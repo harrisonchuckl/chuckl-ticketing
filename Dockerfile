@@ -24,4 +24,21 @@ ENV PORT=4000
 EXPOSE 4000
 
 # Run migrations at container start (uses Railway's real DATABASE_URL), then start server
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/server.js"]
+# Build-time generate already done above (with a one-off dummy URL).
+# At runtime, if DATABASE_URL is missing, construct it from PG* vars.
+CMD ["sh", "-c", "\
+  echo '--- ENV CHECK (first 30 vars) ---'; env | sort | head -n 30; \
+  if [ -z \"$DATABASE_URL\" ]; then \
+    if [ -n \"$PGUSER\" ] && [ -n \"$PGPASSWORD\" ] && [ -n \"$PGHOST\" ] && [ -n \"$PGPORT\" ] && [ -n \"$PGDATABASE\" ]; then \
+      export DATABASE_URL=\"postgresql://$PGUSER:$PGPASSWORD@$PGHOST:$PGPORT/$PGDATABASE?schema=public\"; \
+      echo 'ℹ️ DATABASE_URL was missing; constructed from PG* vars.'; \
+    else \
+      echo '❌ DATABASE_URL missing and PG* pieces not present.'; \
+      env | sort; \
+      exit 1; \
+    fi; \
+  else \
+    echo '✅ DATABASE_URL present'; \
+  fi; \
+  npx prisma migrate deploy && node dist/server.js \
+"]
