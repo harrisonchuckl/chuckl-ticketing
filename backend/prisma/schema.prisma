@@ -10,13 +10,13 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
+  id           String    @id @default(cuid())
+  email        String    @unique
   passwordHash String
   name         String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  role         Role     @default(USER)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  role         Role      @default(USER)
   orders       Order[]
   tickets      Ticket[]
   auditLogs    AuditLog[]
@@ -41,18 +41,18 @@ model Venue {
 }
 
 model Show {
-  id           String    @id @default(cuid())
+  id           String      @id @default(cuid())
   title        String
   startsAtUTC  DateTime
   venueId      String
-  venue        Venue     @relation(fields: [venueId], references: [id])
+  venue        Venue       @relation(fields: [venueId], references: [id])
   capacity     Int
-  sold         Int       @default(0)
-  status       ShowStatus @default(ON_SALE)
+  sold         Int         @default(0)
+  status       ShowStatus  @default(ON_SALE)
   description  String?
   trailerUrl   String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
   ticketTypes  TicketType[]
   orders       Order[]
   tickets      Ticket[]
@@ -67,16 +67,19 @@ enum ShowStatus {
 }
 
 model TicketType {
-  id          String  @id @default(cuid())
+  id          String      @id @default(cuid())
   showId      String
-  show        Show    @relation(fields: [showId], references: [id])
+  show        Show        @relation(fields: [showId], references: [id])
   name        String
   pricePence  Int
   allocation  Int
-  sold        Int     @default(0)
-  sort        Int     @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  sold        Int         @default(0)
+  sort        Int         @default(0)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // back-reference to OrderItem.ticketType
+  orderItems  OrderItem[]
 }
 
 model Order {
@@ -114,19 +117,19 @@ model OrderItem {
 }
 
 model Ticket {
-  id         String   @id @default(cuid())
+  id         String       @id @default(cuid())
   orderId    String
-  order      Order    @relation(fields: [orderId], references: [id])
+  order      Order        @relation(fields: [orderId], references: [id])
   showId     String
-  show       Show     @relation(fields: [showId], references: [id])
-  serial     String   @unique
+  show       Show         @relation(fields: [showId], references: [id])
+  serial     String       @unique
   qrData     String
   status     TicketStatus @default(VALID)
   holderName String?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime     @default(now())
   scannedAt  DateTime?
   userId     String?
-  user       User?    @relation(fields: [userId], references: [id])
+  user       User?        @relation(fields: [userId], references: [id])
 }
 
 enum TicketStatus {
