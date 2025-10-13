@@ -1,0 +1,113 @@
+generator client { provider = "prisma-client-js" }
+datasource db { provider = "postgresql"; url = env("DATABASE_URL") }
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String
+  name          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  role          Role     @default(USER)
+  orders        Order[]
+  tickets       Ticket[]
+  auditLogs     AuditLog[]
+  deletedAt     DateTime?
+}
+enum Role { USER ADMIN SUPPORT }
+
+model Venue {
+  id        String   @id @default(cuid())
+  name      String
+  address   String?
+  county    String?
+  imageUrl  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  shows     Show[]
+}
+
+model Show {
+  id           String    @id @default(cuid())
+  title        String
+  startsAtUTC  DateTime
+  venueId      String
+  venue        Venue     @relation(fields: [venueId], references: [id])
+  capacity     Int
+  sold         Int       @default(0)
+  status       ShowStatus @default(LIVE)
+  description  String?
+  trailerUrl   String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  ticketTypes  TicketType[]
+  orders       Order[]
+  tickets      Ticket[]
+}
+enum ShowStatus { DRAFT ON_SALE LIVE SOLD_OUT CANCELLED }
+
+model TicketType {
+  id         String  @id @default(cuid())
+  showId     String
+  show       Show    @relation(fields: [showId], references: [id])
+  name       String
+  pricePence Int
+  allocation Int
+  sold       Int     @default(0)
+  sort       Int     @default(0)
+}
+
+model Order {
+  id            String   @id @default(cuid())
+  userId        String?
+  user          User?    @relation(fields: [userId], references: [id])
+  showId        String
+  show          Show     @relation(fields: [showId], references: [id])
+  stripeId      String?  @unique
+  status        OrderStatus @default(PENDING)
+  email         String
+  quantity      Int
+  amountPence   Int
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  items         OrderItem[]
+  tickets       Ticket[]
+}
+enum OrderStatus { PENDING PAID CANCELLED REFUNDED }
+
+model OrderItem {
+  id           String     @id @default(cuid())
+  orderId      String
+  order        Order      @relation(fields: [orderId], references: [id])
+  ticketTypeId String
+  ticketType   TicketType @relation(fields: [ticketTypeId], references: [id])
+  quantity     Int
+  unitPence    Int
+}
+
+model Ticket {
+  id         String   @id @default(cuid())
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id])
+  showId     String
+  show       Show     @relation(fields: [showId], references: [id])
+  serial     String   @unique
+  qrData     String
+  status     TicketStatus @default(VALID)
+  holderName String?
+  createdAt  DateTime @default(now())
+  scannedAt  DateTime?
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+}
+enum TicketStatus { VALID USED VOID }
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  resource  String
+  meta      Json
+  createdAt DateTime @default(now())
+}

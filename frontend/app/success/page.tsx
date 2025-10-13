@@ -1,0 +1,1 @@
+export default function Success(){ return <div><h1>Thank you</h1><p>Check your email for QR tickets.</p></div>; }
