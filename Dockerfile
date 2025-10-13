@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Install backend deps
 COPY backend/package*.json ./backend/
-RUN cd backend && npm ci
+RUN cd backend && npm install
 
 # Prisma client
 COPY backend/prisma ./backend/prisma
