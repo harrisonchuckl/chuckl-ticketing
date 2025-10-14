@@ -36,10 +36,4 @@ EXPOSE 8080
 # ---- Start the application ----
 # Here we inject your ACTUAL Railway Postgres credentials directly.
 # Once it's confirmed working, we’ll move this to Railway Variables.
-CMD ["sh", "-c", "\
-  export DATABASE_URL='postgresql://postgres:CwWQWeXByqgiYRLsxKzxhdCVvtvggQvY@postgres.railway.internal:5432/railway?schema=public'; \
-  echo '✅ Using hardcoded DATABASE_URL for startup'; \
-  echo \"🔗 Connecting to: $DATABASE_URL\"; \
-  npx prisma migrate deploy && \
-  node dist/server.js \
-"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/server.js"]
