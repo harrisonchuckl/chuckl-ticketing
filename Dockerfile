@@ -1,43 +1,36 @@
-# ---- Base Node image ----
-FROM node:20-alpine AS builder
+# ----- Base image with OpenSSL (Prisma needs it) -----
+FROM node:20-bullseye-slim
 
-# Create app directory
+RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+
+# Work inside /app
 WORKDIR /app
 
-# Copy package files first (for efficient caching)
-COPY package*.json ./
+# ----- Install backend deps (cache-friendly) -----
+# If your repo has a /backend folder (it does), copy only its package files first
+COPY backend/package*.json ./backend/
+RUN cd backend && npm install
 
-# Install dependencies
-RUN npm install
+# Copy the rest of the backend (includes prisma/)
+COPY backend ./backend
 
-# Copy the rest of the backend source code
-COPY . .
+# Move into backend
+WORKDIR /app/backend
 
-# ---- Build the TypeScript project ----
-RUN npm run build
+# ----- Build time: generate Prisma client & compile TS -----
+# Use a dummy DB URL for generate only (no real connection needed)
+RUN DATABASE_URL="postgresql://user:pass@localhost:5432/notused" npx prisma generate && npm run build
 
-# ---- Final runtime image ----
-FROM node:20-alpine
-
-WORKDIR /app
-
-# Copy built files and node_modules from builder
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/package*.json ./
-
-# Set environment variable for Prisma
-ENV DATABASE_URL="postgresql://postgres:CwWQWeXByqgiYRLsxKzxhdCVvtvggQvY@shortline.proxy.rlwy.net:35923/railway"
+# Runtime env
 ENV NODE_ENV=production
-ENV PORT=8080
+# Railway will provide PORT=8080 at runtime; your server should read process.env.PORT
 
-# Expose the Railway port
 EXPOSE 8080
 
-# Run Prisma migrations automatically, then start the app
+# ----- Runtime: use your LIVE Railway Postgres (internal host) -----
+# Uses the CURRENT password you provided.
 CMD ["sh", "-c", "\
+  export DATABASE_URL='postgresql://postgres:CwWQWeXByqgiYRLsxKzxhdCVvtvggQvY@postgres.railway.internal:5432/railway?schema=public'; \
   echo '✅ Using hardcoded DATABASE_URL for startup'; \
-  npx prisma migrate deploy && \
-  node dist/server.js \
+  npx prisma migrate deploy && node dist/server.js \
 "]
