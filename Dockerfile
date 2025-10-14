@@ -36,4 +36,9 @@ EXPOSE 8080
 # ---- Start the application ----
 # Here we inject your ACTUAL Railway Postgres credentials directly.
 # Once it's confirmed working, we’ll move this to Railway Variables.
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/server.js"]
+CMD ["sh", "-c", "\
+  echo '🔧 Applying Prisma schema (db push)'; \
+  npx prisma db push && \
+  echo '🚀 Starting API'; \
+  node dist/server.js \
+"]
