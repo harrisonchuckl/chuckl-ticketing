@@ -1,36 +1,45 @@
-# ----- Base image with OpenSSL (Prisma needs it) -----
+# ===========================
+# CHUCKL TICKETING DOCKERFILE
+# ===========================
+
+# ---- Base image ----
 FROM node:20-bullseye-slim
 
+# Install OpenSSL (required for Prisma)
 RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
-# Work inside /app
+# Create working directory
 WORKDIR /app
 
-# ----- Install backend deps (cache-friendly) -----
-# If your repo has a /backend folder (it does), copy only its package files first
+# ---- Install dependencies ----
+# Copy only package files first for better caching
 COPY backend/package*.json ./backend/
 RUN cd backend && npm install
 
-# Copy the rest of the backend (includes prisma/)
+# ---- Copy source code ----
 COPY backend ./backend
 
-# Move into backend
+# Set working directory to backend
 WORKDIR /app/backend
 
-# ----- Build time: generate Prisma client & compile TS -----
-# Use a dummy DB URL for generate only (no real connection needed)
+# ---- Generate Prisma client and build TypeScript ----
+# This uses a dummy DB URL just for code generation
 RUN DATABASE_URL="postgresql://user:pass@localhost:5432/notused" npx prisma generate && npm run build
 
-# Runtime env
+# ---- Environment configuration ----
 ENV NODE_ENV=production
-# Railway will provide PORT=8080 at runtime; your server should read process.env.PORT
+ENV PORT=8080
 
+# ---- Expose port ----
 EXPOSE 8080
 
-# ----- Runtime: use your LIVE Railway Postgres (internal host) -----
-# Uses the CURRENT password you provided.
+# ---- Start the application ----
+# Here we inject your ACTUAL Railway Postgres credentials directly.
+# Once it's confirmed working, we’ll move this to Railway Variables.
 CMD ["sh", "-c", "\
   export DATABASE_URL='postgresql://postgres:CwWQWeXByqgiYRLsxKzxhdCVvtvggQvY@postgres.railway.internal:5432/railway?schema=public'; \
   echo '✅ Using hardcoded DATABASE_URL for startup'; \
-  npx prisma migrate deploy && node dist/server.js \
+  echo \"🔗 Connecting to: $DATABASE_URL\"; \
+  npx prisma migrate deploy && \
+  node dist/server.js \
 "]
