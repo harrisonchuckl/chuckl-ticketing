@@ -1,112 +1,59 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../db.js';
-import { requireAuth, requireRole } from '../middleware/auth.js';
 import { z } from 'zod';
 import type { Prisma } from '@prisma/client';
 
 export const router = Router();
 
 /**
- * Create/Update shows & ticket types (Admin)
- * NOTE: We use explicit type assertions to Prisma's *Unchecked* inputs
- * to avoid relational "connect" typing noise and the TS errors you hit.
+ * TEMP bootstrap endpoint:
+ * Creates one Venue, one Show (in 7 days), and one TicketType.
+ * Security: requires header x-bootstrap-key: <BOOTSTRAP_KEY>.
+ * Delete this after seeding real data.
  */
+router.post('/bootstrap', async (req: Request, res: Response) => {
+  const key = req.headers['x-bootstrap-key'];
+  if (!key || key !== process.env.BOOTSTRAP_KEY) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
 
-// ---------- Create Show ----------
-const ShowInput = z.object({
-  title: z.string(),
-  startsAtUTC: z.string(), // ISO string
-  venueId: z.string(),
-  capacity: z.number().int().min(0),
-  description: z.string().optional(),
-  trailerUrl: z.string().url().optional()
-});
+  const venue = await prisma.venue.create({
+    data: {
+      name: 'Chuckl. Cambridge',
+      address: 'Corn Exchange, Cambridge',
+      county: 'Cambridgeshire'
+    }
+  });
 
-router.post(
-  '/shows',
-  requireAuth,
-  requireRole('ADMIN'),
-  async (req: Request, res: Response) => {
-    const body = ShowInput.safeParse(req.body);
-    if (!body.success) return res.status(400).json(body.error);
-
-    const data: Prisma.ShowUncheckedCreateInput = {
-      title: body.data.title,
-      startsAtUTC: new Date(body.data.startsAtUTC),
-      venueId: body.data.venueId,
-      capacity: body.data.capacity,
+  const show = await prisma.show.create({
+    data: {
+      title: 'Friday Night at Chuckl',
+      startsAtUTC: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      venueId: venue.id,
+      capacity: 250,
       sold: 0,
       status: 'ON_SALE',
-      description: body.data.description ?? null,
-      trailerUrl: body.data.trailerUrl ?? null
-    };
+      description: 'A proper night of stand-up.'
+    } satisfies Prisma.ShowUncheckedCreateInput
+  });
 
-    const show = await prisma.show.create({ data });
-    res.json(show);
-  }
-);
-
-// ---------- Update Show ----------
-const ShowUpdate = ShowInput.partial();
-
-router.patch(
-  '/shows/:id',
-  requireAuth,
-  requireRole('ADMIN'),
-  async (req: Request, res: Response) => {
-    const body = ShowUpdate.safeParse(req.body);
-    if (!body.success) return res.status(400).json(body.error);
-
-    // Build a partial update object explicitly to avoid TS inference issues
-    const update: Prisma.ShowUncheckedUpdateInput = {};
-    if (body.data.title !== undefined) update.title = body.data.title;
-    if (body.data.startsAtUTC !== undefined)
-      update.startsAtUTC = new Date(body.data.startsAtUTC);
-    if (body.data.venueId !== undefined) update.venueId = body.data.venueId;
-    if (body.data.capacity !== undefined) update.capacity = body.data.capacity;
-    if (body.data.description !== undefined)
-      update.description = body.data.description;
-    if (body.data.trailerUrl !== undefined)
-      update.trailerUrl = body.data.trailerUrl;
-
-    const show = await prisma.show.update({
-      where: { id: req.params.id },
-      data: update
-    });
-    res.json(show);
-  }
-);
-
-// ---------- Create Ticket Type ----------
-const TicketTypeInput = z.object({
-  name: z.string(),
-  pricePence: z.number().int().min(0),
-  allocation: z.number().int().min(0),
-  sort: z.number().int().optional()
-});
-
-router.post(
-  '/shows/:id/ticket-types',
-  requireAuth,
-  requireRole('ADMIN'),
-  async (req: Request, res: Response) => {
-    const body = TicketTypeInput.safeParse(req.body);
-    if (!body.success) return res.status(400).json(body.error);
-
-    const data: Prisma.TicketTypeUncheckedCreateInput = {
-      showId: req.params.id,
-      name: body.data.name,
-      pricePence: body.data.pricePence,
-      allocation: body.data.allocation,
+  const tt = await prisma.ticketType.create({
+    data: {
+      showId: show.id,
+      name: 'General Admission',
+      pricePence: 2000, // £20.00
+      allocation: 200,
       sold: 0,
-      sort: body.data.sort ?? 0,
-      createdAt: undefined, // let DB default
-      updatedAt: undefined  // let DB default
-    };
+      sort: 1
+    } satisfies Prisma.TicketTypeUncheckedCreateInput
+  });
 
-    const tt = await prisma.ticketType.create({ data });
-    res.json(tt);
-  }
-);
+  res.json({
+    venueId: venue.id,
+    showId: show.id,
+    ticketTypeId: tt.id,
+    message: 'Bootstrap complete. Use these IDs in /checkout/create.'
+  });
+});
 
 export default router;
