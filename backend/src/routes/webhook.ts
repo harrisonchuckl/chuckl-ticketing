@@ -8,7 +8,8 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
 
 export const router = Router();
 
-function randomCode(len = 12) {
+// Random friendly serial (avoids ambiguous chars)
+function randomSerial(len = 12) {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let out = '';
   for (let i = 0; i < len; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
@@ -38,6 +39,7 @@ router.post('/stripe', async (req: Request, res: Response) => {
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object as Stripe.Checkout.Session;
 
+      // We stored these in metadata when creating the session
       const orderId = session.metadata?.orderId;
       const showId = session.metadata?.showId;
 
@@ -46,24 +48,36 @@ router.post('/stripe', async (req: Request, res: Response) => {
         return res.json({ ok: true, skipped: true });
       }
 
-      // 1) Mark order PAID and fetch quantity + showId
+      // 1) Mark order PAID and load quantity
       const order = await prisma.order.update({
         where: { id: orderId },
         data: { status: 'PAID' },
         select: { id: true, quantity: true, showId: true },
       });
 
-      // 2) Create N tickets (MVP: one ticket per quantity purchased)
+      // 2) Idempotency: if tickets already exist, do nothing
+      const existingCount = await prisma.ticket.count({ where: { orderId: order.id } });
+      if (existingCount > 0) {
+        console.log(`ℹ️  Order ${order.id} already has ${existingCount} ticket(s). Skipping create.`);
+        return res.json({ received: true, alreadyIssued: true });
+      }
+
+      // 3) Create N tickets for the order quantity
       const count = Math.max(1, order.quantity);
-      const tickets = Array.from({ length: count }).map(() => ({
-        orderId: order.id,
-        showId: order.showId,
-        code: randomCode(12),
-      }));
+      const ticketsData = Array.from({ length: count }).map(() => {
+        const serial = randomSerial(12);
+        return {
+          orderId: order.id,
+          showId: order.showId,
+          serial,
+          qrData: `chuckl:${serial}`, // simple QR payload; upgrade later if you like
+          status: 'VALID' as const,
+        };
+      });
 
-      await prisma.ticket.createMany({ data: tickets, skipDuplicates: true });
+      await prisma.ticket.createMany({ data: ticketsData });
 
-      console.log(`🎟️  Issued ${count} tickets for order ${orderId}`);
+      console.log(`🎟️  Issued ${count} ticket(s) for order ${order.id}`);
     }
 
     res.json({ received: true });
