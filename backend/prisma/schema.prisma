@@ -1,5 +1,4 @@
 // Prisma schema for Chuckl. Ticketing
-// -----------------------------------
 
 generator client {
   provider = "prisma-client-js"
@@ -31,67 +30,69 @@ enum TicketStatus {
 // -----------------------------
 
 model User {
-  id          String    @id @default(cuid())
-  email       String    @unique
-  name        String?
-  password    String?
-  orders      Order[]
-  tickets     Ticket[]
-  createdAt   DateTime  @default(now())
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  password  String?
+  orders    Order[]
+  tickets   Ticket[]
+  createdAt DateTime @default(now())
 }
 
 model Venue {
-  id          String    @id @default(cuid())
-  name        String
-  address     String?
-  city        String?
-  postcode    String?
-  capacity    Int?
-  shows       Show[]
-  createdAt   DateTime  @default(now())
+  id        String   @id @default(cuid())
+  name      String
+  address   String?
+  city      String?
+  postcode  String?
+  capacity  Int?
+  shows     Show[]
+  createdAt DateTime @default(now())
 }
 
 model Show {
-  id          String    @id @default(cuid())
+  id          String       @id @default(cuid())
   venueId     String
-  venue       Venue     @relation(fields: [venueId], references: [id])
+  venue       Venue        @relation(fields: [venueId], references: [id])
   title       String
   description String?
   date        DateTime
+  // 👇 add both sides of relations so Prisma is happy
   tickets     Ticket[]
   orders      Order[]
-  createdAt   DateTime  @default(now())
+  ticketTypes TicketType[]   // <-- this was missing, fixes P1012
+  createdAt   DateTime    @default(now())
 
   @@index([venueId])
   @@index([date])
 }
 
 model TicketType {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   showId      String
-  show        Show      @relation(fields: [showId], references: [id])
+  show        Show     @relation(fields: [showId], references: [id])
   name        String
   pricePence  Int
   available   Int?
-  createdAt   DateTime  @default(now())
+  createdAt   DateTime @default(now())
 
   @@index([showId])
 }
 
 model Order {
-  id            String       @id @default(cuid())
-  showId        String
-  show          Show          @relation(fields: [showId], references: [id])
-  userId        String?
-  user          User?         @relation(fields: [userId], references: [id])
-  email         String
-  quantity      Int
-  amountPence   Int
-  stripeId      String
-  status        OrderStatus   @default(PENDING)
-  tickets       Ticket[]
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id           String       @id @default(cuid())
+  showId       String
+  show         Show         @relation(fields: [showId], references: [id])
+  userId       String?
+  user         User?        @relation(fields: [userId], references: [id])
+  email        String
+  quantity     Int
+  amountPence  Int
+  stripeId     String
+  status       OrderStatus  @default(PENDING)
+  tickets      Ticket[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
   @@index([showId])
   @@index([userId])
