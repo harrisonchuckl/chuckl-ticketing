@@ -3,7 +3,7 @@ import { prisma } from '../db.js';
 
 export const router = Router();
 
-// Minimal admin router: inspect order/tickets quickly
+// Quick sanity: get order
 router.get('/order/:id', async (req, res) => {
   try {
     const order = await prisma.order.findUnique({
@@ -16,6 +16,7 @@ router.get('/order/:id', async (req, res) => {
   }
 });
 
+// Quick sanity: tickets for an order
 router.get('/tickets/by-order/:id', async (req, res) => {
   try {
     const tickets = await prisma.ticket.findMany({
