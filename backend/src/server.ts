@@ -14,19 +14,19 @@ import { router as admin } from './routes/admin.js';
 
 const app = express();
 
-// ✅ Behind Railway’s proxy (fixes the X-Forwarded-For warning and lets rate-limit use req.ip)
+// Trust Railway proxy so req.ip is correct for rate limiting
 app.set('trust proxy', 1);
 
 // Security headers
 app.use(helmet());
 
-// ✅ RAW body FIRST for Stripe webhooks (must come before express.json)
+// RAW body FIRST for Stripe webhooks (must come before express.json)
 app.use('/webhooks', express.raw({ type: 'application/json' }), webhook);
 
 // JSON body for the rest of the app
 app.use(express.json({ limit: '1mb' }));
 
-// CORS (tighten origins later if you wish)
+// CORS (tighten later)
 app.use(
   cors({
     origin: (process.env.CORS_ORIGINS || '')
@@ -36,7 +36,7 @@ app.use(
   })
 );
 
-// Rate limiting
+// Rate limit
 app.use(
   rateLimit({
     windowMs: 60_000,
@@ -49,7 +49,7 @@ app.use(
 // Health
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
-// Feature routes
+// Routes
 app.use('/auth', auth);
 app.use('/events', events);
 app.use('/checkout', checkout);
