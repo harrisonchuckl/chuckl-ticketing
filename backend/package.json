@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "nodemon --watch src --exec ts-node src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js",
+    "start": "node dist/start.js",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "prisma:reset": "prisma db push --force-reset --accept-data-loss"
