@@ -56,12 +56,11 @@ model Show {
   venue       Venue        @relation(fields: [venueId], references: [id])
   title       String
   description String?
-  date        DateTime
-  // 👇 add both sides of relations so Prisma is happy
+  date        DateTime     @default(now())   // ✅ Added default so migration can apply safely
   tickets     Ticket[]
   orders      Order[]
-  ticketTypes TicketType[]   // <-- this was missing, fixes P1012
-  createdAt   DateTime    @default(now())
+  ticketTypes TicketType[]
+  createdAt   DateTime     @default(now())
 
   @@index([venueId])
   @@index([date])
