@@ -8,8 +8,15 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
 
 export const router = Router();
 
+function randomCode(len = 12) {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let out = '';
+  for (let i = 0; i < len; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
+  return out;
+}
+
 /**
- * Mounted with express.raw({ type: 'application/json' }) at /webhooks in server.ts
+ * Mounted at /webhooks with express.raw({ type: 'application/json' }) in server.ts
  */
 router.post('/stripe', async (req: Request, res: Response) => {
   try {
@@ -31,20 +38,32 @@ router.post('/stripe', async (req: Request, res: Response) => {
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object as Stripe.Checkout.Session;
 
-      // We put orderId into metadata when creating the session
-      const orderId = (session.metadata?.orderId || '').toString();
-      if (!orderId) {
-        console.warn('checkout.session.completed received but no orderId in metadata');
-        return res.json({ ok: true });
+      const orderId = session.metadata?.orderId;
+      const showId = session.metadata?.showId;
+
+      if (!orderId || !showId) {
+        console.warn('checkout.session.completed without orderId/showId metadata');
+        return res.json({ ok: true, skipped: true });
       }
 
-      // Minimal update: mark order PAID (your schema does not have paidAt/items/tickets)
-      await prisma.order.update({
+      // 1) Mark order PAID and fetch quantity + showId
+      const order = await prisma.order.update({
         where: { id: orderId },
         data: { status: 'PAID' },
+        select: { id: true, quantity: true, showId: true },
       });
 
-      console.log(`✅ Order ${orderId} marked PAID (minimal webhook)`);
+      // 2) Create N tickets (MVP: one ticket per quantity purchased)
+      const count = Math.max(1, order.quantity);
+      const tickets = Array.from({ length: count }).map(() => ({
+        orderId: order.id,
+        showId: order.showId,
+        code: randomCode(12),
+      }));
+
+      await prisma.ticket.createMany({ data: tickets, skipDuplicates: true });
+
+      console.log(`🎟️  Issued ${count} tickets for order ${orderId}`);
     }
 
     res.json({ received: true });
