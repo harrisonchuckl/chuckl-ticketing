@@ -1,4 +1,5 @@
-// backend/prisma/schema.prisma
+// Prisma schema for Chuckl. Ticketing
+// -----------------------------------
 
 generator client {
   provider = "prisma-client-js"
@@ -9,111 +10,92 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
-  passwordHash String
-  name         String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  role         Role      @default(USER)
-  orders       Order[]
-  tickets      Ticket[]
-  auditLogs    AuditLog[]
-  deletedAt    DateTime?
-}
-
-enum Role {
-  USER
-  ADMIN
-  SUPPORT
-}
-
-model Venue {
-  id        String   @id @default(cuid())
-  name      String
-  address   String?
-  county    String?
-  imageUrl  String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  shows     Show[]
-}
-
-model Show {
-  id           String      @id @default(cuid())
-  title        String
-  startsAtUTC  DateTime
-  venueId      String
-  venue        Venue       @relation(fields: [venueId], references: [id])
-  capacity     Int
-  sold         Int         @default(0)
-  status       ShowStatus  @default(ON_SALE)
-  description  String?
-  trailerUrl   String?
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-  ticketTypes  TicketType[]
-  orders       Order[]
-  tickets      Ticket[]
-}
-
-enum ShowStatus {
-  DRAFT
-  ON_SALE
-  LIVE
-  SOLD_OUT
-  CANCELLED
-}
-
-model TicketType {
-  id          String      @id @default(cuid())
-  showId      String
-  show        Show        @relation(fields: [showId], references: [id])
-  name        String
-  pricePence  Int
-  allocation  Int
-  sold        Int         @default(0)
-  sort        Int         @default(0)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-
-  // back-reference to OrderItem.ticketType
-  orderItems  OrderItem[]
-}
-
-model Order {
-  id          String      @id @default(cuid())
-  userId      String?
-  user        User?       @relation(fields: [userId], references: [id])
-  showId      String
-  show        Show        @relation(fields: [showId], references: [id])
-  stripeId    String?     @unique
-  status      OrderStatus @default(PENDING)
-  email       String
-  quantity    Int
-  amountPence Int
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  items       OrderItem[]
-  tickets     Ticket[]
-}
+// -----------------------------
+// ENUMS
+// -----------------------------
 
 enum OrderStatus {
   PENDING
   PAID
   CANCELLED
-  REFUNDED
 }
 
-model OrderItem {
-  id           String     @id @default(cuid())
-  orderId      String
-  order        Order      @relation(fields: [orderId], references: [id])
-  ticketTypeId String
-  ticketType   TicketType @relation(fields: [ticketTypeId], references: [id])
-  quantity     Int
-  unitPence    Int
+enum TicketStatus {
+  VALID
+  USED
+  CANCELLED
+}
+
+// -----------------------------
+// MODELS
+// -----------------------------
+
+model User {
+  id          String    @id @default(cuid())
+  email       String    @unique
+  name        String?
+  password    String?
+  orders      Order[]
+  tickets     Ticket[]
+  createdAt   DateTime  @default(now())
+}
+
+model Venue {
+  id          String    @id @default(cuid())
+  name        String
+  address     String?
+  city        String?
+  postcode    String?
+  capacity    Int?
+  shows       Show[]
+  createdAt   DateTime  @default(now())
+}
+
+model Show {
+  id          String    @id @default(cuid())
+  venueId     String
+  venue       Venue     @relation(fields: [venueId], references: [id])
+  title       String
+  description String?
+  date        DateTime
+  tickets     Ticket[]
+  orders      Order[]
+  createdAt   DateTime  @default(now())
+
+  @@index([venueId])
+  @@index([date])
+}
+
+model TicketType {
+  id          String    @id @default(cuid())
+  showId      String
+  show        Show      @relation(fields: [showId], references: [id])
+  name        String
+  pricePence  Int
+  available   Int?
+  createdAt   DateTime  @default(now())
+
+  @@index([showId])
+}
+
+model Order {
+  id            String       @id @default(cuid())
+  showId        String
+  show          Show          @relation(fields: [showId], references: [id])
+  userId        String?
+  user          User?         @relation(fields: [userId], references: [id])
+  email         String
+  quantity      Int
+  amountPence   Int
+  stripeId      String
+  status        OrderStatus   @default(PENDING)
+  tickets       Ticket[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([showId])
+  @@index([userId])
+  @@index([status])
 }
 
 model Ticket {
@@ -130,20 +112,8 @@ model Ticket {
   scannedAt  DateTime?
   userId     String?
   user       User?        @relation(fields: [userId], references: [id])
-}
 
-enum TicketStatus {
-  VALID
-  USED
-  VOID
-}
-
-model AuditLog {
-  id        String   @id @default(cuid())
-  userId    String?
-  user      User?    @relation(fields: [userId], references: [id])
-  action    String
-  resource  String
-  meta      Json
-  createdAt DateTime @default(now())
+  @@index([orderId])
+  @@index([showId])
+  @@index([userId])
 }
