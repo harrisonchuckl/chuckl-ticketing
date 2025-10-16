@@ -1,44 +1,28 @@
-# ===========================
-# CHUCKL TICKETING DOCKERFILE
-# ===========================
-
-# ---- Base image ----
+# ---- Build image ----
 FROM node:20-bullseye-slim
 
-# Install OpenSSL (required for Prisma)
+# OpenSSL for Prisma engine compatibility
 RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
-# Create working directory
 WORKDIR /app
 
-# ---- Install dependencies ----
-# Copy only package files first for better caching
+# Install deps first (better caching)
 COPY backend/package*.json ./backend/
 RUN cd backend && npm install
 
-# ---- Copy source code ----
+# Copy the code
 COPY backend ./backend
-
-# Set working directory to backend
 WORKDIR /app/backend
 
-# ---- Generate Prisma client and build TypeScript ----
-# This uses a dummy DB URL just for code generation
-RUN DATABASE_URL="postgresql://user:pass@localhost:5432/notused" npx prisma generate && npm run build
+# Generate Prisma client with a dummy DB URL (codegen only)
+RUN DATABASE_URL="postgresql://user:pass@localhost:5432/notused" npx prisma generate
 
-# ---- Environment configuration ----
+# Build TypeScript (produces dist/server.js and dist/start.js)
+RUN npm run build
+
+# Runtime env
 ENV NODE_ENV=production
-ENV PORT=8080
+ENV PORT=4000
 
-# ---- Expose port ----
-EXPOSE 8080
-
-# ---- Start the application ----
-# Here we inject your ACTUAL Railway Postgres credentials directly.
-# Once it's confirmed working, we’ll move this to Railway Variables.
-CMD ["sh", "-c", "\
-  echo '🔧 Applying Prisma schema (db push)'; \
-  npx prisma db push && \
-  echo '🚀 Starting API'; \
-  node dist/server.js \
-"]
+# Start via the wrapper (dist/start.js)
+CMD ["node", "dist/start.js"]
