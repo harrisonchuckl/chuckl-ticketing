@@ -1,127 +1,101 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
-import nodemailer from 'nodemailer';
+import prisma from '../db.js';
+import { sendOrderEmail } from '../services/email.js';
 
-const prisma = new PrismaClient();
 export const router = Router();
 
-/**
- * Simple ping to confirm the admin router is mounted
- */
+function checkKey(req: any) {
+  const want = process.env.BOOTSTRAP_KEY || 'ashdb77asjkh';
+  const got = req.header('x-bootstrap-key') || req.header('x-admin-key');
+  if (got !== want) {
+    const err: any = new Error('unauthorized');
+    err.status = 401;
+    throw err;
+  }
+}
+
 router.get('/bootstrap/ping', (_req, res) => {
   res.json({ ok: true, router: 'admin', path: '/admin/bootstrap/ping' });
 });
 
 /**
- * One-time bootstrap to seed:
- * - Venue
- * - Show (in ~14 days at 8pm UK time)
- * - TicketType (General Admission)
- *
- * Guarded by header: x-bootstrap-key: <BOOTSTRAP_KEY>
+ * One-time bootstrap to seed a venue/show/ticketType
  */
 router.post('/bootstrap', async (req, res) => {
   try {
-    const headerKey = req.header('x-bootstrap-key');
-    const expected = process.env.BOOTSTRAP_KEY;
-    if (!expected) {
-      return res.status(500).json({ error: 'server_not_configured', detail: 'BOOTSTRAP_KEY is not set on the service.' });
-    }
-    if (headerKey !== expected) {
-      return res.status(401).json({ error: 'unauthorized', detail: 'x-bootstrap-key mismatch' });
-    }
+    checkKey(req);
 
-    // Create a venue
     const venue = await prisma.venue.create({
       data: {
         name: 'Chuckl. Test Venue',
-        address: '123 Laugh St',
+        address: '123 Example Street',
         city: 'Cambridge',
-        postcode: 'CB1 1AB'
-      }
+        postcode: 'CB1 1AA',
+      },
     });
-
-    // Create a show (two weeks from now, 20:00 UTC)
-    const twoWeeks = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
-    twoWeeks.setUTCHours(20, 0, 0, 0);
 
     const show = await prisma.show.create({
       data: {
         venueId: venue.id,
-        title: 'Chuckl. Test Show',
-        description: 'A night of testing and giggles.',
-        date: twoWeeks // your schema has `date` with @default(now()), we still set a real future date
-      }
+        title: 'Chuckl. Comedy Night (Test)',
+        description: 'An evening of laughs. (seeded)',
+        date: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7), // +7 days
+      },
     });
 
-    // Create a ticket type
     const ticketType = await prisma.ticketType.create({
       data: {
         showId: show.id,
         name: 'General Admission',
-        pricePence: 1000, // £10.00
-        available: 200
-      }
+        pricePence: 2000,
+        available: 100,
+      },
     });
 
     res.json({
       venueId: venue.id,
       showId: show.id,
       ticketTypeId: ticketType.id,
-      message: 'Bootstrap complete. Use these IDs in /checkout/create.'
+      message: 'Bootstrap complete. Use these IDs in /checkout/create.',
     });
-  } catch (err: any) {
-    console.error('Bootstrap error:', err);
-    return res.status(500).json({ error: 'bootstrap_failed', detail: String(err?.message || err) });
+  } catch (e: any) {
+    res.status(e.status || 500).json({ error: 'bootstrap_failed', detail: String(e.message || e) });
   }
 });
 
 /**
- * Optional: test email endpoint (requires SMTP_* env vars).
- * POST { "to": "you@example.com" }
+ * Quick inspect: GET /admin/order/:id
  */
-router.post('/email/test', async (req, res) => {
+router.get('/order/:id', async (req, res) => {
   try {
-    const { to } = req.body || {};
-    if (!to) return res.status(400).json({ error: 'missing_to' });
-
-    const host = process.env.SMTP_HOST;
-    const port = Number(process.env.SMTP_PORT || 587);
-    const user = process.env.SMTP_USER;
-    const pass = process.env.SMTP_PASS;
-    const from = process.env.SMTP_FROM;
-
-    if (!host || !port || !user || !pass || !from) {
-      return res.status(400).json({
-        error: 'smtp_not_configured',
-        missing: {
-          SMTP_HOST: !host,
-          SMTP_PORT: !process.env.SMTP_PORT,
-          SMTP_USER: !user,
-          SMTP_PASS: !pass,
-          SMTP_FROM: !from
-        }
-      });
-    }
-
-    const transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure: port === 465, // 465 = SSL, 587 = STARTTLS
-      auth: { user, pass }
+    checkKey(req);
+    const order = await prisma.order.findUnique({
+      where: { id: String(req.params.id) },
+      include: { show: true, tickets: true },
     });
+    if (!order) return res.status(404).json({ error: 'not_found' });
+    res.json(order);
+  } catch (e: any) {
+    res.status(e.status || 500).json({ error: 'failed', detail: String(e.message || e) });
+  }
+});
 
-    const info = await transporter.sendMail({
-      from,
-      to,
-      subject: 'Chuckl. Test Email',
-      text: 'Hello from Chuckl. Ticketing!',
-      html: '<p>Hello from <b>Chuckl. Ticketing</b>! ✅</p>'
+/**
+ * Resend email: POST /admin/order/:id/email
+ */
+router.post('/order/:id/email', async (req, res) => {
+  try {
+    checkKey(req);
+    const order = await prisma.order.findUnique({
+      where: { id: String(req.params.id) },
+      include: { show: true, tickets: true },
     });
+    if (!order) return res.status(404).json({ error: 'not_found' });
+    if (order.tickets.length === 0) return res.status(400).json({ error: 'no_tickets' });
 
-    return res.json({ ok: true, messageId: info.messageId });
-  } catch (err: any) {
-    console.error('Email test error:', err);
-    return res.status(500).json({ error: 'email_send_failed', detail: String(err?.message || err) });
+    const result = await sendOrderEmail({ order });
+    res.json({ ok: true, result });
+  } catch (e: any) {
+    res.status(e.status || 500).json({ error: 'email_failed', detail: String(e.message || e) });
   }
 });
