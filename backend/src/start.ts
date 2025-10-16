@@ -11,15 +11,13 @@ try {
     });
     console.log('✅ Prisma force reset completed.');
   } else {
-    // Normal light sync (no data loss)
     console.log('🔧 Applying Prisma schema (db push)');
     execSync('npx prisma db push', { stdio: 'inherit', env: process.env as any });
   }
 } catch (e) {
   console.error('❌ Prisma push/reset failed:', e);
-  // Do not exit — app can still start if schema already matches
+  // continue startup even if push fails because schema may already match
 }
 
-// Start the API
 console.log('🚀 Starting API');
 import('./server.js');
