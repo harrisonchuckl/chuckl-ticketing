@@ -1,125 +1,108 @@
 import nodemailer from 'nodemailer';
-import QRCode from 'qrcode';
+import type { Order, Show, Ticket } from '@prisma/client';
 
-type SendTicketsParams = {
-  to: string;
-  show: {
-    id: string;
-    title: string;
-    date: Date;
-    venue?: { name?: string; address?: string | null; city?: string | null; postcode?: string | null } | null;
-  };
-  order: {
-    id: string;
-    quantity: number;
-    amountPence: number;
-  };
-  tickets: Array<{ serial: string; qrData: string }>;
-};
+const EMAIL_ENABLED = process.env.EMAIL_ENABLED === '1';
 
-function formatDate(d: Date) {
-  try {
-    return new Intl.DateTimeFormat('en-GB', {
-      weekday: 'short', year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit'
-    }).format(new Date(d));
-  } catch {
-    return String(d);
+const SMTP_HOST = process.env.SMTP_HOST || '';
+const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
+const SMTP_USER = process.env.SMTP_USER || '';
+const SMTP_PASS = process.env.SMTP_PASS || '';
+const SMTP_FROM = process.env.SMTP_FROM || 'Chuckl. Tickets <no-reply@example.com>';
+
+let transporter: nodemailer.Transporter | null = null;
+
+function ensureTransport(): nodemailer.Transporter {
+  if (transporter) return transporter;
+
+  if (!EMAIL_ENABLED) {
+    throw new Error('EMAIL_ENABLED is not set to 1');
   }
-}
-function formatPrice(pence: number) { return `£${(pence / 100).toFixed(2)}`; }
-
-function smtpReady() {
-  const required = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM'];
-  const missing = required.filter((k) => !process.env[k]);
-  if (missing.length) {
-    console.warn(`📭 SMTP not configured (missing: ${missing.join(', ')}). Skipping email send.`);
-    return false;
+  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
+    throw new Error('SMTP variables are missing (SMTP_HOST/SMTP_USER/SMTP_PASS)');
   }
-  return true;
-}
 
-export async function sendTicketsEmail(params: SendTicketsParams) {
-  if (!smtpReady()) return;
-
-  const { to, show, order, tickets } = params;
-
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST!,
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: Number(process.env.SMTP_PORT) === 465,
-    auth: { user: process.env.SMTP_USER!, pass: process.env.SMTP_PASS! }
+  transporter = nodemailer.createTransport({
+    host: SMTP_HOST,
+    port: SMTP_PORT,
+    secure: SMTP_PORT === 465, // Gmail: 587 = STARTTLS
+    auth: { user: SMTP_USER, pass: SMTP_PASS },
   });
 
-  const attachments = await Promise.all(
-    tickets.map(async (t, idx) => {
-      const dataUrl = await QRCode.toDataURL(t.qrData, { margin: 1, width: 300 });
-      const base64 = dataUrl.split(',')[1];
-      const content = Buffer.from(base64, 'base64');
-      const cid = `ticket-${t.serial}@chuckl`;
-      return { filename: `ticket-${idx + 1}-${t.serial}.png`, content, cid, contentType: 'image/png' };
-    })
-  );
+  return transporter;
+}
 
-  const venueLine = [show.venue?.name, show.venue?.address, show.venue?.city, show.venue?.postcode]
-    .filter(Boolean).join(', ');
+/**
+ * Sends the “your tickets” email after an order is marked PAID.
+ * Provide order with show + tickets included.
+ */
+export async function sendOrderEmail(args: {
+  order: Order & { show: Show; tickets: Ticket[] };
+}) {
+  if (!EMAIL_ENABLED) {
+    console.log('📭 EMAIL_ENABLED != 1 → skipping email send');
+    return { skipped: true };
+  }
 
-  const ticketListHtml = tickets.map((t, i) => `
-    <li style="margin-bottom:12px;">
-      <strong>Ticket ${i + 1}</strong> — Serial: <code>${t.serial}</code><br/>
-      <img src="cid:ticket-${t.serial}@chuckl" alt="QR ${t.serial}" style="margin-top:6px; max-width:260px; height:auto; border:1px solid #eee; padding:4px; border-radius:6px;" />
-    </li>
-  `).join('');
+  const { order } = args;
+  const tCount = order.tickets.length;
 
   const html = `
-    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; line-height:1.5; color:#111;">
-      <h2 style="margin:0 0 8px 0;">Your Chuckl. Tickets</h2>
-      <p style="margin:0 0 16px 0;">Thanks for your purchase! Your tickets are below.</p>
+  <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;line-height:1.55">
+    <h2 style="margin:0 0 8px">Your Chuckl. tickets</h2>
+    <p style="margin:0 0 12px">Thanks! Your payment has been received.</p>
 
-      <div style="background:#f6f7f9; padding:12px 14px; border-radius:10px; margin-bottom:16px;">
-        <div><strong>Show:</strong> ${show.title}</div>
-        <div><strong>When:</strong> ${formatDate(show.date)}</div>
-        ${venueLine ? `<div><strong>Where:</strong> ${venueLine}</div>` : ''}
-        <div><strong>Order:</strong> ${order.id}</div>
-        <div><strong>Total:</strong> ${formatPrice(order.amountPence)}</div>
-      </div>
-
-      <h3 style="margin:0 0 10px 0;">Tickets</h3>
-      <ol style="padding-left:20px; margin:0;">
-        ${ticketListHtml}
-      </ol>
-
-      <p style="margin-top:16px; color:#555;">
-        Please keep your serials secure. Each QR code admits one person and will be marked used at entry.
-      </p>
-      <p style="margin-top:8px; color:#555;">
-        Any issues? Reply to this email and we'll help.
-      </p>
+    <div style="background:#f6f7fb;border:1px solid #e6e8f0;border-radius:10px;padding:12px 14px;margin:10px 0">
+      <div><strong>Show:</strong> ${escapeHtml(order.show.title)}</div>
+      <div><strong>Date:</strong> ${new Date(order.show.date).toLocaleString()}</div>
+      <div><strong>Order ID:</strong> ${order.id}</div>
+      <div><strong>Tickets:</strong> ${tCount}</div>
+      <div><strong>Total:</strong> £${(order.amountPence / 100).toFixed(2)}</div>
     </div>
+
+    <h3 style="margin:16px 0 8px">Your ticket codes</h3>
+    <ul>
+      ${order.tickets
+        .map(
+          (t) =>
+            `<li><code style="background:#eef0f7;padding:2px 6px;border-radius:6px;border:1px solid #dfe3ef">${t.serial}</code></li>`
+        )
+        .join('')}
+    </ul>
+
+    <p style="margin-top:16px">Show this email at the venue. We’ll scan your code(s) on entry.</p>
+    <p style="margin:8px 0 0;color:#5f6472;font-size:13px">Questions? Reply to this email.</p>
+  </div>
   `;
 
-  const text = [
-    `Your Chuckl. Tickets`,
-    ``,
-    `Show: ${show.title}`,
-    `When: ${formatDate(show.date)}`,
-    venueLine ? `Where: ${venueLine}` : '',
-    `Order: ${order.id}`,
-    `Total: ${formatPrice(order.amountPence)}`,
-    ``,
-    `Tickets:`,
-    ...tickets.map((t, i) => `  ${i + 1}) Serial: ${t.serial} | QR: ${t.qrData}`),
-    ``,
-    `Please keep your serials secure. Each QR code admits one person and will be marked used at entry.`,
-  ].filter(Boolean).join('\n');
+  const text =
+    `Your Chuckl. tickets\n\n` +
+    `Show: ${order.show.title}\n` +
+    `Date: ${new Date(order.show.date).toLocaleString()}\n` +
+    `Order ID: ${order.id}\n` +
+    `Tickets: ${tCount}\n` +
+    `Total: £${(order.amountPence / 100).toFixed(2)}\n\n` +
+    `Codes:\n` +
+    order.tickets.map((t) => ` - ${t.serial}`).join('\n');
 
-  const mail = await transporter.sendMail({
-    from: process.env.SMTP_FROM!,
-    to,
-    subject: `Your Tickets – ${show.title}`,
-    html,
+  const mail = {
+    from: SMTP_FROM,
+    to: order.email,
+    subject: `Your tickets – ${order.show.title}`,
     text,
-    attachments
-  });
+    html,
+  };
 
-  console.log(`📧 Email sent: ${mail.messageId} → ${to}`);
+  const tx = ensureTransport();
+  const info = await tx.sendMail(mail);
+  console.log(`📧 Ticket email sent → ${order.email} (${info.messageId})`);
+  return { messageId: info.messageId };
+}
+
+function escapeHtml(s: string) {
+  return s
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
 }
