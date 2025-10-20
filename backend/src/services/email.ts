@@ -1,125 +1,189 @@
 import nodemailer from 'nodemailer';
-import type { Ticket } from '@prisma/client';
 
-const EMAIL_ENABLED = process.env.EMAIL_ENABLED === '1';
+/**
+ * Minimal shapes so this module can be imported anywhere without dragging Prisma types in.
+ */
+type Venue = {
+  name: string | null;
+  address: string | null;
+  city: string | null;
+  postcode: string | null;
+};
 
-const SMTP_HOST = process.env.SMTP_HOST || '';
-const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
-const SMTP_USER = process.env.SMTP_USER || '';
-const SMTP_PASS = process.env.SMTP_PASS || '';
-const SMTP_FROM = process.env.SMTP_FROM || 'Chuckl. Tickets <no-reply@example.com>';
+type Show = {
+  id: string;
+  title: string;
+  date: Date | string;
+  venue: Venue | null;
+};
 
-let transporter: nodemailer.Transporter | null = null;
+type OrderBrief = {
+  id: string;
+  quantity: number;
+  amountPence: number;
+};
 
-function ensureTransport(): nodemailer.Transporter {
-  if (transporter) return transporter;
-
-  if (!EMAIL_ENABLED) {
-    throw new Error('EMAIL_ENABLED is not set to 1');
-  }
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-    throw new Error('SMTP variables missing (SMTP_HOST/SMTP_USER/SMTP_PASS)');
-  }
-
-  transporter = nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: SMTP_PORT,
-    secure: SMTP_PORT === 465, // Gmail: 587 uses STARTTLS
-    auth: { user: SMTP_USER, pass: SMTP_PASS },
-  });
-
-  return transporter;
-}
-
-type SendTicketsArgs = {
-  to: string;
-  show: {
-    id: string;
-    title: string;
-    date: Date;
-    venue: { name: string | null; address: string | null; city: string | null; postcode: string | null } | null;
-  };
-  order: { id: string; quantity: number; amountPence: number };
-  tickets: Pick<Ticket, 'serial' | 'qrData'>[];
+type TicketBrief = {
+  serial: string;
+  qrData: string;
 };
 
 /**
- * Called by the Stripe webhook after an order is marked PAID.
- * Sends a simple HTML + text email with ticket codes.
+ * Convert various env representations to boolean.
  */
-export async function sendTicketsEmail({ to, show, order, tickets }: SendTicketsArgs) {
-  if (!EMAIL_ENABLED) {
-    console.log('📭 EMAIL_ENABLED != 1 → skipping email send');
-    return { skipped: true };
+function isEnabled(v: any) {
+  const s = String(v ?? '').trim().toLowerCase();
+  return s === '1' || s === 'true' || s === 'yes';
+}
+
+/**
+ * Create a reusable SMTP transport from env vars.
+ * Works with Gmail App Passwords (SMTP_HOST=smtp.gmail.com, SMTP_PORT=587).
+ */
+export function getTransport() {
+  const host = process.env.SMTP_HOST;
+  const port = Number(process.env.SMTP_PORT || 587);
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+
+  if (!host || !user || !pass) {
+    throw new Error(
+      `SMTP not configured. Missing one of SMTP_HOST/SMTP_USER/SMTP_PASS (got HOST=${host}, USER=${user}, PASS=${pass ? '***' : 'missing'})`
+    );
   }
 
-  const venueBits = [
+  // PORT 587 -> STARTTLS (secure: false). If you set 465, secure should be true.
+  const secure = port === 465;
+
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth: { user, pass },
+  });
+}
+
+/**
+ * Simple currency formatter (GBP).
+ */
+function formatGBP(pence: number) {
+  return new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(pence / 100);
+}
+
+/**
+ * Build the HTML for the tickets email.
+ */
+function buildTicketsHtml(args: {
+  show: Show;
+  order: OrderBrief;
+  tickets: TicketBrief[];
+}) {
+  const { show, order, tickets } = args;
+
+  const when =
+    typeof show.date === 'string'
+      ? new Date(show.date)
+      : show.date;
+
+  const dateStr = when ? new Date(when).toLocaleString('en-GB', {
+    weekday: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }) : 'TBA';
+
+  const venueLines = [
     show.venue?.name,
-    [show.venue?.address, show.venue?.city].filter(Boolean).join(', '),
-    show.venue?.postcode,
+    show.venue?.address,
+    [show.venue?.city, show.venue?.postcode].filter(Boolean).join(' '),
   ]
     .filter(Boolean)
-    .join(' • ');
+    .join('<br/>');
 
-  const ticketListHtml = tickets
+  const ticketRows = tickets
     .map(
-      (t) =>
-        `<li><code style="background:#eef0f7;padding:2px 6px;border-radius:6px;border:1px solid #dfe3ef">${t.serial}</code></li>`
+      (t, i) => `
+        <tr>
+          <td style="padding:8px;border:1px solid #eee;">${i + 1}</td>
+          <td style="padding:8px;border:1px solid #eee;font-family:monospace;">${t.serial}</td>
+          <td style="padding:8px;border:1px solid #eee;">${t.qrData}</td>
+        </tr>`
     )
     .join('');
 
-  const html = `
-  <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;line-height:1.55">
-    <h2 style="margin:0 0 8px">Your Chuckl. tickets</h2>
-    <p style="margin:0 0 12px">Thanks! Your payment has been received.</p>
+  return `
+  <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:640px;margin:auto;">
+    <h2 style="margin:0 0 12px">Your Chuckl. tickets</h2>
+    <p style="margin:0 0 16px">Order <strong>${order.id}</strong> — ${formatGBP(order.amountPence)}</p>
 
-    <div style="background:#f6f7fb;border:1px solid #e6e8f0;border-radius:10px;padding:12px 14px;margin:10px 0">
-      <div><strong>Show:</strong> ${escapeHtml(show.title)}</div>
-      <div><strong>Date:</strong> ${new Date(show.date).toLocaleString()}</div>
-      ${venueBits ? `<div><strong>Venue:</strong> ${escapeHtml(venueBits)}</div>` : ''}
-      <div><strong>Order ID:</strong> ${escapeHtml(order.id)}</div>
-      <div><strong>Tickets:</strong> ${tickets.length}</div>
-      <div><strong>Total:</strong> £${(order.amountPence / 100).toFixed(2)}</div>
+    <div style="padding:12px;border:1px solid #eee;border-radius:8px;margin-bottom:16px;">
+      <div style="font-size:18px;font-weight:600;">${show.title}</div>
+      <div style="color:#333;margin-top:4px;">${dateStr}</div>
+      <div style="color:#555;margin-top:8px;line-height:1.35">${venueLines || ''}</div>
     </div>
 
-    <h3 style="margin:16px 0 8px">Your ticket codes</h3>
-    <ul>${ticketListHtml}</ul>
+    <p>Show this email at the door. Each ticket has a unique code:</p>
+    <table style="border-collapse:collapse;width:100%;margin-top:8px;">
+      <thead>
+        <tr>
+          <th style="text-align:left;padding:8px;border:1px solid #eee;background:#fafafa;">#</th>
+          <th style="text-align:left;padding:8px;border:1px solid #eee;background:#fafafa;">Serial</th>
+          <th style="text-align:left;padding:8px;border:1px solid #eee;background:#fafafa;">QR payload</th>
+        </tr>
+      </thead>
+      <tbody>${ticketRows}</tbody>
+    </table>
 
-    <p style="margin-top:16px">Show this email at the venue. We’ll scan your code(s) on entry.</p>
-    <p style="margin:8px 0 0;color:#5f6472;font-size:13px">Questions? Just reply to this email.</p>
-  </div>
-  `;
-
-  const text =
-    `Your Chuckl. tickets\n\n` +
-    `Show: ${show.title}\n` +
-    `Date: ${new Date(show.date).toLocaleString()}\n` +
-    (venueBits ? `Venue: ${venueBits}\n` : '') +
-    `Order ID: ${order.id}\n` +
-    `Tickets: ${tickets.length}\n` +
-    `Total: £${(order.amountPence / 100).toFixed(2)}\n\n` +
-    `Codes:\n` +
-    tickets.map((t) => ` - ${t.serial}`).join('\n');
-
-  const mail = {
-    from: SMTP_FROM,
-    to,
-    subject: `Your tickets – ${show.title}`,
-    text,
-    html,
-  };
-
-  const tx = ensureTransport();
-  const info = await tx.sendMail(mail);
-  console.log(`📧 Ticket email sent → ${to} (${info.messageId})`);
-  return { messageId: info.messageId };
+    <p style="margin-top:16px;color:#666;font-size:12px">If you have questions, reply to this email.</p>
+  </div>`;
 }
 
-function escapeHtml(s: string) {
-  return s
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
+/**
+ * Send the real tickets email (used by webhook + admin resend).
+ */
+export async function sendTicketsEmail(args: {
+  to: string;
+  show: Show;
+  order: OrderBrief;
+  tickets: TicketBrief[];
+}) {
+  if (!isEnabled(process.env.EMAIL_ENABLED)) {
+    throw new Error('EMAIL_DISABLED');
+  }
+
+  const transporter = getTransport();
+
+  const from = process.env.SMTP_FROM || `Chuckl. Tickets <${process.env.SMTP_USER}>`;
+  const subject = `Your tickets: ${args.show.title}`;
+  const html = buildTicketsHtml(args);
+
+  await transporter.sendMail({
+    from,
+    to: args.to,
+    subject,
+    html,
+    text: `Your tickets for ${args.show.title}\n\nOrder: ${args.order.id}\nTotal: ${formatGBP(
+      args.order.amountPence
+    )}\n\nTickets:\n${args.tickets.map((t, i) => `${i + 1}. ${t.serial} (${t.qrData})`).join('\n')}`,
+  });
+}
+
+/**
+ * Minimal “ping” email so you can test SMTP without creating an order.
+ */
+export async function sendTestEmail(to: string) {
+  if (!isEnabled(process.env.EMAIL_ENABLED)) {
+    throw new Error('EMAIL_DISABLED');
+  }
+  const transporter = getTransport();
+  const from = process.env.SMTP_FROM || `Chuckl. Tickets <${process.env.SMTP_USER}>`;
+
+  await transporter.sendMail({
+    from,
+    to,
+    subject: 'Chuckl. test email',
+    text: 'If you can read this, SMTP is working. 🎉',
+  });
 }
