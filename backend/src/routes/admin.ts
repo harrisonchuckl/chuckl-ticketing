@@ -1,111 +1,125 @@
+// backend/src/routes/admin.ts
 import { Router, Request, Response } from 'express';
 import { prisma } from '../db.js';
-import { sendTicketsEmail, sendTestEmail } from '../services/email.js';
+import { sendTestEmail, sendTicketsEmail } from '../services/email.js';
 
 export const router = Router();
 
-// --- tiny helpers ---
-function bool(v: any) {
-  return String(v).trim() === '1' || String(v).toLowerCase() === 'true';
-}
-
-// Quick ping
+/** Simple ping so you can curl it */
 router.get('/bootstrap/ping', (_req, res) => {
   res.json({ ok: true, router: 'admin', path: '/admin/bootstrap/ping' });
 });
 
-// 1) Inspect env the API is actually running with (no secrets)
-router.get('/env', (_req: Request, res: Response) => {
-  res.json({
-    EMAIL_ENABLED: process.env.EMAIL_ENABLED ?? null,
-    SMTP_HOST: process.env.SMTP_HOST ?? null,
-    SMTP_USER: process.env.SMTP_USER ?? null,
-    SMTP_FROM: process.env.SMTP_FROM ?? null,
-    NODE_ENV: process.env.NODE_ENV ?? null,
-    note: 'If EMAIL_ENABLED is not "1", emails will be skipped.'
-  });
-});
-
-// 2) Resend tickets email for an order
-router.post('/order/:id/resend', async (req: Request, res: Response) => {
+/** One-time bootstrap: create sample venue/show/ticketType */
+router.post('/bootstrap', async (req: Request, res: Response) => {
   try {
-    const orderId = req.params.id;
-    const to = (req.body?.to as string | undefined)?.trim();
-
-    // Check email toggle
-    if (!bool(process.env.EMAIL_ENABLED)) {
-      console.warn('📭 EMAIL_ENABLED is not 1 → skipping email send');
-      return res.status(409).json({ ok: false, skipped: true, reason: 'EMAIL_DISABLED' });
+    const k = req.headers['x-bootstrap-key'];
+    if (!k || String(k) !== (process.env.BOOTSTRAP_KEY || 'ashdb77asjkh')) {
+      return res.status(401).json({ error: 'unauthorized' });
     }
 
-    // Pull order, show and tickets
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      select: {
-        id: true,
-        email: true,
-        amountPence: true,
-        quantity: true,
-        showId: true,
-        show: {
-          select: {
-            id: true,
-            title: true,
-            date: true,
-            venue: { select: { name: true, address: true, city: true, postcode: true } }
-          }
-        },
-        tickets: { select: { serial: true, qrData: true } }
+    const venue = await prisma.venue.create({
+      data: {
+        name: 'Chuckl. Test Venue',
+        address: '123 High Street',
+        city: 'Cambridge',
+        postcode: 'CB1 1AA'
       }
     });
 
-    if (!order) return res.status(404).json({ ok: false, error: 'order_not_found' });
-    if (!order.show) return res.status(404).json({ ok: false, error: 'show_not_found' });
+    const show = await prisma.show.create({
+      data: {
+        venueId: venue.id,
+        title: 'Chuckl. Test Show',
+        description: 'A fun night!',
+        date: new Date(Date.now() + 7 * 24 * 3600 * 1000)
+      }
+    });
 
-    const recipient = to || order.email;
-    if (!recipient) return res.status(400).json({ ok: false, error: 'no_recipient_email' });
+    const tt = await prisma.ticketType.create({
+      data: {
+        showId: show.id,
+        name: 'General Admission',
+        pricePence: 2000,
+        available: 100
+      }
+    });
 
-    try {
-      await sendTicketsEmail({
-        to: recipient,
-        show: order.show,
-        order: { id: order.id, quantity: order.quantity, amountPence: order.amountPence },
-        tickets: order.tickets
-      });
-      console.log(`📧 Resent tickets to ${recipient} for order ${order.id}`);
-      return res.json({ ok: true, resent: true, to: recipient });
-    } catch (err: any) {
-      console.error('📧 Email send failed:', err?.message || err);
-      return res.status(500).json({ ok: false, error: 'smtp_failed', detail: String(err?.message || err) });
-    }
+    res.json({
+      venueId: venue.id,
+      showId: show.id,
+      ticketTypeId: tt.id,
+      message: 'Bootstrap complete. Use these IDs in /checkout/create.'
+    });
   } catch (e: any) {
-    console.error('resend error:', e?.stack || e);
-    res.status(500).json({ ok: false, error: 'server_error' });
+    console.error('bootstrap_failed:', e?.message || e);
+    res.status(500).json({ error: 'bootstrap_failed', detail: String(e?.message || e) });
   }
 });
 
-// 3) Minimal direct test (no order required)
+/** Test email endpoint */
 router.post('/email/test', async (req: Request, res: Response) => {
   try {
-    const to = (req.body?.to as string | undefined)?.trim();
+    const { to } = req.body || {};
     if (!to) return res.status(400).json({ ok: false, error: 'missing_to' });
 
-    if (!bool(process.env.EMAIL_ENABLED)) {
-      console.warn('📭 EMAIL_ENABLED is not 1 → skipping email send');
-      return res.status(409).json({ ok: false, skipped: true, reason: 'EMAIL_DISABLED' });
+    if (process.env.EMAIL_ENABLED !== '1') {
+      return res.status(400).json({ ok: false, error: 'email_disabled' });
     }
 
-    try {
-      await sendTestEmail(to);
-      console.log(`📧 Test email sent to ${to}`);
-      res.json({ ok: true, to });
-    } catch (err: any) {
-      console.error('📧 Test email failed:', err?.message || err);
-      res.status(500).json({ ok: false, error: 'smtp_failed', detail: String(err?.message || err) });
-    }
+    const rsp = await sendTestEmail(to);
+    console.log('📧 Test email queued/sent to', to);
+    res.json({ ok: true, provider: process.env.RESEND_API_KEY ? 'resend' : 'smtp', result: rsp });
   } catch (e: any) {
-    console.error('test email route error:', e?.stack || e);
-    res.status(500).json({ ok: false, error: 'server_error' });
+    console.error('📧 Test email failed:', e?.message || e);
+    res.status(500).json({ ok: false, error: 'email_failed', detail: e?.message || String(e) });
+  }
+});
+
+/** Resend order tickets by orderId (optional `?to=` override) */
+router.get('/order/:id/resend', async (req: Request, res: Response) => {
+  try {
+    if (process.env.EMAIL_ENABLED !== '1') {
+      return res.status(400).json({ ok: false, error: 'email_disabled' });
+    }
+
+    const orderId = req.params.id;
+    const toOverride = (req.query.to as string) || '';
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        show: { include: { venue: true } },
+        tickets: true
+      }
+    });
+    if (!order) return res.status(404).json({ ok: false, error: 'order_not_found' });
+
+    const to = toOverride || order.email;
+    if (!to) return res.status(400).json({ ok: false, error: 'no_recipient' });
+
+    await sendTicketsEmail({
+      to,
+      show: {
+        id: order.show.id,
+        title: order.show.title,
+        date: order.show.date,
+        venue: {
+          name: order.show.venue.name,
+          address: order.show.venue.address,
+          city: order.show.venue.city,
+          postcode: order.show.venue.postcode
+        }
+      },
+      order: { id: order.id, quantity: order.quantity, amountPence: order.amountPence },
+      tickets: order.tickets.map(t => ({ serial: t.serial, qrData: t.qrData }))
+    });
+
+    console.log(`📧 Resent ${order.tickets.length} ticket(s) to ${to} for order ${order.id}`);
+    res.json({ ok: true, resent: true, to, count: order.tickets.length });
+  } catch (e: any) {
+    console.error('📧 Resend failed:', e?.message || e);
+    res.status(500).json({ ok: false, error: 'resend_failed', detail: e?.message || String(e) });
   }
 });
 
