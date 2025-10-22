@@ -3,41 +3,44 @@ import { prisma } from '../db.js';
 
 export const router = Router();
 
+/** Simple admin-key check used by the scan endpoints */
 function requireAdmin(req: Request, res: Response): boolean {
-  const headerKey = req.header('x-admin-key');
-  const envKey = process.env.ADMIN_KEY || process.env.BOOTSTRAP_KEY || '';
-  if (!envKey || headerKey !== envKey) {
-    res.status(401).json({ error: 'unauthorized', detail: 'Set ADMIN_KEY and pass x-admin-key header' });
+  const got = (req.headers['x-admin-key'] as string | undefined)?.trim();
+  const want = (process.env.ADMIN_KEY || process.env.BOOTSTRAP_KEY || '').trim();
+  if (!got || !want || got !== want) {
+    res.status(401).json({ error: 'unauthorized' });
     return false;
   }
   return true;
 }
 
-// Simple ping
-router.get('/ping', (req, res) => res.json({ ok: true, router: 'scan', path: '/admin/scan/ping' }));
+/** Basic serial sanitiser */
+function cleanSerial(raw?: string): string {
+  return String(raw || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 32);
+}
 
 /**
- * Scan a ticket by serial (case-insensitive).
- * Body: { "serial": "XPTPMQM6TNX4" }
- *
- * Responses:
- *  - 200 { ok: true, status: 'OK'|'ALREADY_USED', ticket: {...}, show: {...}, scannedAt? }
- *  - 404 { error: 'not_found' }
- *  - 401 { error: 'unauthorized' }
+ * POST /scan/check
+ * Body: { serial: string }
+ * Returns ticket + show info without mutating anything.
  */
-router.post('/', async (req: Request, res: Response) => {
+router.post('/check', async (req: Request, res: Response) => {
   try {
     if (!requireAdmin(req, res)) return;
-
-    const serialRaw = (req.body?.serial || req.body?.qrData || '').toString().trim();
-    if (!serialRaw) return res.status(400).json({ error: 'invalid_body', detail: 'Provide serial' });
-
-    // Accept qrData like "chuckl:SERIAL" or plain SERIAL
-    const serial = serialRaw.toUpperCase().replace(/^chuckl:/i, '');
+    const serial = cleanSerial(req.body?.serial);
+    if (!serial) return res.status(400).json({ error: 'invalid_serial' });
 
     const ticket = await prisma.ticket.findUnique({
       where: { serial },
-      include: {
+      select: {
+        id: true,
+        serial: true,
+        status: true,
+        scannedAt: true,
+        order: { select: { email: true, id: true } },
         show: {
           select: {
             id: true,
@@ -45,66 +48,66 @@ router.post('/', async (req: Request, res: Response) => {
             date: true,
             venue: { select: { name: true, address: true, city: true, postcode: true } }
           }
-        },
-        order: { select: { id: true, email: true } }
+        }
       }
     });
 
-    if (!ticket) return res.status(404).json({ error: 'not_found', serial });
-
-    // If already used, return idempotent status (don’t update again)
-    if (ticket.status === 'USED' && ticket.scannedAt) {
-      return res.json({
-        ok: true,
-        status: 'ALREADY_USED',
-        scannedAt: ticket.scannedAt,
-        ticket: { id: ticket.id, serial: ticket.serial },
-        show: ticket.show,
-        order: ticket.order ? { id: ticket.order.id, email: ticket.order.email } : null
-      });
-    }
-
-    const updated = await prisma.ticket.update({
-      where: { id: ticket.id },
-      data: { status: 'USED', scannedAt: new Date() }
-    });
+    if (!ticket) return res.status(404).json({ error: 'not_found' });
 
     return res.json({
       ok: true,
-      status: 'OK',
-      scannedAt: updated.scannedAt,
-      ticket: { id: updated.id, serial: updated.serial },
-      show: ticket.show,
-      order: ticket.order ? { id: ticket.order.id, email: ticket.order.email } : null
+      ticket: {
+        id: ticket.id,
+        serial: ticket.serial,
+        status: ticket.status,
+        scannedAt: ticket.scannedAt,
+        orderId: ticket.order?.id,
+        purchaser: ticket.order?.email
+      },
+      show: ticket.show
     });
-  } catch (e: any) {
-    console.error('scan_error:', e?.stack || e);
+  } catch (err: any) {
+    console.error('scan/check error', err?.stack || err);
     res.status(500).json({ error: 'server_error' });
   }
 });
 
 /**
- * (Optional) Unscan a ticket for testing
- * POST /admin/scan/unscan { "serial": "XPTPMQM6TNX4" }
+ * POST /scan/mark
+ * Body: { serial: string }
+ * Marks VALID → USED (idempotent), returns current state.
  */
-router.post('/unscan', async (req: Request, res: Response) => {
+router.post('/mark', async (req: Request, res: Response) => {
   try {
     if (!requireAdmin(req, res)) return;
+    const serial = cleanSerial(req.body?.serial);
+    if (!serial) return res.status(400).json({ error: 'invalid_serial' });
 
-    const serial = (req.body?.serial || '').toString().trim().toUpperCase();
-    if (!serial) return res.status(400).json({ error: 'invalid_body' });
+    const t = await prisma.ticket.findUnique({
+      where: { serial },
+      select: { id: true, status: true, scannedAt: true }
+    });
+    if (!t) return res.status(404).json({ error: 'not_found' });
 
-    const ticket = await prisma.ticket.findUnique({ where: { serial } });
-    if (!ticket) return res.status(404).json({ error: 'not_found', serial });
+    // Idempotent: if already USED (or not VALID), just return current state.
+    if (t.status !== 'VALID') {
+      return res.json({
+        ok: true,
+        already: true,
+        status: t.status,
+        scannedAt: t.scannedAt
+      });
+    }
 
-    await prisma.ticket.update({
-      where: { id: ticket.id },
-      data: { status: 'VALID', scannedAt: null }
+    const updated = await prisma.ticket.update({
+      where: { id: t.id },
+      data: { status: 'USED', scannedAt: new Date() },
+      select: { status: true, scannedAt: true }
     });
 
-    res.json({ ok: true });
-  } catch (e: any) {
-    console.error('unscan_error:', e?.stack || e);
+    return res.json({ ok: true, status: updated.status, scannedAt: updated.scannedAt });
+  } catch (err: any) {
+    console.error('scan/mark error', err?.stack || err);
     res.status(500).json({ error: 'server_error' });
   }
 });
