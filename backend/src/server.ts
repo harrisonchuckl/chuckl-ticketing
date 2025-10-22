@@ -10,11 +10,9 @@ import { router as checkout } from './routes/checkout.js';
 import { router as webhook } from './routes/webhook.js';
 import { router as me } from './routes/me.js';
 import { router as admin } from './routes/admin.js';
-import { router as scanUi } from './routes/scan-ui.js'; // <-- new UI route for scanning
+import { router as scanUi } from './routes/scan-ui.js';
 
 const app = express();
-
-// trust proxy so rate-limit + Railway’s proxy headers behave correctly
 app.set('trust proxy', true);
 
 app.use(helmet());
@@ -38,7 +36,7 @@ app.use('/checkout', checkout);
 app.use('/webhooks', webhook);
 app.use('/me', me);
 app.use('/admin', admin);
-app.use('/scan', scanUi); // small web UI to test check/mark endpoints
+app.use('/scan', scanUi);
 
 const port = Number(process.env.PORT || 4000);
 app.listen(port, () => console.log('API running on port ' + port));
