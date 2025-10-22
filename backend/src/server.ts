@@ -4,56 +4,51 @@ import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 
-// existing routers in your codebase
 import { router as auth } from './routes/auth.js';
 import { router as events } from './routes/events.js';
 import { router as checkout } from './routes/checkout.js';
 import { router as webhook } from './routes/webhook.js';
 import { router as me } from './routes/me.js';
 import { router as admin } from './routes/admin.js';
-
-// NEW: scan endpoints + tiny admin lookup
-import { router as scan } from './routes/scan.js';
-import { router as adminLookup } from './routes/admin-lookup.js';
+import { router as scanUI } from './routes/scan-ui.js';
 
 const app = express();
 
-// Trust Railway/Proxy so rate-limit reads the client IP correctly
+// trust proxy so rate-limit uses correct client IPs (Railway / proxies)
 app.set('trust proxy', 1);
 
-// Security & basics
 app.use(helmet());
-app.use(
-  cors({
-    origin:
-      (process.env.CORS_ORIGINS || '')
-        .split(',')
-        .map(s => s.trim())
-        .filter(Boolean).length > 0
-        ? (process.env.CORS_ORIGINS as string).split(',').map(s => s.trim())
-        : true
-  })
-);
-app.use(rateLimit({ windowMs: 60_000, max: 120 }));
-
-// Important: the Stripe router handles its own raw body inside the route file,
-// so we can safely put JSON here for the rest of the app.
 app.use(express.json({ limit: '1mb' }));
 
-// Health
+// CORS
+const corsOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+app.use(cors({ origin: corsOrigins.length ? corsOrigins : true }));
+
+// basic rate limit
+app.use(rateLimit({ windowMs: 60_000, max: 120, standardHeaders: true }));
+
+// health
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
-// Mount business routes
+// routes
 app.use('/auth', auth);
 app.use('/events', events);
 app.use('/checkout', checkout);
-app.use('/webhooks', webhook); // stripe webhook lives here
+
+// Stripe webhook MUST receive raw body
+app.use('/webhooks', webhook);
+
 app.use('/me', me);
 app.use('/admin', admin);
 
-// NEW: scanners + admin lookup
-app.use('/scan', scan);
-app.use('/admin', adminLookup);
+// Simple browser scanner UI (uses your /scan/check + /scan/mark APIs)
+app.use('/scan', scanUI);
+
+// success page already lives in /success (if you added it)
+// …any other static/public mounts here
 
 const port = Number(process.env.PORT || 4000);
-app.listen(port, () => console.log(`API running on port ${port}`));
+app.listen(port, () => console.log('API running on port', port));
