@@ -1,7 +1,4 @@
 import { buildTicketsPdf } from './pdf.js';
-import type { Readable } from 'stream';
-
-// Prefer Resend; fallback to SMTP (nodemailer)
 import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
 
@@ -55,9 +52,7 @@ function htmlBody(show: ShowInfo, order: OrderBrief, tickets: TicketInfo[]) {
     .filter(Boolean)
     .join('<br/>');
 
-  const list = tickets
-    .map(t => `<li><code>${t.serial}</code></li>`)
-    .join('');
+  const list = tickets.map(t => `<li><code>${t.serial}</code></li>`).join('');
 
   return `
   <div style="font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;">
@@ -72,24 +67,23 @@ function htmlBody(show: ShowInfo, order: OrderBrief, tickets: TicketInfo[]) {
   `;
 }
 
-async function sendViaResend(to: string, subject: string, html: string, pdf: Buffer) {
+async function sendViaResend(to: string, subject: string, html: string, pdf?: Buffer) {
   const resend = new Resend(RESEND_API_KEY);
+  const attachments = pdf
+    ? [{ content: pdf.toString('base64'), filename: 'tickets.pdf' }]
+    : undefined;
+
   const result = await resend.emails.send({
-    from: EMAIL_FROM,        // e.g. "Chuckl. Tickets <tickets@chuckl.co.uk>"
+    from: EMAIL_FROM, // must be a verified sender in Resend
     to,
     subject,
     html,
-    attachments: [
-      {
-        content: pdf.toString('base64'),
-        filename: 'tickets.pdf',
-      },
-    ],
+    attachments,
   });
   return result;
 }
 
-async function sendViaSmtp(to: string, subject: string, html: string, pdf: Buffer) {
+async function sendViaSmtp(to: string, subject: string, html: string, pdf?: Buffer) {
   const host = process.env.SMTP_HOST;
   const port = Number(process.env.SMTP_PORT || 587);
   const user = process.env.SMTP_USER;
@@ -102,7 +96,7 @@ async function sendViaSmtp(to: string, subject: string, html: string, pdf: Buffe
   const transporter = nodemailer.createTransport({
     host,
     port,
-    secure: port === 465, // 465 = SSL
+    secure: port === 465,
     auth: { user, pass },
   });
 
@@ -111,17 +105,15 @@ async function sendViaSmtp(to: string, subject: string, html: string, pdf: Buffe
     to,
     subject,
     html,
-    attachments: [
-      { filename: 'tickets.pdf', content: pdf, contentType: 'application/pdf' },
-    ],
+    attachments: pdf
+      ? [{ filename: 'tickets.pdf', content: pdf, contentType: 'application/pdf' }]
+      : undefined,
   });
 
   return { id: info.messageId };
 }
 
-/**
- * Public function used by the webhook + admin resend route
- */
+/** Send tickets with attached PDF (used by webhook + admin resend) */
 export async function sendTicketsEmail(args: {
   to: string;
   show: ShowInfo;
@@ -131,16 +123,25 @@ export async function sendTicketsEmail(args: {
   const { to, show, order, tickets } = args;
   const pdf = await buildTicketsPdf({ show, order, tickets });
   const subject = `Your tickets – ${show.title}`;
-
   const html = htmlBody(show, order, tickets);
 
-  if (RESEND_API_KEY) {
-    return await sendViaResend(to, subject, html, pdf);
-  }
-  // fallback to SMTP if configured
-  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+  if (RESEND_API_KEY) return await sendViaResend(to, subject, html, pdf);
+  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS)
     return await sendViaSmtp(to, subject, html, pdf);
-  }
+
+  throw new Error('No email provider configured (RESEND_API_KEY or SMTP_* required)');
+}
+
+/** Simple connectivity test without PDF (admin/test endpoint expects this) */
+export async function sendTestEmail(to: string) {
+  const subject = 'Chuckl. test email';
+  const html = `<div style="font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;">
+    <h2>Test email</h2><p>If you can read this, your email provider is working.</p>
+  </div>`;
+
+  if (RESEND_API_KEY) return await sendViaResend(to, subject, html);
+  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS)
+    return await sendViaSmtp(to, subject, html);
 
   throw new Error('No email provider configured (RESEND_API_KEY or SMTP_* required)');
 }
