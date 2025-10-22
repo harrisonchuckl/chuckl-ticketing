@@ -2,8 +2,6 @@ import { Router } from 'express';
 
 export const router = Router();
 
-// Simple HTML page so you can test /scan/check and /scan/mark from a browser.
-// Requires x-admin-key (your BOOTSTRAP_KEY) to be set in the form.
 router.get('/', (_req, res) => {
   res.type('html').send(`<!doctype html>
 <html>
