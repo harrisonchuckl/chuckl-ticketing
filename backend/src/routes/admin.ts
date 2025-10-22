@@ -1,166 +1,96 @@
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import { prisma } from '../db.js';
 import { sendTicketsEmail, sendTestEmail } from '../services/email.js';
 
-// Accept either ADMIN_KEY or BOOTSTRAP_KEY for convenience
-const ADMIN_KEY = process.env.ADMIN_KEY || process.env.BOOTSTRAP_KEY || '';
-
 export const router = Router();
 
-/** Simple guard for admin endpoints */
-function requireAdmin(req: Request, res: Response): boolean {
-  if (!ADMIN_KEY) {
-    res.status(500).json({ error: 'admin_key_not_set', detail: 'Set ADMIN_KEY or BOOTSTRAP_KEY in Railway.' });
-    return false;
-  }
-  const header = req.header('x-admin-key');
-  if (header !== ADMIN_KEY) {
-    res.status(401).json({ error: 'unauthorized' });
-    return false;
-  }
-  return true;
+// Admin auth via header
+function isAdmin(req: any) {
+  const key = req.headers['x-admin-key'];
+  return key && String(key) === String(process.env.BOOTSTRAP_KEY);
 }
 
-/** Health check for admin router */
-router.get('/bootstrap/ping', (_req, res) => {
-  res.json({ ok: true, router: 'admin', path: '/admin/bootstrap/ping' });
-});
+// Ping (you already use this)
+router.get('/bootstrap/ping', (_req, res) =>
+  res.json({ ok: true, router: 'admin', path: '/admin/bootstrap/ping' })
+);
 
-/** Bootstrap: create a Venue, Show, TicketType for testing */
-router.post('/bootstrap', async (req, res) => {
-  if (!requireAdmin(req, res)) return;
+// Email connectivity test (requires x-admin-key)
+router.post('/email/test', async (req, res) => {
   try {
-    const venue = await prisma.venue.create({
-      data: {
-        name: 'Chuckl. Test Venue',
-        address: '123 Laugh Lane',
-        city: 'Comedy-on-Sea',
-        postcode: 'HA-HA 1AA',
-      },
-    });
-
-    const show = await prisma.show.create({
-      data: {
-        venueId: venue.id,
-        title: 'Chuckl. Test Show',
-        description: 'A demo show created by /admin/bootstrap',
-        date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // +7 days
-      },
-    });
-
-    const ticketType = await prisma.ticketType.create({
-      data: {
-        showId: show.id,
-        name: 'General Admission',
-        pricePence: 2000,
-        available: 100,
-      },
-    });
-
-    res.json({
-      venueId: venue.id,
-      showId: show.id,
-      ticketTypeId: ticketType.id,
-      message: 'Bootstrap complete. Use these IDs in /checkout/create.',
-    });
+    if (!isAdmin(req)) return res.status(401).json({ error: 'unauthorized' });
+    const to = (req.body?.to || '').trim();
+    if (!to) return res.status(400).json({ error: 'missing_to' });
+    const result = await sendTestEmail(to);
+    res.json({ ok: true, provider: process.env.RESEND_API_KEY ? 'resend' : 'smtp', result });
   } catch (e: any) {
-    res.status(500).json({ error: 'bootstrap_failed', detail: e?.message || String(e) });
+    console.error('Test email failed:', e?.message || e);
+    res.status(500).json({ ok: false, error: 'email_failed', detail: e?.message || String(e) });
   }
 });
 
-/** List recent orders */
+// Admin list orders
 router.get('/orders', async (req, res) => {
-  if (!requireAdmin(req, res)) return;
-  const limit = Math.min(parseInt(String(req.query.limit || '10'), 10) || 10, 50);
-  try {
-    const orders = await prisma.order.findMany({
-      take: limit,
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        status: true,
-        email: true,
-        amountPence: true,
-        quantity: true,
-        createdAt: true,
-        show: { select: { id: true, title: true, date: true } },
-      },
-    });
-    res.json({ orders });
-  } catch (e: any) {
-    res.status(500).json({ error: 'list_failed', detail: e?.message || String(e) });
-  }
+  if (!isAdmin(req)) return res.status(401).json({ error: 'unauthorized' });
+  const limit = Math.min(50, Math.max(1, Number(req.query.limit || 10)));
+  const orders = await prisma.order.findMany({
+    take: limit,
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true, status: true, email: true, amountPence: true, quantity: true, createdAt: true,
+      show: { select: { id: true, title: true, date: true } }
+    }
+  });
+  res.json({ orders });
 });
 
-/** Get one order */
-router.get('/order/:orderId', async (req, res) => {
-  if (!requireAdmin(req, res)) return;
-  const { orderId } = req.params;
-  try {
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      include: {
-        tickets: { select: { id: true, serial: true, status: true } },
-        show: { select: { id: true, title: true, date: true, venue: { select: { name: true } } } },
-      },
-    });
-    if (!order) return res.status(404).json({ error: 'not_found' });
-    res.json(order);
-  } catch (e: any) {
-    res.status(500).json({ error: 'fetch_failed', detail: e?.message || String(e) });
-  }
+// Admin get order
+router.get('/order/:id', async (req, res) => {
+  if (!isAdmin(req)) return res.status(401).json({ error: 'unauthorized' });
+  const order = await prisma.order.findUnique({
+    where: { id: req.params.id },
+    include: {
+      tickets: { select: { id: true, serial: true, status: true } },
+      show: { select: { id: true, title: true, date: true, venue: { select: { name: true } } } },
+    }
+  });
+  if (!order) return res.status(404).json({ error: 'not_found' });
+  res.json(order);
 });
 
-/** Resend tickets for an order */
-router.post('/order/:orderId/resend', async (req, res) => {
-  if (!requireAdmin(req, res)) return;
-  const { orderId } = req.params;
-  const overrideTo: string | undefined = req.body?.to;
-
+// Admin resend tickets
+router.post('/order/:id/resend', async (req, res) => {
   try {
+    if (!isAdmin(req)) return res.status(401).json({ error: 'unauthorized' });
+    const id = req.params.id;
+    const to = (req.body?.to || '').trim();
+
     const order = await prisma.order.findUnique({
-      where: { id: orderId },
+      where: { id },
       include: {
-        tickets: { select: { serial: true, qrData: true, status: true } },
+        tickets: { select: { serial: true, qrData: true } },
         show: {
           select: {
-            id: true,
-            title: true,
-            date: true,
-            venue: { select: { name: true, address: true, city: true, postcode: true } },
-          },
-        },
-      },
+            id: true, title: true, date: true,
+            venue: { select: { name: true, address: true, city: true, postcode: true } }
+          }
+        }
+      }
     });
 
     if (!order) return res.status(404).json({ error: 'not_found' });
 
-    const to = overrideTo || order.email;
-    if (!to) return res.status(400).json({ error: 'no_email' });
-
     await sendTicketsEmail({
-      to,
-      show: order.show,
+      to: to || order.email,
+      show: order.show as any,
       order: { id: order.id, quantity: order.quantity, amountPence: order.amountPence },
-      tickets: order.tickets.map(t => ({ serial: t.serial, qrData: t.qrData || `chuckl:${t.serial}` })),
+      tickets: order.tickets as any
     });
 
-    res.json({ ok: true, resent: true, to });
+    res.json({ ok: true, resent: true, to: to || order.email });
   } catch (e: any) {
-    res.status(500).json({ error: 'resend_failed', detail: e?.message || String(e) });
-  }
-});
-
-/** Send a direct test email via the configured provider */
-router.post('/email/test', async (req, res) => {
-  if (!requireAdmin(req, res)) return;
-  const to: string | undefined = req.body?.to;
-  if (!to) return res.status(400).json({ ok: false, error: 'missing_to' });
-  try {
-    const result = await sendTestEmail(to);
-    res.json({ ok: true, provider: result.provider, result: result.result });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, error: 'email_failed', detail: e?.message || String(e) });
+    console.error('Resend failed:', e?.message || e);
+    res.status(500).json({ ok: false, error: 'resend_failed', detail: e?.message || String(e) });
   }
 });
 
