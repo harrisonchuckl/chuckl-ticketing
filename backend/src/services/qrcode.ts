@@ -1,2 +1,17 @@
+// backend/src/services/qrcode.ts
 import QRCode from 'qrcode';
-export async function makeTicketQR(data: string){ return await QRCode.toDataURL(data, { width: 320, margin: 1 }); }
+
+/**
+ * Make a PNG buffer for a QR code.
+ * @param data - string to encode
+ * @param width - pixel width of PNG (default 512)
+ */
+export async function qrPngBuffer(data: string, width = 512): Promise<Buffer> {
+  const buf = await QRCode.toBuffer(data, {
+    type: 'png',
+    width,
+    margin: 1,
+    errorCorrectionLevel: 'M',
+  });
+  return buf;
+}
