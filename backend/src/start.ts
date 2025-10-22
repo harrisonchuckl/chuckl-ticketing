@@ -1,23 +1,32 @@
-import { execSync } from 'node:child_process';
+// backend/src/start.ts
 import 'dotenv/config';
 
-// One-time forced reset when RESET_DB=1
-try {
-  if (process.env.RESET_DB === '1') {
-    console.warn('⚠️  RESET_DB=1 detected → running prisma db push --force-reset --accept-data-loss ...');
-    execSync('npx prisma db push --force-reset --accept-data-loss', {
-      stdio: 'inherit',
-      env: process.env as any
-    });
-    console.log('✅ Prisma force reset completed.');
-  } else {
-    console.log('🔧 Applying Prisma schema (db push)');
-    execSync('npx prisma db push', { stdio: 'inherit', env: process.env as any });
+// if you apply prisma push here, keep it; otherwise you can remove.
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const sh = promisify(exec);
+
+async function main() {
+  try {
+    // Optional: only push on Railway to keep local dev faster
+    if (process.env.RAILWAY_ENVIRONMENT) {
+      const reset = process.env.RESET_DB === '1';
+      const cmd = reset
+        ? 'prisma db push --force-reset --accept-data-loss'
+        : 'prisma db push';
+      console.log('🔧 Applying Prisma schema (db push)');
+      await sh(cmd, { env: process.env, cwd: process.cwd() });
+    }
+  } catch (e) {
+    console.error('Prisma push failed:', e);
   }
-} catch (e) {
-  console.error('❌ Prisma push/reset failed:', e);
-  // continue startup even if push fails because schema may already match
+
+  // Start the API
+  await import('./server.js'); // ESM import of compiled server
 }
 
-console.log('🚀 Starting API');
-import('./server.js');
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
