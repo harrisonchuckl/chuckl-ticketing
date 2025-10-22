@@ -2,8 +2,8 @@ import { Router } from 'express';
 
 export const router = Router();
 
-// Simple HTML page to check/mark tickets by serial.
-// Uses fetch() to call /scan/check and /scan/mark with x-admin-key.
+// Simple HTML page for door staff to check/mark tickets by serial.
+// It calls /scan/check and /scan/mark using fetch() and your x-admin-key.
 router.get('/', (_req, res) => {
   const html = `<!doctype html>
 <html lang="en">
