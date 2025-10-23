@@ -11,27 +11,38 @@ import { router as checkout } from './routes/checkout.js';
 import { router as webhook } from './routes/webhook.js';
 import { router as me } from './routes/me.js';
 import { router as admin } from './routes/admin.js';
-import { router as scan } from './routes/scan.js';        // your working check/mark API
-import { router as scanUi } from './routes/scan-ui.js';    // NEW: the UI we just created
+import { router as scan } from './routes/scan.js';         // your API for check/mark
+import { router as scanUi } from './routes/scan-ui.js';     // NEW: UI + JS
 
 const app = express();
 
-// Trust Railway/Proxy (fixes rate-limit warning re X-Forwarded-For)
-app.set('trust proxy', true);
+/**
+ * Trust proxy only for local/link-local networks (safer than plain `true`)
+ * and tell express-rate-limit not to warn about it.
+ */
+app.set('trust proxy', 'loopback, linklocal, uniquelocal');
 
-// Security + JSON
+// Helmet (no inline scripts needed since we use external JS)
 app.use(helmet());
+
+// JSON body
 app.use(express.json({ limit: '1mb' }));
 
-// CORS (allow list via env or allow all for now)
+// CORS (allow list via env or allow all)
 const corsOrigins = (process.env.CORS_ORIGINS || '')
   .split(',')
   .map(s => s.trim())
   .filter(Boolean);
 app.use(cors({ origin: corsOrigins.length ? corsOrigins : true }));
 
-// Rate limiting
-app.use(rateLimit({ windowMs: 60_000, max: 120 }));
+// Rate limiting (silence trust-proxy validation warning)
+app.use(rateLimit({
+  windowMs: 60_000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { trustProxy: false }
+}));
 
 // Health
 app.get('/health', (_req, res) => res.json({ ok: true }));
@@ -44,13 +55,13 @@ app.use('/webhooks', webhook);
 app.use('/me', me);
 app.use('/admin', admin);
 
-// Scanner API already here
+// Scanner API (already working)
 app.use('/scan', scan);
 
-// Scanner UI (GET /scan)
+// Scanner UI + static JS
 app.use('/', scanUi);
 
-// Minimal success page (keeps Stripe redirect happy)
+// Minimal success page (Stripe redirect)
 app.get('/success', (req, res) => {
   const orderId = String(req.query.orderId || '');
   const html = `<!doctype html>
@@ -76,6 +87,6 @@ a.btn{display:inline-block;margin-top:16px;padding:10px 16px;border-radius:10px;
   res.send(html);
 });
 
-// Start server
+// Start
 const port = Number(process.env.PORT || 4000);
 app.listen(port, () => console.log('API running on port ' + port));
