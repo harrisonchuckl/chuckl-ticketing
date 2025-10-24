@@ -1,3 +1,4 @@
+// backend/src/server.ts
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
@@ -6,29 +7,31 @@ import bodyParser from 'body-parser';
 
 // Route modules
 import checkout from './routes/checkout.js';
-import webhooks from './routes/webhook.js';   // singular file: webhook.ts
+import webhook from './routes/webhook.js'; // singular file: webhook.ts
 import admin from './routes/admin.js';
 import scanApi from './routes/scan.js';
 import scanUI from './routes/scan-ui.js';
 
 const app = express();
 
-// Railway is behind a proxy; keep express-rate-limit safe by scoping trust:
+/**
+ * Railway sits behind a proxy. Keep express-rate-limit safe by scoping trust.
+ * 'loopback' means only loopback proxies (127.0.0.1) are trusted for IP.
+ * This avoids the "permissive trust proxy" warning/error.
+ */
 app.set('trust proxy', 'loopback');
 
-// Basic middleware
+// Stripe webhooks must receive the raw body
+app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), webhook);
+
+// Core middleware for everything else
 app.use(cors());
 app.use(morgan('tiny'));
-
-// Stripe webhooks: must use raw body
-app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), webhooks);
-
-// Everything else uses JSON
 app.use(express.json({ limit: '1mb' }));
 
-// Lightweight rate limit for admin + scan
+// Lightweight rate-limit for admin + scan
 const limiter = rateLimit({
-  windowMs: 60 * 1000,
+  windowMs: 60_000,
   limit: 120,
   standardHeaders: true,
   legacyHeaders: false,
