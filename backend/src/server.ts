@@ -1,44 +1,48 @@
 // backend/src/server.ts
+
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import bodyParser from 'body-parser';
 
+// NOTE: .js extensions are intentional for Node/ESM runtime.
+// They point to the compiled files at runtime.
 import checkout from './routes/checkout.js';
-import webhooks from './routes/webhooks.js';
+import webhooks from './routes/webhook.js';    // <— singular
 import admin from './routes/admin.js';
 import scanApi from './routes/scan.js';
-import scanUI from './routes/scan-ui.js';
+import scanUi from './routes/scan-ui.js';
 
 const app = express();
 
-// Railway is behind a trusted proxy; set to 'loopback' so express-rate-limit is safe
+// Railway is behind a proxy — keep express-rate-limit safe:
 app.set('trust proxy', 'loopback');
 
+// Core middleware
 app.use(cors());
 app.use(morgan('tiny'));
 
-// Stripe webhooks must use raw body
+// Stripe webhooks must receive the raw body
 app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), webhooks);
 
-// Everything else can use JSON
+// Everything else can parse JSON
 app.use(express.json({ limit: '1mb' }));
 
-// Lightweight rate limit for admin/scan actions
+// Lightweight rate-limiting for admin + scan
 const limiter = rateLimit({
-  windowMs: 60 * 1000,
+  windowMs: 60_000,
   limit: 120,
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
 });
 app.use(['/scan', '/admin'], limiter);
 
 // Routes
 app.use('/checkout', checkout);
 app.use('/admin', admin);
-app.use('/scan', scanApi);   // JSON endpoints: /scan/check, /scan/mark, /scan/stats
-app.use('/scan', scanUI);    // UI at GET /scan
+app.use('/scan', scanApi); // JSON: /scan/check, /scan/mark, /scan/stats
+app.use('/scan', scanUi);  // UI:   GET /scan
 
 // Health
 app.get('/health', (_req, res) => res.json({ ok: true }));
