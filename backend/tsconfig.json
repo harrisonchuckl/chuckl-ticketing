@@ -10,11 +10,7 @@
     "forceConsistentCasingInFileNames": true,
     "strict": true,
     "skipLibCheck": true,
-
-    // IMPORTANT: allow both local shims and DefinitelyTyped packages
     "typeRoots": ["./src/types", "./node_modules/@types"],
-
-    // Optional but helpful:
     "resolveJsonModule": true,
     "isolatedModules": true
   },

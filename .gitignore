@@ -1,0 +1,19 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Dist
+dist/
+
+# Env
+.env
+.env.*
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
