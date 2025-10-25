@@ -18,7 +18,7 @@ router.get('/', (_req: Request, res: Response) => {
   .card{background:#141724;border:1px solid #22263a;border-radius:14px;padding:14px}
   h1{font-size:22px;margin:0 0 12px}
   .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-  input[type=text],input[type=datetime-local]{flex:1;min-width:220px;height:40px;padding:0 12px;border-radius:10px;border:1px solid #2a2f46;background:#0f1220;color:#e8ebf7;font-size:15px}
+  input[type=text],select{flex:1;min-width:220px;height:40px;padding:0 12px;border-radius:10px;border:1px solid #2a2f46;background:#0f1220;color:#e8ebf7;font-size:15px}
   button{height:40px;padding:0 12px;border-radius:10px;border:0;background:#4053ff;color:#fff;font-weight:600;cursor:pointer}
   button.secondary{background:#2a2f46}
   .tabs{display:flex;gap:8px;margin:12px 0}
@@ -64,8 +64,10 @@ router.get('/', (_req: Request, res: Response) => {
       <div id="tab-shows">
         <div class="row">
           <button id="loadShows">Load latest shows</button>
+          <select id="showSelect"><option value="">— select a show —</option></select>
+          <button id="loadStats" class="secondary">Load check-ins</button>
         </div>
-        <div id="showsArea" class="muted" style="margin-top:10px">No data yet.</div>
+        <div id="showsArea" class="muted" style="margin-top:10px">Pick a show to see stats.</div>
       </div>
 
       <!-- Orders -->
@@ -94,12 +96,12 @@ router.get('/', (_req: Request, res: Response) => {
   <div id="toast" class="toast hidden"></div>
 
   <script>
-    // --- Helpers ---
     const $ = (sel)=> document.querySelector(sel);
     const $$ = (sel)=> Array.from(document.querySelectorAll(sel));
     const statusEl = $('#status');
     const toast = $('#toast');
     const adminEl = $('#adminkey');
+    const showSelect = $('#showSelect');
     const savedKey = localStorage.getItem('x-admin-key') || '';
     if (savedKey) adminEl.value = savedKey;
 
@@ -127,7 +129,7 @@ router.get('/', (_req: Request, res: Response) => {
       try { return new Date(iso).toLocaleString(); } catch { return iso || ''; }
     }
 
-    // --- Tabs ---
+    // Tabs
     $$('.tab').forEach(t=>{
       t.addEventListener('click', ()=>{
         $$('.tab').forEach(x=>x.classList.remove('active'));
@@ -140,60 +142,42 @@ router.get('/', (_req: Request, res: Response) => {
       });
     });
 
-    // --- Save key ---
+    // Save key
     $('#saveKey').addEventListener('click', ()=>{
       localStorage.setItem('x-admin-key', adminEl.value.trim());
       showToast('Admin key saved', true);
     });
 
-    // --- Shows panel ---
+    // Shows: load list + populate select
     $('#loadShows').addEventListener('click', async ()=>{
-      const r = await getJSON('/admin/bootstrap/ping'); // cheap auth check + router ping
-      if (!r || r.ok !== true){ showToast('Auth failed', false); return; }
-
-      // We don't have a shows list endpoint in admin router, so reuse the user-facing one:
       const events = await fetch('/events').then(x=>x.json()).catch(()=>null);
-      const area = $('#showsArea');
       if (!events || !Array.isArray(events) || events.length===0){
-        area.innerHTML = '<span class="muted">No shows found.</span>';
+        $('#showsArea').innerHTML = '<span class="muted">No shows found.</span>';
+        showSelect.innerHTML = '<option value="">— select a show —</option>';
         return;
       }
-      area.innerHTML = \`
-        <table>
-          <thead><tr>
-            <th>Show</th><th>Date</th><th>Venue</th><th class="right">Actions</th>
-          </tr></thead>
-          <tbody>
-            \${events.map(ev => \`
-              <tr>
-                <td>\${ev.title||'-'}</td>
-                <td>\${prettyDate(ev.date)}</td>
-                <td>\${ev.venue?.name||'-'}</td>
-                <td class="right">
-                  <button class="secondary" data-showid="\${ev.id}" data-act="stats">Load check-ins</button>
-                  <a href="/scan" target="_blank"><button>Open scanner</button></a>
-                </td>
-              </tr>\`).join('')}
-          </tbody>
-        </table>\`;
-
-      area.querySelectorAll('button[data-act="stats"]').forEach(btn=>{
-        btn.addEventListener('click', async ()=>{
-          const s = await getJSON('/scan/stats', { method:'GET' });
-          if (s && s.ok){
-            showToast(\`Checked-in \${s.checkedIn} / \${s.total}\`);
-            // also update Tools tab cards
-            document.getElementById('checked').textContent = s.checkedIn ?? '0';
-            document.getElementById('remaining').textContent = s.remaining ?? '0';
-            document.getElementById('total').textContent = s.total ?? '0';
-          } else {
-            showToast('Could not fetch stats', false);
-          }
-        });
-      });
+      showSelect.innerHTML = '<option value="">— select a show —</option>' +
+        events.map(ev => \`<option value="\${ev.id}">\${ev.title} — \${prettyDate(ev.date)}</option>\`).join('');
+      $('#showsArea').innerHTML = '<span class="muted">Select a show and click “Load check-ins”.</span>';
+      showToast('Shows loaded');
     });
 
-    // --- Orders panel ---
+    // Shows: load stats for selected show
+    $('#loadStats').addEventListener('click', async ()=>{
+      const id = showSelect.value;
+      const url = id ? ('/scan/stats?showId=' + encodeURIComponent(id)) : '/scan/stats';
+      const s = await getJSON(url, { method:'GET' });
+      if (s && s.ok){
+        document.getElementById('checked').textContent = s.checkedIn ?? '0';
+        document.getElementById('remaining').textContent = s.remaining ?? '0';
+        document.getElementById('total').textContent = s.total ?? '0';
+        showToast('Stats refreshed');
+      } else {
+        showToast('Could not fetch stats', false);
+      }
+    });
+
+    // Orders panel
     async function loadOrders(){
       const filterEmail = (document.getElementById('filterEmail').value||'').trim().toLowerCase();
       const area = document.getElementById('ordersArea');
@@ -204,7 +188,6 @@ router.get('/', (_req: Request, res: Response) => {
       }
       let rows = r.orders;
       if (filterEmail) rows = rows.filter(o => (o.email||'').toLowerCase().includes(filterEmail));
-
       area.innerHTML = \`
         <table>
           <thead><tr>
@@ -225,7 +208,6 @@ router.get('/', (_req: Request, res: Response) => {
               </tr>\`).join('')}
           </tbody>
         </table>\`;
-
       area.querySelectorAll('.resend').forEach(btn=>{
         btn.addEventListener('click', async ()=>{
           const id = btn.getAttribute('data-oid');
@@ -241,16 +223,14 @@ router.get('/', (_req: Request, res: Response) => {
         });
       });
     }
-
     document.getElementById('loadOrders').addEventListener('click', loadOrders);
-    document.getElementById('filterEmail').addEventListener('input', ()=> {
-      // re-render quickly by calling loadOrders again (simple for now)
-      loadOrders();
-    });
+    document.getElementById('filterEmail').addEventListener('input', ()=> loadOrders());
 
-    // --- Tools tab ---
+    // Tools
     document.getElementById('refreshStats').addEventListener('click', async ()=>{
-      const s = await getJSON('/scan/stats', { method:'GET' });
+      const id = showSelect.value;
+      const url = id ? ('/scan/stats?showId=' + encodeURIComponent(id)) : '/scan/stats';
+      const s = await getJSON(url, { method:'GET' });
       if (s && s.ok){
         document.getElementById('checked').textContent = s.checkedIn ?? '0';
         document.getElementById('remaining').textContent = s.remaining ?? '0';
