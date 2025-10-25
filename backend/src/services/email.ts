@@ -1,147 +1,183 @@
-import { buildTicketsPdf } from './pdf.js';
-import nodemailer from 'nodemailer';
+// backend/src/services/email.ts
 import { Resend } from 'resend';
+import QRCode from 'qrcode';
+import { buildTicketsPdf } from './pdf.js';
 
-type VenueInfo = {
-  name: string | null;
-  address: string | null;
-  city: string | null;
-  postcode: string | null;
-};
+const resendApiKey = process.env.RESEND_API_KEY || '';
+const EMAIL_FROM = process.env.EMAIL_FROM || 'Chuckl. Tickets <tickets@chuckl.co.uk>';
+
+const BRAND_NAME = process.env.BRAND_NAME || 'Chuckl. Tickets';
+const BRAND_PRIMARY = process.env.BRAND_PRIMARY || '#4053ff';
+const BRAND_BG = '#0b0b10';
+const BRAND_CARD = '#141724';
+const BRAND_BORDER = '#22263a';
+const BRAND_TEXT = '#e8ebf7';
+const BRAND_MUTED = '#9aa0b5';
+const BRAND_LOGO_URL = process.env.BRAND_LOGO_URL || ''; // e.g. https://.../logo.png
+
+const USE_PDF = process.env.EMAIL_ATTACH_PDF === '1';
+
+const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
 type ShowInfo = {
   id: string;
   title: string;
-  date: Date;
-  venue: VenueInfo | null;
+  date: string | Date;
+  venue?: { name?: string; address?: string; city?: string; postcode?: string | null } | null;
 };
 
-type OrderBrief = {
+type OrderInfo = {
   id: string;
   quantity: number;
   amountPence: number;
 };
 
-type TicketInfo = {
-  serial: string;
-  qrData: string;
-};
+type TicketInfo = { serial: string; qrData: string };
 
-const EMAIL_FROM =
-  process.env.EMAIL_FROM ||
-  process.env.SMTP_FROM ||
-  'Chuckl. Tickets <tickets@chuckl.co.uk>';
+function money(pence: number) {
+  return '£' + (Number(pence || 0) / 100).toFixed(2);
+}
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
+function fmtDate(d: string | Date) {
+  try {
+    const date = typeof d === 'string' ? new Date(d) : d;
+    return date.toLocaleString();
+  } catch {
+    return String(d);
+  }
+}
 
-function htmlBody(show: ShowInfo, order: OrderBrief, tickets: TicketInfo[]) {
-  const dateStr = new Date(show.date).toLocaleString('en-GB', {
-    weekday: 'short',
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-
-  const venueLines = [
-    show.venue?.name,
-    show.venue?.address,
-    [show.venue?.city, show.venue?.postcode].filter(Boolean).join(' '),
-  ]
-    .filter(Boolean)
-    .join('<br/>');
-
-  const list = tickets.map(t => `<li><code>${t.serial}</code></li>`).join('');
-
+function headerHtml() {
+  const logoHtml = BRAND_LOGO_URL
+    ? `<img src="${BRAND_LOGO_URL}" alt="${BRAND_NAME}" style="height:28px;vertical-align:middle"/>`
+    : `<strong style="font-weight:800;color:${BRAND_TEXT}">${BRAND_NAME}</strong>`;
   return `
-  <div style="font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;">
-    <h2>Your Chuckl. tickets</h2>
-    <p>Thanks for your order <strong>${order.id}</strong>. Your tickets are attached as a PDF.</p>
-    <h3>${show.title}</h3>
-    <p>${dateStr}<br/>${venueLines || 'Venue TBC'}</p>
-    <p>Tickets (${tickets.length}):</p>
-    <ul>${list}</ul>
-    <p>Show this PDF at the door. Each page contains a QR code for one ticket.</p>
-  </div>
-  `;
+  <div style="padding:22px 20px;border-bottom:1px solid ${BRAND_BORDER};display:flex;align-items:center;gap:12px">
+    ${logoHtml}
+  </div>`;
 }
 
-async function sendViaResend(to: string, subject: string, html: string, pdf?: Buffer) {
-  const resend = new Resend(RESEND_API_KEY);
-  const attachments = pdf
-    ? [{ content: pdf.toString('base64'), filename: 'tickets.pdf' }]
-    : undefined;
-
-  const result = await resend.emails.send({
-    from: EMAIL_FROM, // must be a verified sender in Resend
-    to,
-    subject,
-    html,
-    attachments,
-  });
-  return result;
+function ticketRowHtml(serial: string, dataUrl?: string) {
+  return `
+  <tr>
+    <td style="padding:10px 0;border-bottom:1px solid ${BRAND_BORDER}">
+      <div style="display:flex;gap:14px;align-items:center">
+        ${dataUrl ? `<img src="${dataUrl}" alt="QR ${serial}" style="width:88px;height:88px;border-radius:8px;border:1px solid ${BRAND_BORDER};background:#000" />` : ''}
+        <div>
+          <div style="font-weight:700;letter-spacing:0.3px">Serial: ${serial}</div>
+          <div style="color:${BRAND_MUTED};font-size:13px">Present this QR at the door.</div>
+        </div>
+      </div>
+    </td>
+  </tr>`;
 }
 
-async function sendViaSmtp(to: string, subject: string, html: string, pdf?: Buffer) {
-  const host = process.env.SMTP_HOST;
-  const port = Number(process.env.SMTP_PORT || 587);
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
+function baseHtml(bodyInner: string) {
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="color-scheme" content="dark light"/>
+    <meta name="supported-color-schemes" content="dark light"/>
+    <title>${BRAND_NAME}</title>
+  </head>
+  <body style="margin:0;background:${BRAND_BG};color:${BRAND_TEXT};font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif">
+    <div style="max-width:720px;margin:0 auto;padding:20px">
+      <div style="background:${BRAND_CARD};border:1px solid ${BRAND_BORDER};border-radius:16px;overflow:hidden">
+        ${headerHtml()}
+        <div style="padding:20px">
+          ${bodyInner}
+        </div>
+        <div style="padding:14px 20px;border-top:1px solid ${BRAND_BORDER};color:${BRAND_MUTED};font-size:12px">
+          Sent by ${BRAND_NAME}
+        </div>
+      </div>
+    </div>
+  </body>
+</html>`;
+}
 
-  if (!host || !user || !pass) {
-    throw new Error('SMTP not configured');
+export async function sendTicketsEmail(args: {
+  to: string;
+  show: ShowInfo;
+  order: OrderInfo;
+  tickets: TicketInfo[];
+}) {
+  if (!resend) throw new Error('Resend not configured (RESEND_API_KEY missing)');
+
+  const { to, show, order, tickets } = args;
+
+  // Generate inline QR images (Data URLs)
+  const qrDataUrls: Record<string, string> = {};
+  for (const t of tickets) {
+    try {
+      // Ensure we encode the same value your scanner expects:
+      const payload = t.qrData?.startsWith('chuckl:') ? t.qrData : `chuckl:${t.serial}`;
+      qrDataUrls[t.serial] = await QRCode.toDataURL(payload, { width: 220, margin: 1 });
+    } catch {
+      // if generation fails, we’ll just omit the image
+    }
   }
 
-  const transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: { user, pass },
-  });
+  const body = `
+    <h1 style="margin:0 0 8px;font-size:24px">Your tickets for <span style="color:${BRAND_PRIMARY}">${show.title}</span></h1>
+    <p style="margin:0 0 8px;color:${BRAND_MUTED}">${fmtDate(show.date)}${show.venue?.name ? ' · ' + show.venue.name : ''}</p>
 
-  const info = await transporter.sendMail({
+    <div style="margin:12px 0;padding:12px;border:1px solid ${BRAND_BORDER};border-radius:10px;background:#0f1220">
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">
+        <div><strong>Order ID:</strong> ${order.id}</div>
+        <div><strong>Quantity:</strong> ${order.quantity}</div>
+        <div><strong>Total:</strong> ${money(order.amountPence)}</div>
+      </div>
+    </div>
+
+    <table style="width:100%;border-collapse:collapse;margin-top:8px">
+      <tbody>
+        ${tickets.map(t => ticketRowHtml(t.serial, qrDataUrls[t.serial])).join('')}
+      </tbody>
+    </table>
+
+    <p style="margin-top:14px">
+      <a href="https://chuckl.co.uk" style="display:inline-block;padding:10px 14px;background:${BRAND_PRIMARY};color:#fff;border-radius:10px;text-decoration:none">View event</a>
+    </p>
+  `;
+
+  const html = baseHtml(body);
+
+  const attachments: { filename: string; content: Buffer }[] = [];
+  if (USE_PDF) {
+    try {
+      const pdf = await buildTicketsPdf({ show, order, tickets });
+      attachments.push({ filename: `tickets-${order.id}.pdf`, content: pdf });
+    } catch (e) {
+      console.error('PDF build failed (continuing without attachment):', (e as any)?.message || e);
+    }
+  }
+
+  const subject = `Your tickets – ${show.title}`;
+
+  const result = await resend.emails.send({
     from: EMAIL_FROM,
     to,
     subject,
     html,
-    attachments: pdf
-      ? [{ filename: 'tickets.pdf', content: pdf, contentType: 'application/pdf' }]
-      : undefined,
+    attachments: attachments.length ? attachments : undefined
   });
 
-  return { id: info.messageId };
+  return result;
 }
 
-/** Send tickets with attached PDF (used by webhook + admin resend) */
-export async function sendTicketsEmail(args: {
-  to: string;
-  show: ShowInfo;
-  order: OrderBrief;
-  tickets: TicketInfo[];
-}) {
-  const { to, show, order, tickets } = args;
-  const pdf = await buildTicketsPdf({ show, order, tickets });
-  const subject = `Your tickets – ${show.title}`;
-  const html = htmlBody(show, order, tickets);
-
-  if (RESEND_API_KEY) return await sendViaResend(to, subject, html, pdf);
-  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS)
-    return await sendViaSmtp(to, subject, html, pdf);
-
-  throw new Error('No email provider configured (RESEND_API_KEY or SMTP_* required)');
-}
-
-/** Simple connectivity test without PDF (admin/test endpoint expects this) */
+// Simple test helper for /admin/email/test
 export async function sendTestEmail(to: string) {
-  const subject = 'Chuckl. test email';
-  const html = `<div style="font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;">
-    <h2>Test email</h2><p>If you can read this, your email provider is working.</p>
-  </div>`;
-
-  if (RESEND_API_KEY) return await sendViaResend(to, subject, html);
-  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS)
-    return await sendViaSmtp(to, subject, html);
-
-  throw new Error('No email provider configured (RESEND_API_KEY or SMTP_* required)');
+  if (!resend) throw new Error('Resend not configured');
+  const html = baseHtml(`
+    <h1 style="margin:0 0 8px">Test email</h1>
+    <p>This is a test from <strong>${BRAND_NAME}</strong>.</p>
+  `);
+  return await resend.emails.send({
+    from: EMAIL_FROM,
+    to,
+    subject: `Test – ${BRAND_NAME}`,
+    html
+  });
 }
