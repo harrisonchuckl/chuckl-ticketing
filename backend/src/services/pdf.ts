@@ -1,102 +1,80 @@
+// backend/src/services/pdf.ts
 import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
-
-type VenueInfo = {
-  name: string | null;
-  address: string | null;
-  city: string | null;
-  postcode: string | null;
-};
 
 type ShowInfo = {
   id: string;
   title: string;
-  date: Date;
-  venue: VenueInfo | null;
+  date: string | Date;
+  venue?: { name?: string; address?: string; city?: string; postcode?: string | null } | null;
 };
+type OrderInfo = { id: string; quantity: number; amountPence: number };
+type TicketInfo = { serial: string; qrData: string };
 
-type OrderInfo = {
-  id: string;
-  quantity: number;
-  amountPence: number;
-};
-
-type TicketInfo = {
-  serial: string;
-  qrData: string;
-};
-
-async function qrPngBuffer(data: string): Promise<Buffer> {
-  return await QRCode.toBuffer(data, { margin: 1, scale: 6 });
+function money(pence: number) {
+  return '£' + (Number(pence || 0) / 100).toFixed(2);
+}
+function fmtDate(d: string | Date) {
+  try {
+    const date = typeof d === 'string' ? new Date(d) : d;
+    return date.toLocaleString();
+  } catch {
+    return String(d);
+  }
 }
 
-export async function buildTicketsPdf(params: {
+export async function buildTicketsPdf(args: {
   show: ShowInfo;
   order: OrderInfo;
   tickets: TicketInfo[];
 }): Promise<Buffer> {
-  const { show, order, tickets } = params;
-  const chunks: Buffer[] = [];
-  const doc = new PDFDocument({ autoFirstPage: false });
+  const { show, order, tickets } = args;
 
-  doc.on('data', (d: Buffer) => chunks.push(d));
+  const doc = new PDFDocument({ size: 'A4', margin: 40 });
+  const chunks: Buffer[] = [];
+  doc.on('data', (c: Buffer) => chunks.push(c));
   const done = new Promise<Buffer>((resolve) => {
     doc.on('end', () => resolve(Buffer.concat(chunks)));
   });
 
-  for (const t of tickets) {
-    const qr = await qrPngBuffer(t.qrData);
+  // Header
+  doc
+    .fontSize(22)
+    .text('Chuckl. Tickets', { continued: true })
+    .fillColor('#4053ff')
+    .text('  •  E-Ticket', { continued: false })
+    .moveDown(0.5)
+    .fillColor('#000');
 
-    doc.addPage({ size: 'A4', margins: { top: 50, left: 50, right: 50, bottom: 60 } });
+  // Order block
+  doc
+    .fontSize(12)
+    .text(`Event: ${show.title}`)
+    .text(`Date: ${fmtDate(show.date)}`)
+    .text(`Venue: ${show.venue?.name || ''}`)
+    .text(`Order ID: ${order.id}`)
+    .text(`Quantity: ${order.quantity}`)
+    .text(`Total: ${money(order.amountPence)}`)
+    .moveDown(1);
 
-    doc.fontSize(22).fillColor('#111').text('Chuckl. Tickets').moveDown(0.5);
+  for (let i = 0; i < tickets.length; i++) {
+    const t = tickets[i];
+    const payload = t.qrData?.startsWith('chuckl:') ? t.qrData : `chuckl:${t.serial}`;
+    const dataUrl = await QRCode.toDataURL(payload, { width: 300, margin: 1 });
+    const base64 = dataUrl.replace(/^data:image\/png;base64,/, '');
+    const img = Buffer.from(base64, 'base64');
 
-    doc.fontSize(16).fillColor('#000').text(show.title);
+    doc.fontSize(14).text(`Ticket ${i + 1} of ${tickets.length}`, { underline: true });
+    doc.moveDown(0.25);
+    const y = doc.y;
 
-    const dateStr = new Date(show.date).toLocaleString('en-GB', {
-      weekday: 'short',
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    doc.image(img, { fit: [160, 160], align: 'left' });
+    doc.rect(220, y, 320, 120).stroke('#cccccc');
+    doc.text(`Serial: ${t.serial}`, 230, y + 10);
+    doc.text(`Present this QR at the door.`, 230, y + 28, { width: 300 });
+    doc.moveDown(2);
 
-    const venueLines = [
-      show.venue?.name,
-      show.venue?.address,
-      [show.venue?.city, show.venue?.postcode].filter(Boolean).join(' ')
-    ].filter(Boolean).join('\n');
-
-    doc.fontSize(12).fillColor('#333').text(dateStr).moveDown(0.3).text(venueLines || 'Venue TBC');
-
-    doc.moveDown(0.7);
-    doc.strokeColor('#999').lineWidth(1)
-      .moveTo(doc.page.margins.left, doc.y)
-      .lineTo(doc.page.width - doc.page.margins.right, doc.y)
-      .stroke();
-
-    doc.moveDown(0.7);
-    const leftX = doc.page.margins.left;
-    const topY = doc.y;
-
-    const qrSize = 160;
-    doc.image(qr, leftX, topY, { width: qrSize, height: qrSize });
-
-    const rightX = leftX + qrSize + 20;
-    doc.fontSize(14).fillColor('#000').text('Ticket Serial', rightX, topY)
-      .moveDown(0.2).fontSize(20).text(t.serial)
-      .moveDown(0.6).fontSize(12).fillColor('#333')
-      .text(`Order ID: ${order.id}`)
-      .text(`Admits: 1`)
-      .text(`Total order qty: ${order.quantity}`)
-      .text(`Scan at entry. One scan per ticket.`);
-
-    doc.moveDown(1.2);
-    doc.fontSize(9).fillColor('#666')
-      .text('This ticket contains a unique QR code. Do not share screenshots publicly.', { align: 'left' });
-
-    doc.rect(20, 20, doc.page.width - 40, doc.page.height - 40).strokeColor('#ddd').stroke();
+    if (i < tickets.length - 1) doc.moveDown(0.5);
   }
 
   doc.end();
