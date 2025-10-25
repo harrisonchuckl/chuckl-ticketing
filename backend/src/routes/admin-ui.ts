@@ -1,198 +1,265 @@
 // backend/src/routes/admin-ui.ts
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 
 const router = Router();
 
-// A tiny HTML admin dashboard that:
-// - Lets you enter/save your x-admin-key (stored in localStorage)
-// - Fetches recent orders and groups them by show
-// - On demand, loads check-in counts by fetching each order's tickets
-// - Links to the /scan page (it will reuse the saved admin key)
-
-router.get('/ui', (_req, res) => {
+router.get('/', (_req: Request, res: Response) => {
   const html = `<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Chuckl. Admin</title>
-  <style>
-    :root{
-      --bg:#0b0b10; --card:#151823; --muted:#c6c8d1; --line:#24283a;
-      --brand:#2da8ff; --brand-2:#4f46e5; --ok:#16a34a; --warn:#d97706; --err:#ef4444;
-    }
-    *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:#f6f7fb;font-family:system-ui,-apple-system,Segoe UI,Inter,Roboto,Arial,sans-serif;}
-    .wrap{max-width:1100px;margin:0 auto;padding:28px}
-    h1{margin:0 0 18px;font-size:28px}
-    p{color:var(--muted);margin:0 0 18px}
-    .row{display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin:0 0 16px}
-    input,select,button{height:40px;border-radius:10px;border:1px solid var(--line);background:#0f1320;color:#fff;padding:0 12px}
-    button{background:var(--brand-2);border-color:transparent;cursor:pointer}
-    button.secondary{background:#0f1320;border-color:var(--line)}
-    button.link{background:transparent;border:0;color:var(--brand);padding:0;height:auto}
-    .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px}
-    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
-    .meta{display:flex;gap:10px;flex-wrap:wrap;color:var(--muted);font-size:13px}
-    .pill{display:inline-flex;gap:8px;align-items:center;background:#0f1320;border:1px solid var(--line);padding:6px 10px;border-radius:20px}
-    .pill.ok{border-color:#134e1f;background:#0b1a11}
-    .pill.warn{border-color:#57320a;background:#1a1209}
-    .pill.err{border-color:#5f1313;background:#1a0c0c}
-    .tbl{width:100%;border-collapse:collapse;margin-top:10px}
-    .tbl th,.tbl td{padding:10px;border-top:1px solid var(--line);text-align:left;font-size:14px}
-    .notice{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;padding:10px 14px;border-radius:12px;border:1px solid var(--line);background:#0f1320}
-    .hide{display:none}
-    .muted{color:var(--muted)}
-    .right{margin-left:auto}
-    .small{font-size:12px;color:var(--muted)}
-  </style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Chuckl. Admin</title>
+<style>
+  :root { color-scheme: dark; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;background:#0b0b10;color:#e8ebf7}
+  .wrap{max-width:1100px;margin:0 auto;padding:16px}
+  .card{background:#141724;border:1px solid #22263a;border-radius:14px;padding:14px}
+  h1{font-size:22px;margin:0 0 12px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  input[type=text],input[type=datetime-local]{flex:1;min-width:220px;height:40px;padding:0 12px;border-radius:10px;border:1px solid #2a2f46;background:#0f1220;color:#e8ebf7;font-size:15px}
+  button{height:40px;padding:0 12px;border-radius:10px;border:0;background:#4053ff;color:#fff;font-weight:600;cursor:pointer}
+  button.secondary{background:#2a2f46}
+  .tabs{display:flex;gap:8px;margin:12px 0}
+  .tab{padding:8px 12px;border-radius:10px;border:1px solid #22263a;background:#0f1220;cursor:pointer}
+  .tab.active{background:#4053ff;border-color:#4053ff}
+  .muted{color:#9aa0b5}
+  table{width:100%;border-collapse:collapse;margin-top:10px}
+  th,td{padding:10px;border-bottom:1px solid #22263a;text-align:left;vertical-align:top}
+  th{color:#9aa0b5;font-weight:600}
+  .right{text-align:right}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid #2a2f46;background:#0f1220}
+  .toast{position:fixed;left:12px;right:12px;bottom:12px;padding:12px 14px;border-radius:10px;font-weight:600}
+  .toast.ok{background:#0f5132;color:#d1f7e3;border:1px solid #115e3a}
+  .toast.err{background:#511f20;color:#ffd7d9;border:1px solid #6a2a2c}
+  .hidden{display:none}
+  .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .stat{background:#0f1220;border:1px solid #22263a;border-radius:10px;padding:10px}
+  .stat small{display:block;color:#9aa0b5;font-size:12px;margin-bottom:4px}
+  .bar{display:flex;gap:8px;align-items:center;justify-content:space-between}
+</style>
 </head>
 <body>
   <div class="wrap">
-    <h1>Chuckl. Admin</h1>
     <div class="card">
-      <div class="row">
-        <label class="small">Admin Key</label>
-        <input id="adminKey" placeholder="x-admin-key e.g. ashdb77asjkh" style="width:360px"/>
-        <button id="saveKey">Save</button>
-        <button id="loadShows" class="secondary">Load latest shows</button>
-        <span class="right small">Tip: key is stored only in this browser (localStorage)</span>
+      <div class="bar">
+        <h1>Chuckl. Admin</h1>
+        <div class="muted" id="status">ready</div>
+      </div>
+
+      <div class="row" style="margin-top:6px">
+        <input id="adminkey" type="text" placeholder="x-admin-key (required)"/>
+        <button id="saveKey" class="secondary">Save key</button>
+        <a href="/scan" target="_blank"><button>Open scanner</button></a>
+      </div>
+
+      <div class="tabs">
+        <div class="tab active" data-tab="shows">Shows</div>
+        <div class="tab" data-tab="orders">Orders</div>
+        <div class="tab" data-tab="tools">Tools</div>
+      </div>
+
+      <!-- Shows -->
+      <div id="tab-shows">
+        <div class="row">
+          <button id="loadShows">Load latest shows</button>
+        </div>
+        <div id="showsArea" class="muted" style="margin-top:10px">No data yet.</div>
+      </div>
+
+      <!-- Orders -->
+      <div id="tab-orders" class="hidden">
+        <div class="row">
+          <button id="loadOrders">Load latest orders</button>
+          <input id="filterEmail" type="text" placeholder="filter by email (optional)"/>
+        </div>
+        <div id="ordersArea" class="muted" style="margin-top:10px">No data yet.</div>
+      </div>
+
+      <!-- Tools -->
+      <div id="tab-tools" class="hidden">
+        <div class="grid">
+          <div class="stat"><small>Checked-in</small><div id="checked">–</div></div>
+          <div class="stat"><small>Remaining</small><div id="remaining">–</div></div>
+          <div class="stat"><small>Total</small><div id="total">–</div></div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button id="refreshStats" class="secondary">Refresh stats</button>
+        </div>
       </div>
     </div>
-
-    <div id="showsWrap" class="grid" style="margin-top:16px;"></div>
   </div>
 
-  <div id="toast" class="notice hide"></div>
+  <div id="toast" class="toast hidden"></div>
 
   <script>
-    const $ = (s,el=document)=>el.querySelector(s);
-    const $$ = (s,el=document)=>Array.from(el.querySelectorAll(s));
-    const toast = (msg, ms=2200)=>{ const n=$("#toast"); n.textContent=msg; n.classList.remove("hide"); setTimeout(()=>n.classList.add("hide"), ms); };
+    // --- Helpers ---
+    const $ = (sel)=> document.querySelector(sel);
+    const $$ = (sel)=> Array.from(document.querySelectorAll(sel));
+    const statusEl = $('#status');
+    const toast = $('#toast');
+    const adminEl = $('#adminkey');
+    const savedKey = localStorage.getItem('x-admin-key') || '';
+    if (savedKey) adminEl.value = savedKey;
 
-    // Persist admin key in localStorage
-    const keyInput = $("#adminKey");
-    const savedKey = localStorage.getItem("x-admin-key") || "";
-    if (savedKey) keyInput.value = savedKey;
-    $("#saveKey").onclick = () => {
-      localStorage.setItem("x-admin-key", keyInput.value.trim());
-      toast("Admin key saved");
-    };
-
-    $("#loadShows").onclick = () => loadShows();
-
-    async function api(path){
-      const key = keyInput.value.trim();
-      if(!key){ toast("Enter your admin key first"); throw new Error("no key"); }
-      const res = await fetch(path, { headers: { "x-admin-key": key } });
-      if(!res.ok){ const t = await res.text(); throw new Error("API " + res.status + ": " + t); }
-      return res.json();
+    function showToast(msg, ok=true, ms=3000){
+      toast.textContent = msg;
+      toast.className = 'toast ' + (ok ? 'ok' : 'err');
+      toast.classList.remove('hidden');
+      setTimeout(()=> toast.classList.add('hidden'), ms);
     }
 
-    // 1) Load recent orders then aggregate by show
-    async function loadShows(){
-      $("#showsWrap").innerHTML = "";
-      try{
-        // Pull last 200 orders (tweak if needed)
-        const data = await api("/admin/orders?limit=200");
-        const byShow = new Map();
-        for(const o of data.orders||[]){
-          const s = o.show || {};
-          const k = s.id || "unknown";
-          if(!byShow.has(k)){
-            byShow.set(k, {
-              showId: s.id, title: s.title, date: s.date, venue: (s.venue && s.venue.name) || "",
-              orders: [], totalQty: 0
-            });
+    async function getJSON(url, opts={}){
+      const key = adminEl.value.trim();
+      const headers = Object.assign({'x-admin-key': key}, opts.headers||{});
+      const r = await fetch(url, Object.assign({}, opts, { headers }));
+      if (!r.ok) return { ok:false, error:'http_'+r.status };
+      try { return await r.json(); } catch { return { ok:false, error:'bad_json' }; }
+    }
+
+    function money(pence){
+      const v = (Number(pence||0)/100).toFixed(2);
+      return '£'+v;
+    }
+
+    function prettyDate(iso){
+      try { return new Date(iso).toLocaleString(); } catch { return iso || ''; }
+    }
+
+    // --- Tabs ---
+    $$('.tab').forEach(t=>{
+      t.addEventListener('click', ()=>{
+        $$('.tab').forEach(x=>x.classList.remove('active'));
+        t.classList.add('active');
+        const tab = t.getAttribute('data-tab');
+        $('#tab-shows').classList.add('hidden');
+        $('#tab-orders').classList.add('hidden');
+        $('#tab-tools').classList.add('hidden');
+        $('#tab-'+tab).classList.remove('hidden');
+      });
+    });
+
+    // --- Save key ---
+    $('#saveKey').addEventListener('click', ()=>{
+      localStorage.setItem('x-admin-key', adminEl.value.trim());
+      showToast('Admin key saved', true);
+    });
+
+    // --- Shows panel ---
+    $('#loadShows').addEventListener('click', async ()=>{
+      const r = await getJSON('/admin/bootstrap/ping'); // cheap auth check + router ping
+      if (!r || r.ok !== true){ showToast('Auth failed', false); return; }
+
+      // We don't have a shows list endpoint in admin router, so reuse the user-facing one:
+      const events = await fetch('/events').then(x=>x.json()).catch(()=>null);
+      const area = $('#showsArea');
+      if (!events || !Array.isArray(events) || events.length===0){
+        area.innerHTML = '<span class="muted">No shows found.</span>';
+        return;
+      }
+      area.innerHTML = \`
+        <table>
+          <thead><tr>
+            <th>Show</th><th>Date</th><th>Venue</th><th class="right">Actions</th>
+          </tr></thead>
+          <tbody>
+            \${events.map(ev => \`
+              <tr>
+                <td>\${ev.title||'-'}</td>
+                <td>\${prettyDate(ev.date)}</td>
+                <td>\${ev.venue?.name||'-'}</td>
+                <td class="right">
+                  <button class="secondary" data-showid="\${ev.id}" data-act="stats">Load check-ins</button>
+                  <a href="/scan" target="_blank"><button>Open scanner</button></a>
+                </td>
+              </tr>\`).join('')}
+          </tbody>
+        </table>\`;
+
+      area.querySelectorAll('button[data-act="stats"]').forEach(btn=>{
+        btn.addEventListener('click', async ()=>{
+          const s = await getJSON('/scan/stats', { method:'GET' });
+          if (s && s.ok){
+            showToast(\`Checked-in \${s.checkedIn} / \${s.total}\`);
+            // also update Tools tab cards
+            document.getElementById('checked').textContent = s.checkedIn ?? '0';
+            document.getElementById('remaining').textContent = s.remaining ?? '0';
+            document.getElementById('total').textContent = s.total ?? '0';
+          } else {
+            showToast('Could not fetch stats', false);
           }
-          const bucket = byShow.get(k);
-          bucket.orders.push(o);
-          bucket.totalQty += Number(o.quantity||0);
-        }
-        if (byShow.size===0){
-          $("#showsWrap").innerHTML = '<div class="card"><p class="muted">No recent orders.</p></div>';
-          return;
-        }
-        renderShows(Array.from(byShow.values()).sort((a,b)=>(a.date||"").localeCompare(b.date||"")));
-      }catch(e){
-        console.error(e);
-        toast("Failed to load shows");
+        });
+      });
+    });
+
+    // --- Orders panel ---
+    async function loadOrders(){
+      const filterEmail = (document.getElementById('filterEmail').value||'').trim().toLowerCase();
+      const area = document.getElementById('ordersArea');
+      const r = await getJSON('/admin/orders?limit=50', { method:'GET' });
+      if (!r || !r.orders || !Array.isArray(r.orders)){
+        area.innerHTML = '<span class="muted">No orders.</span>';
+        return;
       }
+      let rows = r.orders;
+      if (filterEmail) rows = rows.filter(o => (o.email||'').toLowerCase().includes(filterEmail));
+
+      area.innerHTML = \`
+        <table>
+          <thead><tr>
+            <th>When</th><th>Email</th><th>Show</th><th>Qty</th><th>Amount</th><th>Status</th><th class="right">Actions</th>
+          </tr></thead>
+          <tbody>
+            \${rows.map(o => \`
+              <tr>
+                <td>\${prettyDate(o.createdAt)}</td>
+                <td>\${o.email}</td>
+                <td>\${o.show?.title||'-'}</td>
+                <td>\${o.quantity}</td>
+                <td>\${money(o.amountPence)}</td>
+                <td><span class="pill">\${o.status}</span></td>
+                <td class="right">
+                  <button data-oid="\${o.id}" data-mail="\${o.email}" class="resend">Resend</button>
+                </td>
+              </tr>\`).join('')}
+          </tbody>
+        </table>\`;
+
+      area.querySelectorAll('.resend').forEach(btn=>{
+        btn.addEventListener('click', async ()=>{
+          const id = btn.getAttribute('data-oid');
+          const to = btn.getAttribute('data-mail') || '';
+          if (!id) return;
+          const rr = await getJSON(\`/admin/order/\${id}/resend\`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to })
+          });
+          if (rr && rr.ok) showToast('Resent to ' + (rr.to||to));
+          else showToast('Resend failed', false);
+        });
+      });
     }
 
-    function fmtDate(iso){ try{ return new Date(iso).toLocaleString(); }catch{ return iso||""; } }
+    document.getElementById('loadOrders').addEventListener('click', loadOrders);
+    document.getElementById('filterEmail').addEventListener('input', ()=> {
+      // re-render quickly by calling loadOrders again (simple for now)
+      loadOrders();
+    });
 
-    function renderShows(items){
-      const wrap = $("#showsWrap");
-      wrap.innerHTML = "";
-      for(const s of items){
-        const card = document.createElement("div");
-        card.className = "card";
-        card.innerHTML = \`
-          <div class="row" style="align-items:flex-start;">
-            <div>
-              <div style="font-weight:700;font-size:18px;">\${s.title||"Unknown show"}</div>
-              <div class="meta" style="margin-top:6px;">
-                <span class="pill">Date: \${fmtDate(s.date)}</span>
-                <span class="pill">Venue: \${s.venue||"-"}</span>
-                <span class="pill">Orders: \${s.orders.length}</span>
-                <span class="pill">Total tickets: <strong>\${s.totalQty}</strong></span>
-              </div>
-            </div>
-            <span class="right"></span>
-            <div class="row">
-              <button class="secondary" data-action="stats">Load check-ins</button>
-              <button class="secondary" data-action="refresh">Refresh orders</button>
-              <button data-action="scan">Open scanner</button>
-            </div>
-          </div>
-          <table class="tbl small">
-            <tbody>
-              <tr><td>Checked-in</td><td id="in_\${s.showId}">—</td></tr>
-              <tr><td>Remaining</td><td id="rem_\${s.showId}">—</td></tr>
-              <tr><td>Total</td><td>\${s.totalQty}</td></tr>
-            </tbody>
-          </table>
-        \`;
-        wrap.appendChild(card);
-
-        card.querySelector('[data-action="scan"]').onclick = ()=>{
-          // Make the scanner reuse the saved key
-          localStorage.setItem("x-admin-key", ($("#adminKey").value||"").trim());
-          window.open("/scan","_blank");
-        };
-        card.querySelector('[data-action="refresh"]').onclick = ()=>loadShows();
-        card.querySelector('[data-action="stats"]').onclick = ()=>loadCheckinsForShow(s);
+    // --- Tools tab ---
+    document.getElementById('refreshStats').addEventListener('click', async ()=>{
+      const s = await getJSON('/scan/stats', { method:'GET' });
+      if (s && s.ok){
+        document.getElementById('checked').textContent = s.checkedIn ?? '0';
+        document.getElementById('remaining').textContent = s.remaining ?? '0';
+        document.getElementById('total').textContent = s.total ?? '0';
+        showToast('Stats refreshed');
+      } else {
+        showToast('Could not fetch stats', false);
       }
-    }
-
-    // 2) On demand, load check-in counts by fetching each order's ticket statuses
-    async function loadCheckinsForShow(show){
-      const key = keyInput.value.trim();
-      if(!key){ toast("Enter your admin key first"); return; }
-      let used = 0;
-      try{
-        // Fetch each order fully, count tickets with status USED (or scannedAt not null)
-        for(const o of show.orders){
-          const full = await api("/admin/order/" + o.id);
-          const tickets = full.tickets || [];
-          for(const t of tickets){
-            if (t.status === "USED" || (t.scannedAt && t.scannedAt !== null)) used++;
-          }
-        }
-        const remaining = Math.max(0, Number(show.totalQty||0) - used);
-        const setTxt = (id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=String(v); };
-        setTxt("in_"+show.showId, used);
-        setTxt("rem_"+show.showId, remaining);
-        toast("Check-ins updated");
-      }catch(e){
-        console.error(e);
-        toast("Failed loading check-ins");
-      }
-    }
-
-    // Auto-load on open if a key exists
-    if(savedKey){ loadShows(); }
+    });
   </script>
 </body>
 </html>`;
