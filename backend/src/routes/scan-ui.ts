@@ -4,15 +4,13 @@ import { Router, Request, Response } from 'express';
 export const router = Router();
 
 /**
- * Minimal scanner UI:
- * - Start/Stop camera
- * - Tap-to-scan (focus assist)
- * - Enter Admin Key (x-admin-key)
- * - Green toast for success, red for errors
- * - Shows running totals for Checked-in / Remaining / Total (calls /scan/stats)
- *
- * QR decoding: uses jsQR from CDN + getUserMedia.
- * Works in iOS Safari (https required — you’re on https via Railway).
+ * Chuckl. Scanner UI (minimal + fast)
+ * - Camera start/stop
+ * - QR read via jsQR
+ * - Admin key stored in localStorage
+ * - 5s green success banner
+ * - Compact stats (calls /scan/stats)
+ * - Manual entry fallback
  */
 router.get('/', (_req: Request, res: Response) => {
   const html = `<!doctype html>
@@ -23,63 +21,62 @@ router.get('/', (_req: Request, res: Response) => {
 <title>Chuckl. Ticket Scanner</title>
 <style>
   :root { color-scheme: dark; }
+  *{box-sizing:border-box}
   body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;background:#0b0b10;color:#e8ebf7}
-  .wrap{max-width:900px;margin:0 auto;padding:16px}
-  .card{background:#141724;border:1px solid #22263a;border-radius:14px;padding:16px}
-  h1{font-size:22px;margin:0 0 12px}
-  label{display:block;font-size:12px;color:#9aa0b5;margin:10px 0 6px}
-  input[type=text]{width:100%;padding:12px 14px;border-radius:10px;border:1px solid #2a2f46;background:#0f1220;color:#e8ebf7;font-size:16px}
-  .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
-  button{appearance:none;border:0;border-radius:10px;padding:12px 14px;background:#4053ff;color:#fff;font-weight:600;cursor:pointer}
+  .wrap{max-width:960px;margin:0 auto;padding:16px}
+  .card{background:#141724;border:1px solid #22263a;border-radius:14px;padding:14px}
+  h1{font-size:20px;margin:0 0 10px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  input[type=text]{flex:1;min-width:220px;height:40px;padding:0 12px;border-radius:10px;border:1px solid #2a2f46;background:#0f1220;color:#e8ebf7;font-size:15px}
+  button{height:40px;padding:0 12px;border-radius:10px;border:0;background:#4053ff;color:#fff;font-weight:600;cursor:pointer}
   button.secondary{background:#2a2f46}
-  .stats{display:flex;gap:10px;margin:12px 0}
-  .stat{flex:1;background:#0f1220;border:1px solid #22263a;border-radius:10px;padding:10px}
-  .stat small{display:block;color:#9aa0b5}
-  .videoBox{margin-top:12px;background:#000;border-radius:12px;border:1px solid #22263a;overflow:hidden}
+  .videoBox{margin-top:10px;background:#000;border-radius:12px;border:1px solid #22263a;overflow:hidden}
   video{display:block;width:100%;height:auto;background:#000}
   canvas{display:none}
-  .actions{display:flex;gap:10px;margin-top:12px}
+  .stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:10px 0 0}
+  .stat{background:#0f1220;border:1px solid #22263a;border-radius:10px;padding:10px}
+  .stat small{display:block;color:#9aa0b5;font-size:12px;margin-bottom:4px}
   .toast{position:fixed;left:12px;right:12px;bottom:12px;padding:12px 14px;border-radius:10px;font-weight:600}
   .toast.ok{background:#0f5132;color:#d1f7e3;border:1px solid #115e3a}
   .toast.err{background:#511f20;color:#ffd7d9;border:1px solid #6a2a2c}
   .hidden{display:none}
-  .small{font-size:12px;color:#9aa0b5}
+  .muted{color:#9aa0b5}
+  .bar{display:flex;gap:8px;align-items:center;justify-content:space-between}
+  .shy{opacity:.85}
 </style>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
-      <h1>Chuckl. Ticket Scanner</h1>
+      <div class="bar">
+        <h1>Chuckl. Scanner</h1>
+        <div class="muted shy" id="camStatus">camera: idle</div>
+      </div>
 
-      <label>Admin Key (required)</label>
-      <input id="adminkey" type="text" placeholder="enter your admin key" />
-
-      <div class="row">
-        <button id="startBtn">Start Camera</button>
+      <div class="row" style="margin-top:8px">
+        <input id="adminkey" type="text" placeholder="x-admin-key (required)"/>
+        <button id="saveKey" class="secondary">Save key</button>
+        <button id="startBtn">Start camera</button>
         <button id="stopBtn" class="secondary">Stop</button>
-        <button id="tapBtn" class="secondary">Tap to Scan</button>
+      </div>
+
+      <div class="videoBox" style="margin-top:10px">
+        <video id="video" playsinline muted></video>
+        <canvas id="canvas" width="640" height="480"></canvas>
       </div>
 
       <div class="stats">
-        <div class="stat"><small>Camera</small><div id="camStatus">idle</div></div>
         <div class="stat"><small>Checked-in</small><div id="checked">–</div></div>
         <div class="stat"><small>Remaining</small><div id="remaining">–</div></div>
         <div class="stat"><small>Total</small><div id="total">–</div></div>
       </div>
 
-      <div class="videoBox">
-        <video id="video" playsinline></video>
-        <canvas id="canvas" width="640" height="480"></canvas>
-      </div>
-
-      <label>Manual entry (fallback)</label>
-      <div class="row">
-        <input id="serial" type="text" placeholder="Scan QR or type serial e.g. K9M2WTSNJNR"/>
+      <div class="row" style="margin-top:10px">
+        <input id="serial" type="text" placeholder="Manual serial e.g. K9M2WTSNJNHR"/>
         <button id="checkBtn" class="secondary">Check</button>
-        <button id="markBtn">Mark as Used</button>
+        <button id="markBtn">Mark used</button>
       </div>
-
-      <p class="small" id="hint">Tip: if scan doesn’t trigger, tap the video once to focus.</p>
+      <div class="muted shy" style="margin-top:6px">Tip: If scan doesn’t trigger, tap the camera view once to refocus.</div>
     </div>
   </div>
 
@@ -93,11 +90,11 @@ router.get('/', (_req: Request, res: Response) => {
     const ctx = canvas.getContext('2d');
     const startBtn = document.getElementById('startBtn');
     const stopBtn = document.getElementById('stopBtn');
-    const tapBtn = document.getElementById('tapBtn');
     const checkBtn = document.getElementById('checkBtn');
     const markBtn = document.getElementById('markBtn');
     const serialEl = document.getElementById('serial');
     const adminEl = document.getElementById('adminkey');
+    const saveKeyBtn = document.getElementById('saveKey');
     const toast = document.getElementById('toast');
     const camStatus = document.getElementById('camStatus');
     const checkedEl = document.getElementById('checked');
@@ -106,24 +103,36 @@ router.get('/', (_req: Request, res: Response) => {
 
     let stream = null;
     let rafId = null;
-    let autoMark = true; // if true, automatically mark as USED after a successful check
+    let lastScan = "";
+    let lastScanAt = 0;
+    const SCAN_THROTTLE_MS = 1200;  // block duplicate scans for ~1.2s
+    const TOAST_MS = 5000;          // ✅ keep banner visible for 5 seconds
+    const AUTO_MARK = true;
+
+    // Persist admin key
+    const savedKey = localStorage.getItem('x-admin-key') || '';
+    if (savedKey) adminEl.value = savedKey;
+    saveKeyBtn.addEventListener('click', () => {
+      localStorage.setItem('x-admin-key', adminEl.value.trim());
+      showToast('Admin key saved', true);
+    });
 
     function showToast(msg, ok=true) {
       toast.textContent = msg;
       toast.className = 'toast ' + (ok ? 'ok' : 'err');
       toast.classList.remove('hidden');
-      setTimeout(()=> toast.classList.add('hidden'), 2200);
+      setTimeout(()=> toast.classList.add('hidden'), TOAST_MS);
     }
 
     async function fetchJSON(url, opts) {
       const r = await fetch(url, opts);
-      return r.json();
+      try { return await r.json(); } catch { return { ok:false, error: 'bad_json' }; }
     }
 
     async function refreshStats() {
+      const key = adminEl.value.trim();
+      if (!key) return;
       try {
-        const key = adminEl.value.trim();
-        if (!key) return;
         const r = await fetchJSON('/scan/stats', {
           method: 'GET',
           headers: { 'x-admin-key': key }
@@ -133,16 +142,23 @@ router.get('/', (_req: Request, res: Response) => {
           remainingEl.textContent = r.remaining ?? '0';
           totalEl.textContent = r.total ?? '0';
         }
-      } catch (e) {}
+      } catch {}
     }
 
-    async function handleSerial(serial, doMark = false) {
+    function extractSerial(raw) {
+      if (!raw) return '';
+      let d = String(raw).trim();
+      if (d.toLowerCase().startsWith('chuckl:')) d = d.slice(7);
+      return d;
+    }
+
+    async function handleSerial(serial, doMark=false) {
       const key = adminEl.value.trim();
       if (!key) { showToast('Enter admin key', false); return; }
       if (!serial) { showToast('No serial', false); return; }
 
       // 1) Check ticket
-      let resp = await fetchJSON('/scan/check', {
+      const resp = await fetchJSON('/scan/check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-admin-key': key },
         body: JSON.stringify({ serial })
@@ -150,19 +166,25 @@ router.get('/', (_req: Request, res: Response) => {
 
       if (!resp || resp.error) {
         showToast(resp?.message || 'Ticket not found', false);
+        await refreshStats();
         return;
       }
 
       if (resp.ok && resp.ticket?.status === 'VALID') {
-        showToast('Customer successfully signed into the event (VALID).');
-        if (doMark || autoMark) {
+        if (doMark || AUTO_MARK) {
           // 2) Mark as used
           const mark = await fetchJSON('/scan/mark', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-admin-key': key },
             body: JSON.stringify({ serial })
           });
-          if (mark && mark.ok) showToast('Customer successfully signed into the event.');
+          if (mark && mark.ok) {
+            showToast('Customer successfully signed into the event.', true);
+          } else {
+            showToast('Could not mark as used', false);
+          }
+        } else {
+          showToast('Customer successfully signed into the event (VALID).', true);
         }
       } else if (resp.ok && resp.ticket?.status === 'USED') {
         showToast('Already used.', false);
@@ -175,43 +197,59 @@ router.get('/', (_req: Request, res: Response) => {
 
     function drawAndScan() {
       if (!video.videoWidth) { rafId = requestAnimationFrame(drawAndScan); return; }
+
       const vw = video.videoWidth, vh = video.videoHeight;
-      canvas.width = vw; canvas.height = vh;
+      if (canvas.width !== vw || canvas.height !== vh) { canvas.width = vw; canvas.height = vh; }
+
       ctx.drawImage(video, 0, 0, vw, vh);
       try {
         const img = ctx.getImageData(0, 0, vw, vh);
         const code = jsQR(img.data, vw, vh);
         if (code && code.data) {
-          let data = String(code.data || '').trim();
-          // We encode tickets as either 'chuckl:SERIAL' or just SERIAL
-          if (data.startsWith('chuckl:')) data = data.slice(7);
-          serialEl.value = data;
-          handleSerial(data, /*doMark*/ true);
-          // brief pause to avoid double-scanning the same QR immediately
-          setTimeout(()=> { rafId = requestAnimationFrame(drawAndScan); }, 900);
-          return;
+          const now = Date.now();
+          let serial = extractSerial(code.data);
+          if (serial && (serial !== lastScan || (now - lastScanAt) > SCAN_THROTTLE_MS)) {
+            lastScan = serial;
+            lastScanAt = now;
+            serialEl.value = serial;
+            // Mark used automatically (typical door flow)
+            handleSerial(serial, true);
+            // Brief pause to avoid double-hit
+            setTimeout(()=> { rafId = requestAnimationFrame(drawAndScan); }, 900);
+            return;
+          }
         }
-      } catch (e) {}
+      } catch {}
       rafId = requestAnimationFrame(drawAndScan);
     }
 
     async function startCamera() {
       try {
-        camStatus.textContent = 'starting…';
-        // rear camera preference
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+        camStatus.textContent = 'camera: starting…';
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } },
+          audio: false
+        });
         video.srcObject = stream;
+        // iOS Safari likes muted+playsinline for autoplay
+        video.setAttribute('playsinline', '');
+        video.muted = true;
         await video.play();
-        camStatus.textContent = 'live';
+        camStatus.textContent = 'camera: live';
         drawAndScan();
+
+        // tapping the video can help trigger autofocus on some browsers
+        video.addEventListener('click', () => {
+          // No direct focus API, but tapping often prompts refocus by the UA
+        }, { passive: true });
       } catch (e) {
-        camStatus.textContent = 'blocked';
-        showToast('Camera permission denied (check Safari settings).', false);
+        camStatus.textContent = 'camera: blocked';
+        showToast('Camera permission denied (check browser settings).', false);
       }
     }
 
     function stopCamera() {
-      camStatus.textContent = 'idle';
+      camStatus.textContent = 'camera: idle';
       if (rafId) cancelAnimationFrame(rafId);
       rafId = null;
       if (stream) {
@@ -221,17 +259,18 @@ router.get('/', (_req: Request, res: Response) => {
       video.srcObject = null;
     }
 
-    // UI handlers
-    startBtn.addEventListener('click', startCamera);
-    stopBtn.addEventListener('click', stopCamera);
-    tapBtn.addEventListener('click', ()=> video.focus());
+    // Buttons
+    document.getElementById('startBtn').addEventListener('click', startCamera);
+    document.getElementById('stopBtn').addEventListener('click', stopCamera);
+    document.getElementById('checkBtn').addEventListener('click', ()=> handleSerial(serialEl.value.trim(), false));
+    document.getElementById('markBtn').addEventListener('click', ()=> handleSerial(serialEl.value.trim(), true));
 
-    checkBtn.addEventListener('click', ()=> handleSerial(serialEl.value.trim(), false));
-    markBtn.addEventListener('click', ()=> handleSerial(serialEl.value.trim(), true));
-
-    // Keep stats fresh every 10s
+    // Auto-refresh stats
     setInterval(refreshStats, 10000);
     refreshStats();
+
+    // If a key is present, start the camera immediately (useful at doors)
+    if (adminEl.value.trim()) startCamera();
   </script>
 </body>
 </html>`;
