@@ -19,11 +19,17 @@ const USE_PDF = process.env.EMAIL_ATTACH_PDF === '1';
 
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
-type ShowInfo = {
+// Allow nulls in venue fields (matches DB)
+export type ShowInfo = {
   id: string;
   title: string;
   date: string | Date;
-  venue?: { name?: string; address?: string; city?: string; postcode?: string | null } | null;
+  venue?: {
+    name?: string | null;
+    address?: string | null;
+    city?: string | null;
+    postcode?: string | null;
+  } | null;
 };
 
 type OrderInfo = {
@@ -111,7 +117,6 @@ export async function sendTicketsEmail(args: {
   const qrDataUrls: Record<string, string> = {};
   for (const t of tickets) {
     try {
-      // Ensure we encode the same value your scanner expects:
       const payload = t.qrData?.startsWith('chuckl:') ? t.qrData : `chuckl:${t.serial}`;
       qrDataUrls[t.serial] = await QRCode.toDataURL(payload, { width: 220, margin: 1 });
     } catch {
@@ -119,9 +124,16 @@ export async function sendTicketsEmail(args: {
     }
   }
 
+  const venueBits = [
+    show.venue?.name || '',
+    show.venue?.address || '',
+    show.venue?.city || '',
+    show.venue?.postcode || ''
+  ].filter(Boolean).join(', ');
+
   const body = `
     <h1 style="margin:0 0 8px;font-size:24px">Your tickets for <span style="color:${BRAND_PRIMARY}">${show.title}</span></h1>
-    <p style="margin:0 0 8px;color:${BRAND_MUTED}">${fmtDate(show.date)}${show.venue?.name ? ' · ' + show.venue.name : ''}</p>
+    <p style="margin:0 0 8px;color:${BRAND_MUTED}">${fmtDate(show.date)}${venueBits ? ' · ' + venueBits : ''}</p>
 
     <div style="margin:12px 0;padding:12px;border:1px solid ${BRAND_BORDER};border-radius:10px;background:#0f1220">
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">
