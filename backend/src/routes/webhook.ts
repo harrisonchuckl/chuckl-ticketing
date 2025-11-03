@@ -61,12 +61,8 @@ router.post('/stripe', async (req: Request, res: Response) => {
       const to = customerEmail || order.email;
       if (show && to) {
         try {
-          await sendTicketsEmail({
-            to,
-            show,
-            order: { id: order.id, quantity: order.quantity, amountPence: order.amountPence },
-            tickets
-          });
+          await sendTicketsEmail(customerEmail, show, tickets);
+
         } catch (e: any) {
           console.error('📧 Email send failed:', e?.message || e);
         }
