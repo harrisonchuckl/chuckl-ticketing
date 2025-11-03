@@ -80,12 +80,8 @@ router.post('/order/:id/resend', async (req, res) => {
 
     if (!order) return res.status(404).json({ error: 'not_found' });
 
-    await sendTicketsEmail({
-      to: to || order.email,
-      show: order.show as any,
-      order: { id: order.id, quantity: order.quantity, amountPence: order.amountPence },
-      tickets: order.tickets as any
-    });
+await sendTicketsEmail(order.email, order.show, order.tickets);
+
 
     res.json({ ok: true, resent: true, to: to || order.email });
   } catch (e: any) {
