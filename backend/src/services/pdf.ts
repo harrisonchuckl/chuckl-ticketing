@@ -2,11 +2,12 @@
 import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
 
+// Allow nulls from DB for optional venue fields
 type ShowInfo = {
   id: string;
   title: string;
   date: string | Date;
-  venue?: { name?: string; address?: string; city?: string; postcode?: string | null } | null;
+  venue?: { name?: string | null; address?: string | null; city?: string | null; postcode?: string | null } | null;
 };
 type OrderInfo = { id: string; quantity: number; amountPence: number };
 type TicketInfo = { serial: string; qrData: string };
@@ -47,11 +48,18 @@ export async function buildTicketsPdf(args: {
     .fillColor('#000');
 
   // Order block
+  const venueBits = [
+    show.venue?.name || '',
+    show.venue?.address || '',
+    show.venue?.city || '',
+    show.venue?.postcode || ''
+  ].filter(Boolean).join(', ');
+
   doc
     .fontSize(12)
     .text(`Event: ${show.title}`)
     .text(`Date: ${fmtDate(show.date)}`)
-    .text(`Venue: ${show.venue?.name || ''}`)
+    .text(`Venue: ${venueBits}`)
     .text(`Order ID: ${order.id}`)
     .text(`Quantity: ${order.quantity}`)
     .text(`Total: ${money(order.amountPence)}`)
@@ -68,7 +76,9 @@ export async function buildTicketsPdf(args: {
     doc.moveDown(0.25);
     const y = doc.y;
 
-    doc.image(img, { fit: [160, 160], align: 'left' });
+    // Use the "options only" overload; keep it simple
+    doc.image(img, { fit: [160, 160] });
+    // simple right column with details
     doc.rect(220, y, 320, 120).stroke('#cccccc');
     doc.text(`Serial: ${t.serial}`, 230, y + 10);
     doc.text(`Present this QR at the door.`, 230, y + 28, { width: 300 });
