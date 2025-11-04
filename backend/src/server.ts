@@ -6,7 +6,7 @@ import rateLimit from 'express-rate-limit';
 import bodyParser from 'body-parser';
 
 import checkout from './routes/checkout.js';
-import webhooks from './routes/webhooks.js';
+import webhook from './routes/webhook.js'; // ✅ fixed: singular file name
 import admin from './routes/admin.js';
 import adminCreateShow from './routes/admin-create-show.js';
 import scanApi from './routes/scan.js';
@@ -22,7 +22,7 @@ app.use(cors());
 app.use(morgan('tiny'));
 
 // Stripe webhooks must use raw body
-app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), webhooks);
+app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), webhook);
 
 // Everything else can use JSON
 app.use(express.json({ limit: '1mb' }));
