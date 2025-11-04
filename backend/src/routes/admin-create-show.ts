@@ -6,8 +6,7 @@ const router = Router();
 
 /**
  * POST /admin/show/create
- * Creates a new show with full metadata.
- * Requires x-admin-key header = BOOTSTRAP_KEY
+ * Create a new show (requires x-admin-key header = BOOTSTRAP_KEY)
  */
 router.post('/show/create', async (req: Request, res: Response) => {
   try {
@@ -31,19 +30,17 @@ router.post('/show/create', async (req: Request, res: Response) => {
       return res.status(400).json({ error: true, message: 'Missing required fields' });
     }
 
-    // fetch venue to default capacity
     const venue = await prisma.venue.findUnique({ where: { id: venueId } });
     if (!venue) return res.status(404).json({ error: true, message: 'Venue not found' });
 
     const show = await prisma.show.create({
       data: {
         title,
-        date: new Date(date),
-        ticketPrice: parseFloat(ticketPrice || '0'),
-        imageUrl: imageUrl || null,
-        capacity: capacityOverride || venue.capacity,
         description: description || '',
+        date: new Date(date),
         venue: { connect: { id: venue.id } },
+        tickets: {},
+        orders: {},
       },
       include: { venue: true },
     });
@@ -52,6 +49,29 @@ router.post('/show/create', async (req: Request, res: Response) => {
   } catch (e: any) {
     console.error('Create show error:', e);
     res.status(500).json({ error: true, message: e.message || 'Internal error' });
+  }
+});
+
+/**
+ * GET /admin/venues
+ * List venues for dropdowns
+ */
+router.get('/venues', async (req: Request, res: Response) => {
+  try {
+    const venues = await prisma.venue.findMany({
+      select: {
+        id: true,
+        name: true,
+        address: true,
+        city: true,
+        postcode: true,
+        capacity: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+    res.json({ ok: true, venues });
+  } catch (e: any) {
+    res.status(500).json({ error: true, message: e.message });
   }
 });
 
