@@ -4,11 +4,13 @@ import { Router, Request, Response } from "express";
 const router = Router();
 
 /**
- * NOTE: This UI route should NOT require x-admin-key
- * It simply serves the admin HTML dashboard. Authentication
- * happens within the page when it makes API calls.
+ * IMPORTANT:
+ * This route serves the Admin HTML and must NOT be protected by x-admin-key.
+ * Only the API endpoints (e.g. /admin/shows/latest) require the key.
+ *
+ * We render the page at absolute path /admin/ui so users can bookmark it.
  */
-router.get("/ui", (_req: Request, res: Response) => {
+router.get("/admin/ui", (_req: Request, res: Response) => {
   const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -42,7 +44,7 @@ router.get("/ui", (_req: Request, res: Response) => {
           <button id="loadShowsBtn">Load latest shows</button>
         </div>
       </div>
-      <p class="muted" id="hint">Shows load from /admin/shows/latest (limit 20). Use your admin key to authenticate requests.</p>
+      <p class="muted" id="hint">Shows load from /admin/shows/latest (limit 20). Your key is sent as x-admin-key.</p>
     </div>
     <div id="shows"></div>
   </div>
