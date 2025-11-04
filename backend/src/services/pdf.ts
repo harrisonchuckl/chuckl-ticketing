@@ -1,92 +1,92 @@
 // backend/src/services/pdf.ts
 import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
+import type { ShowInfo } from './email.js';
 
-// Allow nulls from DB for optional venue fields
-type ShowInfo = {
-  id: string;
-  title: string;
-  date: string | Date;
-  venue?: { name?: string | null; address?: string | null; city?: string | null; postcode?: string | null } | null;
-};
-type OrderInfo = { id: string; quantity: number; amountPence: number };
-type TicketInfo = { serial: string; qrData: string };
+type TicketInfo = { serial: string; status?: 'VALID' | 'USED' };
 
-function money(pence: number) {
-  return '£' + (Number(pence || 0) / 100).toFixed(2);
-}
-function fmtDate(d: string | Date) {
-  try {
-    const date = typeof d === 'string' ? new Date(d) : d;
-    return date.toLocaleString();
-  } catch {
-    return String(d);
-  }
-}
-
-export async function buildTicketsPdf(args: {
-  show: ShowInfo;
-  order: OrderInfo;
-  tickets: TicketInfo[];
-}): Promise<Buffer> {
-  const { show, order, tickets } = args;
-
-  const doc = new PDFDocument({ size: 'A4', margin: 40 });
-  const chunks: Buffer[] = [];
-  doc.on('data', (c: Buffer) => chunks.push(c));
-  const done = new Promise<Buffer>((resolve) => {
+function docToBuffer(doc: PDFKit.PDFDocument): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    doc.on('data', (d: Buffer) => chunks.push(d));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+    doc.end();
+  });
+}
+
+export async function buildTicketsPdf(show: ShowInfo, tickets: TicketInfo[]): Promise<Buffer> {
+  const doc = new PDFDocument({ size: 'A4', margin: 40 });
+  const title = show.title;
+  const d = new Date(show.date);
+  const when = d.toLocaleString('en-GB', {
+    weekday: 'short',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
   });
 
+  const venue = show.venue ?? { name: null, address: null, city: null, postcode: null };
+  const venueLine = [venue.name, venue.address, venue.city, venue.postcode].filter(Boolean).join(', ');
+
   // Header
-  doc
-    .fontSize(22)
-    .text('Chuckl. Tickets', { continued: true })
-    .fillColor('#4053ff')
-    .text('  •  E-Ticket', { continued: false })
-    .moveDown(0.5)
-    .fillColor('#000');
+  doc.fontSize(22).text('Chuckl. Tickets', { continued: false });
+  doc.moveDown(0.3);
+  doc.fontSize(14).fillColor('#333').text(title);
+  doc.fontSize(12).fillColor('#444').text(when);
+  if (venueLine) {
+    doc.fontSize(12).fillColor('#444').text(venueLine);
+  }
+  doc.moveDown(0.8);
+  doc.fillColor('#000');
 
-  // Order block
-  const venueBits = [
-    show.venue?.name || '',
-    show.venue?.address || '',
-    show.venue?.city || '',
-    show.venue?.postcode || ''
-  ].filter(Boolean).join(', ');
-
-  doc
-    .fontSize(12)
-    .text(`Event: ${show.title}`)
-    .text(`Date: ${fmtDate(show.date)}`)
-    .text(`Venue: ${venueBits}`)
-    .text(`Order ID: ${order.id}`)
-    .text(`Quantity: ${order.quantity}`)
-    .text(`Total: ${money(order.amountPence)}`)
-    .moveDown(1);
+  // Tickets: 3 per row (QR ~140px)
+  const qrSize = 140;
+  const gapX = 24;
+  const gapY = 24;
+  const left = doc.x;
+  let x = left;
+  let y = doc.y;
 
   for (let i = 0; i < tickets.length; i++) {
     const t = tickets[i];
-    const payload = t.qrData?.startsWith('chuckl:') ? t.qrData : `chuckl:${t.serial}`;
-    const dataUrl = await QRCode.toDataURL(payload, { width: 300, margin: 1 });
+
+    // Make QR PNG (data URL) with namespaced payload
+    const payload = `chuckl:${t.serial}`;
+    const dataUrl = await QRCode.toDataURL(payload, { errorCorrectionLevel: 'M' });
     const base64 = dataUrl.replace(/^data:image\/png;base64,/, '');
-    const img = Buffer.from(base64, 'base64');
+    const imgBuf = Buffer.from(base64, 'base64');
 
-    doc.fontSize(14).text(`Ticket ${i + 1} of ${tickets.length}`, { underline: true });
-    doc.moveDown(0.25);
-    const y = doc.y;
+    // Box + QR + label
+    doc.roundedRect(x - 8, y - 8, qrSize + 16, qrSize + 44, 8).stroke('#888');
+    doc.image(imgBuf, x, y, { fit: [qrSize, qrSize] });
+    doc.fontSize(12).text(`Serial: ${t.serial}`, x, y + qrSize + 10, { width: qrSize });
 
-    // Use the "options only" overload; keep it simple
-    doc.image(img, { fit: [160, 160] });
-    // simple right column with details
-    doc.rect(220, y, 320, 120).stroke('#cccccc');
-    doc.text(`Serial: ${t.serial}`, 230, y + 10);
-    doc.text(`Present this QR at the door.`, 230, y + 28, { width: 300 });
-    doc.moveDown(2);
-
-    if (i < tickets.length - 1) doc.moveDown(0.5);
+    // Grid layout: 3 across
+    const col = i % 3;
+    if (col < 2) {
+      x += qrSize + gapX + 16; // include box padding
+    } else {
+      x = left;
+      y += qrSize + 44 + gapY + 16;
+      // New page if near bottom
+      if (y > doc.page.height - 160) {
+        doc.addPage();
+        x = left;
+        y = doc.y;
+      }
+    }
   }
 
-  doc.end();
-  return done;
+  // Footer
+  doc.moveDown(1.2);
+  doc.fontSize(10).fillColor('#666');
+  doc.text(
+    'Please bring this PDF or show your email on your phone. Each QR / serial admits one person.',
+    { align: 'left' }
+  );
+
+  return docToBuffer(doc);
 }
