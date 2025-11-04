@@ -17,19 +17,19 @@ import webhooks from './routes/webhook.js';
 
 const app = express();
 
-// Safer trust proxy for express-rate-limit behind Railway proxy
+// Trust proxy (needed for rate limiter behind Railway)
 app.set('trust proxy', 'loopback');
 
 app.use(cors());
 app.use(morgan('tiny'));
 
-// Stripe webhook must use raw body
+// Stripe webhooks (raw body)
 app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), webhooks);
 
 // JSON for everything else
 app.use(express.json({ limit: '1mb' }));
 
-// Lightweight rate limiting for admin/scan
+// Basic rate limiter
 const limiter = rateLimit({
   windowMs: 60 * 1000,
   limit: 120,
@@ -38,21 +38,24 @@ const limiter = rateLimit({
 });
 app.use(['/scan', '/admin'], limiter);
 
-// Routes
+// === ROUTE ORDER FIX ===
+// Admin UI must come BEFORE /admin JSON routes
+app.use('/admin/ui', adminUI);
+app.use('/admin/create', adminCreateShow);
+app.use('/admin/edit', adminEditShow);
+app.use('/admin', admin); // this must be last among admin routes
+
+// Other routes
 app.use('/checkout', checkout);
-app.use('/admin', adminCreateShow);
-app.use('/admin', adminEditShow);
-app.use('/admin', admin);
 app.use('/scan', scanApi);
 app.use('/scan', scanUI);
-app.use('/admin', adminUI);
 
-// Health
+// Health check
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 const PORT = Number(process.env.PORT || 4000);
 app.listen(PORT, () => {
-  console.log(`API running on port ${PORT}`);
+  console.log(`✅ API running on port ${PORT}`);
 });
 
 export default app;
