@@ -5,57 +5,55 @@ import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import bodyParser from 'body-parser';
 
-// Route modules
+// Route modules (NodeNext / ESM requires .js extensions at runtime)
 import checkout from './routes/checkout.js';
+import webhook from './routes/webhook.js';   // singular file: webhook.ts
 import admin from './routes/admin.js';
 import scanApi from './routes/scan.js';
 import scanUI from './routes/scan-ui.js';
-import adminUI from './routes/admin-ui.js';
-import adminCreateShow from './routes/admin-create-show.js';
-import adminEditShow from './routes/admin-edit-show.js';
-import webhooks from './routes/webhook.js';
+import adminUI from './routes/admin-ui.js';   // <-- new UI route (public HTML)
 
 const app = express();
 
-// Trust proxy (needed for rate limiter behind Railway)
+// Railway is behind a trusted proxy; keep express-rate-limit safe by scoping trust:
 app.set('trust proxy', 'loopback');
 
+// Basic middleware
 app.use(cors());
 app.use(morgan('tiny'));
 
-// Stripe webhooks (raw body)
-app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), webhooks);
+// Stripe webhooks must use raw body
+app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), webhook);
 
-// JSON for everything else
+// Everything else can parse JSON
 app.use(express.json({ limit: '1mb' }));
 
-// Basic rate limiter
+// Lightweight rate limit for admin + scan (polite but tidy)
 const limiter = rateLimit({
-  windowMs: 60 * 1000,
+  windowMs: 60_000,
   limit: 120,
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
 });
-app.use(['/scan', '/admin'], limiter);
 
-// === ROUTE ORDER FIX ===
-// Admin UI must come BEFORE /admin JSON routes
-app.use('/admin/ui', adminUI);
-app.use('/admin/create', adminCreateShow);
-app.use('/admin/edit', adminEditShow);
-app.use('/admin', admin); // this must be last among admin routes
+// --- Mount order matters ---
+// 1) Public Admin UI (no auth; UI sends x-admin-key in subsequent JSON calls)
+app.use('/admin', adminUI);
 
-// Other routes
+// 2) Protected admin JSON routes
+app.use('/admin', admin);
+
+// 3) Checkout + scan
 app.use('/checkout', checkout);
-app.use('/scan', scanApi);
-app.use('/scan', scanUI);
+app.use('/scan', scanApi);   // JSON endpoints: /scan/check, /scan/mark, /scan/stats
+app.use('/scan', scanUI);    // UI at GET /scan
 
-// Health check
+// Health
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 const PORT = Number(process.env.PORT || 4000);
 app.listen(PORT, () => {
-  console.log(`✅ API running on port ${PORT}`);
+  console.log(`API running on port ${PORT}`);
 });
 
 export default app;
