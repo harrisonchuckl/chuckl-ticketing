@@ -4,12 +4,12 @@ import { prisma } from '../db.js';
 
 const router = Router();
 
-/** Accept admin key via header OR query ?k= */
+/** Accept admin key via header OR query ?k=  */
 function isAdmin(req: Request): boolean {
   const headerKey = (req.headers['x-admin-key'] ?? '') as string;
   const queryKey = (req.query.k ?? '') as string;
   const key = headerKey || queryKey;
-  return key && String(key) === String(process.env.BOOTSTRAP_KEY);
+  return !!key && String(key) === String(process.env.BOOTSTRAP_KEY);
 }
 
 function requireAdmin(req: Request, res: Response): boolean {
@@ -64,7 +64,7 @@ router.get('/shows/:id', async (req, res) => {
  */
 router.post('/shows', async (req, res) => {
   if (!requireAdmin(req, res)) return;
-  const { title, description, dateISO, venueId, posterUrl } = req.body || {};
+  const { title, description, dateISO, venueId /* posterUrl */ } = req.body || {};
 
   if (!title || !dateISO || !venueId) {
     return res.status(400).json({ error: true, message: 'title, dateISO and venueId are required' });
@@ -84,11 +84,10 @@ router.post('/shows', async (req, res) => {
       description: description ? String(description) : null,
       date,
       venueId: String(venueId)
-      // Note: schema does not have posterUrl yet; we’ll store it soon when field exists.
+      // posterUrl: add when schema supports it
     }
   });
 
-  // Return with relations for immediate UI update
   const full = await prisma.show.findUnique({
     where: { id: show.id },
     include: {
@@ -122,7 +121,7 @@ router.put('/shows/:id', async (req, res) => {
 
   try {
     await prisma.show.update({ where: { id }, data });
-  } catch (e) {
+  } catch {
     return res.status(404).json({ error: true, message: 'Show not found' });
   }
 
@@ -144,9 +143,8 @@ router.delete('/shows/:id', async (req, res) => {
   if (!requireAdmin(req, res)) return;
   const id = String(req.params.id);
   try {
-    // Consider soft-delete later; this hard-deletes
     await prisma.show.delete({ where: { id } });
-  } catch (e) {
+  } catch {
     return res.status(404).json({ error: true, message: 'Show not found' });
   }
   res.json({ ok: true, deleted: true, id });
@@ -178,7 +176,6 @@ router.post('/shows/:id/ticket-types', async (req, res) => {
     return res.status(400).json({ error: true, message: 'name and pricePence required' });
   }
 
-  // Ensure show exists
   const show = await prisma.show.findUnique({ where: { id: showId } });
   if (!show) return res.status(404).json({ error: true, message: 'Show not found' });
 
@@ -212,7 +209,7 @@ router.put('/ticket-types/:ticketTypeId', async (req, res) => {
   try {
     const tt = await prisma.ticketType.update({ where: { id }, data });
     res.json({ ok: true, ticketType: tt });
-  } catch (e) {
+  } catch {
     res.status(404).json({ error: true, message: 'Ticket type not found' });
   }
 });
@@ -226,7 +223,7 @@ router.delete('/ticket-types/:ticketTypeId', async (req, res) => {
   try {
     await prisma.ticketType.delete({ where: { id } });
     res.json({ ok: true, deleted: true, id });
-  } catch (e) {
+  } catch {
     res.status(404).json({ error: true, message: 'Ticket type not found' });
   }
 });
@@ -237,7 +234,7 @@ router.delete('/ticket-types/:ticketTypeId', async (req, res) => {
 router.get('/orders', async (req, res) => {
   if (!requireAdmin(req, res)) return;
   const showId = req.query.showId ? String(req.query.showId) : undefined;
-  const status = req.query.status ? String(req.query.status) : undefined; // PENDING/PAID/CANCELLED
+  const status = req.query.status ? String(req.query.status) : undefined;
   const q = req.query.q ? String(req.query.q).trim() : '';
   const page = Math.max(1, Number(req.query.page ?? 1));
   const limit = Math.min(Math.max(1, Number(req.query.limit ?? 20)), 100);
