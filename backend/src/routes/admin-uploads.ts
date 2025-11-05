@@ -1,28 +1,39 @@
 // backend/src/routes/admin-uploads.ts
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 
 const router = Router();
-function assertAdmin(req: any) {
-  const key = req.headers['x-admin-key'];
-  if (!key || String(key) !== String(process.env.BOOTSTRAP_KEY)) {
-    const e: any = new Error('Unauthorized');
-    e.status = 401;
-    throw e;
+
+function isAdmin(req: Request): boolean {
+  const headerKey = (req.headers['x-admin-key'] ?? '') as string;
+  const queryKey = (req.query.k ?? '') as string;
+  const key = headerKey || queryKey;
+  return !!key && String(key) === String(process.env.BOOTSTRAP_KEY);
+}
+function requireAdmin(req: Request, res: Response): boolean {
+  if (!isAdmin(req)) {
+    res.status(401).json({ error: true, message: 'Unauthorized' });
+    return false;
   }
+  return true;
 }
 
 /**
- * GET /admin/uploads/presign
- * Returns 501 when uploads aren’t configured yet.
- * If you later add S3, replace this with a real presign implementation.
+ * For now we just accept a filename and return a fake "upload URL".
+ * Later we’ll switch this to S3 presigned POST.
  */
-router.get('/uploads/presign', (req, res) => {
-  try {
-    assertAdmin(req);
-    res.status(501).json({ ok: false, message: 'Uploads not configured' });
-  } catch (e: any) {
-    res.status(e.status || 500).json({ error: true, message: e.message });
-  }
+router.post('/uploads/presign', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const { filename } = req.body || {};
+  if (!filename) return res.status(400).json({ error: true, message: 'filename required' });
+
+  // Pretend we have a CDN; store URL in your DB later if needed
+  const fakeUrl = `https://files.example.invalid/uploads/${encodeURIComponent(filename)}`;
+  res.json({
+    ok: true,
+    provider: 'noop',
+    uploadUrl: fakeUrl,
+    publicUrl: fakeUrl
+  });
 });
 
 export default router;
