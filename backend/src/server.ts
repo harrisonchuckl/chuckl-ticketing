@@ -5,30 +5,35 @@ import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import bodyParser from 'body-parser';
 
+// Existing routes
 import checkout from './routes/checkout.js';
-import webhook from './routes/webhook.js';     // singular filename
+import webhook from './routes/webhook.js';
+
+// New/updated admin + scanner routes
 import admin from './routes/admin.js';
 import adminUI from './routes/admin-ui.js';
 import adminVenues from './routes/admin-venues.js';
 import adminShows from './routes/admin-shows.js';
+import adminUploads from './routes/uploads.js';
+
 import scanApi from './routes/scan.js';
 import scanUI from './routes/scan-ui.js';
 
 const app = express();
 
-// Railway is behind a trusted proxy; keep rate-limit correct
+// Railway is behind a trusted proxy; keep express-rate-limit safe
 app.set('trust proxy', 'loopback');
 
 app.use(cors());
 app.use(morgan('tiny'));
 
-// Stripe webhooks need raw body
+// Stripe webhooks must use raw body
 app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), webhook);
 
-// Everything else as JSON
+// Everything else can use JSON
 app.use(express.json({ limit: '1mb' }));
 
-// Lightweight rate-limit for admin/scan
+// Lightweight rate limit for admin + scan
 const limiter = rateLimit({
   windowMs: 60 * 1000,
   limit: 120,
@@ -37,14 +42,22 @@ const limiter = rateLimit({
 });
 app.use(['/scan', '/admin'], limiter);
 
-// ROUTES (order matters so the admin UI isn’t blocked by auth JSON errors)
-app.use('/admin', adminUI);        // GET /admin/ui (HTML)
+/**
+ * ROUTES
+ * Order matters so the Admin UI HTML is always served (not blocked by JSON auth).
+ */
+app.use('/admin', adminUI);        // GET /admin/ui (HTML dashboard)
 app.use('/checkout', checkout);
+
+// Admin JSON APIs
 app.use('/admin', adminVenues);    // GET /admin/venues
-app.use('/admin', adminShows);     // /admin/shows (CRUD)
-app.use('/admin', admin);          // legacy admin endpoints you already had
-app.use('/scan', scanApi);         // JSON endpoints
-app.use('/scan', scanUI);          // GET /scan (HTML)
+app.use('/admin', adminShows);     // /admin/shows (CRUD + ticket types + stats)
+app.use('/admin', adminUploads);   // /admin/uploads/presign (S3 presign)
+app.use('/admin', admin);          // legacy endpoints you already had
+
+// Scanner
+app.use('/scan', scanApi);         // JSON endpoints: /scan/check, /scan/mark, /scan/stats
+app.use('/scan', scanUI);          // UI at GET /scan
 
 // Health
 app.get('/health', (_req, res) => res.json({ ok: true }));
