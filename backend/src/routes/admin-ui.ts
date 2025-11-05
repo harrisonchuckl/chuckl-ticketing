@@ -4,392 +4,480 @@ import { Router, Request, Response } from 'express';
 const router = Router();
 
 /**
- * Admin UI:
- * - Admin key input (saved to localStorage)
- * - Load venues + latest shows
- * - Create Venue (inline form)
- * - Create Show (poster URL or optional upload if /admin/uploads/presign is configured)
- * - Click a show to expand details
+ * Admin UI (multi-section SPA with sidebar)
+ * - Hash routing (#/shows, #/venues, etc.)
+ * - Admin Key saved to localStorage and sent as x-admin-key
+ * - Real calls wired for Venues (GET/POST) and Shows (list/create) if available
+ * - Everything else is a “coming soon” placeholder tab (ready for future wiring)
  */
 router.get('/ui', (_req: Request, res: Response) => {
   const html = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>Chuckl. Admin</title>
 <style>
-  :root{--bg:#f5f6fb;--panel:#ffffff;--ink:#0f172a;--muted:#6b7280;--brand:#2563eb;--ok:#16a34a;--err:#dc2626;--bd:#e5e7eb}
+  :root{--bg:#f6f7fb;--panel:#ffffff;--border:#e5e7ef;--ink:#0e1328;--muted:#6b7280;--brand:#4053ff;--brand-ink:#fff;--ok:#0f5132;--ok-ink:#d1f7e3;--err:#511f20;--err-ink:#ffd7d9}
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;color:var(--ink)}
-  .wrap{max-width:980px;margin:40px auto;padding:0 16px}
-  .card{background:var(--panel);border:1px solid var(--bd);border-radius:12px;padding:16px 18px;box-shadow:0 2px 8px rgba(0,0,0,.04);margin-bottom:18px}
-  h1{margin:0 0 10px;font-size:24px}
-  h2{margin:8px 0 12px;font-size:18px}
-  label{display:block;font-size:12px;color:var(--muted);margin:10px 0 6px}
-  input,select,textarea{width:100%;padding:10px 12px;border:1px solid var(--bd);border-radius:10px;background:#fff;color:var(--ink)}
-  textarea{min-height:90px;resize:vertical}
-  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-  .row-3{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px}
-  .btn{appearance:none;border:0;border-radius:10px;padding:10px 14px;background:var(--brand);color:#fff;font-weight:600;cursor:pointer}
-  .btn.secondary{background:#eef2ff;color:#1e3a8a;border:1px solid #c7d2fe}
-  .btn:disabled{opacity:.5;cursor:not-allowed}
-  .help{font-size:12px;color:var(--muted)}
-  .list{display:flex;flex-direction:column;gap:10px}
-  .tile{background:#f8fafc;border:1px solid var(--bd);border-radius:10px;padding:10px 12px;cursor:pointer}
-  .tile:hover{background:#f1f5f9}
-  .title{font-weight:600}
+  html,body{height:100%}
+  body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+  .layout{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
+  .side{background:#0f1220;color:#e8ebf7;padding:16px 12px;display:flex;flex-direction:column}
+  .brand{display:flex;align-items:center;gap:8px;font-weight:800;font-size:18px;letter-spacing:.2px;margin:6px 8px 14px}
+  .nav{display:flex;flex-direction:column;gap:4px}
+  .nav a{display:flex;align-items:center;gap:10px;color:#cfd5ff;text-decoration:none;padding:10px 12px;border-radius:10px;font-weight:600}
+  .nav a:hover{background:#151935}
+  .nav a.active{background:#1a1f47;color:#fff}
+  .main{padding:24px}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px}
+  .hstack{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .stack{display:flex;flex-direction:column;gap:10px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+  .label{font-size:12px;color:var(--muted);margin-bottom:4px}
+  input,select,textarea{width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--border);background:#fff;color:var(--ink);font-size:14px}
+  textarea{min-height:110px;resize:vertical}
+  button{appearance:none;border:0;border-radius:10px;padding:10px 14px;background:var(--brand);color:var(--brand-ink);font-weight:700;cursor:pointer}
+  button.ghost{background:transparent;color:var(--ink);border:1px solid var(--border)}
+  button.secondary{background:#e9ecff;color:#1b2ae6}
+  .table{width:100%;border-collapse:collapse;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  .table th,.table td{padding:10px 12px;border-bottom:1px solid var(--border);text-align:left;font-size:14px}
   .muted{color:var(--muted)}
-  .details{margin-top:8px;padding-top:8px;border-top:1px dashed var(--bd);display:none}
-  .toast{position:fixed;right:14px;bottom:14px;max-width:420px;padding:12px 14px;border-radius:12px;border:1px solid;display:none}
-  .toast.ok{display:block;background:#ecfdf5;border-color:#059669;color:#064e3b}
-  .toast.err{display:block;background:#fef2f2;border-color:#dc2626;color:#7f1d1d}
-  .divider{height:1px;background:var(--bd);margin:12px 0}
+  .note{font-size:12px;color:var(--muted)}
+  .toolbar{display:flex;gap:10px;justify-content:space-between;align-items:center;margin-bottom:12px}
+  .toolbar .actions{display:flex;gap:8px}
+  .hide{display:none !important}
+  .toast{position:fixed;left:12px;right:12px;bottom:12px;padding:12px 14px;border-radius:10px;font-weight:700}
+  .toast.ok{background:var(--ok);color:var(--ok-ink)}
+  .toast.err{background:var(--err);color:var(--err-ink)}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:6px 8px;border-radius:999px;border:1px solid var(--border);background:#fff}
+  .kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .kpi .card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px}
+  .kpi .metric{font-size:12px;color:var(--muted)}
+  .kpi .value{font-size:22px;font-weight:800;margin-top:6px}
+  .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+  .heading{font-size:20px;font-weight:800}
+  .sub{font-size:12px;color:var(--muted)}
+  .danger{background:#ffe8ea;color:#7e0e1a;border-color:#ffd2d7}
+  .success{background:#e9fbef;color:#0a5c32;border-color:#c8f4d7}
+  .badge{display:inline-block;font-size:11px;padding:4px 8px;border-radius:999px;background:#eef1ff;color:#2332e8;font-weight:700}
+  .divider{height:1px;background:var(--border);margin:12px 0}
 </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="card">
-      <h1>Chuckl. Admin</h1>
-      <div class="row">
+<div class="layout">
+  <aside class="side">
+    <div class="brand">Chuckl. Admin</div>
+    <div class="nav" id="nav">
+      <a href="#/dashboard" data-view="dashboard">Dashboard</a>
+      <a href="#/shows" data-view="shows">Shows</a>
+      <a href="#/venues" data-view="venues">Venues</a>
+      <a href="#/tickets" data-view="tickets">Ticket Types</a>
+      <a href="#/orders" data-view="orders">Orders</a>
+      <a href="#/customers" data-view="customers">Customers / CRM</a>
+      <a href="#/discounts" data-view="discounts">Discounts & Vouchers</a>
+      <a href="#/marketing" data-view="marketing">Marketing Automations</a>
+      <a href="#/seating" data-view="seating">Seating Maps</a>
+      <a href="#/merch" data-view="merch">Merchandise</a>
+      <a href="#/affiliates" data-view="affiliates">Affiliates & Local Deals</a>
+      <a href="#/analytics" data-view="analytics">Analytics</a>
+      <a href="#/settings" data-view="settings">Settings</a>
+    </div>
+    <div style="margin-top:auto;padding:8px 8px 0" class="note">© Chuckl.</div>
+  </aside>
+
+  <main class="main">
+    <!-- GLOBAL KEY BAR -->
+    <div class="panel stack" style="margin-bottom:14px">
+      <div class="header">
         <div>
-          <label>Admin Key</label>
-          <input id="adminkey" type="text" placeholder="enter your admin key"/>
-          <div class="help">API calls send your key as <code>x-admin-key</code>.</div>
+          <div class="heading">Admin Key</div>
+          <div class="sub">Stored locally and sent as <code>x-admin-key</code> on API calls.</div>
         </div>
-        <div style="display:flex;align-items:end;gap:8px">
-          <button id="saveKeyBtn" class="btn secondary">Save key</button>
-          <button id="refreshAllBtn" class="btn">Load venues & shows</button>
+        <div class="actions hstack">
+          <button id="btnLoad" class="secondary">Load venues & shows</button>
+        </div>
+      </div>
+      <div class="grid3">
+        <div>
+          <div class="label">Admin Key</div>
+          <input id="adminkey" placeholder="enter your admin key"/>
+        </div>
+        <div class="stack" style="align-self:end">
+          <button id="btnSaveKey" class="ghost">Save key</button>
+        </div>
+        <div class="stack" style="align-self:end">
+          <span class="pill"><span id="envBadge">Production</span></span>
         </div>
       </div>
     </div>
 
-    <div class="card">
-      <h2>Create Venue</h2>
-      <div class="row">
+    <!-- VIEWS -->
+    <section id="view-dashboard" class="panel stack">
+      <div class="header">
         <div>
-          <label>Venue Name</label>
-          <input id="v_name" type="text" placeholder="e.g. The Forum Theatre"/>
-        </div>
-        <div>
-          <label>Capacity (optional)</label>
-          <input id="v_capacity" type="number" min="1" placeholder="e.g. 650"/>
+          <div class="heading">Dashboard</div>
+          <div class="sub">High-level snapshot (placeholders; wire up later).</div>
         </div>
       </div>
-      <div class="row">
-        <div>
-          <label>Address (line)</label>
-          <input id="v_address" type="text" placeholder="e.g. 123 High Street"/>
-        </div>
-        <div>
-          <label>City</label>
-          <input id="v_city" type="text" placeholder="e.g. Malvern"/>
-        </div>
+      <div class="kpi">
+        <div class="card"><div class="metric">Tickets sold (7d)</div><div class="value">—</div></div>
+        <div class="card"><div class="metric">Revenue (7d)</div><div class="value">—</div></div>
+        <div class="card"><div class="metric">Upcoming shows</div><div class="value">—</div></div>
+        <div class="card"><div class="metric">Refund rate</div><div class="value">—</div></div>
       </div>
-      <div class="row">
-        <div>
-          <label>Postcode</label>
-          <input id="v_postcode" type="text" placeholder="e.g. WR14 3HB"/>
-        </div>
-        <div style="display:flex;align-items:end">
-          <button id="createVenueBtn" class="btn">Create Venue</button>
-        </div>
+      <div class="divider"></div>
+      <div class="stack">
+        <div class="label">Recent activity</div>
+        <div class="note">Feed placeholder — actions, allocations, marketing sends, etc.</div>
       </div>
-      <div class="help" id="venueCreateHelp"></div>
-    </div>
+    </section>
 
-    <div class="card">
-      <h2>Create Show</h2>
-      <div class="row">
+    <section id="view-shows" class="panel stack hide">
+      <div class="header">
         <div>
-          <label>Title</label>
-          <input id="title" type="text" placeholder="e.g. Chuckl. Bridlington"/>
+          <div class="heading">Shows</div>
+          <div class="sub">Create shows and view the latest.</div>
         </div>
-        <div>
-          <label>Date & Time</label>
-          <input id="datetime" type="datetime-local"/>
+        <div class="actions hstack">
+          <button id="btnRefreshShows" class="secondary">Refresh shows</button>
         </div>
       </div>
 
-      <div class="row-3">
-        <div>
-          <label>Venue</label>
-          <select id="venue"></select>
+      <!-- Create Show -->
+      <div class="stack">
+        <div class="label">Create Show</div>
+        <div class="grid3">
+          <div><div class="label">Title</div><input id="showTitle" placeholder="e.g. Chuckl. Bridlington"/></div>
+          <div><div class="label">Date & Time</div><input id="showDate" type="datetime-local"/></div>
+          <div><div class="label">Venue</div><select id="showVenue"></select></div>
         </div>
-        <div>
-          <label>Capacity Override (optional)</label>
-          <input id="capOverride" type="number" min="1" placeholder="leave blank to use venue capacity"/>
+        <div class="grid3">
+          <div><div class="label">Capacity Override (optional)</div><input id="showCap" placeholder="leave blank to use venue capacity"/></div>
+          <div><div class="label">Poster URL (optional)</div><input id="showPoster" placeholder="https://…"/></div>
+          <div></div>
         </div>
-        <div>
-          <label>Poster URL (optional)</label>
-          <input id="posterUrl" type="url" placeholder="https://…"/>
+        <div><div class="label">Description (optional)</div><textarea id="showDesc" placeholder="Short description…"></textarea></div>
+        <div class="hstack">
+          <button id="btnCreateShow">Create Show</button>
+          <button id="btnResetShow" class="ghost">Reset</button>
+          <span class="note">Uploads to S3 coming soon; paste a poster URL for now.</span>
         </div>
       </div>
-
-      <label>Description (optional)</label>
-      <textarea id="desc" placeholder="Short description…"></textarea>
 
       <div class="divider"></div>
 
-      <label>Poster Image Upload (optional)</label>
-      <input id="posterFile" type="file" accept="image/*"/>
-      <div class="help">Uploads use a presigned S3 POST if configured. Otherwise, paste a Poster URL above.</div>
-
-      <div style="margin-top:12px;display:flex;gap:8px">
-        <button id="createBtn" class="btn">Create Show</button>
-        <button id="resetBtn" class="btn secondary">Reset</button>
+      <!-- Latest list -->
+      <div class="stack">
+        <div class="label">Latest Shows</div>
+        <table class="table" id="tblShows">
+          <thead><tr><th>Title</th><th>Date</th><th>Venue</th><th>Tickets</th><th>Orders</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="note">This calls <code>/admin/shows/latest?limit=20</code>.</div>
       </div>
-      <div class="help" id="venueHint" style="margin-top:8px"></div>
-    </div>
+    </section>
 
-    <div class="card">
-      <h2>Latest Shows</h2>
-      <div id="shows" class="list"></div>
-    </div>
-  </div>
+    <section id="view-venues" class="panel stack hide">
+      <div class="header">
+        <div>
+          <div class="heading">Venues</div>
+          <div class="sub">Create and list venues (used by show creation).</div>
+        </div>
+        <div class="actions hstack">
+          <button id="btnRefreshVenues" class="secondary">Refresh venues</button>
+        </div>
+      </div>
 
-  <div id="toast" class="toast"></div>
+      <div class="grid3">
+        <div><div class="label">Venue Name</div><input id="venueName" placeholder="e.g. The Forum Theatre"/></div>
+        <div><div class="label">Capacity (optional)</div><input id="venueCap" placeholder="e.g. 650"/></div>
+        <div><div class="label">Address (line)</div><input id="venueAddr" placeholder="e.g. 123 High Street"/></div>
+      </div>
+      <div class="grid3">
+        <div><div class="label">City</div><input id="venueCity" placeholder="e.g. Malvern"/></div>
+        <div><div class="label">Postcode</div><input id="venuePost" placeholder="e.g. WR14 3HB"/></div>
+        <div class="stack" style="align-self:end"><button id="btnCreateVenue">Create Venue</button></div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="stack">
+        <div class="label">All Venues</div>
+        <table class="table" id="tblVenues">
+          <thead><tr><th>Name</th><th>City</th><th>Postcode</th><th>Capacity</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Placeholder views to be wired later -->
+    <section id="view-tickets" class="panel stack hide">
+      <div class="heading">Ticket Types</div>
+      <div class="sub">Define GA / VIP / Early Bird etc. per show.</div>
+      <div class="divider"></div>
+      <div class="note">Planned: per-show ticket type editor, price/allocations, fees, visibility windows.</div>
+    </section>
+
+    <section id="view-orders" class="panel stack hide">
+      <div class="heading">Orders</div>
+      <div class="sub">Search, export CSV, refund actions.</div>
+      <div class="divider"></div>
+      <div class="note">Planned: filters (status/date/show), receipt resend, refund/void, payout summaries.</div>
+    </section>
+
+    <section id="view-customers" class="panel stack hide">
+      <div class="heading">Customers / CRM</div>
+      <div class="sub">Venue-centric audience with tags and segments.</div>
+      <div class="divider"></div>
+      <ul>
+        <li>Customer profiles with show history</li>
+        <li>Tagging by categories (stand-up, music, family)</li>
+        <li>Mailing list sync with built-in “Mailchimp-esque” campaigns</li>
+      </ul>
+    </section>
+
+    <section id="view-discounts" class="panel stack hide">
+      <div class="heading">Discounts & Vouchers</div>
+      <div class="sub">Codes, campaigns, partner links.</div>
+      <div class="divider"></div>
+      <div class="note">Planned: single-use/multi-use, validity windows, per-ticket-type limits, reporting.</div>
+    </section>
+
+    <section id="view-marketing" class="panel stack hide">
+      <div class="heading">Marketing Automations</div>
+      <div class="sub">Pre-show reminders, “doors open”, “thank you”, upsells, next-show nudges.</div>
+      <div class="divider"></div>
+      <ul>
+        <li>Templates per venue and per category</li>
+        <li>Smart send windows and suppression (e.g., don’t email day-after if customer refunded)</li>
+        <li>Performance dashboard and A/B tests</li>
+      </ul>
+    </section>
+
+    <section id="view-seating" class="panel stack hide">
+      <div class="heading">Seating Maps</div>
+      <div class="sub">Per-venue seat maps with zones, holds, and allocations.</div>
+      <div class="divider"></div>
+      <div class="note">Planned: seat designer, row/seat import, ADA holds, price zones, map previews.</div>
+    </section>
+
+    <section id="view-merch" class="panel stack hide">
+      <div class="heading">Merchandise</div>
+      <div class="sub">Add-ons at checkout and post-purchase offers.</div>
+      <div class="divider"></div>
+      <div class="note">Planned: per-show merch SKUs, inventory, fulfilment notes, pickup QR.</div>
+    </section>
+
+    <section id="view-affiliates" class="panel stack hide">
+      <div class="heading">Affiliates & Local Deals</div>
+      <div class="sub">Venue-specific offers shown in customer accounts (USP).</div>
+      <div class="divider"></div>
+      <div class="note">Planned: affiliate links, deal cards on venue portal, rev-share tracking.</div>
+    </section>
+
+    <section id="view-analytics" class="panel stack hide">
+      <div class="heading">Analytics</div>
+      <div class="sub">Sales curves, demand heatmap, campaign attribution.</div>
+      <div class="divider"></div>
+      <div class="note">Planned: cohort charts, county/venue comparisons, action timeline overlays.</div>
+    </section>
+
+    <section id="view-settings" class="panel stack hide">
+      <div class="heading">Settings</div>
+      <div class="sub">Org, venues, payouts, taxes/fees, API keys.</div>
+      <div class="divider"></div>
+      <div class="note">Planned: white-label theming, custom domains, user roles, webhook keys.</div>
+    </section>
+
+  </main>
+</div>
+
+<div id="toast" class="toast hide"></div>
 
 <script>
 (function(){
-  const els = {
-    key: document.getElementById('adminkey'),
-    saveKey: document.getElementById('saveKeyBtn'),
-    refreshAll: document.getElementById('refreshAllBtn'),
+  const $ = (sel) => document.querySelector(sel);
+  const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+  const toast = $('#toast');
 
-    // create venue
-    vName: document.getElementById('v_name'),
-    vCap: document.getElementById('v_capacity'),
-    vAddress: document.getElementById('v_address'),
-    vCity: document.getElementById('v_city'),
-    vPostcode: document.getElementById('v_postcode'),
-    createVenue: document.getElementById('createVenueBtn'),
-    venueCreateHelp: document.getElementById('venueCreateHelp'),
+  function showToast(msg, ok=true, ms=2500){
+    toast.textContent = msg;
+    toast.className = 'toast ' + (ok ? 'ok' : 'err');
+    toast.classList.remove('hide');
+    setTimeout(()=>toast.classList.add('hide'), ms);
+  }
 
-    // create show
-    venue: document.getElementById('venue'),
-    venueHint: document.getElementById('venueHint'),
-    title: document.getElementById('title'),
-    dt: document.getElementById('datetime'),
-    cap: document.getElementById('capOverride'),
-    posterUrl: document.getElementById('posterUrl'),
-    posterFile: document.getElementById('posterFile'),
-    desc: document.getElementById('desc'),
-    create: document.getElementById('createBtn'),
-    reset: document.getElementById('resetBtn'),
-
-    // lists
-    shows: document.getElementById('shows'),
-    toast: document.getElementById('toast')
+  // ROUTING
+  const views = {
+    dashboard: $('#view-dashboard'),
+    shows: $('#view-shows'),
+    venues: $('#view-venues'),
+    tickets: $('#view-tickets'),
+    orders: $('#view-orders'),
+    customers: $('#view-customers'),
+    discounts: $('#view-discounts'),
+    marketing: $('#view-marketing'),
+    seating: $('#view-seating'),
+    merch: $('#view-merch'),
+    affiliates: $('#view-affiliates'),
+    analytics: $('#view-analytics'),
+    settings: $('#view-settings'),
   };
 
-  function toast(msg, ok=true, ms=3000){
-    els.toast.textContent = msg;
-    els.toast.className = 'toast ' + (ok ? 'ok' : 'err');
-    els.toast.style.display = 'block';
-    setTimeout(()=> els.toast.style.display='none', ms);
+  function setActive(view){
+    Object.values(views).forEach(v => v.classList.add('hide'));
+    (views[view] || views.dashboard).classList.remove('hide');
+    $$('#nav a').forEach(a => a.classList.toggle('active', a.dataset.view === view));
   }
 
-  function getKey(){
-    const k = (els.key.value || '').trim();
-    if(!k){ toast('Enter admin key', false, 2000); }
-    return k;
+  function parseHash(){
+    const h = location.hash.replace(/^#\\//,'');
+    return h || 'dashboard';
   }
 
-  function saveKey(){
-    localStorage.setItem('chuckl_admin_key', els.key.value.trim());
-    toast('Admin key saved');
+  window.addEventListener('hashchange', ()=> setActive(parseHash()));
+  setActive(parseHash());
+
+  // ADMIN KEY
+  const keyEl = $('#adminkey');
+  keyEl.value = localStorage.getItem('chuckl_admin_key') || '';
+  $('#btnSaveKey').addEventListener('click', ()=>{
+    localStorage.setItem('chuckl_admin_key', keyEl.value.trim());
+    showToast('Key saved');
+  });
+
+  // Simple env badge
+  $('#envBadge').textContent = location.hostname.includes('railway') ? 'Production (Railway)' : 'Local';
+
+  // API helpers
+  function headers(){
+    const k = keyEl.value.trim();
+    const h = { 'Content-Type': 'application/json' };
+    if (k) h['x-admin-key'] = k;
+    return h;
+  }
+  async function getJSON(url){
+    const r = await fetch(url, { headers: headers() });
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    return r.json();
+  }
+  async function postJSON(url, body){
+    const r = await fetch(url, { method:'POST', headers: headers(), body: JSON.stringify(body||{}) });
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    return r.json();
   }
 
-  async function api(path, options={}){
-    const key = getKey();
-    if(!key) throw new Error('No admin key');
-    const headers = Object.assign({'x-admin-key': key}, options.headers||{});
-    const url = path + (path.includes('?') ? '&' : '?') + 'k=' + encodeURIComponent(key);
-    const res = await fetch(url, Object.assign({}, options, { headers }));
-    if(!res.ok){
-      const txt = await res.text().catch(()=> '');
-      throw new Error('HTTP ' + res.status + ' ' + txt);
-    }
-    return res.json();
-  }
-
+  // VENUES
+  const tblVenues = $('#tblVenues tbody');
+  const venueSel = $('#showVenue');
   async function loadVenues(){
-    try {
-      const data = await api('/admin/venues');
-      const list = Array.isArray(data?.venues) ? data.venues : [];
-      els.venue.innerHTML = '<option value="">Select venue…</option>' + list.map(v => {
-        const label = [v.name, v.city, v.postcode].filter(Boolean).join(', ');
-        return '<option data-cap="'+(v.capacity ?? '')+'" value="'+v.id+'">'+label+'</option>';
-      }).join('');
-      els.venueHint.textContent = 'Loaded ' + list.length + ' venues.';
-    } catch(e){
-      console.error(e);
-      els.venue.innerHTML = '<option value="">(Failed to load venues)</option>';
-      toast('Failed to load venues', false);
+    tblVenues.innerHTML = '';
+    venueSel.innerHTML = '<option value="">Select a venue…</option>';
+    try{
+      const data = await getJSON('/admin/venues');
+      (data.venues || []).forEach(v=>{
+        // table
+        const tr = document.createElement('tr');
+        tr.innerHTML = \`<td>\${v.name||'—'}</td><td>\${v.city||'—'}</td><td>\${v.postcode||'—'}</td><td>\${v.capacity ?? '—'}</td>\`;
+        tblVenues.appendChild(tr);
+        // select
+        const opt = document.createElement('option');
+        opt.value = v.id;
+        opt.textContent = v.name + (v.city ? ' — '+v.city : '');
+        venueSel.appendChild(opt);
+      });
+      showToast('Venues loaded');
+    }catch(e){
+      showToast('Failed to load venues', false);
     }
   }
+  $('#btnRefreshVenues').addEventListener('click', loadVenues);
 
-  function updateCapacityHint(){
-    const opt = els.venue.options[els.venue.selectedIndex];
-    if(!opt || !opt.value){ els.venueHint.textContent=''; return; }
-    const cap = opt.getAttribute('data-cap');
-    els.venueHint.textContent = cap ? ('Venue capacity: ' + cap) : 'Venue capacity: unknown';
-  }
+  $('#btnCreateVenue').addEventListener('click', async ()=>{
+    const name = $('#venueName').value.trim();
+    const capacity = Number($('#venueCap').value.trim()) || null;
+    const address = $('#venueAddr').value.trim() || null;
+    const city = $('#venueCity').value.trim() || null;
+    const postcode = $('#venuePost').value.trim() || null;
+    if(!name){ showToast('Venue name required', false); return; }
+    try{
+      const r = await postJSON('/admin/venues', { name, capacity, address, city, postcode });
+      if(r && r.ok){ showToast('Venue created'); await loadVenues(); }
+      else showToast(r.message || 'Could not create venue', false);
+    }catch(e){ showToast('Error creating venue', false); }
+  });
 
+  // SHOWS
+  const tblShows = $('#tblShows tbody');
   async function loadShows(){
-    els.shows.innerHTML = '<div class="muted">Loading…</div>';
+    tblShows.innerHTML = '';
     try{
-      const data = await api('/admin/shows/latest?limit=20');
-      const shows = Array.isArray(data?.shows) ? data.shows : [];
-      if(!shows.length){ els.shows.innerHTML = '<div class="muted">No shows yet.</div>'; return; }
-      els.shows.innerHTML = shows.map(s => {
-        const when = new Date(s.date).toLocaleString('en-GB', {weekday:'short', day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'});
-        const venue = s.venue ? [s.venue.name, s.venue.city, s.venue.postcode].filter(Boolean).join(', ') : '';
-        const types = (s.ticketTypes||[]).map(t => t.name + ' £' + (t.pricePence/100).toFixed(2) + (t.available ? ' ×'+t.available : '')).join(' • ');
-        return '<div class="tile" data-id="'+s.id+'">' +
-                 '<div class="title">'+ s.title +'</div>' +
-                 '<div class="muted">'+ when + (venue ? ' · ' + venue : '') +'</div>' +
-                 (types ? '<div class="muted">'+ types +'</div>' : '') +
-                 '<div class="details">' +
-                   '<div class="muted">Tickets: '+ (s._count?.tickets ?? 0) +' · Orders: '+ (s._count?.orders ?? 0) +'</div>' +
-                   '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">' +
-                     '<a class="btn secondary" href="/scan?show='+s.id+'" target="_blank">Open Scanner</a>' +
-                     '<a class="btn secondary" href="/admin/ui" onclick="return false">More actions coming…</a>' +
-                   '</div>' +
-                 '</div>' +
-               '</div>';
-      }).join('');
-
-      // expand/collapse
-      Array.from(els.shows.querySelectorAll('.tile')).forEach(tile => {
-        tile.addEventListener('click', (e) => {
-          // don’t toggle if clicking a button/link inside
-          if ((e.target as HTMLElement).closest('a,button')) return;
-          const d = tile.querySelector('.details') as HTMLElement;
-          d.style.display = d.style.display === 'block' ? 'none' : 'block';
-        });
+      const data = await getJSON('/admin/shows/latest?limit=20');
+      (data.shows || []).forEach(s=>{
+        const when = new Date(s.date).toLocaleString('en-GB');
+        const venue = s.venue?.name || '—';
+        const tr = document.createElement('tr');
+        tr.innerHTML = \`<td>\${s.title}</td><td>\${when}</td><td>\${venue}</td><td>\${s._count?.tickets ?? '—'}</td><td>\${s._count?.orders ?? '—'}</td>\`;
+        tblShows.appendChild(tr);
       });
+      showToast('Shows loaded');
     }catch(e){
-      console.error(e);
-      els.shows.innerHTML = '<div class="muted">Failed to load shows.</div>';
-      toast('Failed to load shows', false);
+      showToast('Failed to load shows', false);
     }
   }
+  $('#btnRefreshShows').addEventListener('click', loadShows);
 
-  async function uploadPosterIfAny(): Promise<string|undefined>{
-    const file = (els.posterFile as HTMLInputElement).files?.[0];
-    if(!file) return undefined;
+  $('#btnCreateShow').addEventListener('click', async ()=>{
+    const title = $('#showTitle').value.trim();
+    const date = $('#showDate').value;
+    const venueId = $('#showVenue').value;
+    const description = $('#showDesc').value.trim() || null;
+    const capacityOverride = Number($('#showCap').value.trim()) || null;
+    const posterUrl = $('#showPoster').value.trim() || null;
 
+    if(!title || !date || !venueId){
+      showToast('Title, date and venue are required', false);
+      return;
+    }
     try{
-      // ask server for presigned POST (if available)
-      const presign = await api('/admin/uploads/presign?kind=poster&ext=' + encodeURIComponent((file.name.split('.').pop()||'png')));
-      if(!presign?.ok || !presign?.url || !presign?.fields) {
-        toast('Uploads not configured — using Poster URL instead', false);
-        return undefined;
+      const body = { title, date: new Date(date).toISOString(), venueId, description, capacityOverride, posterUrl };
+      const r = await postJSON('/admin/shows', body);
+      if(r && r.ok){ 
+        showToast('Show created');
+        $('#showTitle').value = '';
+        $('#showDate').value = '';
+        $('#showVenue').value = '';
+        $('#showDesc').value = '';
+        $('#showCap').value = '';
+        $('#showPoster').value = '';
+        await loadShows();
+      }else{
+        showToast(r.message || 'Could not create show', false);
       }
-      const form = new FormData();
-      Object.entries(presign.fields).forEach(([k,v]) => form.append(k, String(v)));
-      form.append('file', file);
-      const r = await fetch(presign.url, { method:'POST', body: form });
-      if(!r.ok) throw new Error('Upload failed');
-      return presign.publicUrl || presign.key || undefined;
-    }catch(e){
-      console.warn(e);
-      toast('Upload failed — paste a Poster URL instead', false);
-      return undefined;
-    }
+    }catch(e){ showToast('Error creating show', false); }
+  });
+
+  $('#btnResetShow').addEventListener('click', ()=>{
+    $('#showTitle').value = '';
+    $('#showDate').value = '';
+    $('#showVenue').value = '';
+    $('#showDesc').value = '';
+    $('#showCap').value = '';
+    $('#showPoster').value = '';
+  });
+
+  // global load button
+  $('#btnLoad').addEventListener('click', async ()=>{
+    await loadVenues();
+    await loadShows();
+  });
+
+  // If key already present, auto-load lists once
+  if (keyEl.value.trim()){
+    loadVenues().then(loadShows);
   }
-
-  async function createVenue(){
-    const name = els.vName.value.trim();
-    const capacity = els.vCap.value ? Number(els.vCap.value) : undefined;
-    const address = els.vAddress.value.trim() || undefined;
-    const city = els.vCity.value.trim() || undefined;
-    const postcode = els.vPostcode.value.trim() || undefined;
-    if(!name){ toast('Venue name required', false); return; }
-
-    try{
-      els.createVenue.setAttribute('disabled','true');
-      const data = await api('/admin/venues', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ name, capacity, address, city, postcode })
-      });
-      if(!data?.ok) throw new Error(data?.message || 'Unknown error');
-      els.venueCreateHelp.textContent = 'Venue created: ' + data.venue.name;
-      // clear form
-      els.vName.value=''; els.vCap.value=''; els.vAddress.value=''; els.vCity.value=''; els.vPostcode.value='';
-      // refresh venue list
-      await loadVenues();
-    }catch(e){
-      console.error(e);
-      toast('Create venue failed: ' + e.message, false);
-    }finally{
-      els.createVenue.removeAttribute('disabled');
-    }
-  }
-
-  async function createShow(){
-    const title = els.title.value.trim();
-    const venueId = els.venue.value;
-    const dt = els.dt.value;
-    if(!title){ toast('Title required', false); return; }
-    if(!venueId){ toast('Select a venue', false); return; }
-    if(!dt){ toast('Pick date & time', false); return; }
-
-    // optional: upload image
-    let poster = els.posterUrl.value.trim() || undefined;
-    if(!poster){
-      const uploaded = await uploadPosterIfAny();
-      if(uploaded) poster = uploaded;
-    }
-
-    const capacityOverride = els.cap.value ? Number(els.cap.value) : undefined;
-    const payload = {
-      title,
-      description: els.desc.value || undefined,
-      date: new Date(dt).toISOString(),
-      venueId,
-      capacityOverride,
-      posterUrl: poster
-    };
-
-    try{
-      els.create.setAttribute('disabled','true');
-      const data = await api('/admin/shows', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(payload)
-      });
-      if(!data?.ok) throw new Error(data?.message || 'Unknown error');
-      toast('Show created', true, 1800);
-      els.title.value = '';
-      els.desc.value = '';
-      els.posterUrl.value = '';
-      els.posterFile.value = '';
-      els.cap.value = '';
-      loadShows();
-    }catch(e){
-      console.error(e);
-      toast('Create failed: ' + e.message, false);
-    }finally{
-      els.create.removeAttribute('disabled');
-    }
-  }
-
-  // Wire up
-  els.saveKey.addEventListener('click', saveKey);
-  els.refreshAll.addEventListener('click', async () => { await loadVenues(); await loadShows(); });
-  els.create.addEventListener('click', createShow);
-  els.reset.addEventListener('click', () => { els.title.value=''; els.desc.value=''; els.posterUrl.value=''; els.posterFile.value=''; els.cap.value=''; });
-  els.venue.addEventListener('change', updateCapacityHint);
-  els.createVenue.addEventListener('click', createVenue);
-
-  // Boot
-  const saved = localStorage.getItem('chuckl_admin_key');
-  if(saved) els.key.value = saved;
-  if(saved){ loadVenues(); loadShows(); }
 })();
 </script>
 </body>
