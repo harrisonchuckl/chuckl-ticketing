@@ -8,254 +8,371 @@ router.get('/ui', (_req: Request, res: Response) => {
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Chuckl. Admin</title>
 <style>
-  :root { color-scheme: dark; }
-  body{margin:0;background:#0b0b10;color:#e8ebf7;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif}
-  .wrap{max-width:1000px;margin:28px auto;padding:0 16px}
-  .card{background:#141724;border:1px solid #22263a;border-radius:14px;padding:16px}
-  h1{margin:0 0 10px}
-  label{display:block;font-size:12px;color:#9aa0b5;margin:10px 0 6px}
-  input, select{width:100%;padding:12px 14px;border-radius:10px;border:1px solid #2a2f46;background:#0f1220;color:#e8ebf7;font-size:16px}
-  .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
-  button{appearance:none;border:0;border-radius:10px;padding:10px 14px;background:#4053ff;color:#fff;font-weight:600;cursor:pointer}
-  button.secondary{background:#2a2f46}
-  .muted{color:#9aa0b5;font-size:12px}
-  .err{color:#ffd7d9}
-  .list{display:flex;flex-direction:column;gap:10px;margin-top:14px}
-  .item{background:#0f1220;border:1px solid #22263a;border-radius:10px;padding:12px;cursor:pointer}
-  .item h3{margin:0 0 4px;font-size:16px}
-  .details{margin-top:10px;border-top:1px dashed #2a2f46;padding-top:10px}
-  .kv{display:grid;grid-template-columns:120px 1fr;gap:6px;font-size:14px}
-  .badge{display:inline-block;padding:3px 8px;border-radius:999px;background:#22263a;margin-right:6px;font-size:12px}
-  .toast{position:fixed;left:12px;right:12px;bottom:12px;padding:12px 14px;border-radius:10px;font-weight:600}
-  .toast.ok{background:#0f5132;color:#d1f7e3;border:1px solid #115e3a}
-  .toast.err{background:#511f20;color:#ffd7d9;border:1px solid #6a2a2c}
+  :root { color-scheme: light; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f6f7fb;color:#0b1020}
+  .wrap{max-width:1100px;margin:28px auto;padding:0 16px}
+  .card{background:#fff;border:1px solid #e7e8f0;border-radius:14px;box-shadow:0 1px 2px rgba(16,24,40,.04);padding:16px}
+  h1{font-size:24px;margin:0 0 12px}
+  label{display:block;font-size:12px;color:#606578;margin:10px 0 6px}
+  input,select,textarea{width:100%;padding:12px 14px;border-radius:10px;border:1px solid #d7d9e2;background:#fff;color:#0b1020;font-size:14px}
+  textarea{min-height:92px}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .row > *{flex:1}
+  .btn{appearance:none;border:0;border-radius:10px;padding:10px 14px;background:#1976d2;color:#fff;font-weight:600;cursor:pointer}
+  .btn.secondary{background:#eef1f6;color:#0b1020;border:1px solid #d7d9e2}
+  .btn.warn{background:#e53935}
+  .toolbar{display:flex;gap:10px;align-items:center;margin-top:12px}
+  .list{margin-top:16px;display:flex;flex-direction:column;gap:10px}
+  .item{background:#fff;border:1px solid #e7e8f0;border-radius:12px;padding:12px}
+  .item h3{margin:0 0 6px;font-size:16px}
+  .muted{color:#606578;font-size:12px}
+  .toast{position:fixed;left:16px;right:16px;bottom:16px;padding:12px 14px;border-radius:10px;font-weight:600;border:1px solid}
+  .toast.ok{background:#edf7ed;color:#145a32;border-color:#c7e6c8}
+  .toast.err{background:#fdeaea;color:#7f1d1d;border-color:#f5c2c2}
   .hidden{display:none}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .divider{height:1px;background:#eceff5;margin:12px 0}
+  .badge{display:inline-block;padding:2px 8px;border-radius:9999px;background:#eef1f6;border:1px solid #d7d9e2;color:#0b1020;font-size:12px}
 </style>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
       <h1>Chuckl. Admin</h1>
-      <label>Admin Key</label>
-      <input id="adminkey" type="text" placeholder="enter admin key (or use ?k=...)" />
+
       <div class="row">
-        <button id="loadBtn">Load latest shows</button>
-        <button id="openScanner" class="secondary">Open scanner</button>
+        <div>
+          <label>Admin Key</label>
+          <input id="adminkey" type="text" placeholder="enter your admin key"/>
+        </div>
+        <div style="align-self:flex-end">
+          <button id="loadBtn" class="btn">Load latest shows</button>
+        </div>
       </div>
-      <p class="muted">Shows load from <code>/admin/shows/latest</code>. Your key is sent as <code>x-admin-key</code>.</p>
-      <p class="muted" id="error"></p>
+      <p class="muted">Shows load from <code>/admin/shows/latest</code> (limit 20). Your key is sent as <code>x-admin-key</code>.</p>
     </div>
 
-    <div class="card" style="margin-top:14px">
-      <h2 style="margin:0 0 8px;font-size:18px">Create Show (starter)</h2>
-      <div class="row">
-        <div style="flex:1;min-width:220px">
+    <!-- Create Show -->
+    <div class="card" style="margin-top:12px">
+      <h2 style="font-size:18px;margin:0 0 8px">Create Show</h2>
+      <div class="grid">
+        <div>
           <label>Title</label>
-          <input id="newTitle" type="text" placeholder="e.g. Chuckl. Comedy Night"/>
+          <input id="cs_title" type="text" placeholder="e.g. Chuckl. Comedy Night"/>
         </div>
-        <div style="flex:1;min-width:220px">
+        <div>
           <label>Date & Time</label>
-          <input id="newDate" type="datetime-local"/>
+          <input id="cs_date" type="datetime-local"/>
         </div>
-      </div>
-      <div class="row">
-        <div style="flex:1;min-width:220px">
+        <div>
           <label>Venue</label>
-          <select id="venueSelect"><option value="">Loading venues…</option></select>
+          <select id="cs_venue"></select>
         </div>
-        <div style="width:220px">
-          <label>Capacity override (optional)</label>
-          <input id="capOverride" type="text" placeholder="e.g. 350"/>
+        <div>
+          <label>Capacity Override (optional)</label>
+          <input id="cs_capacity" type="number" placeholder="leave blank to use venue capacity"/>
         </div>
       </div>
+      <label style="margin-top:10px">Description (optional)</label>
+      <textarea id="cs_desc" placeholder="One-line blurb or leave empty"></textarea>
+
       <div class="row">
-        <button id="createBtn">Create Show</button>
+        <div>
+          <label>Poster Image</label>
+          <input id="cs_file" type="file" accept="image/*"/>
+          <p class="muted">Uploads directly to S3 via a presigned POST.</p>
+        </div>
+        <div style="align-self:flex-end">
+          <button id="cs_create" class="btn">Create Show</button>
+        </div>
       </div>
-      <p class="muted">This seeds the show; ticket types and pricing can be added later.</p>
     </div>
 
-    <div class="list" id="list"></div>
+    <!-- Shows list -->
+    <div class="card" style="margin-top:12px">
+      <h2 style="font-size:18px;margin:0 0 8px">Latest Shows</h2>
+      <div id="shows" class="list"></div>
+    </div>
   </div>
 
   <div id="toast" class="toast hidden"></div>
 
 <script>
-const q = new URLSearchParams(location.search);
-if (q.get('k')) document.getElementById('adminkey').value = q.get('k');
-
-const errEl = document.getElementById('error');
-const listEl = document.getElementById('list');
+const keyEl = document.getElementById('adminkey');
+const loadBtn = document.getElementById('loadBtn');
+const showsEl = document.getElementById('shows');
 const toast = document.getElementById('toast');
-const venueSelect = document.getElementById('venueSelect');
 
-function showError(msg){ errEl.textContent = 'Error: ' + msg; errEl.className='muted err'; }
-function clearError(){ errEl.textContent=''; errEl.className='muted'; }
-function showToast(msg, ok=true){
+// Create show elements
+const cs_title = document.getElementById('cs_title');
+const cs_date = document.getElementById('cs_date');
+const cs_venue = document.getElementById('cs_venue');
+const cs_capacity = document.getElementById('cs_capacity');
+const cs_desc = document.getElementById('cs_desc');
+const cs_file = document.getElementById('cs_file');
+const cs_create = document.getElementById('cs_create');
+
+function showToast(msg, ok=true, ms=2600) {
   toast.textContent = msg;
   toast.className = 'toast ' + (ok ? 'ok' : 'err');
   toast.classList.remove('hidden');
-  setTimeout(()=>toast.classList.add('hidden'), 2500);
+  setTimeout(()=> toast.classList.add('hidden'), ms);
 }
 
-function adminKey(){
-  const k = (document.getElementById('adminkey').value || '').trim();
-  if (!k) throw new Error('Admin key required');
-  return k;
+// Helpers
+async function fetchJSON(url, opts={}) {
+  const key = keyEl.value.trim();
+  const headers = Object.assign({ 'x-admin-key': key }, (opts.headers||{}));
+  const r = await fetch(url, Object.assign({}, opts, { headers }));
+  if (!r.ok) throw new Error((await r.text()) || ('HTTP ' + r.status));
+  return r.json();
 }
 
-async function fetchJSON(url, opts){
-  const r = await fetch(url, opts);
-  const text = await r.text();
-  try { return JSON.parse(text); } catch { return { error:true, message:'Invalid JSON', raw:text, status:r.status }; }
+// Populate venues
+async function loadVenues() {
+  try {
+    const r = await fetchJSON('/admin/venues');
+    const venues = r.venues || [];
+    cs_venue.innerHTML = venues.map(v => 
+      '<option value="'+v.id+'">'+(v.name || 'Untitled')+(v.capacity ? ' ('+v.capacity+')':'')+'</option>'
+    ).join('');
+  } catch(e) {
+    showToast('Failed to load venues: ' + e.message, false);
+  }
 }
 
-async function loadVenues(){
-  try{
-    const k = adminKey();
-    const data = await fetchJSON('/admin/venues', { headers:{ 'x-admin-key': k }});
-    if (!data || !data.ok) throw new Error(data?.message || 'Failed to load venues');
-    venueSelect.innerHTML = '<option value="">Select a venue…</option>';
-    for(const v of data.venues){
-      const opt = document.createElement('option');
-      opt.value = v.id;
-      const bits = [v.name, v.city, v.postcode].filter(Boolean).join(', ');
-      opt.textContent = bits || v.name || 'Venue';
-      venueSelect.appendChild(opt);
-    }
-  }catch(e){ showToast(String(e.message||e), false); }
+// Load shows
+async function loadShows() {
+  try {
+    const r = await fetchJSON('/admin/shows/latest?limit=20');
+    const list = r.shows || [];
+    showsEl.innerHTML = list.map(itemHTML).join('');
+    // attach handlers
+    list.forEach(s => attachRowHandlers(s.id));
+  } catch(e) {
+    showToast('Failed to load shows: ' + e.message, false);
+  }
 }
 
-async function createShow(){
-  try{
-    const k = adminKey();
-    const title = document.getElementById('newTitle').value.trim();
-    const date = document.getElementById('newDate').value;
-    const venueId = venueSelect.value;
-    const capacityOverride = document.getElementById('capOverride').value.trim();
-
-    if (!title || !date || !venueId) { showToast('Title, date and venue are required', false); return; }
-
-    const payload = { title, date, venueId };
-    if (capacityOverride) payload.capacityOverride = Number(capacityOverride);
-
-    const res = await fetchJSON('/admin/shows', {
-      method:'POST',
-      headers: { 'Content-Type':'application/json', 'x-admin-key': k },
-      body: JSON.stringify(payload)
-    });
-    if (!res || !res.ok) throw new Error(res?.message || 'Failed to create show');
-    showToast('Show created');
-    await loadShows(); // refresh
-  }catch(e){ showToast(String(e.message||e), false); }
+// Single show row
+function itemHTML(s) {
+  const dateStr = new Date(s.date).toLocaleString('en-GB');
+  const vn = s.venue ? (s.venue.name || 'Untitled venue') : 'No venue';
+  const tt = (s.ticketTypes||[]).map(t => 
+    '<span class="badge">'+t.name+': £'+(t.pricePence/100).toFixed(2)+(t.available!=null?(' • avail '+t.available):'')+'</span>'
+  ).join(' ');
+  return \`
+    <div class="item" id="row-\${s.id}">
+      <h3>\${s.title}</h3>
+      <div class="muted">\${dateStr} • \${vn}</div>
+      <div style="margin-top:8px">\${tt || '<span class="muted">No ticket types yet</span>'}</div>
+      <div class="toolbar">
+        <button class="btn secondary" data-edit="\${s.id}">Edit</button>
+        <button class="btn warn" data-del="\${s.id}">Delete</button>
+        <button class="btn secondary" data-stats="\${s.id}">Pre-show stats</button>
+        <button class="btn secondary" data-tt="\${s.id}">Manage ticket types</button>
+      </div>
+      <div class="divider"></div>
+      <div id="panel-\${s.id}" class="muted"></div>
+    </div>\`;
 }
 
-async function loadShows(){
-  clearError();
-  listEl.innerHTML = '';
-  try{
-    const k = adminKey();
-    const data = await fetchJSON('/admin/shows/latest?limit=20', { headers: { 'x-admin-key': k }});
-    if (!data || !data.ok) throw new Error(data?.message || 'Failed to load shows');
-    const shows = data.shows || [];
-    for(const s of shows){
-      listEl.appendChild(renderShowItem(s));
-    }
-  }catch(e){ showError(String(e.message||e)); }
+function attachRowHandlers(id) {
+  const row = document.getElementById('row-'+id);
+  row.querySelector('[data-edit]').addEventListener('click', ()=> openEdit(id));
+  row.querySelector('[data-del]').addEventListener('click', ()=> delShow(id));
+  row.querySelector('[data-stats]').addEventListener('click', ()=> loadStats(id));
+  row.querySelector('[data-tt]').addEventListener('click', ()=> manageTT(id));
 }
 
-function renderShowItem(show){
-  const when = new Date(show.date).toLocaleString('en-GB');
-  const div = document.createElement('div');
-  div.className = 'item';
-  div.innerHTML = \`
-    <h3>\${show.title}</h3>
-    <div class="muted">\${when}</div>
-    <div class="details" style="display:none"></div>
-  \`;
-  const details = div.querySelector('.details');
+// Delete
+async function delShow(id){
+  if(!confirm('Delete this show?')) return;
+  try {
+    await fetchJSON('/admin/shows/'+id, { method:'DELETE' });
+    showToast('Deleted');
+    await loadShows();
+  } catch(e){ showToast(e.message, false); }
+}
 
-  div.addEventListener('click', async (ev) => {
-    // prevent clicks on buttons inside details from re-toggling the card
-    if (ev.target.closest('button')) return;
+// Edit panel (title, date, venue, capacity override, imageUrl)
+function openEdit(id){
+  const panel = document.getElementById('panel-'+id);
+  panel.innerHTML = \`
+    <div class="grid">
+      <div><label>Title</label><input id="e_title-\${id}" type="text"/></div>
+      <div><label>Date & Time</label><input id="e_date-\${id}" type="datetime-local"/></div>
+      <div><label>Venue</label><select id="e_venue-\${id}"></select></div>
+      <div><label>Capacity Override</label><input id="e_cap-\${id}" type="number"/></div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <div>
+        <label>Poster Image</label>
+        <input id="e_file-\${id}" type="file" accept="image/*"/>
+      </div>
+      <div style="align-self:flex-end">
+        <button class="btn" id="e_save-\${id}">Save changes</button>
+      </div>
+    </div>\`;
 
-    if (details.style.display === 'none') {
-      // expand + fetch details
-      try{
-        const k = adminKey();
-        const data = await fetchJSON('/admin/shows/' + show.id, { headers: { 'x-admin-key': k }});
-        if (!data || !data.ok) throw new Error(data?.message || 'Failed to load show');
-        const d = data.show;
-        const stats = data.stats || { checkedIn: 0, remaining: 0, total: 0 };
-        const venueBits = [d.venue?.name, d.venue?.city, d.venue?.postcode].filter(Boolean).join(', ');
-
-        const ttypes = (d.ticketTypes||[]).map(t => \`<span class="badge">\${t.name} · £\${(t.pricePence/100).toFixed(2)} · avail:\${t.available ?? '—'}</span>\`).join(' ');
-
-        details.innerHTML = \`
-          <div class="kv">
-            <div>Venue</div><div>\${venueBits || '—'}</div>
-            <div>Orders</div><div>\${d._count?.orders ?? 0}</div>
-            <div>Tickets</div><div>\${d._count?.tickets ?? 0}</div>
-            <div>Checked-in</div><div>\${stats.checkedIn} / \${stats.total} (remaining \${stats.remaining})</div>
-            <div>Types</div><div>\${ttypes || '—'}</div>
-          </div>
-          <div class="row" style="margin-top:10px">
-            <button class="secondary" data-action="refresh">Load check-ins</button>
-            <button class="secondary" data-action="scanner">Open scanner</button>
-          </div>
-        \`;
-
-        // attach button actions
-        details.querySelector('[data-action="refresh"]').addEventListener('click', async (e) => {
-          e.stopPropagation();
-          try{
-            const k2 = adminKey();
-            const j = await fetchJSON('/admin/shows/' + show.id, { headers: { 'x-admin-key': k2 }});
-            if (!j || !j.ok) throw new Error(j?.message || 'Failed to refresh');
-            const s2 = j.stats || { checkedIn:0, remaining:0, total:0 };
-            details.querySelector('.kv').children[7].innerHTML = \`\${s2.checkedIn} / \${s2.total} (remaining \${s2.remaining})\`;
-            showToast('Stats refreshed');
-          }catch(err){ showToast(String(err.message||err), false); }
-        });
-
-        details.querySelector('[data-action="scanner"]').addEventListener('click', (e) => {
-          e.stopPropagation();
-          const k3 = adminKey();
-          const url = '/scan?k=' + encodeURIComponent(k3);
-          window.open(url, '_blank');
-        });
-
-        details.style.display = '';
-      }catch(e){
-        showToast(String(e.message||e), false);
-      }
-    } else {
-      // collapse
-      details.style.display = 'none';
-    }
+  // preload venues
+  fetchJSON('/admin/venues').then(r=>{
+    const s = document.getElementById('e_venue-'+id);
+    s.innerHTML = (r.venues||[]).map(v => '<option value="'+v.id+'">'+v.name+'</option>').join('');
   });
 
-  return div;
+  document.getElementById('e_save-'+id).addEventListener('click', async ()=>{
+    try{
+      let imageUrl = null;
+      const f = (document.getElementById('e_file-'+id) as HTMLInputElement).files?.[0];
+      if(f){
+        imageUrl = await uploadToS3(f);
+      }
+      const payload:any = {
+        title: (document.getElementById('e_title-'+id) as HTMLInputElement).value || undefined,
+        dateISO: (document.getElementById('e_date-'+id) as HTMLInputElement).value || undefined,
+        venueId: (document.getElementById('e_venue-'+id) as HTMLSelectElement).value || undefined,
+        capacityOverride: Number((document.getElementById('e_cap-'+id) as HTMLInputElement).value) || undefined,
+        imageUrl: imageUrl || undefined
+      };
+      await fetchJSON('/admin/shows/'+id, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      showToast('Saved');
+      await loadShows();
+    }catch(e){ showToast(e.message, false); }
+  });
 }
 
-document.getElementById('loadBtn').addEventListener('click', async () => {
-  await loadVenues();
-  await loadShows();
-});
-document.getElementById('openScanner').addEventListener('click', () => {
+// Stats
+async function loadStats(id){
   try{
-    const k = adminKey();
-    window.open('/scan?k=' + encodeURIComponent(k), '_blank');
-  }catch(e){ showToast(String(e.message||e), false); }
-});
-document.getElementById('createBtn').addEventListener('click', createShow);
-
-// Prefill from ?k and auto-load once
-if (document.getElementById('adminkey').value) {
-  loadVenues().then(loadShows).catch(()=>{});
+    const r = await fetchJSON('/admin/shows/'+id+'/stats');
+    const panel = document.getElementById('panel-'+id);
+    panel.innerHTML = '<div>Total: <b>'+r.total+
+      '</b> • Checked-in: <b>'+r.checkedIn+
+      '</b> • Remaining: <b>'+r.remaining+'</b></div>';
+  }catch(e){ showToast(e.message, false); }
 }
+
+// Ticket types manager
+async function manageTT(id){
+  const panel = document.getElementById('panel-'+id);
+  panel.innerHTML = '<div class="muted">Loading ticket types…</div>';
+  try{
+    const r = await fetchJSON('/admin/shows/'+id+'/ticket-types');
+    const list = r.ticketTypes || [];
+    panel.innerHTML = \`
+      <div>\${list.map(tt=> \`
+        <div class="row" style="margin-bottom:8px">
+          <input id="tt-name-\${tt.id}" value="\${tt.name}"/>
+          <input id="tt-price-\${tt.id}" type="number" value="\${tt.pricePence}"/>
+          <input id="tt-avail-\${tt.id}" type="number" value="\${tt.available ?? ''}" placeholder="available"/>
+          <button class="btn secondary" data-ttsave="\${tt.id}">Save</button>
+          <button class="btn warn" data-ttdel="\${tt.id}">Delete</button>
+        </div>\`).join('')}
+      </div>
+      <div class="divider"></div>
+      <div class="row">
+        <input id="tt-new-name-\${id}" placeholder="Name e.g. General Admission"/>
+        <input id="tt-new-price-\${id}" type="number" placeholder="price in pence e.g. 2000"/>
+        <input id="tt-new-avail-\${id}" type="number" placeholder="available (optional)"/>
+        <button class="btn" data-ttadd="\${id}">Add</button>
+      </div>\`;
+
+    // bind save/delete
+    list.forEach(tt=>{
+      panel.querySelector('[data-ttsave="'+tt.id+'"]').addEventListener('click', async ()=>{
+        try{
+          const payload = {
+            name: (document.getElementById('tt-name-'+tt.id) as HTMLInputElement).value,
+            pricePence: Number((document.getElementById('tt-price-'+tt.id) as HTMLInputElement).value),
+            available: (document.getElementById('tt-avail-'+tt.id) as HTMLInputElement).value === '' ? null :
+              Number((document.getElementById('tt-avail-'+tt.id) as HTMLInputElement).value)
+          };
+          await fetchJSON('/admin/ticket-types/'+tt.id, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+          showToast('Ticket type updated');
+          manageTT(id);
+        }catch(e){ showToast(e.message, false); }
+      });
+      panel.querySelector('[data-ttdel="'+tt.id+'"]').addEventListener('click', async ()=>{
+        if(!confirm('Delete ticket type?')) return;
+        try{
+          await fetchJSON('/admin/ticket-types/'+tt.id, { method:'DELETE' });
+          showToast('Deleted ticket type');
+          manageTT(id);
+        }catch(e){ showToast(e.message, false); }
+      });
+    });
+
+    // add new
+    panel.querySelector('[data-ttadd="'+id+'"]').addEventListener('click', async ()=>{
+      try{
+        const payload = {
+          name: (document.getElementById('tt-new-name-'+id) as HTMLInputElement).value,
+          pricePence: Number((document.getElementById('tt-new-price-'+id) as HTMLInputElement).value),
+          available: (document.getElementById('tt-new-avail-'+id) as HTMLInputElement).value === '' ? null :
+            Number((document.getElementById('tt-new-avail-'+id) as HTMLInputElement).value)
+        };
+        await fetchJSON('/admin/shows/'+id+'/ticket-types', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        showToast('Added ticket type');
+        manageTT(id);
+      }catch(e){ showToast(e.message, false); }
+    });
+
+  }catch(e){ showToast(e.message, false); }
+}
+
+// S3 direct upload helper
+async function uploadToS3(file){
+  // Ask backend for a presigned POST
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+  const presign = await fetchJSON('/admin/uploads/presign?ext='+encodeURIComponent(ext), { method:'POST' });
+  const { url, fields, publicUrl } = presign;
+
+  const fd = new FormData();
+  Object.entries(fields).forEach(([k,v]) => fd.append(k, v as any));
+  fd.append('file', file);
+
+  const r = await fetch(url, { method:'POST', body: fd });
+  if (r.status !== 204) {
+    throw new Error('S3 upload failed: HTTP ' + r.status);
+  }
+  return publicUrl; // Return the final public URL to store on the show
+}
+
+// On create show
+cs_create.addEventListener('click', async ()=>{
+  try{
+    let imageUrl = null;
+    const f = cs_file.files?.[0];
+    if (f) imageUrl = await uploadToS3(f);
+
+    const payload = {
+      title: cs_title.value.trim(),
+      description: cs_desc.value.trim() || null,
+      dateISO: cs_date.value,
+      venueId: cs_venue.value,
+      capacityOverride: cs_capacity.value ? Number(cs_capacity.value) : null,
+      imageUrl
+    };
+    await fetchJSON('/admin/shows', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    showToast('Show created');
+    cs_title.value = ''; cs_desc.value = ''; cs_date.value = ''; cs_capacity.value = ''; cs_file.value='';
+    await loadShows();
+  }catch(e){ showToast(e.message, false); }
+});
+
+loadBtn.addEventListener('click', loadShows);
+
+// Load venues once (so the Create Show selector is ready)
+loadVenues();
 </script>
 </body>
 </html>`;
