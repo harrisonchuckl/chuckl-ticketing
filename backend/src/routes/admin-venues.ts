@@ -2,25 +2,19 @@
 import { Router } from 'express';
 import { prisma } from '../db.js';
 
-export const router = Router();
+const router = Router();
 
 function isAdmin(req: any) {
-  const key = req.headers['x-admin-key'];
+  const key = req.headers['x-admin-key'] ?? req.query.k;
   return key && String(key) === String(process.env.BOOTSTRAP_KEY);
 }
 
-router.get('/admin/venues', async (req, res) => {
-  if (!isAdmin(req)) {
-    return res.status(401).json({ error: true, message: 'Unauthorized' });
-  }
-
+router.get('/venues', async (req, res) => {
+  if (!isAdmin(req)) return res.status(401).json({ error: true, message: 'Unauthorized' });
   const venues = await prisma.venue.findMany({
     orderBy: { name: 'asc' },
-    select: {
-      id: true, name: true, address: true, city: true, postcode: true, capacity: true
-    }
+    select: { id: true, name: true, address: true, city: true, postcode: true, capacity: true }
   });
-
   res.json({ ok: true, venues });
 });
 
