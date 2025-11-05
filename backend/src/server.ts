@@ -6,7 +6,7 @@ import rateLimit from 'express-rate-limit';
 import bodyParser from 'body-parser';
 
 import checkout from './routes/checkout.js';
-import webhook from './routes/webhook.js';     // singular filename in your repo
+import webhook from './routes/webhook.js';     // singular filename
 import admin from './routes/admin.js';
 import adminUI from './routes/admin-ui.js';
 import adminVenues from './routes/admin-venues.js';
