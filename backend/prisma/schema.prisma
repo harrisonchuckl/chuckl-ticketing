@@ -1,5 +1,4 @@
-// Prisma schema for Chuckl. Ticketing
-
+// prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,111 +8,99 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// -----------------------------
-// ENUMS
-// -----------------------------
-
-enum OrderStatus {
-  PENDING
-  PAID
-  CANCELLED
-}
-
-enum TicketStatus {
-  VALID
-  USED
-  CANCELLED
-}
-
-// -----------------------------
-// MODELS
-// -----------------------------
-
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  password  String?
-  orders    Order[]
-  tickets   Ticket[]
-  createdAt DateTime @default(now())
-}
-
 model Venue {
-  id        String   @id @default(cuid())
+  id        Int      @id @default(autoincrement())
   name      String
+  capacity  Int?
   address   String?
   city      String?
   postcode  String?
-  capacity  Int?
-  shows     Show[]
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shows     Show[]
+  // NEW: many-to-many to users
+  userLinks UserVenue[]
 }
 
 model Show {
-  id          String       @id @default(cuid())
-  venueId     String
-  venue       Venue        @relation(fields: [venueId], references: [id])
+  id          Int       @id @default(autoincrement())
   title       String
   description String?
-  date        DateTime     @default(now())   // ✅ Added default so migration can apply safely
-  tickets     Ticket[]
-  orders      Order[]
-  ticketTypes TicketType[]
-  createdAt   DateTime     @default(now())
+  startsAt    DateTime
+  capacity    Int?
+  posterUrl   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  @@index([venueId])
-  @@index([date])
+  venueId Int
+  venue   Venue
+
+  ticketTypes TicketType[]
+  orders      Order[]
 }
 
 model TicketType {
-  id          String   @id @default(cuid())
-  showId      String
-  show        Show     @relation(fields: [showId], references: [id])
-  name        String
-  pricePence  Int
-  available   Int?
-  createdAt   DateTime @default(now())
+  id        Int      @id @default(autoincrement())
+  name      String
+  pricePence Int
+  available Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  @@index([showId])
+  showId Int
+  show   Show
+
+  // Optional: orders referencing this type
+  orders Order[]
 }
 
 model Order {
-  id           String       @id @default(cuid())
-  showId       String
-  show         Show         @relation(fields: [showId], references: [id])
-  userId       String?
-  user         User?        @relation(fields: [userId], references: [id])
-  email        String
-  quantity     Int
-  amountPence  Int
-  stripeId     String
-  status       OrderStatus  @default(PENDING)
-  tickets      Ticket[]
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  id         Int      @id @default(autoincrement())
+  email      String
+  name       String?
+  totalPence Int
+  status     String   // e.g. PAID, REFUNDED
+  createdAt  DateTime @default(now())
 
-  @@index([showId])
-  @@index([userId])
-  @@index([status])
+  showId       Int
+  show         Show
+  ticketTypeId Int?
+  ticketType   TicketType?
 }
 
-model Ticket {
-  id         String       @id @default(cuid())
-  orderId    String
-  order      Order        @relation(fields: [orderId], references: [id])
-  showId     String
-  show       Show         @relation(fields: [showId], references: [id])
-  serial     String       @unique
-  qrData     String
-  status     TicketStatus @default(VALID)
-  holderName String?
-  createdAt  DateTime     @default(now())
-  scannedAt  DateTime?
-  userId     String?
-  user       User?        @relation(fields: [userId], references: [id])
+// ===== NEW AUTH MODELS =====
+model User {
+  id        Int       @id @default(autoincrement())
+  email     String    @unique
+  name      String?
+  password  String    // bcrypt hash
+  role      UserRole  @default(ORGANISER)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
-  @@index([orderId])
-  @@index([showId])
-  @@index([userId])
+  // venues the user can access
+  venues UserVenue[]
+}
+
+model UserVenue {
+  userId  Int
+  venueId Int
+  role    VenueRole @default(EDITOR)
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  venue Venue @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  @@id([userId, venueId])
+}
+
+enum UserRole {
+  SUPERADMIN   // full access to all venues (your internal team)
+  ORGANISER    // regular organiser across assigned venues
+}
+
+enum VenueRole {
+  VIEWER
+  EDITOR
+  ADMIN
 }
