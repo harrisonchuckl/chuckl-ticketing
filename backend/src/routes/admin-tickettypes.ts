@@ -1,125 +1,100 @@
-import { Router, Request, Response } from 'express';
+// backend/src/routes/admin-tickettypes.ts
+import { Router, type Request, type Response } from 'express';
 import { prisma } from '../db.js';
-import { withAuth } from '../middleware/requireAuth.js';
-import { readSession, userHasVenueAccess } from '../lib/auth.js';
 
 const router = Router();
-router.use(...withAuth());
 
-// list ticket types for a show
-router.get('/shows/:showId/tickets', async (req: Request, res: Response) => {
+// List ticket types for a show
+router.get('/shows/:showId/ticket-types', async (req: Request, res: Response) => {
   try {
-    const s = await readSession(req);
-    if (!s) return res.status(401).json({ error: true, message: 'Unauthenticated' });
-
-    const showId = Number(req.params.showId);
-    const show = await prisma.show.findUnique({ where: { id: showId } });
-    if (!show) return res.status(404).json({ error: true, message: 'Show not found' });
-
-    if (s.role !== 'SUPERADMIN') {
-      const ok = await userHasVenueAccess(s.uid, show.venueId);
-      if (!ok) return res.status(403).json({ error: true, message: 'No access to venue' });
-    }
-
+    const { showId } = req.params;
     const types = await prisma.ticketType.findMany({
       where: { showId },
-      orderBy: { id: 'asc' }
+      orderBy: { createdAt: 'asc' }
     });
-
-    return res.json({ ticketTypes: types, show });
+    res.json({ ok: true, ticketTypes: types });
   } catch (e: any) {
-    return res.status(500).json({ error: true, message: e?.message || 'Failed' });
+    res.status(500).json({ error: true, message: e?.message ?? 'Failed to load ticket types' });
   }
 });
 
-// create ticket type
-router.post('/shows/:showId/tickets', async (req: Request, res: Response) => {
+// Create
+router.post('/shows/:showId/ticket-types', async (req: Request, res: Response) => {
   try {
-    const s = await readSession(req);
-    if (!s) return res.status(401).json({ error: true, message: 'Unauthenticated' });
-
-    const showId = Number(req.params.showId);
-    const show = await prisma.show.findUnique({ where: { id: showId } });
-    if (!show) return res.status(404).json({ error: true, message: 'Show not found' });
-
-    if (s.role !== 'SUPERADMIN') {
-      const ok = await userHasVenueAccess(s.uid, show.venueId);
-      if (!ok) return res.status(403).json({ error: true, message: 'No access to venue' });
-    }
-
+    const { showId } = req.params;
     const { name, pricePence, available } = req.body || {};
-    if (!name || pricePence == null || available == null) {
-      return res.status(400).json({ error: true, message: 'name, pricePence, available required' });
+
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ error: true, message: 'Name is required' });
     }
 
-    const t = await prisma.ticketType.create({
+    const price = Number(pricePence);
+    if (!Number.isFinite(price) || price < 0) {
+      return res.status(400).json({ error: true, message: 'pricePence must be a non-negative number' });
+    }
+
+    const avail = available == null || available === '' ? null : Number(available);
+    if (avail != null && (!Number.isFinite(avail) || avail < 0)) {
+      return res.status(400).json({ error: true, message: 'available must be a non-negative number' });
+    }
+
+    const created = await prisma.ticketType.create({
       data: {
         showId,
-        name: String(name),
-        pricePence: Number(pricePence),
-        available: Number(available)
+        name: String(name).trim(),
+        pricePence: price,
+        available: avail
       }
     });
 
-    return res.json({ ticketType: t });
+    res.json({ ok: true, ticketType: created });
   } catch (e: any) {
-    return res.status(500).json({ error: true, message: e?.message || 'Failed' });
+    res.status(500).json({ error: true, message: e?.message ?? 'Failed to create ticket type' });
   }
 });
 
-// update ticket type
-router.put('/shows/:showId/tickets/:id', async (req: Request, res: Response) => {
+// Update
+router.put('/ticket-types/:id', async (req: Request, res: Response) => {
   try {
-    const s = await readSession(req);
-    if (!s) return res.status(401).json({ error: true, message: 'Unauthenticated' });
-
-    const showId = Number(req.params.showId);
-    const id = Number(req.params.id);
-
-    const show = await prisma.show.findUnique({ where: { id: showId } });
-    if (!show) return res.status(404).json({ error: true, message: 'Show not found' });
-
-    if (s.role !== 'SUPERADMIN') {
-      const ok = await userHasVenueAccess(s.uid, show.venueId);
-      if (!ok) return res.status(403).json({ error: true, message: 'No access to venue' });
-    }
-
+    const { id } = req.params;
     const { name, pricePence, available } = req.body || {};
-    const t = await prisma.ticketType.update({
-      where: { id },
-      data: {
-        name: name != null ? String(name) : undefined,
-        pricePence: pricePence != null ? Number(pricePence) : undefined,
-        available: available != null ? Number(available) : undefined
+
+    const data: any = {};
+    if (name != null) data.name = String(name).trim();
+    if (pricePence != null) {
+      const price = Number(pricePence);
+      if (!Number.isFinite(price) || price < 0) {
+        return res.status(400).json({ error: true, message: 'pricePence must be a non-negative number' });
       }
+      data.pricePence = price;
+    }
+    if (available !== undefined) {
+      const avail = available === '' || available == null ? null : Number(available);
+      if (avail != null && (!Number.isFinite(avail) || avail < 0)) {
+        return res.status(400).json({ error: true, message: 'available must be a non-negative number' });
+      }
+      data.available = avail;
+    }
+
+    const updated = await prisma.ticketType.update({
+      where: { id },
+      data
     });
 
-    return res.json({ ticketType: t });
+    res.json({ ok: true, ticketType: updated });
   } catch (e: any) {
-    return res.status(500).json({ error: true, message: e?.message || 'Failed' });
+    res.status(500).json({ error: true, message: e?.message ?? 'Failed to update ticket type' });
   }
 });
 
-// delete ticket type
-router.delete('/shows/:showId/tickets/:id', async (req: Request, res: Response) => {
+// Delete
+router.delete('/ticket-types/:id', async (req: Request, res: Response) => {
   try {
-    const s = await readSession(req);
-    if (!s) return res.status(401).json({ error: true, message: 'Unauthenticated' });
-
-    const showId = Number(req.params.showId);
-    const id = Number(req.params.id);
-    const show = await prisma.show.findUnique({ where: { id: showId } });
-    if (!show) return res.status(404).json({ error: true, message: 'Show not found' });
-
-    if (s.role !== 'SUPERADMIN') {
-      const ok = await userHasVenueAccess(s.uid, show.venueId);
-      if (!ok) return res.status(403).json({ error: true, message: 'No access to venue' });
-    }
-
+    const { id } = req.params;
     await prisma.ticketType.delete({ where: { id } });
-    return res.json({ ok: true });
+    res.json({ ok: true });
   } catch (e: any) {
-    return res.status(500).json({ error: true, message: e?.message || 'Failed' });
+    res.status(500).json({ error: true, message: e?.message ?? 'Failed to delete ticket type' });
   }
 });
 
