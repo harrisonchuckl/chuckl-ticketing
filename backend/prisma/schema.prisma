@@ -1,4 +1,5 @@
-// prisma/schema.prisma
+// Prisma schema for Chuckl. Ticketing
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,99 +9,140 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Venue {
-  id        Int      @id @default(autoincrement())
-  name      String
-  capacity  Int?
-  address   String?
-  city      String?
-  postcode  String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// -----------------------------
+// ENUMS
+// -----------------------------
 
-  shows     Show[]
-  // NEW: many-to-many to users
-  userLinks UserVenue[]
+enum OrderStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+enum TicketStatus {
+  VALID
+  USED
+  CANCELLED
+}
+
+// -----------------------------
+// MODELS
+// -----------------------------
+
+model User {
+  id         String      @id @default(cuid())
+  email      String      @unique
+  name       String?
+  password   String?
+  orders     Order[]
+  tickets    Ticket[]
+  userVenues UserVenue[]
+  createdAt  DateTime    @default(now())
+}
+
+model Venue {
+  id         String      @id @default(cuid())
+  name       String
+  address    String?
+  city       String?
+  postcode   String?
+  capacity   Int?
+  shows      Show[]
+  userLinks  UserVenue[]
+  createdAt  DateTime    @default(now())
 }
 
 model Show {
-  id          Int       @id @default(autoincrement())
+  id          String       @id @default(cuid())
+  venueId     String
+  venue       Venue        @relation(fields: [venueId], references: [id])
   title       String
   description String?
-  startsAt    DateTime
+  // Your existing column in DB is named "date".
+  // We expose it in Prisma as "startsAt" but map it to the "date" column:
+  startsAt    DateTime     @default(now()) @map("date")
   capacity    Int?
   posterUrl   String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
 
-  venueId Int
-  venue   Venue
-
-  ticketTypes TicketType[]
+  tickets     Ticket[]
   orders      Order[]
+  ticketTypes TicketType[]
+  createdAt   DateTime     @default(now())
+
+  @@index([venueId])
+  @@index([startsAt])
 }
 
 model TicketType {
-  id        Int      @id @default(autoincrement())
-  name      String
-  pricePence Int
-  available Int
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  showId      String
+  show        Show     @relation(fields: [showId], references: [id])
+  name        String
+  pricePence  Int
+  available   Int?
+  createdAt   DateTime @default(now())
 
-  showId Int
-  show   Show
-
-  // Optional: orders referencing this type
-  orders Order[]
+  @@index([showId])
 }
 
 model Order {
-  id         Int      @id @default(autoincrement())
-  email      String
-  name       String?
-  totalPence Int
-  status     String   // e.g. PAID, REFUNDED
-  createdAt  DateTime @default(now())
+  id           String       @id @default(cuid())
+  showId       String
+  show         Show         @relation(fields: [showId], references: [id])
 
-  showId       Int
-  show         Show
-  ticketTypeId Int?
-  ticketType   TicketType?
+  userId       String?
+  user         User?        @relation(fields: [userId], references: [id])
+
+  email        String
+  quantity     Int
+  // Your earlier schema used amountPence; keep it to avoid breaking data:
+  amountPence  Int
+  status       OrderStatus  @default(PENDING)
+
+  // Optional link to a ticket type (safe, additive)
+  ticketTypeId String?
+  ticketType   TicketType?  @relation(fields: [ticketTypeId], references: [id])
+
+  tickets      Ticket[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([showId])
+  @@index([userId])
+  @@index([status])
 }
 
-// ===== NEW AUTH MODELS =====
-model User {
-  id        Int       @id @default(autoincrement())
-  email     String    @unique
-  name      String?
-  password  String    // bcrypt hash
-  role      UserRole  @default(ORGANISER)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+model Ticket {
+  id         String       @id @default(cuid())
+  orderId    String
+  order      Order        @relation(fields: [orderId], references: [id])
+  showId     String
+  show       Show         @relation(fields: [showId], references: [id])
+  serial     String       @unique
+  qrData     String
+  status     TicketStatus @default(VALID)
+  holderName String?
+  createdAt  DateTime     @default(now())
+  scannedAt  DateTime?
 
-  // venues the user can access
-  venues UserVenue[]
+  userId     String?
+  user       User?        @relation(fields: [userId], references: [id])
+
+  @@index([orderId])
+  @@index([showId])
+  @@index([userId])
 }
 
+// Many-to-many join for scoping venues to organisers
 model UserVenue {
-  userId  Int
-  venueId Int
-  role    VenueRole @default(EDITOR)
+  userId   String
+  venueId  String
+  role     String?
+  createdAt DateTime @default(now())
 
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  venue Venue @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  user   User  @relation(fields: [userId], references: [id])
+  venue  Venue @relation(fields: [venueId], references: [id])
 
   @@id([userId, venueId])
-}
-
-enum UserRole {
-  SUPERADMIN   // full access to all venues (your internal team)
-  ORGANISER    // regular organiser across assigned venues
-}
-
-enum VenueRole {
-  VIEWER
-  EDITOR
-  ADMIN
+  @@index([venueId])
 }
