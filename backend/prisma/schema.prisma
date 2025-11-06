@@ -30,17 +30,13 @@ enum TicketStatus {
 // -----------------------------
 
 model User {
-  id             String   @id @default(cuid())
-  email          String   @unique
-  name           String?
-  password       String?
-  orders         Order[]
-  tickets        Ticket[]
-  createdAt      DateTime @default(now())
-
-  // 🔐 Password reset
-  resetToken     String?  @unique
-  resetExpiresAt DateTime?
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  password  String?
+  orders    Order[]
+  tickets   Ticket[]
+  createdAt DateTime @default(now())
 }
 
 model Venue {
@@ -119,5 +115,21 @@ model Ticket {
 
   @@index([orderId])
   @@index([showId])
+  @@index([userId])
+}
+
+// -----------------------------
+// PASSWORD RESET TOKENS
+// -----------------------------
+
+model PasswordReset {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
   @@index([userId])
 }
