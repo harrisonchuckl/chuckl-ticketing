@@ -3,7 +3,7 @@ import { buildTicketsPdf } from './pdf.js';
 import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
 
-/** Exported so other modules can import the shared types */
+/** Exported so other modules (e.g. webhook.ts) can import the shared type */
 export type VenueInfo = {
   name: string | null;
   address: string | null;
@@ -11,6 +11,7 @@ export type VenueInfo = {
   postcode: string | null;
 };
 
+/** Exported type used by pdf + webhook */
 export type ShowInfo = {
   id: string;
   title: string;
@@ -18,8 +19,9 @@ export type ShowInfo = {
   venue: VenueInfo | null;
 };
 
-export type TicketInfo = { id?: string; serial: string; status?: 'VALID' | 'USED' };
+type TicketInfo = { id?: string; serial: string; status?: 'VALID' | 'USED' };
 
+/** Utility to render a nice one-line show descriptor */
 function formatShowLine(show: ShowInfo): string {
   const d = new Date(show.date);
   const when = d.toLocaleString('en-GB', {
@@ -93,53 +95,26 @@ function getEmailProvider() {
   };
 }
 
-/** Sends a simple test email (used by /admin/email/test) */
-export async function sendTestEmail(to: string) {
+/** Generic email helper (reused by password reset + other transactional emails) */
+export async function sendEmail(opts: { to: string; subject: string; html: string; attachments?: { filename: string; content: Buffer }[] }) {
   const provider = getEmailProvider();
-  const subject = 'Chuckl. Tickets – Test Email';
-  const html = `<div style="font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;">
-    <h2>Test email from Chuckl. backend</h2>
-    <p>Provider: <code>${provider.name}</code></p>
-    <p>If you received this, email is configured 👍</p>
-  </div>`;
-  const result = await provider.send({ to, subject, html });
+  const result = await provider.send(opts);
   return { ok: true, provider: provider.name, result };
 }
 
-/** ──────────────────────────────────────────────────────────────────────
- *  sendTicketsEmail overloads: support BOTH styles
- *    1) sendTicketsEmail(to, show, tickets)
- *    2) sendTicketsEmail({ to, show, tickets })
- *  ──────────────────────────────────────────────────────────────────────
- */
+/** Sends a simple test email (used by /admin/email/test) */
+export async function sendTestEmail(to: string) {
+  const subject = 'Chuckl. Tickets – Test Email';
+  const html = `<div style="font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;">
+    <h2>Test email from Chuckl. backend</h2>
+    <p>Provider: <code>${getEmailProvider().name}</code></p>
+    <p>If you received this, email is configured 👍</p>
+  </div>`;
+  return sendEmail({ to, subject, html });
+}
 
-// Object style
-export async function sendTicketsEmail(args: {
-  to: string;
-  show: ShowInfo;
-  tickets: TicketInfo[];
-}): Promise<{ ok: true; provider: string; result: any }>;
-
-// Positional style
-export async function sendTicketsEmail(
-  to: string,
-  show: ShowInfo,
-  tickets: TicketInfo[]
-): Promise<{ ok: true; provider: string; result: any }>;
-
-// Implementation
-export async function sendTicketsEmail(
-  a: any,
-  b?: any,
-  c?: any
-): Promise<{ ok: true; provider: string; result: any }> {
-  // Normalise inputs
-  const to: string = typeof a === 'string' ? a : a.to;
-  const show: ShowInfo = typeof a === 'string' ? b : a.show;
-  const tickets: TicketInfo[] = typeof a === 'string' ? c : a.tickets;
-
-  const provider = getEmailProvider();
-
+/** Sends order confirmation with optional PDF tickets attachment (enabled by EMAIL_ATTACH_PDF=1) */
+export async function sendTicketsEmail(to: string, show: ShowInfo, tickets: TicketInfo[]) {
   const subject = `Your Chuckl. Tickets – ${show.title}`;
   const intro = formatShowLine(show);
   const list = tickets.map(t => `<li><code>${t.serial}</code> (${t.status ?? 'VALID'})</li>`).join('');
@@ -153,12 +128,26 @@ export async function sendTicketsEmail(
     <p style="color:#888">If you didn’t expect this email, contact support.</p>
   </div>`;
 
-  const attachments: { filename: string; content: Buffer }[] = [];
+  let attachments: { filename: string; content: Buffer }[] = [];
   if (process.env.EMAIL_ATTACH_PDF === '1') {
     const pdf = await buildTicketsPdf(show, tickets);
     attachments.push({ filename: `tickets-${show.id}.pdf`, content: pdf });
   }
 
-  const result = await provider.send({ to, subject, html, attachments });
-  return { ok: true, provider: provider.name, result };
+  return sendEmail({ to, subject, html, attachments });
+}
+
+/** 🔐 Password reset email */
+export async function sendPasswordResetEmail(email: string, name: string | null, link: string) {
+  const safeName = name || 'there';
+  const html = `
+    <div style="font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;">
+      <p>Hi ${safeName},</p>
+      <p>We received a request to reset your password for your organiser account.</p>
+      <p><a href="${link}" style="color:#2563eb;">Click here to reset your password</a>.</p>
+      <p>This link expires in 30 minutes.</p>
+      <p>If you didn’t request this, you can safely ignore the message.</p>
+    </div>
+  `;
+  return sendEmail({ to: email, subject: 'Reset your password', html });
 }
