@@ -25,14 +25,14 @@
     "resolveJsonModule": true
   },
   "include": ["src/**/*"],
-  "exclude": [
-    // exclude unfinished auth routes for now (we’ll wire these up later)
-    "src/lib/auth.ts",
-    "src/middleware/**",
-    "src/routes/auth.ts",
-    "src/routes/admin-create-show.ts",
-    "src/routes/admin-edit-show.ts",
-    "src/routes/admin-lookup.ts",
-    "src/routes/admin-manage.ts"
-  ]
+"exclude": [
+  "src/lib/auth.ts",
+  "src/middleware/**",
+  "src/routes/auth.ts",
+  "src/routes/admin-create-show.ts",
+  "src/routes/admin-edit-show.ts",
+  "src/routes/admin-lookup.ts",
+  "src/routes/admin-manage.ts"
+]
+
 }
