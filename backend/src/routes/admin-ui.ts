@@ -40,13 +40,15 @@ router.get('/ui', (_req: Request, res: Response) => {
   th{color:#9aa0b5;font-weight:600}
   .muted{color:#9aa0b5}
   .tag{display:inline-block;padding:3px 8px;border-radius:999px;background:#1a1f38;color:#cfd5ec;font-size:12px}
-  .toast{position:fixed;left:16px;right:16px;bottom:16px;padding:12px 14px;border-radius:10px;font-weight:600}
+  .toast{position:fixed;left:16px;right:16px;bottom:16px;padding:12px 14px;border-radius:10px;font-weight:600;z-index:9999}
   .toast.ok{background:#0f5132;color:#d1f7e3;border:1px solid #115e3a}
   .toast.err{background:#511f20;color:#ffd7d9;border:1px solid #6a2a2c}
   .hidden{display:none}
-  /* simple modal */
-  .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5)}
-  .modal .box{background:#0f1220;border:1px solid #21263b;border-radius:12px;padding:16px;max-width:520px;width:92%}
+  /* Manage drawer */
+  .drawer{position:fixed;top:0;right:0;height:100vh;width:520px;background:#0f1220;border-left:1px solid #21263b;box-shadow:0 0 40px rgba(0,0,0,.4);transform:translateX(100%);transition:transform .2s ease;z-index:9998;display:flex;flex-direction:column}
+  .drawer.open{transform:translateX(0)}
+  .drawer .head{padding:14px 16px;border-bottom:1px solid #21263b;display:flex;justify-content:space-between;align-items:center}
+  .drawer .body{padding:16px;overflow:auto}
 </style>
 </head>
 <body>
@@ -135,7 +137,7 @@ router.get('/ui', (_req: Request, res: Response) => {
         <h3 style="margin-top:0">Shows (Latest)</h3>
         <table id="showsTable">
           <thead><tr><th>Title</th><th>Date</th><th>Venue</th><th>Tickets</th><th>Orders</th><th>Actions</th></tr></thead>
-          <tbody></tbody>
+        <tbody></tbody>
         </table>
       </div>
     </section>
@@ -165,44 +167,46 @@ router.get('/ui', (_req: Request, res: Response) => {
   </main>
 </div>
 
-<!-- Modal: Add Venue -->
-<div class="modal" id="venueModal">
-  <div class="box">
-    <h3 style="margin:0 0 8px">Add Venue</h3>
-    <div class="grid two">
-      <div>
-        <label>Name</label>
-        <input id="vm_name" type="text" />
-      </div>
-      <div>
-        <label>Capacity</label>
-        <input id="vm_capacity" type="number" min="0" />
-      </div>
+<!-- Drawer: Manage Show -->
+<div class="drawer" id="manageDrawer">
+  <div class="head">
+    <div>
+      <div id="md_title" style="font-weight:700">Manage Show</div>
+      <div id="md_sub" class="muted" style="font-size:12px;margin-top:2px"></div>
     </div>
-    <div class="grid two">
-      <div>
-        <label>Address</label>
-        <input id="vm_address" type="text" />
+    <button class="btn ghost" id="md_close">Close</button>
+  </div>
+  <div class="body">
+    <div class="panel">
+      <h3 style="margin-top:0">Ticket Types</h3>
+      <div id="tt_list" class="panel" style="padding:0">
+        <table style="width:100%">
+          <thead><tr><th>Name</th><th>Price</th><th>Available</th><th></th></tr></thead>
+          <tbody id="tt_tbody"></tbody>
+        </table>
       </div>
-      <div>
-        <label>City</label>
-        <input id="vm_city" type="text" />
+      <div class="grid three" style="margin-top:10px">
+        <div>
+          <label>Name</label>
+          <input id="tt_new_name" type="text" placeholder="e.g. General Admission"/>
+        </div>
+        <div>
+          <label>Price (GBP)</label>
+          <input id="tt_new_price" type="number" min="0" step="0.01" placeholder="e.g. 22.50"/>
+        </div>
+        <div>
+          <label>Available (optional)</label>
+          <input id="tt_new_available" type="number" min="0" placeholder="e.g. 200"/>
+        </div>
       </div>
-    </div>
-    <div class="grid two">
-      <div>
-        <label>Postcode</label>
-        <input id="vm_postcode" type="text" />
+      <div style="margin-top:10px">
+        <button class="btn" id="tt_create_btn">Add Ticket Type</button>
       </div>
-      <div></div>
-    </div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
-      <button class="btn secondary" id="vm_cancel">Cancel</button>
-      <button class="btn" id="vm_save">Save Venue</button>
     </div>
   </div>
 </div>
 
+<div id="venueModal" class="hidden"></div> <!-- (kept placeholder; we use add venue button on Shows) -->
 <div id="toast" class="toast hidden"></div>
 
 <script>
@@ -254,6 +258,13 @@ router.get('/ui', (_req: Request, res: Response) => {
     });
     return r.json();
   }
+  async function jdel(path) {
+    const key = getKey();
+    const qs = path.includes('?') ? '&' : '?';
+    const url = path + qs + 'k=' + encodeURIComponent(key);
+    const r = await fetch(url, { method: 'DELETE', headers: { 'x-admin-key': key }});
+    return r.json();
+  }
 
   // ---------- Nav ----------
   $$('.nav button').forEach(btn => {
@@ -302,7 +313,7 @@ router.get('/ui', (_req: Request, res: Response) => {
         <td>\${venue}</td>
         <td>\${s._count?.tickets ?? 0}</td>
         <td>\${s._count?.orders ?? 0}</td>
-        <td><span class="tag">Manage</span></td>
+        <td><button class="btn secondary" data-manage="\${s.id}" data-title="\${s.title}" data-date="\${s.date}" data-venue="\${venue}">Manage</button></td>
       </tr>\`;
     }).join('');
   }
@@ -353,26 +364,23 @@ router.get('/ui', (_req: Request, res: Response) => {
     ).join('');
   }
 
-  // ---------- Add Venue Modal ----------
-  const venueModal = $('#venueModal');
-  $('#addVenueBtn').addEventListener('click', () => {
-    venueModal.style.display = 'flex';
-  });
-  $('#vm_cancel').addEventListener('click', () => {
-    venueModal.style.display = 'none';
-  });
-  $('#vm_save').addEventListener('click', async () => {
-    const name = $('#vm_name').value.trim();
-    const capacity = Number($('#vm_capacity').value || '0');
-    const address = $('#vm_address').value.trim() || null;
-    const city = $('#vm_city').value.trim() || null;
-    const postcode = $('#vm_postcode').value.trim() || null;
-    if (!name) { showToast('Venue name required', false); return; }
+  // Add Venue (quick inline on Shows tab)
+  $('#addVenueBtn').addEventListener('click', async () => {
+    const name = prompt('Venue name?');
+    if (!name) return;
+    const capacityStr = prompt('Capacity (optional number)?') || '';
+    const capacityNum = capacityStr.trim() ? Number(capacityStr) : null;
+    const address = prompt('Address (optional)?') || null;
+    const city = prompt('City (optional)?') || null;
+    const postcode = prompt('Postcode (optional)?') || null;
 
-    const r = await jpost('/admin/venues', { name, capacity, address, city, postcode });
+    const r = await jpost('/admin/venues', {
+      name,
+      capacity: (capacityNum !== null && !Number.isNaN(capacityNum)) ? capacityNum : null,
+      address, city, postcode
+    });
     if (!r || !r.ok) { showToast(r?.message || 'Failed to create venue', false); return; }
 
-    venueModal.style.display = 'none';
     showToast('Venue created', true);
     await loadVenueOptions();
     venueSelect.value = r.venue.id;
@@ -397,7 +405,7 @@ router.get('/ui', (_req: Request, res: Response) => {
         <td>\${s._count?.tickets ?? 0}</td>
         <td>\${s._count?.orders ?? 0}</td>
         <td>
-          <button class="btn secondary" data-act="manage" data-id="\${s.id}">Manage</button>
+          <button class="btn secondary" data-manage="\${s.id}" data-title="\${s.title}" data-date="\${s.date}" data-venue="\${venue}">Manage</button>
         </td>
       </tr>\`;
     }).join('');
@@ -427,7 +435,117 @@ router.get('/ui', (_req: Request, res: Response) => {
     await loadLatestShows();
   });
 
-  // init on load
+  // ---------- Manage Drawer (Ticket Types) ----------
+  const drawer = $('#manageDrawer');
+  const mdClose = $('#md_close');
+  const mdTitle = $('#md_title');
+  const mdSub = $('#md_sub');
+  const ttBody = $('#tt_tbody');
+
+  let currentShowId = null;
+
+  async function openManageDrawer(show) {
+    currentShowId = show.id;
+    mdTitle.textContent = show.title;
+    const when = new Date(show.date).toLocaleString();
+    mdSub.textContent = when + (show.venue ? ' @ ' + show.venue : '');
+    drawer.classList.add('open');
+    await loadTicketTypes();
+  }
+
+  mdClose.addEventListener('click', () => {
+    drawer.classList.remove('open');
+    currentShowId = null;
+  });
+
+  async function loadTicketTypes() {
+    if (!currentShowId) return;
+    ttBody.innerHTML = '<tr><td colspan="4" class="muted">Loading…</td></tr>';
+    const r = await jget('/admin/shows/' + encodeURIComponent(currentShowId) + '/ticket-types');
+    if (!r || !r.ok) { ttBody.innerHTML = '<tr><td colspan="4" class="muted">Failed to load</td></tr>'; return; }
+    const rows = (r.ticketTypes || []).map(tt => {
+      const price = (tt.pricePence / 100).toFixed(2);
+      const avail = (tt.available ?? '—');
+      return \`<tr data-tt="\${tt.id}">
+        <td><input data-role="name" type="text" value="\${tt.name}"/></td>
+        <td><input data-role="price" type="number" step="0.01" min="0" value="\${price}"/></td>
+        <td><input data-role="available" type="number" min="0" value="\${avail === '—' ? '' : avail}"/></td>
+        <td>
+          <button class="btn secondary" data-tt-act="save">Save</button>
+          <button class="btn ghost" data-tt-act="delete">Delete</button>
+        </td>
+      </tr>\`;
+    }).join('');
+    ttBody.innerHTML = rows || '<tr><td colspan="4" class="muted">No ticket types yet</td></tr>';
+
+    // bind row buttons
+    ttBody.querySelectorAll('button[data-tt-act="save"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const tr = btn.closest('tr');
+        const id = tr.getAttribute('data-tt');
+        const name = tr.querySelector('input[data-role="name"]').value.trim();
+        const priceGbp = parseFloat(tr.querySelector('input[data-role="price"]').value || '0');
+        const availStr = tr.querySelector('input[data-role="available"]').value;
+        const available = availStr === '' ? null : Number(availStr);
+        if (!name) { showToast('Name required', false); return; }
+        const pricePence = Math.round((Number.isFinite(priceGbp) ? priceGbp : 0) * 100);
+
+        const r2 = await jput('/admin/shows/' + encodeURIComponent(currentShowId) + '/ticket-types/' + encodeURIComponent(id), {
+          name, pricePence, available
+        });
+        if (!r2 || !r2.ok) { showToast(r2?.message || 'Failed to save', false); return; }
+        showToast('Saved', true, 1200);
+        await loadTicketTypes();
+      });
+    });
+
+    ttBody.querySelectorAll('button[data-tt-act="delete"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const tr = btn.closest('tr');
+        const id = tr.getAttribute('data-tt');
+        if (!confirm('Delete this ticket type?')) return;
+        const r2 = await jdel('/admin/shows/' + encodeURIComponent(currentShowId) + '/ticket-types/' + encodeURIComponent(id));
+        if (!r2 || !r2.ok) { showToast(r2?.message || 'Failed to delete', false); return; }
+        showToast('Deleted', true, 1200);
+        await loadTicketTypes();
+      });
+    });
+  }
+
+  // create new ticket type
+  $('#tt_create_btn').addEventListener('click', async () => {
+    if (!currentShowId) { showToast('Open Manage on a show first', false); return; }
+    const name = $('#tt_new_name').value.trim();
+    const priceGbp = parseFloat($('#tt_new_price').value || '0');
+    const availStr = $('#tt_new_available').value;
+    const available = availStr === '' ? null : Number(availStr);
+    if (!name) { showToast('Name required', false); return; }
+    const pricePence = Math.round((Number.isFinite(priceGbp) ? priceGbp : 0) * 100);
+
+    const r = await jpost('/admin/shows/' + encodeURIComponent(currentShowId) + '/ticket-types', {
+      name, pricePence, available
+    });
+    if (!r || !r.ok) { showToast(r?.message || 'Failed to add', false); return; }
+
+    $('#tt_new_name').value = '';
+    $('#tt_new_price').value = '';
+    $('#tt_new_available').value = '';
+    showToast('Ticket type added', true);
+    await loadTicketTypes();
+  });
+
+  // bind all Manage buttons (dashboard & shows tab)
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-manage]');
+    if (!btn) return;
+    const id = btn.getAttribute('data-manage');
+    const title = btn.getAttribute('data-title');
+    const date = btn.getAttribute('data-date');
+    const venue = btn.getAttribute('data-venue');
+    await openManageDrawer({ id, title, date, venue });
+  });
+
+  // init
   (async function init() {
     await loadVenueOptions();
     await refreshShowsList();
