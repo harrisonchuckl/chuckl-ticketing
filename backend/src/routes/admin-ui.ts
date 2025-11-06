@@ -1,443 +1,366 @@
 // backend/src/routes/admin-ui.ts
-import { Router, Request, Response } from "express";
+import { Router, Request, Response } from 'express';
 
 const router = Router();
 
 router.get('/ui', (_req: Request, res: Response) => {
-  res.type('html').send(`<!doctype html>
+  res.type('html').send(`<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Chuckl. Organiser Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
     --bg:#f7f8fb;
     --panel:#ffffff;
-    --text:#0f172a;
-    --muted:#64748b;
+    --text:#0a0a0b;
+    --muted:#6b7280;
     --brand:#2563eb;
     --brand-600:#1d4ed8;
     --border:#e5e7eb;
-    --success:#16a34a;
-    --danger:#dc2626;
+    --danger:#ef4444;
+    --success:#10b981;
   }
   *{box-sizing:border-box}
   html,body{height:100%}
   body{
     margin:0;
-    font:14px/1.4 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
-    color:var(--text); background:var(--bg);
+    font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--text);
   }
-  .layout{display:grid; grid-template-columns: 240px 1fr; height:100%}
+  .layout{display:grid; grid-template-columns: 240px 1fr; height:100vh;}
   aside{
-    background:#fff; border-right:1px solid var(--border);
-    padding:16px 0; display:flex; flex-direction:column; gap:12px;
+    border-right:1px solid var(--border);
+    padding:14px;
+    background:var(--panel);
   }
-  .brand{
-    display:flex; align-items:center; gap:10px; padding:0 16px 8px 16px; border-bottom:1px solid var(--border);
+  .logo{
+    font-weight:700; font-size:18px; letter-spacing:0.2px; margin-bottom:12px;
   }
-  .dot{width:10px;height:10px;border-radius:999px;background:var(--brand)}
-  .brand h1{font-size:16px; margin:0}
-  .section-title{font-size:12px; color:var(--muted); padding:10px 16px 0}
-  nav a{
-    display:flex; align-items:center; gap:10px;
-    padding:10px 16px; color:#0f172a; text-decoration:none;
-    border-left:3px solid transparent;
+  .sectionTitle{font-size:11px; text-transform:uppercase; color:var(--muted); margin:12px 0 6px;}
+  .nav a{
+    display:block; padding:9px 10px; border-radius:8px; text-decoration:none; color:var(--text);
   }
-  nav a.active{background:#eef2ff;border-left-color:var(--brand)}
-  nav a:hover{background:#f3f4f6}
-  main{padding:24px; overflow:auto}
-  .toolbar{display:flex; gap:8px; justify-content:flex-end}
+  .nav a.active{ background:#eef2ff; color:#1e40af; }
+  .nav a:hover{ background:#f3f4f6; }
+
+  header{
+    height:56px; display:flex; align-items:center; justify-content:space-between;
+    padding:0 16px; border-bottom:1px solid var(--border); background:var(--panel);
+  }
   .btn{
-    background:var(--brand); color:#fff; border:0; padding:8px 12px; border-radius:8px; cursor:pointer;
+    background:var(--brand); color:#fff; border:none; border-radius:8px; padding:8px 12px;
+    font-weight:600; cursor:pointer;
   }
-  .btn.secondary{background:#e5e7eb; color:#111827}
   .btn:disabled{opacity:.6; cursor:not-allowed}
-  .card{
-    background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px;
-  }
-  .grid{display:grid; gap:16px}
-  .grid.cols-2{grid-template-columns:1fr 1fr}
-  .muted{color:var(--muted)}
-  .input, select, textarea{
-    width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; background:#fff;
-  }
-  .row{display:flex; gap:12px; align-items:center}
-  .row > *{flex:1}
-  .list{display:flex; flex-direction:column; gap:8px}
-  .list .item{
-    padding:12px; border:1px solid var(--border); border-radius:10px; background:#fff; display:flex; justify-content:space-between; align-items:center;
-  }
-  footer{margin-top:24px; color:var(--muted); font-size:12px}
-  .tag{font-size:12px; padding:4px 8px; border-radius:999px; background:#eef2ff; color:#1e3a8a}
-  .toast{
-    position:fixed; right:16px; bottom:16px; background:#111827; color:#fff; padding:10px 12px; border-radius:8px; opacity:0; transform:translateY(8px); transition:.2s;
-  }
-  .toast.show{opacity:1; transform:translateY(0)}
-  .danger{color:var(--danger)}
-  .success{color:var(--success)}
-  .hidden{display:none !important}
-  .keyPanel{padding:12px 16px; border-bottom:1px solid var(--border)}
-  .keyPanel .row{gap:8px}
-  .help{font-size:12px; color:var(--muted); margin-top:6px}
-  .kbd{background:#f1f5f9; border:1px solid var(--border); border-bottom-width:2px; padding:1px 6px; border-radius:6px; font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New",monospace}
+  .btn.secondary{ background:#111827; }
+  .btn.ghost{ background:transparent; color:var(--text); border:1px solid var(--border); }
+  .content{ padding:16px; overflow:auto; height: calc(100vh - 56px); }
+  .card{ background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; }
+  .row{ display:flex; gap:12px; flex-wrap:wrap; }
+  .input{ width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; }
+  .label{font-size:12px; color:var(--muted); margin-bottom:6px;}
+  .grid2{ display:grid; grid-template-columns: 1fr 1fr; gap:12px;}
+  .muted{ color:var(--muted); font-size:13px;}
+  .error{ color:var(--danger); }
+  .hidden{ display:none; }
+
+  .loginBox{ max-width:420px; margin:48px auto; }
 </style>
 </head>
 <body>
-  <div class="layout">
-    <aside>
-      <div class="brand">
-        <div class="dot"></div>
-        <h1>Chuckl. Admin</h1>
+<div class="layout">
+  <aside>
+    <div class="logo">Chuckl. Organiser Console</div>
+    <div class="sectionTitle">API</div>
+    <div id="authArea" class="card">
+      <div id="loggedOut">
+        <div class="label">Sign in to continue</div>
+        <input id="email" class="input" placeholder="Email" />
+        <div style="height:8px;"></div>
+        <input id="password" type="password" class="input" placeholder="Password" />
+        <div style="height:10px;"></div>
+        <button id="loginBtn" class="btn" style="width:100%;">Sign in</button>
+        <div class="muted" style="margin-top:8px;">Need an account? Ask your Chuckl. contact.</div>
+        <div id="loginErr" class="error hidden" style="margin-top:6px;"></div>
+      </div>
+      <div id="loggedIn" class="hidden">
+        <div class="muted" style="margin-bottom:8px;">Signed in as <span id="meEmail"></span></div>
+        <button id="logoutBtn" class="btn ghost" style="width:100%;">Sign out</button>
+      </div>
+    </div>
+
+    <div class="sectionTitle">Navigation</div>
+    <nav class="nav">
+      <a href="#/dashboard" id="nav-dashboard" class="active">Dashboard</a>
+      <a href="#/shows" id="nav-shows">Shows</a>
+      <a href="#/tickets" id="nav-tickets">Tickets</a>
+      <a href="#/orders" id="nav-orders">Orders</a>
+      <a href="#/marketing" id="nav-marketing">Marketing</a>
+      <a href="#/customers" id="nav-customers">Customers</a>
+      <a href="#/seating" id="nav-seating">Seating</a>
+      <a href="#/reports" id="nav-reports">Reports</a>
+      <a href="#/access" id="nav-access">Access Control</a>
+      <a href="#/finance" id="nav-finance">Finance</a>
+      <a href="#/settings" id="nav-settings">Settings</a>
+      <a href="#/help" id="nav-help">Help</a>
+    </nav>
+  </aside>
+
+  <main style="display:flex; flex-direction:column;">
+    <header>
+      <div id="pageTitle">Dashboard</div>
+      <div>
+        <button id="reloadBtn" class="btn ghost">Reload</button>
+        <button id="createShowBtn" class="btn">Create Show</button>
+      </div>
+    </header>
+    <div class="content">
+      <div id="view-dashboard" class="view card">
+        <div class="muted">Welcome to your organiser console.</div>
       </div>
 
-      <div class="keyPanel">
+      <div id="view-shows" class="view card hidden">
         <div class="row">
-          <input id="adminKey" class="input" placeholder="Admin key" autocomplete="off" />
-          <button id="saveKey" class="btn secondary" style="flex:0 0 auto">Save</button>
+          <div style="flex:1; min-width:260px;">
+            <div class="label">Title</div>
+            <input id="showTitle" class="input" placeholder="e.g. Chuckl. Bridlington"/>
+          </div>
+          <div style="width:260px">
+            <div class="label">Date & Time (local)</div>
+            <input id="showStartsAt" class="input" placeholder="YYYY-MM-DD HH:mm"/>
+          </div>
         </div>
-        <div class="row" style="margin-top:8px">
-          <button id="verifyKey" class="btn" style="flex:0 0 auto">Verify & load</button>
-          <button id="clearKey" class="btn secondary" style="flex:0 0 auto">Clear</button>
+        <div class="row">
+          <div style="flex:1; min-width:260px;">
+            <div class="label">Venue</div>
+            <select id="venueSelect" class="input"></select>
+          </div>
+          <div style="width:220px">
+            <div class="label">Capacity Override (optional)</div>
+            <input id="showCapacity" class="input" placeholder="leave blank to use venue capacity"/>
+          </div>
         </div>
-        <div id="keyStatus" class="help">Saved as <span class="kbd">x-admin-key</span> on requests.</div>
+        <div class="row">
+          <div style="flex:1;">
+            <div class="label">Description (optional)</div>
+            <textarea id="showDesc" class="input" rows="4" placeholder="Short description…"></textarea>
+          </div>
+          <div style="flex:1;">
+            <div class="label">Poster URL (optional)</div>
+            <input id="posterUrl" class="input" placeholder="https://…"/>
+          </div>
+        </div>
+        <div class="row">
+          <button id="btnCreateShow" class="btn">Create Show</button>
+          <div id="showCreateMsg" class="muted"></div>
+        </div>
+        <div style="height:14px;"></div>
+        <div class="label">Latest Shows</div>
+        <div id="showsList" class="muted">No shows yet.</div>
       </div>
 
-      <div class="section-title">Organiser Console</div>
-      <nav id="nav">
-        <a href="#/dashboard" data-page="dashboard" class="active">Dashboard</a>
-        <a href="#/shows" data-page="shows">Shows</a>
-        <a href="#/tickets" data-page="tickets">Tickets</a>
-        <a href="#/orders" data-page="orders">Orders</a>
-        <a href="#/marketing" data-page="marketing">Marketing</a>
-        <a href="#/customers" data-page="customers">Customers</a>
-        <a href="#/seating" data-page="seating">Seating</a>
-        <a href="#/reports" data-page="reports">Reports</a>
-        <a href="#/access" data-page="access">Access Control</a>
-        <a href="#/finance" data-page="finance">Finance</a>
-        <a href="#/settings" data-page="settings">Settings</a>
-        <a href="#/help" data-page="help">Help</a>
-      </nav>
-
-      <footer style="padding:0 16px">
-        Chuckl. Organiser Console v1.0
-      </footer>
-    </aside>
-
-    <main>
-      <div class="row toolbar">
-        <button id="reload" class="btn secondary">Reload</button>
-        <button id="createShow" class="btn">Create Show</button>
+      <div id="view-orders" class="view card hidden">
+        <div class="label">Recent Orders</div>
+        <div id="ordersList" class="muted">Load orders after login.</div>
       </div>
 
-      <!-- Pages -->
-      <section id="page-dashboard" class="grid" style="margin-top:16px">
-        <div class="card">
-          <h2>Dashboard</h2>
-          <p class="muted">Use the left navigation to manage everything. Save your admin key to unlock protected data.</p>
-          <div style="margin-top:8px" class="help">Tip: press <span class="kbd">G</span> then <span class="kbd">S</span> to jump to Shows.</div>
-        </div>
-      </section>
-
-      <section id="page-shows" class="grid hidden" style="margin-top:16px">
-        <div class="card">
-          <div class="row">
-            <h2 style="margin:0">Shows</h2>
-            <span style="text-align:right"><button class="btn" id="refreshShows" style="min-width:120px">Refresh</button></span>
-          </div>
-          <div id="showsList" class="list" style="margin-top:12px">
-            <div class="muted">No data yet. Click “Verify & load”.</div>
-          </div>
-        </div>
-      </section>
-
-      <section id="page-tickets" class="grid hidden" style="margin-top:16px">
-        <div class="card">
-          <h2>Tickets</h2>
-          <p class="muted">Placeholder panel for ticket types, add-ons, holds, and settings.</p>
-        </div>
-      </section>
-
-      <section id="page-orders" class="grid hidden" style="margin-top:16px">
-        <div class="card">
-          <h2>Orders</h2>
-          <div id="ordersList" class="list" style="margin-top:12px">
-            <div class="muted">No data yet. Click “Verify & load”.</div>
-          </div>
-        </div>
-      </section>
-
-      <section id="page-marketing" class="grid hidden" style="margin-top:16px">
-        <div class="card">
-          <h2>Marketing</h2>
-          <p class="muted">Placeholder for email campaigns, social tools, promo links, UTM builder.</p>
-        </div>
-      </section>
-
-      <section id="page-customers" class="grid hidden" style="margin-top:16px">
-        <div class="card">
-          <h2>Customers</h2>
-          <p class="muted">Placeholder for attendee CRM, lists, tags, and exports.</p>
-        </div>
-      </section>
-
-      <section id="page-seating" class="grid hidden" style="margin-top:16px">
-        <div class="card">
-          <h2>Seating</h2>
-          <p class="muted">Placeholder for seat maps, area configs, device pairing.</p>
-        </div>
-      </section>
-
-      <section id="page-reports" class="grid hidden" style="margin-top:16px">
-        <div class="card">
-          <h2>Reports</h2>
-          <p class="muted">Placeholder for sales, channel breakdown, audit, attendees & scheduled reports.</p>
-        </div>
-      </section>
-
-      <section id="page-access" class="grid hidden" style="margin-top:16px">
-        <div class="card">
-          <h2>Access Control</h2>
-          <p class="muted">Placeholder for scanner dashboard & device configuration.</p>
-        </div>
-      </section>
-
-      <section id="page-finance" class="grid hidden" style="margin-top:16px">
-        <div class="card">
-          <h2>Finance</h2>
-          <p class="muted">Placeholder for payouts, charges/credits, invoices, organisation profile.</p>
-        </div>
-      </section>
-
-      <section id="page-settings" class="grid hidden" style="margin-top:16px">
-        <div class="card">
-          <h2>Settings</h2>
-          <p class="muted">Placeholder for org, users, roles, webhooks & API keys.</p>
-        </div>
-      </section>
-
-      <section id="page-help" class="grid hidden" style="margin-top:16px">
-        <div class="card">
-          <h2>Help</h2>
-          <p class="muted">Docs and support will appear here.</p>
-        </div>
-      </section>
-    </main>
-  </div>
-
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+      <!-- Placeholder views -->
+      <div id="view-tickets"   class="view card hidden">Tickets builder coming soon.</div>
+      <div id="view-marketing" class="view card hidden">Marketing tools coming soon.</div>
+      <div id="view-customers" class="view card hidden">Customers list coming soon.</div>
+      <div id="view-seating"   class="view card hidden">Seating & scan config coming soon.</div>
+      <div id="view-reports"   class="view card hidden">Reports coming soon.</div>
+      <div id="view-access"    class="view card hidden">Access Control coming soon.</div>
+      <div id="view-finance"   class="view card hidden">Finance coming soon.</div>
+      <div id="view-settings"  class="view card hidden">Settings coming soon.</div>
+      <div id="view-help"      class="view card hidden">Help & docs coming soon.</div>
+    </div>
+  </main>
+</div>
 
 <script>
-(function(){
-  const $ = (sel)=>document.querySelector(sel);
-  const $$ = (sel)=>Array.from(document.querySelectorAll(sel));
-
-  const STORAGE_KEY = 'ck_admin_key';
-  let ADMIN_KEY = localStorage.getItem(STORAGE_KEY) || '';
-
-  // Elements
-  const adminKeyInput = $('#adminKey');
-  const saveKeyBtn = $('#saveKey');
-  const verifyBtn = $('#verifyKey');
-  const clearBtn = $('#clearKey');
-  const keyStatus = $('#keyStatus');
-  const nav = $('#nav');
-  const toast = $('#toast');
-  const reloadBtn = $('#reload');
-  const createShowBtn = $('#createShow');
-
-  // Pages
-  const pages = {
-    dashboard: $('#page-dashboard'),
-    shows: $('#page-shows'),
-    tickets: $('#page-tickets'),
-    orders: $('#page-orders'),
-    marketing: $('#page-marketing'),
-    customers: $('#page-customers'),
-    seating: $('#page-seating'),
-    reports: $('#page-reports'),
-    access: $('#page-access'),
-    finance: $('#page-finance'),
-    settings: $('#page-settings'),
-    help: $('#page-help'),
+  const $ = (q) => document.querySelector(q);
+  const views = {
+    '#/dashboard': 'view-dashboard',
+    '#/shows': 'view-shows',
+    '#/tickets': 'view-tickets',
+    '#/orders': 'view-orders',
+    '#/marketing': 'view-marketing',
+    '#/customers': 'view-customers',
+    '#/seating': 'view-seating',
+    '#/reports': 'view-reports',
+    '#/access': 'view-access',
+    '#/finance': 'view-finance',
+    '#/settings': 'view-settings',
+    '#/help': 'view-help',
   };
 
-  // Init key
-  adminKeyInput.value = ADMIN_KEY;
-
-  function showToast(msg){
-    toast.textContent = msg;
-    toast.classList.add('show');
-    setTimeout(()=> toast.classList.remove('show'), 1800);
-  }
-
-  function setActive(page){
-    // nav highlight
-    $$('#nav a').forEach(a=>{
-      a.classList.toggle('active', a.dataset.page === page);
-    });
-    // page switch
-    Object.entries(pages).forEach(([k,el])=>{
-      el.classList.toggle('hidden', k !== page);
-    });
-  }
-
-  function routeFromHash(){
-    const hash = location.hash || '#/dashboard';
-    const page = (hash.split('/')[1] || 'dashboard').toLowerCase();
-    if(!pages[page]) return setActive('dashboard');
-    setActive(page);
-    // autoload per page
-    if(page==='shows') loadShows();
-    if(page==='orders') loadOrders();
-  }
-
-  window.addEventListener('hashchange', routeFromHash);
-  routeFromHash();
-
-  // Save/Clear/Verify Key
-  saveKeyBtn.addEventListener('click', ()=>{
-    ADMIN_KEY = adminKeyInput.value.trim();
-    localStorage.setItem(STORAGE_KEY, ADMIN_KEY);
-    showToast('Admin key saved');
-  });
-
-  clearBtn.addEventListener('click', ()=>{
-    localStorage.removeItem(STORAGE_KEY);
-    ADMIN_KEY = '';
-    adminKeyInput.value = '';
-    showToast('Admin key cleared');
-  });
-
-  verifyBtn.addEventListener('click', async()=>{
-    ADMIN_KEY = adminKeyInput.value.trim();
-    if(!ADMIN_KEY){ showToast('Enter a key first'); return; }
-    localStorage.setItem(STORAGE_KEY, ADMIN_KEY);
-    // try a protected endpoint first
-    let ok = false, msg = '';
-    try{
-      const r = await fetch('/admin/venues', { headers: { 'x-admin-key': ADMIN_KEY } });
-      if(r.status === 200){ ok = true; }
-      else if(r.status === 401){ msg = 'Unauthorized – check your key (x-admin-key).'; }
-      else { 
-        // fallback to health to at least see server is up
-        const h = await fetch('/health');
-        ok = h.ok;
-        msg = 'Could not reach protected routes. Check server logs.';
-      }
-    }catch(e){
-      msg = 'Network error. Check server URL and CORS.';
+  function setActive(hash) {
+    for (const k in views) {
+      const id = views[k];
+      const el = document.getElementById(id);
+      if (!el) continue;
+      if (k === hash) el.classList.remove('hidden'); else el.classList.add('hidden');
+      const nav = document.getElementById('nav-' + k.replace('#/', ''));
+      if (nav) nav.classList.toggle('active', k === hash);
     }
-    if(ok){
-      keyStatus.innerHTML = '<span class="success">Key verified.</span>';
-      showToast('Key verified. Loading data…');
-      await Promise.all([loadShows(), loadOrders()]);
-    }else{
-      keyStatus.innerHTML = '<span class="danger">' + (msg || 'Unauthorized') + '</span>';
-      showToast('Key failed.');
+    const title = hash.replace('#/', '');
+    $('#pageTitle').textContent = title.charAt(0).toUpperCase() + title.slice(1);
+  }
+
+  async function api(path, opts={}) {
+    const res = await fetch(path, {
+      method: opts.method || 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include', // important: send/receive cookie
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    });
+    const ct = res.headers.get('content-type') || '';
+    const isJson = ct.includes('application/json');
+    const data = isJson ? await res.json() : await res.text();
+    if (!res.ok) throw new Error((data && data.message) || 'Request failed');
+    return data;
+  }
+
+  // Auth UI state
+  async function refreshMe() {
+    try {
+      const me = await api('/auth/me');
+      $('#loggedOut').classList.add('hidden');
+      $('#loggedIn').classList.remove('hidden');
+      $('#meEmail').textContent = me.user.email;
+      await loadVenues();
+      await loadShows();
+      await loadOrders();
+    } catch {
+      $('#loggedOut').classList.remove('hidden');
+      $('#loggedIn').classList.add('hidden');
+    }
+  }
+
+  $('#loginBtn').addEventListener('click', async () => {
+    $('#loginBtn').disabled = true;
+    $('#loginErr').classList.add('hidden');
+    try {
+      const email = $('#email').value.trim();
+      const password = $('#password').value;
+      await api('/auth/login', { method:'POST', body:{ email, password }});
+      await refreshMe();
+    } catch (e) {
+      $('#loginErr').textContent = e.message || 'Login failed';
+      $('#loginErr').classList.remove('hidden');
+    } finally {
+      $('#loginBtn').disabled = false;
     }
   });
 
-  reloadBtn.addEventListener('click', ()=>location.reload());
-  createShowBtn.addEventListener('click', ()=>{ location.hash = '#/shows'; });
+  $('#logoutBtn').addEventListener('click', async () => {
+    await api('/auth/logout', { method:'POST' });
+    await refreshMe();
+  });
 
-  // API helper
-  async function api(path, init={}){
-    const headers = Object.assign({}, init.headers||{}, ADMIN_KEY ? {'x-admin-key': ADMIN_KEY} : {});
-    const res = await fetch(path, Object.assign({}, init, { headers }));
-    if(res.status === 401) throw new Error('Unauthorized');
-    return res;
+  // Navigation
+  window.addEventListener('hashchange', () => setActive(location.hash || '#/dashboard'));
+  setActive(location.hash || '#/dashboard');
+
+  $('#reloadBtn').addEventListener('click', async () => {
+    await refreshMe();
+  });
+
+  // Shows
+  async function loadVenues() {
+    try {
+      const r = await api('/admin/venues');
+      const sel = $('#venueSelect');
+      sel.innerHTML = '';
+      (r.venues || []).forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v.id;
+        opt.textContent = v.name + (v.city ? (' – ' + v.city) : '');
+        sel.appendChild(opt);
+      });
+    } catch (e) {
+      console.warn(e);
+    }
   }
 
-  // Load Shows
-  async function loadShows(){
-    const panel = $('#showsList');
-    panel.innerHTML = '<div class="muted">Loading…</div>';
-    try{
+  async function loadShows() {
+    try {
       const r = await api('/admin/shows/latest?limit=20');
-      const data = await r.json();
-      if(!Array.isArray(data) || data.length===0){
-        panel.innerHTML = '<div class="muted">No shows found.</div>';
+      const box = $('#showsList');
+      if (!r.shows || r.shows.length === 0) {
+        box.textContent = 'No shows yet.';
         return;
       }
-      panel.innerHTML = '';
-      data.forEach(sh=>{
-        const el = document.createElement('div');
-        el.className = 'item';
-        el.innerHTML = \`
-          <div>
-            <div><strong>\${sh.title || 'Untitled Show'}</strong></div>
-            <div class="muted">\${(sh.venue?.name || 'Unknown venue')} · \${formatDate(sh.startsAt)}</div>
-          </div>
-          <div class="row" style="gap:8px; flex:0 0 auto">
-            <span class="tag">\${(sh.capacity || sh.venue?.capacity || '-') } cap</span>
-            <button class="btn secondary" data-id="\${sh.id}">Manage</button>
-          </div>\`;
-        el.querySelector('button')!.addEventListener('click', ()=>{
-          // later: navigate to detailed show editor
-          showToast('Open show: ' + (sh.title || sh.id));
-        });
-        panel.appendChild(el);
-      });
-    }catch(e){
-      panel.innerHTML = '<div class="danger">Failed to load shows. ' + e.message + '</div>';
+      box.innerHTML = r.shows.map(s => {
+        return \`<div style="padding:8px 0; border-bottom:1px solid var(--border)">
+          <div style="font-weight:600">\${s.title}</div>
+          <div class="muted">\${new Date(s.startsAt).toLocaleString()} — \${s.venue?.name || 'Unknown'}</div>
+        </div>\`;
+      }).join('');
+    } catch (e) {
+      $('#showsList').textContent = 'Failed to load shows';
     }
   }
 
-  // Load Orders (summary)
-  async function loadOrders(){
-    const panel = $('#ordersList');
-    panel.innerHTML = '<div class="muted">Loading…</div>';
-    try{
-      const r = await api('/admin/orders?limit=10');
-      if(r.status===404){ panel.innerHTML = '<div class="muted">No orders endpoint yet.</div>'; return; }
-      const data = await r.json();
-      if(!Array.isArray(data) || data.length===0){
-        panel.innerHTML = '<div class="muted">No recent orders.</div>';
+  async function loadOrders() {
+    try {
+      const r = await api('/admin/orders?limit=20');
+      const box = $('#ordersList');
+      if (!r.orders || r.orders.length === 0) {
+        box.textContent = 'No recent orders.';
         return;
       }
-      panel.innerHTML = '';
-      data.forEach(o=>{
-        const el = document.createElement('div');
-        el.className = 'item';
-        el.innerHTML = \`
-          <div>
-            <div><strong>#\${o.id}</strong> — \${o.buyerEmail || 'buyer'}</div>
-            <div class="muted">\${(o.show?.title || 'Show')} · \${formatDate(o.createdAt)}</div>
-          </div>
-          <div class="row" style="gap:8px; flex:0 0 auto">
-            <span class="tag">£\${(o.total/100).toFixed(2)}</span>
-            <button class="btn secondary" data-id="\${o.id}">View</button>
-          </div>\`;
-        panel.appendChild(el);
-      });
-    }catch(e){
-      panel.innerHTML = '<div class="danger">Failed to load orders. ' + e.message + '</div>';
+      box.innerHTML = r.orders.map(o => {
+        return \`<div style="padding:8px 0; border-bottom:1px solid var(--border)">
+          <div><strong>\${o.email}</strong> — £\${(o.totalPence/100).toFixed(2)} <span class="muted">(\${o.status})</span></div>
+          <div class="muted">Show: \${o.show?.title || ''} • \${new Date(o.createdAt).toLocaleString()}</div>
+        </div>\`;
+      }).join('');
+    } catch (e) {
+      $('#ordersList').textContent = 'Failed to load orders';
     }
   }
 
-  function formatDate(v){
-    try{
-      const d = new Date(v);
-      return d.toLocaleString();
-    }catch(_){ return String(v); }
-  }
+  $('#btnCreateShow').addEventListener('click', async () => {
+    $('#btnCreateShow').disabled = true;
+    $('#showCreateMsg').textContent = '';
+    try {
+      const title = $('#showTitle').value.trim();
+      const startsAt = $('#showStartsAt').value.trim();
+      const venueId = Number($('#venueSelect').value);
+      const capacity = $('#showCapacity').value.trim();
+      const description = $('#showDesc').value.trim();
+      const posterUrl = $('#posterUrl').value.trim() || null;
 
-  // Keyboard quick nav: G then S = shows
-  let keyChord = [];
-  window.addEventListener('keydown', (e)=>{
-    keyChord.push(e.key.toLowerCase()); if(keyChord.length>2) keyChord.shift();
-    if(keyChord.join('')==='gs'){ location.hash = '#/shows'; }
+      if (!title || !startsAt || !venueId) throw new Error('Title, startsAt, venue are required');
+
+      const payload = {
+        title,
+        startsAt,
+        venueId,
+        description: description || null,
+        capacity: capacity ? Number(capacity) : null,
+        posterUrl,
+      };
+      await api('/admin/shows', { method:'POST', body: payload });
+      $('#showCreateMsg').textContent = 'Show created.';
+      await loadShows();
+    } catch (e) {
+      $('#showCreateMsg').textContent = e.message || 'Failed to create show';
+    } finally {
+      $('#btnCreateShow').disabled = false;
+    }
   });
 
-  // First paint: if a key is present, try to verify silently
-  if(ADMIN_KEY){
-    keyStatus.textContent = 'Key present. You can Verify & load.';
-  } else {
-    keyStatus.textContent = 'Enter your admin key and click Verify & load.';
-  }
-})();
+  // initial
+  refreshMe();
 </script>
 </body>
 </html>`);
