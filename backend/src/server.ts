@@ -4,67 +4,67 @@ import cors from 'cors';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import bodyParser from 'body-parser';
+import cookieParser from 'cookie-parser';
 
-// --- Route modules (make sure these files exist and compile to .js) ---
 import checkout from './routes/checkout.js';
-import webhook from './routes/webhook.js';            // Stripe webhook (singular filename)
-import admin from './routes/admin.js';                // legacy/utility admin endpoints
-import adminUI from './routes/admin-ui.js';           // HTML admin interface
-import adminVenues from './routes/admin-venues.js';   // /admin/venues (list/create)
-import adminShows from './routes/admin-shows.js';     // /admin/shows (CRUD)
-import adminTicketTypes from './routes/admin-tickettypes.js'; // /admin/shows/:id/tickets (CRUD)
-import adminUploads from './routes/admin-uploads.js'; // /admin/uploads/presign (stub or S3)
-import adminOrders from './routes/admin-orders.js';   // /admin/orders (listing/filtering)
+import webhook from './routes/webhook.js';
+import admin from './routes/admin.js';
+import adminUI from './routes/admin-ui.js';
+import adminVenues from './routes/admin-venues.js';
+import adminShows from './routes/admin-shows.js';
+import adminTicketTypes from './routes/admin-tickettypes.js';
+import adminOrders from './routes/admin-orders.js';
+import adminUploads from './routes/admin-uploads.js';
+import scanApi from './routes/scan.js';
+import scanUI from './routes/scan-ui.js';
 
-import scanApi from './routes/scan.js';               // JSON scan endpoints
-import scanUI from './routes/scan-ui.js';             // HTML scanner UI
+import authRoutes from './routes/auth.js';
+import { attachSession } from './lib/auth.js';
 
 const app = express();
 
-// Railway is behind a trusted proxy; keep rate-limit and IPs correct
+// Railway proxy
 app.set('trust proxy', 'loopback');
 
-// CORS + logging
-app.use(cors());
+app.use(cors({ credentials: true, origin: true }));
 app.use(morgan('tiny'));
+app.use(cookieParser());
 
-// Stripe webhooks require the *raw* body (before JSON parsing)
+// Stripe webhook uses raw body
 app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), webhook);
 
-// Everything else can use JSON parser
-app.use(express.json({ limit: '1mb' }));
+// Everything else JSON
+app.use(express.json({ limit: '2mb' }));
 
-// Lightweight rate-limit for potentially sensitive paths
+// Light rate limit for admin/scan
 const limiter = rateLimit({
-  windowMs: 60 * 1000,           // 1 minute
-  limit: 120,                    // 120 req/min per IP
+  windowMs: 60 * 1000,
+  limit: 120,
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
 });
-app.use(['/scan', '/admin'], limiter);
+app.use(['/scan', '/admin', '/auth'], limiter);
 
-// -------------------------------
-// ROUTE MOUNT ORDER (IMPORTANT)
-// -------------------------------
-// 1) Serve Admin UI first so GET /admin/ui always returns HTML (not JSON 401)
-app.use('/admin', adminUI);
+// Attach session early so UI can reflect login state
+app.use(attachSession);
 
-// 2) Public checkout (session/create etc.)
+// ===== Routes (order matters) =====
+app.use('/admin', adminUI);          // GET /admin/ui (HTML shell)
+app.use('/auth', authRoutes);        // /auth/login, /auth/register, /auth/logout, /auth/me
+
 app.use('/checkout', checkout);
 
-// 3) Admin JSON APIs
-app.use('/admin', adminVenues);
-app.use('/admin', adminShows);
-app.use('/admin', adminTicketTypes);
-app.use('/admin', adminUploads);
-app.use('/admin', adminOrders);
-app.use('/admin', admin); // keep legacy/admin helpers last under /admin
+app.use('/admin', adminVenues);      // /admin/venues (now session-protected in-file)
+app.use('/admin', adminShows);       // /admin/shows
+app.use('/admin', adminTicketTypes); // /admin/shows/:id/tickets
+app.use('/admin', adminOrders);      // /admin/orders
+app.use('/admin', adminUploads);     // /admin/uploads/presign
 
-// 4) Scanner APIs + UI
-app.use('/scan', scanApi);
-app.use('/scan', scanUI);
+app.use('/admin', admin);            // legacy endpoints if any
 
-// Healthcheck
+app.use('/scan', scanApi);           // JSON
+app.use('/scan', scanUI);            // HTML
+
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 const PORT = Number(process.env.PORT || 4000);
