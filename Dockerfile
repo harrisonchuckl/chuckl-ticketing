@@ -11,7 +11,7 @@ WORKDIR /app
 COPY backend/package*.json ./backend/
 RUN cd backend && npm install
 
-# copy source
+# copy sourceS
 COPY backend ./backend
 
 # generate Prisma client using a dummy URL (codegen only)
