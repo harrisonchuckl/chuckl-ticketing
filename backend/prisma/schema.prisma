@@ -30,13 +30,17 @@ enum TicketStatus {
 // -----------------------------
 
 model User {
-  id         String      @id @default(cuid())
-  email      String      @unique
-  name       String?
-  password   String?
-  orders     Order[]
-  tickets    Ticket[]
-  createdAt  DateTime    @default(now())
+  id             String   @id @default(cuid())
+  email          String   @unique
+  name           String?
+  password       String?
+  orders         Order[]
+  tickets        Ticket[]
+  createdAt      DateTime @default(now())
+
+  // 🔐 Password reset
+  resetToken     String?  @unique
+  resetExpiresAt DateTime?
 }
 
 model Venue {
@@ -75,9 +79,6 @@ model TicketType {
   available   Int?
   createdAt   DateTime @default(now())
 
-  // Added backlink so the Order → TicketType relation is complete
-  orders      Order[]
-
   @@index([showId])
 }
 
@@ -90,15 +91,11 @@ model Order {
   email        String
   quantity     Int
   amountPence  Int
-  stripeId     String?
+  stripeId     String
   status       OrderStatus  @default(PENDING)
   tickets      Ticket[]
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
-
-  // Optional: link an order to a TicketType (e.g., GA, VIP)
-  ticketTypeId String?
-  ticketType   TicketType?  @relation(fields: [ticketTypeId], references: [id])
 
   @@index([showId])
   @@index([userId])
