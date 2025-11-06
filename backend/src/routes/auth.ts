@@ -1,67 +1,61 @@
-import { Router } from 'express';
+// backend/src/routes/auth.ts
+import { Router, Request, Response } from 'express';
 import { prisma } from '../db.js';
 import bcrypt from 'bcryptjs';
+import { attachSession, createSessionCookie, clearSessionCookie, requireAuth } from '../lib/auth.js';
 
-export const router = Router();
+const router = Router();
 
-/**
- * POST /auth/signup
- * body: { email, password, name? }
- * creates a user with a hashed password
- */
-router.post('/signup', async (req, res) => {
+// always attach session on auth routes
+router.use(attachSession);
+
+// POST /auth/register  (TEMP: for initial bootstrapping; keep behind an env flag if needed)
+router.post('/auth/register', async (req: Request, res: Response) => {
   try {
-    const { email, password, name } = req.body || {};
-    if (!email || !password) {
-      return res.status(400).json({ error: 'email_and_password_required' });
-    }
-
-    const existing = await prisma.user.findUnique({ where: { email } });
-    if (existing) return res.status(409).json({ error: 'email_taken' });
-
-    const hash = await bcrypt.hash(password, 10);
-
+    const { email, password, name, role } = req.body || {};
+    if (!email || !password) return res.status(400).json({ error: true, message: 'Email & password required' });
+    const hash = await bcrypt.hash(String(password), 10);
     const user = await prisma.user.create({
       data: {
-        email,
+        email: String(email).toLowerCase(),
+        name: name ? String(name) : null,
+        role: role === 'SUPERADMIN' ? 'SUPERADMIN' : 'ORGANISER',
         password: hash,
-        name: name || null,
       },
-      select: { id: true, email: true, name: true, createdAt: true },
     });
-
-    // You can return a JWT later; for now, return user
-    res.json({ user });
+    return res.json({ ok: true, user: { id: user.id, email: user.email, role: user.role } });
   } catch (e: any) {
-    res.status(500).json({ error: 'signup_failed', detail: String(e?.message || e) });
+    return res.status(500).json({ error: true, message: e?.message || 'Failed' });
   }
 });
 
-/**
- * POST /auth/login
- * body: { email, password }
- * verifies credentials and returns a minimal session payload
- */
-router.post('/login', async (req, res) => {
+// POST /auth/login
+router.post('/auth/login', async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body || {};
-    if (!email || !password) {
-      return res.status(400).json({ error: 'email_and_password_required' });
-    }
+    if (!email || !password) return res.status(400).json({ error: true, message: 'Email & password required' });
+    const user = await prisma.user.findUnique({ where: { email: String(email).toLowerCase() } });
+    if (!user) return res.status(401).json({ error: true, message: 'Invalid credentials' });
 
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user || !user.password) return res.status(401).json({ error: 'invalid_credentials' });
+    const ok = await bcrypt.compare(String(password), user.password);
+    if (!ok) return res.status(401).json({ error: true, message: 'Invalid credentials' });
 
-    const ok = await bcrypt.compare(password, user.password);
-    if (!ok) return res.status(401).json({ error: 'invalid_credentials' });
-
-    // TODO: issue JWT. For now return user basics.
-    res.json({
-      user: { id: user.id, email: user.email, name: user.name, createdAt: user.createdAt },
-    });
+    await createSessionCookie(res, { uid: user.id, email: user.email, role: user.role as any });
+    return res.json({ ok: true, user: { id: user.id, email: user.email, role: user.role } });
   } catch (e: any) {
-    res.status(500).json({ error: 'login_failed', detail: String(e?.message || e) });
+    return res.status(500).json({ error: true, message: e?.message || 'Failed' });
   }
+});
+
+// POST /auth/logout
+router.post('/auth/logout', (_req: Request, res: Response) => {
+  clearSessionCookie(res);
+  return res.json({ ok: true });
+});
+
+// GET /auth/me
+router.get('/auth/me', requireAuth, async (req: Request, res: Response) => {
+  return res.json({ ok: true, user: req.session });
 });
 
 export default router;
