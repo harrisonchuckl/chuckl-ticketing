@@ -1,51 +1,52 @@
-import { Router, Request, Response } from 'express';
+// backend/src/routes/admin-venues.ts
+import { Router, type Request, type Response } from 'express';
 import { prisma } from '../db.js';
-import { withAuth } from '../middleware/requireAuth.js';
-import { readSession } from '../lib/auth.js';
 
 const router = Router();
-router.use(...withAuth());
 
-// List venues (restricted to ones linked to user unless SUPERADMIN)
+// List venues (simple search by name/city/postcode)
 router.get('/venues', async (req: Request, res: Response) => {
   try {
-    const s = await readSession(req);
-    if (!s) return res.status(401).json({ error: true, message: 'Unauthenticated' });
-
-    let venues;
-    if (s.role === 'SUPERADMIN') {
-      venues = await prisma.venue.findMany({ orderBy: { name: 'asc' } });
-    } else {
-      venues = await prisma.venue.findMany({
-        where: { userLinks: { some: { userId: s.uid } } },
-        orderBy: { name: 'asc' }
-      });
-    }
-    return res.json({ venues });
+    const q = String(req.query.q || '').trim();
+    const where = q
+      ? {
+          OR: [
+            { name: { contains: q, mode: 'insensitive' } },
+            { city: { contains: q, mode: 'insensitive' } },
+            { postcode: { contains: q, mode: 'insensitive' } }
+          ]
+        }
+      : {};
+    const venues = await prisma.venue.findMany({
+      where,
+      orderBy: { name: 'asc' }
+    });
+    res.json({ ok: true, venues });
   } catch (e: any) {
-    return res.status(500).json({ error: true, message: e?.message || 'Failed' });
+    res.status(500).json({ error: true, message: e?.message ?? 'Failed to load venues' });
   }
 });
 
-// Create venue
+// Create a new venue
 router.post('/venues', async (req: Request, res: Response) => {
   try {
-    const { name, capacity, address, city, postcode } = req.body || {};
+    const { name, address, city, postcode, capacity } = req.body || {};
     if (!name || !String(name).trim()) {
-      return res.status(400).json({ error: true, message: 'Name required' });
+      return res.status(400).json({ error: true, message: 'Venue name is required' });
     }
-    const v = await prisma.venue.create({
+    const cap = capacity == null || capacity === '' ? null : Number(capacity);
+    const created = await prisma.venue.create({
       data: {
         name: String(name).trim(),
-        capacity: capacity != null && String(capacity).trim() !== '' ? Number(capacity) : null,
-        address: address ? String(address) : null,
-        city: city ? String(city) : null,
-        postcode: postcode ? String(postcode) : null
+        address: address ? String(address).trim() : null,
+        city: city ? String(city).trim() : null,
+        postcode: postcode ? String(postcode).trim() : null,
+        capacity: Number.isFinite(cap) ? cap : null
       }
     });
-    return res.json({ venue: v });
+    res.json({ ok: true, venue: created });
   } catch (e: any) {
-    return res.status(500).json({ error: true, message: e?.message || 'Failed' });
+    res.status(500).json({ error: true, message: e?.message ?? 'Failed to create venue' });
   }
 });
 
