@@ -36,20 +36,18 @@ model User {
   password   String?
   orders     Order[]
   tickets    Ticket[]
-  userVenues UserVenue[]
   createdAt  DateTime    @default(now())
 }
 
 model Venue {
-  id         String      @id @default(cuid())
-  name       String
-  address    String?
-  city       String?
-  postcode   String?
-  capacity   Int?
-  shows      Show[]
-  userLinks  UserVenue[]
-  createdAt  DateTime    @default(now())
+  id        String   @id @default(cuid())
+  name      String
+  address   String?
+  city      String?
+  postcode  String?
+  capacity  Int?
+  shows     Show[]
+  createdAt DateTime @default(now())
 }
 
 model Show {
@@ -58,29 +56,26 @@ model Show {
   venue       Venue        @relation(fields: [venueId], references: [id])
   title       String
   description String?
-  startsAt    DateTime     @default(now()) @map("date")
-  capacity    Int?
-  posterUrl   String?
-
+  date        DateTime     @default(now())
   tickets     Ticket[]
   orders      Order[]
   ticketTypes TicketType[]
   createdAt   DateTime     @default(now())
 
   @@index([venueId])
-  @@index([startsAt])
+  @@index([date])
 }
 
 model TicketType {
-  id          String      @id @default(cuid())
+  id          String   @id @default(cuid())
   showId      String
-  show        Show        @relation(fields: [showId], references: [id])
+  show        Show     @relation(fields: [showId], references: [id])
   name        String
   pricePence  Int
   available   Int?
-  createdAt   DateTime    @default(now())
+  createdAt   DateTime @default(now())
 
-  # ✅ Added backlink so the Order → TicketType relation is complete
+  // Added backlink so the Order → TicketType relation is complete
   orders      Order[]
 
   @@index([showId])
@@ -90,21 +85,20 @@ model Order {
   id           String       @id @default(cuid())
   showId       String
   show         Show         @relation(fields: [showId], references: [id])
-
   userId       String?
   user         User?        @relation(fields: [userId], references: [id])
-
   email        String
   quantity     Int
   amountPence  Int
+  stripeId     String?
   status       OrderStatus  @default(PENDING)
-
-  ticketTypeId String?
-  ticketType   TicketType?  @relation(fields: [ticketTypeId], references: [id])
-
   tickets      Ticket[]
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
+
+  // Optional: link an order to a TicketType (e.g., GA, VIP)
+  ticketTypeId String?
+  ticketType   TicketType?  @relation(fields: [ticketTypeId], references: [id])
 
   @@index([showId])
   @@index([userId])
@@ -123,24 +117,10 @@ model Ticket {
   holderName String?
   createdAt  DateTime     @default(now())
   scannedAt  DateTime?
-
   userId     String?
   user       User?        @relation(fields: [userId], references: [id])
 
   @@index([orderId])
   @@index([showId])
   @@index([userId])
-}
-
-model UserVenue {
-  userId   String
-  venueId  String
-  role     String?
-  createdAt DateTime @default(now())
-
-  user   User  @relation(fields: [userId], references: [id])
-  venue  Venue @relation(fields: [venueId], references: [id])
-
-  @@id([userId, venueId])
-  @@index([venueId])
 }
