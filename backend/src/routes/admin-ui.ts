@@ -31,14 +31,14 @@ router.get('/ui', (_req, res) => {
   label{font-size:12px;color:var(--muted)}
   .btn{border:0;border-radius:10px;padding:10px 12px;font-weight:600;cursor:pointer}
   .btn.primary{background:var(--accent);color:#fff}.btn.ghost{background:#fff;border:1px solid var(--border)}
+  .link{border:0;background:none;color:var(--accent);cursor:pointer;padding:0}
   .note{font-size:13px;color:var(--muted)}
   .card{border:1px solid var(--border);border-radius:12px;padding:12px;background:#fff}
   .danger{color:var(--bad)} .ok{color:var(--ok)}
   .overlay{position:fixed;inset:0;background:rgba(15,23,42,.5);display:none;align-items:center;justify-content:center;z-index:50}
   .overlay.show{display:flex}
-  .login{width:380px;background:#fff;border-radius:14px;border:1px solid var(--border);padding:18px}
-  .login h3{margin:0 0 8px}
-  .link{background:none;border:0;color:var(--accent);cursor:pointer;padding:0 2px}
+  .modal{width:360px;background:#fff;border-radius:14px;border:1px solid var(--border);padding:18px}
+  .modal h3{margin:0 0 8px}
 </style>
 </head>
 <body>
@@ -73,35 +73,38 @@ router.get('/ui', (_req, res) => {
   </section>
 </main>
 
-<!-- Auth overlay -->
+<!-- Login -->
 <div class="overlay" id="loginOverlay">
-  <div class="login" id="loginCard">
-    <h3 id="loginTitle">Sign in</h3>
+  <div class="modal">
+    <h3>Sign in</h3>
     <p class="note" id="loginNote">Use your organiser account.</p>
-
-    <!-- Sign-in fields -->
-    <div class="grid" id="loginFields">
+    <div class="grid">
       <div><label>Email</label><input id="email" type="email" placeholder="you@venue.com"/></div>
       <div><label>Password</label><input id="password" type="password" placeholder="••••••••"/></div>
       <div class="row">
         <button class="btn primary" id="btnLogin">Sign in</button>
-        <button class="btn ghost" id="btnShowSignup">Create account</button>
-        <button class="btn ghost" id="btnDemo">Quick demo</button>
+        <button class="btn ghost" id="btnDemo">Quick demo user</button>
+      </div>
+      <div class="note" style="text-align:center">
+        <button class="link" id="forgotPasswordLink">Forgot password?</button>
       </div>
       <div class="note" id="loginError" style="color:#dc2626;display:none;"></div>
     </div>
+  </div>
+</div>
 
-    <!-- Sign-up fields -->
-    <div class="grid" id="signupFields" style="display:none;">
-      <div><label>Name</label><input id="s_name" type="text" placeholder="Full name"/></div>
-      <div><label>Email</label><input id="s_email" type="email" placeholder="you@venue.com"/></div>
-      <div><label>Password</label><input id="s_password" type="password" placeholder="••••••••"/></div>
-      <div><label>Confirm Password</label><input id="s_password2" type="password" placeholder="••••••••"/></div>
+<!-- Reset password -->
+<div class="overlay" id="resetOverlay">
+  <div class="modal">
+    <h3>Reset your password</h3>
+    <div class="grid">
+      <div><label>New password</label><input id="newPass1" type="password" placeholder="New password"/></div>
+      <div><label>Confirm password</label><input id="newPass2" type="password" placeholder="Repeat new password"/></div>
       <div class="row">
-        <button class="btn primary" id="btnSignup">Create account</button>
-        <button class="btn ghost" id="btnBackToLogin">Back</button>
+        <button class="btn primary" id="btnDoReset">Update password</button>
+        <button class="btn ghost" id="btnCancelReset">Cancel</button>
       </div>
-      <div class="note" id="signupError" style="color:#dc2626;display:none;"></div>
+      <div class="note" id="resetMsg"></div>
     </div>
   </div>
 </div>
@@ -114,7 +117,6 @@ router.get('/ui', (_req, res) => {
     headers:{'Content-Type':'application/json'}
   }, opts || {}));
 
-  // ---------- Views ----------
   const views = {
     home(){ 
       $('#viewTitle').textContent = 'Home';
@@ -202,7 +204,6 @@ router.get('/ui', (_req, res) => {
     }
   };
 
-  // ---------- Data loaders ----------
   async function loadShows(){
     const wrap = document.getElementById('showsWrap');
     wrap.innerHTML = '<div class="note">Loading…</div>';
@@ -226,7 +227,6 @@ router.get('/ui', (_req, res) => {
     if (views[name]) views[name](); else views.home();
   }
 
-  // ---------- Auth helpers ----------
   async function ensureAuth(){
     const me = await fetch('/auth/me', { credentials: 'include' });
     if(me.status===200){
@@ -254,9 +254,9 @@ router.get('/ui', (_req, res) => {
     location.reload();
   });
 
-  // ----- Sign-in -----
+  // Login
   document.getElementById('btnLogin').addEventListener('click', async function(){
-    const email = document.getElementById('email').value.trim();
+    const email = document.getElementById('email').value;
     const password = document.getElementById('password').value;
     const r = await API('/auth/login', { method:'POST', body: JSON.stringify({ email, password }) });
     const j = await r.json();
@@ -269,7 +269,7 @@ router.get('/ui', (_req, res) => {
     location.reload();
   });
 
-  // Demo user (convenience)
+  // Demo user
   document.getElementById('btnDemo').addEventListener('click', async function(){
     const email = 'demo@organiser.test';
     const password = 'demo1234';
@@ -281,48 +281,53 @@ router.get('/ui', (_req, res) => {
     location.reload();
   });
 
-  // ----- Toggle to Sign-up -----
-  const btnShowSignup = document.getElementById('btnShowSignup');
-  const btnBackToLogin = document.getElementById('btnBackToLogin');
-  const signupFields = document.getElementById('signupFields');
-  const loginFields = document.getElementById('loginFields');
-  const loginTitle = document.getElementById('loginTitle');
-  const loginNote = document.getElementById('loginNote');
-
-  btnShowSignup.addEventListener('click', function(){
-    loginFields.style.display = 'none';
-    signupFields.style.display = 'grid';
-    loginTitle.textContent = 'Create account';
-    loginNote.textContent = 'Create your organiser account to get started.';
+  // Forgot password
+  document.getElementById('forgotPasswordLink').addEventListener('click', async () => {
+    const email = prompt('Enter your email to reset password:');
+    if (!email) return;
+    await fetch('/auth/request-reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email })
+    });
+    alert('If that email exists, you’ll receive a reset link shortly.');
   });
 
-  btnBackToLogin.addEventListener('click', function(){
-    signupFields.style.display = 'none';
-    loginFields.style.display = 'grid';
-    loginTitle.textContent = 'Sign in';
-    loginNote.textContent = 'Use your organiser account.';
+  // Reset overlay controls
+  document.getElementById('btnCancelReset').addEventListener('click', function(){
+    history.replaceState(null, '', '#');
+    document.getElementById('resetOverlay').classList.remove('show');
   });
-
-  // ----- Sign-up -----
-  document.getElementById('btnSignup').addEventListener('click', async function(){
-    const name = document.getElementById('s_name').value.trim();
-    const email = document.getElementById('s_email').value.trim();
-    const pw = document.getElementById('s_password').value;
-    const pw2 = document.getElementById('s_password2').value;
-    const err = document.getElementById('signupError');
-    err.style.display='none';
-    if(!name || !email || !pw){ err.textContent='Please fill all fields'; err.style.display='block'; return; }
-    if(pw !== pw2){ err.textContent='Passwords do not match'; err.style.display='block'; return; }
-    const r = await API('/auth/signup', { method:'POST', body: JSON.stringify({ name, email, password: pw }) });
+  document.getElementById('btnDoReset').addEventListener('click', async function(){
+    const msg = document.getElementById('resetMsg');
+    const p1 = (document.getElementById('newPass1') as HTMLInputElement).value;
+    const p2 = (document.getElementById('newPass2') as HTMLInputElement).value;
+    if (!p1 || p1 !== p2) { msg.textContent = 'Passwords do not match.'; msg.style.color = '#dc2626'; return; }
+    const token = (location.hash || '').split('reset=').pop();
+    if (!token) { msg.textContent = 'Missing reset token.'; msg.style.color = '#dc2626'; return; }
+    const r = await fetch('/auth/reset-password', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      credentials:'include',
+      body: JSON.stringify({ token, password: p1 })
+    });
     const j = await r.json();
-    if(j && j.error){ err.textContent = j.message || 'Signup failed'; err.style.display='block'; return; }
-    // Auto-login then reload
-    await API('/auth/login', { method:'POST', body: JSON.stringify({ email, password: pw }) });
-    location.reload();
+    if (!j.ok) { msg.textContent = j.message || 'Reset failed.'; msg.style.color = '#dc2626'; return; }
+    msg.textContent = 'Password updated. Reloading…';
+    msg.style.color = '#16a34a';
+    setTimeout(()=> location.reload(), 800);
   });
 
-  // Boot
+  function checkResetTokenInHash(){
+    const h = location.hash || '';
+    if (h.includes('reset=')) {
+      document.getElementById('resetOverlay').classList.add('show');
+    }
+  }
+
   (async function boot(){
+    checkResetTokenInHash();
     const ok = await ensureAuth();
     if(ok) switchView('home');
   })();
