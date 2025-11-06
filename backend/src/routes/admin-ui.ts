@@ -36,8 +36,9 @@ router.get('/ui', (_req, res) => {
   .danger{color:var(--bad)} .ok{color:var(--ok)}
   .overlay{position:fixed;inset:0;background:rgba(15,23,42,.5);display:none;align-items:center;justify-content:center;z-index:50}
   .overlay.show{display:flex}
-  .login{width:360px;background:#fff;border-radius:14px;border:1px solid var(--border);padding:18px}
+  .login{width:380px;background:#fff;border-radius:14px;border:1px solid var(--border);padding:18px}
   .login h3{margin:0 0 8px}
+  .link{background:none;border:0;color:var(--accent);cursor:pointer;padding:0 2px}
 </style>
 </head>
 <body>
@@ -72,18 +73,35 @@ router.get('/ui', (_req, res) => {
   </section>
 </main>
 
+<!-- Auth overlay -->
 <div class="overlay" id="loginOverlay">
-  <div class="login">
-    <h3>Sign in</h3>
+  <div class="login" id="loginCard">
+    <h3 id="loginTitle">Sign in</h3>
     <p class="note" id="loginNote">Use your organiser account.</p>
-    <div class="grid">
+
+    <!-- Sign-in fields -->
+    <div class="grid" id="loginFields">
       <div><label>Email</label><input id="email" type="email" placeholder="you@venue.com"/></div>
       <div><label>Password</label><input id="password" type="password" placeholder="••••••••"/></div>
       <div class="row">
         <button class="btn primary" id="btnLogin">Sign in</button>
-        <button class="btn ghost" id="btnDemo">Quick demo user</button>
+        <button class="btn ghost" id="btnShowSignup">Create account</button>
+        <button class="btn ghost" id="btnDemo">Quick demo</button>
       </div>
       <div class="note" id="loginError" style="color:#dc2626;display:none;"></div>
+    </div>
+
+    <!-- Sign-up fields -->
+    <div class="grid" id="signupFields" style="display:none;">
+      <div><label>Name</label><input id="s_name" type="text" placeholder="Full name"/></div>
+      <div><label>Email</label><input id="s_email" type="email" placeholder="you@venue.com"/></div>
+      <div><label>Password</label><input id="s_password" type="password" placeholder="••••••••"/></div>
+      <div><label>Confirm Password</label><input id="s_password2" type="password" placeholder="••••••••"/></div>
+      <div class="row">
+        <button class="btn primary" id="btnSignup">Create account</button>
+        <button class="btn ghost" id="btnBackToLogin">Back</button>
+      </div>
+      <div class="note" id="signupError" style="color:#dc2626;display:none;"></div>
     </div>
   </div>
 </div>
@@ -96,6 +114,7 @@ router.get('/ui', (_req, res) => {
     headers:{'Content-Type':'application/json'}
   }, opts || {}));
 
+  // ---------- Views ----------
   const views = {
     home(){ 
       $('#viewTitle').textContent = 'Home';
@@ -183,6 +202,7 @@ router.get('/ui', (_req, res) => {
     }
   };
 
+  // ---------- Data loaders ----------
   async function loadShows(){
     const wrap = document.getElementById('showsWrap');
     wrap.innerHTML = '<div class="note">Loading…</div>';
@@ -206,6 +226,7 @@ router.get('/ui', (_req, res) => {
     if (views[name]) views[name](); else views.home();
   }
 
+  // ---------- Auth helpers ----------
   async function ensureAuth(){
     const me = await fetch('/auth/me', { credentials: 'include' });
     if(me.status===200){
@@ -233,9 +254,9 @@ router.get('/ui', (_req, res) => {
     location.reload();
   });
 
-  // Login
+  // ----- Sign-in -----
   document.getElementById('btnLogin').addEventListener('click', async function(){
-    const email = document.getElementById('email').value;
+    const email = document.getElementById('email').value.trim();
     const password = document.getElementById('password').value;
     const r = await API('/auth/login', { method:'POST', body: JSON.stringify({ email, password }) });
     const j = await r.json();
@@ -248,7 +269,7 @@ router.get('/ui', (_req, res) => {
     location.reload();
   });
 
-  // Demo user
+  // Demo user (convenience)
   document.getElementById('btnDemo').addEventListener('click', async function(){
     const email = 'demo@organiser.test';
     const password = 'demo1234';
@@ -260,6 +281,47 @@ router.get('/ui', (_req, res) => {
     location.reload();
   });
 
+  // ----- Toggle to Sign-up -----
+  const btnShowSignup = document.getElementById('btnShowSignup');
+  const btnBackToLogin = document.getElementById('btnBackToLogin');
+  const signupFields = document.getElementById('signupFields');
+  const loginFields = document.getElementById('loginFields');
+  const loginTitle = document.getElementById('loginTitle');
+  const loginNote = document.getElementById('loginNote');
+
+  btnShowSignup.addEventListener('click', function(){
+    loginFields.style.display = 'none';
+    signupFields.style.display = 'grid';
+    loginTitle.textContent = 'Create account';
+    loginNote.textContent = 'Create your organiser account to get started.';
+  });
+
+  btnBackToLogin.addEventListener('click', function(){
+    signupFields.style.display = 'none';
+    loginFields.style.display = 'grid';
+    loginTitle.textContent = 'Sign in';
+    loginNote.textContent = 'Use your organiser account.';
+  });
+
+  // ----- Sign-up -----
+  document.getElementById('btnSignup').addEventListener('click', async function(){
+    const name = document.getElementById('s_name').value.trim();
+    const email = document.getElementById('s_email').value.trim();
+    const pw = document.getElementById('s_password').value;
+    const pw2 = document.getElementById('s_password2').value;
+    const err = document.getElementById('signupError');
+    err.style.display='none';
+    if(!name || !email || !pw){ err.textContent='Please fill all fields'; err.style.display='block'; return; }
+    if(pw !== pw2){ err.textContent='Passwords do not match'; err.style.display='block'; return; }
+    const r = await API('/auth/signup', { method:'POST', body: JSON.stringify({ name, email, password: pw }) });
+    const j = await r.json();
+    if(j && j.error){ err.textContent = j.message || 'Signup failed'; err.style.display='block'; return; }
+    // Auto-login then reload
+    await API('/auth/login', { method:'POST', body: JSON.stringify({ email, password: pw }) });
+    location.reload();
+  });
+
+  // Boot
   (async function boot(){
     const ok = await ensureAuth();
     if(ok) switchView('home');
