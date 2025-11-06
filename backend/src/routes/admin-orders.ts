@@ -1,150 +1,49 @@
-// backend/src/routes/admin-orders.ts
 import { Router, Request, Response } from 'express';
 import { prisma } from '../db.js';
+import { withAuth } from '../middleware/requireAuth.js';
+import { readSession } from '../lib/auth.js';
 
 const router = Router();
+router.use(...withAuth());
 
-// Simple admin guard via x-admin-key
-router.use((req, res, next) => {
-  const key = req.headers['x-admin-key'];
-  if (!key || String(key) !== String(process.env.BOOTSTRAP_KEY)) {
-    return res.status(401).json({ error: true, message: 'Unauthorized' });
-  }
-  next();
-});
-
-/**
- * GET /admin/orders
- * Optional filters:
- *   - status=PENDING|PAID|CANCELLED
- *   - showId=<show id>
- *   - from=ISO date (filters orders createdAt >= from)
- *   - to=ISO date (filters orders createdAt <= to)
- *   - limit=number (default 50, max 200)
- */
+// list recent orders (restricted to venues user can access)
 router.get('/orders', async (req: Request, res: Response) => {
   try {
-    const {
-      status,
-      showId,
-      from,
-      to,
-      limit: limitStr
-    } = req.query as {
-      status?: string;
-      showId?: string;
-      from?: string;
-      to?: string;
-      limit?: string;
-    };
+    const s = await readSession(req);
+    if (!s) return res.status(401).json({ error: true, message: 'Unauthenticated' });
 
-    const where: any = {};
-    if (status && ['PENDING', 'PAID', 'CANCELLED'].includes(status)) {
-      where.status = status;
+    const limit = Math.min(Number(req.query.limit || 50), 200);
+
+    const select = {
+      id: true,
+      email: true,
+      name: true,
+      totalPence: true,
+      status: true,
+      createdAt: true,
+      show: { select: { id: true, title: true, venueId: true } },
+      ticketType: { select: { id: true, name: true } }
+    } as const;
+
+    let orders;
+    if (s.role === 'SUPERADMIN') {
+      orders = await prisma.order.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        select
+      });
+    } else {
+      orders = await prisma.order.findMany({
+        where: { show: { venue: { userLinks: { some: { userId: s.uid } } } } },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        select
+      });
     }
-    if (showId) {
-      where.showId = showId;
-    }
-    if (from || to) {
-      where.createdAt = {};
-      if (from) where.createdAt.gte = new Date(from);
-      if (to) where.createdAt.lte = new Date(to);
-    }
 
-    let take = 50;
-    if (limitStr) {
-      const n = Number(limitStr);
-      if (!Number.isNaN(n)) take = Math.min(Math.max(n, 1), 200);
-    }
-
-    const orders = await prisma.order.findMany({
-      where,
-      take,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        show: {
-          select: {
-            id: true,
-            title: true,
-            date: true,
-            venue: {
-              select: {
-                id: true,
-                name: true,
-                city: true,
-                postcode: true
-              }
-            }
-          }
-        },
-        tickets: {
-          select: {
-            id: true,
-            serial: true,
-            status: true,
-            scannedAt: true
-          }
-        },
-        user: {
-          select: {
-            id: true,
-            email: true,
-            name: true
-          }
-        }
-      }
-    });
-
-    // Simple summary (useful for UI)
-    const summary = {
-      total: orders.length,
-      byStatus: orders.reduce<Record<string, number>>((acc, o) => {
-        acc[o.status] = (acc[o.status] || 0) + 1;
-        return acc;
-      }, {}),
-      totalAmountPence: orders.reduce((sum, o) => sum + (o.amountPence || 0), 0)
-    };
-
-    res.json({ ok: true, summary, orders });
-  } catch (err: any) {
-    // eslint-disable-next-line no-console
-    console.error('GET /admin/orders error:', err);
-    res.status(500).json({ error: true, message: 'Server error' });
-  }
-});
-
-/**
- * GET /admin/orders/:id
- * Fetch a single order with relations.
- */
-router.get('/orders/:id', async (req: Request, res: Response) => {
-  try {
-    const order = await prisma.order.findUnique({
-      where: { id: req.params.id },
-      include: {
-        show: {
-          select: {
-            id: true,
-            title: true,
-            date: true,
-            venue: {
-              select: { id: true, name: true, city: true, postcode: true }
-            }
-          }
-        },
-        tickets: {
-          select: { id: true, serial: true, status: true, scannedAt: true }
-        },
-        user: { select: { id: true, email: true, name: true } }
-      }
-    });
-
-    if (!order) return res.status(404).json({ error: true, message: 'Order not found' });
-    res.json({ ok: true, order });
-  } catch (err: any) {
-    // eslint-disable-next-line no-console
-    console.error('GET /admin/orders/:id error:', err);
-    res.status(500).json({ error: true, message: 'Server error' });
+    return res.json({ orders });
+  } catch (e: any) {
+    return res.status(500).json({ error: true, message: e?.message || 'Failed' });
   }
 });
 
