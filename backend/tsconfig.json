@@ -1,23 +1,32 @@
 {
   "compilerOptions": {
+    // ESM with Node-style resolution (matches your `.js` import paths from TS)
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+
+    // Modern JS features + Node globals (process, Buffer, TextEncoder, etc.)
     "target": "ES2022",
     "lib": ["ES2022", "DOM"],
-    "module": "ES2022",
-    "moduleResolution": "NodeNext",
     "types": ["node"],
+
+    // Quality-of-life
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
+
+    // Sensible strictness for a backend
     "strict": true,
     "noImplicitAny": true,
+
+    // Build layout
     "outDir": "dist",
     "rootDir": "src",
     "resolveJsonModule": true
   },
   "include": ["src/**/*"],
   "exclude": [
-    // Exclude unfinished auth for now (prevents role/userVenue errors)
+    // exclude unfinished auth routes for now (we’ll wire these up later)
     "src/lib/auth.ts",
     "src/middleware/**",
     "src/routes/auth.ts",
