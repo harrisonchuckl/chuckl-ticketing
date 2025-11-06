@@ -58,8 +58,6 @@ model Show {
   venue       Venue        @relation(fields: [venueId], references: [id])
   title       String
   description String?
-  // Your existing column in DB is named "date".
-  // We expose it in Prisma as "startsAt" but map it to the "date" column:
   startsAt    DateTime     @default(now()) @map("date")
   capacity    Int?
   posterUrl   String?
@@ -74,13 +72,16 @@ model Show {
 }
 
 model TicketType {
-  id          String   @id @default(cuid())
+  id          String      @id @default(cuid())
   showId      String
-  show        Show     @relation(fields: [showId], references: [id])
+  show        Show        @relation(fields: [showId], references: [id])
   name        String
   pricePence  Int
   available   Int?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime    @default(now())
+
+  # ✅ Added backlink so the Order → TicketType relation is complete
+  orders      Order[]
 
   @@index([showId])
 }
@@ -95,11 +96,9 @@ model Order {
 
   email        String
   quantity     Int
-  // Your earlier schema used amountPence; keep it to avoid breaking data:
   amountPence  Int
   status       OrderStatus  @default(PENDING)
 
-  // Optional link to a ticket type (safe, additive)
   ticketTypeId String?
   ticketType   TicketType?  @relation(fields: [ticketTypeId], references: [id])
 
@@ -133,7 +132,6 @@ model Ticket {
   @@index([userId])
 }
 
-// Many-to-many join for scoping venues to organisers
 model UserVenue {
   userId   String
   venueId  String
