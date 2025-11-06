@@ -1,366 +1,272 @@
 // backend/src/routes/admin-ui.ts
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 
 const router = Router();
 
-router.get('/ui', (_req: Request, res: Response) => {
-  res.type('html').send(`<!DOCTYPE html>
+router.get('/ui', (_req, res) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(`<!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Chuckl. Organiser Console</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Organiser Console</title>
 <style>
   :root{
-    --bg:#f7f8fb;
-    --panel:#ffffff;
-    --text:#0a0a0b;
-    --muted:#6b7280;
-    --brand:#2563eb;
-    --brand-600:#1d4ed8;
-    --border:#e5e7eb;
-    --danger:#ef4444;
-    --success:#10b981;
+    --bg:#f7f8fa; --panel:#ffffff; --ink:#0f172a; --muted:#6b7280; --brand:#111827; --accent:#2563eb; --accent-2:#eff6ff;
+    --border:#e5e7eb; --ok:#16a34a; --bad:#dc2626;
   }
   *{box-sizing:border-box}
-  html,body{height:100%}
-  body{
-    margin:0;
-    font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
-    background:var(--bg);
-    color:var(--text);
-  }
-  .layout{display:grid; grid-template-columns: 240px 1fr; height:100vh;}
-  aside{
-    border-right:1px solid var(--border);
-    padding:14px;
-    background:var(--panel);
-  }
-  .logo{
-    font-weight:700; font-size:18px; letter-spacing:0.2px; margin-bottom:12px;
-  }
-  .sectionTitle{font-size:11px; text-transform:uppercase; color:var(--muted); margin:12px 0 6px;}
-  .nav a{
-    display:block; padding:9px 10px; border-radius:8px; text-decoration:none; color:var(--text);
-  }
-  .nav a.active{ background:#eef2ff; color:#1e40af; }
-  .nav a:hover{ background:#f3f4f6; }
-
-  header{
-    height:56px; display:flex; align-items:center; justify-content:space-between;
-    padding:0 16px; border-bottom:1px solid var(--border); background:var(--panel);
-  }
-  .btn{
-    background:var(--brand); color:#fff; border:none; border-radius:8px; padding:8px 12px;
-    font-weight:600; cursor:pointer;
-  }
-  .btn:disabled{opacity:.6; cursor:not-allowed}
-  .btn.secondary{ background:#111827; }
-  .btn.ghost{ background:transparent; color:var(--text); border:1px solid var(--border); }
-  .content{ padding:16px; overflow:auto; height: calc(100vh - 56px); }
-  .card{ background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; }
-  .row{ display:flex; gap:12px; flex-wrap:wrap; }
-  .input{ width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; }
-  .label{font-size:12px; color:var(--muted); margin-bottom:6px;}
-  .grid2{ display:grid; grid-template-columns: 1fr 1fr; gap:12px;}
-  .muted{ color:var(--muted); font-size:13px;}
-  .error{ color:var(--danger); }
-  .hidden{ display:none; }
-
-  .loginBox{ max-width:420px; margin:48px auto; }
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial,sans-serif}
+  header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);background:var(--panel);position:sticky;top:0;z-index:5}
+  header .brand{font-weight:800;letter-spacing:.2px}
+  header .user{font-size:14px;color:var(--muted)}
+  main{display:grid;grid-template-columns:260px 1fr;gap:20px;padding:20px;min-height:calc(100vh - 64px)}
+  nav{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:12px}
+  nav h4{margin:8px 10px 12px 10px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+  nav button{display:block;width:100%;text-align:left;border:0;background:none;padding:10px 12px;border-radius:10px;margin:2px 0;font-size:14px;color:var(--ink)}
+  nav button.active, nav button:hover{background:var(--accent-2);color:var(--accent)}
+  section.view{background:var(--panel);border:1px solid var(--border);border-radius:14px;min-height:60vh}
+  .toolbar{display:flex;gap:8px;align-items:center;padding:14px;border-bottom:1px solid var(--border)}
+  .toolbar h2{font-size:16px;margin:0}
+  .content{padding:16px}
+  .grid{display:grid;gap:12px}
+  .two{grid-template-columns:1fr 1fr}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  input,select,textarea{width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;background:#fff;color:var(--ink);font-size:14px}
+  label{font-size:12px;color:var(--muted)}
+  .btn{border:0;border-radius:10px;padding:10px 12px;font-weight:600;cursor:pointer}
+  .btn.primary{background:var(--accent);color:#fff}
+  .btn.ghost{background:#fff;border:1px solid var(--border)}
+  .note{font-size:13px;color:var(--muted)}
+  .card{border:1px solid var(--border);border-radius:12px;padding:12px;background:#fff}
+  .danger{color:var(--bad)}
+  .ok{color:var(--ok)}
+  /* login modal */
+  .overlay{position:fixed;inset:0;background:rgba(15,23,42,.5);display:none;align-items:center;justify-content:center;z-index:50}
+  .overlay.show{display:flex}
+  .login{width:360px;background:#fff;border-radius:14px;border:1px solid var(--border);padding:18px}
+  .login h3{margin:0 0 8px 0}
 </style>
 </head>
 <body>
-<div class="layout">
-  <aside>
-    <div class="logo">Chuckl. Organiser Console</div>
-    <div class="sectionTitle">API</div>
-    <div id="authArea" class="card">
-      <div id="loggedOut">
-        <div class="label">Sign in to continue</div>
-        <input id="email" class="input" placeholder="Email" />
-        <div style="height:8px;"></div>
-        <input id="password" type="password" class="input" placeholder="Password" />
-        <div style="height:10px;"></div>
-        <button id="loginBtn" class="btn" style="width:100%;">Sign in</button>
-        <div class="muted" style="margin-top:8px;">Need an account? Ask your Chuckl. contact.</div>
-        <div id="loginErr" class="error hidden" style="margin-top:6px;"></div>
-      </div>
-      <div id="loggedIn" class="hidden">
-        <div class="muted" style="margin-bottom:8px;">Signed in as <span id="meEmail"></span></div>
-        <button id="logoutBtn" class="btn ghost" style="width:100%;">Sign out</button>
+<header>
+  <div class="brand">Organiser Console</div>
+  <div class="user"><span id="userEmail">Not signed in</span></div>
+</header>
+
+<main>
+  <nav>
+    <h4>Dashboard</h4>
+    <button data-view="home" class="active">Home</button>
+    <button data-view="shows">Shows</button>
+    <button data-view="venues">Venues</button>
+    <button data-view="orders">Orders</button>
+    <h4>Marketing</h4>
+    <button data-view="audiences">Audiences</button>
+    <button data-view="emails">Email Campaigns</button>
+    <h4>Settings</h4>
+    <button data-view="account">Account</button>
+    <button id="btnLogout" class="danger">Log out</button>
+  </nav>
+
+  <section class="view">
+    <div class="toolbar"><h2 id="viewTitle">Home</h2></div>
+    <div class="content" id="viewContent">
+      <div class="card">
+        <p>Welcome to your organiser console. Use the menu to manage shows, venues, orders, and marketing.</p>
+        <p class="note">You’ll see more tools appear here as we build them in.</p>
       </div>
     </div>
+  </section>
+</main>
 
-    <div class="sectionTitle">Navigation</div>
-    <nav class="nav">
-      <a href="#/dashboard" id="nav-dashboard" class="active">Dashboard</a>
-      <a href="#/shows" id="nav-shows">Shows</a>
-      <a href="#/tickets" id="nav-tickets">Tickets</a>
-      <a href="#/orders" id="nav-orders">Orders</a>
-      <a href="#/marketing" id="nav-marketing">Marketing</a>
-      <a href="#/customers" id="nav-customers">Customers</a>
-      <a href="#/seating" id="nav-seating">Seating</a>
-      <a href="#/reports" id="nav-reports">Reports</a>
-      <a href="#/access" id="nav-access">Access Control</a>
-      <a href="#/finance" id="nav-finance">Finance</a>
-      <a href="#/settings" id="nav-settings">Settings</a>
-      <a href="#/help" id="nav-help">Help</a>
-    </nav>
-  </aside>
-
-  <main style="display:flex; flex-direction:column;">
-    <header>
-      <div id="pageTitle">Dashboard</div>
+<div class="overlay" id="loginOverlay">
+  <div class="login">
+    <h3>Sign in</h3>
+    <p class="note" id="loginNote">Use your organiser account.</p>
+    <div class="grid">
       <div>
-        <button id="reloadBtn" class="btn ghost">Reload</button>
-        <button id="createShowBtn" class="btn">Create Show</button>
+        <label>Email</label>
+        <input id="email" type="email" placeholder="you@venue.com"/>
       </div>
-    </header>
-    <div class="content">
-      <div id="view-dashboard" class="view card">
-        <div class="muted">Welcome to your organiser console.</div>
+      <div>
+        <label>Password</label>
+        <input id="password" type="password" placeholder="••••••••"/>
       </div>
-
-      <div id="view-shows" class="view card hidden">
-        <div class="row">
-          <div style="flex:1; min-width:260px;">
-            <div class="label">Title</div>
-            <input id="showTitle" class="input" placeholder="e.g. Chuckl. Bridlington"/>
-          </div>
-          <div style="width:260px">
-            <div class="label">Date & Time (local)</div>
-            <input id="showStartsAt" class="input" placeholder="YYYY-MM-DD HH:mm"/>
-          </div>
-        </div>
-        <div class="row">
-          <div style="flex:1; min-width:260px;">
-            <div class="label">Venue</div>
-            <select id="venueSelect" class="input"></select>
-          </div>
-          <div style="width:220px">
-            <div class="label">Capacity Override (optional)</div>
-            <input id="showCapacity" class="input" placeholder="leave blank to use venue capacity"/>
-          </div>
-        </div>
-        <div class="row">
-          <div style="flex:1;">
-            <div class="label">Description (optional)</div>
-            <textarea id="showDesc" class="input" rows="4" placeholder="Short description…"></textarea>
-          </div>
-          <div style="flex:1;">
-            <div class="label">Poster URL (optional)</div>
-            <input id="posterUrl" class="input" placeholder="https://…"/>
-          </div>
-        </div>
-        <div class="row">
-          <button id="btnCreateShow" class="btn">Create Show</button>
-          <div id="showCreateMsg" class="muted"></div>
-        </div>
-        <div style="height:14px;"></div>
-        <div class="label">Latest Shows</div>
-        <div id="showsList" class="muted">No shows yet.</div>
+      <div class="row">
+        <button class="btn primary" id="btnLogin">Sign in</button>
+        <button class="btn ghost" id="btnDemo">Quick demo user</button>
       </div>
-
-      <div id="view-orders" class="view card hidden">
-        <div class="label">Recent Orders</div>
-        <div id="ordersList" class="muted">Load orders after login.</div>
-      </div>
-
-      <!-- Placeholder views -->
-      <div id="view-tickets"   class="view card hidden">Tickets builder coming soon.</div>
-      <div id="view-marketing" class="view card hidden">Marketing tools coming soon.</div>
-      <div id="view-customers" class="view card hidden">Customers list coming soon.</div>
-      <div id="view-seating"   class="view card hidden">Seating & scan config coming soon.</div>
-      <div id="view-reports"   class="view card hidden">Reports coming soon.</div>
-      <div id="view-access"    class="view card hidden">Access Control coming soon.</div>
-      <div id="view-finance"   class="view card hidden">Finance coming soon.</div>
-      <div id="view-settings"  class="view card hidden">Settings coming soon.</div>
-      <div id="view-help"      class="view card hidden">Help & docs coming soon.</div>
+      <div class="note" id="loginError" style="color:#dc2626;display:none;"></div>
     </div>
-  </main>
+  </div>
 </div>
 
 <script>
-  const $ = (q) => document.querySelector(q);
-  const views = {
-    '#/dashboard': 'view-dashboard',
-    '#/shows': 'view-shows',
-    '#/tickets': 'view-tickets',
-    '#/orders': 'view-orders',
-    '#/marketing': 'view-marketing',
-    '#/customers': 'view-customers',
-    '#/seating': 'view-seating',
-    '#/reports': 'view-reports',
-    '#/access': 'view-access',
-    '#/finance': 'view-finance',
-    '#/settings': 'view-settings',
-    '#/help': 'view-help',
-  };
+const $ = (sel) => document.querySelector(sel);
+const API = (path, opts={}) => fetch(path, { credentials:'include', headers:{'Content-Type':'application/json'}, ...opts });
 
-  function setActive(hash) {
-    for (const k in views) {
-      const id = views[k];
-      const el = document.getElementById(id);
-      if (!el) continue;
-      if (k === hash) el.classList.remove('hidden'); else el.classList.add('hidden');
-      const nav = document.getElementById('nav-' + k.replace('#/', ''));
-      if (nav) nav.classList.toggle('active', k === hash);
-    }
-    const title = hash.replace('#/', '');
-    $('#pageTitle').textContent = title.charAt(0).toUpperCase() + title.slice(1);
-  }
-
-  async function api(path, opts={}) {
-    const res = await fetch(path, {
-      method: opts.method || 'GET',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include', // important: send/receive cookie
-      body: opts.body ? JSON.stringify(opts.body) : undefined,
+const views = {
+  async home(){ 
+    $('#viewTitle').textContent = 'Home';
+    $('#viewContent').innerHTML = \`
+      <div class="grid two">
+        <div class="card"><h4>Recent activity</h4><p class="note">This will show your most recent sales, ticket scans and edits.</p></div>
+        <div class="card"><h4>Shortcuts</h4><div class="row"><a class="btn ghost" href="#" data-goto="shows">Create show</a><a class="btn ghost" href="#" data-goto="venues">Add venue</a></div></div>
+      </div>\`;
+    $('#viewContent').addEventListener('click', (e)=>{
+      const el=e.target.closest('[data-goto]'); if(!el) return;
+      const v=el.getAttribute('data-goto'); switchView(v);
     });
-    const ct = res.headers.get('content-type') || '';
-    const isJson = ct.includes('application/json');
-    const data = isJson ? await res.json() : await res.text();
-    if (!res.ok) throw new Error((data && data.message) || 'Request failed');
-    return data;
-  }
-
-  // Auth UI state
-  async function refreshMe() {
-    try {
-      const me = await api('/auth/me');
-      $('#loggedOut').classList.add('hidden');
-      $('#loggedIn').classList.remove('hidden');
-      $('#meEmail').textContent = me.user.email;
-      await loadVenues();
-      await loadShows();
-      await loadOrders();
-    } catch {
-      $('#loggedOut').classList.remove('hidden');
-      $('#loggedIn').classList.add('hidden');
-    }
-  }
-
-  $('#loginBtn').addEventListener('click', async () => {
-    $('#loginBtn').disabled = true;
-    $('#loginErr').classList.add('hidden');
-    try {
-      const email = $('#email').value.trim();
-      const password = $('#password').value;
-      await api('/auth/login', { method:'POST', body:{ email, password }});
-      await refreshMe();
-    } catch (e) {
-      $('#loginErr').textContent = e.message || 'Login failed';
-      $('#loginErr').classList.remove('hidden');
-    } finally {
-      $('#loginBtn').disabled = false;
-    }
-  });
-
-  $('#logoutBtn').addEventListener('click', async () => {
-    await api('/auth/logout', { method:'POST' });
-    await refreshMe();
-  });
-
-  // Navigation
-  window.addEventListener('hashchange', () => setActive(location.hash || '#/dashboard'));
-  setActive(location.hash || '#/dashboard');
-
-  $('#reloadBtn').addEventListener('click', async () => {
-    await refreshMe();
-  });
-
-  // Shows
-  async function loadVenues() {
-    try {
-      const r = await api('/admin/venues');
-      const sel = $('#venueSelect');
-      sel.innerHTML = '';
-      (r.venues || []).forEach(v => {
-        const opt = document.createElement('option');
-        opt.value = v.id;
-        opt.textContent = v.name + (v.city ? (' – ' + v.city) : '');
-        sel.appendChild(opt);
-      });
-    } catch (e) {
-      console.warn(e);
-    }
-  }
-
-  async function loadShows() {
-    try {
-      const r = await api('/admin/shows/latest?limit=20');
-      const box = $('#showsList');
-      if (!r.shows || r.shows.length === 0) {
-        box.textContent = 'No shows yet.';
-        return;
+  },
+  async shows(){
+    $('#viewTitle').textContent = 'Shows';
+    $('#viewContent').innerHTML = \`
+      <div class="row"><button class="btn primary" id="btnRefreshShows">Refresh shows</button></div>
+      <div id="showsWrap" class="grid"></div>
+    \`;
+    loadShows();
+    $('#viewContent').addEventListener('click', async (e)=>{
+      if(e.target.id==='btnRefreshShows'){ loadShows(); }
+    });
+  },
+  async venues(){
+    $('#viewTitle').textContent = 'Venues';
+    $('#viewContent').innerHTML = \`
+      <div class="grid two">
+        <div class="card">
+          <h4>Create venue</h4>
+          <div class="grid">
+            <div><label>Name</label><input id="v_name"/></div>
+            <div><label>Address</label><input id="v_address"/></div>
+            <div><label>City</label><input id="v_city"/></div>
+            <div><label>Postcode</label><input id="v_postcode"/></div>
+            <div><label>Capacity</label><input id="v_capacity" type="number" min="0"/></div>
+            <div class="row"><button class="btn primary" id="btnCreateVenue">Save venue</button></div>
+            <div class="note" id="venueMsg"></div>
+          </div>
+        </div>
+        <div class="card">
+          <h4>Find venues</h4>
+          <div class="row"><input id="q" placeholder="Search by name/city/postcode"/><button class="btn ghost" id="btnFind">Search</button></div>
+          <div id="venuesList" class="grid" style="margin-top:8px"></div>
+        </div>
+      </div>\`;
+    $('#viewContent').addEventListener('click', async (e)=>{
+      if(e.target.id==='btnCreateVenue'){
+        const body = {
+          name: $('#v_name').value,
+          address: $('#v_address').value,
+          city: $('#v_city').value,
+          postcode: $('#v_postcode').value,
+          capacity: $('#v_capacity').value
+        };
+        const r = await API('/admin/venues', { method:'POST', body: JSON.stringify(body) });
+        const j = await r.json();
+        $('#venueMsg').textContent = j.ok ? 'Saved.' : (j.message || 'Failed');
       }
-      box.innerHTML = r.shows.map(s => {
-        return \`<div style="padding:8px 0; border-bottom:1px solid var(--border)">
-          <div style="font-weight:600">\${s.title}</div>
-          <div class="muted">\${new Date(s.startsAt).toLocaleString()} — \${s.venue?.name || 'Unknown'}</div>
-        </div>\`;
-      }).join('');
-    } catch (e) {
-      $('#showsList').textContent = 'Failed to load shows';
-    }
-  }
-
-  async function loadOrders() {
-    try {
-      const r = await api('/admin/orders?limit=20');
-      const box = $('#ordersList');
-      if (!r.orders || r.orders.length === 0) {
-        box.textContent = 'No recent orders.';
-        return;
+      if(e.target.id==='btnFind'){
+        const q = $('#q').value || '';
+        const r = await API('/admin/venues?q=' + encodeURIComponent(q));
+        const j = await r.json();
+        const wrap = $('#venuesList');
+        if(!j.ok){ wrap.innerHTML = '<p class="danger">Failed.</p>'; return; }
+        wrap.innerHTML = j.venues.map(v => \`<div class="card"><b>\${v.name}</b><div class="note">\${[v.address,v.city,v.postcode].filter(Boolean).join(', ')||'—'}</div><div class="note">Capacity: \${v.capacity ?? '—'}</div></div>\`).join('');
       }
-      box.innerHTML = r.orders.map(o => {
-        return \`<div style="padding:8px 0; border-bottom:1px solid var(--border)">
-          <div><strong>\${o.email}</strong> — £\${(o.totalPence/100).toFixed(2)} <span class="muted">(\${o.status})</span></div>
-          <div class="muted">Show: \${o.show?.title || ''} • \${new Date(o.createdAt).toLocaleString()}</div>
-        </div>\`;
-      }).join('');
-    } catch (e) {
-      $('#ordersList').textContent = 'Failed to load orders';
-    }
+    });
+  },
+  async orders(){
+    $('#viewTitle').textContent = 'Orders';
+    $('#viewContent').innerHTML = '<div class="note">Orders list coming next.</div>';
+  },
+  async audiences(){
+    $('#viewTitle').textContent = 'Audiences';
+    $('#viewContent').innerHTML = '<div class="note">Audience tools (tags, segments, imports) coming soon.</div>';
+  },
+  async emails(){
+    $('#viewTitle').textContent = 'Email Campaigns';
+    $('#viewContent').innerHTML = '<div class="note">Scheduler + templates placeholder.</div>';
+  },
+  async account(){
+    $('#viewTitle').textContent = 'Account';
+    $('#viewContent').innerHTML = '<div class="note">Manage your password and organisation details.</div>';
   }
+};
 
-  $('#btnCreateShow').addEventListener('click', async () => {
-    $('#btnCreateShow').disabled = true;
-    $('#showCreateMsg').textContent = '';
-    try {
-      const title = $('#showTitle').value.trim();
-      const startsAt = $('#showStartsAt').value.trim();
-      const venueId = Number($('#venueSelect').value);
-      const capacity = $('#showCapacity').value.trim();
-      const description = $('#showDesc').value.trim();
-      const posterUrl = $('#posterUrl').value.trim() || null;
+async function loadShows(){
+  const wrap = document.getElementById('showsWrap');
+  wrap.innerHTML = '<div class="note">Loading…</div>';
+  const r = await API('/admin/shows/latest?limit=20');
+  const j = await r.json();
+  if(!j.ok){ wrap.innerHTML = '<div class="danger">Failed to load shows</div>'; return; }
+  if(!j.shows || j.shows.length===0){ wrap.innerHTML = '<div class="note">No shows yet.</div>'; return; }
+  wrap.innerHTML = j.shows.map(s => {
+    const d = new Date(s.date);
+    const when = d.toLocaleString();
+    const venue = s.venue ? [s.venue.name,s.venue.city,s.venue.postcode].filter(Boolean).join(', ') : '—';
+    const tt = (s.ticketTypes||[]).map(t => \`\${t.name} (£\${(t.pricePence/100).toFixed(2)})\`).join(' · ');
+    return \`<div class="card"><div><b>\${s.title}</b></div><div class="note">\${when} — \${venue}</div><div class="note">\${tt || 'No ticket types'}</div></div>\`;
+  }).join('');
+}
 
-      if (!title || !startsAt || !venueId) throw new Error('Title, startsAt, venue are required');
+function switchView(name){
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.getAttribute('data-view')===name));
+  (views[name]||views.home)();
+}
 
-      const payload = {
-        title,
-        startsAt,
-        venueId,
-        description: description || null,
-        capacity: capacity ? Number(capacity) : null,
-        posterUrl,
-      };
-      await api('/admin/shows', { method:'POST', body: payload });
-      $('#showCreateMsg').textContent = 'Show created.';
-      await loadShows();
-    } catch (e) {
-      $('#showCreateMsg').textContent = e.message || 'Failed to create show';
-    } finally {
-      $('#btnCreateShow').disabled = false;
-    }
+async function ensureAuth(){
+  const me = await fetch('/auth/me', { credentials: 'include' });
+  if(me.status===200){
+    const j = await me.json();
+    document.getElementById('userEmail').textContent = j.user?.email || 'Signed in';
+    document.getElementById('loginOverlay').classList.remove('show');
+    return true;
+  } else {
+    document.getElementById('loginOverlay').classList.add('show');
+    return false;
+  }
+}
+
+// nav
+document.querySelectorAll('nav button[data-view]').forEach(btn=>{
+  btn.addEventListener('click', e => {
+    const v = btn.getAttribute('data-view');
+    switchView(v);
   });
+});
+document.getElementById('btnLogout').addEventListener('click', async ()=>{
+  await API('/auth/logout', { method:'POST' });
+  location.reload();
+});
 
-  // initial
-  refreshMe();
+// login
+document.getElementById('btnLogin').addEventListener('click', async ()=>{
+  const email = (document.getElementById('email') as HTMLInputElement).value;
+  const password = (document.getElementById('password') as HTMLInputElement).value;
+  const r = await API('/auth/login', { method:'POST', body: JSON.stringify({ email, password }) });
+  const j = await r.json();
+  if(!j.ok){ const e = document.getElementById('loginError'); e.textContent = j.message || 'Login failed'; e.style.display='block'; return; }
+  location.reload();
+});
+
+// quick demo user
+document.getElementById('btnDemo').addEventListener('click', async ()=>{
+  const email = 'demo@organiser.test';
+  const password = 'demo1234';
+  // try login first
+  let r = await API('/auth/login', { method:'POST', body: JSON.stringify({ email, password }) });
+  if(r.status===401){
+    await API('/auth/signup', { method:'POST', body: JSON.stringify({ email, password, name: 'Demo User' }) });
+  }
+  await API('/auth/login', { method:'POST', body: JSON.stringify({ email, password }) });
+  location.reload();
+});
+
+(async function boot(){
+  const ok = await ensureAuth();
+  if(ok) switchView('home');
+})();
 </script>
 </body>
 </html>`);
