@@ -140,7 +140,7 @@ router.get('/ui', (_req, res) => {
       renderShowDetail(showId);
     },
 
-    // ---- Orders list & detail with notes ----
+    // ---- Orders list & detail with notes + refund UI ----
     orders(){
       $('#viewTitle').textContent = 'Orders';
       $('#toolbarActions').innerHTML =
@@ -336,11 +336,11 @@ router.get('/ui', (_req, res) => {
       const pricePence = Number($('#tt_price').value || 0);
       const availRaw = $('#tt_avail').value;
       const available = availRaw === '' ? null : Number(availRaw);
-      const r = await API('/admin/shows/'+encodeURIComponent(showId)+'/ticket-types', {
+      const r2 = await API('/admin/shows/'+encodeURIComponent(showId)+'/ticket-types', {
         method:'POST',
         body: JSON.stringify({ name, pricePence, available })
       });
-      const j2 = await r.json();
+      const j2 = await r2.json();
       $('#ttMsg').textContent = j2.ok ? 'Added' : (j2.message || 'Failed');
       if (j2.ok) renderShowDetail(showId);
     });
@@ -390,6 +390,12 @@ router.get('/ui', (_req, res) => {
       + '<div class="note">Amount: '+fmtMoney(o.amountPence)+'</div>'
       + '<div class="note">Qty: '+(o.quantity ?? '—')+'</div>'
       + '<div class="note">Status: '+o.status+'</div>'
+      + '<div class="row" style="margin-top:8px">'
+      +   '<input id="refundAmount" type="number" placeholder="Amount (pence, optional)" style="max-width:160px"/>'
+      +   '<input id="refundReason" placeholder="Reason (optional)" style="max-width:220px"/>'
+      +   '<button class="btn ghost" id="btnRefund">Refund</button>'
+      + '</div>'
+      + '<div class="note" id="refundMsg"></div>'
       + '</div>'
       + '<div class="grid two">'
       +   '<div class="card">'
@@ -406,6 +412,23 @@ router.get('/ui', (_req, res) => {
       + '</div>'
       + '</div>';
 
+    // ===== Refund handler =====
+    const refundBtn = $('#btnRefund');
+    if (refundBtn) {
+      refundBtn.onclick = async () => {
+        const amount = $('#refundAmount').value ? Number($('#refundAmount').value) : null;
+        const reason = $('#refundReason').value || '';
+        const r2 = await API('/admin/orders/'+encodeURIComponent(orderId)+'/refund', {
+          method:'POST',
+          body: JSON.stringify({ amountPence: amount, reason })
+        });
+        const j2 = await r2.json();
+        $('#refundMsg').textContent = j2.ok ? 'Refund issued successfully' : (j2.message||'Failed');
+        if (j2.ok) renderOrderDetail(orderId);
+      };
+    }
+
+    // ===== Notes render & actions =====
     const notesWrap = $('#notesWrap');
     const renderNotes = () => {
       notesWrap.innerHTML = (o.notes||[]).map(n => {
@@ -426,11 +449,11 @@ router.get('/ui', (_req, res) => {
     $('#btnAddNote').onclick = async () => {
       const txt = $('#noteText').value;
       if(!txt.trim()) return;
-      const r = await API('/admin/orders/'+encodeURIComponent(orderId)+'/notes', { method:'POST', body: JSON.stringify({ text: txt }) });
-      const j2 = await r.json();
-      $('#noteMsg').textContent = j2.ok ? 'Saved' : (j2.message||'Failed');
-      if (j2.ok) {
-        o.notes.unshift(j2.note);
+      const r3 = await API('/admin/orders/'+encodeURIComponent(orderId)+'/notes', { method:'POST', body: JSON.stringify({ text: txt }) });
+      const j3 = await r3.json();
+      $('#noteMsg').textContent = j3.ok ? 'Saved' : (j3.message||'Failed');
+      if (j3.ok) {
+        o.notes.unshift(j3.note);
         $('#noteText').value = '';
         renderNotes();
       }
@@ -443,19 +466,19 @@ router.get('/ui', (_req, res) => {
       const noteId = card.getAttribute('data-note');
       if (e.target.classList.contains('note_save')) {
         const txt = card.querySelector('.noteText').value;
-        const r = await API('/admin/orders/'+encodeURIComponent(orderId)+'/notes/'+encodeURIComponent(noteId), {
+        const r4 = await API('/admin/orders/'+encodeURIComponent(orderId)+'/notes/'+encodeURIComponent(noteId), {
           method:'PATCH',
           body: JSON.stringify({ text: txt })
         });
-        const j3 = await r.json();
-        $('#noteMsg').textContent = j3.ok ? 'Saved' : (j3.message || 'Failed');
+        const j4 = await r4.json();
+        $('#noteMsg').textContent = j4.ok ? 'Saved' : (j4.message || 'Failed');
       }
       if (e.target.classList.contains('note_del')) {
         if (!confirm('Delete this note?')) return;
-        const r = await API('/admin/orders/'+encodeURIComponent(orderId)+'/notes/'+encodeURIComponent(noteId), { method:'DELETE' });
-        const j4 = await r.json();
-        $('#noteMsg').textContent = j4.ok ? 'Deleted' : (j4.message || 'Failed');
-        if (j4.ok) {
+        const r5 = await API('/admin/orders/'+encodeURIComponent(orderId)+'/notes/'+encodeURIComponent(noteId), { method:'DELETE' });
+        const j5 = await r5.json();
+        $('#noteMsg').textContent = j5.ok ? 'Deleted' : (j5.message || 'Failed');
+        if (j5.ok) {
           o.notes = o.notes.filter(n => n.id !== noteId);
           renderNotes();
         }
