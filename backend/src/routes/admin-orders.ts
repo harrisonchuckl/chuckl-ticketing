@@ -84,8 +84,9 @@ router.post('/orders/:id/resend', async (req, res) => {
     const order = await prisma.order.findUnique({ where: { id } });
     if (!order) return res.status(404).json({ error: true, message: 'Order not found' });
 
-    const r = await sendTicketsEmail(id, to);
-    res.json({ ok: true, ...(r || {}) });
+    const result = await sendTicketsEmail(id, to);
+    // Avoid duplicate 'ok' – just return what the service returns
+    return res.json(result);
   } catch (e: any) {
     res.status(500).json({ error: true, message: e?.message ?? 'Resend failed' });
   }
