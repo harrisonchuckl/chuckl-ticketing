@@ -1,19 +1,17 @@
 // backend/src/routes/webhook.ts
 import { Router } from 'express';
 import Stripe from 'stripe';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../lib/db.js';
 
-const prisma = new PrismaClient();
 const router = Router();
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  apiVersion: '2024-06-20'
+  apiVersion: '2023-10-16',
 });
 
 router.post('/', async (req, res) => {
-  const sig = req.headers['stripe-signature'] as string;
+  const sig = req.headers['stripe-signature'];
   if (!sig) return res.status(400).send('Missing signature');
-
   let event: Stripe.Event;
   try {
     event = stripe.webhooks.constructEvent(
@@ -22,61 +20,56 @@ router.post('/', async (req, res) => {
       process.env.STRIPE_WEBHOOK_SECRET || ''
     );
   } catch (err: any) {
-    console.error('Webhook signature failed', err.message);
+    console.error('Webhook signature error', err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
   try {
     switch (event.type) {
-      case 'payment_intent.succeeded': {
-        const intent = event.data.object as Stripe.PaymentIntent;
-        const order = await prisma.order.findFirst({ where: { stripeId: intent.id } });
-        if (order) {
-          await prisma.order.update({
-            where: { id: order.id },
-            data: { status: 'PAID' }
-          });
-        }
-        break;
-      }
+      case 'charge.refunded':
+      case 'refund.updated': {
+        const refund = event.data.object as Stripe.Refund;
+        const stripeId = refund.id;
+        const amount = refund.amount;
+        const status = refund.status;
+        const chargeId = refund.charge as string | undefined;
 
-      case 'charge.refunded': {
-        const charge = event.data.object as Stripe.Charge;
-        const refundList = charge.refunds?.data || [];
-        const existingOrder = await prisma.order.findFirst({
-          where: { stripeId: charge.payment_intent as string }
-        });
-        if (existingOrder) {
-          await prisma.order.update({
-            where: { id: existingOrder.id },
-            data: { status: 'REFUNDED' }
+        const existing = await prisma.refund.findUnique({ where: { stripeId } });
+        if (existing) {
+          await prisma.refund.update({
+            where: { stripeId },
+            data: { amount, reason: refund.reason || null },
           });
-
-          for (const ref of refundList) {
-            const exists = await prisma.refund.findFirst({ where: { stripeId: ref.id } });
-            if (!exists) {
-              await prisma.refund.create({
-                data: {
-                  stripeId: ref.id,
-                  orderId: existingOrder.id,
-                  amount: ref.amount || 0,
-                  reason: ref.reason || null
-                }
-              });
-            }
+        } else {
+          // Try to find order by chargeId
+          const order = chargeId
+            ? await prisma.order.findFirst({ where: { stripeId: chargeId } })
+            : null;
+          if (order) {
+            await prisma.refund.create({
+              data: {
+                orderId: order.id,
+                amount,
+                reason: refund.reason || null,
+                stripeId,
+              },
+            });
+            await prisma.order.update({
+              where: { id: order.id },
+              data: { status: 'REFUNDED' },
+            });
           }
         }
         break;
       }
-
       default:
-        console.log(`Unhandled event type ${event.type}`);
+        break;
     }
 
     res.json({ received: true });
-  } catch (e: any) {
-    console.error('Webhook processing failed', e);
-    res.status(500).send('Webhook handling error');
+  } catch (err: any) {
+    console.error('Webhook error', err);
+    res.status(500).send('Webhook processing error');
   }
 });
 
