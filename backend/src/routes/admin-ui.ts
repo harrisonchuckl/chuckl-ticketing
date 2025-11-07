@@ -26,7 +26,7 @@ router.get('/ui', (_req, res) => {
   .toolbar h2{font-size:16px;margin:0}
   .content{padding:16px}
   .grid{display:grid;gap:12px}.two{grid-template-columns:1fr 1fr}.three{grid-template-columns:repeat(3,1fr)}
-  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
   input,select,textarea{width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;background:#fff;color:var(--ink);font-size:14px}
   label{font-size:12px;color:var(--muted)}
   .btn{border:0;border-radius:10px;padding:10px 12px;font-weight:600;cursor:pointer}
@@ -42,6 +42,9 @@ router.get('/ui', (_req, res) => {
   .login h3{margin:0 0 8px}
   .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
   .kpi{background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px}
+  canvas{max-width:100%; height:220px; border:1px dashed var(--border); border-radius:12px}
+  .toast{position:fixed;bottom:16px;right:16px;background:#0f172a;color:#fff;padding:10px 12px;border-radius:10px;opacity:0;transform:translateY(10px);transition:all .2s}
+  .toast.show{opacity:1;transform:translateY(0)}
 </style>
 </head>
 <body>
@@ -95,6 +98,8 @@ router.get('/ui', (_req, res) => {
   </div>
 </div>
 
+<div id="toast" class="toast"></div>
+
 <script>
 (function(){
   const $ = (sel) => document.querySelector(sel);
@@ -103,6 +108,7 @@ router.get('/ui', (_req, res) => {
     headers:{'Content-Type':'application/json'}
   }, opts || {}));
   const fmtMoney = p => '£' + (Number(p || 0)/100).toFixed(2);
+  const toast = (msg) => { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2000); };
 
   // ===== Views =====
   const views = {
@@ -140,17 +146,103 @@ router.get('/ui', (_req, res) => {
       renderShowDetail(showId);
     },
 
-    // ---- Orders list & detail with notes + refund UI ----
+    // ---- Orders list & detail with notes / filters / pagination / bulk ----
     orders(){
       $('#viewTitle').textContent = 'Orders';
       $('#toolbarActions').innerHTML =
         '<div class="row">'
-        + '<input id="ordersQ" placeholder="Search email / Stripe / show"/><button class="btn ghost" id="btnSearchOrders">Search</button>'
+        + '<input id="ordersQ" placeholder="Search email / Stripe / show" style="min-width:260px"/>'
+        + '<select id="ordersStatus"><option value="">All Statuses</option><option>PAID</option><option>PENDING</option><option>REFUNDED</option><option>CANCELLED</option></select>'
+        + '<button class="btn ghost" id="btnSearchOrders">Search</button>'
+        + '<button class="btn ghost" id="btnExportOrders">Export CSV</button>'
         + '</div>';
-      $('#viewContent').innerHTML = '<div id="ordersWrap" class="grid"></div>';
-      const run = () => loadOrders($('#ordersQ').value || '');
+      $('#viewContent').innerHTML =
+        '<div class="row"><button class="btn ghost" id="btnBulkRefund">Bulk refund</button></div>'
+        + '<div id="ordersWrap" class="grid"></div>'
+        + '<div class="row" style="justify-content:flex-end;margin-top:8px">'
+        +   '<button class="btn ghost" id="prevPage">Prev</button>'
+        +   '<span class="note" id="pageInfo" style="min-width:120px;text-align:center">Page 1</span>'
+        +   '<button class="btn ghost" id="nextPage">Next</button>'
+        + '</div>';
+
+      let page = 1, pages = 1, pageSize = 25, lastQuery = '', lastStatus = '';
+
+      const run = async () => {
+        const q = $('#ordersQ').value || '';
+        const status = $('#ordersStatus').value || '';
+        lastQuery = q; lastStatus = status;
+        const r = await API('/admin/orders?q='+encodeURIComponent(q)+'&status='+encodeURIComponent(status)+'&page='+page+'&pageSize='+pageSize);
+        const j = await r.json();
+        if(!j.ok) { $('#ordersWrap').innerHTML = '<div class="danger">Failed to load orders</div>'; return; }
+        pages = j.pages || 1;
+        $('#pageInfo').textContent = 'Page '+j.page+' of '+pages;
+        renderOrders(j.items || []);
+      };
+
+      function renderOrders(items){
+        const wrap = $('#ordersWrap');
+        if(!items.length){ wrap.innerHTML = '<div class="note">No orders found.</div>'; return; }
+        wrap.innerHTML = '<table class="table"><thead><tr>'
+          + '<th><input type="checkbox" id="chkAll"/></th>'
+          + '<th>Date</th><th>Email</th><th>Show</th><th>Qty</th><th>Amount</th><th>Status</th><th></th></tr></thead><tbody>'
+          + items.map(o => {
+              const when = new Date(o.createdAt).toLocaleString();
+              const show = o.show ? (o.show.title + ' (' + new Date(o.show.date).toLocaleDateString() + ')') : '—';
+              return '<tr>'
+                + '<td><input type="checkbox" class="chkRow" data-id="'+o.id+'"/></td>'
+                + '<td>'+when+'</td>'
+                + '<td>'+(o.email||'—')+'</td>'
+                + '<td>'+show+'</td>'
+                + '<td>'+(o.quantity ?? '—')+'</td>'
+                + '<td>'+fmtMoney(o.amountPence)+'</td>'
+                + '<td>'+o.status+'</td>'
+                + '<td><button class="btn ghost" data-open-order="'+o.id+'">Open</button></td>'
+                + '</tr>';
+            }).join('')
+          + '</tbody></table>';
+
+        $('#chkAll').onchange = (e) => {
+          const checked = e.target.checked;
+          document.querySelectorAll('.chkRow').forEach(c => (c as HTMLInputElement).checked = checked);
+        };
+
+        wrap.onclick = e => {
+          const btn = e.target.closest('[data-open-order]');
+          if(!btn) return;
+          switchView('orderDetail', btn.getAttribute('data-open-order'));
+        };
+      }
+
+      $('#toolbarActions').onclick = async e => {
+        if (e.target.id==='btnSearchOrders'){ page = 1; run(); }
+        if (e.target.id==='btnExportOrders'){
+          const url = '/admin/orders.csv?q='+encodeURIComponent(lastQuery)+'&status='+encodeURIComponent(lastStatus);
+          window.open(url, '_blank', 'noopener');
+        }
+      };
+      $('#prevPage').onclick = () => { if (page > 1) { page -= 1; run(); } };
+      $('#nextPage').onclick = () => { if (page < pages) { page += 1; run(); } };
+
+      $('#viewContent').onclick = async (e) => {
+        if (e.target.id === 'btnBulkRefund') {
+          const selected = Array.from(document.querySelectorAll('.chkRow'))
+            .filter((c: any) => c.checked)
+            .map((c: any) => c.getAttribute('data-id'));
+          if (!selected.length) { toast('Select orders first'); return; }
+          const amount = prompt('Optional partial refund amount in pence (leave blank for full):', '');
+          const reason = prompt('Reason (optional):', '') || '';
+          const body: any = { orderIds: selected, reason: reason || undefined };
+          if (amount && String(amount).trim() !== '') body.amountPence = Number(amount);
+          const r = await API('/admin/orders/bulk-refund', { method:'POST', body: JSON.stringify(body) });
+          const j = await r.json();
+          if (!j.ok) { toast('Bulk refund failed'); return; }
+          const okCount = (j.results||[]).filter((x:any)=>x.ok).length;
+          toast('Refunded ' + okCount + ' orders');
+          run();
+        }
+      };
+
       run();
-      $('#toolbarActions').onclick = async e => { if (e.target.id==='btnSearchOrders') run(); }
     },
 
     orderDetail(orderId){
@@ -160,6 +252,7 @@ router.get('/ui', (_req, res) => {
       renderOrderDetail(orderId);
     },
 
+    // ---- Venues (unchanged) ----
     venues(){
       $('#viewTitle').textContent = 'Venues';
       $('#toolbarActions').innerHTML = '';
@@ -285,8 +378,13 @@ router.get('/ui', (_req, res) => {
       +   '<div class="card">'
       +     '<h4 style="margin-top:0">Attendees</h4>'
       +     '<p class="note">Download a CSV for door list or marketing exports.</p>'
-      +     '<a class="btn ghost" href="/admin/shows/'+show.id+'/attendees.csv" target="_blank" rel="noopener">Download CSV</a>'
+      +     '<div class="row"><a class="btn ghost" id="btnAttCsv" href="/admin/shows/'+show.id+'/attendees.csv" target="_blank" rel="noopener">Download CSV</a><span class="note" id="lastExport"></span></div>'
       +   '</div>'
+      + '</div>'
+      + '<div class="card">'
+      +   '<h4 style="margin-top:0">Sales Trend</h4>'
+      +   '<canvas id="salesChart" width="600" height="220"></canvas>'
+      +   '<div class="note" id="insights" style="margin-top:8px"></div>'
       + '</div>'
       + '</div>';
 
@@ -304,7 +402,6 @@ router.get('/ui', (_req, res) => {
         + '</tr>';
     }).join('');
 
-    // handlers
     tbody.onclick = async e => {
       const tr = e.target.closest('tr[data-tt]');
       if(!tr) return;
@@ -318,16 +415,16 @@ router.get('/ui', (_req, res) => {
           method:'PATCH',
           body: JSON.stringify({ name, pricePence, available })
         });
-        const j = await r.json();
-        $('#ttMsg').textContent = j.ok ? 'Saved' : (j.message || 'Failed');
-        if (j.ok) renderShowDetail(showId);
+        const j2 = await r.json();
+        $('#ttMsg').textContent = j2.ok ? 'Saved' : (j2.message || 'Failed');
+        if (j2.ok) renderShowDetail(showId);
       }
       if (e.target.classList.contains('tt_del')) {
         if (!confirm('Delete this ticket type?')) return;
         const r = await API('/admin/ticket-types/'+encodeURIComponent(id), { method: 'DELETE' });
-        const j = await r.json();
-        $('#ttMsg').textContent = j.ok ? 'Deleted' : (j.message || 'Failed');
-        if (j.ok) renderShowDetail(showId);
+        const j3 = await r.json();
+        $('#ttMsg').textContent = j3.ok ? 'Deleted' : (j3.message || 'Failed');
+        if (j3.ok) renderShowDetail(showId);
       }
     };
 
@@ -340,42 +437,54 @@ router.get('/ui', (_req, res) => {
         method:'POST',
         body: JSON.stringify({ name, pricePence, available })
       });
-      const j2 = await r2.json();
-      $('#ttMsg').textContent = j2.ok ? 'Added' : (j2.message || 'Failed');
-      if (j2.ok) renderShowDetail(showId);
+      const j4 = await r2.json();
+      $('#ttMsg').textContent = j4.ok ? 'Added' : (j4.message || 'Failed');
+      if (j4.ok) renderShowDetail(showId);
     });
+
+    // Attendees export toast
+    const lastExportEl = $('#lastExport');
+    $('#btnAttCsv').addEventListener('click', () => {
+      const ts = new Date().toLocaleString();
+      lastExportEl.textContent = 'Last exported: ' + ts;
+      toast('Attendees CSV download started');
+    });
+
+    // Simple demo chart (static computation for now)
+    drawSalesChart('salesChart', [5, 10, 13, 17, 18, 20, 26, 30, 32, 40]);
+    $('#insights').textContent = 'Early Insight: steady growth; consider a “Final Tickets” push at 80% capacity.';
+  }
+
+  // Simple canvas line renderer (no external libs)
+  function drawSalesChart(canvasId, points){
+    const c = document.getElementById(canvasId);
+    if(!c || !c.getContext) return;
+    const ctx = c.getContext('2d');
+    const w = c.width, h = c.height;
+    ctx.clearRect(0,0,w,h);
+    if (!points || !points.length) return;
+
+    const max = Math.max(...points);
+    const pad = 24, innerW = w - pad*2, innerH = h - pad*2;
+
+    // axes
+    ctx.beginPath();
+    ctx.moveTo(pad, pad);
+    ctx.lineTo(pad, h-pad);
+    ctx.lineTo(w-pad, h-pad);
+    ctx.stroke();
+
+    // line
+    ctx.beginPath();
+    points.forEach((v, i) => {
+      const x = pad + (i * (innerW / (points.length - 1)));
+      const y = h - pad - (v / max) * innerH;
+      if (i === 0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
   }
 
   // ===== Orders =====
-  async function loadOrders(q){
-    const wrap = $('#ordersWrap');
-    wrap.innerHTML = '<div class="note">Loading…</div>';
-    const r = await API('/admin/orders?q='+encodeURIComponent(q||'')+'&limit=50');
-    const j = await r.json();
-    if(!j.ok){ wrap.innerHTML = '<div class="danger">Failed to load orders</div>'; return; }
-    if(!j.items || j.items.length===0){ wrap.innerHTML = '<div class="note">No orders found.</div>'; return; }
-    wrap.innerHTML = '<table class="table"><thead><tr><th>Date</th><th>Email</th><th>Show</th><th>Qty</th><th>Amount</th><th>Status</th><th></th></tr></thead><tbody>'
-      + j.items.map(o => {
-          const when = new Date(o.createdAt).toLocaleString();
-          const show = o.show ? (o.show.title + ' (' + new Date(o.show.date).toLocaleDateString() + ')') : '—';
-          return '<tr>'
-            + '<td>'+when+'</td>'
-            + '<td>'+(o.email||'—')+'</td>'
-            + '<td>'+show+'</td>'
-            + '<td>'+(o.quantity ?? '—')+'</td>'
-            + '<td>'+fmtMoney(o.amountPence)+'</td>'
-            + '<td>'+o.status+'</td>'
-            + '<td><button class="btn ghost" data-open-order="'+o.id+'">Open</button></td>'
-            + '</tr>';
-        }).join('')
-      + '</tbody></table>';
-    wrap.onclick = e => {
-      const btn = e.target.closest('[data-open-order]');
-      if(!btn) return;
-      switchView('orderDetail', btn.getAttribute('data-open-order'));
-    };
-  }
-
   async function renderOrderDetail(orderId){
     const wrap = $('#viewContent');
     wrap.innerHTML = '<div class="note">Loading…</div>';
@@ -383,6 +492,7 @@ router.get('/ui', (_req, res) => {
     const j = await r.json();
     if(!j.ok){ wrap.innerHTML = '<div class="danger">Failed to load order</div>'; return; }
     const o = j.order;
+
     wrap.innerHTML =
       '<div class="grid">'
       + '<div class="card"><h3 style="margin:0 0 8px">Order '+o.id+'</h3>'
@@ -400,7 +510,8 @@ router.get('/ui', (_req, res) => {
       + '<div class="grid two">'
       +   '<div class="card">'
       +     '<h4 style="margin-top:0">Notes</h4>'
-      +     '<div class="row"><input id="noteText" placeholder="Add a note…"/><button class="btn primary" id="btnAddNote">Add</button></div>'
+      +     '<div class="row"><input id="noteQ" placeholder="Search notes…"/><button class="btn ghost" id="btnSearchNotes">Search</button></div>'
+      +     '<div class="row" style="margin-top:8px"><input id="noteText" placeholder="Add a note…"/><button class="btn primary" id="btnAddNote">Add</button></div>'
       +     '<div id="notesWrap" class="grid" style="margin-top:8px"></div>'
       +     '<div class="note" id="noteMsg"></div>'
       +   '</div>'
@@ -410,28 +521,27 @@ router.get('/ui', (_req, res) => {
       +     + '</tbody></table>'
       +   '</div>'
       + '</div>'
+      + '<div class="card"><h4 style="margin-top:0">Activity</h4><div id="activityWrap" class="grid"></div></div>'
       + '</div>';
 
-    // ===== Refund handler =====
-    const refundBtn = $('#btnRefund');
-    if (refundBtn) {
-      refundBtn.onclick = async () => {
-        const amount = $('#refundAmount').value ? Number($('#refundAmount').value) : null;
-        const reason = $('#refundReason').value || '';
-        const r2 = await API('/admin/orders/'+encodeURIComponent(orderId)+'/refund', {
-          method:'POST',
-          body: JSON.stringify({ amountPence: amount, reason })
-        });
-        const j2 = await r2.json();
-        $('#refundMsg').textContent = j2.ok ? 'Refund issued successfully' : (j2.message||'Failed');
-        if (j2.ok) renderOrderDetail(orderId);
-      };
-    }
+    // Refund button
+    $('#btnRefund').onclick = async () => {
+      const amount = $('#refundAmount').value ? Number($('#refundAmount').value) : null;
+      const reason = $('#refundReason').value || '';
+      const r = await API('/admin/orders/'+encodeURIComponent(orderId)+'/refund', {
+        method:'POST',
+        body: JSON.stringify({ amountPence: amount, reason })
+      });
+      const j = await r.json();
+      $('#refundMsg').textContent = j.ok ? 'Refund issued successfully' : (j.message||'Failed');
+      if(j.ok) renderOrderDetail(orderId);
+    };
 
-    // ===== Notes render & actions =====
+    // Notes (search + CRUD)
+    let currentNotes = (o.notes || []);
     const notesWrap = $('#notesWrap');
-    const renderNotes = () => {
-      notesWrap.innerHTML = (o.notes||[]).map(n => {
+    const renderNotes = (list) => {
+      notesWrap.innerHTML = (list||[]).map(n => {
         const who = n.user ? (n.user.name || n.user.email || 'User') : 'System';
         return '<div class="card" data-note="'+n.id+'">'
           + '<div class="note">'+new Date(n.createdAt).toLocaleString()+' — '+who+'</div>'
@@ -443,47 +553,71 @@ router.get('/ui', (_req, res) => {
           + '</div>';
       }).join('') || '<div class="note">No notes yet.</div>';
     };
-    renderNotes();
+    renderNotes(currentNotes);
 
-    // Add note
+    $('#btnSearchNotes').onclick = async () => {
+      const q = $('#noteQ').value || '';
+      const r = await API('/admin/orders/'+encodeURIComponent(orderId)+'/notes?q='+encodeURIComponent(q));
+      const j2 = await r.json();
+      if (!j2.ok) { $('#noteMsg').textContent = j2.message || 'Search failed'; return; }
+      currentNotes = j2.notes || [];
+      renderNotes(currentNotes);
+    };
+
     $('#btnAddNote').onclick = async () => {
       const txt = $('#noteText').value;
       if(!txt.trim()) return;
-      const r3 = await API('/admin/orders/'+encodeURIComponent(orderId)+'/notes', { method:'POST', body: JSON.stringify({ text: txt }) });
-      const j3 = await r3.json();
+      const r = await API('/admin/orders/'+encodeURIComponent(orderId)+'/notes', { method:'POST', body: JSON.stringify({ text: txt }) });
+      const j3 = await r.json();
       $('#noteMsg').textContent = j3.ok ? 'Saved' : (j3.message||'Failed');
       if (j3.ok) {
-        o.notes.unshift(j3.note);
+        currentNotes.unshift(j3.note);
         $('#noteText').value = '';
-        renderNotes();
+        renderNotes(currentNotes);
       }
     };
 
-    // Edit / delete notes
     notesWrap.onclick = async e => {
       const card = e.target.closest('[data-note]');
       if(!card) return;
       const noteId = card.getAttribute('data-note');
       if (e.target.classList.contains('note_save')) {
         const txt = card.querySelector('.noteText').value;
-        const r4 = await API('/admin/orders/'+encodeURIComponent(orderId)+'/notes/'+encodeURIComponent(noteId), {
+        const r = await API('/admin/orders/'+encodeURIComponent(orderId)+'/notes/'+encodeURIComponent(noteId), {
           method:'PATCH',
           body: JSON.stringify({ text: txt })
         });
-        const j4 = await r4.json();
+        const j4 = await r.json();
         $('#noteMsg').textContent = j4.ok ? 'Saved' : (j4.message || 'Failed');
       }
       if (e.target.classList.contains('note_del')) {
         if (!confirm('Delete this note?')) return;
-        const r5 = await API('/admin/orders/'+encodeURIComponent(orderId)+'/notes/'+encodeURIComponent(noteId), { method:'DELETE' });
-        const j5 = await r5.json();
+        const r = await API('/admin/orders/'+encodeURIComponent(orderId)+'/notes/'+encodeURIComponent(noteId), { method:'DELETE' });
+        const j5 = await r.json();
         $('#noteMsg').textContent = j5.ok ? 'Deleted' : (j5.message || 'Failed');
         if (j5.ok) {
-          o.notes = o.notes.filter(n => n.id !== noteId);
-          renderNotes();
+          currentNotes = currentNotes.filter(n => n.id !== noteId);
+          renderNotes(currentNotes);
         }
       }
     };
+
+    // Activity feed
+    const act = await API('/admin/orders/'+encodeURIComponent(orderId)+'/activity');
+    const aj = await act.json();
+    const activityWrap = $('#activityWrap');
+    if (!aj.ok) {
+      activityWrap.innerHTML = '<div class="note">Failed to load activity</div>';
+    } else {
+      activityWrap.innerHTML = (aj.events || []).map(ev => {
+        const when = new Date(ev.at).toLocaleString();
+        if (ev.type === 'ORDER_CREATED') return '<div class="card">['+when+'] Order created</div>';
+        if (ev.type === 'NOTE') return '<div class="card">['+when+'] Note: '+(ev.data?.text||'')+'</div>';
+        if (ev.type === 'REFUND') return '<div class="card">['+when+'] Refund: '+fmtMoney(ev.data?.amount||0)+' '+(ev.data?.reason ? ('— ' + ev.data.reason) : '')+'</div>';
+        if (ev.type === 'TICKET_SCANNED') return '<div class="card">['+when+'] Ticket scanned: '+(ev.data?.serial||'')+(ev.data?.holderName ? (' ('+ev.data.holderName+')') : '')+'</div>';
+        return '<div class="card">['+when+'] '+ev.type+'</div>';
+      }).join('') || '<div class="note">No activity yet.</div>';
+    }
   }
 
   // ===== Navigation =====
