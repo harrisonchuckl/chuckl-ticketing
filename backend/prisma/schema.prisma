@@ -1,4 +1,4 @@
-// Prisma schema for Chuckl. Ticketing
+// prisma/schema.prisma
 
 generator client {
   provider = "prisma-client-js"
@@ -9,37 +9,46 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// -----------------------------
-// ENUMS
-// -----------------------------
+model User {
+  id             String           @id @default(cuid())
+  email          String           @unique
+  name           String?
+  password       String?
+  createdAt      DateTime         @default(now())
+  orders         Order[]
+  tickets        Ticket[]
+  passwordResets PasswordReset[]
+}
+
+model Order {
+  id          String        @id @default(cuid())
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  email       String?
+  amountPence Int?
+  status      OrderStatus   @default(PENDING)
+  userId      String?
+  user        User?         @relation(fields: [userId], references: [id])
+  showId      String?
+  show        Show?         @relation(fields: [showId], references: [id])
+  tickets     Ticket[]
+}
 
 enum OrderStatus {
   PENDING
   PAID
+  REFUNDED  // ✅ Added to match webhook handler
   CANCELLED
 }
 
-enum TicketStatus {
-  VALID
-  USED
-  CANCELLED
-}
-
-// -----------------------------
-// MODELS
-// -----------------------------
-
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  password  String?
-  orders    Order[]
-  tickets   Ticket[]
-  createdAt DateTime @default(now())
-
-  // 🔐 Password reset tokens (backlink)
-  passwordResets PasswordReset[]
+model Show {
+  id          String       @id @default(cuid())
+  title       String
+  date        DateTime
+  venueId     String?
+  venue       Venue?       @relation(fields: [venueId], references: [id])
+  ticketTypes TicketType[]
+  orders      Order[]
 }
 
 model Venue {
@@ -50,82 +59,23 @@ model Venue {
   postcode  String?
   capacity  Int?
   shows     Show[]
-  createdAt DateTime @default(now())
-}
-
-model Show {
-  id          String       @id @default(cuid())
-  venueId     String
-  venue       Venue        @relation(fields: [venueId], references: [id])
-  title       String
-  description String?
-  date        DateTime     @default(now())
-  tickets     Ticket[]
-  orders      Order[]
-  ticketTypes TicketType[]
-  createdAt   DateTime     @default(now())
-
-  @@index([venueId])
-  @@index([date])
 }
 
 model TicketType {
-  id          String   @id @default(cuid())
-  showId      String
-  show        Show     @relation(fields: [showId], references: [id])
-  name        String
-  pricePence  Int
-  available   Int?
-  createdAt   DateTime @default(now())
-
-  @@index([showId])
-
-  // Backlink from Order → TicketType
-  orders      Order[]
-}
-
-model Order {
-  id           String       @id @default(cuid())
-  showId       String
-  show         Show         @relation(fields: [showId], references: [id])
-  userId       String?
-  user         User?        @relation(fields: [userId], references: [id])
-  email        String
-  quantity     Int
-  amountPence  Int
-  stripeId     String
-  status       OrderStatus  @default(PENDING)
-  tickets      Ticket[]
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-
-  // Optional linkage to the specific ticket type purchased
-  ticketTypeId String?
-  ticketType   TicketType?  @relation(fields: [ticketTypeId], references: [id])
-
-  @@index([showId])
-  @@index([userId])
-  @@index([status])
+  id         String   @id @default(cuid())
+  name       String
+  pricePence Int
+  showId     String?
+  show       Show?    @relation(fields: [showId], references: [id])
 }
 
 model Ticket {
-  id         String       @id @default(cuid())
-  orderId    String
-  order      Order        @relation(fields: [orderId], references: [id])
-  showId     String
-  show       Show         @relation(fields: [showId], references: [id])
-  serial     String       @unique
-  qrData     String
-  status     TicketStatus @default(VALID)
+  id         String   @id @default(cuid())
+  serial     String   @unique
   holderName String?
-  createdAt  DateTime     @default(now())
-  scannedAt  DateTime?
-  userId     String?
-  user       User?        @relation(fields: [userId], references: [id])
-
-  @@index([orderId])
-  @@index([showId])
-  @@index([userId])
+  status     String
+  orderId    String?
+  order      Order?   @relation(fields: [orderId], references: [id])
 }
 
 model PasswordReset {
@@ -133,11 +83,5 @@ model PasswordReset {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   token     String   @unique
-  expiresAt DateTime
-  usedAt    DateTime?
   createdAt DateTime @default(now())
-
-  @@index([userId])
-  @@index([token])
-  @@index([expiresAt])
 }
