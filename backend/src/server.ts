@@ -16,11 +16,13 @@ import adminShows from './routes/admin-shows.js';
 import adminTicketTypes from './routes/admin-tickettypes.js';
 import adminUploads from './routes/admin-uploads.js';
 import adminOrders from './routes/admin-orders.js';
-import adminRefunds from './routes/admin-refunds.js'; // 👈 NEW
 import events from './routes/events.js';
 import auth from './routes/auth.js';
 import scanApi from './routes/scan.js';
 import scanUI from './routes/scan-ui.js';
+
+// NEW: Show detail + ticket-type inline management + KPIs
+import adminShowDetail from './routes/admin-show-detail.js';
 
 const app = express();
 
@@ -56,12 +58,14 @@ app.use('/auth', auth);
 app.use('/admin', adminUI);
 
 // --- Admin JSON APIs ---
+// Mount the new Show Detail router first to ensure its endpoints are used
+app.use('/admin', adminShowDetail);
+
 app.use('/admin', adminVenues);
 app.use('/admin', adminShows);
 app.use('/admin', adminTicketTypes);
 app.use('/admin', adminOrders);
 app.use('/admin', adminUploads);
-app.use('/admin', adminRefunds); // 👈 mount refunds
 
 // Legacy / bootstrap admin endpoints (if you still need them)
 app.use('/admin', admin);
