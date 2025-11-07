@@ -1,40 +1,40 @@
 // backend/src/routes/webhook.ts
 import { Router } from 'express';
 import Stripe from 'stripe';
-import { prisma } from '../lib/db.js';
+import { PrismaClient } from '@prisma/client';
 
+const prisma = new PrismaClient();
 const router = Router();
 
-const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
-const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
-
-const stripe = new Stripe(STRIPE_SECRET_KEY, {
-  apiVersion: '2024-06-20',
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
+  apiVersion: '2024-06-20'
 });
 
-// Stripe webhooks (raw body set up in server.ts)
-router.post('/webhooks/stripe', async (req, res) => {
-  const sig = req.headers['stripe-signature'] as string | undefined;
-  if (!sig || !STRIPE_WEBHOOK_SECRET) {
-    return res.status(400).send('Missing Stripe signature or webhook secret');
-  }
+router.post('/', async (req, res) => {
+  const sig = req.headers['stripe-signature'] as string;
+  if (!sig) return res.status(400).send('Missing signature');
 
   let event: Stripe.Event;
   try {
-    event = stripe.webhooks.constructEvent(req.body, sig, STRIPE_WEBHOOK_SECRET);
+    event = stripe.webhooks.constructEvent(
+      req.body,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET || ''
+    );
   } catch (err: any) {
+    console.error('Webhook signature failed', err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
   try {
     switch (event.type) {
-      case 'checkout.session.completed': {
-        const session = event.data.object as Stripe.Checkout.Session;
-        const orderId = session?.metadata?.orderId;
-        if (orderId) {
+      case 'payment_intent.succeeded': {
+        const intent = event.data.object as Stripe.PaymentIntent;
+        const order = await prisma.order.findFirst({ where: { stripeId: intent.id } });
+        if (order) {
           await prisma.order.update({
-            where: { id: orderId },
-            data: { status: 'PAID' },
+            where: { id: order.id },
+            data: { status: 'PAID' }
           });
         }
         break;
@@ -42,23 +42,41 @@ router.post('/webhooks/stripe', async (req, res) => {
 
       case 'charge.refunded': {
         const charge = event.data.object as Stripe.Charge;
-        const orderId = charge?.metadata?.orderId;
-        if (orderId) {
+        const refundList = charge.refunds?.data || [];
+        const existingOrder = await prisma.order.findFirst({
+          where: { stripeId: charge.payment_intent as string }
+        });
+        if (existingOrder) {
           await prisma.order.update({
-            where: { id: orderId },
-            data: { status: 'REFUNDED' }, // ✅ Matches new enum
+            where: { id: existingOrder.id },
+            data: { status: 'REFUNDED' }
           });
+
+          for (const ref of refundList) {
+            const exists = await prisma.refund.findFirst({ where: { stripeId: ref.id } });
+            if (!exists) {
+              await prisma.refund.create({
+                data: {
+                  stripeId: ref.id,
+                  orderId: existingOrder.id,
+                  amount: ref.amount || 0,
+                  reason: ref.reason || null
+                }
+              });
+            }
+          }
         }
         break;
       }
 
       default:
-        break;
+        console.log(`Unhandled event type ${event.type}`);
     }
 
     res.json({ received: true });
   } catch (e: any) {
-    res.status(500).send(`Webhook handler error: ${e?.message || 'Unknown error'}`);
+    console.error('Webhook processing failed', e);
+    res.status(500).send('Webhook handling error');
   }
 });
 
