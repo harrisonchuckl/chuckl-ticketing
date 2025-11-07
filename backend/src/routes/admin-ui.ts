@@ -42,9 +42,7 @@ router.get('/ui', (_req, res) => {
   .login h3{margin:0 0 8px}
   .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
   .kpi{background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px}
-  .tabs{display:flex;gap:8px;margin:10px 0}
-  .tabs .pill{padding:6px 10px;border:1px solid var(--border);border-radius:999px;background:#fff;cursor:pointer}
-  .tabs .pill.active{background:var(--accent-2);border-color:#c7d2fe;color:var(--accent)}
+  .chart{background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px}
 </style>
 </head>
 <body>
@@ -60,7 +58,6 @@ router.get('/ui', (_req, res) => {
     <button data-view="shows">Shows</button>
     <button data-view="orders">Orders</button>
     <button data-view="venues">Venues</button>
-    <h4>Insights</h4>
     <button data-view="analytics">Analytics</button>
     <h4>Marketing</h4>
     <button data-view="audiences">Audiences</button>
@@ -77,7 +74,7 @@ router.get('/ui', (_req, res) => {
     </div>
     <div class="content" id="viewContent">
       <div class="card">
-        <p>Welcome to your organiser console. Use the menu to manage shows, orders, venues, analytics and marketing.</p>
+        <p>Welcome to your organiser console. Use the menu to manage shows, orders, venues, and marketing.</p>
         <p class="note">You’ll see more tools appear here as we build them in.</p>
       </div>
     </div>
@@ -120,7 +117,6 @@ router.get('/ui', (_req, res) => {
         + '<div class="card"><h4>Shortcuts</h4><div class="row">'
         + '<button class="btn ghost" data-goto="shows">Go to Shows</button>'
         + '<button class="btn ghost" data-goto="orders">Go to Orders</button>'
-        + '<button class="btn ghost" data-goto="analytics">View Analytics</button>'
         + '</div></div></div>';
       $('#viewContent').addEventListener('click', function(e){
         const el = e.target.closest('[data-goto]');
@@ -146,27 +142,17 @@ router.get('/ui', (_req, res) => {
       renderShowDetail(showId);
     },
 
-    // ---- Orders list & detail with notes + resend + CSV export ----
+    // ---- Orders list & detail with notes ----
     orders(){
       $('#viewTitle').textContent = 'Orders';
       $('#toolbarActions').innerHTML =
         '<div class="row">'
-        + '<input id="ordersQ" placeholder="Search email / Stripe / show"/>'
-        + '<button class="btn ghost" id="btnSearchOrders">Search</button>'
-        + '<a class="btn ghost" id="btnExportCsv" href="#">Export CSV</a>'
+        + '<input id="ordersQ" placeholder="Search email / Stripe / show"/><button class="btn ghost" id="btnSearchOrders">Search</button>'
         + '</div>';
       $('#viewContent').innerHTML = '<div id="ordersWrap" class="grid"></div>';
       const run = () => loadOrders($('#ordersQ').value || '');
       run();
-      $('#toolbarActions').onclick = async e => {
-        if (e.target.id==='btnSearchOrders') run();
-        if (e.target.id==='btnExportCsv') {
-          e.preventDefault();
-          const q = encodeURIComponent($('#ordersQ').value || '');
-          const url = '/admin/orders/export.csv?q='+q;
-          window.open(url, '_blank', 'noopener');
-        }
-      };
+      $('#toolbarActions').onclick = async e => { if (e.target.id==='btnSearchOrders') run(); }
     },
 
     orderDetail(orderId){
@@ -221,52 +207,67 @@ router.get('/ui', (_req, res) => {
       };
     },
 
+    // ---- Analytics (NEW) ----
     analytics(){
       $('#viewTitle').textContent = 'Analytics';
+      // date defaults: last 30 days
+      const today = new Date();
+      const to = today.toISOString().slice(0,10);
+      const from = new Date(today.getTime() - 29*24*60*60*1000).toISOString().slice(0,10);
+
       $('#toolbarActions').innerHTML =
         '<div class="row">'
-        + '<input id="a_from" type="date"/>'
-        + '<input id="a_to" type="date"/>'
-        + '<button class="btn ghost" id="btnRunAnalytics">Run</button>'
+        + '<input id="a_from" type="date" value="'+from+'"/>'
+        + '<input id="a_to" type="date" value="'+to+'"/>'
+        + '<select id="a_metric"><option value="revenue">Revenue</option><option value="orders">Orders</option><option value="tickets">Tickets</option></select>'
+        + '<button class="btn ghost" id="a_refresh">Refresh</button>'
         + '</div>';
+
       $('#viewContent').innerHTML =
-        '<div id="analyticsWrap" class="grid">'
-        +   '<div class="kpis">'
-        +     '<div class="kpi"><div class="note">Orders</div><div id="k_orders" style="font-size:20px;font-weight:700">—</div></div>'
-        +     '<div class="kpi"><div class="note">Tickets Sold</div><div id="k_tickets" style="font-size:20px;font-weight:700">—</div></div>'
-        +     '<div class="kpi"><div class="note">Revenue</div><div id="k_rev" style="font-size:20px;font-weight:700">—</div></div>'
-        +     '<div class="kpi"><div class="note">Avg. Order</div><div id="k_aov" style="font-size:20px;font-weight:700">—</div></div>'
-        +   '</div>'
-        +   '<div class="card">'
-        +     '<h4 style="margin:0 0 8px">Daily Sales</h4>'
-        +     '<table class="table"><thead><tr><th>Date</th><th>Orders</th><th>Tickets</th><th>Revenue</th></tr></thead><tbody id="a_tbody"></tbody></table>'
-        +   '</div>'
-        + '</div>';
+        '<div class="kpis" id="a_kpis"></div>'
+        + '<div class="chart"><h4 style="margin:0 0 8px">Trend</h4><div id="a_chart"></div></div>'
+        + '<div class="card"><h4 style="margin:0 0 8px">Daily table</h4><div id="a_table"></div></div>';
 
       const run = async () => {
-        const from = $('#a_from').value;
-        const to = $('#a_to').value;
-        const q = new URLSearchParams();
-        if (from) q.set('from', from);
-        if (to) q.set('to', to);
-        const r = await API('/admin/analytics/overview?'+q.toString());
+        const f = ($('#a_from').value || from);
+        const t = ($('#a_to').value || to);
+        const metric = $('#a_metric').value || 'revenue';
+        const r = await API('/admin/analytics/overview?from='+encodeURIComponent(f)+'&to='+encodeURIComponent(t));
         const j = await r.json();
-        if (!j.ok) {
-          $('#analyticsWrap').innerHTML = '<div class="danger">Failed to load analytics</div>';
+        if(!j.ok){
+          $('#a_kpis').innerHTML = '<div class="note">Failed to load analytics.</div>';
+          $('#a_chart').innerHTML = '';
+          $('#a_table').innerHTML = '';
           return;
         }
-        $('#k_orders').textContent = j.kpis.ordersCount;
-        $('#k_tickets').textContent = j.kpis.ticketsSold;
-        $('#k_rev').textContent = fmtMoney(j.kpis.revenuePence);
-        $('#k_aov').textContent = fmtMoney(j.kpis.avgOrderValuePence);
+        // KPIs
+        const k = j.kpis || {};
+        $('#a_kpis').innerHTML =
+          '<div class="kpi"><div class="note">Revenue</div><div style="font-size:20px;font-weight:700">'+fmtMoney(k.totalRevenuePence)+'</div></div>'
+          + '<div class="kpi"><div class="note">Orders</div><div style="font-size:20px;font-weight:700">'+(k.totalOrders||0)+'</div></div>'
+          + '<div class="kpi"><div class="note">Tickets</div><div style="font-size:20px;font-weight:700">'+(k.totalTickets||0)+'</div></div>'
+          + '<div class="kpi"><div class="note">Avg. Order Value</div><div style="font-size:20px;font-weight:700">'+fmtMoney(k.avgOrderValuePence||0)+'</div></div>';
 
-        $('#a_tbody').innerHTML = (j.series||[]).map(row =>
-          '<tr><td>'+row.date+'</td><td>'+row.orders+'</td><td>'+row.tickets+'</td><td>'+fmtMoney(row.revenuePence)+'</td></tr>'
-        ).join('') || '<tr><td colspan="4" class="note">No data.</td></tr>';
+        const series = j.series || [];
+        // Table
+        $('#a_table').innerHTML =
+          '<table class="table"><thead><tr><th>Date</th><th>Revenue</th><th>Orders</th><th>Tickets</th></tr></thead><tbody>'
+          + series.map(d => '<tr><td>'+d.date+'</td><td>'+fmtMoney(d.revenuePence)+'</td><td>'+d.ordersCount+'</td><td>'+d.ticketsCount+'</td></tr>').join('')
+          + '</tbody></table>';
+
+        // Chart
+        const values = series.map(d => {
+          switch(metric){
+            case 'orders': return d.ordersCount;
+            case 'tickets': return d.ticketsCount;
+            default: return Math.round((d.revenuePence||0)/100); // pounds
+          }
+        });
+        drawLineChart('#a_chart', series.map(d=>d.date), values, metric);
       };
 
+      $('#toolbarActions').onclick = e => { if (e.target && e.target.id === 'a_refresh') run(); }
       run();
-      $('#toolbarActions').onclick = (e) => { if (e.target.id === 'btnRunAnalytics') run(); };
     },
 
     audiences(){
@@ -322,158 +323,91 @@ router.get('/ui', (_req, res) => {
     if(!j.ok){ $('#viewContent').innerHTML = '<div class="danger">Failed to load show</div>'; return; }
     const { show, kpis } = j;
 
-    // Tabs: Details | Analytics
     $('#viewContent').innerHTML =
-      '<div class="card">'
-      +  '<div class="tabs">'
-      +    '<span class="pill active" data-tab="details">Details</span>'
-      +    '<span class="pill" data-tab="analytics">Analytics</span>'
-      +  '</div>'
-      +  '<div id="tabContent"></div>'
+      '<div class="grid">'
+      + '<div class="card"><h3 style="margin:0 0 8px">'+show.title+'</h3>'
+      + '<div class="note">'+(show.venue ? (show.venue.name + (show.venue.city ? (', '+show.venue.city) : '')) : '—')+'</div>'
+      + '<div class="note">Date: '+new Date(show.date).toLocaleString()+'</div></div>'
+      + '<div class="kpis">'
+      +   '<div class="kpi"><div class="note">Capacity</div><div style="font-size:20px;font-weight:700">'+(kpis.capacity ?? '—')+'</div></div>'
+      +   '<div class="kpi"><div class="note">Total Available</div><div style="font-size:20px;font-weight:700">'+(kpis.totalAvailable ?? 0)+'</div></div>'
+      +   '<div class="kpi"><div class="note">Tickets Sold</div><div style="font-size:20px;font-weight:700">'+(kpis.ticketsSold ?? 0)+'</div></div>'
+      +   '<div class="kpi"><div class="note">Revenue</div><div style="font-size:20px;font-weight:700">'+fmtMoney(kpis.revenuePence)+'</div></div>'
+      + '</div>'
+      + '<div class="grid two">'
+      +   '<div class="card">'
+      +     '<h4 style="margin-top:0">Ticket Types</h4>'
+      +     '<table class="table"><thead><tr><th>Name</th><th>Price</th><th>Avail.</th><th></th></tr></thead>'
+      +     '<tbody id="ttBody"></tbody></table>'
+      +     '<div class="row" style="margin-top:8px">'
+      +       '<input id="tt_name" placeholder="Name"/>'
+      +       '<input id="tt_price" type="number" placeholder="Price (pence)"/>'
+      +       '<input id="tt_avail" type="number" placeholder="Available"/>'
+      +       '<button class="btn primary" id="btnAddTT">Add</button>'
+      +     '</div>'
+      +     '<div class="note" id="ttMsg"></div>'
+      +   '</div>'
+      +   '<div class="card">'
+      +     '<h4 style="margin-top:0">Attendees</h4>'
+      +     '<p class="note">Download a CSV for door list or marketing exports.</p>'
+      +     '<a class="btn ghost" href="/admin/shows/'+show.id+'/attendees.csv" target="_blank" rel="noopener">Download CSV</a>'
+      +   '</div>'
+      + '</div>'
       + '</div>';
 
-    const tabContent = $('#tabContent');
-    const renderDetails = () => {
-      tabContent.innerHTML =
-        '<div class="grid">'
-        + '<div class="card"><h3 style="margin:0 0 8px">'+show.title+'</h3>'
-        + '<div class="note">'+(show.venue ? (show.venue.name + (show.venue.city ? (', '+show.venue.city) : '')) : '—')+'</div>'
-        + '<div class="note">Date: '+new Date(show.date).toLocaleString()+'</div></div>'
-        + '<div class="kpis">'
-        +   '<div class="kpi"><div class="note">Orders</div><div style="font-size:20px;font-weight:700">'+(kpis.totalOrders ?? 0)+'</div></div>'
-        +   '<div class="kpi"><div class="note">Tickets Sold</div><div style="font-size:20px;font-weight:700">'+(kpis.totalTickets ?? 0)+'</div></div>'
-        +   '<div class="kpi"><div class="note">Revenue</div><div style="font-size:20px;font-weight:700">'+fmtMoney(kpis.totalRevenue ?? 0)+'</div></div>'
-        +   '<div class="kpi"><div class="note">Refunded</div><div style="font-size:20px;font-weight:700">'+fmtMoney(kpis.refundedRevenue ?? 0)+'</div></div>'
-        + '</div>'
-        + '<div class="grid two">'
-        +   '<div class="card">'
-        +     '<h4 style="margin-top:0">Ticket Types</h4>'
-        +     '<table class="table"><thead><tr><th>Name</th><th>Price</th><th>Avail.</th><th></th></tr></thead>'
-        +     '<tbody id="ttBody"></tbody></table>'
-        +     '<div class="row" style="margin-top:8px">'
-        +       '<input id="tt_name" placeholder="Name"/>'
-        +       '<input id="tt_price" type="number" placeholder="Price (pence)"/>'
-        +       '<input id="tt_avail" type="number" placeholder="Available"/>'
-        +       '<button class="btn primary" id="btnAddTT">Add</button>'
-        +     '</div>'
-        +     '<div class="note" id="ttMsg"></div>'
-        +   '</div>'
-        +   '<div class="card">'
-        +     '<h4 style="margin-top:0">Attendees</h4>'
-        +     '<p class="note">Download a CSV for door list or marketing exports.</p>'
-        +     '<a class="btn ghost" href="/admin/shows/'+show.id+'/attendees.csv" target="_blank" rel="noopener">Download CSV</a>'
-        +   '</div>'
-        + '</div>'
-        + '</div>';
+    // Render ticket types
+    const tbody = $('#ttBody');
+    tbody.innerHTML = (show.ticketTypes || []).map(tt => {
+      return '<tr data-tt="'+tt.id+'">'
+        + '<td><input class="tt_name" value="'+(tt.name||'')+'"/></td>'
+        + '<td><input class="tt_price" type="number" value="'+(tt.pricePence||0)+'"/></td>'
+        + '<td><input class="tt_avail" type="number" value="'+(tt.available==null?'':tt.available)+'"/></td>'
+        + '<td>'
+        +   '<button class="btn ghost tt_save">Save</button> '
+        +   '<button class="btn ghost tt_del" style="color:#dc2626;border-color:#fecaca">Delete</button>'
+        + '</td>'
+        + '</tr>';
+    }).join('');
 
-      // Render ticket types
-      const tbody = $('#ttBody');
-      tbody.innerHTML = (show.ticketTypes || []).map(tt => {
-        return '<tr data-tt="'+tt.id+'">'
-          + '<td><input class="tt_name" value="'+(tt.name||'')+'"/></td>'
-          + '<td><input class="tt_price" type="number" value="'+(tt.pricePence||0)+'"/></td>'
-          + '<td><input class="tt_avail" type="number" value="'+(tt.available==null?'':tt.available)+'"/></td>'
-          + '<td>'
-          +   '<button class="btn ghost tt_save">Save</button> '
-          +   '<button class="btn ghost tt_del" style="color:#dc2626;border-color:#fecaca">Delete</button>'
-          + '</td>'
-          + '</tr>';
-      }).join('');
-
-      tbody.onclick = async e => {
-        const tr = e.target.closest('tr[data-tt]');
-        if(!tr) return;
-        const id = tr.getAttribute('data-tt');
-        if (e.target.classList.contains('tt_save')) {
-          const name = tr.querySelector('.tt_name').value;
-          const pricePence = Number(tr.querySelector('.tt_price').value || 0);
-          const availRaw = tr.querySelector('.tt_avail').value;
-          const available = availRaw === '' ? null : Number(availRaw);
-          const r = await API('/admin/ticket-types/'+encodeURIComponent(id), {
-            method:'PATCH',
-            body: JSON.stringify({ name, pricePence, available })
-          });
-          const j = await r.json();
-          $('#ttMsg').textContent = j.ok ? 'Saved' : (j.message || 'Failed');
-          if (j.ok) renderShowDetail(show.id);
-        }
-        if (e.target.classList.contains('tt_del')) {
-          if (!confirm('Delete this ticket type?')) return;
-          const r = await API('/admin/ticket-types/'+encodeURIComponent(id), { method: 'DELETE' });
-          const j = await r.json();
-          $('#ttMsg').textContent = j.ok ? 'Deleted' : (j.message || 'Failed');
-          if (j.ok) renderShowDetail(show.id);
-        }
-      };
-
-      $('#btnAddTT')?.addEventListener('click', async () => {
-        const name = $('#tt_name').value;
-        const pricePence = Number($('#tt_price').value || 0);
-        const availRaw = $('#tt_avail').value;
+    // handlers
+    tbody.onclick = async e => {
+      const tr = e.target.closest('tr[data-tt]');
+      if(!tr) return;
+      const id = tr.getAttribute('data-tt');
+      if (e.target.classList.contains('tt_save')) {
+        const name = (tr.querySelector('.tt_name') as HTMLInputElement).value;
+        const pricePence = Number((tr.querySelector('.tt_price') as HTMLInputElement).value || 0);
+        const availRaw = (tr.querySelector('.tt_avail') as HTMLInputElement).value;
         const available = availRaw === '' ? null : Number(availRaw);
-        const r = await API('/admin/shows/'+encodeURIComponent(show.id)+'/ticket-types', {
-          method:'POST',
+        const r = await API('/admin/ticket-types/'+encodeURIComponent(id), {
+          method:'PATCH',
           body: JSON.stringify({ name, pricePence, available })
         });
-        const j2 = await r.json();
-        $('#ttMsg').textContent = j2.ok ? 'Added' : (j2.message || 'Failed');
-        if (j2.ok) renderShowDetail(show.id);
-      });
-    };
-
-    const renderAnalytics = async () => {
-      tabContent.innerHTML =
-        '<div class="grid">'
-        + '<div class="kpis">'
-        +   '<div class="kpi"><div class="note">Orders</div><div id="sa_orders" style="font-size:20px;font-weight:700">—</div></div>'
-        +   '<div class="kpi"><div class="note">Tickets Sold</div><div id="sa_tickets" style="font-size:20px;font-weight:700">—</div></div>'
-        +   '<div class="kpi"><div class="note">Revenue</div><div id="sa_rev" style="font-size:20px;font-weight:700">—</div></div>'
-        +   '<div class="kpi"><div class="note">Refunded</div><div id="sa_ref" style="font-size:20px;font-weight:700">—</div></div>'
-        + '</div>'
-        + '<div class="grid two">'
-        +   '<div class="card">'
-        +     '<h4 style="margin:0 0 8px">Daily Series</h4>'
-        +     '<table class="table"><thead><tr><th>Date</th><th>Orders</th><th>Tickets</th><th>Revenue</th></tr></thead><tbody id="sa_series"></tbody></table>'
-        +   '</div>'
-        +   '<div class="card">'
-        +     '<h4 style="margin:0 0 8px">Ticket Types</h4>'
-        +     '<table class="table"><thead><tr><th>Name</th><th>Sold</th><th>Price</th></tr></thead><tbody id="sa_tt"></tbody></table>'
-        +   '</div>'
-        + '</div>'
-        + '</div>';
-
-      const r = await API('/admin/analytics/show/'+encodeURIComponent(show.id));
-      const jx = await r.json();
-      if (!jx.ok) {
-        tabContent.innerHTML = '<div class="danger">Failed to load show analytics</div>';
-        return;
+        const j = await r.json();
+        $('#ttMsg').textContent = j.ok ? 'Saved' : (j.message || 'Failed');
+        if (j.ok) renderShowDetail(showId);
       }
-      $('#sa_orders').textContent = jx.kpis.ordersCount;
-      $('#sa_tickets').textContent = jx.kpis.ticketsSold;
-      $('#sa_rev').textContent = fmtMoney(jx.kpis.revenuePence);
-      $('#sa_ref').textContent = fmtMoney(jx.kpis.refundedRevenuePence);
-
-      $('#sa_series').innerHTML = (jx.series||[]).map(row =>
-        '<tr><td>'+row.date+'</td><td>'+row.orders+'</td><td>'+row.tickets+'</td><td>'+fmtMoney(row.revenuePence)+'</td></tr>'
-      ).join('') || '<tr><td colspan="4" class="note">No data.</td></tr>';
-
-      $('#sa_tt').innerHTML = (jx.ticketTypeBreakdown||[]).map(tt =>
-        '<tr><td>'+tt.name+'</td><td>'+tt.sold+'</td><td>'+fmtMoney(tt.pricePence)+'</td></tr>'
-      ).join('') || '<tr><td colspan="3" class="note">No breakdown.</td></tr>';
+      if (e.target.classList.contains('tt_del')) {
+        if (!confirm('Delete this ticket type?')) return;
+        const r = await API('/admin/ticket-types/'+encodeURIComponent(id), { method: 'DELETE' });
+        const j = await r.json();
+        $('#ttMsg').textContent = j.ok ? 'Deleted' : (j.message || 'Failed');
+        if (j.ok) renderShowDetail(showId);
+      }
     };
 
-    // initialise with Details
-    renderDetails();
-
-    // tab switching
-    document.querySelectorAll('.tabs .pill').forEach(p => {
-      p.addEventListener('click', (e) => {
-        document.querySelectorAll('.tabs .pill').forEach(x => x.classList.remove('active'));
-        p.classList.add('active');
-        const tab = p.getAttribute('data-tab');
-        if (tab === 'details') renderDetails();
-        if (tab === 'analytics') renderAnalytics();
+    $('#btnAddTT')?.addEventListener('click', async () => {
+      const name = (document.getElementById('tt_name') as HTMLInputElement).value;
+      const pricePence = Number((document.getElementById('tt_price') as HTMLInputElement).value || 0);
+      const availRaw = (document.getElementById('tt_avail') as HTMLInputElement).value;
+      const available = availRaw === '' ? null : Number(availRaw);
+      const r = await API('/admin/shows/'+encodeURIComponent(showId)+'/ticket-types', {
+        method:'POST',
+        body: JSON.stringify({ name, pricePence, available })
       });
+      const j2 = await r.json();
+      (document.getElementById('ttMsg') as HTMLElement).textContent = j2.ok ? 'Added' : (j2.message || 'Failed');
+      if (j2.ok) renderShowDetail(showId);
     });
   }
 
@@ -521,10 +455,6 @@ router.get('/ui', (_req, res) => {
       + '<div class="note">Amount: '+fmtMoney(o.amountPence)+'</div>'
       + '<div class="note">Qty: '+(o.quantity ?? '—')+'</div>'
       + '<div class="note">Status: '+o.status+'</div>'
-      + '<div class="row" style="margin-top:8px">'
-      +   '<button class="btn ghost" id="btnResend">Resend tickets</button>'
-      + '</div>'
-      + '<div class="note" id="resendMsg"></div>'
       + '</div>'
       + '<div class="grid two">'
       +   '<div class="card">'
@@ -541,14 +471,6 @@ router.get('/ui', (_req, res) => {
       + '</div>'
       + '</div>';
 
-    // Resend email
-    $('#btnResend').onclick = async () => {
-      const r = await API('/admin/orders/'+encodeURIComponent(orderId)+'/resend', { method:'POST' });
-      const jx = await r.json();
-      $('#resendMsg').textContent = jx.ok ? ('Email sent ('+(jx.provider||'ok')+')') : (jx.message||'Failed');
-    };
-
-    // Notes
     const notesWrap = $('#notesWrap');
     const renderNotes = () => {
       notesWrap.innerHTML = (o.notes||[]).map(n => {
@@ -566,44 +488,72 @@ router.get('/ui', (_req, res) => {
     renderNotes();
 
     // Add note
-    $('#btnAddNote').onclick = async () => {
-      const txt = $('#noteText').value;
+    (document.getElementById('btnAddNote') as HTMLButtonElement).onclick = async () => {
+      const txt = (document.getElementById('noteText') as HTMLInputElement).value;
       if(!txt.trim()) return;
       const r = await API('/admin/orders/'+encodeURIComponent(orderId)+'/notes', { method:'POST', body: JSON.stringify({ text: txt }) });
       const j2 = await r.json();
-      $('#noteMsg').textContent = j2.ok ? 'Saved' : (j2.message||'Failed');
+      (document.getElementById('noteMsg') as HTMLElement).textContent = j2.ok ? 'Saved' : (j2.message||'Failed');
       if (j2.ok) {
         o.notes.unshift(j2.note);
-        $('#noteText').value = '';
+        (document.getElementById('noteText') as HTMLInputElement).value = '';
         renderNotes();
       }
     };
 
     // Edit / delete notes
     notesWrap.onclick = async e => {
-      const card = e.target.closest('[data-note]');
+      const card = (e.target as HTMLElement).closest('[data-note]');
       if(!card) return;
       const noteId = card.getAttribute('data-note');
-      if (e.target.classList.contains('note_save')) {
-        const txt = card.querySelector('.noteText').value;
-        const r = await API('/admin/orders/'+encodeURIComponent(orderId)+'/notes/'+encodeURIComponent(noteId), {
+      if ((e.target as HTMLElement).classList.contains('note_save')) {
+        const txt = (card.querySelector('.noteText') as HTMLTextAreaElement).value;
+        const r = await API('/admin/orders/'+encodeURIComponent(orderId)+'/notes/'+encodeURIComponent(noteId!), {
           method:'PATCH',
           body: JSON.stringify({ text: txt })
         });
         const j3 = await r.json();
-        $('#noteMsg').textContent = j3.ok ? 'Saved' : (j3.message || 'Failed');
+        (document.getElementById('noteMsg') as HTMLElement).textContent = j3.ok ? 'Saved' : (j3.message || 'Failed');
       }
-      if (e.target.classList.contains('note_del')) {
+      if ((e.target as HTMLElement).classList.contains('note_del')) {
         if (!confirm('Delete this note?')) return;
-        const r = await API('/admin/orders/'+encodeURIComponent(orderId)+'/notes/'+encodeURIComponent(noteId), { method:'DELETE' });
+        const r = await API('/admin/orders/'+encodeURIComponent(orderId)+'/notes/'+encodeURIComponent(noteId!), { method:'DELETE' });
         const j4 = await r.json();
-        $('#noteMsg').textContent = j4.ok ? 'Deleted' : (j4.message || 'Failed');
+        (document.getElementById('noteMsg') as HTMLElement).textContent = j4.ok ? 'Deleted' : (j4.message || 'Failed');
         if (j4.ok) {
-          o.notes = o.notes.filter(n => n.id !== noteId);
+          o.notes = o.notes.filter((n:any) => n.id !== noteId);
           renderNotes();
         }
       }
     };
+  }
+
+  // ===== Tiny SVG line chart renderer =====
+  function drawLineChart(mountSel, labels, values, metric){
+    const mount = document.querySelector(mountSel);
+    const W = mount.clientWidth || 900;
+    const H = 260;
+    const P = 28; // padding
+    const max = Math.max(1, ...values);
+    const min = Math.min(0, ...values);
+    const span = max - min || 1;
+
+    const x = (i) => P + (i * (W - 2*P)) / Math.max(1, values.length - 1);
+    const y = (v) => H - P - ((v - min) * (H - 2*P)) / span;
+
+    const points = values.map((v, i) => x(i)+','+y(v)).join(' ');
+    // grid
+    const gridY = [0, 0.25, 0.5, 0.75, 1].map(r => y(min + r*span));
+
+    mount.innerHTML =
+      '<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Trend chart">'
+      + gridY.map(gy => '<line x1="'+P+'" y1="'+gy.toFixed(1)+'" x2="'+(W-P)+'" y2="'+gy.toFixed(1)+'" stroke="#e5e7eb" stroke-width="1"/>').join('')
+      + '<polyline fill="none" stroke="#2563eb" stroke-width="2" points="'+points+'"/>'
+      + values.map((v,i) => '<circle cx="'+x(i).toFixed(1)+'" cy="'+y(v).toFixed(1)+'" r="2.5" fill="#2563eb"/>').join('')
+      + '</svg>'
+      + '<div class="note" style="margin-top:6px">Metric: '
+      + (metric==='orders'?'Orders':metric==='tickets'?'Tickets':'Revenue (£)')
+      + '</div>';
   }
 
   // ===== Navigation =====
@@ -646,12 +596,12 @@ router.get('/ui', (_req, res) => {
 
   // Login
   $('#btnLogin').addEventListener('click', async function(){
-    const email = $('#email').value;
-    const password = $('#password').value;
+    const email = (document.getElementById('email') as HTMLInputElement).value;
+    const password = (document.getElementById('password') as HTMLInputElement).value;
     const r = await API('/auth/login', { method:'POST', body: JSON.stringify({ email, password }) });
     const j = await r.json();
     if(!j.ok){
-      const e = $('#loginError');
+      const e = (document.getElementById('loginError') as HTMLElement);
       e.textContent = j.message || 'Login failed';
       e.style.display = 'block';
       return;
