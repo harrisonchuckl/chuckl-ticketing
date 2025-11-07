@@ -1,151 +1,125 @@
 // backend/src/routes/webhook.ts
+import { Router } from 'express';
 import type { Request, Response } from 'express';
+import Stripe from 'stripe';
 import prisma from '../lib/db.js';
-import stripe from '../services/stripe.js';
+import { OrderStatus } from '@prisma/client';
 
-const webhookHandler = async (req: Request, res: Response) => {
-  // Stripe requires the raw body (server.ts already provides bodyParser.raw for this route)
+const router = Router();
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
+  apiVersion: '2024-06-20',
+});
+
+// Verify + parse Stripe event from raw body (server.ts mounts bodyParser.raw on this route)
+router.post('/', async (req: Request, res: Response) => {
   const sig = req.headers['stripe-signature'];
   const whSecret = process.env.STRIPE_WEBHOOK_SECRET;
-  if (!sig || !whSecret) {
-    return res.status(400).send('Webhook signature/secret missing');
-  }
 
-  let event: any;
+  let event: Stripe.Event;
+
   try {
-    event = stripe.webhooks.constructEvent(req.body, sig as string, whSecret);
+    if (whSecret && sig) {
+      // req.body is a Buffer because server.ts uses bodyParser.raw for this route
+      event = stripe.webhooks.constructEvent(req.body as Buffer, sig as string, whSecret);
+    } else {
+      // Fallback if no webhook secret is configured
+      event = JSON.parse((req.body as any)?.toString?.() || req.body) as Stripe.Event;
+    }
   } catch (err: any) {
-    console.error('Stripe webhook signature verification failed:', err?.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
   try {
     switch (event.type) {
-      /**
-       * We handle refunds via:
-       *  - charge.refunded (fires when a charge is fully or partially refunded)
-       *  - refund.updated / refund.succeeded (idempotent per refund.id)
-       *
-       * We locate the Order via either:
-       *  - order.stripeId === charge.payment_intent (most common in our flow)
-       *  - OR order.stripeId === charge.id (fallback if we stored the charge id)
-       */
-      case 'charge.refunded': {
-        const charge = event.data.object as {
-          id: string;
-          amount: number;
-          amount_refunded: number;
-          payment_intent?: string | null;
-          refunds?: { data?: Array<{ id: string; amount: number; status?: string }> };
-        };
+      // Mark orders as paid when the payment intent succeeds
+      case 'payment_intent.succeeded': {
+        const pi = event.data.object as Stripe.PaymentIntent;
+        const paymentIntentId = pi.id;
 
-        const candidateStripeIds: string[] = [];
-        if (charge.payment_intent) candidateStripeIds.push(String(charge.payment_intent));
-        candidateStripeIds.push(charge.id);
-
-        const order = await prisma.order.findFirst({
-          where: {
-            stripeId: { in: candidateStripeIds },
-          },
+        // Update any order with this payment intent stripeId
+        await prisma.order.updateMany({
+          where: { stripeId: paymentIntentId },
+          data: { status: OrderStatus.PAID },
         });
+        break;
+      }
 
-        if (!order) {
-          console.warn('charge.refunded: Order not found for charge', charge.id, candidateStripeIds);
-          break;
-        }
+      // Handle refunds created (either API or dashboard)
+      case 'refund.created':
+      case 'charge.refunded': {
+        // refund.created gives us a Refund object directly
+        // charge.refunded contains a Charge object with refunds — handle primary fields
+        let paymentIntentId = '';
+        let amount = 0;
+        let refundId = '';
+        let reason: string | null = null;
 
-        const refundItems = charge.refunds?.data ?? [];
-        for (const rf of refundItems) {
-          const existing = await prisma.refund.findFirst({
-            where: { stripeId: rf.id },
-          });
-          if (!existing) {
-            await prisma.refund.create({
-              data: {
-                stripeId: rf.id,
-                amount: rf.amount,
-                reason: 'stripe_refund',
-                orderId: order.id,
-              },
-            });
+        if (event.type === 'refund.created') {
+          const refund = event.data.object as Stripe.Refund;
+          refundId = refund.id;
+          paymentIntentId = typeof refund.payment_intent === 'string' ? refund.payment_intent : (refund.payment_intent as Stripe.PaymentIntent).id;
+          amount = refund.amount || 0;
+          reason = refund.reason ?? null;
+        } else {
+          const charge = event.data.object as Stripe.Charge;
+          paymentIntentId = typeof charge.payment_intent === 'string' ? charge.payment_intent : (charge.payment_intent as Stripe.PaymentIntent).id;
+          // Use the first refund item if present
+          const r = charge.refunds?.data?.[0];
+          if (r) {
+            refundId = r.id;
+            amount = r.amount || 0;
+            reason = r.reason ?? null;
           }
         }
 
-        // If fully refunded, flip order status to REFUNDED
-        if ((charge.amount_refunded ?? 0) >= (charge.amount ?? 0)) {
-          await prisma.order.update({
-            where: { id: order.id },
-            data: { status: 'REFUNDED' },
-          });
-        }
-        break;
-      }
+        if (!paymentIntentId || amount <= 0 || !refundId) break;
 
-      case 'refund.succeeded':
-      case 'refund.updated': {
-        const refund = event.data.object as {
-          id: string;
-          amount: number;
-          charge?: string | null;
-          payment_intent?: string | null;
-          status?: string;
-        };
-
-        // Try to locate the associated Order
-        const candidateStripeIds: string[] = [];
-        if (refund.payment_intent) candidateStripeIds.push(String(refund.payment_intent));
-        if (refund.charge) candidateStripeIds.push(String(refund.charge));
-
+        // Find the order
         const order = await prisma.order.findFirst({
-          where: { stripeId: { in: candidateStripeIds } },
+          where: { stripeId: paymentIntentId },
+          include: { refunds: true },
         });
+        if (!order) break;
 
-        if (!order) {
-          console.warn('refund.*: Order not found for refund', refund.id, candidateStripeIds);
-          break;
-        }
-
-        // Idempotent: create a refund row if we haven't yet
-        const existing = await prisma.refund.findFirst({
-          where: { stripeId: refund.id },
-        });
-
+        // Idempotency: avoid duplicate refund rows by Stripe refund id
+        const existing = await prisma.refund.findFirst({ where: { stripeId: refundId } });
         if (!existing) {
           await prisma.refund.create({
             data: {
-              stripeId: refund.id,
-              amount: refund.amount,
-              reason: 'stripe_refund',
+              amount,
+              reason,
+              stripeId: refundId,
               orderId: order.id,
-            },
-          });
-        } else {
-          // Optionally update reason/amount if needed
-          await prisma.refund.update({
-            where: { id: existing.id },
-            data: {
-              amount: refund.amount ?? existing.amount,
             },
           });
         }
 
-        // If Stripe has fully refunded (we can infer separately if needed), we leave
-        // order status as-is here. Full-refund status flip is handled in charge.refunded.
+        // Work out if the order is now fully refunded
+        const totalPaid = order.amountPence ?? 0;
+        const alreadyRefunded = (order.refunds || []).reduce((sum, r) => sum + (r.amount || 0), 0);
+        const newRefunded = existing ? alreadyRefunded : alreadyRefunded + amount;
+        const isFullyRefunded = newRefunded >= totalPaid && totalPaid > 0;
+
+        if (isFullyRefunded) {
+          await prisma.order.update({
+            where: { id: order.id },
+            data: { status: OrderStatus.REFUNDED },
+          });
+        }
         break;
       }
 
-      default: {
-        // Ignore other event types for now
-        // console.log(`Unhandled Stripe event type ${event.type}`);
+      // You can add more events as needed
+      default:
+        // No-op for unhandled events
         break;
-      }
     }
 
-    return res.json({ ok: true });
+    res.json({ received: true });
   } catch (err: any) {
-    console.error('Webhook handler error:', err?.message || err);
-    return res.status(500).json({ ok: false, message: 'Webhook handler failed' });
+    res.status(500).json({ ok: false, message: err?.message ?? 'Webhook processing failed' });
   }
-};
+});
 
-export default webhookHandler;
+export default router;
