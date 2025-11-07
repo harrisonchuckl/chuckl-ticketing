@@ -1,35 +1,36 @@
-import { Router, Request, Response } from 'express';
-import { prisma } from '../db.js';
+// backend/src/routes/admin-lookup.ts
+import { Router } from 'express';
+import { PrismaClient } from '@prisma/client';
 
-export const router = Router();
+const prisma = new PrismaClient();
+const router = Router();
 
-function authed(req: Request, res: Response): boolean {
-  const got = (req.headers['x-admin-key'] as string | undefined)?.trim();
-  const want = (process.env.ADMIN_KEY || process.env.BOOTSTRAP_KEY || '').trim();
-  if (!got || !want || got !== want) {
-    res.status(401).json({ error: 'unauthorized' });
-    return false;
-  }
-  return true;
-}
-
-// GET /admin/ticket/:serial  → quick JSON lookup
-router.get('/ticket/:serial', async (req, res) => {
+/**
+ * GET /admin/lookup/ticket?serial=XXXX
+ * Tickets do NOT have a direct `show` relation.
+ * Include the order and the order’s show instead.
+ */
+router.get('/lookup/ticket', async (req, res) => {
   try {
-    if (!authed(req, res)) return;
-    const serial = String(req.params.serial || '').toUpperCase();
+    const serial = String(req.query.serial || '').trim();
+    if (!serial) return res.status(400).json({ ok: false, message: 'serial required' });
+
     const ticket = await prisma.ticket.findUnique({
       where: { serial },
       include: {
-        order: { select: { id: true, email: true, status: true, createdAt: true } },
-        show: { select: { id: true, title: true, date: true } }
+        order: {
+          include: {
+            show: { include: { venue: true } }
+          }
+        },
+        user: true
       }
     });
-    if (!ticket) return res.status(404).json({ error: 'not_found' });
-    res.json(ticket);
+
+    if (!ticket) return res.status(404).json({ ok: false, message: 'Ticket not found' });
+    res.json({ ok: true, ticket });
   } catch (e: any) {
-    console.error('admin/ticket error', e?.stack || e);
-    res.status(500).json({ error: 'server_error' });
+    res.status(500).json({ ok: false, message: e?.message || 'Lookup failed' });
   }
 });
 
