@@ -57,6 +57,8 @@ router.get('/ui', (_req, res) => {
     <button data-view="shows">Shows</button>
     <button data-view="orders">Orders</button>
     <button data-view="venues">Venues</button>
+    <h4>Insights</h4>
+    <button data-view="analytics">Analytics</button>
     <h4>Marketing</h4>
     <button data-view="audiences">Audiences</button>
     <button data-view="emails">Email Campaigns</button>
@@ -72,7 +74,7 @@ router.get('/ui', (_req, res) => {
     </div>
     <div class="content" id="viewContent">
       <div class="card">
-        <p>Welcome to your organiser console. Use the menu to manage shows, orders, venues, and marketing.</p>
+        <p>Welcome to your organiser console. Use the menu to manage shows, orders, venues, analytics and marketing.</p>
         <p class="note">You’ll see more tools appear here as we build them in.</p>
       </div>
     </div>
@@ -115,6 +117,7 @@ router.get('/ui', (_req, res) => {
         + '<div class="card"><h4>Shortcuts</h4><div class="row">'
         + '<button class="btn ghost" data-goto="shows">Go to Shows</button>'
         + '<button class="btn ghost" data-goto="orders">Go to Orders</button>'
+        + '<button class="btn ghost" data-goto="analytics">View Analytics</button>'
         + '</div></div></div>';
       $('#viewContent').addEventListener('click', function(e){
         const el = e.target.closest('[data-goto]');
@@ -127,14 +130,10 @@ router.get('/ui', (_req, res) => {
     // ---- Shows list & detail ----
     shows(){
       $('#viewTitle').textContent = 'Shows';
-      $('#toolbarActions').innerHTML = '<div class="row"><input id="showsQ" placeholder="Search title or venue"/><button class="btn ghost" id="btnSearchShows">Search</button><button class="btn ghost" id="btnRefreshShows">Refresh</button></div>';
+      $('#toolbarActions').innerHTML = '<button class="btn ghost" id="btnRefreshShows">Refresh</button>';
       $('#viewContent').innerHTML = '<div id="showsWrap" class="grid"></div>';
-      const run = () => loadShows($('#showsQ').value || '');
-      run();
-      $('#toolbarActions').onclick = e => {
-        if (e.target.id==='btnSearchShows') run();
-        if (e.target.id==='btnRefreshShows') run();
-      };
+      loadShows();
+      $('#toolbarActions').onclick = e => { if (e.target.id==='btnRefreshShows') loadShows(); }
     },
 
     showDetail(showId){
@@ -144,7 +143,7 @@ router.get('/ui', (_req, res) => {
       renderShowDetail(showId);
     },
 
-    // ---- Orders list & detail with notes & refund ----
+    // ---- Orders list & detail with notes + resend ----
     orders(){
       $('#viewTitle').textContent = 'Orders';
       $('#toolbarActions').innerHTML =
@@ -164,7 +163,6 @@ router.get('/ui', (_req, res) => {
       renderOrderDetail(orderId);
     },
 
-    // ---- Venues ----
     venues(){
       $('#viewTitle').textContent = 'Venues';
       $('#toolbarActions').innerHTML = '';
@@ -210,6 +208,55 @@ router.get('/ui', (_req, res) => {
       };
     },
 
+    analytics(){
+      $('#viewTitle').textContent = 'Analytics';
+      $('#toolbarActions').innerHTML =
+        '<div class="row">'
+        + '<input id="a_from" type="date"/>'
+        + '<input id="a_to" type="date"/>'
+        + '<button class="btn ghost" id="btnRunAnalytics">Run</button>'
+        + '</div>';
+      $('#viewContent').innerHTML =
+        '<div id="analyticsWrap" class="grid">'
+        +   '<div class="kpis">'
+        +     '<div class="kpi"><div class="note">Orders</div><div id="k_orders" style="font-size:20px;font-weight:700">—</div></div>'
+        +     '<div class="kpi"><div class="note">Tickets Sold</div><div id="k_tickets" style="font-size:20px;font-weight:700">—</div></div>'
+        +     '<div class="kpi"><div class="note">Revenue</div><div id="k_rev" style="font-size:20px;font-weight:700">—</div></div>'
+        +     '<div class="kpi"><div class="note">Avg. Order</div><div id="k_aov" style="font-size:20px;font-weight:700">—</div></div>'
+        +   '</div>'
+        +   '<div class="card">'
+        +     '<h4 style="margin:0 0 8px">Daily Sales</h4>'
+        +     '<table class="table"><thead><tr><th>Date</th><th>Orders</th><th>Tickets</th><th>Revenue</th></tr></thead><tbody id="a_tbody"></tbody></table>'
+        +   '</div>'
+        + '</div>';
+
+      const run = async () => {
+        const from = $('#a_from').value;
+        const to = $('#a_to').value;
+        const q = new URLSearchParams();
+        if (from) q.set('from', from);
+        if (to) q.set('to', to);
+        const r = await API('/admin/analytics/overview?'+q.toString());
+        const j = await r.json();
+        if (!j.ok) {
+          $('#analyticsWrap').innerHTML = '<div class="danger">Failed to load analytics</div>';
+          return;
+        }
+        $('#k_orders').textContent = j.kpis.ordersCount;
+        $('#k_tickets').textContent = j.kpis.ticketsSold;
+        $('#k_rev').textContent = fmtMoney(j.kpis.revenuePence);
+        $('#k_aov').textContent = fmtMoney(j.kpis.avgOrderValuePence);
+
+        $('#a_tbody').innerHTML = (j.series||[]).map(row =>
+          '<tr><td>'+row.date+'</td><td>'+row.orders+'</td><td>'+row.tickets+'</td><td>'+fmtMoney(row.revenuePence)+'</td></tr>'
+        ).join('') || '<tr><td colspan="4" class="note">No data.</td></tr>';
+      };
+
+      // Run once on open
+      run();
+      $('#toolbarActions').onclick = (e) => { if (e.target.id === 'btnRunAnalytics') run(); };
+    },
+
     audiences(){
       $('#viewTitle').textContent = 'Audiences';
       $('#toolbarActions').innerHTML = '';
@@ -228,10 +275,10 @@ router.get('/ui', (_req, res) => {
   };
 
   // ===== Shows =====
-  async function loadShows(q){
+  async function loadShows(){
     const wrap = $('#showsWrap');
     wrap.innerHTML = '<div class="note">Loading…</div>';
-    const r = await API('/admin/shows?q='+encodeURIComponent(q||''));
+    const r = await API('/admin/shows/latest?limit=50');
     const j = await r.json();
     if(!j.ok){ wrap.innerHTML = '<div class="danger">Failed to load shows</div>'; return; }
     if(!j.shows || j.shows.length===0){ wrap.innerHTML = '<div class="note">No shows yet.</div>'; return; }
@@ -262,7 +309,7 @@ router.get('/ui', (_req, res) => {
     const j = await r.json();
     if(!j.ok){ $('#viewContent').innerHTML = '<div class="danger">Failed to load show</div>'; return; }
     const show = j.show;
-    const k = j.show.kpis || {};
+    const kpis = j.show.kpis || {};
 
     $('#viewContent').innerHTML =
       '<div class="grid">'
@@ -270,10 +317,10 @@ router.get('/ui', (_req, res) => {
       + '<div class="note">'+(show.venue ? (show.venue.name + (show.venue.city ? (', '+show.venue.city) : '')) : '—')+'</div>'
       + '<div class="note">Date: '+new Date(show.date).toLocaleString()+'</div></div>'
       + '<div class="kpis">'
-      +   '<div class="kpi"><div class="note">Orders</div><div style="font-size:20px;font-weight:700">'+(k.totalOrders ?? 0)+'</div></div>'
-      +   '<div class="kpi"><div class="note">Tickets</div><div style="font-size:20px;font-weight:700">'+(k.totalTickets ?? 0)+'</div></div>'
-      +   '<div class="kpi"><div class="note">Revenue</div><div style="font-size:20px;font-weight:700)">'+fmtMoney(k.totalRevenue)+'</div></div>'
-      +   '<div class="kpi"><div class="note">Refunded</div><div style="font-size:20px;font-weight:700)">'+fmtMoney(k.refundedRevenue)+'</div></div>'
+      +   '<div class="kpi"><div class="note">Orders</div><div style="font-size:20px;font-weight:700">'+(kpis.totalOrders ?? 0)+'</div></div>'
+      +   '<div class="kpi"><div class="note">Tickets Sold</div><div style="font-size:20px;font-weight:700">'+(kpis.totalTickets ?? 0)+'</div></div>'
+      +   '<div class="kpi"><div class="note">Revenue</div><div style="font-size:20px;font-weight:700">'+fmtMoney(kpis.totalRevenue ?? 0)+'</div></div>'
+      +   '<div class="kpi"><div class="note">Refunded</div><div style="font-size:20px;font-weight:700">'+fmtMoney(kpis.refundedRevenue ?? 0)+'</div></div>'
       + '</div>'
       + '<div class="grid two">'
       +   '<div class="card">'
@@ -296,6 +343,7 @@ router.get('/ui', (_req, res) => {
       + '</div>'
       + '</div>';
 
+    // Render ticket types
     const tbody = $('#ttBody');
     tbody.innerHTML = (show.ticketTypes || []).map(tt => {
       return '<tr data-tt="'+tt.id+'">'
@@ -309,6 +357,7 @@ router.get('/ui', (_req, res) => {
         + '</tr>';
     }).join('');
 
+    // handlers
     tbody.onclick = async e => {
       const tr = e.target.closest('tr[data-tt]');
       if(!tr) return;
@@ -318,20 +367,20 @@ router.get('/ui', (_req, res) => {
         const pricePence = Number(tr.querySelector('.tt_price').value || 0);
         const availRaw = tr.querySelector('.tt_avail').value;
         const available = availRaw === '' ? null : Number(availRaw);
-        const r = await API('/admin/show/'+encodeURIComponent(showId)+'/ticket-types/'+encodeURIComponent(id), {
+        const r = await API('/admin/ticket-types/'+encodeURIComponent(id), {
           method:'PATCH',
           body: JSON.stringify({ name, pricePence, available })
         });
         const j = await r.json();
         $('#ttMsg').textContent = j.ok ? 'Saved' : (j.message || 'Failed');
-        if (j.ok) renderShowDetail(showId);
+        if (j.ok) renderShowDetail(show.id);
       }
       if (e.target.classList.contains('tt_del')) {
         if (!confirm('Delete this ticket type?')) return;
-        const r = await API('/admin/shows/'+encodeURIComponent(showId)+'/ticket-types/'+encodeURIComponent(id), { method: 'DELETE' });
+        const r = await API('/admin/ticket-types/'+encodeURIComponent(id), { method: 'DELETE' });
         const j = await r.json();
         $('#ttMsg').textContent = j.ok ? 'Deleted' : (j.message || 'Failed');
-        if (j.ok) renderShowDetail(showId);
+        if (j.ok) renderShowDetail(show.id);
       }
     };
 
@@ -340,13 +389,13 @@ router.get('/ui', (_req, res) => {
       const pricePence = Number($('#tt_price').value || 0);
       const availRaw = $('#tt_avail').value;
       const available = availRaw === '' ? null : Number(availRaw);
-      const r2 = await API('/admin/shows/'+encodeURIComponent(showId)+'/ticket-types', {
+      const r = await API('/admin/shows/'+encodeURIComponent(show.id)+'/ticket-types', {
         method:'POST',
         body: JSON.stringify({ name, pricePence, available })
       });
-      const j2 = await r2.json();
+      const j2 = await r.json();
       $('#ttMsg').textContent = j2.ok ? 'Added' : (j2.message || 'Failed');
-      if (j2.ok) renderShowDetail(showId);
+      if (j2.ok) renderShowDetail(show.id);
     });
   }
 
@@ -387,7 +436,6 @@ router.get('/ui', (_req, res) => {
     const j = await r.json();
     if(!j.ok){ wrap.innerHTML = '<div class="danger">Failed to load order</div>'; return; }
     const o = j.order;
-
     wrap.innerHTML =
       '<div class="grid">'
       + '<div class="card"><h3 style="margin:0 0 8px">Order '+o.id+'</h3>'
@@ -396,11 +444,9 @@ router.get('/ui', (_req, res) => {
       + '<div class="note">Qty: '+(o.quantity ?? '—')+'</div>'
       + '<div class="note">Status: '+o.status+'</div>'
       + '<div class="row" style="margin-top:8px">'
-      +   '<input id="refundAmount" type="number" placeholder="Amount (pence, optional)" style="max-width:160px"/>'
-      +   '<input id="refundReason" placeholder="Reason (optional)" style="max-width:220px"/>'
-      +   '<button class="btn ghost" id="btnRefund">Refund</button>'
+      +   '<button class="btn ghost" id="btnResend">Resend tickets</button>'
       + '</div>'
-      + '<div class="note" id="refundMsg"></div>'
+      + '<div class="note" id="resendMsg"></div>'
       + '</div>'
       + '<div class="grid two">'
       +   '<div class="card">'
@@ -417,17 +463,11 @@ router.get('/ui', (_req, res) => {
       + '</div>'
       + '</div>';
 
-    // Refund button handler
-    $('#btnRefund').onclick = async () => {
-      const amount = $('#refundAmount').value ? Number($('#refundAmount').value) : null;
-      const reason = $('#refundReason').value || '';
-      const r = await API('/admin/orders/'+encodeURIComponent(orderId)+'/refund', {
-        method:'POST',
-        body: JSON.stringify({ amountPence: amount, reason })
-      });
-      const j = await r.json();
-      $('#refundMsg').textContent = j.ok ? 'Refund issued successfully' : (j.message||'Failed');
-      if(j.ok) renderOrderDetail(orderId);
+    // Resend email
+    $('#btnResend').onclick = async () => {
+      const r = await API('/admin/orders/'+encodeURIComponent(orderId)+'/resend', { method:'POST' });
+      const jx = await r.json();
+      $('#resendMsg').textContent = jx.ok ? ('Email sent ('+(jx.provider||'ok')+')') : (jx.message||'Failed');
     };
 
     // Notes
@@ -555,10 +595,7 @@ router.get('/ui', (_req, res) => {
 
   (async function boot(){
     const ok = await ensureAuth();
-    if(ok) {
-      // Jump straight into Shows so filters/actions are visible
-      switchView('shows');
-    }
+    if(ok) switchView('home');
   })();
 })();
 </script>
