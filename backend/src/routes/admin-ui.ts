@@ -13,48 +13,38 @@ router.get('/ui', (_req, res) => {
 <title>Organiser Console</title>
 <style>
   :root{--bg:#f7f8fa;--panel:#fff;--ink:#0f172a;--muted:#6b7280;--accent:#2563eb;--accent-2:#eff6ff;--border:#e5e7eb;--bad:#dc2626;--ok:#16a34a}
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial,sans-serif}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial,sans-serif}
   header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);background:var(--panel);position:sticky;top:0;z-index:5}
-  header .brand{font-weight:800}
-  header .user{font-size:14px;color:var(--muted)}
+  header .brand{font-weight:800} header .user{font-size:14px;color:var(--muted)}
   main{display:grid;grid-template-columns:260px 1fr;gap:20px;padding:20px;min-height:calc(100vh - 64px)}
   nav{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:12px}
   nav h4{margin:8px 10px 12px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
   nav button{display:block;width:100%;text-align:left;border:0;background:none;padding:10px 12px;border-radius:10px;margin:2px 0;font-size:14px;color:var(--ink);cursor:pointer}
   nav button.active,nav button:hover{background:var(--accent-2);color:var(--accent)}
-  section.view{background:var(--panel);border:1px solid var(--border);border-radius:14px;min-height:60vh;position:relative;overflow:hidden}
+  section.view{background:var(--panel);border:1px solid var(--border);border-radius:14px;min-height:60vh}
   .toolbar{display:flex;gap:8px;align-items:center;padding:14px;border-bottom:1px solid var(--border)}
   .toolbar h2{font-size:16px;margin:0}
   .content{padding:16px}
-  .grid{display:grid;gap:12px}
-  .two{grid-template-columns:1fr 1fr}
-  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  .grid{display:grid;gap:12px}.two{grid-template-columns:1fr 1fr}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
   input,select,textarea{width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;background:#fff;color:var(--ink);font-size:14px}
   label{font-size:12px;color:var(--muted)}
   .btn{border:0;border-radius:10px;padding:10px 12px;font-weight:600;cursor:pointer}
-  .btn.primary{background:var(--accent);color:#fff}
-  .btn.ghost{background:#fff;border:1px solid var(--border)}
-  .btn.danger{background:#fee2e2;color:#b91c1c;border:1px solid #fecaca}
+  .btn.primary{background:var(--accent);color:#fff}.btn.ghost{background:#fff;border:1px solid var(--border)}
+  .btn.danger{background:#ef4444;color:#fff}
   .note{font-size:13px;color:var(--muted)}
   .card{border:1px solid var(--border);border-radius:12px;padding:12px;background:#fff}
   .danger{color:var(--bad)} .ok{color:var(--ok)}
-  table{width:100%;border-collapse:collapse}
-  th,td{padding:10px;border-bottom:1px solid var(--border);text-align:left;font-size:14px}
-  th{font-weight:700}
-  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
-  .kpis .card h3{margin:0 0 4px;font-size:18px}
-  .kpis .card .sub{color:var(--muted);font-size:12px}
 
   /* Drawer */
-  .drawer{position:absolute;top:0;right:-480px;width:480px;height:100%;background:#fff;border-left:1px solid var(--border);box-shadow:-8px 0 24px rgba(15,23,42,0.06);transition:right .24s ease;display:flex;flex-direction:column;z-index:20}
+  .drawer{position:fixed;top:0;right:-520px;width:520px;max-width:90vw;height:100vh;background:#fff;border-left:1px solid var(--border);box-shadow:-8px 0 24px rgba(15,23,42,.08);transition:right .24s ease;z-index:60;display:flex;flex-direction:column}
   .drawer.show{right:0}
-  .drawer .head{display:flex;align-items:center;justify-content:space-between;padding:14px;border-bottom:1px solid var(--border)}
-  .drawer .body{padding:14px;overflow:auto}
-  .badge{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid var(--border);font-size:12px;color:var(--muted)}
-  .row.clickable tr{cursor:pointer}
-  .toast{position:fixed;bottom:16px;right:16px;background:#0f172a;color:#fff;padding:10px 12px;border-radius:10px;opacity:0;transform:translateY(6px);transition:.2s}
-  .toast.show{opacity:1;transform:translateY(0)}
+  .drawer .head{display:flex;justify-content:space-between;align-items:center;padding:14px;border-bottom:1px solid var(--border)}
+  .drawer .body{padding:16px;overflow:auto;flex:1}
+  .drawer .foot{padding:14px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end}
+  .x{border:0;background:none;font-size:20px;cursor:pointer;color:#6b7280}
+  .toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;border-radius:10px;padding:10px 14px;font-size:14px;display:none;z-index:80}
+  .toast.show{display:block}
 </style>
 </head>
 <body>
@@ -81,54 +71,29 @@ router.get('/ui', (_req, res) => {
   <section class="view">
     <div class="toolbar"><h2 id="viewTitle">Home</h2></div>
     <div class="content" id="viewContent">
-      <div class="grid">
-        <div class="kpis">
-          <div class="card">
-            <h3 id="kpiSales">£0.00</h3>
-            <div class="sub">Sales (last 7 days)</div>
-          </div>
-          <div class="card">
-            <h3 id="kpiOrders">0</h3>
-            <div class="sub">Orders (last 7 days)</div>
-          </div>
-          <div class="card">
-            <h3 id="kpiTickets">0</h3>
-            <div class="sub">Tickets issued</div>
-          </div>
-          <div class="card">
-            <h3 id="kpiUpcoming">0</h3>
-            <div class="sub">Upcoming shows</div>
-          </div>
-        </div>
-        <div class="card">
-          <h4>Recent activity</h4>
-          <p class="note">Recent sales, scans and edits will appear here.</p>
-        </div>
-        <div class="card">
-          <h4>Shortcuts</h4>
-          <div class="row">
-            <button class="btn ghost" data-goto="shows">Create show</button>
-            <button class="btn ghost" data-goto="venues">Add venue</button>
-            <button class="btn ghost" data-goto="orders">View orders</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Drawer -->
-    <div class="drawer" id="drawer">
-      <div class="head">
-        <div style="font-weight:700" id="drawerTitle">Order</div>
-        <button class="btn ghost" id="drawerClose">Close</button>
-      </div>
-      <div class="body" id="drawerBody">
-        <div class="note">Loading…</div>
+      <div class="card">
+        <p>Welcome to your organiser console. Use the menu to manage shows, venues, orders, and marketing.</p>
+        <p class="note">You’ll see more tools appear here as we build them in.</p>
       </div>
     </div>
   </section>
 </main>
 
-<div class="overlay" id="loginOverlay" style="backdrop-filter:blur(0px);">
+<!-- Drawer (Orders) -->
+<div class="drawer" id="orderDrawer">
+  <div class="head">
+    <div style="font-weight:700" id="odTitle">Order</div>
+    <button class="x" id="odClose" aria-label="Close">&times;</button>
+  </div>
+  <div class="body" id="odBody">
+    <div class="note">Loading…</div>
+  </div>
+  <div class="foot" id="odFoot">
+    <button class="btn ghost" id="btnResend">Resend tickets</button>
+  </div>
+</div>
+
+<div class="overlay" id="loginOverlay" style="position:fixed;inset:0;background:rgba(15,23,42,.5);display:none;align-items:center;justify-content:center;z-index:50">
   <div class="login" style="width:360px;background:#fff;border-radius:14px;border:1px solid var(--border);padding:18px">
     <h3>Sign in</h3>
     <p class="note" id="loginNote">Use your organiser account.</p>
@@ -154,25 +119,29 @@ router.get('/ui', (_req, res) => {
     headers:{'Content-Type':'application/json'}
   }, opts || {}));
 
-  function toast(msg){
+  function toast(msg, ms=1800){
     const t = $('#toast');
-    t.textContent = msg;
-    t.classList.add('show');
-    setTimeout(()=>t.classList.remove('show'), 2000);
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(()=>t.classList.remove('show'), ms);
   }
 
-  // ---- Views ----
   const views = {
-    home(){
+    home(){ 
       $('#viewTitle').textContent = 'Home';
-      $('#viewContent').querySelectorAll('[data-goto]').forEach((btn)=>{
-        btn.addEventListener('click', (e)=>{
-          e.preventDefault();
-          switchView(btn.getAttribute('data-view') || btn.getAttribute('data-goto'));
-        });
-      });
+      $('#viewContent').innerHTML =
+        '<div class="grid two">'
+        + '<div class="card"><h4>Recent activity</h4><p class="note">Recent sales, scans and edits will appear here.</p></div>'
+        + '<div class="card"><h4>Shortcuts</h4><div class="row">'
+        + '<button class="btn ghost" data-goto="shows">Create show</button>'
+        + '<button class="btn ghost" data-goto="venues">Add venue</button>'
+        + '</div></div></div>';
+      $('#viewContent').addEventListener('click', function(e){
+        const el = e.target.closest('[data-goto]');
+        if(!el) return;
+        e.preventDefault();
+        switchView(el.getAttribute('data-goto'));
+      }, { once:true });
     },
-
     shows(){
       $('#viewTitle').textContent = 'Shows';
       $('#viewContent').innerHTML =
@@ -183,7 +152,6 @@ router.get('/ui', (_req, res) => {
         if (e.target && e.target.id === 'btnRefreshShows') loadShows();
       });
     },
-
     venues(){
       $('#viewTitle').textContent = 'Venues';
       $('#viewContent').innerHTML =
@@ -226,104 +194,84 @@ router.get('/ui', (_req, res) => {
         }
       });
     },
-
     orders(){
       $('#viewTitle').textContent = 'Orders';
       $('#viewContent').innerHTML =
-        '<div class="card"><div class="grid two">'
-        + '<div><label>Search</label><input id="f_q" placeholder="Email, Stripe ID, show, venue"/></div>'
-        + '<div><label>Status</label><select id="f_status"><option value="">Any</option><option value="PENDING">PENDING</option><option value="PAID">PAID</option><option value="CANCELLED">CANCELLED</option></select></div>'
-        + '<div><label>From</label><input id="f_from" type="date"/></div>'
-        + '<div><label>To</label><input id="f_to" type="date"/></div>'
-        + '<div class="row"><button class="btn primary" id="btnLoadOrders">Load</button><button class="btn ghost" id="btnExportCSV">Export CSV</button></div>'
-        + '</div></div>'
-        + '<div class="card"><div class="row"><div class="note" id="ordersMeta"></div></div>'
-        + '<div style="overflow:auto"><table id="ordersTable" class="row clickable">'
-        + '<thead><tr>'
-        + '<th>Date</th><th>Email</th><th>Show</th><th>Venue</th><th>Qty</th><th>Amount</th><th>Status</th><th>Stripe ID</th>'
-        + '</tr></thead><tbody></tbody></table></div></div>';
+        '<div class="row">'
+        + '<input id="q_orders" placeholder="Search email/show/venue" style="max-width:360px"/>'
+        + '<button class="btn ghost" id="btnSearchOrders">Search</button>'
+        + '<button class="btn primary" id="btnRefreshOrders">Refresh</button>'
+        + '</div>'
+        + '<div id="ordersWrap" class="grid" style="margin-top:12px"></div>'
+        + '<div class="row" style="margin-top:8px"><button class="btn ghost" id="btnMore">Load more</button></div>';
+      loadOrders();
 
-      const load = async () => {
-        const params = new URLSearchParams();
-        const q = $('#f_q').value.trim();
-        const status = $('#f_status').value;
-        const from = $('#f_from').value;
-        const to = $('#f_to').value;
-        if (q) params.set('q', q);
-        if (status) params.set('status', status);
-        if (from) params.set('from', new Date(from).toISOString());
-        if (to) params.set('to', new Date(to).toISOString());
-        params.set('limit', '200');
-        const r = await API('/admin/orders?' + params.toString());
-        const j = await r.json();
-        if(!j.ok){ $('#ordersMeta').textContent = 'Failed to load.'; return; }
-        $('#ordersMeta').textContent = 'Showing ' + j.rows.length + ' of ' + j.total;
-        const tbody = $('#ordersTable').querySelector('tbody');
-        tbody.innerHTML = j.rows.map((o) => {
-          const when = new Date(o.createdAt).toLocaleString();
-          const venue = (o.show && o.show.venue) ? [o.show.venue.name, o.show.venue.city].filter(Boolean).join(', ') : '—';
-          const showTitle = o.show ? o.show.title : '—';
-          const amount = '£' + ((o.amountPence ?? 0)/100).toFixed(2);
-          const stripeShort = o.stripeId ? (o.stripeId.length > 12 ? o.stripeId.slice(0,12)+'…' : o.stripeId) : '—';
-          return '<tr data-id="'+o.id+'">'
-            + '<td>'+when+'</td>'
-            + '<td>'+ (o.email || '—') +'</td>'
-            + '<td>'+ showTitle +'</td>'
-            + '<td>'+ venue +'</td>'
-            + '<td>'+ (o.quantity ?? 0) +'</td>'
-            + '<td>'+ amount +'</td>'
-            + '<td><span class="badge">'+ (o.status || '—') +'</span></td>'
-            + '<td>'+ stripeShort +'</td>'
-            + '</tr>';
-        }).join('');
-      };
+      let paging = { cursor: null, q: '' };
 
-      $('#viewContent').addEventListener('click', function(e){
-        if (e.target && e.target.id === 'btnLoadOrders') load();
-        if (e.target && e.target.id === 'btnExportCSV') {
-          const params = new URLSearchParams();
-          const q = $('#f_q').value.trim();
-          const status = $('#f_status').value;
-          const from = $('#f_from').value;
-          const to = $('#f_to').value;
-          if (q) params.set('q', q);
-          if (status) params.set('status', status);
-          if (from) params.set('from', new Date(from).toISOString());
-          if (to) params.set('to', new Date(to).toISOString());
-          window.location.href = '/admin/orders/export?' + params.toString();
-        }
-
-        const row = e.target.closest('tr[data-id]');
-        if (row) {
-          const id = row.getAttribute('data-id');
-          openDrawer(id);
+      $('#viewContent').addEventListener('click', async function(e){
+        if (e.target && e.target.id === 'btnRefreshOrders') { paging.cursor = null; loadOrders(paging); }
+        if (e.target && e.target.id === 'btnMore') { loadOrders(paging, true); }
+        const item = e.target.closest('[data-order-id]');
+        if (item) {
+          const id = item.getAttribute('data-order-id');
+          openOrderDrawer(id);
         }
       });
 
-      // Load on entry
-      load();
-    },
+      $('#viewContent').addEventListener('click', async function(e){
+        if (e.target && e.target.id === 'btnSearchOrders') {
+          paging.q = $('#q_orders').value || '';
+          paging.cursor = null;
+          loadOrders(paging);
+        }
+      });
 
+      async function loadOrders(pg){
+        const wrap = $('#ordersWrap');
+        if (!pg || !pg._append) wrap.innerHTML = '<div class="note">Loading…</div>';
+        const qs = new URLSearchParams();
+        if (pg?.q) qs.set('q', pg.q);
+        if (pg?.cursor) qs.set('cursor', pg.cursor);
+        const r = await API('/admin/orders?' + qs.toString());
+        const j = await r.json();
+        if(!j.ok){ wrap.innerHTML = '<div class="danger">Failed to load orders</div>'; return; }
+        const chunk = (j.orders || []).map(function(o){
+          const when = o.createdAt ? new Date(o.createdAt).toLocaleString() : '—';
+          const venue = o.show?.venue?.name ? ' · ' + o.show.venue.name : '';
+          const title = o.show?.title || '—';
+          const qty = o.quantity ?? (o.tickets ? o.tickets.length : 0);
+          const amount = o.amountPence != null ? '£' + (o.amountPence/100).toFixed(2) : '—';
+          return '<div class="card" style="cursor:pointer" data-order-id="'+o.id+'">'
+            + '<div><b>'+title+'</b></div>'
+            + '<div class="note">'+when+venue+'</div>'
+            + '<div class="note">Customer: '+(o.email || '—')+' &nbsp; · &nbsp; Qty: '+qty+' &nbsp; · &nbsp; '+amount+'</div>'
+            + '</div>';
+        }).join('');
+
+        if (pg && pg._append) {
+          wrap.insertAdjacentHTML('beforeend', chunk || '');
+        } else {
+          wrap.innerHTML = chunk || '<div class="note">No orders found.</div>';
+        }
+        paging.cursor = j.nextCursor || null;
+      }
+    },
     audiences(){
       $('#viewTitle').textContent = 'Audiences';
       $('#viewContent').innerHTML = '<div class="note">Audience tools coming soon.</div>';
     },
-
     emails(){
       $('#viewTitle').textContent = 'Email Campaigns';
       $('#viewContent').innerHTML = '<div class="note">Scheduler + templates placeholder.</div>';
     },
-
     account(){
       $('#viewTitle').textContent = 'Account';
       $('#viewContent').innerHTML = '<div class="note">Manage your password and organisation details.</div>';
     }
   };
 
-  // ---- Helpers ----
   async function loadShows(){
     const wrap = document.getElementById('showsWrap');
-    if (!wrap) return;
     wrap.innerHTML = '<div class="note">Loading…</div>';
     const r = await API('/admin/shows/latest?limit=20');
     const j = await r.json();
@@ -349,110 +297,13 @@ router.get('/ui', (_req, res) => {
     const me = await fetch('/auth/me', { credentials: 'include' });
     if(me.status===200){
       const j = await me.json();
-      $('#userEmail').textContent = (j.user && j.user.email) ? j.user.email : 'Signed in';
-      $('#loginOverlay').classList.remove('show');
+      document.getElementById('userEmail').textContent = (j.user && j.user.email) ? j.user.email : 'Signed in';
+      document.getElementById('loginOverlay').style.display = 'none';
       return true;
     } else {
-      $('#loginOverlay').classList.add('show');
+      document.getElementById('loginOverlay').style.display = 'flex';
       return false;
     }
-  }
-
-  // Drawer logic
-  $('#drawerClose').addEventListener('click', ()=>$('#drawer').classList.remove('show'));
-
-  async function openDrawer(orderId){
-    $('#drawerTitle').textContent = 'Order';
-    $('#drawerBody').innerHTML = '<div class="note">Loading…</div>';
-    $('#drawer').classList.add('show');
-
-    const r = await API('/admin/orders/' + encodeURIComponent(orderId));
-    const j = await r.json();
-    if(!j.ok){ $('#drawerBody').innerHTML = '<div class="danger">Failed to load.</div>'; return; }
-
-    const o = j.order;
-    const when = new Date(o.createdAt).toLocaleString();
-    const venue = o.show?.venue;
-    const vline = venue ? [venue.name, venue.city, venue.postcode].filter(Boolean).join(', ') : '—';
-    const amount = '£' + ((o.amountPence ?? 0)/100).toFixed(2);
-
-    const ticketsHtml = (o.tickets || []).map(t => {
-      const scan = t.scannedAt ? (' — scanned ' + new Date(t.scannedAt).toLocaleString()) : '';
-      return '<div class="row" style="justify-content:space-between;border-bottom:1px solid var(--border);padding:6px 0">'
-        + '<div>Serial: <b>'+t.serial+'</b></div>'
-        + '<div class="note">'+t.status+scan+'</div>'
-        + '</div>';
-    }).join('') || '<div class="note">No tickets</div>';
-
-    $('#drawerTitle').textContent = 'Order #' + o.id.slice(0,8);
-    $('#drawerBody').innerHTML =
-      '<div class="grid">'
-      + '<div class="card"><div class="row" style="justify-content:space-between">'
-      + '<div><div class="note">Date</div><div>'+when+'</div></div>'
-      + '<div><div class="note">Status</div><div><span class="badge">'+o.status+'</span></div></div>'
-      + '</div>'
-      + '<div class="row" style="justify-content:space-between">'
-      + '<div><div class="note">Email</div><div>'+ (o.email || '—') +'</div></div>'
-      + '<div><div class="note">Quantity</div><div>'+ (o.quantity ?? 0) +'</div></div>'
-      + '<div><div class="note">Amount</div><div>'+ amount +'</div></div>'
-      + '</div></div>'
-
-      + '<div class="card">'
-      + '<div class="note">Show</div>'
-      + '<div><b>'+(o.show?.title || '—')+'</b></div>'
-      + '<div class="note">'+ (o.show?.date ? new Date(o.show.date).toLocaleString() : '—') +'</div>'
-      + '<div class="note">'+ vline +'</div>'
-      + '</div>'
-
-      + '<div class="card"><div class="row" style="justify-content:space-between;align-items:center">'
-      + '<h4 style="margin:0">Tickets</h4>'
-      + '<div class="row">'
-      + '<button class="btn ghost" id="btnResend">Resend tickets</button>'
-      + (o.status === 'CANCELLED' ? '' : '<button class="btn danger" id="btnRefund">Mark as refunded</button>')
-      + '</div></div>'
-      + '<div style="margin-top:8px">'+ ticketsHtml +'</div>'
-      + '</div>'
-
-      + (o.notes ? ('<div class="card"><div class="note">Notes</div><pre style="white-space:pre-wrap;margin:0">'+escapeHtml(o.notes)+'</pre></div>') : '')
-      + '</div>';
-
-    // Wire buttons
-    const btnResend = $('#btnResend');
-    if (btnResend) {
-      btnResend.addEventListener('click', async ()=>{
-        btnResend.disabled = true;
-        const r = await API('/admin/orders/'+encodeURIComponent(o.id)+'/resend', {
-          method:'POST',
-          body: JSON.stringify({ message: 'Resent via organiser console' })
-        });
-        const j = await r.json();
-        toast(j.ok ? 'Resend recorded' : (j.message || 'Resend failed'));
-        btnResend.disabled = false;
-      });
-    }
-
-    const btnRefund = $('#btnRefund');
-    if (btnRefund) {
-      btnRefund.addEventListener('click', async ()=>{
-        if (!confirm('Mark this order as refunded (cancelled)?')) return;
-        btnRefund.disabled = true;
-        const r = await API('/admin/orders/'+encodeURIComponent(o.id)+'/refund', {
-          method:'POST',
-          body: JSON.stringify({ reason: 'Refunded via organiser console' })
-        });
-        const j = await r.json();
-        toast(j.ok ? 'Order marked as refunded' : (j.message || 'Refund failed'));
-        btnRefund.disabled = false;
-        // Refresh drawer
-        openDrawer(o.id);
-      });
-    }
-  }
-
-  function escapeHtml(s){
-    return String(s).replace(/[&<>"']/g, (ch)=>({
-      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-    }[ch]));
   }
 
   // Sidebar nav
@@ -495,6 +346,51 @@ router.get('/ui', (_req, res) => {
     await API('/auth/login', { method:'POST', body: JSON.stringify({ email, password }) });
     location.reload();
   });
+
+  // Drawer events
+  $('#odClose').addEventListener('click', function(){ $('#orderDrawer').classList.remove('show'); });
+
+  async function openOrderDrawer(orderId){
+    $('#orderDrawer').classList.add('show');
+    $('#odTitle').textContent = 'Order';
+    $('#odBody').innerHTML = '<div class="note">Loading…</div>';
+    $('#btnResend').onclick = null;
+
+    const r = await API('/admin/orders/' + encodeURIComponent(orderId));
+    const j = await r.json();
+    if(!j.ok){ $('#odBody').innerHTML = '<div class="danger">Failed to load order</div>'; return; }
+    const o = j.order;
+    $('#odTitle').textContent = 'Order ' + o.id.slice(0,8) + '…';
+
+    const when = o.createdAt ? new Date(o.createdAt).toLocaleString() : '—';
+    const venue = o.show?.venue?.name || '—';
+    const showTitle = o.show?.title || '—';
+    const tRows = (o.tickets||[]).map(function(t){
+      return '<tr><td>'+t.serial+'</td><td>'+ (t.holderName || '—') +'</td><td>'+t.status+'</td></tr>';
+    }).join('');
+
+    $('#odBody').innerHTML =
+      '<div class="grid">'
+      + '<div class="card"><div><b>Show:</b> '+showTitle+'</div><div class="note">'+(o.show?.date ? new Date(o.show.date).toLocaleString() : '—')+' · '+venue+'</div></div>'
+      + '<div class="card"><div><b>Customer:</b> '+(o.email || '—')+'</div><div class="note">Created: '+when+'</div></div>'
+      + '<div class="card"><div style="overflow:auto"><table style="width:100%;border-collapse:collapse"><thead><tr>'
+      + '<th style="text-align:left;border-bottom:1px solid var(--border);padding:6px 0">Serial</th>'
+      + '<th style="text-align:left;border-bottom:1px solid var(--border);padding:6px 0">Name</th>'
+      + '<th style="text-align:left;border-bottom:1px solid var(--border);padding:6px 0">Status</th>'
+      + '</tr></thead><tbody>'+tRows+'</tbody></table></div></div>'
+      + '</div>';
+
+    $('#btnResend').onclick = async function(){
+      const to = prompt('Send to which email address?', o.email || '');
+      const r2 = await API('/admin/orders/' + encodeURIComponent(o.id) + '/resend', {
+        method: 'POST',
+        body: JSON.stringify({ to: to || undefined })
+      });
+      const j2 = await r2.json();
+      if (j2.ok) toast('Email sent');
+      else toast(j2.message || 'Resend failed');
+    };
+  }
 
   (async function boot(){
     const ok = await ensureAuth();
