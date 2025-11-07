@@ -17,8 +17,20 @@ router.get('/shows', requireAdmin, async (req: Request, res: Response) => {
     const where = q
       ? {
           OR: [
-            { title: { contains: q, mode: 'insensitive' } },
-            { venue: { name: { contains: q, mode: 'insensitive' } } },
+            {
+              title: {
+                contains: q,
+                mode: 'insensitive' as const,
+              },
+            },
+            {
+              venue: {
+                name: {
+                  contains: q,
+                  mode: 'insensitive' as const,
+                },
+              },
+            },
           ],
         }
       : {};
@@ -101,7 +113,7 @@ router.get('/shows/:id', requireAdmin, async (req: Request, res: Response) => {
  */
 router.patch('/shows/:id/ticket-types/:ticketTypeId', requireAdmin, async (req: Request, res: Response) => {
   try {
-    const { id, ticketTypeId } = req.params;
+    const { ticketTypeId } = req.params;
     const { name, pricePence, available } = req.body;
 
     const updated = await prisma.ticketType.update({
@@ -163,12 +175,17 @@ router.delete('/shows/:id/ticket-types/:ticketTypeId', requireAdmin, async (req:
 router.get('/shows/:id/attendees.csv', requireAdmin, async (req: Request, res: Response) => {
   try {
     const showId = String(req.params.id);
+
     const tickets = await prisma.ticket.findMany({
       where: { order: { showId } },
       include: {
-        order: { select: { email: true, status: true } },
+        order: {
+          select: {
+            email: true,
+            status: true,
+          },
+        },
       },
-      orderBy: { createdAt: 'asc' },
     });
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -178,7 +195,9 @@ router.get('/shows/:id/attendees.csv', requireAdmin, async (req: Request, res: R
     res.write(header.join(',') + '\n');
 
     for (const t of tickets) {
-      const row = [t.id, t.holderName ?? '', t.order?.email ?? '', t.order?.status ?? '']
+      const email = t.order?.email ?? '';
+      const status = t.order?.status ?? '';
+      const row = [t.id, t.holderName ?? '', email, status]
         .map((v) => `"${String(v).replace(/"/g, '""')}"`)
         .join(',');
       res.write(row + '\n');
@@ -186,6 +205,7 @@ router.get('/shows/:id/attendees.csv', requireAdmin, async (req: Request, res: R
 
     res.end();
   } catch (err: any) {
+    console.error('CSV export error', err);
     res.status(500).json({ ok: false, message: err.message });
   }
 });
