@@ -1,42 +1,46 @@
-# ---- build stage ----
+# ---------- build stage ----------
 FROM node:20-bullseye-slim AS build
 
 WORKDIR /app
 
-# System deps
-RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
+# Some libs (openssl used by Prisma & Stripe)
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl \
+  && rm -rf /var/lib/apt/lists/*
 
-# Install backend deps
+# Install deps for backend
 COPY backend/package*.json ./backend/
-RUN cd backend && npm install
+WORKDIR /app/backend
+RUN npm install
 
 # Copy source
-COPY backend ./backend
+COPY backend ./ 
 
-# Generate Prisma client (dummy URL OK at build time)
-WORKDIR /app/backend
+# Generate Prisma client (use a dummy DB URL at build time)
 ENV DATABASE_URL="postgresql://user:pass@localhost:5432/notused"
 RUN npx prisma generate
 
-# Build TS → JS
+# TypeScript build -> dist/
 RUN npm run build
 
 
-# ---- runtime stage ----
+# ---------- runtime stage ----------
 FROM node:20-bullseye-slim AS runtime
 
 WORKDIR /app/backend
 
-# System deps
-RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
+# Minimal runtime packages
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl \
+  && rm -rf /var/lib/apt/lists/*
 
-# Copy runtime artifacts
-COPY --from=build /app/backend/node_modules ./node_modules
+# Bring compiled app + node_modules + prisma
 COPY --from=build /app/backend/dist ./dist
-COPY --from=build /app/backend/package*.json ./
 COPY --from=build /app/backend/prisma ./prisma
+COPY --from=build /app/backend/node_modules ./node_modules
+COPY --from=build /app/backend/package*.json ./
 
-# Startup script (handles Prisma migrate/db push then boots server)
+# Startup script to run prisma migrate/db push then start server
 COPY backend/start.sh ./start.sh
 RUN chmod +x ./start.sh
 
