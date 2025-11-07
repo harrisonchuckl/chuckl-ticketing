@@ -18,6 +18,8 @@ model User {
   orders         Order[]
   tickets        Ticket[]         @relation("UserTickets")
   passwordResets PasswordReset[]
+  // Optional backlink to notes authored by this user (if you later store author)
+  orderNotes     OrderNote[]
 }
 
 model Order {
@@ -34,7 +36,8 @@ model Order {
   showId      String?
   show        Show?         @relation(fields: [showId], references: [id])
   tickets     Ticket[]
-  refunds     Refund[]      // <-- refunds linked to orders
+  refunds     Refund[]
+  notes       OrderNote[]   // 👈 NEW: searchable, timestamped notes
 }
 
 enum OrderStatus {
@@ -86,7 +89,6 @@ model Ticket {
   userId      String?
   user        User?     @relation("UserTickets", fields: [userId], references: [id])
 
-  // 👇 Backlink so Refund ↔ Ticket relation is complete
   refunds     Refund[]
 }
 
@@ -111,4 +113,17 @@ model Refund {
   ticketId   String?
   ticket     Ticket?  @relation(fields: [ticketId], references: [id])
   createdBy  String?
+}
+
+model OrderNote {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id])
+  authorId  String?
+  user      User?    @relation(fields: [authorId], references: [id])
+  text      String
+  createdAt DateTime @default(now())
+
+  @@index([orderId, createdAt])
+  @@index([authorId])
 }
