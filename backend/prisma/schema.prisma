@@ -34,7 +34,7 @@ model Order {
   showId      String?
   show        Show?         @relation(fields: [showId], references: [id])
   tickets     Ticket[]
-  refunds     Refund[]      // ✅ new
+  refunds     Refund[]      // <-- refunds linked to orders
 }
 
 enum OrderStatus {
@@ -70,21 +70,24 @@ model TicketType {
   name       String
   pricePence Int
   available  Int?
-  createdAt  DateTime  @default(now())
+  createdAt  DateTime @default(now())
   showId     String?
   show       Show?    @relation(fields: [showId], references: [id])
 }
 
 model Ticket {
-  id          String   @id @default(cuid())
-  serial      String   @unique
+  id          String    @id @default(cuid())
+  serial      String    @unique
   holderName  String?
   status      String
   scannedAt   DateTime?
   orderId     String?
-  order       Order?   @relation(fields: [orderId], references: [id])
+  order       Order?    @relation(fields: [orderId], references: [id])
   userId      String?
-  user        User?    @relation("UserTickets", fields: [userId], references: [id])
+  user        User?     @relation("UserTickets", fields: [userId], references: [id])
+
+  // 👇 Backlink so Refund ↔ Ticket relation is complete
+  refunds     Refund[]
 }
 
 model PasswordReset {
