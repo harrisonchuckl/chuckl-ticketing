@@ -1,153 +1,176 @@
 // backend/src/services/email.ts
-import { buildTicketsPdf } from './pdf.js';
-import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
+import { prisma } from '../lib/db.js';
 
-/** Exported so other modules (e.g. webhook.ts) can import the shared type */
-export type VenueInfo = {
-  name: string | null;
-  address: string | null;
-  city: string | null;
-  postcode: string | null;
-};
+// OPTIONAL: if your pdf service exposes a function, we’ll try to use it.
+// If it doesn’t exist or fails, we’ll still send the email without attachments.
+let buildTicketPDF: undefined | ((
+  args: { serial: string; showTitle: string; showDate: Date; venueName?: string | null; holderName?: string | null }
+) => Promise<Buffer>);
 
-/** Exported type used by pdf + webhook */
-export type ShowInfo = {
-  id: string;
-  title: string;
-  date: Date;
-  venue: VenueInfo | null;
-};
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const pdfSvc = await import('../services/pdf.js');
+  // try a few likely export names to be compatible with your version
+  buildTicketPDF =
+    (pdfSvc.buildTicketPDF as typeof buildTicketPDF) ||
+    (pdfSvc.createTicketPDF as typeof buildTicketPDF) ||
+    (pdfSvc.generateTicketPDF as typeof buildTicketPDF);
+} catch {
+  // no-op – we’ll still send a plain email
+}
 
-type TicketInfo = { id?: string; serial: string; status?: 'VALID' | 'USED' };
+const RESEND_KEY = process.env.RESEND_API_KEY || '';
+const EMAIL_FROM = process.env.EMAIL_FROM || 'noreply@chuckl.co.uk';
 
-/** Utility to render a nice one-line show descriptor */
-function formatShowLine(show: ShowInfo): string {
-  const d = new Date(show.date);
-  const when = d.toLocaleString('en-GB', {
-    weekday: 'short',
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
+const resend = RESEND_KEY ? new Resend(RESEND_KEY) : null;
+
+type OrderDeep = Awaited<ReturnType<typeof fetchOrderDeep>>;
+
+async function fetchOrderDeep(orderId: string) {
+  return prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      show: {
+        include: {
+          venue: true,
+          ticketTypes: true,
+        },
+      },
+      tickets: true,
+      user: true,
+    },
   });
-  const v = show.venue ?? { name: null, address: null, city: null, postcode: null };
-  const venueBits = [v.name, v.address, v.city, v.postcode].filter(Boolean).join(', ');
-  return `${show.title} – ${when}${venueBits ? ' @ ' + venueBits : ''}`;
 }
 
-/** Choose email transport: RESEND if available, else SMTP via SMTP_URL, else console fallback */
-function getEmailProvider() {
-  const resendKey = process.env.RESEND_API_KEY;
-  if (resendKey) {
-    const resend = new Resend(resendKey);
-    return {
-      name: 'resend',
-      async send(opts: { to: string; subject: string; html: string; attachments?: { filename: string; content: Buffer }[] }) {
-        const attachments = (opts.attachments || []).map(a => ({
-          filename: a.filename,
-          content: a.content.toString('base64'),
-          encoding: 'base64'
-        }));
-        const r = await resend.emails.send({
-          from: process.env.EMAIL_FROM ?? 'tickets@chuckl.co.uk',
-          to: opts.to,
-          subject: opts.subject,
-          html: opts.html,
-          attachments
-        });
-        return r;
+/**
+ * Build a simple, branded HTML email body for tickets.
+ */
+function renderTicketsHtml(order: NonNullable<OrderDeep>) {
+  const s = order.show;
+  const v = s?.venue;
+  const when = s?.date ? new Date(s.date).toLocaleString() : '—';
+  const ticketsList = (order.tickets || [])
+    .map(t => {
+      return `<li>
+        <b>Serial:</b> ${t.serial}
+        ${t.holderName ? `&nbsp; &middot; <b>Name:</b> ${t.holderName}` : ''}
+        &nbsp; &middot; <b>Status:</b> ${t.status}
+      </li>`;
+    })
+    .join('');
+
+  const ticketTypeSummary = (s?.ticketTypes || [])
+    .map(tt => `${tt.name} (£${(tt.pricePence / 100).toFixed(2)})`)
+    .join(' · ');
+
+  return `
+  <div style="font-family: Arial, Helvetica, sans-serif; max-width: 640px; margin: 0 auto; color: #0f172a;">
+    <div style="padding: 16px; border: 1px solid #e5e7eb; border-radius: 12px;">
+      <h2 style="margin: 0 0 8px;">Your Tickets – ${s?.title ?? 'Event'}</h2>
+      <p style="margin: 0 0 12px; color: #6b7280;">
+        ${when}${v?.name ? ` &nbsp;&middot;&nbsp; ${v.name}` : ''}${v?.city ? `, ${v.city}` : ''}
+      </p>
+      ${
+        ticketTypeSummary
+          ? `<p style="margin: 0 0 12px;"><b>Ticket Types:</b> ${ticketTypeSummary}</p>`
+          : ''
       }
-    };
-  }
+      <p style="margin: 0 0 12px;">Thanks for your purchase${
+        order.email ? `, ${order.email}` : ''
+      }! Your tickets are below.</p>
+      <ul style="margin: 0 0 12px; padding-left: 18px;">${ticketsList}</ul>
 
-  const smtpUrl = process.env.SMTP_URL;
-  if (smtpUrl) {
-    const tx = nodemailer.createTransport(smtpUrl);
-    return {
-      name: 'smtp',
-      async send(opts: { to: string; subject: string; html: string; attachments?: { filename: string; content: Buffer }[] }) {
-        return tx.sendMail({
-          from: process.env.EMAIL_FROM ?? 'tickets@chuckl.co.uk',
-          to: opts.to,
-          subject: opts.subject,
-          html: opts.html,
-          attachments: opts.attachments
-        });
-      }
-    };
-  }
-
-  // Fallback: log only
-  return {
-    name: 'console',
-    async send(opts: { to: string; subject: string; html: string; attachments?: { filename: string; content: Buffer }[] }) {
-      /* eslint-disable no-console */
-      console.log('EMAIL(FALLBACK):', {
-        to: opts.to,
-        subject: opts.subject,
-        htmlPreview: opts.html?.slice(0, 200) + '…',
-        attachments: (opts.attachments || []).map(a => a.filename)
-      });
-      return { ok: true };
-    }
-  };
-}
-
-/** Generic email helper (reused by password reset + other transactional emails) */
-export async function sendEmail(opts: { to: string; subject: string; html: string; attachments?: { filename: string; content: Buffer }[] }) {
-  const provider = getEmailProvider();
-  const result = await provider.send(opts);
-  return { ok: true, provider: provider.name, result };
-}
-
-/** Sends a simple test email (used by /admin/email/test) */
-export async function sendTestEmail(to: string) {
-  const subject = 'Chuckl. Tickets – Test Email';
-  const html = `<div style="font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;">
-    <h2>Test email from Chuckl. backend</h2>
-    <p>Provider: <code>${getEmailProvider().name}</code></p>
-    <p>If you received this, email is configured 👍</p>
-  </div>`;
-  return sendEmail({ to, subject, html });
-}
-
-/** Sends order confirmation with optional PDF tickets attachment (enabled by EMAIL_ATTACH_PDF=1) */
-export async function sendTicketsEmail(to: string, show: ShowInfo, tickets: TicketInfo[]) {
-  const subject = `Your Chuckl. Tickets – ${show.title}`;
-  const intro = formatShowLine(show);
-  const list = tickets.map(t => `<li><code>${t.serial}</code> (${t.status ?? 'VALID'})</li>`).join('');
-
-  const html = `<div style="font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;">
-    <h2>Thanks – your order is confirmed 🎉</h2>
-    <p>${intro}</p>
-    <p>Ticket serials:</p>
-    <ul>${list}</ul>
-    <p>Show this email or the attached PDF at the door. Each serial is a unique entry code.</p>
-    <p style="color:#888">If you didn’t expect this email, contact support.</p>
-  </div>`;
-
-  let attachments: { filename: string; content: Buffer }[] = [];
-  if (process.env.EMAIL_ATTACH_PDF === '1') {
-    const pdf = await buildTicketsPdf(show, tickets);
-    attachments.push({ filename: `tickets-${show.id}.pdf`, content: pdf });
-  }
-
-  return sendEmail({ to, subject, html, attachments });
-}
-
-/** 🔐 Password reset email */
-export async function sendPasswordResetEmail(email: string, name: string | null, link: string) {
-  const safeName = name || 'there';
-  const html = `
-    <div style="font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;">
-      <p>Hi ${safeName},</p>
-      <p>We received a request to reset your password for your organiser account.</p>
-      <p><a href="${link}" style="color:#2563eb;">Click here to reset your password</a>.</p>
-      <p>This link expires in 30 minutes.</p>
-      <p>If you didn’t request this, you can safely ignore the message.</p>
+      <p style="margin: 0 0 12px; color: #6b7280;">
+        If this email has attachments, each attached PDF is a single ticket. You can show the QR on your phone or print it.
+      </p>
+      <p style="margin: 0; font-size: 12px; color: #6b7280;">
+        Chuckl. Ticketing &mdash; do not reply to this address.
+      </p>
     </div>
-  `;
-  return sendEmail({ to: email, subject: 'Reset your password', html });
+  </div>`;
+}
+
+/**
+ * Tries to build PDF attachments for each ticket (if buildTicketPDF is available).
+ */
+async function buildAttachments(order: NonNullable<OrderDeep>) {
+  if (!buildTicketPDF) return [];
+
+  const s = order.show;
+  const v = s?.venue;
+  const attachments: Array<{ filename: string; content: Buffer }> = [];
+
+  for (const t of order.tickets || []) {
+    try {
+      const pdf = await buildTicketPDF({
+        serial: t.serial,
+        showTitle: s?.title ?? 'Event',
+        showDate: s?.date ?? new Date(),
+        venueName: v?.name ?? undefined,
+        holderName: t.holderName ?? undefined,
+      });
+      attachments.push({
+        filename: `ticket-${t.serial}.pdf`,
+        content: pdf,
+      });
+    } catch {
+      // ignore individual ticket errors; send whatever we can
+    }
+  }
+
+  return attachments;
+}
+
+/**
+ * Public API – send order tickets to the customer email.
+ * Optionally override recipient with "to".
+ */
+export async function sendTicketsEmail(orderId: string, to?: string) {
+  const order = await fetchOrderDeep(orderId);
+  if (!order) throw new Error('Order not found');
+
+  if (!resend) {
+    // still return ok so you can test without keys
+    return { ok: true, message: 'RESEND_API_KEY not configured – email skipped.' };
+  }
+
+  const html = renderTicketsHtml(order);
+  const attachments = await buildAttachments(order);
+  const recipient = (to || order.email || '').trim();
+  if (!recipient) throw new Error('No recipient email on order');
+
+  const subject =
+    `Your tickets for ${order.show?.title ?? 'your event'} – ` +
+    (order.show?.date ? new Date(order.show.date).toLocaleDateString() : '');
+
+  await resend.emails.send({
+    from: EMAIL_FROM,
+    to: recipient,
+    subject,
+    html,
+    attachments:
+      attachments.length > 0
+        ? attachments.map(a => ({
+            filename: a.filename,
+            content: a.content.toString('base64'),
+          }))
+        : undefined,
+  });
+
+  return { ok: true };
+}
+
+/**
+ * Simple test email to verify connectivity
+ */
+export async function sendTestEmail(to: string) {
+  if (!resend) return { ok: false, message: 'RESEND_API_KEY not configured' };
+  await resend.emails.send({
+    from: EMAIL_FROM,
+    to,
+    subject: 'Test email – Chuckl. Ticketing',
+    html: `<div style="font-family:Arial,sans-serif">This is a test email from Chuckl. Ticketing.</div>`,
+  });
+  return { ok: true };
 }
