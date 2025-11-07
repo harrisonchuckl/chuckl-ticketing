@@ -12,10 +12,15 @@ router.get('/ui', (_req, res) => {
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Organiser Console</title>
 <style>
-  :root{--bg:#f7f8fa;--panel:#fff;--ink:#0f172a;--muted:#6b7280;--accent:#2563eb;--accent-2:#eff6ff;--border:#e5e7eb;--bad:#dc2626;--ok:#16a34a}
-  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial,sans-serif}
+  :root{
+    --bg:#f7f8fa;--panel:#fff;--ink:#0f172a;--muted:#6b7280;--accent:#2563eb;--accent-2:#eff6ff;--border:#e5e7eb;--bad:#dc2626;--ok:#16a34a;--warn:#d97706
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial,sans-serif}
+  a{color:var(--accent);text-decoration:none}
   header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);background:var(--panel);position:sticky;top:0;z-index:5}
-  header .brand{font-weight:800} header .user{font-size:14px;color:var(--muted)}
+  header .brand{font-weight:800}
+  header .user{font-size:14px;color:var(--muted)}
   main{display:grid;grid-template-columns:260px 1fr;gap:20px;padding:20px;min-height:calc(100vh - 64px)}
   nav{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:12px}
   nav h4{margin:8px 10px 12px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
@@ -25,26 +30,29 @@ router.get('/ui', (_req, res) => {
   .toolbar{display:flex;gap:8px;align-items:center;padding:14px;border-bottom:1px solid var(--border)}
   .toolbar h2{font-size:16px;margin:0}
   .content{padding:16px}
-  .grid{display:grid;gap:12px}.two{grid-template-columns:1fr 1fr}
+  .grid{display:grid;gap:12px}
+  .two{grid-template-columns:1fr 1fr}
+  .three{grid-template-columns:1fr 1fr 1fr}
+  .four{grid-template-columns:1fr 1fr 1fr 1fr}
   .row{display:flex;gap:12px;flex-wrap:wrap}
   input,select,textarea{width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;background:#fff;color:var(--ink);font-size:14px}
   label{font-size:12px;color:var(--muted)}
   .btn{border:0;border-radius:10px;padding:10px 12px;font-weight:600;cursor:pointer}
-  .btn.primary{background:var(--accent);color:#fff}.btn.ghost{background:#fff;border:1px solid var(--border)}
-  .btn.danger{background:#ef4444;color:#fff}
+  .btn.primary{background:var(--accent);color:#fff}
+  .btn.ghost{background:#fff;border:1px solid var(--border)}
+  .btn.warn{background:#fff;border:1px solid var(--warn);color:var(--warn)}
+  .btn.danger{background:#fff;border:1px solid var(--bad);color:var(--bad)}
   .note{font-size:13px;color:var(--muted)}
   .card{border:1px solid var(--border);border-radius:12px;padding:12px;background:#fff}
-  .danger{color:var(--bad)} .ok{color:var(--ok)}
-
-  /* Drawer */
-  .drawer{position:fixed;top:0;right:-520px;width:520px;max-width:90vw;height:100vh;background:#fff;border-left:1px solid var(--border);box-shadow:-8px 0 24px rgba(15,23,42,.08);transition:right .24s ease;z-index:60;display:flex;flex-direction:column}
-  .drawer.show{right:0}
-  .drawer .head{display:flex;justify-content:space-between;align-items:center;padding:14px;border-bottom:1px solid var(--border)}
-  .drawer .body{padding:16px;overflow:auto;flex:1}
-  .drawer .foot{padding:14px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end}
-  .x{border:0;background:none;font-size:20px;cursor:pointer;color:#6b7280}
-  .toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;border-radius:10px;padding:10px 14px;font-size:14px;display:none;z-index:80}
-  .toast.show{display:block}
+  .kpi{display:flex;align-items:center;justify-content:space-between}
+  .kpi b{font-size:20px}
+  .overlay{position:fixed;inset:0;background:rgba(15,23,42,.5);display:none;align-items:center;justify-content:center;z-index:50}
+  .overlay.show{display:flex}
+  .login{width:360px;background:#fff;border-radius:14px;border:1px solid var(--border);padding:18px}
+  .login h3{margin:0 0 8px}
+  table{width:100%;border-collapse:collapse}
+  th,td{border-bottom:1px solid var(--border);padding:8px 6px;text-align:left;font-size:14px}
+  th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
 </style>
 </head>
 <body>
@@ -79,22 +87,8 @@ router.get('/ui', (_req, res) => {
   </section>
 </main>
 
-<!-- Drawer (Orders) -->
-<div class="drawer" id="orderDrawer">
-  <div class="head">
-    <div style="font-weight:700" id="odTitle">Order</div>
-    <button class="x" id="odClose" aria-label="Close">&times;</button>
-  </div>
-  <div class="body" id="odBody">
-    <div class="note">Loading…</div>
-  </div>
-  <div class="foot" id="odFoot">
-    <button class="btn ghost" id="btnResend">Resend tickets</button>
-  </div>
-</div>
-
-<div class="overlay" id="loginOverlay" style="position:fixed;inset:0;background:rgba(15,23,42,.5);display:none;align-items:center;justify-content:center;z-index:50">
-  <div class="login" style="width:360px;background:#fff;border-radius:14px;border:1px solid var(--border);padding:18px">
+<div class="overlay" id="loginOverlay">
+  <div class="login">
     <h3>Sign in</h3>
     <p class="note" id="loginNote">Use your organiser account.</p>
     <div class="grid">
@@ -109,8 +103,6 @@ router.get('/ui', (_req, res) => {
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
-
 <script>
 (function(){
   const $ = (sel) => document.querySelector(sel);
@@ -118,12 +110,9 @@ router.get('/ui', (_req, res) => {
     credentials:'include',
     headers:{'Content-Type':'application/json'}
   }, opts || {}));
+  const fmtMoney = (p) => '£' + (Number(p||0)/100).toFixed(2);
 
-  function toast(msg, ms=1800){
-    const t = $('#toast');
-    t.textContent = msg; t.classList.add('show');
-    setTimeout(()=>t.classList.remove('show'), ms);
-  }
+  const state = { currentShowId: null };
 
   const views = {
     home(){ 
@@ -142,16 +131,24 @@ router.get('/ui', (_req, res) => {
         switchView(el.getAttribute('data-goto'));
       }, { once:true });
     },
+
     shows(){
       $('#viewTitle').textContent = 'Shows';
       $('#viewContent').innerHTML =
         '<div class="row"><button class="btn primary" id="btnRefreshShows">Refresh shows</button></div>'
         + '<div id="showsWrap" class="grid"></div>';
-      loadShows();
-      $('#viewContent').addEventListener('click', function(e){
-        if (e.target && e.target.id === 'btnRefreshShows') loadShows();
-      });
+      bindShows();
     },
+
+    showDetail(){
+      $('#viewTitle').textContent = 'Show detail';
+      const id = state.currentShowId;
+      $('#viewContent').innerHTML =
+        '<div class="row"><button class="btn ghost" id="btnBackShows">← Back to Shows</button></div>'
+        + '<div id="showDetailWrap" class="grid" style="margin-top:8px"></div>';
+      bindShowDetail(id);
+    },
+
     venues(){
       $('#viewTitle').textContent = 'Venues';
       $('#viewContent').innerHTML =
@@ -167,94 +164,12 @@ router.get('/ui', (_req, res) => {
         + '<div class="card"><h4>Find venues</h4>'
         + '<div class="row"><input id="q" placeholder="Search by name/city/postcode"/><button class="btn ghost" id="btnFind">Search</button></div>'
         + '<div id="venuesList" class="grid" style="margin-top:8px"></div></div></div>';
-      $('#viewContent').addEventListener('click', async function(e){
-        if (e.target && e.target.id === 'btnCreateVenue') {
-          const body = {
-            name: $('#v_name').value,
-            address: $('#v_address').value,
-            city: $('#v_city').value,
-            postcode: $('#v_postcode').value,
-            capacity: Number($('#v_capacity').value || 0)
-          };
-          const r = await API('/admin/venues', { method:'POST', body: JSON.stringify(body) });
-          const j = await r.json();
-          $('#venueMsg').textContent = j.ok ? 'Saved.' : (j.message || 'Failed');
-        }
-        if (e.target && e.target.id === 'btnFind') {
-          const q = $('#q').value || '';
-          const r = await API('/admin/venues?q=' + encodeURIComponent(q));
-          const j = await r.json();
-          const wrap = $('#venuesList');
-          if(!j.ok){ wrap.innerHTML = '<p class="danger">Failed.</p>'; return; }
-          wrap.innerHTML = (j.venues||[]).map(function(v){
-            const meta = [v.address, v.city, v.postcode].filter(Boolean).join(', ') || '—';
-            const cap = (v.capacity != null) ? v.capacity : '—';
-            return '<div class="card"><b>'+v.name+'</b><div class="note">'+meta+'</div><div class="note">Capacity: '+cap+'</div></div>';
-          }).join('');
-        }
-      });
+      bindVenues();
     },
+
     orders(){
       $('#viewTitle').textContent = 'Orders';
-      $('#viewContent').innerHTML =
-        '<div class="row">'
-        + '<input id="q_orders" placeholder="Search email/show/venue" style="max-width:360px"/>'
-        + '<button class="btn ghost" id="btnSearchOrders">Search</button>'
-        + '<button class="btn primary" id="btnRefreshOrders">Refresh</button>'
-        + '</div>'
-        + '<div id="ordersWrap" class="grid" style="margin-top:12px"></div>'
-        + '<div class="row" style="margin-top:8px"><button class="btn ghost" id="btnMore">Load more</button></div>';
-      loadOrders();
-
-      let paging = { cursor: null, q: '' };
-
-      $('#viewContent').addEventListener('click', async function(e){
-        if (e.target && e.target.id === 'btnRefreshOrders') { paging.cursor = null; loadOrders(paging); }
-        if (e.target && e.target.id === 'btnMore') { loadOrders(paging, true); }
-        const item = e.target.closest('[data-order-id]');
-        if (item) {
-          const id = item.getAttribute('data-order-id');
-          openOrderDrawer(id);
-        }
-      });
-
-      $('#viewContent').addEventListener('click', async function(e){
-        if (e.target && e.target.id === 'btnSearchOrders') {
-          paging.q = $('#q_orders').value || '';
-          paging.cursor = null;
-          loadOrders(paging);
-        }
-      });
-
-      async function loadOrders(pg){
-        const wrap = $('#ordersWrap');
-        if (!pg || !pg._append) wrap.innerHTML = '<div class="note">Loading…</div>';
-        const qs = new URLSearchParams();
-        if (pg?.q) qs.set('q', pg.q);
-        if (pg?.cursor) qs.set('cursor', pg.cursor);
-        const r = await API('/admin/orders?' + qs.toString());
-        const j = await r.json();
-        if(!j.ok){ wrap.innerHTML = '<div class="danger">Failed to load orders</div>'; return; }
-        const chunk = (j.orders || []).map(function(o){
-          const when = o.createdAt ? new Date(o.createdAt).toLocaleString() : '—';
-          const venue = o.show?.venue?.name ? ' · ' + o.show.venue.name : '';
-          const title = o.show?.title || '—';
-          const qty = o.quantity ?? (o.tickets ? o.tickets.length : 0);
-          const amount = o.amountPence != null ? '£' + (o.amountPence/100).toFixed(2) : '—';
-          return '<div class="card" style="cursor:pointer" data-order-id="'+o.id+'">'
-            + '<div><b>'+title+'</b></div>'
-            + '<div class="note">'+when+venue+'</div>'
-            + '<div class="note">Customer: '+(o.email || '—')+' &nbsp; · &nbsp; Qty: '+qty+' &nbsp; · &nbsp; '+amount+'</div>'
-            + '</div>';
-        }).join('');
-
-        if (pg && pg._append) {
-          wrap.insertAdjacentHTML('beforeend', chunk || '');
-        } else {
-          wrap.innerHTML = chunk || '<div class="note">No orders found.</div>';
-        }
-        paging.cursor = j.nextCursor || null;
-      }
+      $('#viewContent').innerHTML = '<div class="note">Orders list coming next.</div>';
     },
     audiences(){
       $('#viewTitle').textContent = 'Audiences';
@@ -270,20 +185,177 @@ router.get('/ui', (_req, res) => {
     }
   };
 
-  async function loadShows(){
+  async function bindShows(){
     const wrap = document.getElementById('showsWrap');
-    wrap.innerHTML = '<div class="note">Loading…</div>';
-    const r = await API('/admin/shows/latest?limit=20');
-    const j = await r.json();
-    if(!j.ok){ wrap.innerHTML = '<div class="danger">Failed to load shows</div>'; return; }
-    if(!j.shows || j.shows.length===0){ wrap.innerHTML = '<div class="note">No shows yet.</div>'; return; }
-    wrap.innerHTML = j.shows.map(function(s){
-      const d = new Date(s.date);
-      const when = d.toLocaleString();
-      const venue = s.venue ? [s.venue.name,s.venue.city,s.venue.postcode].filter(Boolean).join(', ') : '—';
-      const tt = (s.ticketTypes||[]).map(function(t){ return t.name+' (£'+(t.pricePence/100).toFixed(2)+')'; }).join(' · ');
-      return '<div class="card"><div><b>'+s.title+'</b></div><div class="note">'+when+' — '+venue+'</div><div class="note">'+(tt || 'No ticket types')+'</div></div>';
-    }).join('');
+    async function load(){
+      wrap.innerHTML = '<div class="note">Loading…</div>';
+      const r = await API('/admin/shows/latest?limit=50');
+      const j = await r.json();
+      if(!j.ok){ wrap.innerHTML = '<div class="danger">Failed to load shows</div>'; return; }
+      if(!j.shows || j.shows.length===0){ wrap.innerHTML = '<div class="note">No shows yet.</div>'; return; }
+      wrap.innerHTML = j.shows.map(function(s){
+        const d = new Date(s.date);
+        const when = d.toLocaleString();
+        const venue = s.venue ? [s.venue.name,s.venue.city,s.venue.postcode].filter(Boolean).join(', ') : '—';
+        const tt = (s.ticketTypes||[]).map(function(t){ return t.name+' ('+fmtMoney(t.pricePence)+')'; }).join(' · ');
+        return '<div class="card">'
+          + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
+          +   '<div>'
+          +     '<div><b>'+s.title+'</b></div>'
+          +     '<div class="note">'+when+' — '+venue+'</div>'
+          +     '<div class="note">'+(tt || 'No ticket types')+'</div>'
+          +   '</div>'
+          +   '<div><button class="btn ghost" data-showid="'+s.id+'" data-action="openShow">Open</button></div>'
+          + '</div>'
+          + '</div>';
+      }).join('');
+    }
+    await load();
+    $('#viewContent').addEventListener('click', function(e){
+      const btn = e.target.closest('button[data-action="openShow"]');
+      if(!btn) return;
+      state.currentShowId = btn.getAttribute('data-showid');
+      switchView('showDetail');
+    });
+    $('#btnRefreshShows').addEventListener('click', load);
+  }
+
+  async function bindShowDetail(id){
+    const wrap = $('#showDetailWrap');
+    async function load(){
+      wrap.innerHTML = '<div class="note">Loading…</div>';
+      const r = await API('/admin/shows/'+encodeURIComponent(id));
+      const j = await r.json();
+      if(!j.ok){ wrap.innerHTML = '<div class="danger">Failed to load show</div>'; return; }
+      const s = j.show, k = j.kpis || {};
+      const when = new Date(s.date).toLocaleString();
+      const venueLine = s.venue ? [s.venue.name,s.venue.city,s.venue.postcode].filter(Boolean).join(', ') : '—';
+
+      wrap.innerHTML =
+        '<div class="grid two">'
+        + '<div class="card">'
+        +   '<h3 style="margin:0 0 8px">'+s.title+'</h3>'
+        +   '<div class="note">'+when+' — '+venueLine+'</div>'
+        +   (s.description ? '<p style="margin-top:8px">'+(s.description||'')+'</p>' : '')
+        +   '<div class="row" style="margin-top:8px">'
+        +     '<button class="btn ghost" id="btnEditShow">Edit show</button>'
+        +     '<a class="btn ghost" id="btnExportCSV" href="/admin/shows/'+s.id+'/attendees.csv">Download attendees (CSV)</a>'
+        +   '</div>'
+        + '</div>'
+        + '<div class="card">'
+        +   '<h4 style="margin-top:0">KPIs</h4>'
+        +   '<div class="grid four">'
+        +     '<div class="kpi card" style="padding:10px"><div>Paid orders</div><b>'+ (k.ordersPaid||0) +'</b></div>'
+        +     '<div class="kpi card" style="padding:10px"><div>Revenue</div><b>'+ fmtMoney(k.revenuePence||0) +'</b></div>'
+        +     '<div class="kpi card" style="padding:10px"><div>Tickets sold</div><b>'+ (k.ticketsSold||0) +'</b></div>'
+        +     '<div class="kpi card" style="padding:10px"><div>Scanned</div><b>'+ (k.ticketsScanned||0) +'</b></div>'
+        +   '</div>'
+        +   '<div class="row" style="margin-top:8px">'
+        +     '<span class="note">Capacity: '+ (k.capacity!=null? k.capacity : '—') +' · Available across types: '+ (k.totalAvailableAcrossTypes!=null? k.totalAvailableAcrossTypes : '—') +'</span>'
+        +   '</div>'
+        + '</div>'
+        + '</div>'
+
+        + '<div class="card">'
+        +   '<h4 style="margin:0 0 8px">Ticket types</h4>'
+        +   '<table>'
+        +     '<thead><tr>'
+        +       '<th>Name</th><th>Price</th><th>Available</th><th>Actions</th>'
+        +     '</tr></thead>'
+        +     '<tbody>'
+        +       (s.ticketTypes||[]).map(function(t){
+                  return '<tr data-ttid="'+t.id+'">'
+                    + '<td><input data-tt="name" value="'+(t.name||'')+'"/></td>'
+                    + '<td><input data-tt="price" type="number" step="1" value="'+(t.pricePence||0)+'"/></td>'
+                    + '<td><input data-tt="avail" type="number" step="1" value="'+(t.available!=null?t.available:'')+'"/></td>'
+                    + '<td class="row">'
+                    +   '<button class="btn ghost" data-action="saveTT">Save</button>'
+                    +   '<button class="btn danger" data-action="deleteTT">Delete</button>'
+                    + '</td>'
+                  + '</tr>';
+                }).join('')
+        +     '</tbody>'
+        +   '</table>'
+        +   '<div class="row" style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">'
+        +     '<b>Add new</b>'
+        +     '<input id="newTTName" placeholder="Name" style="max-width:200px"/>'
+        +     '<input id="newTTPrice" type="number" placeholder="Price pence" style="max-width:160px"/>'
+        +     '<input id="newTTAvail" type="number" placeholder="Available" style="max-width:140px"/>'
+        +     '<button class="btn primary" id="btnAddTT">Add</button>'
+        +   '</div>'
+        +   '<div class="note" id="ttMsg"></div>'
+        + '</div>';
+
+      // bindings
+      $('#btnBackShows').addEventListener('click', function(){ switchView('shows'); });
+
+      $('#showDetailWrap').addEventListener('click', async function(e){
+        const row = e.target.closest('tr[data-ttid]');
+        const actionBtn = e.target.closest('button[data-action]');
+        if (!actionBtn) return;
+        const action = actionBtn.getAttribute('data-action');
+        if (action === 'saveTT' && row){
+          const id = row.getAttribute('data-ttid');
+          const name = row.querySelector('[data-tt="name"]').value;
+          const price = Number(row.querySelector('[data-tt="price"]').value || 0);
+          const availV = row.querySelector('[data-tt="avail"]').value;
+          const available = (availV === '' ? null : Number(availV));
+          const r = await API('/admin/shows/'+s.id+'/ticket-types/'+id, { method:'PUT', body: JSON.stringify({ name, pricePence: price, available }) });
+          const j = await r.json();
+          $('#ttMsg').textContent = j.ok ? 'Saved.' : (j.message || 'Failed to save.');
+          if (j.ok) load();
+        }
+        if (action === 'deleteTT' && row){
+          const id = row.getAttribute('data-ttid');
+          if (!confirm('Delete this ticket type?')) return;
+          const r = await API('/admin/shows/'+s.id+'/ticket-types/'+id, { method:'DELETE' });
+          const j = await r.json();
+          $('#ttMsg').textContent = j.ok ? 'Deleted.' : (j.message || 'Failed to delete.');
+          if (j.ok) load();
+        }
+      });
+
+      $('#btnAddTT').addEventListener('click', async function(){
+        const name = $('#newTTName').value;
+        const price = Number($('#newTTPrice').value || 0);
+        const availTxt = $('#newTTAvail').value;
+        const available = (availTxt === '' ? null : Number(availTxt));
+        const r = await API('/admin/shows/'+s.id+'/ticket-types', { method:'POST', body: JSON.stringify({ name, pricePence: price, available }) });
+        const j = await r.json();
+        $('#ttMsg').textContent = j.ok ? 'Added.' : (j.message || 'Failed to add.');
+        if (j.ok) load();
+      });
+    }
+    await load();
+  }
+
+  function bindVenues(){
+    $('#viewContent').addEventListener('click', async function(e){
+      if (e.target && e.target.id === 'btnCreateVenue') {
+        const body = {
+          name: $('#v_name').value,
+          address: $('#v_address').value,
+          city: $('#v_city').value,
+          postcode: $('#v_postcode').value,
+          capacity: Number($('#v_capacity').value || 0)
+        };
+        const r = await API('/admin/venues', { method:'POST', body: JSON.stringify(body) });
+        const j = await r.json();
+        $('#venueMsg').textContent = j.ok ? 'Saved.' : (j.message || 'Failed');
+      }
+      if (e.target && e.target.id === 'btnFind') {
+        const q = $('#q').value || '';
+        const r = await API('/admin/venues?q=' + encodeURIComponent(q));
+        const j = await r.json();
+        const wrap = $('#venuesList');
+        if(!j.ok){ wrap.innerHTML = '<p class="danger">Failed.</p>'; return; }
+        wrap.innerHTML = (j.venues||[]).map(function(v){
+          const meta = [v.address, v.city, v.postcode].filter(Boolean).join(', ') || '—';
+          const cap = (v.capacity != null) ? v.capacity : '—';
+          return '<div class="card"><b>'+v.name+'</b><div class="note">'+meta+'</div><div class="note">Capacity: '+cap+'</div></div>';
+        }).join('');
+      }
+    }, { once:true });
   }
 
   function switchView(name){
@@ -297,11 +369,11 @@ router.get('/ui', (_req, res) => {
     const me = await fetch('/auth/me', { credentials: 'include' });
     if(me.status===200){
       const j = await me.json();
-      document.getElementById('userEmail').textContent = (j.user && j.user.email) ? j.user.email : 'Signed in';
-      document.getElementById('loginOverlay').style.display = 'none';
+      $('#userEmail').textContent = (j.user && j.user.email) ? j.user.email : 'Signed in';
+      $('#loginOverlay').classList.remove('show');
       return true;
     } else {
-      document.getElementById('loginOverlay').style.display = 'flex';
+      $('#loginOverlay').classList.add('show');
       return false;
     }
   }
@@ -314,20 +386,27 @@ router.get('/ui', (_req, res) => {
     });
   });
 
+  // Back from detail
+  document.addEventListener('click', function(e){
+    if (e.target && e.target.id === 'btnBackShows') {
+      switchView('shows');
+    }
+  });
+
   // Logout
-  document.getElementById('btnLogout').addEventListener('click', async function(){
+  $('#btnLogout').addEventListener('click', async function(){
     await API('/auth/logout', { method:'POST' });
     location.reload();
   });
 
   // Login
-  document.getElementById('btnLogin').addEventListener('click', async function(){
-    const email = document.getElementById('email').value;
-    const password = document.getElementById('password').value;
+  $('#btnLogin').addEventListener('click', async function(){
+    const email = $('#email').value;
+    const password = $('#password').value;
     const r = await API('/auth/login', { method:'POST', body: JSON.stringify({ email, password }) });
     const j = await r.json();
     if(!j.ok){
-      const e = document.getElementById('loginError');
+      const e = $('#loginError');
       e.textContent = j.message || 'Login failed';
       e.style.display = 'block';
       return;
@@ -336,7 +415,7 @@ router.get('/ui', (_req, res) => {
   });
 
   // Demo user
-  document.getElementById('btnDemo').addEventListener('click', async function(){
+  $('#btnDemo').addEventListener('click', async function(){
     const email = 'demo@organiser.test';
     const password = 'demo1234';
     let r = await API('/auth/login', { method:'POST', body: JSON.stringify({ email, password }) });
@@ -346,51 +425,6 @@ router.get('/ui', (_req, res) => {
     await API('/auth/login', { method:'POST', body: JSON.stringify({ email, password }) });
     location.reload();
   });
-
-  // Drawer events
-  $('#odClose').addEventListener('click', function(){ $('#orderDrawer').classList.remove('show'); });
-
-  async function openOrderDrawer(orderId){
-    $('#orderDrawer').classList.add('show');
-    $('#odTitle').textContent = 'Order';
-    $('#odBody').innerHTML = '<div class="note">Loading…</div>';
-    $('#btnResend').onclick = null;
-
-    const r = await API('/admin/orders/' + encodeURIComponent(orderId));
-    const j = await r.json();
-    if(!j.ok){ $('#odBody').innerHTML = '<div class="danger">Failed to load order</div>'; return; }
-    const o = j.order;
-    $('#odTitle').textContent = 'Order ' + o.id.slice(0,8) + '…';
-
-    const when = o.createdAt ? new Date(o.createdAt).toLocaleString() : '—';
-    const venue = o.show?.venue?.name || '—';
-    const showTitle = o.show?.title || '—';
-    const tRows = (o.tickets||[]).map(function(t){
-      return '<tr><td>'+t.serial+'</td><td>'+ (t.holderName || '—') +'</td><td>'+t.status+'</td></tr>';
-    }).join('');
-
-    $('#odBody').innerHTML =
-      '<div class="grid">'
-      + '<div class="card"><div><b>Show:</b> '+showTitle+'</div><div class="note">'+(o.show?.date ? new Date(o.show.date).toLocaleString() : '—')+' · '+venue+'</div></div>'
-      + '<div class="card"><div><b>Customer:</b> '+(o.email || '—')+'</div><div class="note">Created: '+when+'</div></div>'
-      + '<div class="card"><div style="overflow:auto"><table style="width:100%;border-collapse:collapse"><thead><tr>'
-      + '<th style="text-align:left;border-bottom:1px solid var(--border);padding:6px 0">Serial</th>'
-      + '<th style="text-align:left;border-bottom:1px solid var(--border);padding:6px 0">Name</th>'
-      + '<th style="text-align:left;border-bottom:1px solid var(--border);padding:6px 0">Status</th>'
-      + '</tr></thead><tbody>'+tRows+'</tbody></table></div></div>'
-      + '</div>';
-
-    $('#btnResend').onclick = async function(){
-      const to = prompt('Send to which email address?', o.email || '');
-      const r2 = await API('/admin/orders/' + encodeURIComponent(o.id) + '/resend', {
-        method: 'POST',
-        body: JSON.stringify({ to: to || undefined })
-      });
-      const j2 = await r2.json();
-      if (j2.ok) toast('Email sent');
-      else toast(j2.message || 'Resend failed');
-    };
-  }
 
   (async function boot(){
     const ok = await ensureAuth();
