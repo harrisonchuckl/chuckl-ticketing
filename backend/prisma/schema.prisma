@@ -26,6 +26,8 @@ model Order {
   updatedAt   DateTime      @updatedAt
   email       String?
   amountPence Int?
+  quantity    Int?          // ✅ Added back for compatibility
+  stripeId    String?       // ✅ Added back for Stripe integration
   status      OrderStatus   @default(PENDING)
   userId      String?
   user        User?         @relation(fields: [userId], references: [id])
@@ -44,6 +46,7 @@ enum OrderStatus {
 model Show {
   id          String       @id @default(cuid())
   title       String
+  description String?       // ✅ Added back
   date        DateTime
   venueId     String?
   venue       Venue?       @relation(fields: [venueId], references: [id])
@@ -65,6 +68,8 @@ model TicketType {
   id         String   @id @default(cuid())
   name       String
   pricePence Int
+  available  Int?      // ✅ Added back
+  createdAt  DateTime  @default(now()) // ✅ Added back
   showId     String?
   show       Show?    @relation(fields: [showId], references: [id])
 }
@@ -74,6 +79,7 @@ model Ticket {
   serial      String   @unique
   holderName  String?
   status      String
+  scannedAt   DateTime?   // ✅ Added back for scanning feature
   orderId     String?
   order       Order?   @relation(fields: [orderId], references: [id])
   userId      String?
@@ -86,4 +92,6 @@ model PasswordReset {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   token     String   @unique
   createdAt DateTime @default(now())
+  expiresAt DateTime? // ✅ Added back for token validity
+  usedAt    DateTime? // ✅ Added back for tracking used tokens
 }
