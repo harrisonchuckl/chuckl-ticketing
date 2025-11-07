@@ -30,15 +30,15 @@ enum TicketStatus {
 // -----------------------------
 
 model User {
-  id        String          @id @default(cuid())
-  email     String          @unique
+  id        String   @id @default(cuid())
+  email     String   @unique
   name      String?
   password  String?
   orders    Order[]
   tickets   Ticket[]
-  createdAt DateTime        @default(now())
+  createdAt DateTime @default(now())
 
-  /// Relation for password resets (NEW)
+  // 🔐 Password reset tokens (backlink)
   passwordResets PasswordReset[]
 }
 
@@ -78,24 +78,18 @@ model TicketType {
   available   Int?
   createdAt   DateTime @default(now())
 
-  // Backlink so Order.ticketType has an opposite side
-  orders      Order[]
-
   @@index([showId])
+
+  // Backlink from Order → TicketType
+  orders      Order[]
 }
 
 model Order {
   id           String       @id @default(cuid())
   showId       String
   show         Show         @relation(fields: [showId], references: [id])
-
   userId       String?
   user         User?        @relation(fields: [userId], references: [id])
-
-  // Optional link to a specific ticket type
-  ticketTypeId String?
-  ticketType   TicketType?  @relation(fields: [ticketTypeId], references: [id])
-
   email        String
   quantity     Int
   amountPence  Int
@@ -104,6 +98,10 @@ model Order {
   tickets      Ticket[]
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
+
+  // Optional linkage to the specific ticket type purchased
+  ticketTypeId String?
+  ticketType   TicketType?  @relation(fields: [ticketTypeId], references: [id])
 
   @@index([showId])
   @@index([userId])
@@ -140,4 +138,6 @@ model PasswordReset {
   createdAt DateTime @default(now())
 
   @@index([userId])
+  @@index([token])
+  @@index([expiresAt])
 }
