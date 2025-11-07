@@ -118,10 +118,33 @@ router.post('/orders/:id/notes', requireAdmin, async (req: Request, res: Respons
     const text = String(req.body?.text || '').trim();
     if (!text) return res.status(400).json({ ok: false, message: 'Text required' });
 
-    const note = await prisma.orderNote.create({
-      data: { orderId, userId, text },
-      include: { user: { select: { id: true, name: true, email: true } } },
-    });
+const data: any = { orderId, text };
+if (userId) data.user = { connect: { id: userId } };
+
+const note = await prisma.orderNote.create({
+  data,
+  include: { user: { select: { id: true, name: true, email: true } } },
+});
+✅ 3) Fix the Stripe “no call signatures” issue
+
+In your backend/src/services/stripe.ts, make sure you have:
+
+import Stripe from 'stripe';
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
+  apiVersion: '2024-06-20',
+});
+
+export default async function createRefund(orderId: string, amountPence?: number, reason?: string) {
+  // ... existing refund logic ...
+}
+
+
+Then in your routes, the import must be:
+
+import createRefund from '../services/stripe.js';
+
+
+✅ not { createRefund }.
 
     res.json({ ok: true, note });
   } catch (e: any) {
