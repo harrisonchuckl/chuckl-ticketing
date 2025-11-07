@@ -1,65 +1,66 @@
 // backend/src/routes/webhook.ts
 import { Router } from 'express';
-import { prisma } from '../db.js';
-import { sendTicketsEmail } from '../services/email.js';
 import Stripe from 'stripe';
+import { prisma } from '../lib/db.js';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '');
-export const router = Router();
+const router = Router();
 
-router.post('/stripe', async (req, res) => {
+// Ensure STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET are set
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
+
+const stripe = new Stripe(STRIPE_SECRET_KEY, {
+  apiVersion: '2024-06-20',
+});
+
+// This route is mounted with bodyParser.raw in server.ts
+router.post('/webhooks/stripe', async (req, res) => {
+  const sig = req.headers['stripe-signature'] as string | undefined;
+  if (!sig || !STRIPE_WEBHOOK_SECRET) {
+    return res.status(400).send('Missing Stripe signature or webhook secret');
+  }
+
+  let event: Stripe.Event;
   try {
-    const sig = req.headers['stripe-signature'];
-    if (!sig) return res.status(400).send('Missing signature');
+    // req.body is a Buffer here because of bodyParser.raw in server.ts
+    event = stripe.webhooks.constructEvent(req.body, sig, STRIPE_WEBHOOK_SECRET);
+  } catch (err: any) {
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
 
-    const event = stripe.webhooks.constructEvent(
-      req.body,
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET || ''
-    );
-
-    if (event.type === 'checkout.session.completed') {
-      const session: any = event.data.object;
-      const orderId = session.metadata?.orderId;
-
-      if (!orderId) return res.status(400).json({ ok: false, error: 'Missing orderId' });
-
-      const order = await prisma.order.findUnique({
-        where: { id: orderId },
-        include: {
-          show: { include: { venue: true } },
-          tickets: true
+  try {
+    switch (event.type) {
+      case 'checkout.session.completed': {
+        const session = event.data.object as Stripe.Checkout.Session;
+        // Example: mark order as paid by lookup using session metadata
+        const orderId = session?.metadata?.orderId;
+        if (orderId) {
+          await prisma.order.update({
+            where: { id: orderId },
+            data: { status: 'PAID' },
+          });
         }
-      });
-
-      if (!order) return res.status(404).json({ ok: false, error: 'order not found' });
-
-      const show = {
-        id: order.show.id,
-        title: order.show.title,
-        date: order.show.date,
-        venue: order.show.venue
-          ? {
-              name: order.show.venue.name,
-              address: order.show.venue.address,
-              city: order.show.venue.city,
-              postcode: order.show.venue.postcode
-            }
-          : null
-      };
-
-      const tickets = order.tickets.map((t: any) => ({
-        serial: t.serial,
-        status: t.status
-      }));
-
-      await sendTicketsEmail(order.email, show, tickets);
+        break;
+      }
+      case 'charge.refunded': {
+        const charge = event.data.object as Stripe.Charge;
+        const orderId = charge?.metadata?.orderId;
+        if (orderId) {
+          await prisma.order.update({
+            where: { id: orderId },
+            data: { status: 'REFUNDED' },
+          });
+        }
+        break;
+      }
+      default:
+        // no-op for other events
+        break;
     }
 
-    res.json({ ok: true });
-  } catch (err: any) {
-    console.error('Webhook error:', err.message);
-    res.status(400).send(`Webhook Error: ${err.message}`);
+    res.json({ received: true });
+  } catch (e: any) {
+    res.status(500).send(`Webhook handler error: ${e?.message || 'Unknown error'}`);
   }
 });
 
