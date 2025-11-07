@@ -1,267 +1,116 @@
 // backend/src/routes/admin-shows.ts
-import { Router, Request, Response } from 'express';
-import { prisma } from '../db.js';
+import { Router } from 'express';
+import { PrismaClient } from '@prisma/client';
 
+const prisma = new PrismaClient();
 const router = Router();
 
-/** Accept admin key via header OR query ?k=  */
-function isAdmin(req: Request): boolean {
-  const headerKey = (req.headers['x-admin-key'] ?? '') as string;
-  const queryKey = (req.query.k ?? '') as string;
-  const key = headerKey || queryKey;
-  return !!key && String(key) === String(process.env.BOOTSTRAP_KEY);
-}
-
-function requireAdmin(req: Request, res: Response): boolean {
-  if (!isAdmin(req)) {
-    res.status(401).json({ error: true, message: 'Unauthorized' });
-    return false;
-  }
-  return true;
-}
-
-/** -------- SHOWS: LIST (latest) --------
+/**
  * GET /admin/shows/latest?limit=20
+ * Returns latest shows with venue and ticket types, plus counts for orders & ticketTypes
  */
 router.get('/shows/latest', async (req, res) => {
-  if (!requireAdmin(req, res)) return;
-  const limit = Math.min(Number(req.query.limit ?? 20) || 20, 100);
-
-  const shows = await prisma.show.findMany({
-    orderBy: { date: 'desc' },
-    take: limit,
-    include: {
-      venue: true,
-      ticketTypes: true,
-      _count: { select: { tickets: true, orders: true } }
-    }
-  });
-
-  res.json({ ok: true, shows });
+  try {
+    const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 20));
+    const shows = await prisma.show.findMany({
+      orderBy: { date: 'desc' },
+      take: limit,
+      include: {
+        venue: true,
+        ticketTypes: true,
+        _count: { select: { orders: true, ticketTypes: true } }
+      }
+    });
+    res.json({ ok: true, shows });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, message: e?.message || 'Failed to load shows' });
+  }
 });
 
-/** -------- SHOW: READ ONE --------
- * GET /admin/shows/:id
- */
-router.get('/shows/:id', async (req, res) => {
-  if (!requireAdmin(req, res)) return;
-  const id = String(req.params.id);
-  const show = await prisma.show.findUnique({
-    where: { id },
-    include: {
-      venue: true,
-      ticketTypes: true,
-      _count: { select: { tickets: true, orders: true } }
-    }
-  });
-  if (!show) return res.status(404).json({ error: true, message: 'Show not found' });
-  res.json({ ok: true, show });
-});
-
-/** -------- SHOW: CREATE --------
+/**
  * POST /admin/shows
- * { title, description?, dateISO, venueId, posterUrl? }
+ * Create a new show
+ * body: { title, description?, date (ISO), venueId?, imageUrl? }
  */
 router.post('/shows', async (req, res) => {
-  if (!requireAdmin(req, res)) return;
-  const { title, description, dateISO, venueId /* posterUrl */ } = req.body || {};
-
-  if (!title || !dateISO || !venueId) {
-    return res.status(400).json({ error: true, message: 'title, dateISO and venueId are required' });
-  }
-
-  const date = new Date(dateISO);
-  if (isNaN(date.getTime())) {
-    return res.status(400).json({ error: true, message: 'Invalid dateISO' });
-  }
-
-  const venue = await prisma.venue.findUnique({ where: { id: String(venueId) } });
-  if (!venue) return res.status(400).json({ error: true, message: 'Venue not found' });
-
-  const show = await prisma.show.create({
-    data: {
-      title: String(title),
-      description: description ? String(description) : null,
-      date,
-      venueId: String(venueId)
-      // posterUrl: add when schema supports it
-    }
-  });
-
-  const full = await prisma.show.findUnique({
-    where: { id: show.id },
-    include: {
-      venue: true,
-      ticketTypes: true,
-      _count: { select: { tickets: true, orders: true } }
-    }
-  });
-
-  res.json({ ok: true, show: full });
-});
-
-/** -------- SHOW: UPDATE --------
- * PUT /admin/shows/:id
- * Any of: { title?, description?, dateISO?, venueId? }
- */
-router.put('/shows/:id', async (req, res) => {
-  if (!requireAdmin(req, res)) return;
-  const id = String(req.params.id);
-  const { title, description, dateISO, venueId } = req.body || {};
-
-  const data: any = {};
-  if (typeof title === 'string') data.title = title;
-  if (typeof description === 'string' || description === null) data.description = description;
-  if (typeof venueId === 'string') data.venueId = venueId;
-  if (typeof dateISO === 'string') {
-    const d = new Date(dateISO);
-    if (isNaN(d.getTime())) return res.status(400).json({ error: true, message: 'Invalid dateISO' });
-    data.date = d;
-  }
-
   try {
-    await prisma.show.update({ where: { id }, data });
-  } catch {
-    return res.status(404).json({ error: true, message: 'Show not found' });
-  }
-
-  const full = await prisma.show.findUnique({
-    where: { id },
-    include: {
-      venue: true,
-      ticketTypes: true,
-      _count: { select: { tickets: true, orders: true } }
+    const { title, description, date, venueId } = req.body || {};
+    if (!title || !date) {
+      return res.status(400).json({ ok: false, message: 'title and date are required' });
     }
-  });
-  res.json({ ok: true, show: full });
+    const show = await prisma.show.create({
+      data: {
+        title: String(title),
+        description: description ? String(description) : null,
+        date: new Date(String(date)),
+        venueId: venueId ? String(venueId) : null
+      }
+    });
+    res.json({ ok: true, show });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, message: e?.message || 'Failed to create show' });
+  }
 });
 
-/** -------- SHOW: DELETE --------
+/**
+ * GET /admin/shows/:id
+ * Single show
+ */
+router.get('/shows/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const show = await prisma.show.findUnique({
+      where: { id: String(id) },
+      include: {
+        venue: true,
+        ticketTypes: true,
+        orders: {
+          include: { tickets: true }
+        },
+        _count: { select: { orders: true, ticketTypes: true } }
+      }
+    });
+    if (!show) return res.status(404).json({ ok: false, message: 'Not found' });
+    res.json({ ok: true, show });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, message: e?.message || 'Failed to load show' });
+  }
+});
+
+/**
+ * PATCH /admin/shows/:id
+ * Update basic fields
+ */
+router.patch('/shows/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, description, date, venueId } = req.body || {};
+    const updated = await prisma.show.update({
+      where: { id: String(id) },
+      data: {
+        ...(title !== undefined ? { title: String(title) } : {}),
+        ...(description !== undefined ? { description: description ? String(description) : null } : {}),
+        ...(date !== undefined ? { date: new Date(String(date)) } : {}),
+        ...(venueId !== undefined ? { venueId: venueId ? String(venueId) : null } : {})
+      }
+    });
+    res.json({ ok: true, show: updated });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, message: e?.message || 'Failed to update show' });
+  }
+});
+
+/**
  * DELETE /admin/shows/:id
  */
 router.delete('/shows/:id', async (req, res) => {
-  if (!requireAdmin(req, res)) return;
-  const id = String(req.params.id);
   try {
-    await prisma.show.delete({ where: { id } });
-  } catch {
-    return res.status(404).json({ error: true, message: 'Show not found' });
+    const { id } = req.params;
+    await prisma.show.delete({ where: { id: String(id) } });
+    res.json({ ok: true });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, message: e?.message || 'Failed to delete show' });
   }
-  res.json({ ok: true, deleted: true, id });
-});
-
-/** -------- TICKET TYPES: LIST --------
- * GET /admin/shows/:id/ticket-types
- */
-router.get('/shows/:id/ticket-types', async (req, res) => {
-  if (!requireAdmin(req, res)) return;
-  const showId = String(req.params.id);
-  const list = await prisma.ticketType.findMany({
-    where: { showId },
-    orderBy: { createdAt: 'asc' }
-  });
-  res.json({ ok: true, ticketTypes: list });
-});
-
-/** -------- TICKET TYPES: CREATE --------
- * POST /admin/shows/:id/ticket-types
- * { name, pricePence, available? }
- */
-router.post('/shows/:id/ticket-types', async (req, res) => {
-  if (!requireAdmin(req, res)) return;
-  const showId = String(req.params.id);
-  const { name, pricePence, available } = req.body || {};
-
-  if (!name || typeof pricePence !== 'number') {
-    return res.status(400).json({ error: true, message: 'name and pricePence required' });
-  }
-
-  const show = await prisma.show.findUnique({ where: { id: showId } });
-  if (!show) return res.status(404).json({ error: true, message: 'Show not found' });
-
-  const tt = await prisma.ticketType.create({
-    data: {
-      showId,
-      name: String(name),
-      pricePence: Math.floor(pricePence),
-      available: typeof available === 'number' ? Math.max(0, Math.floor(available)) : null
-    }
-  });
-
-  res.json({ ok: true, ticketType: tt });
-});
-
-/** -------- TICKET TYPES: UPDATE --------
- * PUT /admin/ticket-types/:ticketTypeId
- */
-router.put('/ticket-types/:ticketTypeId', async (req, res) => {
-  if (!requireAdmin(req, res)) return;
-  const id = String(req.params.ticketTypeId);
-  const { name, pricePence, available } = req.body || {};
-
-  const data: any = {};
-  if (typeof name === 'string') data.name = name;
-  if (typeof pricePence === 'number') data.pricePence = Math.floor(pricePence);
-  if (typeof available === 'number' || available === null) {
-    data.available = available === null ? null : Math.max(0, Math.floor(available));
-  }
-
-  try {
-    const tt = await prisma.ticketType.update({ where: { id }, data });
-    res.json({ ok: true, ticketType: tt });
-  } catch {
-    res.status(404).json({ error: true, message: 'Ticket type not found' });
-  }
-});
-
-/** -------- TICKET TYPES: DELETE --------
- * DELETE /admin/ticket-types/:ticketTypeId
- */
-router.delete('/ticket-types/:ticketTypeId', async (req, res) => {
-  if (!requireAdmin(req, res)) return;
-  const id = String(req.params.ticketTypeId);
-  try {
-    await prisma.ticketType.delete({ where: { id } });
-    res.json({ ok: true, deleted: true, id });
-  } catch {
-    res.status(404).json({ error: true, message: 'Ticket type not found' });
-  }
-});
-
-/** -------- ORDERS (READ-ONLY BASIC) --------
- * GET /admin/orders?showId=…&status=…&q=…&page=1&limit=20
- */
-router.get('/orders', async (req, res) => {
-  if (!requireAdmin(req, res)) return;
-  const showId = req.query.showId ? String(req.query.showId) : undefined;
-  const status = req.query.status ? String(req.query.status) : undefined;
-  const q = req.query.q ? String(req.query.q).trim() : '';
-  const page = Math.max(1, Number(req.query.page ?? 1));
-  const limit = Math.min(Math.max(1, Number(req.query.limit ?? 20)), 100);
-  const skip = (page - 1) * limit;
-
-  const where: any = {};
-  if (showId) where.showId = showId;
-  if (status) where.status = status;
-  if (q) {
-    where.OR = [
-      { email: { contains: q, mode: 'insensitive' } },
-      { stripeId: { contains: q, mode: 'insensitive' } }
-    ];
-  }
-
-  const [total, orders] = await Promise.all([
-    prisma.order.count({ where }),
-    prisma.order.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take: limit,
-      include: { show: { select: { id: true, title: true } } }
-    })
-  ]);
-
-  res.json({ ok: true, page, limit, total, orders });
 });
 
 export default router;
