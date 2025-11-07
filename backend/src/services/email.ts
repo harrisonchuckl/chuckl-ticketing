@@ -1,27 +1,11 @@
 // backend/src/services/email.ts
 import { Resend } from 'resend';
 import { prisma } from '../lib/db.js';
-
-// OPTIONAL: if your pdf service exposes a function, we’ll try to use it.
-// If it doesn’t exist or fails, we’ll still send the email without attachments.
-let buildTicketPDF: undefined | ((
-  args: { serial: string; showTitle: string; showDate: Date; venueName?: string | null; holderName?: string | null }
-) => Promise<Buffer>);
-
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const pdfSvc = await import('../services/pdf.js');
-  // try a few likely export names to be compatible with your version
-  buildTicketPDF =
-    (pdfSvc.buildTicketPDF as typeof buildTicketPDF) ||
-    (pdfSvc.createTicketPDF as typeof buildTicketPDF) ||
-    (pdfSvc.generateTicketPDF as typeof buildTicketPDF);
-} catch {
-  // no-op – we’ll still send a plain email
-}
+import PDFDocument from 'pdfkit';
 
 const RESEND_KEY = process.env.RESEND_API_KEY || '';
 const EMAIL_FROM = process.env.EMAIL_FROM || 'noreply@chuckl.co.uk';
+const ATTACH_PDFS = String(process.env.PDF_ATTACHMENTS || '').toLowerCase() === 'true';
 
 const resend = RESEND_KEY ? new Resend(RESEND_KEY) : null;
 
@@ -32,10 +16,7 @@ async function fetchOrderDeep(orderId: string) {
     where: { id: orderId },
     include: {
       show: {
-        include: {
-          venue: true,
-          ticketTypes: true,
-        },
+        include: { venue: true, ticketTypes: true },
       },
       tickets: true,
       user: true,
@@ -43,13 +24,11 @@ async function fetchOrderDeep(orderId: string) {
   });
 }
 
-/**
- * Build a simple, branded HTML email body for tickets.
- */
 function renderTicketsHtml(order: NonNullable<OrderDeep>) {
   const s = order.show;
   const v = s?.venue;
   const when = s?.date ? new Date(s.date).toLocaleString() : '—';
+
   const ticketsList = (order.tickets || [])
     .map(t => {
       return `<li>
@@ -91,11 +70,8 @@ function renderTicketsHtml(order: NonNullable<OrderDeep>) {
   </div>`;
 }
 
-/**
- * Tries to build PDF attachments for each ticket (if buildTicketPDF is available).
- */
 async function buildAttachments(order: NonNullable<OrderDeep>) {
-  if (!buildTicketPDF) return [];
+  if (!ATTACH_PDFS) return [];
 
   const s = order.show;
   const v = s?.venue;
@@ -103,42 +79,58 @@ async function buildAttachments(order: NonNullable<OrderDeep>) {
 
   for (const t of order.tickets || []) {
     try {
-      const pdf = await buildTicketPDF({
-        serial: t.serial,
-        showTitle: s?.title ?? 'Event',
-        showDate: s?.date ?? new Date(),
-        venueName: v?.name ?? undefined,
-        holderName: t.holderName ?? undefined,
+      const doc = new PDFDocument({ size: 'A4', margin: 36 });
+      const chunks: Buffer[] = [];
+      doc.on('data', (c: Buffer) => chunks.push(c));
+      const done = new Promise<Buffer>((resolve, reject) => {
+        doc.on('end', () => resolve(Buffer.concat(chunks)));
+        doc.on('error', reject);
       });
+
+      doc.fontSize(18).text(s?.title ?? 'Event', { underline: true });
+      doc.moveDown(0.5);
+      doc.fontSize(12).text(`Date/Time: ${s?.date ? new Date(s.date).toLocaleString() : '—'}`);
+      doc.text(`Venue: ${v?.name ?? '—'}${v?.city ? `, ${v.city}` : ''}`);
+      doc.moveDown(1);
+
+      doc.fontSize(14).text('Ticket', { underline: true });
+      doc.moveDown(0.25);
+      doc.fontSize(12).text(`Serial: ${t.serial}`);
+      doc.text(`Holder: ${t.holderName || '—'}`);
+      doc.text(`Status: ${t.status}`);
+
+      // Placeholder QR box (actual QR can be added later)
+      doc.moveDown(1);
+      doc.rect(doc.x, doc.y, 120, 120).stroke();
+      doc.text('QR placeholder', doc.x + 10, doc.y + 10);
+
+      doc.end();
+      const pdf = await done;
+
       attachments.push({
         filename: `ticket-${t.serial}.pdf`,
         content: pdf,
       });
     } catch {
-      // ignore individual ticket errors; send whatever we can
+      // ignore an individual ticket error
     }
   }
 
   return attachments;
 }
 
-/**
- * Public API – send order tickets to the customer email.
- * Optionally override recipient with "to".
- */
 export async function sendTicketsEmail(orderId: string, to?: string) {
   const order = await fetchOrderDeep(orderId);
-  if (!order) throw new Error('Order not found');
+  if (!order) return { ok: false, message: 'Order not found' };
 
   if (!resend) {
-    // still return ok so you can test without keys
     return { ok: true, message: 'RESEND_API_KEY not configured – email skipped.' };
   }
 
   const html = renderTicketsHtml(order);
   const attachments = await buildAttachments(order);
   const recipient = (to || order.email || '').trim();
-  if (!recipient) throw new Error('No recipient email on order');
+  if (!recipient) return { ok: false, message: 'No recipient email on order' };
 
   const subject =
     `Your tickets for ${order.show?.title ?? 'your event'} – ` +
@@ -161,9 +153,6 @@ export async function sendTicketsEmail(orderId: string, to?: string) {
   return { ok: true };
 }
 
-/**
- * Simple test email to verify connectivity
- */
 export async function sendTestEmail(to: string) {
   if (!resend) return { ok: false, message: 'RESEND_API_KEY not configured' };
   await resend.emails.send({
