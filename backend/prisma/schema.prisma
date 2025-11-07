@@ -16,7 +16,7 @@ model User {
   password       String?
   createdAt      DateTime         @default(now())
   orders         Order[]
-  tickets        Ticket[]
+  tickets        Ticket[]         @relation("UserTickets")
   passwordResets PasswordReset[]
 }
 
@@ -37,7 +37,7 @@ model Order {
 enum OrderStatus {
   PENDING
   PAID
-  REFUNDED  // ✅ Added to match webhook handler
+  REFUNDED
   CANCELLED
 }
 
@@ -70,12 +70,14 @@ model TicketType {
 }
 
 model Ticket {
-  id         String   @id @default(cuid())
-  serial     String   @unique
-  holderName String?
-  status     String
-  orderId    String?
-  order      Order?   @relation(fields: [orderId], references: [id])
+  id          String   @id @default(cuid())
+  serial      String   @unique
+  holderName  String?
+  status      String
+  orderId     String?
+  order       Order?   @relation(fields: [orderId], references: [id])
+  userId      String?
+  user        User?    @relation("UserTickets", fields: [userId], references: [id])
 }
 
 model PasswordReset {
