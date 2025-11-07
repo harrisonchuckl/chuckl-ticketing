@@ -42,6 +42,9 @@ router.get('/ui', (_req, res) => {
   .login h3{margin:0 0 8px}
   .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
   .kpi{background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px}
+  .tabs{display:flex;gap:8px;margin:10px 0}
+  .tabs .pill{padding:6px 10px;border:1px solid var(--border);border-radius:999px;background:#fff;cursor:pointer}
+  .tabs .pill.active{background:var(--accent-2);border-color:#c7d2fe;color:var(--accent)}
 </style>
 </head>
 <body>
@@ -143,17 +146,27 @@ router.get('/ui', (_req, res) => {
       renderShowDetail(showId);
     },
 
-    // ---- Orders list & detail with notes + resend ----
+    // ---- Orders list & detail with notes + resend + CSV export ----
     orders(){
       $('#viewTitle').textContent = 'Orders';
       $('#toolbarActions').innerHTML =
         '<div class="row">'
-        + '<input id="ordersQ" placeholder="Search email / Stripe / show"/><button class="btn ghost" id="btnSearchOrders">Search</button>'
+        + '<input id="ordersQ" placeholder="Search email / Stripe / show"/>'
+        + '<button class="btn ghost" id="btnSearchOrders">Search</button>'
+        + '<a class="btn ghost" id="btnExportCsv" href="#">Export CSV</a>'
         + '</div>';
       $('#viewContent').innerHTML = '<div id="ordersWrap" class="grid"></div>';
       const run = () => loadOrders($('#ordersQ').value || '');
       run();
-      $('#toolbarActions').onclick = async e => { if (e.target.id==='btnSearchOrders') run(); }
+      $('#toolbarActions').onclick = async e => {
+        if (e.target.id==='btnSearchOrders') run();
+        if (e.target.id==='btnExportCsv') {
+          e.preventDefault();
+          const q = encodeURIComponent($('#ordersQ').value || '');
+          const url = '/admin/orders/export.csv?q='+q;
+          window.open(url, '_blank', 'noopener');
+        }
+      };
     },
 
     orderDetail(orderId){
@@ -252,7 +265,6 @@ router.get('/ui', (_req, res) => {
         ).join('') || '<tr><td colspan="4" class="note">No data.</td></tr>';
       };
 
-      // Run once on open
       run();
       $('#toolbarActions').onclick = (e) => { if (e.target.id === 'btnRunAnalytics') run(); };
     },
@@ -308,94 +320,160 @@ router.get('/ui', (_req, res) => {
     const r = await API('/admin/shows/'+encodeURIComponent(showId));
     const j = await r.json();
     if(!j.ok){ $('#viewContent').innerHTML = '<div class="danger">Failed to load show</div>'; return; }
-    const show = j.show;
-    const kpis = j.show.kpis || {};
+    const { show, kpis } = j;
 
+    // Tabs: Details | Analytics
     $('#viewContent').innerHTML =
-      '<div class="grid">'
-      + '<div class="card"><h3 style="margin:0 0 8px">'+show.title+'</h3>'
-      + '<div class="note">'+(show.venue ? (show.venue.name + (show.venue.city ? (', '+show.venue.city) : '')) : '—')+'</div>'
-      + '<div class="note">Date: '+new Date(show.date).toLocaleString()+'</div></div>'
-      + '<div class="kpis">'
-      +   '<div class="kpi"><div class="note">Orders</div><div style="font-size:20px;font-weight:700">'+(kpis.totalOrders ?? 0)+'</div></div>'
-      +   '<div class="kpi"><div class="note">Tickets Sold</div><div style="font-size:20px;font-weight:700">'+(kpis.totalTickets ?? 0)+'</div></div>'
-      +   '<div class="kpi"><div class="note">Revenue</div><div style="font-size:20px;font-weight:700">'+fmtMoney(kpis.totalRevenue ?? 0)+'</div></div>'
-      +   '<div class="kpi"><div class="note">Refunded</div><div style="font-size:20px;font-weight:700">'+fmtMoney(kpis.refundedRevenue ?? 0)+'</div></div>'
-      + '</div>'
-      + '<div class="grid two">'
-      +   '<div class="card">'
-      +     '<h4 style="margin-top:0">Ticket Types</h4>'
-      +     '<table class="table"><thead><tr><th>Name</th><th>Price</th><th>Avail.</th><th></th></tr></thead>'
-      +     '<tbody id="ttBody"></tbody></table>'
-      +     '<div class="row" style="margin-top:8px">'
-      +       '<input id="tt_name" placeholder="Name"/>'
-      +       '<input id="tt_price" type="number" placeholder="Price (pence)"/>'
-      +       '<input id="tt_avail" type="number" placeholder="Available"/>'
-      +       '<button class="btn primary" id="btnAddTT">Add</button>'
-      +     '</div>'
-      +     '<div class="note" id="ttMsg"></div>'
-      +   '</div>'
-      +   '<div class="card">'
-      +     '<h4 style="margin-top:0">Attendees</h4>'
-      +     '<p class="note">Download a CSV for door list or marketing exports.</p>'
-      +     '<a class="btn ghost" href="/admin/shows/'+show.id+'/attendees.csv" target="_blank" rel="noopener">Download CSV</a>'
-      +   '</div>'
-      + '</div>'
+      '<div class="card">'
+      +  '<div class="tabs">'
+      +    '<span class="pill active" data-tab="details">Details</span>'
+      +    '<span class="pill" data-tab="analytics">Analytics</span>'
+      +  '</div>'
+      +  '<div id="tabContent"></div>'
       + '</div>';
 
-    // Render ticket types
-    const tbody = $('#ttBody');
-    tbody.innerHTML = (show.ticketTypes || []).map(tt => {
-      return '<tr data-tt="'+tt.id+'">'
-        + '<td><input class="tt_name" value="'+(tt.name||'')+'"/></td>'
-        + '<td><input class="tt_price" type="number" value="'+(tt.pricePence||0)+'"/></td>'
-        + '<td><input class="tt_avail" type="number" value="'+(tt.available==null?'':tt.available)+'"/></td>'
-        + '<td>'
-        +   '<button class="btn ghost tt_save">Save</button> '
-        +   '<button class="btn ghost tt_del" style="color:#dc2626;border-color:#fecaca">Delete</button>'
-        + '</td>'
-        + '</tr>';
-    }).join('');
+    const tabContent = $('#tabContent');
+    const renderDetails = () => {
+      tabContent.innerHTML =
+        '<div class="grid">'
+        + '<div class="card"><h3 style="margin:0 0 8px">'+show.title+'</h3>'
+        + '<div class="note">'+(show.venue ? (show.venue.name + (show.venue.city ? (', '+show.venue.city) : '')) : '—')+'</div>'
+        + '<div class="note">Date: '+new Date(show.date).toLocaleString()+'</div></div>'
+        + '<div class="kpis">'
+        +   '<div class="kpi"><div class="note">Orders</div><div style="font-size:20px;font-weight:700">'+(kpis.totalOrders ?? 0)+'</div></div>'
+        +   '<div class="kpi"><div class="note">Tickets Sold</div><div style="font-size:20px;font-weight:700">'+(kpis.totalTickets ?? 0)+'</div></div>'
+        +   '<div class="kpi"><div class="note">Revenue</div><div style="font-size:20px;font-weight:700">'+fmtMoney(kpis.totalRevenue ?? 0)+'</div></div>'
+        +   '<div class="kpi"><div class="note">Refunded</div><div style="font-size:20px;font-weight:700">'+fmtMoney(kpis.refundedRevenue ?? 0)+'</div></div>'
+        + '</div>'
+        + '<div class="grid two">'
+        +   '<div class="card">'
+        +     '<h4 style="margin-top:0">Ticket Types</h4>'
+        +     '<table class="table"><thead><tr><th>Name</th><th>Price</th><th>Avail.</th><th></th></tr></thead>'
+        +     '<tbody id="ttBody"></tbody></table>'
+        +     '<div class="row" style="margin-top:8px">'
+        +       '<input id="tt_name" placeholder="Name"/>'
+        +       '<input id="tt_price" type="number" placeholder="Price (pence)"/>'
+        +       '<input id="tt_avail" type="number" placeholder="Available"/>'
+        +       '<button class="btn primary" id="btnAddTT">Add</button>'
+        +     '</div>'
+        +     '<div class="note" id="ttMsg"></div>'
+        +   '</div>'
+        +   '<div class="card">'
+        +     '<h4 style="margin-top:0">Attendees</h4>'
+        +     '<p class="note">Download a CSV for door list or marketing exports.</p>'
+        +     '<a class="btn ghost" href="/admin/shows/'+show.id+'/attendees.csv" target="_blank" rel="noopener">Download CSV</a>'
+        +   '</div>'
+        + '</div>'
+        + '</div>';
 
-    // handlers
-    tbody.onclick = async e => {
-      const tr = e.target.closest('tr[data-tt]');
-      if(!tr) return;
-      const id = tr.getAttribute('data-tt');
-      if (e.target.classList.contains('tt_save')) {
-        const name = tr.querySelector('.tt_name').value;
-        const pricePence = Number(tr.querySelector('.tt_price').value || 0);
-        const availRaw = tr.querySelector('.tt_avail').value;
+      // Render ticket types
+      const tbody = $('#ttBody');
+      tbody.innerHTML = (show.ticketTypes || []).map(tt => {
+        return '<tr data-tt="'+tt.id+'">'
+          + '<td><input class="tt_name" value="'+(tt.name||'')+'"/></td>'
+          + '<td><input class="tt_price" type="number" value="'+(tt.pricePence||0)+'"/></td>'
+          + '<td><input class="tt_avail" type="number" value="'+(tt.available==null?'':tt.available)+'"/></td>'
+          + '<td>'
+          +   '<button class="btn ghost tt_save">Save</button> '
+          +   '<button class="btn ghost tt_del" style="color:#dc2626;border-color:#fecaca">Delete</button>'
+          + '</td>'
+          + '</tr>';
+      }).join('');
+
+      tbody.onclick = async e => {
+        const tr = e.target.closest('tr[data-tt]');
+        if(!tr) return;
+        const id = tr.getAttribute('data-tt');
+        if (e.target.classList.contains('tt_save')) {
+          const name = tr.querySelector('.tt_name').value;
+          const pricePence = Number(tr.querySelector('.tt_price').value || 0);
+          const availRaw = tr.querySelector('.tt_avail').value;
+          const available = availRaw === '' ? null : Number(availRaw);
+          const r = await API('/admin/ticket-types/'+encodeURIComponent(id), {
+            method:'PATCH',
+            body: JSON.stringify({ name, pricePence, available })
+          });
+          const j = await r.json();
+          $('#ttMsg').textContent = j.ok ? 'Saved' : (j.message || 'Failed');
+          if (j.ok) renderShowDetail(show.id);
+        }
+        if (e.target.classList.contains('tt_del')) {
+          if (!confirm('Delete this ticket type?')) return;
+          const r = await API('/admin/ticket-types/'+encodeURIComponent(id), { method: 'DELETE' });
+          const j = await r.json();
+          $('#ttMsg').textContent = j.ok ? 'Deleted' : (j.message || 'Failed');
+          if (j.ok) renderShowDetail(show.id);
+        }
+      };
+
+      $('#btnAddTT')?.addEventListener('click', async () => {
+        const name = $('#tt_name').value;
+        const pricePence = Number($('#tt_price').value || 0);
+        const availRaw = $('#tt_avail').value;
         const available = availRaw === '' ? null : Number(availRaw);
-        const r = await API('/admin/ticket-types/'+encodeURIComponent(id), {
-          method:'PATCH',
+        const r = await API('/admin/shows/'+encodeURIComponent(show.id)+'/ticket-types', {
+          method:'POST',
           body: JSON.stringify({ name, pricePence, available })
         });
-        const j = await r.json();
-        $('#ttMsg').textContent = j.ok ? 'Saved' : (j.message || 'Failed');
-        if (j.ok) renderShowDetail(show.id);
-      }
-      if (e.target.classList.contains('tt_del')) {
-        if (!confirm('Delete this ticket type?')) return;
-        const r = await API('/admin/ticket-types/'+encodeURIComponent(id), { method: 'DELETE' });
-        const j = await r.json();
-        $('#ttMsg').textContent = j.ok ? 'Deleted' : (j.message || 'Failed');
-        if (j.ok) renderShowDetail(show.id);
-      }
+        const j2 = await r.json();
+        $('#ttMsg').textContent = j2.ok ? 'Added' : (j2.message || 'Failed');
+        if (j2.ok) renderShowDetail(show.id);
+      });
     };
 
-    $('#btnAddTT')?.addEventListener('click', async () => {
-      const name = $('#tt_name').value;
-      const pricePence = Number($('#tt_price').value || 0);
-      const availRaw = $('#tt_avail').value;
-      const available = availRaw === '' ? null : Number(availRaw);
-      const r = await API('/admin/shows/'+encodeURIComponent(show.id)+'/ticket-types', {
-        method:'POST',
-        body: JSON.stringify({ name, pricePence, available })
+    const renderAnalytics = async () => {
+      tabContent.innerHTML =
+        '<div class="grid">'
+        + '<div class="kpis">'
+        +   '<div class="kpi"><div class="note">Orders</div><div id="sa_orders" style="font-size:20px;font-weight:700">—</div></div>'
+        +   '<div class="kpi"><div class="note">Tickets Sold</div><div id="sa_tickets" style="font-size:20px;font-weight:700">—</div></div>'
+        +   '<div class="kpi"><div class="note">Revenue</div><div id="sa_rev" style="font-size:20px;font-weight:700">—</div></div>'
+        +   '<div class="kpi"><div class="note">Refunded</div><div id="sa_ref" style="font-size:20px;font-weight:700">—</div></div>'
+        + '</div>'
+        + '<div class="grid two">'
+        +   '<div class="card">'
+        +     '<h4 style="margin:0 0 8px">Daily Series</h4>'
+        +     '<table class="table"><thead><tr><th>Date</th><th>Orders</th><th>Tickets</th><th>Revenue</th></tr></thead><tbody id="sa_series"></tbody></table>'
+        +   '</div>'
+        +   '<div class="card">'
+        +     '<h4 style="margin:0 0 8px">Ticket Types</h4>'
+        +     '<table class="table"><thead><tr><th>Name</th><th>Sold</th><th>Price</th></tr></thead><tbody id="sa_tt"></tbody></table>'
+        +   '</div>'
+        + '</div>'
+        + '</div>';
+
+      const r = await API('/admin/analytics/show/'+encodeURIComponent(show.id));
+      const jx = await r.json();
+      if (!jx.ok) {
+        tabContent.innerHTML = '<div class="danger">Failed to load show analytics</div>';
+        return;
+      }
+      $('#sa_orders').textContent = jx.kpis.ordersCount;
+      $('#sa_tickets').textContent = jx.kpis.ticketsSold;
+      $('#sa_rev').textContent = fmtMoney(jx.kpis.revenuePence);
+      $('#sa_ref').textContent = fmtMoney(jx.kpis.refundedRevenuePence);
+
+      $('#sa_series').innerHTML = (jx.series||[]).map(row =>
+        '<tr><td>'+row.date+'</td><td>'+row.orders+'</td><td>'+row.tickets+'</td><td>'+fmtMoney(row.revenuePence)+'</td></tr>'
+      ).join('') || '<tr><td colspan="4" class="note">No data.</td></tr>';
+
+      $('#sa_tt').innerHTML = (jx.ticketTypeBreakdown||[]).map(tt =>
+        '<tr><td>'+tt.name+'</td><td>'+tt.sold+'</td><td>'+fmtMoney(tt.pricePence)+'</td></tr>'
+      ).join('') || '<tr><td colspan="3" class="note">No breakdown.</td></tr>';
+    };
+
+    // initialise with Details
+    renderDetails();
+
+    // tab switching
+    document.querySelectorAll('.tabs .pill').forEach(p => {
+      p.addEventListener('click', (e) => {
+        document.querySelectorAll('.tabs .pill').forEach(x => x.classList.remove('active'));
+        p.classList.add('active');
+        const tab = p.getAttribute('data-tab');
+        if (tab === 'details') renderDetails();
+        if (tab === 'analytics') renderAnalytics();
       });
-      const j2 = await r.json();
-      $('#ttMsg').textContent = j2.ok ? 'Added' : (j2.message || 'Failed');
-      if (j2.ok) renderShowDetail(show.id);
     });
   }
 
