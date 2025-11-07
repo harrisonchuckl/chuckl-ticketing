@@ -1,214 +1,195 @@
 // backend/src/routes/admin-shows.ts
 import { Router } from 'express';
-import { PrismaClient, OrderStatus } from '@prisma/client';
+import prisma from '../lib/db.js';
 
-const prisma = new PrismaClient();
-const router = Router();
+const router = Router;
 
-function asNumber(v: unknown): number | undefined {
-  if (v === undefined || v === null || v === '') return undefined;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : undefined;
+/**
+ * Helper: compute basic KPIs for a Show
+ */
+function computeKPIs(show: any) {
+  const capacity = show.venue?.capacity ?? null;
+  const totalAvailable = (show.ticketTypes || []).reduce((sum: number, t: any) => sum + (t.available ?? 0), 0);
+  const ticketsSold = (show.orders || []).reduce((sum: number, o: any) => sum + (o.quantity ?? 0), 0);
+  const revenuePence = (show.orders || [])
+    .filter((o: any) => o.status === 'PAID' || o.status === 'REFUNDED') // revenue includes paid; refunds may be handled separately
+    .reduce((sum: number, o: any) => sum + (o.amountPence ?? 0), 0);
+
+  return {
+    capacity,
+    totalAvailable,
+    ticketsSold,
+    revenuePence,
+  };
 }
+
+const R = Router();
 
 /**
  * GET /admin/shows/latest
  */
-router.get('/shows/latest', async (req, res) => {
+R.get('/shows/latest', async (req, res) => {
   try {
-    const limit = Math.min(parseInt(String(req.query.limit || '20'), 10) || 20, 100);
+    const limit = Math.min(Number(req.query.limit || 20), 200);
     const shows = await prisma.show.findMany({
       orderBy: { date: 'desc' },
       take: limit,
-      include: { venue: true, ticketTypes: true },
+      include: {
+        venue: true,
+        ticketTypes: { orderBy: { createdAt: 'desc' } },
+        _count: { select: { orders: true } },
+      },
     });
     res.json({ ok: true, shows });
   } catch (e: any) {
-    res.status(500).json({ ok: false, message: e.message });
-  }
-});
-
-/**
- * POST /admin/shows
- */
-router.post('/shows', async (req, res) => {
-  try {
-    const { title, description, date, venueId } = req.body || {};
-    if (!title || !date) return res.status(400).json({ ok: false, message: 'Missing title/date' });
-    const show = await prisma.show.create({
-      data: {
-        title,
-        description: description || null,
-        date: new Date(date),
-        venueId: venueId || null,
-      },
-      include: { venue: true, ticketTypes: true },
-    });
-    res.json({ ok: true, show });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, message: e.message });
+    res.status(500).json({ error: true, message: e?.message ?? 'Failed to fetch shows' });
   }
 });
 
 /**
  * GET /admin/shows/:id
+ *  - includes venue, ticketTypes, orders (for KPI calc only)
  */
-router.get('/shows/:id', async (req, res) => {
+R.get('/shows/:id', async (req, res) => {
   try {
     const id = String(req.params.id);
     const show = await prisma.show.findUnique({
       where: { id },
-      include: { venue: true, ticketTypes: true },
-    });
-    if (!show) return res.status(404).json({ ok: false, message: 'Not found' });
-
-    const paidAgg = await prisma.order.aggregate({
-      _sum: { amountPence: true, quantity: true },
-      _count: { _all: true },
-      where: { showId: id, status: OrderStatus.PAID },
-    });
-    const ticketsSold = await prisma.ticket.count({
-      where: { order: { showId: id }, status: { in: ['VALID', 'SCANNED'] } },
-    });
-    const ticketsScanned = await prisma.ticket.count({
-      where: { order: { showId: id }, status: 'SCANNED' },
-    });
-
-    res.json({
-      ok: true,
-      show,
-      kpis: {
-        ordersPaid: paidAgg._count._all || 0,
-        revenuePence: paidAgg._sum.amountPence || 0,
-        ticketsSold,
-        ticketsScanned,
-        capacity: show.venue?.capacity ?? null,
+      include: {
+        venue: true,
+        ticketTypes: { orderBy: { createdAt: 'desc' } },
+        orders: { select: { id: true, amountPence: true, quantity: true, status: true } },
       },
     });
+    if (!show) return res.status(404).json({ error: true, message: 'Show not found' });
+
+    const kpis = computeKPIs(show);
+    res.json({ ok: true, show, kpis });
   } catch (e: any) {
-    res.status(500).json({ ok: false, message: e.message });
+    res.status(500).json({ error: true, message: e?.message ?? 'Failed to fetch show' });
   }
 });
 
 /**
- * PUT /admin/shows/:id
+ * PATCH /admin/shows/:id
+ * body can include: title, description, date, venueId
  */
-router.put('/shows/:id', async (req, res) => {
+R.patch('/shows/:id', async (req, res) => {
   try {
     const id = String(req.params.id);
     const { title, description, date, venueId } = req.body || {};
-    const updated = await prisma.show.update({
+    const show = await prisma.show.update({
       where: { id },
       data: {
-        title: title ?? undefined,
-        description: description ?? undefined,
-        date: date ? new Date(date) : undefined,
-        venueId: venueId ?? undefined,
+        ...(title != null ? { title: String(title) } : {}),
+        ...(description !== undefined ? { description: description ? String(description) : null } : {}),
+        ...(date != null ? { date: new Date(date) } : {}),
+        ...(venueId !== undefined ? { venueId: venueId ? String(venueId) : null } : {}),
       },
       include: { venue: true, ticketTypes: true },
     });
-    res.json({ ok: true, show: updated });
+    res.json({ ok: true, show });
   } catch (e: any) {
-    res.status(500).json({ ok: false, message: e.message });
+    res.status(500).json({ error: true, message: e?.message ?? 'Failed to update show' });
   }
 });
 
 /**
  * POST /admin/shows/:id/ticket-types
+ * body: { name, pricePence, available }
  */
-router.post('/shows/:id/ticket-types', async (req, res) => {
+R.post('/shows/:id/ticket-types', async (req, res) => {
   try {
-    const showId = String(req.params.id);
+    const id = String(req.params.id);
     const { name, pricePence, available } = req.body || {};
-    if (!name) return res.status(400).json({ ok: false, message: 'Name required' });
-
-    const created = await prisma.ticketType.create({
+    if (!name || pricePence == null) {
+      return res.status(400).json({ error: true, message: 'name and pricePence required' });
+    }
+    const tt = await prisma.ticketType.create({
       data: {
         name: String(name),
         pricePence: Number(pricePence),
-        available: asNumber(available),
-        showId,
+        available: available != null ? Number(available) : null,
+        showId: id,
       },
     });
-    res.json({ ok: true, ticketType: created });
+    res.json({ ok: true, ticketType: tt });
   } catch (e: any) {
-    res.status(500).json({ ok: false, message: e.message });
+    res.status(500).json({ error: true, message: e?.message ?? 'Failed to create ticket type' });
   }
 });
 
 /**
- * PUT /admin/shows/:id/ticket-types/:ttid
+ * PATCH /admin/ticket-types/:ticketTypeId
+ * body: { name?, pricePence?, available? }
  */
-router.put('/shows/:id/ticket-types/:ttid', async (req, res) => {
+R.patch('/ticket-types/:ticketTypeId', async (req, res) => {
   try {
-    const ttid = String(req.params.ttid);
+    const ticketTypeId = String(req.params.ticketTypeId);
     const { name, pricePence, available } = req.body || {};
-    const data: any = {};
-    if (name !== undefined) data.name = String(name);
-    if (pricePence !== undefined) data.pricePence = Number(pricePence);
-    if (available !== undefined) {
-      const num = asNumber(available);
-      if (num !== undefined) data.available = num; // ✅ null now skipped, not sent
-    }
-
-    const updated = await prisma.ticketType.update({
-      where: { id: ttid },
-      data,
+    const tt = await prisma.ticketType.update({
+      where: { id: ticketTypeId },
+      data: {
+        ...(name != null ? { name: String(name) } : {}),
+        ...(pricePence != null ? { pricePence: Number(pricePence) } : {}),
+        ...(available !== undefined ? { available: available == null ? null : Number(available) } : {}),
+      },
     });
-    res.json({ ok: true, ticketType: updated });
+    res.json({ ok: true, ticketType: tt });
   } catch (e: any) {
-    res.status(500).json({ ok: false, message: e.message });
+    res.status(500).json({ error: true, message: e?.message ?? 'Failed to update ticket type' });
   }
 });
 
 /**
- * DELETE /admin/shows/:id/ticket-types/:ttid
+ * DELETE /admin/ticket-types/:ticketTypeId
  */
-router.delete('/shows/:id/ticket-types/:ttid', async (req, res) => {
+R.delete('/ticket-types/:ticketTypeId', async (req, res) => {
   try {
-    const ttid = String(req.params.ttid);
-    await prisma.ticketType.delete({ where: { id: ttid } });
+    const ticketTypeId = String(req.params.ticketTypeId);
+    await prisma.ticketType.delete({ where: { id: ticketTypeId } });
     res.json({ ok: true });
   } catch (e: any) {
-    res.status(500).json({ ok: false, message: e.message });
+    res.status(500).json({ error: true, message: e?.message ?? 'Failed to delete ticket type' });
   }
 });
 
 /**
  * GET /admin/shows/:id/attendees.csv
+ * CSV of tickets and basic order info
  */
-router.get('/shows/:id/attendees.csv', async (req, res) => {
+R.get('/shows/:id/attendees.csv', async (req, res) => {
   try {
     const id = String(req.params.id);
     const tickets = await prisma.ticket.findMany({
       where: { order: { showId: id } },
-      include: { order: true, user: true },
-      orderBy: { scannedAt: 'desc' },
+      include: {
+        order: { select: { id: true, email: true, status: true, createdAt: true } },
+      },
+      orderBy: { serial: 'asc' },
     });
 
-    const rows: string[] = [
-      'serial,holderName,status,scannedAt,orderId,orderEmail,userEmail',
-      ...tickets.map((t) =>
-        [
-          t.serial || '',
-          t.holderName || '',
-          t.status || '',
-          t.scannedAt ? t.scannedAt.toISOString() : '',
-          t.orderId || '',
-          t.order?.email || '',
-          t.user?.email || '',
-        ]
-          .map((v) => `"${String(v).replace(/"/g, '""')}"`)
-          .join(',')
-      ),
+    const rows = [
+      ['Serial', 'HolderName', 'Status', 'ScannedAt', 'OrderId', 'OrderEmail', 'OrderStatus', 'OrderDate'],
+      ...tickets.map(t => [
+        t.serial,
+        t.holderName ?? '',
+        t.status ?? '',
+        t.scannedAt ? new Date(t.scannedAt).toISOString() : '',
+        t.order?.id ?? '',
+        t.order?.email ?? '',
+        t.order?.status ?? '',
+        t.order?.createdAt ? new Date(t.order.createdAt).toISOString() : '',
+      ]),
     ];
 
+    const csv = rows.map(r => r.map(x => `"${String(x).replace(/"/g, '""')}"`).join(',')).join('\n');
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="attendees-${id}.csv"`);
-    res.send(rows.join('\n'));
+    res.setHeader('Content-Disposition', 'attachment; filename="attendees.csv"');
+    res.send(csv);
   } catch (e: any) {
-    res.status(500).json({ ok: false, message: e.message });
+    res.status(500).json({ error: true, message: e?.message ?? 'Failed to export attendees' });
   }
 });
 
-export default router;
+export default R;
