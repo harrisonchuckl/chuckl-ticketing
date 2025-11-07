@@ -23,7 +23,7 @@ router.get('/ui', (_req, res) => {
   nav h4{margin:8px 10px 12px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
   nav button{display:block;width:100%;text-align:left;border:0;background:none;padding:10px 12px;border-radius:10px;margin:2px 0;font-size:14px;color:var(--ink);cursor:pointer}
   nav button.active,nav button:hover{background:var(--accent-2);color:var(--accent)}
-  section.view{background:var(--panel);border:1px solid var(--border);border-radius:14px;min-height:60vh}
+  section.view{background:var(--panel);border:1px solid var(--border);border-radius:14px;min-height:60vh;position:relative;overflow:hidden}
   .toolbar{display:flex;gap:8px;align-items:center;padding:14px;border-bottom:1px solid var(--border)}
   .toolbar h2{font-size:16px;margin:0}
   .content{padding:16px}
@@ -35,19 +35,26 @@ router.get('/ui', (_req, res) => {
   .btn{border:0;border-radius:10px;padding:10px 12px;font-weight:600;cursor:pointer}
   .btn.primary{background:var(--accent);color:#fff}
   .btn.ghost{background:#fff;border:1px solid var(--border)}
+  .btn.danger{background:#fee2e2;color:#b91c1c;border:1px solid #fecaca}
   .note{font-size:13px;color:var(--muted)}
   .card{border:1px solid var(--border);border-radius:12px;padding:12px;background:#fff}
   .danger{color:var(--bad)} .ok{color:var(--ok)}
-  .overlay{position:fixed;inset:0;background:rgba(15,23,42,.5);display:none;align-items:center;justify-content:center;z-index:50}
-  .overlay.show{display:flex}
-  .login{width:360px;background:#fff;border-radius:14px;border:1px solid var(--border);padding:18px}
-  .login h3{margin:0 0 8px}
   table{width:100%;border-collapse:collapse}
   th,td{padding:10px;border-bottom:1px solid var(--border);text-align:left;font-size:14px}
   th{font-weight:700}
   .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
   .kpis .card h3{margin:0 0 4px;font-size:18px}
   .kpis .card .sub{color:var(--muted);font-size:12px}
+
+  /* Drawer */
+  .drawer{position:absolute;top:0;right:-480px;width:480px;height:100%;background:#fff;border-left:1px solid var(--border);box-shadow:-8px 0 24px rgba(15,23,42,0.06);transition:right .24s ease;display:flex;flex-direction:column;z-index:20}
+  .drawer.show{right:0}
+  .drawer .head{display:flex;align-items:center;justify-content:space-between;padding:14px;border-bottom:1px solid var(--border)}
+  .drawer .body{padding:14px;overflow:auto}
+  .badge{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid var(--border);font-size:12px;color:var(--muted)}
+  .row.clickable tr{cursor:pointer}
+  .toast{position:fixed;bottom:16px;right:16px;background:#0f172a;color:#fff;padding:10px 12px;border-radius:10px;opacity:0;transform:translateY(6px);transition:.2s}
+  .toast.show{opacity:1;transform:translateY(0)}
 </style>
 </head>
 <body>
@@ -77,19 +84,19 @@ router.get('/ui', (_req, res) => {
       <div class="grid">
         <div class="kpis">
           <div class="card">
-            <h3 id="kpiSales">—</h3>
+            <h3 id="kpiSales">£0.00</h3>
             <div class="sub">Sales (last 7 days)</div>
           </div>
           <div class="card">
-            <h3 id="kpiOrders">—</h3>
+            <h3 id="kpiOrders">0</h3>
             <div class="sub">Orders (last 7 days)</div>
           </div>
           <div class="card">
-            <h3 id="kpiTickets">—</h3>
+            <h3 id="kpiTickets">0</h3>
             <div class="sub">Tickets issued</div>
           </div>
           <div class="card">
-            <h3 id="kpiUpcoming">—</h3>
+            <h3 id="kpiUpcoming">0</h3>
             <div class="sub">Upcoming shows</div>
           </div>
         </div>
@@ -107,11 +114,22 @@ router.get('/ui', (_req, res) => {
         </div>
       </div>
     </div>
+
+    <!-- Drawer -->
+    <div class="drawer" id="drawer">
+      <div class="head">
+        <div style="font-weight:700" id="drawerTitle">Order</div>
+        <button class="btn ghost" id="drawerClose">Close</button>
+      </div>
+      <div class="body" id="drawerBody">
+        <div class="note">Loading…</div>
+      </div>
+    </div>
   </section>
 </main>
 
-<div class="overlay" id="loginOverlay">
-  <div class="login">
+<div class="overlay" id="loginOverlay" style="backdrop-filter:blur(0px);">
+  <div class="login" style="width:360px;background:#fff;border-radius:14px;border:1px solid var(--border);padding:18px">
     <h3>Sign in</h3>
     <p class="note" id="loginNote">Use your organiser account.</p>
     <div class="grid">
@@ -126,6 +144,8 @@ router.get('/ui', (_req, res) => {
   </div>
 </div>
 
+<div class="toast" id="toast"></div>
+
 <script>
 (function(){
   const $ = (sel) => document.querySelector(sel);
@@ -134,20 +154,21 @@ router.get('/ui', (_req, res) => {
     headers:{'Content-Type':'application/json'}
   }, opts || {}));
 
+  function toast(msg){
+    const t = $('#toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(()=>t.classList.remove('show'), 2000);
+  }
+
   // ---- Views ----
   const views = {
-    home(){ 
+    home(){
       $('#viewTitle').textContent = 'Home';
-      // KPIs can be stubbed for now (or fetched later)
-      $('#kpiSales').textContent = '£0.00';
-      $('#kpiOrders').textContent = '0';
-      $('#kpiTickets').textContent = '0';
-      $('#kpiUpcoming').textContent = '0';
-
       $('#viewContent').querySelectorAll('[data-goto]').forEach((btn)=>{
         btn.addEventListener('click', (e)=>{
           e.preventDefault();
-          switchView(btn.getAttribute('data-goto'));
+          switchView(btn.getAttribute('data-view') || btn.getAttribute('data-goto'));
         });
       });
     },
@@ -217,7 +238,7 @@ router.get('/ui', (_req, res) => {
         + '<div class="row"><button class="btn primary" id="btnLoadOrders">Load</button><button class="btn ghost" id="btnExportCSV">Export CSV</button></div>'
         + '</div></div>'
         + '<div class="card"><div class="row"><div class="note" id="ordersMeta"></div></div>'
-        + '<div style="overflow:auto"><table id="ordersTable">'
+        + '<div style="overflow:auto"><table id="ordersTable" class="row clickable">'
         + '<thead><tr>'
         + '<th>Date</th><th>Email</th><th>Show</th><th>Venue</th><th>Qty</th><th>Amount</th><th>Status</th><th>Stripe ID</th>'
         + '</tr></thead><tbody></tbody></table></div></div>';
@@ -244,14 +265,14 @@ router.get('/ui', (_req, res) => {
           const showTitle = o.show ? o.show.title : '—';
           const amount = '£' + ((o.amountPence ?? 0)/100).toFixed(2);
           const stripeShort = o.stripeId ? (o.stripeId.length > 12 ? o.stripeId.slice(0,12)+'…' : o.stripeId) : '—';
-          return '<tr>'
+          return '<tr data-id="'+o.id+'">'
             + '<td>'+when+'</td>'
             + '<td>'+ (o.email || '—') +'</td>'
             + '<td>'+ showTitle +'</td>'
             + '<td>'+ venue +'</td>'
             + '<td>'+ (o.quantity ?? 0) +'</td>'
             + '<td>'+ amount +'</td>'
-            + '<td>'+ (o.status || '—') +'</td>'
+            + '<td><span class="badge">'+ (o.status || '—') +'</span></td>'
             + '<td>'+ stripeShort +'</td>'
             + '</tr>';
         }).join('');
@@ -270,6 +291,12 @@ router.get('/ui', (_req, res) => {
           if (from) params.set('from', new Date(from).toISOString());
           if (to) params.set('to', new Date(to).toISOString());
           window.location.href = '/admin/orders/export?' + params.toString();
+        }
+
+        const row = e.target.closest('tr[data-id]');
+        if (row) {
+          const id = row.getAttribute('data-id');
+          openDrawer(id);
         }
       });
 
@@ -315,25 +342,117 @@ router.get('/ui', (_req, res) => {
     document.querySelectorAll('nav button').forEach(function(b){
       b.classList.toggle('active', b.getAttribute('data-view')===name);
     });
-    if (views[name]) {
-      // Render view and attach handlers
-      views[name]();
-    } else {
-      views.home();
-    }
+    if (views[name]) views[name](); else views.home();
   }
 
   async function ensureAuth(){
     const me = await fetch('/auth/me', { credentials: 'include' });
     if(me.status===200){
       const j = await me.json();
-      document.getElementById('userEmail').textContent = (j.user && j.user.email) ? j.user.email : 'Signed in';
-      document.getElementById('loginOverlay').classList.remove('show');
+      $('#userEmail').textContent = (j.user && j.user.email) ? j.user.email : 'Signed in';
+      $('#loginOverlay').classList.remove('show');
       return true;
     } else {
-      document.getElementById('loginOverlay').classList.add('show');
+      $('#loginOverlay').classList.add('show');
       return false;
     }
+  }
+
+  // Drawer logic
+  $('#drawerClose').addEventListener('click', ()=>$('#drawer').classList.remove('show'));
+
+  async function openDrawer(orderId){
+    $('#drawerTitle').textContent = 'Order';
+    $('#drawerBody').innerHTML = '<div class="note">Loading…</div>';
+    $('#drawer').classList.add('show');
+
+    const r = await API('/admin/orders/' + encodeURIComponent(orderId));
+    const j = await r.json();
+    if(!j.ok){ $('#drawerBody').innerHTML = '<div class="danger">Failed to load.</div>'; return; }
+
+    const o = j.order;
+    const when = new Date(o.createdAt).toLocaleString();
+    const venue = o.show?.venue;
+    const vline = venue ? [venue.name, venue.city, venue.postcode].filter(Boolean).join(', ') : '—';
+    const amount = '£' + ((o.amountPence ?? 0)/100).toFixed(2);
+
+    const ticketsHtml = (o.tickets || []).map(t => {
+      const scan = t.scannedAt ? (' — scanned ' + new Date(t.scannedAt).toLocaleString()) : '';
+      return '<div class="row" style="justify-content:space-between;border-bottom:1px solid var(--border);padding:6px 0">'
+        + '<div>Serial: <b>'+t.serial+'</b></div>'
+        + '<div class="note">'+t.status+scan+'</div>'
+        + '</div>';
+    }).join('') || '<div class="note">No tickets</div>';
+
+    $('#drawerTitle').textContent = 'Order #' + o.id.slice(0,8);
+    $('#drawerBody').innerHTML =
+      '<div class="grid">'
+      + '<div class="card"><div class="row" style="justify-content:space-between">'
+      + '<div><div class="note">Date</div><div>'+when+'</div></div>'
+      + '<div><div class="note">Status</div><div><span class="badge">'+o.status+'</span></div></div>'
+      + '</div>'
+      + '<div class="row" style="justify-content:space-between">'
+      + '<div><div class="note">Email</div><div>'+ (o.email || '—') +'</div></div>'
+      + '<div><div class="note">Quantity</div><div>'+ (o.quantity ?? 0) +'</div></div>'
+      + '<div><div class="note">Amount</div><div>'+ amount +'</div></div>'
+      + '</div></div>'
+
+      + '<div class="card">'
+      + '<div class="note">Show</div>'
+      + '<div><b>'+(o.show?.title || '—')+'</b></div>'
+      + '<div class="note">'+ (o.show?.date ? new Date(o.show.date).toLocaleString() : '—') +'</div>'
+      + '<div class="note">'+ vline +'</div>'
+      + '</div>'
+
+      + '<div class="card"><div class="row" style="justify-content:space-between;align-items:center">'
+      + '<h4 style="margin:0">Tickets</h4>'
+      + '<div class="row">'
+      + '<button class="btn ghost" id="btnResend">Resend tickets</button>'
+      + (o.status === 'CANCELLED' ? '' : '<button class="btn danger" id="btnRefund">Mark as refunded</button>')
+      + '</div></div>'
+      + '<div style="margin-top:8px">'+ ticketsHtml +'</div>'
+      + '</div>'
+
+      + (o.notes ? ('<div class="card"><div class="note">Notes</div><pre style="white-space:pre-wrap;margin:0">'+escapeHtml(o.notes)+'</pre></div>') : '')
+      + '</div>';
+
+    // Wire buttons
+    const btnResend = $('#btnResend');
+    if (btnResend) {
+      btnResend.addEventListener('click', async ()=>{
+        btnResend.disabled = true;
+        const r = await API('/admin/orders/'+encodeURIComponent(o.id)+'/resend', {
+          method:'POST',
+          body: JSON.stringify({ message: 'Resent via organiser console' })
+        });
+        const j = await r.json();
+        toast(j.ok ? 'Resend recorded' : (j.message || 'Resend failed'));
+        btnResend.disabled = false;
+      });
+    }
+
+    const btnRefund = $('#btnRefund');
+    if (btnRefund) {
+      btnRefund.addEventListener('click', async ()=>{
+        if (!confirm('Mark this order as refunded (cancelled)?')) return;
+        btnRefund.disabled = true;
+        const r = await API('/admin/orders/'+encodeURIComponent(o.id)+'/refund', {
+          method:'POST',
+          body: JSON.stringify({ reason: 'Refunded via organiser console' })
+        });
+        const j = await r.json();
+        toast(j.ok ? 'Order marked as refunded' : (j.message || 'Refund failed'));
+        btnRefund.disabled = false;
+        // Refresh drawer
+        openDrawer(o.id);
+      });
+    }
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, (ch)=>({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[ch]));
   }
 
   // Sidebar nav
