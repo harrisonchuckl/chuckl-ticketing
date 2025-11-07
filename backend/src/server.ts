@@ -6,7 +6,7 @@ import rateLimit from 'express-rate-limit';
 import bodyParser from 'body-parser';
 import cookieParser from 'cookie-parser';
 
-// Existing routes (keep these imports if you have them)
+// Existing routes
 import checkout from './routes/checkout.js';
 import webhook from './routes/webhook.js';
 import admin from './routes/admin.js';
@@ -16,6 +16,7 @@ import adminShows from './routes/admin-shows.js';
 import adminTicketTypes from './routes/admin-tickettypes.js';
 import adminUploads from './routes/admin-uploads.js';
 import adminOrders from './routes/admin-orders.js';
+import adminRefunds from './routes/admin-refunds.js'; // 👈 NEW
 import events from './routes/events.js';
 import auth from './routes/auth.js';
 import scanApi from './routes/scan.js';
@@ -60,6 +61,7 @@ app.use('/admin', adminShows);
 app.use('/admin', adminTicketTypes);
 app.use('/admin', adminOrders);
 app.use('/admin', adminUploads);
+app.use('/admin', adminRefunds); // 👈 mount refunds
 
 // Legacy / bootstrap admin endpoints (if you still need them)
 app.use('/admin', admin);
