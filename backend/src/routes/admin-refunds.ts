@@ -5,6 +5,7 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 const router = Router();
+
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
   apiVersion: '2024-06-20'
 });
@@ -12,14 +13,11 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
 /**
  * POST /admin/refunds
  * body: { orderId: string, amountPence?: number, reason?: string, createdBy?: string }
- * Creates a full or partial refund in Stripe and logs it.
  */
 router.post('/refunds', async (req, res) => {
   try {
     const { orderId, amountPence, reason, createdBy } = req.body || {};
-    if (!orderId) {
-      return res.status(400).json({ ok: false, message: 'orderId required' });
-    }
+    if (!orderId) return res.status(400).json({ ok: false, message: 'orderId required' });
 
     const order = await prisma.order.findUnique({ where: { id: String(orderId) } });
     if (!order || !order.stripeId) {
