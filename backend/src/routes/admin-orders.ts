@@ -1,6 +1,7 @@
 // backend/src/routes/admin-orders.ts
 import { Router } from 'express';
 import prisma from '../lib/db.js';
+import { Prisma } from '@prisma/client';
 import { createRefund } from '../services/stripe.js';
 
 const router = Router();
@@ -26,12 +27,12 @@ router.post('/orders/:id/refund', async (req, res) => {
       return res.status(400).json({ ok: false, message: 'No Stripe payment ID found for this order' });
     }
 
-    // Check if already refunded
+    // Already fully refunded?
     if (order.status === 'REFUNDED') {
       return res.status(400).json({ ok: false, message: 'Order already refunded' });
     }
 
-    // Send refund request to Stripe
+    // Call Stripe
     const refund = await createRefund({
       paymentIntentId: order.stripeId,
       amountPence: amountPence ? Number(amountPence) : undefined,
@@ -39,7 +40,7 @@ router.post('/orders/:id/refund', async (req, res) => {
       metadata: { orderId: order.id },
     });
 
-    // Record refund in DB
+    // Save refund in DB
     await prisma.refund.create({
       data: {
         orderId: order.id,
@@ -49,8 +50,8 @@ router.post('/orders/:id/refund', async (req, res) => {
       },
     });
 
-    // Update order status if full refund
-    if (!amountPence || (refund.status && refund.status === 'succeeded')) {
+    // If it’s a full refund (or Stripe says succeeded), mark order refunded
+    if (!amountPence || refund.status === 'succeeded') {
       await prisma.order.update({
         where: { id: order.id },
         data: { status: 'REFUNDED' },
@@ -66,7 +67,7 @@ router.post('/orders/:id/refund', async (req, res) => {
 
 /**
  * GET /admin/orders/:id
- * Returns full order details including tickets and notes.
+ * Return full order details including tickets, refunds and notes.
  */
 router.get('/orders/:id', async (req, res) => {
   try {
@@ -77,6 +78,7 @@ router.get('/orders/:id', async (req, res) => {
         show: { include: { venue: true } },
         tickets: true,
         refunds: true,
+        // If you have OrderNote model:
         notes: {
           include: { user: true },
           orderBy: { createdAt: 'desc' },
@@ -94,22 +96,23 @@ router.get('/orders/:id', async (req, res) => {
 
 /**
  * GET /admin/orders
- * Basic order search endpoint
+ * Search orders by email, stripeId or show title.
  */
 router.get('/orders', async (req, res) => {
   try {
     const q = String(req.query.q || '').trim();
     const limit = Number(req.query.limit || 50);
 
-    const where = q
+    const where: Prisma.OrderWhereInput | undefined = q
       ? {
           OR: [
-            { email: { contains: q, mode: 'insensitive' } },
-            { stripeId: { contains: q, mode: 'insensitive' } },
-            { show: { title: { contains: q, mode: 'insensitive' } } },
+            // email is nullable in schema, so use StringNullableFilter with QueryMode
+            { email: { contains: q, mode: Prisma.QueryMode.insensitive } },
+            { stripeId: { contains: q, mode: Prisma.QueryMode.insensitive } },
+            { show: { title: { contains: q, mode: Prisma.QueryMode.insensitive } } },
           ],
         }
-      : {};
+      : undefined;
 
     const items = await prisma.order.findMany({
       where,
