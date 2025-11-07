@@ -7,131 +7,186 @@ import { requireAdmin } from '../lib/authz.js';
 const router = Router();
 
 /**
- * GET /admin/shows/latest?limit=50
+ * GET /admin/shows
+ * Optional ?q=search by title or venue
  */
-router.get('/shows/latest', requireAdmin, async (req: Request, res: Response) => {
+router.get('/shows', requireAdmin, async (req: Request, res: Response) => {
   try {
-    const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || '50'), 10) || 50));
+    const q = String(req.query.q || '').trim();
+
+    const where = q
+      ? {
+          OR: [
+            { title: { contains: q, mode: 'insensitive' } },
+            { venue: { name: { contains: q, mode: 'insensitive' } } },
+          ],
+        }
+      : {};
+
     const shows = await prisma.show.findMany({
-      orderBy: { date: 'desc' },
-      take: limit,
+      where,
       include: {
-        venue: { select: { name: true, city: true, postcode: true, capacity: true } },
+        venue: true,
+        ticketTypes: true,
+        _count: {
+          select: {
+            orders: true,
+            ticketTypes: true,
+          },
+        },
       },
+      orderBy: { date: 'desc' },
     });
+
     res.json({ ok: true, shows });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, message: e?.message ?? 'Failed to load shows' });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, message: err.message });
   }
 });
 
 /**
  * GET /admin/shows/:id
- * Returns show, ticket types, and KPIs
+ * Includes KPIs and ticket type list
  */
 router.get('/shows/:id', requireAdmin, async (req: Request, res: Response) => {
   try {
-    const id = String(req.params.id);
-
+    const showId = String(req.params.id);
     const show = await prisma.show.findUnique({
-      where: { id },
+      where: { id: showId },
       include: {
-        venue: { select: { id: true, name: true, city: true, postcode: true, capacity: true } },
-        ticketTypes: { orderBy: { createdAt: 'asc' } },
+        venue: true,
+        ticketTypes: true,
+        orders: {
+          select: {
+            id: true,
+            amountPence: true,
+            status: true,
+            tickets: true,
+          },
+        },
       },
     });
+
     if (!show) return res.status(404).json({ ok: false, message: 'Show not found' });
 
-    // KPIs
-    const [orders, ticketsCount] = await Promise.all([
-      prisma.order.findMany({
-        where: { showId: id, status: { in: ['PAID', 'REFUNDED'] } },
-        select: { amountPence: true, quantity: true, status: true },
-      }),
-      prisma.ticket.count({ where: { order: { showId: id }, status: 'ISSUED' } }),
-    ]);
+    // --- KPIs ---
+    const totalOrders = show.orders.length;
+    const paidOrders = show.orders.filter((o) => o.status === 'PAID');
+    const refundedOrders = show.orders.filter((o) => o.status === 'REFUNDED');
 
-    const revenuePence = orders.reduce((sum, o) => sum + (o.status === 'PAID' ? (o.amountPence || 0) : 0), 0);
-    const ticketsSold = orders.reduce((sum, o) => sum + (o.status === 'PAID' ? (o.quantity || 0) : 0), 0);
-    const capacity = show.venue?.capacity ?? null;
-    const totalAvailable = (show.ticketTypes || []).reduce((a, t) => a + (t.available ?? 0), 0);
+    const totalTickets = show.orders.reduce((sum, o) => sum + (o.tickets?.length || 0), 0);
+    const totalRevenue = paidOrders.reduce((sum, o) => sum + (o.amountPence || 0), 0);
+    const refundedRevenue = refundedOrders.reduce((sum, o) => sum + (o.amountPence || 0), 0);
 
     res.json({
       ok: true,
-      show,
-      kpis: {
-        capacity,
-        totalAvailable,
-        ticketsSold,
-        revenuePence,
+      show: {
+        ...show,
+        kpis: {
+          totalOrders,
+          totalTickets,
+          totalRevenue,
+          refundedRevenue,
+        },
       },
     });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, message: e?.message ?? 'Failed to load show' });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, message: err.message });
+  }
+});
+
+/**
+ * PATCH /admin/shows/:id/ticket-types/:ticketTypeId
+ * Inline editing for ticket type name, price, available qty
+ */
+router.patch('/shows/:id/ticket-types/:ticketTypeId', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { id, ticketTypeId } = req.params;
+    const { name, pricePence, available } = req.body;
+
+    const updated = await prisma.ticketType.update({
+      where: { id: ticketTypeId },
+      data: {
+        name,
+        pricePence: Number(pricePence),
+        available: available !== undefined ? Number(available) : undefined,
+      },
+    });
+
+    res.json({ ok: true, updated });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, message: err.message });
   }
 });
 
 /**
  * POST /admin/shows/:id/ticket-types
+ * Create new ticket type inline
  */
 router.post('/shows/:id/ticket-types', requireAdmin, async (req: Request, res: Response) => {
   try {
     const showId = String(req.params.id);
-    const { name, pricePence, available } = req.body || {};
-    if (!name || typeof pricePence !== 'number') {
-      return res.status(400).json({ ok: false, message: 'name and pricePence required' });
-    }
-    const tt = await prisma.ticketType.create({
-      data: { showId, name: String(name), pricePence: Number(pricePence), available: available == null ? null : Number(available) },
+    const { name, pricePence, available } = req.body;
+
+    const created = await prisma.ticketType.create({
+      data: {
+        name,
+        pricePence: Number(pricePence),
+        available: available !== undefined ? Number(available) : null,
+        show: { connect: { id: showId } },
+      },
     });
-    res.json({ ok: true, ticketType: tt });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, message: e?.message ?? 'Failed to add ticket type' });
+
+    res.json({ ok: true, created });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, message: err.message });
+  }
+});
+
+/**
+ * DELETE /admin/shows/:id/ticket-types/:ticketTypeId
+ */
+router.delete('/shows/:id/ticket-types/:ticketTypeId', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { ticketTypeId } = req.params;
+    await prisma.ticketType.delete({ where: { id: ticketTypeId } });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, message: err.message });
   }
 });
 
 /**
  * GET /admin/shows/:id/attendees.csv
- * Flat CSV of tickets for door list / marketing export.
+ * Exports list of tickets with holderName, email, status
  */
 router.get('/shows/:id/attendees.csv', requireAdmin, async (req: Request, res: Response) => {
   try {
-    const id = String(req.params.id);
-
+    const showId = String(req.params.id);
     const tickets = await prisma.ticket.findMany({
-      where: { order: { showId: id } },
-      orderBy: { serial: 'asc' },
-      select: {
-        serial: true,
-        holderName: true,
-        status: true,
-        scannedAt: true,
-        order: { select: { email: true, createdAt: true } },
+      where: { order: { showId } },
+      include: {
+        order: { select: { email: true, status: true } },
       },
+      orderBy: { createdAt: 'asc' },
     });
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename="attendees.csv"');
+    res.setHeader('Content-Disposition', `attachment; filename="attendees-${showId}.csv"`);
 
-    const header = ['serial', 'holderName', 'status', 'scannedAt', 'orderEmail', 'orderCreatedAt'];
+    const header = ['Ticket ID', 'Holder Name', 'Email', 'Status'];
     res.write(header.join(',') + '\n');
 
     for (const t of tickets) {
-      const row = [
-        t.serial,
-        t.holderName || '',
-        t.status || '',
-        t.scannedAt ? t.scannedAt.toISOString() : '',
-        t.order?.email || '',
-        t.order?.createdAt ? t.order.createdAt.toISOString() : '',
-      ]
-        .map(v => `"${String(v).replace(/"/g, '""')}"`)
+      const row = [t.id, t.holderName ?? '', t.order?.email ?? '', t.order?.status ?? '']
+        .map((v) => `"${String(v).replace(/"/g, '""')}"`)
         .join(',');
       res.write(row + '\n');
     }
+
     res.end();
-  } catch (e: any) {
-    res.status(500).json({ ok: false, message: e?.message ?? 'Failed to export attendees' });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, message: err.message });
   }
 });
 
