@@ -21,9 +21,13 @@ import auth from './routes/auth.js';
 import scanApi from './routes/scan.js';
 import scanUI from './routes/scan-ui.js';
 
-// NEW
+// Added previously
 import analytics from './routes/analytics.js';
 import emailRoutes from './routes/email.js';
+
+// NEW routes in this chunk
+import adminExports from './routes/admin-exports.js';
+import publicOrders from './routes/public-orders.js';
 
 const app = express();
 
@@ -51,6 +55,8 @@ app.use(['/scan', '/admin'], limiter);
 // --- Public / customer routes ---
 app.use('/events', events);
 app.use('/checkout', checkout);
+// NEW: public self-serve endpoints
+app.use('/', publicOrders);
 
 // --- Auth routes (cookie-based) ---
 app.use('/auth', auth);
@@ -65,9 +71,10 @@ app.use('/admin', adminTicketTypes);
 app.use('/admin', adminOrders);
 app.use('/admin', adminUploads);
 
-// NEW: admin analytics + email
+// Admin analytics + mailer + exports
 app.use('/admin', analytics);
 app.use('/admin', emailRoutes);
+app.use('/admin', adminExports);
 
 // Legacy / bootstrap admin endpoints (if you still need them)
 app.use('/admin', admin);
