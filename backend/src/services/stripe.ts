@@ -1,113 +1,98 @@
 // backend/src/services/stripe.ts
 import Stripe from 'stripe';
+import { OrderStatus } from '@prisma/client';
 import prisma from '../lib/db.js';
 
-const STRIPE_KEY = process.env.STRIPE_SECRET_KEY;
-if (!STRIPE_KEY) {
-  // We throw early so you get a clear env error in logs.
-  throw new Error('STRIPE_SECRET_KEY is not set');
-}
-
-const stripe = new Stripe(STRIPE_KEY, {
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
   apiVersion: '2024-06-20',
 });
 
 /**
- * Creates a Stripe refund for a given order and records it in the database.
+ * Create a Stripe refund for a given order.
  *
- * @param orderId - The order to refund.
- * @param amountPence - Optional partial amount in pence. Defaults to full order amount.
- * @param reason - Optional free-text reason (stored in DB; short code sent to Stripe metadata).
+ * - If amountPence is omitted, we refund the remaining paid balance (full refund net of previous refunds).
+ * - Records a Refund row in Prisma.
+ * - Updates Order.status to REFUNDED for full refunds, leaves PAID for partials.
  *
- * @returns { ok: true, refundId, amountPence, newStatus } on success
- * @throws Error with message suitable for surfacing to API users
+ * @param orderId string
+ * @param amountPence number | undefined
+ * @param reason string | undefined
  */
 export default async function createRefund(
   orderId: string,
-  amountPence?: number | null,
-  reason?: string | null
-): Promise<{ ok: true; refundId: string; amountPence: number; newStatus: string }> {
-  // 1) Load order
+  amountPence?: number,
+  reason?: string
+): Promise<{ ok: true; refundId: string; amountPence: number; newStatus: OrderStatus }> {
+  // Load the order
   const order = await prisma.order.findUnique({
     where: { id: orderId },
-    select: {
-      id: true,
-      amountPence: true,
-      stripeId: true,
-      status: true,
-      refunds: { select: { amount: true } },
-    },
+    include: { refunds: true },
   });
-
   if (!order) {
     throw new Error('Order not found');
   }
   if (!order.stripeId) {
-    throw new Error('Order is missing Stripe payment reference');
+    throw new Error('Order is missing Stripe payment intent ID');
+  }
+  const totalPaid = order.amountPence ?? 0;
+
+  // Sum existing refunds for this order
+  const alreadyRefunded = (order.refunds || []).reduce((sum, r) => sum + (r.amount || 0), 0);
+  const remaining = Math.max(0, totalPaid - alreadyRefunded);
+
+  if (remaining <= 0) {
+    throw new Error('Nothing left to refund for this order');
   }
 
-  // 2) Decide refund amount
-  const orderTotal = Number(order.amountPence ?? 0);
-  if (!orderTotal || orderTotal <= 0) {
-    throw new Error('Order amount is invalid for refund');
-  }
-
-  const alreadyRefunded = order.refunds.reduce((sum, r) => sum + Number(r.amount || 0), 0);
-  const remaining = Math.max(orderTotal - alreadyRefunded, 0);
-
-  const refundAmount = amountPence != null ? Number(amountPence) : remaining || orderTotal;
+  const refundAmount = typeof amountPence === 'number' ? amountPence : remaining;
   if (refundAmount <= 0) {
-    throw new Error('Nothing left to refund');
+    throw new Error('Refund amount must be > 0');
   }
   if (refundAmount > remaining) {
-    throw new Error('Refund amount exceeds remaining balance');
+    throw new Error(`Refund amount exceeds remaining paid amount (${remaining} pence)`);
   }
 
-  // 3) Create Stripe refund
-  // We assume order.stripeId is a PaymentIntent id.
-  // If your integration used “charges”, switch to { charge: order.stripeId }.
-  const stripeRefund = await stripe.refunds.create({
+  // Create the refund in Stripe against the payment intent
+  const refund = await stripe.refunds.create({
     payment_intent: order.stripeId,
     amount: refundAmount,
-    // Stripe reason is limited enum; we put free text into metadata.
-    reason: 'requested_by_customer',
+    reason: reason ? 'requested_by_customer' : undefined,
     metadata: {
       orderId: order.id,
-      appReason: reason || '',
+      reason: reason || '',
     },
   });
 
-  if (!stripeRefund || !stripeRefund.id) {
-    throw new Error('Stripe refund failed to create');
-  }
-
-  // 4) Record refund in DB
+  // Record the refund in our DB
   await prisma.refund.create({
     data: {
       amount: refundAmount,
       reason: reason || null,
-      stripeId: stripeRefund.id,
+      stripeId: refund.id,
       orderId: order.id,
-      // ticketId: null  // Optional: link to a specific ticket in partial-use workflows
     },
   });
 
-  // 5) Update order status if fully refunded
-  const newTotalRefunded = alreadyRefunded + refundAmount;
-  const fullyRefunded = newTotalRefunded >= orderTotal;
+  // If fully refunded now, flip order status
+  const newAlreadyRefunded = alreadyRefunded + refundAmount;
+  const isFullyRefunded = newAlreadyRefunded >= totalPaid && totalPaid > 0;
 
-  const updated = await prisma.order.update({
-    where: { id: order.id },
-    data: fullyRefunded
-      ? { status: 'REFUNDED' } // matches your Prisma enum OrderStatus
-      : undefined,
-    select: { status: true },
-  });
+  const updateData: { status?: OrderStatus } = {};
+  if (isFullyRefunded) {
+    updateData.status = OrderStatus.REFUNDED;
+  }
+
+  if (Object.keys(updateData).length > 0) {
+    await prisma.order.update({
+      where: { id: order.id },
+      data: updateData,
+    });
+  }
 
   return {
     ok: true,
-    refundId: stripeRefund.id,
+    refundId: refund.id,
     amountPence: refundAmount,
-    newStatus: updated.status,
+    newStatus: isFullyRefunded ? OrderStatus.REFUNDED : order.status,
   };
 }
