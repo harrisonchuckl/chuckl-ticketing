@@ -21,8 +21,9 @@ import auth from './routes/auth.js';
 import scanApi from './routes/scan.js';
 import scanUI from './routes/scan-ui.js';
 
-// NEW: Show detail + ticket-type inline management + KPIs
-import adminShowDetail from './routes/admin-show-detail.js';
+// NEW
+import analytics from './routes/analytics.js';
+import emailRoutes from './routes/email.js';
 
 const app = express();
 
@@ -58,14 +59,15 @@ app.use('/auth', auth);
 app.use('/admin', adminUI);
 
 // --- Admin JSON APIs ---
-// Mount the new Show Detail router first to ensure its endpoints are used
-app.use('/admin', adminShowDetail);
-
 app.use('/admin', adminVenues);
 app.use('/admin', adminShows);
 app.use('/admin', adminTicketTypes);
 app.use('/admin', adminOrders);
 app.use('/admin', adminUploads);
+
+// NEW: admin analytics + email
+app.use('/admin', analytics);
+app.use('/admin', emailRoutes);
 
 // Legacy / bootstrap admin endpoints (if you still need them)
 app.use('/admin', admin);
