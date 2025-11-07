@@ -26,14 +26,15 @@ model Order {
   updatedAt   DateTime      @updatedAt
   email       String?
   amountPence Int?
-  quantity    Int?          // ✅ Added back for compatibility
-  stripeId    String?       // ✅ Added back for Stripe integration
+  quantity    Int?
+  stripeId    String?
   status      OrderStatus   @default(PENDING)
   userId      String?
   user        User?         @relation(fields: [userId], references: [id])
   showId      String?
   show        Show?         @relation(fields: [showId], references: [id])
   tickets     Ticket[]
+  refunds     Refund[]      // ✅ new
 }
 
 enum OrderStatus {
@@ -46,7 +47,7 @@ enum OrderStatus {
 model Show {
   id          String       @id @default(cuid())
   title       String
-  description String?       // ✅ Added back
+  description String?
   date        DateTime
   venueId     String?
   venue       Venue?       @relation(fields: [venueId], references: [id])
@@ -68,8 +69,8 @@ model TicketType {
   id         String   @id @default(cuid())
   name       String
   pricePence Int
-  available  Int?      // ✅ Added back
-  createdAt  DateTime  @default(now()) // ✅ Added back
+  available  Int?
+  createdAt  DateTime  @default(now())
   showId     String?
   show       Show?    @relation(fields: [showId], references: [id])
 }
@@ -79,7 +80,7 @@ model Ticket {
   serial      String   @unique
   holderName  String?
   status      String
-  scannedAt   DateTime?   // ✅ Added back for scanning feature
+  scannedAt   DateTime?
   orderId     String?
   order       Order?   @relation(fields: [orderId], references: [id])
   userId      String?
@@ -92,6 +93,19 @@ model PasswordReset {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   token     String   @unique
   createdAt DateTime @default(now())
-  expiresAt DateTime? // ✅ Added back for token validity
-  usedAt    DateTime? // ✅ Added back for tracking used tokens
+  expiresAt DateTime?
+  usedAt    DateTime?
+}
+
+model Refund {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  amount     Int
+  reason     String?
+  stripeId   String?
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id])
+  ticketId   String?
+  ticket     Ticket?  @relation(fields: [ticketId], references: [id])
+  createdBy  String?
 }
