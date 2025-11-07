@@ -1,93 +1,100 @@
 // backend/src/routes/admin-analytics.ts
 import { Router } from 'express';
-import prisma from '../lib/db.js';
+import prisma from '../lib/prisma.js';
 import { requireAdmin } from '../lib/authz.js';
 
 const router = Router();
 
 /**
- * GET /admin/analytics/overview?from=YYYY-MM-DD&to=YYYY-MM-DD
- * Returns daily buckets of:
- *  - ordersCount (PAID orders),
- *  - ticketsCount (tickets linked to PAID orders),
- *  - revenuePence (sum of amountPence on PAID orders)
- *
- * Default range: last 30 days (inclusive).
+ * GET /admin/analytics/summary
+ * Returns headline metrics: total revenue, tickets sold, refund amount, etc.
  */
-router.get('/analytics/overview', requireAdmin, async (req, res) => {
+router.get('/summary', requireAdmin, async (_req, res) => {
   try {
-    const { from, to } = req.query as { from?: string; to?: string };
+    const [orders, refunds, tickets] = await Promise.all([
+      prisma.order.aggregate({
+        _sum: { amountPence: true, quantity: true },
+        where: { status: { in: ['PAID', 'REFUNDED'] } }
+      }),
+      prisma.refund.aggregate({
+        _sum: { amount: true }
+      }),
+      prisma.ticket.count()
+    ]);
 
-    // Default range: last 30 days
-    const now = new Date();
-    const end = to ? new Date(to + 'T23:59:59.999Z') : now;
-    const start = from
-      ? new Date(from + 'T00:00:00.000Z')
-      : new Date(end.getTime() - 29 * 24 * 60 * 60 * 1000);
-
-    // Fetch PAID orders in range with tickets (to count tickets reliably)
-    const orders = await prisma.order.findMany({
-      where: {
-        status: 'PAID',
-        createdAt: {
-          gte: start,
-          lte: end,
-        },
-      },
-      include: { tickets: true },
-      orderBy: { createdAt: 'asc' },
-    });
-
-    // Bucket by YYYY-MM-DD (UTC)
-    const dayKey = (d: Date) =>
-      new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
-        .toISOString()
-        .slice(0, 10);
-
-    // Pre-seed buckets to keep chart continuous
-    const buckets: Record<
-      string,
-      { date: string; ordersCount: number; ticketsCount: number; revenuePence: number }
-    > = {};
-    for (
-      let t = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
-      t <= Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate());
-      t += 24 * 60 * 60 * 1000
-    ) {
-      const d = new Date(t).toISOString().slice(0, 10);
-      buckets[d] = { date: d, ordersCount: 0, ticketsCount: 0, revenuePence: 0 };
-    }
-
-    for (const o of orders) {
-      const k = dayKey(o.createdAt);
-      if (!buckets[k]) {
-        buckets[k] = { date: k, ordersCount: 0, ticketsCount: 0, revenuePence: 0 };
-      }
-      buckets[k].ordersCount += 1;
-      buckets[k].ticketsCount += (o.tickets?.length || 0);
-      buckets[k].revenuePence += Number(o.amountPence || 0);
-    }
-
-    const series = Object.values(buckets).sort((a, b) => (a.date < b.date ? -1 : 1));
-
-    // High-level KPIs
-    const totalRevenuePence = series.reduce((s, d) => s + d.revenuePence, 0);
-    const totalOrders = series.reduce((s, d) => s + d.ordersCount, 0);
-    const totalTickets = series.reduce((s, d) => s + d.ticketsCount, 0);
+    const totalRevenue = (orders._sum.amountPence || 0) / 100;
+    const totalRefunds = (refunds._sum.amount || 0) / 100;
+    const netRevenue = totalRevenue - totalRefunds;
 
     res.json({
       ok: true,
-      range: { from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) },
-      series,
-      kpis: {
-        totalRevenuePence,
-        totalOrders,
-        totalTickets,
-        avgOrderValuePence: totalOrders ? Math.round(totalRevenuePence / totalOrders) : 0,
-      },
+      metrics: {
+        totalRevenue,
+        totalRefunds,
+        netRevenue,
+        ticketsSold: orders._sum.quantity || 0,
+        totalTickets: tickets
+      }
     });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, message: e?.message || 'Failed to load analytics' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ ok: false, message: 'Failed to load summary' });
+  }
+});
+
+/**
+ * GET /admin/analytics/sales-trend
+ * Returns revenue and tickets sold grouped by day for charts.
+ */
+router.get('/sales-trend', requireAdmin, async (_req, res) => {
+  try {
+    const data = await prisma.$queryRawUnsafe(`
+      SELECT
+        DATE_TRUNC('day', "createdAt") AS date,
+        SUM("amountPence") / 100 AS revenue,
+        SUM("quantity") AS tickets
+      FROM "Order"
+      WHERE "status" IN ('PAID', 'REFUNDED')
+      GROUP BY 1
+      ORDER BY 1 ASC;
+    `);
+    res.json({ ok: true, trend: data });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ ok: false, message: 'Failed to load trend data' });
+  }
+});
+
+/**
+ * GET /admin/analytics/top-shows
+ * Returns top 5 shows by revenue.
+ */
+router.get('/top-shows', requireAdmin, async (_req, res) => {
+  try {
+    const data = await prisma.order.groupBy({
+      by: ['showId'],
+      _sum: { amountPence: true, quantity: true },
+      where: { status: { in: ['PAID', 'REFUNDED'] } },
+      orderBy: { _sum: { amountPence: 'desc' } },
+      take: 5
+    });
+
+    const enriched = await Promise.all(
+      data.map(async (d) => {
+        const show = d.showId ? await prisma.show.findUnique({ where: { id: d.showId } }) : null;
+        return {
+          showTitle: show?.title || 'Unknown',
+          venue: show?.venueId ? (await prisma.venue.findUnique({ where: { id: show.venueId } }))?.name : null,
+          revenue: (d._sum.amountPence || 0) / 100,
+          tickets: d._sum.quantity || 0
+        };
+      })
+    );
+
+    res.json({ ok: true, topShows: enriched });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ ok: false, message: 'Failed to load top shows' });
   }
 });
 
