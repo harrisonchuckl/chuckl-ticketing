@@ -13,7 +13,8 @@ router.get('/ui', (_req, res) => {
 <title>Organiser Console</title>
 <style>
   :root{--bg:#f7f8fa;--panel:#fff;--ink:#0f172a;--muted:#6b7280;--accent:#2563eb;--accent-2:#eff6ff;--border:#e5e7eb;--bad:#dc2626;--ok:#16a34a}
-  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial,sans-serif}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial,sans-serif}
   header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);background:var(--panel);position:sticky;top:0;z-index:5}
   header .brand{font-weight:800} header .user{font-size:14px;color:var(--muted)}
   main{display:grid;grid-template-columns:260px 1fr;gap:20px;padding:20px;min-height:calc(100vh - 64px)}
@@ -25,12 +26,16 @@ router.get('/ui', (_req, res) => {
   .toolbar{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:14px;border-bottom:1px solid var(--border)}
   .toolbar h2{font-size:16px;margin:0}
   .content{padding:16px}
-  .grid{display:grid;gap:12px}.two{grid-template-columns:1fr 1fr}.three{grid-template-columns:repeat(3,1fr)}
-  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .grid{display:grid;gap:12px}
+  .two{grid-template-columns:1fr 1fr}
+  .three{grid-template-columns:repeat(3,1fr)}
+  .four{grid-template-columns:repeat(4,1fr)}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
   input,select,textarea{width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;background:#fff;color:var(--ink);font-size:14px}
   label{font-size:12px;color:var(--muted)}
   .btn{border:0;border-radius:10px;padding:10px 12px;font-weight:600;cursor:pointer}
-  .btn.primary{background:var(--accent);color:#fff}.btn.ghost{background:#fff;border:1px solid var(--border)}
+  .btn.primary{background:var(--accent);color:#fff}
+  .btn.ghost{background:#fff;border:1px solid var(--border)}
   .note{font-size:13px;color:var(--muted)}
   .card{border:1px solid var(--border);border-radius:12px;padding:12px;background:#fff}
   .table{width:100%;border-collapse:collapse}
@@ -40,9 +45,11 @@ router.get('/ui', (_req, res) => {
   .overlay.show{display:flex}
   .login{width:360px;background:#fff;border-radius:14px;border:1px solid var(--border);padding:18px}
   .login h3{margin:0 0 8px}
-  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
   .kpi{background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px}
-  .chart{background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px}
+  .chartWrap{background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px}
+  canvas{max-width:100%;height:260px}
+  .field{display:flex;flex-direction:column;gap:6px}
 </style>
 </head>
 <body>
@@ -55,10 +62,10 @@ router.get('/ui', (_req, res) => {
   <nav>
     <h4>Dashboard</h4>
     <button data-view="home" class="active">Home</button>
+    <button data-view="analytics">Analytics</button>
     <button data-view="shows">Shows</button>
     <button data-view="orders">Orders</button>
     <button data-view="venues">Venues</button>
-    <button data-view="analytics">Analytics</button>
     <h4>Marketing</h4>
     <button data-view="audiences">Audiences</button>
     <button data-view="emails">Email Campaigns</button>
@@ -126,6 +133,43 @@ router.get('/ui', (_req, res) => {
       }, { once:true });
     },
 
+    // ---- Analytics ----
+    analytics(){
+      $('#viewTitle').textContent = 'Analytics';
+      const today = new Date(); today.setHours(0,0,0,0);
+      const fromDefault = new Date(today.getTime() - 29*24*60*60*1000); // last 30 days
+      const fmtDate = d => d.toISOString().slice(0,10);
+
+      $('#toolbarActions').innerHTML =
+        '<div class="row">'
+        + '<div class="field"><label>From</label><input id="a_from" type="date" value="'+fmtDate(fromDefault)+'"/></div>'
+        + '<div class="field"><label>To</label><input id="a_to" type="date" value="'+fmtDate(today)+'"/></div>'
+        + '<button class="btn ghost" id="a_refresh">Refresh</button>'
+        + '</div>';
+
+      $('#viewContent').innerHTML =
+        '<div class="kpis" id="kpiWrap">'
+        +   '<div class="kpi"><div class="note">Revenue</div><div id="kpi_revenue" style="font-size:22px;font-weight:700">—</div></div>'
+        +   '<div class="kpi"><div class="note">Refunds</div><div id="kpi_refunds" style="font-size:22px;font-weight:700">—</div></div>'
+        +   '<div class="kpi"><div class="note">Tickets Sold</div><div id="kpi_tickets" style="font-size:22px;font-weight:700">—</div></div>'
+        +   '<div class="kpi"><div class="note">Orders</div><div id="kpi_orders" style="font-size:22px;font-weight:700">—</div></div>'
+        +   '<div class="kpi"><div class="note">Live Shows</div><div id="kpi_live" style="font-size:22px;font-weight:700">—</div></div>'
+        + '</div>'
+        + '<div class="chartWrap"><h4 style="margin:0 0 8px">Daily Sales Trend</h4><canvas id="salesChart" width="900" height="260"></canvas>'
+        + '<div class="note" id="chartNote">Revenue and tickets per day</div></div>'
+        + '<div class="card"><h4 style="margin-top:0">Top Shows</h4><div id="topShowsWrap"></div></div>';
+
+      const run = () => {
+        const from = $('#a_from').value;
+        const to = $('#a_to').value;
+        loadAnalyticsSummary(from, to);
+        loadAnalyticsTrend(from, to);
+        loadTopShows(from, to);
+      };
+      $('#a_refresh').onclick = run;
+      run();
+    },
+
     // ---- Shows list & detail ----
     shows(){
       $('#viewTitle').textContent = 'Shows';
@@ -142,7 +186,7 @@ router.get('/ui', (_req, res) => {
       renderShowDetail(showId);
     },
 
-    // ---- Orders list & detail with notes ----
+    // ---- Orders list & detail with notes + refunds ----
     orders(){
       $('#viewTitle').textContent = 'Orders';
       $('#toolbarActions').innerHTML =
@@ -162,6 +206,7 @@ router.get('/ui', (_req, res) => {
       renderOrderDetail(orderId);
     },
 
+    // ---- Venues ----
     venues(){
       $('#viewTitle').textContent = 'Venues';
       $('#toolbarActions').innerHTML = '';
@@ -207,69 +252,6 @@ router.get('/ui', (_req, res) => {
       };
     },
 
-    // ---- Analytics (NEW) ----
-    analytics(){
-      $('#viewTitle').textContent = 'Analytics';
-      // date defaults: last 30 days
-      const today = new Date();
-      const to = today.toISOString().slice(0,10);
-      const from = new Date(today.getTime() - 29*24*60*60*1000).toISOString().slice(0,10);
-
-      $('#toolbarActions').innerHTML =
-        '<div class="row">'
-        + '<input id="a_from" type="date" value="'+from+'"/>'
-        + '<input id="a_to" type="date" value="'+to+'"/>'
-        + '<select id="a_metric"><option value="revenue">Revenue</option><option value="orders">Orders</option><option value="tickets">Tickets</option></select>'
-        + '<button class="btn ghost" id="a_refresh">Refresh</button>'
-        + '</div>';
-
-      $('#viewContent').innerHTML =
-        '<div class="kpis" id="a_kpis"></div>'
-        + '<div class="chart"><h4 style="margin:0 0 8px">Trend</h4><div id="a_chart"></div></div>'
-        + '<div class="card"><h4 style="margin:0 0 8px">Daily table</h4><div id="a_table"></div></div>';
-
-      const run = async () => {
-        const f = ($('#a_from').value || from);
-        const t = ($('#a_to').value || to);
-        const metric = $('#a_metric').value || 'revenue';
-        const r = await API('/admin/analytics/overview?from='+encodeURIComponent(f)+'&to='+encodeURIComponent(t));
-        const j = await r.json();
-        if(!j.ok){
-          $('#a_kpis').innerHTML = '<div class="note">Failed to load analytics.</div>';
-          $('#a_chart').innerHTML = '';
-          $('#a_table').innerHTML = '';
-          return;
-        }
-        // KPIs
-        const k = j.kpis || {};
-        $('#a_kpis').innerHTML =
-          '<div class="kpi"><div class="note">Revenue</div><div style="font-size:20px;font-weight:700">'+fmtMoney(k.totalRevenuePence)+'</div></div>'
-          + '<div class="kpi"><div class="note">Orders</div><div style="font-size:20px;font-weight:700">'+(k.totalOrders||0)+'</div></div>'
-          + '<div class="kpi"><div class="note">Tickets</div><div style="font-size:20px;font-weight:700">'+(k.totalTickets||0)+'</div></div>'
-          + '<div class="kpi"><div class="note">Avg. Order Value</div><div style="font-size:20px;font-weight:700">'+fmtMoney(k.avgOrderValuePence||0)+'</div></div>';
-
-        const series = j.series || [];
-        // Table
-        $('#a_table').innerHTML =
-          '<table class="table"><thead><tr><th>Date</th><th>Revenue</th><th>Orders</th><th>Tickets</th></tr></thead><tbody>'
-          + series.map(d => '<tr><td>'+d.date+'</td><td>'+fmtMoney(d.revenuePence)+'</td><td>'+d.ordersCount+'</td><td>'+d.ticketsCount+'</td></tr>').join('')
-          + '</tbody></table>';
-
-        // Chart
-        const values = series.map(d => {
-          switch(metric){
-            case 'orders': return d.ordersCount;
-            case 'tickets': return d.ticketsCount;
-            default: return Math.round((d.revenuePence||0)/100); // pounds
-          }
-        });
-        drawLineChart('#a_chart', series.map(d=>d.date), values, metric);
-      };
-
-      $('#toolbarActions').onclick = e => { if (e.target && e.target.id === 'a_refresh') run(); }
-      run();
-    },
-
     audiences(){
       $('#viewTitle').textContent = 'Audiences';
       $('#toolbarActions').innerHTML = '';
@@ -286,6 +268,127 @@ router.get('/ui', (_req, res) => {
       $('#viewContent').innerHTML = '<div class="note">Manage your password and organisation details.</div>';
     }
   };
+
+  // ===== Analytics helpers =====
+  async function loadAnalyticsSummary(from,to){
+    const r = await API('/admin/analytics/summary?from='+encodeURIComponent(from)+'&to='+encodeURIComponent(to));
+    const j = await r.json();
+    if(!j.ok) return;
+    $('#kpi_revenue').textContent = fmtMoney(j.kpis.revenuePence);
+    $('#kpi_refunds').textContent = fmtMoney(j.kpis.refundsPence);
+    $('#kpi_tickets').textContent = String(j.kpis.ticketsSold ?? 0);
+    $('#kpi_orders').textContent = String(j.kpis.ordersCount ?? 0);
+    $('#kpi_live').textContent = String(j.kpis.showsLive ?? 0);
+  }
+
+  async function loadAnalyticsTrend(from,to){
+    const r = await API('/admin/analytics/sales-trend?from='+encodeURIComponent(from)+'&to='+encodeURIComponent(to));
+    const j = await r.json();
+    if(!j.ok) return;
+    const canvas = $('#salesChart');
+    drawLineChart(canvas, j.series || []);
+  }
+
+  async function loadTopShows(from,to){
+    const r = await API('/admin/analytics/top-shows?limit=10&from='+encodeURIComponent(from)+'&to='+encodeURIComponent(to));
+    const j = await r.json();
+    const wrap = $('#topShowsWrap');
+    if(!j.ok){ wrap.innerHTML = '<div class="danger">Failed to load top shows</div>'; return; }
+    if(!j.items || j.items.length===0){ wrap.innerHTML = '<div class="note">No shows in range.</div>'; return; }
+    wrap.innerHTML =
+      '<table class="table"><thead><tr><th>Show</th><th>Venue</th><th>Date</th><th>Revenue</th></tr></thead><tbody>'
+      + j.items.map(it => '<tr>'
+        + '<td>'+escapeHtml(it.title || 'Untitled')+'</td>'
+        + '<td>'+(escapeHtml(it.venueName || ''))+'</td>'
+        + '<td>'+(it.date ? new Date(it.date).toLocaleDateString() : '')+'</td>'
+        + '<td>'+fmtMoney(it.revenuePence)+'</td>'
+        + '</tr>').join('')
+      + '</tbody></table>';
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  }
+
+  // Simple dual-series canvas chart (revenue + tickets)
+  function drawLineChart(canvas, series){
+    if(!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0,0,W,H);
+
+    // padding
+    const padL = 40, padR = 10, padT = 10, padB = 24;
+
+    const xs = series.map(d => d.date);
+    const revs = series.map(d => Number(d.revenuePence||0));
+    const tix = series.map(d => Number(d.tickets||0));
+
+    const maxRev = Math.max(1, ...revs);
+    const maxTix = Math.max(1, ...tix);
+
+    // axes
+    ctx.strokeStyle = '#e5e7eb';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padL, padT);
+    ctx.lineTo(padL, H - padB);
+    ctx.lineTo(W - padR, H - padB);
+    ctx.stroke();
+
+    // helpers
+    const X = (i) => padL + ( (W - padL - padR) * (i / Math.max(1, series.length-1)) );
+    const Yrev = (v) => padT + (H - padT - padB) * (1 - (v / maxRev));
+    const Ytix = (v) => padT + (H - padT - padB) * (1 - (v / maxTix));
+
+    // gridlines (4)
+    ctx.font = '12px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif';
+    ctx.fillStyle = '#6b7280';
+    for(let i=0;i<=4;i++){
+      const y = padT + (H - padT - padB) * (i/4);
+      ctx.strokeStyle = '#f1f5f9';
+      ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+    }
+
+    // labels (left axis shows revenue max, right axis shows tickets max)
+    ctx.fillStyle = '#6b7280';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText(fmtMoney(maxRev), 6, padT - 2 + 0.5);
+    ctx.textAlign = 'right';
+    ctx.fillText(String(maxTix)+' tix', W - 6, padT - 2 + 0.5);
+
+    // X labels (first, mid, last)
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    if(xs.length){
+      const first = xs[0], last = xs[xs.length-1], mid = xs[Math.floor(xs.length/2)];
+      ctx.fillText(first, X(0), H - padB + 6);
+      if(xs.length > 2) ctx.fillText(mid, X(Math.floor(xs.length/2)), H - padB + 6);
+      if(xs.length > 1) ctx.fillText(last, X(xs.length-1), H - padB + 6);
+    }
+
+    // line revenue
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#2563eb';
+    ctx.beginPath();
+    series.forEach((d,i) => { const x=X(i), y=Yrev(Number(d.revenuePence||0)); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+    ctx.stroke();
+
+    // line tickets
+    ctx.strokeStyle = '#10b981';
+    ctx.beginPath();
+    series.forEach((d,i) => { const x=X(i), y=Ytix(Number(d.tickets||0)); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+    ctx.stroke();
+
+    // legend
+    ctx.fillStyle = '#111827';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText('Revenue', padL+8, padT+16);
+    ctx.fillText('Tickets', padL+88, padT+16);
+
+    // legend markers
+    ctx.fillStyle = '#2563eb'; ctx.fillRect(padL, padT+7, 12, 3);
+    ctx.fillStyle = '#10b981'; ctx.fillRect(padL+80, padT+7, 12, 3);
+  }
 
   // ===== Shows =====
   async function loadShows(){
@@ -375,9 +478,9 @@ router.get('/ui', (_req, res) => {
       if(!tr) return;
       const id = tr.getAttribute('data-tt');
       if (e.target.classList.contains('tt_save')) {
-        const name = (tr.querySelector('.tt_name') as HTMLInputElement).value;
-        const pricePence = Number((tr.querySelector('.tt_price') as HTMLInputElement).value || 0);
-        const availRaw = (tr.querySelector('.tt_avail') as HTMLInputElement).value;
+        const name = tr.querySelector('.tt_name').value;
+        const pricePence = Number(tr.querySelector('.tt_price').value || 0);
+        const availRaw = tr.querySelector('.tt_avail').value;
         const available = availRaw === '' ? null : Number(availRaw);
         const r = await API('/admin/ticket-types/'+encodeURIComponent(id), {
           method:'PATCH',
@@ -397,16 +500,16 @@ router.get('/ui', (_req, res) => {
     };
 
     $('#btnAddTT')?.addEventListener('click', async () => {
-      const name = (document.getElementById('tt_name') as HTMLInputElement).value;
-      const pricePence = Number((document.getElementById('tt_price') as HTMLInputElement).value || 0);
-      const availRaw = (document.getElementById('tt_avail') as HTMLInputElement).value;
+      const name = $('#tt_name').value;
+      const pricePence = Number($('#tt_price').value || 0);
+      const availRaw = $('#tt_avail').value;
       const available = availRaw === '' ? null : Number(availRaw);
       const r = await API('/admin/shows/'+encodeURIComponent(showId)+'/ticket-types', {
         method:'POST',
         body: JSON.stringify({ name, pricePence, available })
       });
       const j2 = await r.json();
-      (document.getElementById('ttMsg') as HTMLElement).textContent = j2.ok ? 'Added' : (j2.message || 'Failed');
+      $('#ttMsg').textContent = j2.ok ? 'Added' : (j2.message || 'Failed');
       if (j2.ok) renderShowDetail(showId);
     });
   }
@@ -455,6 +558,12 @@ router.get('/ui', (_req, res) => {
       + '<div class="note">Amount: '+fmtMoney(o.amountPence)+'</div>'
       + '<div class="note">Qty: '+(o.quantity ?? '—')+'</div>'
       + '<div class="note">Status: '+o.status+'</div>'
+      + '<div class="row" style="margin-top:8px">'
+      +   '<input id="refundAmount" type="number" placeholder="Amount (pence, optional)" style="max-width:160px"/>'
+      +   '<input id="refundReason" placeholder="Reason (optional)" style="max-width:220px"/>'
+      +   '<button class="btn ghost" id="btnRefund">Refund</button>'
+      + '</div>'
+      + '<div class="note" id="refundMsg"></div>'
       + '</div>'
       + '<div class="grid two">'
       +   '<div class="card">'
@@ -471,6 +580,20 @@ router.get('/ui', (_req, res) => {
       + '</div>'
       + '</div>';
 
+    // Refund handler
+    $('#btnRefund').onclick = async () => {
+      const amount = $('#refundAmount').value ? Number($('#refundAmount').value) : null;
+      const reason = $('#refundReason').value || '';
+      const r = await API('/admin/orders/'+encodeURIComponent(orderId)+'/refund', {
+        method:'POST',
+        body: JSON.stringify({ amountPence: amount, reason })
+      });
+      const j = await r.json();
+      $('#refundMsg').textContent = j.ok ? 'Refund issued successfully' : (j.message||'Failed');
+      if(j.ok) renderOrderDetail(orderId);
+    };
+
+    // Notes list
     const notesWrap = $('#notesWrap');
     const renderNotes = () => {
       notesWrap.innerHTML = (o.notes||[]).map(n => {
@@ -488,72 +611,44 @@ router.get('/ui', (_req, res) => {
     renderNotes();
 
     // Add note
-    (document.getElementById('btnAddNote') as HTMLButtonElement).onclick = async () => {
-      const txt = (document.getElementById('noteText') as HTMLInputElement).value;
+    $('#btnAddNote').onclick = async () => {
+      const txt = $('#noteText').value;
       if(!txt.trim()) return;
       const r = await API('/admin/orders/'+encodeURIComponent(orderId)+'/notes', { method:'POST', body: JSON.stringify({ text: txt }) });
       const j2 = await r.json();
-      (document.getElementById('noteMsg') as HTMLElement).textContent = j2.ok ? 'Saved' : (j2.message||'Failed');
+      $('#noteMsg').textContent = j2.ok ? 'Saved' : (j2.message||'Failed');
       if (j2.ok) {
         o.notes.unshift(j2.note);
-        (document.getElementById('noteText') as HTMLInputElement).value = '';
+        $('#noteText').value = '';
         renderNotes();
       }
     };
 
     // Edit / delete notes
     notesWrap.onclick = async e => {
-      const card = (e.target as HTMLElement).closest('[data-note]');
+      const card = e.target.closest('[data-note]');
       if(!card) return;
       const noteId = card.getAttribute('data-note');
-      if ((e.target as HTMLElement).classList.contains('note_save')) {
-        const txt = (card.querySelector('.noteText') as HTMLTextAreaElement).value;
-        const r = await API('/admin/orders/'+encodeURIComponent(orderId)+'/notes/'+encodeURIComponent(noteId!), {
+      if (e.target.classList.contains('note_save')) {
+        const txt = card.querySelector('.noteText').value;
+        const r = await API('/admin/orders/'+encodeURIComponent(orderId)+'/notes/'+encodeURIComponent(noteId), {
           method:'PATCH',
           body: JSON.stringify({ text: txt })
         });
         const j3 = await r.json();
-        (document.getElementById('noteMsg') as HTMLElement).textContent = j3.ok ? 'Saved' : (j3.message || 'Failed');
+        $('#noteMsg').textContent = j3.ok ? 'Saved' : (j3.message || 'Failed');
       }
-      if ((e.target as HTMLElement).classList.contains('note_del')) {
+      if (e.target.classList.contains('note_del')) {
         if (!confirm('Delete this note?')) return;
-        const r = await API('/admin/orders/'+encodeURIComponent(orderId)+'/notes/'+encodeURIComponent(noteId!), { method:'DELETE' });
+        const r = await API('/admin/orders/'+encodeURIComponent(orderId)+'/notes/'+encodeURIComponent(noteId), { method:'DELETE' });
         const j4 = await r.json();
-        (document.getElementById('noteMsg') as HTMLElement).textContent = j4.ok ? 'Deleted' : (j4.message || 'Failed');
+        $('#noteMsg').textContent = j4.ok ? 'Deleted' : (j4.message || 'Failed');
         if (j4.ok) {
-          o.notes = o.notes.filter((n:any) => n.id !== noteId);
+          o.notes = o.notes.filter(n => n.id !== noteId);
           renderNotes();
         }
       }
     };
-  }
-
-  // ===== Tiny SVG line chart renderer =====
-  function drawLineChart(mountSel, labels, values, metric){
-    const mount = document.querySelector(mountSel);
-    const W = mount.clientWidth || 900;
-    const H = 260;
-    const P = 28; // padding
-    const max = Math.max(1, ...values);
-    const min = Math.min(0, ...values);
-    const span = max - min || 1;
-
-    const x = (i) => P + (i * (W - 2*P)) / Math.max(1, values.length - 1);
-    const y = (v) => H - P - ((v - min) * (H - 2*P)) / span;
-
-    const points = values.map((v, i) => x(i)+','+y(v)).join(' ');
-    // grid
-    const gridY = [0, 0.25, 0.5, 0.75, 1].map(r => y(min + r*span));
-
-    mount.innerHTML =
-      '<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Trend chart">'
-      + gridY.map(gy => '<line x1="'+P+'" y1="'+gy.toFixed(1)+'" x2="'+(W-P)+'" y2="'+gy.toFixed(1)+'" stroke="#e5e7eb" stroke-width="1"/>').join('')
-      + '<polyline fill="none" stroke="#2563eb" stroke-width="2" points="'+points+'"/>'
-      + values.map((v,i) => '<circle cx="'+x(i).toFixed(1)+'" cy="'+y(v).toFixed(1)+'" r="2.5" fill="#2563eb"/>').join('')
-      + '</svg>'
-      + '<div class="note" style="margin-top:6px">Metric: '
-      + (metric==='orders'?'Orders':metric==='tickets'?'Tickets':'Revenue (£)')
-      + '</div>';
   }
 
   // ===== Navigation =====
@@ -596,12 +691,12 @@ router.get('/ui', (_req, res) => {
 
   // Login
   $('#btnLogin').addEventListener('click', async function(){
-    const email = (document.getElementById('email') as HTMLInputElement).value;
-    const password = (document.getElementById('password') as HTMLInputElement).value;
+    const email = $('#email').value;
+    const password = $('#password').value;
     const r = await API('/auth/login', { method:'POST', body: JSON.stringify({ email, password }) });
     const j = await r.json();
     if(!j.ok){
-      const e = (document.getElementById('loginError') as HTMLElement);
+      const e = $('#loginError');
       e.textContent = j.message || 'Login failed';
       e.style.display = 'block';
       return;
