@@ -1,0 +1,45 @@
+name: CI Validate
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install backend deps
+        working-directory: backend
+        run: npm ci
+
+      - name: Typecheck (no emit)
+        working-directory: backend
+        run: npx tsc --noEmit
+
+      - name: Lint (if you have eslint configured)
+        working-directory: backend
+        run: |
+          if [ -f .eslintrc.json ] || [ -f .eslintrc.js ] || [ -f .eslintrc.cjs ]; then
+            npx eslint "src/**/*.{ts,tsx}" || true
+          else
+            echo "No ESLint config found, skipping."
+          fi
+
+      - name: Redundancy/Overlap check (routes)
+        run: node scripts/check-redundancy.mjs
+
+      - name: Dead exports (ts-prune)
+        working-directory: backend
+        run: npx ts-prune || true
+
+      - name: Report summary
+        run: |
+          echo "✅ CI checks complete."
