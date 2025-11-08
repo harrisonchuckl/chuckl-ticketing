@@ -1,4 +1,3 @@
-// backend/src/routes/admin-ui.ts
 import { Router } from 'express';
 
 const router = Router();
@@ -13,8 +12,7 @@ router.get('/ui', (_req, res) => {
 <title>Organiser Console</title>
 <style>
   :root{--bg:#f7f8fa;--panel:#fff;--ink:#0f172a;--muted:#6b7280;--accent:#2563eb;--accent-2:#eff6ff;--border:#e5e7eb;--bad:#dc2626;--ok:#16a34a}
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial,sans-serif}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial,sans-serif}
   header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);background:var(--panel);position:sticky;top:0;z-index:5}
   header .brand{font-weight:800} header .user{font-size:14px;color:var(--muted)}
   main{display:grid;grid-template-columns:260px 1fr;gap:20px;padding:20px;min-height:calc(100vh - 64px)}
@@ -26,16 +24,12 @@ router.get('/ui', (_req, res) => {
   .toolbar{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:14px;border-bottom:1px solid var(--border)}
   .toolbar h2{font-size:16px;margin:0}
   .content{padding:16px}
-  .grid{display:grid;gap:12px}
-  .two{grid-template-columns:1fr 1fr}
-  .three{grid-template-columns:repeat(3,1fr)}
-  .four{grid-template-columns:repeat(4,1fr)}
-  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  .grid{display:grid;gap:12px}.two{grid-template-columns:1fr 1fr}.three{grid-template-columns:repeat(3,1fr)}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
   input,select,textarea{width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;background:#fff;color:var(--ink);font-size:14px}
-  label{font-size:12px;color:var(--muted)}
+  label{font-size:12px;color:var(--muted')}
   .btn{border:0;border-radius:10px;padding:10px 12px;font-weight:600;cursor:pointer}
-  .btn.primary{background:var(--accent);color:#fff}
-  .btn.ghost{background:#fff;border:1px solid var(--border)}
+  .btn.primary{background:var(--accent);color:#fff}.btn.ghost{background:#fff;border:1px solid var(--border)}
   .note{font-size:13px;color:var(--muted)}
   .card{border:1px solid var(--border);border-radius:12px;padding:12px;background:#fff}
   .table{width:100%;border-collapse:collapse}
@@ -45,11 +39,8 @@ router.get('/ui', (_req, res) => {
   .overlay.show{display:flex}
   .login{width:360px;background:#fff;border-radius:14px;border:1px solid var(--border);padding:18px}
   .login h3{margin:0 0 8px}
-  .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
   .kpi{background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px}
-  .chartWrap{background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px}
-  canvas{max-width:100%;height:260px}
-  .field{display:flex;flex-direction:column;gap:6px}
 </style>
 </head>
 <body>
@@ -67,6 +58,7 @@ router.get('/ui', (_req, res) => {
     <button data-view="orders">Orders</button>
     <button data-view="venues">Venues</button>
     <h4>Marketing</h4>
+    <button data-view="coupons">Coupons</button>
     <button data-view="audiences">Audiences</button>
     <button data-view="emails">Email Campaigns</button>
     <h4>Settings</h4>
@@ -133,41 +125,18 @@ router.get('/ui', (_req, res) => {
       }, { once:true });
     },
 
-    // ---- Analytics ----
     analytics(){
       $('#viewTitle').textContent = 'Analytics';
-      const today = new Date(); today.setHours(0,0,0,0);
-      const fromDefault = new Date(today.getTime() - 29*24*60*60*1000); // last 30 days
-      const fmtDate = d => d.toISOString().slice(0,10);
-
-      $('#toolbarActions').innerHTML =
-        '<div class="row">'
-        + '<div class="field"><label>From</label><input id="a_from" type="date" value="'+fmtDate(fromDefault)+'"/></div>'
-        + '<div class="field"><label>To</label><input id="a_to" type="date" value="'+fmtDate(today)+'"/></div>'
-        + '<button class="btn ghost" id="a_refresh">Refresh</button>'
-        + '</div>';
-
+      $('#toolbarActions').innerHTML = '';
       $('#viewContent').innerHTML =
-        '<div class="kpis" id="kpiWrap">'
-        +   '<div class="kpi"><div class="note">Revenue</div><div id="kpi_revenue" style="font-size:22px;font-weight:700">—</div></div>'
-        +   '<div class="kpi"><div class="note">Refunds</div><div id="kpi_refunds" style="font-size:22px;font-weight:700">—</div></div>'
-        +   '<div class="kpi"><div class="note">Tickets Sold</div><div id="kpi_tickets" style="font-size:22px;font-weight:700">—</div></div>'
-        +   '<div class="kpi"><div class="note">Orders</div><div id="kpi_orders" style="font-size:22px;font-weight:700">—</div></div>'
-        +   '<div class="kpi"><div class="note">Live Shows</div><div id="kpi_live" style="font-size:22px;font-weight:700">—</div></div>'
+        '<div class="kpis" id="kpiWrap"></div>'
+        + '<div class="card"><h4 style="margin-top:0">Daily Sales Trend</h4>'
+        + '<canvas id="trendChart" width="800" height="240" style="max-width:100%"></canvas>'
         + '</div>'
-        + '<div class="chartWrap"><h4 style="margin:0 0 8px">Daily Sales Trend</h4><canvas id="salesChart" width="900" height="260"></canvas>'
-        + '<div class="note" id="chartNote">Revenue and tickets per day</div></div>'
-        + '<div class="card"><h4 style="margin-top:0">Top Shows</h4><div id="topShowsWrap"></div></div>';
-
-      const run = () => {
-        const from = $('#a_from').value;
-        const to = $('#a_to').value;
-        loadAnalyticsSummary(from, to);
-        loadAnalyticsTrend(from, to);
-        loadTopShows(from, to);
-      };
-      $('#a_refresh').onclick = run;
-      run();
+        + '<div class="card"><h4 style="margin-top:0">Top Shows</h4>'
+        + '<div id="topShowsWrap" class="grid"></div>'
+        + '</div>';
+      loadAnalytics();
     },
 
     // ---- Shows list & detail ----
@@ -186,7 +155,7 @@ router.get('/ui', (_req, res) => {
       renderShowDetail(showId);
     },
 
-    // ---- Orders list & detail with notes + refunds ----
+    // ---- Orders list & detail ----
     orders(){
       $('#viewTitle').textContent = 'Orders';
       $('#toolbarActions').innerHTML =
@@ -206,7 +175,6 @@ router.get('/ui', (_req, res) => {
       renderOrderDetail(orderId);
     },
 
-    // ---- Venues ----
     venues(){
       $('#viewTitle').textContent = 'Venues';
       $('#toolbarActions').innerHTML = '';
@@ -223,7 +191,6 @@ router.get('/ui', (_req, res) => {
         + '<div class="card"><h4>Find venues</h4>'
         + '<div class="row"><input id="q" placeholder="Search by name/city/postcode"/><button class="btn ghost" id="btnFind">Search</button></div>'
         + '<div id="venuesList" class="grid" style="margin-top:8px"></div></div></div>';
-
       $('#viewContent').onclick = async e => {
         if (e.target && e.target.id === 'btnCreateVenue') {
           const body = {
@@ -252,6 +219,111 @@ router.get('/ui', (_req, res) => {
       };
     },
 
+    // NEW: Coupons
+    coupons(){
+      $('#viewTitle').textContent = 'Coupons';
+      $('#toolbarActions').innerHTML =
+        '<div class="row">'
+        + '<input id="cq" placeholder="Search code/description"/><button class="btn ghost" id="btnSearchCoupons">Search</button>'
+        + '</div>';
+      $('#viewContent').innerHTML =
+        '<div class="grid two">'
+        +   '<div class="card">'
+        +     '<h4 style="margin-top:0">Create coupon</h4>'
+        +     '<div class="grid">'
+        +       '<div><label>Code</label><input id="c_code" placeholder="e.g. EARLYBIRD"/></div>'
+        +       '<div><label>Description</label><input id="c_desc" placeholder="Optional description"/></div>'
+        +       '<div class="row">'
+        +         '<input id="c_percent" type="number" min="0" max="100" placeholder="% off (0-100)"/>'
+        +         '<input id="c_amount" type="number" min="0" placeholder="Amount off (pence)"/>'
+        +       '</div>'
+        +       '<div class="row">'
+        +         '<input id="c_max" type="number" min="0" placeholder="Max redemptions (optional)"/>'
+        +         '<input id="c_start" type="datetime-local" placeholder="Starts at (optional)"/>'
+        +         '<input id="c_end" type="datetime-local" placeholder="Ends at (optional)"/>'
+        +       '</div>'
+        +       '<div class="row"><button class="btn primary" id="btnCreateCoupon">Create</button><div id="c_msg" class="note"></div></div>'
+        +     '</div>'
+        +   '</div>'
+        +   '<div class="card">'
+        +     '<h4 style="margin-top:0">Coupons</h4>'
+        +     '<div id="couponsWrap" class="grid"></div>'
+        +   '</div>'
+        + '</div>';
+
+      const run = () => loadCoupons($('#cq').value || '');
+      run();
+
+      $('#toolbarActions').onclick = e => { if (e.target.id==='btnSearchCoupons') run(); };
+
+      $('#viewContent').onclick = async (e) => {
+        if (e.target && e.target.id === 'btnCreateCoupon') {
+          const code = $('#c_code').value.trim();
+          if (!code) return ($('#c_msg').textContent = 'Code required');
+          const payload:any = {
+            code,
+            description: $('#c_desc').value || null,
+          };
+          const percent = $('#c_percent').value;
+          const amount = $('#c_amount').value;
+          if (percent && amount) return ($('#c_msg').textContent = 'Use percent OR amount');
+          if (percent) payload.percentOff = Number(percent);
+          if (amount) payload.amountOffPence = Number(amount);
+          const max = $('#c_max').value;
+          if (max) payload.maxRedemptions = Number(max);
+          const start = $('#c_start').value;
+          const end = $('#c_end').value;
+          if (start) payload.startsAt = start;
+          if (end) payload.endsAt = end;
+
+          const r = await API('/admin/coupons', { method:'POST', body: JSON.stringify(payload) });
+          const j = await r.json();
+          $('#c_msg').textContent = j.ok ? 'Created' : (j.message || 'Failed');
+          if (j.ok) { $('#c_code').value=''; $('#c_desc').value=''; $('#c_percent').value=''; $('#c_amount').value=''; $('#c_max').value=''; $('#c_start').value=''; $('#c_end').value=''; run(); }
+        }
+
+        const t = e.target as HTMLElement;
+        const row = t.closest('[data-coupon]');
+        if (!row) return;
+        const id = row.getAttribute('data-coupon');
+
+        if (t.classList.contains('c_toggle')) {
+          const r = await API('/admin/coupons/'+encodeURIComponent(id)+'/toggle', { method:'PATCH' });
+          const j = await r.json();
+          if (j.ok) run();
+        }
+        if (t.classList.contains('c_delete')) {
+          if (!confirm('Delete this coupon?')) return;
+          const r = await API('/admin/coupons/'+encodeURIComponent(id), { method:'DELETE' });
+          const j = await r.json();
+          if (j.ok) run();
+        }
+      };
+
+      async function loadCoupons(q){
+        const r = await API('/admin/coupons?q='+encodeURIComponent(q||''));
+        const j = await r.json();
+        const wrap = $('#couponsWrap');
+        if(!j.ok){ wrap.innerHTML = '<div class="danger">Failed</div>'; return; }
+        wrap.innerHTML = (j.items||[]).map(c => {
+          const window = (c.startsAt ? new Date(c.startsAt).toLocaleString() : '—') + ' → ' + (c.endsAt ? new Date(c.endsAt).toLocaleString() : '—');
+          const val = c.percentOff != null ? (c.percentOff + '% off') : (c.amountOffPence != null ? ('£'+(c.amountOffPence/100).toFixed(2)+' off') : '—');
+          const cap = c.maxRedemptions != null ? (c.timesRedeemed + ' / ' + c.maxRedemptions) : (c.timesRedeemed + ' used');
+          return '<div class="card" data-coupon="'+c.id+'">'
+            + '<div><b>'+c.code+'</b> <span class="note">'+(c.description||'')+'</span></div>'
+            + '<div class="note">Value: '+val+'</div>'
+            + '<div class="note">Active: '+(c.active ? 'Yes' : 'No')+'</div>'
+            + '<div class="note">Window: '+window+'</div>'
+            + '<div class="note">Redemptions: '+cap+'</div>'
+            + '<div class="row" style="margin-top:6px">'
+            +   '<button class="btn ghost c_toggle">'+(c.active?'Disable':'Enable')+'</button>'
+            +   '<button class="btn ghost c_delete" style="color:#dc2626;border-color:#fecaca">Delete</button>'
+            + '</div>'
+            + '</div>';
+        }).join('') || '<div class="note">No coupons yet.</div>';
+      }
+    },
+
     audiences(){
       $('#viewTitle').textContent = 'Audiences';
       $('#toolbarActions').innerHTML = '';
@@ -269,130 +341,9 @@ router.get('/ui', (_req, res) => {
     }
   };
 
-  // ===== Analytics helpers =====
-  async function loadAnalyticsSummary(from,to){
-    const r = await API('/admin/analytics/summary?from='+encodeURIComponent(from)+'&to='+encodeURIComponent(to));
-    const j = await r.json();
-    if(!j.ok) return;
-    $('#kpi_revenue').textContent = fmtMoney(j.kpis.revenuePence);
-    $('#kpi_refunds').textContent = fmtMoney(j.kpis.refundsPence);
-    $('#kpi_tickets').textContent = String(j.kpis.ticketsSold ?? 0);
-    $('#kpi_orders').textContent = String(j.kpis.ordersCount ?? 0);
-    $('#kpi_live').textContent = String(j.kpis.showsLive ?? 0);
-  }
-
-  async function loadAnalyticsTrend(from,to){
-    const r = await API('/admin/analytics/sales-trend?from='+encodeURIComponent(from)+'&to='+encodeURIComponent(to));
-    const j = await r.json();
-    if(!j.ok) return;
-    const canvas = $('#salesChart');
-    drawLineChart(canvas, j.series || []);
-  }
-
-  async function loadTopShows(from,to){
-    const r = await API('/admin/analytics/top-shows?limit=10&from='+encodeURIComponent(from)+'&to='+encodeURIComponent(to));
-    const j = await r.json();
-    const wrap = $('#topShowsWrap');
-    if(!j.ok){ wrap.innerHTML = '<div class="danger">Failed to load top shows</div>'; return; }
-    if(!j.items || j.items.length===0){ wrap.innerHTML = '<div class="note">No shows in range.</div>'; return; }
-    wrap.innerHTML =
-      '<table class="table"><thead><tr><th>Show</th><th>Venue</th><th>Date</th><th>Revenue</th></tr></thead><tbody>'
-      + j.items.map(it => '<tr>'
-        + '<td>'+escapeHtml(it.title || 'Untitled')+'</td>'
-        + '<td>'+(escapeHtml(it.venueName || ''))+'</td>'
-        + '<td>'+(it.date ? new Date(it.date).toLocaleDateString() : '')+'</td>'
-        + '<td>'+fmtMoney(it.revenuePence)+'</td>'
-        + '</tr>').join('')
-      + '</tbody></table>';
-  }
-
-  function escapeHtml(s){
-    return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-  }
-
-  // Simple dual-series canvas chart (revenue + tickets)
-  function drawLineChart(canvas, series){
-    if(!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const W = canvas.width, H = canvas.height;
-    ctx.clearRect(0,0,W,H);
-
-    // padding
-    const padL = 40, padR = 10, padT = 10, padB = 24;
-
-    const xs = series.map(d => d.date);
-    const revs = series.map(d => Number(d.revenuePence||0));
-    const tix = series.map(d => Number(d.tickets||0));
-
-    const maxRev = Math.max(1, ...revs);
-    const maxTix = Math.max(1, ...tix);
-
-    // axes
-    ctx.strokeStyle = '#e5e7eb';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(padL, padT);
-    ctx.lineTo(padL, H - padB);
-    ctx.lineTo(W - padR, H - padB);
-    ctx.stroke();
-
-    // helpers
-    const X = (i) => padL + ( (W - padL - padR) * (i / Math.max(1, series.length-1)) );
-    const Yrev = (v) => padT + (H - padT - padB) * (1 - (v / maxRev));
-    const Ytix = (v) => padT + (H - padT - padB) * (1 - (v / maxTix));
-
-    // gridlines (4)
-    ctx.font = '12px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif';
-    ctx.fillStyle = '#6b7280';
-    for(let i=0;i<=4;i++){
-      const y = padT + (H - padT - padB) * (i/4);
-      ctx.strokeStyle = '#f1f5f9';
-      ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
-    }
-
-    // labels (left axis shows revenue max, right axis shows tickets max)
-    ctx.fillStyle = '#6b7280';
-    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-    ctx.fillText(fmtMoney(maxRev), 6, padT - 2 + 0.5);
-    ctx.textAlign = 'right';
-    ctx.fillText(String(maxTix)+' tix', W - 6, padT - 2 + 0.5);
-
-    // X labels (first, mid, last)
-    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    if(xs.length){
-      const first = xs[0], last = xs[xs.length-1], mid = xs[Math.floor(xs.length/2)];
-      ctx.fillText(first, X(0), H - padB + 6);
-      if(xs.length > 2) ctx.fillText(mid, X(Math.floor(xs.length/2)), H - padB + 6);
-      if(xs.length > 1) ctx.fillText(last, X(xs.length-1), H - padB + 6);
-    }
-
-    // line revenue
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = '#2563eb';
-    ctx.beginPath();
-    series.forEach((d,i) => { const x=X(i), y=Yrev(Number(d.revenuePence||0)); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
-    ctx.stroke();
-
-    // line tickets
-    ctx.strokeStyle = '#10b981';
-    ctx.beginPath();
-    series.forEach((d,i) => { const x=X(i), y=Ytix(Number(d.tickets||0)); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
-    ctx.stroke();
-
-    // legend
-    ctx.fillStyle = '#111827';
-    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-    ctx.fillText('Revenue', padL+8, padT+16);
-    ctx.fillText('Tickets', padL+88, padT+16);
-
-    // legend markers
-    ctx.fillStyle = '#2563eb'; ctx.fillRect(padL, padT+7, 12, 3);
-    ctx.fillStyle = '#10b981'; ctx.fillRect(padL+80, padT+7, 12, 3);
-  }
-
-  // ===== Shows =====
+  // ===== Shows (list/detail) =====
   async function loadShows(){
-    const wrap = $('#showsWrap');
+    const wrap = document.getElementById('showsWrap');
     wrap.innerHTML = '<div class="note">Loading…</div>';
     const r = await API('/admin/shows/latest?limit=50');
     const j = await r.json();
@@ -558,12 +509,7 @@ router.get('/ui', (_req, res) => {
       + '<div class="note">Amount: '+fmtMoney(o.amountPence)+'</div>'
       + '<div class="note">Qty: '+(o.quantity ?? '—')+'</div>'
       + '<div class="note">Status: '+o.status+'</div>'
-      + '<div class="row" style="margin-top:8px">'
-      +   '<input id="refundAmount" type="number" placeholder="Amount (pence, optional)" style="max-width:160px"/>'
-      +   '<input id="refundReason" placeholder="Reason (optional)" style="max-width:220px"/>'
-      +   '<button class="btn ghost" id="btnRefund">Refund</button>'
-      + '</div>'
-      + '<div class="note" id="refundMsg"></div>'
+      + '<div class="note">Coupon: '+(o.coupon ? (o.coupon.code + (o.discountPence? ' (−'+fmtMoney(o.discountPence)+')':'')) : '—')+'</div>'
       + '</div>'
       + '<div class="grid two">'
       +   '<div class="card">'
@@ -580,20 +526,6 @@ router.get('/ui', (_req, res) => {
       + '</div>'
       + '</div>';
 
-    // Refund handler
-    $('#btnRefund').onclick = async () => {
-      const amount = $('#refundAmount').value ? Number($('#refundAmount').value) : null;
-      const reason = $('#refundReason').value || '';
-      const r = await API('/admin/orders/'+encodeURIComponent(orderId)+'/refund', {
-        method:'POST',
-        body: JSON.stringify({ amountPence: amount, reason })
-      });
-      const j = await r.json();
-      $('#refundMsg').textContent = j.ok ? 'Refund issued successfully' : (j.message||'Failed');
-      if(j.ok) renderOrderDetail(orderId);
-    };
-
-    // Notes list
     const notesWrap = $('#notesWrap');
     const renderNotes = () => {
       notesWrap.innerHTML = (o.notes||[]).map(n => {
@@ -649,6 +581,56 @@ router.get('/ui', (_req, res) => {
         }
       }
     };
+  }
+
+  // ===== Analytics (minimal fetch to render KPIs & trend) =====
+  async function loadAnalytics(){
+    const k = await (await API('/admin/analytics/summary')).json();
+    const t = await (await API('/admin/analytics/sales-trend')).json();
+    const top = await (await API('/admin/analytics/top-shows')).json();
+
+    const kEl = document.getElementById('kpiWrap');
+    if(k.ok){
+      const kp = k.kpis || {};
+      kEl.innerHTML =
+        '<div class="kpi"><div class="note">Revenue</div><div style="font-size:20px;font-weight:700">'+fmtMoney(kp.revenuePence)+'</div></div>'
+      + '<div class="kpi"><div class="note">Refunds</div><div style="font-size:20px;font-weight:700">'+fmtMoney(kp.refundsPence)+'</div></div>'
+      + '<div class="kpi"><div class="note">Tickets Sold</div><div style="font-size:20px;font-weight:700">'+(kp.ticketsSold||0)+'</div></div>'
+      + '<div class="kpi"><div class="note">Orders</div><div style="font-size:20px;font-weight:700">'+(kp.orders||0)+'</div></div>';
+    } else {
+      kEl.innerHTML = '<div class="note">Failed to load KPIs</div>';
+    }
+
+    // Tiny inline chart for trend
+    if(t.ok){
+      const cvs = document.getElementById('trendChart');
+      const ctx = cvs.getContext('2d');
+      const days = t.days || [];
+      // simple stroke chart
+      ctx.clearRect(0,0,cvs.width,cvs.height);
+      function drawSeries(vals, yOffset){
+        const max = Math.max(1, ...vals.map(v=>v||0));
+        const w = cvs.width, h = cvs.height;
+        ctx.beginPath();
+        vals.forEach((v,i)=>{
+          const x = (i/(vals.length-1)) * (w-20) + 10;
+          const y = h - (v/max)*(h-20) - 10 - (yOffset||0);
+          if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+        });
+        ctx.stroke();
+      }
+      drawSeries(days.map(d=>d.revenuePence||0), 0);
+      drawSeries(days.map(d=>d.ticketsSold||0), 0);
+    }
+
+    const topWrap = document.getElementById('topShowsWrap');
+    if(top.ok){
+      topWrap.innerHTML = (top.items||[]).map(x=>{
+        return '<div class="card"><b>'+x.title+'</b><div class="note">'+(x.date ? new Date(x.date).toLocaleDateString():'')+'</div><div class="note">Revenue: '+fmtMoney(x.revenuePence)+'</div></div>';
+      }).join('') || '<div class="note">No data</div>';
+    } else {
+      topWrap.innerHTML = '<div class="note">Failed to load</div>';
+    }
   }
 
   // ===== Navigation =====
