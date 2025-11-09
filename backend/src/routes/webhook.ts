@@ -1,12 +1,8 @@
 // backend/src/routes/webhook.ts
 //
-// Stripe webhook handler. Mounted with raw body in server.ts:
+// Mounted with raw body in server.ts:
 // app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), webhook);
-//
-// Handles:
-// - payment_intent.succeeded  -> mark order PAID, compute/stash platform fees
-// - charge.refunded / refund.created -> mark order REFUNDED (best-effort)
-//
+
 import type { Request, Response } from 'express';
 import Stripe from 'stripe';
 import prisma from '../lib/prisma.js';
@@ -19,23 +15,15 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
 const WH_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
 
 async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent) {
-  // We store PaymentIntent ID in Order.stripeId (consistent with the checkout flow).
-  const order = await prisma.order.findUnique({
+  // Your Order.stripeId is not unique in schema, so use findFirst.
+  const order = await prisma.order.findFirst({
     where: { stripeId: pi.id },
     include: {
-      show: {
-        include: {
-          venue: true, // include venue fee config
-        },
-      },
+      show: { include: { venue: true } },
     },
   });
-
   if (!order) return;
 
-  // Defensive: compute subtotal from tickets or from order.amountPence if you store gross
-  // Here we assume order.amountPence is the gross (tickets only, before platform fee),
-  // adjust if needed for your flow.
   const subtotalPence = Math.max(0, order.amountPence ?? 0);
   const qty = Math.max(0, order.quantity ?? 0);
 
@@ -55,39 +43,33 @@ async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent) {
   });
 
   await prisma.order.update({
-    where: { id: order.id },
+    where: { id: order.id }, // update by ID (unique), not stripeId
     data: {
       status: 'PAID',
-      platformFeePence: fee.platformFeePence, // field exists on your Order type per your earlier logs
-      // If you later add organiserSharePence to schema, you can persist: organiserSharePence: fee.organiserSharePence
+      platformFeePence: fee.platformFeePence,
     },
   });
 }
 
-async function markOrderRefundedByChargeId(chargeId: string) {
-  // If you stored PaymentIntent on order.stripeId, we can look up the PI for the charge,
-  // but an easier best-effort path is: find the PaymentIntent from charge and then use its id.
+async function markOrderRefundedFromCharge(chargeId: string) {
   try {
     const ch = await stripe.charges.retrieve(chargeId);
     const piId = typeof ch.payment_intent === 'string' ? ch.payment_intent : ch.payment_intent?.id;
     if (!piId) return;
-    const order = await prisma.order.findUnique({ where: { stripeId: piId } });
+    const order = await prisma.order.findFirst({ where: { stripeId: piId } });
     if (!order) return;
     await prisma.order.update({ where: { id: order.id }, data: { status: 'REFUNDED' } });
   } catch {
-    /* noop */
+    // ignore
   }
 }
 
 export default async function webhook(req: Request, res: Response) {
   let event: Stripe.Event;
 
-  // Verify signature if a secret is set; otherwise trust the payload (not recommended in prod)
   if (WH_SECRET) {
     const sig = req.headers['stripe-signature'];
-    if (!sig) {
-      return res.status(400).send('Missing stripe-signature header');
-    }
+    if (!sig) return res.status(400).send('Missing stripe-signature header');
     try {
       event = stripe.webhooks.constructEvent(req.body, sig, WH_SECRET);
     } catch (err: any) {
@@ -96,7 +78,7 @@ export default async function webhook(req: Request, res: Response) {
   } else {
     try {
       event = JSON.parse(req.body.toString());
-    } catch (e) {
+    } catch {
       return res.status(400).send('Invalid JSON body');
     }
   }
@@ -110,18 +92,18 @@ export default async function webhook(req: Request, res: Response) {
       }
       case 'charge.refunded': {
         const charge = event.data.object as Stripe.Charge;
-        if (charge.id) await markOrderRefundedByChargeId(charge.id);
+        if (charge.id) await markOrderRefundedFromCharge(charge.id);
         break;
       }
       case 'refund.created': {
         const refund = event.data.object as Stripe.Refund;
         if (refund.charge && typeof refund.charge === 'string') {
-          await markOrderRefundedByChargeId(refund.charge);
+          await markOrderRefundedFromCharge(refund.charge);
         }
         break;
       }
       default:
-        // ignore other events gracefully
+        // ignore others
         break;
     }
 
