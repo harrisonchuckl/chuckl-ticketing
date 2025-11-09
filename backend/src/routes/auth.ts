@@ -1,236 +1,243 @@
 // backend/src/routes/auth.ts
 import { Router } from 'express';
 import prisma from '../lib/prisma.js';
-// Use require so TS doesn't need @types/cookie
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const cookie = require('cookie');
-import crypto from 'crypto';
+import * as cookie from 'cookie';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 
 const router = Router();
 
-function setSessionCookie(res: any, sid: string) {
-  // 30 days
-  const c = cookie.serialize('sid', sid, {
+const COOKIE_NAME = 'sid';
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
+
+function serializeSessionCookie(value: string) {
+  return cookie.serialize(COOKIE_NAME, value, {
     httpOnly: true,
     sameSite: 'lax',
-    path: '/',
-    maxAge: 60 * 60 * 24 * 30,
     secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: COOKIE_MAX_AGE,
   });
-  res.setHeader('Set-Cookie', c);
 }
 
-async function createSession(userId: string) {
-  const sid = crypto.randomBytes(24).toString('hex');
-  await prisma.session.create({
-    data: { id: sid, userId, createdAt: new Date() },
+async function getUserFromRequest(req: any) {
+  const raw = req.headers.cookie || '';
+  const parsed = cookie.parse(raw || '');
+  const sid = parsed[COOKIE_NAME];
+  if (!sid) return null;
+
+  const session = await prisma.session.findUnique({
+    where: { id: sid },
+    include: { user: true },
   });
-  return sid;
+  if (!session) return null;
+
+  // (Optional) simple rolling session: extend expiry on use
+  return session.user;
 }
 
-// -------- HTML login page (with tabs) --------
+/* ----------------------------- AUTH SCREENS ----------------------------- */
+
 router.get('/login', (_req, res) => {
   res.type('html').send(`<!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Sign in</title>
-<style>
-  :root { --panel:#fff; --bg:#f7f8fb; --border:#e5e7eb; --text:#111827; --muted:#6b7280; }
-  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
-  .wrap{max-width:520px;margin:40px auto;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px}
-  h1{font-size:18px;margin:0 0 12px 0}
-  label{display:block;font-size:12px;color:var(--muted);margin:10px 0 6px}
-  input{width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--border);border-radius:8px;background:#fff}
-  .row{margin-top:10px}
-  button{width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:#0f172a;color:#fff;cursor:pointer}
-  button:hover{background:#111827}
-  .error{color:#b91c1c;margin-top:8px}
-  .tabs{display:flex;gap:8px;margin-bottom:12px}
-  .tab{flex:1;text-align:center;padding:8px;border:1px solid var(--border);border-radius:8px;background:#fff;cursor:pointer}
-  .tab.active{background:#111827;color:#fff;border-color:#111827}
-  .muted{color:var(--muted);font-size:12px;margin-top:8px}
-  .hidden{display:none}
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sign in</title>
+  <style>
+    :root { --panel:#fff; --bg:#f7f8fb; --border:#e5e7eb; --text:#111827; --muted:#6b7280;}
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;}
+    .wrap{max-width:560px;margin:48px auto;padding:16px;}
+    .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px;}
+    .tabs{display:flex;gap:8px;margin-bottom:12px;}
+    .tab{appearance:none;border:1px solid var(--border);background:#fff;border-radius:8px;padding:8px 12px;cursor:pointer}
+    .tab.active{background:#111827;color:#fff;border-color:#111827}
+    .row{display:flex;flex-direction:column;gap:6px;margin:10px 0}
+    label{font-size:12px;color:var(--muted)}
+    input{border:1px solid var(--border);border-radius:8px;padding:10px}
+    .btn{appearance:none;border:0;background:#111827;color:#fff;border-radius:8px;padding:10px 14px;cursor:pointer}
+    .muted{color:var(--muted);font-size:12px}
+    .err{color:#b91c1c;margin-top:8px}
+  </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="tabs">
-      <div class="tab active" data-tab="signin">Sign in</div>
-      <div class="tab" data-tab="signup">Create account</div>
-      <div class="tab" data-tab="forgot">Forgot password</div>
-    </div>
+    <div class="card">
+      <div class="tabs">
+        <button class="tab active" data-tab="signin">Sign in</button>
+        <button class="tab" data-tab="create">Create account</button>
+        <button class="tab" data-tab="forgot">Forgot password</button>
+      </div>
 
-    <!-- Sign in -->
-    <div id="panel-signin">
-      <h1>Sign in</h1>
-      <label>Email</label>
-      <input id="li-email" type="email" autocomplete="email" />
-      <label>Password</label>
-      <input id="li-password" type="password" autocomplete="current-password" />
-      <div class="row"><button id="btn-login">Sign in</button></div>
-      <div id="li-err" class="error"></div>
-      <div class="muted">After signing in you'll be taken to your organiser console.</div>
-    </div>
+      <div id="signin" class="view">
+        <form id="f_signin">
+          <div class="row">
+            <label>Email</label>
+            <input type="email" name="email" required />
+          </div>
+          <div class="row">
+            <label>Password</label>
+            <input type="password" name="password" required />
+          </div>
+          <button class="btn" type="submit">Sign in</button>
+          <div id="e1" class="err"></div>
+          <div class="muted" style="margin-top:10px">After signing in you'll be taken to your organiser console.</div>
+        </form>
+      </div>
 
-    <!-- Create account -->
-    <div id="panel-signup" class="hidden">
-      <h1>Create account</h1>
-      <label>Name (optional)</label>
-      <input id="su-name" type="text" />
-      <label>Email</label>
-      <input id="su-email" type="email" autocomplete="email" />
-      <label>Password</label>
-      <input id="su-password" type="password" autocomplete="new-password" />
-      <div class="row"><button id="btn-signup">Create account</button></div>
-      <div id="su-err" class="error"></div>
-      <div class="muted">We'll create your organiser login and sign you in.</div>
-    </div>
+      <div id="create" class="view" style="display:none">
+        <form id="f_create">
+          <div class="row">
+            <label>Name (optional)</label>
+            <input type="text" name="name" />
+          </div>
+          <div class="row">
+            <label>Email</label>
+            <input type="email" name="email" required />
+          </div>
+          <div class="row">
+            <label>Password</label>
+            <input type="password" name="password" required />
+          </div>
+          <button class="btn" type="submit">Create account</button>
+          <div id="e2" class="err"></div>
+          <div class="muted" style="margin-top:10px">We'll create your organiser login and sign you in.</div>
+        </form>
+      </div>
 
-    <!-- Forgot -->
-    <div id="panel-forgot" class="hidden">
-      <h1>Forgot password</h1>
-      <label>Email</label>
-      <input id="fp-email" type="email" autocomplete="email" />
-      <div class="row"><button id="btn-forgot">Send reset link</button></div>
-      <div id="fp-err" class="error"></div>
-      <div class="muted">We'll email you a password reset link if your account exists.</div>
+      <div id="forgot" class="view" style="display:none">
+        <form id="f_forgot">
+          <div class="row">
+            <label>Email</label>
+            <input type="email" name="email" required />
+          </div>
+          <button class="btn" type="submit">Send reset link</button>
+          <div id="e3" class="err"></div>
+          <div class="muted" style="margin-top:10px">We'll email you a password reset link if your account exists.</div>
+        </form>
+      </div>
     </div>
   </div>
 
 <script>
-  const $ = (s, r=document)=>r.querySelector(s);
-  const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
+  const tabs = Array.from(document.querySelectorAll('.tab'));
+  const views = { signin: document.getElementById('signin'), create: document.getElementById('create'), forgot: document.getElementById('forgot') };
+  tabs.forEach(t => t.addEventListener('click', () => {
+    tabs.forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    const k = t.getAttribute('data-tab');
+    Object.keys(views).forEach(v => views[v].style.display = (v===k ? 'block' : 'none'));
+  }));
 
-  // Tabs
-  $$('.tab').forEach(t => {
-    t.addEventListener('click', () => {
-      $$('.tab').forEach(x=>x.classList.remove('active'));
-      t.classList.add('active');
-      const key = t.dataset.tab;
-      $('#panel-signin').classList.toggle('hidden', key!=='signin');
-      $('#panel-signup').classList.toggle('hidden', key!=='signup');
-      $('#panel-forgot').classList.toggle('hidden', key!=='forgot');
-    });
+  async function postJSON(url, data) {
+    const r = await fetch(url, { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(data), credentials:'include' });
+    return r.json();
+  }
+
+  document.getElementById('f_signin').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    document.getElementById('e1').textContent = '';
+    const fd = new FormData(ev.currentTarget);
+    const j = await postJSON('/auth/login', { email: fd.get('email'), password: fd.get('password') });
+    if (j.ok) { window.location.href = '/admin/ui#home'; } else { document.getElementById('e1').textContent = j.error || 'Sign in failed'; }
   });
 
-  function gotoApp(){ window.location.href = '/admin/ui#home'; }
-
-  $('#btn-login')?.addEventListener('click', async () => {
-    $('#li-err').textContent = '';
-    const email = $('#li-email').value.trim();
-    const password = $('#li-password').value;
-    if(!email || !password){ $('#li-err').textContent='Enter email and password'; return; }
-    try{
-      const r = await fetch('/auth/login', {
-        method:'POST', headers:{'content-type':'application/json'},
-        body: JSON.stringify({ email, password })
-      });
-      const j = await r.json();
-      if(j && j.ok) return gotoApp();
-      $('#li-err').textContent = j && j.error ? j.error : 'Sign in failed';
-    }catch(e){ $('#li-err').textContent='Sign in failed'; }
+  document.getElementById('f_create').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    document.getElementById('e2').textContent = '';
+    const fd = new FormData(ev.currentTarget);
+    const j = await postJSON('/auth/create', { name: fd.get('name'), email: fd.get('email'), password: fd.get('password') });
+    if (j.ok) { window.location.href = '/admin/ui#home'; } else { document.getElementById('e2').textContent = j.error || 'Create failed'; }
   });
 
-  $('#btn-signup')?.addEventListener('click', async () => {
-    $('#su-err').textContent = '';
-    const name = $('#su-name').value.trim();
-    const email = $('#su-email').value.trim();
-    const password = $('#su-password').value;
-    if(!email || !password){ $('#su-err').textContent='Enter email and password'; return; }
-    try{
-      const r = await fetch('/auth/signup', {
-        method:'POST', headers:{'content-type':'application/json'},
-        body: JSON.stringify({ name, email, password })
-      });
-      const j = await r.json();
-      if(j && j.ok) return gotoApp();
-      $('#su-err').textContent = j && j.error ? j.error : 'Could not create account';
-    }catch(e){ $('#su-err').textContent='Could not create account'; }
-  });
-
-  $('#btn-forgot')?.addEventListener('click', async () => {
-    $('#fp-err').textContent = '';
-    const email = $('#fp-email').value.trim();
-    if(!email){ $('#fp-err').textContent='Enter your email'; return; }
-    try{
-      const r = await fetch('/auth/forgot', {
-        method:'POST', headers:{'content-type':'application/json'},
-        body: JSON.stringify({ email })
-      });
-      const j = await r.json();
-      if(j && j.ok){ alert('If your account exists, a reset link will be emailed.'); }
-      else { $('#fp-err').textContent = j && j.error ? j.error : 'Password reset endpoint not available yet.'; }
-    }catch(e){ $('#fp-err').textContent='Password reset endpoint not available yet.'; }
+  document.getElementById('f_forgot').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    document.getElementById('e3').textContent = '';
+    const fd = new FormData(ev.currentTarget);
+    const j = await postJSON('/auth/forgot', { email: fd.get('email') });
+    document.getElementById('e3').textContent = j.ok ? 'If that email exists we have sent a reset link.' : (j.error || 'Failed to send reset link');
   });
 </script>
 </body>
 </html>`);
 });
 
-// -------- Login / Signup / Forgot JSON endpoints --------
+/* ------------------------------- API ROUTES ------------------------------ */
 
-router.post('/login', async (req, res) => {
-  try {
-    const { email, password } = req.body || {};
-    if (!email || !password) return res.status(400).json({ ok: false, error: 'Missing email or password' });
-
-    const user = await prisma.user.findUnique({ where: { email: String(email).toLowerCase() } });
-    if (!user || !user.password) return res.status(401).json({ ok: false, error: 'Invalid credentials' });
-
-    const ok = await bcrypt.compare(password, user.password);
-    if (!ok) return res.status(401).json({ ok: false, error: 'Invalid credentials' });
-
-    const sid = await createSession(user.id);
-    setSessionCookie(res, sid);
-    return res.json({ ok: true });
-  } catch (e) {
-    console.error('POST /auth/login failed', e);
-    return res.status(500).json({ ok: false, error: 'Login failed' });
-  }
+// Who am I?
+router.get('/me', async (req, res) => {
+  const user = await getUserFromRequest(req);
+  res.json({ ok: !!user, user: user ? { id: user.id, email: user.email, name: user.name } : null });
 });
 
-router.post('/signup', async (req, res) => {
+// Create account
+router.post('/create', async (req, res) => {
   try {
-    const { name, email, password } = req.body || {};
-    if (!email || !password) return res.status(400).json({ ok: false, error: 'Missing email or password' });
+    const { name, email, password } = (req.body || {}) as { name?: string; email?: string; password?: string };
+    if (!email || !password) return res.status(400).json({ ok: false, error: 'Missing email/password' });
 
-    const lower = String(email).toLowerCase();
-    const existing = await prisma.user.findUnique({ where: { email: lower } });
-    if (existing) return res.status(409).json({ ok: false, error: 'Email already registered' });
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) return res.status(400).json({ ok: false, error: 'Account already exists' });
 
-    const hash = await bcrypt.hash(password, 10);
+    const hash = await bcrypt.hash(String(password), 10);
     const user = await prisma.user.create({
-      data: { email: lower, name: name || null, password: hash },
+      data: { email, name: name || null, password: hash },
     });
 
-    const sid = await createSession(user.id);
-    setSessionCookie(res, sid);
-    return res.json({ ok: true });
-  } catch (e) {
-    console.error('POST /auth/signup failed', e);
-    return res.status(500).json({ ok: false, error: 'Signup failed' });
+    const sid = crypto.randomBytes(24).toString('hex');
+    await prisma.session.create({ data: { id: sid, userId: user.id, createdAt: new Date() } });
+
+    res.setHeader('Set-Cookie', serializeSessionCookie(sid));
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('POST /auth/create', err);
+    res.status(500).json({ ok: false, error: 'Create account failed' });
   }
 });
 
-router.post('/forgot', async (_req, res) => {
-  // Placeholder until we wire email
-  return res.json({ ok: false, error: 'Password reset endpoint not available yet.' });
+// Sign in
+router.post('/login', async (req, res) => {
+  try {
+    const { email, password } = (req.body || {}) as { email?: string; password?: string };
+    if (!email || !password) return res.status(400).json({ ok: false, error: 'Missing email/password' });
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user || !user.password) return res.status(401).json({ ok: false, error: 'Invalid credentials' });
+
+    const ok = await bcrypt.compare(String(password), String(user.password));
+    if (!ok) return res.status(401).json({ ok: false, error: 'Invalid credentials' });
+
+    const sid = crypto.randomBytes(24).toString('hex');
+    await prisma.session.create({ data: { id: sid, userId: user.id, createdAt: new Date() } });
+
+    res.setHeader('Set-Cookie', serializeSessionCookie(sid));
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('POST /auth/login', err);
+    res.status(500).json({ ok: false, error: 'Login failed' });
+  }
 });
 
-// -------- Logout (clear cookie + redirect) --------
+// Log out (kept here too; your /routes/logout.ts can also handle it)
 router.get('/logout', async (req, res) => {
   try {
-    const cookies = cookie.parse(req.headers.cookie || '');
-    const sid = cookies.sid;
+    const raw = req.headers.cookie || '';
+    const parsed = cookie.parse(raw || '');
+    const sid = parsed[COOKIE_NAME];
     if (sid) {
-      await prisma.session.delete({ where: { id: sid } }).catch(() => {});
+      await prisma.session.deleteMany({ where: { id: sid } }).catch(() => {});
     }
-  } catch (_) {}
-  res.setHeader('Set-Cookie', cookie.serialize('sid', '', { path: '/', maxAge: 0 }));
-  res.redirect('/auth/login');
+  } finally {
+    res.setHeader('Set-Cookie', cookie.serialize(COOKIE_NAME, '', { path: '/', httpOnly: true, maxAge: 0, sameSite: 'lax', secure: process.env.NODE_ENV === 'production' }));
+    res.redirect('/auth/login');
+  }
+});
+
+// Forgot password (stub)
+router.post('/forgot', async (_req, res) => {
+  // You can wire actual email later. For now, always succeed.
+  res.json({ ok: true });
 });
 
 export default router;
