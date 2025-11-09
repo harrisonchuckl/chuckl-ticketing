@@ -1,108 +1,82 @@
 // backend/src/services/fees.ts
-import { PrismaClient, Venue } from '@prisma/client';
+import prisma from '../lib/prisma.js';
+
+export type FeeCalcInput = {
+  showId: string;
+  quantity: number;
+  unitPricePence: number; // ticket face value per ticket
+  organiserId?: string | null; // who owns the show / order
+};
 
 export type FeeCalcResult = {
-  platformFeePence: number;      // total platform fee (customer pays on top)
-  organiserFeePence: number;     // organiser’s share of the platform fee
-  ourSharePence: number;         // our share of the platform fee
-  basketFeePence: number;        // flat basket fee (if any)
-  paymentFeePence: number;       // PSP fee (placeholder = 0 for now)
+  grossPence: number;           // unitPrice * qty
+  platformFeePence: number;     // venue fee% * gross + per-ticket * qty + basket
+  organiserSharePence: number;  // organiser split of platformFee (per organiser account)
+  ourSharePence: number;        // platform share of platformFee
+  paymentFeePence: number;      // (placeholder for Stripe costs if you track them)
+  netPayoutPence: number;       // gross - paymentFee - platformFee (organiser receives net payout from gross minus fees)
 };
 
-export type VenueFeePolicy = Pick<
-  Venue,
-  'feePercentBps' | 'perTicketFeePence' | 'basketFeePence' | 'organiserSplitBps'
->;
-
-type NormalisedPolicy = {
-  feePercentBps: number;
-  perTicketFeePence: number;
-  basketFeePence: number;
-  organiserSplitBps: number;
-};
-
-export const defaultVenuePolicy: NormalisedPolicy = {
-  feePercentBps: 0,
-  perTicketFeePence: 0,
-  basketFeePence: 0,
-  organiserSplitBps: 5000, // 50/50 default
-};
-
-export function normalisePolicy(v?: Partial<VenueFeePolicy>): NormalisedPolicy {
-  return {
-    feePercentBps: (v?.feePercentBps ?? defaultVenuePolicy.feePercentBps) || 0,
-    perTicketFeePence: (v?.perTicketFeePence ?? defaultVenuePolicy.perTicketFeePence) || 0,
-    basketFeePence: (v?.basketFeePence ?? defaultVenuePolicy.basketFeePence) || 0,
-    organiserSplitBps: (v?.organiserSplitBps ?? defaultVenuePolicy.organiserSplitBps) || 0,
-  };
+function bps(v?: number | null) {
+  const n = typeof v === 'number' ? v : 0;
+  return Math.max(0, n) / 10000; // 10000 bps = 100%
 }
 
-export function calcFeesForVenue(
-  policyInput: Partial<VenueFeePolicy> | undefined,
-  quantity: number,
-  subtotalPence: number
-): FeeCalcResult {
-  const policy = normalisePolicy(policyInput);
-  const safeQty = Math.max(0, quantity || 0);
-  const safeSubtotal = Math.max(0, subtotalPence || 0);
-
-  const pctFee = Math.round((safeSubtotal * policy.feePercentBps) / 10_000);
-  const perTicketFee = Math.round(policy.perTicketFeePence * safeQty);
-  const basketFee = Math.round(policy.basketFeePence);
-
-  const platformFee = pctFee + perTicketFee + basketFee;
-
-  const organiserShare = Math.round((platformFee * policy.organiserSplitBps) / 10_000);
-  const ourShare = platformFee - organiserShare;
-
-  return {
-    platformFeePence: platformFee,
-    organiserFeePence: organiserShare,
-    ourSharePence: ourShare,
-    basketFeePence: basketFee,
-    paymentFeePence: 0,
-  };
-}
-
-export async function calcFeesForShow(...args: any[]): Promise<FeeCalcResult> {
-  if (args.length === 1 && typeof args[0] === 'string') {
-    return { platformFeePence: 0, organiserFeePence: 0, ourSharePence: 0, basketFeePence: 0, paymentFeePence: 0 };
-  }
-  if (args.length === 1 && typeof args[0] === 'object') {
-    const { prisma, showId, quantity, subtotalPence } = args[0] || {};
-    return calcFromDb(prisma as PrismaClient, showId as string, quantity as number, subtotalPence as number);
-  }
-  if (args.length >= 4) {
-    const [prisma, showId, quantity, subtotalPence] = args as [PrismaClient, string, number, number];
-    return calcFromDb(prisma, showId, quantity, subtotalPence);
-  }
-  return { platformFeePence: 0, organiserFeePence: 0, ourSharePence: 0, basketFeePence: 0, paymentFeePence: 0 };
-}
-
-async function calcFromDb(
-  prisma: PrismaClient,
-  showId: string,
-  quantity: number,
-  subtotalPence: number
-): Promise<FeeCalcResult> {
-  if (!prisma || !showId) {
-    return { platformFeePence: 0, organiserFeePence: 0, ourSharePence: 0, basketFeePence: 0, paymentFeePence: 0 };
-  }
+/**
+ * Main calculator:
+ * - pulls venue fee policy from the Show -> Venue
+ * - pulls organiser split from the organiser (User.organiserSplitBps) or DEFAULT_ORGANISER_SPLIT_BPS
+ */
+export async function calcFeesForShow(input: FeeCalcInput): Promise<FeeCalcResult> {
+  const { showId, quantity, unitPricePence } = input;
 
   const show = await prisma.show.findUnique({
     where: { id: showId },
     select: {
+      id: true,
       venue: {
         select: {
           feePercentBps: true,
           perTicketFeePence: true,
           basketFeePence: true,
-          organiserSplitBps: true,
-        },
-      },
-    },
+        }
+      }
+    }
   });
+  if (!show) throw new Error('Show not found');
 
-  const policy = normalisePolicy(show?.venue ?? undefined);
-  return calcFeesForVenue(policy, quantity || 0, subtotalPence || 0);
+  const grossPence = unitPricePence * Math.max(0, quantity);
+
+  const v = show.venue || ({} as any);
+  const pctPart = Math.round(grossPence * bps(v.feePercentBps));
+  const perTicketPart = Math.round((v.perTicketFeePence ?? 0) * Math.max(0, quantity));
+  const basketPart = Math.round(v.basketFeePence ?? 0);
+
+  const platformFeePence = Math.max(0, pctPart + perTicketPart + basketPart);
+
+  // organiser split
+  let organiserSplitBps = Number(process.env.DEFAULT_ORGANISER_SPLIT_BPS || 5000); // default 50%
+  if (input.organiserId) {
+    const org = await prisma.user.findUnique({
+      where: { id: input.organiserId },
+      select: { organiserSplitBps: true },
+    });
+    if (org && org.organiserSplitBps != null) organiserSplitBps = org.organiserSplitBps;
+  }
+  const organiserSharePence = Math.round(platformFeePence * bps(organiserSplitBps));
+  const ourSharePence = Math.max(0, platformFeePence - organiserSharePence);
+
+  // placeholder payment processor fee (optional—set to 0 for now)
+  const paymentFeePence = 0;
+
+  const netPayoutPence = Math.max(0, grossPence - paymentFeePence - platformFeePence);
+
+  return {
+    grossPence,
+    platformFeePence,
+    organiserSharePence,
+    ourSharePence,
+    paymentFeePence,
+    netPayoutPence
+  };
 }
