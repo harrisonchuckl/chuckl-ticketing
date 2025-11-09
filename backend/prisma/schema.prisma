@@ -20,31 +20,35 @@ model User {
 }
 
 model Order {
-  id              String        @id @default(cuid())
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  email           String?
-  amountPence     Int?          // gross charged to customer (after discount)
-  quantity        Int?
-  stripeId        String?
-  status          OrderStatus   @default(PENDING)
-  userId          String?
-  user            User?         @relation(fields: [userId], references: [id])
-  showId          String?
-  show            Show?         @relation(fields: [showId], references: [id])
-  tickets         Ticket[]
-  refunds         Refund[]
-  notes           OrderNote[]
+  id                              String        @id @default(cuid())
+  createdAt                       DateTime      @default(now())
+  updatedAt                       DateTime      @updatedAt
+  email                           String?
+  amountPence                     Int?
+  quantity                        Int?
+  stripeId                        String?
+  status                          OrderStatus   @default(PENDING)
+  userId                          String?
+  user                            User?         @relation(fields: [userId], references: [id])
+  showId                          String?
+  show                            Show?         @relation(fields: [showId], references: [id])
+  tickets                         Ticket[]
+  refunds                         Refund[]
+  notes                           OrderNote[]
 
-  // discounts/coupons
-  couponId        String?
-  coupon          Coupon?       @relation(fields: [couponId], references: [id])
-  discountPence   Int?
+  // Discounts / coupons
+  couponId                        String?
+  coupon                          Coupon?       @relation(fields: [couponId], references: [id])
+  discountPence                   Int?
 
-  // NEW: fees & payout
-  platformFeePence Int?         // our fee
-  paymentFeePence  Int?         // Stripe fees from balance transaction
-  netPayoutPence   Int?         // what organiser would receive
+  // Fees & payout (overall)
+  platformFeePence                Int?
+  paymentFeePence                 Int?
+  netPayoutPence                  Int?
+
+  // Fee split
+  platformFeeOurSharePence        Int?
+  platformFeeOrganiserSharePence  Int?
 
   @@index([showId])
   @@index([couponId])
@@ -72,13 +76,21 @@ model Show {
 }
 
 model Venue {
-  id        String   @id @default(cuid())
-  name      String
-  address   String?
-  city      String?
-  postcode  String?
-  capacity  Int?
-  shows     Show[]
+  id                 String   @id @default(cuid())
+  name               String
+  address            String?
+  city               String?
+  postcode           String?
+  capacity           Int?
+  shows              Show[]
+
+  // Per-venue fee profile (all optional; fallbacks come from env)
+  feePercentBps          Int?   // e.g. 1000 = 10.00%
+  perTicketFeePence      Int?   // fixed per ticket
+  basketFeePence         Int?   // fixed per order
+  organiserShareBps      Int?   // % of fee given to organiser, e.g. 5000 = 50%
+
+  @@index([name])
 }
 
 model TicketType {
