@@ -16,12 +16,14 @@ import adminShows from './routes/admin-shows.js';
 import adminTicketTypes from './routes/admin-tickettypes.js';
 import adminUploads from './routes/admin-uploads.js';
 import adminOrders from './routes/admin-orders.js';
-import adminAnalytics from './routes/admin-analytics.js';
-import adminCoupons from './routes/admin-coupons.js'; // <- ensure file exists
 import events from './routes/events.js';
 import auth from './routes/auth.js';
 import scanApi from './routes/scan.js';
 import scanUI from './routes/scan-ui.js';
+import adminAnalytics from './routes/admin-analytics.js';
+
+// NEW: coupons placeholder (required to satisfy import)
+import adminCoupons from './routes/admin-coupons.js';
 
 const app = express();
 
@@ -63,7 +65,7 @@ app.use('/admin', adminTicketTypes);
 app.use('/admin', adminOrders);
 app.use('/admin', adminUploads);
 app.use('/admin', adminAnalytics);
-app.use('/admin', adminCoupons);
+app.use('/admin', adminCoupons); // 👈 add this
 
 // Legacy / bootstrap admin endpoints (if you still need them)
 app.use('/admin', admin);
