@@ -22,25 +22,28 @@ model User {
 }
 
 model Order {
-  id                String        @id @default(cuid())
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-  email             String?
-  amountPence       Int?
-  quantity          Int?
-  stripeId          String?
-  status            OrderStatus   @default(PENDING)
-  userId            String?
-  user              User?         @relation(fields: [userId], references: [id])
-  showId            String?
-  show              Show?         @relation(fields: [showId], references: [id])
-  tickets           Ticket[]
-  refunds           Refund[]
-  notes             OrderNote[]
+  id          String        @id @default(cuid())
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  email       String?
+  amountPence Int?          // total charged to customer (subtotal + platform fee)
+  subtotalPence Int?        // ticket revenue (qty * unitPrice) — NEW, used for payouts
+  quantity    Int?
+  stripeId    String?
+  status      OrderStatus   @default(PENDING)
+  userId      String?
+  user        User?         @relation(fields: [userId], references: [id])
+  showId      String?
+  show        Show?         @relation(fields: [showId], references: [id])
+  tickets     Ticket[]
+  refunds     Refund[]
+  notes       OrderNote[]
 
-  // Computed at checkout/webhook (filled later)
-  platformFeePence  Int?          @default(0) // total fee we keep
-  organiserFeePence Int?          @default(0) // fee share paid to organiser
+  // --- Fee breakdown (all optional so we can roll in safely) ---
+  platformFeePence              Int?   // total platform fee on basket
+  organiserFeePence             Int?   // organiser share of platform fee
+  paymentFeePence               Int?   // PSP fee (placeholder for now)
+  netPayoutPence                Int?   // organiser payout estimate = subtotal + organiserFee - paymentFee
 }
 
 enum OrderStatus {
@@ -62,19 +65,19 @@ model Show {
 }
 
 model Venue {
-  id               String   @id @default(cuid())
-  name             String
-  address          String?
-  city             String?
-  postcode         String?
-  capacity         Int?
-  shows            Show[]
+  id        String   @id @default(cuid())
+  name      String
+  address   String?
+  city      String?
+  postcode  String?
+  capacity  Int?
+  shows     Show[]
 
-  // --- Fee profile (all optional; defaults mean “no fee” if left blank) ---
-  feePercentBps        Int?    @default(0)   // e.g. 1000 = 10.00%
-  perTicketFeePence    Int?    @default(0)   // fixed per ticket fee
-  basketFeePence       Int?    @default(0)   // one-off fee per order
-  organiserSplitBps    Int?    @default(5000) // split of total fee that goes to organiser (e.g. 5000 = 50.00%)
+  // --- Venue fee policy (nullable for safe rollout) ---
+  feePercentBps       Int?   // e.g. 1000 = 10.00%
+  perTicketFeePence   Int?   // e.g. 50p per ticket
+  basketFeePence      Int?   // e.g. flat 30p per basket
+  organiserSplitBps   Int?   // e.g. 5000 = 50% of platform fees go to organiser
 }
 
 model TicketType {
