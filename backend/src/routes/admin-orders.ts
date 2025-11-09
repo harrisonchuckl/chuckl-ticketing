@@ -98,7 +98,8 @@ router.get('/orders/:id', requireAdmin, async (req, res) => {
           select: {
             id: true, serial: true, holderName: true, status: true, scannedAt: true,
           },
-          orderBy: { createdAt: 'asc' },
+          // Ticket has no createdAt; sort by serial for stable order
+          orderBy: { serial: 'asc' },
         },
         refunds: {
           select: { id: true, amount: true, reason: true, stripeId: true, createdAt: true },
@@ -139,7 +140,6 @@ router.post('/orders/:id/notes', requireAdmin, async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Text required' });
     }
 
-    // If you attach user identity to req (e.g. req.user.id), wire it here.
     const note = await prisma.orderNote.create({
       data: { orderId: id, text: String(text).trim() },
       select: { id: true, text: true, createdAt: true },
