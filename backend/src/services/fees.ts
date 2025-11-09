@@ -23,6 +23,7 @@ export type FeeCalcInput = {
 export type FeeCalcResult = {
   platformFeePence: number;
   organiserSharePence: number;
+  ourSharePence: number; // platformFeePence - organiserSharePence
   breakdown: {
     perTicketFeePence: number;
     basketFeePence: number;
@@ -35,16 +36,19 @@ export function calcFeesForVenue(input: FeeCalcInput): FeeCalcResult {
   const perTicket = Math.max(0, Number(v.perTicketFeePence ?? 0));
   const basket = Math.max(0, Number(v.basketFeePence ?? 0));
   const percent = Math.max(0, Number(v.feePercent ?? 0));
-  const organiserSharePct = Math.min(100, Math.max(0, Number(v.organiserSharePercent ?? 0)));
+  // Default organiser share to 50% if not provided
+  const organiserSharePct = Math.min(100, Math.max(0, Number(v.organiserSharePercent ?? 50)));
 
   const perTicketTotal = perTicket * Math.max(0, input.ticketCount || 0);
   const percentFee = Math.round((percent / 100) * Math.max(0, input.subtotalPence || 0));
   const platformFee = perTicketTotal + basket + percentFee;
   const organiserShare = Math.round((organiserSharePct / 100) * platformFee);
+  const ourShare = platformFee - organiserShare;
 
   return {
     platformFeePence: platformFee,
     organiserSharePence: organiserShare,
+    ourSharePence: ourShare,
     breakdown: {
       perTicketFeePence: perTicketTotal,
       basketFeePence: basket,
@@ -53,7 +57,7 @@ export function calcFeesForVenue(input: FeeCalcInput): FeeCalcResult {
   };
 }
 
-// Convenience wrapper used by checkout.ts in some versions of the codebase.
+// Convenience wrapper used by some routes.
 // Accepts a "show-like" object with a nested venue carrying fee fields.
 export function calcFeesForShow(args: {
   show?: { venue?: VenueFeeConfig | null } | null;
