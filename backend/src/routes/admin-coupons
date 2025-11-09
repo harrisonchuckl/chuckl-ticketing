@@ -1,27 +1,31 @@
 // backend/src/routes/admin-coupons.ts
 //
-// Minimal placeholder to satisfy server import.
-// Flesh out real CRUD later.
+// Minimal placeholder routes so the server compiles cleanly.
+// We’ll wire real coupon CRUD once the Coupon model is finalised.
 
 import { Router } from 'express';
 import { requireAdmin } from '../lib/authz.js';
 
 const router = Router();
 
+// List coupons (placeholder)
 router.get('/coupons', requireAdmin, async (_req, res) => {
   res.json({ ok: true, items: [] });
 });
 
+// Create coupon (not implemented yet)
 router.post('/coupons', requireAdmin, async (_req, res) => {
-  res.status(501).json({ ok: false, message: 'Not implemented yet' });
+  res.status(501).json({ ok: false, message: 'Coupons: not implemented yet' });
 });
 
+// Update coupon (not implemented yet)
 router.patch('/coupons/:id', requireAdmin, async (_req, res) => {
-  res.status(501).json({ ok: false, message: 'Not implemented yet' });
+  res.status(501).json({ ok: false, message: 'Coupons: not implemented yet' });
 });
 
+// Delete coupon (not implemented yet)
 router.delete('/coupons/:id', requireAdmin, async (_req, res) => {
-  res.status(501).json({ ok: false, message: 'Not implemented yet' });
+  res.status(501).json({ ok: false, message: 'Coupons: not implemented yet' });
 });
 
 export default router;
