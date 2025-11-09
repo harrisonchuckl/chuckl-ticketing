@@ -22,7 +22,7 @@ import scanApi from './routes/scan.js';
 import scanUI from './routes/scan-ui.js';
 import adminAnalytics from './routes/admin-analytics.js';
 
-// NEW: coupons placeholder (required to satisfy import)
+// NEW: coupons placeholder (to satisfy import and keep build green)
 import adminCoupons from './routes/admin-coupons.js';
 
 const app = express();
@@ -65,7 +65,7 @@ app.use('/admin', adminTicketTypes);
 app.use('/admin', adminOrders);
 app.use('/admin', adminUploads);
 app.use('/admin', adminAnalytics);
-app.use('/admin', adminCoupons); // 👈 add this
+app.use('/admin', adminCoupons); // 👈 ensure this line is present
 
 // Legacy / bootstrap admin endpoints (if you still need them)
 app.use('/admin', admin);
