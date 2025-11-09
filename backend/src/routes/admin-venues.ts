@@ -1,110 +1,72 @@
 // backend/src/routes/admin-venues.ts
 import { Router } from 'express';
-import prisma from '../lib/prisma.js';
-import { requireAdminOrOrganiser } from '../lib/authz.js';
+import { Prisma, PrismaClient } from '@prisma/client';
+import { requireAdmin } from '../lib/authz.js';
 
+const prisma = new PrismaClient();
 const router = Router();
 
-// Create venue
-router.post('/venues', requireAdminOrOrganiser, async (req, res) => {
+// Create / update venue
+router.post('/venues', requireAdmin, async (req, res) => {
   try {
     const {
-      name, address, city, postcode, capacity,
-      feePercentBps, perTicketFeePence, basketFeePence, organiserSplitBps,
+      id,
+      name,
+      address,
+      city,
+      postcode,
+      capacity,
+      feePercentBps,
+      perTicketFeePence,
+      basketFeePence,
+      organiserSplitBps,
     } = req.body || {};
 
-    const v = await prisma.venue.create({
-      data: {
-        name,
-        address: address ?? null,
-        city: city ?? null,
-        postcode: postcode ?? null,
-        capacity: capacity == null ? null : Number(capacity),
+    const data: Prisma.VenueUncheckedCreateInput = {
+      name,
+      address: address ?? null,
+      city: city ?? null,
+      postcode: postcode ?? null,
+      capacity: capacity ?? null,
+      feePercentBps: feePercentBps ?? null,
+      perTicketFeePence: perTicketFeePence ?? null,
+      basketFeePence: basketFeePence ?? null,
+      organiserSplitBps: organiserSplitBps ?? 5000,
+    };
 
-        feePercentBps:   feePercentBps   == null ? 0 : Number(feePercentBps),
-        perTicketFeePence: perTicketFeePence == null ? 0 : Number(perTicketFeePence),
-        basketFeePence:  basketFeePence  == null ? 0 : Number(basketFeePence),
-        organiserSplitBps: organiserSplitBps == null ? 5000 : Number(organiserSplitBps),
-      }
-    });
-    res.json({ ok: true, venue: v });
-  } catch (e: any) {
-    res.status(400).json({ ok: false, message: e.message || 'Failed to create venue' });
+    const venue = id
+      ? await prisma.venue.update({ where: { id }, data })
+      : await prisma.venue.create({ data });
+
+    res.json({ ok: true, venue });
+  } catch (err: any) {
+    res.status(400).json({ ok: false, message: err?.message || 'Failed to save venue' });
   }
 });
 
-// Update venue
-router.patch('/venues/:id', requireAdminOrOrganiser, async (req, res) => {
-  try {
-    const id = req.params.id;
-    const {
-      name, address, city, postcode, capacity,
-      feePercentBps, perTicketFeePence, basketFeePence, organiserSplitBps,
-    } = req.body || {};
-
-    const v = await prisma.venue.update({
-      where: { id },
-      data: {
-        ...(name != null ? { name } : {}),
-        ...(address !== undefined ? { address } : {}),
-        ...(city !== undefined ? { city } : {}),
-        ...(postcode !== undefined ? { postcode } : {}),
-        ...(capacity !== undefined ? { capacity: capacity == null ? null : Number(capacity) } : {}),
-
-        ...(feePercentBps !== undefined ? { feePercentBps: Number(feePercentBps ?? 0) } : {}),
-        ...(perTicketFeePence !== undefined ? { perTicketFeePence: Number(perTicketFeePence ?? 0) } : {}),
-        ...(basketFeePence !== undefined ? { basketFeePence: Number(basketFeePence ?? 0) } : {}),
-        ...(organiserSplitBps !== undefined ? { organiserSplitBps: Number(organiserSplitBps ?? 5000) } : {}),
-      }
-    });
-    res.json({ ok: true, venue: v });
-  } catch (e: any) {
-    res.status(400).json({ ok: false, message: e.message || 'Failed to update venue' });
-  }
-});
-
-// Find venues (simple search)
-router.get('/venues', requireAdminOrOrganiser, async (req, res) => {
+// Search venues
+router.get('/venues', requireAdmin, async (req, res) => {
   try {
     const q = String(req.query.q || '').trim();
-    const where = q
+    const where: Prisma.VenueWhereInput | undefined = q
       ? {
           OR: [
-            { name:   { contains: q, mode: 'insensitive' } },
-            { city:   { contains: q, mode: 'insensitive' } },
-            { postcode: { contains: q, mode: 'insensitive' } },
-          ]
+            { name: { contains: q, mode: Prisma.QueryMode.insensitive } },
+            { city: { contains: q, mode: Prisma.QueryMode.insensitive } },
+            { postcode: { contains: q, mode: Prisma.QueryMode.insensitive } },
+          ],
         }
       : undefined;
 
     const venues = await prisma.venue.findMany({
       where,
       orderBy: { name: 'asc' },
-      select: {
-        id: true, name: true, address: true, city: true, postcode: true, capacity: true,
-        feePercentBps: true, perTicketFeePence: true, basketFeePence: true, organiserSplitBps: true,
-      }
+      take: 50,
     });
-    res.json({ ok: true, venues });
-  } catch (e: any) {
-    res.status(400).json({ ok: false, message: e.message || 'Failed to fetch venues' });
-  }
-});
 
-// Get single venue
-router.get('/venues/:id', requireAdminOrOrganiser, async (req, res) => {
-  try {
-    const v = await prisma.venue.findUnique({
-      where: { id: req.params.id },
-      select: {
-        id: true, name: true, address: true, city: true, postcode: true, capacity: true,
-        feePercentBps: true, perTicketFeePence: true, basketFeePence: true, organiserSplitBps: true,
-      }
-    });
-    if (!v) return res.status(404).json({ ok: false, message: 'Not found' });
-    res.json({ ok: true, venue: v });
-  } catch (e: any) {
-    res.status(400).json({ ok: false, message: e.message || 'Failed to fetch venue' });
+    res.json({ ok: true, venues });
+  } catch (err: any) {
+    res.status(400).json({ ok: false, message: err?.message || 'Failed to load venues' });
   }
 });
 
