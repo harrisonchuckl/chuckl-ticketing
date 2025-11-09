@@ -7,30 +7,28 @@ const router = Router();
 
 /**
  * GET /admin/orders/export.csv
- * Optional query:
- *   q   -> searches email, stripeId, show title (insensitive)
- *   from, to -> YYYY-MM-DD date filters on createdAt
- *
- * CSV columns are safe for accounting: one row per order.
+ * Optional query params:
+ *   q     -> search email, stripeId, show title (case-insensitive)
+ *   from  -> YYYY-MM-DD (inclusive)
+ *   to    -> YYYY-MM-DD (inclusive)
  */
 router.get('/orders/export.csv', requireAdmin, async (req, res) => {
   const q = (req.query.q as string | undefined)?.trim();
   const from = req.query.from ? new Date(String(req.query.from)) : undefined;
   const to = req.query.to ? new Date(String(req.query.to)) : undefined;
 
-  const where: any = {
-    ...(from ? { createdAt: { gte: from } } : {}),
-    ...(to ? { createdAt: { lte: to } } : {}),
-    ...(q
-      ? {
-          OR: [
-            { email: { contains: q, mode: 'insensitive' as const } },
-            { stripeId: { contains: q, mode: 'insensitive' as const } },
-            { show: { title: { contains: q, mode: 'insensitive' as const } } },
-          ],
-        }
-      : {}),
-  };
+  const where: any = {};
+  if (from || to) where.createdAt = {};
+  if (from) (where.createdAt as any).gte = from;
+  if (to) (where.createdAt as any).lte = to;
+
+  if (q) {
+    where.OR = [
+      { email: { contains: q, mode: 'insensitive' as const } },
+      { stripeId: { contains: q, mode: 'insensitive' as const } },
+      { show: { title: { contains: q, mode: 'insensitive' as const } } },
+    ];
+  }
 
   const orders = await prisma.order.findMany({
     where,
@@ -41,19 +39,18 @@ router.get('/orders/export.csv', requireAdmin, async (req, res) => {
       status: true,
       email: true,
       stripeId: true,
-      show: { select: { id: true, title: true } },
       amountPence: true,
       quantity: true,
       platformFeePence: true,
       organiserSharePence: true,
       paymentFeePence: true,
       netPayoutPence: true,
+      show: { select: { id: true, title: true } },
       user: { select: { id: true, email: true, organiserSplitBps: true } },
     },
   });
 
-  // CSV header
-  const head = [
+  const header = [
     'order_id',
     'created_at',
     'status',
@@ -99,12 +96,11 @@ router.get('/orders/export.csv', requireAdmin, async (req, res) => {
     ];
   });
 
-  const csv = [head, ...rows]
+  const csv = [header, ...rows]
     .map((r) =>
       r
         .map((cell) => {
           const s = String(cell ?? '');
-          // Quote if needed
           return /[",\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
         })
         .join(',')
