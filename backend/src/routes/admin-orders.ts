@@ -1,238 +1,154 @@
 // backend/src/routes/admin-orders.ts
 import { Router } from 'express';
-import type { Request, Response } from 'express';
-import { Prisma, OrderStatus } from '@prisma/client';
-import prisma from '../lib/db.js';
-import createRefund from '../services/stripe.js';
 import { requireAdmin } from '../lib/authz.js';
+import prisma from '../lib/prisma.js';
 
 const router = Router();
 
-/**
- * GET /admin/orders
- * Query params:
- *  - q: search text (email / stripe id / show title)
- *  - status: order status filter
- *  - page / pageSize: pagination
- */
-router.get('/orders', requireAdmin, async (req: Request, res: Response) => {
-  try {
-    const q = String(req.query.q || '').trim();
-    const status = String(req.query.status || '').trim().toUpperCase();
-    const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
-    const pageSize = Math.min(200, Math.max(1, parseInt(String(req.query.pageSize || '25'), 10) || 25));
+/** Build a Prisma where clause from q/from/to */
+function buildWhere(q?: string | null, from?: string | null, to?: string | null) {
+  const where: any = {};
 
-    const where: Prisma.OrderWhereInput = {};
-
-    if (q) {
-      where.OR = [
-        { email: { contains: q, mode: Prisma.QueryMode.insensitive } },
-        { stripeId: { contains: q, mode: Prisma.QueryMode.insensitive } },
-        { show: { title: { contains: q, mode: Prisma.QueryMode.insensitive } } },
-      ];
+  // Date window
+  if (from || to) {
+    where.createdAt = {};
+    if (from) where.createdAt.gte = new Date(from as string);
+    if (to) {
+      const d = new Date(to as string);
+      d.setHours(23, 59, 59, 999);
+      where.createdAt.lte = d;
     }
-
-    if (status && Object.prototype.hasOwnProperty.call(OrderStatus, status)) {
-      where.status = status as OrderStatus;
-    }
-
-    const [total, items] = await Promise.all([
-      prisma.order.count({ where }),
-      prisma.order.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        include: {
-          show: { select: { id: true, title: true, date: true } },
-        },
-      }),
-    ]);
-
-    res.json({ ok: true, items, page, pageSize, total, pages: Math.ceil(total / pageSize) });
-  } catch (err: any) {
-    res.status(500).json({ ok: false, message: err?.message ?? 'Failed to load orders' });
   }
-});
 
-/**
- * GET /admin/orders/:id
- */
-router.get('/orders/:id', requireAdmin, async (req: Request, res: Response) => {
-  try {
-    const id = String(req.params.id);
-    const order = await prisma.order.findUnique({
-      where: { id },
-      include: {
-        tickets: true,
-        refunds: true,
-        show: { select: { id: true, title: true, date: true } },
-        notes: {
-          orderBy: { createdAt: 'desc' },
-          include: { user: { select: { id: true, name: true, email: true } } },
-        },
-      },
-    });
-    if (!order) return res.status(404).json({ ok: false, message: 'Order not found' });
-    res.json({ ok: true, order });
-  } catch (err: any) {
-    res.status(500).json({ ok: false, message: err?.message ?? 'Failed to fetch order' });
+  // Text search
+  if (q && q.trim()) {
+    const term = q.trim();
+    where.OR = [
+      { email: { contains: term } },
+      { stripeId: { contains: term } },
+      { show: { title: { contains: term } } },
+    ];
   }
-});
 
-/**
- * GET /admin/orders/:id/notes?q=
- */
-router.get('/orders/:id/notes', requireAdmin, async (req: Request, res: Response) => {
+  return where;
+}
+
+/** GET /admin/orders — supports ?q=&from=&to= */
+router.get('/orders', requireAdmin, async (req, res) => {
   try {
-    const orderId = String(req.params.id);
-    const q = String(req.query.q || '').trim();
-
-    const where: Prisma.OrderNoteWhereInput = { orderId };
-    if (q) where.text = { contains: q, mode: Prisma.QueryMode.insensitive };
-
-    const notes = await prisma.orderNote.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      include: { user: { select: { id: true, name: true, email: true } } },
-    });
-
-    res.json({ ok: true, notes });
-  } catch (err: any) {
-    res.status(500).json({ ok: false, message: err?.message ?? 'Failed to fetch notes' });
-  }
-});
-
-/**
- * POST /admin/orders/:id/notes
- * body: { text }
- */
-router.post('/orders/:id/notes', requireAdmin, async (req: Request, res: Response) => {
-  try {
-    const orderId = String(req.params.id);
-    const userId = (req as any).user?.id ?? null;
-    const text = String(req.body?.text || '').trim();
-    if (!text) return res.status(400).json({ ok: false, message: 'Text required' });
-
-    const data: any = { orderId, text };
-    if (userId) data.user = { connect: { id: userId } };
-
-    const note = await prisma.orderNote.create({
-      data,
-      include: { user: { select: { id: true, name: true, email: true } } },
-    });
-
-    res.json({ ok: true, note });
-  } catch (err: any) {
-    res.status(500).json({ ok: false, message: err?.message ?? 'Failed to add note' });
-  }
-});
-
-/**
- * PATCH /admin/orders/:id/notes/:noteId
- */
-router.patch('/orders/:id/notes/:noteId', requireAdmin, async (req: Request, res: Response) => {
-  try {
-    const noteId = String(req.params.noteId);
-    const text = String(req.body?.text || '').trim();
-    if (!text) return res.status(400).json({ ok: false, message: 'Text required' });
-
-    await prisma.orderNote.update({
-      where: { id: noteId },
-      data: { text },
-    });
-
-    res.json({ ok: true });
-  } catch (err: any) {
-    res.status(500).json({ ok: false, message: err?.message ?? 'Failed to update note' });
-  }
-});
-
-/**
- * DELETE /admin/orders/:id/notes/:noteId
- */
-router.delete('/orders/:id/notes/:noteId', requireAdmin, async (req: Request, res: Response) => {
-  try {
-    const noteId = String(req.params.noteId);
-    await prisma.orderNote.delete({ where: { id: noteId } });
-    res.json({ ok: true });
-  } catch (err: any) {
-    res.status(500).json({ ok: false, message: err?.message ?? 'Failed to delete note' });
-  }
-});
-
-/**
- * POST /admin/orders/:id/refund
- * body: { amountPence?: number, reason?: string }
- */
-router.post('/orders/:id/refund', requireAdmin, async (req: Request, res: Response) => {
-  try {
-    const orderId = String(req.params.id);
-    const { amountPence, reason } = req.body || {};
-
-    const refund = await createRefund(
-      orderId,
-      typeof amountPence === 'number' ? amountPence : undefined,
-      reason ? String(reason) : undefined
-    );
-
-    res.json({ ok: true, refund });
-  } catch (err: any) {
-    res.status(400).json({ ok: false, message: err?.message ?? 'Refund failed' });
-  }
-});
-
-/**
- * GET /admin/orders.csv
- */
-router.get('/orders.csv', requireAdmin, async (req: Request, res: Response) => {
-  try {
-    const q = String(req.query.q || '').trim();
-    const status = String(req.query.status || '').trim().toUpperCase();
-
-    const where: Prisma.OrderWhereInput = {};
-    if (q) {
-      where.OR = [
-        { email: { contains: q, mode: Prisma.QueryMode.insensitive } },
-        { stripeId: { contains: q, mode: Prisma.QueryMode.insensitive } },
-        { show: { title: { contains: q, mode: Prisma.QueryMode.insensitive } } },
-      ];
-    }
-    if (status && Object.prototype.hasOwnProperty.call(OrderStatus, status)) {
-      where.status = status as OrderStatus;
-    }
+    const { q, from, to } = req.query as Record<string, string | undefined>;
+    const where = buildWhere(q, from, to);
 
     const items = await prisma.order.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      include: { show: { select: { title: true, date: true } } },
+      select: {
+        id: true,
+        createdAt: true,
+        email: true,
+        stripeId: true,
+        status: true,
+        amountPence: true,
+        quantity: true,
+        platformFeePence: true,
+        organiserSharePence: true,
+        paymentFeePence: true,
+        show: { select: { id: true, title: true } },
+      },
+      take: 500,
     });
 
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename="orders.csv"');
+    const mapped = items.map((o) => {
+      const amount = Number(o.amountPence || 0);
+      const platform = Number(o.platformFeePence || 0);
+      const organiserShare = Number(o.organiserSharePence || 0);
+      const payment = Number(o.paymentFeePence || 0);
+      const ourShare = platform - organiserShare;
+      const net = amount - payment - ourShare;
+      return { ...o, netPayoutPence: net };
+    });
 
-    const header = ['createdAt', 'email', 'showTitle', 'showDate', 'quantity', 'amountPence', 'status', 'stripeId'];
-    res.write(header.join(',') + '\n');
+    res.json({ ok: true, items: mapped });
+  } catch (err) {
+    console.error('GET /admin/orders failed', err);
+    res.status(500).json({ ok: false, error: 'Failed to load orders' });
+  }
+});
 
-    for (const o of items) {
-      const row = [
-        o.createdAt.toISOString(),
-        o.email ?? '',
-        o.show?.title ?? '',
-        o.show?.date ? o.show.date.toISOString() : '',
-        String(o.quantity ?? ''),
-        String(o.amountPence ?? ''),
-        o.status,
-        o.stripeId ?? '',
-      ]
-        .map((v) => `"${String(v).replace(/"/g, '""')}"`)
-        .join(',');
-      res.write(row + '\n');
+/** GET /admin/orders/:id — order detail (+tickets, refunds, notes) */
+router.get('/orders/:id', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const o = await prisma.order.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        createdAt: true,
+        email: true,
+        stripeId: true,
+        status: true,
+        amountPence: true,
+        quantity: true,
+        platformFeePence: true,
+        organiserSharePence: true,
+        paymentFeePence: true,
+        show: { select: { id: true, title: true, date: true } },
+        tickets: {
+          select: {
+            id: true, serial: true, holderName: true, status: true, scannedAt: true,
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+        refunds: {
+          select: { id: true, amount: true, reason: true, stripeId: true, createdAt: true },
+          orderBy: { createdAt: 'asc' },
+        },
+        notes: {
+          select: {
+            id: true, text: true, createdAt: true,
+            user: { select: { id: true, email: true, name: true } },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+
+    if (!o) return res.status(404).json({ ok: false, error: 'Not found' });
+
+    const amount = Number(o.amountPence || 0);
+    const platform = Number(o.platformFeePence || 0);
+    const organiserShare = Number(o.organiserSharePence || 0);
+    const payment = Number(o.paymentFeePence || 0);
+    const ourShare = platform - organiserShare;
+    const net = amount - payment - ourShare;
+
+    res.json({ ok: true, item: { ...o, netPayoutPence: net } });
+  } catch (err) {
+    console.error('GET /admin/orders/:id failed', err);
+    res.status(500).json({ ok: false, error: 'Failed to load order' });
+  }
+});
+
+/** POST /admin/orders/:id/notes { text } — add an internal note */
+router.post('/orders/:id/notes', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { text } = req.body || {};
+    if (!text || !String(text).trim()) {
+      return res.status(400).json({ ok: false, error: 'Text required' });
     }
 
-    res.end();
-  } catch (err: any) {
-    res.status(500).json({ ok: false, message: err?.message ?? 'CSV export failed' });
+    // If you attach user identity to req (e.g. req.user.id), wire it here.
+    const note = await prisma.orderNote.create({
+      data: { orderId: id, text: String(text).trim() },
+      select: { id: true, text: true, createdAt: true },
+    });
+
+    res.json({ ok: true, note });
+  } catch (err) {
+    console.error('POST /admin/orders/:id/notes failed', err);
+    res.status(500).json({ ok: false, error: 'Failed to add note' });
   }
 });
 
