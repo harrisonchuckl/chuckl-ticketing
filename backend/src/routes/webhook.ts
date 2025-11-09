@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import Stripe from 'stripe';
 import prisma from '../lib/prisma.js';
-import { calcPlatformFeePence } from '../services/fees.js';
+import { calcFeesForShow } from '../services/fees.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
   apiVersion: '2024-06-20',
@@ -9,8 +9,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
 
 const router = Router();
 
-// NB: server.ts mounts this with bodyParser.raw({type:'application/json'}) at /webhooks/stripe
-
+// Mounted at /webhooks/stripe with raw body in server.ts
 router.post('/', async (req, res) => {
   const sig = req.headers['stripe-signature'] as string;
   let event: Stripe.Event;
@@ -26,53 +25,67 @@ router.post('/', async (req, res) => {
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
-        const orderId = (session.metadata && session.metadata.orderId) || null;
+        const orderId = session.metadata?.orderId || null;
         if (!orderId) break;
 
-        // Retrieve payment intent with charges & balance tx
-        const pi = session.payment_intent
-          ? await stripe.paymentIntents.retrieve(session.payment_intent as string, { expand: ['charges.data.balance_transaction'] })
-          : null;
+        const existing = await prisma.order.findUnique({
+          where: { id: orderId },
+          select: { id: true, amountPence: true, showId: true, stripeId: true },
+        });
+        if (!existing) break;
 
+        // Retrieve PI (expanded) and read the balance transaction for Stripe fees
+        let paymentFeePence: number | null = null;
         let chargeId: string | null = null;
-        let stripeFeePence: number | null = null;
 
-        if (pi && pi.charges && pi.charges.data && pi.charges.data.length > 0) {
-          const ch = pi.charges.data[0];
-          chargeId = ch.id;
-          const bt = ch.balance_transaction as Stripe.BalanceTransaction | null;
-          if (bt && typeof bt.fee === 'number' && bt.currency === 'gbp') {
-            stripeFeePence = bt.fee;
+        if (session.payment_intent) {
+          const resp = await stripe.paymentIntents.retrieve(session.payment_intent as string, {
+            expand: ['charges.data.balance_transaction'],
+          }) as Stripe.Response<Stripe.PaymentIntent>;
+          const pi = resp.data;
+
+          if (pi.charges?.data?.length) {
+            const ch = pi.charges.data[0];
+            chargeId = ch.id;
+            const bt = ch.balance_transaction as Stripe.BalanceTransaction | null;
+            if (bt && typeof bt.fee === 'number' && bt.currency === 'gbp') {
+              paymentFeePence = bt.fee;
+            }
           }
         }
 
-        const existing = await prisma.order.findUnique({ where: { id: orderId } });
-        if (!existing) break;
+        // Final fee calc (based on actual gross + ticket count if needed)
+        const showId = existing.showId!;
+        const gross = existing.amountPence || 0;
 
-        // Final platform fee based on actual gross
-        const platformFee = calcPlatformFeePence(existing.amountPence || 0);
+        // We don’t have itemised qty in Order; infer from tickets after fulfillment if you prefer.
+        // For now, we approximate qty by counting tickets linked to this order (if any created already),
+        // else default to 1 (basket-level fee still applies).
+        const qty = await prisma.ticket.count({ where: { orderId: orderId } }).then(n => (n > 0 ? n : 1));
 
-        const paymentFee = stripeFeePence ?? null;
+        const feeFinal = await calcFeesForShow(showId, gross, qty);
+
+        const ourShare = feeFinal.ourSharePence;
+        const organiserShare = feeFinal.organiserSharePence;
+
+        // Net payout to organiser: gross - payment fees - our share
         const netPayout =
-          existing.amountPence != null
-            ? Math.max(0, existing.amountPence - (platformFee || 0) - (paymentFee || 0))
-            : null;
+          gross - (paymentFeePence || 0) - ourShare;
 
         await prisma.order.update({
           where: { id: orderId },
           data: {
             status: 'PAID',
             stripeId: chargeId || existing.stripeId || null,
-            platformFeePence: platformFee,
-            paymentFeePence: paymentFee,
-            netPayoutPence: netPayout,
+            paymentFeePence: paymentFeePence,
+            platformFeePence: feeFinal.platformFeePence,
+            platformFeeOurSharePence: ourShare,
+            platformFeeOrganiserSharePence: organiserShare,
+            netPayoutPence: Math.max(0, netPayout),
           },
         });
-
         break;
       }
-
-      // Optional: handle refund webhook events here to adjust fees if desired
 
       default:
         break;
