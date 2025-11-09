@@ -10,6 +10,7 @@ import cookieParser from 'cookie-parser';
 import checkout from './routes/checkout.js';
 import webhook from './routes/webhook.js';
 import events from './routes/events.js';
+import publicUI from './routes/public-ui.js'; // 👈 NEW: consumer-facing HTML UI
 
 // Auth
 import auth from './routes/auth.js';
@@ -45,9 +46,12 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), webho
 // Everything else as JSON
 app.use(express.json({ limit: '1mb' }));
 
-// --- Public / customer routes ---
+// --- Public / customer JSON APIs ---
 app.use('/events', events);
 app.use('/checkout', checkout);
+
+// --- Public HTML UI ---
+app.use('/public', publicUI); // 👈 NEW
 
 // --- Auth routes (UI + JSON) ---
 app.use('/auth', loginUI);     // GET /auth/login (HTML)
