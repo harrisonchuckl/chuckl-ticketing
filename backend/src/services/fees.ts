@@ -1,16 +1,11 @@
 // backend/src/services/fees.ts
 //
-// Centralised fee calculation for venues.
-// Reads fee config from a Venue (nullable fields are treated as 0).
-//
-// Schema expectations on Venue (all optional):
-// - perTicketFeePence:   Int?   (fixed fee per ticket, in pence)
-// - basketFeePence:      Int?   (fixed fee per order, in pence)
-// - feePercent:          Int?   (percentage of subtotal, e.g. 10 for 10%)
-// - organiserSharePercent: Int? (percentage of the platform fee you remit to organiser, e.g. 50)
-//
-// If some or all of these don’t exist yet in your prisma schema, run a migration
-// to add them—or set safe defaults below.
+// Centralised fee calculation.
+// Venue-level config (all optional):
+//   perTicketFeePence     Int?   fixed fee per ticket, in pence
+//   basketFeePence        Int?   fixed fee per order, in pence
+//   feePercent            Int?   percentage of subtotal (e.g. 10 for 10%)
+//   organiserSharePercent Int?   percentage of the platform fee paid to organiser (e.g. 50)
 
 export type VenueFeeConfig = {
   perTicketFeePence?: number | null;
@@ -21,13 +16,13 @@ export type VenueFeeConfig = {
 
 export type FeeCalcInput = {
   venue: VenueFeeConfig | null | undefined;
-  ticketCount: number;       // total tickets in the order
-  subtotalPence: number;     // pre-fee order amount (sum of ticket prices), in pence
+  ticketCount: number;     // number of tickets in the order
+  subtotalPence: number;   // ticket revenue before platform fees
 };
 
 export type FeeCalcResult = {
-  platformFeePence: number;      // what you’ll store on Order.platformFeePence
-  organiserSharePence: number;   // the organiser’s share (not persisted unless you decide to)
+  platformFeePence: number;
+  organiserSharePence: number;
   breakdown: {
     perTicketFeePence: number;
     basketFeePence: number;
@@ -44,7 +39,6 @@ export function calcFeesForVenue(input: FeeCalcInput): FeeCalcResult {
 
   const perTicketTotal = perTicket * Math.max(0, input.ticketCount || 0);
   const percentFee = Math.round((percent / 100) * Math.max(0, input.subtotalPence || 0));
-
   const platformFee = perTicketTotal + basket + percentFee;
   const organiserShare = Math.round((organiserSharePct / 100) * platformFee);
 
@@ -57,4 +51,18 @@ export function calcFeesForVenue(input: FeeCalcInput): FeeCalcResult {
       percentFeePence: percentFee,
     },
   };
+}
+
+// Convenience wrapper used by checkout.ts in some versions of the codebase.
+// Accepts a "show-like" object with a nested venue carrying fee fields.
+export function calcFeesForShow(args: {
+  show?: { venue?: VenueFeeConfig | null } | null;
+  ticketCount: number;
+  subtotalPence: number;
+}): FeeCalcResult {
+  return calcFeesForVenue({
+    venue: args.show?.venue,
+    ticketCount: args.ticketCount,
+    subtotalPence: args.subtotalPence,
+  });
 }
