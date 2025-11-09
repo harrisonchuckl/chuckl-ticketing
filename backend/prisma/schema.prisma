@@ -10,40 +10,47 @@ datasource db {
 }
 
 model User {
-  id             String           @id @default(cuid())
-  email          String           @unique
-  name           String?
-  password       String?
-  createdAt      DateTime         @default(now())
-  orders         Order[]
-  tickets        Ticket[]         @relation("UserTickets")
-  passwordResets PasswordReset[]
-  orderNotes     OrderNote[]
+  id                 String           @id @default(cuid())
+  email              String           @unique
+  name               String?
+  password           String?
+  createdAt          DateTime         @default(now())
+
+  // Relations
+  orders             Order[]
+  tickets            Ticket[]         @relation("UserTickets")
+  passwordResets     PasswordReset[]
+  orderNotes         OrderNote[]
+
+  /// Per-organiser share of the platform fee (basis points: 5000 = 50%)
+  organiserSplitBps  Int?
 }
 
 model Order {
-  id          String        @id @default(cuid())
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  email       String?
-  amountPence Int?          // total charged to customer (subtotal + platform fee)
-  subtotalPence Int?        // ticket revenue (qty * unitPrice) — NEW, used for payouts
-  quantity    Int?
-  stripeId    String?
-  status      OrderStatus   @default(PENDING)
-  userId      String?
-  user        User?         @relation(fields: [userId], references: [id])
-  showId      String?
-  show        Show?         @relation(fields: [showId], references: [id])
-  tickets     Ticket[]
-  refunds     Refund[]
-  notes       OrderNote[]
+  id                 String        @id @default(cuid())
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
 
-  // --- Fee breakdown (all optional so we can roll in safely) ---
-  platformFeePence              Int?   // total platform fee on basket
-  organiserFeePence             Int?   // organiser share of platform fee
-  paymentFeePence               Int?   // PSP fee (placeholder for now)
-  netPayoutPence                Int?   // organiser payout estimate = subtotal + organiserFee - paymentFee
+  email              String?
+  amountPence        Int?
+  quantity           Int?
+  stripeId           String?
+  status             OrderStatus   @default(PENDING)
+
+  // Fee breakdown (all optional so we can roll out safely)
+  platformFeePence   Int?
+  organiserSharePence Int?
+  paymentFeePence    Int?
+  netPayoutPence     Int?
+
+  // Relations
+  userId             String?
+  user               User?         @relation(fields: [userId], references: [id])
+  showId             String?
+  show               Show?         @relation(fields: [showId], references: [id])
+  tickets            Ticket[]
+  refunds            Refund[]
+  notes              OrderNote[]
 }
 
 enum OrderStatus {
@@ -58,8 +65,10 @@ model Show {
   title       String
   description String?
   date        DateTime
+
   venueId     String?
   venue       Venue?       @relation(fields: [venueId], references: [id])
+
   ticketTypes TicketType[]
   orders      Order[]
 }
@@ -71,13 +80,13 @@ model Venue {
   city      String?
   postcode  String?
   capacity  Int?
-  shows     Show[]
 
-  // --- Venue fee policy (nullable for safe rollout) ---
-  feePercentBps       Int?   // e.g. 1000 = 10.00%
-  perTicketFeePence   Int?   // e.g. 50p per ticket
-  basketFeePence      Int?   // e.g. flat 30p per basket
-  organiserSplitBps   Int?   // e.g. 5000 = 50% of platform fees go to organiser
+  // Fee policy (basis points & pence)
+  feePercentBps     Int?   // e.g. 1000 = 10%
+  perTicketFeePence Int?   // e.g. 50p per ticket = 50
+  basketFeePence    Int?   // e.g. 30p per order = 30
+
+  shows     Show[]
 }
 
 model TicketType {
@@ -86,6 +95,7 @@ model TicketType {
   pricePence Int
   available  Int?
   createdAt  DateTime @default(now())
+
   showId     String?
   show       Show?    @relation(fields: [showId], references: [id])
 }
@@ -94,10 +104,12 @@ model Ticket {
   id          String    @id @default(cuid())
   serial      String    @unique
   holderName  String?
-  status      String
+  status      String          // keep as String to avoid destructive migration
   scannedAt   DateTime?
+
   orderId     String?
   order       Order?    @relation(fields: [orderId], references: [id])
+
   userId      String?
   user        User?     @relation("UserTickets", fields: [userId], references: [id])
 
@@ -120,10 +132,13 @@ model Refund {
   amount     Int
   reason     String?
   stripeId   String?
+
   orderId    String
   order      Order    @relation(fields: [orderId], references: [id])
+
   ticketId   String?
   ticket     Ticket?  @relation(fields: [ticketId], references: [id])
+
   createdBy  String?
 }
 
