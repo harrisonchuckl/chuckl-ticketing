@@ -1,52 +1,60 @@
-import prisma from '../lib/prisma.js';
+// backend/src/services/fees.ts
+//
+// Centralised fee calculation for venues.
+// Reads fee config from a Venue (nullable fields are treated as 0).
+//
+// Schema expectations on Venue (all optional):
+// - perTicketFeePence:   Int?   (fixed fee per ticket, in pence)
+// - basketFeePence:      Int?   (fixed fee per order, in pence)
+// - feePercent:          Int?   (percentage of subtotal, e.g. 10 for 10%)
+// - organiserSharePercent: Int? (percentage of the platform fee you remit to organiser, e.g. 50)
+//
+// If some or all of these don’t exist yet in your prisma schema, run a migration
+// to add them—or set safe defaults below.
 
-type FeeResult = {
-  platformFeePence: number;
-  ourSharePence: number;
-  organiserSharePence: number;
+export type VenueFeeConfig = {
+  perTicketFeePence?: number | null;
+  basketFeePence?: number | null;
+  feePercent?: number | null;
+  organiserSharePercent?: number | null;
 };
 
-function toInt(v: any, def = 0) {
-  const n = Number(v);
-  return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : def;
-}
+export type FeeCalcInput = {
+  venue: VenueFeeConfig | null | undefined;
+  ticketCount: number;       // total tickets in the order
+  subtotalPence: number;     // pre-fee order amount (sum of ticket prices), in pence
+};
 
-/**
- * Compute platform fee for a given show/venue, including:
- *  - percentage of gross (bps)
- *  - per-ticket fixed fee
- *  - per-basket fixed fee
- * Then split the fee between us and the organiser.
- *
- * Env defaults when venue fields are null:
- *  PLATFORM_FEE_BPS (default 100 = 1.00%)
- *  PER_TICKET_FEE_PENCE (default 0)
- *  BASKET_FEE_PENCE (default 0)
- *  ORGANISER_FEE_SHARE_BPS (default 5000 = 50%)
- */
-export async function calcFeesForShow(showId: string, grossPence: number, quantity: number): Promise<FeeResult> {
-  const show = await prisma.show.findUnique({
-    where: { id: showId },
-    select: { venue: { select: {
-      feePercentBps: true, perTicketFeePence: true, basketFeePence: true, organiserShareBps: true
-    } } }
-  });
+export type FeeCalcResult = {
+  platformFeePence: number;      // what you’ll store on Order.platformFeePence
+  organiserSharePence: number;   // the organiser’s share (not persisted unless you decide to)
+  breakdown: {
+    perTicketFeePence: number;
+    basketFeePence: number;
+    percentFeePence: number;
+  };
+};
 
-  const venue = show?.venue;
+export function calcFeesForVenue(input: FeeCalcInput): FeeCalcResult {
+  const v = input.venue ?? {};
+  const perTicket = Math.max(0, Number(v.perTicketFeePence ?? 0));
+  const basket = Math.max(0, Number(v.basketFeePence ?? 0));
+  const percent = Math.max(0, Number(v.feePercent ?? 0));
+  const organiserSharePct = Math.min(100, Math.max(0, Number(v.organiserSharePercent ?? 0)));
 
-  const bps = toInt(venue?.feePercentBps ?? process.env.PLATFORM_FEE_BPS ?? 100);            // 1.00% default
-  const perTicket = toInt(venue?.perTicketFeePence ?? process.env.PER_TICKET_FEE_PENCE ?? 0);
-  const basket = toInt(venue?.basketFeePence ?? process.env.BASKET_FEE_PENCE ?? 0);
-  const organiserShareBps = toInt(venue?.organiserShareBps ?? process.env.ORGANISER_FEE_SHARE_BPS ?? 5000); // 50%
+  const perTicketTotal = perTicket * Math.max(0, input.ticketCount || 0);
+  const percentFee = Math.round((percent / 100) * Math.max(0, input.subtotalPence || 0));
 
-  const percentComponent = Math.floor((Math.max(0, grossPence) * bps) / 10000);
-  const perTicketComponent = perTicket * Math.max(0, quantity);
-  const basketComponent = basket;
+  const platformFee = perTicketTotal + basket + percentFee;
+  const organiserShare = Math.round((organiserSharePct / 100) * platformFee);
 
-  const platformFeePence = Math.max(0, percentComponent + perTicketComponent + basketComponent);
-
-  const organiserSharePence = Math.floor((platformFeePence * organiserShareBps) / 10000);
-  const ourSharePence = Math.max(0, platformFeePence - organiserSharePence);
-
-  return { platformFeePence, ourSharePence, organiserSharePence };
+  return {
+    platformFeePence: platformFee,
+    organiserSharePence: organiserShare,
+    breakdown: {
+      perTicketFeePence: perTicketTotal,
+      basketFeePence: basket,
+      percentFeePence: percentFee,
+    },
+  };
 }
