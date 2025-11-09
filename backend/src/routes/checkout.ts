@@ -1,73 +1,91 @@
 // backend/src/routes/checkout.ts
 import { Router } from 'express';
-import Stripe from 'stripe';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../lib/prisma.js';
 import { calcFeesForShow } from '../services/fees.js';
+import Stripe from 'stripe';
 
-const prisma = new PrismaClient();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, { apiVersion: '2024-06-20' });
 const router = Router();
 
 /**
- * POST /checkout/create-intent
- * body: { showId: string, quantity: number, unitPricePence: number, email?: string }
+ * POST /checkout/session
+ * Body: { showId: string, quantity: number, unitPricePence?: number }
  */
-router.post('/create-intent', async (req, res) => {
+router.post('/session', async (req, res) => {
   try {
-    const { showId, quantity, unitPricePence, email } = req.body || {};
-    if (!showId || !quantity || !unitPricePence) {
-      return res.status(400).json({ ok: false, message: 'Missing showId, quantity or unitPricePence' });
+    const { showId, quantity } = req.body ?? {};
+    if (!showId || !quantity || quantity < 1) {
+      return res.status(400).json({ ok: false, message: 'showId and quantity are required' });
     }
 
-    const subtotalPence = quantity * unitPricePence;
-
-    const fees = await calcFeesForShow({
-      prisma,
-      showId,
-      quantity,
-      subtotalPence,
-    });
-
-    const amountPence = subtotalPence + fees.platformFeePence;
-
-    const pi = await stripe.paymentIntents.create({
-      amount: amountPence,
-      currency: 'gbp',
-      metadata: {
-        showId,
-        quantity: String(quantity),
-        unitPricePence: String(unitPricePence),
-        subtotalPence: String(subtotalPence),
-        platformFeePence: String(fees.platformFeePence),
+    // Unit price: prefer ticket type price or fallback to provided value
+    const show = await prisma.show.findUnique({
+      where: { id: showId },
+      select: {
+        ticketTypes: { select: { pricePence: true }, orderBy: { createdAt: 'asc' } },
       },
-      receipt_email: email || undefined,
-      automatic_payment_methods: { enabled: true },
     });
 
+    const unitPricePence =
+      show?.ticketTypes?.[0]?.pricePence ??
+      (typeof req.body.unitPricePence === 'number' ? req.body.unitPricePence : null);
+
+    if (!unitPricePence) {
+      return res.status(400).json({ ok: false, message: 'No ticket price found' });
+    }
+
+    // Optional organiser fee split (if user logged-in and has a custom split)
+    let organiserSplitBps: number | null = null;
+    const userId = (req as any).userId as string | undefined;
+    if (userId) {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { organiserSplitBps: true },
+      });
+      organiserSplitBps = user?.organiserSplitBps ?? null;
+    }
+
+    const fees = await calcFeesForShow(prisma, showId, Number(quantity), Number(unitPricePence), organiserSplitBps);
+
+    // Create a placeholder order (PENDING)
     const order = await prisma.order.create({
       data: {
-        showId,
-        email: email ?? null,
-        quantity,
-        subtotalPence,
-        amountPence,
-        stripeId: pi.id,
+        show: { connect: { id: showId } },
+        quantity: Number(quantity),
+        amountPence: Number(unitPricePence) * Number(quantity),
         status: 'PENDING',
         platformFeePence: fees.platformFeePence,
-        organiserFeePence: fees.organiserFeePence,
-        paymentFeePence: 0,
-        netPayoutPence: subtotalPence + fees.organiserFeePence - 0,
+        organiserSharePence: fees.organiserSharePence,
+        paymentFeePence: fees.paymentFeePence,
+        netPayoutPence: fees.netPayoutPence,
       },
+      select: { id: true },
     });
 
-    res.json({
-      ok: true,
-      clientSecret: pi.client_secret,
-      orderId: order.id,
-      fees,
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      currency: 'gbp',
+      line_items: [
+        {
+          quantity,
+          price_data: {
+            currency: 'gbp',
+            unit_amount: unitPricePence,
+            product_data: {
+              name: 'Tickets',
+            },
+          },
+        },
+      ],
+      metadata: { orderId: order.id, showId },
+      success_url: `${process.env.PUBLIC_BASE_URL}/success?order=${order.id}`,
+      cancel_url: `${process.env.PUBLIC_BASE_URL}/cancel?order=${order.id}`,
     });
+
+    return res.json({ ok: true, url: session.url });
   } catch (err: any) {
-    res.status(400).json({ ok: false, message: err?.message || 'Failed to create payment intent' });
+    console.error('checkout/session error', err);
+    return res.status(500).json({ ok: false, message: 'Checkout error' });
   }
 });
 
