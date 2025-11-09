@@ -1,58 +1,75 @@
 // backend/src/routes/admin-analytics.ts
 import { Router } from 'express';
-import { requireAdmin } from '../lib/authz.js';
 import prisma from '../lib/prisma.js';
+import { requireAdminOrOrganiser } from '../lib/authz.js';
 
 const router = Router();
 
-/** helper: pence safe number */
-const N = (v: unknown) => Number(v || 0);
-
-/** GET /admin/analytics/summary — KPIs for Home */
-router.get('/analytics/summary', requireAdmin, async (req, res) => {
+/**
+ * GET /admin/analytics/summary
+ * Returns quick KPIs for the dashboard:
+ *  - last 7 days
+ *  - month-to-date
+ *
+ * Assumes Order has fields:
+ *   amountPence, platformFeePence, organiserSharePence, paymentFeePence, netPayoutPence, status, createdAt
+ */
+router.get('/analytics/summary', requireAdminOrOrganiser, async (_req, res) => {
   try {
     const now = new Date();
 
-    // Last 7 days
-    const last7From = new Date(now);
-    last7From.setDate(now.getDate() - 7);
+    // last 7 days window
+    const start7 = new Date(now);
+    start7.setDate(now.getDate() - 7);
 
-    // Month-to-date
-    const mtdFrom = new Date(now.getFullYear(), now.getMonth(), 1);
+    // month-to-date (UTC month start)
+    const startMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 
-    async function block(from: Date) {
-      const items = await prisma.order.findMany({
-        where: { createdAt: { gte: from } },
-        select: {
-          amountPence: true,
-          platformFeePence: true,
-          organiserSharePence: true,
-          paymentFeePence: true,
-        },
-      });
-      let orders = 0, gmv = 0, ourFees = 0, net = 0;
-      for (const o of items) {
-        orders += 1;
-        const amount = N(o.amountPence);
-        const platform = N(o.platformFeePence);
-        const organiserShare = N(o.organiserSharePence);
-        const payment = N(o.paymentFeePence);
-        const ourShare = platform - organiserShare;
-        const netPayout = amount - payment - ourShare;
+    const baseSelect = {
+      createdAt: true,
+      amountPence: true,
+      platformFeePence: true,
+      organiserSharePence: true,
+      paymentFeePence: true,
+      netPayoutPence: true,
+      status: true,
+    } as const;
 
-        gmv += amount;
-        ourFees += ourShare;
-        net += netPayout;
-      }
-      return { orders, gmvPence: gmv, ourFeesPence: ourFees, netPayoutPence: net };
+    const [last7Orders, mtdOrders] = await Promise.all([
+      prisma.order.findMany({
+        where: { status: 'PAID', createdAt: { gte: start7, lte: now } },
+        select: baseSelect,
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.order.findMany({
+        where: { status: 'PAID', createdAt: { gte: startMonth, lte: now } },
+        select: baseSelect,
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    function summarise(items: typeof last7Orders) {
+      const orders = items.length;
+      const gmvPence = items.reduce((a, o) => a + (o.amountPence ?? 0), 0);
+      const ourFeesPence = items.reduce((a, o) => {
+        const platform = o.platformFeePence ?? 0;
+        const organiserShare = o.organiserSharePence ?? 0;
+        return a + (platform - organiserShare);
+      }, 0);
+      const netPayoutPence = items.reduce((a, o) => a + (o.netPayoutPence ?? 0), 0);
+      return { orders, gmvPence, ourFeesPence, netPayoutPence };
     }
 
-    const [ last7, mtd ] = await Promise.all([ block(last7From), block(mtdFrom) ]);
-
-    res.json({ ok: true, summary: { last7, mtd } });
-  } catch (e) {
-    console.error('GET /admin/analytics/summary failed', e);
-    res.status(500).json({ ok: false, error: 'Failed to load summary' });
+    res.json({
+      ok: true,
+      summary: {
+        last7: summarise(last7Orders),
+        mtd: summarise(mtdOrders),
+      },
+    });
+  } catch (err) {
+    console.error('analytics/summary failed', err);
+    res.status(500).json({ ok: false, error: 'Failed to load analytics' });
   }
 });
 
