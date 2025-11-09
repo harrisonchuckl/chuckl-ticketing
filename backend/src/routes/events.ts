@@ -7,10 +7,11 @@ const router = Router();
 /**
  * GET /events
  * Query:
- *  - q: string (search in show title, venue name, city, postcode)
- *  - city: string (exact city match)
- *  - month: YYYY-MM (limits to that calendar month)
- *  - upcoming: '1' (default) -> only future shows, '0' -> all
+ *  - q: string (search in title, venue name, city, postcode)
+ *  - city: string
+ *  - venueId: string
+ *  - month: YYYY-MM
+ *  - upcoming: '1' (default) or '0'
  *  - page: number (default 1)
  *  - pageSize: number (default 20, max 100)
  *  - order: 'asc' | 'desc' (by date, default asc)
@@ -20,6 +21,7 @@ router.get('/', async (req, res) => {
     const {
       q = '',
       city = '',
+      venueId = '',
       month = '',
       upcoming = '1',
       page = '1',
@@ -37,32 +39,24 @@ router.get('/', async (req, res) => {
     if (month && /^\d{4}-\d{2}$/.test(month)) {
       const [y, m] = month.split('-').map(Number);
       startDate = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0));
-      endDate = new Date(Date.UTC(y, m, 1, 0, 0, 0)); // first of next month
+      endDate = new Date(Date.UTC(y, m, 1, 0, 0, 0));
     }
 
     const now = new Date();
 
     const where: any = {
       AND: [
-        upcoming === '1'
-          ? { date: { gte: now } }
-          : {},
-
-        startDate && endDate
-          ? { date: { gte: startDate, lt: endDate } }
-          : {},
-
-        city
-          ? { venue: { city: { equals: city } } }
-          : {},
-
+        upcoming === '1' ? { date: { gte: now } } : {},
+        startDate && endDate ? { date: { gte: startDate, lt: endDate } } : {},
+        city ? { venue: { city: { equals: city } } } : {},
+        venueId ? { venueId } : {},
         q
           ? {
               OR: [
-                { title:   { contains: q, mode: 'insensitive' } },
-                { venue:   { name: { contains: q, mode: 'insensitive' } } },
-                { venue:   { city: { contains: q, mode: 'insensitive' } } },
-                { venue:   { postcode: { contains: q, mode: 'insensitive' } } },
+                { title: { contains: q, mode: 'insensitive' } },
+                { venue: { name: { contains: q, mode: 'insensitive' } } },
+                { venue: { city: { contains: q, mode: 'insensitive' } } },
+                { venue: { postcode: { contains: q, mode: 'insensitive' } } },
               ],
             }
           : {},
@@ -91,12 +85,7 @@ router.get('/', async (req, res) => {
     res.json({
       ok: true,
       items,
-      meta: {
-        total,
-        page: pageNum,
-        pageSize: take,
-        pages: Math.ceil(total / take),
-      },
+      meta: { total, page: pageNum, pageSize: take, pages: Math.ceil(total / take) },
     });
   } catch (e) {
     console.error(e);
@@ -106,34 +95,17 @@ router.get('/', async (req, res) => {
 
 /**
  * GET /events/cities
- * Distinct list of cities that have (by default) upcoming shows.
- * Query:
- *  - upcoming: '1' (default) -> only cities with future shows, '0' -> all cities with any show
  */
 router.get('/cities', async (req, res) => {
   try {
     const { upcoming = '1' } = (req.query || {}) as Record<string, string>;
     const now = new Date();
-
-    // Find venues that have at least one show matching the upcoming filter
     const venues = await prisma.venue.findMany({
-      where: {
-        shows: {
-          some: upcoming === '1' ? { date: { gte: now } } : {},
-        },
-      },
+      where: { shows: { some: upcoming === '1' ? { date: { gte: now } } : {} } },
       select: { city: true },
       orderBy: { city: 'asc' },
     });
-
-    const cities = Array.from(
-      new Set(
-        (venues || [])
-          .map(v => (v.city || '').trim())
-          .filter(Boolean)
-      )
-    );
-
+    const cities = Array.from(new Set((venues || []).map(v => (v.city || '').trim()).filter(Boolean)));
     res.json({ ok: true, cities });
   } catch (e) {
     console.error(e);
@@ -143,7 +115,6 @@ router.get('/cities', async (req, res) => {
 
 /**
  * GET /events/:id
- * Single show (for the public details page).
  */
 router.get('/:id', async (req, res) => {
   try {
@@ -152,13 +123,7 @@ router.get('/:id', async (req, res) => {
       where: { id },
       include: {
         venue: true,
-        ticketTypes: {
-          select: { id: true, name: true, pricePence: true, available: true },
-          orderBy: { pricePence: 'asc' },
-        },
-        orders: {
-          select: { id: true }, // cheap count signal if ever needed
-        },
+        ticketTypes: { select: { id: true, name: true, pricePence: true, available: true }, orderBy: { pricePence: 'asc' } },
       },
     });
     if (!show) return res.status(404).json({ ok: false, error: 'Not found' });
@@ -166,6 +131,35 @@ router.get('/:id', async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ ok: false, error: 'Failed to load event' });
+  }
+});
+
+/**
+ * GET /events/venue/:venueId (list shows for a venue; default upcoming)
+ * Query: upcoming=1|0
+ */
+router.get('/venue/:venueId', async (req, res) => {
+  try {
+    const venueId = String(req.params.venueId);
+    const { upcoming = '1' } = (req.query || {}) as Record<string, string>;
+    const now = new Date();
+
+    const venue = await prisma.venue.findUnique({ where: { id: venueId } });
+    if (!venue) return res.status(404).json({ ok: false, error: 'Venue not found' });
+
+    const items = await prisma.show.findMany({
+      where: { venueId, ...(upcoming === '1' ? { date: { gte: now } } : {}) },
+      include: {
+        venue: true,
+        ticketTypes: { select: { id: true, name: true, pricePence: true, available: true }, orderBy: { pricePence: 'asc' } },
+      },
+      orderBy: { date: 'asc' },
+    });
+
+    res.json({ ok: true, venue, items });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok: false, error: 'Failed to load venue shows' });
   }
 });
 
