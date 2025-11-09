@@ -1,399 +1,397 @@
 // backend/src/routes/admin-ui.ts
 import { Router } from 'express';
+import { ensureAdminOrOrganiser } from '../lib/authz.js';
 
 const router = Router();
 
-router.get('/', (_req, res) => res.redirect('/admin/ui'));
-
-router.get('/ui', (_req, res) => {
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.send(`<!doctype html>
+/**
+ * Simple single-file admin UI.
+ * - Hash-based router (#home, #shows, #orders, #venues, #analytics, #audiences, #email, #account)
+ * - Sidebar links are normal anchors with data-view; JS switches view and prevents full reload.
+ * - Home view shows KPI summary pulled from /admin/analytics/summary.
+ */
+router.get('/ui', ensureAdminOrOrganiser, async (_req, res) => {
+  res.type('html').send(`<!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Organiser Console</title>
-<style>
-  :root {
-    --bg:#fafbfc; --panel:#fff; --text:#1f2937; --muted:#6b7280; --line:#e5e7eb; --brand:#111827;
-    --btn:#111827; --btnText:#fff; --btnLite:#f3f4f6;
-  }
-  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font:14px/1.45 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif}
-  .app{display:flex;min-height:100vh}
-  .sidebar{width:220px;background:var(--panel);border-right:1px solid var(--line);padding:12px;position:sticky;top:0;height:100vh;box-sizing:border-box}
-  .brand{font-weight:700;margin:4px 8px 12px}
-  .section{color:var(--muted);font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin:16px 8px 8px}
-  .nav{display:flex;flex-direction:column;gap:4px}
-  .nav button{appearance:none;border:0;background:transparent;text-align:left;padding:8px 10px;border-radius:8px;cursor:pointer}
-  .nav button.active{background:var(--btnLite)}
-  .nav button:hover{background:#f6f7f8}
-  .main{flex:1;padding:20px}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
-  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-  input[type="text"], input[type="date"], input[type="number"]{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:#fff;min-width:220px}
-  .btn{background:var(--btn);color:var(--btnText);border:0;border-radius:8px;padding:8px 12px;cursor:pointer}
-  .btn-link{color:var(--brand);text-decoration:underline;cursor:pointer}
-  table{width:100%;border-collapse:collapse;margin-top:12px}
-  th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left}
-  .muted{color:var(--muted)}
-  .pill{display:inline-block;padding:10px 12px;border-radius:12px;border:1px solid var(--line);font-size:13px;background:#fff;min-width:140px}
-  .right{margin-left:auto}
-  .danger{color:#b91c1c}
-  .grid{display:grid;grid-template-columns:repeat(2,minmax(220px,1fr));gap:10px;margin-top:10px}
-  /* Drawer */
-  .drawer{position:fixed;top:0;right:-440px;width:420px;height:100vh;background:#fff;border-left:1px solid var(--line);box-shadow:-6px 0 20px rgba(0,0,0,.06);transition:right .24s ease;padding:16px;overflow:auto;z-index:50}
-  .drawer.open{right:0}
-  .drawer h4{margin:6px 0 12px}
-  .drawer .close{position:absolute;top:10px;right:12px;background:#f3f4f6;border:1px solid var(--line);border-radius:6px;padding:6px 8px;cursor:pointer}
-  canvas{max-width:100%;height:220px;border:1px solid var(--line);border-radius:8px;background:#fff}
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Organiser Console</title>
+  <style>
+    :root {
+      --bg: #f7f8fb;
+      --panel: #ffffff;
+      --border: #e5e7eb;
+      --text: #111827;
+      --muted: #6b7280;
+      --brand: #111827;
+      --brand-2: #374151;
+    }
+    html, body { margin:0; padding:0; height:100%; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; color: var(--text); background: var(--bg); }
+    .wrap { display:flex; min-height:100vh; }
+    .sidebar {
+      width: 220px; background:#fff; border-right:1px solid var(--border); padding:16px 12px; position:sticky; top:0; height:100vh; box-sizing:border-box;
+    }
+    .sb-group { font-size:12px; letter-spacing:.04em; color:var(--muted); margin:14px 8px 6px; text-transform:uppercase; }
+    .sb-link { display:block; padding:10px 12px; margin:4px 4px; border-radius:8px; color:#111827; text-decoration:none; }
+    .sb-link.active, .sb-link:hover { background:#f1f5f9; }
+    .content { flex:1; padding:20px; }
+    .card {
+      background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:16px;
+    }
+    .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+    .title { font-weight:600; }
+    .muted { color:var(--muted); }
+    .kpis { display:grid; grid-template-columns: repeat(4, minmax(160px,1fr)); gap:12px; }
+    .kpi { background:#fff; border:1px solid var(--border); border-radius:12px; padding:12px; }
+    .kpi .label { font-size:12px; color:var(--muted); }
+    .kpi .value { font-size:20px; font-weight:700; margin-top:6px; }
+    .btn { appearance:none; border:1px solid var(--border); background:#fff; border-radius:8px; padding:8px 12px; cursor:pointer; }
+    .btn:hover { background:#f9fafb; }
+    .toolbar { display:flex; gap:8px; flex-wrap:wrap; }
+    .row { display:flex; gap:8px; flex-wrap:wrap; }
+    input, select {
+      border:1px solid var(--border); border-radius:8px; padding:8px 10px; background:#fff; outline:none;
+    }
+    table { width:100%; border-collapse:collapse; font-size:14px; }
+    th, td { text-align:left; padding:10px; border-bottom:1px solid var(--border); }
+    th { font-weight:600; color:#334155; background:#f8fafc; }
+    .right { text-align:right; }
+    .error { color:#b91c1c; }
+    .spacer { height:8px; }
+    /* Make sure nothing overlays the sidebar */
+    * { pointer-events:auto; }
+  </style>
 </head>
 <body>
-<div class="app">
-  <aside class="sidebar">
-    <div class="brand">Organiser Console</div>
+  <div class="wrap">
+    <aside class="sidebar" id="sidebar">
+      <div class="sb-group">Dashboard</div>
+      <a class="sb-link" href="#home" data-view="home">Home</a>
+      <div class="sb-group">Manage</div>
+      <a class="sb-link" href="#shows" data-view="shows">Shows</a>
+      <a class="sb-link" href="#orders" data-view="orders">Orders</a>
+      <a class="sb-link" href="#venues" data-view="venues">Venues</a>
+      <div class="sb-group">Insights</div>
+      <a class="sb-link" href="#analytics" data-view="analytics">Analytics</a>
+      <div class="sb-group">Marketing</div>
+      <a class="sb-link" href="#audiences" data-view="audiences">Audiences</a>
+      <a class="sb-link" href="#email" data-view="email">Email Campaigns</a>
+      <div class="sb-group">Settings</div>
+      <a class="sb-link" href="#account" data-view="account">Account</a>
+      <a class="sb-link" href="/auth/logout">Log out</a>
+    </aside>
 
-    <div class="section">Dashboard</div>
-    <div class="nav">
-      <button data-view="home" class="active">Home</button>
-      <button data-view="shows">Shows</button>
-      <button data-view="orders">Orders</button>
-      <button data-view="venues">Venues</button>
-    </div>
-
-    <div class="section">Insights</div>
-    <div class="nav">
-      <button data-view="analytics">Analytics</button>
-    </div>
-
-    <div class="section">Marketing</div>
-    <div class="nav">
-      <button data-view="audiences">Audiences</button>
-      <button data-view="email">Email Campaigns</button>
-    </div>
-
-    <div class="section">Settings</div>
-    <div class="nav">
-      <button data-view="account">Account</button>
-      <a class="btn-link" href="/auth/logout">Log out</a>
-    </div>
-  </aside>
-
-  <main class="main">
-    <div id="content" class="card"></div>
-  </main>
-
-  <aside id="drawer" class="drawer" aria-hidden="true">
-    <button class="close" id="drawerClose">Close</button>
-    <div id="drawerBody" class="muted">Loading…</div>
-  </aside>
-</div>
+    <main class="content" id="main">
+      <div class="card">
+        <div class="title">Loading…</div>
+      </div>
+    </main>
+  </div>
 
 <script>
-  function fmtPence(p){ return (Number(p||0)/100).toFixed(2); }
-  function qs(sel, root=document){ return root.querySelector(sel); }
-  function qsa(sel, root=document){ return Array.from(root.querySelectorAll(sel)); }
-  async function api(path, opts){
-    const r = await fetch(path, Object.assign({ credentials:'include' }, opts||{}));
-    if(!r.ok) throw new Error('HTTP '+r.status);
-    const ct = r.headers.get('content-type')||'';
-    return ct.includes('application/json') ? r.json() : r.text();
+(function(){
+  const $ = (sel, root=document) => root.querySelector(sel);
+  const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+
+  // Sidebar link activation
+  function setActive(view){
+    $$('.sb-link').forEach(a => {
+      const v = a.getAttribute('data-view');
+      a.classList.toggle('active', v === view);
+    });
   }
-  async function ensureAuth(){
-    try{ const me = await api('/auth/me'); return !!me?.ok; }catch(_){ return false; }
-  }
 
-  const views = {
-    async home(){
-      const summaryHtml = \`
-        <div id="summary" class="grid">
-          <div class="pill">WTD Gross: <strong id="wtdGross">—</strong></div>
-          <div class="pill">MTD Gross: <strong id="mtdGross">—</strong></div>
-          <div class="pill">WTD Net Payout: <strong id="wtdNet">—</strong></div>
-          <div class="pill">MTD Net Payout: <strong id="mtdNet">—</strong></div>
-        </div>\`;
-
-      setTimeout(async ()=>{
-        try{
-          const r = await api('/admin/analytics/summary');
-          if(r?.ok){
-            qs('#wtdGross').textContent = '£'+fmtPence(r.wtd.totalGrossPence);
-            qs('#mtdGross').textContent = '£'+fmtPence(r.mtd.totalGrossPence);
-            qs('#wtdNet').textContent   = '£'+fmtPence(r.wtd.totalNetPayoutPence);
-            qs('#mtdNet').textContent   = '£'+fmtPence(r.mtd.totalNetPayoutPence);
-          }
-        }catch(_){}
-      }, 0);
-
-      return \`
-        <h3>Home</h3>
-        <p class="muted">Welcome to your organiser console. Use the menu to manage shows, orders, venues, insights and marketing.</p>
-        \${summaryHtml}
-      \`;
-    },
-
-    async shows(){
-      const data = await api('/admin/shows');
-      const rows = (data?.items||[]).map(s => \`
-        <tr>
-          <td>\${s.title||''}</td>
-          <td>\${s.venue?.name||''}</td>
-          <td>\${new Date(s.date).toLocaleString()}</td>
-          <td class="muted">\${s.id}</td>
-        </tr>\`).join('');
-      return \`
-        <div class="row">
-          <h3>Shows</h3>
-          <button class="btn right" id="refreshShows">Refresh</button>
-        </div>
-        <table>
-          <thead><tr><th>Title</th><th>Venue</th><th>Date</th><th>ID</th></tr></thead>
-          <tbody>\${rows||''}</tbody>
-        </table>
-      \`;
-    },
-
-    async orders(){
-      return \`
-        <h3>Orders</h3>
-        <div class="row" id="ordersToolbar">
-          <input type="text" name="q" placeholder="Search email / Stripe / show"/>
-          <input type="date" name="from"/>
-          <input type="date" name="to"/>
-          <button class="btn" id="searchOrders">Search</button>
-          <a class="btn-link" id="exportCsv" href="#">Export CSV</a>
-        </div>
-        <div id="ordersTable" style="margin-top:12px" class="muted">Enter a query or date range and click Search.</div>
-      \`;
-    },
-
-    async venues(){
-      const resp = await api('/admin/venues');
-      const venues = resp?.items || [];
-      const rows = venues.map(v => \`
-        <tr data-id="\${v.id}">
-          <td><div><strong>\${v.name||''}</strong><div class="muted">\${[v.city, v.postcode].filter(Boolean).join(' • ')}</div></div></td>
-          <td><input type="number" step="1" min="0" name="feePercentBps" value="\${v.feePercentBps ?? ''}" placeholder="bps (e.g. 1000 = 10%)"/></td>
-          <td><input type="number" step="1" min="0" name="perTicketFeePence" value="\${v.perTicketFeePence ?? ''}" placeholder="per-ticket pence"/></td>
-          <td><input type="number" step="1" min="0" name="basketFeePence" value="\${v.basketFeePence ?? ''}" placeholder="basket pence"/></td>
-          <td><button class="btn saveVenue">Save</button></td>
-        </tr>\`).join('');
-
-      return \`
-        <div class="row"><h3>Venues</h3><button class="btn right" id="refreshVenues">Refresh</button></div>
-        <table>
-          <thead><tr><th>Venue</th><th>% Fee (bps)</th><th>Per-ticket (p)</th><th>Basket (p)</th><th></th></tr></thead>
-          <tbody>\${rows||''}</tbody>
-        </table>
-        <p class="muted" style="margin-top:10px">Fee policy applies per venue; organiser split is configured on each organiser account.</p>
-      \`;
-    },
-
-    async analytics(){
-      return \`
-        <h3>Analytics</h3>
-        <div class="row" id="analyticsToolbar">
-          <input type="date" name="from"/>
-          <input type="date" name="to"/>
-          <button class="btn" id="runAnalytics">Run</button>
-        </div>
-        <div id="analyticsBody" class="muted" style="margin-top:12px">Pick a date range and click Run.</div>
-        <h4 style="margin-top:16px">MTD Daily Gross</h4>
-        <canvas id="mtdChart" width="800" height="220"></canvas>
-      \`;
-    },
-
-    async audiences(){ return '<h3>Audiences</h3><p class="muted">Audience tools coming soon.</p>'; },
-    async email(){ return '<h3>Email Campaigns</h3><p class="muted">Email integrations coming soon.</p>'; },
-
-    async account(){
-      const me = await api('/auth/me').catch(()=>({}));
-      return \`
-        <h3>Account</h3>
-        <p><strong>Email:</strong> \${me?.user?.email || 'unknown'}</p>
-        <p><strong>Organiser split (bps):</strong> \${me?.user?.organiserSplitBps ?? '—'}</p>
-        <p><a class="btn-link danger" href="/auth/logout">Log out</a></p>
-      \`;
+  // Routing
+  function route(){
+    const hash = (location.hash || '#home').replace('#','');
+    setActive(hash);
+    switch(hash){
+      case 'home': return renderHome();
+      case 'shows': return renderShows();
+      case 'orders': return renderOrders();
+      case 'venues': return renderVenues();
+      case 'analytics': return renderAnalytics();
+      case 'audiences': return renderAudiences();
+      case 'email': return renderEmail();
+      case 'account': return renderAccount();
+      default: return renderHome();
     }
-  };
-
-  // --- helpers ---
-  function numOrNull(v){ if(v===undefined||v===null||v==='') return null; const n=Number(v); return Number.isFinite(n)?n:null; }
-  function openDrawer(html){ const d=qs('#drawer'); qs('#drawerBody').innerHTML=html; d.classList.add('open'); d.setAttribute('aria-hidden','false'); }
-  function closeDrawer(){ const d=qs('#drawer'); d.classList.remove('open'); d.setAttribute('aria-hidden','true'); }
-
-  async function switchView(view){
-    qsa('.sidebar .nav button').forEach(b => b.classList.toggle('active', b.dataset.view===view));
-    const el = qs('#content');
-    el.innerHTML = '<div class="muted">Loading…</div>';
-    try{
-      const ok = await ensureAuth();
-      if(!ok){ el.innerHTML='<p>Please <a class="btn-link" href="/auth/login">sign in</a> to continue.</p>'; return; }
-      el.innerHTML = await views[view]();
-
-      if(view==='shows'){ qs('#refreshShows')?.addEventListener('click', ()=>switchView('shows')); }
-
-      if(view==='venues'){
-        qs('#refreshVenues')?.addEventListener('click', ()=>switchView('venues'));
-        qsa('.saveVenue').forEach(btn=>{
-          btn.addEventListener('click', async ()=>{
-            const tr = btn.closest('tr'); const id = tr?.dataset.id;
-            const body = {
-              feePercentBps: numOrNull(qs('input[name="feePercentBps"]', tr)?.value),
-              perTicketFeePence: numOrNull(qs('input[name="perTicketFeePence"]', tr)?.value),
-              basketFeePence: numOrNull(qs('input[name="basketFeePence"]', tr)?.value),
-            };
-            await api('/admin/venues/'+id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-            btn.textContent='Saved'; setTimeout(()=>btn.textContent='Save',1200);
-          });
-        });
-      }
-
-      if(view==='orders'){
-        const toolbar = qs('#ordersToolbar');
-        const exportBtn = qs('#exportCsv');
-        const table = qs('#ordersTable');
-        function buildQS(){
-          const p = new URLSearchParams();
-          const q = qs('input[name="q"]', toolbar).value.trim();
-          const from = qs('input[name="from"]', toolbar).value;
-          const to = qs('input[name="to"]', toolbar).value;
-          if(q) p.set('q', q);
-          if(from) p.set('from', from);
-          if(to) p.set('to', to);
-          return p.toString() ? '?'+p.toString() : '';
-        }
-        exportBtn.addEventListener('click', (e)=>{ e.preventDefault(); window.location.href='/admin/orders/export.csv'+buildQS(); });
-        qs('#searchOrders').addEventListener('click', async ()=>{
-          table.innerHTML='Loading…';
-          try{
-            const data = await api('/admin/orders'+buildQS());
-            const rows = (data?.items||[]).map(o=>\`
-              <tr data-id="\${o.id}">
-                <td>\${o.show?.title||''}</td>
-                <td>\${o.email||''}</td>
-                <td>\${o.status}</td>
-                <td>£\${fmtPence(o.amountPence)}</td>
-                <td>£\${fmtPence(o.platformFeePence)}</td>
-                <td>£\${fmtPence(o.organiserSharePence)}</td>
-                <td>£\${fmtPence(o.netPayoutPence)}</td>
-                <td class="muted">\${o.id}</td>
-              </tr>\`).join('');
-            table.innerHTML=\`
-              <table id="ordersTbl">
-                <thead><tr>
-                  <th>Show</th><th>Buyer</th><th>Status</th><th>Gross</th>
-                  <th>Platform Fee</th><th>Organiser Share</th><th>Net Payout</th><th>ID</th>
-                </tr></thead>
-                <tbody>\${rows}</tbody>
-              </table>\`;
-            // click row -> drawer
-            qsa('#ordersTbl tbody tr').forEach(tr=>{
-              tr.addEventListener('click', async ()=>{
-                const id = tr.getAttribute('data-id');
-                openDrawer('Loading…');
-                try{
-                  const resp = await api('/admin/orders/'+id);
-                  const o = resp.item;
-                  const tix = (o.tickets||[]).map(t=>\`<li>\${t.serial} — \${t.holderName || '—'} <span class="muted">(\${t.status})</span>\${t.scannedAt?(' · scanned '+new Date(t.scannedAt).toLocaleString()):''}</li>\`).join('');
-                  const refs = (o.refunds||[]).map(r=>\`<li>£\${fmtPence(r.amount)} — \${r.reason||'refund'} <span class="muted">(\${new Date(r.createdAt).toLocaleString()})</span></li>\`).join('');
-                  const notes = (o.notes||[]).map(n=>\`<li>\${new Date(n.createdAt).toLocaleString()} — <em>\${n.text}</em></li>\`).join('');
-                  const html = \`
-                    <h4>Order \${o.id}</h4>
-                    <div class="muted">\${o.email || ''} · \${o.show?.title || ''} · \${o.status}</div>
-                    <div class="grid" style="margin:10px 0">
-                      <div class="pill">Gross £\${fmtPence(o.amountPence)}</div>
-                      <div class="pill">Platform Fee £\${fmtPence(o.platformFeePence)}</div>
-                      <div class="pill">Organiser Share £\${fmtPence(o.organiserSharePence)}</div>
-                      <div class="pill">Net Payout £\${fmtPence(o.netPayoutPence)}</div>
-                    </div>
-                    <h4>Tickets</h4>
-                    <ul>\${tix||'<li class="muted">No tickets</li>'}</ul>
-                    <h4>Refunds</h4>
-                    <ul>\${refs||'<li class="muted">None</li>'}</ul>
-                    <h4>Notes</h4>
-                    <ul id="notesList">\${notes||'<li class="muted">None yet</li>'}</ul>
-                    <div class="row" style="margin-top:8px">
-                      <input id="noteText" type="text" placeholder="Add a note…"/>
-                      <button class="btn" id="addNote">Add</button>
-                    </div>
-                  \`;
-                  openDrawer(html);
-                  qs('#addNote')?.addEventListener('click', async ()=>{
-                    const text = qs('#noteText')?.value.trim();
-                    if(!text) return;
-                    await api('/admin/orders/'+id+'/notes', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text }) });
-                    const li = document.createElement('li'); li.innerHTML = '<em>'+text+'</em>';
-                    qs('#notesList')?.appendChild(li);
-                    qs('#noteText').value='';
-                  });
-                }catch(_){ openDrawer('<p class="danger">Failed to load order.</p>'); }
-              });
-            });
-          }catch(_){ table.innerHTML='<span class="danger">Failed to load orders</span>'; }
-        });
-      }
-
-      if(view==='analytics'){
-        const toolbar = qs('#analyticsToolbar');
-        const body = qs('#analyticsBody');
-        qs('#runAnalytics').addEventListener('click', async ()=>{
-          body.innerHTML='Loading…';
-          const from = qs('input[name="from"]', toolbar).value;
-          const to = qs('input[name="to"]', toolbar).value;
-          const p = new URLSearchParams();
-          if(from) p.set('from', from);
-          if(to) p.set('to', to);
-          try{
-            const data = await api('/admin/analytics'+(p.toString()?('?'+p.toString()):'')); 
-            body.innerHTML = \`
-              <div class="row">
-                <div class="pill">Orders: \${data.totalOrders}</div>
-                <div class="pill">Tickets: \${data.totalTickets}</div>
-                <div class="pill">Gross: £\${fmtPence(data.totalGrossPence)}</div>
-                <div class="pill">Platform Fee: £\${fmtPence(data.totalPlatformFeePence)}</div>
-                <div class="pill">Organiser Share: £\${fmtPence(data.totalOrganiserSharePence)}</div>
-                <div class="pill">Net Payout: £\${fmtPence(data.totalNetPayoutPence)}</div>
-              </div>\`;
-          }catch(_){ body.innerHTML='<span class="danger">Failed to load analytics</span>'; }
-        });
-
-        // draw MTD bar chart
-        (async ()=>{
-          try{
-            const r = await api('/admin/analytics/mtd-daily');
-            const points = r?.points || [];
-            const c = qs('#mtdChart') as HTMLCanvasElement;
-            const ctx = c.getContext('2d');
-            if(!ctx) return;
-            // basic bar chart
-            const w = c.width, h = c.height, pad = 30;
-            ctx.clearRect(0,0,w,h);
-            const max = Math.max(1, ...points.map(p=>p.grossPence));
-            const barW = Math.max(4, Math.floor((w - pad*2)/Math.max(1, points.length)));
-            ctx.strokeStyle = '#e5e7eb';
-            ctx.beginPath(); ctx.moveTo(pad, h-pad); ctx.lineTo(w-pad, h-pad); ctx.stroke();
-            points.forEach((p, i)=>{
-              const x = pad + i*barW;
-              const y = h - pad - (p.grossPence/max)*(h - pad*2);
-              const bh = (h - pad) - y;
-              ctx.fillStyle = '#111827';
-              ctx.fillRect(x+1, y, barW-2, bh);
-            });
-          }catch(_){}
-        })();
-      }
-
-      history.replaceState(null,'','/admin/ui#'+view);
-    }catch(e){ console.error(e); qs('#content').innerHTML = '<p class="danger">Failed to load view.</p>'; }
   }
 
-  qsa('.sidebar .nav button').forEach(btn=> btn.addEventListener('click', ()=> switchView(btn.dataset.view)));
-  qs('#drawerClose')?.addEventListener('click', closeDrawer);
-  (async function boot(){ const initial=(location.hash||'#home').slice(1); await switchView(views[initial]?initial:'home'); })();
+  // Utils
+  const fmtP = (p) => '£' + (Number(p||0)/100).toFixed(2);
+  function setMain(html){
+    const m = $('#main');
+    m.innerHTML = html;
+  }
+  async function getJSON(url){
+    const r = await fetch(url, { credentials: 'include' });
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return r.json();
+  }
+
+  // HOME: KPI summary
+  async function renderHome(){
+    setMain(\`
+      <div class="card">
+        <div class="header"><div class="title">Welcome</div></div>
+        <div class="muted">Welcome to your organiser console. Use the menu to manage shows, orders, venues, insights and marketing.</div>
+      </div>
+      <div class="card" id="kpiCard">
+        <div class="header">
+          <div class="title">Dashboard KPIs</div>
+          <div class="toolbar">
+            <button class="btn" id="kpiRefresh">Refresh</button>
+          </div>
+        </div>
+        <div id="kpiBody" class="kpis">
+          <div class="kpi"><div class="label">Orders (Last 7d)</div><div class="value" id="kpi_o7">—</div></div>
+          <div class="kpi"><div class="label">GMV (Last 7d)</div><div class="value" id="kpi_g7">—</div></div>
+          <div class="kpi"><div class="label">Our Fees (Last 7d)</div><div class="value" id="kpi_f7">—</div></div>
+          <div class="kpi"><div class="label">Net Payout (Last 7d)</div><div class="value" id="kpi_n7">—</div></div>
+          <div class="kpi"><div class="label">Orders (MTD)</div><div class="value" id="kpi_om">—</div></div>
+          <div class="kpi"><div class="label">GMV (MTD)</div><div class="value" id="kpi_gm">—</div></div>
+          <div class="kpi"><div class="label">Our Fees (MTD)</div><div class="value" id="kpi_fm">—</div></div>
+          <div class="kpi"><div class="label">Net Payout (MTD)</div><div class="value" id="kpi_nm">—</div></div>
+        </div>
+        <div class="spacer"></div>
+        <div id="kpiErr" class="error"></div>
+      </div>
+    \`);
+
+    async function loadKPIs(){
+      try{
+        $('#kpiErr').textContent = '';
+        const j = await getJSON('/admin/analytics/summary');
+        if(!j.ok) throw new Error('Bad response');
+        const s = j.summary || {};
+        $('#kpi_o7').textContent = s.last7?.orders ?? '0';
+        $('#kpi_g7').textContent = fmtP(s.last7?.gmvPence);
+        $('#kpi_f7').textContent = fmtP(s.last7?.ourFeesPence);
+        $('#kpi_n7').textContent = fmtP(s.last7?.netPayoutPence);
+        $('#kpi_om').textContent = s.mtd?.orders ?? '0';
+        $('#kpi_gm').textContent = fmtP(s.mtd?.gmvPence);
+        $('#kpi_fm').textContent = fmtP(s.mtd?.ourFeesPence);
+        $('#kpi_nm').textContent = fmtP(s.mtd?.netPayoutPence);
+      } catch(e){
+        $('#kpiErr').textContent = 'Failed to load KPIs';
+      }
+    }
+
+    $('#kpiRefresh')?.addEventListener('click', loadKPIs);
+    loadKPIs();
+  }
+
+  // SHOWS
+  async function renderShows(){
+    setMain(\`
+      <div class="card">
+        <div class="header">
+          <div class="title">Shows</div>
+          <div class="toolbar">
+            <button class="btn" id="btnRefresh">Refresh</button>
+          </div>
+        </div>
+        <div id="err" class="error"></div>
+        <div class="spacer"></div>
+        <table id="tbl"><thead>
+          <tr><th>Title</th><th>Date</th><th>Venue</th></tr>
+        </thead><tbody></tbody></table>
+      </div>
+    \`);
+    async function load(){
+      try{
+        $('#err').textContent = '';
+        const j = await getJSON('/admin/shows');
+        if(!j.ok) throw new Error();
+        const tbody = $('#tbl tbody');
+        tbody.innerHTML = (j.items||[]).map(it => \`
+          <tr>
+            <td>\${it.title || ''}</td>
+            <td>\${it.date ? new Date(it.date).toLocaleString() : ''}</td>
+            <td>\${it.venue?.name || ''}</td>
+          </tr>\`).join('');
+      }catch(e){ $('#err').textContent = 'Failed to load shows'; }
+    }
+    $('#btnRefresh')?.addEventListener('click', load);
+    load();
+  }
+
+  // ORDERS
+  async function renderOrders(){
+    setMain(\`
+      <div class="card">
+        <div class="header">
+          <div class="title">Orders</div>
+          <form id="searchForm" class="row" style="gap:8px">
+            <input type="text" id="q" placeholder="Search email / Stripe / show" />
+            <input type="date" id="from" />
+            <input type="date" id="to" />
+            <button class="btn" type="submit">Search</button>
+            <a class="btn" id="btnExport" href="/admin/orders/export.csv">Export CSV</a>
+          </form>
+        </div>
+        <div id="err" class="error"></div>
+        <div class="spacer"></div>
+        <table id="tbl"><thead>
+          <tr>
+            <th>When</th><th>Email</th><th>Show</th><th>Status</th>
+            <th class="right">Amount</th><th class="right">Platform fee</th><th class="right">Net payout</th>
+          </tr>
+        </thead><tbody></tbody></table>
+      </div>
+    \`);
+
+    const form = $('#searchForm');
+    const q = $('#q') as HTMLInputElement;
+    const from = $('#from') as HTMLInputElement;
+    const to = $('#to') as HTMLInputElement;
+    const exportBtn = $('#btnExport') as HTMLAnchorElement;
+
+    function buildQS(){
+      const u = new URLSearchParams();
+      if(q.value.trim()) u.set('q', q.value.trim());
+      if(from.value) u.set('from', from.value);
+      if(to.value) u.set('to', to.value);
+      return u.toString();
+    }
+    function setExportHref(){
+      const qs = buildQS();
+      exportBtn.href = '/admin/orders/export.csv' + (qs ? ('?'+qs) : '');
+    }
+
+    async function load(){
+      try{
+        $('#err').textContent = '';
+        setExportHref();
+        const qs = buildQS();
+        const url = '/admin/orders' + (qs ? ('?'+qs) : '');
+        const j = await getJSON(url);
+        if(!j.ok) throw new Error();
+        const tbody = $('#tbl tbody');
+        tbody.innerHTML = (j.items||[]).map(o => {
+          const amt = '£' + ((o.amountPence||0)/100).toFixed(2);
+          const pf = '£' + ((o.platformFeePence||0)/100).toFixed(2);
+          const net = '£' + ((o.netPayoutPence||0)/100).toFixed(2);
+          return \`<tr>
+            <td>\${new Date(o.createdAt).toLocaleString()}</td>
+            <td>\${o.email||''}</td>
+            <td>\${o.show?.title||''}</td>
+            <td>\${o.status||''}</td>
+            <td class="right">\${amt}</td>
+            <td class="right">\${pf}</td>
+            <td class="right">\${net}</td>
+          </tr>\`;
+        }).join('');
+      } catch(e){
+        $('#err').textContent = 'Failed to load orders';
+      }
+    }
+
+    form.addEventListener('submit', (ev)=>{ ev.preventDefault(); load(); });
+    load();
+  }
+
+  // VENUES
+  async function renderVenues(){
+    setMain(\`
+      <div class="card">
+        <div class="header">
+          <div class="title">Venues</div>
+          <div class="toolbar">
+            <input type="text" id="vq" placeholder="Search name / city / postcode" />
+            <button class="btn" id="vsearch">Search</button>
+          </div>
+        </div>
+        <div id="err" class="error"></div>
+        <div class="spacer"></div>
+        <table id="tbl"><thead>
+          <tr><th>Name</th><th>City</th><th>Postcode</th><th>Capacity</th></tr>
+        </thead><tbody></tbody></table>
+      </div>
+    \`);
+
+    const vq = $('#vq') as HTMLInputElement;
+    async function load(){
+      try{
+        $('#err').textContent = '';
+        const qs = vq.value.trim() ? ('?q='+encodeURIComponent(vq.value.trim())) : '';
+        const j = await getJSON('/admin/venues'+qs);
+        if(!j.ok) throw new Error();
+        const tbody = $('#tbl tbody');
+        tbody.innerHTML = (j.items||[]).map(v => \`
+          <tr>
+            <td>\${v.name||''}</td>
+            <td>\${v.city||''}</td>
+            <td>\${v.postcode||''}</td>
+            <td>\${v.capacity??''}</td>
+          </tr>\`).join('');
+      } catch(e){ $('#err').textContent = 'Failed to load venues'; }
+    }
+    $('#vsearch')?.addEventListener('click', load);
+    load();
+  }
+
+  // ANALYTICS
+  async function renderAnalytics(){
+    setMain(\`
+      <div class="card">
+        <div class="header"><div class="title">Analytics</div></div>
+        <div class="muted">Monthly chart & exports are available; use Orders filters for date-windowed CSV.</div>
+      </div>
+    \`);
+  }
+
+  // AUDIENCES
+  function renderAudiences(){
+    setMain(\`
+      <div class="card">
+        <div class="header"><div class="title">Audiences</div></div>
+        <div>Audience tools coming soon.</div>
+      </div>
+    \`);
+  }
+
+  // EMAIL
+  function renderEmail(){
+    setMain(\`
+      <div class="card">
+        <div class="header"><div class="title">Email Campaigns</div></div>
+        <div>Campaign tools coming soon.</div>
+      </div>
+    \`);
+  }
+
+  // ACCOUNT
+  function renderAccount(){
+    setMain(\`
+      <div class="card">
+        <div class="header"><div class="title">Account</div></div>
+        <div>Manage your login and security from here (coming soon).</div>
+      </div>
+    \`);
+  }
+
+  // Handle direct link & clicks
+  window.addEventListener('hashchange', route);
+  document.addEventListener('click', (e) => {
+    const a = (e.target as HTMLElement)?.closest('a.sb-link') as HTMLAnchorElement | null;
+    if(a && a.dataset.view){
+      e.preventDefault();
+      const h = a.getAttribute('href') || '#home';
+      history.pushState(null, '', h);
+      route();
+    }
+  });
+
+  // Boot
+  route();
+})();
 </script>
 </body>
-</html>`);
+</html>
+`);
 });
 
 export default router;
