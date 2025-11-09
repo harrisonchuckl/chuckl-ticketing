@@ -1,4 +1,3 @@
-// backend/src/server.ts
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
@@ -13,7 +12,8 @@ import events from './routes/events.js';
 
 // Auth
 import auth from './routes/auth.js';
-import authLogout from './routes/logout.js'; // 👈 NEW: logout handler
+import authLogout from './routes/logout.js';
+import loginUI from './routes/login-ui.js'; // 👈 NEW: HTML login page
 
 // Admin UI + APIs
 import admin from './routes/admin.js';
@@ -24,7 +24,7 @@ import adminTicketTypes from './routes/admin-tickettypes.js';
 import adminUploads from './routes/admin-uploads.js';
 import adminOrders from './routes/admin-orders.js';
 import adminAnalytics from './routes/admin-analytics.js';
-import adminExports from './routes/admin-exports.js'; // CSV export
+import adminExports from './routes/admin-exports.js';
 
 const app = express();
 
@@ -40,24 +40,20 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), webho
 // Everything else as JSON
 app.use(express.json({ limit: '1mb' }));
 
-// Lightweight rate-limit for admin/scan
-const limiter = rateLimit({
-  windowMs: 60 * 1000,
-  limit: 120,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-app.use(['/scan', '/admin'], limiter);
-
 // --- Public / customer routes ---
 app.use('/events', events);
 app.use('/checkout', checkout);
 
-// --- Auth routes (cookie-based) ---
-app.use('/auth', auth);
-app.use('/auth', authLogout); // 👈 mount /auth/logout
+// --- Auth routes ---
+app.use('/auth', loginUI);     // GET /auth/login (HTML)
+app.use('/auth', auth);        // POST /auth/login etc (your existing JSON)
+app.use('/auth', authLogout);  // GET /auth/logout -> redirects to /auth/login
 
-// --- Admin UI first so unauth view can render HTML instead of JSON errors ---
+// Light rate limit for admin
+const limiter = rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: true, legacyHeaders: false });
+app.use(['/scan', '/admin'], limiter);
+
+// --- Admin UI first so unauth users see HTML not JSON ---
 app.use('/admin', adminUI);
 
 // --- Admin JSON APIs ---
@@ -69,15 +65,13 @@ app.use('/admin', adminUploads);
 app.use('/admin', adminAnalytics);
 app.use('/admin', adminExports);
 
-// Legacy / bootstrap admin endpoints (if you still need them)
+// Legacy / bootstrap admin endpoints (if still used)
 app.use('/admin', admin);
 
 // Health
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 const PORT = Number(process.env.PORT || 4000);
-app.listen(PORT, () => {
-  console.log('API running on port ' + PORT);
-});
+app.listen(PORT, () => console.log('API running on port ' + PORT));
 
 export default app;
