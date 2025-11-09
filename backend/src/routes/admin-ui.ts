@@ -1,16 +1,14 @@
 // backend/src/routes/admin-ui.ts
 import { Router } from 'express';
-import { ensureAdminOrOrganiser } from '../lib/authz.js';
+import { requireAdminOrOrganiser } from '../lib/authz.js';
 
 const router = Router();
 
 /**
- * Simple single-file admin UI.
- * - Hash-based router (#home, #shows, #orders, #venues, #analytics, #audiences, #email, #account)
- * - Sidebar links are normal anchors with data-view; JS switches view and prevents full reload.
- * - Home view shows KPI summary pulled from /admin/analytics/summary.
+ * Single-file Admin UI (hash router).
+ * Views: #home #shows #orders #venues #analytics #audiences #email #account
  */
-router.get('/ui', ensureAdminOrOrganiser, async (_req, res) => {
+router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
   res.type('html').send(`<!doctype html>
 <html lang="en">
 <head>
@@ -59,7 +57,6 @@ router.get('/ui', ensureAdminOrOrganiser, async (_req, res) => {
     .right { text-align:right; }
     .error { color:#b91c1c; }
     .spacer { height:8px; }
-    /* Make sure nothing overlays the sidebar */
     * { pointer-events:auto; }
   </style>
 </head>
@@ -94,7 +91,6 @@ router.get('/ui', ensureAdminOrOrganiser, async (_req, res) => {
   const $ = (sel, root=document) => root.querySelector(sel);
   const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
 
-  // Sidebar link activation
   function setActive(view){
     $$('.sb-link').forEach(a => {
       const v = a.getAttribute('data-view');
@@ -102,7 +98,6 @@ router.get('/ui', ensureAdminOrOrganiser, async (_req, res) => {
     });
   }
 
-  // Routing
   function route(){
     const hash = (location.hash || '#home').replace('#','');
     setActive(hash);
@@ -119,19 +114,14 @@ router.get('/ui', ensureAdminOrOrganiser, async (_req, res) => {
     }
   }
 
-  // Utils
   const fmtP = (p) => '£' + (Number(p||0)/100).toFixed(2);
-  function setMain(html){
-    const m = $('#main');
-    m.innerHTML = html;
-  }
+  function setMain(html){ $('#main').innerHTML = html; }
   async function getJSON(url){
     const r = await fetch(url, { credentials: 'include' });
     if(!r.ok) throw new Error('HTTP '+r.status);
     return r.json();
   }
 
-  // HOME: KPI summary
   async function renderHome(){
     setMain(\`
       <div class="card">
@@ -141,9 +131,7 @@ router.get('/ui', ensureAdminOrOrganiser, async (_req, res) => {
       <div class="card" id="kpiCard">
         <div class="header">
           <div class="title">Dashboard KPIs</div>
-          <div class="toolbar">
-            <button class="btn" id="kpiRefresh">Refresh</button>
-          </div>
+          <div class="toolbar"><button class="btn" id="kpiRefresh">Refresh</button></div>
         </div>
         <div id="kpiBody" class="kpis">
           <div class="kpi"><div class="label">Orders (Last 7d)</div><div class="value" id="kpi_o7">—</div></div>
@@ -183,15 +171,12 @@ router.get('/ui', ensureAdminOrOrganiser, async (_req, res) => {
     loadKPIs();
   }
 
-  // SHOWS
   async function renderShows(){
     setMain(\`
       <div class="card">
         <div class="header">
           <div class="title">Shows</div>
-          <div class="toolbar">
-            <button class="btn" id="btnRefresh">Refresh</button>
-          </div>
+          <div class="toolbar"><button class="btn" id="btnRefresh">Refresh</button></div>
         </div>
         <div id="err" class="error"></div>
         <div class="spacer"></div>
@@ -218,7 +203,6 @@ router.get('/ui', ensureAdminOrOrganiser, async (_req, res) => {
     load();
   }
 
-  // ORDERS
   async function renderOrders(){
     setMain(\`
       <div class="card">
@@ -244,10 +228,10 @@ router.get('/ui', ensureAdminOrOrganiser, async (_req, res) => {
     \`);
 
     const form = $('#searchForm');
-    const q = $('#q') as HTMLInputElement;
-    const from = $('#from') as HTMLInputElement;
-    const to = $('#to') as HTMLInputElement;
-    const exportBtn = $('#btnExport') as HTMLAnchorElement;
+    const q = $('#q');
+    const from = $('#from');
+    const to = $('#to');
+    const exportBtn = $('#btnExport');
 
     function buildQS(){
       const u = new URLSearchParams();
@@ -293,7 +277,6 @@ router.get('/ui', ensureAdminOrOrganiser, async (_req, res) => {
     load();
   }
 
-  // VENUES
   async function renderVenues(){
     setMain(\`
       <div class="card">
@@ -312,7 +295,7 @@ router.get('/ui', ensureAdminOrOrganiser, async (_req, res) => {
       </div>
     \`);
 
-    const vq = $('#vq') as HTMLInputElement;
+    const vq = $('#vq');
     async function load(){
       try{
         $('#err').textContent = '';
@@ -333,17 +316,15 @@ router.get('/ui', ensureAdminOrOrganiser, async (_req, res) => {
     load();
   }
 
-  // ANALYTICS
   async function renderAnalytics(){
     setMain(\`
       <div class="card">
         <div class="header"><div class="title">Analytics</div></div>
-        <div class="muted">Monthly chart & exports are available; use Orders filters for date-windowed CSV.</div>
+        <div class="muted">Use Orders filters for date-windowed CSV. Charts coming next.</div>
       </div>
     \`);
   }
 
-  // AUDIENCES
   function renderAudiences(){
     setMain(\`
       <div class="card">
@@ -353,7 +334,6 @@ router.get('/ui', ensureAdminOrOrganiser, async (_req, res) => {
     \`);
   }
 
-  // EMAIL
   function renderEmail(){
     setMain(\`
       <div class="card">
@@ -363,7 +343,6 @@ router.get('/ui', ensureAdminOrOrganiser, async (_req, res) => {
     \`);
   }
 
-  // ACCOUNT
   function renderAccount(){
     setMain(\`
       <div class="card">
@@ -373,11 +352,10 @@ router.get('/ui', ensureAdminOrOrganiser, async (_req, res) => {
     \`);
   }
 
-  // Handle direct link & clicks
   window.addEventListener('hashchange', route);
   document.addEventListener('click', (e) => {
-    const a = (e.target as HTMLElement)?.closest('a.sb-link') as HTMLAnchorElement | null;
-    if(a && a.dataset.view){
+    const a = e.target && (e.target as HTMLElement).closest('a.sb-link');
+    if(a && a.getAttribute('data-view')){
       e.preventDefault();
       const h = a.getAttribute('href') || '#home';
       history.pushState(null, '', h);
@@ -385,7 +363,6 @@ router.get('/ui', ensureAdminOrOrganiser, async (_req, res) => {
     }
   });
 
-  // Boot
   route();
 })();
 </script>
