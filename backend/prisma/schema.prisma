@@ -1,3 +1,5 @@
+// prisma/schema.prisma
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -20,38 +22,25 @@ model User {
 }
 
 model Order {
-  id                              String        @id @default(cuid())
-  createdAt                       DateTime      @default(now())
-  updatedAt                       DateTime      @updatedAt
-  email                           String?
-  amountPence                     Int?
-  quantity                        Int?
-  stripeId                        String?
-  status                          OrderStatus   @default(PENDING)
-  userId                          String?
-  user                            User?         @relation(fields: [userId], references: [id])
-  showId                          String?
-  show                            Show?         @relation(fields: [showId], references: [id])
-  tickets                         Ticket[]
-  refunds                         Refund[]
-  notes                           OrderNote[]
+  id                String        @id @default(cuid())
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  email             String?
+  amountPence       Int?
+  quantity          Int?
+  stripeId          String?
+  status            OrderStatus   @default(PENDING)
+  userId            String?
+  user              User?         @relation(fields: [userId], references: [id])
+  showId            String?
+  show              Show?         @relation(fields: [showId], references: [id])
+  tickets           Ticket[]
+  refunds           Refund[]
+  notes             OrderNote[]
 
-  // Discounts / coupons
-  couponId                        String?
-  coupon                          Coupon?       @relation(fields: [couponId], references: [id])
-  discountPence                   Int?
-
-  // Fees & payout (overall)
-  platformFeePence                Int?
-  paymentFeePence                 Int?
-  netPayoutPence                  Int?
-
-  // Fee split
-  platformFeeOurSharePence        Int?
-  platformFeeOrganiserSharePence  Int?
-
-  @@index([showId])
-  @@index([couponId])
+  // Computed at checkout/webhook (filled later)
+  platformFeePence  Int?          @default(0) // total fee we keep
+  organiserFeePence Int?          @default(0) // fee share paid to organiser
 }
 
 enum OrderStatus {
@@ -70,27 +59,22 @@ model Show {
   venue       Venue?       @relation(fields: [venueId], references: [id])
   ticketTypes TicketType[]
   orders      Order[]
-
-  @@index([venueId])
-  @@index([date])
 }
 
 model Venue {
-  id                 String   @id @default(cuid())
-  name               String
-  address            String?
-  city               String?
-  postcode           String?
-  capacity           Int?
-  shows              Show[]
+  id               String   @id @default(cuid())
+  name             String
+  address          String?
+  city             String?
+  postcode         String?
+  capacity         Int?
+  shows            Show[]
 
-  // Per-venue fee profile (all optional; fallbacks come from env)
-  feePercentBps          Int?   // e.g. 1000 = 10.00%
-  perTicketFeePence      Int?   // fixed per ticket
-  basketFeePence         Int?   // fixed per order
-  organiserShareBps      Int?   // % of fee given to organiser, e.g. 5000 = 50%
-
-  @@index([name])
+  // --- Fee profile (all optional; defaults mean “no fee” if left blank) ---
+  feePercentBps        Int?    @default(0)   // e.g. 1000 = 10.00%
+  perTicketFeePence    Int?    @default(0)   // fixed per ticket fee
+  basketFeePence       Int?    @default(0)   // one-off fee per order
+  organiserSplitBps    Int?    @default(5000) // split of total fee that goes to organiser (e.g. 5000 = 50.00%)
 }
 
 model TicketType {
@@ -101,8 +85,6 @@ model TicketType {
   createdAt  DateTime @default(now())
   showId     String?
   show       Show?    @relation(fields: [showId], references: [id])
-
-  @@index([showId])
 }
 
 model Ticket {
@@ -117,9 +99,6 @@ model Ticket {
   user        User?     @relation("UserTickets", fields: [userId], references: [id])
 
   refunds     Refund[]
-
-  @@index([orderId])
-  @@index([userId])
 }
 
 model PasswordReset {
@@ -130,8 +109,6 @@ model PasswordReset {
   createdAt DateTime @default(now())
   expiresAt DateTime?
   usedAt    DateTime?
-
-  @@index([userId])
 }
 
 model Refund {
@@ -145,9 +122,6 @@ model Refund {
   ticketId   String?
   ticket     Ticket?  @relation(fields: [ticketId], references: [id])
   createdBy  String?
-
-  @@index([orderId])
-  @@index([ticketId])
 }
 
 model OrderNote {
@@ -161,24 +135,4 @@ model OrderNote {
 
   @@index([orderId, createdAt])
   @@index([authorId])
-}
-
-// Coupons / Promo Codes
-model Coupon {
-  id             String    @id @default(cuid())
-  code           String    @unique
-  description    String?
-  active         Boolean   @default(true)
-  percentOff     Int?
-  amountOffPence Int?
-  maxRedemptions Int?
-  timesRedeemed  Int       @default(0)
-  startsAt       DateTime?
-  endsAt         DateTime?
-  createdAt      DateTime  @default(now())
-
-  orders         Order[]
-
-  @@index([active])
-  @@index([startsAt, endsAt])
 }
