@@ -1,3 +1,4 @@
+// backend/src/server.ts
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
@@ -13,7 +14,10 @@ import events from './routes/events.js';
 // Auth
 import auth from './routes/auth.js';
 import authLogout from './routes/logout.js';
-import loginUI from './routes/login-ui.js'; // 👈 NEW: HTML login page
+import loginUI from './routes/login-ui.js';
+
+// 🔐 TEMP: one-time bootstrap to create first organiser user
+import bootstrap from './routes/bootstrap.js';
 
 // Admin UI + APIs
 import admin from './routes/admin.js';
@@ -28,6 +32,7 @@ import adminExports from './routes/admin-exports.js';
 
 const app = express();
 
+// Behind Railway/Proxy
 app.set('trust proxy', 'loopback');
 
 app.use(cors());
@@ -44,13 +49,21 @@ app.use(express.json({ limit: '1mb' }));
 app.use('/events', events);
 app.use('/checkout', checkout);
 
-// --- Auth routes ---
+// --- Auth routes (UI + JSON) ---
 app.use('/auth', loginUI);     // GET /auth/login (HTML)
-app.use('/auth', auth);        // POST /auth/login etc (your existing JSON)
-app.use('/auth', authLogout);  // GET /auth/logout -> redirects to /auth/login
+app.use('/auth', auth);        // POST /auth/login etc (JSON)
+app.use('/auth', authLogout);  // GET /auth/logout -> redirect to /auth/login
+
+// ⚠️ TEMP: bootstrap first user (remove after successful login)
+app.use('/auth', bootstrap);
 
 // Light rate limit for admin
-const limiter = rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: true, legacyHeaders: false });
+const limiter = rateLimit({
+  windowMs: 60_000,
+  limit: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 app.use(['/scan', '/admin'], limiter);
 
 // --- Admin UI first so unauth users see HTML not JSON ---
@@ -72,6 +85,8 @@ app.use('/admin', admin);
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 const PORT = Number(process.env.PORT || 4000);
-app.listen(PORT, () => console.log('API running on port ' + PORT));
+app.listen(PORT, () => {
+  console.log('API running on port ' + PORT);
+});
 
 export default app;
