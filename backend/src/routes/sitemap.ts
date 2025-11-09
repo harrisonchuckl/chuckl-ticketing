@@ -10,18 +10,19 @@ const router = Router();
  */
 router.get('/sitemap.xml', async (_req, res) => {
   try {
-    const base = (process.env.PUBLIC_BASE_URL || '').replace(/\/+$/,'');
+    const base = (process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, '');
     const now = new Date();
+
     const shows = await prisma.show.findMany({
       where: { date: { gte: now } },
-      select: { id: true, updatedAt: true },
+      select: { id: true, date: true },
       orderBy: { date: 'asc' },
     });
 
     const urls = [
-      urlTag(base ? `${base}/public/events` : '/public/events', new Date(), 'daily', '0.6'),
+      urlTag(urlJoin(base, '/public/events'), new Date(), 'daily', '0.6'),
       ...shows.map(s =>
-        urlTag(base ? `${base}/public/event/${s.id}` : `/public/event/${s.id}`, s.updatedAt || new Date(), 'weekly', '0.8')
+        urlTag(urlJoin(base, `/public/event/${s.id}`), s.date || new Date(), 'weekly', '0.8')
       ),
     ];
 
@@ -42,6 +43,10 @@ function urlTag(loc: string, lastmod: Date, freq: string, prio: string) {
   const l = escapeXml(loc);
   const d = lastmod.toISOString();
   return `<url><loc>${l}</loc><lastmod>${d}</lastmod><changefreq>${freq}</changefreq><priority>${prio}</priority></url>`;
+}
+function urlJoin(base: string, path: string) {
+  if (!base) return path;
+  return base.replace(/\/+$/, '') + path;
 }
 function escapeXml(s: string){ return s.replace(/[<>&'"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;',"'":'&apos;','"':'&quot;'}[c]!)); }
 
