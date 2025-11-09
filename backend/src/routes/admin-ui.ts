@@ -5,7 +5,7 @@ import { requireAdminOrOrganiser } from '../lib/authz.js';
 const router = Router();
 
 /**
- * Single-file Admin UI (hash router).
+ * Admin UI (hash router). Pure JS in <script> (no TS assertions).
  * Views: #home #shows #orders #venues #analytics #audiences #email #account
  */
 router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
@@ -22,21 +22,15 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
       --border: #e5e7eb;
       --text: #111827;
       --muted: #6b7280;
-      --brand: #111827;
-      --brand-2: #374151;
     }
     html, body { margin:0; padding:0; height:100%; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; color: var(--text); background: var(--bg); }
     .wrap { display:flex; min-height:100vh; }
-    .sidebar {
-      width: 220px; background:#fff; border-right:1px solid var(--border); padding:16px 12px; position:sticky; top:0; height:100vh; box-sizing:border-box;
-    }
+    .sidebar { width: 220px; background:#fff; border-right:1px solid var(--border); padding:16px 12px; position:sticky; top:0; height:100vh; box-sizing:border-box; }
     .sb-group { font-size:12px; letter-spacing:.04em; color:var(--muted); margin:14px 8px 6px; text-transform:uppercase; }
     .sb-link { display:block; padding:10px 12px; margin:4px 4px; border-radius:8px; color:#111827; text-decoration:none; }
     .sb-link.active, .sb-link:hover { background:#f1f5f9; }
     .content { flex:1; padding:20px; }
-    .card {
-      background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:16px;
-    }
+    .card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:16px; }
     .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
     .title { font-weight:600; }
     .muted { color:var(--muted); }
@@ -48,16 +42,12 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
     .btn:hover { background:#f9fafb; }
     .toolbar { display:flex; gap:8px; flex-wrap:wrap; }
     .row { display:flex; gap:8px; flex-wrap:wrap; }
-    input, select {
-      border:1px solid var(--border); border-radius:8px; padding:8px 10px; background:#fff; outline:none;
-    }
+    input, select { border:1px solid var(--border); border-radius:8px; padding:8px 10px; background:#fff; outline:none; }
     table { width:100%; border-collapse:collapse; font-size:14px; }
     th, td { text-align:left; padding:10px; border-bottom:1px solid var(--border); }
     th { font-weight:600; color:#334155; background:#f8fafc; }
     .right { text-align:right; }
     .error { color:#b91c1c; }
-    .spacer { height:8px; }
-    * { pointer-events:auto; }
   </style>
 </head>
 <body>
@@ -80,9 +70,7 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
     </aside>
 
     <main class="content" id="main">
-      <div class="card">
-        <div class="title">Loading…</div>
-      </div>
+      <div class="card"><div class="title">Loading...</div></div>
     </main>
   </div>
 
@@ -97,6 +85,8 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
       a.classList.toggle('active', v === view);
     });
   }
+
+  function setMain(html){ $('#main').innerHTML = html; }
 
   function route(){
     const hash = (location.hash || '#home').replace('#','');
@@ -114,14 +104,14 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
     }
   }
 
-  const fmtP = (p) => '£' + (Number(p||0)/100).toFixed(2);
-  function setMain(html){ $('#main').innerHTML = html; }
   async function getJSON(url){
     const r = await fetch(url, { credentials: 'include' });
     if(!r.ok) throw new Error('HTTP '+r.status);
     return r.json();
   }
+  const fmtP = (p) => '£' + (Number(p||0)/100).toFixed(2);
 
+  // HOME
   async function renderHome(){
     setMain(\`
       <div class="card">
@@ -143,7 +133,7 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
           <div class="kpi"><div class="label">Our Fees (MTD)</div><div class="value" id="kpi_fm">—</div></div>
           <div class="kpi"><div class="label">Net Payout (MTD)</div><div class="value" id="kpi_nm">—</div></div>
         </div>
-        <div class="spacer"></div>
+        <div style="height:8px"></div>
         <div id="kpiErr" class="error"></div>
       </div>
     \`);
@@ -154,23 +144,23 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
         const j = await getJSON('/admin/analytics/summary');
         if(!j.ok) throw new Error('Bad response');
         const s = j.summary || {};
-        $('#kpi_o7').textContent = s.last7?.orders ?? '0';
-        $('#kpi_g7').textContent = fmtP(s.last7?.gmvPence);
-        $('#kpi_f7').textContent = fmtP(s.last7?.ourFeesPence);
-        $('#kpi_n7').textContent = fmtP(s.last7?.netPayoutPence);
-        $('#kpi_om').textContent = s.mtd?.orders ?? '0';
-        $('#kpi_gm').textContent = fmtP(s.mtd?.gmvPence);
-        $('#kpi_fm').textContent = fmtP(s.mtd?.ourFeesPence);
-        $('#kpi_nm').textContent = fmtP(s.mtd?.netPayoutPence);
+        $('#kpi_o7').textContent = s.last7 && s.last7.orders || 0;
+        $('#kpi_g7').textContent = fmtP(s.last7 && s.last7.gmvPence);
+        $('#kpi_f7').textContent = fmtP(s.last7 && s.last7.ourFeesPence);
+        $('#kpi_n7').textContent = fmtP(s.last7 && s.last7.netPayoutPence);
+        $('#kpi_om').textContent = s.mtd && s.mtd.orders || 0;
+        $('#kpi_gm').textContent = fmtP(s.mtd && s.mtd.gmvPence);
+        $('#kpi_fm').textContent = fmtP(s.mtd && s.mtd.ourFeesPence);
+        $('#kpi_nm').textContent = fmtP(s.mtd && s.mtd.netPayoutPence);
       } catch(e){
         $('#kpiErr').textContent = 'Failed to load KPIs';
       }
     }
-
-    $('#kpiRefresh')?.addEventListener('click', loadKPIs);
+    $('#kpiRefresh') && $('#kpiRefresh').addEventListener('click', loadKPIs);
     loadKPIs();
   }
 
+  // SHOWS
   async function renderShows(){
     setMain(\`
       <div class="card">
@@ -179,7 +169,7 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
           <div class="toolbar"><button class="btn" id="btnRefresh">Refresh</button></div>
         </div>
         <div id="err" class="error"></div>
-        <div class="spacer"></div>
+        <div style="height:8px"></div>
         <table id="tbl"><thead>
           <tr><th>Title</th><th>Date</th><th>Venue</th></tr>
         </thead><tbody></tbody></table>
@@ -195,14 +185,15 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
           <tr>
             <td>\${it.title || ''}</td>
             <td>\${it.date ? new Date(it.date).toLocaleString() : ''}</td>
-            <td>\${it.venue?.name || ''}</td>
+            <td>\${it.venue && it.venue.name || ''}</td>
           </tr>\`).join('');
       }catch(e){ $('#err').textContent = 'Failed to load shows'; }
     }
-    $('#btnRefresh')?.addEventListener('click', load);
+    const r = $('#btnRefresh'); r && r.addEventListener('click', load);
     load();
   }
 
+  // ORDERS
   async function renderOrders(){
     setMain(\`
       <div class="card">
@@ -217,7 +208,7 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
           </form>
         </div>
         <div id="err" class="error"></div>
-        <div class="spacer"></div>
+        <div style="height:8px"></div>
         <table id="tbl"><thead>
           <tr>
             <th>When</th><th>Email</th><th>Show</th><th>Status</th>
@@ -228,21 +219,18 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
     \`);
 
     const form = $('#searchForm');
-    const q = $('#q');
-    const from = $('#from');
-    const to = $('#to');
-    const exportBtn = $('#btnExport');
+    const q = $('#q'), from = $('#from'), to = $('#to'), exportBtn = $('#btnExport');
 
     function buildQS(){
       const u = new URLSearchParams();
-      if(q.value.trim()) u.set('q', q.value.trim());
-      if(from.value) u.set('from', from.value);
-      if(to.value) u.set('to', to.value);
+      if(q && q.value.trim()) u.set('q', q.value.trim());
+      if(from && from.value) u.set('from', from.value);
+      if(to && to.value) u.set('to', to.value);
       return u.toString();
     }
     function setExportHref(){
       const qs = buildQS();
-      exportBtn.href = '/admin/orders/export.csv' + (qs ? ('?'+qs) : '');
+      if(exportBtn) exportBtn.href = '/admin/orders/export.csv' + (qs ? ('?'+qs) : '');
     }
 
     async function load(){
@@ -256,12 +244,12 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
         const tbody = $('#tbl tbody');
         tbody.innerHTML = (j.items||[]).map(o => {
           const amt = '£' + ((o.amountPence||0)/100).toFixed(2);
-          const pf = '£' + ((o.platformFeePence||0)/100).toFixed(2);
+          const pf  = '£' + ((o.platformFeePence||0)/100).toFixed(2);
           const net = '£' + ((o.netPayoutPence||0)/100).toFixed(2);
           return \`<tr>
             <td>\${new Date(o.createdAt).toLocaleString()}</td>
             <td>\${o.email||''}</td>
-            <td>\${o.show?.title||''}</td>
+            <td>\${o.show && o.show.title || ''}</td>
             <td>\${o.status||''}</td>
             <td class="right">\${amt}</td>
             <td class="right">\${pf}</td>
@@ -273,10 +261,11 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
       }
     }
 
-    form.addEventListener('submit', (ev)=>{ ev.preventDefault(); load(); });
+    form && form.addEventListener('submit', function(ev){ ev.preventDefault(); load(); });
     load();
   }
 
+  // VENUES
   async function renderVenues(){
     setMain(\`
       <div class="card">
@@ -288,7 +277,7 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
           </div>
         </div>
         <div id="err" class="error"></div>
-        <div class="spacer"></div>
+        <div style="height:8px"></div>
         <table id="tbl"><thead>
           <tr><th>Name</th><th>City</th><th>Postcode</th><th>Capacity</th></tr>
         </thead><tbody></tbody></table>
@@ -299,7 +288,7 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
     async function load(){
       try{
         $('#err').textContent = '';
-        const qs = vq.value.trim() ? ('?q='+encodeURIComponent(vq.value.trim())) : '';
+        const qs = vq && vq.value.trim() ? ('?q='+encodeURIComponent(vq.value.trim())) : '';
         const j = await getJSON('/admin/venues'+qs);
         if(!j.ok) throw new Error();
         const tbody = $('#tbl tbody');
@@ -308,53 +297,46 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
             <td>\${v.name||''}</td>
             <td>\${v.city||''}</td>
             <td>\${v.postcode||''}</td>
-            <td>\${v.capacity??''}</td>
+            <td>\${v.capacity!=null?v.capacity:''}</td>
           </tr>\`).join('');
       } catch(e){ $('#err').textContent = 'Failed to load venues'; }
     }
-    $('#vsearch')?.addEventListener('click', load);
+    const vs = $('#vsearch'); vs && vs.addEventListener('click', load);
     load();
   }
 
+  // ANALYTICS
   async function renderAnalytics(){
     setMain(\`
       <div class="card">
         <div class="header"><div class="title">Analytics</div></div>
-        <div class="muted">Use Orders filters for date-windowed CSV. Charts coming next.</div>
+        <div class="muted">Use the Orders filters for date-windowed CSV. Charts coming next.</div>
       </div>
     \`);
   }
 
   function renderAudiences(){
     setMain(\`
-      <div class="card">
-        <div class="header"><div class="title">Audiences</div></div>
-        <div>Audience tools coming soon.</div>
-      </div>
+      <div class="card"><div class="header"><div class="title">Audiences</div></div><div>Audience tools coming soon.</div></div>
     \`);
   }
-
   function renderEmail(){
     setMain(\`
-      <div class="card">
-        <div class="header"><div class="title">Email Campaigns</div></div>
-        <div>Campaign tools coming soon.</div>
-      </div>
+      <div class="card"><div class="header"><div class="title">Email Campaigns</div></div><div>Campaign tools coming soon.</div></div>
     \`);
   }
-
   function renderAccount(){
     setMain(\`
-      <div class="card">
-        <div class="header"><div class="title">Account</div></div>
-        <div>Manage your login and security from here (coming soon).</div>
-      </div>
+      <div class="card"><div class="header"><div class="title">Account</div></div><div>Manage your login and security from here (coming soon).</div></div>
     \`);
   }
 
   window.addEventListener('hashchange', route);
-  document.addEventListener('click', (e) => {
-    const a = e.target && (e.target as HTMLElement).closest('a.sb-link');
+
+  // Safe link handling without TS assertions
+  document.addEventListener('click', function(e){
+    const t = e.target;
+    const a = t && t.closest ? t.closest('a.sb-link') : null;
     if(a && a.getAttribute('data-view')){
       e.preventDefault();
       const h = a.getAttribute('href') || '#home';
