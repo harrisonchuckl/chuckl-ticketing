@@ -1,10 +1,23 @@
 import { Request, Response, NextFunction } from 'express';
 
 /**
- * Very light placeholder that assumes cookie auth has already happened upstream.
- * Tighten as needed (e.g., check req.user.role).
+ * VERY LIGHT placeholder authZ middlewares.
+ * Replace with your real checks (e.g., req.user.role === 'ADMIN') once your auth is wired.
  */
-export function requireAdminOrOrganiser(_req: Request, _res: Response, next: NextFunction) {
-  // TODO: implement proper authorisation
+
+export function requireAdmin(_req: Request, _res: Response, next: NextFunction) {
+  // TODO: enforce admin role
   next();
 }
+
+export function requireOrganiser(_req: Request, _res: Response, next: NextFunction) {
+  // TODO: enforce organiser role
+  next();
+}
+
+export function requireAdminOrOrganiser(_req: Request, _res: Response, next: NextFunction) {
+  // TODO: enforce (admin || organiser)
+  next();
+}
+
+export default { requireAdmin, requireOrganiser, requireAdminOrOrganiser };
