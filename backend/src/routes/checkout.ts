@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import prisma from '../lib/prisma.js';
 import Stripe from 'stripe';
-import { calcPlatformFeePence } from '../services/fees.js';
+import { calcFeesForShow } from '../services/fees.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
   apiVersion: '2024-06-20',
@@ -65,8 +65,8 @@ router.post('/create', async (req, res) => {
 
     const payablePence = Math.max(subtotalPence - discountPence, 0);
 
-    // Estimate platform fee now (finalised in webhook)
-    const estPlatformFee = calcPlatformFeePence(payablePence);
+    // Estimate fees for the venue (not added to Stripe price; used for payout)
+    const feeEst = await calcFeesForShow(String(showId), payablePence, quantity);
 
     // Create Order (PENDING)
     const order = await prisma.order.create({
@@ -78,7 +78,9 @@ router.post('/create', async (req, res) => {
         status: 'PENDING',
         couponId,
         discountPence: discountPence || null,
-        platformFeePence: estPlatformFee,
+        platformFeePence: feeEst.platformFeePence,
+        platformFeeOurSharePence: feeEst.ourSharePence,
+        platformFeeOrganiserSharePence: feeEst.organiserSharePence,
       },
       select: { id: true },
     });
