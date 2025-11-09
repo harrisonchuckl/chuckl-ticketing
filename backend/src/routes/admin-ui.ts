@@ -3,10 +3,8 @@ import { Router } from 'express';
 
 const router = Router();
 
-// Keep "/" helpful — many folks bookmark /admin
 router.get('/', (_req, res) => res.redirect('/admin/ui'));
 
-// One HTML page app; data comes from JSON APIs under /admin/*
 router.get('/ui', (_req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(`<!doctype html>
@@ -38,9 +36,16 @@ router.get('/ui', (_req, res) => {
   table{width:100%;border-collapse:collapse;margin-top:12px}
   th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left}
   .muted{color:var(--muted)}
-  .pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid var(--line);font-size:12px;background:#fff}
+  .pill{display:inline-block;padding:10px 12px;border-radius:12px;border:1px solid var(--line);font-size:13px;background:#fff;min-width:140px}
   .right{margin-left:auto}
   .danger{color:#b91c1c}
+  .grid{display:grid;grid-template-columns:repeat(2,minmax(220px,1fr));gap:10px;margin-top:10px}
+  /* Drawer */
+  .drawer{position:fixed;top:0;right:-440px;width:420px;height:100vh;background:#fff;border-left:1px solid var(--line);box-shadow:-6px 0 20px rgba(0,0,0,.06);transition:right .24s ease;padding:16px;overflow:auto;z-index:50}
+  .drawer.open{right:0}
+  .drawer h4{margin:6px 0 12px}
+  .drawer .close{position:absolute;top:10px;right:12px;background:#f3f4f6;border:1px solid var(--line);border-radius:6px;padding:6px 8px;cursor:pointer}
+  canvas{max-width:100%;height:220px;border:1px solid var(--line);border-radius:8px;background:#fff}
 </style>
 </head>
 <body>
@@ -77,10 +82,14 @@ router.get('/ui', (_req, res) => {
   <main class="main">
     <div id="content" class="card"></div>
   </main>
+
+  <aside id="drawer" class="drawer" aria-hidden="true">
+    <button class="close" id="drawerClose">Close</button>
+    <div id="drawerBody" class="muted">Loading…</div>
+  </aside>
 </div>
 
 <script>
-  // --- util -----------------------------------------------------
   function fmtPence(p){ return (Number(p||0)/100).toFixed(2); }
   function qs(sel, root=document){ return root.querySelector(sel); }
   function qsa(sel, root=document){ return Array.from(root.querySelectorAll(sel)); }
@@ -91,22 +100,35 @@ router.get('/ui', (_req, res) => {
     return ct.includes('application/json') ? r.json() : r.text();
   }
   async function ensureAuth(){
-    try{
-      const me = await api('/auth/me');
-      return !!me?.ok;
-    }catch(_){ return false; }
+    try{ const me = await api('/auth/me'); return !!me?.ok; }catch(_){ return false; }
   }
 
-  // --- views ----------------------------------------------------
   const views = {
     async home(){
+      const summaryHtml = \`
+        <div id="summary" class="grid">
+          <div class="pill">WTD Gross: <strong id="wtdGross">—</strong></div>
+          <div class="pill">MTD Gross: <strong id="mtdGross">—</strong></div>
+          <div class="pill">WTD Net Payout: <strong id="wtdNet">—</strong></div>
+          <div class="pill">MTD Net Payout: <strong id="mtdNet">—</strong></div>
+        </div>\`;
+
+      setTimeout(async ()=>{
+        try{
+          const r = await api('/admin/analytics/summary');
+          if(r?.ok){
+            qs('#wtdGross').textContent = '£'+fmtPence(r.wtd.totalGrossPence);
+            qs('#mtdGross').textContent = '£'+fmtPence(r.mtd.totalGrossPence);
+            qs('#wtdNet').textContent   = '£'+fmtPence(r.wtd.totalNetPayoutPence);
+            qs('#mtdNet').textContent   = '£'+fmtPence(r.mtd.totalNetPayoutPence);
+          }
+        }catch(_){}
+      }, 0);
+
       return \`
         <h3>Home</h3>
         <p class="muted">Welcome to your organiser console. Use the menu to manage shows, orders, venues, insights and marketing.</p>
-        <div style="height:8px"></div>
-        <div class="row">
-          <span class="pill">Status: Online</span>
-        </div>
+        \${summaryHtml}
       \`;
     },
 
@@ -132,7 +154,6 @@ router.get('/ui', (_req, res) => {
     },
 
     async orders(){
-      // Toolbar with Export CSV respecting q/from/to
       return \`
         <h3>Orders</h3>
         <div class="row" id="ordersToolbar">
@@ -142,7 +163,7 @@ router.get('/ui', (_req, res) => {
           <button class="btn" id="searchOrders">Search</button>
           <a class="btn-link" id="exportCsv" href="#">Export CSV</a>
         </div>
-        <div id="ordersTable" class="muted" style="margin-top:12px">Enter a query or date range and click Search.</div>
+        <div id="ordersTable" style="margin-top:12px" class="muted">Enter a query or date range and click Search.</div>
       \`;
     },
 
@@ -177,16 +198,13 @@ router.get('/ui', (_req, res) => {
           <button class="btn" id="runAnalytics">Run</button>
         </div>
         <div id="analyticsBody" class="muted" style="margin-top:12px">Pick a date range and click Run.</div>
+        <h4 style="margin-top:16px">MTD Daily Gross</h4>
+        <canvas id="mtdChart" width="800" height="220"></canvas>
       \`;
     },
 
-    async audiences(){
-      return \`<h3>Audiences</h3><p class="muted">Audience tools coming soon.</p>\`;
-    },
-
-    async email(){
-      return \`<h3>Email Campaigns</h3><p class="muted">Email integrations coming soon.</p>\`;
-    },
+    async audiences(){ return '<h3>Audiences</h3><p class="muted">Audience tools coming soon.</p>'; },
+    async email(){ return '<h3>Email Campaigns</h3><p class="muted">Email integrations coming soon.</p>'; },
 
     async account(){
       const me = await api('/auth/me').catch(()=>({}));
@@ -199,27 +217,24 @@ router.get('/ui', (_req, res) => {
     }
   };
 
-  // --- router / navigation --------------------------------------
+  // --- helpers ---
+  function numOrNull(v){ if(v===undefined||v===null||v==='') return null; const n=Number(v); return Number.isFinite(n)?n:null; }
+  function openDrawer(html){ const d=qs('#drawer'); qs('#drawerBody').innerHTML=html; d.classList.add('open'); d.setAttribute('aria-hidden','false'); }
+  function closeDrawer(){ const d=qs('#drawer'); d.classList.remove('open'); d.setAttribute('aria-hidden','true'); }
+
   async function switchView(view){
-    // highlight menu
     qsa('.sidebar .nav button').forEach(b => b.classList.toggle('active', b.dataset.view===view));
-    // render
     const el = qs('#content');
     el.innerHTML = '<div class="muted">Loading…</div>';
     try{
-      // auth-gate UI (but let HTML load)
       const ok = await ensureAuth();
-      if(!ok){
-        el.innerHTML = '<p>Please <a class="btn-link" href="/auth/login">sign in</a> to continue.</p>';
-        return;
-      }
+      if(!ok){ el.innerHTML='<p>Please <a class="btn-link" href="/auth/login">sign in</a> to continue.</p>'; return; }
       el.innerHTML = await views[view]();
-      // attach view-specific handlers
-      if(view==='shows'){
-        qs('#refreshShows')?.addEventListener('click', () => switchView('shows'));
-      }
+
+      if(view==='shows'){ qs('#refreshShows')?.addEventListener('click', ()=>switchView('shows')); }
+
       if(view==='venues'){
-        qs('#refreshVenues')?.addEventListener('click', () => switchView('venues'));
+        qs('#refreshVenues')?.addEventListener('click', ()=>switchView('venues'));
         qsa('.saveVenue').forEach(btn=>{
           btn.addEventListener('click', async ()=>{
             const tr = btn.closest('tr'); const id = tr?.dataset.id;
@@ -233,6 +248,7 @@ router.get('/ui', (_req, res) => {
           });
         });
       }
+
       if(view==='orders'){
         const toolbar = qs('#ordersToolbar');
         const exportBtn = qs('#exportCsv');
@@ -245,19 +261,15 @@ router.get('/ui', (_req, res) => {
           if(q) p.set('q', q);
           if(from) p.set('from', from);
           if(to) p.set('to', to);
-          const qsStr = p.toString();
-          return qsStr ? ('?'+qsStr) : '';
+          return p.toString() ? '?'+p.toString() : '';
         }
-        exportBtn.addEventListener('click', (e)=>{
-          e.preventDefault();
-          window.location.href = '/admin/orders/export.csv'+buildQS();
-        });
+        exportBtn.addEventListener('click', (e)=>{ e.preventDefault(); window.location.href='/admin/orders/export.csv'+buildQS(); });
         qs('#searchOrders').addEventListener('click', async ()=>{
           table.innerHTML='Loading…';
           try{
             const data = await api('/admin/orders'+buildQS());
             const rows = (data?.items||[]).map(o=>\`
-              <tr>
+              <tr data-id="\${o.id}">
                 <td>\${o.show?.title||''}</td>
                 <td>\${o.email||''}</td>
                 <td>\${o.status}</td>
@@ -268,18 +280,60 @@ router.get('/ui', (_req, res) => {
                 <td class="muted">\${o.id}</td>
               </tr>\`).join('');
             table.innerHTML=\`
-              <table>
+              <table id="ordersTbl">
                 <thead><tr>
                   <th>Show</th><th>Buyer</th><th>Status</th><th>Gross</th>
                   <th>Platform Fee</th><th>Organiser Share</th><th>Net Payout</th><th>ID</th>
                 </tr></thead>
                 <tbody>\${rows}</tbody>
               </table>\`;
-          }catch(_){
-            table.innerHTML='<span class="danger">Failed to load orders</span>';
-          }
+            // click row -> drawer
+            qsa('#ordersTbl tbody tr').forEach(tr=>{
+              tr.addEventListener('click', async ()=>{
+                const id = tr.getAttribute('data-id');
+                openDrawer('Loading…');
+                try{
+                  const resp = await api('/admin/orders/'+id);
+                  const o = resp.item;
+                  const tix = (o.tickets||[]).map(t=>\`<li>\${t.serial} — \${t.holderName || '—'} <span class="muted">(\${t.status})</span>\${t.scannedAt?(' · scanned '+new Date(t.scannedAt).toLocaleString()):''}</li>\`).join('');
+                  const refs = (o.refunds||[]).map(r=>\`<li>£\${fmtPence(r.amount)} — \${r.reason||'refund'} <span class="muted">(\${new Date(r.createdAt).toLocaleString()})</span></li>\`).join('');
+                  const notes = (o.notes||[]).map(n=>\`<li>\${new Date(n.createdAt).toLocaleString()} — <em>\${n.text}</em></li>\`).join('');
+                  const html = \`
+                    <h4>Order \${o.id}</h4>
+                    <div class="muted">\${o.email || ''} · \${o.show?.title || ''} · \${o.status}</div>
+                    <div class="grid" style="margin:10px 0">
+                      <div class="pill">Gross £\${fmtPence(o.amountPence)}</div>
+                      <div class="pill">Platform Fee £\${fmtPence(o.platformFeePence)}</div>
+                      <div class="pill">Organiser Share £\${fmtPence(o.organiserSharePence)}</div>
+                      <div class="pill">Net Payout £\${fmtPence(o.netPayoutPence)}</div>
+                    </div>
+                    <h4>Tickets</h4>
+                    <ul>\${tix||'<li class="muted">No tickets</li>'}</ul>
+                    <h4>Refunds</h4>
+                    <ul>\${refs||'<li class="muted">None</li>'}</ul>
+                    <h4>Notes</h4>
+                    <ul id="notesList">\${notes||'<li class="muted">None yet</li>'}</ul>
+                    <div class="row" style="margin-top:8px">
+                      <input id="noteText" type="text" placeholder="Add a note…"/>
+                      <button class="btn" id="addNote">Add</button>
+                    </div>
+                  \`;
+                  openDrawer(html);
+                  qs('#addNote')?.addEventListener('click', async ()=>{
+                    const text = qs('#noteText')?.value.trim();
+                    if(!text) return;
+                    await api('/admin/orders/'+id+'/notes', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text }) });
+                    const li = document.createElement('li'); li.innerHTML = '<em>'+text+'</em>';
+                    qs('#notesList')?.appendChild(li);
+                    qs('#noteText').value='';
+                  });
+                }catch(_){ openDrawer('<p class="danger">Failed to load order.</p>'); }
+              });
+            });
+          }catch(_){ table.innerHTML='<span class="danger">Failed to load orders</span>'; }
         });
       }
+
       if(view==='analytics'){
         const toolbar = qs('#analyticsToolbar');
         const body = qs('#analyticsBody');
@@ -291,7 +345,7 @@ router.get('/ui', (_req, res) => {
           if(from) p.set('from', from);
           if(to) p.set('to', to);
           try{
-            const data = await api('/admin/analytics' + (p.toString()?('?'+p.toString()):''));
+            const data = await api('/admin/analytics'+(p.toString()?('?'+p.toString()):'')); 
             body.innerHTML = \`
               <div class="row">
                 <div class="pill">Orders: \${data.totalOrders}</div>
@@ -301,31 +355,42 @@ router.get('/ui', (_req, res) => {
                 <div class="pill">Organiser Share: £\${fmtPence(data.totalOrganiserSharePence)}</div>
                 <div class="pill">Net Payout: £\${fmtPence(data.totalNetPayoutPence)}</div>
               </div>\`;
-          }catch(_){
-            body.innerHTML = '<span class="danger">Failed to load analytics</span>';
-          }
+          }catch(_){ body.innerHTML='<span class="danger">Failed to load analytics</span>'; }
         });
+
+        // draw MTD bar chart
+        (async ()=>{
+          try{
+            const r = await api('/admin/analytics/mtd-daily');
+            const points = r?.points || [];
+            const c = qs('#mtdChart') as HTMLCanvasElement;
+            const ctx = c.getContext('2d');
+            if(!ctx) return;
+            // basic bar chart
+            const w = c.width, h = c.height, pad = 30;
+            ctx.clearRect(0,0,w,h);
+            const max = Math.max(1, ...points.map(p=>p.grossPence));
+            const barW = Math.max(4, Math.floor((w - pad*2)/Math.max(1, points.length)));
+            ctx.strokeStyle = '#e5e7eb';
+            ctx.beginPath(); ctx.moveTo(pad, h-pad); ctx.lineTo(w-pad, h-pad); ctx.stroke();
+            points.forEach((p, i)=>{
+              const x = pad + i*barW;
+              const y = h - pad - (p.grossPence/max)*(h - pad*2);
+              const bh = (h - pad) - y;
+              ctx.fillStyle = '#111827';
+              ctx.fillRect(x+1, y, barW-2, bh);
+            });
+          }catch(_){}
+        })();
       }
+
       history.replaceState(null,'','/admin/ui#'+view);
-    }catch(e){
-      console.error(e);
-      qs('#content').innerHTML = '<p class="danger">Failed to load view.</p>';
-    }
+    }catch(e){ console.error(e); qs('#content').innerHTML = '<p class="danger">Failed to load view.</p>'; }
   }
 
-  function numOrNull(v){ if(v===undefined||v===null||v==='') return null; const n=Number(v); return Number.isFinite(n)?n:null; }
-
-  // Sidebar events
-  qsa('.sidebar .nav button').forEach(btn=>{
-    btn.addEventListener('click', ()=> switchView(btn.dataset.view));
-  });
-
-  // Boot: go to hash view if present
-  (async function boot(){
-    const initial = (location.hash||'#home').slice(1);
-    if(!views[initial]) { await switchView('home'); return; }
-    await switchView(initial);
-  })();
+  qsa('.sidebar .nav button').forEach(btn=> btn.addEventListener('click', ()=> switchView(btn.dataset.view)));
+  qs('#drawerClose')?.addEventListener('click', closeDrawer);
+  (async function boot(){ const initial=(location.hash||'#home').slice(1); await switchView(views[initial]?initial:'home'); })();
 </script>
 </body>
 </html>`);
