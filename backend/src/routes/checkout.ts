@@ -1,112 +1,137 @@
+// backend/src/routes/checkout.ts
+//
+// Creates a Stripe PaymentIntent for a basket of tickets.
+// Expects: { showId: string, items: [{ ticketTypeId: string, qty: number }], email?: string }
+//
+// NOTE: This file updates older calls to calcFeesForShow(show, qty, subtotal)
+// to the new single-argument signature.
+//
+// Charges the customer the ticket subtotal + platform fee.
+// Stores an Order with amountPence=subtotal (ticket revenue), quantity, status=PENDING,
+// and saves platformFeePence (for later settlement splits).
+
 import { Router } from 'express';
-import prisma from '../lib/prisma.js';
 import Stripe from 'stripe';
+import prisma from '../lib/prisma.js';
 import { calcFeesForShow } from '../services/fees.js';
+
+const router = Router();
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
   apiVersion: '2024-06-20',
 });
 
-const router = Router();
+type ItemInput = { ticketTypeId: string; qty: number };
 
-/**
- * POST /checkout/create
- * body: { showId: string, items: [{ ticketTypeId, qty }], email, promoCode? }
- */
-router.post('/create', async (req, res) => {
+router.post('/intent', async (req, res) => {
   try {
-    const { showId, items, email, promoCode } = req.body || {};
+    const { showId, items, email } = req.body as {
+      showId: string;
+      items: ItemInput[];
+      email?: string;
+    };
+
     if (!showId || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ ok: false, message: 'showId and items required' });
+      return res.status(400).json({ ok: false, message: 'Invalid payload' });
     }
 
-    // Load ticket types & compute subtotal
-    const ttIds = items.map((i: any) => String(i.ticketTypeId));
-    const tts = await prisma.ticketType.findMany({ where: { id: { in: ttIds } } });
+    // Load show (with venue config)
+    const show = await prisma.show.findUnique({
+      where: { id: showId },
+      include: { venue: true },
+    });
+    if (!show) return res.status(404).json({ ok: false, message: 'Show not found' });
 
-    let quantity = 0;
+    // Load the ticket types referenced and compute subtotal + quantity
+    const ttIds = items.map(i => i.ticketTypeId);
+    const tt = await prisma.ticketType.findMany({
+      where: { id: { in: ttIds }, showId: showId },
+      select: { id: true, pricePence: true },
+    });
+
+    // Build a map for price lookup
+    const priceMap = new Map<string, number>();
+    tt.forEach(t => priceMap.set(t.id, t.pricePence));
+
     let subtotalPence = 0;
-    for (const line of items) {
-      const tt = tts.find((t) => t.id === String(line.ticketTypeId));
-      const qty = Number(line.qty || 0);
-      if (!tt || qty <= 0) continue;
-      if (tt.available != null && qty > tt.available) {
-        return res.status(400).json({ ok: false, message: `Insufficient availability for ${tt.name}` });
+    let totalQty = 0;
+    for (const i of items) {
+      const price = priceMap.get(i.ticketTypeId);
+      if (price == null) {
+        return res.status(400).json({ ok: false, message: 'Invalid ticket type in basket' });
       }
-      quantity += qty;
-      subtotalPence += qty * tt.pricePence;
-    }
-    if (quantity === 0) return res.status(400).json({ ok: false, message: 'No valid items' });
-
-    // Optional: apply coupon
-    let couponId: string | null = null;
-    let discountPence = 0;
-    if (promoCode) {
-      const now = new Date();
-      const c = await prisma.coupon.findFirst({
-        where: {
-          code: String(promoCode).toUpperCase(),
-          active: true,
-          AND: [
-            { OR: [{ startsAt: null }, { startsAt: { lte: now } }] },
-            { OR: [{ endsAt: null }, { endsAt: { gte: now } }] },
-          ],
-        },
-      });
-      if (c && (c.maxRedemptions == null || c.timesRedeemed < c.maxRedemptions)) {
-        couponId = c.id;
-        if (c.percentOff != null) {
-          discountPence = Math.floor((subtotalPence * Math.min(Math.max(c.percentOff, 0), 100)) / 100);
-        } else if (c.amountOffPence != null) {
-          discountPence = Math.min(subtotalPence, Math.max(c.amountOffPence, 0));
-        }
-      }
+      const qty = Math.max(0, Number(i.qty || 0));
+      totalQty += qty;
+      subtotalPence += price * qty;
     }
 
-    const payablePence = Math.max(subtotalPence - discountPence, 0);
+    // Fees (new signature)
+    const fees = calcFeesForShow({
+      show,
+      ticketCount: totalQty,
+      subtotalPence,
+    });
 
-    // Estimate fees for the venue (not added to Stripe price; used for payout)
-    const feeEst = await calcFeesForShow(String(showId), payablePence, quantity);
+    // Amount to charge the customer is subtotal + platform fee
+    const amountToCharge = subtotalPence + fees.platformFeePence;
+    if (amountToCharge <= 0) {
+      return res.status(400).json({ ok: false, message: 'Amount must be > 0' });
+    }
 
-    // Create Order (PENDING)
+    // Create or upsert a pending order for this basket
     const order = await prisma.order.create({
       data: {
-        showId: String(showId),
-        email: email ? String(email) : null,
-        amountPence: payablePence,
-        quantity,
+        email: email ?? null,
+        amountPence: subtotalPence,
+        quantity: totalQty,
         status: 'PENDING',
-        couponId,
-        discountPence: discountPence || null,
-        platformFeePence: feeEst.platformFeePence,
-        platformFeeOurSharePence: feeEst.ourSharePence,
-        platformFeeOrganiserSharePence: feeEst.organiserSharePence,
+        showId: show.id,
+        platformFeePence: fees.platformFeePence,
       },
-      select: { id: true },
     });
 
-    const session = await stripe.checkout.sessions.create({
-      mode: 'payment',
-      payment_method_types: ['card'],
+    // Create PaymentIntent
+    const pi = await stripe.paymentIntents.create({
+      amount: amountToCharge,
       currency: 'gbp',
-      line_items: [
-        {
-          quantity: 1,
-          price_data: {
-            currency: 'gbp',
-            product_data: { name: 'Tickets' },
-            unit_amount: payablePence,
-          },
-        },
-      ],
-      metadata: { orderId: order.id },
-      success_url: `${process.env.PUBLIC_BASE_URL}/events/success?o=${order.id}`,
-      cancel_url: `${process.env.PUBLIC_BASE_URL}/events/cancel?o=${order.id}`,
+      receipt_email: email || undefined,
+      metadata: {
+        orderId: order.id,
+        showId: show.id,
+      },
+      automatic_payment_methods: { enabled: true },
     });
 
-    res.json({ ok: true, orderId: order.id, stripeUrl: session.url });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, message: e?.message ?? 'Checkout failed' });
+    // Save Stripe ID on order
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { stripeId: pi.id },
+    });
+
+    res.json({
+      ok: true,
+      clientSecret: pi.client_secret,
+      orderId: order.id,
+    });
+  } catch (err: any) {
+    console.error('checkout/intent error:', err);
+    res.status(500).json({ ok: false, message: err?.message || 'Checkout error' });
+  }
+});
+
+// (Optional) basic endpoint to fetch an order by id to render a confirmation page
+router.get('/orders/:id', async (req, res) => {
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      include: {
+        show: { include: { venue: true } },
+      },
+    });
+    if (!order) return res.status(404).json({ ok: false, message: 'Not found' });
+    res.json({ ok: true, order });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, message: err?.message || 'Error' });
   }
 });
 
