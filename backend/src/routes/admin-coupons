@@ -1,78 +1,31 @@
+// backend/src/routes/admin-coupons.ts
+//
+// Minimal placeholder so server builds cleanly.
+// You can flesh this out later with real CRUD and schema support.
+//
 import { Router } from 'express';
-import prisma from '../lib/prisma.js';
 import { requireAdmin } from '../lib/authz.js';
 
 const router = Router();
 
-// List/search
-router.get('/coupons', requireAdmin, async (req, res) => {
-  try {
-    const q = String(req.query.q || '').trim();
-    const where = q
-      ? {
-          OR: [
-            { code: { contains: q, mode: 'insensitive' } },
-            { description: { contains: q, mode: 'insensitive' } },
-          ],
-        }
-      : {};
-    const items = await prisma.coupon.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-    });
-    res.json({ ok: true, items });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, message: e?.message ?? 'Failed' });
-  }
+// List coupons (placeholder)
+router.get('/coupons', requireAdmin, async (_req, res) => {
+  res.json({ ok: true, items: [] });
 });
 
-// Create
-router.post('/coupons', requireAdmin, async (req, res) => {
-  try {
-    const { code, description, percentOff, amountOffPence, maxRedemptions, startsAt, endsAt } = req.body || {};
-    if (!code) return res.status(400).json({ ok: false, message: 'Code required' });
-    if (percentOff && amountOffPence) return res.status(400).json({ ok: false, message: 'Use percent OR amount' });
-
-    const item = await prisma.coupon.create({
-      data: {
-        code: String(code).toUpperCase(),
-        description: description ? String(description) : null,
-        percentOff: percentOff != null ? Number(percentOff) : null,
-        amountOffPence: amountOffPence != null ? Number(amountOffPence) : null,
-        maxRedemptions: maxRedemptions != null ? Number(maxRedemptions) : null,
-        startsAt: startsAt ? new Date(startsAt) : null,
-        endsAt: endsAt ? new Date(endsAt) : null,
-      },
-    });
-    res.json({ ok: true, item });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, message: e?.message ?? 'Failed' });
-  }
+// Create coupon (placeholder)
+router.post('/coupons', requireAdmin, async (_req, res) => {
+  res.status(501).json({ ok: false, message: 'Not implemented yet' });
 });
 
-// Toggle active
-router.patch('/coupons/:id/toggle', requireAdmin, async (req, res) => {
-  try {
-    const id = String(req.params.id);
-    const c = await prisma.coupon.findUnique({ where: { id } });
-    if (!c) return res.status(404).json({ ok: false, message: 'Not found' });
-    const item = await prisma.coupon.update({ where: { id }, data: { active: !c.active } });
-    res.json({ ok: true, item });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, message: e?.message ?? 'Failed' });
-  }
+// Update coupon (placeholder)
+router.patch('/coupons/:id', requireAdmin, async (_req, res) => {
+  res.status(501).json({ ok: false, message: 'Not implemented yet' });
 });
 
-// Delete
-router.delete('/coupons/:id', requireAdmin, async (req, res) => {
-  try {
-    const id = String(req.params.id);
-    await prisma.coupon.delete({ where: { id } });
-    res.json({ ok: true });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, message: e?.message ?? 'Failed' });
-  }
+// Delete coupon (placeholder)
+router.delete('/coupons/:id', requireAdmin, async (_req, res) => {
+  res.status(501).json({ ok: false, message: 'Not implemented yet' });
 });
 
 export default router;
