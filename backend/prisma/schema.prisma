@@ -16,31 +16,35 @@ model User {
   orders         Order[]
   tickets        Ticket[]         @relation("UserTickets")
   passwordResets PasswordReset[]
-  // Optional backlink to notes authored by this user
   orderNotes     OrderNote[]
 }
 
 model Order {
-  id            String        @id @default(cuid())
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  email         String?
-  amountPence   Int?
-  quantity      Int?
-  stripeId      String?
-  status        OrderStatus   @default(PENDING)
-  userId        String?
-  user          User?         @relation(fields: [userId], references: [id])
-  showId        String?
-  show          Show?         @relation(fields: [showId], references: [id])
-  tickets       Ticket[]
-  refunds       Refund[]
-  notes         OrderNote[]
+  id              String        @id @default(cuid())
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  email           String?
+  amountPence     Int?          // gross charged to customer (after discount)
+  quantity        Int?
+  stripeId        String?
+  status          OrderStatus   @default(PENDING)
+  userId          String?
+  user            User?         @relation(fields: [userId], references: [id])
+  showId          String?
+  show            Show?         @relation(fields: [showId], references: [id])
+  tickets         Ticket[]
+  refunds         Refund[]
+  notes           OrderNote[]
 
-  // NEW: coupon linkage + discount value actually applied
-  couponId      String?
-  coupon        Coupon?       @relation(fields: [couponId], references: [id])
-  discountPence Int?          // amount discounted from subtotal
+  // discounts/coupons
+  couponId        String?
+  coupon          Coupon?       @relation(fields: [couponId], references: [id])
+  discountPence   Int?
+
+  // NEW: fees & payout
+  platformFeePence Int?         // our fee
+  paymentFeePence  Int?         // Stripe fees from balance transaction
+  netPayoutPence   Int?         // what organiser would receive
 
   @@index([showId])
   @@index([couponId])
@@ -147,15 +151,14 @@ model OrderNote {
   @@index([authorId])
 }
 
-// NEW: Coupons / Promo Codes
+// Coupons / Promo Codes
 model Coupon {
   id             String    @id @default(cuid())
   code           String    @unique
   description    String?
   active         Boolean   @default(true)
-  // Either percent or fixed amount in pence; you can support both later
-  percentOff     Int?      // 0..100
-  amountOffPence Int?      // absolute discount
+  percentOff     Int?
+  amountOffPence Int?
   maxRedemptions Int?
   timesRedeemed  Int       @default(0)
   startsAt       DateTime?
