@@ -1,7 +1,9 @@
 // backend/src/routes/auth.ts
 import { Router } from 'express';
-import { prisma } from '../lib/prisma.js';
-import cookie from 'cookie';
+import prisma from '../lib/prisma.js';
+// Use require so TS doesn't need @types/cookie
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const cookie = require('cookie');
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 
@@ -214,7 +216,7 @@ router.post('/signup', async (req, res) => {
 });
 
 router.post('/forgot', async (_req, res) => {
-  // You can wire real email later. For now, return a friendly placeholder.
+  // Placeholder until we wire email
   return res.json({ ok: false, error: 'Password reset endpoint not available yet.' });
 });
 
@@ -224,7 +226,6 @@ router.get('/logout', async (req, res) => {
     const cookies = cookie.parse(req.headers.cookie || '');
     const sid = cookies.sid;
     if (sid) {
-      // Best-effort delete
       await prisma.session.delete({ where: { id: sid } }).catch(() => {});
     }
   } catch (_) {}
