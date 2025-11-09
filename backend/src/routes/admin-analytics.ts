@@ -4,13 +4,19 @@ import { requireAdminOrOrganiser } from '../lib/authz.js';
 
 const router = Router();
 
-// KPIs
 router.get('/analytics/summary', requireAdminOrOrganiser, async (_req, res) => {
   try {
     const [paidOrders, refunds, ticketsSold] = await Promise.all([
       prisma.order.findMany({
         where: { status: 'PAID' },
-        select: { amountPence: true, platformFeePence: true, paymentFeePence: true, netPayoutPence: true },
+        select: {
+          amountPence: true,
+          platformFeePence: true,
+          platformFeeOurSharePence: true,
+          platformFeeOrganiserSharePence: true,
+          paymentFeePence: true,
+          netPayoutPence: true,
+        },
       }),
       prisma.refund.findMany({ select: { amount: true } }),
       prisma.ticket.count({ where: { status: 'VALID' } }),
@@ -20,6 +26,8 @@ router.get('/analytics/summary', requireAdminOrOrganiser, async (_req, res) => {
 
     const revenuePence = sum(paidOrders.map((o) => o.amountPence || 0));
     const platformFeesPence = sum(paidOrders.map((o) => o.platformFeePence || 0));
+    const platformFeesOurSharePence = sum(paidOrders.map((o) => o.platformFeeOurSharePence || 0));
+    const platformFeesOrganiserSharePence = sum(paidOrders.map((o) => o.platformFeeOrganiserSharePence || 0));
     const paymentFeesPence = sum(paidOrders.map((o) => o.paymentFeePence || 0));
     const netPayoutPence = sum(paidOrders.map((o) => o.netPayoutPence || 0));
     const refundsPence = sum(refunds.map((r) => r.amount || 0));
@@ -29,6 +37,8 @@ router.get('/analytics/summary', requireAdminOrOrganiser, async (_req, res) => {
       kpis: {
         revenuePence,
         platformFeesPence,
+        platformFeesOurSharePence,
+        platformFeesOrganiserSharePence,
         paymentFeesPence,
         netPayoutPence,
         refundsPence,
@@ -41,10 +51,8 @@ router.get('/analytics/summary', requireAdminOrOrganiser, async (_req, res) => {
   }
 });
 
-// Daily sales trend (gross + net)
 router.get('/analytics/sales-trend', requireAdminOrOrganiser, async (_req, res) => {
   try {
-    // last 30 days
     const since = new Date(Date.now() - 29 * 24 * 60 * 60 * 1000);
     const rows = await prisma.order.findMany({
       where: { status: 'PAID', createdAt: { gte: since } },
@@ -52,7 +60,6 @@ router.get('/analytics/sales-trend', requireAdminOrOrganiser, async (_req, res) 
       orderBy: { createdAt: 'asc' },
     });
 
-    // bucket by day
     const map = new Map<string, { revenuePence: number; netPayoutPence: number }>();
     for (const r of rows) {
       const day = r.createdAt.toISOString().slice(0, 10);
@@ -71,7 +78,6 @@ router.get('/analytics/sales-trend', requireAdminOrOrganiser, async (_req, res) 
   }
 });
 
-// Top shows by revenue
 router.get('/analytics/top-shows', requireAdminOrOrganiser, async (_req, res) => {
   try {
     const shows = await prisma.show.findMany({
