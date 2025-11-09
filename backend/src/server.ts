@@ -10,7 +10,8 @@ import cookieParser from 'cookie-parser';
 import checkout from './routes/checkout.js';
 import webhook from './routes/webhook.js';
 import events from './routes/events.js';
-import publicUI from './routes/public-ui.js'; // 👈 NEW: consumer-facing HTML UI
+import publicUI from './routes/public-ui.js'; // consumer-facing HTML UI
+import calendarICS from './routes/calendar-ics.js'; // 👈 NEW: .ics generator
 
 // Auth
 import auth from './routes/auth.js';
@@ -51,7 +52,10 @@ app.use('/events', events);
 app.use('/checkout', checkout);
 
 // --- Public HTML UI ---
-app.use('/public', publicUI); // 👈 NEW
+app.use('/public', publicUI);
+
+// --- Calendar / ICS ---
+app.use('/calendar', calendarICS);
 
 // --- Auth routes (UI + JSON) ---
 app.use('/auth', loginUI);     // GET /auth/login (HTML)
