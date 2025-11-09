@@ -1,82 +1,95 @@
 // backend/src/services/fees.ts
-import prisma from '../lib/prisma.js';
+import type { PrismaClient } from '@prisma/client';
+
+export type FeePolicy = {
+  feePercentBps?: number | null;      // e.g. 1000 = 10%
+  perTicketFeePence?: number | null;  // e.g. 50
+  basketFeePence?: number | null;     // e.g. 30
+};
 
 export type FeeCalcInput = {
-  showId: string;
+  subTotalPence: number;              // unit price * quantity (before fees)
   quantity: number;
-  unitPricePence: number; // ticket face value per ticket
-  organiserId?: string | null; // who owns the show / order
+  policy: FeePolicy;
+  organiserSplitBps?: number | null;  // from User.organiserSplitBps
 };
 
 export type FeeCalcResult = {
-  grossPence: number;           // unitPrice * qty
-  platformFeePence: number;     // venue fee% * gross + per-ticket * qty + basket
-  organiserSharePence: number;  // organiser split of platformFee (per organiser account)
-  ourSharePence: number;        // platform share of platformFee
-  paymentFeePence: number;      // (placeholder for Stripe costs if you track them)
-  netPayoutPence: number;       // gross - paymentFee - platformFee (organiser receives net payout from gross minus fees)
+  platformFeePence: number;           // total platform fee (percent + per-ticket + basket)
+  organiserSharePence: number;        // portion of platform fee we owe organiser
+  paymentFeePence: number;            // (placeholder for Stripe costs etc.)
+  netPayoutPence: number;             // suggested net to organiser (subtotal - payment fees - our share)
 };
 
-function bps(v?: number | null) {
-  const n = typeof v === 'number' ? v : 0;
-  return Math.max(0, n) / 10000; // 10000 bps = 100%
+function ceil(x: number) {
+  return Math.ceil(x);
+}
+
+export function calcFees(input: FeeCalcInput): FeeCalcResult {
+  const { subTotalPence, quantity, policy, organiserSplitBps } = input;
+
+  const percent = policy.feePercentBps ?? 0;
+  const perTicket = policy.perTicketFeePence ?? 0;
+  const basket = policy.basketFeePence ?? 0;
+
+  const percentFee = ceil((subTotalPence * percent) / 10_000);
+  const perTicketFee = quantity * perTicket;
+  const basketFee = basket;
+
+  const platformFeePence = percentFee + perTicketFee + basketFee;
+
+  const organiserSharePence = ceil((platformFeePence * (organiserSplitBps ?? 0)) / 10_000);
+
+  // For now keep payment processing cost at 0 in code (you can wire Stripe reporting later)
+  const paymentFeePence = 0;
+
+  // What organiser should receive if you pass-through the organiser share to them immediately:
+  // organiser_net = subtotal - payment_fees - (platform_fee - organiser_share)
+  const ourShare = platformFeePence - organiserSharePence;
+  const netPayoutPence = subTotalPence - paymentFeePence - ourShare;
+
+  return {
+    platformFeePence,
+    organiserSharePence,
+    paymentFeePence,
+    netPayoutPence,
+  };
 }
 
 /**
- * Main calculator:
- * - pulls venue fee policy from the Show -> Venue
- * - pulls organiser split from the organiser (User.organiserSplitBps) or DEFAULT_ORGANISER_SPLIT_BPS
+ * Convenience: load the venue fee policy by showId, then calculate.
+ * unitPricePence: price per ticket for this order (before fees)
  */
-export async function calcFeesForShow(input: FeeCalcInput): Promise<FeeCalcResult> {
-  const { showId, quantity, unitPricePence } = input;
-
+export async function calcFeesForShow(
+  prisma: PrismaClient,
+  showId: string,
+  quantity: number,
+  unitPricePence: number,
+  organiserSplitBps?: number | null,
+): Promise<FeeCalcResult> {
   const show = await prisma.show.findUnique({
     where: { id: showId },
     select: {
-      id: true,
       venue: {
         select: {
           feePercentBps: true,
           perTicketFeePence: true,
           basketFeePence: true,
-        }
-      }
-    }
+        },
+      },
+    },
   });
-  if (!show) throw new Error('Show not found');
 
-  const grossPence = unitPricePence * Math.max(0, quantity);
-
-  const v = show.venue || ({} as any);
-  const pctPart = Math.round(grossPence * bps(v.feePercentBps));
-  const perTicketPart = Math.round((v.perTicketFeePence ?? 0) * Math.max(0, quantity));
-  const basketPart = Math.round(v.basketFeePence ?? 0);
-
-  const platformFeePence = Math.max(0, pctPart + perTicketPart + basketPart);
-
-  // organiser split
-  let organiserSplitBps = Number(process.env.DEFAULT_ORGANISER_SPLIT_BPS || 5000); // default 50%
-  if (input.organiserId) {
-    const org = await prisma.user.findUnique({
-      where: { id: input.organiserId },
-      select: { organiserSplitBps: true },
-    });
-    if (org && org.organiserSplitBps != null) organiserSplitBps = org.organiserSplitBps;
-  }
-  const organiserSharePence = Math.round(platformFeePence * bps(organiserSplitBps));
-  const ourSharePence = Math.max(0, platformFeePence - organiserSharePence);
-
-  // placeholder payment processor fee (optional—set to 0 for now)
-  const paymentFeePence = 0;
-
-  const netPayoutPence = Math.max(0, grossPence - paymentFeePence - platformFeePence);
-
-  return {
-    grossPence,
-    platformFeePence,
-    organiserSharePence,
-    ourSharePence,
-    paymentFeePence,
-    netPayoutPence
+  const policy: FeePolicy = {
+    feePercentBps: show?.venue?.feePercentBps ?? 0,
+    perTicketFeePence: show?.venue?.perTicketFeePence ?? 0,
+    basketFeePence: show?.venue?.basketFeePence ?? 0,
   };
+
+  return calcFees({
+    subTotalPence: unitPricePence * quantity,
+    quantity,
+    policy,
+    organiserSplitBps: organiserSplitBps ?? 0,
+  });
 }
