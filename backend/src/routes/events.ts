@@ -63,7 +63,8 @@ router.get('/', async (req, res) => {
       ].filter(Boolean),
     };
 
-    const orderBy = [{ date: order === 'desc' ? 'desc' : 'asc' }];
+    // Use a single object to satisfy Prisma typing
+    const orderBy: any = { date: (order === 'desc' ? 'desc' : 'asc') };
 
     const [items, total] = await Promise.all([
       prisma.show.findMany({
@@ -135,7 +136,7 @@ router.get('/:id', async (req, res) => {
 });
 
 /**
- * GET /events/venue/:venueId (list shows for a venue; default upcoming)
+ * GET /events/venue/:venueId
  * Query: upcoming=1|0
  */
 router.get('/venue/:venueId', async (req, res) => {
