@@ -24,31 +24,18 @@ model User {
 
   /// Per-organiser share of the platform fee (basis points: 5000 = 50%)
   organiserSplitBps  Int?
-
-  // NEW: active login sessions for this user
-  sessions           Session[]
-}
-
-model Session {
-  /// We store a random hex string from the auth route, so no default is set here.
-  id        String   @id
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-
-  @@index([userId, createdAt])
 }
 
 model Order {
-  id                  String        @id @default(cuid())
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
+  id                  String      @id @default(cuid())
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
 
   email               String?
   amountPence         Int?
   quantity            Int?
   stripeId            String?
-  status              OrderStatus   @default(PENDING)
+  status              OrderStatus @default(PENDING)
 
   // Fee breakdown (all optional so we can roll out safely)
   platformFeePence    Int?
@@ -58,9 +45,9 @@ model Order {
 
   // Relations
   userId              String?
-  user                User?         @relation(fields: [userId], references: [id])
+  user                User?       @relation(fields: [userId], references: [id])
   showId              String?
-  show                Show?         @relation(fields: [showId], references: [id])
+  show                Show?       @relation(fields: [showId], references: [id])
   tickets             Ticket[]
   refunds             Refund[]
   notes               OrderNote[]
@@ -78,6 +65,9 @@ model Show {
   title       String
   description String?
   date        DateTime
+
+  /// Optional poster / image URL for listings & meta tags
+  imageUrl    String?
 
   venueId     String?
   venue       Venue?       @relation(fields: [venueId], references: [id])
