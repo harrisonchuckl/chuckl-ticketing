@@ -3,234 +3,190 @@ import { Router } from 'express';
 
 const router = Router();
 
-/**
- * Admin UI (HTML shell with client-side views)
- * We deliberately do *not* import server types or JSX here — this is a plain
- * Express route that returns HTML as a string so tsc can compile cleanly.
- */
-router.get(['/admin', '/admin/'], (_req, res) => {
-  res.type('html').send(`<!doctype html>
+router.get('/ui', (_req, res) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(`<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta http-equiv="x-ua-compatible" content="ie=edge"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Organiser Console</title>
-  <style>
-    :root { --fg:#0f172a; --muted:#64748b; --bg:#ffffff; --line:#e2e8f0; --red:#dc2626; --blue:#2563eb; }
-    *{ box-sizing:border-box; }
-    body{ margin:0; font:14px/1.35 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; color:var(--fg); background:var(--bg);}
-    .shell{ display:grid; grid-template-columns: 240px 1fr; min-height:100vh;}
-    aside{ border-right:1px solid var(--line); padding:16px;}
-    main{ padding:16px 20px 80px; }
-    h3{ margin:6px 0 16px; font-size:16px; }
-    h4{ margin:0 0 10px; font-size:14px; }
-    .brand{ font-weight:600; margin-bottom:8px;}
-    nav .group{ font-size:11px; color:var(--muted); text-transform:uppercase; margin:14px 0 6px;}
-    nav a{ display:block; padding:8px 10px; margin:4px 0; border-radius:8px; color:var(--fg); text-decoration:none;}
-    nav a.active{ background:#f1f5f9; }
-    .row{ display:flex; gap:8px; align-items:center; }
-    .grid{ display:grid; gap:12px; }
-    .grid.two{ grid-template-columns: 1fr 1fr; }
-    .card{ border:1px solid var(--line); border-radius:12px; padding:12px; background:#fff;}
-    label{ display:block; font-size:12px; color:var(--muted); margin-bottom:4px;}
-    input, select, textarea{ width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:#fff; }
-    input[type="date"]{ padding:6px 8px; }
-    .btn{ appearance:none; border:1px solid var(--line); background:#fff; padding:8px 12px; border-radius:8px; cursor:pointer; }
-    .btn.primary{ background:var(--blue); color:#fff; border-color:var(--blue); }
-    .btn.ghost{ background:#fff; }
-    .muted{ color:var(--muted); }
-    .danger{ color:var(--red); }
-    .note{ color:var(--muted); font-size:12px; margin-top:6px;}
-    .toolbar{ display:flex; gap:8px; align-items:center; justify-content:flex-end; margin-bottom:12px; }
-    .spacer{ flex:1; }
-    .table{ width:100%; border-collapse:collapse; }
-    .table th, .table td{ padding:8px 10px; border-bottom:1px solid var(--line); text-align:left; }
-    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
-    @media (max-width: 920px){ .grid.two{ grid-template-columns: 1fr; } .shell{ grid-template-columns: 1fr; } aside{ border-right:none; border-bottom:1px solid var(--line);} }
-  </style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Organiser Console</title>
+<style>
+  :root{--bg:#f7f8fa;--panel:#fff;--ink:#0f172a;--muted:#6b7280;--accent:#2563eb;--accent-2:#eff6ff;--border:#e5e7eb;--bad:#dc2626;--ok:#16a34a}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial,sans-serif}
+  header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);background:var(--panel);position:sticky;top:0;z-index:5}
+  header .brand{font-weight:800} header .user{font-size:14px;color:var(--muted)}
+  main{display:grid;grid-template-columns:260px 1fr;gap:20px;padding:20px;min-height:calc(100vh - 64px)}
+  nav{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:12px}
+  nav h4{margin:8px 10px 12px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+  nav button{display:block;width:100%;text-align:left;border:0;background:none;padding:10px 12px;border-radius:10px;margin:2px 0;font-size:14px;color:var(--ink);cursor:pointer}
+  nav button.active,nav button:hover{background:var(--accent-2);color:var(--accent)}
+  section.view{background:var(--panel);border:1px solid var(--border);border-radius:14px;min-height:60vh;display:flex;flex-direction:column}
+  .toolbar{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:14px;border-bottom:1px solid var(--border)}
+  .toolbar h2{font-size:16px;margin:0}
+  .content{padding:16px}
+  .grid{display:grid;gap:12px}.two{grid-template-columns:1fr 1fr}.three{grid-template-columns:repeat(3,1fr)}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  input,select,textarea{width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;background:#fff;color:var(--ink);font-size:14px}
+  label{font-size:12px;color:var(--muted)}
+  .btn{border:0;border-radius:10px;padding:10px 12px;font-weight:600;cursor:pointer}
+  .btn.primary{background:var(--accent);color:#fff}.btn.ghost{background:#fff;border:1px solid var(--border)}
+  .note{font-size:13px;color:var(--muted)}
+  .card{border:1px solid var(--border);border-radius:12px;padding:12px;background:#fff}
+  .table{width:100%;border-collapse:collapse}
+  .table th,.table td{border-bottom:1px solid var(--border);padding:8px 6px;text-align:left;font-size:14px}
+  .danger{color:var(--bad)} .ok{color:var(--ok)}
+  .overlay{position:fixed;inset:0;background:rgba(15,23,42,.5);display:none;align-items:center;justify-content:center;z-index:50}
+  .overlay.show{display:flex}
+  .login{width:360px;background:#fff;border-radius:14px;border:1px solid var(--border);padding:18px}
+  .login h3{margin:0 0 8px}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .kpi{background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px}
+</style>
 </head>
 <body>
-  <div class="shell">
-    <aside>
-      <div class="brand">Organiser Console</div>
-      <div id="userEmail" class="muted" style="font-size:12px;margin-bottom:10px;"></div>
-      <nav>
-        <div class="group">Dashboard</div>
-        <a href="#home" data-view="home" class="active">Home</a>
-        <a href="#shows" data-view="shows">Shows</a>
-        <a href="#orders" data-view="orders">Orders</a>
-        <a href="#venues" data-view="venues">Venues</a>
-        <div class="group">Insights</div>
-        <a href="#analytics" data-view="analytics">Analytics</a>
-        <div class="group">Marketing</div>
-        <a href="#audiences" data-view="audiences">Audiences</a>
-        <a href="#email" data-view="email">Email Campaigns</a>
-        <div class="group">Settings</div>
-        <a href="#account" data-view="account">Account</a>
-        <a href="/auth/logout" class="danger">Log out</a>
-      </nav>
-    </aside>
-    <main>
-      <div class="toolbar">
-        <div class="spacer"></div>
-        <div id="toolbarActions"></div>
+<header>
+  <div class="brand">Organiser Console</div>
+  <div class="user"><span id="userEmail">Not signed in</span></div>
+</header>
+
+<main>
+  <nav>
+    <h4>Dashboard</h4>
+    <button data-view="home" class="active">Home</button>
+    <button data-view="shows">Shows</button>
+    <button data-view="orders">Orders</button>
+    <button data-view="venues">Venues</button>
+    <h4>Marketing</h4>
+    <button data-view="audiences">Audiences</button>
+    <button data-view="emails">Email Campaigns</button>
+    <h4>Settings</h4>
+    <button data-view="account">Account</button>
+    <button id="btnLogout" class="danger">Log out</button>
+  </nav>
+
+  <section class="view">
+    <div class="toolbar">
+      <h2 id="viewTitle">Home</h2>
+      <div id="toolbarActions"></div>
+    </div>
+    <div class="content" id="viewContent">
+      <div class="card">
+        <p>Welcome to your organiser console. Use the menu to manage shows, orders, venues, and marketing.</p>
+        <p class="note">You’ll see more tools appear here as we build them in.</p>
       </div>
-      <h3 id="viewTitle">Home</h3>
-      <div id="viewContent" class="card">
-        Welcome to your organiser console. Use the menu to manage shows, orders, venues, and marketing.
-        <div class="note">You’ll see more tools appear here as we build them in.</div>
+    </div>
+  </section>
+</main>
+
+<div class="overlay" id="loginOverlay">
+  <div class="login">
+    <h3>Sign in</h3>
+    <p class="note" id="loginNote">Use your organiser account.</p>
+    <div class="grid">
+      <div><label>Email</label><input id="email" type="email" placeholder="you@venue.com"/></div>
+      <div><label>Password</label><input id="password" type="password" placeholder="••••••••"/></div>
+      <div class="row">
+        <button class="btn primary" id="btnLogin">Sign in</button>
+        <button class="btn ghost" id="btnDemo">Quick demo user</button>
       </div>
-    </main>
+      <div class="note" id="loginError" style="color:#dc2626;display:none;"></div>
+    </div>
   </div>
+</div>
 
-  <script>
-  // Small DOM helpers
-  const $ = (sel, el=document) => el.querySelector(sel);
+<script>
+(function(){
+  const $ = (sel) => document.querySelector(sel);
+  const API = (path, opts) => fetch(path, Object.assign({
+    credentials:'include',
+    headers:{'Content-Type':'application/json'}
+  }, opts || {}));
+  const fmtMoney = p => '£' + (Number(p || 0)/100).toFixed(2);
 
-  // Generic fetch wrapper that sends/accepts JSON and cookies
-  async function API(path, init){
-    const opts = Object.assign({ credentials:'include', headers: { 'Content-Type':'application/json' } }, init || {});
-    return fetch(path, opts);
-  }
-
-  // Left nav clicks
-  $('aside').addEventListener('click', (e) => {
-    const a = e.target.closest('a[data-view]');
-    if (!a) return;
-    e.preventDefault();
-    for(const n of document.querySelectorAll('aside nav a')) n.classList.remove('active');
-    a.classList.add('active');
-    const v = a.getAttribute('data-view');
-    if (views[v]) views[v]();
-    history.replaceState(null, '', '#' + v);
-  });
-
-  // Top-right user display (best-effort; ignore errors)
-  (async () => {
-    try{
-      const r = await API('/auth/me');
-      if (r.ok){
-        const j = await r.json();
-        if (j && j.email) $('#userEmail').textContent = j.email;
-      }
-    }catch{}
-  })();
-
+  // ===== Views =====
   const views = {
     home(){
       $('#viewTitle').textContent = 'Home';
       $('#toolbarActions').innerHTML = '';
       $('#viewContent').innerHTML =
-        '<div class="card">Welcome to your organiser console. Use the menu to manage shows, orders, venues, and marketing.'
-        + '<div class="note">You’ll see more tools appear here as we build them in.</div>'
-        + '</div>';
+        '<div class="grid two">'
+        + '<div class="card"><h4>Recent activity</h4><p class="note">Recent sales, scans and edits will appear here.</p></div>'
+        + '<div class="card"><h4>Shortcuts</h4><div class="row">'
+        + '<button class="btn ghost" data-goto="shows">Go to Shows</button>'
+        + '<button class="btn ghost" data-goto="orders">Go to Orders</button>'
+        + '</div></div></div>';
+      $('#viewContent').addEventListener('click', function(e){
+        const el = e.target.closest('[data-goto]');
+        if(!el) return;
+        e.preventDefault();
+        switchView(el.getAttribute('data-goto'));
+      }, { once:true });
     },
 
+    // ---- Shows list & detail ----
     shows(){
       $('#viewTitle').textContent = 'Shows';
       $('#toolbarActions').innerHTML = '<button class="btn ghost" id="btnRefreshShows">Refresh</button>';
-      $('#viewContent').innerHTML = '<div id="showsWrap" class="card">Loading…</div>';
-
-      const load = async () => {
-        try{
-          const r = await API('/admin/shows');
-          const j = await r.json();
-          if(!j.ok) throw new Error(j.message||'Failed to load shows');
-          const rows = (j.items||[]).map(s =>
-            '<tr><td>'+escapeHtml(s.title||'')+'</td>'
-            + '<td>'+(s.date ? new Date(s.date).toLocaleString() : '')+'</td>'
-            + '<td>'+escapeHtml((s.venue && s.venue.name) || '')+'</td></tr>'
-          ).join('');
-          $('#showsWrap').innerHTML =
-            '<div class="card"><div class="row"><input id="s_q" placeholder="Search shows"/><button class="btn ghost" id="s_find">Search</button></div></div>'
-            + '<div class="card" style="margin-top:12px;"><table class="table"><thead><tr><th>Title</th><th>Date</th><th>Venue</th></tr></thead><tbody>'
-            + rows + '</tbody></table></div>';
-        }catch(e){
-          $('#showsWrap').innerHTML = '<p class="danger">Failed to load shows</p>';
-        }
-      };
-      load();
-
-      $('#toolbarActions').onclick = (e) => { if(e.target.id==='btnRefreshShows') load(); };
-      $('#viewContent').onclick = async (e) => {
-        if (e.target && e.target.id === 's_find'){
-          const q = $('#s_q').value || '';
-          const r = await API('/admin/shows?q='+encodeURIComponent(q));
-          const j = await r.json();
-          const rows = (j.items||[]).map(s =>
-            '<tr><td>'+escapeHtml(s.title||'')+'</td>'
-            + '<td>'+(s.date ? new Date(s.date).toLocaleString() : '')+'</td>'
-            + '<td>'+escapeHtml((s.venue && s.venue.name) || '')+'</td></tr>'
-          ).join('');
-          $('#showsWrap').innerHTML =
-            '<div class="card"><div class="row"><input id="s_q" placeholder="Search shows"/><button class="btn ghost" id="s_find">Search</button></div></div>'
-            + '<div class="card" style="margin-top:12px;"><table class="table"><thead><tr><th>Title</th><th>Date</th><th>Venue</th></tr></thead><tbody>'
-            + rows + '</tbody></table></div>';
-        }
-      };
+      $('#viewContent').innerHTML = '<div id="showsWrap" class="grid"></div>';
+      loadShows();
+      $('#toolbarActions').onclick = e => { if (e.target.id==='btnRefreshShows') loadShows(); }
     },
 
+    showDetail(showId){
+      $('#viewTitle').textContent = 'Show';
+      $('#toolbarActions').innerHTML = '<a class="btn ghost" id="btnBackShows" href="#">Back</a>';
+      $('#toolbarActions').onclick = e => { if (e.target.id==='btnBackShows'){ e.preventDefault(); switchView("shows"); } };
+      renderShowDetail(showId);
+    },
+
+    // ---- Orders list & detail (with Notes + Refund) ----
     orders(){
       $('#viewTitle').textContent = 'Orders';
-      $('#toolbarActions').innerHTML = '<a class="btn ghost" href="/admin/orders/export.csv">Export CSV</a>';
-      $('#viewContent').innerHTML =
-        '<div class="card">'
-        + '<div class="row"><input id="o_q" placeholder="Search email / Stripe / show"/>'
-        + '<button class="btn primary" id="o_search">Search</button></div>'
-        + '</div>'
-        + '<div class="card" style="margin-top:12px;" id="ordersList">Enter a search.</div>';
-
-      $('#viewContent').onclick = async (e) => {
-        if (e.target && e.target.id === 'o_search') {
-          const q = $('#o_q').value || '';
-          const r = await API('/admin/orders?q='+encodeURIComponent(q));
-          const j = await r.json();
-          if(!j.ok){ $('#ordersList').innerHTML = '<p class="danger">Failed to load orders</p>'; return; }
-          const rows = (j.items||[]).map(o => {
-            const when = o.createdAt ? new Date(o.createdAt).toLocaleString() : '';
-            return '<tr>'
-              + '<td class="mono">'+(o.id||'')+'</td>'
-              + '<td>'+(o.email||'')+'</td>'
-              + '<td>'+(o.amountPence!=null ? '£'+(o.amountPence/100).toFixed(2) : '')+'</td>'
-              + '<td>'+(o.status||'')+'</td>'
-              + '<td>'+(o.show && o.show.title ? escapeHtml(o.show.title) : '')+'</td>'
-              + '<td>'+(when)+'</td>'
-              + '</tr>';
-          }).join('');
-          $('#ordersList').innerHTML =
-            '<table class="table"><thead><tr>'
-            + '<th>ID</th><th>Email</th><th>Amount</th><th>Status</th><th>Show</th><th>Created</th>'
-            + '</tr></thead><tbody>'+rows+'</tbody></table>';
-        }
-      };
+      $('#toolbarActions').innerHTML =
+        '<div class="row">'
+        + '<input id="ordersQ" placeholder="Search email / Stripe / show"/><button class="btn ghost" id="btnSearchOrders">Search</button>'
+        + '</div>';
+      $('#viewContent').innerHTML = '<div id="ordersWrap" class="grid"></div>';
+      const run = () => loadOrders($('#ordersQ').value || '');
+      run();
+      $('#toolbarActions').onclick = async e => { if (e.target.id==='btnSearchOrders') run(); }
     },
 
-    // ===== VENUES with fee profile fields =====
+    orderDetail(orderId){
+      $('#viewTitle').textContent = 'Order';
+      $('#toolbarActions').innerHTML = '<a class="btn ghost" id="btnBackOrders" href="#">Back</a>';
+      $('#toolbarActions').onclick = e => { if (e.target.id==='btnBackOrders'){ e.preventDefault(); switchView("orders"); } };
+      renderOrderDetail(orderId);
+    },
+
+    // ---- Venues (now with fee policy fields) ----
     venues(){
       $('#viewTitle').textContent = 'Venues';
       $('#toolbarActions').innerHTML = '';
       $('#viewContent').innerHTML =
         '<div class="grid two">'
-        + '<div class="card"><h4>Create / edit venue</h4><div class="grid">'
-        +   '<div><label>Name</label><input id="v_name"/></div>'
-        +   '<div><label>Address</label><input id="v_address"/></div>'
-        +   '<div><label>City</label><input id="v_city"/></div>'
-        +   '<div><label>Postcode</label><input id="v_postcode"/></div>'
-        +   '<div><label>Capacity</label><input id="v_capacity" type="number" min="0"/></div>'
-        +   '<hr/>'
-        +   '<div><label>Fee % (bps)</label><input id="v_feePercentBps" type="number" min="0" max="10000" placeholder="e.g. 1000 = 10.00%"/></div>'
-        +   '<div><label>Per-ticket fee (pence)</label><input id="v_perTicketFeePence" type="number" min="0" placeholder="e.g. 50"/></div>'
-        +   '<div><label>Basket fee (pence)</label><input id="v_basketFeePence" type="number" min="0" placeholder="e.g. 99"/></div>'
-        +   '<div><label>Organiser split (bps)</label><input id="v_organiserSplitBps" type="number" min="0" max="10000" placeholder="5000 = 50/50"/></div>'
-        +   '<div class="row"><button class="btn primary" id="btnCreateVenue">Save venue</button></div>'
-        +   '<div class="note" id="venueMsg"></div></div></div>'
-        + '<div class="card"><h4>Find venues</h4>'
-        +   '<div class="row"><input id="q" placeholder="Search by name/city/postcode"/><button class="btn ghost" id="btnFind">Search</button></div>'
-        +   '<div id="venuesList" class="grid" style="margin-top:8px"></div></div>'
+        + '<div class="card"><h4>Create venue</h4><div class="grid">'
+        + '<div><label>Name</label><input id="v_name"/></div>'
+        + '<div><label>Address</label><input id="v_address"/></div>'
+        + '<div><label>City</label><input id="v_city"/></div>'
+        + '<div><label>Postcode</label><input id="v_postcode"/></div>'
+        + '<div><label>Capacity</label><input id="v_capacity" type="number" min="0"/></div>'
+        + '<hr/>'
+        + '<div><label>% fee (bps, 1000=10%)</label><input id="v_fee_bps" type="number" min="0" placeholder="e.g. 1000"/></div>'
+        + '<div><label>Per-ticket fee (p)</label><input id="v_fee_ticket" type="number" min="0" placeholder="e.g. 50"/></div>'
+        + '<div><label>Basket fee (p)</label><input id="v_fee_basket" type="number" min="0" placeholder="e.g. 30"/></div>'
+        + '<div><label>Organiser split (bps, 5000=50%)</label><input id="v_split_bps" type="number" min="0" max="10000" placeholder="e.g. 5000"/></div>'
+        + '<div class="row"><button class="btn primary" id="btnCreateVenue">Save venue</button></div>'
+        + '<div class="note" id="venueMsg"></div></div></div>'
+
+        + '<div class="card"><h4>Find & edit venues</h4>'
+        + '<div class="row"><input id="q" placeholder="Search by name/city/postcode"/><button class="btn ghost" id="btnFind">Search</button></div>'
+        + '<div id="venuesList" class="grid" style="margin-top:8px"></div></div>'
         + '</div>';
 
       $('#viewContent').onclick = async e => {
+        // Create venue
         if (e.target && e.target.id === 'btnCreateVenue') {
           const body = {
             name: $('#v_name').value,
@@ -239,15 +195,17 @@ router.get(['/admin', '/admin/'], (_req, res) => {
             postcode: $('#v_postcode').value,
             capacity: Number($('#v_capacity').value || 0),
 
-            feePercentBps: Number($('#v_feePercentBps').value || 0),
-            perTicketFeePence: Number($('#v_perTicketFeePence').value || 0),
-            basketFeePence: Number($('#v_basketFeePence').value || 0),
-            organiserSplitBps: Number($('#v_organiserSplitBps').value || 5000),
+            feePercentBps: numOrNull($('#v_fee_bps').value),
+            perTicketFeePence: numOrNull($('#v_fee_ticket').value),
+            basketFeePence: numOrNull($('#v_fee_basket').value),
+            organiserSplitBps: numOrNull($('#v_split_bps').value),
           };
           const r = await API('/admin/venues', { method:'POST', body: JSON.stringify(body) });
           const j = await r.json();
           $('#venueMsg').textContent = j.ok ? 'Saved.' : (j.message || 'Failed');
         }
+
+        // Search venues
         if (e.target && e.target.id === 'btnFind') {
           const q = $('#q').value || '';
           const r = await API('/admin/venues?q=' + encodeURIComponent(q));
@@ -257,103 +215,405 @@ router.get(['/admin', '/admin/'], (_req, res) => {
           wrap.innerHTML = (j.venues||[]).map(v => {
             const meta = [v.address, v.city, v.postcode].filter(Boolean).join(', ') || '—';
             const cap = (v.capacity != null) ? v.capacity : '—';
-            const fees = [
-              (v.feePercentBps||0) ? ('%' + (v.feePercentBps/100).toFixed(2)) : null,
-              (v.perTicketFeePence||0) ? ('+' + v.perTicketFeePence + 'p/tkt') : null,
-              (v.basketFeePence||0) ? ('+' + v.basketFeePence + 'p basket') : null,
-              'org split ' + ((v.organiserSplitBps||5000)/100).toFixed(2) + '%'
-            ].filter(Boolean).join(' · ');
-            return '<div class="card"><b>'+escapeHtml(v.name||'')+'</b>'
-              + '<div class="note">'+escapeHtml(meta)+'</div>'
-              + '<div class="note">Capacity: '+cap+'</div>'
-              + '<div class="note">Fees: '+(fees || 'none')+'</div>'
+
+            return '<div class="card" data-venue="'+v.id+'">'
+              + '<b>'+escapeHtml(v.name)+'</b><div class="note">'+escapeHtml(meta)+'</div><div class="note">Capacity: '+cap+'</div>'
+              + '<div class="grid three" style="margin-top:8px">'
+              +   '<div><label>% fee (bps)</label><input class="fee_bps" type="number" min="0" value="'+valOrEmpty(v.feePercentBps)+'"/></div>'
+              +   '<div><label>Per-ticket fee (p)</label><input class="fee_ticket" type="number" min="0" value="'+valOrEmpty(v.perTicketFeePence)+'"/></div>'
+              +   '<div><label>Basket fee (p)</label><input class="fee_basket" type="number" min="0" value="'+valOrEmpty(v.basketFeePence)+'"/></div>'
+              + '</div>'
+              + '<div class="grid two" style="margin-top:8px">'
+              +   '<div><label>Organiser split (bps)</label><input class="split_bps" type="number" min="0" max="10000" value="'+valOrEmpty(v.organiserSplitBps)+'"/></div>'
+              +   '<div style="display:flex;align-items:flex-end"><button class="btn ghost v_save">Save</button></div>'
+              + '</div>'
               + '</div>';
           }).join('');
         }
-      };
-    },
 
-    analytics(){
-      $('#viewTitle').textContent = 'Analytics';
-      $('#toolbarActions').innerHTML = '';
-      $('#viewContent').innerHTML =
-        '<div class="row" style="gap:12px;">'
-        + '<input id="a_start" type="date"/>'
-        + '<input id="a_end" type="date"/>'
-        + '<button class="btn primary" id="a_run">Run</button></div>'
-        + '<div class="card" style="margin-top:12px;"><canvas id="a_chart" height="160" style="width:100%;"></canvas></div>'
-        + '<div id="a_msg" class="note"></div>';
+        // Inline save for a venue
+        const card = e.target && e.target.closest && e.target.closest('[data-venue]');
+        if (card && e.target && e.target.classList.contains('v_save')) {
+          const id = card.getAttribute('data-venue');
+          const fee_bps = numOrNull(card.querySelector('.fee_bps')?.value);
+          const fee_ticket = numOrNull(card.querySelector('.fee_ticket')?.value);
+          const fee_basket = numOrNull(card.querySelector('.fee_basket')?.value);
+          const split_bps = numOrNull(card.querySelector('.split_bps')?.value);
 
-      $('#viewContent').onclick = async (e) => {
-        if (e.target && e.target.id === 'a_run') {
-          const start = $('#a_start').value;
-          const end = $('#a_end').value;
-          const r = await API('/admin/analytics/sales?start=' + encodeURIComponent(start) + '&end=' + encodeURIComponent(end));
+          const r = await API('/admin/venues/'+encodeURIComponent(id), {
+            method:'PATCH',
+            body: JSON.stringify({
+              feePercentBps: fee_bps,
+              perTicketFeePence: fee_ticket,
+              basketFeePence: fee_basket,
+              organiserSplitBps: split_bps,
+            })
+          });
           const j = await r.json();
-          if(!j.ok){ $('#a_msg').textContent = j.message || 'Failed to load analytics'; return; }
-          drawSimpleLineChart($('#a_chart'), (j.points||[]));
-          $('#a_msg').textContent = '';
+          if (!$('#venueMsgInline')) {
+            const msg = document.createElement('div');
+            msg.className = 'note';
+            msg.id = 'venueMsgInline';
+            card.appendChild(msg);
+          }
+          $('#venueMsgInline').textContent = j.ok ? 'Updated.' : (j.message || 'Failed to update');
         }
       };
+
+      function numOrNull(v){ return (v === '' || v === undefined || v === null) ? null : Number(v); }
+      function valOrEmpty(v){ return (v === null || v === undefined) ? '' : String(v); }
+      function escapeHtml(s){ return String(s||'').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
     },
 
     audiences(){
       $('#viewTitle').textContent = 'Audiences';
       $('#toolbarActions').innerHTML = '';
-      $('#viewContent').innerHTML = '<div class="card muted">Audiences module coming soon.</div>';
+      $('#viewContent').innerHTML = '<div class="note">Audience tools coming soon.</div>';
     },
-
-    email(){
+    emails(){
       $('#viewTitle').textContent = 'Email Campaigns';
       $('#toolbarActions').innerHTML = '';
-      $('#viewContent').innerHTML = '<div class="card muted">Email campaigns module coming soon.</div>';
+      $('#viewContent').innerHTML = '<div class="note">Scheduler + templates placeholder.</div>';
     },
-
     account(){
       $('#viewTitle').textContent = 'Account';
       $('#toolbarActions').innerHTML = '';
-      $('#viewContent').innerHTML = '<div class="card muted">Account settings will appear here.</div>';
-    },
+      $('#viewContent').innerHTML = '<div class="note">Manage your password and organisation details.</div>';
+    }
   };
 
-  function escapeHtml(s){
-    return String(s==null?'':s)
-      .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
-      .replaceAll('"','&quot;').replaceAll("'",'&#39;');
+  // ===== Shows =====
+  async function loadShows(){
+    const wrap = $('#showsWrap');
+    wrap.innerHTML = '<div class="note">Loading…</div>';
+    const r = await API('/admin/shows/latest?limit=50');
+    const j = await r.json();
+    if(!j.ok){ wrap.innerHTML = '<div class="danger">Failed to load shows</div>'; return; }
+    if(!j.shows || j.shows.length===0){ wrap.innerHTML = '<div class="note">No shows yet.</div>'; return; }
+    wrap.innerHTML = j.shows.map(s => {
+      const d = new Date(s.date);
+      const when = d.toLocaleString();
+      const venue = s.venue ? [s.venue.name,s.venue.city,s.venue.postcode].filter(Boolean).join(', ') : '—';
+      return '<div class="card">'
+        + '<div class="row" style="justify-content:space-between;align-items:center">'
+        +   '<div>'
+        +     '<div><b>'+s.title+'</b></div>'
+        +     '<div class="note">'+when+' — '+venue+'</div>'
+        +   '</div>'
+        +   '<div><button class="btn ghost" data-show="'+s.id+'">Open</button></div>'
+        + '</div>'
+        + '</div>';
+    }).join('');
+    wrap.onclick = e => {
+      const btn = e.target.closest('[data-show]');
+      if(!btn) return;
+      const id = btn.getAttribute('data-show');
+      switchView('showDetail', id);
+    };
   }
 
-  // Tiny line chart (no external libs)
-  function drawSimpleLineChart(canvas, points){
-    const ctx = canvas.getContext('2d');
-    const W = canvas.width = canvas.clientWidth;
-    const H = canvas.height = canvas.clientHeight;
-    ctx.clearRect(0,0,W,H);
-    if(!points || !points.length){ ctx.fillStyle='#9ca3af'; ctx.fillText('No data', 10, 20); return; }
+  async function renderShowDetail(showId){
+    const r = await API('/admin/shows/'+encodeURIComponent(showId));
+    const j = await r.json();
+    if(!j.ok){ $('#viewContent').innerHTML = '<div class="danger">Failed to load show</div>'; return; }
+    const { show, kpis } = j;
 
-    const xs = points.map(p => +new Date(p.date || p.day || p.x));
-    const ys = points.map(p => Number(p.amountPence || p.y || 0));
-    const minX = Math.min(...xs), maxX = Math.max(...xs);
-    const minY = 0, maxY = Math.max(...ys, 1);
+    $('#viewContent').innerHTML =
+      '<div class="grid">'
+      + '<div class="card"><h3 style="margin:0 0 8px">'+show.title+'</h3>'
+      + '<div class="note">'+(show.venue ? (show.venue.name + (show.venue.city ? (', '+show.venue.city) : '')) : '—')+'</div>'
+      + '<div class="note">Date: '+new Date(show.date).toLocaleString()+'</div></div>'
+      + '<div class="kpis">'
+      +   '<div class="kpi"><div class="note">Capacity</div><div style="font-size:20px;font-weight:700">'+(kpis.capacity ?? '—')+'</div></div>'
+      +   '<div class="kpi"><div class="note">Total Available</div><div style="font-size:20px;font-weight:700">'+(kpis.totalAvailable ?? 0)+'</div></div>'
+      +   '<div class="kpi"><div class="note">Tickets Sold</div><div style="font-size:20px;font-weight:700">'+(kpis.ticketsSold ?? 0)+'</div></div>'
+      +   '<div class="kpi"><div class="note">Revenue</div><div style="font-size:20px;font-weight:700">'+fmtMoney(kpis.revenuePence)+'</div></div>'
+      + '</div>'
+      + '<div class="grid two">'
+      +   '<div class="card">'
+      +     '<h4 style="margin-top:0">Ticket Types</h4>'
+      +     '<table class="table"><thead><tr><th>Name</th><th>Price</th><th>Avail.</th><th></th></tr></thead>'
+      +     '<tbody id="ttBody"></tbody></table>'
+      +     '<div class="row" style="margin-top:8px">'
+      +       '<input id="tt_name" placeholder="Name"/>'
+      +       '<input id="tt_price" type="number" placeholder="Price (pence)"/>'
+      +       '<input id="tt_avail" type="number" placeholder="Available"/>'
+      +       '<button class="btn primary" id="btnAddTT">Add</button>'
+      +     '</div>'
+      +     '<div class="note" id="ttMsg"></div>'
+      +   '</div>'
+      +   '<div class="card">'
+      +     '<h4 style="margin-top:0">Attendees</h4>'
+      +     '<p class="note">Download a CSV for door list or marketing exports.</p>'
+      +     '<a class="btn ghost" href="/admin/shows/'+show.id+'/attendees.csv" target="_blank" rel="noopener">Download CSV</a>'
+      +   '</div>'
+      + '</div>'
+      + '</div>';
 
-    const px = (x) => 20 + (W-40) * ((x - minX) / Math.max(1, (maxX-minX)));
-    const py = (y) => H-20 - (H-40) * ((y - minY) / Math.max(1, (maxY-minY)));
+    // Render ticket types
+    const tbody = $('#ttBody');
+    tbody.innerHTML = (show.ticketTypes || []).map(tt => {
+      return '<tr data-tt="'+tt.id+'">'
+        + '<td><input class="tt_name" value="'+(tt.name||'')+'"/></td>'
+        + '<td><input class="tt_price" type="number" value="'+(tt.pricePence||0)+'"/></td>'
+        + '<td><input class="tt_avail" type="number" value="'+(tt.available==null?'':tt.available)+'"/></td>'
+        + '<td>'
+        +   '<button class="btn ghost tt_save">Save</button> '
+        +   '<button class="btn ghost tt_del" style="color:#dc2626;border-color:#fecaca">Delete</button>'
+        + '</td>'
+        + '</tr>';
+    }).join('');
 
-    // axes
-    ctx.strokeStyle = '#e5e7eb'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(20, 10); ctx.lineTo(20, H-20); ctx.lineTo(W-10, H-20); ctx.stroke();
+    // handlers
+    tbody.onclick = async e => {
+      const tr = e.target.closest('tr[data-tt]');
+      if(!tr) return;
+      const id = tr.getAttribute('data-tt');
+      if (e.target.classList.contains('tt_save')) {
+        const name = tr.querySelector('.tt_name').value;
+        const pricePence = Number(tr.querySelector('.tt_price').value || 0);
+        const availRaw = tr.querySelector('.tt_avail').value;
+        const available = availRaw === '' ? null : Number(availRaw);
+        const r = await API('/admin/ticket-types/'+encodeURIComponent(id), {
+          method:'PATCH',
+          body: JSON.stringify({ name, pricePence, available })
+        });
+        const j = await r.json();
+        $('#ttMsg').textContent = j.ok ? 'Saved' : (j.message || 'Failed');
+        if (j.ok) renderShowDetail(showId);
+      }
+      if (e.target.classList.contains('tt_del')) {
+        if (!confirm('Delete this ticket type?')) return;
+        const r = await API('/admin/ticket-types/'+encodeURIComponent(id), { method: 'DELETE' });
+        const j = await r.json();
+        $('#ttMsg').textContent = j.ok ? 'Deleted' : (j.message || 'Failed');
+        if (j.ok) renderShowDetail(showId);
+      }
+    };
 
-    // line
-    ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 2;
-    ctx.beginPath();
-    points.forEach((p,i) => { const x=px(+new Date(p.date||p.day||p.x)); const y=py(Number(p.amountPence||p.y||0)); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
-    ctx.stroke();
+    $('#btnAddTT')?.addEventListener('click', async () => {
+      const name = $('#tt_name').value;
+      const pricePence = Number($('#tt_price').value || 0);
+      const availRaw = $('#tt_avail').value;
+      const available = availRaw === '' ? null : Number(availRaw);
+      const r = await API('/admin/shows/'+encodeURIComponent(showId)+'/ticket-types', {
+        method:'POST',
+        body: JSON.stringify({ name, pricePence, available })
+      });
+      const j2 = await r.json();
+      $('#ttMsg').textContent = j2.ok ? 'Added' : (j2.message || 'Failed');
+      if (j2.ok) renderShowDetail(showId);
+    });
   }
 
-  // Initial view from hash
-  const initial = (location.hash||'#home').slice(1);
-  const link = document.querySelector('aside nav a[data-view="'+initial+'"]') || document.querySelector('aside nav a[data-view="home"]');
-  if (link){ link.click(); }
-  </script>
+  // ===== Orders =====
+  async function loadOrders(q){
+    const wrap = $('#ordersWrap');
+    wrap.innerHTML = '<div class="note">Loading…</div>';
+    const r = await API('/admin/orders?q='+encodeURIComponent(q||'')+'&limit=50');
+    const j = await r.json();
+    if(!j.ok){ wrap.innerHTML = '<div class="danger">Failed to load orders</div>'; return; }
+    if(!j.items || j.items.length===0){ wrap.innerHTML = '<div class="note">No orders found.</div>'; return; }
+    wrap.innerHTML = '<table class="table"><thead><tr><th>Date</th><th>Email</th><th>Show</th><th>Qty</th><th>Amount</th><th>Status</th><th></th></tr></thead><tbody>'
+      + j.items.map(o => {
+          const when = new Date(o.createdAt).toLocaleString();
+          const show = o.show ? (o.show.title + ' (' + new Date(o.show.date).toLocaleDateString() + ')') : '—';
+          return '<tr>'
+            + '<td>'+when+'</td>'
+            + '<td>'+(o.email||'—')+'</td>'
+            + '<td>'+show+'</td>'
+            + '<td>'+(o.quantity ?? '—')+'</td>'
+            + '<td>'+fmtMoney(o.amountPence)+'</td>'
+            + '<td>'+o.status+'</td>'
+            + '<td><button class="btn ghost" data-open-order="'+o.id+'">Open</button></td>'
+            + '</tr>';
+        }).join('')
+      + '</tbody></table>';
+    wrap.onclick = e => {
+      const btn = e.target.closest('[data-open-order]');
+      if(!btn) return;
+      switchView('orderDetail', btn.getAttribute('data-open-order'));
+    };
+  }
+
+  async function renderOrderDetail(orderId){
+    const wrap = $('#viewContent');
+    wrap.innerHTML = '<div class="note">Loading…</div>';
+    const r = await API('/admin/orders/'+encodeURIComponent(orderId));
+    const j = await r.json();
+    if(!j.ok){ wrap.innerHTML = '<div class="danger">Failed to load order</div>'; return; }
+    const o = j.order;
+    wrap.innerHTML =
+      '<div class="grid">'
+      + '<div class="card"><h3 style="margin:0 0 8px">Order '+o.id+'</h3>'
+      + '<div class="note">Email: '+(o.email||'—')+'</div>'
+      + '<div class="note">Amount: '+fmtMoney(o.amountPence)+'</div>'
+      + '<div class="note">Qty: '+(o.quantity ?? '—')+'</div>'
+      + '<div class="note">Status: '+o.status+'</div>'
+      + '<div class="row" style="margin-top:8px">'
+      +   '<input id="refundAmount" type="number" placeholder="Amount (pence, optional)" style="max-width:160px"/>'
+      +   '<input id="refundReason" placeholder="Reason (optional)" style="max-width:220px"/>'
+      +   '<button class="btn ghost" id="btnRefund">Refund</button>'
+      + '</div>'
+      + '<div class="note" id="refundMsg"></div>'
+      + '</div>'
+      + '<div class="grid two">'
+      +   '<div class="card">'
+      +     '<h4 style="margin-top:0">Notes</h4>'
+      +     '<div class="row"><input id="noteText" placeholder="Add a note…"/><button class="btn primary" id="btnAddNote">Add</button></div>'
+      +     '<div id="notesWrap" class="grid" style="margin-top:8px"></div>'
+      +     '<div class="note" id="noteMsg"></div>'
+      +   '</div>'
+      +   '<div class="card"><h4 style="margin-top:0">Tickets</h4>'
+      +     '<table class="table"><thead><tr><th>Serial</th><th>Holder</th><th>Status</th><th>Scanned</th></tr></thead><tbody>'
+      +     (o.tickets||[]).map(t => '<tr><td>'+t.serial+'</td><td>'+(t.holderName||'')+'</td><td>'+(t.status||'')+'</td><td>'+(t.scannedAt?new Date(t.scannedAt).toLocaleString():'')+'</td></tr>').join('')
+      +     + '</tbody></table>'
+      +   '</div>'
+      + '</div>'
+      + '</div>';
+
+    // Refund handler
+    $('#btnRefund').onclick = async () => {
+      const amount = $('#refundAmount').value ? Number($('#refundAmount').value) : null;
+      const reason = $('#refundReason').value || '';
+      const r = await API('/admin/orders/'+encodeURIComponent(orderId)+'/refund', {
+        method:'POST',
+        body: JSON.stringify({ amountPence: amount, reason })
+      });
+      const j2 = await r.json();
+      $('#refundMsg').textContent = j2.ok ? 'Refund issued successfully' : (j2.message||'Failed');
+      if(j2.ok) renderOrderDetail(orderId);
+    };
+
+    // Notes
+    const notesWrap = $('#notesWrap');
+    const renderNotes = () => {
+      notesWrap.innerHTML = (o.notes||[]).map(n => {
+        const who = n.user ? (n.user.name || n.user.email || 'User') : 'System';
+        return '<div class="card" data-note="'+n.id+'">'
+          + '<div class="note">'+new Date(n.createdAt).toLocaleString()+' — '+who+'</div>'
+          + '<div><textarea class="noteText" style="width:100%;min-height:60px">'+(n.text||'')+'</textarea></div>'
+          + '<div class="row" style="margin-top:6px">'
+          +   '<button class="btn ghost note_save">Save</button>'
+          +   '<button class="btn ghost note_del" style="color:#dc2626;border-color:#fecaca">Delete</button>'
+          + '</div>'
+          + '</div>';
+      }).join('') || '<div class="note">No notes yet.</div>';
+    };
+    renderNotes();
+
+    // Add note
+    $('#btnAddNote').onclick = async () => {
+      const txt = $('#noteText').value;
+      if(!txt.trim()) return;
+      const r = await API('/admin/orders/'+encodeURIComponent(orderId)+'/notes', { method:'POST', body: JSON.stringify({ text: txt }) });
+      const j2 = await r.json();
+      $('#noteMsg').textContent = j2.ok ? 'Saved' : (j2.message||'Failed');
+      if (j2.ok) {
+        o.notes.unshift(j2.note);
+        $('#noteText').value = '';
+        renderNotes();
+      }
+    };
+
+    // Edit / delete notes
+    notesWrap.onclick = async e => {
+      const card = e.target.closest('[data-note]');
+      if(!card) return;
+      const noteId = card.getAttribute('data-note');
+      if (e.target.classList.contains('note_save')) {
+        const txt = card.querySelector('.noteText').value;
+        const r = await API('/admin/orders/'+encodeURIComponent(orderId)+'/notes/'+encodeURIComponent(noteId), {
+          method:'PATCH',
+          body: JSON.stringify({ text: txt })
+        });
+        const j3 = await r.json();
+        $('#noteMsg').textContent = j3.ok ? 'Saved' : (j3.message || 'Failed');
+      }
+      if (e.target.classList.contains('note_del')) {
+        if (!confirm('Delete this note?')) return;
+        const r = await API('/admin/orders/'+encodeURIComponent(orderId)+'/notes/'+encodeURIComponent(noteId), { method:'DELETE' });
+        const j4 = await r.json();
+        $('#noteMsg').textContent = j4.ok ? 'Deleted' : (j4.message || 'Failed');
+        if (j4.ok) {
+          o.notes = o.notes.filter(n => n.id !== noteId);
+          renderNotes();
+        }
+      }
+    };
+  }
+
+  // ===== Navigation =====
+  function switchView(name, arg){
+    document.querySelectorAll('nav button').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-view')===name);
+    });
+    if (name === 'showDetail') return views.showDetail(arg);
+    if (name === 'orderDetail') return views.orderDetail(arg);
+    if (views[name]) views[name](); else views.home();
+  }
+
+  // Sidebar
+  document.querySelectorAll('nav button[data-view]').forEach(btn=>{
+    btn.addEventListener('click', e => {
+      e.preventDefault();
+      switchView(btn.getAttribute('data-view'));
+    });
+  });
+
+  // Auth helpers
+  async function ensureAuth(){
+    const me = await fetch('/auth/me', { credentials: 'include' });
+    if(me.status===200){
+      const j = await me.json();
+      $('#userEmail').textContent = (j.user && j.user.email) ? j.user.email : 'Signed in';
+      $('#loginOverlay').classList.remove('show');
+      return true;
+    } else {
+      $('#loginOverlay').classList.add('show');
+      return false;
+    }
+  }
+
+  // Logout
+  $('#btnLogout').addEventListener('click', async function(){
+    await API('/auth/logout', { method:'POST' });
+    location.reload();
+  });
+
+  // Login
+  $('#btnLogin').addEventListener('click', async function(){
+    const email = $('#email').value;
+    const password = $('#password').value;
+    const r = await API('/auth/login', { method:'POST', body: JSON.stringify({ email, password }) });
+    const j = await r.json();
+    if(!j.ok){
+      const e = $('#loginError');
+      e.textContent = j.message || 'Login failed';
+      e.style.display = 'block';
+      return;
+    }
+    location.reload();
+  });
+
+  // Demo user
+  $('#btnDemo').addEventListener('click', async function(){
+    const email = 'demo@organiser.test';
+    const password = 'demo1234';
+    let r = await API('/auth/login', { method:'POST', body: JSON.stringify({ email, password }) });
+    if(r.status===401){
+      await API('/auth/signup', { method:'POST', body: JSON.stringify({ email, password, name: 'Demo User' }) });
+    }
+    await API('/auth/login', { method:'POST', body: JSON.stringify({ email, password }) });
+    location.reload();
+  });
+
+  (async function boot(){
+    const ok = await ensureAuth();
+    if(ok) switchView('home');
+  })();
+})();
+</script>
 </body>
 </html>`);
 });
