@@ -1,202 +1,102 @@
-// backend/src/routes/admin-analytics.ts
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import prisma from '../lib/prisma.js';
+import { requireAdminOrOrganiser } from '../lib/authz.js';
 
 const router = Router();
 
-/**
- * Helpers
- */
-function parseRange(q: Request['query']) {
-  const now = new Date();
-  const to = q.to ? new Date(String(q.to)) : now;
-  const from =
-    q.from ? new Date(String(q.from)) : new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
-  // normalise to day bounds for consistency
-  from.setHours(0, 0, 0, 0);
-  to.setHours(23, 59, 59, 999);
-  return { from, to };
-}
-
-function dayKey(d: Date): string {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-/**
- * GET /admin/analytics/summary
- * Returns high-level KPIs for a date range (default last 30 days)
- */
-router.get('/analytics/summary', async (req: Request, res: Response) => {
+// KPIs
+router.get('/analytics/summary', requireAdminOrOrganiser, async (_req, res) => {
   try {
-    const { from, to } = parseRange(req.query);
+    const [paidOrders, refunds, ticketsSold] = await Promise.all([
+      prisma.order.findMany({
+        where: { status: 'PAID' },
+        select: { amountPence: true, platformFeePence: true, paymentFeePence: true, netPayoutPence: true },
+      }),
+      prisma.refund.findMany({ select: { amount: true } }),
+      prisma.ticket.count({ where: { status: 'VALID' } }),
+    ]);
 
-    // Sum paid order amounts in range
-    const paidOrders = await prisma.order.findMany({
-      where: {
-        status: 'PAID',
-        createdAt: { gte: from, lte: to },
-      },
-      select: { amountPence: true, id: true, quantity: true },
-    });
+    const sum = (arr: number[]) => arr.reduce((a, b) => a + (b || 0), 0);
 
-    const totalPaidPence = paidOrders.reduce((sum, o) => sum + (o.amountPence ?? 0), 0);
-
-    // Sum refunds in range
-    const refunds = await prisma.refund.findMany({
-      where: { createdAt: { gte: from, lte: to } },
-      select: { amount: true },
-    });
-    const totalRefundsPence = refunds.reduce((sum, r) => sum + (r.amount ?? 0), 0);
-
-    // Net revenue
-    const revenuePence = totalPaidPence - totalRefundsPence;
-
-    // Tickets sold = count of tickets belonging to paid orders in range
-    const tickets = await prisma.ticket.findMany({
-      where: {
-        order: { status: 'PAID', createdAt: { gte: from, lte: to } },
-      },
-      select: { id: true },
-    });
-    const ticketsSold = tickets.length;
-
-    // Orders count
-    const ordersCount = paidOrders.length;
-
-    // Live shows (upcoming)
-    const showsLive = await prisma.show.count({
-      where: { date: { gte: new Date() } },
-    });
+    const revenuePence = sum(paidOrders.map((o) => o.amountPence || 0));
+    const platformFeesPence = sum(paidOrders.map((o) => o.platformFeePence || 0));
+    const paymentFeesPence = sum(paidOrders.map((o) => o.paymentFeePence || 0));
+    const netPayoutPence = sum(paidOrders.map((o) => o.netPayoutPence || 0));
+    const refundsPence = sum(refunds.map((r) => r.amount || 0));
 
     res.json({
       ok: true,
-      range: { from, to },
       kpis: {
         revenuePence,
-        refundsPence: totalRefundsPence,
+        platformFeesPence,
+        paymentFeesPence,
+        netPayoutPence,
+        refundsPence,
         ticketsSold,
-        ordersCount,
-        showsLive,
+        orders: paidOrders.length,
       },
     });
   } catch (e: any) {
-    res.status(500).json({ ok: false, message: e?.message || 'Failed to compute summary' });
+    res.status(500).json({ ok: false, message: e?.message ?? 'Failed' });
   }
 });
 
-/**
- * GET /admin/analytics/sales-trend
- * Returns daily series for revenue and tickets (default last 30 days)
- */
-router.get('/analytics/sales-trend', async (req: Request, res: Response) => {
+// Daily sales trend (gross + net)
+router.get('/analytics/sales-trend', requireAdminOrOrganiser, async (_req, res) => {
   try {
-    const { from, to } = parseRange(req.query);
-
-    // Paid orders in range
-    const orders = await prisma.order.findMany({
-      where: { status: 'PAID', createdAt: { gte: from, lte: to } },
-      select: { id: true, amountPence: true, createdAt: true },
+    // last 30 days
+    const since = new Date(Date.now() - 29 * 24 * 60 * 60 * 1000);
+    const rows = await prisma.order.findMany({
+      where: { status: 'PAID', createdAt: { gte: since } },
+      select: { createdAt: true, amountPence: true, netPayoutPence: true },
       orderBy: { createdAt: 'asc' },
     });
 
-    // Tickets in range (for paid orders)
-    const tickets = await prisma.ticket.findMany({
-      where: { order: { status: 'PAID', createdAt: { gte: from, lte: to } } },
-      select: { id: true, order: { select: { createdAt: true } } },
-    });
-
-    // Build day buckets
-    const seriesMap = new Map<string, { date: string; revenuePence: number; tickets: number }>();
-
-    // seed all days in range with zeros (for charts with gaps)
-    const cursor = new Date(from.getTime());
-    while (cursor <= to) {
-      const k = dayKey(cursor);
-      seriesMap.set(k, { date: k, revenuePence: 0, tickets: 0 });
-      cursor.setDate(cursor.getDate() + 1);
+    // bucket by day
+    const map = new Map<string, { revenuePence: number; netPayoutPence: number }>();
+    for (const r of rows) {
+      const day = r.createdAt.toISOString().slice(0, 10);
+      const cur = map.get(day) || { revenuePence: 0, netPayoutPence: 0 };
+      cur.revenuePence += r.amountPence || 0;
+      cur.netPayoutPence += r.netPayoutPence || 0;
+      map.set(day, cur);
     }
+    const days = Array.from(map.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, v]) => ({ date, revenuePence: v.revenuePence, netPayoutPence: v.netPayoutPence }));
 
-    // add revenue by order day
-    for (const o of orders) {
-      const k = dayKey(o.createdAt);
-      const prev = seriesMap.get(k);
-      const amount = o.amountPence ?? 0;
-      if (prev) prev.revenuePence += amount;
-      else seriesMap.set(k, { date: k, revenuePence: amount, tickets: 0 });
-    }
-
-    // add tickets by ticket->order day
-    for (const t of tickets) {
-      const createdAt = t.order?.createdAt ?? new Date();
-      const k = dayKey(createdAt);
-      const prev = seriesMap.get(k);
-      if (prev) prev.tickets += 1;
-      else seriesMap.set(k, { date: k, revenuePence: 0, tickets: 1 });
-    }
-
-    const series = Array.from(seriesMap.values()).sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-    );
-
-    res.json({ ok: true, range: { from, to }, series });
+    res.json({ ok: true, days });
   } catch (e: any) {
-    res.status(500).json({ ok: false, message: e?.message || 'Failed to compute trend' });
+    res.status(500).json({ ok: false, message: e?.message ?? 'Failed' });
   }
 });
 
-/**
- * GET /admin/analytics/top-shows
- * Returns top shows by revenue in range (default last 30 days)
- * ?limit=5
- */
-router.get('/analytics/top-shows', async (req: Request, res: Response) => {
+// Top shows by revenue
+router.get('/analytics/top-shows', requireAdminOrOrganiser, async (_req, res) => {
   try {
-    const { from, to } = parseRange(req.query);
-    const limit = Math.max(1, Math.min(50, Number(req.query.limit ?? 5)));
-
-    // Pull paid orders with their show
-    const orders = await prisma.order.findMany({
-      where: {
-        status: 'PAID',
-        createdAt: { gte: from, lte: to },
-        showId: { not: null },
-      },
+    const shows = await prisma.show.findMany({
       select: {
-        amountPence: true,
-        showId: true,
-        show: { select: { id: true, title: true, date: true, venue: { select: { name: true } } } },
+        id: true,
+        title: true,
+        date: true,
+        orders: { where: { status: 'PAID' }, select: { amountPence: true } },
       },
+      orderBy: { date: 'desc' },
+      take: 20,
     });
-
-    // Aggregate by showId
-    const agg = new Map<
-      string,
-      { showId: string; title: string; date: Date | null; venueName: string | null; revenuePence: number }
-    >();
-
-    for (const o of orders) {
-      const key = o.showId as string;
-      const info = agg.get(key) ?? {
-        showId: key,
-        title: o.show?.title ?? 'Untitled show',
-        date: o.show?.date ?? null,
-        venueName: o.show?.venue?.name ?? null,
-        revenuePence: 0,
-      };
-      info.revenuePence += o.amountPence ?? 0;
-      agg.set(key, info);
-    }
-
-    const list = Array.from(agg.values())
+    const items = shows
+      .map((s) => ({
+        id: s.id,
+        title: s.title,
+        date: s.date,
+        revenuePence: s.orders.reduce((a, b) => a + (b.amountPence || 0), 0),
+      }))
       .sort((a, b) => b.revenuePence - a.revenuePence)
-      .slice(0, limit);
+      .slice(0, 10);
 
-    res.json({ ok: true, range: { from, to }, items: list });
+    res.json({ ok: true, items });
   } catch (e: any) {
-    res.status(500).json({ ok: false, message: e?.message || 'Failed to compute top shows' });
+    res.status(500).json({ ok: false, message: e?.message ?? 'Failed' });
   }
 });
 
