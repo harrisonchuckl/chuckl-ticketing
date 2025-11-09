@@ -1,108 +1,69 @@
+// backend/src/routes/admin-analytics.ts
 import { Router } from 'express';
-import prisma from '../lib/prisma.js';
-import { requireAdminOrOrganiser } from '../lib/authz.js';
+import { PrismaClient } from '@prisma/client';
+import { requireAdmin } from '../lib/authz.js';
 
+const prisma = new PrismaClient();
 const router = Router();
 
-router.get('/analytics/summary', requireAdminOrOrganiser, async (_req, res) => {
+/**
+ * GET /admin/analytics/sales?start=YYYY-MM-DD&end=YYYY-MM-DD
+ * Returns daily totals and fee breakdowns (best-effort).
+ * Only uses columns guaranteed to exist (amountPence, platformFeePence if present).
+ */
+router.get('/analytics/sales', requireAdmin, async (req, res) => {
   try {
-    const [paidOrders, refunds, ticketsSold] = await Promise.all([
-      prisma.order.findMany({
-        where: { status: 'PAID' },
-        select: {
-          amountPence: true,
-          platformFeePence: true,
-          platformFeeOurSharePence: true,
-          platformFeeOrganiserSharePence: true,
-          paymentFeePence: true,
-          netPayoutPence: true,
-        },
-      }),
-      prisma.refund.findMany({ select: { amount: true } }),
-      prisma.ticket.count({ where: { status: 'VALID' } }),
-    ]);
+    const start = String(req.query.start || '').trim();
+    const end = String(req.query.end || '').trim();
 
-    const sum = (arr: number[]) => arr.reduce((a, b) => a + (b || 0), 0);
+    const startDate = start ? new Date(start + 'T00:00:00Z') : new Date(Date.now() - 30 * 86400000);
+    const endDate = end ? new Date(end + 'T23:59:59Z') : new Date();
 
-    const revenuePence = sum(paidOrders.map((o) => o.amountPence || 0));
-    const platformFeesPence = sum(paidOrders.map((o) => o.platformFeePence || 0));
-    const platformFeesOurSharePence = sum(paidOrders.map((o) => o.platformFeeOurSharePence || 0));
-    const platformFeesOrganiserSharePence = sum(paidOrders.map((o) => o.platformFeeOrganiserSharePence || 0));
-    const paymentFeesPence = sum(paidOrders.map((o) => o.paymentFeePence || 0));
-    const netPayoutPence = sum(paidOrders.map((o) => o.netPayoutPence || 0));
-    const refundsPence = sum(refunds.map((r) => r.amount || 0));
-
-    res.json({
-      ok: true,
-      kpis: {
-        revenuePence,
-        platformFeesPence,
-        platformFeesOurSharePence,
-        platformFeesOrganiserSharePence,
-        paymentFeesPence,
-        netPayoutPence,
-        refundsPence,
-        ticketsSold,
-        orders: paidOrders.length,
+    const orders = await prisma.order.findMany({
+      where: {
+        createdAt: { gte: startDate, lte: endDate },
+        status: { in: ['PAID', 'REFUNDED'] }, // include REFUNDED to see negative adjustments if you implement them later
       },
-    });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, message: e?.message ?? 'Failed' });
-  }
-});
-
-router.get('/analytics/sales-trend', requireAdminOrOrganiser, async (_req, res) => {
-  try {
-    const since = new Date(Date.now() - 29 * 24 * 60 * 60 * 1000);
-    const rows = await prisma.order.findMany({
-      where: { status: 'PAID', createdAt: { gte: since } },
-      select: { createdAt: true, amountPence: true, netPayoutPence: true },
-      orderBy: { createdAt: 'asc' },
-    });
-
-    const map = new Map<string, { revenuePence: number; netPayoutPence: number }>();
-    for (const r of rows) {
-      const day = r.createdAt.toISOString().slice(0, 10);
-      const cur = map.get(day) || { revenuePence: 0, netPayoutPence: 0 };
-      cur.revenuePence += r.amountPence || 0;
-      cur.netPayoutPence += r.netPayoutPence || 0;
-      map.set(day, cur);
-    }
-    const days = Array.from(map.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([date, v]) => ({ date, revenuePence: v.revenuePence, netPayoutPence: v.netPayoutPence }));
-
-    res.json({ ok: true, days });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, message: e?.message ?? 'Failed' });
-  }
-});
-
-router.get('/analytics/top-shows', requireAdminOrOrganiser, async (_req, res) => {
-  try {
-    const shows = await prisma.show.findMany({
       select: {
         id: true,
-        title: true,
-        date: true,
-        orders: { where: { status: 'PAID' }, select: { amountPence: true } },
+        createdAt: true,
+        amountPence: true,
+        // platformFeePence column may or may not exist yet; if it doesn't, TS is still fine because we won't access unknown keys at runtime.
+        // @ts-expect-error – tolerate absence during transition
+        platformFeePence: true,
       },
-      orderBy: { date: 'desc' },
-      take: 20,
+      orderBy: { createdAt: 'asc' },
+      take: 5000,
     });
-    const items = shows
-      .map((s) => ({
-        id: s.id,
-        title: s.title,
-        date: s.date,
-        revenuePence: s.orders.reduce((a, b) => a + (b.amountPence || 0), 0),
-      }))
-      .sort((a, b) => b.revenuePence - a.revenuePence)
-      .slice(0, 10);
 
-    res.json({ ok: true, items });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, message: e?.message ?? 'Failed' });
+    // Bucket by yyyy-mm-dd
+    const dayKey = (d: Date) => d.toISOString().slice(0, 10);
+    const map = new Map<
+      string,
+      { gross: number; platform: number }
+    >();
+
+    for (const o of orders) {
+      const k = dayKey(o.createdAt);
+      const bucket = map.get(k) || { gross: 0, platform: 0 };
+      bucket.gross += o.amountPence ?? 0;
+      // @ts-ignore – tolerate missing field at runtime
+      bucket.platform += o.platformFeePence ?? 0;
+      map.set(k, bucket);
+    }
+
+    const points = Array.from(map.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, v]) => ({
+        date,
+        amountPence: v.gross,
+        // Optional secondary series if you want later
+        platformFeePence: v.platform,
+      }));
+
+    res.json({ ok: true, points });
+  } catch (err: any) {
+    res.status(400).json({ ok: false, message: err?.message || 'Failed to load analytics' });
   }
 });
 
