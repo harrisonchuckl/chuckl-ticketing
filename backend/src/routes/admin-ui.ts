@@ -27,7 +27,7 @@ router.get('/ui', (_req, res) => {
   .grid{display:grid;gap:12px}.two{grid-template-columns:1fr 1fr}.three{grid-template-columns:repeat(3,1fr)}
   .row{display:flex;gap:12px;flex-wrap:wrap}
   input,select,textarea{width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;background:#fff;color:var(--ink);font-size:14px}
-  label{font-size:12px;color:var(--muted')}
+  label{font-size:12px;color:var(--muted)}
   .btn{border:0;border-radius:10px;padding:10px 12px;font-weight:600;cursor:pointer}
   .btn.primary{background:var(--accent);color:#fff}.btn.ghost{background:#fff;border:1px solid var(--border)}
   .note{font-size:13px;color:var(--muted)}
@@ -39,7 +39,7 @@ router.get('/ui', (_req, res) => {
   .overlay.show{display:flex}
   .login{width:360px;background:#fff;border-radius:14px;border:1px solid var(--border);padding:18px}
   .login h3{margin:0 0 8px}
-  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
   .kpi{background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px}
 </style>
 </head>
@@ -130,7 +130,7 @@ router.get('/ui', (_req, res) => {
       $('#toolbarActions').innerHTML = '';
       $('#viewContent').innerHTML =
         '<div class="kpis" id="kpiWrap"></div>'
-        + '<div class="card"><h4 style="margin-top:0">Daily Sales Trend</h4>'
+        + '<div class="card"><h4 style="margin-top:0">Daily Sales Trend (Gross vs Net)</h4>'
         + '<canvas id="trendChart" width="800" height="240" style="max-width:100%"></canvas>'
         + '</div>'
         + '<div class="card"><h4 style="margin-top:0">Top Shows</h4>'
@@ -219,7 +219,7 @@ router.get('/ui', (_req, res) => {
       };
     },
 
-    // NEW: Coupons
+    // ---- Coupons (already present in your build) ----
     coupons(){
       $('#viewTitle').textContent = 'Coupons';
       $('#toolbarActions').innerHTML =
@@ -260,29 +260,23 @@ router.get('/ui', (_req, res) => {
         if (e.target && e.target.id === 'btnCreateCoupon') {
           const code = $('#c_code').value.trim();
           if (!code) return ($('#c_msg').textContent = 'Code required');
-          const payload:any = {
+          const payload = {
             code,
             description: $('#c_desc').value || null,
+            percentOff: $('#c_percent').value ? Number($('#c_percent').value) : null,
+            amountOffPence: $('#c_amount').value ? Number($('#c_amount').value) : null,
+            maxRedemptions: $('#c_max').value ? Number($('#c_max').value) : null,
+            startsAt: $('#c_start').value || null,
+            endsAt: $('#c_end').value || null,
           };
-          const percent = $('#c_percent').value;
-          const amount = $('#c_amount').value;
-          if (percent && amount) return ($('#c_msg').textContent = 'Use percent OR amount');
-          if (percent) payload.percentOff = Number(percent);
-          if (amount) payload.amountOffPence = Number(amount);
-          const max = $('#c_max').value;
-          if (max) payload.maxRedemptions = Number(max);
-          const start = $('#c_start').value;
-          const end = $('#c_end').value;
-          if (start) payload.startsAt = start;
-          if (end) payload.endsAt = end;
-
+          if (payload.percentOff && payload.amountOffPence) return ($('#c_msg').textContent = 'Use percent OR amount');
           const r = await API('/admin/coupons', { method:'POST', body: JSON.stringify(payload) });
           const j = await r.json();
           $('#c_msg').textContent = j.ok ? 'Created' : (j.message || 'Failed');
           if (j.ok) { $('#c_code').value=''; $('#c_desc').value=''; $('#c_percent').value=''; $('#c_amount').value=''; $('#c_max').value=''; $('#c_start').value=''; $('#c_end').value=''; run(); }
         }
 
-        const t = e.target as HTMLElement;
+        const t = e.target;
         const row = t.closest('[data-coupon]');
         if (!row) return;
         const id = row.getAttribute('data-coupon');
@@ -301,8 +295,7 @@ router.get('/ui', (_req, res) => {
       };
 
       async function loadCoupons(q){
-        const r = await API('/admin/coupons?q='+encodeURIComponent(q||''));
-        const j = await r.json();
+        const r = await API('/admin/coupons?q='+encodeURIComponent(q||'')); const j = await r.json();
         const wrap = $('#couponsWrap');
         if(!j.ok){ wrap.innerHTML = '<div class="danger">Failed</div>'; return; }
         wrap.innerHTML = (j.items||[]).map(c => {
@@ -324,24 +317,67 @@ router.get('/ui', (_req, res) => {
       }
     },
 
-    audiences(){
-      $('#viewTitle').textContent = 'Audiences';
-      $('#toolbarActions').innerHTML = '';
-      $('#viewContent').innerHTML = '<div class="note">Audience tools coming soon.</div>';
-    },
-    emails(){
-      $('#viewTitle').textContent = 'Email Campaigns';
-      $('#toolbarActions').innerHTML = '';
-      $('#viewContent').innerHTML = '<div class="note">Scheduler + templates placeholder.</div>';
-    },
-    account(){
-      $('#viewTitle').textContent = 'Account';
-      $('#toolbarActions').innerHTML = '';
-      $('#viewContent').innerHTML = '<div class="note">Manage your password and organisation details.</div>';
-    }
+    emails(){ $('#viewTitle').textContent = 'Email Campaigns'; $('#toolbarActions').innerHTML = ''; $('#viewContent').innerHTML = '<div class="note">Scheduler + templates placeholder.</div>'; },
+    audiences(){ $('#viewTitle').textContent = 'Audiences'; $('#toolbarActions').innerHTML = ''; $('#viewContent').innerHTML = '<div class="note">Audience tools coming soon.</div>'; },
+    account(){ $('#viewTitle').textContent = 'Account'; $('#toolbarActions').innerHTML = ''; $('#viewContent').innerHTML = '<div class="note">Manage your password and organisation details.</div>'; },
   };
 
-  // ===== Shows (list/detail) =====
+  // ===== Analytics =====
+  async function loadAnalytics(){
+    const k = await (await API('/admin/analytics/summary')).json();
+    const t = await (await API('/admin/analytics/sales-trend')).json();
+    const top = await (await API('/admin/analytics/top-shows')).json();
+
+    const kEl = document.getElementById('kpiWrap');
+    if(k.ok){
+      const kp = k.kpis || {};
+      kEl.innerHTML =
+        '<div class="kpi"><div class="note">Gross Revenue</div><div style="font-size:20px;font-weight:700">'+fmtMoney(kp.revenuePence)+'</div></div>'
+      + '<div class="kpi"><div class="note">Platform Fees</div><div style="font-size:20px;font-weight:700">'+fmtMoney(kp.platformFeesPence)+'</div></div>'
+      + '<div class="kpi"><div class="note">Payment Fees</div><div style="font-size:20px;font-weight:700">'+fmtMoney(kp.paymentFeesPence)+'</div></div>'
+      + '<div class="kpi"><div class="note">Net Payout</div><div style="font-size:20px;font-weight:700">'+fmtMoney(kp.netPayoutPence)+'</div></div>'
+      + '<div class="kpi"><div class="note">Refunds</div><div style="font-size:20px;font-weight:700">'+fmtMoney(kp.refundsPence)+'</div></div>'
+      + '<div class="kpi"><div class="note">Tickets Sold</div><div style="font-size:20px;font-weight:700">'+(kp.ticketsSold||0)+'</div></div>';
+    } else {
+      kEl.innerHTML = '<div class="note">Failed to load KPIs</div>';
+    }
+
+    // Tiny inline chart for trend (gross vs net)
+    if(t.ok){
+      const cvs = document.getElementById('trendChart');
+      const ctx = cvs.getContext('2d');
+      const days = t.days || [];
+      ctx.clearRect(0,0,cvs.width,cvs.height);
+
+      function drawSeries(vals){
+        const max = Math.max(1, ...vals.map(v=>v||0));
+        const w = cvs.width, h = cvs.height;
+        ctx.beginPath();
+        vals.forEach((v,i)=>{
+          const x = (i/(vals.length-1)) * (w-20) + 10;
+          const y = h - (v/max)*(h-20) - 10;
+          if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+        });
+        ctx.stroke();
+      }
+      drawSeries(days.map(d=>d.revenuePence||0));     // gross
+      drawSeries(days.map(d=>d.netPayoutPence||0));  // net
+    }
+
+    const topWrap = document.getElementById('topShowsWrap');
+    if(top.ok){
+      topWrap.innerHTML = (top.items||[]).map(x=>{
+        return '<div class="card"><b>'+x.title+'</b>'
+          + '<div class="note">'+(x.date ? new Date(x.date).toLocaleDateString():'')+'</div>'
+          + '<div class="note">Revenue: '+fmtMoney(x.revenuePence)+'</div>'
+          + '</div>';
+      }).join('') || '<div class="note">No data</div>';
+    } else {
+      topWrap.innerHTML = '<div class="note">Failed to load</div>';
+    }
+  }
+
+  // ===== Shows ===== (unchanged except for helper wiring)
   async function loadShows(){
     const wrap = document.getElementById('showsWrap');
     wrap.innerHTML = '<div class="note">Loading…</div>';
@@ -382,7 +418,7 @@ router.get('/ui', (_req, res) => {
       + '<div class="card"><h3 style="margin:0 0 8px">'+show.title+'</h3>'
       + '<div class="note">'+(show.venue ? (show.venue.name + (show.venue.city ? (', '+show.venue.city) : '')) : '—')+'</div>'
       + '<div class="note">Date: '+new Date(show.date).toLocaleString()+'</div></div>'
-      + '<div class="kpis">'
+      + '<div class="kpis" style="grid-template-columns:repeat(4,1fr)">'
       +   '<div class="kpi"><div class="note">Capacity</div><div style="font-size:20px;font-weight:700">'+(kpis.capacity ?? '—')+'</div></div>'
       +   '<div class="kpi"><div class="note">Total Available</div><div style="font-size:20px;font-weight:700">'+(kpis.totalAvailable ?? 0)+'</div></div>'
       +   '<div class="kpi"><div class="note">Tickets Sold</div><div style="font-size:20px;font-weight:700">'+(kpis.ticketsSold ?? 0)+'</div></div>'
@@ -409,7 +445,6 @@ router.get('/ui', (_req, res) => {
       + '</div>'
       + '</div>';
 
-    // Render ticket types
     const tbody = $('#ttBody');
     tbody.innerHTML = (show.ticketTypes || []).map(tt => {
       return '<tr data-tt="'+tt.id+'">'
@@ -423,10 +458,8 @@ router.get('/ui', (_req, res) => {
         + '</tr>';
     }).join('');
 
-    // handlers
     tbody.onclick = async e => {
-      const tr = e.target.closest('tr[data-tt]');
-      if(!tr) return;
+      const tr = e.target.closest('tr[data-tt]'); if(!tr) return;
       const id = tr.getAttribute('data-tt');
       if (e.target.classList.contains('tt_save')) {
         const name = tr.querySelector('.tt_name').value;
@@ -434,18 +467,15 @@ router.get('/ui', (_req, res) => {
         const availRaw = tr.querySelector('.tt_avail').value;
         const available = availRaw === '' ? null : Number(availRaw);
         const r = await API('/admin/ticket-types/'+encodeURIComponent(id), {
-          method:'PATCH',
-          body: JSON.stringify({ name, pricePence, available })
+          method:'PATCH', body: JSON.stringify({ name, pricePence, available })
         });
-        const j = await r.json();
-        $('#ttMsg').textContent = j.ok ? 'Saved' : (j.message || 'Failed');
+        const j = await r.json(); $('#ttMsg').textContent = j.ok ? 'Saved' : (j.message || 'Failed');
         if (j.ok) renderShowDetail(showId);
       }
       if (e.target.classList.contains('tt_del')) {
         if (!confirm('Delete this ticket type?')) return;
         const r = await API('/admin/ticket-types/'+encodeURIComponent(id), { method: 'DELETE' });
-        const j = await r.json();
-        $('#ttMsg').textContent = j.ok ? 'Deleted' : (j.message || 'Failed');
+        const j = await r.json(); $('#ttMsg').textContent = j.ok ? 'Deleted' : (j.message || 'Failed');
         if (j.ok) renderShowDetail(showId);
       }
     };
@@ -456,11 +486,9 @@ router.get('/ui', (_req, res) => {
       const availRaw = $('#tt_avail').value;
       const available = availRaw === '' ? null : Number(availRaw);
       const r = await API('/admin/shows/'+encodeURIComponent(showId)+'/ticket-types', {
-        method:'POST',
-        body: JSON.stringify({ name, pricePence, available })
+        method:'POST', body: JSON.stringify({ name, pricePence, available })
       });
-      const j2 = await r.json();
-      $('#ttMsg').textContent = j2.ok ? 'Added' : (j2.message || 'Failed');
+      const j2 = await r.json(); $('#ttMsg').textContent = j2.ok ? 'Added' : (j2.message || 'Failed');
       if (j2.ok) renderShowDetail(showId);
     });
   }
@@ -473,7 +501,7 @@ router.get('/ui', (_req, res) => {
     const j = await r.json();
     if(!j.ok){ wrap.innerHTML = '<div class="danger">Failed to load orders</div>'; return; }
     if(!j.items || j.items.length===0){ wrap.innerHTML = '<div class="note">No orders found.</div>'; return; }
-    wrap.innerHTML = '<table class="table"><thead><tr><th>Date</th><th>Email</th><th>Show</th><th>Qty</th><th>Amount</th><th>Status</th><th></th></tr></thead><tbody>'
+    wrap.innerHTML = '<table class="table"><thead><tr><th>Date</th><th>Email</th><th>Show</th><th>Qty</th><th>Gross</th><th>Status</th><th></th></tr></thead><tbody>'
       + j.items.map(o => {
           const when = new Date(o.createdAt).toLocaleString();
           const show = o.show ? (o.show.title + ' (' + new Date(o.show.date).toLocaleDateString() + ')') : '—';
@@ -506,7 +534,11 @@ router.get('/ui', (_req, res) => {
       '<div class="grid">'
       + '<div class="card"><h3 style="margin:0 0 8px">Order '+o.id+'</h3>'
       + '<div class="note">Email: '+(o.email||'—')+'</div>'
-      + '<div class="note">Amount: '+fmtMoney(o.amountPence)+'</div>'
+      + '<div class="note">Gross: '+fmtMoney(o.amountPence)+'</div>'
+      + '<div class="note">Discount: '+(o.discountPence? '−'+fmtMoney(o.discountPence): '—')+'</div>'
+      + '<div class="note">Platform fee: '+(o.platformFeePence!=null? fmtMoney(o.platformFeePence): '—')+'</div>'
+      + '<div class="note">Payment fee: '+(o.paymentFeePence!=null? fmtMoney(o.paymentFeePence): '—')+'</div>'
+      + '<div class="note">Net payout: '+(o.netPayoutPence!=null? fmtMoney(o.netPayoutPence): '—')+'</div>'
       + '<div class="note">Qty: '+(o.quantity ?? '—')+'</div>'
       + '<div class="note">Status: '+o.status+'</div>'
       + '<div class="note">Coupon: '+(o.coupon ? (o.coupon.code + (o.discountPence? ' (−'+fmtMoney(o.discountPence)+')':'')) : '—')+'</div>'
@@ -581,56 +613,6 @@ router.get('/ui', (_req, res) => {
         }
       }
     };
-  }
-
-  // ===== Analytics (minimal fetch to render KPIs & trend) =====
-  async function loadAnalytics(){
-    const k = await (await API('/admin/analytics/summary')).json();
-    const t = await (await API('/admin/analytics/sales-trend')).json();
-    const top = await (await API('/admin/analytics/top-shows')).json();
-
-    const kEl = document.getElementById('kpiWrap');
-    if(k.ok){
-      const kp = k.kpis || {};
-      kEl.innerHTML =
-        '<div class="kpi"><div class="note">Revenue</div><div style="font-size:20px;font-weight:700">'+fmtMoney(kp.revenuePence)+'</div></div>'
-      + '<div class="kpi"><div class="note">Refunds</div><div style="font-size:20px;font-weight:700">'+fmtMoney(kp.refundsPence)+'</div></div>'
-      + '<div class="kpi"><div class="note">Tickets Sold</div><div style="font-size:20px;font-weight:700">'+(kp.ticketsSold||0)+'</div></div>'
-      + '<div class="kpi"><div class="note">Orders</div><div style="font-size:20px;font-weight:700">'+(kp.orders||0)+'</div></div>';
-    } else {
-      kEl.innerHTML = '<div class="note">Failed to load KPIs</div>';
-    }
-
-    // Tiny inline chart for trend
-    if(t.ok){
-      const cvs = document.getElementById('trendChart');
-      const ctx = cvs.getContext('2d');
-      const days = t.days || [];
-      // simple stroke chart
-      ctx.clearRect(0,0,cvs.width,cvs.height);
-      function drawSeries(vals, yOffset){
-        const max = Math.max(1, ...vals.map(v=>v||0));
-        const w = cvs.width, h = cvs.height;
-        ctx.beginPath();
-        vals.forEach((v,i)=>{
-          const x = (i/(vals.length-1)) * (w-20) + 10;
-          const y = h - (v/max)*(h-20) - 10 - (yOffset||0);
-          if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-        });
-        ctx.stroke();
-      }
-      drawSeries(days.map(d=>d.revenuePence||0), 0);
-      drawSeries(days.map(d=>d.ticketsSold||0), 0);
-    }
-
-    const topWrap = document.getElementById('topShowsWrap');
-    if(top.ok){
-      topWrap.innerHTML = (top.items||[]).map(x=>{
-        return '<div class="card"><b>'+x.title+'</b><div class="note">'+(x.date ? new Date(x.date).toLocaleDateString():'')+'</div><div class="note">Revenue: '+fmtMoney(x.revenuePence)+'</div></div>';
-      }).join('') || '<div class="note">No data</div>';
-    } else {
-      topWrap.innerHTML = '<div class="note">Failed to load</div>';
-    }
   }
 
   // ===== Navigation =====
