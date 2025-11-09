@@ -1,66 +1,72 @@
 // backend/src/routes/webhook.ts
 import { Router } from 'express';
+import prisma from '../lib/prisma.js';
 import Stripe from 'stripe';
-import { PrismaClient } from '@prisma/client';
 import { calcFeesForShow } from '../services/fees.js';
 
-const prisma = new PrismaClient();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, { apiVersion: '2024-06-20' });
-
 const router = Router();
 
+/**
+ * Stripe webhook
+ */
 router.post('/webhooks/stripe', async (req, res) => {
-  const sig = req.headers['stripe-signature'] as string;
-  if (!sig) return res.status(400).send('Missing signature');
-
-  let event: Stripe.Event;
   try {
-    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET as string);
+    const sig = req.headers['stripe-signature'] as string | undefined;
+    if (!sig) return res.status(400).send('No signature');
+
+    const event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET as string);
+
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object as Stripe.Checkout.Session;
+      const orderId = session.metadata?.orderId;
+      const showId = session.metadata?.showId;
+
+      if (orderId && showId) {
+        // Load order to compute fees precisely (unit price = amount/qty)
+        const order = await prisma.order.findUnique({
+          where: { id: orderId },
+          select: {
+            id: true,
+            amountPence: true,
+            quantity: true,
+            userId: true,
+          },
+        });
+
+        if (order) {
+          const unit = order.quantity && order.amountPence ? Math.round(order.amountPence / order.quantity) : 0;
+
+          let organiserSplitBps: number | null = null;
+          if (order.userId) {
+            const user = await prisma.user.findUnique({
+              where: { id: order.userId },
+              select: { organiserSplitBps: true },
+            });
+            organiserSplitBps = user?.organiserSplitBps ?? null;
+          }
+
+          const fees = await calcFeesForShow(prisma, showId, Number(order.quantity ?? 0), unit, organiserSplitBps);
+
+          await prisma.order.update({
+            where: { id: orderId },
+            data: {
+              status: 'PAID',
+              platformFeePence: fees.platformFeePence,
+              organiserSharePence: fees.organiserSharePence,
+              paymentFeePence: fees.paymentFeePence,
+              netPayoutPence: fees.netPayoutPence,
+              stripeId: session.payment_intent as string,
+            },
+          });
+        }
+      }
+    }
+
+    return res.json({ received: true });
   } catch (err: any) {
+    console.error('stripe webhook error', err);
     return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-
-  try {
-    if (event.type === 'payment_intent.succeeded') {
-      const pi = event.data.object as Stripe.PaymentIntent;
-
-      const order = await prisma.order.findFirst({
-        where: { stripeId: pi.id },
-        select: { id: true, showId: true, quantity: true, subtotalPence: true },
-      });
-      if (!order) return res.json({ ok: true });
-
-      const fees = await calcFeesForShow({
-        prisma,
-        showId: order.showId as string,
-        quantity: order.quantity ?? 0,
-        subtotalPence: order.subtotalPence ?? 0,
-      });
-
-      await prisma.order.update({
-        where: { id: order.id },
-        data: {
-          status: 'PAID',
-          platformFeePence: fees.platformFeePence,
-          organiserFeePence: fees.organiserFeePence,
-          paymentFeePence: 0,
-          netPayoutPence: (order.subtotalPence ?? 0) + fees.organiserFeePence - 0,
-        },
-      });
-    }
-
-    if (event.type === 'payment_intent.payment_failed') {
-      const pi = event.data.object as Stripe.PaymentIntent;
-      await prisma.order.updateMany({
-        where: { stripeId: pi.id },
-        data: { status: 'CANCELLED' },
-      });
-    }
-
-    res.json({ ok: true });
-  } catch (err: any) {
-    console.error('Webhook handler error', err);
-    res.status(500).json({ ok: false });
   }
 });
 
