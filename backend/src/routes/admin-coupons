@@ -4,7 +4,32 @@ import { requireAdminOrOrganiser } from '../lib/authz.js';
 
 const router = Router();
 
-// List / search
+// Create coupon
+router.post('/coupons', requireAdminOrOrganiser, async (req, res) => {
+  try {
+    const { code, description, percentOff, amountOffPence, maxRedemptions, startsAt, endsAt } = req.body || {};
+    if (!code) return res.status(400).json({ ok: false, message: 'Code required' });
+    if (percentOff && amountOffPence) return res.status(400).json({ ok: false, message: 'Use percent OR amount' });
+
+    const coupon = await prisma.coupon.create({
+      data: {
+        code: String(code).toUpperCase(),
+        description: description || null,
+        percentOff: percentOff != null ? Number(percentOff) : null,
+        amountOffPence: amountOffPence != null ? Number(amountOffPence) : null,
+        maxRedemptions: maxRedemptions != null ? Number(maxRedemptions) : null,
+        startsAt: startsAt ? new Date(startsAt) : null,
+        endsAt: endsAt ? new Date(endsAt) : null,
+        active: true,
+      },
+    });
+    res.json({ ok: true, coupon });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, message: e?.message ?? 'Failed' });
+  }
+});
+
+// Search/list
 router.get('/coupons', requireAdminOrOrganiser, async (req, res) => {
   try {
     const q = String(req.query.q || '').trim();
@@ -15,43 +40,12 @@ router.get('/coupons', requireAdminOrOrganiser, async (req, res) => {
             { description: { contains: q, mode: 'insensitive' } },
           ],
         }
-      : undefined;
-
+      : {};
     const items = await prisma.coupon.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      take: 100,
     });
-
     res.json({ ok: true, items });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, message: e?.message ?? 'Failed' });
-  }
-});
-
-// Create
-router.post('/coupons', requireAdminOrOrganiser, async (req, res) => {
-  try {
-    const { code, description, percentOff, amountOffPence, maxRedemptions, startsAt, endsAt } = req.body || {};
-    if (!code) return res.status(400).json({ ok: false, message: 'Code required' });
-
-    if (percentOff && amountOffPence) {
-      return res.status(400).json({ ok: false, message: 'Choose percentOff OR amountOffPence' });
-    }
-
-    const coupon = await prisma.coupon.create({
-      data: {
-        code: String(code).toUpperCase(),
-        description: description ? String(description) : null,
-        percentOff: percentOff != null ? Number(percentOff) : null,
-        amountOffPence: amountOffPence != null ? Number(amountOffPence) : null,
-        maxRedemptions: maxRedemptions != null ? Number(maxRedemptions) : null,
-        startsAt: startsAt ? new Date(startsAt) : null,
-        endsAt: endsAt ? new Date(endsAt) : null,
-      },
-    });
-
-    res.json({ ok: true, coupon });
   } catch (e: any) {
     res.status(500).json({ ok: false, message: e?.message ?? 'Failed' });
   }
@@ -63,12 +57,8 @@ router.patch('/coupons/:id/toggle', requireAdminOrOrganiser, async (req, res) =>
     const id = String(req.params.id);
     const c = await prisma.coupon.findUnique({ where: { id } });
     if (!c) return res.status(404).json({ ok: false, message: 'Not found' });
-
-    const updated = await prisma.coupon.update({
-      where: { id },
-      data: { active: !c.active },
-    });
-    res.json({ ok: true, coupon: updated });
+    const upd = await prisma.coupon.update({ where: { id }, data: { active: !c.active } });
+    res.json({ ok: true, coupon: upd });
   } catch (e: any) {
     res.status(500).json({ ok: false, message: e?.message ?? 'Failed' });
   }
