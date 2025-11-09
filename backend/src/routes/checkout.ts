@@ -21,7 +21,6 @@ router.post('/create-intent', async (req, res) => {
 
     const subtotalPence = quantity * unitPricePence;
 
-    // ✅ await the async fee helper
     const fees = await calcFeesForShow({
       prisma,
       showId,
@@ -45,19 +44,20 @@ router.post('/create-intent', async (req, res) => {
       automatic_payment_methods: { enabled: true },
     });
 
-    // Create a provisional order row (status PENDING)
     const order = await prisma.order.create({
       data: {
         showId,
         email: email ?? null,
         quantity,
+        subtotalPence,
         amountPence,
         stripeId: pi.id,
         status: 'PENDING',
-        // if you later persist fee splits per order, add columns and write them here
-        platformFeePence: fees.platformFeePence ?? null,
-        organiserFeePence: fees.organiserFeePence ?? null,
-      } as any, // tolerate extra fields if schema doesn’t have them yet
+        platformFeePence: fees.platformFeePence,
+        organiserFeePence: fees.organiserFeePence,
+        paymentFeePence: 0,
+        netPayoutPence: subtotalPence + fees.organiserFeePence - 0,
+      },
     });
 
     res.json({
