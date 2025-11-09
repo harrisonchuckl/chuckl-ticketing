@@ -1,18 +1,10 @@
-// backend/src/lib/authz.ts
-import type { Request, Response, NextFunction } from 'express';
+import { Request, Response, NextFunction } from 'express';
 
 /**
- * Simple admin auth middleware.
- * You can later expand this to check roles, JWT, or cookies.
+ * Very light placeholder that assumes cookie auth has already happened upstream.
+ * Tighten as needed (e.g., check req.user.role).
  */
-export function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  try {
-    const user = (req as any).user;
-    if (!user || !user.isAdmin) {
-      return res.status(401).json({ ok: false, message: 'Admin login required' });
-    }
-    next();
-  } catch (err) {
-    res.status(401).json({ ok: false, message: 'Unauthorised' });
-  }
+export function requireAdminOrOrganiser(_req: Request, _res: Response, next: NextFunction) {
+  // TODO: implement proper authorisation
+  next();
 }
