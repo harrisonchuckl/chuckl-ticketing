@@ -2,11 +2,11 @@
 import { PrismaClient, Venue } from '@prisma/client';
 
 export type FeeCalcResult = {
-  platformFeePence: number;      // total platform fee on the basket
-  organiserFeePence: number;     // organiser share of the platform fee
+  platformFeePence: number;      // total platform fee (customer pays on top)
+  organiserFeePence: number;     // organiser’s share of the platform fee
   ourSharePence: number;         // our share of the platform fee
-  basketFeePence: number;        // basket-level flat fee (if any)
-  paymentFeePence: number;       // placeholder for PSP fees (0 for now)
+  basketFeePence: number;        // flat basket fee (if any)
+  paymentFeePence: number;       // PSP fee (placeholder = 0 for now)
 };
 
 export type VenueFeePolicy = Pick<
@@ -14,7 +14,6 @@ export type VenueFeePolicy = Pick<
   'feePercentBps' | 'perTicketFeePence' | 'basketFeePence' | 'organiserSplitBps'
 >;
 
-// Strict, non-null policy we actually use for maths
 type NormalisedPolicy = {
   feePercentBps: number;
   perTicketFeePence: number;
@@ -26,7 +25,7 @@ export const defaultVenuePolicy: NormalisedPolicy = {
   feePercentBps: 0,
   perTicketFeePence: 0,
   basketFeePence: 0,
-  organiserSplitBps: 5000, // 50/50 by default
+  organiserSplitBps: 5000, // 50/50 default
 };
 
 export function normalisePolicy(v?: Partial<VenueFeePolicy>): NormalisedPolicy {
@@ -65,12 +64,6 @@ export function calcFeesForVenue(
   };
 }
 
-/**
- * Flexible helper:
- *  - (prisma, showId, quantity, subtotalPence)
- *  - ({ prisma, showId, quantity, subtotalPence })
- *  - (showId) -> zeros (legacy)
- */
 export async function calcFeesForShow(...args: any[]): Promise<FeeCalcResult> {
   if (args.length === 1 && typeof args[0] === 'string') {
     return { platformFeePence: 0, organiserFeePence: 0, ourSharePence: 0, basketFeePence: 0, paymentFeePence: 0 };
