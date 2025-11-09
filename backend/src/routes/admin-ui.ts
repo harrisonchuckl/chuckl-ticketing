@@ -3,494 +3,329 @@ import { Router } from 'express';
 
 const router = Router();
 
+// Keep "/" helpful — many folks bookmark /admin
+router.get('/', (_req, res) => res.redirect('/admin/ui'));
+
+// One HTML page app; data comes from JSON APIs under /admin/*
 router.get('/ui', (_req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(`<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>Organiser Console</title>
 <style>
-  :root{--bg:#f7f8fa;--panel:#fff;--ink:#0f172a;--muted:#6b7280;--accent:#2563eb;--accent-2:#eff6ff;--border:#e5e7eb;--bad:#dc2626;--ok:#16a34a}
-  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial,sans-serif}
-  header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);background:var(--panel);position:sticky;top:0;z-index:5}
-  header .brand{font-weight:800} header .user{font-size:14px;color:var(--muted)}
-  main{display:grid;grid-template-columns:260px 1fr;gap:20px;padding:20px;min-height:calc(100vh - 64px)}
-  nav{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:12px}
-  nav h4{margin:8px 10px 12px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
-  nav button{display:block;width:100%;text-align:left;border:0;background:none;padding:10px 12px;border-radius:10px;margin:2px 0;font-size:14px;color:var(--ink);cursor:pointer}
-  nav button.active,nav button:hover{background:var(--accent-2);color:var(--accent)}
-  section.view{background:var(--panel);border:1px solid var(--border);border-radius:14px;min-height:60vh;display:flex;flex-direction:column}
-  .toolbar{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:14px;border-bottom:1px solid var(--border)}
-  .toolbar h2{font-size:16px;margin:0}
-  .content{padding:16px}
-  .grid{display:grid;gap:12px}.two{grid-template-columns:1fr 1fr}.three{grid-template-columns:repeat(3,1fr)}
-  .row{display:flex;gap:12px;flex-wrap:wrap}
-  input,select,textarea{width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;background:#fff;color:var(--ink);font-size:14px}
-  label{font-size:12px;color:var(--muted)}
-  .btn{border:0;border-radius:10px;padding:10px 12px;font-weight:600;cursor:pointer}
-  .btn.primary{background:var(--accent);color:#fff}.btn.ghost{background:#fff;border:1px solid var(--border)}
-  .note{font-size:13px;color:var(--muted)}
-  .card{border:1px solid var(--border);border-radius:12px;padding:12px;background:#fff}
-  .table{width:100%;border-collapse:collapse}
-  .table th,.table td{border-bottom:1px solid var(--border);padding:8px 6px;text-align:left;font-size:14px}
-  .danger{color:var(--bad)} .ok{color:var(--ok)}
-  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
-  canvas{max-width:100%;height:320px;border:1px solid var(--border);border-radius:12px;background:#fff}
+  :root {
+    --bg:#fafbfc; --panel:#fff; --text:#1f2937; --muted:#6b7280; --line:#e5e7eb; --brand:#111827;
+    --btn:#111827; --btnText:#fff; --btnLite:#f3f4f6;
+  }
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font:14px/1.45 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif}
+  .app{display:flex;min-height:100vh}
+  .sidebar{width:220px;background:var(--panel);border-right:1px solid var(--line);padding:12px;position:sticky;top:0;height:100vh;box-sizing:border-box}
+  .brand{font-weight:700;margin:4px 8px 12px}
+  .section{color:var(--muted);font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin:16px 8px 8px}
+  .nav{display:flex;flex-direction:column;gap:4px}
+  .nav button{appearance:none;border:0;background:transparent;text-align:left;padding:8px 10px;border-radius:8px;cursor:pointer}
+  .nav button.active{background:var(--btnLite)}
+  .nav button:hover{background:#f6f7f8}
+  .main{flex:1;padding:20px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  input[type="text"], input[type="date"], input[type="number"]{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:#fff;min-width:220px}
+  .btn{background:var(--btn);color:var(--btnText);border:0;border-radius:8px;padding:8px 12px;cursor:pointer}
+  .btn-link{color:var(--brand);text-decoration:underline;cursor:pointer}
+  table{width:100%;border-collapse:collapse;margin-top:12px}
+  th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left}
+  .muted{color:var(--muted)}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid var(--line);font-size:12px;background:#fff}
+  .right{margin-left:auto}
+  .danger{color:#b91c1c}
 </style>
 </head>
 <body>
-<header>
-  <div class="brand">Organiser Console</div>
-  <div class="user"><span id="userEmail">Not signed in</span></div>
-</header>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">Organiser Console</div>
 
-<main>
-  <nav>
-    <h4>Dashboard</h4>
-    <button data-view="home" class="active">Home</button>
-    <button data-view="shows">Shows</button>
-    <button data-view="orders">Orders</button>
-    <button data-view="venues">Venues</button>
-    <h4>Insights</h4>
-    <button data-view="analytics">Analytics</button>
-    <h4>Marketing</h4>
-    <button data-view="audiences">Audiences</button>
-    <button data-view="emails">Email Campaigns</button>
-    <h4>Settings</h4>
-    <button data-view="account">Account</button>
-    <button id="btnLogout" class="danger">Log out</button>
-  </nav>
+    <div class="section">Dashboard</div>
+    <div class="nav">
+      <button data-view="home" class="active">Home</button>
+      <button data-view="shows">Shows</button>
+      <button data-view="orders">Orders</button>
+      <button data-view="venues">Venues</button>
+    </div>
 
-  <section class="view">
-    <div class="toolbar">
-      <h2 id="viewTitle">Home</h2>
-      <div id="toolbarActions"></div>
+    <div class="section">Insights</div>
+    <div class="nav">
+      <button data-view="analytics">Analytics</button>
     </div>
-    <div class="content" id="viewContent">
-      <div class="card">
-        <p>Welcome to your organiser console. Use the menu to manage shows, orders, venues, insights and marketing.</p>
-        <p class="note">You’ll see more tools appear here as we build them in.</p>
-      </div>
+
+    <div class="section">Marketing</div>
+    <div class="nav">
+      <button data-view="audiences">Audiences</button>
+      <button data-view="email">Email Campaigns</button>
     </div>
-  </section>
-</main>
+
+    <div class="section">Settings</div>
+    <div class="nav">
+      <button data-view="account">Account</button>
+      <a class="btn-link" href="/auth/logout">Log out</a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div id="content" class="card"></div>
+  </main>
+</div>
 
 <script>
-(function(){
-  const $ = (sel) => document.querySelector(sel);
-  const API = (path, opts) => fetch(path, Object.assign({
-    credentials:'include',
-    headers:{'Content-Type':'application/json'}
-  }, opts || {}));
-  const fmtMoney = p => '£' + (Number(p || 0)/100).toFixed(2);
+  // --- util -----------------------------------------------------
+  function fmtPence(p){ return (Number(p||0)/100).toFixed(2); }
+  function qs(sel, root=document){ return root.querySelector(sel); }
+  function qsa(sel, root=document){ return Array.from(root.querySelectorAll(sel)); }
+  async function api(path, opts){
+    const r = await fetch(path, Object.assign({ credentials:'include' }, opts||{}));
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const ct = r.headers.get('content-type')||'';
+    return ct.includes('application/json') ? r.json() : r.text();
+  }
+  async function ensureAuth(){
+    try{
+      const me = await api('/auth/me');
+      return !!me?.ok;
+    }catch(_){ return false; }
+  }
 
-  // ===== Views =====
+  // --- views ----------------------------------------------------
   const views = {
-    home(){
-      $('#viewTitle').textContent = 'Home';
-      $('#toolbarActions').innerHTML = '';
-      $('#viewContent').innerHTML =
-        '<div class="grid two">'
-        + '<div class="card"><h4>Recent activity</h4><p class="note">Recent sales, scans and edits will appear here.</p></div>'
-        + '<div class="card"><h4>Shortcuts</h4><div class="row">'
-        + '<button class="btn ghost" data-goto="shows">Go to Shows</button>'
-        + '<button class="btn ghost" data-goto="orders">Go to Orders</button>'
-        + '</div></div></div>';
-      $('#viewContent').addEventListener('click', function(e){
-        const el = e.target.closest('[data-goto]');
-        if(!el) return;
-        e.preventDefault();
-        switchView(el.getAttribute('data-goto'));
-      }, { once:true });
+    async home(){
+      return \`
+        <h3>Home</h3>
+        <p class="muted">Welcome to your organiser console. Use the menu to manage shows, orders, venues, insights and marketing.</p>
+        <div style="height:8px"></div>
+        <div class="row">
+          <span class="pill">Status: Online</span>
+        </div>
+      \`;
     },
 
-    // ---- Analytics (restored) ----
-    analytics(){
-      $('#viewTitle').textContent = 'Analytics';
-      $('#toolbarActions').innerHTML = '';
-      $('#viewContent').innerHTML =
-        '<div class="card"><div class="row">'
-        + '<div><label>From</label><input id="a_from" type="date"/></div>'
-        + '<div><label>To</label><input id="a_to" type="date"/></div>'
-        + '<div style="align-self:flex-end"><button class="btn primary" id="a_run">Run</button></div>'
-        + '</div><div id="a_msg" class="note" style="margin-top:8px"></div></div>'
-        + '<div style="margin-top:12px"><canvas id="a_chart"></canvas></div>';
-
-      $('#a_run').onclick = runAnalytics;
-
-      function parseISO(d){ return d ? new Date(d) : null; }
-
-      async function runAnalytics(){
-        const from = $('#a_from').value;
-        const to = $('#a_to').value;
-        $('#a_msg').textContent = 'Loading…';
-        const q = new URLSearchParams();
-        if(from) q.set('from', from);
-        if(to) q.set('to', to);
-        const r = await API('/admin/analytics/summary?'+q.toString());
-        const j = await r.json();
-        if(!j.ok){ $('#a_msg').textContent = j.message || 'Failed to load analytics'; return; }
-        $('#a_msg').textContent =
-          'Orders: '+j.totals.orders
-          + ' · Tickets: ' + j.totals.tickets
-          + ' · Gross: ' + fmtMoney(j.totals.grossPence)
-          + ' · Platform fee: ' + fmtMoney(j.totals.platformFeePence)
-          + ' · Your share: ' + fmtMoney(j.totals.organiserSharePence);
-
-        drawChart(j.daily || []);
-      }
-
-      function drawChart(rows){
-        const c = document.getElementById('a_chart');
-        const ctx = c.getContext('2d');
-        // simple reset
-        c.width = c.clientWidth;
-        c.height = 320;
-        ctx.clearRect(0,0,c.width,c.height);
-
-        // axes
-        ctx.strokeStyle = '#e5e7eb';
-        ctx.beginPath(); ctx.moveTo(40,10); ctx.lineTo(40,300); ctx.lineTo(c.width-10,300); ctx.stroke();
-
-        const vals = rows.map(r => r.grossPence||0);
-        const max = Math.max(100, ...vals);
-        const scaleY = 260 / max;
-
-        // labels + bars
-        ctx.fillStyle = '#111827';
-        ctx.font = '12px system-ui';
-
-        const step = Math.max(1, Math.floor(rows.length / 10));
-        rows.forEach((r,i) => {
-          const x = 50 + i * Math.max(6, (c.width-80)/Math.max(rows.length, 20));
-          const h = (r.grossPence||0) * scaleY;
-          // bar
-          ctx.fillStyle = '#2563eb';
-          ctx.fillRect(x, 300 - h, 4, h);
-          // label sparsely
-          if(i % step === 0){
-            ctx.fillStyle = '#6b7280';
-            ctx.fillText(r.date, x-10, 315);
-          }
-        });
-      }
+    async shows(){
+      const data = await api('/admin/shows');
+      const rows = (data?.items||[]).map(s => \`
+        <tr>
+          <td>\${s.title||''}</td>
+          <td>\${s.venue?.name||''}</td>
+          <td>\${new Date(s.date).toLocaleString()}</td>
+          <td class="muted">\${s.id}</td>
+        </tr>\`).join('');
+      return \`
+        <div class="row">
+          <h3>Shows</h3>
+          <button class="btn right" id="refreshShows">Refresh</button>
+        </div>
+        <table>
+          <thead><tr><th>Title</th><th>Venue</th><th>Date</th><th>ID</th></tr></thead>
+          <tbody>\${rows||''}</tbody>
+        </table>
+      \`;
     },
 
-    // ---- Shows / Orders / Venues (unchanged except organiser split moved off Venues) ----
-    shows(){
-      $('#viewTitle').textContent = 'Shows';
-      $('#toolbarActions').innerHTML = '<button class="btn ghost" id="btnRefreshShows">Refresh</button>';
-      $('#viewContent').innerHTML = '<div id="showsWrap" class="grid"></div>';
-      loadShows();
-      $('#toolbarActions').onclick = e => { if (e.target.id==='btnRefreshShows') loadShows(); }
+    async orders(){
+      // Toolbar with Export CSV respecting q/from/to
+      return \`
+        <h3>Orders</h3>
+        <div class="row" id="ordersToolbar">
+          <input type="text" name="q" placeholder="Search email / Stripe / show"/>
+          <input type="date" name="from"/>
+          <input type="date" name="to"/>
+          <button class="btn" id="searchOrders">Search</button>
+          <a class="btn-link" id="exportCsv" href="#">Export CSV</a>
+        </div>
+        <div id="ordersTable" class="muted" style="margin-top:12px">Enter a query or date range and click Search.</div>
+      \`;
     },
 
-    showDetail(showId){
-      $('#viewTitle').textContent = 'Show';
-      $('#toolbarActions').innerHTML = '<a class="btn ghost" id="btnBackShows" href="#">Back</a>';
-      $('#toolbarActions').onclick = e => { if (e.target.id==='btnBackShows'){ e.preventDefault(); switchView("shows"); } };
-      renderShowDetail(showId);
+    async venues(){
+      const resp = await api('/admin/venues');
+      const venues = resp?.items || [];
+      const rows = venues.map(v => \`
+        <tr data-id="\${v.id}">
+          <td><div><strong>\${v.name||''}</strong><div class="muted">\${[v.city, v.postcode].filter(Boolean).join(' • ')}</div></div></td>
+          <td><input type="number" step="1" min="0" name="feePercentBps" value="\${v.feePercentBps ?? ''}" placeholder="bps (e.g. 1000 = 10%)"/></td>
+          <td><input type="number" step="1" min="0" name="perTicketFeePence" value="\${v.perTicketFeePence ?? ''}" placeholder="per-ticket pence"/></td>
+          <td><input type="number" step="1" min="0" name="basketFeePence" value="\${v.basketFeePence ?? ''}" placeholder="basket pence"/></td>
+          <td><button class="btn saveVenue">Save</button></td>
+        </tr>\`).join('');
+
+      return \`
+        <div class="row"><h3>Venues</h3><button class="btn right" id="refreshVenues">Refresh</button></div>
+        <table>
+          <thead><tr><th>Venue</th><th>% Fee (bps)</th><th>Per-ticket (p)</th><th>Basket (p)</th><th></th></tr></thead>
+          <tbody>\${rows||''}</tbody>
+        </table>
+        <p class="muted" style="margin-top:10px">Fee policy applies per venue; organiser split is configured on each organiser account.</p>
+      \`;
     },
 
-    orders(){
-      $('#viewTitle').textContent = 'Orders';
-      $('#toolbarActions').innerHTML =
-        '<div class="row">'
-        + '<input id="ordersQ" placeholder="Search email / Stripe / show"/><button class="btn ghost" id="btnSearchOrders">Search</button>'
-        + '</div>';
-      $('#viewContent').innerHTML = '<div id="ordersWrap" class="grid"></div>';
-      const run = () => loadOrders($('#ordersQ').value || '');
-      run();
-      $('#toolbarActions').onclick = async e => { if (e.target.id==='btnSearchOrders') run(); }
+    async analytics(){
+      return \`
+        <h3>Analytics</h3>
+        <div class="row" id="analyticsToolbar">
+          <input type="date" name="from"/>
+          <input type="date" name="to"/>
+          <button class="btn" id="runAnalytics">Run</button>
+        </div>
+        <div id="analyticsBody" class="muted" style="margin-top:12px">Pick a date range and click Run.</div>
+      \`;
     },
 
-    orderDetail(orderId){
-      $('#viewTitle').textContent = 'Order';
-      $('#toolbarActions').innerHTML = '<a class="btn ghost" id="btnBackOrders" href="#">Back</a>';
-      $('#toolbarActions').onclick = e => { if (e.target.id==='btnBackOrders'){ e.preventDefault(); switchView("orders"); } };
-      renderOrderDetail(orderId);
+    async audiences(){
+      return \`<h3>Audiences</h3><p class="muted">Audience tools coming soon.</p>\`;
     },
 
-    venues(){
-      $('#viewTitle').textContent = 'Venues';
-      $('#toolbarActions').innerHTML = '';
-      $('#viewContent').innerHTML =
-        '<div class="grid two">'
-        + '<div class="card"><h4>Create venue</h4><div class="grid">'
-        + '<div><label>Name</label><input id="v_name"/></div>'
-        + '<div><label>Address</label><input id="v_address"/></div>'
-        + '<div><label>City</label><input id="v_city"/></div>'
-        + '<div><label>Postcode</label><input id="v_postcode"/></div>'
-        + '<div><label>Capacity</label><input id="v_capacity" type="number" min="0"/></div>'
-        + '<hr/>'
-        + '<div><label>% fee (bps, 1000=10%)</label><input id="v_fee_bps" type="number" min="0" placeholder="e.g. 1000"/></div>'
-        + '<div><label>Per-ticket fee (p)</label><input id="v_fee_ticket" type="number" min="0" placeholder="e.g. 50"/></div>'
-        + '<div><label>Basket fee (p)</label><input id="v_fee_basket" type="number" min="0" placeholder="e.g. 30"/></div>'
-        + '<div class="row"><button class="btn primary" id="btnCreateVenue">Save venue</button></div>'
-        + '<div class="note" id="venueMsg"></div></div></div>'
-
-        + '<div class="card"><h4>Find & edit venues</h4>'
-        + '<div class="row"><input id="q" placeholder="Search by name/city/postcode"/><button class="btn ghost" id="btnFind">Search</button></div>'
-        + '<div id="venuesList" class="grid" style="margin-top:8px"></div></div>'
-        + '</div>';
-
-      $('#viewContent').onclick = async e => {
-        if (e.target && e.target.id === 'btnCreateVenue') {
-          const body = {
-            name: $('#v_name').value,
-            address: $('#v_address').value,
-            city: $('#v_city').value,
-            postcode: $('#v_postcode').value,
-            capacity: Number($('#v_capacity').value || 0),
-            feePercentBps: numOrNull($('#v_fee_bps').value),
-            perTicketFeePence: numOrNull($('#v_fee_ticket').value),
-            basketFeePence: numOrNull($('#v_fee_basket').value),
-          };
-          const r = await API('/admin/venues', { method:'POST', body: JSON.stringify(body) });
-          const j = await r.json();
-          $('#venueMsg').textContent = j.ok ? 'Saved.' : (j.message || 'Failed');
-        }
-
-        if (e.target && e.target.id === 'btnFind') {
-          const q = $('#q').value || '';
-          const r = await API('/admin/venues?q=' + encodeURIComponent(q));
-          const j = await r.json();
-          const wrap = $('#venuesList');
-          if(!j.ok){ wrap.innerHTML = '<p class="danger">Failed.</p>'; return; }
-          wrap.innerHTML = (j.venues||[]).map(v => {
-            const meta = [v.address, v.city, v.postcode].filter(Boolean).join(', ') || '—';
-            const cap = (v.capacity != null) ? v.capacity : '—';
-
-            return '<div class="card" data-venue="'+v.id+'">'
-              + '<b>'+escapeHtml(v.name)+'</b><div class="note">'+escapeHtml(meta)+'</div><div class="note">Capacity: '+cap+'</div>'
-              + '<div class="grid three" style="margin-top:8px">'
-              +   '<div><label>% fee (bps)</label><input class="fee_bps" type="number" min="0" value="'+valOrEmpty(v.feePercentBps)+'"/></div>'
-              +   '<div><label>Per-ticket fee (p)</label><input class="fee_ticket" type="number" min="0" value="'+valOrEmpty(v.perTicketFeePence)+'"/></div>'
-              +   '<div><label>Basket fee (p)</label><input class="fee_basket" type="number" min="0" value="'+valOrEmpty(v.basketFeePence)+'"/></div>'
-              + '</div>'
-              + '<div style="margin-top:8px;display:flex;justify-content:flex-end;"><button class="btn ghost v_save">Save</button></div>'
-              + '</div>';
-          }).join('');
-        }
-
-        const card = e.target && e.target.closest && e.target.closest('[data-venue]');
-        if (card && e.target && e.target.classList.contains('v_save')) {
-          const id = card.getAttribute('data-venue');
-          const fee_bps = numOrNull(card.querySelector('.fee_bps')?.value);
-          const fee_ticket = numOrNull(card.querySelector('.fee_ticket')?.value);
-          const fee_basket = numOrNull(card.querySelector('.fee_basket')?.value);
-
-          const r = await API('/admin/venues/'+encodeURIComponent(id), {
-            method:'PATCH',
-            body: JSON.stringify({
-              feePercentBps: fee_bps,
-              perTicketFeePence: fee_ticket,
-              basketFeePence: fee_basket,
-            })
-          });
-          const j = await r.json();
-          const msg = document.createElement('div');
-          msg.className = 'note';
-          msg.textContent = j.ok ? 'Updated.' : (j.message || 'Failed to update');
-          card.appendChild(msg);
-          setTimeout(()=>msg.remove(),2000);
-        }
-      };
-
-      function numOrNull(v){ return (v === '' || v === undefined || v === null) ? null : Number(v); }
-      function valOrEmpty(v){ return (v === null || v === undefined) ? '' : String(v); }
-      function escapeHtml(s){ return String(s||'').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
+    async email(){
+      return \`<h3>Email Campaigns</h3><p class="muted">Email integrations coming soon.</p>\`;
     },
 
-    audiences(){
-      $('#viewTitle').textContent = 'Audiences';
-      $('#toolbarActions').innerHTML = '';
-      $('#viewContent').innerHTML = '<div class="note">Audience tools coming soon.</div>';
-    },
-
-    emails(){
-      $('#viewTitle').textContent = 'Email Campaigns';
-      $('#toolbarActions').innerHTML = '';
-      $('#viewContent').innerHTML = '<div class="note">Scheduler + templates placeholder.</div>';
-    },
-
-    // ---- Account: organiser split lives here ----
-    account(){
-      $('#viewTitle').textContent = 'Account';
-      $('#toolbarActions').innerHTML = '';
-      $('#viewContent').innerHTML =
-        '<div class="grid two">'
-        + '<div class="card"><h4>Organiser settings</h4>'
-        + '<div class="grid">'
-        +   '<div><label>Organiser split (bps, 5000 = 50%)</label><input id="acc_split_bps" type="number" min="0" max="10000" placeholder="e.g. 5000"/></div>'
-        +   '<div class="row"><button class="btn primary" id="acc_save">Save</button></div>'
-        +   '<div class="note" id="acc_msg"></div>'
-        + '</div></div>'
-        + '<div class="card"><h4>Password</h4><p class="note">Password tools coming soon.</p></div>'
-        + '</div>';
-
-      (async () => {
-        const r = await API('/admin/account');
-        const j = await r.json();
-        if(j.ok && j.user){
-          $('#userEmail').textContent = j.user.email || 'Signed in';
-          if (j.user.organiserSplitBps != null) {
-            (document.getElementById('acc_split_bps') as any).value = String(j.user.organiserSplitBps);
-          }
-        }
-      })();
-
-      document.getElementById('acc_save')?.addEventListener('click', async () => {
-        const organiserSplitBps = Number((document.getElementById('acc_split_bps') as any).value || 0);
-        const r = await API('/admin/account', { method: 'PATCH', body: JSON.stringify({ organiserSplitBps })});
-        const j = await r.json();
-        (document.getElementById('acc_msg') as any).textContent = j.ok ? 'Saved.' : (j.message || 'Failed to save');
-      });
+    async account(){
+      const me = await api('/auth/me').catch(()=>({}));
+      return \`
+        <h3>Account</h3>
+        <p><strong>Email:</strong> \${me?.user?.email || 'unknown'}</p>
+        <p><strong>Organiser split (bps):</strong> \${me?.user?.organiserSplitBps ?? '—'}</p>
+        <p><a class="btn-link danger" href="/auth/logout">Log out</a></p>
+      \`;
     }
   };
 
-  // ===== Shows / Orders detail helpers (unchanged from your last working copy) =====
-  async function loadShows(){
-    const wrap = document.getElementById('showsWrap');
-    wrap.innerHTML = '<div class="note">Loading…</div>';
-    const r = await API('/admin/shows/latest?limit=50');
-    const j = await r.json();
-    if(!j.ok){ wrap.innerHTML = '<div class="danger">Failed to load shows</div>'; return; }
-    if(!j.shows || j.shows.length===0){ wrap.innerHTML = '<div class="note">No shows yet.</div>'; return; }
-    wrap.innerHTML = j.shows.map(s => {
-      const d = new Date(s.date);
-      const when = d.toLocaleString();
-      const venue = s.venue ? [s.venue.name,s.venue.city,s.venue.postcode].filter(Boolean).join(', ') : '—';
-      return '<div class="card">'
-        + '<div class="row" style="justify-content:space-between;align-items:center">'
-        +   '<div>'
-        +     '<div><b>'+s.title+'</b></div>'
-        +     '<div class="note">'+when+' — '+venue+'</div>'
-        +   '</div>'
-        +   '<div><button class="btn ghost" data-show="'+s.id+'">Open</button></div>'
-        + '</div>'
-        + '</div>';
-    }).join('');
-    wrap.onclick = e => {
-      const btn = (e.target as any).closest('[data-show]');
-      if(!btn) return;
-      const id = btn.getAttribute('data-show');
-      switchView('showDetail', id);
-    };
-  }
-
-  async function renderShowDetail(showId){
-    const wrap = document.getElementById('viewContent');
-    const r = await API('/admin/shows/'+encodeURIComponent(showId));
-    const j = await r.json();
-    if(!j.ok){ wrap.innerHTML = '<div class="danger">Failed to load show</div>'; return; }
-    const { show, kpis } = j;
-
-    wrap.innerHTML =
-      '<div class="grid">'
-      + '<div class="card"><h3 style="margin:0 0 8px">'+show.title+'</h3>'
-      + '<div class="note">'+(show.venue ? (show.venue.name + (show.venue.city ? (', '+show.venue.city) : '')) : '—')+'</div>'
-      + '<div class="note">Date: '+new Date(show.date).toLocaleString()+'</div></div>'
-      + '<div class="kpis">'
-      +   '<div class="kpi"><div class="note">Capacity</div><div style="font-size:20px;font-weight:700">'+(kpis.capacity ?? '—')+'</div></div>'
-      +   '<div class="kpi"><div class="note">Total Available</div><div style="font-size:20px;font-weight:700">'+(kpis.totalAvailable ?? 0)+'</div></div>'
-      +   '<div class="kpi"><div class="note">Tickets Sold</div><div style="font-size:20px;font-weight:700">'+(kpis.ticketsSold ?? 0)+'</div></div>'
-      +   '<div class="kpi"><div class="note">Revenue</div><div style="font-size:20px;font-weight:700)">'+fmtMoney(kpis.revenuePence)+'</div></div>'
-      + '</div>'
-      + '<div class="grid two">'
-      +   '<div class="card">'
-      +     '<h4 style="margin-top:0">Ticket Types</h4>'
-      +     '<table class="table"><thead><tr><th>Name</th><th>Price</th><th>Avail.</th><th></th></tr></thead>'
-      +     '<tbody id="ttBody"></tbody></table>'
-      +     '<div class="row" style="margin-top:8px">'
-      +       '<input id="tt_name" placeholder="Name"/>'
-      +       '<input id="tt_price" type="number" placeholder="Price (pence)"/>'
-      +       '<input id="tt_avail" type="number" placeholder="Available"/>'
-      +       '<button class="btn primary" id="btnAddTT">Add</button>'
-      +     '</div>'
-      +     '<div class="note" id="ttMsg"></div>'
-      +   '</div>'
-      +   '<div class="card">'
-      +     '<h4 style="margin-top:0">Attendees</h4>'
-      +     '<p class="note">Download a CSV for door list or marketing exports.</p>'
-      +     '<a class="btn ghost" href="/admin/shows/'+show.id+'/attendees.csv" target="_blank" rel="noopener">Download CSV</a>'
-      +   '</div>'
-      + '</div>'
-      + '</div>';
-
-    // render ticket types (same as previous working copy)…
-  }
-
-  async function loadOrders(q){
-    const wrap = document.getElementById('ordersWrap');
-    wrap.innerHTML = '<div class="note">Loading…</div>';
-    const r = await API('/admin/orders?q='+encodeURIComponent(q||'')+'&limit=50');
-    const j = await r.json();
-    if(!j.ok){ wrap.innerHTML = '<div class="danger">Failed to load orders</div>'; return; }
-    if(!j.items || j.items.length===0){ wrap.innerHTML = '<div class="note">No orders found.</div>'; return; }
-    wrap.innerHTML = '<table class="table"><thead><tr><th>Date</th><th>Email</th><th>Show</th><th>Qty</th><th>Amount</th><th>Status</th><th></th></tr></thead><tbody>'
-      + j.items.map(o => {
-          const when = new Date(o.createdAt).toLocaleString();
-          const show = o.show ? (o.show.title + ' (' + new Date(o.show.date).toLocaleDateString() + ')') : '—';
-          return '<tr>'
-            + '<td>'+when+'</td>'
-            + '<td>'+(o.email||'—')+'</td>'
-            + '<td>'+show+'</td>'
-            + '<td>'+(o.quantity ?? '—')+'</td>'
-            + '<td>'+fmtMoney(o.amountPence)+'</td>'
-            + '<td>'+o.status+'</td>'
-            + '<td><button class="btn ghost" data-open-order="'+o.id+'">Open</button></td>'
-            + '</tr>';
-        }).join('')
-      + '</tbody></table>';
-    wrap.onclick = e => {
-      const btn = (e.target as any).closest('[data-open-order]');
-      if(!btn) return;
-      switchView('orderDetail', btn.getAttribute('data-open-order'));
-    };
-  }
-
-  // ===== Navigation / auth =====
-  function switchView(name, arg){
-    document.querySelectorAll('nav button').forEach(btn => {
-      btn.classList.toggle('active', btn.getAttribute('data-view')===name);
-    });
-    if (name === 'showDetail') return views.showDetail(arg);
-    if (name === 'orderDetail') return views.orderDetail(arg);
-    if (views[name]) views[name](); else views.home();
-  }
-
-  document.querySelectorAll('nav button[data-view]').forEach(btn=>{
-    btn.addEventListener('click', e => {
-      e.preventDefault();
-      switchView(btn.getAttribute('data-view'));
-    });
-  });
-
-  async function ensureAuth(){
-    const me = await fetch('/auth/me', { credentials: 'include' });
-    if(me.status===200){
-      const j = await me.json();
-      $('#userEmail').textContent = (j.user && j.user.email) ? j.user.email : 'Signed in';
-      return true;
-    } else {
-      // show login overlay if you have it elsewhere
-      return true; // keep UI visible for now
+  // --- router / navigation --------------------------------------
+  async function switchView(view){
+    // highlight menu
+    qsa('.sidebar .nav button').forEach(b => b.classList.toggle('active', b.dataset.view===view));
+    // render
+    const el = qs('#content');
+    el.innerHTML = '<div class="muted">Loading…</div>';
+    try{
+      // auth-gate UI (but let HTML load)
+      const ok = await ensureAuth();
+      if(!ok){
+        el.innerHTML = '<p>Please <a class="btn-link" href="/auth/login">sign in</a> to continue.</p>';
+        return;
+      }
+      el.innerHTML = await views[view]();
+      // attach view-specific handlers
+      if(view==='shows'){
+        qs('#refreshShows')?.addEventListener('click', () => switchView('shows'));
+      }
+      if(view==='venues'){
+        qs('#refreshVenues')?.addEventListener('click', () => switchView('venues'));
+        qsa('.saveVenue').forEach(btn=>{
+          btn.addEventListener('click', async ()=>{
+            const tr = btn.closest('tr'); const id = tr?.dataset.id;
+            const body = {
+              feePercentBps: numOrNull(qs('input[name="feePercentBps"]', tr)?.value),
+              perTicketFeePence: numOrNull(qs('input[name="perTicketFeePence"]', tr)?.value),
+              basketFeePence: numOrNull(qs('input[name="basketFeePence"]', tr)?.value),
+            };
+            await api('/admin/venues/'+id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+            btn.textContent='Saved'; setTimeout(()=>btn.textContent='Save',1200);
+          });
+        });
+      }
+      if(view==='orders'){
+        const toolbar = qs('#ordersToolbar');
+        const exportBtn = qs('#exportCsv');
+        const table = qs('#ordersTable');
+        function buildQS(){
+          const p = new URLSearchParams();
+          const q = qs('input[name="q"]', toolbar).value.trim();
+          const from = qs('input[name="from"]', toolbar).value;
+          const to = qs('input[name="to"]', toolbar).value;
+          if(q) p.set('q', q);
+          if(from) p.set('from', from);
+          if(to) p.set('to', to);
+          const qsStr = p.toString();
+          return qsStr ? ('?'+qsStr) : '';
+        }
+        exportBtn.addEventListener('click', (e)=>{
+          e.preventDefault();
+          window.location.href = '/admin/orders/export.csv'+buildQS();
+        });
+        qs('#searchOrders').addEventListener('click', async ()=>{
+          table.innerHTML='Loading…';
+          try{
+            const data = await api('/admin/orders'+buildQS());
+            const rows = (data?.items||[]).map(o=>\`
+              <tr>
+                <td>\${o.show?.title||''}</td>
+                <td>\${o.email||''}</td>
+                <td>\${o.status}</td>
+                <td>£\${fmtPence(o.amountPence)}</td>
+                <td>£\${fmtPence(o.platformFeePence)}</td>
+                <td>£\${fmtPence(o.organiserSharePence)}</td>
+                <td>£\${fmtPence(o.netPayoutPence)}</td>
+                <td class="muted">\${o.id}</td>
+              </tr>\`).join('');
+            table.innerHTML=\`
+              <table>
+                <thead><tr>
+                  <th>Show</th><th>Buyer</th><th>Status</th><th>Gross</th>
+                  <th>Platform Fee</th><th>Organiser Share</th><th>Net Payout</th><th>ID</th>
+                </tr></thead>
+                <tbody>\${rows}</tbody>
+              </table>\`;
+          }catch(_){
+            table.innerHTML='<span class="danger">Failed to load orders</span>';
+          }
+        });
+      }
+      if(view==='analytics'){
+        const toolbar = qs('#analyticsToolbar');
+        const body = qs('#analyticsBody');
+        qs('#runAnalytics').addEventListener('click', async ()=>{
+          body.innerHTML='Loading…';
+          const from = qs('input[name="from"]', toolbar).value;
+          const to = qs('input[name="to"]', toolbar).value;
+          const p = new URLSearchParams();
+          if(from) p.set('from', from);
+          if(to) p.set('to', to);
+          try{
+            const data = await api('/admin/analytics' + (p.toString()?('?'+p.toString()):''));
+            body.innerHTML = \`
+              <div class="row">
+                <div class="pill">Orders: \${data.totalOrders}</div>
+                <div class="pill">Tickets: \${data.totalTickets}</div>
+                <div class="pill">Gross: £\${fmtPence(data.totalGrossPence)}</div>
+                <div class="pill">Platform Fee: £\${fmtPence(data.totalPlatformFeePence)}</div>
+                <div class="pill">Organiser Share: £\${fmtPence(data.totalOrganiserSharePence)}</div>
+                <div class="pill">Net Payout: £\${fmtPence(data.totalNetPayoutPence)}</div>
+              </div>\`;
+          }catch(_){
+            body.innerHTML = '<span class="danger">Failed to load analytics</span>';
+          }
+        });
+      }
+      history.replaceState(null,'','/admin/ui#'+view);
+    }catch(e){
+      console.error(e);
+      qs('#content').innerHTML = '<p class="danger">Failed to load view.</p>';
     }
   }
 
-  $('#btnLogout').addEventListener('click', async function(){
-    await API('/auth/logout', { method:'POST' });
-    location.reload();
+  function numOrNull(v){ if(v===undefined||v===null||v==='') return null; const n=Number(v); return Number.isFinite(n)?n:null; }
+
+  // Sidebar events
+  qsa('.sidebar .nav button').forEach(btn=>{
+    btn.addEventListener('click', ()=> switchView(btn.dataset.view));
   });
 
+  // Boot: go to hash view if present
   (async function boot(){
-    const ok = await ensureAuth();
-    if(ok) switchView('home');
+    const initial = (location.hash||'#home').slice(1);
+    if(!views[initial]) { await switchView('home'); return; }
+    await switchView(initial);
   })();
-})();
 </script>
 </body>
 </html>`);
