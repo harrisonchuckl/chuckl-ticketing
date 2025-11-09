@@ -24,34 +24,28 @@ router.post('/webhooks/stripe', async (req, res) => {
     if (event.type === 'payment_intent.succeeded') {
       const pi = event.data.object as Stripe.PaymentIntent;
 
-      // Look up provisional order by PI id
       const order = await prisma.order.findFirst({
         where: { stripeId: pi.id },
-        select: { id: true, showId: true, quantity: true, amountPence: true, email: true },
+        select: { id: true, showId: true, quantity: true, subtotalPence: true },
       });
-
       if (!order) return res.json({ ok: true });
-
-      // Recalculate fees using the same inputs used at checkout
-      const quantity = order.quantity ?? 0;
-      const subtotalPence = (order.amountPence ?? 0); // was total; if you prefer, recompute from metadata
-      // If you store unit price separately, pass the real subtotal here.
 
       const fees = await calcFeesForShow({
         prisma,
         showId: order.showId as string,
-        quantity,
-        subtotalPence,
+        quantity: order.quantity ?? 0,
+        subtotalPence: order.subtotalPence ?? 0,
       });
 
       await prisma.order.update({
         where: { id: order.id },
         data: {
           status: 'PAID',
-          // optional fee fields if present
-          platformFeePence: fees.platformFeePence ?? undefined,
-          organiserFeePence: fees.organiserFeePence ?? undefined,
-        } as any,
+          platformFeePence: fees.platformFeePence,
+          organiserFeePence: fees.organiserFeePence,
+          paymentFeePence: 0,
+          netPayoutPence: (order.subtotalPence ?? 0) + fees.organiserFeePence - 0,
+        },
       });
     }
 
