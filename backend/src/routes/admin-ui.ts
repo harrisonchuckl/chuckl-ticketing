@@ -22,6 +22,7 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
       --border: #e5e7eb;
       --text: #111827;
       --muted: #6b7280;
+      --brand: #111827;
     }
     html, body { margin:0; padding:0; height:100%; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; color: var(--text); background: var(--bg); }
     .wrap { display:flex; min-height:100vh; }
@@ -31,7 +32,7 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
     .sb-link.active, .sb-link:hover { background:#f1f5f9; }
     .content { flex:1; padding:20px; }
     .card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:16px; }
-    .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+    .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; gap:12px; }
     .title { font-weight:600; }
     .muted { color:var(--muted); }
     .kpis { display:grid; grid-template-columns: repeat(4, minmax(160px,1fr)); gap:12px; }
@@ -39,15 +40,28 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
     .kpi .label { font-size:12px; color:var(--muted); }
     .kpi .value { font-size:20px; font-weight:700; margin-top:6px; }
     .btn { appearance:none; border:1px solid var(--border); background:#fff; border-radius:8px; padding:8px 12px; cursor:pointer; }
+    .btn.primary { background:#111827; color:#fff; border-color:#111827; }
     .btn:hover { background:#f9fafb; }
     .toolbar { display:flex; gap:8px; flex-wrap:wrap; }
     .row { display:flex; gap:8px; flex-wrap:wrap; }
-    input, select { border:1px solid var(--border); border-radius:8px; padding:8px 10px; background:#fff; outline:none; }
+    input, select, textarea { border:1px solid var(--border); border-radius:8px; padding:8px 10px; background:#fff; outline:none; }
+    input[type="number"]{ width:140px; }
     table { width:100%; border-collapse:collapse; font-size:14px; }
     th, td { text-align:left; padding:10px; border-bottom:1px solid var(--border); }
     th { font-weight:600; color:#334155; background:#f8fafc; }
     .right { text-align:right; }
     .error { color:#b91c1c; }
+    .success { color:#065f46; }
+    .grid { display:grid; gap:8px; }
+    .grid.cols-2 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .grid.cols-3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+    .grid.cols-4 { grid-template-columns: repeat(4, minmax(0,1fr)); }
+    @media (max-width: 960px){
+      .grid.cols-2, .grid.cols-3, .grid.cols-4 { grid-template-columns: 1fr; }
+    }
+    label { font-size:12px; color:var(--muted); display:block; margin-bottom:4px; }
+    .field { display:flex; flex-direction:column; }
+    .sep { height:8px; }
   </style>
 </head>
 <body>
@@ -109,6 +123,15 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
     if(!r.ok) throw new Error('HTTP '+r.status);
     return r.json();
   }
+  async function postJSON(url, body){
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type':'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(body||{})
+    });
+    return r.json();
+  }
   const fmtP = (p) => '£' + (Number(p||0)/100).toFixed(2);
 
   // HOME
@@ -133,7 +156,7 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
           <div class="kpi"><div class="label">Our Fees (MTD)</div><div class="value" id="kpi_fm">—</div></div>
           <div class="kpi"><div class="label">Net Payout (MTD)</div><div class="value" id="kpi_nm">—</div></div>
         </div>
-        <div style="height:8px"></div>
+        <div class="sep"></div>
         <div id="kpiErr" class="error"></div>
       </div>
     \`);
@@ -169,7 +192,7 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
           <div class="toolbar"><button class="btn" id="btnRefresh">Refresh</button></div>
         </div>
         <div id="err" class="error"></div>
-        <div style="height:8px"></div>
+        <div class="sep"></div>
         <table id="tbl"><thead>
           <tr><th>Title</th><th>Date</th><th>Venue</th></tr>
         </thead><tbody></tbody></table>
@@ -189,7 +212,7 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
           </tr>\`).join('');
       }catch(e){ $('#err').textContent = 'Failed to load shows'; }
     }
-    const r = $('#btnRefresh'); r && r.addEventListener('click', load);
+    $('#btnRefresh')?.addEventListener('click', load);
     load();
   }
 
@@ -208,7 +231,7 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
           </form>
         </div>
         <div id="err" class="error"></div>
-        <div style="height:8px"></div>
+        <div class="sep"></div>
         <table id="tbl"><thead>
           <tr>
             <th>When</th><th>Email</th><th>Show</th><th>Status</th>
@@ -265,7 +288,7 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
     load();
   }
 
-  // VENUES
+  // VENUES (with create form)
   async function renderVenues(){
     setMain(\`
       <div class="card">
@@ -277,9 +300,36 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
           </div>
         </div>
         <div id="err" class="error"></div>
-        <div style="height:8px"></div>
+        <div class="sep"></div>
+
+        <div class="card" style="border-style:dashed;">
+          <div class="header">
+            <div class="title">Add Venue</div>
+            <div class="muted">Create a venue and (optionally) set fee policy.</div>
+          </div>
+          <form id="vform" class="grid cols-4">
+            <div class="field"><label>Name</label><input id="v_name" required placeholder="Venue name" /></div>
+            <div class="field"><label>City</label><input id="v_city" placeholder="City" /></div>
+            <div class="field"><label>Postcode</label><input id="v_postcode" placeholder="Postcode" /></div>
+            <div class="field"><label>Capacity</label><input id="v_capacity" type="number" min="0" step="1" placeholder="e.g. 800" /></div>
+
+            <div class="field"><label>Address (optional)</label><input id="v_address" placeholder="Address line(s)" /></div>
+            <div></div><div></div><div></div>
+
+            <div class="field"><label>% fee (bps)</label><input id="v_bps" type="number" min="0" step="1" placeholder="1000 = 10%" /></div>
+            <div class="field"><label>Per-ticket fee (p)</label><input id="v_ticketp" type="number" min="0" step="1" placeholder="e.g. 50" /></div>
+            <div class="field"><label>Basket fee (p)</label><input id="v_basketp" type="number" min="0" step="1" placeholder="e.g. 30" /></div>
+            <div class="field" style="display:flex; align-items:flex-end; gap:8px;">
+              <button class="btn primary" type="submit">Create venue</button>
+              <span id="vmsg" class="muted"></span>
+            </div>
+          </form>
+        </div>
+
+        <div class="sep"></div>
+
         <table id="tbl"><thead>
-          <tr><th>Name</th><th>City</th><th>Postcode</th><th>Capacity</th></tr>
+          <tr><th>Name</th><th>City</th><th>Postcode</th><th>Capacity</th><th>Fee % (bps)</th><th>Per-ticket (p)</th><th>Basket (p)</th></tr>
         </thead><tbody></tbody></table>
       </div>
     \`);
@@ -298,10 +348,40 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
             <td>\${v.city||''}</td>
             <td>\${v.postcode||''}</td>
             <td>\${v.capacity!=null?v.capacity:''}</td>
+            <td>\${v.feePercentBps!=null?v.feePercentBps:''}</td>
+            <td>\${v.perTicketFeePence!=null?v.perTicketFeePence:''}</td>
+            <td>\${v.basketFeePence!=null?v.basketFeePence:''}</td>
           </tr>\`).join('');
       } catch(e){ $('#err').textContent = 'Failed to load venues'; }
     }
-    const vs = $('#vsearch'); vs && vs.addEventListener('click', load);
+    $('#vsearch')?.addEventListener('click', load);
+
+    $('#vform')?.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const body = {
+        name: $('#v_name').value.trim(),
+        city: $('#v_city').value.trim() || null,
+        postcode: $('#v_postcode').value.trim() || null,
+        capacity: $('#v_capacity').value ? Number($('#v_capacity').value) : null,
+        address: $('#v_address').value.trim() || null,
+        feePercentBps: $('#v_bps').value ? Number($('#v_bps').value) : null,
+        perTicketFeePence: $('#v_ticketp').value ? Number($('#v_ticketp').value) : null,
+        basketFeePence: $('#v_basketp').value ? Number($('#v_basketp').value) : null,
+      };
+      const msg = $('#vmsg');
+      try{
+        msg.textContent = 'Saving...';
+        const r = await postJSON('/admin/venues', body);
+        if(!r.ok) throw new Error(r.error || 'Failed');
+        msg.className = 'success';
+        msg.textContent = 'Venue created ✔';
+        await load();
+      }catch(e){
+        msg.className = 'error';
+        msg.textContent = 'Error creating venue';
+      }
+    });
+
     load();
   }
 
