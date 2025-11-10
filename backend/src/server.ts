@@ -15,8 +15,10 @@ import events from './routes/events.js';
 import publicUI from './routes/public-ui.js';
 // Public SEO preview (SSR meta for shares)
 import publicMeta from './routes/public-meta.js';
-// NEW: SEO sitemap (XML)
+// Public sitemap (XML)
 import sitemap from './routes/sitemap.js';
+// NEW: Server-rendered Event Page
+import publicEventSSR from './routes/public-event-ssr.js';
 
 // Auth
 import auth from './routes/auth.js';
@@ -56,14 +58,19 @@ app.use(express.json({ limit: '1mb' }));
 app.use('/events', events);
 app.use('/checkout', checkout);
 
-// --- Public HTML UI ---
-app.use('/public', publicUI);
+// --- Public HTML (server-rendered event page) ---
+// Mount BEFORE the SPA so /public/event/:id is SSR HTML
+app.use('/public', publicEventSSR);
 
 // --- Public SEO preview (SSR meta) ---
 app.use('/public', publicMeta);
 
 // --- Public sitemap (XML) ---
 app.use('/public', sitemap);
+
+// --- Public HTML UI (SPA shell) ---
+// Handles /public/events and (if you navigate inside SPA) /public/event/:id
+app.use('/public', publicUI);
 
 // --- Auth routes (UI + JSON) ---
 app.use('/auth', loginUI);     // GET /auth/login (HTML)
