@@ -1,112 +1,72 @@
 // backend/src/routes/admin-venues.ts
 import { Router } from 'express';
 import prisma from '../lib/prisma.js';
-import { requireAdmin } from '../lib/authz.js';
+import { requireAdminOrOrganiser } from '../lib/authz.js';
 
 const router = Router();
 
-/**
- * GET /admin/venues
- * Optional q= search across name/city/postcode
- */
-router.get('/venues', requireAdmin, async (req, res) => {
-  const q = (req.query.q as string | undefined)?.trim();
-  const where = q
-    ? {
-        OR: [
-          { name: { contains: q, mode: 'insensitive' as const } },
-          { city: { contains: q, mode: 'insensitive' as const } },
-          { postcode: { contains: q, mode: 'insensitive' as const } },
-        ],
+// List venues (search by name/city/postcode)
+router.get('/venues', requireAdminOrOrganiser, async (req, res) => {
+  try {
+    const q = (req.query.q as string | undefined)?.trim();
+    const where = q ? {
+      OR: [
+        { name: { contains: q, mode: 'insensitive' } },
+        { city: { contains: q, mode: 'insensitive' } },
+        { postcode: { contains: q, mode: 'insensitive' } },
+      ]
+    } : {};
+
+    const items = await prisma.venue.findMany({
+      where,
+      orderBy: [{ name: 'asc' }],
+      select: {
+        id: true, name: true, address: true, city: true, postcode: true, capacity: true,
+        feePercentBps: true, perTicketFeePence: true, basketFeePence: true,
       }
-    : undefined;
+    });
 
-  const venues = await prisma.venue.findMany({
-    where,
-    orderBy: { name: 'asc' },
-    select: {
-      id: true,
-      name: true,
-      address: true,
-      city: true,
-      postcode: true,
-      capacity: true,
-      feePercentBps: true,
-      perTicketFeePence: true,
-      basketFeePence: true,
-    },
-  });
-
-  res.json({ ok: true, items: venues });
+    res.json({ ok: true, items });
+  } catch (e) {
+    console.error('GET /admin/venues failed', e);
+    res.status(500).json({ ok: false, error: 'Failed to list venues' });
+  }
 });
 
-/**
- * POST /admin/venues
- */
-router.post('/venues', requireAdmin, async (req, res) => {
-  const { name, address, city, postcode, capacity, feePercentBps, perTicketFeePence, basketFeePence } = req.body ?? {};
-  if (!name) return res.status(400).json({ ok: false, message: 'Name is required' });
+// Create venue
+router.post('/venues', requireAdminOrOrganiser, async (req, res) => {
+  try {
+    const {
+      name, address, city, postcode, capacity,
+      feePercentBps, perTicketFeePence, basketFeePence,
+    } = req.body || {};
 
-  const created = await prisma.venue.create({
-    data: {
-      name,
-      address: address ?? null,
-      city: city ?? null,
-      postcode: postcode ?? null,
-      capacity: typeof capacity === 'number' ? capacity : null,
-      feePercentBps: typeof feePercentBps === 'number' ? feePercentBps : null,
-      perTicketFeePence: typeof perTicketFeePence === 'number' ? perTicketFeePence : null,
-      basketFeePence: typeof basketFeePence === 'number' ? basketFeePence : null,
-    },
-    select: {
-      id: true,
-      name: true,
-      address: true,
-      city: true,
-      postcode: true,
-      capacity: true,
-      feePercentBps: true,
-      perTicketFeePence: true,
-      basketFeePence: true,
-    },
-  });
+    if (!name || String(name).trim().length === 0) {
+      return res.status(400).json({ ok: false, error: 'Name is required' });
+    }
 
-  res.json({ ok: true, item: created });
-});
+    const created = await prisma.venue.create({
+      data: {
+        name: String(name).trim(),
+        address: address ? String(address).trim() : null,
+        city: city ? String(city).trim() : null,
+        postcode: postcode ? String(postcode).trim() : null,
+        capacity: capacity != null ? Number(capacity) : null,
+        feePercentBps: feePercentBps != null ? Number(feePercentBps) : null,
+        perTicketFeePence: perTicketFeePence != null ? Number(perTicketFeePence) : null,
+        basketFeePence: basketFeePence != null ? Number(basketFeePence) : null,
+      },
+      select: {
+        id: true, name: true, city: true, postcode: true, capacity: true,
+        feePercentBps: true, perTicketFeePence: true, basketFeePence: true,
+      }
+    });
 
-/**
- * PATCH /admin/venues/:id
- */
-router.patch('/venues/:id', requireAdmin, async (req, res) => {
-  const id = req.params.id;
-  const { name, address, city, postcode, capacity, feePercentBps, perTicketFeePence, basketFeePence } = req.body ?? {};
-
-  const updated = await prisma.venue.update({
-    where: { id },
-    data: {
-      name: name ?? undefined,
-      address: address ?? undefined,
-      city: city ?? undefined,
-      postcode: postcode ?? undefined,
-      capacity: typeof capacity === 'number' ? capacity : undefined,
-      feePercentBps: typeof feePercentBps === 'number' ? feePercentBps : undefined,
-      perTicketFeePence: typeof perTicketFeePence === 'number' ? perTicketFeePence : undefined,
-      basketFeePence: typeof basketFeePence === 'number' ? basketFeePence : undefined,
-    },
-    select: {
-      id: true,
-      name: true,
-      address: true,
-      city: true,
-      postcode: true,
-      capacity: true,
-      feePercentBps: true,
-      perTicketFeePence: true,
-      basketFeePence: true,
-    },
-  });
-
-  res.json({ ok: true, item: updated });
+    res.json({ ok: true, venue: created });
+  } catch (e) {
+    console.error('POST /admin/venues failed', e);
+    res.status(500).json({ ok: false, error: 'Failed to create venue' });
+  }
 });
 
 export default router;
