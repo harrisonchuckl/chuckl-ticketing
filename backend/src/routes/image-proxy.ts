@@ -6,7 +6,7 @@ const router = Router();
 
 /**
  * GET /img/fetch?src=<url>&w=600
- * - fetches a public image (e.g. from R2), resizes, emits webp
+ * Fetch a public image (e.g. from R2), resize, emit webp.
  */
 router.get('/img/fetch', async (req: Request, res: Response) => {
   try {
@@ -17,7 +17,8 @@ router.get('/img/fetch', async (req: Request, res: Response) => {
       return res.status(400).send('Invalid src');
     }
 
-    const upstream = await fetch(src, { redirect: 'follow' as RequestRedirect });
+    // Use built-in fetch; don't reference DOM types.
+    const upstream = await fetch(src, { redirect: 'follow' as any });
     if (!upstream.ok) return res.status(404).send('Not found');
 
     const arrayBuf = await upstream.arrayBuffer();
