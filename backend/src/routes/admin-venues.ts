@@ -1,22 +1,23 @@
-// backend/src/routes/admin-venues.ts
 import { Router } from 'express';
 import prisma from '../lib/prisma.js';
 import { requireAdminOrOrganiser } from '../lib/authz.js';
-import { Prisma } from '@prisma/client';
 
 const router = Router();
 
-// List venues (search by name/city/postcode)
+/**
+ * GET /admin/venues?q=
+ * Simple, case-insensitive search over name/city/postcode.
+ */
 router.get('/venues', requireAdminOrOrganiser, async (req, res) => {
   try {
-    const q = (req.query.q as string | undefined)?.trim();
+    const q = (String(req.query.q || '').trim()) || null;
 
-    const where: Prisma.VenueWhereInput | undefined = q
+    const where = q
       ? {
           OR: [
-            { name: { contains: q, mode: Prisma.QueryMode.insensitive } },
-            { city: { contains: q, mode: Prisma.QueryMode.insensitive } },
-            { postcode: { contains: q, mode: Prisma.QueryMode.insensitive } },
+            { name: { contains: q, mode: 'insensitive' as const } },
+            { city: { contains: q, mode: 'insensitive' as const } },
+            { postcode: { contains: q, mode: 'insensitive' as const } },
           ],
         }
       : undefined;
@@ -31,20 +32,20 @@ router.get('/venues', requireAdminOrOrganiser, async (req, res) => {
         city: true,
         postcode: true,
         capacity: true,
-        feePercentBps: true,
-        perTicketFeePence: true,
-        basketFeePence: true,
       },
     });
 
     res.json({ ok: true, items });
   } catch (e) {
     console.error('GET /admin/venues failed', e);
-    res.status(500).json({ ok: false, error: 'Failed to list venues' });
+    res.status(500).json({ ok: false, error: 'Failed to load venues' });
   }
 });
 
-// Create venue
+/**
+ * POST /admin/venues
+ * Create a venue (no fee fields here – fees are handled per-ticket / per-show).
+ */
 router.post('/venues', requireAdminOrOrganiser, async (req, res) => {
   try {
     const {
@@ -53,12 +54,9 @@ router.post('/venues', requireAdminOrOrganiser, async (req, res) => {
       city,
       postcode,
       capacity,
-      feePercentBps,
-      perTicketFeePence,
-      basketFeePence,
     } = req.body || {};
 
-    if (!name || String(name).trim().length === 0) {
+    if (!name || String(name).trim() === '') {
       return res.status(400).json({ ok: false, error: 'Name is required' });
     }
 
@@ -69,21 +67,14 @@ router.post('/venues', requireAdminOrOrganiser, async (req, res) => {
         city: city ? String(city).trim() : null,
         postcode: postcode ? String(postcode).trim() : null,
         capacity: capacity != null ? Number(capacity) : null,
-        feePercentBps: feePercentBps != null ? Number(feePercentBps) : null,
-        perTicketFeePence:
-          perTicketFeePence != null ? Number(perTicketFeePence) : null,
-        basketFeePence:
-          basketFeePence != null ? Number(basketFeePence) : null,
       },
       select: {
         id: true,
         name: true,
+        address: true,
         city: true,
         postcode: true,
         capacity: true,
-        feePercentBps: true,
-        perTicketFeePence: true,
-        basketFeePence: true,
       },
     });
 
