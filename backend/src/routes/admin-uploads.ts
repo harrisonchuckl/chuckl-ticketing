@@ -2,71 +2,60 @@
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
 import Busboy from 'busboy';
+import Sharp from 'sharp';
 import { putObjectStream } from '../lib/storage.js';
 import { requireAdminOrOrganiser } from '../lib/authz.js';
 
 const router = Router();
 
-const PUBLIC_BASE = process.env.R2_PUBLIC_BASE || '';
-
-function extFromFilename(name: string | undefined) {
-  if (!name) return '';
-  const i = name.lastIndexOf('.');
-  return i >= 0 ? name.slice(i + 1).toLowerCase() : '';
-}
-
 router.post('/uploads', requireAdminOrOrganiser, async (req, res) => {
   try {
     const bb = Busboy({ headers: req.headers });
 
-    let resolved = false;
+    let responded = false;
 
-    bb.on('file', async (_name, file, info) => {
-      const mime = info.mimeType;
-      const filename = info.filename;
-      const ext = extFromFilename(filename) || (mime === 'image/png' ? 'png' : mime === 'image/jpeg' ? 'jpg' : 'bin');
-
+    bb.on('file', async (_field, file, info) => {
+      const mime = info.mimeType || 'application/octet-stream';
       if (!mime.startsWith('image/')) {
-        resolved = true;
+        responded = true;
         file.resume();
         return res.status(400).json({ ok: false, error: 'Only image uploads allowed' });
       }
 
-      // posters/yyyy/mm/<uuid>.<ext>
       const now = new Date();
-      const key = `posters/${now.getUTCFullYear()}/${String(now.getUTCMonth()+1).padStart(2,'0')}/${randomUUID()}.${ext}`;
+      const key = `posters/${now.getUTCFullYear()}/${String(now.getUTCMonth()+1).padStart(2,'0')}/${randomUUID()}.webp`;
 
       try {
-        await putObjectStream({
+        // Transform with Sharp (auto-rotate, max width 2000, webp compress)
+        const transformer = Sharp()
+          .rotate()
+          .resize({ width: 2000, withoutEnlargement: true })
+          .webp({ quality: 82 });
+
+        file.pipe(transformer);
+
+        const { url } = await putObjectStream({
           key,
-          body: file,
-          contentType: mime,
+          body: transformer,
+          contentType: 'image/webp',
         });
-        resolved = true;
-        const url = PUBLIC_BASE
-          ? `${PUBLIC_BASE.replace(/\/+$/,'')}/${key}`
-          : key; // require PUBLIC_BASE for a full URL
-        return res.json({ ok: true, key, url });
+
+        responded = true;
+        return res.json({ ok: true, key, url, contentType: 'image/webp' });
       } catch (e) {
-        console.error('upload failed', e);
-        resolved = true;
+        console.error('upload-sharp failed', e);
+        responded = true;
         return res.status(500).json({ ok: false, error: 'Upload failed' });
       }
     });
 
-    bb.on('error', (e) => {
-      if (!resolved) {
-        console.error('busboy error', e);
-        resolved = true;
-        res.status(500).json({ ok: false, error: 'Upload error' });
-      }
+    bb.on('finish', () => {
+      if (!responded) res.status(400).json({ ok: false, error: 'No file sent' });
     });
 
-    bb.on('finish', () => {
-      if (!resolved) {
-        // no file field
-        res.status(400).json({ ok: false, error: 'No file sent' });
-      }
+    bb.on('error', (e) => {
+      console.error('busboy error', e);
+      if (!responded) res.status(500).json({ ok: false, error: 'Upload error' });
     });
 
     req.pipe(bb);
