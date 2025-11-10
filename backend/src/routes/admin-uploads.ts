@@ -1,67 +1,96 @@
 // backend/src/routes/admin-uploads.ts
-import { Router } from 'express';
-import { randomUUID } from 'crypto';
+import { Router, type Request, type Response } from 'express';
 import Busboy from 'busboy';
-import Sharp from 'sharp';
-import { putObjectStream } from '../lib/storage.js';
+import sharp from 'sharp';
+import { uploadToR2 } from '../lib/upload-r2.js';
 import { requireAdminOrOrganiser } from '../lib/authz.js';
 
 const router = Router();
 
-router.post('/uploads', requireAdminOrOrganiser, async (req, res) => {
+/**
+ * POST /admin/uploads/poster
+ * Multipart form-data:
+ *   - file: image file (jpg/png/webp)
+ *   - showId: string (optional; if passed we’ll use it in the key)
+ *
+ * Returns:
+ *   { ok: true, url: "https://..." }
+ */
+router.post('/uploads/poster', requireAdminOrOrganiser, async (req: Request, res: Response) => {
   try {
-    const bb = Busboy({ headers: req.headers });
-
-    let responded = false;
-
-    bb.on('file', async (_field, file, info) => {
-      const mime = info.mimeType || 'application/octet-stream';
-      if (!mime.startsWith('image/')) {
-        responded = true;
-        file.resume();
-        return res.status(400).json({ ok: false, error: 'Only image uploads allowed' });
+    const bb = Busboy({
+      headers: req.headers,
+      limits: {
+        // ~15MB raw; we will downscale with sharp (server-side)
+        fileSize: 15 * 1024 * 1024,
+        files: 1
       }
+    });
 
-      const now = new Date();
-      const key = `posters/${now.getUTCFullYear()}/${String(now.getUTCMonth()+1).padStart(2,'0')}/${randomUUID()}.webp`;
+    let rawBuffer: Buffer | null = null;
+    let filename = 'poster';
+    let showId: string | null = null;
+    let mimeType = 'image/jpeg';
 
-      try {
-        // Transform with Sharp (auto-rotate, max width 2000, webp compress)
-        const transformer = Sharp()
-          .rotate()
-          .resize({ width: 2000, withoutEnlargement: true })
-          .webp({ quality: 82 });
+    const done = new Promise<void>((resolve, reject) => {
+      bb.on('file', (_field: string, file: NodeJS.ReadableStream, info: { filename: string; mimeType: string }) => {
+        filename = info?.filename || filename;
+        mimeType = info?.mimeType || mimeType;
 
-        file.pipe(transformer);
-
-        const { url } = await putObjectStream({
-          key,
-          body: transformer,
-          contentType: 'image/webp',
+        const chunks: Buffer[] = [];
+        file.on('data', (d: Buffer) => chunks.push(d));
+        file.on('limit', () => reject(new Error('File too large')));
+        file.on('end', () => {
+          rawBuffer = Buffer.concat(chunks);
         });
+      });
 
-        responded = true;
-        return res.json({ ok: true, key, url, contentType: 'image/webp' });
-      } catch (e) {
-        console.error('upload-sharp failed', e);
-        responded = true;
-        return res.status(500).json({ ok: false, error: 'Upload failed' });
-      }
-    });
+      bb.on('field', (field: string, val: string) => {
+        if (field === 'showId') showId = val;
+      });
 
-    bb.on('finish', () => {
-      if (!responded) res.status(400).json({ ok: false, error: 'No file sent' });
-    });
-
-    bb.on('error', (e) => {
-      console.error('busboy error', e);
-      if (!responded) res.status(500).json({ ok: false, error: 'Upload error' });
+      bb.on('error', (e: unknown) => reject(e as Error));
+      bb.on('finish', () => resolve());
     });
 
     req.pipe(bb);
-  } catch (e) {
-    console.error('POST /admin/uploads fatal', e);
-    res.status(500).json({ ok: false, error: 'Upload failed' });
+    await done;
+
+    if (!rawBuffer) {
+      return res.status(400).json({ ok: false, error: 'No file received' });
+    }
+
+    // Normalise + compress: limit width to 1600px, convert to webp (small, modern)
+    const processed = await sharp(rawBuffer)
+      .rotate() // auto-orient
+      .resize({ width: 1600, withoutEnlargement: true })
+      .webp({ quality: 82 })
+      .toBuffer();
+
+    const ext = 'webp';
+    const ts = Date.now();
+    const safeFile = filename.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9.\-_]/g, '').toLowerCase();
+    const baseName = safeFile.replace(/\.[a-z0-9]+$/i, '') || 'poster';
+    const key = showId
+      ? `posters/${showId}/${baseName}-${ts}.${ext}`
+      : `posters/${baseName}-${ts}.${ext}`;
+
+    const put = await uploadToR2(key, processed, {
+      contentType: `image/${ext}`,
+      cacheControl: 'public, max-age=31536000, immutable'
+    });
+
+    if (!put.ok) {
+      return res.status(500).json({ ok: false, error: 'Upload failed' });
+    }
+
+    // Public URL (from your R2_PUBLIC_BASE)
+    const url = `${put.publicBase}/${key}`;
+
+    return res.json({ ok: true, url });
+  } catch (err) {
+    console.error('poster upload failed', err);
+    return res.status(500).json({ ok: false, error: 'Upload error' });
   }
 });
 
