@@ -3,6 +3,9 @@
 // Fee calculation with no dependency on Venue fee fields.
 // Policy is driven by environment variables with safe defaults.
 // Compatible with the updated Prisma schema (no fee fields on Venue).
+//
+// Also exposes a backward-compat named export `calcFeesForShow`
+// so existing routes (checkout/webhook) continue to compile.
 
 import prisma from '../lib/prisma.js';
 
@@ -23,60 +26,40 @@ const intFromEnv = (key: string, def: number): number => {
 };
 
 // Global policy (env-driven)
-// Basis points = hundredths of a percent. 1000 = 10%.
 const POLICY = {
-  // Percentage of basket kept as platform fee
-  PLATFORM_FEE_BPS: intFromEnv('PLATFORM_FEE_BPS', 1000), // default 10%
-
-  // Optional per-ticket and per-basket add-ons to platform fee
-  PER_TICKET_FEE_PENCE: intFromEnv('PER_TICKET_FEE_PENCE', 0),
-  BASKET_FEE_PENCE: intFromEnv('BASKET_FEE_PENCE', 0),
-
-  // Payment processor fees (e.g. Stripe UK typical ~1.5% + 20p; configure to taste)
-  PAYMENT_FEE_BPS: intFromEnv('PAYMENT_FEE_BPS', 150),      // 1.5%
-  PAYMENT_FIXED_PENCE: intFromEnv('PAYMENT_FIXED_PENCE', 20) // 20p
+  PLATFORM_FEE_BPS: intFromEnv('PLATFORM_FEE_BPS', 1000),        // 10%
+  PER_TICKET_FEE_PENCE: intFromEnv('PER_TICKET_FEE_PENCE', 0),   // 0p
+  BASKET_FEE_PENCE: intFromEnv('BASKET_FEE_PENCE', 0),           // 0p
+  PAYMENT_FEE_BPS: intFromEnv('PAYMENT_FEE_BPS', 150),           // 1.5%
+  PAYMENT_FIXED_PENCE: intFromEnv('PAYMENT_FIXED_PENCE', 20)     // 20p
 };
 
-// Sanity: ensure non-negative
 const nn = (v: number) => (v < 0 ? 0 : v);
 
-// ------- Public API -------
-
-/**
- * Calculate all fees for an order *without* reading fee data from Venue.
- * Fee policy is taken from environment variables above.
- *
- * @param showId - the show the order belongs to (validated for existence)
- * @param amountPence - gross amount in pence (sum of ticket prices)
- * @param quantity - number of tickets
- * @param organiserSplitBps - optional share of platform fee for organiser (e.g. 5000 = 50%)
- */
+// ------- Core implementation -------
 export async function calculateFeesForOrder(
   showId: string,
   amountPence: number,
   quantity: number,
   organiserSplitBps?: number
 ): Promise<FeeBreakdown> {
-  // Ensure the show exists (also ensures Prisma types are correct with the new schema)
+  // Validate show exists (minimal select so Prisma types match new schema)
   const show = await prisma.show.findUnique({
     where: { id: showId },
-    select: { id: true } // do not select venue; fees are env-based now
+    select: { id: true }
   });
-  if (!show) {
-    throw new Error('Show not found');
-  }
+  if (!show) throw new Error('Show not found');
 
   const gross = nn(Math.floor(amountPence));
   const qty = nn(Math.floor(quantity));
 
-  // Platform fee = percentage of gross + per-ticket + per-basket
+  // Platform fee parts
   const platformPct = Math.floor((gross * POLICY.PLATFORM_FEE_BPS) / 10_000);
   const platformPerTicket = nn(POLICY.PER_TICKET_FEE_PENCE) * qty;
   const platformBasket = nn(POLICY.BASKET_FEE_PENCE);
-
   const platformFeePence = nn(platformPct + platformPerTicket + platformBasket);
 
-  // Organiser share of *platform* fee (optional)
+  // Optional organiser share of platform fee
   const organiserSharePence =
     organiserSplitBps && organiserSplitBps > 0
       ? Math.floor((platformFeePence * organiserSplitBps) / 10_000)
@@ -86,17 +69,49 @@ export async function calculateFeesForOrder(
   const paymentPct = Math.floor((gross * POLICY.PAYMENT_FEE_BPS) / 10_000);
   const paymentFeePence = nn(paymentPct + nn(POLICY.PAYMENT_FIXED_PENCE));
 
-  // Net payout to you after platform + payment fees
   const netPayoutPence = nn(gross - platformFeePence - paymentFeePence);
 
   return {
     platformFeePence,
     organiserSharePence,
     paymentFeePence,
-    netPayoutPence
+    netPayoutPence,
   };
 }
 
-// Backwards compat alias in case other modules import a different name
+// Back-compat alias some modules might still use
 export const calculateOrderFees = calculateFeesForOrder;
+
+// ------- Backward-compat shim: calcFeesForShow -------
+// Supports both signatures:
+//   calcFeesForShow(showId: string, amountPence: number, quantity: number, organiserSplitBps?: number)
+//   calcFeesForShow({ showId, amountPence, quantity, organiserSplitBps })
+export async function calcFeesForShow(
+  showIdOrArgs:
+    | string
+    | {
+        showId: string;
+        amountPence: number;
+        quantity: number;
+        organiserSplitBps?: number;
+      },
+  maybeAmountPence?: number,
+  maybeQuantity?: number,
+  maybeOrganiserSplitBps?: number
+): Promise<FeeBreakdown> {
+  if (typeof showIdOrArgs === 'string') {
+    // Positional
+    return calculateFeesForOrder(
+      showIdOrArgs,
+      maybeAmountPence ?? 0,
+      maybeQuantity ?? 0,
+      maybeOrganiserSplitBps
+    );
+  }
+  // Object form
+  const { showId, amountPence, quantity, organiserSplitBps } = showIdOrArgs;
+  return calculateFeesForOrder(showId, amountPence, quantity, organiserSplitBps);
+}
+
+// Default export remains the new name for clarity
 export default calculateFeesForOrder;
