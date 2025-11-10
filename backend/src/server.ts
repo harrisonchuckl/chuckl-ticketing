@@ -10,16 +10,18 @@ import cookieParser from 'cookie-parser';
 import checkout from './routes/checkout.js';
 import webhook from './routes/webhook.js';
 import events from './routes/events.js';
-import publicUI from './routes/public-ui.js';      // consumer-facing HTML UI
-import calendarICS from './routes/calendar-ics.js'; // .ics generator
-import sitemap from './routes/sitemap.js';          // public sitemap
+
+// Public HTML UI (SPA)
+import publicUI from './routes/public-ui.js';
+// NEW: SEO preview SSR
+import publicMeta from './routes/public-meta.js';
 
 // Auth
 import auth from './routes/auth.js';
 import authLogout from './routes/logout.js';
 import loginUI from './routes/login-ui.js';
 
-// 🔐 TEMP: one-time bootstrap to create first organiser user
+// 🔐 TEMP: one-time bootstrap to create first organiser user (remove after use)
 import bootstrap from './routes/bootstrap.js';
 
 // Admin UI + APIs
@@ -48,16 +50,15 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), webho
 // Everything else as JSON
 app.use(express.json({ limit: '1mb' }));
 
-// --- Public / customer JSON APIs ---
+// --- Public / customer JSON routes ---
 app.use('/events', events);
 app.use('/checkout', checkout);
 
 // --- Public HTML UI ---
 app.use('/public', publicUI);
 
-// --- Calendar / ICS + Sitemap ---
-app.use('/calendar', calendarICS);
-app.use('/public', sitemap);
+// --- Public SEO preview (SSR meta) ---
+app.use('/public', publicMeta);
 
 // --- Auth routes (UI + JSON) ---
 app.use('/auth', loginUI);     // GET /auth/login (HTML)
