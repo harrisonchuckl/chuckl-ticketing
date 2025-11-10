@@ -45,7 +45,7 @@ router.post('/shows', requireAdminOrOrganiser, async (req, res) => {
 
     if (ticket && ticket.name && ticket.pricePounds != null) {
       const pounds = Number(ticket.pricePounds);
-      const pricePence = Math.round(pounds * 100); // £ -> p
+      const pricePence = Math.round(pounds * 100);
       await prisma.ticketType.create({
         data: {
           name: String(ticket.name).trim(),
