@@ -1,7 +1,11 @@
-// prisma/schema.prisma
+// backend/prisma/schema.prisma
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // Force library engine (works best in serverless/containers)
+  engineType    = "library"
+  // We build/run on Debian 12 (OpenSSL 3). Include native for local dev too.
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -84,11 +88,7 @@ model Venue {
   postcode  String?
   capacity  Int?
 
-  // Fee policy (basis points & pence)
-  feePercentBps     Int?   // e.g. 1000 = 10%
-  perTicketFeePence Int?   // e.g. 50p per ticket = 50
-  basketFeePence    Int?   // e.g. 30p per order = 30
-
+  // (Pricing removed from Venue; pricing now lives on TicketType/Show)
   shows     Show[]
 }
 
