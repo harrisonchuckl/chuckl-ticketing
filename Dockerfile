@@ -2,43 +2,36 @@
 FROM node:20-bullseye-slim AS builder
 WORKDIR /app
 
-# Install build tooling (sharp needs these at build-time)
+# Build tools (sharp needs these at build time)
 RUN apt-get update \
  && apt-get install -y --no-install-recommends python3 build-essential ca-certificates openssl \
  && rm -rf /var/lib/apt/lists/*
 
-# Copy only manifests first for better caching
+# Copy manifests first for caching
 COPY backend/package*.json ./backend/
 WORKDIR /app/backend
 
-# Install ALL deps (incl dev) to compile TS
-RUN npm ci
+# Install deps (dev + prod) to build TS
+# Use npm install so we don't choke on an out-of-sync lockfile
+RUN npm install
 
 # Copy source and build
 COPY backend ./
 RUN npx prisma generate && npm run build
 
-# ---------- prod deps ----------
-FROM node:20-bullseye-slim AS proddeps
-WORKDIR /app/backend
-COPY backend/package*.json ./
-RUN npm ci --omit=dev
+# Prune dev deps so the runtime stays slim
+RUN npm prune --omit=dev
 
 # ---------- runtime ----------
 FROM gcr.io/distroless/nodejs20-debian12:nonroot
 WORKDIR /app/backend
 
-# Copy node_modules (prod only) and compiled dist
-COPY --from=proddeps /app/backend/node_modules ./node_modules
-COPY --from=builder  /app/backend/dist         ./dist
-COPY --from=builder  /app/backend/prisma       ./prisma
-COPY --from=builder  /app/backend/package.json ./package.json
+# Bring only what's needed at runtime
+COPY --from=builder /app/backend/node_modules ./node_modules
+COPY --from=builder /app/backend/dist         ./dist
+COPY --from=builder /app/backend/prisma       ./prisma
+COPY --from=builder /app/backend/package.json ./package.json
 
-# Prisma needs the schema at runtime for some commands; we already copied prisma/
 ENV NODE_ENV=production PORT=4000
-
-# Expose port (informational)
 EXPOSE 4000
-
-# Start the compiled server
 CMD ["/nodejs/bin/node", "dist/server.js"]
