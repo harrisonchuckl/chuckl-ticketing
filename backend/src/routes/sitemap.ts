@@ -5,49 +5,78 @@ import prisma from '../lib/prisma.js';
 const router = Router();
 
 /**
- * GET /public/sitemap.xml
- * Lists public event pages (and the listing page).
+ * XML sitemap for public events.
+ * URL: /public/sitemap.xml
+ *
+ * Notes:
+ * - Uses only fields that exist in your Show model.
+ * - Falls back to today's date for <lastmod>.
+ * - Event URL pattern: /public/event/:id
  */
 router.get('/sitemap.xml', async (_req, res) => {
   try {
-    const base = (process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, '');
-    const now = new Date();
-
     const shows = await prisma.show.findMany({
-      where: { date: { gte: now } },
-      select: { id: true, date: true },
+      where: {
+        date: { gte: new Date() }, // upcoming
+      },
+      select: {
+        id: true,
+        title: true,
+        date: true,
+      },
       orderBy: { date: 'asc' },
     });
 
-    const urls = [
-      urlTag(urlJoin(base, '/public/events'), new Date(), 'daily', '0.6'),
-      ...shows.map(s =>
-        urlTag(urlJoin(base, `/public/event/${s.id}`), s.date || new Date(), 'weekly', '0.8')
-      ),
-    ];
+    const base = inferBaseUrlFromHeaders(_req.headers) || '';
+    const urls = shows.map((s) => {
+      const loc = `${base}/public/event/${encodeURIComponent(s.id)}`;
+      const lastmod = (s.date ?? new Date()).toISOString().split('T')[0];
+      return { loc, lastmod };
+    });
 
-    const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls.join('\n')}
-</urlset>`;
-
-    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-    res.send(xml);
+    const xml = buildSitemap(urls);
+    res.type('application/xml').send(xml);
   } catch (e) {
-    console.error(e);
-    res.status(500).send('Failed to generate sitemap');
+    // If anything goes wrong, return a minimal sitemap to avoid 500s in crawlers
+    const xml = buildSitemap([]);
+    res.type('application/xml').status(200).send(xml);
   }
 });
 
-function urlTag(loc: string, lastmod: Date, freq: string, prio: string) {
-  const l = escapeXml(loc);
-  const d = lastmod.toISOString();
-  return `<url><loc>${l}</loc><lastmod>${d}</lastmod><changefreq>${freq}</changefreq><priority>${prio}</priority></url>`;
+function buildSitemap(items: { loc: string; lastmod: string }[]) {
+  const body =
+    items
+      .map(
+        (u) =>
+          `<url><loc>${escapeXml(u.loc)}</loc><lastmod>${u.lastmod}</lastmod></url>`
+      )
+      .join('') || '';
+  return `<?xml version="1.0" encoding="UTF-8"?>` +
+    `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">` +
+    body +
+    `</urlset>`;
 }
-function urlJoin(base: string, path: string) {
-  if (!base) return path;
-  return base.replace(/\/+$/, '') + path;
+
+function escapeXml(s: string) {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
 }
-function escapeXml(s: string){ return s.replace(/[<>&'"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;',"'":'&apos;','"':'&quot;'}[c]!)); }
+
+// Tries to build absolute base URL from proxy headers (Railway / reverse proxy)
+function inferBaseUrlFromHeaders(
+  headers: Record<string, string | string[] | undefined>
+): string | null {
+  const proto =
+    (headers['x-forwarded-proto'] as string) ||
+    (headers['x-forwarded-protocol'] as string) ||
+    'https';
+  const host = (headers['x-forwarded-host'] as string) || (headers['host'] as string);
+  if (!host) return null;
+  return `${proto}://${host}`;
+}
 
 export default router;
