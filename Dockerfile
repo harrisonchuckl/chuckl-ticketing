@@ -1,50 +1,44 @@
-# ---------- build stage ----------
-FROM node:20-bullseye-slim AS build
-
+# ---------- builder ----------
+FROM node:20-bullseye-slim AS builder
 WORKDIR /app
 
-# Some libs (openssl used by Prisma & Stripe)
+# Install build tooling (sharp needs these at build-time)
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends openssl \
-  && rm -rf /var/lib/apt/lists/*
+ && apt-get install -y --no-install-recommends python3 build-essential ca-certificates openssl \
+ && rm -rf /var/lib/apt/lists/*
 
-# Install deps for backend
+# Copy only manifests first for better caching
 COPY backend/package*.json ./backend/
 WORKDIR /app/backend
-RUN npm install
 
-# Copy source
-COPY backend ./ 
+# Install ALL deps (incl dev) to compile TS
+RUN npm ci
 
-# Generate Prisma client (use a dummy DB URL at build time)
-ENV DATABASE_URL="postgresql://user:pass@localhost:5432/notused"
-RUN npx prisma generate
+# Copy source and build
+COPY backend ./
+RUN npx prisma generate && npm run build
 
-# TypeScript build -> dist/
-RUN npm run build
+# ---------- prod deps ----------
+FROM node:20-bullseye-slim AS proddeps
+WORKDIR /app/backend
+COPY backend/package*.json ./
+RUN npm ci --omit=dev
 
-
-# ---------- runtime stage ----------
-FROM node:20-bullseye-slim AS runtime
-
+# ---------- runtime ----------
+FROM gcr.io/distroless/nodejs20-debian12:nonroot
 WORKDIR /app/backend
 
-# Minimal runtime packages
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends openssl \
-  && rm -rf /var/lib/apt/lists/*
+# Copy node_modules (prod only) and compiled dist
+COPY --from=proddeps /app/backend/node_modules ./node_modules
+COPY --from=builder  /app/backend/dist         ./dist
+COPY --from=builder  /app/backend/prisma       ./prisma
+COPY --from=builder  /app/backend/package.json ./package.json
 
-# Bring compiled app + node_modules + prisma
-COPY --from=build /app/backend/dist ./dist
-COPY --from=build /app/backend/prisma ./prisma
-COPY --from=build /app/backend/node_modules ./node_modules
-COPY --from=build /app/backend/package*.json ./
+# Prisma needs the schema at runtime for some commands; we already copied prisma/
+ENV NODE_ENV=production PORT=4000
 
-# Startup script to run prisma migrate/db push then start server
-COPY backend/start.sh ./start.sh
-RUN chmod +x ./start.sh
-
-ENV NODE_ENV=production
+# Expose port (informational)
 EXPOSE 4000
 
-CMD ["./start.sh"]
+# Start the compiled server
+CMD ["/nodejs/bin/node", "dist/server.js"]
