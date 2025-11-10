@@ -2,6 +2,7 @@
 import { Router } from 'express';
 import prisma from '../lib/prisma.js';
 import { requireAdminOrOrganiser } from '../lib/authz.js';
+import { Prisma } from '@prisma/client';
 
 const router = Router();
 
@@ -9,21 +10,31 @@ const router = Router();
 router.get('/venues', requireAdminOrOrganiser, async (req, res) => {
   try {
     const q = (req.query.q as string | undefined)?.trim();
-    const where = q ? {
-      OR: [
-        { name: { contains: q, mode: 'insensitive' } },
-        { city: { contains: q, mode: 'insensitive' } },
-        { postcode: { contains: q, mode: 'insensitive' } },
-      ]
-    } : {};
+
+    const where: Prisma.VenueWhereInput | undefined = q
+      ? {
+          OR: [
+            { name: { contains: q, mode: Prisma.QueryMode.insensitive } },
+            { city: { contains: q, mode: Prisma.QueryMode.insensitive } },
+            { postcode: { contains: q, mode: Prisma.QueryMode.insensitive } },
+          ],
+        }
+      : undefined;
 
     const items = await prisma.venue.findMany({
       where,
       orderBy: [{ name: 'asc' }],
       select: {
-        id: true, name: true, address: true, city: true, postcode: true, capacity: true,
-        feePercentBps: true, perTicketFeePence: true, basketFeePence: true,
-      }
+        id: true,
+        name: true,
+        address: true,
+        city: true,
+        postcode: true,
+        capacity: true,
+        feePercentBps: true,
+        perTicketFeePence: true,
+        basketFeePence: true,
+      },
     });
 
     res.json({ ok: true, items });
@@ -37,8 +48,14 @@ router.get('/venues', requireAdminOrOrganiser, async (req, res) => {
 router.post('/venues', requireAdminOrOrganiser, async (req, res) => {
   try {
     const {
-      name, address, city, postcode, capacity,
-      feePercentBps, perTicketFeePence, basketFeePence,
+      name,
+      address,
+      city,
+      postcode,
+      capacity,
+      feePercentBps,
+      perTicketFeePence,
+      basketFeePence,
     } = req.body || {};
 
     if (!name || String(name).trim().length === 0) {
@@ -53,13 +70,21 @@ router.post('/venues', requireAdminOrOrganiser, async (req, res) => {
         postcode: postcode ? String(postcode).trim() : null,
         capacity: capacity != null ? Number(capacity) : null,
         feePercentBps: feePercentBps != null ? Number(feePercentBps) : null,
-        perTicketFeePence: perTicketFeePence != null ? Number(perTicketFeePence) : null,
-        basketFeePence: basketFeePence != null ? Number(basketFeePence) : null,
+        perTicketFeePence:
+          perTicketFeePence != null ? Number(perTicketFeePence) : null,
+        basketFeePence:
+          basketFeePence != null ? Number(basketFeePence) : null,
       },
       select: {
-        id: true, name: true, city: true, postcode: true, capacity: true,
-        feePercentBps: true, perTicketFeePence: true, basketFeePence: true,
-      }
+        id: true,
+        name: true,
+        city: true,
+        postcode: true,
+        capacity: true,
+        feePercentBps: true,
+        perTicketFeePence: true,
+        basketFeePence: true,
+      },
     });
 
     res.json({ ok: true, venue: created });
