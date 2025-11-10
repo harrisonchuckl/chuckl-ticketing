@@ -13,8 +13,10 @@ import events from './routes/events.js';
 
 // Public HTML UI (SPA)
 import publicUI from './routes/public-ui.js';
-// NEW: SEO preview SSR
+// Public SEO preview (SSR meta for shares)
 import publicMeta from './routes/public-meta.js';
+// NEW: SEO sitemap (XML)
+import sitemap from './routes/sitemap.js';
 
 // Auth
 import auth from './routes/auth.js';
@@ -59,6 +61,9 @@ app.use('/public', publicUI);
 
 // --- Public SEO preview (SSR meta) ---
 app.use('/public', publicMeta);
+
+// --- Public sitemap (XML) ---
+app.use('/public', sitemap);
 
 // --- Auth routes (UI + JSON) ---
 app.use('/auth', loginUI);     // GET /auth/login (HTML)
