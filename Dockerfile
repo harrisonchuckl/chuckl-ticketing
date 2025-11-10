@@ -46,4 +46,4 @@ COPY --from=proddeps /app/backend/package.json ./package.json
 EXPOSE 4000
 
 # IMPORTANT: your entry is dist/start.js (not index.js)
-CMD ["node","dist/start.js"]
+CMD ["dist/start.js"]
