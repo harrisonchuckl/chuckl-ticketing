@@ -4,8 +4,11 @@
 // Policy is driven by environment variables with safe defaults.
 // Compatible with the updated Prisma schema (no fee fields on Venue).
 //
-// Also exposes a backward-compat named export `calcFeesForShow`
-// so existing routes (checkout/webhook) continue to compile.
+// Exports:
+//   - default export: calculateFeesForOrder(showId, amountPence, quantity, organiserSplitBps?)
+//   - named export:  calcFeesForShow(...legacyArgs)  <-- backward-compat shim
+//
+// The shim accepts BOTH object and positional forms, and tolerates EXTRA args.
 
 import prisma from '../lib/prisma.js';
 
@@ -83,33 +86,24 @@ export async function calculateFeesForOrder(
 export const calculateOrderFees = calculateFeesForOrder;
 
 // ------- Backward-compat shim: calcFeesForShow -------
-// Supports both signatures:
-//   calcFeesForShow(showId: string, amountPence: number, quantity: number, organiserSplitBps?: number)
-//   calcFeesForShow({ showId, amountPence, quantity, organiserSplitBps })
-export async function calcFeesForShow(
-  showIdOrArgs:
-    | string
-    | {
-        showId: string;
-        amountPence: number;
-        quantity: number;
-        organiserSplitBps?: number;
-      },
-  maybeAmountPence?: number,
-  maybeQuantity?: number,
-  maybeOrganiserSplitBps?: number
-): Promise<FeeBreakdown> {
-  if (typeof showIdOrArgs === 'string') {
-    // Positional
-    return calculateFeesForOrder(
-      showIdOrArgs,
-      maybeAmountPence ?? 0,
-      maybeQuantity ?? 0,
-      maybeOrganiserSplitBps
-    );
+// Accepts BOTH signatures and tolerates extra positional args:
+//
+//   1) Positional (legacy)
+//      calcFeesForShow(showId, amountPence, quantity, organiserSplitBps?, ...ignored)
+//      ^ any args beyond the 4th are ignored
+//
+//   2) Object
+//      calcFeesForShow({ showId, amountPence, quantity, organiserSplitBps })
+//
+// Returns Promise<FeeBreakdown>
+export async function calcFeesForShow(...args: any[]): Promise<FeeBreakdown> {
+  if (args.length === 1 && typeof args[0] === 'object' && args[0] !== null) {
+    const { showId, amountPence, quantity, organiserSplitBps } = args[0];
+    return calculateFeesForOrder(showId, amountPence, quantity, organiserSplitBps);
   }
-  // Object form
-  const { showId, amountPence, quantity, organiserSplitBps } = showIdOrArgs;
+
+  // Positional: use first four values, ignore the rest for compatibility
+  const [showId, amountPence, quantity, organiserSplitBps] = args;
   return calculateFeesForOrder(showId, amountPence, quantity, organiserSplitBps);
 }
 
