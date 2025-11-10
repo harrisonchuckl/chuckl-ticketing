@@ -1,39 +1,79 @@
 // backend/src/routes/admin-uploads.ts
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
+import { randomUUID } from 'crypto';
+import Busboy from 'busboy';
+import { putObjectStream } from '../lib/storage.js';
+import { requireAdminOrOrganiser } from '../lib/authz.js';
 
 const router = Router();
 
-function isAdmin(req: Request): boolean {
-  const headerKey = (req.headers['x-admin-key'] ?? '') as string;
-  const queryKey = (req.query.k ?? '') as string;
-  const key = headerKey || queryKey;
-  return !!key && String(key) === String(process.env.BOOTSTRAP_KEY);
+const PUBLIC_BASE = process.env.R2_PUBLIC_BASE || '';
+
+function extFromFilename(name: string | undefined) {
+  if (!name) return '';
+  const i = name.lastIndexOf('.');
+  return i >= 0 ? name.slice(i + 1).toLowerCase() : '';
 }
-function requireAdmin(req: Request, res: Response): boolean {
-  if (!isAdmin(req)) {
-    res.status(401).json({ error: true, message: 'Unauthorized' });
-    return false;
+
+router.post('/uploads', requireAdminOrOrganiser, async (req, res) => {
+  try {
+    const bb = Busboy({ headers: req.headers });
+
+    let resolved = false;
+
+    bb.on('file', async (_name, file, info) => {
+      const mime = info.mimeType;
+      const filename = info.filename;
+      const ext = extFromFilename(filename) || (mime === 'image/png' ? 'png' : mime === 'image/jpeg' ? 'jpg' : 'bin');
+
+      if (!mime.startsWith('image/')) {
+        resolved = true;
+        file.resume();
+        return res.status(400).json({ ok: false, error: 'Only image uploads allowed' });
+      }
+
+      // posters/yyyy/mm/<uuid>.<ext>
+      const now = new Date();
+      const key = `posters/${now.getUTCFullYear()}/${String(now.getUTCMonth()+1).padStart(2,'0')}/${randomUUID()}.${ext}`;
+
+      try {
+        await putObjectStream({
+          key,
+          body: file,
+          contentType: mime,
+        });
+        resolved = true;
+        const url = PUBLIC_BASE
+          ? `${PUBLIC_BASE.replace(/\/+$/,'')}/${key}`
+          : key; // require PUBLIC_BASE for a full URL
+        return res.json({ ok: true, key, url });
+      } catch (e) {
+        console.error('upload failed', e);
+        resolved = true;
+        return res.status(500).json({ ok: false, error: 'Upload failed' });
+      }
+    });
+
+    bb.on('error', (e) => {
+      if (!resolved) {
+        console.error('busboy error', e);
+        resolved = true;
+        res.status(500).json({ ok: false, error: 'Upload error' });
+      }
+    });
+
+    bb.on('finish', () => {
+      if (!resolved) {
+        // no file field
+        res.status(400).json({ ok: false, error: 'No file sent' });
+      }
+    });
+
+    req.pipe(bb);
+  } catch (e) {
+    console.error('POST /admin/uploads fatal', e);
+    res.status(500).json({ ok: false, error: 'Upload failed' });
   }
-  return true;
-}
-
-/**
- * For now we just accept a filename and return a fake "upload URL".
- * Later we’ll switch this to S3 presigned POST.
- */
-router.post('/uploads/presign', async (req, res) => {
-  if (!requireAdmin(req, res)) return;
-  const { filename } = req.body || {};
-  if (!filename) return res.status(400).json({ error: true, message: 'filename required' });
-
-  // Pretend we have a CDN; store URL in your DB later if needed
-  const fakeUrl = `https://files.example.invalid/uploads/${encodeURIComponent(filename)}`;
-  res.json({
-    ok: true,
-    provider: 'noop',
-    uploadUrl: fakeUrl,
-    publicUrl: fakeUrl
-  });
 });
 
 export default router;
