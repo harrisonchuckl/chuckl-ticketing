@@ -1,157 +1,155 @@
-// backend/src/routes/uploads.ts
 import { Router } from 'express';
 import Busboy from 'busboy';
+import crypto from 'crypto';
 import sharp from 'sharp';
-import crypto from 'node:crypto';
+import { PassThrough } from 'stream';
+import { Upload } from '@aws-sdk/lib-storage';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-
-// Optional: protect this route like your other admin routes.
-// If you want it protected, uncomment the next line and the middleware usage.
-// import { requireAdminOrOrganiser } from '../lib/authz.js';
+import { requireAdminOrOrganiser } from '../lib/authz.js';
 
 const router = Router();
 
-// ---- R2 / S3 client (self-contained) ----
-const R2_ENDPOINT = process.env.R2_ENDPOINT || '';        // e.g. https://<ACCOUNT_ID>.r2.cloudflarestorage.com
-const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID || '';
-const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY || '';
-const R2_BUCKET = process.env.R2_BUCKET || '';            // e.g. chuckl-media
-const R2_PUBLIC_BASE =
-  process.env.R2_PUBLIC_BASE || '';                       // e.g. https://cdn.example.com OR https://pub-<id>.r2.dev/<bucket>
+/**
+ * ENV you need:
+ * - R2_ACCOUNT_ID           (optional if you supply R2_ENDPOINT directly)
+ * - R2_BUCKET               (required)
+ * - R2_ACCESS_KEY_ID        (required)
+ * - R2_SECRET_ACCESS_KEY    (required)
+ * - R2_ENDPOINT             (recommended, e.g. https://<accountid>.r2.cloudflarestorage.com)
+ * - R2_PUBLIC_BASE          (recommended for public URL, e.g. https://cdn.yourdomain.com OR https://pub-<subdomain>.r2.dev/<bucket>)
+ *
+ * If R2_PUBLIC_BASE isn’t set, we fall back to a generic R2-style URL.
+ */
+const {
+  R2_BUCKET,
+  R2_ACCESS_KEY_ID,
+  R2_SECRET_ACCESS_KEY,
+  R2_ENDPOINT,
+  R2_ACCOUNT_ID,
+  R2_PUBLIC_BASE,
+} = process.env;
 
-if (!R2_ENDPOINT || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BUCKET) {
-  // Don’t throw at module load to avoid crashing the process if you hit the route by mistake.
-  console.warn('[upload] Missing one or more R2 env vars: R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET');
+if (!R2_BUCKET || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !(R2_ENDPOINT || R2_ACCOUNT_ID)) {
+  // Don’t throw at import time in production containers; instead log once.
+  // eslint-disable-next-line no-console
+  console.warn('[uploads] Missing R2 configuration. Set R2_BUCKET, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, and R2_ENDPOINT or R2_ACCOUNT_ID.');
 }
 
+const endpoint =
+  R2_ENDPOINT ||
+  (R2_ACCOUNT_ID ? `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com` : undefined);
+
 const s3 = new S3Client({
-  region: 'auto',              // R2 uses 'auto'
-  endpoint: R2_ENDPOINT,       // custom endpoint
+  region: 'auto', // Cloudflare R2 accepts "auto"
+  endpoint,
   credentials: {
-    accessKeyId: R2_ACCESS_KEY_ID,
-    secretAccessKey: R2_SECRET_ACCESS_KEY,
+    accessKeyId: R2_ACCESS_KEY_ID ?? '',
+    secretAccessKey: R2_SECRET_ACCESS_KEY ?? '',
   },
 });
 
-// ---- Helpers ----
-function randomKey(ext = 'webp') {
-  const id = crypto.randomBytes(8).toString('hex');
-  const ts = Date.now();
-  return `uploads/posters/${ts}-${id}.${ext}`;
-}
-
-function publicUrlForKey(key: string) {
+// Build public URL for the stored key
+function publicUrlForKey(key: string): string {
   if (R2_PUBLIC_BASE) {
-    // If you provided a clean base (custom domain or r2.dev path), just join
-    return `${R2_PUBLIC_BASE.replace(/\/+$/, '')}/${key}`;
+    // If you set R2_PUBLIC_BASE to a bucket-scoped origin (e.g. https://cdn.example.com or https://pub-xxx.r2.dev/bucket)
+    // just join it with the key.
+    return `${R2_PUBLIC_BASE.replace(/\/+$/, '')}/${key.replace(/^\/+/, '')}`;
   }
-  // Fallback (not ideal): path-style URL under the API endpoint
-  // This is usually not publicly accessible unless you’ve got a proxy in front.
-  return `${R2_ENDPOINT.replace(/\/+$/, '')}/${R2_BUCKET}/${key}`;
+  // Fallback: generic R2 S3 URL (not great for public, but works)
+  // https://<accountid>.r2.cloudflarestorage.com/<bucket>/<key>
+  const base = endpoint ?? 'https://r2.cloudflarestorage.com';
+  return `${base.replace(/\/+$/, '')}/${encodeURIComponent(R2_BUCKET ?? '')}/${key}`;
 }
 
-// ---- Route ----
-// router.post('/', requireAdminOrOrganiser, (req, res) => {
-router.post('/', (req, res) => {
-  // Basic guard
-  if (!R2_ENDPOINT || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BUCKET) {
-    return res.status(500).json({ ok: false, error: 'R2 is not configured on the server.' });
-  }
-
-  // Ensure multipart
-  const contentType = req.headers['content-type'] || '';
-  if (!contentType.startsWith('multipart/form-data')) {
-    return res.status(400).json({ ok: false, error: 'Expected multipart/form-data' });
-  }
-
-  const bb = Busboy({ headers: req.headers });
-  let responded = false;
-  let handledFile = false;
-
-  function fail(status: number, message: string) {
-    if (!responded) {
-      responded = true;
-      res.status(status).json({ ok: false, error: message });
-    }
-  }
-
-  bb.on('file', (fieldname, file, info) => {
-    if (handledFile) {
-      // ignore additional files
-      file.resume();
-      return;
-    }
-    handledFile = true;
-
-    const { filename, mimeType } = info;
-
-    if (!mimeType || !mimeType.startsWith('image/')) {
-      file.resume();
-      return fail(400, 'Please upload an image file.');
+router.post('/', requireAdminOrOrganiser, async (req, res) => {
+  try {
+    // Basic guard
+    if (!R2_BUCKET || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !endpoint) {
+      return res.status(500).json({ ok: false, error: 'Uploads not configured on server' });
     }
 
-    // Collect into a buffer (simpler; safe for posters)
-    const chunks: Buffer[] = [];
-    file.on('data', (d: Buffer) => chunks.push(d));
-    file.on('limit', () => {
-      // Only triggered if you set limits in Busboy config; not set here.
-      // Keeping for completeness.
-      return fail(413, 'File too large');
-    });
+    if (!req.headers['content-type'] || !req.headers['content-type'].includes('multipart/form-data')) {
+      return res.status(400).json({ ok: false, error: 'Content-Type must be multipart/form-data' });
+    }
 
-    file.on('error', (err: unknown) => {
-      console.error('[upload] file stream error:', err);
-      return fail(500, 'Read error');
-    });
+    // We’ll wrap Busboy usage in a promise to await completion
+    const out = await new Promise<{ key: string; url: string }>((resolve, reject) => {
+      const bb = Busboy({
+        headers: req.headers,
+        limits: {
+          files: 1,
+          fileSize: 20 * 1024 * 1024, // 20 MB
+        },
+      });
 
-    file.on('end', async () => {
-      if (responded) return;
-      try {
-        const input = Buffer.concat(chunks);
+      let settled = false;
+      let handledAFile = false;
 
-        // Convert to WebP (rotate based on EXIF)
-        const webp = await sharp(input).rotate().webp({ quality: 88 }).toBuffer();
+      function fail(err: Error | string, httpCode = 400) {
+        if (settled) return;
+        settled = true;
+        reject(Object.assign(new Error(typeof err === 'string' ? err : err.message), { httpCode }));
+      }
 
-        const key = randomKey('webp');
-        const put = new PutObjectCommand({
-          Bucket: R2_BUCKET,
-          Key: key,
-          Body: webp,                     // Node Buffer (✅ accepted by AWS SDK)
-          ContentType: 'image/webp',
-          // ACL: 'public-read'           // R2 is usually made public via bucket/CF config; omit ACL unless you enabled it
-          CacheControl: 'public, max-age=31536000, immutable',
+      bb.on('file', (_fieldname, fileStream, info) => {
+        handledAFile = true;
+
+        const { filename, mimeType } = info;
+        // We always output webp
+        const key = `posters/${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.webp`;
+
+        // Transform stream: -> sharp(webp)
+        const toWebp = sharp().webp({ quality: 82 });
+        const bodyStream = new PassThrough();
+        // Node streams only:
+        fileStream.pipe(toWebp).pipe(bodyStream);
+
+        // Managed multipart upload
+        const uploader = new Upload({
+          client: s3,
+          params: new PutObjectCommand({
+            Bucket: R2_BUCKET,
+            Key: key,
+            Body: bodyStream,
+            ContentType: 'image/webp',
+            // R2 ignores ACL for private buckets; leave public access to your CDN/public binding
+          }) as any, // lib-storage accepts either plain params or command; cast for TS peace
+          queueSize: 3,
+          partSize: 5 * 1024 * 1024, // 5MB parts
+          leavePartsOnError: false,
         });
 
-        await s3.send(put);
+        uploader.done().then(
+          () => {
+            if (settled) return;
+            settled = true;
+            resolve({ key, url: publicUrlForKey(key) });
+          },
+          (err) => fail(err instanceof Error ? err : new Error(String(err)), 500)
+        );
+      });
 
-        const url = publicUrlForKey(key);
-        responded = true;
-        return res.json({ ok: true, key, url, filename });
-      } catch (err: any) {
-        console.error('[upload] processing/upload error:', err);
-        return fail(500, err?.message || 'Upload failed');
-      }
+      bb.on('error', (err) => fail(err instanceof Error ? err : new Error(String(err)), 400));
+      bb.on('partsLimit', () => fail('Too many parts', 413));
+      bb.on('filesLimit', () => fail('Too many files', 413));
+      bb.on('fieldsLimit', () => fail('Too many fields', 413));
+
+      bb.on('close', () => {
+        if (!handledAFile && !settled) {
+          fail('No file received', 400);
+        }
+      });
+
+      // IMPORTANT: classic Node piping – do NOT use Web Streams here.
+      // This avoids the TS error ("BusboyInstance is not assignable to WritableStream").
+      req.pipe(bb);
     });
-  });
 
-  bb.on('field', () => {
-    // ignore extra fields for now
-  });
-
-  bb.on('error', (err: unknown) => {
-    console.error('[upload] busboy error:', err);
-    return fail(500, 'Upload error');
-  });
-
-  bb.on('finish', () => {
-    if (!responded && !handledFile) {
-      return fail(400, 'No file received');
-    }
-    // If we already responded in 'end', do nothing.
-  });
-
-  // ✅ Node stream piping (no web streams involved)
-  req.pipe(bb);
+    return res.json({ ok: true, ...out });
+  } catch (e: any) {
+    const httpCode = e?.httpCode && Number.isInteger(e.httpCode) ? Number(e.httpCode) : 500;
+    return res.status(httpCode).json({ ok: false, error: e?.message || 'Upload failed' });
+  }
 });
 
 export default router;
