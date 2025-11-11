@@ -34,11 +34,16 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
   th,td{text-align:left;padding:10px;border-bottom:1px solid var(--border)}
   th{font-weight:600;color:#334155;background:#f8fafc}
   .error{color:#b91c1c}
-  .drop{border:2px dashed #cbd5e1;border-radius:12px;padding:16px;text-align:center;color:#64748b}
+  .drop{border:2px dashed #cbd5e1;border-radius:12px;padding:16px;text-align:center;color:#64748b;cursor:pointer}
   .drop.drag{background:#f8fafc;border-color:#94a3b8}
-  .imgprev{max-height:140px;border:1px solid var(--border);border-radius:8px}
   .progress{height:8px;background:#e5e7eb;border-radius:999px;overflow:hidden}
   .bar{height:8px;background:#111827;width:0%}
+  .row{display:flex;gap:8px;align-items:center}
+  .hidden{display:none}
+  /* Preview block */
+  .preview{border:1px solid var(--border);border-radius:12px;padding:10px;margin-top:8px;background:#fafafa}
+  .imgprev{max-height:180px;max-width:100%;border:1px solid var(--border);border-radius:8px;background:#fff}
+  .small{font-size:12px}
 </style>
 </head>
 <body>
@@ -94,7 +99,7 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
     setMain('<div class="card"><div class="title">Welcome</div><div class="muted">Use the menu to manage shows, venues and orders.</div></div>');
   }
 
-  // ----- Safe upload helper using fetch -> /api/upload -----
+  // ----- Safe upload helper -> /api/upload -----
   async function uploadPoster(file) {
     const form = new FormData();
     form.append("file", file);
@@ -126,17 +131,29 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
           <div class="grid"><label>Title</label><input id="sh_title" placeholder="e.g. Chuckl. Comedy Club"/></div>
           <div class="grid"><label>Date & time</label><input id="sh_dt" type="datetime-local"/></div>
           <div class="grid"><label>Venue</label><select id="sh_venue"><option value="">Loading venues…</option></select></div>
+
           <div class="grid">
             <label>Poster image</label>
             <div id="drop" class="drop">Drop image here or click to choose</div>
             <input id="file" type="file" accept="image/*" style="display:none"/>
             <div class="progress" style="margin-top:8px"><div id="bar" class="bar"></div></div>
-            <div class="row" style="margin-top:8px;display:flex;gap:8px;align-items:center">
-              <img id="prev" class="imgprev" alt=""/>
-              <input id="imgurl" placeholder="(auto-set after upload) https://…"/>
+
+            <div class="preview hidden" id="preview">
+              <div class="row">
+                <img id="prev" class="imgprev" alt="Poster preview"/>
+                <div>
+                  <div class="small muted" id="prevmeta"></div>
+                  <div class="row" style="margin-top:6px">
+                    <a id="openimg" class="btn" target="_blank" rel="noopener">Open image</a>
+                    <button id="clearimg" class="btn" type="button">Remove</button>
+                  </div>
+                </div>
+              </div>
+              <input id="imgurl" placeholder="(auto-set after upload) https://…" style="margin-top:8px;width:100%"/>
             </div>
-            <div class="hint">We auto-optimise to WebP and host on Cloudflare R2.</div>
+            <div class="hint muted small" style="margin-top:6px">We auto-optimise to WebP and host on Cloudflare R2.</div>
           </div>
+
           <div class="grid" style="grid-column:1/-1"><label>Description (optional)</label><textarea id="sh_desc" rows="3" placeholder="Short blurb…"></textarea></div>
         </div>
         <div class="header" style="margin-top:10px"><div class="title">First ticket type</div></div>
@@ -165,7 +182,10 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
     } catch { $('#err').textContent='Failed to load venues'; }
 
     // drag-drop wiring (uses safe fetch helper)
-    const drop=$('#drop'), file=$('#file'), bar=$('#bar'), prev=$('#prev'), imgurl=$('#imgurl');
+    const drop=$('#drop'), file=$('#file'), bar=$('#bar');
+    const prev=$('#prev'), imgurl=$('#imgurl');
+    const preview=$('#preview'), openimg=$('#openimg'), clearimg=$('#clearimg'), prevmeta=$('#prevmeta');
+
     function choose(){ file.click(); }
     drop.addEventListener('click', choose);
     drop.addEventListener('dragover', e=>{ e.preventDefault(); drop.classList.add('drag');});
@@ -182,11 +202,15 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
 
     async function doUpload(f){
       $('#err').textContent='';
-      bar.style.width='15%'; // show 'working' immediately (fetch does not expose progress)
+      bar.style.width='15%'; // immediate feedback
       try{
         const out = await uploadPoster(f);
         imgurl.value = out.url;
         prev.src = out.url;
+        prevmeta.textContent = \`\${f.name} • \${(f.size/1024).toFixed(0)} KB\`;
+        openimg.href = out.url;
+        preview.classList.remove('hidden');
+
         bar.style.width='100%';
         setTimeout(()=>bar.style.width='0%', 800);
       }catch(e){
@@ -194,6 +218,14 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
         $('#err').textContent = e.message || 'Upload failed';
       }
     }
+
+    clearimg.addEventListener('click', ()=>{
+      prev.src = '';
+      imgurl.value = '';
+      prevmeta.textContent = '';
+      openimg.removeAttribute('href');
+      preview.classList.add('hidden');
+    });
 
     // create show
     $('#create').addEventListener('click', async ()=>{
@@ -221,10 +253,12 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
           body: JSON.stringify(payload)
         });
         if(!r.ok) throw new Error(r.error||'Failed to create show');
+
+        // reset
         ['sh_title','sh_dt','sh_desc','imgurl','t_name','t_price','t_alloc'].forEach(id=>{
           const el=$('#'+id); if(el) el.value='';
         });
-        prev.src=''; bar.style.width='0%';
+        clearimg.click();
         await loadList();
       }catch(e){
         $('#err').textContent=e.message||'Failed to create show';
