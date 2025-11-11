@@ -22,7 +22,7 @@ const {
 if (!R2_BUCKET || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !(R2_ENDPOINT || R2_ACCOUNT_ID)) {
   // eslint-disable-next-line no-console
   console.warn(
-    '[uploads] Missing R2 configuration. Set R2_BUCKET, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, and R2_ENDPOINT or R2_ACCOUNT_ID.'
+    '[uploads] Missing R2 config. Set R2_BUCKET, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, and R2_ENDPOINT or R2_ACCOUNT_ID.'
   );
 }
 
@@ -75,7 +75,7 @@ router.post('/', requireAdminOrOrganiser, async (req, res) => {
         reject(e);
       };
 
-      bb.on('file', (_fieldname, fileStream, info) => {
+      bb.on('file', (_fieldname, fileStream, _info) => {
         sawFile = true;
 
         const key = `posters/${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.webp`;
@@ -83,7 +83,6 @@ router.post('/', requireAdminOrOrganiser, async (req, res) => {
         const toWebp = sharp().webp({ quality: 82 });
         const bodyStream = new PassThrough();
 
-        // Node streams only (no web streams)
         fileStream.pipe(toWebp).pipe(bodyStream);
 
         const uploader = new Upload({
@@ -111,17 +110,17 @@ router.post('/', requireAdminOrOrganiser, async (req, res) => {
 
       bb.on('error', (err) => fail(err, 400));
 
-      // These events exist at runtime but aren’t in older @types — cast to any to wire them.
+      // Extra limits events exist at runtime; cast to any for typings compatibility
       (bb as any).on('partsLimit', () => fail('Too many parts', 413));
       (bb as any).on('filesLimit', () => fail('Too many files', 413));
       (bb as any).on('fieldsLimit', () => fail('Too many fields', 413));
 
-      // Use 'finish' (declared in types) instead of 'close'
-      bb.once('finish', () => {
+      // Use 'finish' and guard with `settled`
+      bb.on('finish', () => {
         if (!sawFile && !settled) fail('No file received', 400);
       });
 
-      // Avoid the TS clash with Web WritableStream by casting to any.
+      // Avoid TS clash with Web WritableStream by casting
       (req as any).pipe(bb as any);
     });
 
