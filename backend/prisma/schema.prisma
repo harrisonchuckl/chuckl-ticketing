@@ -16,15 +16,15 @@ datasource db {
 // =========================
 
 model User {
-  id                 String              @id @default(cuid())
-  email              String              @unique
+  id                 String               @id @default(cuid())
+  email              String               @unique
   name               String?
   password           String?
-  createdAt          DateTime            @default(now())
+  createdAt          DateTime             @default(now())
 
   // Relations
   orders             Order[]
-  tickets            Ticket[]            @relation("UserTickets")
+  tickets            Ticket[]             @relation("UserTickets")
   passwordResets     PasswordReset[]
   orderNotes         OrderNote[]
 
@@ -33,6 +33,7 @@ model User {
 
   // New relations
   createdAllocations ExternalAllocation[] @relation("AllocationCreatedBy")
+  seatHolds          SeatHold[]           // back-relation for SeatHold.user
 }
 
 model Order {
@@ -88,6 +89,7 @@ model Show {
   orders      Order[]
 
   // New relations
+  tickets            Ticket[]              // back-relation for Ticket.show
   seating            ShowSeating?
   reportSchedules    BoxOfficeReportSchedule[]
   externalAllocations ExternalAllocation[]
@@ -209,7 +211,7 @@ model OrderNote {
 }
 
 // =========================
-// Seating maps (additive)
+/* Seating maps (additive) */
 // =========================
 
 // A seat map belongs to a venue and can be versioned.
