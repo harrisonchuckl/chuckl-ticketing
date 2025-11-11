@@ -1,52 +1,52 @@
-# ---------- builder (dev deps + compile + prisma generate) ----------
-FROM node:20-bullseye-slim AS builder
-
+# ---------- prod deps (only production node_modules) ----------
+FROM node:20-bullseye-slim AS proddeps
 WORKDIR /app/backend
 
-# system libs needed to build native deps (e.g. sharp) and prisma engines
+# Copy package manifests and Prisma schema BEFORE install so prisma generate can run here
+COPY backend/package*.json ./
+COPY backend/prisma ./prisma
+
+# Install prod deps only
+RUN npm install --omit=dev
+
+# Generate Prisma client against prod node_modules
+RUN npx prisma generate --schema=prisma/schema.prisma
+
+# ---------- builder (dev deps + build TS) ----------
+FROM node:20-bullseye-slim AS builder
+WORKDIR /app
+
+# Build tools needed for sharp (and friends)
 RUN apt-get update \
  && apt-get install -y --no-install-recommends python3 build-essential ca-certificates openssl \
  && rm -rf /var/lib/apt/lists/*
 
-# install with dev deps (prisma CLI is a devDep)
-COPY backend/package*.json ./
-RUN npm install
+# Install all deps for building TS
+COPY backend/package*.json ./backend/
+RUN cd backend && npm install
 
-# copy source + schema and generate prisma client (OpenSSL 3 target already set)
-COPY backend ./
-RUN npx prisma generate
+# Copy the rest of the backend source (TS etc.)
+COPY backend ./backend
 
-# build TypeScript -> dist/
-RUN npm run build
+# Prisma generate is not strictly required here because we generated it in proddeps,
+# but harmless if present:
+RUN cd backend && npx prisma generate --schema=prisma/schema.prisma
 
-# ---------- proddeps (only prod node_modules to keep image small) ----------
-FROM node:20-bullseye-slim AS proddeps
-WORKDIR /app/backend
-COPY backend/package*.json ./
-RUN npm install --omit=dev
+# Build TypeScript -> dist/
+RUN cd backend && npm run build
 
-# ---------- runtime (distroless) ----------
+# ---------- runtime (distroless, tiny) ----------
 FROM gcr.io/distroless/nodejs20-debian12:nonroot
-
 WORKDIR /app/backend
 
-# app dist (compiled JS)
+# Copy compiled JS
 COPY --from=builder /app/backend/dist ./dist
 
-# only production dependencies
+# Copy prisma schema (optional) and generated client from proddeps
 COPY --from=proddeps /app/backend/node_modules ./node_modules
+COPY --from=proddeps /app/backend/prisma ./prisma
 
-# copy the generated prisma client + engines from the builder
-# (this is the critical bit that fixes "@prisma/client did not initialize yet")
-COPY --from=builder /app/backend/node_modules/@prisma/client ./node_modules/@prisma/client
-COPY --from=builder /app/backend/node_modules/.prisma ./node_modules/.prisma
-
-# (optional) copy schema for introspection/migrations if you use them at runtime
-# COPY --from=builder /app/backend/prisma ./prisma
-
+# Environment (Railway sets PORT), Node distroless uses CMD arg as entry
 ENV NODE_ENV=production
-ENV PORT=4000
 EXPOSE 4000
-
-# Distroless already has node as ENTRYPOINT; give it the script only.
 CMD ["dist/start.js"]
