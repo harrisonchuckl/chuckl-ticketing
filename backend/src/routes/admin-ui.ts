@@ -36,14 +36,11 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
   .error{color:#b91c1c}
   .drop{border:2px dashed #cbd5e1;border-radius:12px;padding:16px;text-align:center;color:#64748b;cursor:pointer}
   .drop.drag{background:#f8fafc;border-color:#94a3b8}
+  .imgprev{max-height:140px;border:1px solid var(--border);border-radius:8px}
   .progress{height:8px;background:#e5e7eb;border-radius:999px;overflow:hidden}
   .bar{height:8px;background:#111827;width:0%}
   .row{display:flex;gap:8px;align-items:center}
-  .hidden{display:none}
-  /* Preview block */
-  .preview{border:1px solid var(--border);border-radius:12px;padding:10px;margin-top:8px;background:#fafafa}
-  .imgprev{max-height:180px;max-width:100%;border:1px solid var(--border);border-radius:8px;background:#fff}
-  .small{font-size:12px}
+  .actions{display:flex;gap:6px;align-items:center}
 </style>
 </head>
 <body>
@@ -99,7 +96,7 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
     setMain('<div class="card"><div class="title">Welcome</div><div class="muted">Use the menu to manage shows, venues and orders.</div></div>');
   }
 
-  // ----- Safe upload helper -> /api/upload -----
+  // ----- Safe upload helper using fetch -> /api/upload -----
   async function uploadPoster(file) {
     const form = new FormData();
     form.append("file", file);
@@ -137,25 +134,21 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
             <div id="drop" class="drop">Drop image here or click to choose</div>
             <input id="file" type="file" accept="image/*" style="display:none"/>
             <div class="progress" style="margin-top:8px"><div id="bar" class="bar"></div></div>
-
-            <div class="preview hidden" id="preview">
-              <div class="row">
-                <img id="prev" class="imgprev" alt="Poster preview"/>
-                <div>
-                  <div class="small muted" id="prevmeta"></div>
-                  <div class="row" style="margin-top:6px">
-                    <a id="openimg" class="btn" target="_blank" rel="noopener">Open image</a>
-                    <button id="clearimg" class="btn" type="button">Remove</button>
-                  </div>
-                </div>
+            <div class="row" style="margin-top:10px">
+              <img id="prev" class="imgprev" alt="Poster preview" style="display:none"/>
+              <div class="actions">
+                <button id="removeImg" class="btn" style="display:none">Remove</button>
               </div>
-              <input id="imgurl" placeholder="(auto-set after upload) https://…" style="margin-top:8px;width:100%"/>
             </div>
-            <div class="hint muted small" style="margin-top:6px">We auto-optimise to WebP and host on Cloudflare R2.</div>
+            <input id="imgurl" type="hidden"/>
           </div>
 
-          <div class="grid" style="grid-column:1/-1"><label>Description (optional)</label><textarea id="sh_desc" rows="3" placeholder="Short blurb…"></textarea></div>
+          <div class="grid" style="grid-column:1/-1">
+            <label>Description (optional)</label>
+            <textarea id="sh_desc" rows="3" placeholder="Short blurb…"></textarea>
+          </div>
         </div>
+
         <div class="header" style="margin-top:10px"><div class="title">First ticket type</div></div>
         <div class="grid grid-3" style="margin-bottom:8px">
           <div class="grid"><label>Name</label><input id="t_name" placeholder="General Admission"/></div>
@@ -167,6 +160,7 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
           <div id="err" class="error"></div>
         </div>
       </div>
+
       <div class="card">
         <div class="header"><div class="title">Shows</div><button id="refresh" class="btn">Refresh</button></div>
         <table><thead><tr><th>Title</th><th>When</th><th>Venue</th><th>Tickets</th><th>Orders</th></tr></thead><tbody id="tbody"></tbody></table>
@@ -182,10 +176,7 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
     } catch { $('#err').textContent='Failed to load venues'; }
 
     // drag-drop wiring (uses safe fetch helper)
-    const drop=$('#drop'), file=$('#file'), bar=$('#bar');
-    const prev=$('#prev'), imgurl=$('#imgurl');
-    const preview=$('#preview'), openimg=$('#openimg'), clearimg=$('#clearimg'), prevmeta=$('#prevmeta');
-
+    const drop=$('#drop'), file=$('#file'), bar=$('#bar'), prev=$('#prev'), imgurl=$('#imgurl'), removeBtn=$('#removeImg');
     function choose(){ file.click(); }
     drop.addEventListener('click', choose);
     drop.addEventListener('dragover', e=>{ e.preventDefault(); drop.classList.add('drag');});
@@ -200,17 +191,23 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
       if(f) await doUpload(f);
     });
 
+    removeBtn.addEventListener('click', ()=>{
+      imgurl.value = '';
+      prev.src = '';
+      prev.style.display = 'none';
+      removeBtn.style.display = 'none';
+      bar.style.width='0%';
+    });
+
     async function doUpload(f){
       $('#err').textContent='';
-      bar.style.width='15%'; // immediate feedback
+      bar.style.width='15%'; // show 'working' immediately (fetch has no progress events)
       try{
         const out = await uploadPoster(f);
         imgurl.value = out.url;
         prev.src = out.url;
-        prevmeta.textContent = \`\${f.name} • \${(f.size/1024).toFixed(0)} KB\`;
-        openimg.href = out.url;
-        preview.classList.remove('hidden');
-
+        prev.style.display = 'block';
+        removeBtn.style.display = 'inline-block';
         bar.style.width='100%';
         setTimeout(()=>bar.style.width='0%', 800);
       }catch(e){
@@ -218,14 +215,6 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
         $('#err').textContent = e.message || 'Upload failed';
       }
     }
-
-    clearimg.addEventListener('click', ()=>{
-      prev.src = '';
-      imgurl.value = '';
-      prevmeta.textContent = '';
-      openimg.removeAttribute('href');
-      preview.classList.add('hidden');
-    });
 
     // create show
     $('#create').addEventListener('click', async ()=>{
@@ -253,12 +242,10 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
           body: JSON.stringify(payload)
         });
         if(!r.ok) throw new Error(r.error||'Failed to create show');
-
-        // reset
-        ['sh_title','sh_dt','sh_desc','imgurl','t_name','t_price','t_alloc'].forEach(id=>{
+        ['sh_title','sh_dt','sh_desc','t_name','t_price','t_alloc'].forEach(id=>{
           const el=$('#'+id); if(el) el.value='';
         });
-        clearimg.click();
+        imgurl.value=''; prev.src=''; prev.style.display='none'; removeBtn.style.display='none'; bar.style.width='0%';
         await loadList();
       }catch(e){
         $('#err').textContent=e.message||'Failed to create show';
