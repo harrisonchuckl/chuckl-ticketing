@@ -17,7 +17,7 @@ const {
   R2_PUBLIC_BASE,
 } = process.env;
 
-// Resolve endpoint (either full R2 endpoint or from account id)
+// Resolve endpoint: prefer explicit endpoint, else build from account id
 const endpoint =
   R2_ENDPOINT ||
   (R2_ACCOUNT_ID ? `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com` : undefined);
@@ -68,13 +68,12 @@ router.post('/', requireAdminOrOrganiser, async (req, res) => {
         reject(err);
       };
 
-      bb.on('file', (_name, file, info) => {
+      bb.on('file', (_name, file, info: any) => {
         sawFile = true;
-        // info: { filename, encoding, mimeType }
+
         file.on('data', (d: Buffer) => {
           total += d.length;
           if (total > MAX_BYTES) {
-            // Busboy should stop earlier, but double-guard.
             file.removeAllListeners();
             fail('File too large', 413);
             return;
@@ -83,7 +82,7 @@ router.post('/', requireAdminOrOrganiser, async (req, res) => {
         });
 
         file.on('limit', () => fail('File too large', 413));
-        file.on('error', (e) => fail(e instanceof Error ? e.message : String(e), 400));
+        file.on('error', (e: any) => fail(e?.message || String(e), 400));
 
         file.on('end', async () => {
           try {
@@ -110,22 +109,23 @@ router.post('/', requireAdminOrOrganiser, async (req, res) => {
         });
       });
 
-      bb.on('filesLimit', () => fail('Too many files', 413));
-      bb.on('fieldsLimit', () => fail('Too many fields', 413));
-      bb.on('partsLimit', () => fail('Too many parts', 413));
-      bb.on('error', (e) => fail(e instanceof Error ? e.message : String(e), 400));
+      // These events exist at runtime but aren’t in the TS type — cast to any.
+      (bb as any).on('filesLimit', () => fail('Too many files', 413));
+      (bb as any).on('fieldsLimit', () => fail('Too many fields', 413));
+      (bb as any).on('partsLimit', () => fail('Too many parts', 413));
+
+      bb.on('error', (e: any) => fail(e?.message || String(e), 400));
 
       bb.on('finish', () => {
         if (!sawFile) fail('No file received', 400);
       });
 
-      // Cast to any to avoid Node/Web stream typing mismatch in TS
+      // Avoid Node/Web stream type mismatch in TS with a light cast.
       (req as any).pipe(bb as any);
     });
 
     return res.json({ ok: true, key, url });
   } catch (e: any) {
-    // Temporary: log full details to help if anything else crops up
     console.error('[upload] error:', e?.stack || e);
     const code = Number.isInteger(e?.httpCode) ? e.httpCode : 500;
     return res.status(code).json({ ok: false, error: e?.message || 'Upload failed' });
