@@ -11,24 +11,24 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/* =========================
-   Core / existing models
-   ========================= */
+// =========================
+// Core / existing models
+// =========================
 
 model User {
-  id                 String           @id @default(cuid())
-  email              String           @unique
+  id                 String              @id @default(cuid())
+  email              String              @unique
   name               String?
   password           String?
-  createdAt          DateTime         @default(now())
+  createdAt          DateTime            @default(now())
 
   // Relations
   orders             Order[]
-  tickets            Ticket[]         @relation("UserTickets")
+  tickets            Ticket[]            @relation("UserTickets")
   passwordResets     PasswordReset[]
   orderNotes         OrderNote[]
 
-  /// Per-organiser share of the platform fee (basis points: 5000 = 50%)
+  // Per-organiser share of the platform fee (basis points: 5000 = 50%)
   organiserSplitBps  Int?
 
   // New relations
@@ -61,7 +61,7 @@ model Order {
   refunds             Refund[]
   notes               OrderNote[]
 
-  // New relations
+  // New
   seatHolds           SeatHold[]
 }
 
@@ -78,7 +78,7 @@ model Show {
   description String?
   date        DateTime
 
-  /// Optional poster / image URL for listings & meta tags
+  // Optional poster / image URL for listings & meta tags
   imageUrl    String?
 
   venueId     String?
@@ -88,10 +88,10 @@ model Show {
   orders      Order[]
 
   // New relations
-  seating     ShowSeating?
-  reportSchedules BoxOfficeReportSchedule[]
+  seating            ShowSeating?
+  reportSchedules    BoxOfficeReportSchedule[]
   externalAllocations ExternalAllocation[]
-  seatHolds   SeatHold[]
+  seatHolds          SeatHold[]
 }
 
 model Venue {
@@ -102,18 +102,17 @@ model Venue {
   postcode  String?
   capacity  Int?
 
-  // (Pricing removed from Venue; pricing now lives on TicketType/Show)
+  // Pricing lives on TicketType/Show
   shows     Show[]
 
-  // New relations
+  // New
   seatMaps  SeatMap[]
 }
 
-/* Pricing/ticketing extensions:
-   - kind: paid vs free
-   - seating: allocated vs unallocated (for UI flows)
-   - level: optional display label ("Stalls", "Circle", etc.)
-*/
+// Pricing/ticketing extensions:
+// - kind: paid vs free
+// - seating: allocated vs unallocated
+// - level: optional display label ("Stalls", "Circle", etc.)
 enum TicketKind {
   PAID
   FREE
@@ -125,29 +124,29 @@ enum SeatingKind {
 }
 
 model TicketType {
-  id         String   @id @default(cuid())
+  id         String      @id @default(cuid())
   name       String
   pricePence Int
   available  Int?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime    @default(now())
 
-  // New fields (safe defaults)
-  kind       TicketKind @default(PAID)
+  // New fields
+  kind       TicketKind  @default(PAID)
   seating    SeatingKind @default(UNALLOCATED)
   level      String?
 
   showId     String?
-  show       Show?    @relation(fields: [showId], references: [id])
+  show       Show?       @relation(fields: [showId], references: [id])
 
   // Optional link from price tiers (allocated seating)
-  priceTiers PriceTier[]  // one ticket type can back multiple tiers if needed
+  priceTiers PriceTier[]
 }
 
 model Ticket {
   id          String    @id @default(cuid())
   serial      String    @unique
   holderName  String?
-  status      String          // keep as String to avoid destructive migration
+  status      String
   scannedAt   DateTime?
 
   orderId     String?
@@ -162,7 +161,7 @@ model Ticket {
   seatId      String?
   seat        Seat?      @relation(fields: [seatId], references: [id])
 
-  // Optional convenience back-link to show (helps seat workflows)
+  // Optional convenience link to show
   showId      String?
   show        Show?      @relation(fields: [showId], references: [id])
 
@@ -209,13 +208,12 @@ model OrderNote {
   @@index([authorId])
 }
 
-/* =========================
-   Seating maps (additive)
-   ========================= */
+// =========================
+// Seating maps (additive)
+// =========================
 
-/* A seat map belongs to a venue and can be versioned.
-   layout: JSON blob for editor geometry (zones, shapes, stage, etc.).
-*/
+// A seat map belongs to a venue and can be versioned.
+// layout: JSON blob for editor geometry (zones, shapes, stage, etc.)
 model SeatMap {
   id         String   @id @default(cuid())
   venueId    String
@@ -234,13 +232,13 @@ model SeatMap {
   @@index([venueId, isDefault])
 }
 
-/* Optional grouping for levels/areas (e.g., Stalls, Circle). */
+// Optional grouping for levels/areas (e.g., Stalls, Circle)
 model SeatZone {
   id        String   @id @default(cuid())
   seatMapId String
   seatMap   SeatMap  @relation(fields: [seatMapId], references: [id])
   name      String
-  level     String?   // display label; same as name for many venues
+  level     String?
   meta      Json?
 
   seats     Seat[]
@@ -248,9 +246,8 @@ model SeatZone {
   @@index([seatMapId])
 }
 
-/* Seat definitions inside a map.
-   status marks the default availability inside the template.
-*/
+// Seat definitions inside a map.
+// status marks the default availability inside the template.
 enum SeatKind {
   STANDARD
   ACCESSIBLE
@@ -267,24 +264,24 @@ enum SeatStatus {
 }
 
 model Seat {
-  id         String    @id @default(cuid())
+  id         String     @id @default(cuid())
   seatMapId  String
-  seatMap    SeatMap   @relation(fields: [seatMapId], references: [id])
+  seatMap    SeatMap    @relation(fields: [seatMapId], references: [id])
 
   zoneId     String?
-  zone       SeatZone? @relation(fields: [zoneId], references: [id])
+  zone       SeatZone?  @relation(fields: [zoneId], references: [id])
 
   rowLabel   String
   seatNumber String
-  label      String?   // precomputed "A-12" convenience
-  kind       SeatKind  @default(STANDARD)
+  label      String?
+  kind       SeatKind   @default(STANDARD)
   status     SeatStatus @default(AVAILABLE)
-  level      String?   // optional override; mirrors zone.level if set
+  level      String?
   meta       Json?
 
   // Relations
-  tickets    Ticket[]
-  holds      SeatHold[]
+  tickets         Ticket[]
+  holds           SeatHold[]
   allocationSeats AllocationSeat[]
   priceTierSeats  PriceTierSeat[]
 
@@ -292,51 +289,48 @@ model Seat {
   @@index([zoneId])
 }
 
-/* Attach a specific seat map to a show (or keep UNALLOCATED).
-   seatingMode controls UI flow.
-*/
+// Attach a specific seat map to a show (or keep UNALLOCATED).
+// seatingMode controls UI flow.
 enum SeatingMode {
   UNALLOCATED
   ALLOCATED
 }
 
 model ShowSeating {
-  id         String     @id @default(cuid())
-  showId     String     @unique
-  show       Show       @relation(fields: [showId], references: [id])
+  id          String      @id @default(cuid())
+  showId      String      @unique
+  show        Show        @relation(fields: [showId], references: [id])
 
-  seatMapId  String?
-  seatMap    SeatMap?   @relation(fields: [seatMapId], references: [id])
+  seatMapId   String?
+  seatMap     SeatMap?    @relation(fields: [seatMapId], references: [id])
 
   seatingMode SeatingMode @default(UNALLOCATED)
 
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 
-  priceTiers PriceTier[]
+  priceTiers  PriceTier[]
 }
 
-/* Price tiers (e.g., Stalls £30, Circle £25) for a show using a map.
-   Optionally link to a TicketType if you keep that as the purchasable SKU.
-*/
+// Price tiers (e.g., Stalls £30, Circle £25) for a show using a map.
+// Optionally link to a TicketType if you keep that as the purchasable SKU.
 model PriceTier {
-  id            String      @id @default(cuid())
+  id            String       @id @default(cuid())
   showSeatingId String
-  showSeating   ShowSeating @relation(fields: [showSeatingId], references: [id])
+  showSeating   ShowSeating  @relation(fields: [showSeatingId], references: [id])
 
   name          String
   pricePence    Int
 
-  // Optional SKU back-link
   ticketTypeId  String?
-  ticketType    TicketType? @relation(fields: [ticketTypeId], references: [id])
+  ticketType    TicketType?  @relation(fields: [ticketTypeId], references: [id])
 
   seats         PriceTierSeat[]
 
   @@index([showSeatingId])
 }
 
-/* M:N link from seats to a price tier. */
+// M:N link from seats to a price tier.
 model PriceTierSeat {
   id          String    @id @default(cuid())
   priceTierId String
@@ -348,7 +342,7 @@ model PriceTierSeat {
   @@index([seatId])
 }
 
-/* Ephemeral seat holds during checkout. */
+// Ephemeral seat holds during checkout.
 model SeatHold {
   id         String   @id @default(cuid())
   showId     String
@@ -371,24 +365,23 @@ model SeatHold {
   @@index([expiresAt])
 }
 
-/* External allocations (e.g., promoter/other platform).
-   Each allocation has many seats captured for reporting.
-*/
+// External allocations (e.g., promoter/other platform).
+// Each allocation has many seats captured for reporting.
 model ExternalAllocation {
-  id            String   @id @default(cuid())
-  showId        String
-  show          Show     @relation(fields: [showId], references: [id])
+  id               String   @id @default(cuid())
+  showId           String
+  show             Show     @relation(fields: [showId], references: [id])
 
-  label         String
+  label            String
   externalPlatform String?
-  contactEmail  String?
-  notes         String?
+  contactEmail     String?
+  notes            String?
 
-  createdAt     DateTime @default(now())
-  createdById   String?
-  createdBy     User?    @relation("AllocationCreatedBy", fields: [createdById], references: [id])
+  createdAt        DateTime @default(now())
+  createdById      String?
+  createdBy        User?    @relation("AllocationCreatedBy", fields: [createdById], references: [id])
 
-  seats         AllocationSeat[]
+  seats            AllocationSeat[]
 
   @@index([showId, createdAt])
 }
@@ -411,9 +404,9 @@ model AllocationSeat {
   @@index([seatId])
 }
 
-/* =========================
-   Box office report schedule
-   ========================= */
+// =========================
+// Box office report schedule
+// =========================
 
 model BoxOfficeReportSchedule {
   id         String   @id @default(cuid())
@@ -421,11 +414,11 @@ model BoxOfficeReportSchedule {
   show       Show     @relation(fields: [showId], references: [id])
 
   email      String
-  /// 0=Sun ... 6=Sat (cron-like simplicity)
+  // 0=Sun ... 6=Sat
   dayOfWeek  Int
-  /// "HH:mm" in the given timezone
+  // "HH:mm" in the given timezone
   timeOfDay  String
-  timezone   String?  // e.g. "Europe/London"
+  timezone   String?
   isActive   Boolean  @default(true)
 
   createdAt  DateTime @default(now())
