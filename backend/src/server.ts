@@ -1,3 +1,4 @@
+// backend/src/server.ts
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
@@ -39,7 +40,7 @@ const app = express();
 // Behind Railway/Proxy
 app.set('trust proxy', 'loopback');
 
-// CORS (allow cookies for admin)
+// CORS (loose by default; tighten origin as needed)
 app.use(cors({ origin: true, credentials: true }));
 
 app.use(morgan('tiny'));
@@ -49,14 +50,14 @@ app.use(cookieParser());
 app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), webhook);
 
 // Everything else as JSON
-app.use(express.json({ limit: '2mb' })); // bump to 2MB for admin payloads
-
-// --- File upload API (multipart) ---
-app.use('/api/upload', uploadRoute);
+app.use(express.json({ limit: '2mb' }));
 
 // --- Public / customer JSON routes ---
 app.use('/events', events);
 app.use('/checkout', checkout);
+
+// --- File upload endpoint (R2-backed) ---
+app.use('/api/upload', uploadRoute);
 
 // --- Public HTML UI ---
 app.use('/public', publicUI);
