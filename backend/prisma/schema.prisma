@@ -47,7 +47,7 @@ model Order {
   stripeId            String?
   status              OrderStatus @default(PENDING)
 
-  // Fee breakdown (all optional so we can roll out safely)
+  // Fee breakdown (optional for safe rollout)
   platformFeePence    Int?
   organiserSharePence Int?
   paymentFeePence     Int?
@@ -62,7 +62,7 @@ model Order {
   refunds             Refund[]
   notes               OrderNote[]
 
-  // New
+  // Seat holds tied to an order during checkout
   seatHolds           SeatHold[]
 }
 
@@ -89,11 +89,11 @@ model Show {
   orders      Order[]
 
   // New relations
-  tickets            Ticket[]              // back-relation for Ticket.show
-  seating            ShowSeating?
-  reportSchedules    BoxOfficeReportSchedule[]
+  tickets             Ticket[]                 // back-relation for Ticket.show
+  seating             ShowSeating?
+  reportSchedules     BoxOfficeReportSchedule[]
   externalAllocations ExternalAllocation[]
-  seatHolds          SeatHold[]
+  seatHolds           SeatHold[]
 }
 
 model Venue {
@@ -107,14 +107,14 @@ model Venue {
   // Pricing lives on TicketType/Show
   shows     Show[]
 
-  // New
+  // Seat maps available for this venue
   seatMaps  SeatMap[]
 }
 
-// Pricing/ticketing extensions:
-// - kind: paid vs free
-// - seating: allocated vs unallocated
-// - level: optional display label ("Stalls", "Circle", etc.)
+// =========================
+// Ticketing extensions
+// =========================
+
 enum TicketKind {
   PAID
   FREE
@@ -132,10 +132,10 @@ model TicketType {
   available  Int?
   createdAt  DateTime    @default(now())
 
-  // New fields
+  // Extensions
   kind       TicketKind  @default(PAID)
   seating    SeatingKind @default(UNALLOCATED)
-  level      String?
+  level      String?     // e.g. "Stalls", "Circle"
 
   showId     String?
   show       Show?       @relation(fields: [showId], references: [id])
@@ -159,11 +159,11 @@ model Ticket {
 
   refunds     Refund[]
 
-  // New: seat assignment (allocated shows)
+  // Seat assignment (allocated shows)
   seatId      String?
   seat        Seat?      @relation(fields: [seatId], references: [id])
 
-  // Optional convenience link to show
+  // Convenience link to show
   showId      String?
   show        Show?      @relation(fields: [showId], references: [id])
 
@@ -211,7 +211,7 @@ model OrderNote {
 }
 
 // =========================
-/* Seating maps (additive) */
+// Seating maps (additive)
 // =========================
 
 // A seat map belongs to a venue and can be versioned.
@@ -234,13 +234,12 @@ model SeatMap {
   @@index([venueId, isDefault])
 }
 
-// Optional grouping for levels/areas (e.g., Stalls, Circle)
 model SeatZone {
   id        String   @id @default(cuid())
   seatMapId String
   seatMap   SeatMap  @relation(fields: [seatMapId], references: [id])
   name      String
-  level     String?
+  level     String?   // e.g. "Stalls", "Circle"
   meta      Json?
 
   seats     Seat[]
@@ -248,8 +247,6 @@ model SeatZone {
   @@index([seatMapId])
 }
 
-// Seat definitions inside a map.
-// status marks the default availability inside the template.
 enum SeatKind {
   STANDARD
   ACCESSIBLE
@@ -281,7 +278,6 @@ model Seat {
   level      String?
   meta       Json?
 
-  // Relations
   tickets         Ticket[]
   holds           SeatHold[]
   allocationSeats AllocationSeat[]
@@ -291,8 +287,6 @@ model Seat {
   @@index([zoneId])
 }
 
-// Attach a specific seat map to a show (or keep UNALLOCATED).
-// seatingMode controls UI flow.
 enum SeatingMode {
   UNALLOCATED
   ALLOCATED
@@ -314,8 +308,6 @@ model ShowSeating {
   priceTiers  PriceTier[]
 }
 
-// Price tiers (e.g., Stalls £30, Circle £25) for a show using a map.
-// Optionally link to a TicketType if you keep that as the purchasable SKU.
 model PriceTier {
   id            String       @id @default(cuid())
   showSeatingId String
@@ -332,7 +324,6 @@ model PriceTier {
   @@index([showSeatingId])
 }
 
-// M:N link from seats to a price tier.
 model PriceTierSeat {
   id          String    @id @default(cuid())
   priceTierId String
@@ -344,7 +335,6 @@ model PriceTierSeat {
   @@index([seatId])
 }
 
-// Ephemeral seat holds during checkout.
 model SeatHold {
   id         String   @id @default(cuid())
   showId     String
@@ -367,8 +357,6 @@ model SeatHold {
   @@index([expiresAt])
 }
 
-// External allocations (e.g., promoter/other platform).
-// Each allocation has many seats captured for reporting.
 model ExternalAllocation {
   id               String   @id @default(cuid())
   showId           String
