@@ -4,8 +4,7 @@ import { requireAdminOrOrganiser } from '../lib/authz.js';
 
 const router = Router();
 
-// Serve UI for /admin/ui and any nested route (deep-link friendly)
-router.get(['/ui', '/ui/*'], requireAdminOrOrganiser, async (_req, res) => {
+router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
   res.type('html').send(`<!doctype html>
 <html lang="en">
 <head>
@@ -13,19 +12,21 @@ router.get(['/ui', '/ui/*'], requireAdminOrOrganiser, async (_req, res) => {
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Organiser Console</title>
 <style>
-  :root{--bg:#f7f8fb;--panel:#fff;--border:#e5e7eb;--text:#111827;--muted:#6b7280}
+  :root{
+    --bg:#f7f8fb; --panel:#fff; --border:#e5e7eb;
+    --text:#111827; --muted:#6b7280; --brand:#111827; --brand-ghost:#f1f5f9;
+    --green:#16a34a; --amber:#f59e0b; --red:#dc2626; --blue:#2563eb;
+  }
   html,body{margin:0;padding:0;height:100%;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;color:var(--text);background:var(--bg)}
   .wrap{display:flex;min-height:100vh}
   .sidebar{width:220px;background:#fff;border-right:1px solid var(--border);padding:16px 12px;position:sticky;top:0;height:100vh;box-sizing:border-box}
   .sb-group{font-size:12px;letter-spacing:.04em;color:var(--muted);margin:14px 8px 6px;text-transform:uppercase}
-  .sb-link{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;margin:4px 4px;border-radius:8px;color:#111827;text-decoration:none;cursor:pointer}
-  .sb-link:hover,.sb-link.active{background:#f1f5f9}
-  .chev{margin-left:8px;transition:transform .15s ease}
-  .chev.rotate{transform:rotate(90deg)}
-  .submenu{margin:2px 0 8px 8px;display:none}
+  .sb-link{display:block;padding:10px 12px;margin:4px 4px;border-radius:8px;color:#111827;text-decoration:none}
+  .sb-link.active,.sb-link:hover{background:#f1f5f9}
+  .sb-parent{user-select:none;display:flex;align-items:center;justify-content:space-between}
+  .caret{font-size:12px;color:var(--muted)}
+  .submenu{margin-left:8px;display:none}
   .submenu.open{display:block}
-  .submenu a{display:block;padding:8px 10px;margin:2px 8px;border-radius:8px;color:#111827;text-decoration:none}
-  .submenu a:hover,.submenu a.active{background:#f1f5f9}
   .content{flex:1;padding:20px}
   .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px}
   .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
@@ -33,514 +34,660 @@ router.get(['/ui', '/ui/*'], requireAdminOrOrganiser, async (_req, res) => {
   .muted{color:var(--muted)}
   .btn{appearance:none;border:1px solid var(--border);background:#fff;border-radius:8px;padding:8px 12px;cursor:pointer}
   .btn:hover{background:#f9fafb}
-  .btn.pri{background:#111827;color:#fff;border-color:#111827}
-  .btn.pri:hover{opacity:.92}
+  .btn.primary{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .btn.ghost{background:var(--brand-ghost);border-color:var(--brand-ghost)}
   .grid{display:grid;gap:8px}
   .grid-2{grid-template-columns:repeat(2,1fr)}
+  .grid-3{grid-template-columns:repeat(3,1fr)}
+  .grid-4{grid-template-columns:repeat(4,1fr)}
+  .row{display:flex;gap:8px;align-items:center}
   input,select,textarea{border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:#fff;outline:none}
   input[type="datetime-local"]{padding-right:6px}
   table{width:100%;border-collapse:collapse;font-size:14px}
   th,td{text-align:left;padding:10px;border-bottom:1px solid var(--border)}
   th{font-weight:600;color:#334155;background:#f8fafc}
   .error{color:#b91c1c}
-  .ok{color:#15803d}
+  /* uploader */
   .drop{border:2px dashed #cbd5e1;border-radius:12px;padding:16px;text-align:center;color:#64748b}
   .drop.drag{background:#f8fafc;border-color:#94a3b8}
   .imgprev{max-height:140px;border:1px solid var(--border);border-radius:8px}
-  .progress{height:8px;background:#e5e7eb;border-radius:999px;overflow:hidden}
-  .bar{height:8px;background:#111827;width:0%}
-  .row{display:flex;gap:8px;align-items:center}
-  .pill{background:#f1f5f9;border:1px solid var(--border);padding:2px 8px;border-radius:999px;font-size:12px}
-  .typeahead{position:relative}
-  .ta-list{position:absolute;left:0;right:0;top:100%;z-index:10;background:#fff;border:1px solid var(--border);border-top:none;border-radius:0 0 12px 12px;max-height:220px;overflow:auto;display:none}
-  .ta-item{padding:8px 10px;border-top:1px solid var(--border);cursor:pointer}
-  .ta-item:hover{background:#f8fafc}
-  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  /* rich text */
+  .rte-toolbar{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+  .rte-toolbar button{border:1px solid var(--border);background:#fff;border-radius:6px;padding:6px 8px;cursor:pointer}
+  .rte{border:1px solid var(--border);border-radius:8px;padding:10px;min-height:120px;background:#fff}
+  .rte:focus{outline:2px solid #e5e7eb}
+  /* allocations bar */
+  .alloc{display:flex;gap:6px;align-items:center}
+  .allocbar{flex:1;height:10px;background:#e5e7eb;border-radius:999px;overflow:hidden;position:relative}
+  .allocbar span{position:absolute;left:0;top:0;height:100%}
+  .seg-sold{background:var(--green)}
+  .seg-hold{background:var(--amber)}
+  .seg-avail{background:#60a5fa}
+  /* menu (kebab) */
+  .kebab{position:relative}
+  .kebab-btn{border:1px solid var(--border);background:#fff;border-radius:8px;padding:6px 8px;cursor:pointer}
+  .kebab-menu{position:absolute;right:0;top:36px;background:#fff;border:1px solid var(--border);border-radius:8px;min-width:160px;box-shadow:0 10px 20px rgba(0,0,0,.06);display:none;z-index:5}
+  .kebab-menu.open{display:block}
+  .kebab-menu a{display:block;padding:10px 12px;color:#111827;text-decoration:none}
+  .kebab-menu a:hover{background:#f8fafc}
   /* modal */
-  .modal-back{position:fixed;inset:0;background:rgba(15,23,42,.35);display:none;align-items:center;justify-content:center;z-index:50}
-  .modal{background:#fff;border:1px solid var(--border);border-radius:12px;max-width:640px;width:92%;padding:14px}
-  .modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-  .disabled{opacity:.55;pointer-events:none}
+  .modal{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;padding:20px}
+  .modal.open{display:flex}
+  .modalcard{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px;max-width:640px;width:100%}
+  .modalhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .closex{cursor:pointer;color:var(--muted)}
+  .wfull{width:100%}
+  .hint{font-size:12px;color:var(--muted)}
 </style>
 </head>
 <body>
 <div class="wrap">
   <aside class="sidebar">
     <div class="sb-group">Dashboard</div>
-    <a class="sb-link" data-route="/admin/ui/home"><span>Home</span></a>
+    <a class="sb-link" href="#home" data-view="home">Home</a>
 
     <div class="sb-group">Manage</div>
-    <div class="sb-link" id="showsToggle"><span>Shows</span><span class="chev">▶</span></div>
-    <div class="submenu" id="showsMenu">
-      <a data-route="/admin/ui/shows/create">Add tickets</a>
-      <a data-route="/admin/ui/shows/current">All events</a>
+
+    <div class="sb-link sb-parent" data-parent="shows">
+      <span>Shows</span><span class="caret">▸</span>
     </div>
-    <a class="sb-link" data-route="/admin/ui/orders"><span>Orders</span></a>
-    <a class="sb-link" data-route="/admin/ui/venues"><span>Venues</span></a>
+    <div class="submenu" id="submenu-shows">
+      <a class="sb-link" href="#shows/create" data-view="shows/create">Create show</a>
+      <a class="sb-link" href="#shows/current" data-view="shows/current">All events</a>
+    </div>
+
+    <a class="sb-link" href="#orders" data-view="orders">Orders</a>
+    <a class="sb-link" href="#venues" data-view="venues">Venues</a>
 
     <div class="sb-group">Insights</div>
-    <a class="sb-link" data-route="/admin/ui/analytics"><span>Analytics</span></a>
+    <a class="sb-link" href="#analytics" data-view="analytics">Analytics</a>
 
     <div class="sb-group">Marketing</div>
-    <a class="sb-link" data-route="/admin/ui/audiences"><span>Audiences</span></a>
-    <a class="sb-link" data-route="/admin/ui/email"><span>Email Campaigns</span></a>
+    <a class="sb-link" href="#audiences" data-view="audiences">Audiences</a>
+    <a class="sb-link" href="#email" data-view="email">Email Campaigns</a>
 
     <div class="sb-group">Settings</div>
-    <a class="sb-link" data-route="/admin/ui/account"><span>Account</span></a>
+    <a class="sb-link" href="#account" data-view="account">Account</a>
     <a class="sb-link" href="/auth/logout">Log out</a>
   </aside>
 
   <main class="content" id="main"><div class="card"><div class="title">Loading…</div></div></main>
 </div>
 
-<!-- Modal: Create Venue -->
-<div class="modal-back" id="venueModalBack" aria-hidden="true">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="venueModalTitle">
-    <div class="modal-header">
-      <div class="title" id="venueModalTitle">Create venue</div>
-      <button class="btn" id="venueModalClose">✕</button>
-    </div>
+<!-- Create Venue Modal -->
+<div class="modal" id="venueModal">
+  <div class="modalcard">
+    <div class="modalhead"><div class="title">Create venue</div><span class="closex" id="venueClose">✕</span></div>
     <div class="grid grid-2" style="margin-bottom:8px">
-      <div class="grid"><label>Name</label><input id="vm_name"/></div>
-      <div class="grid"><label>City / Town</label><input id="vm_city"/></div>
-      <div class="grid"><label>Address</label><input id="vm_addr" placeholder="Street & number"/></div>
-      <div class="grid"><label>Postcode</label><input id="vm_pc" placeholder="e.g. SW1A 1AA"/></div>
-      <div class="grid"><label>Capacity (optional)</label><input id="vm_cap" type="number"/></div>
-      <div class="grid"><label>Phone (optional)</label><input id="vm_phone"/></div>
-      <div class="grid"><label>Website (optional)</label><input id="vm_www" placeholder="https://…"/></div>
+      <div class="grid"><label>Name</label><input id="v_name" /></div>
+      <div class="grid"><label>City / Town</label><input id="v_city" /></div>
+      <div class="grid"><label>Address</label><input id="v_address" /></div>
+      <div class="grid"><label>Postcode</label><input id="v_postcode" /></div>
+      <div class="grid"><label>Capacity (optional)</label><input id="v_capacity" type="number" /></div>
+      <div class="grid"><label>Phone (optional)</label><input id="v_phone" /></div>
+      <div class="grid"><label>Website (optional)</label><input id="v_website" /></div>
     </div>
     <div class="row" style="justify-content:flex-end">
-      <button class="btn" id="venueModalCancel">Cancel</button>
-      <button class="btn" id="venueModalSave">Save venue</button>
-      <div id="vm_err" class="error" style="margin-left:8px"></div>
+      <button class="btn" id="venueCancel">Cancel</button>
+      <button class="btn primary" id="venueSave">Save venue</button>
+      <div id="venueErr" class="error" style="margin-left:8px"></div>
     </div>
   </div>
 </div>
 
 <script>
 (function(){
-  const BASE = '/admin/ui';
-
-  // ---------- helpers ----------
   const $=(s,r=document)=>r.querySelector(s);
   const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
-  function setMain(html){ $('#main').innerHTML=html; }
+  const main = $('#main');
+
+  function setActive(view){
+    $$('.sb-link').forEach(a=>a.classList.toggle('active',a.getAttribute('data-view')===view));
+    // keep submenu open for Shows routes
+    const sub = $('#submenu-shows');
+    const caret = $('.sb-parent[data-parent="shows"] .caret');
+    if(view && view.startsWith('shows/')){ sub.classList.add('open'); caret.textContent='▾'; }
+  }
 
   async function j(url,opts){
     const r=await fetch(url,{credentials:'include',...(opts||{})});
-    if(!r.ok){ const t=await r.text().catch(()=> ''); throw new Error('HTTP '+r.status+(t?(': '+t.slice(0,200)):'')); }
-    return r.json();
-  }
-
-  // Upload helper
-  async function uploadPoster(file){
-    const form=new FormData(); form.append('file',file);
-    const res=await fetch('/api/upload',{method:'POST',body:form,credentials:'include'});
-    if(!res.ok){ const t=await res.text(); throw new Error('Upload failed ('+res.status+'): '+t.slice(0,200)); }
-    const data=await res.json().catch(async()=>{ const t=await res.text(); throw new Error('Non-JSON: '+t.slice(0,200)); });
-    if(!data?.ok) throw new Error(data?.error||'Upload error');
-    return data; // { ok, url, key }
-  }
-
-  // ---------- router ----------
-  const routes = {
-    '/home': home,
-    '/shows': ()=>navTo('/shows/create'),
-    '/shows/create': showsCreate,
-    '/shows/current': showsList,
-    '/orders': orders,
-    '/venues': venues,
-    '/analytics': analytics,
-    '/audiences': audiences,
-    '/email': email,
-    '/account': account
-  };
-
-  function relPath(){
-    const p = location.pathname.replace(/\\/+$/, '');
-    const base = BASE.replace(/\\/+$/, '');
-    return p.startsWith(base) ? (p.slice(base.length) || '/home') : '/home';
-  }
-
-  function navTo(path){
-    const full = BASE + path;
-    if(location.pathname!==full) history.pushState({}, '', full);
-    render();
-  }
-
-  function render(){
-    const rel = relPath();
-
-    // active nav
-    $$('#showsMenu a').forEach(a=>a.classList.toggle('active', a.getAttribute('data-route')===BASE+rel));
-    $$('.sidebar .sb-link').forEach(a=>{
-      const r=a.getAttribute('data-route');
-      a.classList.toggle('active', r && (r===BASE+rel || (rel.startsWith('/shows') && r===BASE+'/shows')));
-    });
-
-    const openShows = rel.startsWith('/shows');
-    $('#showsMenu').classList.toggle('open', openShows);
-    $('#showsToggle .chev').classList.toggle('rotate', openShows);
-
-    (routes[rel] || home)();
-  }
-
-  window.addEventListener('popstate', render);
-
-  document.addEventListener('click', (e)=>{
-    const a = e.target?.closest('a[data-route], .sb-link#showsToggle');
-    if(!a) return;
-
-    if(a.id==='showsToggle'){
-      const isOpen = $('#showsMenu').classList.toggle('open');
-      $('#showsToggle .chev').classList.toggle('rotate', isOpen);
-      e.preventDefault(); return;
+    if(!r.ok){
+      const text = await r.text().catch(()=> '');
+      throw new Error('HTTP '+r.status+(text?(': '+text.slice(0,200)):''));
     }
+    // try json first, fall back to text (for safety)
+    try { return await r.json(); } catch { return await r.text(); }
+  }
 
-    const route = a.getAttribute('data-route');
-    if(route){ e.preventDefault(); history.pushState({}, '', route); render(); }
+  // -------- Left-nav: Shows submenu toggle
+  const parent = $('.sb-parent[data-parent="shows"]');
+  parent.addEventListener('click', ()=>{
+    const sub = $('#submenu-shows');
+    const caret = $('.sb-parent[data-parent="shows"] .caret');
+    sub.classList.toggle('open');
+    caret.textContent = sub.classList.contains('open') ? '▾' : '▸';
   });
 
-  // ---------- views ----------
-  function home(){
-    setMain('<div class="card"><div class="title">Welcome</div><div class="muted">Use the menu to manage shows, venues and orders.</div></div>');
+  // -------- Poster uploader
+  async function uploadPoster(file) {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch("/api/upload", { method: "POST", body: form, credentials: "include" });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(\`Upload failed (\${res.status}): \${text.slice(0, 300)}\`);
+    }
+    const data = await res.json();
+    if (!data?.ok) throw new Error(data?.error || "Unknown upload error");
+    return data; // { ok:true, key, url }
   }
 
-  function showsCreate(){
-    setMain(\`
+  // -------- Lightweight Rich Text Editor
+  function mountRTE(container, initialHtml=''){
+    container.innerHTML = \`
+      <div class="rte-toolbar">
+        <button type="button" data-cmd="bold"><b>B</b></button>
+        <button type="button" data-cmd="italic"><i>I</i></button>
+        <button type="button" data-cmd="underline"><u>U</u></button>
+        <button type="button" data-cmd="insertUnorderedList">• List</button>
+        <button type="button" data-cmd="insertOrderedList">1. List</button>
+        <button type="button" data-cmd="createLink">Link</button>
+        <button type="button" data-cmd="removeFormat">Clear</button>
+      </div>
+      <div class="rte" id="rteArea" contenteditable="true"></div>
+      <div class="hint">Event description (required). Use the toolbar to format.</div>
+    \`;
+    const area = $('#rteArea', container);
+    area.innerHTML = initialHtml || '';
+    container.querySelectorAll('[data-cmd]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const cmd = btn.getAttribute('data-cmd');
+        if(cmd==='createLink'){
+          const url = prompt('Enter URL');
+          if(url) document.execCommand('createLink', false, url);
+          return;
+        }
+        document.execCommand(cmd,false,null);
+        area.focus();
+      });
+    });
+    return {
+      getHTML(){ return area.innerHTML.trim(); },
+      setHTML(html){ area.innerHTML = html || ''; }
+    };
+  }
+
+  // -------- Venue modal helpers
+  const venueModal = $('#venueModal'), venueErr = $('#venueErr');
+  function openVenueModal(prefillName){
+    venueErr.textContent='';
+    ['v_name','v_city','v_address','v_postcode','v_capacity','v_phone','v_website'].forEach(id=>$('#'+id).value='');
+    if(prefillName) $('#v_name').value = prefillName;
+    venueModal.classList.add('open');
+  }
+  function closeVenueModal(){ venueModal.classList.remove('open'); }
+  $('#venueClose').onclick = closeVenueModal;
+  $('#venueCancel').onclick = closeVenueModal;
+
+  // -------- Router
+  function route(){
+    const hash = (location.hash||'#home').slice(1);
+    setActive(hash);
+    if(hash==='home') return home();
+    if(hash==='orders') return orders();
+    if(hash==='venues') return venues();
+    if(hash==='analytics') return analytics();
+    if(hash==='audiences') return audiences();
+    if(hash==='email') return email();
+    if(hash==='shows/create') return showsCreate();       // create (and edit if ?id=)
+    if(hash==='shows/current') return showsCurrent();     // list
+    // default
+    return home();
+  }
+  window.addEventListener('hashchange', route);
+
+  // -------- Views
+  function home(){
+    main.innerHTML = '<div class="card"><div class="title">Welcome</div><div class="muted">Use the menu to manage shows, venues and orders.</div></div>';
+  }
+  function orders(){ main.innerHTML = '<div class="card"><div class="title">Orders</div><div class="muted">Filters & CSV export coming soon.</div></div>'; }
+  function venues(){ main.innerHTML = '<div class="card"><div class="title">Venues</div><div class="muted">Use the Venues tab (already implemented) to add/search venues.</div></div>'; }
+  function analytics(){ main.innerHTML = '<div class="card"><div class="title">Analytics</div><div class="muted">Charts coming soon.</div></div>'; }
+  function audiences(){ main.innerHTML = '<div class="card"><div class="title">Audiences</div><div>Coming soon.</div></div>'; }
+  function email(){ main.innerHTML = '<div class="card"><div class="title">Email Campaigns</div><div>Coming soon.</div></div>'; }
+
+  // ---------- SHOWS: Create / Edit
+  async function showsCreate(){
+    // Detect edit mode
+    const params = new URLSearchParams(location.search);
+    const editId = params.get('id');
+
+    main.innerHTML = \`
       <div class="card">
-        <div class="header"><div class="title">Add Tickets</div></div>
+        <div class="header"><div class="title">\${editId ? 'Edit show' : 'Create show'}</div></div>
 
-        <div class="two-col">
-          <div class="grid"><label>Title</label><input id="sh_title" placeholder="e.g. Chuckl. Comedy Club"/></div>
-          <div class="grid"><label>Date & time</label><input id="sh_dt" type="datetime-local"/></div>
-        </div>
+        <div class="grid grid-2" style="margin-bottom:8px">
+          <div class="grid">
+            <label>Title</label>
+            <input id="sh_title" placeholder="e.g. Chuckl. Comedy Club"/>
+          </div>
+          <div class="grid">
+            <label>Date & time</label>
+            <input id="sh_dt" type="datetime-local"/>
+          </div>
 
-        <div class="two-col" style="margin-top:8px">
           <div class="grid">
             <label>Venue</label>
-            <div class="typeahead">
-              <input id="venue_input" placeholder="Start typing a venue…" autocomplete="off"/>
-              <div id="venue_list" class="ta-list"></div>
-            </div>
-            <div id="venue_hint" class="muted" style="margin-top:6px">Pick an existing venue or create a new one.</div>
+            <input id="venueSearch" placeholder="Start typing a venue..." />
+            <div id="venueResults" class="card" style="padding:8px;display:none;margin-top:6px"></div>
+            <div class="hint">Pick an existing venue or create a new one.</div>
           </div>
 
           <div class="grid">
             <label>Poster image</label>
             <div id="drop" class="drop">Drop image here or click to choose</div>
             <input id="file" type="file" accept="image/*" style="display:none"/>
-            <div class="progress" style="margin-top:8px"><div id="bar" class="bar"></div></div>
-            <div class="row" style="margin-top:8px;gap:8px;align-items:center">
+            <div class="row" style="margin-top:8px;gap:12px;align-items:center">
               <img id="prev" class="imgprev" alt="Poster preview"/>
               <button id="removeImg" class="btn" style="display:none">Remove</button>
             </div>
           </div>
+
+          <div class="grid" style="grid-column:1/-1">
+            <label>Description</label>
+            <div id="rteHost"></div>
+            <div id="descErr" class="error"></div>
+          </div>
         </div>
 
-        <div class="grid" style="grid-column:1/-1;margin-top:8px">
-          <label>Description (optional)</label>
-          <textarea id="sh_desc" rows="3" placeholder="Short blurb…"></textarea>
-        </div>
-
-        <div class="row" style="margin-top:12px">
-          <button id="saveShow" class="btn pri">Save show & continue</button>
+        <div class="row" style="gap:8px">
+          <button id="saveShow" class="btn primary">\${editId ? 'Save changes' : 'Save show shell'}</button>
           <div id="err" class="error"></div>
-          <div id="ok" class="ok"></div>
         </div>
       </div>
 
-      <div class="card disabled" id="ticketsCard" aria-disabled="true">
+      <div class="card" id="ticketsCard" style="display:\${editId ? 'block' : 'none'}">
         <div class="header"><div class="title">Tickets</div>
-          <div class="muted" id="ticketsHint">Save the show to add tickets.</div>
-        </div>
-
-        <div class="row" style="margin-bottom:8px">
-          <button class="btn" id="addPaid">Add paid ticket</button>
-          <button class="btn" id="addFree">Add free ticket</button>
-        </div>
-
-        <div id="newTicketForm" class="grid" style="display:none;margin-bottom:12px">
-          <div class="grid-2">
-            <div class="grid"><label>Ticket name</label><input id="tk_name" placeholder="e.g. General Admission"/></div>
-            <div class="grid"><label>Level (optional)</label>
-              <select id="tk_level">
-                <option value="">—</option>
-                <option>Stalls</option>
-                <option>Circle</option>
-                <option>Upper Circle</option>
-                <option>Balcony</option>
-              </select>
-            </div>
-          </div>
-          <div class="grid-2">
-            <div class="grid" id="priceWrap"><label>Price (£)</label><input id="tk_price" type="number" step="0.01" placeholder="25.00"/></div>
-            <div class="grid"><label>Allocation (qty)</label><input id="tk_alloc" type="number" placeholder="e.g. 300"/></div>
-          </div>
-
-          <div class="row" style="margin:6px 0 2px">
-            <span class="pill" id="tk_kind_badge">PAID</span>
-            <label style="margin-left:10px" class="muted">Seating:</label>
-            <span class="pill">Unallocated</span>
-            <span class="pill muted" title="Coming soon" style="opacity:.6">Allocated (seating map)</span>
-          </div>
-
-          <div class="row" style="justify-content:flex-end">
-            <button class="btn" id="tk_cancel">Cancel</button>
-            <button class="btn pri" id="tk_save">Add ticket</button>
-            <div id="tk_err" class="error" style="margin-left:8px"></div>
+          <div class="row">
+            <input id="onSaleAt" type="datetime-local" />
+            <button id="scheduleBtn" class="btn">Schedule on-sale</button>
+            <button id="publishBtn" class="btn primary">Publish show</button>
           </div>
         </div>
-
+        <div class="row" style="margin-bottom:8px;gap:8px">
+          <button id="addPaid" class="btn">Add paid ticket</button>
+          <button id="addFree" class="btn">Add free ticket</button>
+        </div>
         <table>
           <thead><tr><th>Name</th><th>Kind</th><th>Seating</th><th>Level</th><th>Price</th><th>Qty</th></tr></thead>
-          <tbody id="tk_body"><tr><td colspan="6" class="muted">No tickets yet.</td></tr></tbody>
+          <tbody id="ticketsBody"><tr><td colspan="6" class="muted">No tickets yet.</td></tr></tbody>
         </table>
-
-        <div class="row" style="margin-top:12px">
-          <button class="btn" id="gotoAll">Done – go to All events</button>
-        </div>
       </div>
-    \`);
+    \`;
 
-    // preload venues for typeahead
-    let venues = [];
-    j('/admin/venues').then(vj=>{ venues = vj.items || []; }).catch(()=>{});
+    // Rich text editor (required)
+    const rte = mountRTE($('#rteHost'), '');
 
-    const input = $('#venue_input'), list=$('#venue_list'), hint=$('#venue_hint');
-    let selectedVenueId = null;
+    // Venue search / suggest / create
+    const vInput = $('#venueSearch'), vResults = $('#venueResults');
+    let venueId = null, imageUrl = null, currentShowId = editId || null;
 
-    function renderList(items){
-      if(!items.length){ list.style.display='none'; return; }
-      list.innerHTML = items.map(v=>\`<div class="ta-item" data-id="\${v.id}">\${v.name}\${v.city?' – '+v.city:''}</div>\`).join('');
-      list.style.display='block';
-    }
-    function suggest(){
-      const q=(input.value||'').toLowerCase().trim(); selectedVenueId=null;
-      if(!q){ list.style.display='none'; hint.textContent='Pick an existing venue or create a new one.'; return; }
-      const matches = venues.filter(v => (v.name||'').toLowerCase().includes(q) || (v.city||'').toLowerCase().includes(q)).slice(0,8);
-      if(matches.length){ renderList(matches); }
-      else{ list.innerHTML = \`<div class="ta-item" data-create="1">Create "\${input.value}" as a new venue</div>\`; list.style.display='block'; }
-    }
-    input.addEventListener('input', suggest);
-    list.addEventListener('click',(e)=>{
-      const it=e.target.closest('.ta-item'); if(!it) return;
-      const create=it.getAttribute('data-create');
-      if(create){ openVenueModal(input.value); }
-      else{
-        const id=it.getAttribute('data-id'); const v=venues.find(x=>String(x.id)===String(id));
-        if(v){ input.value=v.name+(v.city?' – '+v.city:''); selectedVenueId=v.id; hint.innerHTML='<span class="pill">Selected</span>'; }
+    async function searchVenues(q){
+      const data = await j('/admin/venues?q='+encodeURIComponent(q));
+      const list = (data.items||[]);
+      if(!q || (!list.length && !q.trim())){ vResults.style.display='none'; return; }
+      let html = '';
+      if(list.length){
+        html += list.map(v=>\`<div class="row" style="justify-content:space-between;padding:6px 4px">
+          <span>\${v.name}\${v.city?' – '+v.city:''}</span>
+          <button class="btn ghost pickVenue" data-id="\${v.id}" data-name="\${v.name}">Select</button>
+        </div>\`).join('');
+      }else{
+        html += \`<div class="row" style="justify-content:space-between;padding:6px 4px">
+          <span>Create "\${q}" as a new venue</span>
+          <button class="btn primary" id="createVenueBtn">Create venue</button>
+        </div>\`;
       }
-      list.style.display='none';
+      vResults.innerHTML = html;
+      vResults.style.display='block';
+
+      // wire picks
+      $$('.pickVenue', vResults).forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          venueId = btn.getAttribute('data-id');
+          vInput.value = btn.getAttribute('data-name');
+          vResults.style.display='none';
+        });
+      });
+      const createBtn = $('#createVenueBtn', vResults);
+      if(createBtn){
+        createBtn.addEventListener('click', ()=>{
+          openVenueModal(vInput.value.trim());
+        });
+      }
+    }
+    vInput.addEventListener('input', e=>{
+      const q = e.target.value || '';
+      if(q.trim().length<1){ vResults.style.display='none'; return; }
+      searchVenues(q);
     });
 
-    // image upload
-    const drop=$('#drop'), file=$('#file'), bar=$('#bar'), prev=$('#prev'), removeBtn=$('#removeImg');
-    function choose(){ file.click(); }
-    drop.addEventListener('click', choose);
+    // Venue modal save (Address + Postcode required)
+    $('#venueSave').addEventListener('click', async ()=>{
+      venueErr.textContent='';
+      const payload = {
+        name: $('#v_name').value.trim(),
+        city: $('#v_city').value.trim(),
+        address: $('#v_address').value.trim(),
+        postcode: $('#v_postcode').value.trim(),
+        capacity: $('#v_capacity').value ? Number($('#v_capacity').value) : null,
+        phone: $('#v_phone').value.trim() || null,
+        website: $('#v_website').value.trim() || null
+      };
+      if(!payload.name || !payload.address || !payload.postcode){
+        venueErr.textContent='Name, Address and Postcode are required.';
+        return;
+      }
+      try{
+        const out = await j('/admin/venues',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        if(!out?.ok && !out?.id) throw new Error(out?.error || 'Failed to create venue');
+        venueId = out.id || out.venue?.id;
+        vInput.value = payload.name + (payload.city?(' – '+payload.city):'');
+        closeVenueModal();
+      }catch(e){ venueErr.textContent = e.message || 'Failed to save venue'; }
+    });
+
+    // Poster upload
+    const drop=$('#drop'), file=$('#file'), prev=$('#prev'), removeImg=$('#removeImg');
+    drop.addEventListener('click', ()=>file.click());
     drop.addEventListener('dragover', e=>{ e.preventDefault(); drop.classList.add('drag');});
     drop.addEventListener('dragleave', ()=>drop.classList.remove('drag'));
-    drop.addEventListener('drop', async (e)=>{ e.preventDefault(); drop.classList.remove('drag'); const f=e.dataTransfer.files&&e.dataTransfer.files[0]; if(f) await doUpload(f);});
-    file.addEventListener('change', async ()=>{ const f=file.files&&file.files[0]; if(f) await doUpload(f); });
-
+    drop.addEventListener('drop', async (e)=>{
+      e.preventDefault(); drop.classList.remove('drag');
+      const f = e.dataTransfer.files && e.dataTransfer.files[0];
+      if(f) await doUpload(f);
+    });
+    file.addEventListener('change', async ()=>{
+      const f = file.files && file.files[0];
+      if(f) await doUpload(f);
+    });
     async function doUpload(f){
-      $('#err').textContent=''; bar.style.width='15%';
+      $('#err').textContent='';
       try{
-        const out=await uploadPoster(f);
-        prev.src=out.url; prev.style.display='block'; removeBtn.style.display='inline-block';
-        bar.style.width='100%'; setTimeout(()=>bar.style.width='0%',700);
-        prev.dataset.url=out.url;
-      }catch(e){ bar.style.width='0%'; $('#err').textContent=e.message||'Upload failed'; }
+        const out = await uploadPoster(f);
+        imageUrl = out.url;
+        prev.src = imageUrl;
+        removeImg.style.display='inline-block';
+      }catch(e){
+        $('#err').textContent = e.message || 'Upload failed';
+      }
     }
-    removeBtn.addEventListener('click', ()=>{ prev.src=''; prev.removeAttribute('data-url'); removeBtn.style.display='none'; });
+    removeImg.addEventListener('click', ()=>{
+      imageUrl = null;
+      prev.src = '';
+      removeImg.style.display='none';
+    });
 
-    // save show -> then unlock Tickets card
-    let currentShowId = null;
-    $('#saveShow').addEventListener('click', async ()=>{
-      $('#err').textContent=''; $('#ok').textContent='';
+    // Load edit data
+    if(editId){
       try{
-        if(!selectedVenueId){
-          // try exact match by name
-          const name=(input.value||'').trim();
-          const exact = venues.find(v => (v.name||'').toLowerCase()===name.toLowerCase());
-          if(exact) selectedVenueId = exact.id;
+        const s = await j('/admin/shows/'+encodeURIComponent(editId));
+        if(s){
+          $('#sh_title').value = s.title || '';
+          if(s.date){ // ISO -> local value
+            const d = new Date(s.date);
+            const pad=n=>String(n).padStart(2,'0');
+            const val = d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes());
+            $('#sh_dt').value = val;
+          }
+          if(s.venue){ venueId = s.venue.id; vInput.value = s.venue.name + (s.venue.city?(' – '+s.venue.city):''); }
+          imageUrl = s.imageUrl || null; if(imageUrl){ prev.src=imageUrl; removeImg.style.display='inline-block'; }
+          rte.setHTML(s.descriptionHtml || s.description || '');
+          currentShowId = s.id;
+          $('#ticketsCard').style.display = 'block';
+          await loadTickets();
         }
-        if(!$('#sh_title').value.trim() || !$('#sh_dt').value){ $('#err').textContent='Title and date/time are required'; return; }
-        if(!selectedVenueId){ hint.innerHTML='<span class="pill">No venue selected</span> — choose a venue or create one.'; input.focus(); return; }
+      }catch(e){ console.warn(e); }
+    }
 
-        const payload = {
-          title: $('#sh_title').value.trim(),
-          date: new Date($('#sh_dt').value).toISOString(),
-          venueId: selectedVenueId,
-          imageUrl: $('#prev').dataset.url || null,
-          description: $('#sh_desc').value.trim() || null
-        };
-
-        const r = await j('/admin/shows',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-        // expect id in r.id or r.show.id
-        currentShowId = r?.id ?? r?.show?.id ?? null;
-        if(!currentShowId) throw new Error('Missing show id from response');
-
-        // lock basic fields (optional UX), unlock tickets
-        ['sh_title','sh_dt','venue_input','sh_desc'].forEach(id=>{ const el=$('#'+id); if(el) el.setAttribute('disabled',''); });
-        $('#ticketsCard').classList.remove('disabled'); $('#ticketsCard').removeAttribute('aria-disabled');
-        $('#ticketsHint').textContent='Add at least one ticket to start selling.';
-        $('#ok').textContent='Show saved. You can now add tickets.';
-        loadTickets(); // show any existing (likely none)
+    // Save show shell / changes
+    $('#saveShow').addEventListener('click', async ()=>{
+      $('#err').textContent='';
+      $('#descErr').textContent='';
+      const payload = {
+        title: $('#sh_title').value.trim(),
+        date: $('#sh_dt').value ? new Date($('#sh_dt').value).toISOString() : null,
+        venueId: venueId || null,
+        imageUrl: imageUrl || null,
+        descriptionHtml: rte.getHTML()
+      };
+      if(!payload.title || !payload.date || !payload.venueId){
+        $('#err').textContent='Title, date/time and venue are required';
+        return;
+      }
+      if(!payload.descriptionHtml){
+        $('#descErr').textContent='Description is required.';
+        return;
+      }
+      try{
+        let out;
+        if(currentShowId){
+          out = await j('/admin/shows/'+encodeURIComponent(currentShowId),{
+            method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)
+          });
+        }else{
+          out = await j('/admin/shows',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+          currentShowId = out.id || out.show?.id;
+        }
+        if(!currentShowId) throw new Error('Show ID not returned');
+        $('#ticketsCard').style.display = 'block';
+        await loadTickets();
       }catch(e){
-        $('#err').textContent=e.message||'Failed to save show';
+        $('#err').textContent = e.message || 'Failed to save show';
       }
     });
 
-    // ---- Tickets builder (unallocated only for now) ----
-    let pendingKind = 'PAID'; // or 'FREE'
-
-    function openTicketForm(kind){
-      pendingKind = kind;
-      $('#newTicketForm').style.display='grid';
-      $('#tk_name').value = kind==='FREE' ? 'Free Ticket' : 'General Admission';
-      $('#tk_price').value = kind==='FREE' ? '' : '';
-      $('#tk_price').disabled = (kind==='FREE');
-      $('#tk_kind_badge').textContent = kind;
-      $('#tk_alloc').value='';
-      $('#tk_err').textContent='';
-    }
-    function closeTicketForm(){
-      $('#newTicketForm').style.display='none';
-      $('#tk_err').textContent='';
-    }
-
-    $('#addPaid').addEventListener('click', ()=> openTicketForm('PAID'));
-    $('#addFree').addEventListener('click', ()=> openTicketForm('FREE'));
-    $('#tk_cancel').addEventListener('click', closeTicketForm);
-
+    // Tickets (unallocated for now)
     async function loadTickets(){
-      const body = $('#tk_body');
-      if(!currentShowId){ body.innerHTML='<tr><td colspan="6" class="muted">Save the show first.</td></tr>'; return; }
+      const body = $('#ticketsBody');
+      if(!currentShowId){ body.innerHTML='<tr><td colspan="6" class="muted">Save the show to add tickets.</td></tr>'; return; }
       try{
-        // TODO: adapt to your tickettypes API if different
-        const t = await j('/admin/tickettypes?showId='+encodeURIComponent(currentShowId));
-        const items = t.items || t || [];
+        const data = await j('/admin/tickets?showId='+encodeURIComponent(currentShowId));
+        const items = data.items || [];
         if(!items.length){ body.innerHTML='<tr><td colspan="6" class="muted">No tickets yet.</td></tr>'; return; }
-        body.innerHTML = items.map(x=>\`
-          <tr>
-            <td>\${x.name||''}</td>
-            <td>\${x.kind||'PAID'}</td>
-            <td>\${x.seating||'UNALLOCATED'}</td>
-            <td>\${x.level||''}</td>
-            <td>\${typeof x.pricePounds==='number' ? '£'+x.pricePounds.toFixed(2) : (x.kind==='FREE'?'Free':'')}</td>
-            <td>\${x.available ?? ''}</td>
-          </tr>\`).join('');
+        body.innerHTML = items.map(t=>\`<tr>
+          <td>\${t.name}</td>
+          <td>\${t.kind || (t.pricePence>0?'Paid':'Free')}</td>
+          <td>Unallocated</td>
+          <td>\${t.level || '-'}</td>
+          <td>£\${(t.pricePence||0/100).toFixed(2)}</td>
+          <td>\${t.available ?? ''}</td>
+        </tr>\`).join('');
       }catch(_e){
-        body.innerHTML='<tr><td colspan="6" class="muted">Tickets unavailable (API not implemented yet).</td></tr>';
+        body.innerHTML='<tr><td colspan="6" class="muted">No tickets yet.</td></tr>';
       }
     }
 
-    $('#tk_save').addEventListener('click', async ()=>{
-      $('#tk_err').textContent='';
-      try{
-        if(!currentShowId) throw new Error('Save the show first');
-        const name = $('#tk_name').value.trim();
-        const level = $('#tk_level').value || null;
-        const alloc = $('#tk_alloc').value ? Number($('#tk_alloc').value) : null;
-        const price = pendingKind==='FREE' ? 0 : ($('#tk_price').value ? Number($('#tk_price').value) : null);
-        if(!name){ $('#tk_err').textContent='Ticket name required'; return; }
-        if(pendingKind==='PAID' && (price===null || isNaN(price))){ $('#tk_err').textContent='Price required for paid tickets'; return; }
-        if(alloc===null || isNaN(alloc)){ $('#tk_err').textContent='Allocation (quantity) required'; return; }
-
-        // TODO: adapt to your tickettypes API if different
-        const payload = {
-          showId: currentShowId,
-          name,
-          pricePounds: pendingKind==='FREE' ? 0 : price,
-          available: alloc,
-          kind: pendingKind,
-          seating: 'UNALLOCATED',
-          level
-        };
-        await j('/admin/tickettypes',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-
-        closeTicketForm();
-        loadTickets();
-      }catch(e){
-        $('#tk_err').textContent=e.message||'Failed to add ticket';
+    async function addTicket(kind){
+      if(!currentShowId){ alert('Save the show first.'); return; }
+      const name = prompt('Ticket name (e.g. General Admission)');
+      if(!name) return;
+      let pricePence = 0;
+      if(kind==='paid'){
+        const p = prompt('Price in pounds (e.g. 25.00)');
+        if(!p) return;
+        pricePence = Math.round(parseFloat(p)*100);
       }
-    });
+      const qtyStr = prompt('Quantity (e.g. 300)');
+      const qty = qtyStr ? Number(qtyStr) : 0;
+      const payload = {
+        showId: currentShowId,
+        name,
+        pricePence,
+        available: qty,
+        kind: (kind==='paid'?'Paid':'Free'),
+        seating: 'Unallocated',
+      };
+      try{
+        await j('/admin/tickets',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        await loadTickets();
+      }catch(e){ alert(e.message || 'Failed to add ticket'); }
+    }
+    $('#addPaid').addEventListener('click', ()=>addTicket('paid'));
+    $('#addFree').addEventListener('click', ()=>addTicket('free'));
 
-    $('#gotoAll').addEventListener('click', ()=> navTo('/shows/current'));
+    // Publish / Schedule
+    $('#publishBtn').addEventListener('click', async ()=>{
+      if(!currentShowId){ alert('Save the show first.'); return; }
+      try{
+        await j('/admin/shows/'+encodeURIComponent(currentShowId),{
+          method:'PATCH',headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ published: true })
+        });
+        alert('Show published');
+      }catch(e){ alert(e.message || 'Failed to publish'); }
+    });
+    $('#scheduleBtn').addEventListener('click', async ()=>{
+      if(!currentShowId){ alert('Save the show first.'); return; }
+      const val = $('#onSaleAt').value;
+      if(!val){ alert('Pick a date/time for on-sale'); return; }
+      try{
+        await j('/admin/shows/'+encodeURIComponent(currentShowId),{
+          method:'PATCH',headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ onSaleAt: new Date(val).toISOString() })
+        });
+        alert('On-sale scheduled');
+      }catch(e){ alert(e.message || 'Failed to schedule'); }
+    });
   }
 
-  async function showsList(){
-    setMain(\`
+  // ---------- SHOWS: Current (list + edit/duplicate + allocation bars)
+  async function showsCurrent(){
+    main.innerHTML = \`
       <div class="card">
-        <div class="header"><div class="title">All events</div><button id="refresh" class="btn">Refresh</button></div>
-        <table><thead><tr><th>Title</th><th>When</th><th>Venue</th><th>Tickets</th><th>Orders</th></tr></thead><tbody id="tbody"></tbody></table>
+        <div class="header"><div class="title">All events</div>
+          <button id="refresh" class="btn">Refresh</button>
+        </div>
+        <table>
+          <thead>
+            <tr><th>Title</th><th>When</th><th>Venue</th><th style="width:360px">Total allocation</th><th>Gross face</th><th>Status</th><th></th></tr>
+          </thead>
+          <tbody id="tbody"><tr><td colspan="7">Loading…</td></tr></tbody>
+        </table>
         <div id="lerr" class="error"></div>
-      </div>\`);
+      </div>
+    \`;
+
     async function load(){
+      $('#lerr').textContent='';
+      const tb = $('#tbody');
       try{
-        $('#lerr').textContent='';
         const jn = await j('/admin/shows');
-        const tb = $('#tbody');
-        tb.innerHTML=(jn.items||[]).map(s=>\`
-          <tr>
-            <td>\${s.title}</td>
-            <td>\${new Date(s.date).toLocaleString()}</td>
-            <td>\${s.venue ? (s.venue.name+(s.venue.city?' – '+s.venue.city:'')) : ''}</td>
-            <td>\${s._count?.ticketTypes ?? 0}</td>
-            <td>\${s._count?.orders ?? 0}</td>
-          </tr>\`).join('');
-      }catch(e){ $('#lerr').textContent='Failed to load shows'; }
+        const items = jn.items || [];
+        if(!items.length){ tb.innerHTML='<tr><td colspan="7" class="muted">No events yet.</td></tr>'; return; }
+        tb.innerHTML = items.map(s=>{
+          // best-effort stats; if missing, default to 0
+          const sold = Number(s.stats?.sold ?? s.sold ?? 0);
+          const hold = Number(s.stats?.onHold ?? 0);
+          const avail = Number(s.stats?.available ?? s.available ?? 0);
+          const total = Math.max(1, sold+hold+avail);
+          const soldPct = Math.round((sold/total)*100);
+          const holdPct = Math.round((hold/total)*100);
+          const availPct = Math.max(0, 100 - soldPct - holdPct);
+          const gross = s.grossFace ?? s.revenue?.grossFace ?? 0;
+          const when = s.date ? new Date(s.date).toLocaleString() : '';
+          const venueLabel = s.venue ? (s.venue.name+(s.venue.city?' – '+s.venue.city:'')) : '';
+          const status = s.published ? 'ON SALE' : 'DRAFT';
+          return \`
+            <tr data-id="\${s.id||''}" class="eventRow" style="cursor:pointer">
+              <td>\${s.title||''}</td>
+              <td>\${when}</td>
+              <td>\${venueLabel}</td>
+              <td>
+                <div class="alloc">
+                  <div class="allocbar">
+                    <span class="seg-sold" style="width:\${soldPct}%;"></span>
+                    <span class="seg-hold" style="left:\${soldPct}%;width:\${holdPct}%;"></span>
+                    <span class="seg-avail" style="left:\${soldPct+holdPct}%;width:\${availPct}%;"></span>
+                  </div>
+                  <div class="hint" style="min-width:120px;text-align:right">\${total} total</div>
+                </div>
+                <div class="hint">Sold \${sold} • Hold \${hold} • Avail \${avail}</div>
+              </td>
+              <td>£\${Number(gross/100).toFixed(2)}</td>
+              <td><span class="\${s.published?'muted':''}">\${status}</span></td>
+              <td>
+                <div class="kebab">
+                  <button class="kebab-btn">⋮</button>
+                  <div class="kebab-menu">
+                    <a href="#" class="editItem">Edit</a>
+                    <a href="#" class="dupItem">Duplicate</a>
+                  </div>
+                </div>
+              </td>
+            </tr>\`;
+        }).join('');
+        // Row click to edit
+        $$('.eventRow', tb).forEach(tr=>{
+          tr.addEventListener('click', (ev)=>{
+            // ignore clicks on kebab
+            if(ev.target.closest('.kebab')) return;
+            const id = tr.getAttribute('data-id');
+            history.pushState(null,'','#shows/create?id='+encodeURIComponent(id));
+            route();
+          });
+          const kebabBtn = $('.kebab-btn', tr), menu = $('.kebab-menu', tr);
+          kebabBtn.addEventListener('click', (e)=>{ e.stopPropagation(); menu.classList.toggle('open'); });
+          document.addEventListener('click', ()=>menu.classList.remove('open'), { once:true });
+          $('.editItem', menu).addEventListener('click', (e)=>{ e.preventDefault(); const id = tr.getAttribute('data-id'); history.pushState(null,'','#shows/create?id='+encodeURIComponent(id)); route(); });
+          $('.dupItem', menu).addEventListener('click', async (e)=>{
+            e.preventDefault();
+            const id = tr.getAttribute('data-id');
+            try{
+              // Try server-side duplicate; fallback to client copy
+              let out;
+              try{
+                out = await j('/admin/shows/'+encodeURIComponent(id)+'/duplicate',{method:'POST'});
+              }catch(_ee){}
+              if(out?.id){
+                history.pushState(null,'','#shows/create?id='+encodeURIComponent(out.id));
+                return route();
+              }
+              const s = await j('/admin/shows/'+encodeURIComponent(id));
+              const payload = {
+                title: (s.title||'')+' (Copy)',
+                date: s.date,
+                venueId: s.venue?.id || null,
+                imageUrl: s.imageUrl || null,
+                descriptionHtml: s.descriptionHtml || s.description || ''
+              };
+              const created = await j('/admin/shows',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+              const newId = created.id || created.show?.id;
+              if(newId){
+                alert('Show duplicated. Update details, then publish.');
+                history.pushState(null,'','#shows/create?id='+encodeURIComponent(newId));
+                route();
+              }
+            }catch(err){ alert(err.message || 'Failed to duplicate'); }
+          });
+        });
+      }catch(e){ $('#lerr').textContent = e.message || 'Failed to load shows'; }
     }
+
     $('#refresh').addEventListener('click', load);
     load();
   }
 
-  function venues(){ setMain('<div class="card"><div class="title">Venues</div><div class="muted">Use the Venues tab (already implemented) to add/search venues.</div></div>'); }
-  function orders(){ setMain('<div class="card"><div class="title">Orders</div><div class="muted">Filters & CSV export are available in Orders view.</div></div>'); }
-  function analytics(){ setMain('<div class="card"><div class="title">Analytics</div><div class="muted">Charts coming soon.</div></div>'); }
-  function audiences(){ setMain('<div class="card"><div class="title">Audiences</div><div class="muted">Coming soon.</div></div>'); }
-  function email(){ setMain('<div class="card"><div class="title">Email Campaigns</div><div class="muted">Coming soon.</div></div>'); }
-  function account(){ setMain('<div class="card"><div class="title">Account</div><div class="muted">Manage your login and security (coming soon).</div></div>'); }
-
-  // ---------- venue modal ----------
-  function openVenueModal(prefillName){
-    $('#venueModalBack').style.display='flex';
-    $('#vm_err').textContent='';
-    if(prefillName) $('#vm_name').value=prefillName;
-    ['vm_city','vm_addr','vm_pc','vm_cap','vm_phone','vm_www'].forEach(id=>{$('#'+id).value='';});
-  }
-  function closeVenueModal(){ $('#venueModalBack').style.display='none'; }
-  $('#venueModalClose').addEventListener('click', closeVenueModal);
-  $('#venueModalCancel').addEventListener('click', closeVenueModal);
-
-  $('#venueModalSave').addEventListener('click', async ()=>{
-    $('#vm_err').textContent='';
-    const payload = {
-      name: $('#vm_name').value.trim(),
-      city: $('#vm_city').value.trim(),
-      address: $('#vm_addr').value.trim(),
-      postcode: $('#vm_pc').value.trim(),
-      capacity: $('#vm_cap').value ? Number($('#vm_cap').value) : null,
-      phone: $('#vm_phone').value.trim() || null,
-      website: $('#vm_www').value.trim() || null
-    };
-    if(!payload.name || !payload.city || !payload.address || !payload.postcode){ $('#vm_err').textContent='Name, City, Address and Postcode are required'; return; }
-    try{
-      const r = await j('/admin/venues',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-      if(!r.ok && r.error) throw new Error(r.error);
-      closeVenueModal();
-      // refresh local venues cache
-      const vj = await j('/admin/venues'); const venuesAll = vj.items||[];
-      const created = venuesAll.find(v => String(v.id)===String(r.id));
-      const input = $('#venue_input'), hint=$('#venue_hint');
-      if(input){ input.value = created ? (created.name+(created.city?' – '+created.city:'')) : payload.name+' – '+payload.city; input.focus(); input.blur(); }
-      if(hint){ hint.innerHTML='<span class="pill">Selected</span>'; }
-    }catch(e){ $('#vm_err').textContent=e.message||'Failed to create venue'; }
+  // Intercept clicks on left-nav links (single-page)
+  document.addEventListener('click', function(e){
+    const a = e.target?.closest && e.target.closest('a.sb-link');
+    if(a && a.getAttribute('data-view')){
+      e.preventDefault(); history.pushState(null,'',a.getAttribute('href')); route();
+    }
   });
 
-  // initial render
-  render();
+  // Boot
+  route();
 })();
 </script>
 </body>
