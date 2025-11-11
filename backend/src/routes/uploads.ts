@@ -1,109 +1,152 @@
 // backend/src/routes/uploads.ts
-import { Router, type Request, type Response } from "express";
+import { Router } from "express";
 import Busboy from "busboy";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import sharp from "sharp";
-import { randomUUID } from "node:crypto";
-
-// ---- R2 client (Cloudflare R2 uses S3-compatible API) ----
-const s3 = new S3Client({
-  region: "auto",
-  endpoint: process.env.R2_ENDPOINT,               // e.g. https://<accountid>.r2.cloudflarestorage.com
-  forcePathStyle: true,
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID || "",
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || "",
-  },
-});
-
-const BUCKET = process.env.R2_BUCKET || "";
-const PUBLIC_BASE = process.env.R2_PUBLIC_BASE || ""; // e.g. https://pub-xxxxxxxxxxxxxxxxxxxx.r2.dev  (or your custom domain)
-
-// Small helper to send 400/500 nicely
-function fail(res: Response, status: number, msg: string) {
-  return res.status(status).json({ ok: false, error: msg });
-}
+import crypto from "node:crypto";
 
 const router = Router();
 
-router.post("/", async (req: Request, res: Response) => {
+// ---- Env checks ----
+const R2_ENDPOINT = process.env.R2_ENDPOINT;        // e.g. https://<accountid>.r2.cloudflarestorage.com
+const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
+const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
+const R2_BUCKET = process.env.R2_BUCKET;            // e.g. chuckl-posters
+const R2_PUBLIC_BASE = process.env.R2_PUBLIC_BASE;  // e.g. https://pub-xxxxxxxxxxx.r2.dev   (NO trailing slash)
+
+if (!R2_ENDPOINT || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BUCKET || !R2_PUBLIC_BASE) {
+  console.warn("[uploads] Missing one or more R2 env vars.");
+}
+
+const s3 = new S3Client({
+  region: "auto",
+  endpoint: R2_ENDPOINT,
+  credentials: {
+    accessKeyId: R2_ACCESS_KEY_ID || "",
+    secretAccessKey: R2_SECRET_ACCESS_KEY || "",
+  },
+  forcePathStyle: true,
+});
+
+function todayPrefix() {
+  const d = new Date();
+  const yyyy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+router.post("/", async (req, res) => {
   try {
-    if (!BUCKET) return fail(res, 500, "R2_BUCKET not set");
-    if (!PUBLIC_BASE) return fail(res, 500, "R2_PUBLIC_BASE not set");
+    if (!R2_BUCKET || !R2_PUBLIC_BASE) {
+      return res.status(500).json({ ok: false, error: "Storage not configured" });
+    }
 
     const bb = Busboy({
       headers: req.headers,
-      limits: { files: 1, fileSize: 20 * 1024 * 1024, parts: 3 }, // 20MB
+      limits: {
+        files: 1,            // allow a single poster file
+        fields: 0,
+        fileSize: 12 * 1024 * 1024, // 12MB
+        // NOTE: 'parts' is NOT valid in the type, so we don't set it
+      },
     });
 
-    let gotFile = false;
-    let uploadedUrl: string | null = null;
+    let fileHandled = false;
 
-    bb.on("file", (_fieldname, fileStream: NodeJS.ReadableStream, info) => {
-      gotFile = true;
-      const { filename } = info;
+    // Optional: limit events (not in TS defs, so cast)
+    (bb as any).on("filesLimit", () => {
+      res.status(413).json({ ok: false, error: "Too many files" });
+      req.unpipe(bb);
+    });
+    (bb as any).on("fieldsLimit", () => {
+      res.status(400).json({ ok: false, error: "Too many fields" });
+      req.unpipe(bb);
+    });
 
-      // Collect the bytes -> Buffer (simple and safe for <= 20MB)
-      const chunks: Buffer[] = [];
-      fileStream.on("data", (c: Buffer) => chunks.push(c));
-      fileStream.on("limit", () => {
-        // fileSize limit hit
-        fail(res, 400, "File too large");
-        // Stop reading more data
-        (fileStream as any).pause?.();
-      });
+    bb.on("file", async (_name, file, info) => {
+      if (fileHandled) {
+        // Drain any extra data if client sent >1 file
+        file.resume();
+        return;
+      }
+      fileHandled = true;
 
-      fileStream.once("end", async () => {
-        try {
-          const inputBuf = Buffer.concat(chunks);
-          if (!inputBuf.length) return fail(res, 400, "Empty file");
+      const { filename, mimeType } = info;
 
-          // Convert to WebP (quality ~80)
-          const webp = await sharp(inputBuf)
-            .rotate()        // auto-orient
-            .webp({ quality: 80 })
-            .toBuffer();
+      // Accept common image types
+      const allowed = new Set([
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "image/avif",
+        "image/heic",
+        "image/heif",
+      ]);
+      if (!allowed.has(mimeType)) {
+        file.resume();
+        return res.status(400).json({ ok: false, error: `Unsupported type: ${mimeType}` });
+      }
 
-          const yyyy = new Date().toISOString().slice(0, 10);
-          const key = `posters/${yyyy}/${randomUUID()}.webp`;
+      try {
+        // Convert to WebP, reasonable defaults
+        const processed = await sharp()
+          .webp({ quality: 90 })
+          .toBuffer({ resolveWithObject: true });
 
-          // Upload to R2
-          await s3.send(
-            new PutObjectCommand({
-              Bucket: BUCKET,
-              Key: key,
-              Body: webp,
-              ContentType: "image/webp",
-              ACL: "private", // object can be private—public access comes from PUBLIC_BASE
-            })
-          );
+        // Stream -> sharp pipeline -> buffer
+        const bufPromise = new Promise<Buffer>((resolve, reject) => {
+          const chunks: Buffer[] = [];
+          const transform = sharp().webp({ quality: 90 });
 
-          // Build public URL using the public base (bucket public access or mapped domain)
-          uploadedUrl = `${PUBLIC_BASE.replace(/\/+$/, "")}/${key}`;
-        } catch (e: any) {
-          console.error("Upload error:", e);
-          if (!res.headersSent) fail(res, 500, "Image processing/upload failed");
-        }
-      });
+          file.on("error", reject);
+          transform.on("error", reject);
+
+          transform.on("data", (c) => chunks.push(c as Buffer));
+          transform.on("end", () => resolve(Buffer.concat(chunks)));
+
+          file.pipe(transform);
+        });
+
+        const body = await bufPromise;
+
+        const key = `posters/${todayPrefix()}/${crypto.randomUUID()}.webp`;
+
+        await s3.send(
+          new PutObjectCommand({
+            Bucket: R2_BUCKET,
+            Key: key,
+            Body: body,
+            ContentType: "image/webp",
+            // R2 ignores ACL for public; public access is via bucket setting + public URL
+          })
+        );
+
+        const url = `${R2_PUBLIC_BASE}/${key}`;
+        return res.json({ ok: true, key, url, name: filename });
+      } catch (err: any) {
+        console.error("[uploads] processing/upload error:", err);
+        return res.status(500).json({ ok: false, error: "Image processing/upload failed" });
+      }
     });
 
     bb.on("error", (err) => {
-      console.error("Busboy error:", err);
-      if (!res.headersSent) fail(res, 400, "Malformed form-data");
+      console.error("[uploads] busboy error:", err);
+      if (!res.headersSent) res.status(500).json({ ok: false, error: "Upload error" });
     });
 
     bb.on("finish", () => {
-      if (res.headersSent) return;
-      if (!gotFile) return fail(res, 400, "No file provided");
-      if (!uploadedUrl) return fail(res, 500, "Upload did not complete");
-      return res.json({ ok: true, url: uploadedUrl });
+      // If no file was sent
+      if (!fileHandled && !res.headersSent) {
+        res.status(400).json({ ok: false, error: "No file uploaded" });
+      }
     });
 
-    // Pipe the request into busboy (cast keeps TS happy with current defs)
-    (req as any).pipe(bb as any);
+    // IMPORTANT: pipe the request -> busboy (Readable -> Writable)
+    req.pipe(bb);
   } catch (e: any) {
-    console.error(e);
-    return fail(res, 500, "Unexpected error during upload");
+    console.error("[uploads] unexpected:", e);
+    res.status(500).json({ ok: false, error: "Unexpected server error" });
   }
 });
 
