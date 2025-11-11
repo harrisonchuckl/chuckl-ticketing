@@ -74,6 +74,30 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
 
   function home(){ setMain('<div class="card"><div class="title">Welcome</div><div class="muted">Use the menu to manage shows, venues and orders.</div></div>'); }
 
+  // ----- Safe upload helper using fetch -> /api/upload -----
+  async function uploadPoster(file) {
+    const form = new FormData();
+    form.append("file", file);
+
+    const res = await fetch("/api/upload", { method: "POST", body: form, credentials: "include" });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(\`Upload failed (\${res.status}): \${text.slice(0, 300)}\`);
+    }
+
+    const data = await res.json().catch(async () => {
+      const text = await res.text();
+      throw new Error(\`Non-JSON response: \${text.slice(0, 300)}\`);
+    });
+
+    if (!data?.ok) {
+      throw new Error(data?.error || "Unknown upload error");
+    }
+
+    return data; // { ok:true, key, url }
+  }
+
   async function shows(){
     setMain(\`
       <div class="card">
@@ -119,37 +143,35 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
       const sel = $('#sh_venue'); sel.innerHTML='<option value="">Select venue…</option>'+(vj.items||[]).map(v=>\`<option value="\${v.id}">\${v.name}\${v.city?' – '+v.city:''}</option>\`).join('');
     } catch { $('#err').textContent='Failed to load venues'; }
 
-    // drag-drop wiring
+    // drag-drop wiring (uses safe fetch helper)
     const drop=$('#drop'), file=$('#file'), bar=$('#bar'), prev=$('#prev'), imgurl=$('#imgurl');
     function choose(){ file.click(); }
     drop.addEventListener('click', choose);
     drop.addEventListener('dragover', e=>{ e.preventDefault(); drop.classList.add('drag');});
     drop.addEventListener('dragleave', ()=>drop.classList.remove('drag'));
-    drop.addEventListener('drop', e=>{
+    drop.addEventListener('drop', async (e)=>{
       e.preventDefault(); drop.classList.remove('drag');
-      if(e.dataTransfer.files && e.dataTransfer.files[0]) doUpload(e.dataTransfer.files[0]);
+      const f = e.dataTransfer.files && e.dataTransfer.files[0];
+      if(f) await doUpload(f);
     });
-    file.addEventListener('change', ()=>{ if(file.files && file.files[0]) doUpload(file.files[0]); });
+    file.addEventListener('change', async ()=>{
+      const f = file.files && file.files[0];
+      if(f) await doUpload(f);
+    });
 
     async function doUpload(f){
       $('#err').textContent='';
-      bar.style.width='0%';
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST','/admin/uploads',true);
-      xhr.withCredentials = true;
-      xhr.upload.onprogress = (ev)=>{ if(ev.lengthComputable){ const p = Math.round((ev.loaded/ev.total)*100); bar.style.width = p+'%'; } };
-      xhr.onerror = ()=>{ $('#err').textContent='Upload failed'; };
-      xhr.onload = ()=>{
-        try{
-          const j = JSON.parse(xhr.responseText);
-          if(!j.ok) throw new Error(j.error||'Upload failed');
-          imgurl.value = j.url;
-          prev.src = j.url;
-        }catch(e){ $('#err').textContent = e.message||'Upload failed'; }
-      };
-      const fd = new FormData();
-      fd.append('file', f);
-      xhr.send(fd);
+      bar.style.width='15%'; // show 'working' immediately
+      try{
+        const out = await uploadPoster(f);
+        imgurl.value = out.url;
+        prev.src = out.url;
+        bar.style.width='100%';
+        setTimeout(()=>bar.style.width='0%', 800);
+      }catch(e){
+        bar.style.width='0%';
+        $('#err').textContent = e.message || 'Upload failed';
+      }
     }
 
     // create show
