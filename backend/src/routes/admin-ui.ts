@@ -4,7 +4,7 @@ import { requireAdminOrOrganiser } from '../lib/authz.js';
 
 const router = Router();
 
-// Serve the same HTML for /ui and any /ui/* subpath so hard-refresh & deep links work
+// Serve UI for /admin/ui and any nested route (deep-link friendly)
 router.get(['/ui', '/ui/*'], requireAdminOrOrganiser, async (_req, res) => {
   res.type('html').send(`<!doctype html>
 <html lang="en">
@@ -33,32 +33,34 @@ router.get(['/ui', '/ui/*'], requireAdminOrOrganiser, async (_req, res) => {
   .muted{color:var(--muted)}
   .btn{appearance:none;border:1px solid var(--border);background:#fff;border-radius:8px;padding:8px 12px;cursor:pointer}
   .btn:hover{background:#f9fafb}
+  .btn.pri{background:#111827;color:#fff;border-color:#111827}
+  .btn.pri:hover{opacity:.92}
   .grid{display:grid;gap:8px}
   .grid-2{grid-template-columns:repeat(2,1fr)}
-  .grid-3{grid-template-columns:repeat(3,1fr)}
   input,select,textarea{border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:#fff;outline:none}
   input[type="datetime-local"]{padding-right:6px}
   table{width:100%;border-collapse:collapse;font-size:14px}
   th,td{text-align:left;padding:10px;border-bottom:1px solid var(--border)}
   th{font-weight:600;color:#334155;background:#f8fafc}
   .error{color:#b91c1c}
+  .ok{color:#15803d}
   .drop{border:2px dashed #cbd5e1;border-radius:12px;padding:16px;text-align:center;color:#64748b}
   .drop.drag{background:#f8fafc;border-color:#94a3b8}
   .imgprev{max-height:140px;border:1px solid var(--border);border-radius:8px}
   .progress{height:8px;background:#e5e7eb;border-radius:999px;overflow:hidden}
   .bar{height:8px;background:#111827;width:0%}
-  /* modal */
-  .modal-back{position:fixed;inset:0;background:rgba(15,23,42,.35);display:none;align-items:center;justify-content:center;z-index:50}
-  .modal{background:#fff;border:1px solid var(--border);border-radius:12px;max-width:640px;width:92%;padding:14px}
-  .modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
   .row{display:flex;gap:8px;align-items:center}
   .pill{background:#f1f5f9;border:1px solid var(--border);padding:2px 8px;border-radius:999px;font-size:12px}
   .typeahead{position:relative}
   .ta-list{position:absolute;left:0;right:0;top:100%;z-index:10;background:#fff;border:1px solid var(--border);border-top:none;border-radius:0 0 12px 12px;max-height:220px;overflow:auto;display:none}
   .ta-item{padding:8px 10px;border-top:1px solid var(--border);cursor:pointer}
   .ta-item:hover{background:#f8fafc}
-  /* alignment tweak: Title and Venue same width/spacing */
   .two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  /* modal */
+  .modal-back{position:fixed;inset:0;background:rgba(15,23,42,.35);display:none;align-items:center;justify-content:center;z-index:50}
+  .modal{background:#fff;border:1px solid var(--border);border-radius:12px;max-width:640px;width:92%;padding:14px}
+  .modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .disabled{opacity:.55;pointer-events:none}
 </style>
 </head>
 <body>
@@ -70,7 +72,7 @@ router.get(['/ui', '/ui/*'], requireAdminOrOrganiser, async (_req, res) => {
     <div class="sb-group">Manage</div>
     <div class="sb-link" id="showsToggle"><span>Shows</span><span class="chev">▶</span></div>
     <div class="submenu" id="showsMenu">
-      <a data-route="/admin/ui/shows/create">Create show</a>
+      <a data-route="/admin/ui/shows/create">Add tickets</a>
       <a data-route="/admin/ui/shows/current">All events</a>
     </div>
     <a class="sb-link" data-route="/admin/ui/orders"><span>Orders</span></a>
@@ -122,22 +124,17 @@ router.get(['/ui', '/ui/*'], requireAdminOrOrganiser, async (_req, res) => {
   // ---------- helpers ----------
   const $=(s,r=document)=>r.querySelector(s);
   const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
-
   function setMain(html){ $('#main').innerHTML=html; }
 
   async function j(url,opts){
     const r=await fetch(url,{credentials:'include',...(opts||{})});
-    if(!r.ok){
-      const text=await r.text().catch(()=> '');
-      throw new Error('HTTP '+r.status+(text?(': '+text.slice(0,200)):''));
-    }
+    if(!r.ok){ const t=await r.text().catch(()=> ''); throw new Error('HTTP '+r.status+(t?(': '+t.slice(0,200)):'')); }
     return r.json();
   }
 
-  // upload helper -> /api/upload
+  // Upload helper
   async function uploadPoster(file){
-    const form=new FormData();
-    form.append('file',file);
+    const form=new FormData(); form.append('file',file);
     const res=await fetch('/api/upload',{method:'POST',body:form,credentials:'include'});
     if(!res.ok){ const t=await res.text(); throw new Error('Upload failed ('+res.status+'): '+t.slice(0,200)); }
     const data=await res.json().catch(async()=>{ const t=await res.text(); throw new Error('Non-JSON: '+t.slice(0,200)); });
@@ -145,7 +142,7 @@ router.get(['/ui', '/ui/*'], requireAdminOrOrganiser, async (_req, res) => {
     return data; // { ok, url, key }
   }
 
-  // ---------- client router (path-based) ----------
+  // ---------- router ----------
   const routes = {
     '/home': home,
     '/shows': ()=>navTo('/shows/create'),
@@ -159,31 +156,28 @@ router.get(['/ui', '/ui/*'], requireAdminOrOrganiser, async (_req, res) => {
     '/account': account
   };
 
-  function currentPath(){
+  function relPath(){
     const p = location.pathname.replace(/\\/+$/, '');
     const base = BASE.replace(/\\/+$/, '');
-    const rel = p.startsWith(base) ? p.slice(base.length) || '/home' : '/home';
-    return rel;
+    return p.startsWith(base) ? (p.slice(base.length) || '/home') : '/home';
   }
 
   function navTo(path){
     const full = BASE + path;
-    if(location.pathname!==full){
-      history.pushState({}, '', full);
-    }
+    if(location.pathname!==full) history.pushState({}, '', full);
     render();
   }
 
   function render(){
-    // set active classes
-    const rel = currentPath();
+    const rel = relPath();
+
+    // active nav
     $$('#showsMenu a').forEach(a=>a.classList.toggle('active', a.getAttribute('data-route')===BASE+rel));
     $$('.sidebar .sb-link').forEach(a=>{
-      const route=a.getAttribute('data-route');
-      a.classList.toggle('active', route && (route===BASE+rel || (rel.startsWith('/shows') && route===BASE+'/shows')));
+      const r=a.getAttribute('data-route');
+      a.classList.toggle('active', r && (r===BASE+rel || (rel.startsWith('/shows') && r===BASE+'/shows')));
     });
 
-    // open shows submenu automatically on /shows/*
     const openShows = rel.startsWith('/shows');
     $('#showsMenu').classList.toggle('open', openShows);
     $('#showsToggle .chev').classList.toggle('rotate', openShows);
@@ -193,25 +187,18 @@ router.get(['/ui', '/ui/*'], requireAdminOrOrganiser, async (_req, res) => {
 
   window.addEventListener('popstate', render);
 
-  // intercept clicks on sidebar links (data-route)
   document.addEventListener('click', (e)=>{
     const a = e.target?.closest('a[data-route], .sb-link#showsToggle');
     if(!a) return;
 
-    // toggle shows submenu
     if(a.id==='showsToggle'){
       const isOpen = $('#showsMenu').classList.toggle('open');
       $('#showsToggle .chev').classList.toggle('rotate', isOpen);
-      e.preventDefault();
-      return;
+      e.preventDefault(); return;
     }
 
     const route = a.getAttribute('data-route');
-    if(route){
-      e.preventDefault();
-      history.pushState({}, '', route);
-      render();
-    }
+    if(route){ e.preventDefault(); history.pushState({}, '', route); render(); }
   });
 
   // ---------- views ----------
@@ -219,10 +206,10 @@ router.get(['/ui', '/ui/*'], requireAdminOrOrganiser, async (_req, res) => {
     setMain('<div class="card"><div class="title">Welcome</div><div class="muted">Use the menu to manage shows, venues and orders.</div></div>');
   }
 
-  function showsBaseForm(){
-    return \`
+  function showsCreate(){
+    setMain(\`
       <div class="card">
-        <div class="header"><div class="title">Add Show</div></div>
+        <div class="header"><div class="title">Add Tickets</div></div>
 
         <div class="two-col">
           <div class="grid"><label>Title</label><input id="sh_title" placeholder="e.g. Chuckl. Comedy Club"/></div>
@@ -256,33 +243,71 @@ router.get(['/ui', '/ui/*'], requireAdminOrOrganiser, async (_req, res) => {
           <textarea id="sh_desc" rows="3" placeholder="Short blurb…"></textarea>
         </div>
 
-        <div class="header" style="margin-top:10px"><div class="title">First ticket type</div></div>
-        <div class="grid grid-3" style="margin-bottom:8px">
-          <div class="grid"><label>Name</label><input id="t_name" value="General Admission"/></div>
-          <div class="grid"><label>Price (£)</label><input id="t_price" type="number" step="0.01" placeholder="25.00"/></div>
-          <div class="grid"><label>Allocation (optional)</label><input id="t_alloc" type="number" placeholder="e.g. 300"/></div>
-        </div>
-
-        <div class="row" style="display:flex;gap:8px;align-items:center">
-          <button id="create" class="btn">Create show</button>
+        <div class="row" style="margin-top:12px">
+          <button id="saveShow" class="btn pri">Save show & continue</button>
           <div id="err" class="error"></div>
+          <div id="ok" class="ok"></div>
         </div>
-      </div>\`;
-  }
+      </div>
 
-  async function showsCreate(){
-    setMain(showsBaseForm());
+      <div class="card disabled" id="ticketsCard" aria-disabled="true">
+        <div class="header"><div class="title">Tickets</div>
+          <div class="muted" id="ticketsHint">Save the show to add tickets.</div>
+        </div>
 
-    // venues preload (for typeahead)
+        <div class="row" style="margin-bottom:8px">
+          <button class="btn" id="addPaid">Add paid ticket</button>
+          <button class="btn" id="addFree">Add free ticket</button>
+        </div>
+
+        <div id="newTicketForm" class="grid" style="display:none;margin-bottom:12px">
+          <div class="grid-2">
+            <div class="grid"><label>Ticket name</label><input id="tk_name" placeholder="e.g. General Admission"/></div>
+            <div class="grid"><label>Level (optional)</label>
+              <select id="tk_level">
+                <option value="">—</option>
+                <option>Stalls</option>
+                <option>Circle</option>
+                <option>Upper Circle</option>
+                <option>Balcony</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="grid" id="priceWrap"><label>Price (£)</label><input id="tk_price" type="number" step="0.01" placeholder="25.00"/></div>
+            <div class="grid"><label>Allocation (qty)</label><input id="tk_alloc" type="number" placeholder="e.g. 300"/></div>
+          </div>
+
+          <div class="row" style="margin:6px 0 2px">
+            <span class="pill" id="tk_kind_badge">PAID</span>
+            <label style="margin-left:10px" class="muted">Seating:</label>
+            <span class="pill">Unallocated</span>
+            <span class="pill muted" title="Coming soon" style="opacity:.6">Allocated (seating map)</span>
+          </div>
+
+          <div class="row" style="justify-content:flex-end">
+            <button class="btn" id="tk_cancel">Cancel</button>
+            <button class="btn pri" id="tk_save">Add ticket</button>
+            <div id="tk_err" class="error" style="margin-left:8px"></div>
+          </div>
+        </div>
+
+        <table>
+          <thead><tr><th>Name</th><th>Kind</th><th>Seating</th><th>Level</th><th>Price</th><th>Qty</th></tr></thead>
+          <tbody id="tk_body"><tr><td colspan="6" class="muted">No tickets yet.</td></tr></tbody>
+        </table>
+
+        <div class="row" style="margin-top:12px">
+          <button class="btn" id="gotoAll">Done – go to All events</button>
+        </div>
+      </div>
+    \`);
+
+    // preload venues for typeahead
     let venues = [];
-    try{
-      const vj = await j('/admin/venues');
-      venues = vj.items || [];
-    }catch{}
+    j('/admin/venues').then(vj=>{ venues = vj.items || []; }).catch(()=>{});
 
-    const input = $('#venue_input');
-    const list = $('#venue_list');
-    const hint = $('#venue_hint');
+    const input = $('#venue_input'), list=$('#venue_list'), hint=$('#venue_hint');
     let selectedVenueId = null;
 
     function renderList(items){
@@ -290,29 +315,21 @@ router.get(['/ui', '/ui/*'], requireAdminOrOrganiser, async (_req, res) => {
       list.innerHTML = items.map(v=>\`<div class="ta-item" data-id="\${v.id}">\${v.name}\${v.city?' – '+v.city:''}</div>\`).join('');
       list.style.display='block';
     }
-
     function suggest(){
-      const q = (input.value||'').toLowerCase().trim();
-      selectedVenueId = null;
+      const q=(input.value||'').toLowerCase().trim(); selectedVenueId=null;
       if(!q){ list.style.display='none'; hint.textContent='Pick an existing venue or create a new one.'; return; }
       const matches = venues.filter(v => (v.name||'').toLowerCase().includes(q) || (v.city||'').toLowerCase().includes(q)).slice(0,8);
-      renderList(matches);
-      if(matches.length===0){
-        list.innerHTML = \`<div class="ta-item" data-create="1">Create "\${input.value}" as a new venue</div>\`;
-        list.style.display='block';
-      }
+      if(matches.length){ renderList(matches); }
+      else{ list.innerHTML = \`<div class="ta-item" data-create="1">Create "\${input.value}" as a new venue</div>\`; list.style.display='block'; }
     }
-
     input.addEventListener('input', suggest);
-    list.addEventListener('click', (e)=>{
-      const it = e.target.closest('.ta-item'); if(!it) return;
-      const create = it.getAttribute('data-create');
-      if(create){
-        openVenueModal(input.value);
-      }else{
-        const id = it.getAttribute('data-id');
-        const v = venues.find(x=>String(x.id)===String(id));
-        if(v){ input.value = v.name + (v.city? ' – '+v.city : ''); selectedVenueId = v.id; hint.innerHTML = '<span class="pill">Selected</span>'; }
+    list.addEventListener('click',(e)=>{
+      const it=e.target.closest('.ta-item'); if(!it) return;
+      const create=it.getAttribute('data-create');
+      if(create){ openVenueModal(input.value); }
+      else{
+        const id=it.getAttribute('data-id'); const v=venues.find(x=>String(x.id)===String(id));
+        if(v){ input.value=v.name+(v.city?' – '+v.city:''); selectedVenueId=v.id; hint.innerHTML='<span class="pill">Selected</span>'; }
       }
       list.style.display='none';
     });
@@ -323,72 +340,134 @@ router.get(['/ui', '/ui/*'], requireAdminOrOrganiser, async (_req, res) => {
     drop.addEventListener('click', choose);
     drop.addEventListener('dragover', e=>{ e.preventDefault(); drop.classList.add('drag');});
     drop.addEventListener('dragleave', ()=>drop.classList.remove('drag'));
-    drop.addEventListener('drop', async (e)=>{
-      e.preventDefault(); drop.classList.remove('drag');
-      const f=e.dataTransfer.files&&e.dataTransfer.files[0];
-      if(f) await doUpload(f);
-    });
+    drop.addEventListener('drop', async (e)=>{ e.preventDefault(); drop.classList.remove('drag'); const f=e.dataTransfer.files&&e.dataTransfer.files[0]; if(f) await doUpload(f);});
     file.addEventListener('change', async ()=>{ const f=file.files&&file.files[0]; if(f) await doUpload(f); });
 
     async function doUpload(f){
-      $('#err').textContent='';
-      bar.style.width='15%';
+      $('#err').textContent=''; bar.style.width='15%';
       try{
         const out=await uploadPoster(f);
-        prev.src=out.url;
-        prev.style.display='block';
-        removeBtn.style.display='inline-block';
-        bar.style.width='100%';
-        setTimeout(()=>bar.style.width='0%', 700);
-        prev.dataset.url = out.url; // stash for submit
-      }catch(e){
-        bar.style.width='0%';
-        $('#err').textContent = e.message||'Upload failed';
-      }
+        prev.src=out.url; prev.style.display='block'; removeBtn.style.display='inline-block';
+        bar.style.width='100%'; setTimeout(()=>bar.style.width='0%',700);
+        prev.dataset.url=out.url;
+      }catch(e){ bar.style.width='0%'; $('#err').textContent=e.message||'Upload failed'; }
     }
-    removeBtn.addEventListener('click', ()=>{
-      prev.src=''; prev.removeAttribute('data-url'); removeBtn.style.display='none';
-    });
+    removeBtn.addEventListener('click', ()=>{ prev.src=''; prev.removeAttribute('data-url'); removeBtn.style.display='none'; });
 
-    // create show
-    $('#create').addEventListener('click', async ()=>{
-      $('#err').textContent='';
+    // save show -> then unlock Tickets card
+    let currentShowId = null;
+    $('#saveShow').addEventListener('click', async ()=>{
+      $('#err').textContent=''; $('#ok').textContent='';
       try{
-        // if no selectedVenueId, try to find exact match by name (before forcing modal)
         if(!selectedVenueId){
-          const name = (input.value||'').trim();
+          // try exact match by name
+          const name=(input.value||'').trim();
           const exact = venues.find(v => (v.name||'').toLowerCase()===name.toLowerCase());
           if(exact) selectedVenueId = exact.id;
         }
-        if(!selectedVenueId){
-          hint.innerHTML = '<span class="pill">No venue selected</span> — choose a venue or create one.';
-          input.focus();
-          return;
-        }
+        if(!$('#sh_title').value.trim() || !$('#sh_dt').value){ $('#err').textContent='Title and date/time are required'; return; }
+        if(!selectedVenueId){ hint.innerHTML='<span class="pill">No venue selected</span> — choose a venue or create one.'; input.focus(); return; }
+
         const payload = {
           title: $('#sh_title').value.trim(),
-          date: $('#sh_dt').value ? new Date($('#sh_dt').value).toISOString() : null,
+          date: new Date($('#sh_dt').value).toISOString(),
           venueId: selectedVenueId,
           imageUrl: $('#prev').dataset.url || null,
-          description: $('#sh_desc').value.trim() || null,
-          ticket: {
-            name: $('#t_name').value.trim(),
-            pricePounds: $('#t_price').value ? Number($('#t_price').value) : null,
-            available: $('#t_alloc').value ? Number($('#t_alloc').value) : null
-          }
+          description: $('#sh_desc').value.trim() || null
         };
-        if(!payload.title || !payload.date){ $('#err').textContent='Title and date/time are required'; return; }
+
         const r = await j('/admin/shows',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-        if(!r.ok) throw new Error(r.error||'Failed to create show');
-        // reset
-        ['sh_title','sh_dt','sh_desc','t_name','t_price','t_alloc'].forEach(id=>{ const el=$('#'+id); if(el) el.value=''; });
-        input.value=''; selectedVenueId=null; hint.textContent='Pick an existing venue or create a new one.';
-        prev.src=''; prev.removeAttribute('data-url'); removeBtn.style.display='none';
-        bar.style.width='0%';
-        // go to list
-        navTo('/shows/current');
-      }catch(e){ $('#err').textContent=e.message||'Failed to create show'; }
+        // expect id in r.id or r.show.id
+        currentShowId = r?.id ?? r?.show?.id ?? null;
+        if(!currentShowId) throw new Error('Missing show id from response');
+
+        // lock basic fields (optional UX), unlock tickets
+        ['sh_title','sh_dt','venue_input','sh_desc'].forEach(id=>{ const el=$('#'+id); if(el) el.setAttribute('disabled',''); });
+        $('#ticketsCard').classList.remove('disabled'); $('#ticketsCard').removeAttribute('aria-disabled');
+        $('#ticketsHint').textContent='Add at least one ticket to start selling.';
+        $('#ok').textContent='Show saved. You can now add tickets.';
+        loadTickets(); // show any existing (likely none)
+      }catch(e){
+        $('#err').textContent=e.message||'Failed to save show';
+      }
     });
+
+    // ---- Tickets builder (unallocated only for now) ----
+    let pendingKind = 'PAID'; // or 'FREE'
+
+    function openTicketForm(kind){
+      pendingKind = kind;
+      $('#newTicketForm').style.display='grid';
+      $('#tk_name').value = kind==='FREE' ? 'Free Ticket' : 'General Admission';
+      $('#tk_price').value = kind==='FREE' ? '' : '';
+      $('#tk_price').disabled = (kind==='FREE');
+      $('#tk_kind_badge').textContent = kind;
+      $('#tk_alloc').value='';
+      $('#tk_err').textContent='';
+    }
+    function closeTicketForm(){
+      $('#newTicketForm').style.display='none';
+      $('#tk_err').textContent='';
+    }
+
+    $('#addPaid').addEventListener('click', ()=> openTicketForm('PAID'));
+    $('#addFree').addEventListener('click', ()=> openTicketForm('FREE'));
+    $('#tk_cancel').addEventListener('click', closeTicketForm);
+
+    async function loadTickets(){
+      const body = $('#tk_body');
+      if(!currentShowId){ body.innerHTML='<tr><td colspan="6" class="muted">Save the show first.</td></tr>'; return; }
+      try{
+        // TODO: adapt to your tickettypes API if different
+        const t = await j('/admin/tickettypes?showId='+encodeURIComponent(currentShowId));
+        const items = t.items || t || [];
+        if(!items.length){ body.innerHTML='<tr><td colspan="6" class="muted">No tickets yet.</td></tr>'; return; }
+        body.innerHTML = items.map(x=>\`
+          <tr>
+            <td>\${x.name||''}</td>
+            <td>\${x.kind||'PAID'}</td>
+            <td>\${x.seating||'UNALLOCATED'}</td>
+            <td>\${x.level||''}</td>
+            <td>\${typeof x.pricePounds==='number' ? '£'+x.pricePounds.toFixed(2) : (x.kind==='FREE'?'Free':'')}</td>
+            <td>\${x.available ?? ''}</td>
+          </tr>\`).join('');
+      }catch(_e){
+        body.innerHTML='<tr><td colspan="6" class="muted">Tickets unavailable (API not implemented yet).</td></tr>';
+      }
+    }
+
+    $('#tk_save').addEventListener('click', async ()=>{
+      $('#tk_err').textContent='';
+      try{
+        if(!currentShowId) throw new Error('Save the show first');
+        const name = $('#tk_name').value.trim();
+        const level = $('#tk_level').value || null;
+        const alloc = $('#tk_alloc').value ? Number($('#tk_alloc').value) : null;
+        const price = pendingKind==='FREE' ? 0 : ($('#tk_price').value ? Number($('#tk_price').value) : null);
+        if(!name){ $('#tk_err').textContent='Ticket name required'; return; }
+        if(pendingKind==='PAID' && (price===null || isNaN(price))){ $('#tk_err').textContent='Price required for paid tickets'; return; }
+        if(alloc===null || isNaN(alloc)){ $('#tk_err').textContent='Allocation (quantity) required'; return; }
+
+        // TODO: adapt to your tickettypes API if different
+        const payload = {
+          showId: currentShowId,
+          name,
+          pricePounds: pendingKind==='FREE' ? 0 : price,
+          available: alloc,
+          kind: pendingKind,
+          seating: 'UNALLOCATED',
+          level
+        };
+        await j('/admin/tickettypes',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+
+        closeTicketForm();
+        loadTickets();
+      }catch(e){
+        $('#tk_err').textContent=e.message||'Failed to add ticket';
+      }
+    });
+
+    $('#gotoAll').addEventListener('click', ()=> navTo('/shows/current'));
   }
 
   async function showsList(){
@@ -446,29 +525,22 @@ router.get(['/ui', '/ui/*'], requireAdminOrOrganiser, async (_req, res) => {
       phone: $('#vm_phone').value.trim() || null,
       website: $('#vm_www').value.trim() || null
     };
-    if(!payload.name || !payload.city || !payload.address || !payload.postcode){
-      $('#vm_err').textContent='Name, City, Address and Postcode are required';
-      return;
-    }
+    if(!payload.name || !payload.city || !payload.address || !payload.postcode){ $('#vm_err').textContent='Name, City, Address and Postcode are required'; return; }
     try{
-      const r = await j('/admin/venues', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-      if(!r.ok) throw new Error(r.error||'Failed to create venue');
+      const r = await j('/admin/venues',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      if(!r.ok && r.error) throw new Error(r.error);
       closeVenueModal();
-      // refresh cached venues for typeahead
+      // refresh local venues cache
       const vj = await j('/admin/venues'); const venuesAll = vj.items||[];
       const created = venuesAll.find(v => String(v.id)===String(r.id));
-      // update the create page inputs if still there
-      const input = $('#venue_input'); const hint=$('#venue_hint');
+      const input = $('#venue_input'), hint=$('#venue_hint');
       if(input){ input.value = created ? (created.name+(created.city?' – '+created.city:'')) : payload.name+' – '+payload.city; input.focus(); input.blur(); }
-      if(hint){ hint.innerHTML = '<span class="pill">Selected</span>'; }
+      if(hint){ hint.innerHTML='<span class="pill">Selected</span>'; }
     }catch(e){ $('#vm_err').textContent=e.message||'Failed to create venue'; }
   });
 
   // initial render
   render();
-
-  // expose modal opener to typeahead (create link)
-  window.openVenueModal = openVenueModal;
 })();
 </script>
 </body>
