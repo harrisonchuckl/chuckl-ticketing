@@ -62,9 +62,6 @@ app.use('/api/upload', uploadRoute);
 // --- Public HTML UI ---
 app.use('/public', publicUI);
 
-// --- Image proxy (resizes & caches to R2) ---
-app.use('/', imageProxy);
-
 // --- Auth routes (UI + JSON) ---
 app.use('/auth', loginUI);     // GET /auth/login (HTML)
 app.use('/auth', auth);        // POST /auth/login etc (JSON)
@@ -82,8 +79,9 @@ const limiter = rateLimit({
 });
 app.use(['/scan', '/admin'], limiter);
 
-// --- Admin UI first so unauth users see HTML not JSON ---
-app.use('/admin', adminUI);
+// --- Admin entry points (UI first so unauth users see HTML not JSON) ---
+app.get('/admin', (_req, res) => res.redirect(302, '/admin/ui/home')); // make /admin work
+app.use('/admin', adminUI); // serves /admin/ui and /admin/ui/* (HTML SPA)
 
 // --- Admin JSON APIs ---
 app.use('/admin', adminVenues);
@@ -99,6 +97,10 @@ app.use('/admin', admin);
 
 // Health
 app.get('/health', (_req, res) => res.json({ ok: true }));
+
+// ⬇️ Put the image proxy LAST so it can’t swallow /admin routes
+// If you prefer, mount it at /img instead: app.use('/img', imageProxy);
+app.use('/', imageProxy);
 
 const PORT = Number(process.env.PORT || 4000);
 app.listen(PORT, () => {
