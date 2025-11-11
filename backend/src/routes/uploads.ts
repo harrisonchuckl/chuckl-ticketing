@@ -1,14 +1,15 @@
 // backend/src/routes/uploads.ts
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import Busboy from "busboy";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import sharp from "sharp";
+import { randomUUID } from "node:crypto";
 
-const router = Router();
-
+// ---- R2 client (Cloudflare R2 uses S3-compatible API) ----
 const s3 = new S3Client({
   region: "auto",
-  endpoint: process.env.R2_ENDPOINT,      // e.g. https://<accountid>.r2.cloudflarestorage.com
+  endpoint: process.env.R2_ENDPOINT,               // e.g. https://<accountid>.r2.cloudflarestorage.com
+  forcePathStyle: true,
   credentials: {
     accessKeyId: process.env.R2_ACCESS_KEY_ID || "",
     secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || "",
@@ -16,72 +17,93 @@ const s3 = new S3Client({
 });
 
 const BUCKET = process.env.R2_BUCKET || "";
-const PUBLIC_BASE = process.env.R2_PUBLIC_BASE || ""; // <-- new (https://pub-xxxx.r2.dev)
+const PUBLIC_BASE = process.env.R2_PUBLIC_BASE || ""; // e.g. https://pub-xxxxxxxxxxxxxxxxxxxx.r2.dev  (or your custom domain)
 
-router.post("/", (req, res) => {
+// Small helper to send 400/500 nicely
+function fail(res: Response, status: number, msg: string) {
+  return res.status(status).json({ ok: false, error: msg });
+}
+
+const router = Router();
+
+router.post("/", async (req: Request, res: Response) => {
   try {
-    const bb = Busboy({ headers: req.headers, limits: { files: 1, fileSize: 15 * 1024 * 1024 } });
+    if (!BUCKET) return fail(res, 500, "R2_BUCKET not set");
+    if (!PUBLIC_BASE) return fail(res, 500, "R2_PUBLIC_BASE not set");
 
-    let resolved = false;
-    const done = (status: number, body: any) => {
-      if (resolved) return;
-      resolved = true;
-      res.status(status).json(body);
-    };
-
-    bb.on("file", (_name, file, info) => {
-      const { filename, mimeType } = info;
-      if (!mimeType.startsWith("image/")) {
-        file.resume();
-        return done(400, { ok: false, error: "Only images are allowed" });
-      }
-
-      const key = `posters/${new Date().toISOString().slice(0,10)}/${crypto.randomUUID()}.webp`;
-
-      // optimise → webp
-      const transformer = sharp().rotate().webp({ quality: 85 });
-
-      const chunks: Buffer[] = [];
-      transformer.on("data", (c) => chunks.push(c));
-      transformer.on("error", (err) => done(500, { ok: false, error: err.message }));
-      transformer.on("end", async () => {
-        try {
-          const Body = Buffer.concat(chunks);
-          await s3.send(new PutObjectCommand({
-            Bucket: BUCKET,
-            Key: key,
-            Body,
-            ContentType: "image/webp",
-            // R2 ignores ACLs; public access is controlled at bucket level
-          }));
-
-          if (!PUBLIC_BASE) {
-            // Safety net: if you forgot to set PUBLIC_BASE, still return API URL (will 403 in browser)
-            return done(200, {
-              ok: true,
-              key,
-              url: `${process.env.R2_ENDPOINT?.replace(/\/$/, "")}/${BUCKET}/${key}`,
-              note: "Set R2_PUBLIC_BASE to a public URL to render in browser."
-            });
-          }
-
-          // ✅ public browser URL
-          const publicUrl = `${PUBLIC_BASE.replace(/\/$/, "")}/${key}`;
-          return done(200, { ok: true, key, url: publicUrl });
-        } catch (e: any) {
-          return done(500, { ok: false, error: e?.message || "Upload failed" });
-        }
-      });
-
-      file.pipe(transformer);
+    const bb = Busboy({
+      headers: req.headers,
+      limits: { files: 1, fileSize: 20 * 1024 * 1024, parts: 3 }, // 20MB
     });
 
-    bb.on("error", (err) => done(500, { ok: false, error: err.message }));
-    bb.on("finish", () => { /* no-op: we finish in transformer 'end' */ });
+    let gotFile = false;
+    let uploadedUrl: string | null = null;
 
-    req.pipe(bb);
+    bb.on("file", (_fieldname, fileStream: NodeJS.ReadableStream, info) => {
+      gotFile = true;
+      const { filename } = info;
+
+      // Collect the bytes -> Buffer (simple and safe for <= 20MB)
+      const chunks: Buffer[] = [];
+      fileStream.on("data", (c: Buffer) => chunks.push(c));
+      fileStream.on("limit", () => {
+        // fileSize limit hit
+        fail(res, 400, "File too large");
+        // Stop reading more data
+        (fileStream as any).pause?.();
+      });
+
+      fileStream.once("end", async () => {
+        try {
+          const inputBuf = Buffer.concat(chunks);
+          if (!inputBuf.length) return fail(res, 400, "Empty file");
+
+          // Convert to WebP (quality ~80)
+          const webp = await sharp(inputBuf)
+            .rotate()        // auto-orient
+            .webp({ quality: 80 })
+            .toBuffer();
+
+          const yyyy = new Date().toISOString().slice(0, 10);
+          const key = `posters/${yyyy}/${randomUUID()}.webp`;
+
+          // Upload to R2
+          await s3.send(
+            new PutObjectCommand({
+              Bucket: BUCKET,
+              Key: key,
+              Body: webp,
+              ContentType: "image/webp",
+              ACL: "private", // object can be private—public access comes from PUBLIC_BASE
+            })
+          );
+
+          // Build public URL using the public base (bucket public access or mapped domain)
+          uploadedUrl = `${PUBLIC_BASE.replace(/\/+$/, "")}/${key}`;
+        } catch (e: any) {
+          console.error("Upload error:", e);
+          if (!res.headersSent) fail(res, 500, "Image processing/upload failed");
+        }
+      });
+    });
+
+    bb.on("error", (err) => {
+      console.error("Busboy error:", err);
+      if (!res.headersSent) fail(res, 400, "Malformed form-data");
+    });
+
+    bb.on("finish", () => {
+      if (res.headersSent) return;
+      if (!gotFile) return fail(res, 400, "No file provided");
+      if (!uploadedUrl) return fail(res, 500, "Upload did not complete");
+      return res.json({ ok: true, url: uploadedUrl });
+    });
+
+    // Pipe the request into busboy (cast keeps TS happy with current defs)
+    (req as any).pipe(bb as any);
   } catch (e: any) {
-    return res.status(500).json({ ok: false, error: e?.message || "Unexpected error" });
+    console.error(e);
+    return fail(res, 500, "Unexpected error during upload");
   }
 });
 
