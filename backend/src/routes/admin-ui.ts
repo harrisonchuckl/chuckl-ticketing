@@ -68,11 +68,31 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
   const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
   function setActive(v){ $$('.sb-link').forEach(a=>a.classList.toggle('active',a.getAttribute('data-view')===v)); }
   function setMain(html){ $('#main').innerHTML=html; }
-  async function j(url,opts){ const r=await fetch(url,{credentials:'include',...(opts||{})}); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
-  function route(){ const v=(location.hash||'#home').slice(1); setActive(v); if(v==='shows') return shows(); if(v==='venues') return venues(); if(v==='orders') return orders(); if(v==='analytics') return analytics(); if(v==='audiences') return audiences(); if(v==='email') return email(); if(v==='account') return account(); return home(); }
+  async function j(url,opts){
+    const r=await fetch(url,{credentials:'include',...(opts||{})});
+    if(!r.ok){
+      const text = await r.text().catch(()=> '');
+      throw new Error('HTTP '+r.status+(text?(': '+text.slice(0,200)):''));
+    }
+    return r.json();
+  }
+  function route(){
+    const v=(location.hash||'#home').slice(1);
+    setActive(v);
+    if(v==='shows') return shows();
+    if(v==='venues') return venues();
+    if(v==='orders') return orders();
+    if(v==='analytics') return analytics();
+    if(v==='audiences') return audiences();
+    if(v==='email') return email();
+    if(v==='account') return account();
+    return home();
+  }
   window.addEventListener('hashchange',route);
 
-  function home(){ setMain('<div class="card"><div class="title">Welcome</div><div class="muted">Use the menu to manage shows, venues and orders.</div></div>'); }
+  function home(){
+    setMain('<div class="card"><div class="title">Welcome</div><div class="muted">Use the menu to manage shows, venues and orders.</div></div>');
+  }
 
   // ----- Safe upload helper using fetch -> /api/upload -----
   async function uploadPoster(file) {
@@ -140,7 +160,8 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
     // load venues
     try {
       const vj = await j('/admin/venues');
-      const sel = $('#sh_venue'); sel.innerHTML='<option value="">Select venue…</option>'+(vj.items||[]).map(v=>\`<option value="\${v.id}">\${v.name}\${v.city?' – '+v.city:''}</option>\`).join('');
+      const sel = $('#sh_venue');
+      sel.innerHTML='<option value="">Select venue…</option>'+(vj.items||[]).map(v=>\`<option value="\${v.id}">\${v.name}\${v.city?' – '+v.city:''}</option>\`).join('');
     } catch { $('#err').textContent='Failed to load venues'; }
 
     // drag-drop wiring (uses safe fetch helper)
@@ -161,7 +182,7 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
 
     async function doUpload(f){
       $('#err').textContent='';
-      bar.style.width='15%'; // show 'working' immediately
+      bar.style.width='15%'; // show 'working' immediately (fetch does not expose progress)
       try{
         const out = await uploadPoster(f);
         imgurl.value = out.url;
@@ -187,16 +208,27 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
           ticket: {
             name: $('#t_name').value.trim(),
             pricePounds: $('#t_price').value ? Number($('#t_price').value) : null,
-            available: $('#t_alloc').value ? Number($('#t_alloc').value) : null,
+            available: $('#t_alloc').value ? Number($('#t_alloc').value) : null
           }
         };
-        if(!payload.title || !payload.date || !payload.venueId){ $('#err').textContent='Title, date/time and venue are required'; return; }
-        const r = await j('/admin/shows',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        if(!payload.title || !payload.date || !payload.venueId){
+          $('#err').textContent='Title, date/time and venue are required';
+          return;
+        }
+        const r = await j('/admin/shows',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(payload)
+        });
         if(!r.ok) throw new Error(r.error||'Failed to create show');
-        ['sh_title','sh_dt','sh_desc','imgurl','t_name','t_price','t_alloc'].forEach(id=>{ const el=$('#'+id); if(el) el.value=''; });
+        ['sh_title','sh_dt','sh_desc','imgurl','t_name','t_price','t_alloc'].forEach(id=>{
+          const el=$('#'+id); if(el) el.value='';
+        });
         prev.src=''; bar.style.width='0%';
         await loadList();
-      }catch(e){ $('#err').textContent=e.message||'Failed to create show'; }
+      }catch(e){
+        $('#err').textContent=e.message||'Failed to create show';
+      }
     });
 
     async function loadList(){
@@ -212,7 +244,9 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
             <td>\${s._count?.ticketTypes ?? 0}</td>
             <td>\${s._count?.orders ?? 0}</td>
           </tr>\`).join('');
-      }catch(e){ $('#lerr').textContent='Failed to load shows'; }
+      }catch(_e){
+        $('#lerr').textContent='Failed to load shows';
+      }
     }
     $('#refresh').addEventListener('click', loadList);
     loadList();
@@ -227,7 +261,9 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
 
   document.addEventListener('click', function(e){
     const a = e.target?.closest && e.target.closest('a.sb-link');
-    if(a && a.getAttribute('data-view')){ e.preventDefault(); history.pushState(null,'',a.getAttribute('href')); route(); }
+    if(a && a.getAttribute('data-view')){
+      e.preventDefault(); history.pushState(null,'',a.getAttribute('href')); route();
+    }
   });
 
   route();
