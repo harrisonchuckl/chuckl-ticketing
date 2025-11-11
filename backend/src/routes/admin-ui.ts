@@ -31,8 +31,7 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
   .btn:hover{background:#f9fafb}
   .grid{display:grid;gap:8px}
   .grid-2{grid-template-columns:repeat(2,1fr)}
-  .grid-3{grid-template-columns:repeat(3,1fr)}
-  input,select,textarea{border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:#fff;outline:none;width:100%;box-sizing:border-box}
+  input,textarea{border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:#fff;outline:none;width:100%;box-sizing:border-box}
   textarea{min-height:140px}
   table{width:100%;border-collapse:collapse;font-size:14px}
   th,td{text-align:left;padding:10px;border-bottom:1px solid var(--border);vertical-align:middle}
@@ -86,84 +85,58 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
   const $=(s,r=document)=>r.querySelector(s);
   const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
 
-  // --- lightweight router (hashless, internal state) ---
-  let CURRENT='';
-  function setActive(id){
-    $$('.sb-link').forEach(a=>a.classList.toggle('active', a.getAttribute('data-view')===id));
-  }
+  // simple in-memory cache for shows list so Edit/Duplicate can prefill without extra roundtrips
+  let SHOW_CACHE = new Map();
+
+  // --- router ---
+  function setActive(id){ $$('.sb-link').forEach(a=>a.classList.toggle('active', a.getAttribute('data-view')===id)); }
   function setMain(html){ $('#main').innerHTML=html; }
+  $('#sb-shows').addEventListener('click', ()=>$('#sb-shows-sub').classList.toggle('show'));
 
-  // toggle "Shows" submenu
-  $('#sb-shows').addEventListener('click', ()=>{
-    $('#sb-shows-sub').classList.toggle('show');
-  });
-
-  // client API helper
   async function j(url,opts){
     const r=await fetch(url,{credentials:'include',...(opts||{})});
-    if(!r.ok){
-      const text = await r.text().catch(()=> '');
-      throw new Error('HTTP '+r.status+(text?(': '+text.slice(0,200)):''));
-    }
     const ct=r.headers.get('content-type')||'';
+    if(!r.ok){ throw new Error('HTTP '+r.status); }
     if(ct.includes('application/json')) return r.json();
-    return r.text();
+    // try to parse JSON even if header is wrong
+    try{ return JSON.parse(await r.text()); }catch{ return {}; }
   }
 
-  // nav clicks
-  document.addEventListener('click', (e)=>{
-    const a = e.target.closest && e.target.closest('.sb-link[data-view]');
-    if(a){ e.preventDefault(); go(a.getAttribute('data-view')); }
-  });
-
-  // programmatic navigation with optional params
-  function go(view, params){
-    CURRENT=view;
+  function go(view, params={}){
     setActive(view);
     if(view==='home') return home();
-    if(view==='shows_create') return shows_create({mode:'create'});
-    if(view==='shows_edit') return shows_create({mode:'edit', ...(params||{})});
-    if(view==='shows_duplicate') return shows_create({mode:'duplicate', ...(params||{})});
+    if(view==='shows_create') return shows_create({mode:'create', ...params});
+    if(view==='shows_edit') return shows_create({mode:'edit', ...params});
+    if(view==='shows_duplicate') return shows_create({mode:'duplicate', ...params});
     if(view==='shows_current') return shows_current();
     if(view==='orders') return orders();
     if(view==='venues') return venues();
     if(view==='analytics') return analytics();
     if(view==='audiences') return audiences();
     if(view==='email') return email();
-    return home();
+    home();
   }
 
-  // ---------- views ----------
   function home(){
     setMain('<div class="card"><div class="title">Welcome</div><div class="muted">Use the menu to manage shows, venues and orders.</div></div>');
   }
 
-  // shared upload helper: returns {ok:true, url, key}
-  async function uploadPoster(file){
-    const form = new FormData();
-    form.append('file', file);
-    const res = await fetch('/api/upload', { method:'POST', body:form, credentials:'include' });
-    if(!res.ok){ const t=await res.text().catch(()=> ''); throw new Error('Upload failed: '+t.slice(0,200)); }
-    const data = await res.json();
-    if(!data?.ok) throw new Error(data?.error||'Upload error');
-    return data;
-  }
-
-  // simple rich text toolbar
-  function applyFormat(cmd){
-    document.execCommand(cmd,false,null);
-  }
-
-  // edit/create view
+  // ---------- CREATE / EDIT ----------
   async function shows_create(opts){
-    const mode = opts?.mode||'create'; // 'create' | 'edit' | 'duplicate'
-    let prefill = null;
+    const mode = opts.mode || 'create';
+    // Prefer prefill passed from list; fallback to API by ID; fallback to list by ID
+    let prefill = opts.prefill || null;
 
-    if((mode==='edit' || mode==='duplicate') && opts?.id){
+    if(!prefill && opts.id){
       try{
-        prefill = await j('/admin/shows/'+encodeURIComponent(opts.id));
-      }catch(e){
-        console.error(e);
+        prefill = await j('/admin/shows/'+encodeURIComponent(opts.id)); // if your API serves JSON here
+      }catch{}
+      if(!prefill){
+        try{
+          const all = await j('/admin/shows');
+          const found = (all.items||[]).find(s=>s.id===opts.id);
+          if(found) prefill = found;
+        }catch{}
       }
     }
 
@@ -198,8 +171,6 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
               <button class="btn" data-cmd="underline"><u>U</u></button>
               <button class="btn" data-cmd="insertUnorderedList">• List</button>
               <button class="btn" data-cmd="insertOrderedList">1. List</button>
-              <button class="btn" data-cmd="createLink">Link</button>
-              <button class="btn" id="clearFmt">Clear</button>
             </div>
             <div id="desc" contenteditable="true" style="border:1px solid var(--border);border-radius:8px;padding:10px;min-height:160px;background:#fff"></div>
             <div class="muted" style="margin-top:6px">Event description (required). Use the toolbar to format.</div>
@@ -211,35 +182,40 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
           <div id="err" class="error"></div>
         </div>
       </div>
-
-      <div id="ticketsCard" class="card" style="display:none">
-        <div class="header"><div class="title">Tickets</div><div class="muted">Save the show to add tickets.</div></div>
-        <div style="display:flex;gap:8px;margin-bottom:8px">
-          <button id="addPaid" class="btn" disabled>Add paid ticket</button>
-          <button id="addFree" class="btn" disabled>Add free ticket</button>
-        </div>
-        <table>
-          <thead><tr><th>Name</th><th>Kind</th><th>Seating</th><th>Level</th><th>Price</th><th>Qty</th></tr></thead>
-          <tbody id="trows"><tr><td colspan="6" class="muted">No tickets yet.</td></tr></tbody>
-        </table>
-        <div style="margin-top:10px"><button id="finish" class="btn" disabled>Publish / Schedule</button></div>
-      </div>
     \`);
 
-    // wire toolbar
+    // formatting
     $$('.toolbar .btn').forEach(b=>{
       const cmd=b.getAttribute('data-cmd');
-      if(cmd==='createLink'){
-        b.addEventListener('click', ()=>{
-          const url=prompt('Link URL'); if(url) applyFormat('createLink'), document.execCommand('createLink', false, url);
-        });
-      }else if(cmd){
-        b.addEventListener('click', ()=>applyFormat(cmd));
-      }
+      b.addEventListener('click', ()=>document.execCommand(cmd,false,null));
     });
-    $('#clearFmt').addEventListener('click', ()=>$('#desc').innerHTML='');
 
-    // venues typeahead
+    // image upload
+    async function uploadPoster(file){
+      const form=new FormData(); form.append('file',file);
+      const res=await fetch('/api/upload',{method:'POST',body:form,credentials:'include'});
+      if(!res.ok) throw new Error('Upload failed');
+      const data=await res.json(); if(!data?.ok) throw new Error(data?.error||'Upload error');
+      return data;
+    }
+    const drop=$('#drop'), file=$('#file'), bar=$('#bar'), prev=$('#prev'), removeImg=$('#removeImg');
+    drop.addEventListener('click', ()=>file.click());
+    drop.addEventListener('dragover', e=>{e.preventDefault();drop.classList.add('drag');});
+    drop.addEventListener('dragleave', ()=>drop.classList.remove('drag'));
+    drop.addEventListener('drop', async e=>{e.preventDefault();drop.classList.remove('drag'); const f=e.dataTransfer.files?.[0]; if(f) await doUpload(f);});
+    file.addEventListener('change', async ()=>{const f=file.files?.[0]; if(f) await doUpload(f);});
+    let posterUrl=null;
+    async function doUpload(f){
+      $('#err').textContent=''; bar.style.width='15%';
+      try{
+        const out=await uploadPoster(f);
+        posterUrl=out.url; prev.src=posterUrl; prev.style.display='inline-block'; removeImg.style.display='inline-block';
+        bar.style.width='100%'; setTimeout(()=>bar.style.width='0%',500);
+      }catch(e){ bar.style.width='0%'; $('#err').textContent=e.message||'Upload failed'; }
+    }
+    removeImg.addEventListener('click',()=>{ posterUrl=null; prev.src=''; prev.style.display='none'; removeImg.style.display='none'; });
+
+    // venues typeahead (required fields enforced on save)
     let selectedVenueId=null;
     async function searchVenues(q){
       if(!q){ $('#venue_results').style.display='none'; return; }
@@ -247,126 +223,37 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
         const vj=await j('/admin/venues?q='+encodeURIComponent(q));
         const box=$('#venue_results');
         const items=(vj.items||[]);
-        box.innerHTML = items.map(v=>\`<a href="#" data-vid="\${v.id}" class="sb-link">\${v.name}\${v.city?(' – '+v.city):''}</a>\`).join('') +
-          (items.length? '' : \`<div class="muted" style="padding:8px">No match. <button id="createVenue" class="btn" style="margin-left:6px">Create venue “\${q}”</button></div>\`);
+        box.innerHTML = items.map(v=>\`<a href="#" data-vid="\${v.id}" class="sb-link">\${v.name}\${v.city?(' – '+v.city):''}</a>\`).join('')
+          || '<div class="muted" style="padding:8px">No match.</div>';
         box.style.display='block';
-
-        // attach clicks
         box.querySelectorAll('a[data-vid]').forEach(a=>{
-          a.addEventListener('click', (e)=>{
-            e.preventDefault();
-            selectedVenueId = a.getAttribute('data-vid');
-            $('#venue_search').value = a.textContent.trim();
-            box.style.display='none';
-          });
+          a.addEventListener('click',(e)=>{e.preventDefault(); selectedVenueId=a.getAttribute('data-vid'); $('#venue_search').value=a.textContent.trim(); box.style.display='none';});
         });
-        const addBtn=box.querySelector('#createVenue');
-        if(addBtn){
-          addBtn.addEventListener('click', async ()=>{
-            // pop modal create
-            const name=$('#venue_search').value.trim();
-            await openVenueModal({name});
-          });
-        }
-      }catch(e){ console.error(e); }
+      }catch(e){}
     }
-    $('#venue_search').addEventListener('input', (e)=>searchVenues(e.target.value.trim()));
+    $('#venue_search').addEventListener('input', e=>searchVenues(e.target.value.trim()));
 
-    async function openVenueModal(seed){
-      const overlay=document.createElement('div');
-      overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:50';
-      overlay.innerHTML=\`
-        <div class="card" style="width:560px;max-width:90vw">
-          <div class="header"><div class="title">Create venue</div><button id="x" class="btn">✕</button></div>
-          <div class="grid grid-2">
-            <div class="grid"><label>Name</label><input id="v_name"/></div>
-            <div class="grid"><label>City / Town</label><input id="v_city"/></div>
-            <div class="grid" style="grid-column:1/-1"><label>Address</label><input id="v_addr"/></div>
-            <div class="grid"><label>Postcode</label><input id="v_pc"/></div>
-            <div class="grid"><label>Capacity (optional)</label><input id="v_cap" type="number"/></div>
-            <div class="grid"><label>Phone (optional)</label><input id="v_phone"/></div>
-            <div class="grid" style="grid-column:1/-1"><label>Website (optional)</label><input id="v_web"/></div>
-          </div>
-          <div style="display:flex;gap:8px;margin-top:12px">
-            <button id="saveV" class="btn">Save venue</button>
-            <button id="cancelV" class="btn">Cancel</button>
-            <div id="verr" class="error"></div>
-          </div>
-        </div>\`;
-      document.body.appendChild(overlay);
-      $('#v_name', overlay).value = seed?.name || '';
-      $('#x',overlay).onclick=$('#cancelV',overlay).onclick=()=>overlay.remove();
-      $('#saveV',overlay).onclick=async ()=>{
-        $('#verr',overlay).textContent='';
-        const payload={
-          name: $('#v_name',overlay).value.trim(),
-          city: $('#v_city',overlay).value.trim(),
-          address: $('#v_addr',overlay).value.trim(),
-          postcode: $('#v_pc',overlay).value.trim(),
-          capacity: Number($('#v_cap',overlay).value||0)||null,
-          phone: $('#v_phone',overlay).value.trim()||null,
-          website: $('#v_web',overlay).value.trim()||null
-        };
-        if(!payload.name || !payload.address || !payload.postcode){
-          $('#verr',overlay).textContent='Name, address and postcode are required.'; return;
-        }
-        try{
-          const out = await j('/admin/venues',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-          selectedVenueId = out?.id;
-          $('#venue_search').value = out?.name + (out?.city?(' – '+out.city):'');
-          overlay.remove();
-        }catch(e){ $('#verr',overlay).textContent=e.message||'Failed to save venue'; }
-      };
-    }
-
-    // image upload
-    const drop=$('#drop'), file=$('#file'), bar=$('#bar'), prev=$('#prev'), removeImg=$('#removeImg');
-    drop.addEventListener('click', ()=>file.click());
-    drop.addEventListener('dragover', e=>{ e.preventDefault(); drop.classList.add('drag');});
-    drop.addEventListener('dragleave', ()=>drop.classList.remove('drag'));
-    drop.addEventListener('drop', async (e)=>{
-      e.preventDefault(); drop.classList.remove('drag');
-      const f=e.dataTransfer.files&&e.dataTransfer.files[0]; if(f) await doUpload(f);
-    });
-    file.addEventListener('change', async ()=>{ const f=file.files&&file.files[0]; if(f) await doUpload(f); });
-
-    let posterUrl=null;
-    async function doUpload(f){
-      $('#err').textContent=''; bar.style.width='15%';
-      try{
-        const out=await uploadPoster(f);
-        posterUrl=out.url;
-        prev.src=posterUrl;
-        prev.style.display='inline-block';
-        removeImg.style.display='inline-block';
-        bar.style.width='100%'; setTimeout(()=>bar.style.width='0%',600);
-      }catch(e){ bar.style.width='0%'; $('#err').textContent=e.message||'Upload failed'; }
-    }
-    removeImg.addEventListener('click',()=>{ posterUrl=null; prev.src=''; prev.style.display='none'; removeImg.style.display='none'; });
-
-    // prefill for edit / duplicate
+    // prefill (Edit / Duplicate)
     let editId=null;
     if(prefill){
-      if(mode==='edit'){ editId=prefill.id; }
-      $('#sh_title').value = (mode==='duplicate' ? (prefill.title+' (Copy)') : prefill.title)||'';
+      if(mode==='edit') editId=prefill.id;
+      $('#sh_title').value = (mode==='duplicate' && prefill.title) ? (prefill.title+' (Copy)') : (prefill.title||'');
       try{
-        const dt = prefill.date ? new Date(prefill.date) : null;
-        if(dt){
-          const iso = dt.toISOString().slice(0,16);
+        if(prefill.date){
+          const d=new Date(prefill.date);
+          const iso = new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);
           $('#sh_dt').value = iso;
         }
       }catch{}
       if(prefill.venue){
-        selectedVenueId = prefill.venue.id;
+        selectedVenueId=prefill.venue.id;
         $('#venue_search').value = prefill.venue.name + (prefill.venue.city?(' – '+prefill.venue.city):'');
       }
       if(prefill.imageUrl){ posterUrl=prefill.imageUrl; prev.src=posterUrl; prev.style.display='inline-block'; removeImg.style.display='inline-block'; }
       if(prefill.descriptionHtml){ $('#desc').innerHTML=prefill.descriptionHtml; }
-      // enable tickets area if editing existing
-      if(mode==='edit'){ $('#ticketsCard').style.display='block'; }
     }
 
-    // save show shell or update
+    // save
     $('#saveShell').addEventListener('click', async ()=>{
       $('#err').textContent='';
       const payload={
@@ -380,26 +267,21 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
         $('#err').textContent='Title, date/time, venue and description are required.'; return;
       }
       try{
-        let out;
         if(editId){
-          out = await j('/admin/shows/'+encodeURIComponent(editId),{
+          await j('/admin/shows/'+encodeURIComponent(editId),{
             method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
           });
         }else{
-          out = await j('/admin/shows',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
-          editId = out.id;
+          const out = await j('/admin/shows',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+          editId = out?.id || null;
         }
-        // reveal tickets area
-        $('#ticketsCard').style.display='block';
-        $('#addPaid').disabled = false;
-        $('#addFree').disabled = false;
-        $('#finish').disabled = false;
-        // optionally load existing tickets into #trows here…
+        // once saved, jump to tickets screen later; for now go back to list:
+        go('shows_current');
       }catch(e){ $('#err').textContent=e.message||'Failed to save show'; }
     });
   }
 
-  // list view
+  // ---------- LIST ----------
   async function shows_current(){
     setMain(\`
       <div class="card">
@@ -417,7 +299,11 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
         $('#lerr').textContent='';
         const jn=await j('/admin/shows');
         const tb=$('#tbody');
+        SHOW_CACHE = new Map();
+        (jn.items||[]).forEach(s=>SHOW_CACHE.set(s.id,s));
+
         if(!jn.items || !jn.items.length){ tb.innerHTML='<tr><td colspan="7" class="muted">No events yet.</td></tr>'; return; }
+
         tb.innerHTML = jn.items.map(s=>{
           const dt = s.date ? new Date(s.date) : null;
           const uk = dt ? dt.toLocaleString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
@@ -428,14 +314,14 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
           const pct = total ? Math.round((sold/total)*100) : 0;
           return \`
             <tr data-id="\${s.id}">
-              <td>\${s.title}</td>
+              <td>\${s.title||''}</td>
               <td>\${uk}</td>
               <td>\${s.venue ? (s.venue.name+(s.venue.city?' – '+s.venue.city:'')) : ''}</td>
               <td>
-                <div class="chip">\${total} total</div>
-                <div class="chip">Sold \${sold}</div>
-                <div class="chip">Hold \${hold}</div>
-                <div class="chip">Avail \${avail}</div>
+                <span class="chip">\${total} total</span>
+                <span class="chip">Sold \${sold}</span>
+                <span class="chip">Hold \${hold}</span>
+                <span class="chip">Avail \${avail}</span>
                 <div class="barwrap" style="margin-top:6px;width:160px"><div class="bar" style="width:\${pct}%"></div></div>
               </td>
               <td>£\${(s.stats?.grossFace||0).toFixed(2)}</td>
@@ -449,7 +335,7 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
               </td>
             </tr>\`;
         }).join('');
-        // kebab menus + actions
+
         tb.querySelectorAll('.kebab').forEach(btn=>{
           btn.addEventListener('click', (e)=>{
             const tr=e.target.closest('tr');
@@ -467,10 +353,11 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
           a.addEventListener('click', (e)=>{
             e.preventDefault();
             const tr = a.closest('tr'); const id = tr.getAttribute('data-id');
+            const prefill = SHOW_CACHE.get(id) || null;
             if(a.getAttribute('data-act')==='edit'){
-              go('shows_edit',{id});
+              go('shows_edit',{id, prefill});
             }else{
-              go('shows_duplicate',{id});
+              go('shows_duplicate',{id, prefill});
             }
           });
         });
@@ -480,15 +367,15 @@ router.get('/ui', requireAdminOrOrganiser, async (_req, res) => {
     load();
   }
 
-  // stubs for other sections (keep existing functionality)
+  // stubs
   function orders(){ setMain('<div class="card"><div class="title">Orders</div><div class="muted">Use the Orders view to search & export.</div></div>'); }
   function venues(){ setMain('<div class="card"><div class="title">Venues</div><div class="muted">Use the Venues tab to add/search venues.</div></div>'); }
   function analytics(){ setMain('<div class="card"><div class="title">Analytics</div><div class="muted">Charts coming soon.</div></div>'); }
   function audiences(){ setMain('<div class="card"><div class="title">Audiences</div><div>Coming soon.</div></div>'); }
   function email(){ setMain('<div class="card"><div class="title">Email Campaigns</div><div>Coming soon.</div></div>'); }
 
-  // initial view
-  go('shows_create');
+  // boot
+  go('shows_current');
 })();
 </script>
 </body>
