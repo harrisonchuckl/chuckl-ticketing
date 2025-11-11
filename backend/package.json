@@ -5,15 +5,15 @@
   "main": "dist/start.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/start.js"
+    "start": "node dist/start.js",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
-      "@aws-sdk/client-s3": "^3.624.0",
+    "@aws-sdk/client-s3": "^3.624.0",
     "@aws-sdk/lib-storage": "^3.624.0",
-    "busboy": "^1.6.0",
-     "sharp": "^0.33.4",
     "@prisma/client": "^5.22.0",
     "bcryptjs": "^2.4.3",
+    "busboy": "^1.6.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -24,8 +24,10 @@
     "morgan": "^1.10.1",
     "nodemailer": "^6.10.1",
     "pdfkit": "^0.15.2",
+    "prisma": "^5.22.0",
     "qrcode": "^1.5.4",
     "resend": "^3.5.0",
+    "sharp": "^0.33.4",
     "stripe": "^16.6.0"
   },
   "devDependencies": {
@@ -37,7 +39,6 @@
     "@types/node": "^20.12.7",
     "@types/nodemailer": "^7.0.3",
     "@types/pdfkit": "^0.13.6",
-    "prisma": "^5.22.0",
     "typescript": "^5.6.2"
   }
 }
