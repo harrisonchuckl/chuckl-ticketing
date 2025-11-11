@@ -7,12 +7,12 @@ import crypto from "node:crypto";
 
 const router = Router();
 
-// ---- Env checks ----
+// ---- Required env ----
 const R2_ENDPOINT = process.env.R2_ENDPOINT;        // e.g. https://<accountid>.r2.cloudflarestorage.com
 const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
 const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
 const R2_BUCKET = process.env.R2_BUCKET;            // e.g. chuckl-posters
-const R2_PUBLIC_BASE = process.env.R2_PUBLIC_BASE;  // e.g. https://pub-xxxxxxxxxxx.r2.dev   (NO trailing slash)
+const R2_PUBLIC_BASE = process.env.R2_PUBLIC_BASE;  // e.g. https://pub-xxxxxxxxxxxxxx.r2.dev (NO trailing slash)
 
 if (!R2_ENDPOINT || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BUCKET || !R2_PUBLIC_BASE) {
   console.warn("[uploads] Missing one or more R2 env vars.");
@@ -45,36 +45,33 @@ router.post("/", async (req, res) => {
     const bb = Busboy({
       headers: req.headers,
       limits: {
-        files: 1,            // allow a single poster file
+        files: 1,
         fields: 0,
         fileSize: 12 * 1024 * 1024, // 12MB
-        // NOTE: 'parts' is NOT valid in the type, so we don't set it
       },
     });
 
     let fileHandled = false;
 
-    // Optional: limit events (not in TS defs, so cast)
+    // These events exist at runtime but aren't in the TS defs; cast to any.
     (bb as any).on("filesLimit", () => {
-      res.status(413).json({ ok: false, error: "Too many files" });
-      req.unpipe(bb);
+      if (!res.headersSent) res.status(413).json({ ok: false, error: "Too many files" });
+      (req as any).unpipe(bb as any);
     });
     (bb as any).on("fieldsLimit", () => {
-      res.status(400).json({ ok: false, error: "Too many fields" });
-      req.unpipe(bb);
+      if (!res.headersSent) res.status(400).json({ ok: false, error: "Too many fields" });
+      (req as any).unpipe(bb as any);
     });
 
     bb.on("file", async (_name, file, info) => {
       if (fileHandled) {
-        // Drain any extra data if client sent >1 file
-        file.resume();
+        file.resume(); // drain extras
         return;
       }
       fileHandled = true;
 
       const { filename, mimeType } = info;
 
-      // Accept common image types
       const allowed = new Set([
         "image/jpeg",
         "image/png",
@@ -89,26 +86,18 @@ router.post("/", async (req, res) => {
       }
 
       try {
-        // Convert to WebP, reasonable defaults
-        const processed = await sharp()
-          .webp({ quality: 90 })
-          .toBuffer({ resolveWithObject: true });
-
-        // Stream -> sharp pipeline -> buffer
-        const bufPromise = new Promise<Buffer>((resolve, reject) => {
+        // Pipe upload -> sharp(webp) -> buffer
+        const body: Buffer = await new Promise((resolve, reject) => {
           const chunks: Buffer[] = [];
-          const transform = sharp().webp({ quality: 90 });
+          const t = sharp().webp({ quality: 90 });
 
           file.on("error", reject);
-          transform.on("error", reject);
+          t.on("error", reject);
+          t.on("data", (c) => chunks.push(c as Buffer));
+          t.on("end", () => resolve(Buffer.concat(chunks)));
 
-          transform.on("data", (c) => chunks.push(c as Buffer));
-          transform.on("end", () => resolve(Buffer.concat(chunks)));
-
-          file.pipe(transform);
+          file.pipe(t);
         });
-
-        const body = await bufPromise;
 
         const key = `posters/${todayPrefix()}/${crypto.randomUUID()}.webp`;
 
@@ -118,15 +107,14 @@ router.post("/", async (req, res) => {
             Key: key,
             Body: body,
             ContentType: "image/webp",
-            // R2 ignores ACL for public; public access is via bucket setting + public URL
           })
         );
 
         const url = `${R2_PUBLIC_BASE}/${key}`;
         return res.json({ ok: true, key, url, name: filename });
-      } catch (err: any) {
+      } catch (err) {
         console.error("[uploads] processing/upload error:", err);
-        return res.status(500).json({ ok: false, error: "Image processing/upload failed" });
+        if (!res.headersSent) return res.status(500).json({ ok: false, error: "Image processing/upload failed" });
       }
     });
 
@@ -136,17 +124,16 @@ router.post("/", async (req, res) => {
     });
 
     bb.on("finish", () => {
-      // If no file was sent
       if (!fileHandled && !res.headersSent) {
         res.status(400).json({ ok: false, error: "No file uploaded" });
       }
     });
 
-    // IMPORTANT: pipe the request -> busboy (Readable -> Writable)
-    req.pipe(bb);
-  } catch (e: any) {
+    // Cast Busboy to a WritableStream for TS; runtime is fine.
+    (req as any).pipe(bb as any);
+  } catch (e) {
     console.error("[uploads] unexpected:", e);
-    res.status(500).json({ ok: false, error: "Unexpected server error" });
+    if (!res.headersSent) res.status(500).json({ ok: false, error: "Unexpected server error" });
   }
 });
 
