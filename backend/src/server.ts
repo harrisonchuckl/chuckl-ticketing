@@ -1,4 +1,3 @@
-// backend/src/server.ts
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
@@ -13,8 +12,8 @@ import events from './routes/events.js';
 import publicUI from './routes/public-ui.js';
 import imageProxy from './routes/image-proxy.js';
 
-// Upload API (S3/R2)
-import uploadRoute from './routes/upload.js';
+// Uploads (new)
+import uploadRoute from './routes/uploads.js';
 
 // Auth
 import auth from './routes/auth.js';
@@ -40,7 +39,7 @@ const app = express();
 // Behind Railway/Proxy
 app.set('trust proxy', 'loopback');
 
-// CORS — allow credentials and let Railway/your domain pass through
+// CORS (allow cookies for admin)
 app.use(cors({ origin: true, credentials: true }));
 
 app.use(morgan('tiny'));
@@ -49,23 +48,23 @@ app.use(cookieParser());
 // Stripe webhooks need raw body
 app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), webhook);
 
-// Everything else as JSON (non-multipart)
-app.use(express.json({ limit: '2mb' }));
+// Everything else as JSON
+app.use(express.json({ limit: '2mb' })); // bump to 2MB for admin payloads
 
-// ---------- Public / customer JSON routes ----------
+// --- File upload API (multipart) ---
+app.use('/api/upload', uploadRoute);
+
+// --- Public / customer JSON routes ---
 app.use('/events', events);
 app.use('/checkout', checkout);
 
-// ---------- Public HTML UI ----------
+// --- Public HTML UI ---
 app.use('/public', publicUI);
 
-// ---------- Image proxy (resizes & caches to R2) ----------
+// --- Image proxy (resizes & caches to R2) ---
 app.use('/', imageProxy);
 
-// ---------- File upload endpoint (multipart/form-data) ----------
-app.use('/api/upload', uploadRoute);
-
-// ---------- Auth routes (UI + JSON) ----------
+// --- Auth routes (UI + JSON) ---
 app.use('/auth', loginUI);     // GET /auth/login (HTML)
 app.use('/auth', auth);        // POST /auth/login etc (JSON)
 app.use('/auth', authLogout);  // GET /auth/logout -> redirect to /auth/login
@@ -73,7 +72,7 @@ app.use('/auth', authLogout);  // GET /auth/logout -> redirect to /auth/login
 // ⚠️ TEMP: bootstrap first user (remove after successful login)
 app.use('/auth', bootstrap);
 
-// Light rate limit for admin areas
+// Light rate limit for admin
 const limiter = rateLimit({
   windowMs: 60_000,
   limit: 120,
@@ -82,10 +81,10 @@ const limiter = rateLimit({
 });
 app.use(['/scan', '/admin'], limiter);
 
-// ---------- Admin UI first so unauth users see HTML not JSON ----------
+// --- Admin UI first so unauth users see HTML not JSON ---
 app.use('/admin', adminUI);
 
-// ---------- Admin JSON APIs ----------
+// --- Admin JSON APIs ---
 app.use('/admin', adminVenues);
 app.use('/admin', adminShows);
 app.use('/admin', adminTicketTypes);
