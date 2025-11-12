@@ -1,63 +1,43 @@
-import { Router } from 'express';
-import prisma from '../lib/prisma.js';
-import { requireAdminOrOrganiser } from '../lib/authz.js';
+import { Router } from "express";
+import prisma from "../lib/prisma.js";
+import { requireAdminOrOrganiser } from "../lib/authz.js";
 
 const router = Router();
 
-/**
- * GET /admin/venues?q=
- * Simple, case-insensitive search over name/city/postcode.
- */
-router.get('/venues', requireAdminOrOrganiser, async (req, res) => {
+/** GET /admin/venues?q= — search name/city/postcode */
+router.get("/venues", requireAdminOrOrganiser, async (req, res) => {
   try {
-    const q = (String(req.query.q || '').trim()) || null;
+    const q = (String(req.query.q || "").trim()) || null;
 
     const where = q
       ? {
           OR: [
-            { name: { contains: q, mode: 'insensitive' as const } },
-            { city: { contains: q, mode: 'insensitive' as const } },
-            { postcode: { contains: q, mode: 'insensitive' as const } },
+            { name: { contains: q, mode: "insensitive" as const } },
+            { city: { contains: q, mode: "insensitive" as const } },
+            { postcode: { contains: q, mode: "insensitive" as const } },
           ],
         }
       : undefined;
 
     const items = await prisma.venue.findMany({
       where,
-      orderBy: [{ name: 'asc' }],
-      select: {
-        id: true,
-        name: true,
-        address: true,
-        city: true,
-        postcode: true,
-        capacity: true,
-      },
+      orderBy: [{ name: "asc" }],
+      select: { id: true, name: true, address: true, city: true, postcode: true, capacity: true },
     });
 
     res.json({ ok: true, items });
   } catch (e) {
-    console.error('GET /admin/venues failed', e);
-    res.status(500).json({ ok: false, error: 'Failed to load venues' });
+    console.error("GET /admin/venues failed", e);
+    res.status(500).json({ ok: false, error: "Failed to load venues" });
   }
 });
 
-/**
- * POST /admin/venues
- * Create a venue (shared across all users).
- */
-router.post('/venues', requireAdminOrOrganiser, async (req, res) => {
+/** POST /admin/venues — create a venue */
+router.post("/venues", requireAdminOrOrganiser, async (req, res) => {
   try {
-    const {
-      name,
-      address,
-      city,
-      postcode,
-      capacity,
-    } = req.body || {};
-
-    if (!name || String(name).trim() === '') {
-      return res.status(400).json({ ok: false, error: 'Name is required' });
+    const { name, address, city, postcode, capacity } = req.body || {};
+    if (!name || String(name).trim() === "") {
+      return res.status(400).json({ ok: false, error: "Name is required" });
     }
 
     const created = await prisma.venue.create({
@@ -68,20 +48,13 @@ router.post('/venues', requireAdminOrOrganiser, async (req, res) => {
         postcode: postcode ? String(postcode).trim() : null,
         capacity: capacity != null ? Number(capacity) : null,
       },
-      select: {
-        id: true,
-        name: true,
-        address: true,
-        city: true,
-        postcode: true,
-        capacity: true,
-      },
+      select: { id: true, name: true, address: true, city: true, postcode: true, capacity: true },
     });
 
     res.json({ ok: true, venue: created });
   } catch (e) {
-    console.error('POST /admin/venues failed', e);
-    res.status(500).json({ ok: false, error: 'Failed to create venue' });
+    console.error("POST /admin/venues failed", e);
+    res.status(500).json({ ok: false, error: "Failed to create venue" });
   }
 });
 
