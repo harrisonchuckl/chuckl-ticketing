@@ -31,7 +31,7 @@ enum TicketStatus {
   SOLD
   REFUNDED
   EXTERNAL_ALLOCATED
-  USED         // needed by scanner route
+  USED
 }
 
 enum SeatStatus {
@@ -51,11 +51,11 @@ model User {
   id                 String       @id @default(cuid())
   email              String       @unique
   name               String?
-  password           String?      // legacy (some routes read this)
+  password           String?
   passwordHash       String?
   role               Role         @default(CUSTOMER)
 
-  organiserSplitBps  Int?         // legacy field used in exports/checkout/etc
+  organiserSplitBps  Int?
 
   orders             Order[]
   seatHolds          SeatHold[]
@@ -68,10 +68,8 @@ model User {
 model Venue {
   id                String             @id @default(cuid())
   name              String
-  capacity          Int?               // legacy
-  // legacy convenience field some routes select as 'address'
+  capacity          Int?
   address           String?
-  // granular address fields (optional)
   city              String?
   postcode          String?
   addressLine1      String?
@@ -89,9 +87,8 @@ model Show {
   id              String        @id @default(cuid())
   title           String
   date            DateTime
-  status          String?                // DRAFT / ON_SALE / CLOSED, etc.
+  status          String?
 
-  // both fields kept for compatibility with different routes
   description     String?
   descriptionHtml String?
 
@@ -105,7 +102,10 @@ model Show {
   seats           ShowSeat[]
   orderItems      OrderItem[]
   seatHolds       SeatHold[]
-  orders          Order[]       // legacy: some routes expect Show.count({ select: { orders: true }})
+  orders          Order[]
+
+  // inverse for legacy SeatMap relation
+  seatMaps        SeatMap[]
 
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
@@ -120,16 +120,13 @@ model TicketType {
   show            Show       @relation(fields: [showId], references: [id])
 
   name            String
-
-  // legacy integer price used across routes
   pricePence      Int        @default(0)
 
-  // newer decimal fields retained as well
   facePrice       Decimal    @db.Decimal(10, 2)
   fee             Decimal    @db.Decimal(10, 2) @default(0)
 
   allocationTotal Int        @default(0)
-  available       Int        @default(0)        // some routes read `available`
+  available       Int        @default(0)
   maxPerOrder     Int?
 
   tickets         Ticket[]
@@ -159,7 +156,6 @@ model Ticket {
   status      TicketStatus  @default(AVAILABLE)
   pricePaid   Decimal?      @db.Decimal(10, 2)
 
-  // scanner + lookup legacy fields
   serial      String?       @unique
   scannedAt   DateTime?
 
@@ -180,23 +176,19 @@ model Order {
   email               String
   status              OrderStatus   @default(PENDING)
 
-  // newer fields already used in some routes
   totalGross          Decimal       @db.Decimal(10, 2) @default(0)
   totalFees           Decimal       @db.Decimal(10, 2) @default(0)
 
-  // legacy integer financial fields (used heavily in routes)
-  amountPence         Int?          // order total in pence
+  amountPence         Int?
   platformFeePence    Int?
   organiserSharePence Int?
   paymentFeePence     Int?
   netPayoutPence      Int?
   stripeId            String?
 
-  // legacy: some routes treat an order as tied to a single show
   showId              String?
   show                Show?         @relation(fields: [showId], references: [id])
 
-  // legacy: some routes read quantity directly on Order
   quantity            Int?
 
   items               OrderItem[]
@@ -224,7 +216,7 @@ model OrderItem {
   quantity      Int         @default(1)
   unitPrice     Decimal     @db.Decimal(10, 2)
   fees          Decimal     @db.Decimal(10, 2) @default(0)
-  amountPence   Int?        // legacy helper
+  amountPence   Int?
 
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
@@ -240,7 +232,7 @@ model Refund {
   order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   amountPence  Int
   reason       String?
-  processorId  String?  // e.g. Stripe refund id
+  processorId  String?
   createdAt    DateTime @default(now())
 
   @@index([orderId])
@@ -353,29 +345,29 @@ model SeatHold {
 }
 
 // =========================
-// Legacy seatmap models (to satisfy existing routes)
+// Legacy seatmap models (for existing routes)
 // =========================
 
 model SeatMap {
-  id        String   @id @default(cuid())
-  showId    String?
-  show      Show?    @relation(fields: [showId], references: [id])
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  showId       String?
+  show         Show?    @relation(fields: [showId], references: [id])
+  name         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  seats     Seat[]
-  allocations ExternalAllocation[]
+  seats        Seat[]
+  allocations  ExternalAllocation[]
 
   @@index([showId])
 }
 
 model Seat {
-  id        String   @id @default(cuid())
-  seatMapId String
-  seatMap   SeatMap  @relation(fields: [seatMapId], references: [id])
+  id         String   @id @default(cuid())
+  seatMapId  String
+  seatMap    SeatMap  @relation(fields: [seatMapId], references: [id])
 
-  label     String
+  label      String
   row       String?
   number    Int?
   x         Int?
@@ -383,31 +375,32 @@ model Seat {
   status    SeatStatus @default(AVAILABLE)
 
   createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  updatedAt DateTime  @default(now())
 
   allocationSeats AllocationSeat[]
 }
 
 model ExternalAllocation {
-  id        String   @id @default(cuid())
-  showId    String?
-  show      Show?    @relation(fields: [showId], references: [id])
+  id          String   @id @default(cuid())
+  seatMapId   String
+  seatMap     SeatMap  @relation(fields: [seatMapId], references: [id])
+  name        String
+  createdAt   DateTime @default(now())
 
-  name      String
-  createdAt DateTime @default(now())
+  seats       AllocationSeat[]
 
-  seats     AllocationSeat[]
+  @@index([seatMapId])
 }
 
 model AllocationSeat {
-  id           String            @id @default(cuid())
+  id           String             @id @default(cuid())
   allocationId String
   allocation   ExternalAllocation @relation(fields: [allocationId], references: [id], onDelete: Cascade)
 
   seatId       String
   seat         Seat               @relation(fields: [seatId], references: [id], onDelete: Cascade)
 
-  createdAt    DateTime          @default(now())
+  createdAt    DateTime           @default(now())
 
   @@index([allocationId])
   @@index([seatId])
