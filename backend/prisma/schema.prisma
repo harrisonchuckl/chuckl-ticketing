@@ -1,3 +1,28 @@
+/// ===============================
+/// Prisma schema for Chuckl Ticketing
+/// ===============================
+
+generator client {
+  provider = "prisma-client-js"
+  // previewFeatures = []
+}
+
+datasource db {
+  provider = "postgresql"
+  // During `prisma generate` Prisma only needs this env var to EXIST.
+  // Your real runtime URL comes from the deployment environment.
+  url = env("DB_URL")
+}
+
+/// ======================================================================
+/// KEEP THE REST OF YOUR EXISTING MODELS IN THIS FILE AS WELL.
+/// Paste/retain all other models (Order, Show, Venue, Seat, SeatMapZone,
+/// TicketType, User, etc.) exactly as you already have them. The blocks
+/// below are the UPDATED ones you asked for.
+/// ======================================================================
+
+
+
 // ----------------------
 // Refund (updated block)
 // ----------------------
@@ -92,3 +117,8 @@ model AllocationSeat {
   @@index([allocationId])
   @@index([seatId])
 }
+
+/// ======================================================================
+/// END OF UPDATED BLOCKS
+/// Keep/retain ALL your other existing models in this same file.
+/// ======================================================================
