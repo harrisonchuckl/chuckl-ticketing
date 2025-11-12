@@ -1,4 +1,3 @@
-// backend/src/server.ts
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
@@ -40,16 +39,17 @@ import adminSeatmaps from './routes/admin-seatmaps.js';
 
 const app = express();
 
-// Behind Railway/Proxy
+// If behind Railway/Cloud Run/other proxy
 app.set('trust proxy', 'loopback');
 
 // CORS (loose by default; tighten origin as needed)
 app.use(cors({ origin: true, credentials: true }));
 
+// Logging & cookies
 app.use(morgan('tiny'));
 app.use(cookieParser());
 
-// Stripe webhooks need raw body
+// --- Stripe webhooks need RAW body BEFORE any JSON middleware ---
 app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), webhook);
 
 // Everything else as JSON
@@ -76,7 +76,7 @@ app.use('/auth', authLogout);  // GET /auth/logout -> redirect to /auth/login
 // ⚠️ TEMP: bootstrap first user (remove after successful login)
 app.use('/auth', bootstrap);
 
-// Light rate limit for admin
+// Light rate limit for admin endpoints
 const limiter = rateLimit({
   windowMs: 60_000,
   limit: 120,
