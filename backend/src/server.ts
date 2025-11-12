@@ -17,6 +17,7 @@ import imageProxyRouter from "./routes/image-proxy.js";
 import adminUploadsRouter from "./routes/admin-uploads.js";
 import adminUiRouter from "./routes/admin-ui.js";
 import adminVenuesRouter from "./routes/admin-venues.js";
+import adminShowsRouter from "./routes/admin-shows.js";
 
 const app = express();
 
@@ -26,7 +27,7 @@ app.set("trust proxy", 1);
 // Core middleware
 app.use(
   cors({
-    origin: "*", // tighten later if you switch to cookie auth from a specific origin
+    origin: "*",
     credentials: true,
   })
 );
@@ -60,15 +61,17 @@ app.use("/public/orders", publicOrdersRouter);
 app.use("/uploads", uploadsRouter);
 app.use("/image-proxy", imageProxyRouter);
 
-// Uploads (new) – the route inside is `/poster`
+// Uploads (new): accept POST /admin/uploads (and /admin/uploads/poster)
 app.use("/admin/uploads", adminUploadsRouter);
-// Back-compat alias some older UI used
+
+// Back-compat alias some older UI used (/api/upload → same handler)
 app.use("/api/upload", adminUploadsRouter);
 
-// Admin API bits
+// Admin APIs
 app.use("/admin", adminVenuesRouter);
+app.use("/admin", adminShowsRouter);
 
-// Admin Console SPA shell at /admin/ui/*
+// Admin Console SPA at /admin/ui/*
 app.use("/admin", adminUiRouter);
 
 // 404 handler (JSON)
