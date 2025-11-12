@@ -1,39 +1,40 @@
-# ---------- prod deps (only production node_modules) ----------
+# ---------- prod deps (production node_modules + Prisma client) ----------
 FROM node:20-bullseye-slim AS proddeps
 WORKDIR /app/backend
 
-# Copy package manifests and Prisma schema BEFORE install so prisma generate can run here
+# Copy package manifests and Prisma schema first for better caching
 COPY backend/package*.json ./
 COPY backend/prisma ./prisma
 
-# Install prod deps only
-RUN npm install --omit=dev
+# If you have a package-lock.json, prefer npm ci. If not, swap to `npm install --omit=dev`
+RUN npm ci --omit=dev || npm install --omit=dev
 
-# Generate Prisma client against prod node_modules
+# Generate Prisma client against production deps
 RUN npx prisma generate --schema=prisma/schema.prisma
+
 
 # ---------- builder (dev deps + build TS) ----------
 FROM node:20-bullseye-slim AS builder
 WORKDIR /app
 
-# Build tools needed for sharp (and friends)
+# Build tools (sharp/pdfkit sometimes need these even with prebuilt binaries)
 RUN apt-get update \
  && apt-get install -y --no-install-recommends python3 build-essential ca-certificates openssl \
  && rm -rf /var/lib/apt/lists/*
 
-# Install all deps for building TS
+# Install all deps for TypeScript build
 COPY backend/package*.json ./backend/
-RUN cd backend && npm install
+RUN cd backend && (npm ci || npm install)
 
-# Copy the rest of the backend source (TS etc.)
+# Copy the rest of the backend source
 COPY backend ./backend
 
-# Prisma generate is not strictly required here because we generated it in proddeps,
-# but harmless if present:
+# (Harmless duplicate; ensures prisma types exist during tsc)
 RUN cd backend && npx prisma generate --schema=prisma/schema.prisma
 
-# Build TypeScript -> dist/
+# Compile TS -> dist/
 RUN cd backend && npm run build
+
 
 # ---------- runtime (distroless, tiny) ----------
 FROM gcr.io/distroless/nodejs20-debian12:nonroot
@@ -42,11 +43,13 @@ WORKDIR /app/backend
 # Copy compiled JS
 COPY --from=builder /app/backend/dist ./dist
 
-# Copy prisma schema (optional) and generated client from proddeps
+# Copy production node_modules (includes @prisma/client and engines) and schema
 COPY --from=proddeps /app/backend/node_modules ./node_modules
 COPY --from=proddeps /app/backend/prisma ./prisma
 
-# Environment (Railway sets PORT), Node distroless uses CMD arg as entry
 ENV NODE_ENV=production
+# Railway will set PORT; your server should read it or default to 4000
 EXPOSE 4000
+
+# Start the app (update if your entry point is different)
 CMD ["dist/start.js"]
