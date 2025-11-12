@@ -1,40 +1,47 @@
 import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
-import * as bcrypt from "bcryptjs";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 const router = Router();
 
 /**
- * POST /bootstrap/admin
- * Body: { email: string, password: string, name?: string }
+ * One-time admin bootstrap endpoint.
+ * Protect with BOOTSTRAP_SECRET (query ?key=...).
  */
-router.post("/admin", async (req, res) => {
-  const { email, password, name } = req.body ?? {};
-  if (!email || !password) {
-    return res.status(400).json({ error: "email and password are required" });
+router.get("/", async (req, res) => {
+  try {
+    // Optional safety key
+    const mustHaveKey = process.env.BOOTSTRAP_SECRET;
+    if (mustHaveKey && req.query.key !== mustHaveKey) {
+      return res.status(403).json({ error: "forbidden" });
     }
 
-  const salt = await bcrypt.genSalt(10);
-  const passwordHash = await bcrypt.hash(String(password), salt);
+    const email = process.env.ADMIN_EMAIL;
+    const password = process.env.ADMIN_PASSWORD;
 
-  const upserted = await prisma.user.upsert({
-    where: { email: String(email) },
-    update: {
-      name: name ?? undefined,
-      role: "admin",
-      passwordHash
-    },
-    create: {
-      email: String(email),
-      name: name ?? null,
-      role: "admin",
-      passwordHash
-    },
-    select: { id: true, email: true, name: true, role: true }
-  });
+    if (!email || !password) {
+      return res.status(400).json({ error: "ADMIN_EMAIL or ADMIN_PASSWORD missing" });
+    }
 
-  return res.json(upserted);
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const user = await prisma.user.upsert({
+      where: { email },
+      update: { passwordHash, role: "admin" },
+      create: {
+        email,
+        name: "Administrator",
+        role: "admin",
+        passwordHash,
+      },
+    });
+
+    return res.json({ ok: true, userId: user.id, email: user.email });
+  } catch (err: any) {
+    console.error(err);
+    return res.status(500).json({ error: "bootstrap_failed" });
+  }
 });
 
 export default router;
