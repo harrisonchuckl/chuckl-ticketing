@@ -9,19 +9,114 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  // During `prisma generate` Prisma only needs this env var to EXIST.
-  // Your real runtime URL comes from the deployment environment.
+  // Prisma only needs this env var to exist during `prisma generate`.
+  // Your real runtime URL should be provided at runtime/deploy.
   url = env("DB_URL")
 }
 
 /// ======================================================================
-/// KEEP THE REST OF YOUR EXISTING MODELS IN THIS FILE AS WELL.
-/// Paste/retain all other models (Order, Show, Venue, Seat, SeatMapZone,
-/// TicketType, User, etc.) exactly as you already have them. The blocks
-/// below are the UPDATED ones you asked for.
+/// CORE MODELS (minimal but functional so `prisma generate` passes)
+/// You can flesh these out with more fields/indexes later as needed.
 /// ======================================================================
 
+model Order {
+  id         String    @id @default(cuid())
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
+  // Example money fields (pence for accuracy)
+  subtotalPence Int     @default(0)
+  feesPence     Int     @default(0)
+  totalPence    Int     @default(0)
+
+  // Relations
+  refunds Refund[]
+
+  @@index([createdAt])
+}
+
+model Show {
+  id         String    @id @default(cuid())
+  venueId    String?
+  venue      Venue?    @relation(fields: [venueId], references: [id])
+  title      String?
+  startsAt   DateTime?
+
+  // Relations
+  seatMaps          SeatMap[]
+  externalAllocations ExternalAllocation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([venueId])
+  @@index([startsAt])
+}
+
+model Venue {
+  id        String   @id @default(cuid())
+  name      String
+  address1  String?
+  address2  String?
+  city      String?
+  postcode  String?
+  country   String?
+
+  // Relations
+  seatMaps  SeatMap[]
+  shows     Show[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([city])
+  @@index([name])
+}
+
+model Seat {
+  id        String   @id @default(cuid())
+
+  seatMapId String
+  seatMap   SeatMap  @relation(fields: [seatMapId], references: [id], onDelete: Cascade)
+
+  // Labels kept as strings so things like "A12" / "Balcony-7" work
+  rowLabel   String?
+  seatNumber String?
+  level      String?
+
+  isAvailable Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Optional: connect allocation seats back to physical seat (not required)
+  allocationSeats AllocationSeat[]
+
+  @@index([seatMapId])
+  @@index([rowLabel, seatNumber])
+}
+
+model SeatMapZone {
+  id        String  @id @default(cuid())
+
+  seatMapId String
+  seatMap   SeatMap @relation(fields: [seatMapId], references: [id], onDelete: Cascade)
+
+  name       String
+  // Optional styling / pricing helpers
+  colorHex   String?   // e.g. "#0ea5e9"
+  pricePence Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([seatMapId])
+  @@index([name])
+}
+
+/// ======================================================================
+/// YOUR UPDATED BLOCKS (from your message)
+/// ======================================================================
 
 // ----------------------
 // Refund (updated block)
@@ -107,6 +202,7 @@ model AllocationSeat {
   allocationId String
 
   allocation   ExternalAllocation @relation(fields: [allocationId], references: [id], onDelete: Cascade)
+  seat         Seat?              @relation(fields: [seatId], references: [id], onDelete: Cascade)
 
   rowLabel   String?
   seatNumber String?  // <- keep as string to support labels like "A12"
@@ -117,8 +213,3 @@ model AllocationSeat {
   @@index([allocationId])
   @@index([seatId])
 }
-
-/// ======================================================================
-/// END OF UPDATED BLOCKS
-/// Keep/retain ALL your other existing models in this same file.
-/// ======================================================================
