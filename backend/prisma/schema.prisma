@@ -33,7 +33,8 @@ model User {
   organiserSplitBps Int?
 
   orders         Order[]
-  showsOrganised Show[] @relation("OrganiserShows")
+  showsOrganised Show[]  @relation("OrganiserShows")
+  tickets        Ticket[] // <-- back-relation for Ticket.user
 }
 
 model Venue {
@@ -232,7 +233,7 @@ model ExternalAllocation {
 
   source    String
   label     String?
-  externalPlatform String? // sometimes set by routes
+  externalPlatform String?
   quantity  Int
 
   seats     AllocationSeat[]
