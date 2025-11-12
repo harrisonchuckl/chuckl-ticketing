@@ -4,6 +4,65 @@ import prisma from '../lib/prisma.js';
 
 const router = Router();
 
+/** ---------- Helpers ---------- */
+function parseDateFlexible(input: string): Date | null {
+  if (!input) return null;
+  // Allow YYYY-MM-DD or full ISO
+  if (/^\d{4}-\d{2}-\d{2}/.test(input)) {
+    const d = new Date(input);
+    return isNaN(+d) ? null : d;
+  }
+  // Allow DD/MM/YYYY
+  const m = input.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (m) {
+    const [, dd, mm, yyyy] = m;
+    const d = new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd), 19, 0, 0)); // 7pm UTC so UK dates don’t slip
+    return isNaN(+d) ? null : d;
+  }
+  const d = new Date(input);
+  return isNaN(+d) ? null : d;
+}
+
+/**
+ * POST /events
+ * Creates a new show and returns its id.
+ * Body: { title: string, venueId: string, date: string, description?: string }
+ */
+router.post('/', async (req, res) => {
+  try {
+    const { title, venueId, date, description } = (req.body || {}) as {
+      title?: string; venueId?: string; date?: string; description?: string | null;
+    };
+
+    if (!title || !title.trim()) return res.status(400).json({ ok: false, error: 'title is required' });
+    if (!venueId || !String(venueId).trim()) return res.status(400).json({ ok: false, error: 'venueId is required' });
+    if (!date) return res.status(400).json({ ok: false, error: 'date is required' });
+
+    const when = parseDateFlexible(String(date).trim());
+    if (!when) return res.status(400).json({ ok: false, error: 'invalid date format' });
+
+    // Ensure venue exists (nice error message)
+    const venue = await prisma.venue.findUnique({ where: { id: String(venueId) } });
+    if (!venue) return res.status(404).json({ ok: false, error: 'venue not found' });
+
+    const created = await prisma.show.create({
+      data: {
+        title: String(title).trim(),
+        venueId: String(venueId),
+        date: when,
+        description: description ? String(description).trim() : null,
+        // status: 'DRAFT' // uncomment if you have this field
+      },
+      select: { id: true }
+    });
+
+    return res.status(201).json({ ok: true, showId: created.id });
+  } catch (e) {
+    console.error('POST /events failed', e);
+    res.status(500).json({ ok: false, error: 'Failed to create event' });
+  }
+});
+
 /**
  * GET /events
  * Query:
