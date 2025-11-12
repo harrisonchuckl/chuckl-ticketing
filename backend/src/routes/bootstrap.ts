@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import bcrypt from "bcryptjs";
+import * as bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -14,7 +14,7 @@ router.get("/", async (req: Request, res: Response) => {
     const key = String(req.query.key ?? "");
     const secret = process.env.BOOTSTRAP_KEY ?? "";
 
-    // Hide the existence of this endpoint unless the key matches
+    // Hide if incorrect key or no secret configured
     if (!secret || key !== secret) {
       return res.status(404).json({ error: "Not found" });
     }
@@ -23,12 +23,13 @@ router.get("/", async (req: Request, res: Response) => {
     const password = process.env.BOOTSTRAP_PASSWORD ?? "change-me";
     const name = process.env.BOOTSTRAP_NAME ?? "Admin";
 
-    // Optional organiser split (basis points). Keep undefined if not provided.
-    const splitStr = process.env.BOOTSTRAP_ORGANISER_SPLIT_BPS;
+    // organiser split in basis points (nullable)
+    const splitStr = process.env.BOOTSTRAP_ORGANISER_SPLIT_BPS?.trim();
     const organiserSplitBps =
-      splitStr && splitStr.trim() !== "" ? Number(splitStr) : undefined;
+      splitStr && splitStr !== "" ? parseInt(splitStr, 10) : null;
 
-    const passwordHash = await bcrypt.hash(password, 10);
+    const salt = await bcrypt.genSalt(10);           // <- string salt
+    const passwordHash = await bcrypt.hash(password, salt);
 
     const user = await prisma.user.upsert({
       where: { email },
@@ -52,7 +53,7 @@ router.get("/", async (req: Request, res: Response) => {
       userId: user.id,
       email: user.email,
       role: user.role,
-      organiserSplitBps: user.organiserSplitBps ?? null,
+      organiserSplitBps: user.organiserSplitBps,
     });
   } catch (err) {
     console.error("bootstrap error:", err);
