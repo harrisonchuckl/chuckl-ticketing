@@ -1,324 +1,131 @@
-/// ===============================
-/// Prisma schema for Chuckl Ticketing
-/// ===============================
-
+// prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DB_URL")
+  url      = env("DATABASE_URL")
 }
-
-/// ===============================
-/// Enums
-/// ===============================
-
-enum OrderStatus {
-  PENDING
-  PAID
-  REFUNDED
-  CANCELLED
-}
-
-enum SeatStatus {
-  AVAILABLE
-  HELD
-  SOLD
-  BLOCKED
-}
-
-/// ===============================
-/// Core models
-/// ===============================
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String?
-  passwordHash String?
-  role         String?
+  id               String   @id @default(cuid())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  name             String?
+  email            String   @unique
+  passwordHash     String?
+  role             String?  // "admin" | "organiser" etc.
 
-  orders       Order[]
+  // Used in code
+  organiserSplitBps Int?    // e.g. 1000 == 10%
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  @@index([email])
+  orders  Order[]
+  shows   Show[]   @relation("UserShows")
 }
 
 model Venue {
-  id        String   @id @default(cuid())
-  name      String
-  address1  String?
-  address2  String?
-  city      String?
-  postcode  String?
-  country   String?
-  capacity  Int?
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  name       String
+  // Code sometimes selects 'address'. If your DB has address1/address2/city/postcode,
+  // you can either keep those and change code, or present a single 'address' field:
+  address    String?  // If you already have address1, you can do: address String? @map("address1")
 
-  seatMaps  SeatMap[]
-  shows     Show[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([city])
-  @@index([name])
+  shows      Show[]
 }
 
 model Show {
-  id        String   @id @default(cuid())
-
-  venueId   String?
-  venue     Venue?   @relation(fields: [venueId], references: [id])
-
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
   title       String?
   description String?
   imageUrl    String?
+  date        DateTime
 
-  // Primary date used across routes
-  date      DateTime
+  venueId     String?
+  venue       Venue?   @relation(fields: [venueId], references: [id])
 
-  // Relations
-  ticketTypes         TicketType[]
-  orders              Order[]
-  seatMaps            SeatMap[]
-  externalAllocations ExternalAllocation[]
-  tickets             Ticket[]          // <-- added to satisfy Ticket.show back-relation
+  organiserId String?
+  organiser   User?    @relation("UserShows", fields: [organiserId], references: [id])
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([venueId])
-  @@index([date])
+  ticketTypes TicketType[]
+  orders      Order[]
+  tickets     Ticket[]
 }
 
 model TicketType {
-  id           String   @id @default(cuid())
-  showId       String
-  show         Show     @relation(fields: [showId], references: [id], onDelete: Cascade)
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  name         String
-  pricePence   Int
-  feePence     Int?
+  showId        String
+  show          Show     @relation(fields: [showId], references: [id])
+
+  name          String
+  pricePence    Int
+  feePence      Int?
   quantityTotal Int?
-  quantitySold  Int?    @default(0)
+  quantitySold  Int?
   maxPerOrder   Int?
-  isActive     Boolean  @default(true)
-  sortOrder    Int?
+  isActive      Boolean  @default(true)
+  sortOrder     Int?
 
-  tickets      Ticket[]
+  // Code reads 'available' directly from Prisma type
+  available     Int?     // <- optional computed-ish field you can set/maintain in code
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  @@index([showId])
-  @@index([isActive])
+  tickets       Ticket[]
+  orders        Order[]
 }
 
 model Order {
-  id        String       @id @default(cuid())
+  id               String   @id @default(cuid())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  showId    String
-  show      Show         @relation(fields: [showId], references: [id], onDelete: Cascade)
+  showId           String
+  show             Show     @relation(fields: [showId], references: [id])
 
-  userId    String?
-  user      User?        @relation(fields: [userId], references: [id])
+  userId           String?
+  user             User?    @relation(fields: [userId], references: [id])
 
-  email     String?
-  stripeId  String?
+  ticketTypeId     String?
+  ticketType       TicketType? @relation(fields: [ticketTypeId], references: [id])
 
-  status    OrderStatus  @default(PENDING)
+  // Code expects quantity on Order
+  quantity         Int?
 
-  // Money (pence)
-  amountPence          Int  @default(0)
-  paymentFeePence      Int? @default(0)
-  platformFeePence     Int? @default(0)
-  organiserSharePence  Int? @default(0)
-  netPayoutPence       Int? @default(0)
+  platformFeePence   Int?
+  organiserSharePence Int?
+  paymentFeePence     Int?
+  netPayoutPence      Int?
 
-  // Legacy/other totals used elsewhere
-  subtotalPence Int @default(0)
-  feesPence     Int @default(0)
-  totalPence    Int @default(0)
-
-  tickets   Ticket[]
-  refunds   Refund[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([showId])
-  @@index([userId])
-  @@index([email])
-  @@index([status])
-  @@index([createdAt])
+  tickets          Ticket[]
 }
 
 model Ticket {
-  id           String     @id @default(cuid())
-
-  orderId      String
-  order        Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  id           String   @id @default(cuid())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   showId       String
-  show         Show       @relation(fields: [showId], references: [id], onDelete: Cascade)
+  show         Show     @relation(fields: [showId], references: [id])
+
+  orderId      String
+  order        Order    @relation(fields: [orderId], references: [id])
 
   ticketTypeId String
-  ticketType   TicketType @relation(fields: [ticketTypeId], references: [id], onDelete: Restrict)
-
-  amountPence  Int        @default(0)
-  quantity     Int        @default(1)
+  ticketType   TicketType @relation(fields: [ticketTypeId], references: [id])
 
   seatId       String?
-  seat         Seat?      @relation(fields: [seatId], references: [id], onDelete: SetNull)
+  amountPence  Int
+  quantity     Int       @default(1)
 
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-
-  @@index([orderId])
-  @@index([showId])
-  @@index([ticketTypeId])
-}
-
-/// ===============================
-/// Your updated blocks (kept)
-/// ===============================
-
-model Refund {
-  id          String   @id @default(cuid())
-
-  orderId     String
-  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-
-  /// Amount in pence (column mapped to amountPence)
-  amount      Int      @map("amountPence")
-
-  reason      String?
-  processorId String?
-  stripeId    String?
-
-  // NEW - matches route usage
-  createdBy   String?
-
-  createdAt   DateTime @default(now())
-
-  @@index([orderId])
-}
-
-model SeatMap {
-  id        String   @id @default(cuid())
-  showId    String?
-  show      Show?    @relation(fields: [showId], references: [id])
-  venueId   String?
-  venue     Venue?   @relation(fields: [venueId], references: [id])
-
-  name      String
-  version   Int?
-  isDefault Boolean  @default(false)
-
-  // routes post a layout JSON
-  layout    Json?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  seats       Seat[]
-  allocations ExternalAllocation[]
-  zones       SeatMapZone[]
-
-  @@index([showId])
-  @@index([venueId])
-}
-
-model ExternalAllocation {
-  id        String   @id @default(cuid())
-
-  showId    String?
-  show      Show?    @relation(fields: [showId], references: [id])
-
-  seatMapId String
-  seatMap   SeatMap  @relation(fields: [seatMapId], references: [id])
-
-  label     String
-
-  externalPlatform String?
-  contactEmail     String?
-
-  createdAt DateTime @default(now())
-
-  seats AllocationSeat[]
-
-  @@index([seatMapId])
-  @@index([showId])
-}
-
-model AllocationSeat {
-  id           String   @id @default(cuid())
-  seatId       String
-  allocationId String
-
-  allocation   ExternalAllocation @relation(fields: [allocationId], references: [id], onDelete: Cascade)
-  seat         Seat?              @relation(fields: [seatId], references: [id], onDelete: Cascade)
-
-  rowLabel   String?
-  seatNumber String?
-  level      String?
-
-  createdAt  DateTime @default(now())
-
-  @@index([allocationId])
-  @@index([seatId])
-}
-
-model Seat {
-  id         String      @id @default(cuid())
-
-  seatMapId  String
-  seatMap    SeatMap     @relation(fields: [seatMapId], references: [id], onDelete: Cascade)
-
-  label      String?
-  kind       String?
-
-  rowLabel   String?
-  seatNumber String?
-  level      String?
-
-  status     SeatStatus  @default(AVAILABLE)
-
-  zoneId     String?
-  zone       SeatMapZone? @relation(fields: [zoneId], references: [id], onDelete: SetNull)
-
-  isAvailable Boolean @default(true)
-
-  allocationSeats AllocationSeat[]
-  tickets     Ticket[]
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@index([seatMapId])
-  @@index([zoneId])
-  @@index([rowLabel, seatNumber])
-}
-
-model SeatMapZone {
-  id        String  @id @default(cuid())
-
-  seatMapId String
-  seatMap   SeatMap @relation(fields: [seatMapId], references: [id], onDelete: Cascade)
-
-  name       String
-  colorHex   String?
-  pricePence Int?
-
-  seats      Seat[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([seatMapId])
-  @@index([name])
+  // Fields your code uses in email/scan/services
+  serial       String?   @unique
+  status       String?   // e.g. "ISSUED" | "SCANNED" | "CANCELLED"
+  scannedAt    DateTime?
+  holderName   String?
 }
