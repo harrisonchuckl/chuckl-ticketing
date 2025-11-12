@@ -1,11 +1,10 @@
-// backend/src/server.ts
 import express from "express";
 import cors from "cors";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import cookieParser from "cookie-parser";
 
-// ---- Routers that already exist in your repo ----
+// ---- Routers (these already exist in your repo) ----
 import authRouter from "./routes/auth.js";
 import bootstrapRouter from "./routes/bootstrap.js";
 import checkoutRouter from "./routes/checkout.js";
@@ -15,19 +14,19 @@ import adminUploadsRouter from "./routes/admin-uploads.js";
 import uploadsRouter from "./routes/uploads.js";
 import imageProxyRouter from "./routes/image-proxy.js";
 
-// ✅ NEW: Admin UI SPA router
+// NEW: admin UI
 import adminUiRouter from "./routes/admin-ui.js";
 
 const app = express();
 
-// if running behind a proxy (Railway/Cloud Run/ALB/etc.)
+// behind a proxy/load balancer (Cloud Run/ALB/etc.)
 app.set("trust proxy", 1);
 
 // Core middleware
 app.use(
   cors({
-    origin: "*", // tighten this if you use cookie auth with specific origins
-    credentials: true
+    origin: "*",
+    credentials: true,
   })
 );
 app.use(morgan("dev"));
@@ -41,7 +40,7 @@ app.use(
     windowMs: 60 * 1000,
     limit: 200,
     standardHeaders: true,
-    legacyHeaders: false
+    legacyHeaders: false,
   })
 );
 
@@ -49,7 +48,7 @@ app.use(
 app.get("/healthz", (_req, res) => res.status(200).send("ok"));
 app.get("/readyz", (_req, res) => res.status(200).send("ready"));
 
-// ---- API routers ----
+// Mount API routers
 app.use("/auth", authRouter);
 app.use("/bootstrap", bootstrapRouter);
 app.use("/checkout", checkoutRouter);
@@ -59,14 +58,10 @@ app.use("/admin/uploads", adminUploadsRouter);
 app.use("/uploads", uploadsRouter);
 app.use("/image-proxy", imageProxyRouter);
 
-// ---- Admin UI (SPA) ----
-// Helpful shortcut so /admin takes you to the UI home
-app.get("/admin", (_req, res) => res.redirect(302, "/admin/ui/home"));
+// Mount the Admin UI shell LAST so it acts as a catch-all under /admin/ui
+app.use("/admin/ui", adminUiRouter);
 
-// Mount the SPA shell + sub-routes (served by admin-ui.ts)
-app.use("/admin", adminUiRouter);
-
-// 404 handler (must be last)
+// 404 handler (for anything not matched above)
 app.use((_req, res) => res.status(404).json({ error: "Not found" }));
 
 export default app;
