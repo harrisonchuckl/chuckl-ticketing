@@ -1,12 +1,13 @@
 // backend/src/routes/admin-ui.ts
-import { Router } from "express";
-import { requireAdminOrOrganiser } from "../lib/authz.js";
+import { Router } from 'express';
+import { requireAdminOrOrganiser } from '../lib/authz.js';
 
 const router = Router();
 
-router.get(["/ui", "/ui/", "/ui/*"], requireAdminOrOrganiser, (_req, res) => {
-  res.set("Cache-Control", "no-store");
-  res.type("html").send(`<!doctype html>
+// Serve the SPA shell for /admin/ui and any subpath
+router.get(['/ui', '/ui/', '/ui/home', '/ui/*'], requireAdminOrOrganiser, (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.type('html').send(`<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
@@ -42,11 +43,16 @@ router.get(["/ui", "/ui/", "/ui/*"], requireAdminOrOrganiser, (_req, res) => {
   .progress{height:8px;background:#e5e7eb;border-radius:999px;overflow:hidden}
   .bar{height:8px;background:#111827;width:0%}
   .row{display:flex;gap:8px;align-items:center}
-  .kebab{position:relative}
-  .menu{position:absolute;right:0;top:28px;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.08);display:none;min-width:160px}
+  .kbd{font:12px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:6px;padding:2px 6px}
+  .menuWrap{position:relative}
+  .menu{position:absolute;right:0;top:28px;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.08);display:none;min-width:160px;z-index:3}
   .menu.open{display:block}
   .menu a{display:block;padding:8px 10px;text-decoration:none;color:#111827}
   .menu a:hover{background:#f8fafc}
+  .typeahead{position:relative}
+  .ta-list{position:absolute;z-index:5;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:8px;margin-top:4px;max-height:220px;overflow:auto}
+  .ta-item{padding:8px 10px;cursor:pointer}
+  .ta-item:hover{background:#f8fafc}
 </style>
 </head>
 <body>
@@ -91,16 +97,12 @@ router.get(["/ui", "/ui/", "/ui/*"], requireAdminOrOrganiser, (_req, res) => {
   const showsSub = $('#showsSub');
   showsToggle.addEventListener('click', (e)=>{ e.preventDefault(); showsSub.style.display = showsSub.style.display==='none'?'block':'none'; });
 
-  function setActive(path){
-    $$('.sb-link').forEach(a=>{
-      a.classList.toggle('active', a.getAttribute('data-view')===path);
-    });
-  }
+  function setActive(path){ $$('.sb-link').forEach(a=>a.classList.toggle('active', a.getAttribute('data-view')===path)); }
 
   async function j(url,opts){
     const r=await fetch(url,{credentials:'include',...(opts||{})});
     if(!r.ok){ const t=await r.text().catch(()=> ''); throw new Error('HTTP '+r.status+(t?(': '+t.slice(0,200)):'')); }
-    try { return await r.json(); } catch { return {}; }
+    return r.json();
   }
   function go(path){ history.pushState(null,'',path); route(); }
 
@@ -116,20 +118,11 @@ router.get(["/ui", "/ui/", "/ui/*"], requireAdminOrOrganiser, (_req, res) => {
   function route(){
     const path = location.pathname.replace(/\\/$/, '');
     setActive(path);
-
     if (path === '/admin/ui' || path === '/admin/ui/home' || path === '/admin/ui/index.html') return home();
     if (path === '/admin/ui/shows/create') return createShow();
     if (path === '/admin/ui/shows/current') return listShows();
-    if (path === '/admin/ui/orders') return orders();
-    if (path === '/admin/ui/venues') return venues();
-
-    if (path.startsWith('/admin/ui/shows/') && path.endsWith('/seating')) {
-      return seatingPage(path.split('/')[4]);
-    }
-    if (path.startsWith('/admin/ui/shows/') && path.endsWith('/edit')) {
-      return editShow(path.split('/')[4]);
-    }
-
+    if (path.startsWith('/admin/ui/shows/') && path.endsWith('/edit')) return editShow(path.split('/')[4]);
+    if (path.startsWith('/admin/ui/shows/') && path.endsWith('/seating')) return seatingPage(path.split('/')[4]);
     if (path.startsWith('/admin/ui')) return home();
   }
 
@@ -137,46 +130,16 @@ router.get(["/ui", "/ui/", "/ui/*"], requireAdminOrOrganiser, (_req, res) => {
     main.innerHTML = '<div class="card"><div class="title">Welcome</div><div class="muted">Use the menu to manage shows, venues and orders.</div></div>';
   }
 
-  // ---------- Upload helper ----------
+  // ---------- Shared helpers ----------
   async function uploadPoster(file) {
+    // IMPORTANT: this matches the mounted router on the server (/admin/uploads)
     const form = new FormData(); form.append("file", file);
     const res = await fetch("/admin/uploads", { method: "POST", body: form, credentials: "include" });
     if (!res.ok) { const t = await res.text(); throw new Error('Upload failed: '+t.slice(0,200)); }
-    const data = await res.json(); if (!data?.ok) throw new Error(data?.error||'Upload failed'); return data;
+    const data = await res.json();
+    if (!data?.ok || !data?.url) throw new Error(data?.error||'Upload failed');
+    return data;
   }
-
-  // ---------- Venue helpers (type-ahead + create-if-missing) ----------
-  async function venueSuggest(q){
-    if(!q || q.length < 2) { const dl=$('#venue_list'); if(dl) dl.innerHTML = ''; return; }
-    try {
-      const r = await j('/admin/venues?q=' + encodeURIComponent(q));
-      const opts = (r.items||[]).map(v=>{
-        const desc = [v.name, v.city, v.postcode].filter(Boolean).join(' — ');
-        return \`<option value="\${v.name}">\${desc}</option>\`;
-      }).join('');
-      const dl = $('#venue_list'); if (dl) dl.innerHTML = opts;
-    } catch(e){ /* ignore */ }
-  }
-  function bindVenueTypeahead(){
-    const vin = $('#venue_input');
-    if(!vin) return;
-    vin.addEventListener('input', ()=>venueSuggest(vin.value.trim()));
-    vin.addEventListener('focus', ()=>venueSuggest(vin.value.trim()));
-  }
-  async function ensureVenueExists(name){
-    const q = (name||'').trim();
-    if(!q) return null;
-    try{
-      const r = await j('/admin/venues?q='+encodeURIComponent(q));
-      const exact = (r.items||[]).find(v => (v.name||'').toLowerCase() === q.toLowerCase());
-      if (exact) return exact;
-      const cr = await j('/admin/venues', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name:q }) });
-      if (cr.ok === false) throw new Error(cr.error||'Failed to create venue');
-      return cr.venue || cr.item || null;
-    }catch(e){ return null; }
-  }
-
-  // ---------- WYSIWYG helpers ----------
   function editorToolbarHtml(){
     return '<div class="row" style="gap:6px;margin-bottom:6px">'
       +'<button type="button" class="btn" data-cmd="bold">B</button>'
@@ -187,12 +150,80 @@ router.get(["/ui", "/ui/", "/ui/*"], requireAdminOrOrganiser, (_req, res) => {
       +'</div>';
   }
   function bindWysiwyg(container){
+    const ed = container.querySelector('[data-editor]');
     container.querySelectorAll('[data-cmd]').forEach(b=>{
       b.addEventListener('click', ()=> document.execCommand(b.getAttribute('data-cmd')));
     });
+    return ed;
   }
 
-  // ---------- Create Show ----------
+  // ---------- Venue typeahead with "Add new" ----------
+  function attachVenueTypeahead(inputEl){
+    inputEl.setAttribute('autocomplete','off');
+    inputEl.dataset.venueId = ''; // where we store chosen id
+    const wrap = document.createElement('div');
+    wrap.className='typeahead';
+    inputEl.parentNode.insertBefore(wrap, inputEl);
+    wrap.appendChild(inputEl);
+
+    const list = document.createElement('div');
+    list.className='ta-list';
+    list.style.display='none';
+    wrap.appendChild(list);
+
+    let lastQuery = '';
+    async function search(q){
+      lastQuery = q;
+      if(!q || q.trim()===''){ list.style.display='none'; list.innerHTML=''; inputEl.dataset.venueId=''; return; }
+      const res = await j('/admin/venues?q='+encodeURIComponent(q));
+      const items = res.items || [];
+      let html = '';
+      if(items.length){
+        html += items.map(v=>'<div class="ta-item" data-id="'+v.id+'" data-name="'+escapeHtml(v.name)+'">'+escapeHtml(v.name + (v.city? ' – '+v.city : ''))+'</div>').join('');
+      }else{
+        html += '<div class="ta-item" data-new="'+escapeHtml(q)+'">➕ Add “‘+escapeHtml(q)+'” as a new venue</div>';
+      }
+      list.innerHTML = html;
+      list.style.display='block';
+    }
+
+    inputEl.addEventListener('input', (e)=>{ search(e.target.value); });
+    inputEl.addEventListener('focus', ()=>{ if(inputEl.value) search(inputEl.value); });
+
+    document.addEventListener('click',(e)=>{
+      if(!wrap.contains(e.target)) list.style.display='none';
+    });
+
+    list.addEventListener('click', async (e)=>{
+      const item = e.target.closest('.ta-item');
+      if(!item) return;
+      if(item.dataset.id){
+        inputEl.value = item.dataset.name || '';
+        inputEl.dataset.venueId = item.dataset.id;
+        list.style.display='none';
+      }else if(item.dataset.new){
+        // create new venue with just a name (can edit later)
+        const name = item.dataset.new;
+        try{
+          const r = await j('/admin/venues', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ name })
+          });
+          if(r.ok === false){ throw new Error(r.error || 'Failed to create venue'); }
+          inputEl.value = r.venue.name;
+          inputEl.dataset.venueId = r.venue.id;
+          list.style.display='none';
+        }catch(err){
+          alert(err.message || 'Failed to create venue');
+        }
+      }
+    });
+  }
+
+  function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#39;' }[c])); }
+
+  // ---------- Create show ----------
   async function createShow(){
     main.innerHTML = \`
       <div class="card">
@@ -200,12 +231,7 @@ router.get(["/ui", "/ui/", "/ui/*"], requireAdminOrOrganiser, (_req, res) => {
         <div class="grid grid-2">
           <div class="grid"><label>Title</label><input id="sh_title" placeholder="e.g. Chuckl. Comedy Club"/></div>
           <div class="grid"><label>Date & time</label><input id="sh_dt" type="datetime-local"/></div>
-          <div class="grid">
-            <label>Venue</label>
-            <input id="venue_input" list="venue_list" placeholder="Start typing a venue…"/>
-            <datalist id="venue_list"></datalist>
-            <div class="muted">Pick an existing venue or just type a new one.</div>
-          </div>
+          <div class="grid"><label>Venue</label><input id="venue_input" placeholder="Pick or create a venue"/></div>
           <div class="grid">
             <label>Poster image</label>
             <div id="drop" class="drop">Drop image here or click to choose</div>
@@ -229,8 +255,10 @@ router.get(["/ui", "/ui/", "/ui/*"], requireAdminOrOrganiser, (_req, res) => {
       </div>\`;
 
     bindWysiwyg(main);
-    bindVenueTypeahead();
+    const venueEl = $('#venue_input');
+    attachVenueTypeahead(venueEl);
 
+    // upload widget
     const drop=$('#drop'), file=$('#file'), bar=$('#bar'), prev=$('#prev');
     function choose(){ file.click(); }
     drop.addEventListener('click', choose);
@@ -248,30 +276,23 @@ router.get(["/ui", "/ui/", "/ui/*"], requireAdminOrOrganiser, (_req, res) => {
     }
 
     $('#save').addEventListener('click', async ()=>{
-      const title = $('#sh_title').value.trim();
-      const venueText = $('#venue_input').value.trim();
-      const dateIso = $('#sh_dt').value ? new Date($('#sh_dt').value).toISOString() : null;
-      const descriptionHtml = $('#desc').innerHTML.trim();
-
-      if(!title || !dateIso || !venueText || !descriptionHtml){
+      const payload = {
+        title: $('#sh_title').value.trim(),
+        date: $('#sh_dt').value ? new Date($('#sh_dt').value).toISOString() : null,
+        venueId: venueEl.dataset.venueId || null,
+        venueText: venueEl.value.trim(),
+        imageUrl: prev.src || null,
+        descriptionHtml: $('#desc').innerHTML.trim()
+      };
+      if(!payload.title || !payload.date || !payload.venueText || !payload.descriptionHtml){
         $('#err').textContent='Title, date/time, venue and description are required';
         return;
       }
-
-      // Ensure venue exists or create it
-      const v = await ensureVenueExists(venueText);
-      const payload = {
-        title,
-        date: dateIso,
-        venueId: v?.id || null,
-        venueText,
-        imageUrl: ($('#prev') && $('#prev').src) ? $('#prev').src : null,
-        descriptionHtml
-      };
-
-      const r = await j('/admin/shows',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-      if(r.ok === false){ $('#err').textContent=r.error||'Failed to create show'; return; }
-      go('/admin/ui/shows/current');
+      try{
+        const r = await j('/admin/shows',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        if(r.ok){ go('/admin/ui/shows/current'); }
+        else { $('#err').textContent=r.error||'Failed to create show'; }
+      }catch(e){ $('#err').textContent=e.message||'Failed to create show'; }
     });
   }
 
@@ -302,11 +323,11 @@ router.get(["/ui", "/ui/", "/ui/*"], requireAdminOrOrganiser, (_req, res) => {
           <td>\${s.title||''}</td>
           <td>\${when}</td>
           <td>\${s.venue ? (s.venue.name+(s.venue.city?' – '+s.venue.city:'')) : (s.venueText||'')}</td>
-          <td><span class="muted">Sold \${sold} · Hold \${hold} · Avail \${avail}</span> \${bar}</td>
-          <td>£\${Number(s._revenue?.grossFace ?? 0).toFixed(2)}</td>
+          <td><span class="muted">\${total} total · Sold \${sold} · Hold \${hold} · Avail \${avail}</span> \${bar}</td>
+          <td>£\${((s._revenue?.grossFace ?? 0)).toFixed(2)}</td>
           <td>\${s.status || 'DRAFT'}</td>
           <td>
-            <div class="kebab">
+            <div class="menuWrap">
               <button class="btn" data-kebab="\${s.id}">⋮</button>
               <div class="menu" id="m-\${s.id}">
                 <a href="#" data-edit="\${s.id}">Edit</a>
@@ -320,7 +341,7 @@ router.get(["/ui", "/ui/", "/ui/*"], requireAdminOrOrganiser, (_req, res) => {
       $$('[data-kebab]').forEach(b=>{
         b.addEventListener('click', (e)=>{ e.preventDefault(); const id=b.getAttribute('data-kebab'); const m=$('#m-'+id); $$('.menu').forEach(x=>x.classList.remove('open')); m.classList.add('open'); });
       });
-      document.addEventListener('click',(e)=>{ if(!e.target.closest('.kebab')) $$('.menu').forEach(x=>x.classList.remove('open')); });
+      document.addEventListener('click',(e)=>{ if(!e.target.closest('.menuWrap')) $$('.menu').forEach(x=>x.classList.remove('open')); });
 
       $$('[data-edit]').forEach(a=>a.addEventListener('click',(e)=>{ e.preventDefault(); go('/admin/ui/shows/'+a.getAttribute('data-edit')+'/edit'); }));
       $$('[data-seating]').forEach(a=>a.addEventListener('click',(e)=>{ e.preventDefault(); go('/admin/ui/shows/'+a.getAttribute('data-seating')+'/seating'); }));
@@ -335,7 +356,7 @@ router.get(["/ui", "/ui/", "/ui/*"], requireAdminOrOrganiser, (_req, res) => {
     load();
   }
 
-  // ---------- Edit show (minimal shell) ----------
+  // ---------- Edit show ----------
   async function editShow(id){
     const s = await j('/admin/shows/'+id);
     main.innerHTML = \`
@@ -345,17 +366,13 @@ router.get(["/ui", "/ui/", "/ui/*"], requireAdminOrOrganiser, (_req, res) => {
           <div class="grid"><label>Title</label><input id="sh_title"/></div>
           <div class="grid"><label>Date & time</label><input id="sh_dt" type="datetime-local"/></div>
           <div class="grid"><label>Venue</label><input id="venue_input"/></div>
-          <div class="grid"><label>Poster image</label>
-            <div class="drop" id="drop">Drop image here or click to choose</div>
-            <input id="file" type="file" accept="image/*" style="display:none"/>
-            <div class="progress" style="margin-top:8px"><div id="bar" class="bar"></div></div>
-            <img id="prev" class="imgprev" />
-          </div>
+          <div class="grid"><label>Poster image</label><div class="drop" id="drop">Drop image here or click to choose</div><input id="file" type="file" accept="image/*" style="display:none"/><div class="progress" style="margin-top:8px"><div id="bar" class="bar"></div></div><img id="prev" class="imgprev" /></div>
         </div>
         <div class="grid" style="margin-top:10px">
           <label>Description</label>
           \${editorToolbarHtml()}
           <div id="desc" data-editor contenteditable="true" style="min-height:120px;border:1px solid var(--border);border-radius:8px;padding:10px"></div>
+          <div class="muted">Event description (required). Use the toolbar to format.</div>
         </div>
         <div class="row" style="margin-top:10px">
           <button id="save" class="btn p">Save changes</button>
@@ -365,8 +382,13 @@ router.get(["/ui", "/ui/", "/ui/*"], requireAdminOrOrganiser, (_req, res) => {
       </div>\`;
 
     bindWysiwyg(main);
+
+    const venueEl = $('#venue_input');
+    attachVenueTypeahead(venueEl);
+
     $('#sh_title').value = s.item?.title ?? '';
-    $('#venue_input').value = s.item?.venue?.name || s.item?.venueText || '';
+    venueEl.value = s.item?.venue?.name || s.item?.venueText || '';
+    venueEl.dataset.venueId = s.item?.venueId || '';
     $('#desc').innerHTML = s.item?.descriptionHtml || '';
     if (s.item?.date) {
       const dt = new Date(s.item.date);
@@ -375,9 +397,9 @@ router.get(["/ui", "/ui/", "/ui/*"], requireAdminOrOrganiser, (_req, res) => {
     }
     if (s.item?.imageUrl) { $('#prev').src = s.item.imageUrl; $('#prev').style.display='block'; }
 
-    // upload handlers
-    const drop=$('#drop'), file=$('#file'), bar=$('#bar');
-    drop.addEventListener('click', ()=>file.click());
+    // upload
+    const drop=$('#drop'), file=$('#file'), bar=$('#bar'), prev=$('#prev');
+    drop.addEventListener('click', ()=> file.click());
     drop.addEventListener('dragover', e=>{ e.preventDefault(); drop.classList.add('drag');});
     drop.addEventListener('dragleave', ()=>drop.classList.remove('drag'));
     drop.addEventListener('drop', async (e)=>{
@@ -387,7 +409,7 @@ router.get(["/ui", "/ui/", "/ui/*"], requireAdminOrOrganiser, (_req, res) => {
     file.addEventListener('change', async ()=>{ const f=file.files && file.files[0]; if(f) await doUpload(f); });
     async function doUpload(f){
       $('#err').textContent=''; bar.style.width='15%';
-      try{ const out = await uploadPoster(f); $('#prev').src = out.url; $('#prev').style.display='block'; bar.style.width='100%'; setTimeout(()=>bar.style.width='0%',800);}
+      try{ const out = await uploadPoster(f); prev.src = out.url; prev.style.display='block'; bar.style.width='100%'; setTimeout(()=>bar.style.width='0%',800);}
       catch(e){ bar.style.width='0%'; $('#err').textContent=e.message||'Upload failed'; }
     }
 
@@ -396,8 +418,9 @@ router.get(["/ui", "/ui/", "/ui/*"], requireAdminOrOrganiser, (_req, res) => {
       const payload = {
         title: $('#sh_title').value.trim(),
         date: $('#sh_dt').value ? new Date($('#sh_dt').value).toISOString() : null,
-        venueText: $('#venue_input').value.trim(),
-        imageUrl: ($('#prev') && $('#prev').src) ? $('#prev').src : null,
+        venueId: venueEl.dataset.venueId || null,
+        venueText: venueEl.value.trim(),
+        imageUrl: $('#prev').src || null,
         descriptionHtml: $('#desc').innerHTML.trim()
       };
       if(!payload.title || !payload.date || !payload.venueText || !payload.descriptionHtml){
@@ -405,20 +428,15 @@ router.get(["/ui", "/ui/", "/ui/*"], requireAdminOrOrganiser, (_req, res) => {
         return;
       }
       const r = await j('/admin/shows/'+id,{ method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-      if(r.ok){ alert('Saved'); } else { $('#err').textContent=r.error||'Failed to save'; }
+      if(r.ok){ alert('Saved'); }
+      else { $('#err').textContent=r.error||'Failed to save'; }
     });
   }
 
-  // ---------- Seating placeholder ----------
   function seatingPage(id){
-    main.innerHTML = '<div class="card"><div class="title">Seating map</div><div class="muted">Coming soon</div></div>';
+    main.innerHTML='<div class="card"><div class="title">Seating (show '+id+')</div><div class="muted">Coming soon</div></div>';
   }
 
-  // ---------- Orders/Venues placeholders ----------
-  function orders(){ main.innerHTML='<div class="card"><div class="title">Orders</div><div class="muted">Coming soon</div></div>'; }
-  function venues(){ main.innerHTML='<div class="card"><div class="title">Venues</div><div class="muted">Use Create show to add/select a venue. A dedicated page will follow.</div></div>'; }
-
-  // initial route
   route();
 })();
 </script>
