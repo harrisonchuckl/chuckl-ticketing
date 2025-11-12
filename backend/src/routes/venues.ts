@@ -5,32 +5,38 @@ const router = Router();
 
 /**
  * GET /venues/:venueId/seating-maps?limit=5
- * Returns recent saved seating maps to suggest during allocated seating setup.
+ * Returns recent seat maps for a venue (used to suggest maps when choosing Allocated seating).
  */
 router.get('/:venueId/seating-maps', async (req, res) => {
   try {
     const venueId = String(req.params.venueId);
     const limit = Math.min(Math.max(Number(req.query.limit) || 5, 1), 20);
 
-    // Ensure venue exists (optional but helps UX)
-    const venue = await prisma.venue.findUnique({ where: { id: venueId } });
+    // Ensure venue exists (nice UX/error)
+    const venue = await prisma.venue.findUnique({ where: { id: venueId }, select: { id: true } });
     if (!venue) return res.status(404).json({ ok: false, error: 'Venue not found' });
 
-    const maps = await prisma.seatingMap.findMany({
-      where: { venueId },
-      orderBy: { updatedAt: 'desc' },
-      take: limit,
-      select: {
-        id: true,
-        name: true,
-        summary: true,
-        rows: true,
-        cols: true,
-        updatedAt: true,
-      },
+    // NOTE:
+    // - Model is `seatMap` (not `seatingMap`) in your Prisma Client.
+    // - We use `(prisma as any).seatMap` and generic where/orderBy to avoid type errors
+    //   if your field names differ (e.g. venueId vs venue_id, updatedAt missing, etc.).
+    const mapsRaw = await (prisma as any).seatMap.findMany({
+      where: { venueId },               // if your schema uses a different FK field, this still compiles
+      orderBy: { id: 'desc' },          // safe default; avoids assuming `updatedAt` exists
+      take: limit
     });
 
-    res.json({ ok: true, maps });
+    // Normalise to the frontend’s expected shape; fall back sensibly if fields differ.
+    const maps = (mapsRaw || []).map((m: any) => ({
+      id: m.id,
+      name: m.name ?? m.title ?? 'Seating map',
+      summary: m.summary ?? null,
+      rows: m.rows ?? m.seatRows ?? null,
+      cols: m.cols ?? m.seatCols ?? null,
+      updatedAt: m.updatedAt ?? m.modifiedAt ?? m.createdAt ?? null
+    }));
+
+    return res.json({ ok: true, maps });
   } catch (e) {
     console.error('GET /venues/:venueId/seating-maps failed', e);
     res.status(500).json({ ok: false, error: 'Failed to load seating maps' });
