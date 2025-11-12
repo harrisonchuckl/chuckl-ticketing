@@ -43,7 +43,7 @@ enum SeatStatus {
 }
 
 // =========================
-/** Core models **/
+// Core models
 // =========================
 
 model User {
@@ -56,7 +56,6 @@ model User {
 
   organiserSplitBps  Int?
 
-  // inverse relations
   orders             Order[]
   seatHolds          SeatHold[]
   uploads            Upload[]
@@ -106,10 +105,7 @@ model Show {
   seatHolds       SeatHold[]
   orders          Order[]
 
-  // inverse for legacy seat map
   seatMaps        SeatMap[]
-
-  // external allocations (legacy compatibility)
   externalAllocations ExternalAllocation[]
 
   createdAt       DateTime      @default(now())
@@ -127,7 +123,7 @@ model TicketType {
   name            String
   pricePence      Int        @default(0)
 
-  // Make optional in create inputs by giving a default
+  // Default so it’s optional in create inputs
   facePrice       Decimal    @db.Decimal(10, 2) @default(0)
   fee             Decimal    @db.Decimal(10, 2) @default(0)
 
@@ -165,10 +161,8 @@ model Ticket {
   serial      String?       @unique
   scannedAt   DateTime?
 
-  // legacy field used in email/mailer services
   holderName  String?
 
-  // link to purchaser (optional)
   userId      String?
   user        User?         @relation(fields: [userId], references: [id])
 
@@ -185,8 +179,6 @@ model Order {
   id                  String        @id @default(cuid())
   userId              String?
   user                User?         @relation(fields: [userId], references: [id])
-
-  // optional so creation can happen before attaching an email
   email               String?
 
   status              OrderStatus   @default(PENDING)
@@ -246,13 +238,9 @@ model Refund {
   orderId      String
   order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  // map DB column amountPence -> client field amount
   amount       Int      @map("amountPence")
-
   reason       String?
   processorId  String?
-
-  // present in your route/service code
   stripeId     String?
 
   createdAt    DateTime @default(now())
@@ -271,7 +259,7 @@ model Upload {
 }
 
 // =========================
-/** Seating templates & show seats (newer system) **/
+// Seating templates & show seats (newer system)
 // =========================
 
 model SeatmapTemplate {
@@ -367,7 +355,7 @@ model SeatHold {
 }
 
 // =========================
-/** Legacy seatmaps (compat) **/
+// Legacy seatmaps (compat)
 // =========================
 
 model SeatMap {
@@ -376,13 +364,10 @@ model SeatMap {
   showId       String?
   show         Show?    @relation(fields: [showId], references: [id])
 
-  // legacy routes sometimes set seat maps per-venue
   venueId      String?
   venue        Venue?   @relation(fields: [venueId], references: [id])
 
   name         String
-
-  // used by your route code
   version      Int?
 
   createdAt    DateTime @default(now())
@@ -409,7 +394,6 @@ model Seat {
   y          Int?
   status     SeatStatus @default(AVAILABLE)
 
-  // legacy fields referenced in routes
   level      String?
   kind       String?
   zoneId     String?
@@ -435,14 +419,12 @@ model SeatMapZone {
 model ExternalAllocation {
   id          String   @id @default(cuid())
 
-  // many routes filter by showId
   showId      String?
   show        Show?    @relation(fields: [showId], references: [id])
 
   seatMapId   String
   seatMap     SeatMap  @relation(fields: [seatMapId], references: [id])
 
-  // your code expects `label`
   label       String
 
   createdAt   DateTime @default(now())
@@ -461,7 +443,6 @@ model AllocationSeat {
   seatId       String
   seat         Seat               @relation(fields: [seatId], references: [id], onDelete: Cascade)
 
-  // denormalised fields used in routes
   rowLabel     String?
   seatNumber   String?
   level        String?
