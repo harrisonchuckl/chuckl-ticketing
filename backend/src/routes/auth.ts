@@ -90,11 +90,4 @@ router.post("/login", async (req, res) => {
   }
 });
 
-// GET /auth/logout
-router.get("/logout", async (_req, res) => {
-  res.clearCookie(COOKIE_NAME, { ...COOKIE_OPTS, maxAge: 0 });
-  // send JSON (your admin UI reads JSON) – or change to redirect if you prefer
-  return res.json({ ok: true });
-});
-
 export default router;
