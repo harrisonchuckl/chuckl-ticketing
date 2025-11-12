@@ -1,179 +1,108 @@
 import { Router } from "express";
-import { prisma } from "../utils/prisma";
-import { z } from "zod";
+import { PrismaClient } from "@prisma/client";
 
+const prisma = new PrismaClient();
 const router = Router();
 
 /**
- * Create a new SeatMap for a show or a venue
+ * GET /admin/seatmaps?showId=...&venueId=...
  */
-const CreateSeatMapBody = z.object({
-  name: z.string().min(1),
-  showId: z.string().optional(),
-  venueId: z.string().optional(),
-  version: z.number().int().nonnegative().optional(),
-  isDefault: z.boolean().optional(),
-});
+router.get("/", async (req, res) => {
+  const showId = toUndef(req.query.showId);
+  const venueId = toUndef(req.query.venueId);
 
-router.post("/", async (req, res, next) => {
-  try {
-    const data = CreateSeatMapBody.parse(req.body);
-    const seatMap = await prisma.seatMap.create({
-      data: {
-        name: data.name,
-        showId: data.showId ?? null,
-        venueId: data.venueId ?? null,
-        version: data.version ?? null,
-        isDefault: data.isDefault ?? false,
-      },
-    });
-    res.status(201).json({ ok: true, seatMap });
-  } catch (err) {
-    next(err);
-  }
+  const where: any = {};
+  if (showId) where.showId = showId;
+  if (venueId) where.venueId = venueId;
+
+  const maps = await prisma.seatMap.findMany({
+    where,
+    include: {
+      seats: true,
+      zones: true,
+      allocations: true
+    },
+    orderBy: { createdAt: "desc" }
+  });
+
+  res.json(maps);
 });
 
 /**
- * List SeatMaps by show or venue
+ * POST /admin/seatmaps
+ * Body: { showId: string, name: string, venueId?: string | null, isDefault?: boolean, version?: number, layout?: any }
  */
-router.get("/", async (req, res, next) => {
-  try {
-    const { showId, venueId } = req.query as { showId?: string; venueId?: string };
-    const seatMaps = await prisma.seatMap.findMany({
-      where: {
-        showId: showId ?? undefined,
-        venueId: venueId ?? undefined,
-      },
-      orderBy: { createdAt: "desc" },
-      include: {
-        seats: true,
-        allocations: true,
-        zones: true,
-      },
-    });
-    res.json({ ok: true, seatMaps });
-  } catch (err) {
-    next(err);
-  }
+router.post("/", async (req, res) => {
+  const { showId, name, venueId, isDefault, version, layout } = req.body ?? {};
+  if (!showId || !name) {
+    return res.status(400).json({ error: "showId and name are required" });
+    }
+  const data = {
+    showId: String(showId),
+    name: String(name),
+    venueId: venueId ?? undefined,
+    isDefault: typeof isDefault === "boolean" ? isDefault : undefined,
+    version: typeof version === "number" ? version : undefined,
+    layout: layout ?? undefined
+  };
+
+  const created = await prisma.seatMap.create({ data });
+  res.status(201).json(created);
 });
 
 /**
- * Create an external allocation record for a seatmap (e.g. Ticketsolve/SeeTickets)
+ * PATCH /admin/seatmaps/:id/default
+ * Body: { isDefault: boolean }
  */
-const CreateExternalAllocationBody = z.object({
-  seatMapId: z.string().min(1),
-  showId: z.string().optional(),
-  label: z.string().min(1),
-  externalPlatform: z.string().optional(), // NEW in schema
-});
+router.patch("/:id/default", async (req, res) => {
+  const { id } = req.params;
+  const { isDefault } = req.body ?? {};
 
-router.post("/allocations", async (req, res, next) => {
-  try {
-    const body = CreateExternalAllocationBody.parse(req.body);
-    const alloc = await prisma.externalAllocation.create({
-      data: {
-        seatMapId: body.seatMapId,
-        showId: body.showId ?? null,
-        label: body.label,
-        externalPlatform: body.externalPlatform ?? null,
-      },
-    });
-    res.status(201).json({ ok: true, allocation: alloc });
-  } catch (err) {
-    next(err);
+  if (typeof isDefault !== "boolean") {
+    return res.status(400).json({ error: "isDefault boolean is required" });
   }
+
+  const updated = await prisma.seatMap.update({
+    where: { id },
+    data: { isDefault }
+  });
+
+  res.json(updated);
 });
 
 /**
- * Bulk attach seats to an allocation (createMany)
- * NOTE: seatNumber is stored as STRING in the schema => cast any numbers to strings
+ * POST /admin/seatmaps/:id/allocations
+ * Body: { source: string, quantity: number, label?: string, externalPlatform?: string, contactEmail?: string }
  */
-const BulkAllocationSeatsBody = z.object({
-  allocationId: z.string().min(1),
-  seats: z.array(
-    z.object({
-      seatId: z.string().min(1),
-      rowLabel: z.string().nullable(),  // nullable is OK
-      seatNumber: z.union([z.number(), z.string()]).nullable(), // accept number or string in body
-      level: z.string().nullable(),
-    })
-  ).min(1),
-});
-
-router.post("/allocations/:allocationId/seats", async (req, res, next) => {
-  try {
-    const allocationId = req.params.allocationId;
-    const parsed = BulkAllocationSeatsBody.parse({
-      allocationId,
-      seats: req.body?.seats,
-    });
-
-    const data = parsed.seats.map((s) => ({
-      allocationId,
-      seatId: s.seatId,
-      rowLabel: s.rowLabel ?? null,
-      seatNumber: s.seatNumber != null ? String(s.seatNumber) : null, // <- cast to string
-      level: s.level ?? null,
-    }));
-
-    await prisma.allocationSeat.createMany({ data });
-
-    res.status(201).json({ ok: true, count: data.length });
-  } catch (err) {
-    next(err);
+router.post("/:id/allocations", async (req, res) => {
+  const { id } = req.params;
+  const { source, quantity, label, externalPlatform, contactEmail } = req.body ?? {};
+  if (!source || typeof quantity !== "number") {
+    return res.status(400).json({ error: "source and quantity are required" });
   }
+
+  // Find a showId from the seatmap
+  const seatMap = await prisma.seatMap.findUnique({ where: { id } });
+  if (!seatMap) return res.status(404).json({ error: "SeatMap not found" });
+
+  const allocation = await prisma.externalAllocation.create({
+    data: {
+      showId: seatMap.showId,
+      seatMapId: id,
+      source: String(source),
+      quantity,
+      label: label ?? null,
+      externalPlatform: externalPlatform ?? null,
+      contactEmail: contactEmail ?? null
+    }
+  });
+
+  res.status(201).json(allocation);
 });
 
-/**
- * Get a seatmap by id (with allocations & seats)
- */
-router.get("/:id", async (req, res, next) => {
-  try {
-    const seatMap = await prisma.seatMap.findUnique({
-      where: { id: req.params.id },
-      include: {
-        seats: true,
-        allocations: {
-          include: {
-            seats: true,
-          },
-        },
-        zones: true,
-        show: true,
-        venue: true,
-      },
-    });
-    if (!seatMap) return res.status(404).json({ ok: false, error: "Not found" });
-    res.json({ ok: true, seatMap });
-  } catch (err) {
-    next(err);
-  }
-});
-
-/**
- * Update isDefault, version, name
- */
-const UpdateSeatMapBody = z.object({
-  name: z.string().min(1).optional(),
-  version: z.number().int().nonnegative().nullable().optional(),
-  isDefault: z.boolean().optional(),
-});
-
-router.patch("/:id", async (req, res, next) => {
-  try {
-    const body = UpdateSeatMapBody.parse(req.body);
-    const seatMap = await prisma.seatMap.update({
-      where: { id: req.params.id },
-      data: {
-        name: body.name ?? undefined,
-        version: body.version ?? undefined,
-        isDefault: body.isDefault ?? undefined,
-      },
-    });
-    res.json({ ok: true, seatMap });
-  } catch (err) {
-    next(err);
-  }
-});
+function toUndef(v: unknown): string | undefined {
+  if (v === null || v === undefined || v === "") return undefined;
+  return String(v);
+}
 
 export default router;
