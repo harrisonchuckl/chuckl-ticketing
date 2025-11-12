@@ -5,7 +5,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  // If your env var was previously DB_URL, switch this to env("DB_URL")
   url      = env("DATABASE_URL")
 }
 
@@ -32,6 +31,7 @@ enum TicketStatus {
   SOLD
   REFUNDED
   EXTERNAL_ALLOCATED
+  USED         // needed by scanner route
 }
 
 enum SeatStatus {
@@ -48,27 +48,34 @@ enum SeatStatus {
 // =========================
 
 model User {
-  id           String       @id @default(cuid())
-  email        String       @unique
-  passwordHash String?
-  name         String?
-  role         Role         @default(CUSTOMER)
+  id                 String       @id @default(cuid())
+  email              String       @unique
+  name               String?
+  password           String?      // legacy (some routes read this)
+  passwordHash       String?
+  role               Role         @default(CUSTOMER)
 
-  orders       Order[]
-  seatHolds    SeatHold[]
-  uploads      Upload[]
+  organiserSplitBps  Int?         // legacy field used in exports/checkout/etc
 
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  orders             Order[]
+  seatHolds          SeatHold[]
+  uploads            Upload[]
+
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 }
 
 model Venue {
   id                String             @id @default(cuid())
   name              String
+  capacity          Int?               // legacy
+  // legacy convenience field some routes select as 'address'
+  address           String?
+  // granular address fields (optional)
   city              String?
+  postcode          String?
   addressLine1      String?
   addressLine2      String?
-  postcode          String?
   country           String?
 
   shows             Show[]
@@ -82,8 +89,12 @@ model Show {
   id              String        @id @default(cuid())
   title           String
   date            DateTime
-  status          String?       // e.g. DRAFT / ON_SALE / CLOSED
+  status          String?                // DRAFT / ON_SALE / CLOSED, etc.
+
+  // both fields kept for compatibility with different routes
+  description     String?
   descriptionHtml String?
+
   imageUrl        String?
 
   venueId         String?
@@ -93,7 +104,8 @@ model Show {
   tickets         Ticket[]
   seats           ShowSeat[]
   orderItems      OrderItem[]
-  seatHolds       SeatHold[]    // <-- back-relation for SeatHold.show
+  seatHolds       SeatHold[]
+  orders          Order[]       // legacy: some routes expect Show.count({ select: { orders: true }})
 
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
@@ -103,22 +115,28 @@ model Show {
 }
 
 model TicketType {
-  id            String     @id @default(cuid())
-  showId        String
-  show          Show       @relation(fields: [showId], references: [id])
+  id              String     @id @default(cuid())
+  showId          String
+  show            Show       @relation(fields: [showId], references: [id])
 
-  name          String
-  facePrice     Decimal    @db.Decimal(10, 2)
-  fee           Decimal    @db.Decimal(10, 2) @default(0)
+  name            String
 
-  allocationTotal Int       @default(0)
-  maxPerOrder    Int?
+  // legacy integer price used across routes
+  pricePence      Int        @default(0)
 
-  tickets       Ticket[]
-  orderItems    OrderItem[]   // <-- back-relation for OrderItem.ticketType
+  // newer decimal fields retained as well
+  facePrice       Decimal    @db.Decimal(10, 2)
+  fee             Decimal    @db.Decimal(10, 2) @default(0)
 
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  allocationTotal Int        @default(0)
+  available       Int        @default(0)        // some routes read `available`
+  maxPerOrder     Int?
+
+  tickets         Ticket[]
+  orderItems      OrderItem[]
+
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
   @@index([showId])
 }
@@ -136,10 +154,14 @@ model Ticket {
   order       Order?        @relation(fields: [orderId], references: [id])
 
   seatId      String?
-  seat        ShowSeat?     @relation(fields: [seatId], references: [id]) // back-relation on ShowSeat.tickets
+  seat        ShowSeat?     @relation(fields: [seatId], references: [id])
 
   status      TicketStatus  @default(AVAILABLE)
   pricePaid   Decimal?      @db.Decimal(10, 2)
+
+  // scanner + lookup legacy fields
+  serial      String?       @unique
+  scannedAt   DateTime?
 
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
@@ -151,23 +173,41 @@ model Ticket {
 }
 
 model Order {
-  id          String        @id @default(cuid())
-  userId      String?
-  user        User?         @relation(fields: [userId], references: [id])
+  id                  String        @id @default(cuid())
+  userId              String?
+  user                User?         @relation(fields: [userId], references: [id])
 
-  email       String
-  status      OrderStatus   @default(PENDING)
+  email               String
+  status              OrderStatus   @default(PENDING)
 
-  totalGross  Decimal       @db.Decimal(10, 2) @default(0)
-  totalFees   Decimal       @db.Decimal(10, 2) @default(0)
+  // newer fields already used in some routes
+  totalGross          Decimal       @db.Decimal(10, 2) @default(0)
+  totalFees           Decimal       @db.Decimal(10, 2) @default(0)
 
-  items       OrderItem[]
-  tickets     Ticket[]
+  // legacy integer financial fields (used heavily in routes)
+  amountPence         Int?          // order total in pence
+  platformFeePence    Int?
+  organiserSharePence Int?
+  paymentFeePence     Int?
+  netPayoutPence      Int?
+  stripeId            String?
 
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  // legacy: some routes treat an order as tied to a single show
+  showId              String?
+  show                Show?         @relation(fields: [showId], references: [id])
+
+  // legacy: some routes read quantity directly on Order
+  quantity            Int?
+
+  items               OrderItem[]
+  tickets             Ticket[]
+  refunds             Refund[]
+
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
 
   @@index([userId])
+  @@index([showId])
 }
 
 model OrderItem {
@@ -179,11 +219,12 @@ model OrderItem {
   show          Show?       @relation(fields: [showId], references: [id])
 
   ticketTypeId  String?
-  ticketType    TicketType? @relation(fields: [ticketTypeId], references: [id]) // back-relation on TicketType.orderItems
+  ticketType    TicketType? @relation(fields: [ticketTypeId], references: [id])
 
   quantity      Int         @default(1)
   unitPrice     Decimal     @db.Decimal(10, 2)
   fees          Decimal     @db.Decimal(10, 2) @default(0)
+  amountPence   Int?        // legacy helper
 
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
@@ -191,6 +232,18 @@ model OrderItem {
   @@index([orderId])
   @@index([showId])
   @@index([ticketTypeId])
+}
+
+model Refund {
+  id           String   @id @default(cuid())
+  orderId      String
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  amountPence  Int
+  reason       String?
+  processorId  String?  // e.g. Stripe refund id
+  createdAt    DateTime @default(now())
+
+  @@index([orderId])
 }
 
 model Upload {
@@ -204,7 +257,7 @@ model Upload {
 }
 
 // =========================
-// Seating templates & show seats
+// Seating templates & show seats (newer system)
 // =========================
 
 model SeatmapTemplate {
@@ -270,9 +323,9 @@ model ShowSeat {
   allocationRef String?
 
   holdId    String?
-  hold      SeatHold?   @relation(fields: [holdId], references: [id]) // back-relation on SeatHold.seats
+  hold      SeatHold?   @relation(fields: [holdId], references: [id])
 
-  tickets   Ticket[]    // <-- back-relation for Ticket.seat
+  tickets   Ticket[]
 
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
@@ -285,7 +338,7 @@ model ShowSeat {
 model SeatHold {
   id         String    @id @default(cuid())
   showId     String
-  show       Show      @relation(fields: [showId], references: [id]) // back-relation on Show.seatHolds
+  show       Show      @relation(fields: [showId], references: [id])
 
   userId     String?
   user       User?     @relation(fields: [userId], references: [id])
@@ -293,8 +346,69 @@ model SeatHold {
   expiresAt  DateTime
   createdAt  DateTime  @default(now())
 
-  seats      ShowSeat[] // <-- back-relation for ShowSeat.hold
+  seats      ShowSeat[]
 
   @@index([showId])
   @@index([userId])
+}
+
+// =========================
+// Legacy seatmap models (to satisfy existing routes)
+// =========================
+
+model SeatMap {
+  id        String   @id @default(cuid())
+  showId    String?
+  show      Show?    @relation(fields: [showId], references: [id])
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  seats     Seat[]
+  allocations ExternalAllocation[]
+
+  @@index([showId])
+}
+
+model Seat {
+  id        String   @id @default(cuid())
+  seatMapId String
+  seatMap   SeatMap  @relation(fields: [seatMapId], references: [id])
+
+  label     String
+  row       String?
+  number    Int?
+  x         Int?
+  y         Int?
+  status    SeatStatus @default(AVAILABLE)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  allocationSeats AllocationSeat[]
+}
+
+model ExternalAllocation {
+  id        String   @id @default(cuid())
+  showId    String?
+  show      Show?    @relation(fields: [showId], references: [id])
+
+  name      String
+  createdAt DateTime @default(now())
+
+  seats     AllocationSeat[]
+}
+
+model AllocationSeat {
+  id           String            @id @default(cuid())
+  allocationId String
+  allocation   ExternalAllocation @relation(fields: [allocationId], references: [id], onDelete: Cascade)
+
+  seatId       String
+  seat         Seat               @relation(fields: [seatId], references: [id], onDelete: Cascade)
+
+  createdAt    DateTime          @default(now())
+
+  @@index([allocationId])
+  @@index([seatId])
 }
