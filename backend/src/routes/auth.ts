@@ -19,7 +19,6 @@ router.post("/register", async (req, res) => {
       return res.status(409).json({ error: "email already in use" });
     }
 
-    // Generate a salt first to avoid the TS overload gripe
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(String(password), salt);
 
