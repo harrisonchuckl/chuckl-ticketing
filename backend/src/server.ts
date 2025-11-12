@@ -13,7 +13,7 @@ import events from './routes/events.js';
 import publicUI from './routes/public-ui.js';
 import imageProxy from './routes/image-proxy.js';
 
-// Uploads
+// Uploads (new)
 import uploadRoute from './routes/uploads.js';
 
 // Auth
@@ -21,7 +21,7 @@ import auth from './routes/auth.js';
 import authLogout from './routes/logout.js';
 import loginUI from './routes/login-ui.js';
 
-// 🔐 TEMP bootstrap first organiser
+// 🔐 TEMP: one-time bootstrap to create first organiser user (remove after use)
 import bootstrap from './routes/bootstrap.js';
 
 // Admin UI + APIs
@@ -34,7 +34,8 @@ import adminUploads from './routes/admin-uploads.js';
 import adminOrders from './routes/admin-orders.js';
 import adminAnalytics from './routes/admin-analytics.js';
 import adminExports from './routes/admin-exports.js';
-// NEW
+
+// NEW: seatmaps admin endpoints used by Admin UI
 import adminSeatmaps from './routes/admin-seatmaps.js';
 
 const app = express();
@@ -69,10 +70,10 @@ app.use('/', imageProxy);
 
 // --- Auth routes (UI + JSON) ---
 app.use('/auth', loginUI);     // GET /auth/login (HTML)
-app.use('/auth', auth);        // POST /auth/login (JSON)
-app.use('/auth', authLogout);  // GET /auth/logout
+app.use('/auth', auth);        // POST /auth/login etc (JSON)
+app.use('/auth', authLogout);  // GET /auth/logout -> redirect to /auth/login
 
-// ⚠️ TEMP: bootstrap first user
+// ⚠️ TEMP: bootstrap first user (remove after successful login)
 app.use('/auth', bootstrap);
 
 // Light rate limit for admin
@@ -95,7 +96,9 @@ app.use('/admin', adminOrders);
 app.use('/admin', adminUploads);
 app.use('/admin', adminAnalytics);
 app.use('/admin', adminExports);
-app.use('/admin', adminSeatmaps); // <-- add
+
+// NEW: Seatmaps admin endpoints
+app.use('/admin', adminSeatmaps);
 
 // Legacy / bootstrap admin endpoints (if still used)
 app.use('/admin', admin);
