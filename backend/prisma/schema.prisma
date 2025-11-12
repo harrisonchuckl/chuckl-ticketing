@@ -43,7 +43,7 @@ enum SeatStatus {
 }
 
 // =========================
-// Core models
+/* Core models */
 // =========================
 
 model User {
@@ -56,9 +56,11 @@ model User {
 
   organiserSplitBps  Int?
 
+  // inverse relations
   orders             Order[]
   seatHolds          SeatHold[]
   uploads            Upload[]
+  tickets            Ticket[]     // <— added inverse for Ticket.user
 
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
@@ -165,7 +167,7 @@ model Ticket {
   // legacy field used in email/mailer services
   holderName  String?
 
-  // optional direct link as some queries include ticket.user
+  // link to purchaser (optional)
   userId      String?
   user        User?         @relation(fields: [userId], references: [id])
 
@@ -243,7 +245,7 @@ model Refund {
   orderId      String
   order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  // Expose as `amount` to match code, keep column name as amountPence
+  // keep column name amountPence but expose as amount in the client
   amount       Int      @map("amountPence")
 
   reason       String?
