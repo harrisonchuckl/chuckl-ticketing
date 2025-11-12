@@ -7,9 +7,9 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/* =========================
-   Enums
-   ========================= */
+// =========================
+// Enums
+// =========================
 
 enum Role {
   ADMIN
@@ -42,9 +42,9 @@ enum SeatStatus {
   EXTERNAL_ALLOCATED
 }
 
-/* =========================
-   Core models
-   ========================= */
+// =========================
+// Core models
+// =========================
 
 model User {
   id                 String       @id @default(cuid())
@@ -106,6 +106,7 @@ model Show {
 
   // inverse for legacy seat map
   seatMaps        SeatMap[]
+
   // external allocations (legacy compatibility)
   externalAllocations ExternalAllocation[]
 
@@ -127,7 +128,6 @@ model TicketType {
   facePrice       Decimal    @db.Decimal(10, 2)
   fee             Decimal    @db.Decimal(10, 2) @default(0)
 
-  // allow nulls to satisfy routes that pass null
   allocationTotal Int?
   available       Int?
   maxPerOrder     Int?
@@ -183,7 +183,7 @@ model Order {
   userId              String?
   user                User?         @relation(fields: [userId], references: [id])
 
-  // make optional to allow creation before we attach an email
+  // optional so creation can happen before attaching an email
   email               String?
 
   status              OrderStatus   @default(PENDING)
@@ -263,9 +263,9 @@ model Upload {
   createdAt    DateTime @default(now())
 }
 
-/* =========================
-   Seating templates & show seats (newer system)
-   ========================= */
+// =========================
+// Seating templates & show seats (newer system)
+// =========================
 
 model SeatmapTemplate {
   id        String            @id @default(cuid())
@@ -359,9 +359,9 @@ model SeatHold {
   @@index([userId])
 }
 
-/* =========================
-   Legacy seatmaps (compat)
-   ========================= */
+// =========================
+// Legacy seatmaps (compat)
+// =========================
 
 model SeatMap {
   id           String   @id @default(cuid())
@@ -391,7 +391,6 @@ model Seat {
   seatMap    SeatMap  @relation(fields: [seatMapId], references: [id])
 
   label      String
-  // rename to match route usage
   rowLabel   String?
   seatNumber Int?
 
