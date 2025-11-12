@@ -1,4 +1,3 @@
-// backend/src/routes/admin-ui.ts
 import { Router } from 'express';
 import { requireAdminOrOrganiser } from '../lib/authz.js';
 
@@ -19,7 +18,7 @@ router.get(['/ui', '/ui/', '/ui/home', '/ui/*'], requireAdminOrOrganiser, (_req,
   .wrap{display:flex;min-height:100vh}
   .sidebar{width:220px;background:#fff;border-right:1px solid var(--border);padding:16px 12px;position:sticky;top:0;height:100vh;box-sizing:border-box}
   .sb-group{font-size:12px;letter-spacing:.04em;color:var(--muted);margin:14px 8px 6px;text-transform:uppercase}
-  .sb-link{display:block;padding:10px 12px;margin:4px 4px;border-radius:8px;color:#111827;text-decoration:none}
+  .sb-link{display:block;padding:10px 12px;margin:4px;border-radius:8px;color:#111827;text-decoration:none}
   .sb-link.active,.sb-link:hover{background:#f1f5f9}
   .sb-sub{margin-left:10px}
   .content{flex:1;padding:20px}
@@ -32,6 +31,7 @@ router.get(['/ui', '/ui/', '/ui/home', '/ui/*'], requireAdminOrOrganiser, (_req,
   .btn.p{background:#111827;color:#fff;border-color:#111827}
   .grid{display:grid;gap:8px}
   .grid-2{grid-template-columns:repeat(2,1fr)}
+  .grid-3{grid-template-columns:repeat(3,1fr)}
   input,select,textarea{border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:#fff;outline:none}
   table{width:100%;border-collapse:collapse;font-size:14px}
   th,td{text-align:left;padding:10px;border-bottom:1px solid var(--border)}
@@ -40,17 +40,13 @@ router.get(['/ui', '/ui/', '/ui/home', '/ui/*'], requireAdminOrOrganiser, (_req,
   .drop{border:2px dashed #cbd5e1;border-radius:12px;padding:16px;text-align:center;color:#64748b}
   .drop.drag{background:#f8fafc;border-color:#94a3b8}
   .imgprev{max-height:140px;border:1px solid var(--border);border-radius:8px;display:none}
-  .progress{height:8px;background:#e5e7eb;border-radius:999px;overflow:hidden}
-  .bar{height:8px;background:#111827;width:0%}
   .row{display:flex;gap:8px;align-items:center}
-  .kbd{font:12px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:6px;padding:2px 6px}
-  .menuWrap{position:relative}
-  .menu{position:absolute;right:0;top:28px;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.08);display:none;min-width:160px;z-index:3}
+  .menu{position:absolute;right:0;top:28px;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.08);display:none;min-width:160px}
   .menu.open{display:block}
   .menu a{display:block;padding:8px 10px;text-decoration:none;color:#111827}
   .menu a:hover{background:#f8fafc}
   .typeahead{position:relative}
-  .ta-list{position:absolute;z-index:5;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:8px;margin-top:4px;max-height:220px;overflow:auto}
+  .ta-list{position:absolute;left:0;right:0;top:calc(100% + 4px);background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.08);z-index:40;max-height:240px;overflow:auto;display:none}
   .ta-item{padding:8px 10px;cursor:pointer}
   .ta-item:hover{background:#f8fafc}
 </style>
@@ -81,7 +77,7 @@ router.get(['/ui', '/ui/', '/ui/home', '/ui/*'], requireAdminOrOrganiser, (_req,
 
     <div class="sb-group">Settings</div>
     <a class="sb-link" href="/admin/ui/account" data-view="/admin/ui/account">Account</a>
-    <a class="sb-link" href="/auth/logout">Log out</a>
+    <a class="sb-link" href="/auth/logout" id="logoutLink">Log out</a>
   </aside>
   <main class="content" id="main"><div class="card"><div class="title">Loading…</div></div></main>
 </div>
@@ -97,7 +93,11 @@ router.get(['/ui', '/ui/', '/ui/home', '/ui/*'], requireAdminOrOrganiser, (_req,
   const showsSub = $('#showsSub');
   showsToggle.addEventListener('click', (e)=>{ e.preventDefault(); showsSub.style.display = showsSub.style.display==='none'?'block':'none'; });
 
-  function setActive(path){ $$('.sb-link').forEach(a=>a.classList.toggle('active', a.getAttribute('data-view')===path)); }
+  function setActive(path){
+    $$('.sb-link').forEach(a=>{
+      a.classList.toggle('active', a.getAttribute('data-view')===path);
+    });
+  }
 
   async function j(url,opts){
     const r=await fetch(url,{credentials:'include',...(opts||{})});
@@ -106,7 +106,12 @@ router.get(['/ui', '/ui/', '/ui/home', '/ui/*'], requireAdminOrOrganiser, (_req,
   }
   function go(path){ history.pushState(null,'',path); route(); }
 
-  // Delegate menu clicks
+  // handle logout via fetch so UI doesn't get stuck on JSON
+  $('#logoutLink').addEventListener('click', async (e)=>{
+    e.preventDefault();
+    try { await j('/auth/logout'); location.href='/admin/ui/home'; } catch {}
+  });
+
   document.addEventListener('click',function(e){
     const a = e.target && e.target.closest && e.target.closest('a.sb-link');
     if(a && a.getAttribute('data-view')){
@@ -118,11 +123,20 @@ router.get(['/ui', '/ui/', '/ui/home', '/ui/*'], requireAdminOrOrganiser, (_req,
   function route(){
     const path = location.pathname.replace(/\\/$/, '');
     setActive(path);
+
     if (path === '/admin/ui' || path === '/admin/ui/home' || path === '/admin/ui/index.html') return home();
     if (path === '/admin/ui/shows/create') return createShow();
     if (path === '/admin/ui/shows/current') return listShows();
-    if (path.startsWith('/admin/ui/shows/') && path.endsWith('/edit')) return editShow(path.split('/')[4]);
-    if (path.startsWith('/admin/ui/shows/') && path.endsWith('/seating')) return seatingPage(path.split('/')[4]);
+    if (path === '/admin/ui/orders') return orders();
+    if (path === '/admin/ui/venues') return venues();
+
+    if (path.startsWith('/admin/ui/shows/') && path.endsWith('/seating')) {
+      return seatingPage(path.split('/')[4]);
+    }
+    if (path.startsWith('/admin/ui/shows/') && path.endsWith('/edit')) {
+      return editShow(path.split('/')[4]);
+    }
+
     if (path.startsWith('/admin/ui')) return home();
   }
 
@@ -130,16 +144,17 @@ router.get(['/ui', '/ui/', '/ui/home', '/ui/*'], requireAdminOrOrganiser, (_req,
     main.innerHTML = '<div class="card"><div class="title">Welcome</div><div class="muted">Use the menu to manage shows, venues and orders.</div></div>';
   }
 
-  // ---------- Shared helpers ----------
-  async function uploadPoster(file) {
-    // IMPORTANT: this matches the mounted router on the server (/admin/uploads)
-    const form = new FormData(); form.append("file", file);
-    const res = await fetch("/admin/uploads", { method: "POST", body: form, credentials: "include" });
+  async function uploadPoster(file, showId) {
+    const form = new FormData();
+    form.append("file", file);
+    if (showId) form.append("showId", showId);
+    const res = await fetch("/admin/uploads/poster", { method: "POST", body: form, credentials: "include" });
     if (!res.ok) { const t = await res.text(); throw new Error('Upload failed: '+t.slice(0,200)); }
     const data = await res.json();
-    if (!data?.ok || !data?.url) throw new Error(data?.error||'Upload failed');
+    if (!data?.ok) throw new Error(data?.error||'Upload failed');
     return data;
   }
+
   function editorToolbarHtml(){
     return '<div class="row" style="gap:6px;margin-bottom:6px">'
       +'<button type="button" class="btn" data-cmd="bold">B</button>'
@@ -149,6 +164,7 @@ router.get(['/ui', '/ui/', '/ui/home', '/ui/*'], requireAdminOrOrganiser, (_req,
       +'<button type="button" class="btn" data-cmd="insertOrderedList">1. List</button>'
       +'</div>';
   }
+
   function bindWysiwyg(container){
     const ed = container.querySelector('[data-editor]');
     container.querySelectorAll('[data-cmd]').forEach(b=>{
@@ -157,73 +173,62 @@ router.get(['/ui', '/ui/', '/ui/home', '/ui/*'], requireAdminOrOrganiser, (_req,
     return ed;
   }
 
-  // ---------- Venue typeahead with "Add new" ----------
-  function attachVenueTypeahead(inputEl){
-    inputEl.setAttribute('autocomplete','off');
-    inputEl.dataset.venueId = ''; // where we store chosen id
-    const wrap = document.createElement('div');
-    wrap.className='typeahead';
-    inputEl.parentNode.insertBefore(wrap, inputEl);
-    wrap.appendChild(inputEl);
-
+  // ---------- Typeahead for venues ----------
+  function attachVenueTypeahead(input){
+    input.setAttribute('autocomplete','off');
+    input.parentElement.classList.add('typeahead');
     const list = document.createElement('div');
-    list.className='ta-list';
-    list.style.display='none';
-    wrap.appendChild(list);
+    list.className = 'ta-list';
+    input.parentElement.appendChild(list);
 
-    let lastQuery = '';
+    let lastQ = '';
     async function search(q){
-      lastQuery = q;
-      if(!q || q.trim()===''){ list.style.display='none'; list.innerHTML=''; inputEl.dataset.venueId=''; return; }
-      const res = await j('/admin/venues?q='+encodeURIComponent(q));
-      const items = res.items || [];
-      let html = '';
-      if(items.length){
-        html += items.map(v=>'<div class="ta-item" data-id="'+v.id+'" data-name="'+escapeHtml(v.name)+'">'+escapeHtml(v.name + (v.city? ' – '+v.city : ''))+'</div>').join('');
-      }else{
-        html += '<div class="ta-item" data-new="'+escapeHtml(q)+'">➕ Add “‘+escapeHtml(q)+'” as a new venue</div>';
+      lastQ = q;
+      if (!q || q.trim().length < 2) { list.style.display='none'; list.innerHTML=''; return; }
+      try{
+        const data = await j('/admin/venues?q='+encodeURIComponent(q));
+        const items = data.items || [];
+        let html = items.map(v=>'<div class="ta-item" data-id="'+v.id+'" data-name="'+(v.name||'')+'">'+(v.name||'')+(v.city?(' – '+v.city):'')+'</div>').join('');
+        if (!items.length){
+          html += '<div class="ta-item" data-create="'+q+'">➕ Create venue “'+q.replace(/"/g,'&quot;')+'”</div>';
+        }
+        list.innerHTML = html || '<div class="ta-item" data-create="'+q+'">➕ Create venue “'+q.replace(/"/g,'&quot;')+'”</div>';
+        list.style.display = 'block';
+      }catch(e){
+        list.style.display='none';
       }
-      list.innerHTML = html;
-      list.style.display='block';
     }
 
-    inputEl.addEventListener('input', (e)=>{ search(e.target.value); });
-    inputEl.addEventListener('focus', ()=>{ if(inputEl.value) search(inputEl.value); });
-
-    document.addEventListener('click',(e)=>{
-      if(!wrap.contains(e.target)) list.style.display='none';
-    });
+    input.addEventListener('input', ()=> search(input.value));
+    input.addEventListener('focus', ()=> { if (input.value) search(input.value); });
 
     list.addEventListener('click', async (e)=>{
       const item = e.target.closest('.ta-item');
       if(!item) return;
-      if(item.dataset.id){
-        inputEl.value = item.dataset.name || '';
-        inputEl.dataset.venueId = item.dataset.id;
+      const id = item.getAttribute('data-id');
+      const create = item.getAttribute('data-create');
+      if (id){
+        input.dataset.venueId = id;
+        input.value = item.getAttribute('data-name') || input.value;
         list.style.display='none';
-      }else if(item.dataset.new){
-        // create new venue with just a name (can edit later)
-        const name = item.dataset.new;
+      } else if (create){
+        // create venue on the fly
         try{
-          const r = await j('/admin/venues', {
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({ name })
-          });
-          if(r.ok === false){ throw new Error(r.error || 'Failed to create venue'); }
-          inputEl.value = r.venue.name;
-          inputEl.dataset.venueId = r.venue.id;
-          list.style.display='none';
-        }catch(err){
-          alert(err.message || 'Failed to create venue');
-        }
+          const r = await j('/admin/venues', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name: create }) });
+          if (r.ok && r.venue){
+            input.dataset.venueId = r.venue.id;
+            input.value = r.venue.name;
+          }
+        }catch{}
+        list.style.display='none';
       }
+    });
+
+    document.addEventListener('click',(e)=>{
+      if (!list.contains(e.target) && e.target !== input){ list.style.display='none'; }
     });
   }
 
-  function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#39;' }[c])); }
-
-  // ---------- Create show ----------
   async function createShow(){
     main.innerHTML = \`
       <div class="card">
@@ -231,15 +236,12 @@ router.get(['/ui', '/ui/', '/ui/home', '/ui/*'], requireAdminOrOrganiser, (_req,
         <div class="grid grid-2">
           <div class="grid"><label>Title</label><input id="sh_title" placeholder="e.g. Chuckl. Comedy Club"/></div>
           <div class="grid"><label>Date & time</label><input id="sh_dt" type="datetime-local"/></div>
-          <div class="grid"><label>Venue</label><input id="venue_input" placeholder="Pick or create a venue"/></div>
+          <div class="grid"><label>Venue</label><div class="typeahead"><input id="venue_input" placeholder="Start typing a venue…"/><div class="ta-list"></div></div><div class="muted">Pick an existing venue or just type a new one.</div></div>
           <div class="grid">
             <label>Poster image</label>
             <div id="drop" class="drop">Drop image here or click to choose</div>
             <input id="file" type="file" accept="image/*" style="display:none"/>
-            <div class="progress" style="margin-top:8px"><div id="bar" class="bar"></div></div>
-            <div class="row" style="margin-top:8px;gap:8px;align-items:center">
-              <img id="prev" class="imgprev" alt=""/>
-            </div>
+            <img id="prev" class="imgprev" alt=""/>
           </div>
         </div>
         <div class="grid" style="margin-top:10px">
@@ -255,11 +257,9 @@ router.get(['/ui', '/ui/', '/ui/home', '/ui/*'], requireAdminOrOrganiser, (_req,
       </div>\`;
 
     bindWysiwyg(main);
-    const venueEl = $('#venue_input');
-    attachVenueTypeahead(venueEl);
+    attachVenueTypeahead($('#venue_input'));
 
-    // upload widget
-    const drop=$('#drop'), file=$('#file'), bar=$('#bar'), prev=$('#prev');
+    const drop=$('#drop'), file=$('#file'), prev=$('#prev');
     function choose(){ file.click(); }
     drop.addEventListener('click', choose);
     drop.addEventListener('dragover', e=>{ e.preventDefault(); drop.classList.add('drag');});
@@ -269,34 +269,43 @@ router.get(['/ui', '/ui/', '/ui/home', '/ui/*'], requireAdminOrOrganiser, (_req,
       const f = e.dataTransfer.files && e.dataTransfer.files[0]; if(f) await doUpload(f);
     });
     file.addEventListener('change', async ()=>{ const f=file.files && file.files[0]; if(f) await doUpload(f); });
+
     async function doUpload(f){
-      $('#err').textContent=''; bar.style.width='15%';
-      try{ const out = await uploadPoster(f); prev.src = out.url; prev.style.display='block'; bar.style.width='100%'; setTimeout(()=>bar.style.width='0%',800);}
-      catch(e){ bar.style.width='0%'; $('#err').textContent=e.message||'Upload failed'; }
+      $('#err').textContent='';
+      try{
+        const out = await uploadPoster(f, null);
+        prev.src = out.url; prev.style.display='block';
+      }catch(e){ $('#err').textContent = e.message || 'Upload failed'; }
     }
 
     $('#save').addEventListener('click', async ()=>{
       const payload = {
         title: $('#sh_title').value.trim(),
         date: $('#sh_dt').value ? new Date($('#sh_dt').value).toISOString() : null,
-        venueId: venueEl.dataset.venueId || null,
-        venueText: venueEl.value.trim(),
-        imageUrl: prev.src || null,
+        venueId: $('#venue_input').dataset.venueId || null,
+        venueText: $('#venue_input').value.trim(),
+        imageUrl: $('#prev').src || null,
         descriptionHtml: $('#desc').innerHTML.trim()
       };
-      if(!payload.title || !payload.date || !payload.venueText || !payload.descriptionHtml){
-        $('#err').textContent='Title, date/time, venue and description are required';
+      if(!payload.title || !payload.date || !payload.venueText){
+        $('#err').textContent='Title, date/time and venue are required';
         return;
       }
-      try{
-        const r = await j('/admin/shows',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-        if(r.ok){ go('/admin/ui/shows/current'); }
-        else { $('#err').textContent=r.error||'Failed to create show'; }
-      }catch(e){ $('#err').textContent=e.message||'Failed to create show'; }
+
+      // if no venueId but user typed a new one, create it first
+      if (!payload.venueId && payload.venueText){
+        try{
+          const r = await j('/admin/venues', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name: payload.venueText }) });
+          if (r.ok && r.venue){ payload.venueId = r.venue.id; }
+        }catch{}
+      }
+
+      const r = await j('/admin/shows',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      if(!r.ok) { $('#err').textContent=r.error||'Failed to create show'; return; }
+      go('/admin/ui/shows/current');
     });
   }
 
-  // ---------- All events ----------
   async function listShows(){
     main.innerHTML = \`
       <div class="card">
@@ -323,119 +332,26 @@ router.get(['/ui', '/ui/', '/ui/home', '/ui/*'], requireAdminOrOrganiser, (_req,
           <td>\${s.title||''}</td>
           <td>\${when}</td>
           <td>\${s.venue ? (s.venue.name+(s.venue.city?' – '+s.venue.city:'')) : (s.venueText||'')}</td>
-          <td><span class="muted">\${total} total · Sold \${sold} · Hold \${hold} · Avail \${avail}</span> \${bar}</td>
-          <td>£\${((s._revenue?.grossFace ?? 0)).toFixed(2)}</td>
+          <td><span>\${total}</span> <span class="muted">Sold \${sold} · Hold \${hold} · Avail \${avail}</span> \${bar}</td>
+          <td>£\${(s._revenue?.grossFace ?? 0).toFixed(2)}</td>
           <td>\${s.status || 'DRAFT'}</td>
-          <td>
-            <div class="menuWrap">
-              <button class="btn" data-kebab="\${s.id}">⋮</button>
-              <div class="menu" id="m-\${s.id}">
-                <a href="#" data-edit="\${s.id}">Edit</a>
-                <a href="#" data-seating="\${s.id}">Seating map</a>
-                <a href="#" data-dup="\${s.id}">Duplicate</a>
-              </div>
-            </div>
-          </td>
+          <td><a href="#" data-edit="\${s.id}">Edit</a></td>
         </tr>\`;
       }).join('');
-      $$('[data-kebab]').forEach(b=>{
-        b.addEventListener('click', (e)=>{ e.preventDefault(); const id=b.getAttribute('data-kebab'); const m=$('#m-'+id); $$('.menu').forEach(x=>x.classList.remove('open')); m.classList.add('open'); });
-      });
-      document.addEventListener('click',(e)=>{ if(!e.target.closest('.menuWrap')) $$('.menu').forEach(x=>x.classList.remove('open')); });
-
       $$('[data-edit]').forEach(a=>a.addEventListener('click',(e)=>{ e.preventDefault(); go('/admin/ui/shows/'+a.getAttribute('data-edit')+'/edit'); }));
-      $$('[data-seating]').forEach(a=>a.addEventListener('click',(e)=>{ e.preventDefault(); go('/admin/ui/shows/'+a.getAttribute('data-seating')+'/seating'); }));
-      $$('[data-dup]').forEach(a=>a.addEventListener('click', async (e)=>{
-        e.preventDefault();
-        const id = a.getAttribute('data-dup');
-        const r = await j('/admin/shows/'+id+'/duplicate', { method:'POST' });
-        if(r.ok && r.newId){ go('/admin/ui/shows/'+r.newId+'/edit'); }
-      }));
     }
     $('#refresh').addEventListener('click', load);
     load();
   }
 
-  // ---------- Edit show ----------
   async function editShow(id){
     const s = await j('/admin/shows/'+id);
-    main.innerHTML = \`
-      <div class="card">
-        <div class="header"><div class="title">Edit show</div></div>
-        <div class="grid grid-2">
-          <div class="grid"><label>Title</label><input id="sh_title"/></div>
-          <div class="grid"><label>Date & time</label><input id="sh_dt" type="datetime-local"/></div>
-          <div class="grid"><label>Venue</label><input id="venue_input"/></div>
-          <div class="grid"><label>Poster image</label><div class="drop" id="drop">Drop image here or click to choose</div><input id="file" type="file" accept="image/*" style="display:none"/><div class="progress" style="margin-top:8px"><div id="bar" class="bar"></div></div><img id="prev" class="imgprev" /></div>
-        </div>
-        <div class="grid" style="margin-top:10px">
-          <label>Description</label>
-          \${editorToolbarHtml()}
-          <div id="desc" data-editor contenteditable="true" style="min-height:120px;border:1px solid var(--border);border-radius:8px;padding:10px"></div>
-          <div class="muted">Event description (required). Use the toolbar to format.</div>
-        </div>
-        <div class="row" style="margin-top:10px">
-          <button id="save" class="btn p">Save changes</button>
-          <a class="btn" href="#" id="goSeating">Seating map</a>
-          <div id="err" class="error"></div>
-        </div>
-      </div>\`;
-
-    bindWysiwyg(main);
-
-    const venueEl = $('#venue_input');
-    attachVenueTypeahead(venueEl);
-
-    $('#sh_title').value = s.item?.title ?? '';
-    venueEl.value = s.item?.venue?.name || s.item?.venueText || '';
-    venueEl.dataset.venueId = s.item?.venueId || '';
-    $('#desc').innerHTML = s.item?.descriptionHtml || '';
-    if (s.item?.date) {
-      const dt = new Date(s.item.date);
-      const iso = dt.toISOString().slice(0,16);
-      $('#sh_dt').value = iso;
-    }
-    if (s.item?.imageUrl) { $('#prev').src = s.item.imageUrl; $('#prev').style.display='block'; }
-
-    // upload
-    const drop=$('#drop'), file=$('#file'), bar=$('#bar'), prev=$('#prev');
-    drop.addEventListener('click', ()=> file.click());
-    drop.addEventListener('dragover', e=>{ e.preventDefault(); drop.classList.add('drag');});
-    drop.addEventListener('dragleave', ()=>drop.classList.remove('drag'));
-    drop.addEventListener('drop', async (e)=>{
-      e.preventDefault(); drop.classList.remove('drag');
-      const f = e.dataTransfer.files && e.dataTransfer.files[0]; if(f) await doUpload(f);
-    });
-    file.addEventListener('change', async ()=>{ const f=file.files && file.files[0]; if(f) await doUpload(f); });
-    async function doUpload(f){
-      $('#err').textContent=''; bar.style.width='15%';
-      try{ const out = await uploadPoster(f); prev.src = out.url; prev.style.display='block'; bar.style.width='100%'; setTimeout(()=>bar.style.width='0%',800);}
-      catch(e){ bar.style.width='0%'; $('#err').textContent=e.message||'Upload failed'; }
-    }
-
-    $('#goSeating').addEventListener('click',(e)=>{e.preventDefault(); go('/admin/ui/shows/'+id+'/seating');});
-    $('#save').addEventListener('click', async ()=>{
-      const payload = {
-        title: $('#sh_title').value.trim(),
-        date: $('#sh_dt').value ? new Date($('#sh_dt').value).toISOString() : null,
-        venueId: venueEl.dataset.venueId || null,
-        venueText: venueEl.value.trim(),
-        imageUrl: $('#prev').src || null,
-        descriptionHtml: $('#desc').innerHTML.trim()
-      };
-      if(!payload.title || !payload.date || !payload.venueText || !payload.descriptionHtml){
-        $('#err').textContent='Title, date/time, venue and description are required';
-        return;
-      }
-      const r = await j('/admin/shows/'+id,{ method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-      if(r.ok){ alert('Saved'); }
-      else { $('#err').textContent=r.error||'Failed to save'; }
-    });
+    main.innerHTML = '<div class="card"><div class="title">Edit show '+id+'</div><div class="muted">Coming soon</div></div>';
   }
 
-  function seatingPage(id){
-    main.innerHTML='<div class="card"><div class="title">Seating (show '+id+')</div><div class="muted">Coming soon</div></div>';
-  }
+  function seatingPage(id){ main.innerHTML = '<div class="card"><div class="title">Seating for '+id+'</div><div class="muted">Coming soon</div></div>'; }
+  function orders(){ main.innerHTML='<div class="card"><div class="title">Orders</div><div class="muted">Coming soon</div></div>'; }
+  function venues(){ main.innerHTML='<div class="card"><div class="title">Venues</div><div class="muted">Use the Venue input on Create Show to add/search.</div></div>'; }
 
   route();
 })();
