@@ -4,53 +4,49 @@
 
 generator client {
   provider = "prisma-client-js"
-  // previewFeatures = []
 }
 
 datasource db {
   provider = "postgresql"
-  // Prisma only needs this env var to exist during `prisma generate`.
-  // Your real runtime URL should be provided at runtime/deploy.
-  url = env("DB_URL")
+  url      = env("DB_URL")
 }
 
-/// ======================================================================
-/// CORE MODELS (minimal but functional so `prisma generate` passes)
-/// You can flesh these out with more fields/indexes later as needed.
-/// ======================================================================
+/// ===============================
+/// Enums
+/// ===============================
 
-model Order {
-  id         String    @id @default(cuid())
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-
-  // Example money fields (pence for accuracy)
-  subtotalPence Int     @default(0)
-  feesPence     Int     @default(0)
-  totalPence    Int     @default(0)
-
-  // Relations
-  refunds Refund[]
-
-  @@index([createdAt])
+enum OrderStatus {
+  PENDING
+  PAID
+  REFUNDED
+  CANCELLED
 }
 
-model Show {
-  id         String    @id @default(cuid())
-  venueId    String?
-  venue      Venue?    @relation(fields: [venueId], references: [id])
-  title      String?
-  startsAt   DateTime?
+enum SeatStatus {
+  AVAILABLE
+  HELD
+  SOLD
+  BLOCKED
+}
 
-  // Relations
-  seatMaps          SeatMap[]
-  externalAllocations ExternalAllocation[]
+/// ===============================
+/// Core models required by routes
+/// ===============================
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model User {
+  id         String   @id @default(cuid())
+  email      String   @unique
+  name       String?
+  // If you don't use passwords, leave as optional
+  passwordHash String?
+  role       String?  // "admin" | "organiser" | etc.
 
-  @@index([venueId])
-  @@index([startsAt])
+  orders     Order[]
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([email])
 }
 
 model Venue {
@@ -61,6 +57,7 @@ model Venue {
   city      String?
   postcode  String?
   country   String?
+  capacity  Int?
 
   // Relations
   seatMaps  SeatMap[]
@@ -73,50 +70,137 @@ model Venue {
   @@index([name])
 }
 
-model Seat {
+model Show {
   id        String   @id @default(cuid())
 
-  seatMapId String
-  seatMap   SeatMap  @relation(fields: [seatMapId], references: [id], onDelete: Cascade)
+  venueId   String?
+  venue     Venue?   @relation(fields: [venueId], references: [id])
 
-  // Labels kept as strings so things like "A12" / "Balcony-7" work
-  rowLabel   String?
-  seatNumber String?
-  level      String?
+  title       String?
+  description String?
+  imageUrl    String?
 
-  isAvailable Boolean  @default(true)
+  // A lot of your routes use `date`, so include it explicitly.
+  // If you also want startsAt, add it too; primary usage is `date`.
+  date      DateTime
+  // startsAt DateTime?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Optional: connect allocation seats back to physical seat (not required)
-  allocationSeats AllocationSeat[]
-
-  @@index([seatMapId])
-  @@index([rowLabel, seatNumber])
-}
-
-model SeatMapZone {
-  id        String  @id @default(cuid())
-
-  seatMapId String
-  seatMap   SeatMap @relation(fields: [seatMapId], references: [id], onDelete: Cascade)
-
-  name       String
-  // Optional styling / pricing helpers
-  colorHex   String?   // e.g. "#0ea5e9"
-  pricePence Int?
+  // Relations
+  ticketTypes         TicketType[]
+  orders              Order[]
+  seatMaps            SeatMap[]
+  externalAllocations ExternalAllocation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([seatMapId])
-  @@index([name])
+  @@index([venueId])
+  @@index([date])
 }
 
-/// ======================================================================
-/// YOUR UPDATED BLOCKS (from your message)
-/// ======================================================================
+model TicketType {
+  id        String   @id @default(cuid())
+
+  showId    String
+  show      Show     @relation(fields: [showId], references: [id], onDelete: Cascade)
+
+  name        String
+  // pricing (pence)
+  pricePence  Int
+  feePence    Int?      // optional per-type fee if you use it
+  // inventory controls
+  quantityTotal Int?
+  quantitySold  Int?     @default(0)
+  maxPerOrder   Int?
+
+  isActive   Boolean @default(true)
+  sortOrder  Int?     // for UI lists
+
+  tickets    Ticket[]
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([showId])
+  @@index([isActive])
+}
+
+model Order {
+  id        String       @id @default(cuid())
+
+  showId    String
+  show      Show         @relation(fields: [showId], references: [id], onDelete: Cascade)
+
+  userId    String?
+  user      User?        @relation(fields: [userId], references: [id])
+
+  // customer identity (used in many routes/exports)
+  email     String?
+
+  // gateway references
+  stripeId  String?
+
+  status    OrderStatus  @default(PENDING)
+
+  // Money fields (all pence) – your routes read these names
+  amountPence          Int     @default(0) // main amount (sometimes used as item amount)
+  paymentFeePence      Int?    @default(0)
+  platformFeePence     Int?    @default(0)
+  organiserSharePence  Int?    @default(0)
+  netPayoutPence       Int?    @default(0)
+
+  // Totals you may still use elsewhere
+  subtotalPence Int    @default(0)
+  feesPence     Int    @default(0)
+  totalPence    Int    @default(0)
+
+  // Relations
+  tickets   Ticket[]
+  refunds   Refund[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([showId])
+  @@index([userId])
+  @@index([email])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Ticket {
+  id           String     @id @default(cuid())
+
+  orderId      String
+  order        Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  showId       String
+  show         Show       @relation(fields: [showId], references: [id], onDelete: Cascade)
+
+  ticketTypeId String
+  ticketType   TicketType @relation(fields: [ticketTypeId], references: [id], onDelete: Restrict)
+
+  // price at time of purchase (pence)
+  amountPence  Int        @default(0)
+
+  // quantity is referenced in multiple routes/exports
+  quantity     Int        @default(1)
+
+  // optional seat binding
+  seatId       String?
+  seat         Seat?      @relation(fields: [seatId], references: [id], onDelete: SetNull)
+
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([orderId])
+  @@index([showId])
+  @@index([ticketTypeId])
+}
+
+/// ===============================
+/// Your updated blocks (kept as requested)
+/// ===============================
 
 // ----------------------
 // Refund (updated block)
@@ -157,6 +241,9 @@ model SeatMap {
   // NEW - matches route usage
   isDefault Boolean  @default(false)
 
+  // routes create with a `layout` payload
+  layout    Json?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -185,6 +272,9 @@ model ExternalAllocation {
   // NEW - optional platform hint (e.g., "SeeTickets", "Ticketsolve")
   externalPlatform String?
 
+  // NEW - used in routes when creating allocations
+  contactEmail String?
+
   createdAt DateTime @default(now())
 
   seats AllocationSeat[]
@@ -212,4 +302,60 @@ model AllocationSeat {
 
   @@index([allocationId])
   @@index([seatId])
+}
+
+// ------------------------------------
+// Seat + SeatMapZone (expanded)
+// ------------------------------------
+model Seat {
+  id        String   @id @default(cuid())
+
+  seatMapId String
+  seatMap   SeatMap  @relation(fields: [seatMapId], references: [id], onDelete: Cascade)
+
+  // For flexible labels; your code reads label/kind/status/zoneId
+  label     String?
+  kind      String?       // e.g., "standard" | "wheelchair" | "aisle"
+
+  rowLabel   String?
+  seatNumber String?
+  level      String?
+
+  status     SeatStatus   @default(AVAILABLE)
+
+  zoneId     String?
+  zone       SeatMapZone? @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+
+  isAvailable Boolean  @default(true)
+
+  allocationSeats AllocationSeat[]
+  // optional backref from tickets if bound
+  tickets    Ticket[]
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([seatMapId])
+  @@index([zoneId])
+  @@index([rowLabel, seatNumber])
+}
+
+model SeatMapZone {
+  id        String  @id @default(cuid())
+
+  seatMapId String
+  seatMap   SeatMap @relation(fields: [seatMapId], references: [id], onDelete: Cascade)
+
+  name       String
+  // Optional styling / pricing helpers
+  colorHex   String?   // e.g. "#0ea5e9"
+  pricePence Int?
+
+  seats      Seat[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([seatMapId])
+  @@index([name])
 }
