@@ -1,93 +1,73 @@
-// backend/src/routes/auth.ts
-import { Router } from 'express';
-import prisma from '../lib/prisma.js';
-import bcrypt from 'bcryptjs';
+import { Router } from "express";
+import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 
+const prisma = new PrismaClient();
 const router = Router();
 
-// Cookie settings (httpOnly session cookie)
-const COOKIE_NAME = 'sid';
-const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
-
-function setSessionCookie(res: any, userId: string) {
-  // We’re keeping this simple: cookie just stores the userId.
-  // (You can swap to JWT later if you like.)
-  res.cookie(COOKIE_NAME, userId, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: COOKIE_MAX_AGE * 1000,
-    path: '/',
-  });
-}
-
-function clearSessionCookie(res: any) {
-  res.clearCookie(COOKIE_NAME, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-  });
-}
-
-/**
- * POST /auth/login
- * Body: { email, password }
- * Sets httpOnly cookie if OK.
- */
-router.post('/login', async (req, res) => {
+// POST /auth/register
+router.post("/register", async (req, res) => {
   try {
-    const { email, password } = (req.body || {}) as { email?: string; password?: string };
-    if (!email || !password) return res.status(400).json({ ok: false, error: 'Missing email or password' });
+    const { email, name, password } = req.body ?? {};
+    if (!email || !password) {
+      return res.status(400).json({ error: "email and password are required" });
+    }
+
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      return res.status(409).json({ error: "email already in use" });
+    }
+
+    const passwordHash = await bcrypt.hash(String(password), 10);
+
+    const user = await prisma.user.create({
+      data: {
+        email,
+        name: name ?? null,
+        passwordHash
+      },
+      select: { id: true, email: true, name: true }
+    });
+
+    return res.status(201).json(user);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(err);
+    return res.status(500).json({ error: "internal error" });
+  }
+});
+
+// POST /auth/login
+router.post("/login", async (req, res) => {
+  try {
+    const { email, password } = req.body ?? {};
+    if (!email || !password) {
+      return res.status(400).json({ error: "email and password are required" });
+    }
 
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user || !user.password) {
-      return res.status(401).json({ ok: false, error: 'Invalid credentials' });
+    if (!user || !user.passwordHash) {
+      return res.status(401).json({ error: "invalid credentials" });
     }
 
-    let ok = false;
-    // Support both hashed and plaintext (during bootstrap)
-    if (user.password.startsWith('$2')) {
-      ok = await bcrypt.compare(password, user.password);
-    } else {
-      ok = password === user.password;
+    const ok = await bcrypt.compare(String(password), user.passwordHash);
+    if (!ok) {
+      return res.status(401).json({ error: "invalid credentials" });
     }
-    if (!ok) return res.status(401).json({ ok: false, error: 'Invalid credentials' });
 
-    setSessionCookie(res, user.id);
-    return res.json({ ok: true, user: { id: user.id, email: user.email, name: user.name, organiserSplitBps: user.organiserSplitBps, createdAt: user.createdAt } });
-  } catch (e) {
-    console.error(e);
-    return res.status(500).json({ ok: false, error: 'Login failed' });
+    const token = jwt.sign(
+      { sub: user.id, email: user.email, role: user.role ?? "user" },
+      String(process.env.JWT_SECRET || "dev-secret"),
+      { expiresIn: "7d" }
+    );
+
+    return res.json({ token });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(err);
+    return res.status(500).json({ error: "internal error" });
   }
-});
-
-/**
- * GET /auth/me
- * Returns the current user if cookie present.
- */
-router.get('/me', async (req: any, res) => {
-  try {
-    const sid = req.cookies?.[COOKIE_NAME];
-    if (!sid) return res.json({ ok: true, user: null });
-
-    const user = await prisma.user.findUnique({
-      where: { id: String(sid) },
-      select: { id: true, email: true, name: true, organiserSplitBps: true, createdAt: true },
-    });
-    return res.json({ ok: true, user: user || null });
-  } catch (e) {
-    console.error(e);
-    return res.status(500).json({ ok: false, error: 'Failed to fetch session' });
-  }
-});
-
-/**
- * POST /auth/logout  (JSON variant; you also have GET /auth/logout in logout.ts)
- */
-router.post('/logout', async (_req, res) => {
-  clearSessionCookie(res);
-  return res.json({ ok: true });
 });
 
 export default router;
