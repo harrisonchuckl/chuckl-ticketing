@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.node.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "allowJs": false,
+    "strict": true,
+    "noEmit": true,
+    "moduleDetection": "force",
+    "moduleResolution": "bundler",
+    "types": ["vite/client"]
+  },
+  "include": ["src"]
+}
