@@ -34,7 +34,7 @@ model User {
 
   orders         Order[]
   showsOrganised Show[]  @relation("OrganiserShows")
-  tickets        Ticket[] // <-- back-relation for Ticket.user
+  tickets        Ticket[]
 }
 
 model Venue {
@@ -82,7 +82,7 @@ model TicketType {
 
   name        String
   pricePence  Int
-  /// numeric availability expected by routes (they compare `available > 0`)
+  /// numeric availability (routes compare > 0)
   available   Int?
 
   showId      String
@@ -126,7 +126,9 @@ model Refund {
 
   amount      Int
   amountPence Int?
-  reason      String?  // routes sometimes set 'reason'
+  reason      String?
+  processorId String?  // e.g. Stripe refund id or processor reference
+  stripeId    String?  // kept because some routes refer to this key
 
   orderId     String
   order       Order    @relation(fields: [orderId], references: [id])
@@ -155,7 +157,6 @@ model Ticket {
   ticketType  TicketType @relation(fields: [ticketTypeId], references: [id])
   seat        Seat?      @relation(fields: [seatId], references: [id])
 
-  // Optional direct link handy for includes some code expects (TicketInclude.user)
   userId      String?
   user        User?      @relation(fields: [userId], references: [id])
 }
@@ -168,6 +169,7 @@ model SeatMap {
   name       String
   version    Int       @default(1)
   isDefault  Boolean   @default(false)
+  layout     Json?     // used by routes/admin-seatmaps.ts
 
   showId     String
   venueId    String?
@@ -231,10 +233,11 @@ model ExternalAllocation {
   seatMapId String?
   seatMap   SeatMap? @relation(fields: [seatMapId], references: [id])
 
-  source    String
-  label     String?
+  source          String
+  label           String?
   externalPlatform String?
-  quantity  Int
+  contactEmail    String?
+  quantity        Int
 
   seats     AllocationSeat[]
 }
@@ -249,4 +252,9 @@ model AllocationSeat {
 
   seatId        String
   seat          Seat    @relation(fields: [seatId], references: [id])
+
+  // denormalised helpers that some routes read directly
+  rowLabel      String?
+  seatNumber    Int?
+  level         String?
 }
