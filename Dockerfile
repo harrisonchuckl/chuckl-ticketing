@@ -2,14 +2,14 @@
 FROM node:20-bullseye-slim AS proddeps
 WORKDIR /app/backend
 
-# Copy package manifests and Prisma schema first for better caching
+# Copy manifests and Prisma schema early for caching + generate
 COPY backend/package*.json ./
 COPY backend/prisma ./prisma
 
-# If you have a package-lock.json, prefer npm ci. If not, swap to `npm install --omit=dev`
-RUN npm ci --omit=dev || npm install --omit=dev
+# Prefer lockfile if valid; otherwise fall back. Never run lifecycle scripts here.
+RUN (npm ci --omit=dev --ignore-scripts || npm install --omit=dev --no-audit --no-fund --ignore-scripts)
 
-# Generate Prisma client against production deps
+# Generate Prisma client against prod deps
 RUN npx prisma generate --schema=prisma/schema.prisma
 
 
@@ -17,22 +17,25 @@ RUN npx prisma generate --schema=prisma/schema.prisma
 FROM node:20-bullseye-slim AS builder
 WORKDIR /app
 
-# Build tools (sharp/pdfkit sometimes need these even with prebuilt binaries)
+# (Optional) Build tools – keep if you truly need native builds (e.g. sharp)
 RUN apt-get update \
  && apt-get install -y --no-install-recommends python3 build-essential ca-certificates openssl \
  && rm -rf /var/lib/apt/lists/*
 
-# Install all deps for TypeScript build
+# Copy manifests and Prisma schema BEFORE installing so postinstall can't fail
 COPY backend/package*.json ./backend/
-RUN cd backend && (npm ci || npm install)
+COPY backend/prisma ./backend/prisma
 
-# Copy the rest of the backend source
+# Install dev deps for building, but skip lifecycle scripts to avoid premature prisma runs
+RUN cd backend && (npm ci --ignore-scripts || npm install --no-audit --no-fund --ignore-scripts)
+
+# Now copy the rest of the source
 COPY backend ./backend
 
-# (Harmless duplicate; ensures prisma types exist during tsc)
+# Generate Prisma client for type-safe build (uses dev deps just installed)
 RUN cd backend && npx prisma generate --schema=prisma/schema.prisma
 
-# Compile TS -> dist/
+# Build TS -> dist/
 RUN cd backend && npm run build
 
 
@@ -40,16 +43,16 @@ RUN cd backend && npm run build
 FROM gcr.io/distroless/nodejs20-debian12:nonroot
 WORKDIR /app/backend
 
-# Copy compiled JS
+# Compiled JS
 COPY --from=builder /app/backend/dist ./dist
 
-# Copy production node_modules (includes @prisma/client and engines) and schema
+# Production node_modules (includes @prisma/client + engines) and schema
 COPY --from=proddeps /app/backend/node_modules ./node_modules
 COPY --from=proddeps /app/backend/prisma ./prisma
 
 ENV NODE_ENV=production
-# Railway will set PORT; your server should read it or default to 4000
+# Railway will provide PORT; fall back handled in your app
 EXPOSE 4000
 
-# Start the app (update if your entry point is different)
+# Start the app (adjust if your entrypoint differs)
 CMD ["dist/start.js"]
