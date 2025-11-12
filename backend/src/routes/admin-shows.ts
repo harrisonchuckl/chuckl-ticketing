@@ -1,65 +1,153 @@
-import { Router } from 'express';
-import prisma from '../lib/prisma.js';
-import { requireAdminOrOrganiser } from '../lib/authz.js';
+import { Router } from "express";
+import prisma from "../lib/prisma.js";
+import { requireAdminOrOrganiser } from "../lib/authz.js";
 
 const router = Router();
 
-router.get('/shows', requireAdminOrOrganiser, async (_req, res) => {
+/** Utility: find existing venue (by exact name+city) or create one from text */
+async function ensureVenue(venueId?: string | null, venueText?: string | null) {
+  if (venueId) {
+    const v = await prisma.venue.findUnique({ where: { id: venueId } });
+    if (v) return v.id;
+  }
+  const name = (venueText || "").trim();
+  if (!name) return null;
+
+  // Try a soft match by name
+  const existing = await prisma.venue.findFirst({
+    where: { name: { equals: name, mode: "insensitive" } },
+    select: { id: true },
+  });
+  if (existing) return existing.id;
+
+  const created = await prisma.venue.create({
+    data: { name },
+    select: { id: true },
+  });
+  return created.id;
+}
+
+/** GET /admin/shows — list */
+router.get("/shows", requireAdminOrOrganiser, async (_req, res) => {
   try {
     const items = await prisma.show.findMany({
-      orderBy: [{ date: 'asc' }],
+      orderBy: [{ date: "asc" }],
       select: {
-        id: true,
-        title: true,
-        description: true,
-        date: true,
-        imageUrl: true,
+        id: true, title: true, description: true, imageUrl: true, date: true, status: true,
         venue: { select: { id: true, name: true, city: true } },
-        _count: { select: { ticketTypes: true, orders: true } },
       },
     });
-    res.json({ ok: true, items });
+
+    // Attach simple allocation/revenue placeholders to match your UI
+    const enriched = items.map(s => ({
+      ...s,
+      _alloc: { total: 0, sold: 0, hold: 0 },
+      _revenue: { grossFace: 0 },
+    }));
+
+    res.json({ ok: true, items: enriched });
   } catch (e) {
-    console.error('GET /admin/shows failed', e);
-    res.status(500).json({ ok: false, error: 'Failed to load shows' });
+    console.error("GET /admin/shows failed", e);
+    res.status(500).json({ ok: false, error: "Failed to load shows" });
   }
 });
 
-router.post('/shows', requireAdminOrOrganiser, async (req, res) => {
+/** POST /admin/shows — create (auto-creates venue if needed) */
+router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
   try {
-    const { title, description, date, venueId, imageUrl, ticket } = req.body || {};
-    if (!title || !date || !venueId) {
-      return res.status(400).json({ ok: false, error: 'title, date and venueId are required' });
+    const { title, date, imageUrl, descriptionHtml, venueId, venueText } = req.body || {};
+    if (!title || !date || !(venueId || venueText) || !descriptionHtml) {
+      return res.status(400).json({ ok: false, error: "Missing required fields" });
     }
+
+    const finalVenueId = await ensureVenue(venueId, venueText);
 
     const created = await prisma.show.create({
       data: {
-        title: String(title).trim(),
-        description: description ? String(description) : null,
+        title: String(title),
         date: new Date(date),
-        venue: { connect: { id: String(venueId) } },
-        imageUrl: imageUrl ? String(imageUrl) : null,
+        imageUrl: imageUrl ?? null,
+        description: descriptionHtml ?? null,
+        venueId: finalVenueId,
       },
-      select: { id: true, title: true, date: true, venueId: true },
+      select: { id: true },
     });
 
-    if (ticket && ticket.name && ticket.pricePounds != null) {
-      const pounds = Number(ticket.pricePounds);
-      const pricePence = Math.round(pounds * 100);
-      await prisma.ticketType.create({
-        data: {
-          name: String(ticket.name).trim(),
-          pricePence,
-          available: ticket.available != null ? Number(ticket.available) : null,
-          show: { connect: { id: created.id } },
-        },
-      });
-    }
-
-    res.json({ ok: true, show: created });
+    res.json({ ok: true, id: created.id });
   } catch (e) {
-    console.error('POST /admin/shows failed', e);
-    res.status(500).json({ ok: false, error: 'Failed to create show' });
+    console.error("POST /admin/shows failed", e);
+    res.status(500).json({ ok: false, error: "Failed to create show" });
+  }
+});
+
+/** GET /admin/shows/:id */
+router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
+  try {
+    const s = await prisma.show.findUnique({
+      where: { id: String(req.params.id) },
+      select: {
+        id: true, title: true, description: true, imageUrl: true, date: true,
+        venue: { select: { id: true, name: true, city: true } },
+      },
+    });
+    if (!s) return res.status(404).json({ ok: false, error: "Not found" });
+
+    res.json({ ok: true, item: { ...s, venueText: s.venue?.name ?? "" } });
+  } catch (e) {
+    console.error("GET /admin/shows/:id failed", e);
+    res.status(500).json({ ok: false, error: "Failed to load show" });
+  }
+});
+
+/** PATCH /admin/shows/:id */
+router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
+  try {
+    const { title, date, imageUrl, descriptionHtml, venueId, venueText } = req.body || {};
+    const finalVenueId = await ensureVenue(venueId, venueText);
+
+    const updated = await prisma.show.update({
+      where: { id: String(req.params.id) },
+      data: {
+        ...(title != null ? { title: String(title) } : {}),
+        ...(date != null ? { date: new Date(date) } : {}),
+        ...(imageUrl !== undefined ? { imageUrl: imageUrl ?? null } : {}),
+        ...(descriptionHtml !== undefined ? { description: descriptionHtml ?? null } : {}),
+        ...(finalVenueId ? { venueId: finalVenueId } : {}),
+      },
+      select: { id: true },
+    });
+
+    res.json({ ok: true, id: updated.id });
+  } catch (e) {
+    console.error("PATCH /admin/shows/:id failed", e);
+    res.status(500).json({ ok: false, error: "Failed to update show" });
+  }
+});
+
+/** POST /admin/shows/:id/duplicate */
+router.post("/shows/:id/duplicate", requireAdminOrOrganiser, async (req, res) => {
+  try {
+    const src = await prisma.show.findUnique({
+      where: { id: String(req.params.id) },
+      select: { title: true, description: true, imageUrl: true, date: true, venueId: true },
+    });
+    if (!src) return res.status(404).json({ ok: false, error: "Not found" });
+
+    const newShow = await prisma.show.create({
+      data: {
+        title: (src.title || "") + " (Copy)",
+        description: src.description,
+        imageUrl: src.imageUrl,
+        date: src.date, // you’ll likely change date in the editor
+        venueId: src.venueId,
+      },
+      select: { id: true },
+    });
+
+    res.json({ ok: true, newId: newShow.id });
+  } catch (e) {
+    console.error("duplicate show failed", e);
+    res.status(500).json({ ok: false, error: "Failed to duplicate" });
   }
 });
 
