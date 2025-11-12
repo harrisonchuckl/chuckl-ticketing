@@ -43,7 +43,7 @@ enum SeatStatus {
 }
 
 // =========================
-/* Core models */
+// Core models
 // =========================
 
 model User {
@@ -60,7 +60,7 @@ model User {
   orders             Order[]
   seatHolds          SeatHold[]
   uploads            Upload[]
-  tickets            Ticket[]     // <— added inverse for Ticket.user
+  tickets            Ticket[]
 
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
@@ -245,7 +245,7 @@ model Refund {
   orderId      String
   order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  // keep column name amountPence but expose as amount in the client
+  // map DB column amountPence -> client field amount
   amount       Int      @map("amountPence")
 
   reason       String?
