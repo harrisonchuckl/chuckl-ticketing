@@ -1,418 +1,77 @@
-// backend/prisma/schema.prisma
-
-generator client {
-  provider      = "prisma-client-js"
-  engineType    = "library"
-  binaryTargets = ["native", "debian-openssl-3.0.x"]
-}
-
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-
 // =========================
-// Core / existing models
+// Seating maps & show seats
 // =========================
-
-model User {
-  id                 String               @id @default(cuid())
-  email              String               @unique
-  name               String?
-  password           String?
-  createdAt          DateTime             @default(now())
-
-  // Relations
-  orders             Order[]
-  tickets            Ticket[]             @relation("UserTickets")
-  passwordResets     PasswordReset[]
-  orderNotes         OrderNote[]
-
-  // Per-organiser share of the platform fee (basis points: 5000 = 50%)
-  organiserSplitBps  Int?
-
-  // New relations
-  createdAllocations ExternalAllocation[] @relation("AllocationCreatedBy")
-  seatHolds          SeatHold[]           // back-relation for SeatHold.user
-}
-
-model Order {
-  id                  String      @id @default(cuid())
-  createdAt           DateTime    @default(now())
-  updatedAt           DateTime    @updatedAt
-
-  email               String?
-  amountPence         Int?
-  quantity            Int?
-  stripeId            String?
-  status              OrderStatus @default(PENDING)
-
-  // Fee breakdown (optional for safe rollout)
-  platformFeePence    Int?
-  organiserSharePence Int?
-  paymentFeePence     Int?
-  netPayoutPence      Int?
-
-  // Relations
-  userId              String?
-  user                User?       @relation(fields: [userId], references: [id])
-  showId              String?
-  show                Show?       @relation(fields: [showId], references: [id])
-  tickets             Ticket[]
-  refunds             Refund[]
-  notes               OrderNote[]
-
-  // Seat holds tied to an order during checkout
-  seatHolds           SeatHold[]
-}
-
-enum OrderStatus {
-  PENDING
-  PAID
-  REFUNDED
-  CANCELLED
-}
-
-model Show {
-  id          String       @id @default(cuid())
-  title       String
-  description String?
-  date        DateTime
-
-  // Optional poster / image URL for listings & meta tags
-  imageUrl    String?
-
-  venueId     String?
-  venue       Venue?       @relation(fields: [venueId], references: [id])
-
-  ticketTypes TicketType[]
-  orders      Order[]
-
-  // New relations
-  tickets             Ticket[]                 // back-relation for Ticket.show
-  seating             ShowSeating?
-  reportSchedules     BoxOfficeReportSchedule[]
-  externalAllocations ExternalAllocation[]
-  seatHolds           SeatHold[]
-}
-
-model Venue {
-  id        String   @id @default(cuid())
-  name      String
-  address   String?
-  city      String?
-  postcode  String?
-  capacity  Int?
-
-  // Pricing lives on TicketType/Show
-  shows     Show[]
-
-  // Seat maps available for this venue
-  seatMaps  SeatMap[]
-}
-
-// =========================
-// Ticketing extensions
-// =========================
-
-enum TicketKind {
-  PAID
-  FREE
-}
-
-enum SeatingKind {
-  UNALLOCATED
-  ALLOCATED
-}
-
-model TicketType {
-  id         String      @id @default(cuid())
-  name       String
-  pricePence Int
-  available  Int?
-  createdAt  DateTime    @default(now())
-
-  // Extensions
-  kind       TicketKind  @default(PAID)
-  seating    SeatingKind @default(UNALLOCATED)
-  level      String?     // e.g. "Stalls", "Circle"
-
-  showId     String?
-  show       Show?       @relation(fields: [showId], references: [id])
-
-  // Optional link from price tiers (allocated seating)
-  priceTiers PriceTier[]
-}
-
-model Ticket {
-  id          String    @id @default(cuid())
-  serial      String    @unique
-  holderName  String?
-  status      String
-  scannedAt   DateTime?
-
-  orderId     String?
-  order       Order?    @relation(fields: [orderId], references: [id])
-
-  userId      String?
-  user        User?     @relation("UserTickets", fields: [userId], references: [id])
-
-  refunds     Refund[]
-
-  // Seat assignment (allocated shows)
-  seatId      String?
-  seat        Seat?      @relation(fields: [seatId], references: [id])
-
-  // Convenience link to show
-  showId      String?
-  show        Show?      @relation(fields: [showId], references: [id])
-
-  @@index([showId])
-  @@index([seatId])
-}
-
-model PasswordReset {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  token     String   @unique
-  createdAt DateTime @default(now())
-  expiresAt DateTime?
-  usedAt    DateTime?
-}
-
-model Refund {
-  id         String   @id @default(cuid())
-  createdAt  DateTime @default(now())
-  amount     Int
-  reason     String?
-  stripeId   String?
-
-  orderId    String
-  order      Order    @relation(fields: [orderId], references: [id])
-
-  ticketId   String?
-  ticket     Ticket?  @relation(fields: [ticketId], references: [id])
-
-  createdBy  String?
-}
-
-model OrderNote {
-  id        String   @id @default(cuid())
-  orderId   String
-  order     Order    @relation(fields: [orderId], references: [id])
-  authorId  String?
-  user      User?    @relation(fields: [authorId], references: [id])
-  text      String
-  createdAt DateTime @default(now())
-
-  @@index([orderId, createdAt])
-  @@index([authorId])
-}
-
-// =========================
-// Seating maps (additive)
-// =========================
-
-// A seat map belongs to a venue and can be versioned.
-// layout: JSON blob for editor geometry (zones, shapes, stage, etc.)
-model SeatMap {
-  id         String   @id @default(cuid())
-  venueId    String
-  venue      Venue    @relation(fields: [venueId], references: [id])
-  name       String
-  version    Int      @default(1)
-  isDefault  Boolean  @default(false)
-  layout     Json?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  zones      SeatZone[]
-  seats      Seat[]
-  shows      ShowSeating[]
-
-  @@index([venueId, isDefault])
-}
-
-model SeatZone {
-  id        String   @id @default(cuid())
-  seatMapId String
-  seatMap   SeatMap  @relation(fields: [seatMapId], references: [id])
-  name      String
-  level     String?   // e.g. "Stalls", "Circle"
-  meta      Json?
-
-  seats     Seat[]
-
-  @@index([seatMapId])
-}
-
-enum SeatKind {
-  STANDARD
-  ACCESSIBLE
-  COMPANION
-  OBSTRUCTED
-  WHEELCHAIR
-  CARER
-}
 
 enum SeatStatus {
   AVAILABLE
   UNAVAILABLE
-  BLOCKED
+  HELD
+  RESERVED
+  SOLD
+  EXTERNAL_ALLOCATED
 }
 
-model Seat {
-  id         String     @id @default(cuid())
-  seatMapId  String
-  seatMap    SeatMap    @relation(fields: [seatMapId], references: [id])
+model SeatmapTemplate {
+  id        String            @id @default(cuid())
+  venueId   String
+  venue     Venue             @relation(fields: [venueId], references: [id])
+  name      String
+  sections  SeatmapSection[]
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+}
 
-  zoneId     String?
-  zone       SeatZone?  @relation(fields: [zoneId], references: [id])
+model SeatmapSection {
+  id         String           @id @default(cuid())
+  templateId String
+  template   SeatmapTemplate  @relation(fields: [templateId], references: [id])
 
+  name      String
+  level     String?
+  sortIndex Int               @default(0)
+  originX   Int               @default(0)
+  originY   Int               @default(0)
+
+  seats     SeatTemplate[]
+}
+
+model SeatTemplate {
+  id        String          @id @default(cuid())
+  sectionId String
+  section   SeatmapSection  @relation(fields: [sectionId], references: [id])
+
+  rowLabel  String
+  seatNumber Int
+  label     String
+  x         Int
+  y         Int
+  w         Int              @default(18)
+  h         Int              @default(18)
+  tags      Json?
+
+  @@index([sectionId])
+}
+
+model ShowSeat {
+  id        String     @id @default(cuid())
+  showId    String
+  show      Show       @relation(fields: [showId], references: [id])
+
+  section    String?
   rowLabel   String
-  seatNumber String
-  label      String?
-  kind       SeatKind   @default(STANDARD)
-  status     SeatStatus @default(AVAILABLE)
-  level      String?
-  meta       Json?
+  seatNumber Int
+  label      String
+  x          Int
+  y          Int
+  w          Int        @default(18)
+  h          Int        @default(18)
 
-  tickets         Ticket[]
-  holds           SeatHold[]
-  allocationSeats AllocationSeat[]
-  priceTierSeats  PriceTierSeat[]
+  status        SeatStatus @default(AVAILABLE)
+  allocationRef String?
 
-  @@unique([seatMapId, rowLabel, seatNumber])
-  @@index([zoneId])
-}
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
 
-enum SeatingMode {
-  UNALLOCATED
-  ALLOCATED
-}
-
-model ShowSeating {
-  id          String      @id @default(cuid())
-  showId      String      @unique
-  show        Show        @relation(fields: [showId], references: [id])
-
-  seatMapId   String?
-  seatMap     SeatMap?    @relation(fields: [seatMapId], references: [id])
-
-  seatingMode SeatingMode @default(UNALLOCATED)
-
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-
-  priceTiers  PriceTier[]
-}
-
-model PriceTier {
-  id            String       @id @default(cuid())
-  showSeatingId String
-  showSeating   ShowSeating  @relation(fields: [showSeatingId], references: [id])
-
-  name          String
-  pricePence    Int
-
-  ticketTypeId  String?
-  ticketType    TicketType?  @relation(fields: [ticketTypeId], references: [id])
-
-  seats         PriceTierSeat[]
-
-  @@index([showSeatingId])
-}
-
-model PriceTierSeat {
-  id          String    @id @default(cuid())
-  priceTierId String
-  priceTier   PriceTier @relation(fields: [priceTierId], references: [id])
-  seatId      String
-  seat        Seat      @relation(fields: [seatId], references: [id])
-
-  @@unique([priceTierId, seatId])
-  @@index([seatId])
-}
-
-model SeatHold {
-  id         String   @id @default(cuid())
-  showId     String
-  show       Show     @relation(fields: [showId], references: [id])
-
-  seatId     String
-  seat       Seat     @relation(fields: [seatId], references: [id])
-
-  userId     String?
-  user       User?    @relation(fields: [userId], references: [id])
-
-  orderId    String?
-  order      Order?   @relation(fields: [orderId], references: [id])
-
-  createdAt  DateTime @default(now())
-  expiresAt  DateTime
-  releasedAt DateTime?
-
-  @@index([showId, seatId])
-  @@index([expiresAt])
-}
-
-model ExternalAllocation {
-  id               String   @id @default(cuid())
-  showId           String
-  show             Show     @relation(fields: [showId], references: [id])
-
-  label            String
-  externalPlatform String?
-  contactEmail     String?
-  notes            String?
-
-  createdAt        DateTime @default(now())
-  createdById      String?
-  createdBy        User?    @relation("AllocationCreatedBy", fields: [createdById], references: [id])
-
-  seats            AllocationSeat[]
-
-  @@index([showId, createdAt])
-}
-
-model AllocationSeat {
-  id            String   @id @default(cuid())
-  allocationId  String
-  allocation    ExternalAllocation @relation(fields: [allocationId], references: [id])
-
-  seatId        String
-  seat          Seat     @relation(fields: [seatId], references: [id])
-
-  // Snapshot for fast reporting/export
-  rowLabel      String
-  seatNumber    String
-  level         String?
-  active        Boolean  @default(true)
-
-  @@unique([allocationId, seatId])
-  @@index([seatId])
-}
-
-// =========================
-// Box office report schedule
-// =========================
-
-model BoxOfficeReportSchedule {
-  id         String   @id @default(cuid())
-  showId     String
-  show       Show     @relation(fields: [showId], references: [id])
-
-  email      String
-  // 0=Sun ... 6=Sat
-  dayOfWeek  Int
-  // "HH:mm" in the given timezone
-  timeOfDay  String
-  timezone   String?
-  isActive   Boolean  @default(true)
-
-  createdAt  DateTime @default(now())
-  lastSentAt DateTime?
-
-  @@index([showId, isActive])
+  @@unique([showId, label])
+  @@index([showId, status])
 }
