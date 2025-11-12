@@ -1,8 +1,9 @@
 #!/usr/bin/env sh
 set -eu
 
-# Default port if not provided
 : "${PORT:=8080}"
 
-# Start the compiled server
+# Prisma client sometimes needs env to be present
+export NODE_ENV="${NODE_ENV:-production}"
+
 exec node dist/start.js
