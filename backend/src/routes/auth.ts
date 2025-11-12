@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
+import * as bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
 const prisma = new PrismaClient();
@@ -19,7 +19,9 @@ router.post("/register", async (req, res) => {
       return res.status(409).json({ error: "email already in use" });
     }
 
-    const passwordHash = await bcrypt.hash(String(password), 10);
+    // Generate a salt first to avoid the TS overload gripe
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(String(password), salt);
 
     const user = await prisma.user.create({
       data: {
@@ -32,7 +34,6 @@ router.post("/register", async (req, res) => {
 
     return res.status(201).json(user);
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error(err);
     return res.status(500).json({ error: "internal error" });
   }
@@ -64,7 +65,6 @@ router.post("/login", async (req, res) => {
 
     return res.json({ token });
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error(err);
     return res.status(500).json({ error: "internal error" });
   }
