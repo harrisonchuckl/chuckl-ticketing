@@ -43,7 +43,7 @@ enum SeatStatus {
 }
 
 // =========================
-// Core models
+/** Core models **/
 // =========================
 
 model User {
@@ -127,7 +127,8 @@ model TicketType {
   name            String
   pricePence      Int        @default(0)
 
-  facePrice       Decimal    @db.Decimal(10, 2)
+  // Make optional in create inputs by giving a default
+  facePrice       Decimal    @db.Decimal(10, 2) @default(0)
   fee             Decimal    @db.Decimal(10, 2) @default(0)
 
   allocationTotal Int?
@@ -250,6 +251,10 @@ model Refund {
 
   reason       String?
   processorId  String?
+
+  // present in your route/service code
+  stripeId     String?
+
   createdAt    DateTime @default(now())
 
   @@index([orderId])
@@ -266,7 +271,7 @@ model Upload {
 }
 
 // =========================
-// Seating templates & show seats (newer system)
+/** Seating templates & show seats (newer system) **/
 // =========================
 
 model SeatmapTemplate {
@@ -362,7 +367,7 @@ model SeatHold {
 }
 
 // =========================
-// Legacy seatmaps (compat)
+/** Legacy seatmaps (compat) **/
 // =========================
 
 model SeatMap {
@@ -376,6 +381,10 @@ model SeatMap {
   venue        Venue?   @relation(fields: [venueId], references: [id])
 
   name         String
+
+  // used by your route code
+  version      Int?
+
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -433,7 +442,9 @@ model ExternalAllocation {
   seatMapId   String
   seatMap     SeatMap  @relation(fields: [seatMapId], references: [id])
 
-  name        String
+  // your code expects `label`
+  label       String
+
   createdAt   DateTime @default(now())
 
   seats       AllocationSeat[]
@@ -449,6 +460,11 @@ model AllocationSeat {
 
   seatId       String
   seat         Seat               @relation(fields: [seatId], references: [id], onDelete: Cascade)
+
+  // denormalised fields used in routes
+  rowLabel     String?
+  seatNumber   String?
+  level        String?
 
   createdAt    DateTime           @default(now())
 
