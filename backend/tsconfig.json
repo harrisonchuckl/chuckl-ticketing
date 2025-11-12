@@ -12,7 +12,7 @@
     "resolveJsonModule": true,
     "lib": ["ES2022", "DOM"],
     "types": ["node"],
-    "noEmitOnError": true
+    "noEmitOnError": false
   },
   "include": ["src", "src/**/*.d.ts"],
   "exclude": ["node_modules", "dist"]
