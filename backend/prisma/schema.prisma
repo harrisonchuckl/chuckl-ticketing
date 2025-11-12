@@ -1,6 +1,38 @@
+// ---------- Prisma client + DB connection ----------
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // If your env var was previously DB_URL, change this to env("DB_URL")
+  url      = env("DATABASE_URL")
+}
+
 // =========================
-// Seating maps & show seats
+// Enums
 // =========================
+
+enum Role {
+  ADMIN
+  ORGANISER
+  CUSTOMER
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  REFUNDED
+  CANCELLED
+}
+
+enum TicketStatus {
+  AVAILABLE
+  RESERVED
+  SOLD
+  REFUNDED
+  EXTERNAL_ALLOCATED
+}
 
 enum SeatStatus {
   AVAILABLE
@@ -11,6 +43,169 @@ enum SeatStatus {
   EXTERNAL_ALLOCATED
 }
 
+// =========================
+// Core models
+// =========================
+
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  passwordHash String?
+  name         String?
+  role         Role         @default(CUSTOMER)
+
+  orders       Order[]
+  seatHolds    SeatHold[]
+  uploads      Upload[]
+
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+}
+
+model Venue {
+  id                String             @id @default(cuid())
+  name              String
+  city              String?
+  addressLine1      String?
+  addressLine2      String?
+  postcode          String?
+  country           String?
+
+  shows             Show[]
+  seatmapTemplates  SeatmapTemplate[]
+
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+}
+
+model Show {
+  id              String        @id @default(cuid())
+  title           String
+  date            DateTime
+  status          String?       // e.g. DRAFT / ON_SALE / CLOSED
+  descriptionHtml String?
+  imageUrl        String?
+
+  venueId         String?
+  venue           Venue?        @relation(fields: [venueId], references: [id])
+
+  ticketTypes     TicketType[]
+  tickets         Ticket[]
+  seats           ShowSeat[]
+  orderItems      OrderItem[]
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([venueId])
+  @@index([date])
+}
+
+model TicketType {
+  id            String   @id @default(cuid())
+  showId        String
+  show          Show     @relation(fields: [showId], references: [id])
+
+  name          String
+  // face value & fee in DECIMAL(10,2)
+  facePrice     Decimal  @db.Decimal(10, 2)
+  fee           Decimal  @db.Decimal(10, 2) @default(0)
+
+  allocationTotal Int     @default(0)
+  maxPerOrder    Int?
+
+  tickets       Ticket[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([showId])
+}
+
+model Ticket {
+  id          String        @id @default(cuid())
+
+  showId      String?
+  show        Show?         @relation(fields: [showId], references: [id])
+
+  typeId      String?
+  type        TicketType?   @relation(fields: [typeId], references: [id])
+
+  orderId     String?
+  order       Order?        @relation(fields: [orderId], references: [id])
+
+  seatId      String?
+  seat        ShowSeat?     @relation(fields: [seatId], references: [id])
+
+  status      TicketStatus  @default(AVAILABLE)
+  pricePaid   Decimal?      @db.Decimal(10, 2)
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([showId])
+  @@index([typeId])
+  @@index([orderId])
+  @@index([seatId])
+}
+
+model Order {
+  id          String        @id @default(cuid())
+  userId      String?
+  user        User?         @relation(fields: [userId], references: [id])
+
+  email       String
+  status      OrderStatus   @default(PENDING)
+
+  totalGross  Decimal       @db.Decimal(10, 2) @default(0)
+  totalFees   Decimal       @db.Decimal(10, 2) @default(0)
+
+  items       OrderItem[]
+  tickets     Ticket[]
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([userId])
+}
+
+model OrderItem {
+  id            String    @id @default(cuid())
+  orderId       String
+  order         Order     @relation(fields: [orderId], references: [id])
+
+  showId        String?
+  show          Show?     @relation(fields: [showId], references: [id])
+
+  ticketTypeId  String?
+  ticketType    TicketType? @relation(fields: [ticketTypeId], references: [id])
+
+  quantity      Int       @default(1)
+  unitPrice     Decimal   @db.Decimal(10, 2)
+  fees          Decimal   @db.Decimal(10, 2) @default(0)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([orderId])
+  @@index([showId])
+  @@index([ticketTypeId])
+}
+
+model Upload {
+  id           String   @id @default(cuid())
+  key          String
+  url          String   @unique
+  ownerUserId  String?
+  owner        User?    @relation(fields: [ownerUserId], references: [id])
+
+  createdAt    DateTime @default(now())
+}
+
+// =========================
+// Seating templates & show seats
+// =========================
+
 model SeatmapTemplate {
   id        String            @id @default(cuid())
   venueId   String
@@ -19,6 +214,8 @@ model SeatmapTemplate {
   sections  SeatmapSection[]
   createdAt DateTime          @default(now())
   updatedAt DateTime          @updatedAt
+
+  @@index([venueId])
 }
 
 model SeatmapSection {
@@ -33,21 +230,23 @@ model SeatmapSection {
   originY   Int               @default(0)
 
   seats     SeatTemplate[]
+
+  @@index([templateId])
 }
 
 model SeatTemplate {
-  id        String          @id @default(cuid())
-  sectionId String
-  section   SeatmapSection  @relation(fields: [sectionId], references: [id])
+  id         String          @id @default(cuid())
+  sectionId  String
+  section    SeatmapSection  @relation(fields: [sectionId], references: [id])
 
-  rowLabel  String
+  rowLabel   String
   seatNumber Int
-  label     String
-  x         Int
-  y         Int
-  w         Int              @default(18)
-  h         Int              @default(18)
-  tags      Json?
+  label      String
+  x          Int
+  y          Int
+  w          Int              @default(18)
+  h          Int              @default(18)
+  tags       Json?
 
   @@index([sectionId])
 }
@@ -69,9 +268,31 @@ model ShowSeat {
   status        SeatStatus @default(AVAILABLE)
   allocationRef String?
 
+  // Optional hold link
+  holdId    String?
+  hold      SeatHold?   @relation(fields: [holdId], references: [id])
+
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
   @@unique([showId, label])
   @@index([showId, status])
+  @@index([holdId])
+}
+
+model SeatHold {
+  id         String    @id @default(cuid())
+  showId     String
+  show       Show      @relation(fields: [showId], references: [id])
+
+  userId     String?
+  user       User?     @relation(fields: [userId], references: [id])
+
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+
+  // Seats on this hold (via ShowSeat.holdId)
+  // (No direct array field needed; relation exists from ShowSeat -> SeatHold)
+  @@index([showId])
+  @@index([userId])
 }
