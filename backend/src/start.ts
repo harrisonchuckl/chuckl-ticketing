@@ -1,6 +1,14 @@
-// backend/src/start.ts
-import 'dotenv/config';
+import { createServer } from './server';
 
-// No runtime prisma db push here – the DB is already in sync on Railway.
-// We just start the API server.
-await import('./server.js');
+(async () => {
+  try {
+    const app = await createServer();
+    const port = process.env.PORT ? Number(process.env.PORT) : 4000;
+    app.listen(port, () => {
+      console.log(`[server] listening on http://0.0.0.0:${port}`);
+    });
+  } catch (err) {
+    console.error('[server] failed to start', err);
+    process.exit(1);
+  }
+})();
