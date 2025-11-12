@@ -1,15 +1,11 @@
-// Prisma Client generator
 generator client {
   provider = "prisma-client-js"
 }
 
-// Database
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
-
-//// Enums
 
 enum OrderStatus {
   PENDING
@@ -25,8 +21,6 @@ enum SeatStatus {
   BLOCKED
 }
 
-//// Models
-
 model User {
   id                String   @id @default(cuid())
   createdAt         DateTime @default(now())
@@ -38,7 +32,6 @@ model User {
   role              String?
   organiserSplitBps Int?
 
-  // Relations
   orders         Order[]
   showsOrganised Show[] @relation("OrganiserShows")
 }
@@ -54,7 +47,6 @@ model Venue {
   postcode  String?
   capacity  Int?
 
-  // Relations
   shows     Show[]
   seatMaps  SeatMap[]
 }
@@ -69,19 +61,15 @@ model Show {
   imageUrl    String?
   date        DateTime
 
-  // Foreign keys
   venueId     String?
   organiserId String?
 
-  // Relations
   venue       Venue? @relation(fields: [venueId], references: [id])
   organiser   User?  @relation("OrganiserShows", fields: [organiserId], references: [id])
 
   ticketTypes TicketType[]
   tickets     Ticket[]
   orders      Order[]
-
-  // Seat mapping and allocations
   seatMaps    SeatMap[]
   allocations ExternalAllocation[]
 }
@@ -93,7 +81,8 @@ model TicketType {
 
   name        String
   pricePence  Int
-  available   Boolean  @default(true) // required by routes
+  /// numeric availability expected by routes (they compare `available > 0`)
+  available   Int?
 
   showId      String
   show        Show     @relation(fields: [showId], references: [id])
@@ -107,25 +96,21 @@ model Order {
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
 
-  // Financials
   amountPence         Int
   platformFeePence    Int?
   organiserSharePence Int?
   paymentFeePence     Int?
   netPayoutPence      Int?
 
-  // Convenience / external references
   stripeId            String?
   status              OrderStatus @default(PENDING)
   email               String?
-  quantity            Int?        // some routes select this
+  quantity            Int?
 
-  // FKs
   showId       String
   userId       String?
   ticketTypeId String?
 
-  // Relations
   show         Show        @relation(fields: [showId], references: [id])
   user         User?       @relation(fields: [userId], references: [id])
   ticketType   TicketType? @relation(fields: [ticketTypeId], references: [id])
@@ -138,9 +123,9 @@ model Refund {
   id          String   @id @default(cuid())
   createdAt   DateTime @default(now())
 
-  // keep both for compatibility with code that queries `amount`
   amount      Int
   amountPence Int?
+  reason      String?  // routes sometimes set 'reason'
 
   orderId     String
   order       Order    @relation(fields: [orderId], references: [id])
@@ -164,14 +149,15 @@ model Ticket {
   scannedAt   DateTime?
   holderName  String?
 
-  // Relations
   show        Show       @relation(fields: [showId], references: [id])
   order       Order      @relation(fields: [orderId], references: [id])
   ticketType  TicketType @relation(fields: [ticketTypeId], references: [id])
   seat        Seat?      @relation(fields: [seatId], references: [id])
-}
 
-//// Seating map
+  // Optional direct link handy for includes some code expects (TicketInclude.user)
+  userId      String?
+  user        User?      @relation(fields: [userId], references: [id])
+}
 
 model SeatMap {
   id         String   @id @default(cuid())
@@ -179,16 +165,18 @@ model SeatMap {
   updatedAt  DateTime @updatedAt
 
   name       String
-  version    Int      @default(1)   // routes update this
+  version    Int       @default(1)
+  isDefault  Boolean   @default(false)
+
   showId     String
-  venueId    String?                // queried by routes
+  venueId    String?
 
   show       Show    @relation(fields: [showId], references: [id])
   venue      Venue?  @relation(fields: [venueId], references: [id])
 
   seats      Seat[]
-  zones      Zone[]                 // routes include zones
-  allocations ExternalAllocation[]  // some routes include allocations
+  zones      Zone[]
+  allocations ExternalAllocation[]
 }
 
 model Zone {
@@ -213,9 +201,9 @@ model Seat {
   seatMapId  String
   seatMap    SeatMap   @relation(fields: [seatMapId], references: [id])
 
-  // Fields expected by routes
   row        String
   number     Int
+
   rowLabel   String?
   seatNumber Int?
   label      String?
@@ -227,12 +215,9 @@ model Seat {
   zoneId     String?
   zone       Zone?      @relation(fields: [zoneId], references: [id])
 
-  // Back references
   tickets         Ticket[]
   allocationSeats AllocationSeat[]
 }
-
-//// Third-party allocations
 
 model ExternalAllocation {
   id        String   @id @default(cuid())
@@ -242,12 +227,12 @@ model ExternalAllocation {
   showId    String
   show      Show     @relation(fields: [showId], references: [id])
 
-  // optional link to a specific seat map
   seatMapId String?
   seatMap   SeatMap? @relation(fields: [seatMapId], references: [id])
 
   source    String
-  label     String?   // used by routes
+  label     String?
+  externalPlatform String? // sometimes set by routes
   quantity  Int
 
   seats     AllocationSeat[]
