@@ -26,14 +26,14 @@ enum SeatStatus {
 //// Models
 
 model User {
-  id               String   @id @default(cuid())
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                String   @id @default(cuid())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  name             String?
-  email            String   @unique
-  passwordHash     String?
-  role             String?
+  name              String?
+  email             String   @unique
+  passwordHash      String?
+  role              String?
   organiserSplitBps Int?
 
   // Relations
@@ -78,43 +78,43 @@ model Show {
   tickets     Ticket[]
   orders      Order[]
 
-  // Seat mapping
+  // Seat mapping (seats are linked via SeatMap -> Seat)
   seatMaps    SeatMap[]
   allocations ExternalAllocation[]
 }
 
 model TicketType {
-  id         String   @id @default(cuid())
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  name       String
-  pricePence Int
+  name        String
+  pricePence  Int
 
-  showId     String
-  show       Show     @relation(fields: [showId], references: [id])
+  showId      String
+  show        Show     @relation(fields: [showId], references: [id])
 
-  tickets    Ticket[]
-  orders     Order[]
+  tickets     Ticket[]
+  orders      Order[]
 }
 
 model Order {
-  id                 String      @id @default(cuid())
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
+  id                  String      @id @default(cuid())
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
 
   // Financials used by routes
-  amountPence        Int
-  platformFeePence   Int?
+  amountPence         Int
+  platformFeePence    Int?
   organiserSharePence Int?
-  paymentFeePence    Int?
-  netPayoutPence     Int?
+  paymentFeePence     Int?
+  netPayoutPence      Int?
 
-  stripeId           String?
-  status             OrderStatus @default(PENDING)
+  stripeId            String?
+  status              OrderStatus @default(PENDING)
 
   // Convenience fields used in routes
-  email              String?
+  email               String?
 
   // FKs
   showId       String
@@ -122,8 +122,8 @@ model Order {
   ticketTypeId String?
 
   // Relations
-  show         Show       @relation(fields: [showId], references: [id])
-  user         User?      @relation(fields: [userId], references: [id])
+  show         Show        @relation(fields: [showId], references: [id])
+  user         User?       @relation(fields: [userId], references: [id])
   ticketType   TicketType? @relation(fields: [ticketTypeId], references: [id])
 
   tickets      Ticket[]
@@ -131,12 +131,12 @@ model Order {
 }
 
 model Refund {
-  id         String   @id @default(cuid())
-  createdAt  DateTime @default(now())
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
   amountPence Int
 
-  orderId    String
-  order      Order    @relation(fields: [orderId], references: [id])
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id])
 }
 
 model Ticket {
@@ -148,7 +148,7 @@ model Ticket {
   amountPence Int
   quantity    Int      @default(1)
 
-  orderId     String
+  orderId      String
   ticketTypeId String
 
   status      String?
@@ -191,37 +191,33 @@ model Seat {
   number     Int
   status     SeatStatus @default(AVAILABLE)
 
-  // Optional convenience to tie to a show directly
-  showId     String?
-  show       Show?      @relation(fields: [showId], references: [id])
-
   // Back references
-  tickets    Ticket[]
-  allocationSeats AllocationSeat[]
+  tickets          Ticket[]
+  allocationSeats  AllocationSeat[]
 }
 
 model ExternalAllocation {
-  id         String   @id @default(cuid())
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  showId     String
-  show       Show     @relation(fields: [showId], references: [id])
+  showId    String
+  show      Show     @relation(fields: [showId], references: [id])
 
-  source     String
-  quantity   Int
+  source    String
+  quantity  Int
 
-  seats      AllocationSeat[]
+  seats     AllocationSeat[]
 }
 
 model AllocationSeat {
-  id                 String   @id @default(cuid())
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  allocationId       String
-  allocation         ExternalAllocation @relation(fields: [allocationId], references: [id])
+  allocationId  String
+  allocation    ExternalAllocation @relation(fields: [allocationId], references: [id])
 
-  seatId             String
-  seat               Seat             @relation(fields: [seatId], references: [id])
+  seatId        String
+  seat          Seat             @relation(fields: [seatId], references: [id])
 }
