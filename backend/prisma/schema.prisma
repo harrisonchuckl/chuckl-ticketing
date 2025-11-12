@@ -1,5 +1,8 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // Include both engine targets so the client works on Debian 11 (OpenSSL 1.1)
+  // and Debian 12 (OpenSSL 3.0) runtimes.
+  binaryTargets = ["native", "debian-openssl-1.1.x", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -82,7 +85,8 @@ model TicketType {
 
   name        String
   pricePence  Int
-  /// numeric availability (routes compare > 0)
+
+  /// Numeric availability used by routes (e.g. comparisons like > 0)
   available   Int?
 
   showId      String
@@ -106,6 +110,8 @@ model Order {
   stripeId            String?
   status              OrderStatus @default(PENDING)
   email               String?
+
+  /// Some routes read a top-level quantity directly on the order
   quantity            Int?
 
   showId       String
@@ -124,11 +130,15 @@ model Refund {
   id          String   @id @default(cuid())
   createdAt   DateTime @default(now())
 
+  /// Kept for routes that read `amount`
   amount      Int
+  /// Some code references `amountPence`; keep both for compatibility
   amountPence Int?
   reason      String?
-  processorId String?  // e.g. Stripe refund id or processor reference
-  stripeId    String?  // kept because some routes refer to this key
+  /// E.g. Stripe refund id or processor reference
+  processorId String?
+  /// Some routes refer to this key
+  stripeId    String?
 
   orderId     String
   order       Order    @relation(fields: [orderId], references: [id])
@@ -169,7 +179,8 @@ model SeatMap {
   name       String
   version    Int       @default(1)
   isDefault  Boolean   @default(false)
-  layout     Json?     // used by routes/admin-seatmaps.ts
+  /// Full seat-map layout JSON used by admin routes
+  layout     Json?
 
   showId     String
   venueId    String?
@@ -204,9 +215,11 @@ model Seat {
   seatMapId  String
   seatMap    SeatMap   @relation(fields: [seatMapId], references: [id])
 
+  /// Basic coordinates
   row        String
   number     Int
 
+  /// Denormalised / optional fields referenced by routes
   rowLabel   String?
   seatNumber Int?
   label      String?
@@ -223,23 +236,23 @@ model Seat {
 }
 
 model ExternalAllocation {
-  id        String   @id @default(cuid())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  showId    String
-  show      Show     @relation(fields: [showId], references: [id])
+  showId     String
+  show       Show     @relation(fields: [showId], references: [id])
 
-  seatMapId String?
-  seatMap   SeatMap? @relation(fields: [seatMapId], references: [id])
+  seatMapId  String?
+  seatMap    SeatMap? @relation(fields: [seatMapId], references: [id])
 
-  source          String
-  label           String?
+  source           String
+  label            String?
   externalPlatform String?
-  contactEmail    String?
-  quantity        Int
+  contactEmail     String?
+  quantity         Int
 
-  seats     AllocationSeat[]
+  seats      AllocationSeat[]
 }
 
 model AllocationSeat {
@@ -253,7 +266,7 @@ model AllocationSeat {
   seatId        String
   seat          Seat    @relation(fields: [seatId], references: [id])
 
-  // denormalised helpers that some routes read directly
+  /// Denormalised helpers that some routes read directly
   rowLabel      String?
   seatNumber    Int?
   level         String?
