@@ -13,7 +13,7 @@ import events from './routes/events.js';
 import publicUI from './routes/public-ui.js';
 import imageProxy from './routes/image-proxy.js';
 
-// Uploads (new)
+// Uploads
 import uploadRoute from './routes/uploads.js';
 
 // Auth
@@ -21,7 +21,7 @@ import auth from './routes/auth.js';
 import authLogout from './routes/logout.js';
 import loginUI from './routes/login-ui.js';
 
-// 🔐 TEMP: one-time bootstrap to create first organiser user (remove after use)
+// 🔐 TEMP bootstrap first organiser
 import bootstrap from './routes/bootstrap.js';
 
 // Admin UI + APIs
@@ -34,6 +34,8 @@ import adminUploads from './routes/admin-uploads.js';
 import adminOrders from './routes/admin-orders.js';
 import adminAnalytics from './routes/admin-analytics.js';
 import adminExports from './routes/admin-exports.js';
+// NEW
+import adminSeatmaps from './routes/admin-seatmaps.js';
 
 const app = express();
 
@@ -67,10 +69,10 @@ app.use('/', imageProxy);
 
 // --- Auth routes (UI + JSON) ---
 app.use('/auth', loginUI);     // GET /auth/login (HTML)
-app.use('/auth', auth);        // POST /auth/login etc (JSON)
-app.use('/auth', authLogout);  // GET /auth/logout -> redirect to /auth/login
+app.use('/auth', auth);        // POST /auth/login (JSON)
+app.use('/auth', authLogout);  // GET /auth/logout
 
-// ⚠️ TEMP: bootstrap first user (remove after successful login)
+// ⚠️ TEMP: bootstrap first user
 app.use('/auth', bootstrap);
 
 // Light rate limit for admin
@@ -81,9 +83,6 @@ const limiter = rateLimit({
   legacyHeaders: false,
 });
 app.use(['/scan', '/admin'], limiter);
-
-// Convenience redirect so /admin lands on the UI home
-app.get('/admin', (_req, res) => res.redirect('/admin/ui/home'));
 
 // --- Admin UI first so unauth users see HTML not JSON ---
 app.use('/admin', adminUI);
@@ -96,6 +95,7 @@ app.use('/admin', adminOrders);
 app.use('/admin', adminUploads);
 app.use('/admin', adminAnalytics);
 app.use('/admin', adminExports);
+app.use('/admin', adminSeatmaps); // <-- add
 
 // Legacy / bootstrap admin endpoints (if still used)
 app.use('/admin', admin);
