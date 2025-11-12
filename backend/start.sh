@@ -1,11 +1,8 @@
-import createServer from "./server.js";
+#!/usr/bin/env sh
+set -eu
 
-const port = Number(process.env.PORT ?? 8080);
+# Default port if not provided
+: "${PORT:=8080}"
 
-(async () => {
-  const app = await Promise.resolve(createServer());
-  app.listen(port, () => {
-    // eslint-disable-next-line no-console
-    console.log(`Backend listening on :${port}`);
-  });
-})();
+# Start the compiled server
+exec node dist/start.js
