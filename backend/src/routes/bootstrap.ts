@@ -1,13 +1,12 @@
 import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
+import * as bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 const router = Router();
 
 /**
  * POST /bootstrap/admin
- * Creates or updates an admin user with the provided email/password.
  * Body: { email: string, password: string, name?: string }
  */
 router.post("/admin", async (req, res) => {
@@ -16,7 +15,8 @@ router.post("/admin", async (req, res) => {
     return res.status(400).json({ error: "email and password are required" });
   }
 
-  const passwordHash = await bcrypt.hash(String(password), 10);
+  const salt = await bcrypt.genSalt(10);
+  const passwordHash = await bcrypt.hash(String(password), salt);
 
   const upserted = await prisma.user.upsert({
     where: { email: String(email) },
