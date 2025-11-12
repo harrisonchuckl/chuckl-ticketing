@@ -6,15 +6,13 @@ import jwt from "jsonwebtoken";
 const prisma = new PrismaClient();
 const router = Router();
 
-const JWT_SECRET = String(process.env.JWT_SECRET || "dev-secret");
-const COOKIE_NAME = "session";
-const COOKIE_OPTS = {
-  httpOnly: true,
-  sameSite: "lax" as const,
-  secure: true, // on Railway it's HTTPS
-  path: "/",
-  maxAge: 7 * 24 * 60 * 60, // 7 days (seconds)
-};
+function sign(user: { id: string; email: string; role: string | null }) {
+  return jwt.sign(
+    { sub: user.id, email: user.email, role: user.role ?? "user" },
+    String(process.env.JWT_SECRET || "dev-secret"),
+    { expiresIn: "7d" }
+  );
+}
 
 // POST /auth/register
 router.post("/register", async (req, res) => {
@@ -25,32 +23,26 @@ router.post("/register", async (req, res) => {
     }
 
     const existing = await prisma.user.findUnique({ where: { email } });
-    if (existing) {
-      return res.status(409).json({ error: "email already in use" });
-    }
+    if (existing) return res.status(409).json({ error: "email already in use" });
 
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(String(password), salt);
 
     const user = await prisma.user.create({
-      data: {
-        email: String(email).toLowerCase(),
-        name: name ?? null,
-        passwordHash,
-        role: "admin", // you can change this default later
-      },
+      data: { email, name: name ?? null, passwordHash },
       select: { id: true, email: true, name: true, role: true }
     });
 
-    // auto-login after register
-    const token = jwt.sign(
-      { sub: user.id, email: user.email, role: user.role ?? "user" },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
+    const token = sign(user);
+    // Set a cookie for web flows; also return token in JSON for API use
+    res.cookie("auth", token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: true, // Railway is HTTPS
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
 
-    res.cookie(COOKIE_NAME, token, COOKIE_OPTS);
-    return res.status(201).json({ ok: true, user, token });
+    return res.status(201).json({ token, user });
   } catch (err) {
     console.error("register failed", err);
     return res.status(500).json({ error: "internal error" });
@@ -65,28 +57,44 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ error: "email and password are required" });
     }
 
-    const user = await prisma.user.findUnique({ where: { email: String(email).toLowerCase() } });
+    const user = await prisma.user.findUnique({ where: { email } });
     if (!user || !user.passwordHash) {
       return res.status(401).json({ error: "invalid credentials" });
     }
 
     const ok = await bcrypt.compare(String(password), user.passwordHash);
-    if (!ok) {
-      return res.status(401).json({ error: "invalid credentials" });
-    }
+    if (!ok) return res.status(401).json({ error: "invalid credentials" });
 
-    const token = jwt.sign(
-      { sub: user.id, email: user.email, role: user.role ?? "user" },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
+    const token = sign(user);
+    res.cookie("auth", token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: true,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
 
-    // set cookie for browser usage AND return token for API tooling if you want it
-    res.cookie(COOKIE_NAME, token, COOKIE_OPTS);
-    return res.json({ ok: true, token });
+    return res.json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role } });
   } catch (err) {
     console.error("login failed", err);
     return res.status(500).json({ error: "internal error" });
+  }
+});
+
+// GET /auth/logout  (fixes your 404)
+router.get("/logout", (req, res) => {
+  res.clearCookie("auth", { httpOnly: true, sameSite: "lax", secure: true });
+  return res.json({ ok: true });
+});
+
+// (Optional) GET /auth/me
+router.get("/me", (req, res) => {
+  const token = (req.cookies?.auth as string) || "";
+  if (!token) return res.status(401).json({ error: "unauthenticated" });
+  try {
+    const payload = jwt.verify(token, String(process.env.JWT_SECRET || "dev-secret"));
+    return res.json({ ok: true, user: payload });
+  } catch {
+    return res.status(401).json({ error: "unauthenticated" });
   }
 });
 
