@@ -5,7 +5,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  // If your env var was previously DB_URL, change this to env("DB_URL")
+  // If your env var was previously DB_URL, switch this to env("DB_URL")
   url      = env("DATABASE_URL")
 }
 
@@ -93,6 +93,7 @@ model Show {
   tickets         Ticket[]
   seats           ShowSeat[]
   orderItems      OrderItem[]
+  seatHolds       SeatHold[]    // <-- back-relation for SeatHold.show
 
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
@@ -102,22 +103,22 @@ model Show {
 }
 
 model TicketType {
-  id            String   @id @default(cuid())
+  id            String     @id @default(cuid())
   showId        String
-  show          Show     @relation(fields: [showId], references: [id])
+  show          Show       @relation(fields: [showId], references: [id])
 
   name          String
-  // face value & fee in DECIMAL(10,2)
-  facePrice     Decimal  @db.Decimal(10, 2)
-  fee           Decimal  @db.Decimal(10, 2) @default(0)
+  facePrice     Decimal    @db.Decimal(10, 2)
+  fee           Decimal    @db.Decimal(10, 2) @default(0)
 
-  allocationTotal Int     @default(0)
+  allocationTotal Int       @default(0)
   maxPerOrder    Int?
 
   tickets       Ticket[]
+  orderItems    OrderItem[]   // <-- back-relation for OrderItem.ticketType
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
   @@index([showId])
 }
@@ -135,7 +136,7 @@ model Ticket {
   order       Order?        @relation(fields: [orderId], references: [id])
 
   seatId      String?
-  seat        ShowSeat?     @relation(fields: [seatId], references: [id])
+  seat        ShowSeat?     @relation(fields: [seatId], references: [id]) // back-relation on ShowSeat.tickets
 
   status      TicketStatus  @default(AVAILABLE)
   pricePaid   Decimal?      @db.Decimal(10, 2)
@@ -170,22 +171,22 @@ model Order {
 }
 
 model OrderItem {
-  id            String    @id @default(cuid())
+  id            String      @id @default(cuid())
   orderId       String
-  order         Order     @relation(fields: [orderId], references: [id])
+  order         Order       @relation(fields: [orderId], references: [id])
 
   showId        String?
-  show          Show?     @relation(fields: [showId], references: [id])
+  show          Show?       @relation(fields: [showId], references: [id])
 
   ticketTypeId  String?
-  ticketType    TicketType? @relation(fields: [ticketTypeId], references: [id])
+  ticketType    TicketType? @relation(fields: [ticketTypeId], references: [id]) // back-relation on TicketType.orderItems
 
-  quantity      Int       @default(1)
-  unitPrice     Decimal   @db.Decimal(10, 2)
-  fees          Decimal   @db.Decimal(10, 2) @default(0)
+  quantity      Int         @default(1)
+  unitPrice     Decimal     @db.Decimal(10, 2)
+  fees          Decimal     @db.Decimal(10, 2) @default(0)
 
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
   @@index([orderId])
   @@index([showId])
@@ -268,9 +269,10 @@ model ShowSeat {
   status        SeatStatus @default(AVAILABLE)
   allocationRef String?
 
-  // Optional hold link
   holdId    String?
-  hold      SeatHold?   @relation(fields: [holdId], references: [id])
+  hold      SeatHold?   @relation(fields: [holdId], references: [id]) // back-relation on SeatHold.seats
+
+  tickets   Ticket[]    // <-- back-relation for Ticket.seat
 
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
@@ -283,7 +285,7 @@ model ShowSeat {
 model SeatHold {
   id         String    @id @default(cuid())
   showId     String
-  show       Show      @relation(fields: [showId], references: [id])
+  show       Show      @relation(fields: [showId], references: [id]) // back-relation on Show.seatHolds
 
   userId     String?
   user       User?     @relation(fields: [userId], references: [id])
@@ -291,8 +293,8 @@ model SeatHold {
   expiresAt  DateTime
   createdAt  DateTime  @default(now())
 
-  // Seats on this hold (via ShowSeat.holdId)
-  // (No direct array field needed; relation exists from ShowSeat -> SeatHold)
+  seats      ShowSeat[] // <-- back-relation for ShowSeat.hold
+
   @@index([showId])
   @@index([userId])
 }
