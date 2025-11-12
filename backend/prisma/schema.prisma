@@ -1,4 +1,3 @@
-// prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,124 +7,221 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+//// Enums
+
+enum OrderStatus {
+  PENDING
+  PAID
+  REFUNDED
+  CANCELLED
+}
+
+enum SeatStatus {
+  AVAILABLE
+  HELD
+  SOLD
+  BLOCKED
+}
+
+//// Models
+
 model User {
   id               String   @id @default(cuid())
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+
   name             String?
   email            String   @unique
   passwordHash     String?
-  role             String?  // "admin" | "organiser" etc.
+  role             String?
+  organiserSplitBps Int?
 
-  // Used in code
-  organiserSplitBps Int?    // e.g. 1000 == 10%
-
-  orders  Order[]
-  shows   Show[]   @relation("UserShows")
+  // Relations
+  orders           Order[]
+  showsOrganised   Show[]   @relation("OrganiserShows")
 }
 
 model Venue {
-  id         String   @id @default(cuid())
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  name       String
-  // Code sometimes selects 'address'. If your DB has address1/address2/city/postcode,
-  // you can either keep those and change code, or present a single 'address' field:
-  address    String?  // If you already have address1, you can do: address String? @map("address1")
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  shows      Show[]
+  name      String
+  address   String?
+  city      String?
+  postcode  String?
+  capacity  Int?
+
+  // Relations
+  shows     Show[]
 }
 
 model Show {
   id          String   @id @default(cuid())
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
   title       String?
   description String?
   imageUrl    String?
   date        DateTime
 
+  // Foreign keys
   venueId     String?
-  venue       Venue?   @relation(fields: [venueId], references: [id])
-
   organiserId String?
-  organiser   User?    @relation("UserShows", fields: [organiserId], references: [id])
+
+  // Relations
+  venue       Venue?   @relation(fields: [venueId], references: [id])
+  organiser   User?    @relation("OrganiserShows", fields: [organiserId], references: [id])
 
   ticketTypes TicketType[]
-  orders      Order[]
   tickets     Ticket[]
+  orders      Order[]
+
+  // Seat mapping
+  seatMaps    SeatMap[]
+  allocations ExternalAllocation[]
 }
 
 model TicketType {
-  id            String   @id @default(cuid())
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  showId        String
-  show          Show     @relation(fields: [showId], references: [id])
+  name       String
+  pricePence Int
 
-  name          String
-  pricePence    Int
-  feePence      Int?
-  quantityTotal Int?
-  quantitySold  Int?
-  maxPerOrder   Int?
-  isActive      Boolean  @default(true)
-  sortOrder     Int?
+  showId     String
+  show       Show     @relation(fields: [showId], references: [id])
 
-  // Code reads 'available' directly from Prisma type
-  available     Int?     // <- optional computed-ish field you can set/maintain in code
-
-  tickets       Ticket[]
-  orders        Order[]
+  tickets    Ticket[]
+  orders     Order[]
 }
 
 model Order {
-  id               String   @id @default(cuid())
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                 String      @id @default(cuid())
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
 
-  showId           String
-  show             Show     @relation(fields: [showId], references: [id])
-
-  userId           String?
-  user             User?    @relation(fields: [userId], references: [id])
-
-  ticketTypeId     String?
-  ticketType       TicketType? @relation(fields: [ticketTypeId], references: [id])
-
-  // Code expects quantity on Order
-  quantity         Int?
-
+  // Financials used by routes
+  amountPence        Int
   platformFeePence   Int?
   organiserSharePence Int?
-  paymentFeePence     Int?
-  netPayoutPence      Int?
+  paymentFeePence    Int?
+  netPayoutPence     Int?
 
-  tickets          Ticket[]
+  stripeId           String?
+  status             OrderStatus @default(PENDING)
+
+  // Convenience fields used in routes
+  email              String?
+
+  // FKs
+  showId       String
+  userId       String?
+  ticketTypeId String?
+
+  // Relations
+  show         Show       @relation(fields: [showId], references: [id])
+  user         User?      @relation(fields: [userId], references: [id])
+  ticketType   TicketType? @relation(fields: [ticketTypeId], references: [id])
+
+  tickets      Ticket[]
+  refunds      Refund[]
+}
+
+model Refund {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  amountPence Int
+
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id])
 }
 
 model Ticket {
-  id           String   @id @default(cuid())
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  showId       String
-  show         Show     @relation(fields: [showId], references: [id])
+  showId      String
+  amountPence Int
+  quantity    Int      @default(1)
 
-  orderId      String
-  order        Order    @relation(fields: [orderId], references: [id])
-
+  orderId     String
   ticketTypeId String
-  ticketType   TicketType @relation(fields: [ticketTypeId], references: [id])
 
-  seatId       String?
-  amountPence  Int
-  quantity     Int       @default(1)
+  status      String?
+  seatId      String?
+  serial      String?
+  scannedAt   DateTime?
+  holderName  String?
 
-  // Fields your code uses in email/scan/services
-  serial       String?   @unique
-  status       String?   // e.g. "ISSUED" | "SCANNED" | "CANCELLED"
-  scannedAt    DateTime?
-  holderName   String?
+  // Relations
+  show        Show       @relation(fields: [showId], references: [id])
+  order       Order      @relation(fields: [orderId], references: [id])
+  ticketType  TicketType @relation(fields: [ticketTypeId], references: [id])
+  seat        Seat?      @relation(fields: [seatId], references: [id])
+}
+
+//// Seat mapping & allocations
+
+model SeatMap {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  name      String
+
+  showId    String
+  show      Show     @relation(fields: [showId], references: [id])
+
+  seats     Seat[]
+}
+
+model Seat {
+  id         String    @id @default(cuid())
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  seatMapId  String
+  seatMap    SeatMap   @relation(fields: [seatMapId], references: [id])
+
+  row        String
+  number     Int
+  status     SeatStatus @default(AVAILABLE)
+
+  // Optional convenience to tie to a show directly
+  showId     String?
+  show       Show?      @relation(fields: [showId], references: [id])
+
+  // Back references
+  tickets    Ticket[]
+  allocationSeats AllocationSeat[]
+}
+
+model ExternalAllocation {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  showId     String
+  show       Show     @relation(fields: [showId], references: [id])
+
+  source     String
+  quantity   Int
+
+  seats      AllocationSeat[]
+}
+
+model AllocationSeat {
+  id                 String   @id @default(cuid())
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  allocationId       String
+  allocation         ExternalAllocation @relation(fields: [allocationId], references: [id])
+
+  seatId             String
+  seat               Seat             @relation(fields: [seatId], references: [id])
 }
