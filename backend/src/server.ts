@@ -1,10 +1,11 @@
+// backend/src/server.ts
 import express from "express";
 import cors from "cors";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import cookieParser from "cookie-parser";
 
-// ---- Routers (these already exist in your repo) ----
+// ---- Existing routers in your repo ----
 import authRouter from "./routes/auth.js";
 import bootstrapRouter from "./routes/bootstrap.js";
 import checkoutRouter from "./routes/checkout.js";
@@ -14,18 +15,19 @@ import adminUploadsRouter from "./routes/admin-uploads.js";
 import uploadsRouter from "./routes/uploads.js";
 import imageProxyRouter from "./routes/image-proxy.js";
 
-// NEW: admin UI
+// ---- Our admin UI + venues API ----
 import adminUiRouter from "./routes/admin-ui.js";
+import adminVenuesRouter from "./routes/admin-venues.js";
 
 const app = express();
 
-// behind a proxy/load balancer (Cloud Run/ALB/etc.)
+// behind a proxy/load balancer (Railway / Cloud Run / etc.)
 app.set("trust proxy", 1);
 
 // Core middleware
 app.use(
   cors({
-    origin: "*",
+    origin: "*", // tighten later if you switch to cookie auth from a specific origin
     credentials: true,
   })
 );
@@ -48,20 +50,30 @@ app.use(
 app.get("/healthz", (_req, res) => res.status(200).send("ok"));
 app.get("/readyz", (_req, res) => res.status(200).send("ready"));
 
-// Mount API routers
+// Existing mounts
 app.use("/auth", authRouter);
 app.use("/bootstrap", bootstrapRouter);
 app.use("/checkout", checkoutRouter);
 app.use("/webhook", webhookRouter);
 app.use("/public/orders", publicOrdersRouter);
+
+// Uploads
 app.use("/admin/uploads", adminUploadsRouter);
 app.use("/uploads", uploadsRouter);
+
+// Back-compat alias for older UI that used /api/upload
+app.use("/api/upload", adminUploadsRouter);
+
+// Image proxy
 app.use("/image-proxy", imageProxyRouter);
 
-// Mount the Admin UI shell LAST so it acts as a catch-all under /admin/ui
-app.use("/admin/ui", adminUiRouter);
+// IMPORTANT: mount venues router at /admin so its '/venues' -> '/admin/venues'
+app.use("/admin", adminVenuesRouter);
 
-// 404 handler (for anything not matched above)
+// Admin Console SPA shell at /admin/ui/*
+app.use("/admin", adminUiRouter);
+
+// 404 handler (JSON)
 app.use((_req, res) => res.status(404).json({ error: "Not found" }));
 
 export default app;
