@@ -1,4 +1,3 @@
-// backend/src/routes/admin-uploads.ts
 import { Router, type Request, type Response } from 'express';
 import Busboy from 'busboy';
 import sharp from 'sharp';
@@ -9,13 +8,15 @@ const router = Router();
 
 /**
  * POST /admin/uploads/poster
+ * also works as /api/upload/poster (server mounts alias)
+ *
  * Multipart form-data:
  *   - file: image file (jpg/png/webp)
  *   - showId: string (optional; used in the key path)
  *
  * Returns: { ok: true, url: "https://..." }
  */
-router.post('/uploads/poster', requireAdminOrOrganiser, async (req: Request, res: Response) => {
+router.post('/poster', requireAdminOrOrganiser, async (req: Request, res: Response) => {
   try {
     const bb = Busboy({
       headers: req.headers,
@@ -25,12 +26,10 @@ router.post('/uploads/poster', requireAdminOrOrganiser, async (req: Request, res
     let rawBuffer: Buffer | null = null;
     let filename = 'poster';
     let showId: string | null = null;
-    let mimeType = 'image/jpeg';
 
     const done = new Promise<void>((resolve, reject) => {
       bb.on('file', (_field: string, file: NodeJS.ReadableStream, info: { filename: string; mimeType: string }) => {
         filename = info?.filename || filename;
-        mimeType = info?.mimeType || mimeType;
         const chunks: Buffer[] = [];
         file.on('data', (d: Buffer) => chunks.push(d));
         file.on('limit', () => reject(new Error('File too large')));
@@ -43,8 +42,7 @@ router.post('/uploads/poster', requireAdminOrOrganiser, async (req: Request, res
       bb.on('finish', () => resolve());
     });
 
-    // Busboy isn't typed as a Writable, so hush TS (runtime is fine)
-    // @ts-ignore
+    // @ts-ignore Busboy is stream-writable at runtime
     req.pipe(bb);
     await done;
 
