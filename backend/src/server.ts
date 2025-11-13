@@ -13,15 +13,20 @@ import publicOrdersRouter from "./routes/public-orders.js";
 import uploadsRouter from "./routes/uploads.js";
 import imageProxyRouter from "./routes/image-proxy.js";
 
-// ---- New/adjusted routers ----
+// ---- Admin / organiser routers ----
 import adminUploadsRouter from "./routes/admin-uploads.js";
 import adminUiRouter from "./routes/admin-ui.js";
 import adminVenuesRouter from "./routes/admin-venues.js";
 import adminShowsRouter from "./routes/admin-shows.js";
 
+// ---- NEW: ticket types + seat maps ----
+import adminTicketTypesRouter from "./routes/admin-tickettypes.js";
+import adminSeatMapsRouter from "./routes/admin-seatmaps.js";
+import seatMapsRouter from "./routes/seatmaps.js";
+
 const app = express();
 
-// behind a proxy/load balancer (Railway / Cloud Run / etc.)
+// Behind a proxy/load balancer (Railway / Cloud Run / etc.)
 app.set("trust proxy", 1);
 
 // Core middleware
@@ -50,7 +55,7 @@ app.use(
 app.get("/healthz", (_req, res) => res.status(200).send("ok"));
 app.get("/readyz", (_req, res) => res.status(200).send("ready"));
 
-// Existing mounts
+// ---------- Public / core APIs ----------
 app.use("/auth", authRouter);
 app.use("/bootstrap", bootstrapRouter);
 app.use("/checkout", checkoutRouter);
@@ -61,20 +66,36 @@ app.use("/public/orders", publicOrdersRouter);
 app.use("/uploads", uploadsRouter);
 app.use("/image-proxy", imageProxyRouter);
 
+// ---------- Admin / organiser APIs ----------
+
 // Uploads (new): accept POST /admin/uploads (and /admin/uploads/poster)
 app.use("/admin/uploads", adminUploadsRouter);
 
 // Back-compat alias some older UI used (/api/upload → same handler)
 app.use("/api/upload", adminUploadsRouter);
 
-// Admin APIs
+// Admin data APIs
 app.use("/admin", adminVenuesRouter);
 app.use("/admin", adminShowsRouter);
 
-// Admin Console SPA at /admin/ui/*
+// NEW: ticket types for a show
+// - GET  /admin/shows/:showId/ticket-types
+// - POST /admin/shows/:showId/ticket-types
+app.use("/admin", adminTicketTypesRouter);
+
+// NEW: admin seatmap endpoints
+// - GET /admin/seatmaps?showId=...
+// - future POST/PUT for builder
+app.use("/admin", adminSeatMapsRouter);
+
+// NEW: public / low-level seatmap API (used by builder + frontend)
+// e.g. GET /seatmaps/:seatMapId/seats
+app.use("/seatmaps", seatMapsRouter);
+
+// ---------- Admin Console SPA at /admin/ui/* ----------
 app.use("/admin", adminUiRouter);
 
-// 404 handler (JSON)
+// ---------- 404 handler (JSON) ----------
 app.use((_req, res) => res.status(404).json({ error: "Not found" }));
 
 export default app;
