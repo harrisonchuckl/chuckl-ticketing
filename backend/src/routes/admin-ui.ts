@@ -59,7 +59,10 @@ router.get(
   .opt{padding:8px 10px;cursor:pointer}
   .opt:hover{background:#f8fafc}
   .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--border);background:#f9fafb}
-  .seat-layout-wrap{background:#020617;border-radius:12px;padding:16px;color:#e5e7eb;min-height:220px;display:flex;flex-direction:column;gap:12px}
+  .seat-layout-wrap{background:#020617;border-radius:12px;padding:16px;color:#e5e7eb;min-height:320px;display:flex;flex-direction:column;gap:12px}
+  #seatCanvas{
+    min-width:900px;  /* give the seat grid breathing room */
+  }
   .seat-stage{font-size:12px;text-align:center;letter-spacing:.12em;text-transform:uppercase;color:#e5e7eb}
   .seat-stage-bar{margin-top:4px;height:6px;border-radius:999px;background:rgba(148,163,184,.35)}
   .seat-dot{width:12px;height:12px;border-radius:3px;background:var(--seat-bg);border:1px solid var(--seat-border)}
@@ -77,6 +80,7 @@ router.get(
   .seat-selected{outline:2px solid #f97316;outline-offset:1px}
 </style>
 </head>
+
 <body>
 <div class="wrap">
   <aside class="sidebar">
@@ -292,28 +296,53 @@ router.get(
     main.innerHTML =
       '<div class="card">'
         +'<div class="header"><div class="title">Create show</div></div>'
-        +'<div class="grid grid-2">'
-          +'<div class="grid"><label>Title</label><input id="sh_title" placeholder="e.g. Chuckl. Comedy Club"/></div>'
-          +'<div class="grid"><label>Date & time</label><input id="sh_dt" type="datetime-local"/></div>'
-          +'<div class="grid"><label>Venue</label><input id="venue_input" placeholder="Start typing a venue…"/><div class="tip">Pick an existing venue or just type a new one.</div></div>'
-          +'<div class="grid">'
-            +'<label>Poster image</label>'
-            +'<div id="drop" class="drop">Drop image here or click to choose</div>'
-            +'<input id="file" type="file" accept="image/*" style="display:none"/>'
-            +'<div class="progress" style="margin-top:8px"><div id="bar" class="bar"></div></div>'
-            +'<div class="row" style="margin-top:8px;gap:8px;align-items:center"><img id="prev" class="imgprev" alt=""/></div>'
+               +'<div class="grid" style="gap:16px">'
+          +'<div class="grid grid-2" style="align-content:start;gap:12px">'
+            +'<div class="card" style="margin:0">'
+              +'<div class="title" style="margin-bottom:4px">Seat maps for this show</div>'
+              +'<div class="muted" id="sm_status">Loading seat maps…</div>'
+              +'<select id="sm_select" style="margin-top:8px;width:100%"></select>'
+              +'<div class="tip" id="sm_tip" style="margin-top:8px;font-size:12px">Seat maps are stored per show and can optionally be linked to a venue.</div>'
+            +'</div>'
+
+            +'<div class="card" style="margin:0">'
+              +'<div class="title" style="margin-bottom:4px">Create new seat map</div>'
+              +'<input id="sm_name" placeholder="e.g. Stalls layout" />'
+              +'<button class="btn p" id="sm_create" style="margin-top:8px;width:100%">Create seat map</button>'
+              +'<div class="error" id="sm_err" style="margin-top:4px"></div>'
+            +'</div>'
+
+            +'<div class="card" style="margin:0">'
+              +'<div class="title" style="margin-bottom:4px">Quick seat generator</div>'
+              +'<div class="muted" style="font-size:12px;margin-bottom:6px">Fast way to create a basic rectangular layout (A, B, C… rows).</div>'
+              +'<div class="grid grid-2" style="margin-bottom:6px">'
+                +'<div class="grid"><label>Rows</label><input id="q_rows" type="number" min="1" max="50" value="5"/></div>'
+                +'<div class="grid"><label>Seats per row</label><input id="q_cols" type="number" min="1" max="80" value="10"/></div>'
+              +'</div>'
+              +'<button class="btn" id="q_generate" style="width:100%;margin-top:4px">Generate seats</button>'
+              +'<div class="tip" style="font-size:12px">Uses /seatmaps/:id/seats/bulk, then reloads seats into the layout.</div>'
+            +'</div>'
+          +'</div>'
+
+          +'<div class="card" style="margin:0">'
+            +'<div class="header">'
+              +'<div class="title">Seat layout</div>'
+              +'<button class="btn p" id="sm_saveLayout">Save layout</button>'
+            +'</div>'
+            +'<div class="muted" style="margin-bottom:6px;font-size:12px">Drag seats to adjust positions. Changes are only saved when you click “Save layout”.</div>'
+            +'<div class="seat-layout-wrap">'
+              +'<div class="seat-stage">Stage<div class="seat-stage-bar"></div></div>'
+              +'<div id="seatCanvas" style="position:relative;min-height:220px;"></div>'
+              +'<div class="seat-legend">'
+                +'<span><span class="seat-dot"></span> Available</span>'
+                +'<span><span class="seat-dot held"></span> Held</span>'
+                +'<span><span class="seat-dot sold"></span> Sold</span>'
+                +'<span><span class="seat-dot block"></span> Blocked</span>'
+              +'</div>'
+            +'</div>'
           +'</div>'
         +'</div>'
-        +'<div class="grid" style="margin-top:10px">'
-          +'<label>Description</label>'+editorToolbarHtml()
-          +'<div id="desc" data-editor contenteditable="true" style="min-height:120px;border:1px solid var(--border);border-radius:8px;padding:10px"></div>'
-          +'<div class="muted">Event description (required). Use the toolbar to format.</div>'
-        +'</div>'
-        +'<div class="row" style="margin-top:10px">'
-          +'<button id="save" class="btn p">Save show and add tickets</button>'
-          +'<div id="err" class="error"></div>'
-        +'</div>'
-      +'</div>';
+
 
     bindWysiwyg(main);
     mountVenuePicker($('#venue_input'));
