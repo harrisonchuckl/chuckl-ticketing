@@ -10,7 +10,9 @@ router.get(
   requireAdminOrOrganiser,
   (_req, res) => {
     res.set("Cache-Control", "no-store");
-    res.type("html").send(`<!doctype html>
+    res
+      .type("html")
+      .send(`<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
@@ -291,7 +293,7 @@ router.get(
     });
   }
 
-    // ---------- Create show ----------
+  // ---------- Create show ----------
   async function createShow(){
     main.innerHTML =
       '<div class="card">'
@@ -351,37 +353,6 @@ router.get(
         $('#err').textContent = 'Upload failed: '+(e.message||e);
       }
     }
-
-    $('#save').addEventListener('click', async function(){
-      $('#err').textContent = '';
-      try{
-        const payload = {
-          title: $('#sh_title').value.trim(),
-          date: $('#sh_dt').value ? new Date($('#sh_dt').value).toISOString() : null,
-          venueText: $('#venue_input').value.trim(),
-          venueId: $('#venue_input').dataset.venueId || null,
-          imageUrl: $('#prev').src || null,
-          descriptionHtml: $('#desc').innerHTML.trim()
-        };
-        if(!payload.title || !payload.date || !payload.venueText || !payload.descriptionHtml){
-          throw new Error('Title, date/time, venue and description are required');
-        }
-        const r = await j('/admin/shows',{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify(payload)
-        });
-        if(r && r.ok && r.id){
-          go('/admin/ui/shows/'+r.id+'/tickets');
-        }else{
-          throw new Error((r && r.error) || 'Failed to create show');
-        }
-      }catch(e){
-        $('#err').textContent = e.message || String(e);
-      }
-    });
-  }
-
 
     $('#save').addEventListener('click', async function(){
       $('#err').textContent = '';
@@ -863,7 +834,6 @@ router.get(
     loadSeatMaps();
   }
 
-
   // ---------- Seating page with Seat Inspector ----------
   async function seatingPage(showId){
     main.innerHTML = '<div class="card"><div class="title">Loading seating…</div></div>';
@@ -883,7 +853,7 @@ router.get(
       : (show.venueText || '');
     const venueId = show.venue && show.venue.id ? show.venue.id : null;
 
-        main.innerHTML =
+    main.innerHTML =
       '<div class="card">'
         +'<div class="header">'
           +'<div>'
@@ -943,7 +913,6 @@ router.get(
           +'</div>'
         +'</div>'
       +'</div>';
-
 
     // --- Wire up controls ---
     const backToTicketsBtn = document.getElementById('backToTickets');
@@ -1228,13 +1197,7 @@ router.get(
     reloadSeatMaps();
   }
 
-
-
-
- 
-
   // ---------- Simple stubs for other views ----------
-
   function orders(){
     main.innerHTML = '<div class="card"><div class="title">Orders</div><div class="muted">Orders view coming soon.</div></div>';
   }
@@ -1267,6 +1230,5 @@ router.get(
 </html>`);
   }
 );
-
 
 export default router;
