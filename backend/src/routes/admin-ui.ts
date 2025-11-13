@@ -893,7 +893,7 @@ router.get(
     loadSeatMaps();
   }
 
-  // ---------- Seating page with Seat Inspector (snap + guides + row move + zoom + blocks) ----------
+  // ---------- Seating page with Seat Inspector (snap + guides + row move + zoom + blocks + metadata) ----------
   async function seatingPage(showId){
     main.innerHTML = '<div class="card"><div class="title">Loading seating…</div></div>';
 
@@ -954,10 +954,15 @@ router.get(
 
             +'<div class="card" style="margin:0">'
               +'<div class="title" style="margin-bottom:4px">Seat blocks</div>'
-              +'<div class="muted" style="font-size:12px;margin-bottom:6px">Group seats into named blocks (e.g. “Stalls Left”, “Circle”) and drag the whole block.</div>'
+              +'<div class="muted" style="font-size:12px;margin-bottom:6px">Group seats into named blocks (e.g. “Stalls Left”, “Circle”), give them a zone and link to a ticket type.</div>'
               +'<div class="grid" style="grid-template-columns:2fr auto;gap:6px;margin-bottom:6px">'
                 +'<input id="block_name" placeholder="e.g. Stalls Left" />'
                 +'<button class="btn" id="block_create">Create from selection</button>'
+              +'</div>'
+              +'<div class="grid grid-3" style="margin-bottom:6px">'
+                +'<div class="grid"><label style="font-size:12px">Capacity (optional)</label><input id="block_capacity" type="number" min="0" placeholder="Auto from seats"/></div>'
+                +'<div class="grid"><label style="font-size:12px">Pricing zone</label><input id="block_zone" placeholder="e.g. Zone A"/></div>'
+                +'<div class="grid"><label style="font-size:12px">Ticket type</label><select id="block_ticketType"><option value="">— None —</option></select></div>'
               +'</div>'
               +'<div class="tip" style="font-size:12px">Select one or more seats first, then create a block. You can drag the block label on the canvas to move all its seats.</div>'
               +'<div id="blocks_list" style="margin-top:8px;font-size:13px"></div>'
@@ -1015,6 +1020,9 @@ router.get(
     const blockNameInput   = document.getElementById('block_name');
     const blockCreateBtn   = document.getElementById('block_create');
     const blocksList       = document.getElementById('blocks_list');
+    const blockCapacityInput = document.getElementById('block_capacity');
+    const blockZoneInput     = document.getElementById('block_zone');
+    const blockTicketTypeSelect = document.getElementById('block_ticketType');
 
     backToTicketsBtn.addEventListener('click', function(){
       go('/admin/ui/shows/'+showId+'/tickets');
@@ -1028,6 +1036,7 @@ router.get(
     let currentSeatMapId = null;
     let layout = { seats: {}, elements: [] };
     let seats = [];
+    let ticketTypes = [];
 
     // selection state
     const selectedSeatIds = new Set();
@@ -1138,6 +1147,15 @@ router.get(
       guideV.style.display = 'block';
     }
 
+    function ticketTypeLabelForId(id){
+      if(!id || !ticketTypes || !ticketTypes.length) return '';
+      const tt = ticketTypes.find(function(t){ return t.id === id; });
+      if(!tt) return '';
+      const price = (tt.pricePence || 0) / 100;
+      const priceLabel = price === 0 ? 'Free' : '£'+price.toFixed(2);
+      return tt.name + ' ('+priceLabel+')';
+    }
+
     function refreshBlocksList(){
       ensureLayout();
       if(!blocksList) return;
@@ -1147,9 +1165,16 @@ router.get(
         return;
       }
       blocksList.innerHTML = blocks.map(function(b){
-        const count = Array.isArray(b.seatIds) ? b.seatIds.length : 0;
+        const seatCount = Array.isArray(b.seatIds) ? b.seatIds.length : 0;
+        const capacity = (typeof b.capacity === 'number' && b.capacity >= 0) ? b.capacity : seatCount;
+        const zone = (b.zone || '').trim();
+        const ttLabel = ticketTypeLabelForId(b.ticketTypeId);
+        const bits = [];
+        bits.push(capacity+' seats');
+        if(zone) bits.push('Zone: '+zone);
+        if(ttLabel) bits.push('Ticket: '+ttLabel);
         return '<div class="row" data-block-row="'+b.id+'" style="justify-content:space-between;margin-bottom:4px">'
-          +'<div><strong>'+ (b.name || 'Untitled block') +'</strong> <span class="muted">('+count+' seats)</span></div>'
+          +'<div><strong>'+ (b.name || 'Untitled block') +'</strong> <span class="muted">· '+bits.join(' · ')+'</span></div>'
           +'<div class="row" style="gap:4px">'
             +'<button class="btn" data-block-select="'+b.id+'">Select</button>'
             +'<button class="btn" data-block-delete="'+b.id+'">Delete</button>'
@@ -1187,6 +1212,28 @@ router.get(
           renderSeats();
         });
       });
+    }
+
+    async function loadTicketTypesForShow(){
+      try{
+        const res = await j('/admin/shows/'+showId+'/ticket-types');
+        ticketTypes = res.ticketTypes || [];
+        if(blockTicketTypeSelect){
+          const currentVal = blockTicketTypeSelect.value;
+          blockTicketTypeSelect.innerHTML = '<option value="">— None —</option>' +
+            ticketTypes.map(function(tt){
+              const price = (tt.pricePence || 0) / 100;
+              const priceLabel = price === 0 ? 'Free' : '£'+price.toFixed(2);
+              return '<option value="'+tt.id+'">'+tt.name+' ('+priceLabel+')</option>';
+            }).join('');
+          if(currentVal && ticketTypes.some(function(t){ return t.id === currentVal; })){
+            blockTicketTypeSelect.value = currentVal;
+          }
+        }
+        refreshBlocksList();
+      }catch(e){
+        // soft-fail; blocks still work without ticket types
+      }
     }
 
     async function reloadSeatMaps(){
@@ -1355,7 +1402,9 @@ router.get(
 
         const labelSpan = document.createElement('span');
         labelSpan.className = 'seat-block-overlay-label';
-        labelSpan.textContent = b.name || 'Block';
+        labelSpan.textContent = b.name
+          ? (b.zone ? (b.name+' – '+b.zone) : b.name)
+          : (b.zone || 'Block');
 
         const handleSpan = document.createElement('span');
         handleSpan.className = 'seat-block-overlay-handle';
@@ -1452,7 +1501,7 @@ router.get(
       }
     });
 
-    // Create block from current selection
+    // Create block from current selection (with metadata)
     blockCreateBtn.addEventListener('click', function(){
       ensureLayout();
       const seatIds = Array.from(selectedSeatIds);
@@ -1462,14 +1511,35 @@ router.get(
       }
       const blocks = layout.elements.filter(function(e){ return e && e.type === 'block'; });
       const name = (blockNameInput.value || '').trim() || ('Block '+(blocks.length+1));
+
+      let capacity = null;
+      const capStr = (blockCapacityInput && blockCapacityInput.value || '').trim();
+      if(capStr){
+        const n = Number(capStr);
+        if(Number.isFinite(n) && n >= 0){
+          capacity = n;
+        }
+      }
+
+      const zone = (blockZoneInput && blockZoneInput.value || '').trim() || null;
+      const ticketTypeId = (blockTicketTypeSelect && blockTicketTypeSelect.value) || null;
+
       const id = 'block_'+Date.now()+'_'+Math.floor(Math.random()*1000);
       layout.elements.push({
         id: id,
         type: 'block',
         name: name,
-        seatIds: seatIds.slice()
+        seatIds: seatIds.slice(),
+        capacity: capacity,
+        zone: zone,
+        ticketTypeId: ticketTypeId
       });
-      blockNameInput.value = '';
+
+      if(blockNameInput) blockNameInput.value = '';
+      if(blockCapacityInput) blockCapacityInput.value = '';
+      if(blockZoneInput) blockZoneInput.value = '';
+      if(blockTicketTypeSelect) blockTicketTypeSelect.value = '';
+
       selectedBlockId = id;
       refreshBlocksList();
       renderSeats();
@@ -1707,6 +1777,7 @@ router.get(
     });
 
     // Initial load
+    await loadTicketTypesForShow();
     reloadSeatMaps();
   }
 
