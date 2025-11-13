@@ -33,14 +33,22 @@ router.get("/shows", requireAdminOrOrganiser, async (_req, res) => {
     const items = await prisma.show.findMany({
       orderBy: [{ date: "asc" }],
       select: {
-        id: true, title: true, description: true, imageUrl: true, date: true, status: true,
+        id: true,
+        title: true,
+        description: true,
+        imageUrl: true,
+        date: true,
+        // NOTE: status is not a column on Show in the current schema,
+        // so we do NOT select it here to keep Prisma types happy.
         venue: { select: { id: true, name: true, city: true } },
       },
     });
 
-    // Attach simple allocation/revenue placeholders to match your UI
-    const enriched = items.map(s => ({
+    // Attach a placeholder status + simple allocation/revenue placeholders
+    // to match the shape expected by the Admin UI.
+    const enriched = items.map((s) => ({
       ...s,
+      status: null as string | null,
       _alloc: { total: 0, sold: 0, hold: 0 },
       _revenue: { grossFace: 0 },
     }));
@@ -86,7 +94,11 @@ router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
     const s = await prisma.show.findUnique({
       where: { id: String(req.params.id) },
       select: {
-        id: true, title: true, description: true, imageUrl: true, date: true,
+        id: true,
+        title: true,
+        description: true,
+        imageUrl: true,
+        date: true,
         venue: { select: { id: true, name: true, city: true } },
       },
     });
