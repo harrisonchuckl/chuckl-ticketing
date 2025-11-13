@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { PrismaClient, SeatStatus } from "@prisma/client";
+import { randomUUID } from "crypto";
 
 const prisma = new PrismaClient();
 const router = Router();
@@ -42,6 +43,7 @@ router.post("/:seatMapId/seats/bulk", async (req, res) => {
   }
 
   const data = seats.map((s: any) => ({
+    id: randomUUID(),
     seatMapId,
     row: String(s.row),
     number: Number(s.number),
