@@ -46,7 +46,7 @@ router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req,
   .row{display:flex;gap:8px;align-items:center}
   .kbd{font:12px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:6px;padding:2px 6px}
   .kebab{position:relative}
-  .menu{position:absolute;right:0;top:28px;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.08);display:none;min-width:160px}
+  .menu{position:absolute;right:0;top:28px;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.08);display:none;min-width:160px;z-index:30}
   .menu.open{display:block}
   .menu a{display:block;padding:8px 10px;text-decoration:none;color:#111827}
   .menu a:hover{background:#f8fafc}
@@ -56,6 +56,11 @@ router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req,
   .opt{padding:8px 10px;cursor:pointer}
   .opt:hover{background:#f8fafc}
   .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--border);background:#f9fafb}
+  /* Extra bits for seating builder */
+  .badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:12px;background:#f1f5f9;border:1px solid #e5e7eb;color:#0f172a}
+  .tag{display:inline-block;padding:2px 6px;border-radius:6px;font-size:11px;background:#ecfeff;color:#0e7490;border:1px solid #cffafe}
+  .seat-preview{display:grid;grid-template-columns:repeat(auto-fit,minmax(18px,1fr));gap:2px;font-size:10px;margin-top:6px}
+  .seat-dot{border-radius:4px;border:1px solid #cbd5e1;padding:2px 0;text-align:center}
 </style>
 </head>
 <body>
@@ -618,7 +623,7 @@ router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req,
 
     loadTicketTypes();
 
-    // Seat maps UI
+    // Seat maps UI (summary)
     const seatMapsSummary = $('#seatMapsSummary');
     const seatMapsList = $('#seatMapsList');
     const venueId = show.venue?.id || null;
@@ -675,9 +680,328 @@ router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req,
     loadSeatMaps();
   }
 
-  // ---------- Seating placeholder ----------
-  function seatingPage(id){
-    main.innerHTML = '<div class="card"><div class="title">Seating map</div><div class="muted">Seating map builder coming soon for show '+id+'.</div></div>';
+  // ---------- Seating map builder ----------
+  async function seatingPage(id){
+    main.innerHTML = '<div class="card"><div class="title">Loading seating map…</div></div>';
+
+    let showResp;
+    try {
+      showResp = await j('/admin/shows/'+id);
+    } catch (e) {
+      main.innerHTML = '<div class="card"><div class="error">Failed to load show: '+(e.message||e)+'</div></div>';
+      return;
+    }
+    const show = showResp.item || {};
+    const when = show.date ? new Date(show.date).toLocaleString('en-GB',{ dateStyle:'full', timeStyle:'short'}) : '';
+    const venueName = show.venue ? (show.venue.name + (show.venue.city ? ' – '+show.venue.city : '')) : (show.venueText || '');
+    const venueId = show.venue?.id || null;
+
+    main.innerHTML = \`
+      <div class="card">
+        <div class="header">
+          <div>
+            <div class="title">Seating for \${show.title || 'Untitled show'}</div>
+            <div class="muted">\${when ? when + ' · ' : ''}\${venueName}</div>
+          </div>
+          <div class="row">
+            <button class="btn" id="backToTickets">Back to tickets</button>
+            <button class="btn" id="backToShows2">All events</button>
+          </div>
+        </div>
+
+        <div class="grid grid-2">
+          <!-- LEFT: Seat map selection & meta -->
+          <div class="card" style="margin:0">
+            <div class="title" style="margin-bottom:4px">Seat maps</div>
+            <div class="muted" style="margin-bottom:8px">
+              Create and reuse seating layouts per venue. One seat map can be shared by multiple shows at the same venue.
+            </div>
+
+            <div class="grid" style="margin-bottom:8px">
+              <label>Seat map for this show</label>
+              <select id="mapSelect">
+                <option value="">Loading seat maps…</option>
+              </select>
+              <div class="tip">
+                <span class="badge">Tip</span> Use <span class="tag">Create new map</span> if this venue layout is new.
+              </div>
+            </div>
+
+            <div class="row" style="margin-bottom:8px">
+              <button class="btn" id="createMapBtn">Create new map</button>
+              <button class="btn" id="refreshMapsBtn">Refresh</button>
+            </div>
+
+            <div id="mapMeta" class="muted" style="font-size:13px;margin-top:4px">
+              No map selected yet.
+            </div>
+          </div>
+
+          <!-- RIGHT: Basic seat generator -->
+          <div class="card" style="margin:0">
+            <div class="title" style="margin-bottom:4px">Quick seat generator</div>
+            <div class="muted" style="margin-bottom:8px">
+              Start with a simple grid (rows A, B, C… and seat numbers 1, 2, 3…). You can refine or extend later.
+            </div>
+
+            <div id="noMapWarning" class="error" style="font-size:13px;margin-bottom:8px;display:none">
+              Select or create a seat map first.
+            </div>
+
+            <div class="grid grid-3" style="margin-bottom:8px">
+              <div class="grid">
+                <label>Number of rows</label>
+                <input id="rowsInput" type="number" min="1" max="50" value="10" />
+              </div>
+              <div class="grid">
+                <label>Seats per row</label>
+                <input id="seatsPerRowInput" type="number" min="1" max="80" value="20" />
+              </div>
+              <div class="grid">
+                <label>Start row label</label>
+                <input id="rowStartInput" maxlength="1" value="A" />
+              </div>
+            </div>
+
+            <div class="row" style="margin-bottom:8px">
+              <button class="btn p" id="generateSeatsBtn">Generate seats</button>
+              <div id="genStatus" class="muted" style="font-size:13px"></div>
+            </div>
+
+            <div id="seatsSummary" class="muted" style="font-size:13px;margin-top:4px">
+              No seats generated yet.
+            </div>
+
+            <div id="seatsPreview" style="margin-top:8px;max-height:220px;overflow:auto;border-top:1px solid var(--border);padding-top:8px;font-size:12px">
+              <div class="muted">Seat preview will appear here once generated.</div>
+            </div>
+          </div>
+        </div>
+      </div>\`;
+
+    $('#backToTickets').addEventListener('click', ()=> go('/admin/ui/shows/'+id+'/tickets'));
+    $('#backToShows2').addEventListener('click', ()=> go('/admin/ui/shows/current'));
+
+    const mapSelect = $('#mapSelect');
+    const createMapBtn = $('#createMapBtn');
+    const refreshMapsBtn = $('#refreshMapsBtn');
+    const mapMeta = $('#mapMeta');
+    const noMapWarning = $('#noMapWarning');
+    const rowsInput = $('#rowsInput');
+    const seatsPerRowInput = $('#seatsPerRowInput');
+    const rowStartInput = $('#rowStartInput');
+    const generateSeatsBtn = $('#generateSeatsBtn');
+    const genStatus = $('#genStatus');
+    const seatsSummary = $('#seatsSummary');
+    const seatsPreview = $('#seatsPreview');
+
+    let currentMaps = [];
+    let currentMapId = null;
+
+    async function loadMapsAndPopulate(selectIdToKeep){
+      mapSelect.innerHTML = '<option value="">Loading…</option>';
+      mapMeta.textContent = 'Loading seat maps…';
+      try{
+        let url = '/admin/seatmaps?showId='+encodeURIComponent(id);
+        if(venueId) url += '&venueId='+encodeURIComponent(venueId);
+        const maps = await j(url);
+        currentMaps = Array.isArray(maps) ? maps : [];
+        if(!currentMaps.length){
+          mapSelect.innerHTML = '<option value="">No seat maps yet</option>';
+          mapMeta.textContent = 'No seat maps yet for this show/venue.';
+          currentMapId = null;
+          noMapWarning.style.display = 'block';
+          seatsSummary.textContent = 'No seats generated yet.';
+          seatsPreview.innerHTML = '<div class="muted">Seat preview will appear here once generated.</div>';
+          return;
+        }
+
+        mapSelect.innerHTML = '<option value="">Select seat map…</option>' +
+          currentMaps.map(m => '<option value="'+m.id+'">'+m.name+' (v'+(m.version||1)+ (m.isDefault ? ', default' : '') +')</option>').join('');
+
+        // Select previous if still exists; otherwise pick default; otherwise first
+        let toSelect = selectIdToKeep || null;
+        if(!toSelect){
+          const def = currentMaps.find(m=>m.isDefault);
+          toSelect = def ? def.id : currentMaps[0].id;
+        }
+        mapSelect.value = toSelect;
+        currentMapId = toSelect || null;
+        updateMapMeta();
+        if(currentMapId){
+          noMapWarning.style.display = 'none';
+          await loadSeatsPreview();
+        }else{
+          noMapWarning.style.display = 'block';
+        }
+      }catch(e){
+        mapSelect.innerHTML = '<option value="">Error loading maps</option>';
+        mapMeta.textContent = 'Failed to load seat maps: '+(e.message||e);
+        currentMaps = [];
+        currentMapId = null;
+        noMapWarning.style.display = 'block';
+      }
+    }
+
+    function updateMapMeta(){
+      if(!currentMapId){
+        mapMeta.textContent = 'No map selected yet.';
+        return;
+      }
+      const m = currentMaps.find(m=>m.id===currentMapId);
+      if(!m){
+        mapMeta.textContent = 'Selected map not found.';
+        return;
+      }
+      const seatCount = Array.isArray(m.seats) ? m.seats.length : (m._seatCount ?? 0);
+      mapMeta.innerHTML =
+        '<span class="badge">'+(m.name||'Untitled')+'</span> '+
+        '<span class="muted">v'+(m.version||1)+(m.isDefault?' · Default':'')+'</span><br/>'+
+        '<span class="muted">Known seat count: '+seatCount+'</span>';
+    }
+
+    mapSelect.addEventListener('change', async ()=>{
+      currentMapId = mapSelect.value || null;
+      updateMapMeta();
+      if(currentMapId){
+        noMapWarning.style.display = 'none';
+        await loadSeatsPreview();
+      }else{
+        noMapWarning.style.display = 'block';
+        seatsSummary.textContent = 'No seats generated yet.';
+        seatsPreview.innerHTML = '<div class="muted">Seat preview will appear here once generated.</div>';
+      }
+    });
+
+    createMapBtn.addEventListener('click', async ()=>{
+      const name = prompt('Name for this seat map? (e.g. "Stalls + Circle")', venueName || 'Main layout');
+      if(!name) return;
+      try{
+        const body = { showId: id, name: name.trim() };
+        if(venueId) body.venueId = venueId;
+        const created = await j('/admin/seatmaps', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(body)
+        });
+        const newId = created.id;
+        await loadMapsAndPopulate(newId);
+        alert('Seat map created. You can now generate seats.');
+      }catch(e){
+        alert('Failed to create seat map: '+(e.message||e));
+      }
+    });
+
+    refreshMapsBtn.addEventListener('click', ()=> loadMapsAndPopulate(currentMapId));
+
+    async function loadSeatsPreview(){
+      if(!currentMapId){
+        seatsSummary.textContent = 'No map selected.';
+        seatsPreview.innerHTML = '<div class="muted">Select a seat map to see its seats.</div>';
+        return;
+      }
+      seatsSummary.textContent = 'Loading seats…';
+      seatsPreview.innerHTML = '<div class="muted">Loading…</div>';
+      try{
+        const seats = await j('/seatmaps/'+encodeURIComponent(currentMapId)+'/seats');
+        if(!Array.isArray(seats) || !seats.length){
+          seatsSummary.textContent = 'No seats have been generated yet for this map.';
+          seatsPreview.innerHTML = '<div class="muted">Use the generator to create rows and seats.</div>';
+          return;
+        }
+        const total = seats.length;
+        const rows = [...new Set(seats.map(s=>s.rowLabel || s.row))];
+        seatsSummary.textContent = 'This map currently has '+total+' seats across '+rows.length+' row'+(rows.length===1?'':'s')+'.';
+
+        // Simple compact preview: group by row
+        const byRow = {};
+        seats.forEach(s=>{
+          const r = s.rowLabel || s.row;
+          if(!byRow[r]) byRow[r] = [];
+          byRow[r].push(s.seatNumber || s.number);
+        });
+        const rowKeys = Object.keys(byRow).sort((a,b)=>{
+          // A, B, C… numeric-ish compare if single letters
+          if(a.length===1 && b.length===1) return a.charCodeAt(0)-b.charCodeAt(0);
+          return a.localeCompare(b);
+        });
+
+        let html = '';
+        rowKeys.forEach(r=>{
+          const nums = byRow[r].sort((a,b)=>a-b);
+          html += '<div style="margin-bottom:4px"><strong>'+r+':</strong> <span class="muted">'+nums.join(', ')+'</span></div>';
+        });
+        seatsPreview.innerHTML = html || '<div class="muted">No seats.</div>';
+      }catch(e){
+        seatsSummary.textContent = 'Failed to load seats.';
+        seatsPreview.innerHTML = '<div class="error">'+(e.message||e)+'</div>';
+      }
+    }
+
+    generateSeatsBtn.addEventListener('click', async ()=>{
+      genStatus.textContent = '';
+      if(!currentMapId){
+        noMapWarning.style.display = 'block';
+        genStatus.textContent = 'Select or create a seat map first.';
+        return;
+      }
+      noMapWarning.style.display = 'none';
+
+      const rows = Number(rowsInput.value);
+      const perRow = Number(seatsPerRowInput.value);
+      let start = (rowStartInput.value || 'A').toUpperCase().charAt(0) || 'A';
+
+      if(!Number.isFinite(rows) || rows<=0){
+        genStatus.textContent = 'Rows must be a positive number.';
+        return;
+      }
+      if(!Number.isFinite(perRow) || perRow<=0){
+        genStatus.textContent = 'Seats per row must be a positive number.';
+        return;
+      }
+      const startCode = start.charCodeAt(0);
+      if(startCode < 65 || startCode > 90){
+        genStatus.textContent = 'Start row label must be A–Z.';
+        return;
+      }
+
+      // Build seat payload
+      const seats = [];
+      for(let i=0;i<rows;i++){
+        const rowCode = startCode + i;
+        const rowLabel = String.fromCharCode(rowCode);
+        for(let n=1;n<=perRow;n++){
+          seats.push({
+            row: rowLabel,
+            number: n,
+            rowLabel: rowLabel,
+            seatNumber: n,
+            label: rowLabel + n
+          });
+        }
+      }
+
+      if(!seats.length){
+        genStatus.textContent = 'Nothing to generate.';
+        return;
+      }
+
+      genStatus.textContent = 'Generating '+seats.length+' seats…';
+      try{
+        await j('/seatmaps/'+encodeURIComponent(currentMapId)+'/seats/bulk', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ seats })
+        });
+        genStatus.textContent = 'Seats generated and saved.';
+        await loadSeatsPreview();
+      }catch(e){
+        genStatus.textContent = 'Failed to generate seats: '+(e.message||e);
+      }
+    });
+
+    // Initial load
+    loadMapsAndPopulate(null);
   }
 
   // ---------- Other sections (stubs) ----------
