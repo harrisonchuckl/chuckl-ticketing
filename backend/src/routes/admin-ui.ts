@@ -828,7 +828,8 @@ router.get(
     loadSeatMaps();
   }
 
-  // ---------- Seating page with Seat Inspector (drag & drop + Quick Generator) ----------
+
+  // ---------- Seating page with Seat Inspector ----------
   async function seatingPage(showId){
     main.innerHTML = '<div class="card"><div class="title">Loading seating…</div></div>';
 
@@ -839,9 +840,12 @@ router.get(
       main.innerHTML = '<div class="card"><div class="error">Failed to load show: '+(e.message||e)+'</div></div>';
       return;
     }
+
     const show = showResp.item || {};
     const when = show.date ? new Date(show.date).toLocaleString('en-GB',{dateStyle:'full', timeStyle:'short'}) : '';
-    const venueName = show.venue ? (show.venue.name + (show.venue.city ? ' – '+show.venue.city : '')) : (show.venueText || '');
+    const venueName = show.venue
+      ? (show.venue.name + (show.venue.city ? ' – '+show.venue.city : ''))
+      : (show.venueText || '');
     const venueId = show.venue && show.venue.id ? show.venue.id : null;
 
     main.innerHTML =
@@ -896,10 +900,10 @@ router.get(
                 +'<div class="seat-stage">Stage<div class="seat-stage-bar"></div></div>'
                 +'<div id="seatCanvas" style="position:relative;min-height:220px;"></div>'
                 +'<div class="seat-legend">'
-                  +'<span><span class="seat-dot"></span> Standard / available</span>'
+                  +'<span><span class="seat-dot"></span> Available</span>'
                   +'<span><span class="seat-dot held"></span> Held</span>'
-                  +'<span><span class="seat-dot block"></span> Blocked</span>'
                   +'<span><span class="seat-dot sold"></span> Sold</span>'
+                  +'<span><span class="seat-dot block"></span> Blocked</span>'
                 +'</div>'
               +'</div>'
             +'</div>'
@@ -907,273 +911,321 @@ router.get(
         +'</div>'
       +'</div>';
 
-    $('#backToTickets').addEventListener('click', function(){ go('/admin/ui/shows/'+showId+'/tickets'); });
-    $('#editShowBtn').addEventListener('click', function(){ go('/admin/ui/shows/'+showId+'/edit'); });
+    // --- Wire up controls ---
+    const backToTicketsBtn = document.getElementById('backToTickets');
+    const editShowBtn      = document.getElementById('editShowBtn');
+    const smStatus         = document.getElementById('sm_status');
+    const smSelect         = document.getElementById('sm_select');
+    const smTip            = document.getElementById('sm_tip');
+    const smName           = document.getElementById('sm_name');
+    const smCreate         = document.getElementById('sm_create');
+    const smErr            = document.getElementById('sm_err');
+    const qRows            = document.getElementById('q_rows');
+    const qCols            = document.getElementById('q_cols');
+    const qGenerate        = document.getElementById('q_generate');
+    const seatCanvas       = document.getElementById('seatCanvas');
+    const saveLayoutBtn    = document.getElementById('sm_saveLayout');
 
-    const smStatus = $('#sm_status');
-    const smSelect = $('#sm_select');
-    const smErr = $('#sm_err');
-    const seatCanvas = $('#seatCanvas');
-    const saveLayoutBtn = $('#sm_saveLayout');
-    const qGenerate = $('#q_generate');
-    const qRows = $('#q_rows');
-    const qCols = $('#q_cols');
+    backToTicketsBtn.addEventListener('click', function(){
+      go('/admin/ui/shows/'+showId+'/tickets');
+    });
+    editShowBtn.addEventListener('click', function(){
+      go('/admin/ui/shows/'+showId+'/edit');
+    });
 
-    let seatMaps = [];
-    let currentMap = null;
-    let currentLayout = null;
-    let currentSeats = [];
+    // Data state for this page
+    let seatMapsData = [];
+    let currentSeatMapId = null;
+    let layout = { seats: {}, elements: [] };
+    let seats = [];
 
-    async function fetchSeatMaps(){
+    function ensureLayout(){
+      if(!layout || typeof layout !== 'object') layout = { seats:{}, elements:[] };
+      if(!layout.seats || typeof layout.seats !== 'object') layout.seats = {};
+      if(!Array.isArray(layout.elements)) layout.elements = [];
+    }
+
+    async function reloadSeatMaps(){
       smStatus.textContent = 'Loading seat maps…';
       smSelect.innerHTML = '';
-      currentMap = null;
-      currentSeats = [];
-      seatCanvas.innerHTML = '<div class="muted" style="font-size:13px">No seat map selected.</div>';
+      seatMapsData = [];
+      currentSeatMapId = null;
 
       try{
-        let url = '/admin/seatmaps?showId='+encodeURIComponent(showId);
-        if(venueId) url += '&venueId='+encodeURIComponent(venueId);
-        const maps = await j(url);
-        seatMaps = Array.isArray(maps) ? maps : [];
-        if(!seatMaps.length){
-          smStatus.textContent = 'No seat maps yet. Create one on the left.';
-          smSelect.innerHTML = '';
+        let qs = 'showId='+encodeURIComponent(showId);
+        if(venueId) qs += '&venueId='+encodeURIComponent(venueId);
+        const maps = await j('/admin/seatmaps?'+qs);
+
+        if(!Array.isArray(maps) || !maps.length){
+          smStatus.textContent = 'No seat maps yet. Create one below.';
+          smTip.textContent = 'Create a map for this show; you can optionally reuse it for future dates at this venue.';
+          seatCanvas.innerHTML = '<div class="muted">No seat map selected.</div>';
           return;
         }
-        smStatus.textContent = seatMaps.length+' seat map'+(seatMaps.length>1?'s':'')+' found.';
-        smSelect.innerHTML = seatMaps.map(function(m){
-          return '<option value="'+m.id+'">'+(m.name || 'Untitled')+(m.isDefault ? ' (default)' : '')+'</option>';
+
+        seatMapsData = maps;
+        smStatus.textContent = maps.length+' seat map'+(maps.length>1?'s':'')+' found.';
+        smSelect.innerHTML = maps.map(function(m){
+          let label = m.name || 'Untitled map';
+          if(m.isDefault) label += ' (default)';
+          return '<option value="'+m.id+'">'+label+'</option>';
         }).join('');
 
-        let chosen = seatMaps.find(function(m){ return m.isDefault; }) || seatMaps[0];
-        currentMap = chosen;
-        if(currentMap && smSelect.value !== currentMap.id){
-          smSelect.value = currentMap.id;
-        }
-        await loadSeatsAndLayout();
+        const def = maps.find(function(m){ return m.isDefault; }) || maps[0];
+        currentSeatMapId = def.id;
+        smSelect.value = currentSeatMapId;
+
+        layout = (def.layout && typeof def.layout === 'object')
+          ? def.layout
+          : { seats:{}, elements:[] };
+
+        await reloadSeats();
       }catch(e){
-        smStatus.textContent = 'Failed to load seat maps.';
-        seatCanvas.innerHTML = '<div class="error" style="font-size:13px">'+(e.message||e)+'</div>';
+        smStatus.textContent = 'Failed to load seat maps';
+        smErr.textContent = e.message || String(e);
       }
     }
 
+    async function reloadSeats(){
+      if(!currentSeatMapId){
+        seatCanvas.innerHTML = '<div class="muted">No seat map selected.</div>';
+        return;
+      }
+      try{
+        seats = await j('/seatmaps/'+currentSeatMapId+'/seats');
+        renderSeats();
+      }catch(e){
+        seatCanvas.innerHTML = '<div class="error">Failed to load seats: '+(e.message||e)+'</div>';
+      }
+    }
+
+    function renderSeats(){
+      seatCanvas.innerHTML = '';
+      ensureLayout();
+
+      if(!Array.isArray(seats) || !seats.length){
+        seatCanvas.innerHTML = '<div class="muted">No seats yet. Use the quick generator on the left.</div>';
+        return;
+      }
+
+      const hasPositions = Object.keys(layout.seats).length > 0;
+      if(!hasPositions){
+        // Default grid positions if no layout yet
+        const rowsMap = {};
+        seats.forEach(function(s){
+          const key = s.rowLabel || s.row || '';
+          if(!rowsMap[key]) rowsMap[key] = [];
+          rowsMap[key].push(s);
+        });
+
+        const rowKeys = Object.keys(rowsMap).sort();
+        const offsetX = 40;
+        const offsetY = 30;
+        const dx = 24;
+        const dy = 24;
+
+        rowKeys.forEach(function(rowKey, rowIndex){
+          const rowSeats = rowsMap[rowKey].sort(function(a,b){
+            const an = a.seatNumber != null ? a.seatNumber : a.number;
+            const bn = b.seatNumber != null ? b.seatNumber : b.number;
+            return an - bn;
+          });
+          const y = offsetY + rowIndex * dy;
+          rowSeats.forEach(function(s, colIndex){
+            const x = offsetX + colIndex * dx;
+            layout.seats[s.id] = { x:x, y:y, rotation:0 };
+          });
+        });
+      }
+
+      seats.forEach(function(s){
+        let pos = layout.seats[s.id];
+        if(!pos){
+          pos = { x:40, y:30, rotation:0 };
+          layout.seats[s.id] = pos;
+        }
+
+        const seatEl = document.createElement('div');
+        seatEl.className = 'seat';
+        if(s.status === 'BLOCKED') seatEl.classList.add('seat-blocked');
+        if(s.status === 'HELD')    seatEl.classList.add('seat-held');
+        if(s.status === 'SOLD')    seatEl.classList.add('seat-sold');
+
+        seatEl.setAttribute('data-seat-id', s.id);
+        seatEl.style.position = 'absolute';
+        seatEl.style.left = (pos.x - 9)+'px';
+        seatEl.style.top  = (pos.y - 9)+'px';
+
+        const labelRow  = s.rowLabel || s.row || '';
+        const labelSeat = (s.seatNumber != null ? s.seatNumber : s.number);
+        seatEl.title = labelRow+' '+labelSeat;
+        seatEl.textContent = labelSeat;
+
+        seatCanvas.appendChild(seatEl);
+      });
+    }
+
+    // Switch between different maps
     smSelect.addEventListener('change', async function(){
       const id = smSelect.value;
-      currentMap = seatMaps.find(function(m){ return m.id === id; }) || null;
-      await loadSeatsAndLayout();
+      currentSeatMapId = id || null;
+      const found = seatMapsData.find(function(m){ return m.id === id; });
+      if(found && found.layout && typeof found.layout === 'object'){
+        layout = found.layout;
+      }else{
+        layout = { seats:{}, elements:[] };
+      }
+      await reloadSeats();
     });
 
-    async function loadSeatsAndLayout(){
-      if(!currentMap){
-        seatCanvas.innerHTML = '<div class="muted" style="font-size:13px">No seat map selected.</div>';
-        return;
-      }
-      seatCanvas.innerHTML = '<div class="muted" style="font-size:13px">Loading seats…</div>';
-      try{
-        const seats = await j('/seatmaps/'+encodeURIComponent(currentMap.id)+'/seats');
-        currentSeats = Array.isArray(seats) ? seats : [];
-
-        currentLayout = currentMap.layout || {};
-        if(!currentLayout || typeof currentLayout !== 'object') currentLayout = {};
-        if(!currentLayout.seats || typeof currentLayout.seats !== 'object') currentLayout.seats = {};
-        if(!Array.isArray(currentLayout.elements)) currentLayout.elements = [];
-
-        const rowIndexByRow = {};
-        const sorted = currentSeats.slice().sort(function(a,b){
-          if(a.row < b.row) return -1;
-          if(a.row > b.row) return 1;
-          return a.number - b.number;
-        });
-        sorted.forEach(function(seat){
-          if(!rowIndexByRow.hasOwnProperty(seat.row)){
-            rowIndexByRow[seat.row] = Object.keys(rowIndexByRow).length;
-          }
-          const rowIndex = rowIndexByRow[seat.row];
-          const colIndex = seat.number - 1;
-          if(!currentLayout.seats[seat.id]){
-            currentLayout.seats[seat.id] = { x: colIndex*22, y: rowIndex*24, rotation:0 };
-          }
-        });
-
-        renderSeatLayout();
-      }catch(e){
-        seatCanvas.innerHTML = '<div class="error" style="font-size:13px">'+(e.message||e)+'</div>';
-      }
-    }
-
-    function renderSeatLayout(){
-      if(!currentMap){
-        seatCanvas.innerHTML = '<div class="muted" style="font-size:13px">No seat map selected.</div>';
-        return;
-      }
-      let html = '';
-      currentSeats.forEach(function(seat){
-        const pos = currentLayout.seats[seat.id] || { x:0, y:0, rotation:0 };
-        const classes = ['seat'];
-        if(seat.status === 'BLOCKED') classes.push('seat-blocked');
-        if(seat.status === 'HELD') classes.push('seat-held');
-        if(seat.status === 'SOLD') classes.push('seat-sold');
-        const label = seat.seatNumber || seat.number;
-        html += '<div class="'+classes.join(' ')+'" data-seat-id="'+seat.id+'" style="position:absolute;left:'+pos.x+'px;top:'+pos.y+'px;transform:rotate('+(pos.rotation||0)+'deg);"><span>'+label+'</span></div>';
-      });
-      if(!html){
-        seatCanvas.innerHTML = '<div class="muted" style="font-size:13px">This seat map has no seats yet.</div>';
-        return;
-      }
-      seatCanvas.innerHTML = html;
-      attachSeatDragging();
-    }
-
-    function attachSeatDragging(){
-      let dragging = null;
-      let startX = 0, startY = 0, origX = 0, origY = 0;
-
-      seatCanvas.querySelectorAll('.seat').forEach(function(el){
-        el.addEventListener('mousedown', function(ev){
-          ev.preventDefault();
-          const id = el.getAttribute('data-seat-id');
-          if(!id) return;
-          let pos = currentLayout.seats[id];
-          if(!pos){
-            pos = { x:0, y:0, rotation:0 };
-            currentLayout.seats[id] = pos;
-          }
-          dragging = { id: id, el: el };
-          startX = ev.clientX;
-          startY = ev.clientY;
-          origX = pos.x;
-          origY = pos.y;
-          document.addEventListener('mousemove', onMove);
-          document.addEventListener('mouseup', onUp);
-        });
-      });
-
-      function onMove(ev){
-        if(!dragging) return;
-        const dx = ev.clientX - startX;
-        const dy = ev.clientY - startY;
-        const pos = currentLayout.seats[dragging.id];
-        pos.x = origX + dx;
-        pos.y = origY + dy;
-        dragging.el.style.left = pos.x + 'px';
-        dragging.el.style.top  = pos.y + 'px';
-      }
-
-      function onUp(){
-        if(!dragging) return;
-        dragging = null;
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
-      }
-    }
-
-    saveLayoutBtn.addEventListener('click', async function(){
+    // Create new seat map
+    smCreate.addEventListener('click', async function(){
       smErr.textContent = '';
-      if(!currentMap){
-        smErr.textContent = 'No seat map selected.';
-        return;
-      }
-      try{
-        await j('/admin/seatmaps/'+encodeURIComponent(currentMap.id)+'/layout',{
-          method:'PATCH',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ layout: currentLayout })
-        });
-        alert('Layout saved');
-      }catch(e){
-        smErr.textContent = e.message || String(e);
-      }
-    });
-
-    // Quick seat generator -> POST /seatmaps/:seatMapId/seats/bulk
-    qGenerate.addEventListener('click', async function(){
-      smErr.textContent = '';
-      if(!currentMap){
-        smErr.textContent = 'Select or create a seat map first.';
-        return;
-      }
-      const rowsVal = Number((qRows && qRows.value) || '0');
-      const colsVal = Number((qCols && qCols.value) || '0');
-
-      if(!Number.isFinite(rowsVal) || rowsVal <= 0 || !Number.isFinite(colsVal) || colsVal <= 0){
-        smErr.textContent = 'Rows and seats per row must be positive numbers.';
-        return;
-      }
-
-      const maxRows = Math.min(rowsVal, 50);
-      const maxCols = Math.min(colsVal, 80);
-      const seatsPayload = [];
-
-      for(let r=0; r<maxRows; r++){
-        // A, B, C… wrap after Z if needed
-        const rowLabel = String.fromCharCode(65 + (r % 26));
-        for(let c=1; c<=maxCols; c++){
-          seatsPayload.push({
-            row: rowLabel,
-            number: c,
-            rowLabel: rowLabel,
-            seatNumber: c
-          });
-        }
-      }
-
-      try{
-        await j('/seatmaps/'+encodeURIComponent(currentMap.id)+'/seats/bulk',{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ seats: seatsPayload })
-        });
-        await loadSeatsAndLayout();
-      }catch(e){
-        smErr.textContent = e.message || String(e);
-      }
-    });
-
-    $('#sm_create').addEventListener('click', async function(){
-      smErr.textContent = '';
-      const name = $('#sm_name').value.trim();
+      const name = smName.value.trim();
       if(!name){
         smErr.textContent = 'Name is required';
         return;
       }
       try{
-        await j('/admin/seatmaps',{
+        const body = { showId: showId, name: name };
+        if(venueId) body.venueId = venueId;
+        const created = await j('/admin/seatmaps',{
           method:'POST',
           headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ showId: showId, name: name, venueId: venueId || null })
+          body: JSON.stringify(body)
         });
-        $('#sm_name').value = '';
-        await fetchSeatMaps();
+        smName.value = '';
+        await reloadSeatMaps();
+        currentSeatMapId = created.id;
+        smSelect.value = currentSeatMapId;
+        layout = { seats:{}, elements:[] };
+        await reloadSeats();
       }catch(e){
         smErr.textContent = e.message || String(e);
       }
     });
 
-    fetchSeatMaps();
+    // Quick generator → /seatmaps/:id/seats/bulk
+    qGenerate.addEventListener('click', async function(){
+      if(!currentSeatMapId){
+        alert('Select or create a seat map first.');
+        return;
+      }
+      const rows = Number(qRows.value) || 0;
+      const cols = Number(qCols.value) || 0;
+      if(rows <= 0 || cols <= 0){
+        alert('Rows and seats per row must be positive numbers.');
+        return;
+      }
+      const seatsPayload = [];
+      for(let r=0;r<rows;r++){
+        const rowLabel = String.fromCharCode(65 + r);
+        for(let c=0;c<cols;c++){
+          seatsPayload.push({
+            row: rowLabel,
+            number: c+1,
+            rowLabel: rowLabel,
+            seatNumber: c+1
+          });
+        }
+      }
+      try{
+        await j('/seatmaps/'+currentSeatMapId+'/seats/bulk',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ seats: seatsPayload })
+        });
+        await reloadSeats();
+      }catch(e){
+        alert('Failed to generate seats: '+(e.message||e));
+      }
+    });
+
+    // Very simple drag behaviour (per-seat)
+    let draggingSeat = null;
+
+    seatCanvas.addEventListener('mousedown', function(e){
+      const seatEl = e.target && e.target.closest ? e.target.closest('.seat') : null;
+      if(!seatEl) return;
+      draggingSeat = seatEl;
+      seatEl.classList.add('seat-selected');
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', function(e){
+      if(!draggingSeat) return;
+      const rect = seatCanvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const id = draggingSeat.getAttribute('data-seat-id');
+      draggingSeat.style.left = (x - 9)+'px';
+      draggingSeat.style.top  = (y - 9)+'px';
+      ensureLayout();
+      layout.seats[id] = { x:x, y:y, rotation:0 };
+    });
+
+    document.addEventListener('mouseup', function(){
+      if(draggingSeat){
+        draggingSeat.classList.remove('seat-selected');
+      }
+      draggingSeat = null;
+    });
+
+    // Save layout → PATCH /admin/seatmaps/:id/layout
+    saveLayoutBtn.addEventListener('click', async function(){
+      if(!currentSeatMapId){
+        alert('No seat map selected.');
+        return;
+      }
+      ensureLayout();
+      try{
+        await j('/admin/seatmaps/'+currentSeatMapId+'/layout',{
+          method:'PATCH',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ layout: layout })
+        });
+        alert('Layout saved');
+      }catch(e){
+        alert('Failed to save layout: '+(e.message||e));
+      }
+    });
+
+    // Initial load
+    reloadSeatMaps();
   }
 
-  // ---------- Simple placeholder pages ----------
+
+
+
+ 
+
+  // ---------- Simple stubs for other views ----------
+
   function orders(){
-    main.innerHTML = '<div class="card"><div class="title">Orders</div><div class="muted">Order management coming soon.</div></div>';
+    main.innerHTML = '<div class="card"><div class="title">Orders</div><div class="muted">Orders view coming soon.</div></div>';
   }
+
   function venues(){
-    main.innerHTML = '<div class="card"><div class="title">Venues</div><div class="muted">Venue tooling coming soon. For now, manage venues via the existing CMS / admin API.</div></div>';
+    main.innerHTML = '<div class="card"><div class="title">Venues</div><div class="muted">Venue management UI coming soon (data API already exists).</div></div>';
   }
+
   function analytics(){
     main.innerHTML = '<div class="card"><div class="title">Analytics</div><div class="muted">Analytics dashboard coming soon.</div></div>';
   }
+
   function audiences(){
-    main.innerHTML = '<div class="card"><div class="title">Audiences</div><div class="muted">Audience segments and email lists will appear here.</div></div>';
+    main.innerHTML = '<div class="card"><div class="title">Audiences</div><div class="muted">Audience tools coming soon.</div></div>';
   }
+
   function emailPage(){
-    main.innerHTML = '<div class="card"><div class="title">Email Campaigns</div><div class="muted">Email tooling will connect to your Replit email automation.</div></div>';
+    main.innerHTML = '<div class="card"><div class="title">Email Campaigns</div><div class="muted">Email campaign tools will plug into your existing Mailchimp/automation stack.</div></div>';
   }
+
   function account(){
     main.innerHTML = '<div class="card"><div class="title">Account</div><div class="muted">Account settings coming soon.</div></div>';
   }
 
-  // Kick things off
+  // Kick off initial route on page load
   route();
 })();
 </script>
@@ -1181,5 +1233,6 @@ router.get(
 </html>`);
   }
 );
+
 
 export default router;
