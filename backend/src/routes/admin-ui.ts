@@ -55,6 +55,7 @@ router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req,
   .pop.open{display:block}
   .opt{padding:8px 10px;cursor:pointer}
   .opt:hover{background:#f8fafc}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--border);background:#f9fafb}
 </style>
 </head>
 <body>
@@ -134,6 +135,7 @@ router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req,
 
     if (path.startsWith('/admin/ui/shows/') && path.endsWith('/seating')) return seatingPage(path.split('/')[4]);
     if (path.startsWith('/admin/ui/shows/') && path.endsWith('/edit')) return editShow(path.split('/')[4]);
+    if (path.startsWith('/admin/ui/shows/') && path.endsWith('/tickets')) return ticketsPage(path.split('/')[4]);
 
     if (path.startsWith('/admin/ui')) return home();
   }
@@ -285,7 +287,12 @@ router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req,
           throw new Error('Title, date/time, venue and description are required');
         }
         const r = await j('/admin/shows',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-        if(r && r.ok){ go('/admin/ui/shows/current'); } else { throw new Error((r && r.error)||'Failed to create show'); }
+        if(r && r.ok && r.id){
+          // After creating the show, go straight to the ticket setup screen for this show.
+          go('/admin/ui/shows/'+r.id+'/tickets');
+        } else {
+          throw new Error((r && r.error)||'Failed to create show');
+        }
       }catch(e){ $('#err').textContent=e.message||String(e); }
     });
   }
@@ -322,6 +329,7 @@ router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req,
               <div class="menu" id="m-\${s.id}">
                 <a href="#" data-edit="\${s.id}">Edit</a>
                 <a href="#" data-seating="\${s.id}">Seating map</a>
+                <a href="#" data-tickets="\${s.id}">Tickets</a>
                 <a href="#" data-dup="\${s.id}">Duplicate</a>
               </div></div></td>
           </tr>\`;
@@ -334,6 +342,7 @@ router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req,
 
         $$('[data-edit]').forEach(a=>a.addEventListener('click',(e)=>{ e.preventDefault(); go('/admin/ui/shows/'+a.getAttribute('data-edit')+'/edit'); }));
         $$('[data-seating]').forEach(a=>a.addEventListener('click',(e)=>{ e.preventDefault(); go('/admin/ui/shows/'+a.getAttribute('data-seating')+'/seating'); }));
+        $$('[data-tickets]').forEach(a=>a.addEventListener('click',(e)=>{ e.preventDefault(); go('/admin/ui/shows/'+a.getAttribute('data-tickets')+'/tickets'); }));
         $$('[data-dup]').forEach(a=>a.addEventListener('click', async (e)=>{
           e.preventDefault();
           try{ const id=a.getAttribute('data-dup'); const r=await j('/admin/shows/'+id+'/duplicate',{method:'POST'}); if(r.ok && r.newId){ go('/admin/ui/shows/'+r.newId+'/edit'); } }
@@ -372,6 +381,7 @@ router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req,
         <div class="row" style="margin-top:10px">
           <button id="save" class="btn p">Save changes</button>
           <a class="btn" href="#" id="goSeating">Seating map</a>
+          <a class="btn" href="#" id="goTickets">Tickets</a>
           <div id="err" class="error"></div>
         </div>
       </div>\`;
@@ -386,7 +396,8 @@ router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req,
       const iso = dt.toISOString().slice(0,16);
       $('#sh_dt').value = iso;
     }
-    $('#desc').innerHTML = s.item?.descriptionHtml || '';
+    // For now, use description as HTML (backend sends description only)
+    $('#desc').innerHTML = s.item?.description || '';
     if (s.item?.imageUrl) { $('#prev').src = s.item.imageUrl; $('#prev').style.display='block'; }
 
     const drop=$('#drop'), file=$('#file'), bar=$('#bar'), prev=$('#prev');
@@ -403,6 +414,8 @@ router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req,
     }
 
     $('#goSeating').addEventListener('click',(e)=>{e.preventDefault(); go('/admin/ui/shows/'+id+'/seating');});
+    $('#goTickets').addEventListener('click',(e)=>{e.preventDefault(); go('/admin/ui/shows/'+id+'/tickets');});
+
     $('#save').addEventListener('click', async ()=>{
       $('#err').textContent='';
       try{
@@ -423,9 +436,248 @@ router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req,
     });
   }
 
+  // ---------- Tickets for a show ----------
+  async function ticketsPage(id){
+    main.innerHTML = '<div class="card"><div class="title">Loading tickets…</div></div>';
+    let showResp;
+    try {
+      showResp = await j('/admin/shows/'+id);
+    } catch (e) {
+      main.innerHTML = '<div class="card"><div class="error">Failed to load show: '+(e.message||e)+'</div></div>';
+      return;
+    }
+    const show = showResp.item || {};
+    const when = show.date ? new Date(show.date).toLocaleString('en-GB',{ dateStyle:'full', timeStyle:'short'}) : '';
+    const venueName = show.venue ? (show.venue.name + (show.venue.city ? ' – '+show.venue.city : '')) : (show.venueText || '');
+
+    main.innerHTML = \`
+      <div class="card">
+        <div class="header">
+          <div>
+            <div class="title">Tickets for \${show.title || 'Untitled show'}</div>
+            <div class="muted">\${when ? when + ' · ' : ''}\${venueName}</div>
+          </div>
+          <div class="row">
+            <button class="btn" id="backToShows">Back to all events</button>
+            <button class="btn" id="editShowBtn">Edit show</button>
+          </div>
+        </div>
+
+        <div class="grid grid-2" style="margin-bottom:16px">
+          <div class="card" style="margin:0">
+            <div class="title" style="margin-bottom:4px">Ticket structure</div>
+            <div class="muted" style="margin-bottom:8px">
+              Tickets can be free (price £0) or paid, and can be sold as general admission or allocated seating.
+            </div>
+            <div class="row" style="margin-bottom:8px">
+              <span class="pill" id="structureGeneral">General admission</span>
+              <span class="pill" id="structureAllocated">Allocated seating</span>
+            </div>
+            <div class="muted" style="font-size:12px">
+              Allocated seating uses a seating map for this venue. You can reuse an existing map or create a new one just for this show.
+            </div>
+          </div>
+
+          <div class="card" style="margin:0">
+            <div class="title" style="margin-bottom:4px">Seat maps for this show</div>
+            <div class="muted" id="seatMapsSummary">Loading seat maps…</div>
+            <div id="seatMapsList" style="margin-top:8px"></div>
+            <div class="row" style="margin-top:8px">
+              <button class="btn" id="refreshSeatMaps">Refresh seat maps</button>
+              <button class="btn" id="editSeatMaps">Create / edit seat map</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin:0">
+          <div class="header">
+            <div class="title">Ticket types</div>
+            <button class="btn" id="addTypeBtn">Add ticket type</button>
+          </div>
+          <div class="muted" style="margin-bottom:8px">
+            Set up the tickets you want to sell for this show. A £0 price will be treated as a free ticket.
+          </div>
+          <div id="ticketTypesEmpty" class="muted" style="display:none">No ticket types yet. Use “Add ticket type” to create one.</div>
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Price</th>
+                <th>Available</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="ticketTypesBody">
+              <tr><td colspan="4" class="muted">Loading…</td></tr>
+            </tbody>
+          </table>
+
+          <div id="addTypeForm" style="margin-top:12px;display:none">
+            <div class="grid grid-3">
+              <div class="grid"><label>Name</label><input id="tt_name" placeholder="e.g. Standard" /></div>
+              <div class="grid"><label>Price (£)</label><input id="tt_price" type="number" min="0" step="0.01" placeholder="e.g. 15" /></div>
+              <div class="grid"><label>Available (optional)</label><input id="tt_available" type="number" min="0" step="1" placeholder="Leave blank for unlimited" /></div>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <button class="btn p" id="tt_save">Save ticket type</button>
+              <button class="btn" id="tt_cancel">Cancel</button>
+              <div id="tt_err" class="error"></div>
+            </div>
+          </div>
+        </div>
+      </div>\`;
+
+    $('#backToShows').addEventListener('click', ()=> go('/admin/ui/shows/current'));
+    $('#editShowBtn').addEventListener('click', ()=> go('/admin/ui/shows/'+id+'/edit'));
+
+    // Ticket types UI
+    const addTypeForm = $('#addTypeForm');
+    const ticketTypesBody = $('#ticketTypesBody');
+    const ticketTypesEmpty = $('#ticketTypesEmpty');
+
+    $('#addTypeBtn').addEventListener('click', ()=>{ addTypeForm.style.display='block'; $('#tt_name').focus(); });
+    $('#tt_cancel').addEventListener('click', ()=>{ addTypeForm.style.display='none'; $('#tt_err').textContent=''; });
+
+    async function loadTicketTypes(){
+      try{
+        const res = await j('/admin/shows/'+id+'/ticket-types');
+        const items = res.ticketTypes || [];
+        if(!items.length){
+          ticketTypesBody.innerHTML = '<tr><td colspan="4" class="muted">No ticket types yet.</td></tr>';
+          ticketTypesEmpty.style.display = 'block';
+        } else {
+          ticketTypesEmpty.style.display = 'none';
+          ticketTypesBody.innerHTML = items.map(tt=>{
+            const price = (tt.pricePence ?? 0) / 100;
+            const priceLabel = price === 0 ? 'Free' : '£'+price.toFixed(2);
+            const availLabel = tt.available == null ? 'Unlimited' : String(tt.available);
+            return '<tr>'
+              +'<td>'+ (tt.name || '') +'</td>'
+              +'<td>'+ priceLabel +'</td>'
+              +'<td>'+ availLabel +'</td>'
+              +'<td><button class="btn" data-del="'+tt.id+'">Delete</button></td>'
+              +'</tr>';
+          }).join('');
+          $$('[data-del]', ticketTypesBody).forEach(btn=>{
+            btn.addEventListener('click', async (e)=>{
+              e.preventDefault();
+              const idToDel = btn.getAttribute('data-del');
+              if(!idToDel) return;
+              if(!confirm('Delete this ticket type?')) return;
+              try{
+                await j('/admin/ticket-types/'+idToDel, { method:'DELETE' });
+                loadTicketTypes();
+              }catch(err){
+                alert('Failed to delete: '+(err.message||err));
+              }
+            });
+          });
+        }
+      }catch(e){
+        ticketTypesBody.innerHTML = '<tr><td colspan="4" class="error">Failed to load ticket types: '+(e.message||e)+'</td></tr>';
+      }
+    }
+
+    $('#tt_save').addEventListener('click', async ()=>{
+      $('#tt_err').textContent='';
+      const name = $('#tt_name').value.trim();
+      const priceStr = $('#tt_price').value.trim();
+      const availStr = $('#tt_available').value.trim();
+
+      if(!name){ $('#tt_err').textContent='Name is required'; return; }
+
+      let pricePence = 0;
+      if(priceStr){
+        const p = Number(priceStr);
+        if(!Number.isFinite(p) || p < 0){ $('#tt_err').textContent='Price must be a non-negative number'; return; }
+        pricePence = Math.round(p * 100);
+      }
+
+      let available = null;
+      if(availStr){
+        const a = Number(availStr);
+        if(!Number.isFinite(a) || a < 0){ $('#tt_err').textContent='Available must be a non-negative number'; return; }
+        available = a;
+      }
+
+      try{
+        await j('/admin/shows/'+id+'/ticket-types', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ name, pricePence, available })
+        });
+        $('#tt_name').value='';
+        $('#tt_price').value='';
+        $('#tt_available').value='';
+        addTypeForm.style.display='none';
+        loadTicketTypes();
+      }catch(err){
+        $('#tt_err').textContent = err.message || String(err);
+      }
+    });
+
+    loadTicketTypes();
+
+    // Seat maps UI
+    const seatMapsSummary = $('#seatMapsSummary');
+    const seatMapsList = $('#seatMapsList');
+    const venueId = show.venue?.id || null;
+
+    async function loadSeatMaps(){
+      seatMapsSummary.textContent = 'Loading seat maps…';
+      seatMapsList.innerHTML = '';
+      try{
+        let url = '/admin/seatmaps?showId='+encodeURIComponent(id);
+        if(venueId) url += '&venueId='+encodeURIComponent(venueId);
+        const maps = await j(url); // admin-seatmaps returns an array
+        if(!Array.isArray(maps) || !maps.length){
+          seatMapsSummary.textContent = 'No seat maps yet for this show/venue.';
+          seatMapsList.innerHTML = '<div class="muted" style="font-size:13px">You can create a seat map using the “Create / edit seat map” button.</div>';
+          return;
+        }
+        seatMapsSummary.textContent = maps.length + ' seat map'+(maps.length>1?'s':'')+' found.';
+        seatMapsList.innerHTML = maps.map(m=>{
+          const def = m.isDefault ? ' · <strong>Default</strong>' : '';
+          return '<div class="row" style="margin-bottom:4px;justify-content:space-between">'
+            +'<div><strong>'+m.name+'</strong> <span class="muted">v'+(m.version||1)+'</span>'+def+'</div>'
+            +'<div class="row" style="gap:4px">'
+            +(!m.isDefault ? '<button class="btn" data-make-default="'+m.id+'">Make default</button>' : '')
+            +'</div>'
+            +'</div>';
+        }).join('');
+
+        $$('[data-make-default]', seatMapsList).forEach(btn=>{
+          btn.addEventListener('click', async (e)=>{
+            e.preventDefault();
+            const mapId = btn.getAttribute('data-make-default');
+            if(!mapId) return;
+            try{
+              await j('/admin/seatmaps/'+mapId+'/default', {
+                method:'PATCH',
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ isDefault: true })
+              });
+              loadSeatMaps();
+            }catch(err){
+              alert('Failed to update default: '+(err.message||err));
+            }
+          });
+        });
+      }catch(e){
+        seatMapsSummary.textContent = 'Failed to load seat maps.';
+        seatMapsList.innerHTML = '<div class="error" style="font-size:13px">'+(e.message||e)+'</div>';
+      }
+    }
+
+    $('#refreshSeatMaps').addEventListener('click', loadSeatMaps);
+    $('#editSeatMaps').addEventListener('click', ()=> go('/admin/ui/shows/'+id+'/seating'));
+
+    loadSeatMaps();
+  }
+
   // ---------- Seating placeholder ----------
   function seatingPage(id){
-    main.innerHTML = '<div class="card"><div class="title">Seating map</div><div class="muted">Coming soon for show '+id+'</div></div>';
+    main.innerHTML = '<div class="card"><div class="title">Seating map</div><div class="muted">Seating map builder coming soon for show '+id+'.</div></div>';
   }
 
   // ---------- Other sections (stubs) ----------
