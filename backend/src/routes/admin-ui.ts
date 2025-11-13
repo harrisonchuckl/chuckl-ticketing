@@ -71,13 +71,13 @@ router.get(
     display:flex;
     flex-direction:column;
     gap:12px;
-    position:relative; /* needed for guides + zoom controls */
+    position:relative;
   }
   #seatCanvas{
     position:relative;
-    min-width:900px;  /* give the seat grid breathing room */
+    min-width:900px;
     min-height:220px;
-    transform-origin:0 0; /* zoom from top-left */
+    transform-origin:0 0;
   }
   .guide-line{position:absolute;background:rgba(248,250,252,.85);pointer-events:none;z-index:5}
   .guide-line.h{height:1px;width:100%}
@@ -893,7 +893,7 @@ router.get(
     loadSeatMaps();
   }
 
-  // ---------- Seating page with Seat Inspector (snap + guides + row move + zoom + blocks + metadata) ----------
+  // ---------- Seating page with blocks, metadata & seat-level pricing ----------
   async function seatingPage(showId){
     main.innerHTML = '<div class="card"><div class="title">Loading seating…</div></div>';
 
@@ -967,6 +967,20 @@ router.get(
               +'<div class="tip" style="font-size:12px">Select one or more seats first, then create a block. You can drag the block label on the canvas to move all its seats.</div>'
               +'<div id="blocks_list" style="margin-top:8px;font-size:13px"></div>'
             +'</div>'
+
+            +'<div class="card" style="margin:0">'
+              +'<div class="title" style="margin-bottom:4px">Seat pricing</div>'
+              +'<div class="muted" style="font-size:12px;margin-bottom:6px">Pick a ticket type, then assign it to selected seats. With multiple ticket prices, every seat should be allocated.</div>'
+              +'<div class="grid" style="grid-template-columns:1fr;gap:6px;margin-bottom:6px">'
+                +'<label style="font-size:12px">Ticket type for selection</label>'
+                +'<select id="seat_price_ticketType"><option value="">— Choose ticket type —</option></select>'
+              +'</div>'
+              +'<div class="row" style="margin-bottom:4px">'
+                +'<button class="btn" id="seat_price_assign_selection">Assign to selection</button>'
+                +'<button class="btn" id="seat_price_clear">Clear from selection</button>'
+              +'</div>'
+              +'<div id="seat_price_summary" class="tip" style="font-size:12px;margin-top:4px">No pricing assignments yet.</div>'
+            +'</div>'
           +'</div>'
 
           +'<div class="card" style="margin:0">'
@@ -1024,6 +1038,11 @@ router.get(
     const blockZoneInput     = document.getElementById('block_zone');
     const blockTicketTypeSelect = document.getElementById('block_ticketType');
 
+    const seatPriceTicketTypeSelect   = document.getElementById('seat_price_ticketType');
+    const seatPriceAssignBtn          = document.getElementById('seat_price_assign_selection');
+    const seatPriceClearBtn           = document.getElementById('seat_price_clear');
+    const seatPriceSummary            = document.getElementById('seat_price_summary');
+
     backToTicketsBtn.addEventListener('click', function(){
       go('/admin/ui/shows/'+showId+'/tickets');
     });
@@ -1068,6 +1087,21 @@ router.get(
       if(!Array.isArray(layout.elements)) layout.elements = [];
     }
 
+    function ensureSeatMeta(id){
+      ensureLayout();
+      let meta = layout.seats[id];
+      if(!meta){
+        meta = { x:40, y:30, rotation:0, ticketTypeId:null };
+        layout.seats[id] = meta;
+      }else{
+        if(typeof meta.x !== 'number') meta.x = 40;
+        if(typeof meta.y !== 'number') meta.y = 30;
+        if(typeof meta.rotation !== 'number') meta.rotation = 0;
+        if(!('ticketTypeId' in meta)) meta.ticketTypeId = null;
+      }
+      return meta;
+    }
+
     function clearSelection(){
       selectedSeatIds.forEach(function(id){
         const el = seatCanvas.querySelector('[data-seat-id="'+id+'"]');
@@ -1093,7 +1127,6 @@ router.get(
       const blocks = layout.elements.filter(function(e){ return e && e.type === 'block' && Array.isArray(e.seatIds); });
       blocks.some(function(b){
         if(!b.seatIds || !b.seatIds.length) return false;
-        // treat as selected if all block seats are currently selected
         const allIn = b.seatIds.every(function(id){ return selectedSeatIds.has(id); });
         if(allIn){
           selectedBlockId = b.id;
@@ -1154,6 +1187,37 @@ router.get(
       const price = (tt.pricePence || 0) / 100;
       const priceLabel = price === 0 ? 'Free' : '£'+price.toFixed(2);
       return tt.name + ' ('+priceLabel+')';
+    }
+
+    function updateSeatPricingSummary(){
+      if(!seatPriceSummary){
+        return;
+      }
+      if(!Array.isArray(seats) || !seats.length){
+        seatPriceSummary.textContent = 'No seats yet.';
+        return;
+      }
+      ensureLayout();
+      const countsByTt = {};
+      let unassigned = 0;
+      seats.forEach(function(s){
+        const meta = layout.seats[s.id];
+        const ttId = meta && meta.ticketTypeId;
+        if(ttId){
+          countsByTt[ttId] = (countsByTt[ttId] || 0) + 1;
+        }else{
+          unassigned++;
+        }
+      });
+      const parts = [];
+      Object.keys(countsByTt).forEach(function(ttId){
+        const n = countsByTt[ttId];
+        parts.push(ticketTypeLabelForId(ttId)+': '+n+' seat'+(n===1?'':'s'));
+      });
+      if(unassigned > 0){
+        parts.push(unassigned+' unassigned seat'+(unassigned===1?'':'s'));
+      }
+      seatPriceSummary.textContent = parts.length ? parts.join(' · ') : 'No pricing assignments yet.';
     }
 
     function refreshBlocksList(){
@@ -1218,6 +1282,8 @@ router.get(
       try{
         const res = await j('/admin/shows/'+showId+'/ticket-types');
         ticketTypes = res.ticketTypes || [];
+
+        // Populate block ticket type select
         if(blockTicketTypeSelect){
           const currentVal = blockTicketTypeSelect.value;
           blockTicketTypeSelect.innerHTML = '<option value="">— None —</option>' +
@@ -1230,9 +1296,25 @@ router.get(
             blockTicketTypeSelect.value = currentVal;
           }
         }
+
+        // Populate seat pricing ticket type select
+        if(seatPriceTicketTypeSelect){
+          const currentVal2 = seatPriceTicketTypeSelect.value;
+          seatPriceTicketTypeSelect.innerHTML = '<option value="">— Choose ticket type —</option>' +
+            ticketTypes.map(function(tt){
+              const price = (tt.pricePence || 0) / 100;
+              const priceLabel = price === 0 ? 'Free' : '£'+price.toFixed(2);
+              return '<option value="'+tt.id+'">'+tt.name+' ('+priceLabel+')</option>';
+            }).join('');
+          if(currentVal2 && ticketTypes.some(function(t){ return t.id === currentVal2; })){
+            seatPriceTicketTypeSelect.value = currentVal2;
+          }
+        }
+
         refreshBlocksList();
+        updateSeatPricingSummary();
       }catch(e){
-        // soft-fail; blocks still work without ticket types
+        // soft-fail; blocks & pricing still work with no ticket types
       }
     }
 
@@ -1254,6 +1336,7 @@ router.get(
           hideGuides();
           layout = { seats:{}, elements:[] };
           refreshBlocksList();
+          updateSeatPricingSummary();
           return;
         }
 
@@ -1276,6 +1359,7 @@ router.get(
         clearSelection();
         await reloadSeats();
         refreshBlocksList();
+        updateSeatPricingSummary();
       }catch(e){
         smStatus.textContent = 'Failed to load seat maps';
         smErr.textContent = e.message || String(e);
@@ -1292,6 +1376,7 @@ router.get(
         seats = await j('/seatmaps/'+currentSeatMapId+'/seats');
         renderSeats();
         refreshBlocksList();
+        updateSeatPricingSummary();
       }catch(e){
         seatCanvas.innerHTML = '<div class="error">Failed to load seats: '+(e.message||e)+'</div>';
         hideGuides();
@@ -1336,17 +1421,16 @@ router.get(
           const y = offsetY + rowIndex * dy;
           rowSeats.forEach(function(s, colIndex){
             const x = offsetX + colIndex * dx;
-            layout.seats[s.id] = { x:x, y:y, rotation:0 };
+            const meta = ensureSeatMeta(s.id);
+            meta.x = x;
+            meta.y = y;
           });
         });
       }
 
       seats.forEach(function(s){
-        let pos = layout.seats[s.id];
-        if(!pos){
-          pos = { x:40, y:30, rotation:0 };
-          layout.seats[s.id] = pos;
-        }
+        const meta = ensureSeatMeta(s.id);
+        const pos = { x: meta.x, y: meta.y };
 
         const seatEl = document.createElement('div');
         seatEl.className = 'seat';
@@ -1361,7 +1445,12 @@ router.get(
 
         const labelRow  = s.rowLabel || s.row || '';
         const labelSeat = (s.seatNumber != null ? s.seatNumber : s.number);
-        seatEl.title = labelRow+' '+labelSeat;
+        let title = labelRow+' '+labelSeat;
+        const ttLabel = meta.ticketTypeId ? ticketTypeLabelForId(meta.ticketTypeId) : '';
+        if(ttLabel){
+          title += ' · '+ttLabel;
+        }
+        seatEl.title = title;
         seatEl.textContent = labelSeat;
 
         if(selectedSeatIds.has(s.id)){
@@ -1377,8 +1466,9 @@ router.get(
       blocks.forEach(function(b){
         let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
         b.seatIds.forEach(function(id){
-          const pos = layout.seats[id];
-          if(!pos) return;
+          const meta = layout.seats[id];
+          if(!meta) return;
+          const pos = meta;
           if(pos.x < minX) minX = pos.x;
           if(pos.x > maxX) maxX = pos.x;
           if(pos.y < minY) minY = pos.y;
@@ -1433,6 +1523,7 @@ router.get(
       clearSelection();
       await reloadSeats();
       refreshBlocksList();
+      updateSeatPricingSummary();
     });
 
     // Create new seat map
@@ -1459,6 +1550,7 @@ router.get(
         clearSelection();
         await reloadSeats();
         refreshBlocksList();
+        updateSeatPricingSummary();
       }catch(e){
         smErr.textContent = e.message || String(e);
       }
@@ -1545,9 +1637,45 @@ router.get(
       renderSeats();
     });
 
+    // Seat pricing: assign / clear ticket type from selected seats
+    seatPriceAssignBtn.addEventListener('click', function(){
+      const ttId = seatPriceTicketTypeSelect && seatPriceTicketTypeSelect.value;
+      if(!ttId){
+        alert('Choose a ticket type first.');
+        return;
+      }
+      if(!selectedSeatIds.size){
+        alert('Select one or more seats first.');
+        return;
+      }
+      ensureLayout();
+      selectedSeatIds.forEach(function(id){
+        const meta = ensureSeatMeta(id);
+        meta.ticketTypeId = ttId;
+      });
+      renderSeats();
+      updateSeatPricingSummary();
+    });
+
+    seatPriceClearBtn.addEventListener('click', function(){
+      if(!selectedSeatIds.size){
+        alert('Select one or more seats to clear.');
+        return;
+      }
+      ensureLayout();
+      selectedSeatIds.forEach(function(id){
+        const meta = ensureSeatMeta(id);
+        if(meta.ticketTypeId){
+          meta.ticketTypeId = null;
+        }
+      });
+      renderSeats();
+      updateSeatPricingSummary();
+    });
+
     // Drag behaviour with snap + alignment guides + group move (seats or blocks)
-    const GRID_SIZE = 4;      // subtle grid snap
-    const SNAP_DIST = 8;      // pixels for snapping to other seats / centre (logical units)
+    const GRID_SIZE = 4;
+    const SNAP_DIST = 8;
     let dragState = null;
 
     seatCanvas.addEventListener('mousedown', function(e){
@@ -1569,12 +1697,10 @@ router.get(
               const seatIds = Array.from(selectedSeatIds);
               const startPositions = {};
               seatIds.forEach(function(id){
-                if(!layout.seats[id]){
-                  layout.seats[id] = { x:40, y:30, rotation:0 };
-                }
+                const meta = ensureSeatMeta(id);
                 startPositions[id] = {
-                  x: layout.seats[id].x,
-                  y: layout.seats[id].y
+                  x: meta.x,
+                  y: meta.y
                 };
               });
 
@@ -1606,10 +1732,8 @@ router.get(
 
       // selection logic
       if(e.altKey){
-        // Alt+click => select entire row
         selectRowForSeat(seatId);
       }else if(e.shiftKey || e.metaKey || e.ctrlKey){
-        // modifier-click => toggle in selection
         if(selectedSeatIds.has(seatId)){
           selectedSeatIds.delete(seatId);
           seatEl.classList.remove('seat-selected');
@@ -1619,7 +1743,6 @@ router.get(
         recomputeSelectedBlockFromSeats();
         renderSeats();
       }else{
-        // normal click => single selection
         selectSingleSeat(seatId);
       }
 
@@ -1629,12 +1752,10 @@ router.get(
         const seatIds = Array.from(selectedSeatIds);
         const startPositions = {};
         seatIds.forEach(function(id){
-          if(!layout.seats[id]){
-            layout.seats[id] = { x:40, y:30, rotation:0 };
-          }
+          const meta = ensureSeatMeta(id);
           startPositions[id] = {
-            x: layout.seats[id].x,
-            y: layout.seats[id].y
+            x: meta.x,
+            y: meta.y
           };
         });
 
@@ -1657,7 +1778,6 @@ router.get(
       const dxScreen = e.clientX - dragState.startMouseX;
       const dyScreen = e.clientY - dragState.startMouseY;
 
-      // convert to logical units (unscaled)
       const dx = dxScreen / zoom;
       const dy = dyScreen / zoom;
 
@@ -1673,25 +1793,24 @@ router.get(
       let anchorX = anchorStart.x + dx;
       let anchorY = anchorStart.y + dy;
 
-      // Snap to small underlying grid
+      // Snap to grid
       anchorX = Math.round(anchorX / GRID_SIZE) * GRID_SIZE;
       anchorY = Math.round(anchorY / GRID_SIZE) * GRID_SIZE;
 
-      // Clamp anchor inside canvas with a small padding
       const PADDING = 10;
       anchorX = Math.max(PADDING, Math.min(widthLogical  - PADDING, anchorX));
       anchorY = Math.max(PADDING, Math.min(heightLogical - PADDING, anchorY));
 
-      // Build arrays of other seat centres for alignment snapping
       let snapX = null;
       let snapY = null;
       const canvasCenterX = widthLogical / 2;
       const canvasCenterY = heightLogical / 2;
 
       seats.forEach(function(s){
-        if(!layout.seats[s.id]) return;
-        if(dragState.seatIds.indexOf(s.id) !== -1) return; // skip seats in the moving group
-        const pos = layout.seats[s.id];
+        const meta = layout.seats[s.id];
+        if(!meta) return;
+        if(dragState.seatIds.indexOf(s.id) !== -1) return;
+        const pos = meta;
         if(Math.abs(anchorX - pos.x) <= SNAP_DIST){
           snapX = pos.x;
         }
@@ -1700,7 +1819,6 @@ router.get(
         }
       });
 
-      // Snap to canvas centre lines
       if(Math.abs(anchorX - canvasCenterX) <= SNAP_DIST){
         snapX = canvasCenterX;
       }
@@ -1711,7 +1829,6 @@ router.get(
       if(snapX != null) anchorX = snapX;
       if(snapY != null) anchorY = snapY;
 
-      // Update guides based on final anchor
       if(snapY != null){
         showGuideH(anchorY);
       }else{
@@ -1723,7 +1840,6 @@ router.get(
         guideV.style.display = 'none';
       }
 
-      // Work out adjustment to keep group aligned with snapped anchor
       const adjustDx = anchorX - (anchorStart.x + dx);
       const adjustDy = anchorY - (anchorStart.y + dy);
 
@@ -1732,12 +1848,14 @@ router.get(
         let x = base.x + dx + adjustDx;
         let y = base.y + dy + adjustDy;
 
-        // clamp each seat
         const PADDING = 10;
         x = Math.max(PADDING, Math.min(widthLogical  - PADDING, x));
         y = Math.max(PADDING, Math.min(heightLogical - PADDING, y));
 
-        layout.seats[id] = { x:x, y:y, rotation:0 };
+        const meta = ensureSeatMeta(id);
+        meta.x = x;
+        meta.y = y;
+
         const el = seatCanvas.querySelector('[data-seat-id="'+id+'"]');
         if(el){
           el.style.left = (x - 9)+'px';
@@ -1745,14 +1863,10 @@ router.get(
         }
       });
 
-      // Re-render overlays only (quick hack: full render)
       renderSeats();
     });
 
     document.addEventListener('mouseup', function(){
-      if(dragState){
-        // keep selection, just stop dragging + hide guides
-      }
       dragState = null;
       hideGuides();
     });
@@ -1764,6 +1878,22 @@ router.get(
         return;
       }
       ensureLayout();
+
+      // Enforce: if multiple ticket types exist, every seat must have a ticketTypeId
+      if(ticketTypes && ticketTypes.length > 1){
+        let unassigned = 0;
+        seats.forEach(function(s){
+          const meta = layout.seats[s.id];
+          if(!meta || !meta.ticketTypeId){
+            unassigned++;
+          }
+        });
+        if(unassigned > 0){
+          alert('There are '+unassigned+' seats not assigned to a ticket type. When using multiple prices, every seat must be allocated. Please assign them before saving.');
+          return;
+        }
+      }
+
       try{
         await j('/admin/seatmaps/'+currentSeatMapId+'/layout',{
           method:'PATCH',
@@ -1779,6 +1909,25 @@ router.get(
     // Initial load
     await loadTicketTypesForShow();
     reloadSeatMaps();
+
+    // --- Helper (for future) to check "no single gaps" in a row ---
+    // Example usage in purchase flow, not used here yet:
+    // given an array of seat numbers that are taken, and the new seats requested
+    // function wouldLeaveSingleGap(allSeatNumbers, currentlyTaken, requested){
+    //   const taken = new Set(currentlyTaken.concat(requested));
+    //   const sorted = allSeatNumbers.slice().sort((a,b)=>a-b);
+    //   for(let i=0;i<sorted.length;i++){
+    //     const n = sorted[i];
+    //     if(taken.has(n)) continue;
+    //     const leftTaken  = (i === 0) ? true : taken.has(sorted[i-1]);
+    //     const rightTaken = (i === sorted.length-1) ? true : taken.has(sorted[i+1]);
+    //     // if free seat has taken (or aisle) both sides → orphan single
+    //     if(leftTaken && rightTaken){
+    //       return true;
+    //     }
+    //   }
+    //   return false;
+    // }
   }
 
   // ---------- Simple stubs for other views ----------
