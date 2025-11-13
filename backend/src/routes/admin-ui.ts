@@ -1095,8 +1095,8 @@ router.get(
       <div class="card">
         <div class="header">
           <div>
-            <div class="title">Seating map for \\${show.title || 'Untitled show'}</div>
-            <div class="muted">\\${when ? when + ' · ' : ''}\\${venueName || 'No venue set yet'}</div>
+            <div class="title">Seating map for \${show.title || 'Untitled show'}</div>
+            <div class="muted">\${when ? when + ' · ' : ''}\${venueName || 'No venue set yet'}</div>
           </div>
           <div class="row">
             <button class="btn" id="backToTickets">Back to tickets</button>
