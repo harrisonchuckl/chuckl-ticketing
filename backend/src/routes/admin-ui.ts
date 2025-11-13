@@ -785,7 +785,7 @@ router.get(
     const seatMapsList = $('#seatMapsList');
     const venueId = show.venue && show.venue.id ? show.venue.id : null;
 
-    async function loadSeatMaps(){
+        async function loadSeatMaps(){
       seatMapsSummary.textContent = 'Loading seat maps…';
       seatMapsList.innerHTML = '';
       try{
@@ -834,7 +834,8 @@ router.get(
     loadSeatMaps();
   }
 
-  // ---------- Seating page with Seat Inspector ----------
+
+  // ---------- Seating page with Seat Inspector (snap + guides) ----------
   async function seatingPage(showId){
     main.innerHTML = '<div class="card"><div class="title">Loading seating…</div></div>';
 
@@ -899,7 +900,7 @@ router.get(
               +'<div class="title">Seat layout</div>'
               +'<button class="btn p" id="sm_saveLayout">Save layout</button>'
             +'</div>'
-            +'<div class="muted" style="margin-bottom:6px;font-size:12px">Drag seats to adjust positions. Changes are only saved when you click “Save layout”.</div>'
+            +'<div class="muted" style="margin-bottom:6px;font-size:12px">Drag seats to adjust positions. Seats snap to a subtle grid and alignment guides show when you line up with other rows/columns or the canvas centre. Changes are only saved when you click “Save layout”.</div>'
             +'<div class="seat-layout-wrap">'
               +'<div class="seat-stage">Stage<div class="seat-stage-bar"></div></div>'
               +'<div id="seatCanvas" style="position:relative;min-height:220px;"></div>'
@@ -914,7 +915,7 @@ router.get(
         +'</div>'
       +'</div>';
 
-    // --- Wire up controls ---
+
     const backToTicketsBtn = document.getElementById('backToTickets');
     const editShowBtn      = document.getElementById('editShowBtn');
     const smStatus         = document.getElementById('sm_status');
@@ -948,6 +949,30 @@ router.get(
       if(!Array.isArray(layout.elements)) layout.elements = [];
     }
 
+    // --- Alignment guides (safety rails) ---
+    const guideH = document.createElement('div');
+    guideH.className = 'guide-line h';
+    guideH.style.display = 'none';
+    seatCanvas.appendChild(guideH);
+
+    const guideV = document.createElement('div');
+    guideV.className = 'guide-line v';
+    guideV.style.display = 'none';
+    seatCanvas.appendChild(guideV);
+
+    function hideGuides(){
+      guideH.style.display = 'none';
+      guideV.style.display = 'none';
+    }
+    function showGuideH(y){
+      guideH.style.top = (y - 0.5)+'px';
+      guideH.style.display = 'block';
+    }
+    function showGuideV(x){
+      guideV.style.left = (x - 0.5)+'px';
+      guideV.style.display = 'block';
+    }
+
     async function reloadSeatMaps(){
       smStatus.textContent = 'Loading seat maps…';
       smSelect.innerHTML = '';
@@ -963,6 +988,7 @@ router.get(
           smStatus.textContent = 'No seat maps yet. Create one below.';
           smTip.textContent = 'Create a map for this show; you can optionally reuse it for future dates at this venue.';
           seatCanvas.innerHTML = '<div class="muted">No seat map selected.</div>';
+          hideGuides();
           return;
         }
 
@@ -992,6 +1018,7 @@ router.get(
     async function reloadSeats(){
       if(!currentSeatMapId){
         seatCanvas.innerHTML = '<div class="muted">No seat map selected.</div>';
+        hideGuides();
         return;
       }
       try{
@@ -999,15 +1026,22 @@ router.get(
         renderSeats();
       }catch(e){
         seatCanvas.innerHTML = '<div class="error">Failed to load seats: '+(e.message||e)+'</div>';
+        hideGuides();
       }
     }
 
     function renderSeats(){
       seatCanvas.innerHTML = '';
+      seatCanvas.appendChild(guideH);
+      seatCanvas.appendChild(guideV);
+      hideGuides();
       ensureLayout();
 
       if(!Array.isArray(seats) || !seats.length){
         seatCanvas.innerHTML = '<div class="muted">No seats yet. Use the quick generator on the left.</div>';
+        seatCanvas.appendChild(guideH);
+        seatCanvas.appendChild(guideV);
+        hideGuides();
         return;
       }
 
@@ -1066,6 +1100,8 @@ router.get(
 
         seatCanvas.appendChild(seatEl);
       });
+      seatCanvas.appendChild(guideH);
+      seatCanvas.appendChild(guideV);
     }
 
     // Switch between different maps
@@ -1144,12 +1180,14 @@ router.get(
       }
     });
 
-    // Very simple drag behaviour (per-seat)
+    // Drag behaviour with snap + alignment guides
+    const GRID_SIZE = 4;      // subtle grid snap
+    const SNAP_DIST = 8;      // pixels for snapping to other seats / centre
     let draggingSeat = null;
 
     seatCanvas.addEventListener('mousedown', function(e){
       const seatEl = e.target && e.target.closest ? e.target.closest('.seat') : null;
-      if(!seatEl) return;
+      if(!seatEl || seatEl.classList.contains('seat-sold')) return;
       draggingSeat = seatEl;
       seatEl.classList.add('seat-selected');
       e.preventDefault();
@@ -1158,12 +1196,65 @@ router.get(
     document.addEventListener('mousemove', function(e){
       if(!draggingSeat) return;
       const rect = seatCanvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
+      let x = e.clientX - rect.left;
+      let y = e.clientY - rect.top;
+
+      // Snap to a small underlying grid
+      x = Math.round(x / GRID_SIZE) * GRID_SIZE;
+      y = Math.round(y / GRID_SIZE) * GRID_SIZE;
+
+      // Clamp inside canvas with a small padding
+      const PADDING = 10;
+      x = Math.max(PADDING, Math.min(rect.width  - PADDING, x));
+      y = Math.max(PADDING, Math.min(rect.height - PADDING, y));
+
       const id = draggingSeat.getAttribute('data-seat-id');
+      ensureLayout();
+
+      // Build arrays of other seat centres for alignment snapping
+      let snapX = null;
+      let snapY = null;
+      const canvasCenterX = rect.width / 2;
+      const canvasCenterY = rect.height / 2;
+
+      seats.forEach(function(s){
+        if(!layout.seats[s.id] || s.id === id) return;
+        const pos = layout.seats[s.id];
+        // snap x to other seats in the same "column"
+        if(Math.abs(x - pos.x) <= SNAP_DIST){
+          snapX = pos.x;
+        }
+        // snap y to other seats in the same "row"
+        if(Math.abs(y - pos.y) <= SNAP_DIST){
+          snapY = pos.y;
+        }
+      });
+
+      // Snap to canvas centre lines
+      if(Math.abs(x - canvasCenterX) <= SNAP_DIST){
+        snapX = canvasCenterX;
+      }
+      if(Math.abs(y - canvasCenterY) <= SNAP_DIST){
+        snapY = canvasCenterY;
+      }
+
+      if(snapX != null) x = snapX;
+      if(snapY != null) y = snapY;
+
+      // Update guides visibility
+      if(snapY != null){
+        showGuideH(y);
+      }else{
+        guideH.style.display = 'none';
+      }
+      if(snapX != null){
+        showGuideV(x);
+      }else{
+        guideV.style.display = 'none';
+      }
+
       draggingSeat.style.left = (x - 9)+'px';
       draggingSeat.style.top  = (y - 9)+'px';
-      ensureLayout();
       layout.seats[id] = { x:x, y:y, rotation:0 };
     });
 
@@ -1172,6 +1263,7 @@ router.get(
         draggingSeat.classList.remove('seat-selected');
       }
       draggingSeat = null;
+      hideGuides();
     });
 
     // Save layout → PATCH /admin/seatmaps/:id/layout
@@ -1197,7 +1289,10 @@ router.get(
     reloadSeatMaps();
   }
 
+
+
   // ---------- Simple stubs for other views ----------
+
   function orders(){
     main.innerHTML = '<div class="card"><div class="title">Orders</div><div class="muted">Orders view coming soon.</div></div>';
   }
@@ -1230,5 +1325,6 @@ router.get(
 </html>`);
   }
 );
+
 
 export default router;
