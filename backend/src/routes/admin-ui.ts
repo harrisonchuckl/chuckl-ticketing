@@ -828,7 +828,7 @@ router.get(
     loadSeatMaps();
   }
 
-  // ---------- Seating page with Seat Inspector (drag & drop layout) ----------
+  // ---------- Seating page with Seat Inspector (drag & drop + Quick Generator) ----------
   async function seatingPage(showId){
     main.innerHTML = '<div class="card"><div class="title">Loading seating…</div></div>';
 
@@ -875,12 +875,13 @@ router.get(
 
             +'<div class="card" style="margin:0">'
               +'<div class="title" style="margin-bottom:4px">Quick seat generator</div>'
-              +'<div class="muted" style="font-size:12px;margin-bottom:6px">Fast way to create a basic rectangular layout. (We will wire this up next.)</div>'
+              +'<div class="muted" style="font-size:12px;margin-bottom:6px">Fast way to create a basic rectangular layout (A, B, C… rows).</div>'
               +'<div class="grid grid-2" style="margin-bottom:6px">'
                 +'<div class="grid"><label>Rows</label><input id="q_rows" type="number" min="1" max="50" value="5"/></div>'
                 +'<div class="grid"><label>Seats per row</label><input id="q_cols" type="number" min="1" max="80" value="10"/></div>'
               +'</div>'
-              +'<div class="tip" style="font-size:12px">Coming soon: this will create seats automatically using /seatmaps/:id/seats/bulk.</div>'
+              +'<button class="btn" id="q_generate" style="width:100%;margin-top:4px">Generate seats</button>'
+              +'<div class="tip" style="font-size:12px">Uses /seatmaps/:id/seats/bulk, then reloads seats into the layout.</div>'
             +'</div>'
           +'</div>'
 
@@ -914,6 +915,9 @@ router.get(
     const smErr = $('#sm_err');
     const seatCanvas = $('#seatCanvas');
     const saveLayoutBtn = $('#sm_saveLayout');
+    const qGenerate = $('#q_generate');
+    const qRows = $('#q_rows');
+    const qCols = $('#q_cols');
 
     let seatMaps = [];
     let currentMap = null;
@@ -1077,6 +1081,50 @@ router.get(
           body: JSON.stringify({ layout: currentLayout })
         });
         alert('Layout saved');
+      }catch(e){
+        smErr.textContent = e.message || String(e);
+      }
+    });
+
+    // Quick seat generator -> POST /seatmaps/:seatMapId/seats/bulk
+    qGenerate.addEventListener('click', async function(){
+      smErr.textContent = '';
+      if(!currentMap){
+        smErr.textContent = 'Select or create a seat map first.';
+        return;
+      }
+      const rowsVal = Number((qRows && qRows.value) || '0');
+      const colsVal = Number((qCols && qCols.value) || '0');
+
+      if(!Number.isFinite(rowsVal) || rowsVal <= 0 || !Number.isFinite(colsVal) || colsVal <= 0){
+        smErr.textContent = 'Rows and seats per row must be positive numbers.';
+        return;
+      }
+
+      const maxRows = Math.min(rowsVal, 50);
+      const maxCols = Math.min(colsVal, 80);
+      const seatsPayload = [];
+
+      for(let r=0; r<maxRows; r++){
+        // A, B, C… wrap after Z if needed
+        const rowLabel = String.fromCharCode(65 + (r % 26));
+        for(let c=1; c<=maxCols; c++){
+          seatsPayload.push({
+            row: rowLabel,
+            number: c,
+            rowLabel: rowLabel,
+            seatNumber: c
+          });
+        }
+      }
+
+      try{
+        await j('/seatmaps/'+encodeURIComponent(currentMap.id)+'/seats/bulk',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ seats: seatsPayload })
+        });
+        await loadSeatsAndLayout();
       }catch(e){
         smErr.textContent = e.message || String(e);
       }
