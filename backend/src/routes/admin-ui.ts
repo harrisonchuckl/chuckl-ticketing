@@ -61,9 +61,37 @@ router.get(
   .opt{padding:8px 10px;cursor:pointer}
   .opt:hover{background:#f8fafc}
   .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--border);background:#f9fafb}
-  .seat-layout-wrap{background:#020617;border-radius:12px;padding:16px;color:#e5e7eb;min-height:320px;display:flex;flex-direction:column;gap:12px}
-  #seatCanvas{
+  .seat-layout-wrap{
+    background:#020617;
+    border-radius:12px;
+    padding:16px;
+    color:#e5e7eb;
+    min-height:320px;
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+    position:relative; /* needed for guides + zoom controls */
+  }   #seatCanvas{
+    position:relative;
     min-width:900px;  /* give the seat grid breathing room */
+    min-height:220px;
+    transform-origin:0 0; /* zoom from top-left */
+  }
+  .guide-line{position:absolute;background:rgba(248,250,252,.85);pointer-events:none;z-index:5}
+  .guide-line.h{height:1px;width:100%}
+  .guide-line.v{width:1px;height:100%}
+
+  .seat-zoom-controls{
+    position:absolute;
+    right:16px;
+    bottom:16px;
+    display:flex;
+    gap:4px;
+    z-index:10;
+  }
+  .seat-zoom-controls .btn{
+    padding:4px 8px;
+    font-size:12px;
   }
   .seat-stage{font-size:12px;text-align:center;letter-spacing:.12em;text-transform:uppercase;color:#e5e7eb}
   .seat-stage-bar{margin-top:4px;height:6px;border-radius:999px;background:rgba(148,163,184,.35)}
@@ -835,7 +863,7 @@ router.get(
   }
 
 
-  // ---------- Seating page with Seat Inspector (snap + guides) ----------
+    // ---------- Seating page with Seat Inspector (snap + guides + row move + zoom) ----------
   async function seatingPage(showId){
     main.innerHTML = '<div class="card"><div class="title">Loading seating…</div></div>';
 
@@ -900,7 +928,11 @@ router.get(
               +'<div class="title">Seat layout</div>'
               +'<button class="btn p" id="sm_saveLayout">Save layout</button>'
             +'</div>'
-            +'<div class="muted" style="margin-bottom:6px;font-size:12px">Drag seats to adjust positions. Seats snap to a subtle grid and alignment guides show when you line up with other rows/columns or the canvas centre. Changes are only saved when you click “Save layout”.</div>'
+            +'<div class="muted" style="margin-bottom:6px;font-size:12px">'
+              +'Drag seats to adjust positions. Seats snap to a subtle grid and alignment guides show when you line up with other rows/columns or the canvas centre.'
+              +' Changes are only saved when you click “Save layout”.<br/>'
+              +'<strong>Tip:</strong> <strong>Alt+click</strong> a seat to grab the whole row, or <strong>Shift+click</strong> to build a custom selection, then drag to move them together.'
+            +'</div>'
             +'<div class="seat-layout-wrap">'
               +'<div class="seat-stage">Stage<div class="seat-stage-bar"></div></div>'
               +'<div id="seatCanvas" style="position:relative;min-height:220px;"></div>'
@@ -909,6 +941,11 @@ router.get(
                 +'<span><span class="seat-dot held"></span> Held</span>'
                 +'<span><span class="seat-dot sold"></span> Sold</span>'
                 +'<span><span class="seat-dot block"></span> Blocked</span>'
+              +'</div>'
+              +'<div class="seat-zoom-controls">'
+                +'<button type="button" class="btn" id="zoomOutBtn">−</button>'
+                +'<button type="button" class="btn" id="zoomResetBtn">100%</button>'
+                +'<button type="button" class="btn" id="zoomInBtn">+</button>'
               +'</div>'
             +'</div>'
           +'</div>'
@@ -930,6 +967,10 @@ router.get(
     const seatCanvas       = document.getElementById('seatCanvas');
     const saveLayoutBtn    = document.getElementById('sm_saveLayout');
 
+    const zoomInBtn        = document.getElementById('zoomInBtn');
+    const zoomOutBtn       = document.getElementById('zoomOutBtn');
+    const zoomResetBtn     = document.getElementById('zoomResetBtn');
+
     backToTicketsBtn.addEventListener('click', function(){
       go('/admin/ui/shows/'+showId+'/tickets');
     });
@@ -943,10 +984,67 @@ router.get(
     let layout = { seats: {}, elements: [] };
     let seats = [];
 
+    // selection state
+    const selectedSeatIds = new Set();
+
+    // zoom state
+    let zoom = 1;
+    function applyZoom(){
+      seatCanvas.style.transform = 'scale('+zoom+')';
+    }
+    applyZoom();
+
+    zoomInBtn.addEventListener('click', function(){
+      zoom = Math.min(3, zoom + 0.25);
+      applyZoom();
+    });
+    zoomOutBtn.addEventListener('click', function(){
+      zoom = Math.max(0.5, zoom - 0.25);
+      applyZoom();
+    });
+    zoomResetBtn.addEventListener('click', function(){
+      zoom = 1;
+      applyZoom();
+    });
+
     function ensureLayout(){
       if(!layout || typeof layout !== 'object') layout = { seats:{}, elements:[] };
       if(!layout.seats || typeof layout.seats !== 'object') layout.seats = {};
       if(!Array.isArray(layout.elements)) layout.elements = [];
+    }
+
+    function clearSelection(){
+      selectedSeatIds.forEach(function(id){
+        const el = seatCanvas.querySelector('[data-seat-id="'+id+'"]');
+        if(el) el.classList.remove('seat-selected');
+      });
+      selectedSeatIds.clear();
+    }
+
+    function addSeatToSelection(id){
+      if(!selectedSeatIds.has(id)){
+        selectedSeatIds.add(id);
+        const el = seatCanvas.querySelector('[data-seat-id="'+id+'"]');
+        if(el) el.classList.add('seat-selected');
+      }
+    }
+
+    function selectSingleSeat(id){
+      clearSelection();
+      addSeatToSelection(id);
+    }
+
+    function selectRowForSeat(id){
+      const seat = seats.find(function(s){ return s.id === id; });
+      if(!seat) return;
+      const rowKey = seat.rowLabel || seat.row || '';
+      clearSelection();
+      seats.forEach(function(s){
+        const key = s.rowLabel || s.row || '';
+        if(key === rowKey){
+          addSeatToSelection(s.id);
+        }
+      });
     }
 
     // --- Alignment guides (safety rails) ---
@@ -1064,7 +1162,7 @@ router.get(
         rowKeys.forEach(function(rowKey, rowIndex){
           const rowSeats = rowsMap[rowKey].sort(function(a,b){
             const an = a.seatNumber != null ? a.seatNumber : a.number;
-            const bn = b.seatNumber != null ? b.seatNumber : b.number;
+            const bn = b.seatNumber != null ? b.number : b.number;
             return an - bn;
           });
           const y = offsetY + rowIndex * dy;
@@ -1098,6 +1196,10 @@ router.get(
         seatEl.title = labelRow+' '+labelSeat;
         seatEl.textContent = labelSeat;
 
+        if(selectedSeatIds.has(s.id)){
+          seatEl.classList.add('seat-selected');
+        }
+
         seatCanvas.appendChild(seatEl);
       });
       seatCanvas.appendChild(guideH);
@@ -1114,6 +1216,7 @@ router.get(
       }else{
         layout = { seats:{}, elements:[] };
       }
+      clearSelection();
       await reloadSeats();
     });
 
@@ -1138,6 +1241,7 @@ router.get(
         currentSeatMapId = created.id;
         smSelect.value = currentSeatMapId;
         layout = { seats:{}, elements:[] };
+        clearSelection();
         await reloadSeats();
       }catch(e){
         smErr.textContent = e.message || String(e);
@@ -1174,95 +1278,175 @@ router.get(
           headers:{'Content-Type':'application/json'},
           body: JSON.stringify({ seats: seatsPayload })
         });
+        clearSelection();
         await reloadSeats();
       }catch(e){
         alert('Failed to generate seats: '+(e.message||e));
       }
     });
 
-    // Drag behaviour with snap + alignment guides
+    // Drag behaviour with snap + alignment guides + group move
     const GRID_SIZE = 4;      // subtle grid snap
-    const SNAP_DIST = 8;      // pixels for snapping to other seats / centre
-    let draggingSeat = null;
+    const SNAP_DIST = 8;      // pixels for snapping to other seats / centre (logical units)
+    let dragState = null;
 
     seatCanvas.addEventListener('mousedown', function(e){
       const seatEl = e.target && e.target.closest ? e.target.closest('.seat') : null;
-      if(!seatEl || seatEl.classList.contains('seat-sold')) return;
-      draggingSeat = seatEl;
-      seatEl.classList.add('seat-selected');
+
+      // Clicked on empty canvas: clear selection
+      if(!seatEl){
+        clearSelection();
+        return;
+      }
+
+      const seatId = seatEl.getAttribute('data-seat-id');
+      if(!seatId || seatEl.classList.contains('seat-sold')) return;
+
+      // selection logic
+      if(e.altKey){
+        // Alt+click => select entire row
+        selectRowForSeat(seatId);
+      }else if(e.shiftKey || e.metaKey || e.ctrlKey){
+        // modifier-click => toggle in selection
+        if(selectedSeatIds.has(seatId)){
+          selectedSeatIds.delete(seatId);
+          seatEl.classList.remove('seat-selected');
+        }else{
+          addSeatToSelection(seatId);
+        }
+      }else{
+        // normal click => single selection
+        selectSingleSeat(seatId);
+      }
+
+      // start drag for left button
+      if(e.button === 0 && selectedSeatIds.size){
+        ensureLayout();
+        const seatIds = Array.from(selectedSeatIds);
+        const startPositions = {};
+        seatIds.forEach(function(id){
+          if(!layout.seats[id]){
+            layout.seats[id] = { x:40, y:30, rotation:0 };
+          }
+          startPositions[id] = {
+            x: layout.seats[id].x,
+            y: layout.seats[id].y
+          };
+        });
+
+        dragState = {
+          seatIds: seatIds,
+          anchorSeatId: seatId,
+          startMouseX: e.clientX,
+          startMouseY: e.clientY,
+          startPositions: startPositions
+        };
+      }
+
       e.preventDefault();
     });
 
     document.addEventListener('mousemove', function(e){
-      if(!draggingSeat) return;
+      if(!dragState) return;
+
       const rect = seatCanvas.getBoundingClientRect();
-      let x = e.clientX - rect.left;
-      let y = e.clientY - rect.top;
+      const dxScreen = e.clientX - dragState.startMouseX;
+      const dyScreen = e.clientY - dragState.startMouseY;
 
-      // Snap to a small underlying grid
-      x = Math.round(x / GRID_SIZE) * GRID_SIZE;
-      y = Math.round(y / GRID_SIZE) * GRID_SIZE;
+      // convert to logical units (unscaled)
+      const dx = dxScreen / zoom;
+      const dy = dyScreen / zoom;
 
-      // Clamp inside canvas with a small padding
-      const PADDING = 10;
-      x = Math.max(PADDING, Math.min(rect.width  - PADDING, x));
-      y = Math.max(PADDING, Math.min(rect.height - PADDING, y));
+      const widthLogical = rect.width / zoom;
+      const heightLogical = rect.height / zoom;
 
-      const id = draggingSeat.getAttribute('data-seat-id');
       ensureLayout();
+
+      const anchorId = dragState.anchorSeatId;
+      const anchorStart = dragState.startPositions[anchorId];
+      if(!anchorStart) return;
+
+      let anchorX = anchorStart.x + dx;
+      let anchorY = anchorStart.y + dy;
+
+      // Snap to small underlying grid
+      anchorX = Math.round(anchorX / GRID_SIZE) * GRID_SIZE;
+      anchorY = Math.round(anchorY / GRID_SIZE) * GRID_SIZE;
+
+      // Clamp anchor inside canvas with a small padding
+      const PADDING = 10;
+      anchorX = Math.max(PADDING, Math.min(widthLogical  - PADDING, anchorX));
+      anchorY = Math.max(PADDING, Math.min(heightLogical - PADDING, anchorY));
 
       // Build arrays of other seat centres for alignment snapping
       let snapX = null;
       let snapY = null;
-      const canvasCenterX = rect.width / 2;
-      const canvasCenterY = rect.height / 2;
+      const canvasCenterX = widthLogical / 2;
+      const canvasCenterY = heightLogical / 2;
 
       seats.forEach(function(s){
-        if(!layout.seats[s.id] || s.id === id) return;
+        if(!layout.seats[s.id]) return;
+        if(dragState.seatIds.indexOf(s.id) !== -1) return; // skip seats in the moving group
         const pos = layout.seats[s.id];
-        // snap x to other seats in the same "column"
-        if(Math.abs(x - pos.x) <= SNAP_DIST){
+        if(Math.abs(anchorX - pos.x) <= SNAP_DIST){
           snapX = pos.x;
         }
-        // snap y to other seats in the same "row"
-        if(Math.abs(y - pos.y) <= SNAP_DIST){
+        if(Math.abs(anchorY - pos.y) <= SNAP_DIST){
           snapY = pos.y;
         }
       });
 
       // Snap to canvas centre lines
-      if(Math.abs(x - canvasCenterX) <= SNAP_DIST){
+      if(Math.abs(anchorX - canvasCenterX) <= SNAP_DIST){
         snapX = canvasCenterX;
       }
-      if(Math.abs(y - canvasCenterY) <= SNAP_DIST){
+      if(Math.abs(anchorY - canvasCenterY) <= SNAP_DIST){
         snapY = canvasCenterY;
       }
 
-      if(snapX != null) x = snapX;
-      if(snapY != null) y = snapY;
+      if(snapX != null) anchorX = snapX;
+      if(snapY != null) anchorY = snapY;
 
-      // Update guides visibility
+      // Update guides based on final anchor
       if(snapY != null){
-        showGuideH(y);
+        showGuideH(anchorY);
       }else{
         guideH.style.display = 'none';
       }
       if(snapX != null){
-        showGuideV(x);
+        showGuideV(anchorX);
       }else{
         guideV.style.display = 'none';
       }
 
-      draggingSeat.style.left = (x - 9)+'px';
-      draggingSeat.style.top  = (y - 9)+'px';
-      layout.seats[id] = { x:x, y:y, rotation:0 };
+      // Work out adjustment to keep group aligned with snapped anchor
+      const adjustDx = anchorX - (anchorStart.x + dx);
+      const adjustDy = anchorY - (anchorStart.y + dy);
+
+      dragState.seatIds.forEach(function(id){
+        const base = dragState.startPositions[id];
+        let x = base.x + dx + adjustDx;
+        let y = base.y + dy + adjustDy;
+
+        // clamp each seat
+        const PADDING = 10;
+        x = Math.max(PADDING, Math.min(widthLogical  - PADDING, x));
+        y = Math.max(PADDING, Math.min(heightLogical - PADDING, y));
+
+        layout.seats[id] = { x:x, y:y, rotation:0 };
+        const el = seatCanvas.querySelector('[data-seat-id="'+id+'"]');
+        if(el){
+          el.style.left = (x - 9)+'px';
+          el.style.top  = (y - 9)+'px';
+        }
+      });
     });
 
     document.addEventListener('mouseup', function(){
-      if(draggingSeat){
-        draggingSeat.classList.remove('seat-selected');
+      if(dragState){
+        // keep selection, just stop dragging + hide guides
       }
-      draggingSeat = null;
+      dragState = null;
       hideGuides();
     });
 
@@ -1288,6 +1472,7 @@ router.get(
     // Initial load
     reloadSeatMaps();
   }
+
 
 
 
