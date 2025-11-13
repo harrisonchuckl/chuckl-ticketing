@@ -4,9 +4,14 @@ import { requireAdminOrOrganiser } from "../lib/authz.js";
 const router = Router();
 
 /** Single-page admin console at /admin/ui* */
-router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req, res) => {
-  res.set("Cache-Control", "no-store");
-  res.type("html").send(`<!doctype html>
+router.get(
+  ["/ui", "/ui/", "/ui/home", "/ui/*"],
+  requireAdminOrOrganiser,
+  (_req, res) => {
+    res.set("Cache-Control", "no-store");
+    res
+      .type("html")
+      .send(`<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
@@ -26,14 +31,14 @@ router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req,
   .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
   .title{font-weight:600}
   .muted{color:var(--muted)}
-  .btn{appearance:none;border:1px solid var(--border);background:#fff;border-radius:8px;padding:8px 12px;cursor:pointer}
+  .btn{appearance:none;border:1px solid var(--border);background:#fff;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:14px}
   .btn:hover{background:#f9fafb}
   .btn.p{background:#111827;color:#fff;border-color:#111827}
   .grid{display:grid;gap:8px}
   .grid-2{grid-template-columns:repeat(2,1fr)}
   .grid-3{grid-template-columns:repeat(3,1fr)}
   .grid-4{grid-template-columns:repeat(4,1fr)}
-  input,select,textarea{border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:#fff;outline:none}
+  input,select,textarea{border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:#fff;outline:none;font-size:14px}
   table{width:100%;border-collapse:collapse;font-size:14px}
   th,td{text-align:left;padding:10px;border-bottom:1px solid var(--border)}
   th{font-weight:600;color:#334155;background:#f8fafc}
@@ -51,16 +56,29 @@ router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req,
   .menu a{display:block;padding:8px 10px;text-decoration:none;color:#111827}
   .menu a:hover{background:#f8fafc}
   .tip{font-size:12px;color:#64748b;margin-top:4px}
-  .pop{position:absolute;z-index:20;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.08);min-width:260px;display:none}
+  .pop{position:absolute;z-index:20;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.08);min-width:260px;display:none;max-height:260px;overflow:auto}
   .pop.open{display:block}
-  .opt{padding:8px 10px;cursor:pointer}
+  .opt{padding:8px 10px;cursor:pointer;font-size:14px}
   .opt:hover{background:#f8fafc}
   .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--border);background:#f9fafb}
-  /* Extra bits for seating builder */
-  .badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:12px;background:#f1f5f9;border:1px solid #e5e7eb;color:#0f172a}
-  .tag{display:inline-block;padding:2px 6px;border-radius:6px;font-size:11px;background:#ecfeff;color:#0e7490;border:1px solid #cffafe}
-  .seat-preview{display:grid;grid-template-columns:repeat(auto-fit,minmax(18px,1fr));gap:2px;font-size:10px;margin-top:6px}
-  .seat-dot{border-radius:4px;border:1px solid #cbd5e1;padding:2px 0;text-align:center}
+
+  /* Seating builder layout */
+  .seat-layout-wrap{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+  .seat-sidebar{flex:0 0 290px;max-width:320px}
+  .seat-main{flex:1;min-width:260px}
+  .seat-grid{border:1px solid var(--border);border-radius:8px;padding:8px;overflow:auto;max-height:520px;background:#020617}
+  .seat-row{display:flex;align-items:center;margin-bottom:4px}
+  .seat-row-label{color:#e5e7eb;font-size:12px;width:34px;text-align:right;padding-right:6px;flex-shrink:0}
+  .seat-row-seats{display:flex;flex-wrap:wrap}
+  .seat-cell{width:26px;height:26px;border-radius:4px;margin:1px;font-size:11px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid #1f2937;background:#111827;color:#e5e7eb;box-sizing:border-box}
+  .seat-cell.empty{border:none;background:transparent;cursor:default}
+  .seat-cell.status-AVAILABLE{background:#16a34a;border-color:#15803d}
+  .seat-cell.status-BLOCKED{background:#4b5563;border-color:#374151;opacity:0.75}
+  .seat-cell.status-HELD{background:#f97316;border-color:#ea580c}
+  .seat-cell.status-SOLD{background:#b91c1c;border-color:#7f1d1d}
+  .seat-legend{display:flex;flex-wrap:wrap;gap:8px;font-size:12px;margin-top:8px}
+  .seat-legend-item{display:flex;align-items:center;gap:4px}
+  .seat-legend-swatch{width:14px;height:14px;border-radius:4px;border:1px solid var(--border)}
 </style>
 </head>
 <body>
@@ -103,7 +121,10 @@ router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req,
   // Sidebar nested menu
   const showsToggle = $('#showsToggle');
   const showsSub = $('#showsSub');
-  showsToggle.addEventListener('click', (e)=>{ e.preventDefault(); showsSub.style.display = showsSub.style.display==='none'?'block':'none'; });
+  showsToggle.addEventListener('click', (e)=>{
+    e.preventDefault();
+    showsSub.style.display = showsSub.style.display==='none'?'block':'none';
+  });
 
   function setActive(path){
     $$('.sb-link').forEach(a=>{
@@ -173,12 +194,18 @@ router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req,
           const el=document.createElement('div');
           el.className='opt';
           el.textContent=v.name+(v.city?(' — '+v.city):'');
-          el.addEventListener('click',()=>{ input.value=v.name; input.dataset.venueId=v.id; close(); });
+          el.addEventListener('click',()=>{
+            input.value=v.name;
+            input.dataset.venueId=v.id;
+            close();
+          });
           pop.appendChild(el);
         });
       }
-      if(q && !list.some(v=>(v.name||'').toLowerCase()===q.toLowerCase())){
-        const add=document.createElement('div'); add.className='opt'; add.innerHTML='➕ Create venue “'+q+'”';
+      if(q && !list.some(v=> (v.name||'').toLowerCase()===q.toLowerCase())){
+        const add=document.createElement('div');
+        add.className='opt';
+        add.innerHTML='➕ Create venue “'+q+'”';
         add.addEventListener('click', async ()=>{
           try{
             const created = await j('/admin/venues', {
@@ -204,8 +231,13 @@ router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req,
       input.dataset.venueId=''; const q=input.value.trim(); if(!q){ close(); return; }
       render(await searchVenues(q), q);
     });
-    input.addEventListener('focus', async ()=>{ const q=input.value.trim(); if(!q) return; render(await searchVenues(q), q); });
-    document.addEventListener('click', (e)=>{ if(!pop.contains(e.target) && e.target!==input) close(); });
+    input.addEventListener('focus', async ()=>{
+      const q=input.value.trim(); if(!q) return;
+      render(await searchVenues(q), q);
+    });
+    document.addEventListener('click', (e)=>{
+      if(!pop.contains(e.target) && e.target!==input) close();
+    });
   }
 
   // ---------- Upload helper ----------
@@ -268,13 +300,26 @@ router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req,
     drop.addEventListener('click', ()=> file.click());
     drop.addEventListener('dragover', e=>{ e.preventDefault(); drop.classList.add('drag');});
     drop.addEventListener('dragleave', ()=> drop.classList.remove('drag'));
-    drop.addEventListener('drop', async (e)=>{ e.preventDefault(); drop.classList.remove('drag'); const f=e.dataTransfer.files&&e.dataTransfer.files[0]; if(f) await doUpload(f);});
-    file.addEventListener('change', async ()=>{ const f=file.files&&file.files[0]; if(f) await doUpload(f); });
+    drop.addEventListener('drop', async (e)=>{
+      e.preventDefault();
+      drop.classList.remove('drag');
+      const f=e.dataTransfer.files&&e.dataTransfer.files[0];
+      if(f) await doUpload(f);
+    });
+    file.addEventListener('change', async ()=>{
+      const f=file.files&&file.files[0];
+      if(f) await doUpload(f);
+    });
 
     async function doUpload(f){
       $('#err').textContent=''; bar.style.width='15%';
-      try{ const out=await uploadPoster(f); prev.src=out.url; prev.style.display='block'; bar.style.width='100%'; setTimeout(()=>bar.style.width='0%',800);}
-      catch(e){ bar.style.width='0%'; $('#err').textContent='Upload failed: '+(e.message||e); }
+      try{
+        const out=await uploadPoster(f);
+        prev.src=out.url; prev.style.display='block';
+        bar.style.width='100%'; setTimeout(()=>bar.style.width='0%',800);
+      } catch(e){
+        bar.style.width='0%'; $('#err').textContent='Upload failed: '+(e.message||e);
+      }
     }
 
     $('#save').addEventListener('click', async ()=>{
@@ -291,14 +336,19 @@ router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req,
         if(!payload.title || !payload.date || !payload.venueText || !payload.descriptionHtml){
           throw new Error('Title, date/time, venue and description are required');
         }
-        const r = await j('/admin/shows',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        const r = await j('/admin/shows',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(payload)
+        });
         if(r && r.ok && r.id){
-          // After creating the show, go straight to the ticket setup screen for this show.
           go('/admin/ui/shows/'+r.id+'/tickets');
         } else {
           throw new Error((r && r.error)||'Failed to create show');
         }
-      }catch(e){ $('#err').textContent=e.message||String(e); }
+      }catch(e){
+        $('#err').textContent=e.message||String(e);
+      }
     });
   }
 
@@ -319,39 +369,61 @@ router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req,
         const tb=$('#tbody');
         tb.innerHTML = items.map(s=>{
           const when = s.date ? new Date(s.date).toLocaleString('en-GB',{ dateStyle:'short', timeStyle:'short'}) : '';
-          const total = (s._alloc?.total ?? 0), sold=(s._alloc?.sold ?? 0), hold=(s._alloc?.hold ?? 0), avail=Math.max(total-sold-hold,0);
+          const total = (s._alloc?.total ?? 0),
+                sold  = (s._alloc?.sold  ?? 0),
+                hold  = (s._alloc?.hold  ?? 0),
+                avail = Math.max(total-sold-hold,0);
           const pct = total? Math.round((sold/total)*100):0;
-          const bar = \`<div style="background:#e5e7eb;height:6px;border-radius:999px;overflow:hidden;width:140px"><div style="background:#111827;height:6px;width:\${pct}%"></div></div>\`;
-          return \`<tr>
-            <td>\${s.title||''}</td>
-            <td>\${when}</td>
-            <td>\${s.venue ? (s.venue.name+(s.venue.city?' – '+s.venue.city:'')) : ''}</td>
-            <td><span class="muted">Sold \${sold} · Hold \${hold} · Avail \${avail}</span> \${bar}</td>
-            <td>£\${(s._revenue?.grossFace ?? 0).toFixed(2)}</td>
-            <td>\${s.status || 'DRAFT'}</td>
-            <td><div class="kebab">
-              <button class="btn" data-kebab="\${s.id}">⋮</button>
-              <div class="menu" id="m-\${s.id}">
-                <a href="#" data-edit="\${s.id}">Edit</a>
-                <a href="#" data-seating="\${s.id}">Seating map</a>
-                <a href="#" data-tickets="\${s.id}">Tickets</a>
-                <a href="#" data-dup="\${s.id}">Duplicate</a>
-              </div></div></td>
-          </tr>\`;
+          const bar = '<div style="background:#e5e7eb;height:6px;border-radius:999px;overflow:hidden;width:140px"><div style="background:#111827;height:6px;width:'+pct+'%"></div></div>';
+          return '<tr>'
+            +'<td>'+(s.title||'')+'</td>'
+            +'<td>'+when+'</td>'
+            +'<td>'+(s.venue ? (s.venue.name+(s.venue.city?' – '+s.venue.city:'')) : '')+'</td>'
+            +'<td><span class="muted">Sold '+sold+' · Hold '+hold+' · Avail '+avail+'</span> '+bar+'</td>'
+            +'<td>£'+((s._revenue?.grossFace ?? 0).toFixed(2))+'</td>'
+            +'<td>'+(s.status || 'DRAFT')+'</td>'
+            +'<td><div class="kebab">'
+              +'<button class="btn" data-kebab="'+s.id+'">⋮</button>'
+              +'<div class="menu" id="m-'+s.id+'">'
+                +'<a href="#" data-edit="'+s.id+'">Edit</a>'
+                +'<a href="#" data-seating="'+s.id+'">Seating map</a>'
+                +'<a href="#" data-tickets="'+s.id+'">Tickets</a>'
+                +'<a href="#" data-dup="'+s.id+'">Duplicate</a>'
+              +'</div></div></td>'
+          +'</tr>';
         }).join('') || '<tr><td colspan="7" class="muted">No shows yet</td></tr>';
 
         $$('[data-kebab]').forEach(b=>{
-          b.addEventListener('click', (e)=>{ e.preventDefault(); const id=b.getAttribute('data-kebab'); const m=$('#m-'+id); $$('.menu').forEach(x=>x.classList.remove('open')); m.classList.add('open'); });
+          b.addEventListener('click', (e)=>{
+            e.preventDefault();
+            const id=b.getAttribute('data-kebab');
+            const m=$('#m-'+id);
+            $$('.menu').forEach(x=>x.classList.remove('open'));
+            m.classList.add('open');
+          });
         });
-        document.addEventListener('click',(e)=>{ if(!e.target.closest('.kebab')) $$('.menu').forEach(x=>x.classList.remove('open')); });
+        document.addEventListener('click',(e)=>{
+          if(!e.target.closest('.kebab')) $$('.menu').forEach(x=>x.classList.remove('open'));
+        });
 
-        $$('[data-edit]').forEach(a=>a.addEventListener('click',(e)=>{ e.preventDefault(); go('/admin/ui/shows/'+a.getAttribute('data-edit')+'/edit'); }));
-        $$('[data-seating]').forEach(a=>a.addEventListener('click',(e)=>{ e.preventDefault(); go('/admin/ui/shows/'+a.getAttribute('data-seating')+'/seating'); }));
-        $$('[data-tickets]').forEach(a=>a.addEventListener('click',(e)=>{ e.preventDefault(); go('/admin/ui/shows/'+a.getAttribute('data-tickets')+'/tickets'); }));
+        $$('[data-edit]').forEach(a=>a.addEventListener('click',(e)=>{
+          e.preventDefault(); go('/admin/ui/shows/'+a.getAttribute('data-edit')+'/edit');
+        }));
+        $$('[data-seating]').forEach(a=>a.addEventListener('click',(e)=>{
+          e.preventDefault(); go('/admin/ui/shows/'+a.getAttribute('data-seating')+'/seating');
+        }));
+        $$('[data-tickets]').forEach(a=>a.addEventListener('click',(e)=>{
+          e.preventDefault(); go('/admin/ui/shows/'+a.getAttribute('data-tickets')+'/tickets');
+        }));
         $$('[data-dup]').forEach(a=>a.addEventListener('click', async (e)=>{
           e.preventDefault();
-          try{ const id=a.getAttribute('data-dup'); const r=await j('/admin/shows/'+id+'/duplicate',{method:'POST'}); if(r.ok && r.newId){ go('/admin/ui/shows/'+r.newId+'/edit'); } }
-          catch(e){ alert('Duplicate failed: '+(e.message||e)); }
+          try{
+            const id=a.getAttribute('data-dup');
+            const r=await j('/admin/shows/'+id+'/duplicate',{method:'POST'});
+            if(r.ok && r.newId){ go('/admin/ui/shows/'+r.newId+'/edit'); }
+          } catch(e){
+            alert('Duplicate failed: '+(e.message||e));
+          }
         }));
       }catch(e){
         $('#tbody').innerHTML='<tr><td colspan="7" class="error">Failed to load shows: '+(e.message||e)+'</td></tr>';
@@ -363,7 +435,13 @@ router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req,
 
   // ---------- Edit show ----------
   async function editShow(id){
-    let s=null; try{ s=await j('/admin/shows/'+id);}catch(e){ main.innerHTML='<div class="card"><div class="error">Failed to load show: '+(e.message||e)+'</div></div>'; return; }
+    let s=null;
+    try{
+      s=await j('/admin/shows/'+id);
+    }catch(e){
+      main.innerHTML='<div class="card"><div class="error">Failed to load show: '+(e.message||e)+'</div></div>';
+      return;
+    }
     main.innerHTML=\`
       <div class="card">
         <div class="header"><div class="title">Edit show</div></div>
@@ -396,30 +474,51 @@ router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req,
 
     $('#sh_title').value = s.item?.title ?? '';
     $('#venue_input').value = s.item?.venue?.name || s.item?.venueText || '';
+    if (s.item?.venue?.id) {
+      $('#venue_input').dataset.venueId = s.item.venue.id;
+    }
     if (s.item?.date) {
       const dt = new Date(s.item.date);
       const iso = dt.toISOString().slice(0,16);
       $('#sh_dt').value = iso;
     }
-    // For now, use description as HTML (backend sends description only)
     $('#desc').innerHTML = s.item?.description || '';
-    if (s.item?.imageUrl) { $('#prev').src = s.item.imageUrl; $('#prev').style.display='block'; }
+    if (s.item?.imageUrl) {
+      $('#prev').src = s.item.imageUrl;
+      $('#prev').style.display='block';
+    }
 
     const drop=$('#drop'), file=$('#file'), bar=$('#bar'), prev=$('#prev');
     drop.addEventListener('click', ()=> file.click());
     drop.addEventListener('dragover', e=>{ e.preventDefault(); drop.classList.add('drag');});
     drop.addEventListener('dragleave', ()=> drop.classList.remove('drag'));
-    drop.addEventListener('drop', async (e)=>{ e.preventDefault(); drop.classList.remove('drag'); const f=e.dataTransfer.files&&e.dataTransfer.files[0]; if(f) await doUpload(f);});
-    file.addEventListener('change', async ()=>{ const f=file.files&&file.files[0]; if(f) await doUpload(f); });
+    drop.addEventListener('drop', async (e)=>{
+      e.preventDefault(); drop.classList.remove('drag');
+      const f=e.dataTransfer.files&&e.dataTransfer.files[0];
+      if(f) await doUpload(f);
+    });
+    file.addEventListener('change', async ()=>{
+      const f=file.files&&file.files[0];
+      if(f) await doUpload(f);
+    });
 
     async function doUpload(f){
       $('#err').textContent=''; bar.style.width='15%';
-      try{ const out=await uploadPoster(f); prev.src=out.url; prev.style.display='block'; bar.style.width='100%'; setTimeout(()=>bar.style.width='0%',800);}
-      catch(e){ bar.style.width='0%'; $('#err').textContent='Upload failed: '+(e.message||e); }
+      try{
+        const out=await uploadPoster(f);
+        prev.src=out.url; prev.style.display='block';
+        bar.style.width='100%'; setTimeout(()=>bar.style.width='0%',800);
+      }catch(e){
+        bar.style.width='0%'; $('#err').textContent='Upload failed: '+(e.message||e);
+      }
     }
 
-    $('#goSeating').addEventListener('click',(e)=>{e.preventDefault(); go('/admin/ui/shows/'+id+'/seating');});
-    $('#goTickets').addEventListener('click',(e)=>{e.preventDefault(); go('/admin/ui/shows/'+id+'/tickets');});
+    $('#goSeating').addEventListener('click',(e)=>{
+      e.preventDefault(); go('/admin/ui/shows/'+id+'/seating');
+    });
+    $('#goTickets').addEventListener('click',(e)=>{
+      e.preventDefault(); go('/admin/ui/shows/'+id+'/tickets');
+    });
 
     $('#save').addEventListener('click', async ()=>{
       $('#err').textContent='';
@@ -435,9 +534,16 @@ router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req,
         if(!payload.title || !payload.date || !payload.venueText || !payload.descriptionHtml){
           throw new Error('Title, date/time, venue and description are required');
         }
-        const r = await j('/admin/shows/'+id,{ method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-        if(r && r.ok){ alert('Saved'); } else { throw new Error((r && r.error)||'Failed to save'); }
-      }catch(e){ $('#err').textContent=e.message||String(e); }
+        const r = await j('/admin/shows/'+id,{
+          method:'PATCH',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(payload)
+        });
+        if(r && r.ok){ alert('Saved'); }
+        else { throw new Error((r && r.error)||'Failed to save'); }
+      }catch(e){
+        $('#err').textContent=e.message||String(e);
+      }
     });
   }
 
@@ -540,8 +646,14 @@ router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req,
     const ticketTypesBody = $('#ticketTypesBody');
     const ticketTypesEmpty = $('#ticketTypesEmpty');
 
-    $('#addTypeBtn').addEventListener('click', ()=>{ addTypeForm.style.display='block'; $('#tt_name').focus(); });
-    $('#tt_cancel').addEventListener('click', ()=>{ addTypeForm.style.display='none'; $('#tt_err').textContent=''; });
+    $('#addTypeBtn').addEventListener('click', ()=>{
+      addTypeForm.style.display='block';
+      $('#tt_name').focus();
+    });
+    $('#tt_cancel').addEventListener('click', ()=>{
+      addTypeForm.style.display='none';
+      $('#tt_err').textContent='';
+    });
 
     async function loadTicketTypes(){
       try{
@@ -623,7 +735,7 @@ router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req,
 
     loadTicketTypes();
 
-    // Seat maps UI (summary)
+    // Seat maps UI (summary only here – full editor on /seating)
     const seatMapsSummary = $('#seatMapsSummary');
     const seatMapsList = $('#seatMapsList');
     const venueId = show.venue?.id || null;
@@ -634,7 +746,7 @@ router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req,
       try{
         let url = '/admin/seatmaps?showId='+encodeURIComponent(id);
         if(venueId) url += '&venueId='+encodeURIComponent(venueId);
-        const maps = await j(url); // admin-seatmaps returns an array
+        const maps = await j(url);
         if(!Array.isArray(maps) || !maps.length){
           seatMapsSummary.textContent = 'No seat maps yet for this show/venue.';
           seatMapsList.innerHTML = '<div class="muted" style="font-size:13px">You can create a seat map using the “Create / edit seat map” button.</div>';
@@ -681,332 +793,416 @@ router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req,
   }
 
   // ---------- Seating map builder ----------
-  async function seatingPage(id){
+  function seatingPage(showId){
     main.innerHTML = '<div class="card"><div class="title">Loading seating map…</div></div>';
 
-    let showResp;
-    try {
-      showResp = await j('/admin/shows/'+id);
-    } catch (e) {
-      main.innerHTML = '<div class="card"><div class="error">Failed to load show: '+(e.message||e)+'</div></div>';
-      return;
-    }
-    const show = showResp.item || {};
-    const when = show.date ? new Date(show.date).toLocaleString('en-GB',{ dateStyle:'full', timeStyle:'short'}) : '';
-    const venueName = show.venue ? (show.venue.name + (show.venue.city ? ' – '+show.venue.city : '')) : (show.venueText || '');
-    const venueId = show.venue?.id || null;
-
-    main.innerHTML = \`
-      <div class="card">
-        <div class="header">
-          <div>
-            <div class="title">Seating for \${show.title || 'Untitled show'}</div>
-            <div class="muted">\${when ? when + ' · ' : ''}\${venueName}</div>
-          </div>
-          <div class="row">
-            <button class="btn" id="backToTickets">Back to tickets</button>
-            <button class="btn" id="backToShows2">All events</button>
-          </div>
-        </div>
-
-        <div class="grid grid-2">
-          <!-- LEFT: Seat map selection & meta -->
-          <div class="card" style="margin:0">
-            <div class="title" style="margin-bottom:4px">Seat maps</div>
-            <div class="muted" style="margin-bottom:8px">
-              Create and reuse seating layouts per venue. One seat map can be shared by multiple shows at the same venue.
-            </div>
-
-            <div class="grid" style="margin-bottom:8px">
-              <label>Seat map for this show</label>
-              <select id="mapSelect">
-                <option value="">Loading seat maps…</option>
-              </select>
-              <div class="tip">
-                <span class="badge">Tip</span> Use <span class="tag">Create new map</span> if this venue layout is new.
-              </div>
-            </div>
-
-            <div class="row" style="margin-bottom:8px">
-              <button class="btn" id="createMapBtn">Create new map</button>
-              <button class="btn" id="refreshMapsBtn">Refresh</button>
-            </div>
-
-            <div id="mapMeta" class="muted" style="font-size:13px;margin-top:4px">
-              No map selected yet.
-            </div>
-          </div>
-
-          <!-- RIGHT: Basic seat generator -->
-          <div class="card" style="margin:0">
-            <div class="title" style="margin-bottom:4px">Quick seat generator</div>
-            <div class="muted" style="margin-bottom:8px">
-              Start with a simple grid (rows A, B, C… and seat numbers 1, 2, 3…). You can refine or extend later.
-            </div>
-
-            <div id="noMapWarning" class="error" style="font-size:13px;margin-bottom:8px;display:none">
-              Select or create a seat map first.
-            </div>
-
-            <div class="grid grid-3" style="margin-bottom:8px">
-              <div class="grid">
-                <label>Number of rows</label>
-                <input id="rowsInput" type="number" min="1" max="50" value="10" />
-              </div>
-              <div class="grid">
-                <label>Seats per row</label>
-                <input id="seatsPerRowInput" type="number" min="1" max="80" value="20" />
-              </div>
-              <div class="grid">
-                <label>Start row label</label>
-                <input id="rowStartInput" maxlength="1" value="A" />
-              </div>
-            </div>
-
-            <div class="row" style="margin-bottom:8px">
-              <button class="btn p" id="generateSeatsBtn">Generate seats</button>
-              <div id="genStatus" class="muted" style="font-size:13px"></div>
-            </div>
-
-            <div id="seatsSummary" class="muted" style="font-size:13px;margin-top:4px">
-              No seats generated yet.
-            </div>
-
-            <div id="seatsPreview" style="margin-top:8px;max-height:220px;overflow:auto;border-top:1px solid var(--border);padding-top:8px;font-size:12px">
-              <div class="muted">Seat preview will appear here once generated.</div>
-            </div>
-          </div>
-        </div>
-      </div>\`;
-
-    $('#backToTickets').addEventListener('click', ()=> go('/admin/ui/shows/'+id+'/tickets'));
-    $('#backToShows2').addEventListener('click', ()=> go('/admin/ui/shows/current'));
-
-    const mapSelect = $('#mapSelect');
-    const createMapBtn = $('#createMapBtn');
-    const refreshMapsBtn = $('#refreshMapsBtn');
-    const mapMeta = $('#mapMeta');
-    const noMapWarning = $('#noMapWarning');
-    const rowsInput = $('#rowsInput');
-    const seatsPerRowInput = $('#seatsPerRowInput');
-    const rowStartInput = $('#rowStartInput');
-    const generateSeatsBtn = $('#generateSeatsBtn');
-    const genStatus = $('#genStatus');
-    const seatsSummary = $('#seatsSummary');
-    const seatsPreview = $('#seatsPreview');
-
-    let currentMaps = [];
-    let currentMapId = null;
-
-    async function loadMapsAndPopulate(selectIdToKeep){
-      mapSelect.innerHTML = '<option value="">Loading…</option>';
-      mapMeta.textContent = 'Loading seat maps…';
+    (async ()=>{
+      let showResp;
       try{
-        let url = '/admin/seatmaps?showId='+encodeURIComponent(id);
-        if(venueId) url += '&venueId='+encodeURIComponent(venueId);
-        const maps = await j(url);
-        currentMaps = Array.isArray(maps) ? maps : [];
-        if(!currentMaps.length){
-          mapSelect.innerHTML = '<option value="">No seat maps yet</option>';
-          mapMeta.textContent = 'No seat maps yet for this show/venue.';
-          currentMapId = null;
-          noMapWarning.style.display = 'block';
-          seatsSummary.textContent = 'No seats generated yet.';
-          seatsPreview.innerHTML = '<div class="muted">Seat preview will appear here once generated.</div>';
-          return;
-        }
-
-        mapSelect.innerHTML = '<option value="">Select seat map…</option>' +
-          currentMaps.map(m => '<option value="'+m.id+'">'+m.name+' (v'+(m.version||1)+ (m.isDefault ? ', default' : '') +')</option>').join('');
-
-        // Select previous if still exists; otherwise pick default; otherwise first
-        let toSelect = selectIdToKeep || null;
-        if(!toSelect){
-          const def = currentMaps.find(m=>m.isDefault);
-          toSelect = def ? def.id : currentMaps[0].id;
-        }
-        mapSelect.value = toSelect;
-        currentMapId = toSelect || null;
-        updateMapMeta();
-        if(currentMapId){
-          noMapWarning.style.display = 'none';
-          await loadSeatsPreview();
-        }else{
-          noMapWarning.style.display = 'block';
-        }
+        showResp = await j('/admin/shows/'+showId);
       }catch(e){
-        mapSelect.innerHTML = '<option value="">Error loading maps</option>';
-        mapMeta.textContent = 'Failed to load seat maps: '+(e.message||e);
-        currentMaps = [];
+        main.innerHTML = '<div class="card"><div class="error">Failed to load show: '+(e.message||e)+'</div></div>';
+        return;
+      }
+      const show = showResp.item || {};
+      const when = show.date ? new Date(show.date).toLocaleString('en-GB',{ dateStyle:'full', timeStyle:'short'}) : '';
+      const venueName = show.venue ? (show.venue.name + (show.venue.city ? ' – '+show.venue.city : '')) : (show.venueText || '');
+      const venueId = show.venue?.id || null;
+
+      main.innerHTML = \`
+        <div class="card">
+          <div class="header">
+            <div>
+              <div class="title">Seating map for \${show.title || 'Untitled show'}</div>
+              <div class="muted">\${when ? when + ' · ' : ''}\${venueName || 'No venue set'}</div>
+            </div>
+            <div class="row">
+              <button class="btn" id="backToTickets">Back to tickets</button>
+              <button class="btn" id="backToShow">Edit show</button>
+            </div>
+          </div>
+
+          <div class="seat-layout-wrap">
+            <div class="seat-sidebar">
+              <div class="card" style="margin:0 0 12px 0">
+                <div class="title" style="margin-bottom:6px">Seat maps for this show</div>
+                <div class="muted" id="sm_summary">Loading seat maps…</div>
+                <div id="sm_list" style="margin-top:8px"></div>
+                <hr style="border:none;border-top:1px solid var(--border);margin:10px 0" />
+                <div class="grid">
+                  <label style="font-size:13px">Create new seat map</label>
+                  <input id="sm_name" placeholder="e.g. Stalls layout" />
+                  <button class="btn p" id="sm_create">Create seat map</button>
+                  <div class="tip">Seat maps are stored per show (optionally linked to a venue).</div>
+                  <div class="error" id="sm_err"></div>
+                </div>
+              </div>
+
+              <div class="card" style="margin:0">
+                <div class="title" style="margin-bottom:6px">Quick seat generator</div>
+                <div class="muted" style="font-size:12px;margin-bottom:8px">
+                  Fast way to create a basic rectangular layout. You can then tweak individual seats.
+                </div>
+                <div class="grid grid-2" style="margin-bottom:8px">
+                  <div class="grid">
+                    <label style="font-size:13px">Rows</label>
+                    <input id="q_rows" type="number" min="1" max="80" value="5" />
+                  </div>
+                  <div class="grid">
+                    <label style="font-size:13px">Seats per row</label>
+                    <input id="q_perRow" type="number" min="1" max="80" value="10" />
+                  </div>
+                </div>
+                <div class="grid" style="margin-bottom:8px">
+                  <label style="font-size:13px">Row labels</label>
+                  <select id="q_rowLabels">
+                    <option value="letters">A, B, C…</option>
+                    <option value="numbers">1, 2, 3…</option>
+                  </select>
+                </div>
+                <div class="grid grid-2" style="margin-bottom:8px">
+                  <div class="grid">
+                    <label style="font-size:13px">Seat type</label>
+                    <select id="q_kind">
+                      <option value="">Standard</option>
+                      <option value="PREMIUM">Premium</option>
+                      <option value="RESTRICTED">Restricted view</option>
+                      <option value="CARER">Carer</option>
+                      <option value="BOX">Box seat</option>
+                    </select>
+                  </div>
+                  <div class="grid">
+                    <label style="font-size:13px">Level (optional)</label>
+                    <input id="q_level" placeholder="e.g. Stalls" />
+                  </div>
+                </div>
+                <div class="tip">For more complex layouts (boxes, walkways, balcony) you can generate a base and then refine by seat.</div>
+                <div class="row" style="margin-top:8px">
+                  <button class="btn p" id="q_generate">Generate seats</button>
+                  <div class="error" id="q_err"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="seat-main">
+              <div class="card" style="margin:0">
+                <div class="header" style="margin-bottom:8px">
+                  <div class="title">Seat layout</div>
+                  <div class="muted" id="seat_status">No seat map selected.</div>
+                </div>
+                <div id="seatGrid" class="seat-grid">
+                  <div class="muted" style="font-size:13px">Select or create a seat map on the left.</div>
+                </div>
+                <div class="seat-legend">
+                  <div class="seat-legend-item">
+                    <span class="seat-legend-swatch" style="background:#16a34a;border-color:#15803d"></span>
+                    <span>Available</span>
+                  </div>
+                  <div class="seat-legend-item">
+                    <span class="seat-legend-swatch" style="background:#4b5563;border-color:#374151"></span>
+                    <span>Blocked / no seat</span>
+                  </div>
+                  <div class="seat-legend-item">
+                    <span class="seat-legend-swatch" style="background:#f97316;border-color:#ea580c"></span>
+                    <span>Held</span>
+                  </div>
+                  <div class="seat-legend-item">
+                    <span class="seat-legend-swatch" style="background:#b91c1c;border-color:#7f1d1d"></span>
+                    <span>Sold (read-only)</span>
+                  </div>
+                </div>
+                <div class="tip" style="margin-top:6px">
+                  Click a seat to toggle its status: Available → Blocked → Held → Available. Sold seats cannot be changed here.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>\`;
+
+      $('#backToTickets').addEventListener('click', ()=> go('/admin/ui/shows/'+showId+'/tickets'));
+      $('#backToShow').addEventListener('click', ()=> go('/admin/ui/shows/'+showId+'/edit'));
+
+      const smSummary = $('#sm_summary');
+      const smList = $('#sm_list');
+      const smName = $('#sm_name');
+      const smErr = $('#sm_err');
+      const seatGrid = $('#seatGrid');
+      const seatStatus = $('#seat_status');
+      const qRows = $('#q_rows');
+      const qPerRow = $('#q_perRow');
+      const qRowLabels = $('#q_rowLabels');
+      const qKind = $('#q_kind');
+      const qLevel = $('#q_level');
+      const qErr = $('#q_err');
+
+      let currentMapId = null;
+      let currentMaps = [];
+      let seats = [];
+
+      async function loadSeatMaps(){
+        smSummary.textContent = 'Loading seat maps…';
+        smList.innerHTML = '';
         currentMapId = null;
-        noMapWarning.style.display = 'block';
-      }
-    }
+        seats = [];
+        seatGrid.innerHTML = '<div class="muted" style="font-size:13px">Select or create a seat map on the left.</div>';
+        seatStatus.textContent = 'No seat map selected.';
 
-    function updateMapMeta(){
-      if(!currentMapId){
-        mapMeta.textContent = 'No map selected yet.';
-        return;
-      }
-      const m = currentMaps.find(m=>m.id===currentMapId);
-      if(!m){
-        mapMeta.textContent = 'Selected map not found.';
-        return;
-      }
-      const seatCount = Array.isArray(m.seats) ? m.seats.length : (m._seatCount ?? 0);
-      mapMeta.innerHTML =
-        '<span class="badge">'+(m.name||'Untitled')+'</span> '+
-        '<span class="muted">v'+(m.version||1)+(m.isDefault?' · Default':'')+'</span><br/>'+
-        '<span class="muted">Known seat count: '+seatCount+'</span>';
-    }
+        try{
+          let url = '/admin/seatmaps?showId='+encodeURIComponent(showId);
+          if(venueId) url += '&venueId='+encodeURIComponent(venueId);
+          const maps = await j(url);
+          if(!Array.isArray(maps) || !maps.length){
+            smSummary.textContent = 'No seat maps yet for this show.';
+            smList.innerHTML = '<div class="muted" style="font-size:13px">Create a new seat map using the form below.</div>';
+            return;
+          }
+          currentMaps = maps;
+          smSummary.textContent = maps.length + ' seat map'+(maps.length>1?'s':'');
+          smList.innerHTML = maps.map(m=>{
+            const def = m.isDefault ? ' (default)' : '';
+            return '<div class="row" style="justify-content:space-between;margin-bottom:4px">'
+              +'<button class="btn" data-sm-id="'+m.id+'">'+m.name+' <span class="muted" style="font-size:12px">v'+(m.version||1)+def+'</span></button>'
+              + (m.isDefault ? '' : '<button class="btn" data-sm-default="'+m.id+'" style="font-size:12px;padding:4px 8px">Make default</button>')
+              +'</div>';
+          }).join('');
 
-    mapSelect.addEventListener('change', async ()=>{
-      currentMapId = mapSelect.value || null;
-      updateMapMeta();
-      if(currentMapId){
-        noMapWarning.style.display = 'none';
-        await loadSeatsPreview();
-      }else{
-        noMapWarning.style.display = 'block';
-        seatsSummary.textContent = 'No seats generated yet.';
-        seatsPreview.innerHTML = '<div class="muted">Seat preview will appear here once generated.</div>';
-      }
-    });
+          $$('[data-sm-id]', smList).forEach(btn=>{
+            btn.addEventListener('click', ()=>{
+              const id = btn.getAttribute('data-sm-id');
+              if(!id) return;
+              currentMapId = id;
+              seats = [];
+              seatStatus.textContent = 'Loading seats…';
+              renderSeats();
+              loadSeats();
+            });
+          });
 
-    createMapBtn.addEventListener('click', async ()=>{
-      const name = prompt('Name for this seat map? (e.g. "Stalls + Circle")', venueName || 'Main layout');
-      if(!name) return;
-      try{
-        const body = { showId: id, name: name.trim() };
-        if(venueId) body.venueId = venueId;
-        const created = await j('/admin/seatmaps', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify(body)
-        });
-        const newId = created.id;
-        await loadMapsAndPopulate(newId);
-        alert('Seat map created. You can now generate seats.');
-      }catch(e){
-        alert('Failed to create seat map: '+(e.message||e));
-      }
-    });
+          $$('[data-sm-default]', smList).forEach(btn=>{
+            btn.addEventListener('click', async (e)=>{
+              e.preventDefault();
+              const id = btn.getAttribute('data-sm-default');
+              if(!id) return;
+              try{
+                await j('/admin/seatmaps/'+id+'/default', {
+                  method:'PATCH',
+                  headers:{'Content-Type':'application/json'},
+                  body: JSON.stringify({ isDefault: true })
+                });
+                loadSeatMaps();
+              }catch(err){
+                alert('Failed to update default: '+(err.message||err));
+              }
+            });
+          });
 
-    refreshMapsBtn.addEventListener('click', ()=> loadMapsAndPopulate(currentMapId));
-
-    async function loadSeatsPreview(){
-      if(!currentMapId){
-        seatsSummary.textContent = 'No map selected.';
-        seatsPreview.innerHTML = '<div class="muted">Select a seat map to see its seats.</div>';
-        return;
+          // Auto-select default or first map
+          const defaultMap = maps.find(m=>m.isDefault) || maps[0];
+          if(defaultMap){
+            currentMapId = defaultMap.id;
+            seatStatus.textContent = 'Loading seats…';
+            loadSeats();
+          }
+        }catch(e){
+          smSummary.textContent = 'Failed to load seat maps.';
+          smList.innerHTML = '<div class="error" style="font-size:13px">'+(e.message||e)+'</div>';
+        }
       }
-      seatsSummary.textContent = 'Loading seats…';
-      seatsPreview.innerHTML = '<div class="muted">Loading…</div>';
-      try{
-        const seats = await j('/seatmaps/'+encodeURIComponent(currentMapId)+'/seats');
-        if(!Array.isArray(seats) || !seats.length){
-          seatsSummary.textContent = 'No seats have been generated yet for this map.';
-          seatsPreview.innerHTML = '<div class="muted">Use the generator to create rows and seats.</div>';
+
+      async function loadSeats(){
+        if(!currentMapId){
+          seatGrid.innerHTML = '<div class="muted" style="font-size:13px">Select or create a seat map first.</div>';
+          seatStatus.textContent = 'No seat map selected.';
           return;
         }
-        const total = seats.length;
-        const rows = [...new Set(seats.map(s=>s.rowLabel || s.row))];
-        seatsSummary.textContent = 'This map currently has '+total+' seats across '+rows.length+' row'+(rows.length===1?'':'s')+'.';
+        try{
+          const data = await j('/seatmaps/'+encodeURIComponent(currentMapId)+'/seats');
+          seats = Array.isArray(data) ? data : [];
+          renderSeats();
+        }catch(e){
+          seatGrid.innerHTML = '<div class="error" style="font-size:13px">Failed to load seats: '+(e.message||e)+'</div>';
+          seatStatus.textContent = 'Error loading seats.';
+        }
+      }
 
-        // Simple compact preview: group by row
-        const byRow = {};
+      function renderSeats(){
+        if(!currentMapId){
+          seatGrid.innerHTML = '<div class="muted" style="font-size:13px">Select or create a seat map on the left.</div>';
+          seatStatus.textContent = 'No seat map selected.';
+          return;
+        }
+        if(!seats.length){
+          seatGrid.innerHTML = '<div class="muted" style="font-size:13px">No seats yet. Use the Quick seat generator on the left to create a base layout.</div>';
+          seatStatus.textContent = '0 seats';
+          return;
+        }
+
+        const byRow = new Map();
         seats.forEach(s=>{
-          const r = s.rowLabel || s.row;
-          if(!byRow[r]) byRow[r] = [];
-          byRow[r].push(s.seatNumber || s.number);
+          const key = s.row || s.rowLabel || '';
+          if(!byRow.has(key)) byRow.set(key, []);
+          byRow.get(key).push(s);
         });
-        const rowKeys = Object.keys(byRow).sort((a,b)=>{
-          // A, B, C… numeric-ish compare if single letters
-          if(a.length===1 && b.length===1) return a.charCodeAt(0)-b.charCodeAt(0);
-          return a.localeCompare(b);
+
+        const rowKeys = Array.from(byRow.keys()).sort((a,b)=>{
+          // basic sort: letters then numbers
+          const an = parseInt(a,10), bn = parseInt(b,10);
+          if(!isNaN(an) && !isNaN(bn)) return an-bn;
+          return String(a).localeCompare(String(b));
         });
 
         let html = '';
-        rowKeys.forEach(r=>{
-          const nums = byRow[r].sort((a,b)=>a-b);
-          html += '<div style="margin-bottom:4px"><strong>'+r+':</strong> <span class="muted">'+nums.join(', ')+'</span></div>';
-        });
-        seatsPreview.innerHTML = html || '<div class="muted">No seats.</div>';
-      }catch(e){
-        seatsSummary.textContent = 'Failed to load seats.';
-        seatsPreview.innerHTML = '<div class="error">'+(e.message||e)+'</div>';
-      }
-    }
-
-    generateSeatsBtn.addEventListener('click', async ()=>{
-      genStatus.textContent = '';
-      if(!currentMapId){
-        noMapWarning.style.display = 'block';
-        genStatus.textContent = 'Select or create a seat map first.';
-        return;
-      }
-      noMapWarning.style.display = 'none';
-
-      const rows = Number(rowsInput.value);
-      const perRow = Number(seatsPerRowInput.value);
-      let start = (rowStartInput.value || 'A').toUpperCase().charAt(0) || 'A';
-
-      if(!Number.isFinite(rows) || rows<=0){
-        genStatus.textContent = 'Rows must be a positive number.';
-        return;
-      }
-      if(!Number.isFinite(perRow) || perRow<=0){
-        genStatus.textContent = 'Seats per row must be a positive number.';
-        return;
-      }
-      const startCode = start.charCodeAt(0);
-      if(startCode < 65 || startCode > 90){
-        genStatus.textContent = 'Start row label must be A–Z.';
-        return;
-      }
-
-      // Build seat payload
-      const seats = [];
-      for(let i=0;i<rows;i++){
-        const rowCode = startCode + i;
-        const rowLabel = String.fromCharCode(rowCode);
-        for(let n=1;n<=perRow;n++){
-          seats.push({
-            row: rowLabel,
-            number: n,
-            rowLabel: rowLabel,
-            seatNumber: n,
-            label: rowLabel + n
+        rowKeys.forEach(rowKey=>{
+          const list = byRow.get(rowKey).slice().sort((a,b)=> (a.number||0)-(b.number||0));
+          html += '<div class="seat-row"><div class="seat-row-label">'+(rowKey||'')+'</div><div class="seat-row-seats">';
+          list.forEach(s=>{
+            const status = s.status || 'AVAILABLE';
+            const label = s.seatNumber ?? s.number ?? '';
+            html += '<div class="seat-cell status-'+status+'" '
+              +'data-seat-id="'+s.id+'" '
+              +'data-seat-status="'+status+'" '
+              +'title="'+(rowKey+label)+'">'+label+'</div>';
           });
-        }
-      }
-
-      if(!seats.length){
-        genStatus.textContent = 'Nothing to generate.';
-        return;
-      }
-
-      genStatus.textContent = 'Generating '+seats.length+' seats…';
-      try{
-        await j('/seatmaps/'+encodeURIComponent(currentMapId)+'/seats/bulk', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ seats })
+          html += '</div></div>';
         });
-        genStatus.textContent = 'Seats generated and saved.';
-        await loadSeatsPreview();
-      }catch(e){
-        genStatus.textContent = 'Failed to generate seats: '+(e.message||e);
-      }
-    });
 
-    // Initial load
-    loadMapsAndPopulate(null);
+        seatGrid.innerHTML = html;
+        seatStatus.textContent = seats.length+' seats';
+
+        const cycle = ['AVAILABLE','BLOCKED','HELD']; // Sold stays as-is
+
+        $$('[data-seat-id]', seatGrid).forEach(cell=>{
+          cell.addEventListener('click', async ()=>{
+            const id = cell.getAttribute('data-seat-id');
+            const cur = cell.getAttribute('data-seat-status') || 'AVAILABLE';
+            if(cur === 'SOLD'){
+              return; // don't allow changing sold seats here
+            }
+            const idx = cycle.indexOf(cur);
+            const next = cycle[(idx+1) % cycle.length];
+
+            try{
+              await j('/seatmaps/seat/'+encodeURIComponent(id)+'/status', {
+                method:'PATCH',
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ status: next })
+              });
+              cell.setAttribute('data-seat-status', next);
+              cell.className = 'seat-cell status-'+next;
+            }catch(e){
+              alert('Failed to update seat: '+(e.message||e));
+            }
+          });
+        });
+      }
+
+      // Create seat map
+      $('#sm_create').addEventListener('click', async ()=>{
+        smErr.textContent='';
+        const name = smName.value.trim();
+        if(!name){
+          smErr.textContent = 'Name is required';
+          return;
+        }
+        try{
+          const payload = {
+            showId: showId,
+            name,
+            venueId: venueId || null,
+            isDefault: !currentMaps || !currentMaps.length,
+            version: 1
+          };
+          const created = await j('/admin/seatmaps', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify(payload)
+          });
+          smName.value = '';
+          // reload & select new map
+          await loadSeatMaps();
+          currentMapId = created.id;
+          seatStatus.textContent = 'Loading seats…';
+          loadSeats();
+        }catch(e){
+          smErr.textContent = e.message || String(e);
+        }
+      });
+
+      // Quick generator
+      $('#q_generate').addEventListener('click', async ()=>{
+        qErr.textContent='';
+        if(!currentMapId){
+          qErr.textContent = 'Select or create a seat map first.';
+          return;
+        }
+        const rows = Number(qRows.value || '0');
+        const perRow = Number(qPerRow.value || '0');
+        if(!Number.isFinite(rows) || rows<=0){
+          qErr.textContent='Rows must be a positive number';
+          return;
+        }
+        if(!Number.isFinite(perRow) || perRow<=0){
+          qErr.textContent='Seats per row must be a positive number';
+          return;
+        }
+        const labelMode = qRowLabels.value === 'numbers' ? 'numbers' : 'letters';
+        const kind = qKind.value || null;
+        const level = qLevel.value.trim() || null;
+
+        const seatsPayload = [];
+        for(let r=0;r<rows;r++){
+          let rowLabel;
+          if(labelMode==='numbers'){
+            rowLabel = String(r+1);
+          }else{
+            // A, B, ..., Z, AA, AB...
+            let n=r;
+            rowLabel='';
+            while(true){
+              const c = String.fromCharCode(65 + (n % 26));
+              rowLabel = c + rowLabel;
+              n = Math.floor(n/26) - 1;
+              if(n<0) break;
+            }
+          }
+          for(let n=1;n<=perRow;n++){
+            const label = rowLabel + n;
+            seatsPayload.push({
+              row: rowLabel,
+              number: n,
+              rowLabel: rowLabel,
+              seatNumber: n,
+              label,
+              kind: kind || undefined,
+              level: level || undefined
+            });
+          }
+        }
+
+        try{
+          await j('/seatmaps/'+encodeURIComponent(currentMapId)+'/seats/bulk', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ seats: seatsPayload })
+          });
+          qErr.textContent='';
+          loadSeats();
+        }catch(e){
+          qErr.textContent = e.message || String(e);
+        }
+      });
+
+      loadSeatMaps();
+    })();
   }
 
   // ---------- Other sections (stubs) ----------
-  function orders(){ main.innerHTML='<div class="card"><div class="title">Orders</div><div class="muted">Coming soon</div></div>'; }
-  function venues(){ main.innerHTML='<div class="card"><div class="title">Venues</div><div class="muted">Use the venue picker in Create Show to add/search venues.</div></div>'; }
+  function orders(){
+    main.innerHTML='<div class="card"><div class="title">Orders</div><div class="muted">Coming soon</div></div>';
+  }
+  function venues(){
+    main.innerHTML='<div class="card"><div class="title">Venues</div><div class="muted">Use the venue picker in Create Show to add/search venues.</div></div>';
+  }
 
   // Boot
   route();
@@ -1014,6 +1210,7 @@ router.get(["/ui", "/ui/", "/ui/home", "/ui/*"], requireAdminOrOrganiser, (_req,
 </script>
 </body>
 </html>`);
-});
+  }
+);
 
 export default router;
