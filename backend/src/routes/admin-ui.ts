@@ -61,6 +61,7 @@ router.get(
   .opt{padding:8px 10px;cursor:pointer}
   .opt:hover{background:#f8fafc}
   .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--border);background:#f9fafb}
+
   .seat-layout-wrap{
     background:#020617;
     border-radius:12px;
@@ -71,7 +72,8 @@ router.get(
     flex-direction:column;
     gap:12px;
     position:relative; /* needed for guides + zoom controls */
-  }   #seatCanvas{
+  }
+  #seatCanvas{
     position:relative;
     min-width:900px;  /* give the seat grid breathing room */
     min-height:220px;
@@ -108,6 +110,35 @@ router.get(
   .seat-held{background:#f59e0b;border-color:#92400e}
   .seat-sold{background:#9ca3af;border-color:#4b5563;cursor:not-allowed}
   .seat-selected{outline:2px solid #f97316;outline-offset:1px}
+
+  /* Seat blocks / grids overlay */
+  .seat-block-overlay{
+    position:absolute;
+    border:1px dashed rgba(148,163,184,.9);
+    background:rgba(15,23,42,.35);
+    border-radius:8px;
+    padding:4px 6px;
+    box-sizing:border-box;
+    cursor:move;
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    font-size:11px;
+    color:#e5e7eb;
+    pointer-events:auto;
+  }
+  .seat-block-overlay-label{
+    font-weight:500;
+  }
+  .seat-block-overlay-handle{
+    font-size:10px;
+    opacity:.8;
+    margin-left:8px;
+  }
+  .seat-block-overlay.selected{
+    border-style:solid;
+    border-color:#f97316;
+  }
 </style>
 </head>
 
@@ -813,7 +844,7 @@ router.get(
     const seatMapsList = $('#seatMapsList');
     const venueId = show.venue && show.venue.id ? show.venue.id : null;
 
-        async function loadSeatMaps(){
+    async function loadSeatMaps(){
       seatMapsSummary.textContent = 'Loading seat maps…';
       seatMapsList.innerHTML = '';
       try{
@@ -862,8 +893,7 @@ router.get(
     loadSeatMaps();
   }
 
-
-    // ---------- Seating page with Seat Inspector (snap + guides + row move + zoom) ----------
+  // ---------- Seating page with Seat Inspector (snap + guides + row move + zoom + blocks) ----------
   async function seatingPage(showId){
     main.innerHTML = '<div class="card"><div class="title">Loading seating…</div></div>';
 
@@ -921,6 +951,17 @@ router.get(
               +'<button class="btn" id="q_generate" style="width:100%;margin-top:4px">Generate seats</button>'
               +'<div class="tip" style="font-size:12px">Uses /seatmaps/:id/seats/bulk, then reloads seats into the layout.</div>'
             +'</div>'
+
+            +'<div class="card" style="margin:0">'
+              +'<div class="title" style="margin-bottom:4px">Seat blocks</div>'
+              +'<div class="muted" style="font-size:12px;margin-bottom:6px">Group seats into named blocks (e.g. “Stalls Left”, “Circle”) and drag the whole block.</div>'
+              +'<div class="grid" style="grid-template-columns:2fr auto;gap:6px;margin-bottom:6px">'
+                +'<input id="block_name" placeholder="e.g. Stalls Left" />'
+                +'<button class="btn" id="block_create">Create from selection</button>'
+              +'</div>'
+              +'<div class="tip" style="font-size:12px">Select one or more seats first, then create a block. You can drag the block label on the canvas to move all its seats.</div>'
+              +'<div id="blocks_list" style="margin-top:8px;font-size:13px"></div>'
+            +'</div>'
           +'</div>'
 
           +'<div class="card" style="margin:0">'
@@ -971,6 +1012,10 @@ router.get(
     const zoomOutBtn       = document.getElementById('zoomOutBtn');
     const zoomResetBtn     = document.getElementById('zoomResetBtn');
 
+    const blockNameInput   = document.getElementById('block_name');
+    const blockCreateBtn   = document.getElementById('block_create');
+    const blocksList       = document.getElementById('blocks_list');
+
     backToTicketsBtn.addEventListener('click', function(){
       go('/admin/ui/shows/'+showId+'/tickets');
     });
@@ -986,6 +1031,7 @@ router.get(
 
     // selection state
     const selectedSeatIds = new Set();
+    let selectedBlockId = null;
 
     // zoom state
     let zoom = 1;
@@ -1019,6 +1065,7 @@ router.get(
         if(el) el.classList.remove('seat-selected');
       });
       selectedSeatIds.clear();
+      selectedBlockId = null;
     }
 
     function addSeatToSelection(id){
@@ -1029,9 +1076,29 @@ router.get(
       }
     }
 
+    function recomputeSelectedBlockFromSeats(){
+      ensureLayout();
+      selectedBlockId = null;
+      const sel = Array.from(selectedSeatIds);
+      if(!sel.length) return;
+      const blocks = layout.elements.filter(function(e){ return e && e.type === 'block' && Array.isArray(e.seatIds); });
+      blocks.some(function(b){
+        if(!b.seatIds || !b.seatIds.length) return false;
+        // treat as selected if all block seats are currently selected
+        const allIn = b.seatIds.every(function(id){ return selectedSeatIds.has(id); });
+        if(allIn){
+          selectedBlockId = b.id;
+          return true;
+        }
+        return false;
+      });
+    }
+
     function selectSingleSeat(id){
       clearSelection();
       addSeatToSelection(id);
+      recomputeSelectedBlockFromSeats();
+      renderSeats();
     }
 
     function selectRowForSeat(id){
@@ -1045,18 +1112,18 @@ router.get(
           addSeatToSelection(s.id);
         }
       });
+      recomputeSelectedBlockFromSeats();
+      renderSeats();
     }
 
     // --- Alignment guides (safety rails) ---
     const guideH = document.createElement('div');
     guideH.className = 'guide-line h';
     guideH.style.display = 'none';
-    seatCanvas.appendChild(guideH);
 
     const guideV = document.createElement('div');
     guideV.className = 'guide-line v';
     guideV.style.display = 'none';
-    seatCanvas.appendChild(guideV);
 
     function hideGuides(){
       guideH.style.display = 'none';
@@ -1069,6 +1136,57 @@ router.get(
     function showGuideV(x){
       guideV.style.left = (x - 0.5)+'px';
       guideV.style.display = 'block';
+    }
+
+    function refreshBlocksList(){
+      ensureLayout();
+      if(!blocksList) return;
+      const blocks = layout.elements.filter(function(e){ return e && e.type === 'block'; });
+      if(!blocks.length){
+        blocksList.innerHTML = '<div class="muted">No blocks yet.</div>';
+        return;
+      }
+      blocksList.innerHTML = blocks.map(function(b){
+        const count = Array.isArray(b.seatIds) ? b.seatIds.length : 0;
+        return '<div class="row" data-block-row="'+b.id+'" style="justify-content:space-between;margin-bottom:4px">'
+          +'<div><strong>'+ (b.name || 'Untitled block') +'</strong> <span class="muted">('+count+' seats)</span></div>'
+          +'<div class="row" style="gap:4px">'
+            +'<button class="btn" data-block-select="'+b.id+'">Select</button>'
+            +'<button class="btn" data-block-delete="'+b.id+'">Delete</button>'
+          +'</div></div>';
+      }).join('');
+
+      $$('[data-block-select]', blocksList).forEach(function(btn){
+        btn.addEventListener('click', function(e){
+          e.preventDefault();
+          const id = btn.getAttribute('data-block-select');
+          ensureLayout();
+          const block = layout.elements.find(function(el){ return el && el.id === id && el.type === 'block'; });
+          if(!block || !Array.isArray(block.seatIds) || !block.seatIds.length) return;
+          clearSelection();
+          block.seatIds.forEach(function(seatId){ addSeatToSelection(seatId); });
+          selectedBlockId = id;
+          renderSeats();
+        });
+      });
+
+      $$('[data-block-delete]', blocksList).forEach(function(btn){
+        btn.addEventListener('click', function(e){
+          e.preventDefault();
+          const id = btn.getAttribute('data-block-delete');
+          if(!id) return;
+          ensureLayout();
+          const idx = layout.elements.findIndex(function(el){ return el && el.id === id && el.type === 'block'; });
+          if(idx !== -1){
+            layout.elements.splice(idx,1);
+          }
+          if(selectedBlockId === id){
+            selectedBlockId = null;
+          }
+          refreshBlocksList();
+          renderSeats();
+        });
+      });
     }
 
     async function reloadSeatMaps(){
@@ -1087,6 +1205,8 @@ router.get(
           smTip.textContent = 'Create a map for this show; you can optionally reuse it for future dates at this venue.';
           seatCanvas.innerHTML = '<div class="muted">No seat map selected.</div>';
           hideGuides();
+          layout = { seats:{}, elements:[] };
+          refreshBlocksList();
           return;
         }
 
@@ -1106,7 +1226,9 @@ router.get(
           ? def.layout
           : { seats:{}, elements:[] };
 
+        clearSelection();
         await reloadSeats();
+        refreshBlocksList();
       }catch(e){
         smStatus.textContent = 'Failed to load seat maps';
         smErr.textContent = e.message || String(e);
@@ -1122,6 +1244,7 @@ router.get(
       try{
         seats = await j('/seatmaps/'+currentSeatMapId+'/seats');
         renderSeats();
+        refreshBlocksList();
       }catch(e){
         seatCanvas.innerHTML = '<div class="error">Failed to load seats: '+(e.message||e)+'</div>';
         hideGuides();
@@ -1130,8 +1253,6 @@ router.get(
 
     function renderSeats(){
       seatCanvas.innerHTML = '';
-      seatCanvas.appendChild(guideH);
-      seatCanvas.appendChild(guideV);
       hideGuides();
       ensureLayout();
 
@@ -1162,7 +1283,7 @@ router.get(
         rowKeys.forEach(function(rowKey, rowIndex){
           const rowSeats = rowsMap[rowKey].sort(function(a,b){
             const an = a.seatNumber != null ? a.seatNumber : a.number;
-            const bn = b.seatNumber != null ? b.number : b.number;
+            const bn = b.seatNumber != null ? b.seatNumber : b.number;
             return an - bn;
           });
           const y = offsetY + rowIndex * dy;
@@ -1202,6 +1323,50 @@ router.get(
 
         seatCanvas.appendChild(seatEl);
       });
+
+      // Block overlays
+      ensureLayout();
+      const blocks = layout.elements.filter(function(e){ return e && e.type === 'block' && Array.isArray(e.seatIds) && e.seatIds.length; });
+      blocks.forEach(function(b){
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        b.seatIds.forEach(function(id){
+          const pos = layout.seats[id];
+          if(!pos) return;
+          if(pos.x < minX) minX = pos.x;
+          if(pos.x > maxX) maxX = pos.x;
+          if(pos.y < minY) minY = pos.y;
+          if(pos.y > maxY) maxY = pos.y;
+        });
+        if(!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) return;
+
+        const overlay = document.createElement('div');
+        overlay.className = 'seat-block-overlay';
+        if(selectedBlockId === b.id) overlay.classList.add('selected');
+        overlay.setAttribute('data-block-id', b.id);
+
+        const padding = 12;
+        const width = (maxX - minX) + padding*2;
+        const height = (maxY - minY) + padding*2;
+
+        overlay.style.left = (minX - padding)+'px';
+        overlay.style.top  = (minY - padding)+'px';
+        overlay.style.width = width+'px';
+        overlay.style.height = height+'px';
+
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'seat-block-overlay-label';
+        labelSpan.textContent = b.name || 'Block';
+
+        const handleSpan = document.createElement('span');
+        handleSpan.className = 'seat-block-overlay-handle';
+        handleSpan.textContent = '⋮⋮';
+
+        overlay.appendChild(labelSpan);
+        overlay.appendChild(handleSpan);
+
+        seatCanvas.appendChild(overlay);
+      });
+
       seatCanvas.appendChild(guideH);
       seatCanvas.appendChild(guideV);
     }
@@ -1218,6 +1383,7 @@ router.get(
       }
       clearSelection();
       await reloadSeats();
+      refreshBlocksList();
     });
 
     // Create new seat map
@@ -1243,6 +1409,7 @@ router.get(
         layout = { seats:{}, elements:[] };
         clearSelection();
         await reloadSeats();
+        refreshBlocksList();
       }catch(e){
         smErr.textContent = e.message || String(e);
       }
@@ -1285,17 +1452,82 @@ router.get(
       }
     });
 
-    // Drag behaviour with snap + alignment guides + group move
+    // Create block from current selection
+    blockCreateBtn.addEventListener('click', function(){
+      ensureLayout();
+      const seatIds = Array.from(selectedSeatIds);
+      if(!seatIds.length){
+        alert('Select one or more seats first.');
+        return;
+      }
+      const blocks = layout.elements.filter(function(e){ return e && e.type === 'block'; });
+      const name = (blockNameInput.value || '').trim() || ('Block '+(blocks.length+1));
+      const id = 'block_'+Date.now()+'_'+Math.floor(Math.random()*1000);
+      layout.elements.push({
+        id: id,
+        type: 'block',
+        name: name,
+        seatIds: seatIds.slice()
+      });
+      blockNameInput.value = '';
+      selectedBlockId = id;
+      refreshBlocksList();
+      renderSeats();
+    });
+
+    // Drag behaviour with snap + alignment guides + group move (seats or blocks)
     const GRID_SIZE = 4;      // subtle grid snap
     const SNAP_DIST = 8;      // pixels for snapping to other seats / centre (logical units)
     let dragState = null;
 
     seatCanvas.addEventListener('mousedown', function(e){
+      // First: check if clicking a block overlay
+      const blockEl = e.target && e.target.closest ? e.target.closest('.seat-block-overlay') : null;
+      if(blockEl){
+        const blockId = blockEl.getAttribute('data-block-id');
+        if(blockId){
+          ensureLayout();
+          const block = layout.elements.find(function(el){ return el && el.id === blockId && el.type === 'block'; });
+          if(block && Array.isArray(block.seatIds) && block.seatIds.length){
+            clearSelection();
+            block.seatIds.forEach(function(seatId){ addSeatToSelection(seatId); });
+            selectedBlockId = blockId;
+            renderSeats();
+
+            if(e.button === 0){
+              ensureLayout();
+              const seatIds = Array.from(selectedSeatIds);
+              const startPositions = {};
+              seatIds.forEach(function(id){
+                if(!layout.seats[id]){
+                  layout.seats[id] = { x:40, y:30, rotation:0 };
+                }
+                startPositions[id] = {
+                  x: layout.seats[id].x,
+                  y: layout.seats[id].y
+                };
+              });
+
+              dragState = {
+                seatIds: seatIds,
+                anchorSeatId: seatIds[0],
+                startMouseX: e.clientX,
+                startMouseY: e.clientY,
+                startPositions: startPositions
+              };
+            }
+          }
+        }
+        e.preventDefault();
+        return;
+      }
+
       const seatEl = e.target && e.target.closest ? e.target.closest('.seat') : null;
 
       // Clicked on empty canvas: clear selection
       if(!seatEl){
         clearSelection();
+        renderSeats();
         return;
       }
 
@@ -1314,6 +1546,8 @@ router.get(
         }else{
           addSeatToSelection(seatId);
         }
+        recomputeSelectedBlockFromSeats();
+        renderSeats();
       }else{
         // normal click => single selection
         selectSingleSeat(seatId);
@@ -1440,6 +1674,9 @@ router.get(
           el.style.top  = (y - 9)+'px';
         }
       });
+
+      // Re-render overlays only (quick hack: full render)
+      renderSeats();
     });
 
     document.addEventListener('mouseup', function(){
@@ -1472,9 +1709,6 @@ router.get(
     // Initial load
     reloadSeatMaps();
   }
-
-
-
 
   // ---------- Simple stubs for other views ----------
 
@@ -1510,6 +1744,5 @@ router.get(
 </html>`);
   }
 );
-
 
 export default router;
