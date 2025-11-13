@@ -1,3 +1,4 @@
+// backend/src/index.ts
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -34,9 +35,9 @@ app.use("/admin", adminVenuesRoutes);
 app.use("/venues", venuesRoutes); // GET /venues/:venueId/seating-maps
 
 // ---------- NEW: ticketing + seatmaps APIs ----------
-app.use("/admin", adminTicketTypesRoutes); // /admin/shows/:showId/ticket-types
-app.use("/admin", adminSeatMapsRoutes);    // /admin/seatmaps?showId=...
-app.use("/seatmaps", seatMapsRoutes);      // /seatmaps/:seatMapId/...
+app.use("/admin", adminTicketTypesRoutes);       // /admin/shows/:showId/ticket-types
+app.use("/admin/seatmaps", adminSeatMapsRoutes); // /admin/seatmaps?showId=...
+app.use("/seatmaps", seatMapsRoutes);            // /seatmaps/:seatMapId/...
 
 const port = Number(process.env.PORT) || 3000;
 app.listen(port, () => {
