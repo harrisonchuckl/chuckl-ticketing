@@ -53,14 +53,8 @@ router.post("/", async (req: Request, res: Response) => {
         .json({ error: true, message: "showId and name are required" });
     }
 
-    const data: {
-      showId: string;
-      name: string;
-      venueId?: string | null;
-      isDefault?: boolean;
-      version?: number;
-      layout?: unknown;
-    } = {
+    // Loosened typing here so Prisma's JSON type doesn't complain
+    const data: any = {
       showId: String(showId),
       name: String(name),
     };
