@@ -76,6 +76,9 @@ router.post("/", async (req: Request, res: Response) => {
 /**
  * PATCH /admin/seatmaps/:id/default
  * Body: { isDefault: boolean }
+ *
+ * Updated so that if you set one map as default, all other maps for that show
+ * are automatically unset.
  */
 router.patch("/:id/default", async (req: Request, res: Response) => {
   try {
@@ -88,6 +91,26 @@ router.patch("/:id/default", async (req: Request, res: Response) => {
         .json({ error: true, message: "isDefault boolean is required" });
     }
 
+    const map = await prisma.seatMap.findUnique({
+      where: { id },
+      select: { id: true, showId: true },
+    });
+
+    if (!map) {
+      return res.status(404).json({ error: true, message: "SeatMap not found" });
+    }
+
+    // If we're setting this one as default, unset all others for the same show
+    if (isDefault && map.showId) {
+      await prisma.seatMap.updateMany({
+        where: {
+          showId: map.showId,
+          NOT: { id: map.id },
+        },
+        data: { isDefault: false },
+      });
+    }
+
     const updated = await prisma.seatMap.update({
       where: { id },
       data: { isDefault },
@@ -95,9 +118,38 @@ router.patch("/:id/default", async (req: Request, res: Response) => {
 
     res.json(updated);
   } catch (e: any) {
-    res
-      .status(500)
-      .json({ error: true, message: e?.message ?? "Failed to update seat map" });
+    res.status(500).json({
+      error: true,
+      message: e?.message ?? "Failed to update seat map",
+    });
+  }
+});
+
+/**
+ * PATCH /admin/seatmaps/:id/layout
+ * Body: { layout: any }
+ *
+ * This is the key endpoint for the future drag & drop editor.
+ * The front-end will send a JSON blob describing seat positions and elements,
+ * which we store in seatMap.layout.
+ */
+router.patch("/:id/layout", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { layout } = req.body ?? {};
+
+    // No strict validation for now – we treat this as arbitrary JSON.
+    const updated = await prisma.seatMap.update({
+      where: { id },
+      data: { layout },
+    });
+
+    res.json(updated);
+  } catch (e: any) {
+    res.status(500).json({
+      error: true,
+      message: e?.message ?? "Failed to update seat map layout",
+    });
   }
 });
 
