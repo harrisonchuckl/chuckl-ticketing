@@ -862,30 +862,257 @@ const payload = {          label: labelEl ? labelEl.value.trim() : '',
     }
   }
 
-  // -------- Seat-map designer (allocated seating stub) --------
+  // -------- Seat-map designer (allocated seating wizard) --------
 
   async function seatingPage(eventId){
-    // You can later wire this to a richer endpoint like /admin/events/:id/seat-map
+    // Local wizard state – in future this can be loaded from /admin/events/:id/seat-map
+    const state = {
+      layout: 'theatre',
+      rows: 10,
+      seatsPerRow: 20,
+      tables: 20,
+      seatsPerTable: 6,
+      gaCapacity: 400,
+    };
+
     main.innerHTML =
       '<div class="card">' +
         '<div class="header">' +
           '<div>' +
-            '<div class="title">Seat map designer</div>' +
-            '<div class="muted">Drag out blocks, tables and labels to match your venue layout. This will power allocated seating.</div>' +
+            '<div class="title">Seat map layout</div>' +
+            '<div class="muted" id="seatStepLabel">Step 1 of 2 · Choose your layout</div>' +
           '</div>' +
-          '<button class="btn" data-view="/admin/ui/shows/current">All events</button>' +
+          '<div style="display:flex;gap:8px;">' +
+            '<button class="btn" data-view="/admin/ui/shows/current">All events</button>' +
+          '</div>' +
         '</div>' +
-        '<div class="seat-layout-wrap">' +
-          '<div class="seat-stage">' +
-            '<div>STAGE</div>' +
-            '<div class="seat-stage-bar"></div>' +
+        '<div class="grid grid-2" style="align-items:flex-start;">' +
+          '<div>' +
+            '<div class="muted" style="font-size:13px;margin-bottom:6px;">Quick start layouts</div>' +
+            '<div class="mode-choice-wrap" style="margin-top:8px;">' +
+              '<div class="mode-card" data-layout-choice="theatre">' +
+                '<div class="mode-card-title">Theatre rows</div>' +
+                '<div class="mode-card-body">Straight rows facing the stage. Perfect for classic theatre style.</div>' +
+                '<div class="mode-card-tag">Most common</div>' +
+              '</div>' +
+              '<div class="mode-card" data-layout-choice="cabaret">' +
+                '<div class="mode-card-title">Cabaret tables</div>' +
+                '<div class="mode-card-body">Round tables with seats around them. Good for clubs and cabaret rooms.</div>' +
+                '<div class="mode-card-tag">Tables and chairs</div>' +
+              '</div>' +
+              '<div class="mode-card" data-layout-choice="standing">' +
+                '<div class="mode-card-title">Standing / GA zone</div>' +
+                '<div class="mode-card-body">No fixed seats. Set a capacity and let people stand or pick any spot.</div>' +
+                '<div class="mode-card-tag">Standing room</div>' +
+              '</div>' +
+              '<div class="mode-card" data-layout-choice="custom">' +
+                '<div class="mode-card-title">Custom mix</div>' +
+                '<div class="mode-card-body">Rows and tables together. Use this when your venue has a more complex layout.</div>' +
+                '<div class="mode-card-tag">Advanced</div>' +
+              '</div>' +
+            '</div>' +
           '</div>' +
-          '<div style="margin-top:12px;font-size:13px;color:#64748b;">' +
-            'Seat-map tooling will be built out here. For now this is a visual placeholder so you can see how allocated seating fits into the flow.' +
+          '<div>' +
+            '<div class="muted" style="font-size:13px;margin-bottom:6px;">Layout details</div>' +
+            '<div class="grid grid-2" style="margin-bottom:12px;">' +
+              '<div data-layout-section="theatre cabaret custom">' +
+                '<label>Number of rows</label><br />' +
+                '<input type="number" min="1" id="seatRows" value="10" />' +
+                '<div class="tip">Applies to theatre rows. For cabaret, this is the number of rows of tables.</div>' +
+              '</div>' +
+              '<div data-layout-section="theatre custom">' +
+                '<label>Seats per row</label><br />' +
+                '<input type="number" min="1" id="seatPerRow" value="20" />' +
+                '<div class="tip">Total seats in each row.</div>' +
+              '</div>' +
+              '<div data-layout-section="cabaret custom">' +
+                '<label>Number of tables</label><br />' +
+                '<input type="number" min="1" id="seatTables" value="20" />' +
+                '<div class="tip">Total tables in the room.</div>' +
+              '</div>' +
+              '<div data-layout-section="cabaret custom">' +
+                '<label>Seats per table</label><br />' +
+                '<input type="number" min="1" id="seatPerTable" value="6" />' +
+                '<div class="tip">Useful for round tables and booths.</div>' +
+              '</div>' +
+              '<div data-layout-section="standing">' +
+                '<label>Standing capacity</label><br />' +
+                '<input type="number" min="1" id="seatGaCapacity" value="400" />' +
+                '<div class="tip">Maximum number of people in the space.</div>' +
+              '</div>' +
+            '</div>' +
+            '<div class="seat-layout-wrap">' +
+              '<div class="seat-stage">' +
+                '<div>STAGE</div>' +
+                '<div class="seat-stage-bar"></div>' +
+              '</div>' +
+              '<div id="seatLayoutSummary" style="margin-top:10px;font-size:13px;color:#0f172a;">' +
+                'Layout summary will appear here.' +
+              '</div>' +
+              '<div id="seatLayoutPreview" style="margin-top:10px;"></div>' +
+            '</div>' +
+            '<div style="margin-top:12px;display:flex;justify-content:flex-end;gap:8px;">' +
+              '<button class="btn" id="seatWizardBackBtn">Back</button>' +
+              '<button class="btn p" id="seatWizardSaveBtn">Save layout</button>' +
+            '</div>' +
           '</div>' +
         '</div>' +
       '</div>';
+
+    const layoutCards = $$('.mode-card', main);
+    const rowsInput = $('#seatRows', main);
+    const perRowInput = $('#seatPerRow', main);
+    const tablesInput = $('#seatTables', main);
+    const perTableInput = $('#seatPerTable', main);
+    const gaCapInput = $('#seatGaCapacity', main);
+    const sections = $$('[data-layout-section]', main);
+    const summaryEl = $('#seatLayoutSummary', main);
+    const previewEl = $('#seatLayoutPreview', main);
+    const stepLabel = $('#seatStepLabel', main);
+    const backBtn = $('#seatWizardBackBtn', main);
+    const saveBtn = $('#seatWizardSaveBtn', main);
+
+    function applySectionVisibility(){
+      sections.forEach(function(sec){
+        const modes = (sec.getAttribute('data-layout-section') || '').split(/\s+/);
+        if (modes.indexOf(state.layout) !== -1){
+          sec.style.display = '';
+        } else {
+          sec.style.display = 'none';
+        }
+      });
+    }
+
+    function renderPreview(){
+      let total = 0;
+      let desc = '';
+
+      if (state.layout === 'theatre'){
+        total = (state.rows || 0) * (state.seatsPerRow || 0);
+        desc = 'Theatre rows · ' + state.rows + ' rows × ' + state.seatsPerRow + ' seats per row.';
+      } else if (state.layout === 'cabaret'){
+        total = (state.tables || 0) * (state.seatsPerTable || 0);
+        desc = 'Cabaret tables · ' + state.tables + ' tables × ' + state.seatsPerTable + ' seats per table.';
+      } else if (state.layout === 'standing'){
+        total = state.gaCapacity || 0;
+        desc = 'Standing / GA zone · capacity ' + total + '.';
+      } else {
+        const theatrePart = (state.rows || 0) * (state.seatsPerRow || 0);
+        const tablePart = (state.tables || 0) * (state.seatsPerTable || 0);
+        total = theatrePart + tablePart;
+        desc = 'Custom mix · ' + theatrePart + ' row seats plus ' + tablePart + ' table seats.';
+      }
+
+      summaryEl.textContent = 'Total seats: ' + total + '. ' + desc;
+
+      // Simple visual preview using the existing seat styles
+      previewEl.innerHTML = '';
+      if (state.layout === 'standing'){
+        previewEl.innerHTML =
+          '<div class="muted" style="font-size:13px;">Standing zone preview. People are free to move within the area.</div>';
+        return;
+      }
+
+      const maxSeatsToDraw = 220;
+      let seatsToDraw = total;
+      let trimmed = false;
+      if (seatsToDraw > maxSeatsToDraw){
+        seatsToDraw = maxSeatsToDraw;
+        trimmed = true;
+      }
+
+      const grid = document.createElement('div');
+      grid.className = 'seat-grid';
+
+      // Pick a rough column count so the grid looks reasonable
+      let cols = 10;
+      if (state.layout === 'cabaret'){ cols = 8; }
+      if (state.layout === 'custom'){ cols = 12; }
+
+      grid.style.gridTemplateColumns = 'repeat(' + cols + ', 1fr)';
+
+      for (let i = 0; i < seatsToDraw; i++){
+        const seat = document.createElement('div');
+        seat.className = 'seat';
+        seat.innerHTML = '&nbsp;';
+        grid.appendChild(seat);
+      }
+
+      previewEl.appendChild(grid);
+
+      if (trimmed){
+        const note = document.createElement('div');
+        note.className = 'tip';
+        note.textContent = 'Preview trimmed to ' + maxSeatsToDraw + ' seats for performance. Full capacity is ' + total + ' seats.';
+        previewEl.appendChild(note);
+      }
+    }
+
+    function setLayout(layout){
+      state.layout = layout;
+
+      layoutCards.forEach(function(card){
+        const isActive = card.getAttribute('data-layout-choice') === layout;
+        card.style.outline = isActive ? '2px solid #111827' : '';
+        card.style.backgroundColor = isActive ? '#e5e7eb' : '';
+      });
+
+      stepLabel.textContent = 'Step 2 of 2 · Configure your ' + layout + ' layout';
+      applySectionVisibility();
+      renderPreview();
+    }
+
+    layoutCards.forEach(function(card){
+      card.addEventListener('click', function(){
+        const layout = card.getAttribute('data-layout-choice');
+        if (layout){
+          setLayout(layout);
+        }
+      });
+    });
+
+    function wireNumberInput(el, key){
+      if (!el) return;
+      el.addEventListener('input', function(){
+        const v = parseInt(el.value, 10);
+        state[key] = isNaN(v) || v < 0 ? 0 : v;
+        renderPreview();
+      });
+    }
+
+    wireNumberInput(rowsInput, 'rows');
+    wireNumberInput(perRowInput, 'seatsPerRow');
+    wireNumberInput(tablesInput, 'tables');
+    wireNumberInput(perTableInput, 'seatsPerTable');
+
+    if (gaCapInput){
+      gaCapInput.addEventListener('input', function(){
+        const v = parseInt(gaCapInput.value, 10);
+        state.gaCapacity = isNaN(v) || v < 0 ? 0 : v;
+        renderPreview();
+      });
+    }
+
+    if (backBtn){
+      backBtn.addEventListener('click', function(){
+        // Go back to the ticket mode choice screen for this show
+        go('/admin/ui/shows/' + encodeURIComponent(eventId) + '/tickets');
+      });
+    }
+
+    if (saveBtn){
+      saveBtn.addEventListener('click', async function(){
+        // For now we just log the config and show a message.
+        // Later this will POST to something like /admin/events/:id/seat-map.
+        console.log('Seat layout config for event', eventId, state);
+        alert('Layout saved locally. We will wire this to a real seat-map endpoint so it can drive allocated seating at checkout.');
+      });
+    }
+
+    // Initial state
+    setLayout('theatre');
   }
+
 
   // -------- Other simple pages (placeholders) --------
 
