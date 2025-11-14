@@ -6,7 +6,14 @@ const router = Router();
 
 /** Single-page admin console at /admin/ui* */
 router.get(
-  ["/ui", "/ui/", "/ui/home", "/ui/*"],
+  [
+    "/ui",
+    "/ui/",
+    "/ui/home",
+    "/ui/*",
+    "/ui/events/:eventId",
+    "/ui/events/:eventId/*",
+  ],
   requireAdminOrOrganiser,
   (_req, res) => {
     res.set("Cache-Control", "no-store");
@@ -281,7 +288,7 @@ router.get(
   window.addEventListener('popstate', route);
 
   function route(){
-    const path = location.pathname.replace(/\/$/, '');
+    const path = location.pathname.replace(/\\/$/, '');
     setActive(path);
 
     if (path === '/admin/ui' || path === '/admin/ui/home' || path === '/admin/ui/index.html') return home();
@@ -293,6 +300,14 @@ router.get(
     if (path === '/admin/ui/audiences') return audiences();
     if (path === '/admin/ui/email') return emailPage();
     if (path === '/admin/ui/account') return account();
+
+    // NEW: support /admin/ui/events/:eventId/seat-map → seat map designer
+    if (path.startsWith('/admin/ui/events/') && path.endsWith('/seat-map')) {
+      // /admin/ui/events/:eventId/seat-map
+      const parts = path.split('/');
+      const eventId = parts[4]; // ['', 'admin', 'ui', 'events', ':eventId', 'seat-map']
+      return seatingPage(eventId);
+    }
 
     if (path.startsWith('/admin/ui/shows/') && path.endsWith('/edit')) return editShow(path.split('/')[4]);
     if (path.startsWith('/admin/ui/shows/') && path.endsWith('/tickets')) return ticketsPage(path.split('/')[4]);
