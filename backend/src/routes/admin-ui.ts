@@ -139,7 +139,7 @@ router.get(
     border-style:solid;
     border-color:#f97316;
   }
-    /* Generic layout elements (stage blocks, zones, tables, icons, labels) */
+  /* Generic layout elements (stage blocks, zones, tables, icons, labels) */
   .seat-el{
     position:absolute;
     cursor:move;
@@ -281,7 +281,7 @@ router.get(
   window.addEventListener('popstate', route);
 
   function route(){
-    const path = location.pathname.replace(/\\/$/, '');
+    const path = location.pathname.replace(/\/$/, '');
     setActive(path);
 
     if (path === '/admin/ui' || path === '/admin/ui/home' || path === '/admin/ui/index.html') return home();
@@ -1091,10 +1091,6 @@ router.get(
     const seatCanvas       = document.getElementById('seatCanvas');
     const saveLayoutBtn    = document.getElementById('sm_saveLayout');
 
-        const elPalette        = document.getElementById('el_palette');
-    const elInspector      = document.getElementById('el_inspector');
-
-
     const zoomInBtn        = document.getElementById('zoomInBtn');
     const zoomOutBtn       = document.getElementById('zoomOutBtn');
     const zoomResetBtn     = document.getElementById('zoomResetBtn');
@@ -1125,7 +1121,7 @@ router.get(
     let seats = [];
     let ticketTypes = [];
 
-        // --- Generic layout elements (stage, tables, toilets, etc.) ---
+    // --- Generic layout elements (stage, tables, toilets, etc.) ---
     const DEFAULT_ELEMENT_SPECS = {
       'stage-rect': { w: 140, h: 46, label: 'STAGE', kind: 'stage' },
       'zone-rect':  { w: 120, h: 60, label: '',      kind: 'zone-rect' },
@@ -1152,23 +1148,6 @@ router.get(
       if(!spec) return '';
       return spec.kind || '';
     }
-
-    function humanElementLabel(type){
-      switch(type){
-        case 'stage-rect': return 'Stage block';
-        case 'zone-rect': return 'Zone (rectangle)';
-        case 'zone-circle': return 'Zone (circle)';
-        case 'aisle-line': return 'Aisle / line';
-        case 'label': return 'Text label';
-        case 'toilets': return 'Toilets icon';
-        case 'stairs': return 'Stairs icon';
-        case 'table-round': return 'Round table';
-        case 'table-rect': return 'Rectangular table';
-        case 'sofa-2': return 'Sofa (2 seats)';
-        default: return type;
-      }
-    }
-
 
     // selection state
     const selectedSeatIds = new Set();
@@ -1271,7 +1250,7 @@ router.get(
       renderSeats();
     }
 
-    // --- Alignment guides (safety rails) ---
+    // --- Alignment guides ---
     const guideH = document.createElement('div');
     guideH.className = 'guide-line h';
     guideH.style.display = 'none';
@@ -1509,110 +1488,18 @@ router.get(
         return;
       }
 
-            // render seats
+      // First pass – ensure every seat has a meta
       seats.forEach(function(s){
         let pos = layout.seats[s.id];
         if(!pos){
-          pos = { x:40, y:30, rotation:0 };
+          pos = { x:40, y:30, rotation:0, ticketTypeId:null };
           layout.seats[s.id] = pos;
         }
-
-        const seatEl = document.createElement('div');
-        seatEl.className = 'seat';
-        if(s.status === 'BLOCKED') seatEl.classList.add('seat-blocked');
-        if(s.status === 'HELD')    seatEl.classList.add('seat-held');
-        if(s.status === 'SOLD')    seatEl.classList.add('seat-sold');
-
-        seatEl.setAttribute('data-seat-id', s.id);
-        seatEl.style.position = 'absolute';
-        seatEl.style.left = (pos.x - 9)+'px';
-        seatEl.style.top  = (pos.y - 9)+'px';
-
-        const labelRow  = s.rowLabel || s.row || '';
-        const labelSeat = (s.seatNumber != null ? s.seatNumber : s.number);
-        seatEl.title = labelRow+' '+labelSeat;
-        seatEl.textContent = labelSeat;
-
-        if(selectedSeatIds.has(s.id)){
-          seatEl.classList.add('seat-selected');
-        }
-
-        seatCanvas.appendChild(seatEl);
       });
 
-      // render generic layout elements on top
-      renderElements();
-
-      seatCanvas.appendChild(guideH);
-      seatCanvas.appendChild(guideV);
-    function renderElements(){
-      // remove any existing nodes
-      seatCanvas.querySelectorAll('.seat-el').forEach(function(n){ n.remove(); });
-
-      const elements = ensureElements();
-      if(!elements.length) return;
-
-      elements.forEach(function(el){
-        const node = document.createElement('div');
-        const kindClass = elementClassForType(el.type);
-        node.className = 'seat-el'+(kindClass ? ' '+kindClass : '');
-        if(selectedElementId === el.id) node.classList.add('selected');
-
-        node.dataset.elId = el.id;
-
-        const w = el.w || 40;
-        const h = el.h || 20;
-        node.style.left   = (el.x - w/2)+'px';
-        node.style.top    = (el.y - h/2)+'px';
-        node.style.width  = w+'px';
-        node.style.height = h+'px';
-
-        if(el.type === 'zone-circle'){
-          node.style.borderRadius = '999px';
-        }
-
-        // label / icon
-        node.textContent = el.label || '';
-
-        node.addEventListener('click', function(evt){
-          evt.stopPropagation();
-          selectedElementId = el.id;
-          renderElements();
-          renderElementInspector();
-        });
-
-        seatCanvas.appendChild(node);
-      });
-    }
-
-    function renderElementInspector(){
-      const elements = ensureElements();
-      const el = elements.find(function(e){ return e.id === selectedElementId; });
-      if(!el){
-        elInspector.innerHTML = '<div class="muted">Select an element to edit its label or properties.</div>';
-        return;
-      }
-
-      const safeLabel = (el.label || '').replace(/"/g,'&quot;');
-      let extra = '';
-
-      if(el.type === 'table-round' || el.type === 'table-rect'){
-        const chairs = (el.meta && el.meta.chairs) || '';
-        extra += ''
-          +'<div class="grid" style="margin-top:4px">'
-          +'<label>Chairs around table</label>'
-          +'<input id="el_chairs" type="number" min="1" max="24" value="'+chairs+'"/>'
-          +'</div>';
-      }
-
-      elInspector.innerHTML =
-        '<div style="margin-bottom:4px"><strong>'+humanElementLabel(el.type)+'</strong></div>'
-       +'<div class="grid" style="margin-bottom:4px">'
-
-
+      // If no positions stored at all, create a simple grid
       const hasPositions = Object.keys(layout.seats).length > 0;
       if(!hasPositions){
-        // Default grid positions if no layout yet
         const rowsMap = {};
         seats.forEach(function(s){
           const key = s.rowLabel || s.row || '';
@@ -1642,6 +1529,7 @@ router.get(
         });
       }
 
+      // Render seats
       seats.forEach(function(s){
         const meta = ensureSeatMeta(s.id);
         const pos = { x: meta.x, y: meta.y };
@@ -1673,6 +1561,9 @@ router.get(
 
         seatCanvas.appendChild(seatEl);
       });
+
+      // Render generic layout elements on top
+      renderElements();
 
       // Block overlays
       ensureLayout();
@@ -1722,6 +1613,44 @@ router.get(
 
       seatCanvas.appendChild(guideH);
       seatCanvas.appendChild(guideV);
+    }
+
+    function renderElements(){
+      // remove any existing nodes
+      seatCanvas.querySelectorAll('.seat-el').forEach(function(n){ n.remove(); });
+
+      const elements = ensureElements();
+      if(!elements.length) return;
+
+      elements.forEach(function(el){
+        const node = document.createElement('div');
+        const kindClass = elementClassForType(el.type);
+        node.className = 'seat-el'+(kindClass ? ' '+kindClass : '');
+        if(selectedElementId === el.id) node.classList.add('selected');
+
+        node.dataset.elId = el.id;
+
+        const w = el.w || 40;
+        const h = el.h || 20;
+        node.style.left   = (el.x - w/2)+'px';
+        node.style.top    = (el.y - h/2)+'px';
+        node.style.width  = w+'px';
+        node.style.height = h+'px';
+
+        if(el.type === 'zone-circle'){
+          node.style.borderRadius = '999px';
+        }
+
+        node.textContent = el.label || '';
+
+        node.addEventListener('click', function(evt){
+          evt.stopPropagation();
+          selectedElementId = el.id;
+          renderElements();
+        });
+
+        seatCanvas.appendChild(node);
+      });
     }
 
     // Switch between different maps
@@ -2124,9 +2053,7 @@ router.get(
     await loadTicketTypesForShow();
     reloadSeatMaps();
 
-    // --- Helper (for future) to check "no single gaps" in a row ---
-    // Example usage in purchase flow, not used here yet:
-    // given an array of seat numbers that are taken, and the new seats requested
+    // --- Helper for checkout "no single gaps" (not used on this page yet) ---
     // function wouldLeaveSingleGap(allSeatNumbers, currentlyTaken, requested){
     //   const taken = new Set(currentlyTaken.concat(requested));
     //   const sorted = allSeatNumbers.slice().sort((a,b)=>a-b);
@@ -2135,7 +2062,6 @@ router.get(
     //     if(taken.has(n)) continue;
     //     const leftTaken  = (i === 0) ? true : taken.has(sorted[i-1]);
     //     const rightTaken = (i === sorted.length-1) ? true : taken.has(sorted[i+1]);
-    //     // if free seat has taken (or aisle) both sides → orphan single
     //     if(leftTaken && rightTaken){
     //       return true;
     //     }
