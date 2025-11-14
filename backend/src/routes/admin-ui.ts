@@ -353,30 +353,73 @@ router.get(
     });
   }
 
-  // ---------- Create show ----------
+    // ---------- Create show ----------
   async function createShow(){
     main.innerHTML =
       '<div class="card">'
-        +'<div class="header"><div class="title">Create show</div></div>'
-        +'<div class="grid grid-2">'
-          +'<div class="grid"><label>Title</label><input id="sh_title" placeholder="e.g. Chuckl. Comedy Club"/></div>'
-          +'<div class="grid"><label>Date & time</label><input id="sh_dt" type="datetime-local"/></div>'
-          +'<div class="grid"><label>Venue</label><input id="venue_input" placeholder="Start typing a venue…"/><div class="tip">Pick an existing venue or just type a new one.</div></div>'
-          +'<div class="grid">'
-            +'<label>Poster image</label>'
-            +'<div id="drop" class="drop">Drop image here or click to choose</div>'
-            +'<input id="file" type="file" accept="image/*" style="display:none"/>'
-            +'<div class="progress" style="margin-top:8px"><div id="bar" class="bar"></div></div>'
-            +'<div class="row" style="margin-top:8px;gap:8px;align-items:center"><img id="prev" class="imgprev" alt=""/></div>'
+        +'<div class="header">'
+          +'<div>'
+            +'<div class="title">Add show</div>'
+            +'<div class="muted">Create the show, upload artwork and set up your first ticket type.</div>'
           +'</div>'
         +'</div>'
-        +'<div class="grid" style="margin-top:10px">'
-          +'<label>Description</label>'+editorToolbarHtml()
-          +'<div id="desc" data-editor contenteditable="true" style="min-height:120px;border:1px solid var(--border);border-radius:8px;padding:10px"></div>'
-          +'<div class="muted">Event description (required). Use the toolbar to format.</div>'
+
+        +'<div class="grid grid-2" style="margin-bottom:12px">'
+          +'<div class="grid">'
+            +'<label>Title</label>'
+            +'<input id="sh_title" placeholder="e.g. Chuckl. Comedy Club" />'
+            +'<label style="margin-top:10px">Venue</label>'
+            +'<input id="venue_input" placeholder="Start typing a venue…" />'
+            +'<div class="tip">Pick an existing venue or create a new one.</div>'
+          +'</div>'
+
+          +'<div class="grid">'
+            +'<label>Date & time</label>'
+            +'<input id="sh_dt" type="datetime-local" />'
+            +'<label style="margin-top:10px">Poster image</label>'
+            +'<div id="drop" class="drop">Drop image here or click to choose</div>'
+            +'<input id="file" type="file" accept="image/*" style="display:none" />'
+            +'<div class="progress" style="margin-top:8px"><div id="bar" class="bar"></div></div>'
+            +'<div class="row" style="margin-top:8px;gap:8px;align-items:center">'
+              +'<img id="prev" class="imgprev" alt="" />'
+            +'</div>'
+          +'</div>'
         +'</div>'
-        +'<div class="row" style="margin-top:10px">'
-          +'<button id="save" class="btn p">Save show and add tickets</button>'
+
+        +'<div class="grid" style="margin-top:10px;margin-bottom:16px">'
+          +'<label>Description (optional)</label>'
+          + editorToolbarHtml()
+          +'<div id="desc" data-editor contenteditable="true" '
+            +'style="min-height:120px;border:1px solid var(--border);border-radius:8px;padding:10px"></div>'
+          +'<div class="muted">Use the toolbar to format your event description.</div>'
+        +'</div>'
+
+        +'<div class="card" style="margin:0;margin-bottom:16px">'
+          +'<div class="title" style="margin-bottom:4px">First ticket type</div>'
+          +'<div class="muted" style="margin-bottom:8px;font-size:13px">'
+            +'Optional, but recommended. You can add more ticket types on the next screen.'
+          +'</div>'
+          +'<div class="grid grid-3">'
+            +'<div class="grid">'
+              +'<label>Name</label>'
+              +'<input id="ft_name" placeholder="e.g. General Admission" value="General Admission" />'
+            +'</div>'
+            +'<div class="grid">'
+              +'<label>Price (£)</label>'
+              +'<input id="ft_price" type="number" min="0" step="0.01" placeholder="e.g. 25" />'
+            +'</div>'
+            +'<div class="grid">'
+              +'<label>Allocation (optional)</label>'
+              +'<input id="ft_allocation" type="number" min="0" step="1" placeholder="e.g. 300" />'
+            +'</div>'
+          +'</div>'
+          +'<div class="tip" style="margin-top:6px;font-size:12px">'
+            +'Leave these blank if you prefer to set up all tickets on the next page.'
+          +'</div>'
+        +'</div>'
+
+        +'<div class="row" style="margin-top:6px">'
+          +'<button id="save" class="btn p">Create show</button>'
           +'<div id="err" class="error"></div>'
         +'</div>'
       +'</div>';
@@ -384,19 +427,28 @@ router.get(
     bindWysiwyg(main);
     mountVenuePicker($('#venue_input'));
 
-    const drop = $('#drop'), file = $('#file'), bar = $('#bar'), prev = $('#prev');
+    const drop = $('#drop');
+    const file = $('#file');
+    const bar  = $('#bar');
+    const prev = $('#prev');
 
     drop.addEventListener('click', function(){ file.click(); });
-    drop.addEventListener('dragover', function(e){ e.preventDefault(); drop.classList.add('drag'); });
-    drop.addEventListener('dragleave', function(){ drop.classList.remove('drag'); });
+    drop.addEventListener('dragover', function(e){
+      e.preventDefault();
+      drop.classList.add('drag');
+    });
+    drop.addEventListener('dragleave', function(){
+      drop.classList.remove('drag');
+    });
     drop.addEventListener('drop', async function(e){
-      e.preventDefault(); drop.classList.remove('drag');
+      e.preventDefault();
+      drop.classList.remove('drag');
       const f = e.dataTransfer.files && e.dataTransfer.files[0];
-      if(f) await doUpload(f);
+      if (f) await doUpload(f);
     });
     file.addEventListener('change', async function(){
       const f = file.files && file.files[0];
-      if(f) await doUpload(f);
+      if (f) await doUpload(f);
     });
 
     async function doUpload(f){
@@ -407,40 +459,104 @@ router.get(
         prev.src = out.url;
         prev.style.display = 'block';
         bar.style.width = '100%';
-        setTimeout(function(){ bar.style.width='0%'; },800);
+        setTimeout(function(){ bar.style.width = '0%'; }, 800);
       }catch(e){
         bar.style.width = '0%';
-        $('#err').textContent = 'Upload failed: '+(e.message||e);
+        $('#err').textContent = 'Upload failed: ' + (e.message || e);
       }
     }
 
     $('#save').addEventListener('click', async function(){
-      $('#err').textContent = '';
+      const errEl = $('#err');
+      errEl.textContent = '';
+
       try{
-        const payload = {
-          title: $('#sh_title').value.trim(),
-          date: $('#sh_dt').value ? new Date($('#sh_dt').value).toISOString() : null,
-          venueText: $('#venue_input').value.trim(),
-          venueId: $('#venue_input').dataset.venueId || null,
-          imageUrl: $('#prev').src || null,
-          descriptionHtml: $('#desc').innerHTML.trim()
-        };
-        if(!payload.title || !payload.date || !payload.venueText || !payload.descriptionHtml){
-          throw new Error('Title, date/time, venue and description are required');
+        const title      = $('#sh_title').value.trim();
+        const dtRaw      = $('#sh_dt').value;
+        const venueInput = $('#venue_input');
+        const venueText  = venueInput.value.trim();
+        const venueId    = venueInput.dataset.venueId || null;
+        const imageUrl   = $('#prev').src || null;
+        const descHtml   = $('#desc').innerHTML.trim();
+
+        if (!title || !dtRaw || !venueText){
+          throw new Error('Title, date/time and venue are required');
         }
-        const r = await j('/admin/shows',{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify(payload)
+
+        const dateIso = new Date(dtRaw).toISOString();
+
+        // First ticket type fields (optional)
+        const ftName        = $('#ft_name').value.trim();
+        const ftPriceStr    = $('#ft_price').value.trim();
+        const ftAllocStr    = $('#ft_allocation').value.trim();
+
+        let firstTicketPayload = null;
+        if (ftName || ftPriceStr || ftAllocStr){
+          let pricePence = 0;
+          if (ftPriceStr){
+            const p = Number(ftPriceStr);
+            if (!Number.isFinite(p) || p < 0){
+              throw new Error('First ticket price must be a non-negative number');
+            }
+            pricePence = Math.round(p * 100);
+          }
+          let available = null;
+          if (ftAllocStr){
+            const a = Number(ftAllocStr);
+            if (!Number.isFinite(a) || a < 0){
+              throw new Error('First ticket allocation must be a non-negative number');
+            }
+            available = a;
+          }
+
+          firstTicketPayload = {
+            name: ftName || 'General Admission',
+            pricePence,
+            available
+          };
+        }
+
+        // Create the show
+        const showRes = await j('/admin/shows', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title,
+            date: dateIso,
+            venueText,
+            venueId,
+            imageUrl,
+            descriptionHtml: descHtml
+          })
         });
-        if(r && r.ok && r.id){
-          // After creating the show, go straight to the "Add tickets" page
-          go('/admin/ui/shows/'+r.id+'/tickets');
-        }else{
-          throw new Error((r && r.error) || 'Failed to create show');
+
+        if (!showRes || !showRes.ok || !showRes.id){
+          throw new Error((showRes && showRes.error) || 'Failed to create show');
         }
+
+        const showId = showRes.id;
+
+        // Optionally create the first ticket type
+        if (firstTicketPayload){
+          try{
+            await j('/admin/shows/' + showId + '/ticket-types', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(firstTicketPayload)
+            });
+          }catch(ttErr){
+            alert(
+              'Show created, but the first ticket type could not be saved: '
+              + (ttErr.message || ttErr)
+              + '. You can add it manually on the Tickets page.'
+            );
+          }
+        }
+
+        // Go straight into the new Tickets page wizard
+        go('/admin/ui/shows/' + showId + '/tickets');
       }catch(e){
-        $('#err').textContent = e.message || String(e);
+        errEl.textContent = e.message || String(e);
       }
     });
   }
