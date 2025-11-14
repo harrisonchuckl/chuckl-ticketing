@@ -397,7 +397,7 @@ router.get(
     }
   }
 
-  function mountVenuePicker(input){
+    function mountVenuePicker(input){
     const container = document.createElement('div');
     container.style.position = 'relative';
     input.parentNode.insertBefore(container, input);
@@ -407,15 +407,18 @@ router.get(
     pop.className = 'pop';
     container.appendChild(pop);
 
-    function close(){ pop.classList.remove('open'); }
+    function close(){
+      pop.classList.remove('open');
+    }
 
-    function render(list,q){
+    function render(list, q){
       pop.innerHTML = '';
-      if(list.length){
+
+      if (list && list.length){
         list.forEach(function(v){
           const el = document.createElement('div');
           el.className = 'opt';
-          el.textContent = (v.name || '') + (v.city ? (' — '+v.city) : '');
+          el.textContent = (v.name || '') + (v.city ? (' — ' + v.city) : '');
           el.addEventListener('click', function(){
             input.value = v.name || '';
             input.dataset.venueId = v.id;
@@ -424,31 +427,37 @@ router.get(
           pop.appendChild(el);
         });
       }
-      if(q && !list.some(function(v){ return (v.name || '').toLowerCase() === q.toLowerCase(); })){
+
+      // "Create venue" option if there’s no exact name match
+      if (q && !(list || []).some(function(v){
+        return (v.name || '').toLowerCase() === q.toLowerCase();
+      })){
         const add = document.createElement('div');
         add.className = 'opt';
-        add.innerHTML = '➕ Create venue “‘ + q + '”';
+        // fixed string quoting here:
+        add.innerHTML = '➕ Create venue “' + q + '”';
         add.addEventListener('click', async function(){
           try{
-            const created = await j('/admin/venues',{
+            const created = await j('/admin/venues', {
               method:'POST',
               headers:{'Content-Type':'application/json'},
               body: JSON.stringify({ name: q })
             });
-            if(created && created.ok && created.venue){
+            if (created && created.ok && created.venue){
               input.value = created.venue.name || '';
               input.dataset.venueId = created.venue.id;
-            }else{
+            } else {
               alert('Failed to create venue');
             }
-          }catch(err){
-            alert('Create failed: '+(err && err.message ? err.message : String(err)));
+          } catch(err){
+            alert('Create failed: ' + (err && err.message ? err.message : String(err)));
           }
           close();
         });
         pop.appendChild(add);
       }
-      if(pop.children.length){
+
+      if (pop.children.length){
         pop.classList.add('open');
       } else {
         pop.classList.remove('open');
@@ -456,51 +465,37 @@ router.get(
     }
 
     let debounceTimer = null;
+
     input.addEventListener('input', function(){
       const q = input.value.trim();
-      if(!q){
+
+      if (!q){
         pop.innerHTML = '';
         pop.classList.remove('open');
         delete input.dataset.venueId;
         return;
       }
-      if(debounceTimer){ clearTimeout(debounceTimer); }
+
+      if (debounceTimer){ clearTimeout(debounceTimer); }
       debounceTimer = setTimeout(async function(){
         const list = await searchVenues(q);
-        render(list,q);
+        render(list, q);
       }, 200);
     });
 
-    input.addEventListener('blur', function(){
-      setTimeout(close, 150);
-    });
-  }
-
-    if(pop.children.length){
-        pop.classList.add('open');
-      } else {
-        pop.classList.remove('open');
-      }
-    }
-
-    let debounceTimer = null;
-    input.addEventListener('input', function(){
+    // On focus, show current suggestions if any text already typed
+    input.addEventListener('focus', async function(){
       const q = input.value.trim();
-      if(!q){
-        pop.innerHTML = '';
-        pop.classList.remove('open');
-        delete input.dataset.venueId;
-        return;
-      }
-      if(debounceTimer){ clearTimeout(debounceTimer); }
-      debounceTimer = setTimeout(async function(){
-        const list = await searchVenues(q);
-        render(list,q);
-      }, 200);
+      if (!q) return;
+      const list = await searchVenues(q);
+      render(list, q);
     });
 
-    input.addEventListener('blur', function(){
-      setTimeout(close, 150);
+    // Click outside to close
+    document.addEventListener('click', function(e){
+      if (!container.contains(e.target)){
+        close();
+      }
     });
   }
 
@@ -513,6 +508,7 @@ router.get(
       .replace(/"/g,'&quot;')
       .replace(/'/g,'&#39;');
   }
+
 
   function showMessage(title, body){
     main.innerHTML =
