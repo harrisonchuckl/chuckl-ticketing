@@ -104,7 +104,7 @@ router.get(
   .seat-legend{font-size:12px;color:#e5e7eb;display:flex;gap:12px;flex-wrap:wrap;margin-top:4px}
   .seat-legend span{display:inline-flex;align-items:center;gap:4px}
   .seat-grid{display:inline-grid;gap:4px;margin-top:4px}
-  .seat{width:18px;height:18px;border-radius:4px;background:var(--seat-bg);border:1px solid var(--seat-border);display:flex;align-items:center;justify-content:center;font-size:10px;cursor:pointer;transition:transform .05s ease-out,box-shadow .05s ease-out}
+  .seat{width:18px;height:18px;border-radius:4px;background:var(--seat-bg);border:1px solid var(--seat-border);display:flex;align-items:center;justify-content:center;font-size:10px;cursor:pointer;transition:transform .05s.ease-out,box-shadow .05s.ease-out}
   .seat:hover{transform:translateY(-1px);box-shadow:0 1px 2px rgba(0,0,0,.45)}
   .seat-blocked{background:#0f172a;border-color:#0b1120}
   .seat-held{background:#f59e0b;border-color:#92400e}
@@ -353,7 +353,7 @@ router.get(
     });
   }
 
-    // ---------- Create show ----------
+  // ---------- Create show ----------
   async function createShow(){
     main.innerHTML =
       '<div class="card">'
@@ -419,7 +419,7 @@ router.get(
         +'</div>'
 
         +'<div class="row" style="margin-top:6px">'
-          +'<button id="save" class="btn p">Create show</button>'
+          +'<button id="save" class="btn p">Save show and add tickets</button>'
           +'<div id="err" class="error"></div>'
         +'</div>'
       +'</div>';
@@ -516,7 +516,7 @@ router.get(
           };
         }
 
-        // Create the show
+        // Create the show (tolerant to different JSON shapes)
         const showRes = await j('/admin/shows', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -530,11 +530,20 @@ router.get(
           })
         });
 
-        if (!showRes || !showRes.ok || !showRes.id){
-          throw new Error((showRes && showRes.error) || 'Failed to create show');
+        if (showRes && showRes.error) {
+          throw new Error(showRes.error);
         }
 
-        const showId = showRes.id;
+        const showId =
+          (showRes && (
+            showRes.id ||
+            (showRes.show && showRes.show.id) ||
+            (showRes.item && showRes.item.id)
+          )) || null;
+
+        if (!showId){
+          throw new Error('Failed to create show (no id returned from server)');
+        }
 
         // Optionally create the first ticket type
         if (firstTicketPayload){
@@ -1662,8 +1671,19 @@ router.get(
         });
         smName.value = '';
         await reloadSeatMaps();
-        currentSeatMapId = created.id;
-        smSelect.value = currentSeatMapId;
+        const newId =
+          (created && (
+            created.id ||
+            (created.map && created.map.id) ||
+            (created.item && created.item.id)
+          )) || null;
+        if(newId){
+          currentSeatMapId = newId;
+          smSelect.value = currentSeatMapId;
+        } else if (seatMapsData[0]) {
+          currentSeatMapId = seatMapsData[0].id;
+          smSelect.value = currentSeatMapId;
+        }
         layout = { seats:{}, elements:[] };
         clearSelection();
         await reloadSeats();
