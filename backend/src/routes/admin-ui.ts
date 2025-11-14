@@ -1,4 +1,4 @@
-// backend/src/routes/admin-ui.ts – CHUNK 1/3
+// backend/src/routes/admin-ui.ts
 import { Router } from "express";
 import { requireAdminOrOrganiser } from "../lib/authz.js";
 
@@ -6,14 +6,7 @@ const router = Router();
 
 /** Single-page admin console at /admin/ui* */
 router.get(
-  [
-    "/ui",
-    "/ui/",
-    "/ui/home",
-    "/ui/*",
-    "/ui/events/:eventId",
-    "/ui/events/:eventId/*",
-  ],
+  ["/ui", "/ui/", "/ui/home", "/ui/*"],
   requireAdminOrOrganiser,
   (_req, res) => {
     res.set("Cache-Control", "no-store");
@@ -69,28 +62,16 @@ router.get(
   .opt:hover{background:#f8fafc}
   .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--border);background:#f9fafb}
 
-  .tab-strip{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:4px}
-  .tab-btn{flex:1;appearance:none;border:none;background:transparent;padding:6px 8px;font-size:13px;border-radius:8px 8px 0 0;cursor:pointer;color:var(--muted)}
-  .tab-btn.active{background:#e5e7eb;color:var(--ink);font-weight:500}
-  .tab-pane{display:none;margin-top:4px}
-  .tab-pane.active{display:block}
-
-  /* Seat layout canvas + tools */
   .seat-layout-wrap{
-    background:#f9fafb;
-    background-image:
-      linear-gradient(#e5e7eb 1px, transparent 1px),
-      linear-gradient(90deg, #e5e7eb 1px, transparent 1px);
-    background-size:24px 24px;
+    background:#020617;
     border-radius:12px;
     padding:16px;
-    color:#0f172a;
-    min-height:360px;
+    color:#e5e7eb;
+    min-height:320px;
     display:flex;
     flex-direction:column;
     gap:12px;
     position:relative;
-    overflow:auto;
   }
   #seatCanvas{
     position:relative;
@@ -98,7 +79,7 @@ router.get(
     min-height:220px;
     transform-origin:0 0;
   }
-  .guide-line{position:absolute;background:rgba(148,163,184,.7);pointer-events:none;z-index:5}
+  .guide-line{position:absolute;background:rgba(248,250,252,.85);pointer-events:none;z-index:5}
   .guide-line.h{height:1px;width:100%}
   .guide-line.v{width:1px;height:100%}
 
@@ -114,26 +95,13 @@ router.get(
     padding:4px 8px;
     font-size:12px;
   }
-  .seat-stage{
-    font-size:12px;
-    text-align:center;
-    letter-spacing:.12em;
-    text-transform:uppercase;
-    color:#0f172a;
-  }
+  .seat-stage{font-size:12px;text-align:center;letter-spacing:.12em;text-transform:uppercase;color:#e5e7eb}
   .seat-stage-bar{margin-top:4px;height:6px;border-radius:999px;background:rgba(148,163,184,.35)}
   .seat-dot{width:12px;height:12px;border-radius:3px;background:var(--seat-bg);border:1px solid var(--seat-border)}
   .seat-dot.block{background:#0f172a;border-color:#0b1120}
   .seat-dot.held{background:#f59e0b;border-color:#92400e}
   .seat-dot.sold{background:#9ca3af;border-color:#4b5563}
-  .seat-legend{
-    font-size:12px;
-    color:#0f172a;
-    display:flex;
-    gap:12px;
-    flex-wrap:wrap;
-    margin-top:4px;
-  }
+  .seat-legend{font-size:12px;color:#e5e7eb;display:flex;gap:12px;flex-wrap:wrap;margin-top:4px}
   .seat-legend span{display:inline-flex;align-items:center;gap:4px}
   .seat-grid{display:inline-grid;gap:4px;margin-top:4px}
   .seat{width:18px;height:18px;border-radius:4px;background:var(--seat-bg);border:1px solid var(--seat-border);display:flex;align-items:center;justify-content:center;font-size:10px;cursor:pointer;transition:transform .05s ease-out,box-shadow .05s ease-out}
@@ -147,7 +115,7 @@ router.get(
   .seat-block-overlay{
     position:absolute;
     border:1px dashed rgba(148,163,184,.9);
-    background:rgba(148,163,184,.12);
+    background:rgba(15,23,42,.35);
     border-radius:8px;
     padding:4px 6px;
     box-sizing:border-box;
@@ -156,7 +124,7 @@ router.get(
     align-items:flex-start;
     justify-content:space-between;
     font-size:11px;
-    color:#0f172a;
+    color:#e5e7eb;
     pointer-events:auto;
   }
   .seat-block-overlay-label{
@@ -170,103 +138,6 @@ router.get(
   .seat-block-overlay.selected{
     border-style:solid;
     border-color:#f97316;
-  }
-
-  /* Generic layout elements (stage blocks, zones, tables, icons, labels) */
-  .seat-el{
-    position:absolute;
-    cursor:move;
-    font-size:11px;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    border-radius:6px;
-    border:1px solid rgba(148,163,184,.85);
-    background:rgba(255,255,255,.9);
-    color:#0f172a;
-    padding:2px 4px;
-    box-sizing:border-box;
-    user-select:none;
-  }
-  .seat-el.stage{
-    background:#e5f3ff;
-    color:#0f172a;
-    border-color:#60a5fa;
-    font-weight:600;
-    letter-spacing:.08em;
-    text-transform:uppercase;
-  }
-  .seat-el.zone-rect{
-    background:rgba(56,189,248,.08);
-    border-style:dashed;
-  }
-  .seat-el.zone-circle{
-    background:rgba(74,222,128,.08);
-    border-radius:999px;
-    border-style:dashed;
-  }
-  .seat-el.aisle{
-    height:2px;
-    padding:0;
-    border-radius:999px;
-    background:#e5e7eb;
-    border:none;
-  }
-  .seat-el.label{
-    background:transparent;
-    border:none;
-    color:#0f172a;
-    font-weight:500;
-  }
-  .seat-el.small-icon{
-    width:18px;
-    height:18px;
-    border-radius:999px;
-    font-size:10px;
-  }
-  .seat-el.table{
-    background:rgba(148,163,184,.25);
-  }
-  .seat-el.sofa{
-    background:#e5e7eb;
-    border-radius:999px;
-  }
-  .seat-el.selected{
-    outline:2px solid #f97316;
-    outline-offset:2px;
-  }
-
-  /* NEW: ticket mode choice (two big squares) */
-  .mode-choice-wrap{
-    display:grid;
-    grid-template-columns:repeat(2,minmax(0,1fr));
-    gap:16px;
-    margin-top:16px;
-  }
-  .mode-card{
-    border-radius:12px;
-    border:1px solid var(--border);
-    padding:18px 16px;
-    text-align:left;
-    cursor:pointer;
-    background:#f9fafb;
-    transition:background .12s ease,box-shadow .12s ease,transform .12s ease;
-  }
-  .mode-card:hover{
-    background:#eef2ff;
-    box-shadow:0 10px 25px rgba(15,23,42,.08);
-    transform:translateY(-1px);
-  }
-  .mode-card-title{font-weight:600;margin-bottom:4px;}
-  .mode-card-body{font-size:13px;color:var(--muted);margin-bottom:8px;}
-  .mode-card-tag{
-    display:inline-block;
-    margin-top:4px;
-    padding:2px 8px;
-    border-radius:999px;
-    font-size:11px;
-    background:#e5e7eb;
-    color:#111827;
   }
 </style>
 </head>
@@ -304,19 +175,17 @@ router.get(
 
 <script>
 (function(){
-  const $ = function(sel,root){ return (root||document).querySelector(sel); };
-  const $$ = function(sel,root){ return Array.prototype.slice.call((root||document).querySelectorAll(sel)); };
+  const $ = (s,r=document)=>r.querySelector(s);
+  const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
   const main = $('#main');
 
   // Sidebar nested menu
   const showsToggle = $('#showsToggle');
   const showsSub = $('#showsSub');
-  if (showsToggle && showsSub) {
-    showsToggle.addEventListener('click', function(e){
-      e.preventDefault();
-      showsSub.style.display = showsSub.style.display === 'none' ? 'block' : 'none';
-    });
-  }
+  showsToggle.addEventListener('click', function(e){
+    e.preventDefault();
+    showsSub.style.display = showsSub.style.display === 'none' ? 'block' : 'none';
+  });
 
   function setActive(path){
     $$('.sb-link').forEach(function(a){
@@ -348,7 +217,8 @@ router.get(
   window.addEventListener('popstate', route);
 
   function route(){
-    const path = location.pathname.replace(/\\/$/, '');
+    // normalise any trailing slash
+    const path = location.pathname.replace(/\/$/, '');
     setActive(path);
 
     if (path === '/admin/ui' || path === '/admin/ui/home' || path === '/admin/ui/index.html') return home();
@@ -361,23 +231,9 @@ router.get(
     if (path === '/admin/ui/email') return emailPage();
     if (path === '/admin/ui/account') return account();
 
-    // NEW: ticket mode + unallocated / allocated
-    if (path.startsWith('/admin/ui/shows/') && path.endsWith('/tickets/unallocated')) {
-      return ticketsPage(path.split('/')[4]);
-    }
-    if (path.startsWith('/admin/ui/shows/') && path.endsWith('/tickets')) {
-      return ticketModePage(path.split('/')[4]);
-    }
-
-    // seat-map designer (allocated seating path)
-    if (path.startsWith('/admin/ui/events/') && path.endsWith('/seat-map')) {
-      const parts = path.split('/');
-      const eventId = parts[4]; // ['', 'admin', 'ui', 'events', ':eventId', 'seat-map']
-      return seatingPage(eventId);
-    }
-
     if (path.startsWith('/admin/ui/shows/') && path.endsWith('/edit')) return editShow(path.split('/')[4]);
-    if (path.startsWith('/admin/ui/shows/') && path.endsWith('/seating')) return seatingPage(path.split('/')[4]); // legacy alias
+    if (path.startsWith('/admin/ui/shows/') && path.endsWith('/tickets')) return ticketsPage(path.split('/')[4]);
+    if (path.startsWith('/admin/ui/shows/') && path.endsWith('/seating')) return seatingPage(path.split('/')[4]);
 
     return home();
   }
@@ -397,7 +253,7 @@ router.get(
     }
   }
 
-    function mountVenuePicker(input){
+  function mountVenuePicker(input){
     const container = document.createElement('div');
     container.style.position = 'relative';
     input.parentNode.insertBefore(container, input);
@@ -407,771 +263,1688 @@ router.get(
     pop.className = 'pop';
     container.appendChild(pop);
 
-    function close(){
-      pop.classList.remove('open');
-    }
+    function close(){ pop.classList.remove('open'); }
 
-    function render(list, q){
+    function render(list,q){
       pop.innerHTML = '';
-
-      if (list && list.length){
+      if(list.length){
         list.forEach(function(v){
           const el = document.createElement('div');
           el.className = 'opt';
-          el.textContent = (v.name || '') + (v.city ? (' — ' + v.city) : '');
+          el.textContent = v.name + (v.city ? (' — '+v.city) : '');
           el.addEventListener('click', function(){
-            input.value = v.name || '';
+            input.value = v.name;
             input.dataset.venueId = v.id;
             close();
           });
           pop.appendChild(el);
         });
       }
-
-      // "Create venue" option if there’s no exact name match
-      if (q && !(list || []).some(function(v){
-        return (v.name || '').toLowerCase() === q.toLowerCase();
-      })){
+      if(q && !list.some(function(v){ return (v.name || '').toLowerCase() === q.toLowerCase(); })){
         const add = document.createElement('div');
         add.className = 'opt';
-        // fixed string quoting here:
-        add.innerHTML = '➕ Create venue “' + q + '”';
+        add.innerHTML = '➕ Create venue “'+q+'”';
         add.addEventListener('click', async function(){
           try{
-            const created = await j('/admin/venues', {
+            const created = await j('/admin/venues',{
               method:'POST',
               headers:{'Content-Type':'application/json'},
               body: JSON.stringify({ name: q })
             });
-            if (created && created.ok && created.venue){
-              input.value = created.venue.name || '';
+            if(created && created.ok && created.venue){
+              input.value = created.venue.name;
               input.dataset.venueId = created.venue.id;
-            } else {
+            }else{
               alert('Failed to create venue');
             }
-          } catch(err){
-            alert('Create failed: ' + (err && err.message ? err.message : String(err)));
+          }catch(err){
+            alert('Create failed: '+(err.message||err));
           }
           close();
         });
         pop.appendChild(add);
       }
-
-      if (pop.children.length){
-        pop.classList.add('open');
-      } else {
-        pop.classList.remove('open');
-      }
+      if(pop.children.length){ pop.classList.add('open'); } else { close(); }
     }
 
-    let debounceTimer = null;
-
-    input.addEventListener('input', function(){
+    input.addEventListener('input', async function(){
+      input.dataset.venueId = '';
       const q = input.value.trim();
-
-      if (!q){
-        pop.innerHTML = '';
-        pop.classList.remove('open');
-        delete input.dataset.venueId;
-        return;
-      }
-
-      if (debounceTimer){ clearTimeout(debounceTimer); }
-      debounceTimer = setTimeout(async function(){
-        const list = await searchVenues(q);
-        render(list, q);
-      }, 200);
+      if(!q){ close(); return; }
+      render(await searchVenues(q), q);
     });
-
-    // On focus, show current suggestions if any text already typed
     input.addEventListener('focus', async function(){
       const q = input.value.trim();
-      if (!q) return;
-      const list = await searchVenues(q);
-      render(list, q);
+      if(!q) return;
+      render(await searchVenues(q), q);
+    });
+    document.addEventListener('click', function(e){
+      if(!pop.contains(e.target) && e.target !== input) close();
+    });
+  }
+
+  // ---------- Upload helper ----------
+  async function uploadPoster(file){
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch('/admin/uploads',{ method:'POST', body: form, credentials:'include' });
+    const txt = await res.text();
+    if(!res.ok) throw new Error(txt || ('HTTP '+res.status));
+    const data = txt ? JSON.parse(txt) : {};
+    if(!data.ok || !data.url) throw new Error('Unexpected upload response');
+    return data;
+  }
+
+  function editorToolbarHtml(){
+    return '<div class="row" style="gap:6px;margin-bottom:6px">'
+      +'<button type="button" class="btn" data-cmd="bold">B</button>'
+      +'<button type="button" class="btn" data-cmd="italic"><span style="font-style:italic">I</span></button>'
+      +'<button type="button" class="btn" data-cmd="underline"><span style="text-decoration:underline">U</span></button>'
+      +'<button type="button" class="btn" data-cmd="insertUnorderedList">• List</button>'
+      +'<button type="button" class="btn" data-cmd="insertOrderedList">1. List</button>'
+      +'</div>';
+  }
+
+  function bindWysiwyg(container){
+    container.querySelectorAll('[data-cmd]').forEach(function(b){
+      b.addEventListener('click', function(){
+        document.execCommand(b.getAttribute('data-cmd'));
+      });
+    });
+  }
+
+  // ---------- Create show ----------
+  async function createShow(){
+    main.innerHTML =
+      '<div class="card">'
+        +'<div class="header"><div class="title">Create show</div></div>'
+        +'<div class="grid grid-2">'
+          +'<div class="grid"><label>Title</label><input id="sh_title" placeholder="e.g. Chuckl. Comedy Club"/></div>'
+          +'<div class="grid"><label>Date & time</label><input id="sh_dt" type="datetime-local"/></div>'
+          +'<div class="grid"><label>Venue</label><input id="venue_input" placeholder="Start typing a venue…"/><div class="tip">Pick an existing venue or just type a new one.</div></div>'
+          +'<div class="grid">'
+            +'<label>Poster image</label>'
+            +'<div id="drop" class="drop">Drop image here or click to choose</div>'
+            +'<input id="file" type="file" accept="image/*" style="display:none"/>'
+            +'<div class="progress" style="margin-top:8px"><div id="bar" class="bar"></div></div>'
+            +'<div class="row" style="margin-top:8px;gap:8px;align-items:center"><img id="prev" class="imgprev" alt=""/></div>'
+          +'</div>'
+        +'</div>'
+        +'<div class="grid" style="margin-top:10px">'
+          +'<label>Description</label>'+editorToolbarHtml()
+          +'<div id="desc" data-editor contenteditable="true" style="min-height:120px;border:1px solid var(--border);border-radius:8px;padding:10px"></div>'
+          +'<div class="muted">Event description (required). Use the toolbar to format.</div>'
+        +'</div>'
+        +'<div class="row" style="margin-top:10px">'
+          +'<button id="save" class="btn p">Save show and add tickets</button>'
+          +'<div id="err" class="error"></div>'
+        +'</div>'
+      +'</div>';
+
+    bindWysiwyg(main);
+    mountVenuePicker($('#venue_input'));
+
+    const drop = $('#drop'), file = $('#file'), bar = $('#bar'), prev = $('#prev');
+
+    drop.addEventListener('click', function(){ file.click(); });
+    drop.addEventListener('dragover', function(e){ e.preventDefault(); drop.classList.add('drag'); });
+    drop.addEventListener('dragleave', function(){ drop.classList.remove('drag'); });
+    drop.addEventListener('drop', async function(e){
+      e.preventDefault(); drop.classList.remove('drag');
+      const f = e.dataTransfer.files && e.dataTransfer.files[0];
+      if(f) await doUpload(f);
+    });
+    file.addEventListener('change', async function(){
+      const f = file.files && file.files[0];
+      if(f) await doUpload(f);
     });
 
-    // Click outside to close
-    document.addEventListener('click', function(e){
-      if (!container.contains(e.target)){
-        close();
+    async function doUpload(f){
+      $('#err').textContent = '';
+      bar.style.width = '15%';
+      try{
+        const out = await uploadPoster(f);
+        prev.src = out.url;
+        prev.style.display = 'block';
+        bar.style.width = '100%';
+        setTimeout(function(){ bar.style.width='0%'; },800);
+      }catch(e){
+        bar.style.width = '0%';
+        $('#err').textContent = 'Upload failed: '+(e.message||e);
+      }
+    }
+
+    $('#save').addEventListener('click', async function(){
+      $('#err').textContent = '';
+      try{
+        const payload = {
+          title: $('#sh_title').value.trim(),
+          date: $('#sh_dt').value ? new Date($('#sh_dt').value).toISOString() : null,
+          venueText: $('#venue_input').value.trim(),
+          venueId: $('#venue_input').dataset.venueId || null,
+          imageUrl: $('#prev').src || null,
+          descriptionHtml: $('#desc').innerHTML.trim()
+        };
+        if(!payload.title || !payload.date || !payload.venueText || !payload.descriptionHtml){
+          throw new Error('Title, date/time, venue and description are required');
+        }
+        const r = await j('/admin/shows',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(payload)
+        });
+        if(r && r.ok && r.id){
+          // After creating the show, go straight to the "Add tickets" page
+          go('/admin/ui/shows/'+r.id+'/tickets');
+        }else{
+          throw new Error((r && r.error) || 'Failed to create show');
+        }
+      }catch(e){
+        $('#err').textContent = e.message || String(e);
       }
     });
   }
 
-  // -------- Helpers --------
-  function escapeHtml(str){
-    return String(str || '')
-      .replace(/&/g,'&amp;')
-      .replace(/</g,'&lt;')
-      .replace(/>/g,'&gt;')
-      .replace(/"/g,'&quot;')
-      .replace(/'/g,'&#39;');
-  }
-
-
-  function showMessage(title, body){
-    main.innerHTML =
-      '<div class="card">' +
-        '<div class="title">'+escapeHtml(title)+'</div>' +
-        '<div class="muted">'+escapeHtml(body)+'</div>' +
-      '</div>';
-  }
-
-  function showError(msg){
-    main.innerHTML =
-      '<div class="card">' +
-        '<div class="title">Something went wrong</div>' +
-        '<div class="error">'+escapeHtml(msg)+'</div>' +
-      '</div>';
-  }
-
-  // -------- Shows: list + create + edit --------
-
+  // ---------- Shows list ----------
   async function listShows(){
-    main.innerHTML = '<div class="card"><div class="title">All events</div><div class="muted">Loading…</div></div>';
+    main.innerHTML =
+      '<div class="card">'
+        +'<div class="header"><div class="title">All events</div><button id="refresh" class="btn">Refresh</button></div>'
+        +'<table><thead><tr><th>Title</th><th>When</th><th>Venue</th><th>Total allocation</th><th>Gross face</th><th>Status</th><th></th></tr></thead>'
+        +'<tbody id="tbody"></tbody></table>'
+      +'</div>';
+
+    async function load(){
+      $('#tbody').innerHTML = '<tr><td colspan="7" class="muted">Loading…</td></tr>';
+      try{
+        const jn = await j('/admin/shows');
+        const items = jn.items || [];
+        const tb = $('#tbody');
+        tb.innerHTML = items.map(function(s){
+          const when = s.date ? new Date(s.date).toLocaleString('en-GB',{dateStyle:'short', timeStyle:'short'}) : '';
+          const total = (s._alloc && s._alloc.total) || 0;
+          const sold  = (s._alloc && s._alloc.sold) || 0;
+          const hold  = (s._alloc && s._alloc.hold) || 0;
+          const avail = Math.max(total-sold-hold,0);
+          const pct   = total ? Math.round((sold/total)*100) : 0;
+          const bar   = '<div style="background:#e5e7eb;height:6px;border-radius:999px;overflow:hidden;width:140px"><div style="background:#111827;height:6px;width:'+pct+'%"></div></div>';
+          return '<tr>'
+            +'<td>'+(s.title||'')+'</td>'
+            +'<td>'+when+'</td>'
+            +'<td>'+(s.venue ? (s.venue.name + (s.venue.city ? ' – '+s.venue.city : '')) : '')+'</td>'
+            +'<td><span class="muted">Sold '+sold+' · Hold '+hold+' · Avail '+avail+'</span> '+bar+'</td>'
+            +'<td>£'+(((s._revenue && s._revenue.grossFace) || 0).toFixed(2))+'</td>'
+            +'<td>'+(s.status || 'DRAFT')+'</td>'
+            +'<td><div class="kebab">'
+              +'<button class="btn" data-kebab="'+s.id+'">⋮</button>'
+              +'<div class="menu" id="m-'+s.id+'">'
+                +'<a href="#" data-edit="'+s.id+'">Edit</a>'
+                +'<a href="#" data-seating="'+s.id+'">Seating map</a>'
+                +'<a href="#" data-tickets="'+s.id+'">Tickets</a>'
+                +'<a href="#" data-dup="'+s.id+'">Duplicate</a>'
+              +'</div></div></td>'
+          +'</tr>';
+        }).join('') || '<tr><td colspan="7" class="muted">No shows yet</td></tr>';
+
+        $$('[data-kebab]').forEach(function(b){
+          b.addEventListener('click', function(e){
+            e.preventDefault();
+            const id = b.getAttribute('data-kebab');
+            const m  = $('#m-'+id);
+            $$('.menu').forEach(function(x){ x.classList.remove('open'); });
+            m.classList.add('open');
+          });
+        });
+        document.addEventListener('click', function(e){
+          if(!e.target.closest || !e.target.closest('.kebab')){
+            $$('.menu').forEach(function(x){ x.classList.remove('open'); });
+          }
+        });
+
+        $$('[data-edit]').forEach(function(a){
+          a.addEventListener('click', function(e){
+            e.preventDefault();
+            go('/admin/ui/shows/'+a.getAttribute('data-edit')+'/edit');
+          });
+        });
+        $$('[data-seating]').forEach(function(a){
+          a.addEventListener('click', function(e){
+            e.preventDefault();
+            go('/admin/ui/shows/'+a.getAttribute('data-seating')+'/seating');
+          });
+        });
+        $$('[data-tickets]').forEach(function(a){
+          a.addEventListener('click', function(e){
+            e.preventDefault();
+            go('/admin/ui/shows/'+a.getAttribute('data-tickets')+'/tickets');
+          });
+        });
+        $$('[data-dup]').forEach(function(a){
+          a.addEventListener('click', async function(e){
+            e.preventDefault();
+            try{
+              const id = a.getAttribute('data-dup');
+              const r  = await j('/admin/shows/'+id+'/duplicate',{method:'POST'});
+              if(r.ok && r.newId){ go('/admin/ui/shows/'+r.newId+'/edit'); }
+            }catch(err){
+              alert('Duplicate failed: '+(err.message||err));
+            }
+          });
+        });
+      }catch(e){
+        $('#tbody').innerHTML = '<tr><td colspan="7" class="error">Failed to load shows: '+(e.message||e)+'</td></tr>';
+      }
+    }
+
+    $('#refresh').addEventListener('click', load);
+    load();
+  }
+
+  // ---------- Edit show ----------
+  async function editShow(id){
+    let s = null;
     try{
-      const data = await j('/admin/shows');
-      const items = data.items || [];
-      if(!items.length){
-        main.innerHTML =
-          '<div class="card">' +
-            '<div class="header">' +
-              '<div class="title">All events</div>' +
-              '<button class="btn p" data-view="/admin/ui/shows/create">Create show</button>' +
-            '</div>' +
-            '<div class="muted">No shows yet. Click “Create show” to add your first one.</div>' +
-          '</div>';
+      s = await j('/admin/shows/'+id);
+    }catch(e){
+      main.innerHTML = '<div class="card"><div class="error">Failed to load show: '+(e.message||e)+'</div></div>';
+      return;
+    }
+    main.innerHTML =
+      '<div class="card">'
+        +'<div class="header"><div class="title">Edit show</div></div>'
+        +'<div class="grid grid-2">'
+          +'<div class="grid"><label>Title</label><input id="sh_title"/></div>'
+          +'<div class="grid"><label>Date & time</label><input id="sh_dt" type="datetime-local"/></div>'
+          +'<div class="grid"><label>Venue</label><input id="venue_input"/></div>'
+          +'<div class="grid"><label>Poster image</label>'
+            +'<div class="drop" id="drop">Drop image here or click to choose</div>'
+            +'<input id="file" type="file" accept="image/*" style="display:none"/>'
+            +'<div class="progress" style="margin-top:8px"><div id="bar" class="bar"></div></div>'
+            +'<img id="prev" class="imgprev" />'
+          +'</div>'
+        +'</div>'
+        +'<div class="grid" style="margin-top:10px">'
+          +'<label>Description</label>'+editorToolbarHtml()
+          +'<div id="desc" data-editor contenteditable="true" style="min-height:120px;border:1px solid var(--border);border-radius:8px;padding:10px"></div>'
+          +'<div class="muted">Event description (required). Use the toolbar to format.</div>'
+        +'</div>'
+        +'<div class="row" style="margin-top:10px">'
+          +'<button id="save" class="btn p">Save changes</button>'
+          +'<a class="btn" href="#" id="goSeating">Seating map</a>'
+          +'<a class="btn" href="#" id="goTickets">Tickets</a>'
+          +'<div id="err" class="error"></div>'
+        +'</div>'
+      +'</div>';
+
+    bindWysiwyg(main);
+    mountVenuePicker($('#venue_input'));
+
+    $('#sh_title').value = (s.item && s.item.title) || '';
+    $('#venue_input').value = (s.item && s.item.venue && s.item.venue.name) || (s.item && s.item.venueText) || '';
+    if (s.item && s.item.date){
+      const dt = new Date(s.item.date);
+      $('#sh_dt').value = dt.toISOString().slice(0,16);
+    }
+    $('#desc').innerHTML = (s.item && s.item.description) || '';
+    if (s.item && s.item.imageUrl){
+      $('#prev').src = s.item.imageUrl;
+      $('#prev').style.display = 'block';
+    }
+
+    const drop = $('#drop'), file = $('#file'), bar = $('#bar'), prev = $('#prev');
+
+    drop.addEventListener('click', function(){ file.click(); });
+    drop.addEventListener('dragover', function(e){ e.preventDefault(); drop.classList.add('drag'); });
+    drop.addEventListener('dragleave', function(){ drop.classList.remove('drag'); });
+    drop.addEventListener('drop', async function(e){
+      e.preventDefault(); drop.classList.remove('drag');
+      const f = e.dataTransfer.files && e.dataTransfer.files[0];
+      if(f) await doUpload(f);
+    });
+    file.addEventListener('change', async function(){
+      const f = file.files && file.files[0];
+      if(f) await doUpload(f);
+    });
+
+    async function doUpload(f){
+      $('#err').textContent = '';
+      bar.style.width = '15%';
+      try{
+        const out = await uploadPoster(f);
+        prev.src = out.url;
+        prev.style.display = 'block';
+        bar.style.width = '100%';
+        setTimeout(function(){ bar.style.width='0%'; },800);
+      }catch(e){
+        bar.style.width = '0%';
+        $('#err').textContent = 'Upload failed: '+(e.message||e);
+      }
+    }
+
+    $('#goSeating').addEventListener('click', function(e){
+      e.preventDefault();
+      go('/admin/ui/shows/'+id+'/seating');
+    });
+    $('#goTickets').addEventListener('click', function(e){
+      e.preventDefault();
+      go('/admin/ui/shows/'+id+'/tickets');
+    });
+
+    $('#save').addEventListener('click', async function(){
+      $('#err').textContent = '';
+      try{
+        const payload = {
+          title: $('#sh_title').value.trim(),
+          date: $('#sh_dt').value ? new Date($('#sh_dt').value).toISOString() : null,
+          venueText: $('#venue_input').value.trim(),
+          venueId: $('#venue_input').dataset.venueId || null,
+          imageUrl: $('#prev').src || null,
+          descriptionHtml: $('#desc').innerHTML.trim()
+        };
+        if(!payload.title || !payload.date || !payload.venueText || !payload.descriptionHtml){
+          throw new Error('Title, date/time, venue and description are required');
+        }
+        const r = await j('/admin/shows/'+id,{
+          method:'PATCH',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(payload)
+        });
+        if(r && r.ok){
+          alert('Saved');
+        }else{
+          throw new Error((r && r.error) || 'Failed to save');
+        }
+      }catch(e){
+        $('#err').textContent = e.message || String(e);
+      }
+    });
+  }
+
+  // ---------- Tickets for a show ----------
+  async function ticketsPage(id){
+    main.innerHTML = '<div class="card"><div class="title">Loading tickets…</div></div>';
+    let showResp;
+    try{
+      showResp = await j('/admin/shows/'+id);
+    }catch(e){
+      main.innerHTML = '<div class="card"><div class="error">Failed to load show: '+(e.message||e)+'</div></div>';
+      return;
+    }
+    const show = showResp.item || {};
+    const when = show.date ? new Date(show.date).toLocaleString('en-GB',{dateStyle:'full', timeStyle:'short'}) : '';
+    const venueName = show.venue ? (show.venue.name + (show.venue.city ? ' – '+show.venue.city : '')) : (show.venueText || '');
+
+    main.innerHTML =
+      '<div class="card">'
+        +'<div class="header">'
+          +'<div>'
+            +'<div class="title">Tickets for '+(show.title || 'Untitled show')+'</div>'
+            +'<div class="muted">'+(when ? when+' · ' : '')+venueName+'</div>'
+          +'</div>'
+          +'<div class="row">'
+            +'<button class="btn" id="backToShows">Back to all events</button>'
+            +'<button class="btn" id="editShowBtn">Edit show</button>'
+          +'</div>'
+        +'</div>'
+
+        +'<div class="grid grid-2" style="margin-bottom:16px">'
+          +'<div class="card" style="margin:0">'
+            +'<div class="title" style="margin-bottom:4px">Ticket structure</div>'
+            +'<div class="muted" style="margin-bottom:8px">Tickets can be free (price £0) or paid, and can be sold as general admission or allocated seating.</div>'
+            +'<div class="row" style="margin-bottom:8px">'
+              +'<span class="pill" id="structureGeneral">General admission</span>'
+              +'<span class="pill" id="structureAllocated">Allocated seating</span>'
+            +'</div>'
+            +'<div class="muted" style="font-size:12px">Allocated seating uses a seating map for this venue. You can reuse an existing map or create a new one just for this show.</div>'
+          +'</div>'
+
+          +'<div class="card" style="margin:0">'
+            +'<div class="title" style="margin-bottom:4px">Seat maps for this show</div>'
+            +'<div class="muted" id="seatMapsSummary">Loading seat maps…</div>'
+            +'<div id="seatMapsList" style="margin-top:8px"></div>'
+            +'<div class="row" style="margin-top:8px">'
+              +'<button class="btn" id="refreshSeatMaps">Refresh seat maps</button>'
+              +'<button class="btn" id="editSeatMaps">Create / edit seat map</button>'
+            +'</div>'
+          +'</div>'
+        +'</div>'
+
+        +'<div class="card" style="margin:0">'
+          +'<div class="header">'
+            +'<div class="title">Ticket types</div>'
+            +'<button class="btn" id="addTypeBtn">Add ticket type</button>'
+          +'</div>'
+          +'<div class="muted" style="margin-bottom:8px">Set up the tickets you want to sell for this show. A £0 price will be treated as a free ticket.</div>'
+          +'<div id="ticketTypesEmpty" class="muted" style="display:none">No ticket types yet. Use “Add ticket type” to create one.</div>'
+          +'<table>'
+            +'<thead><tr><th>Name</th><th>Price</th><th>Available</th><th></th></tr></thead>'
+            +'<tbody id="ticketTypesBody"><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>'
+          +'</table>'
+          +'<div id="addTypeForm" style="margin-top:12px;display:none">'
+            +'<div class="grid grid-3">'
+              +'<div class="grid"><label>Name</label><input id="tt_name" placeholder="e.g. Standard" /></div>'
+              +'<div class="grid"><label>Price (£)</label><input id="tt_price" type="number" min="0" step="0.01" placeholder="e.g. 15" /></div>'
+              +'<div class="grid"><label>Available (optional)</label><input id="tt_available" type="number" min="0" step="1" placeholder="Leave blank for unlimited" /></div>'
+            +'</div>'
+            +'<div class="row" style="margin-top:8px">'
+              +'<button class="btn p" id="tt_save">Save ticket type</button>'
+              +'<button class="btn" id="tt_cancel">Cancel</button>'
+              +'<div id="tt_err" class="error"></div>'
+            +'</div>'
+          +'</div>'
+        +'</div>'
+      +'</div>';
+
+    $('#backToShows').addEventListener('click', function(){ go('/admin/ui/shows/current'); });
+    $('#editShowBtn').addEventListener('click', function(){ go('/admin/ui/shows/'+id+'/edit'); });
+
+    // Ticket types UI
+    const addTypeForm = $('#addTypeForm');
+    const ticketTypesBody = $('#ticketTypesBody');
+    const ticketTypesEmpty = $('#ticketTypesEmpty');
+
+    $('#addTypeBtn').addEventListener('click', function(){
+      addTypeForm.style.display = 'block';
+      $('#tt_name').focus();
+    });
+    $('#tt_cancel').addEventListener('click', function(){
+      addTypeForm.style.display = 'none';
+      $('#tt_err').textContent = '';
+    });
+
+    async function loadTicketTypes(){
+      try{
+        const res = await j('/admin/shows/'+id+'/ticket-types');
+        const items = res.ticketTypes || [];
+        if(!items.length){
+          ticketTypesBody.innerHTML = '<tr><td colspan="4" class="muted">No ticket types yet.</td></tr>';
+          ticketTypesEmpty.style.display = 'block';
+        }else{
+          ticketTypesEmpty.style.display = 'none';
+          ticketTypesBody.innerHTML = items.map(function(tt){
+            const price = (tt.pricePence || 0) / 100;
+            const priceLabel = price === 0 ? 'Free' : '£'+price.toFixed(2);
+            const availLabel = tt.available == null ? 'Unlimited' : String(tt.available);
+            return '<tr>'
+              +'<td>'+(tt.name || '')+'</td>'
+              +'<td>'+priceLabel+'</td>'
+              +'<td>'+availLabel+'</td>'
+              +'<td><button class="btn" data-del="'+tt.id+'">Delete</button></td>'
+            +'</tr>';
+          }).join('');
+          $$('[data-del]', ticketTypesBody).forEach(function(btn){
+            btn.addEventListener('click', async function(e){
+              e.preventDefault();
+              const idToDel = btn.getAttribute('data-del');
+              if(!idToDel) return;
+              if(!confirm('Delete this ticket type?')) return;
+              try{
+                await j('/admin/ticket-types/'+idToDel,{ method:'DELETE' });
+                loadTicketTypes();
+              }catch(err){
+                alert('Failed to delete: '+(err.message||err));
+              }
+            });
+          });
+        }
+      }catch(e){
+        ticketTypesBody.innerHTML = '<tr><td colspan="4" class="error">Failed to load ticket types: '+(e.message||e)+'</td></tr>';
+      }
+    }
+
+    $('#tt_save').addEventListener('click', async function(){
+      $('#tt_err').textContent = '';
+      const name = $('#tt_name').value.trim();
+      const priceStr = $('#tt_price').value.trim();
+      const availStr = $('#tt_available').value.trim();
+
+      if(!name){
+        $('#tt_err').textContent = 'Name is required';
         return;
       }
 
-      let rows = items.map(function(s){
-        const id = s.id;
-        const date = s.startUtc || s.date || '';
-        const venueName = (s.venue && s.venue.name) || s.venueName || '';
-        const city = (s.venue && s.venue.city) || s.city || '';
-        const labelVenue = venueName + (city ? ' — '+city : '');
-        return (
-          '<tr>' +
-            '<td>'+escapeHtml(s.name || s.title || '')+'</td>' +
-            '<td>'+escapeHtml(date || '')+'</td>' +
-            '<td>'+escapeHtml(labelVenue)+'</td>' +
-            '<td style="white-space:nowrap;display:flex;gap:6px;align-items:center;">' +
-              '<a class="btn" data-view="/admin/ui/shows/'+encodeURIComponent(id)+'/edit" href="/admin/ui/shows/'+encodeURIComponent(id)+'/edit">Edit</a>' +
-              '<a class="btn p" data-view="/admin/ui/shows/'+encodeURIComponent(id)+'/tickets" href="/admin/ui/shows/'+encodeURIComponent(id)+'/tickets">Tickets</a>' +
-            '</td>' +
-          '</tr>'
-        );
+      let pricePence = 0;
+      if(priceStr){
+        const p = Number(priceStr);
+        if(!Number.isFinite(p) || p < 0){
+          $('#tt_err').textContent = 'Price must be a non-negative number';
+          return;
+        }
+        pricePence = Math.round(p * 100);
+      }
+
+      let available = null;
+      if(availStr){
+        const a = Number(availStr);
+        if(!Number.isFinite(a) || a < 0){
+          $('#tt_err').textContent = 'Available must be a non-negative number';
+          return;
+        }
+        available = a;
+      }
+
+      try{
+        await j('/admin/shows/'+id+'/ticket-types',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ name, pricePence, available })
+        });
+        $('#tt_name').value = '';
+        $('#tt_price').value = '';
+        $('#tt_available').value = '';
+        addTypeForm.style.display = 'none';
+        loadTicketTypes();
+      }catch(err){
+        $('#tt_err').textContent = err.message || String(err);
+      }
+    });
+
+    loadTicketTypes();
+
+    // Seat maps summary
+    const seatMapsSummary = $('#seatMapsSummary');
+    const seatMapsList = $('#seatMapsList');
+    const venueId = show.venue && show.venue.id ? show.venue.id : null;
+
+    async function loadSeatMaps(){
+      seatMapsSummary.textContent = 'Loading seat maps…';
+      seatMapsList.innerHTML = '';
+      try{
+        let url = '/admin/seatmaps?showId='+encodeURIComponent(id);
+        if(venueId) url += '&venueId='+encodeURIComponent(venueId);
+        const maps = await j(url);
+        if(!Array.isArray(maps) || !maps.length){
+          seatMapsSummary.textContent = 'No seat maps yet for this show/venue.';
+          seatMapsList.innerHTML = '<div class="muted" style="font-size:13px">You can create a seat map using the “Create / edit seat map” button.</div>';
+          return;
+        }
+        seatMapsSummary.textContent = maps.length+' seat map'+(maps.length>1?'s':'')+' found.';
+        seatMapsList.innerHTML = maps.map(function(m){
+          const def = m.isDefault ? ' · <strong>Default</strong>' : '';
+          return '<div class="row" style="margin-bottom:4px;justify-content:space-between">'
+            +'<div><strong>'+m.name+'</strong> <span class="muted">v'+(m.version || 1)+'</span>'+def+'</div>'
+            +'<div class="row" style="gap:4px">'+(!m.isDefault ? '<button class="btn" data-make-default="'+m.id+'">Make default</button>' : '')+'</div>'
+          +'</div>';
+        }).join('');
+
+        $$('[data-make-default]', seatMapsList).forEach(function(btn){
+          btn.addEventListener('click', async function(e){
+            e.preventDefault();
+            const mapId = btn.getAttribute('data-make-default');
+            if(!mapId) return;
+            try{
+              await j('/admin/seatmaps/'+mapId+'/default',{
+                method:'PATCH',
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ isDefault:true })
+              });
+              loadSeatMaps();
+            }catch(err){
+              alert('Failed to update default: '+(err.message||err));
+            }
+          });
+        });
+      }catch(e){
+        seatMapsSummary.textContent = 'Failed to load seat maps.';
+        seatMapsList.innerHTML = '<div class="error" style="font-size:13px">'+(e.message||e)+'</div>';
+      }
+    }
+
+    $('#refreshSeatMaps').addEventListener('click', loadSeatMaps);
+    $('#editSeatMaps').addEventListener('click', function(){ go('/admin/ui/shows/'+id+'/seating'); });
+    loadSeatMaps();
+  }
+
+  // ---------- Seating page with blocks, metadata & seat-level pricing ----------
+  async function seatingPage(showId){
+    main.innerHTML = '<div class="card"><div class="title">Loading seating…</div></div>';
+
+    let showResp;
+    try{
+      showResp = await j('/admin/shows/'+showId);
+    }catch(e){
+      main.innerHTML = '<div class="card"><div class="error">Failed to load show: '+(e.message||e)+'</div></div>';
+      return;
+    }
+
+    const show = showResp.item || {};
+    const when = show.date ? new Date(show.date).toLocaleString('en-GB',{dateStyle:'full', timeStyle:'short'}) : '';
+    const venueName = show.venue
+      ? (show.venue.name + (show.venue.city ? ' – '+show.venue.city : ''))
+      : (show.venueText || '');
+    const venueId = show.venue && show.venue.id ? show.venue.id : null;
+
+    main.innerHTML =
+      '<div class="card">'
+        +'<div class="header">'
+          +'<div>'
+            +'<div class="title">Seating map for '+(show.title || 'Untitled show')+'</div>'
+            +'<div class="muted">'+(when ? when+' · ' : '')+venueName+'</div>'
+          +'</div>'
+          +'<div class="row">'
+            +'<button class="btn" id="backToTickets">Back to tickets</button>'
+            +'<button class="btn" id="editShowBtn">Edit show</button>'
+          +'</div>'
+        +'</div>'
+
+        +'<div class="grid" style="gap:16px">'
+          +'<div class="grid grid-2" style="align-content:start;gap:12px">'
+            +'<div class="card" style="margin:0">'
+              +'<div class="title" style="margin-bottom:4px">Seat maps for this show</div>'
+              +'<div class="muted" id="sm_status">Loading seat maps…</div>'
+              +'<select id="sm_select" style="margin-top:8px;width:100%"></select>'
+              +'<div class="tip" id="sm_tip" style="margin-top:8px;font-size:12px">Seat maps are stored per show and can optionally be linked to a venue.</div>'
+            +'</div>'
+
+            +'<div class="card" style="margin:0">'
+              +'<div class="title" style="margin-bottom:4px">Create new seat map</div>'
+              +'<input id="sm_name" placeholder="e.g. Stalls layout" />'
+              +'<button class="btn p" id="sm_create" style="margin-top:8px;width:100%">Create seat map</button>'
+              +'<div class="error" id="sm_err" style="margin-top:4px"></div>'
+            +'</div>'
+
+            +'<div class="card" style="margin:0">'
+              +'<div class="title" style="margin-bottom:4px">Quick seat generator</div>'
+              +'<div class="muted" style="font-size:12px;margin-bottom:6px">Fast way to create a basic rectangular layout (A, B, C… rows).</div>'
+              +'<div class="grid grid-2" style="margin-bottom:6px">'
+                +'<div class="grid"><label>Rows</label><input id="q_rows" type="number" min="1" max="50" value="5"/></div>'
+                +'<div class="grid"><label>Seats per row</label><input id="q_cols" type="number" min="1" max="80" value="10"/></div>'
+              +'</div>'
+              +'<button class="btn" id="q_generate" style="width:100%;margin-top:4px">Generate seats</button>'
+              +'<div class="tip" style="font-size:12px">Uses /seatmaps/:id/seats/bulk, then reloads seats into the layout.</div>'
+            +'</div>'
+
+            +'<div class="card" style="margin:0">'
+              +'<div class="title" style="margin-bottom:4px">Seat blocks</div>'
+              +'<div class="muted" style="font-size:12px;margin-bottom:6px">Group seats into named blocks (e.g. “Stalls Left”, “Circle”), give them a zone and link to a ticket type.</div>'
+              +'<div class="grid" style="grid-template-columns:2fr auto;gap:6px;margin-bottom:6px">'
+                +'<input id="block_name" placeholder="e.g. Stalls Left" />'
+                +'<button class="btn" id="block_create">Create from selection</button>'
+              +'</div>'
+              +'<div class="grid grid-3" style="margin-bottom:6px">'
+                +'<div class="grid"><label style="font-size:12px">Capacity (optional)</label><input id="block_capacity" type="number" min="0" placeholder="Auto from seats"/></div>'
+                +'<div class="grid"><label style="font-size:12px">Pricing zone</label><input id="block_zone" placeholder="e.g. Zone A"/></div>'
+                +'<div class="grid"><label style="font-size:12px">Ticket type</label><select id="block_ticketType"><option value="">— None —</option></select></div>'
+              +'</div>'
+              +'<div class="tip" style="font-size:12px">Select one or more seats first, then create a block. You can drag the block label on the canvas to move all its seats.</div>'
+              +'<div id="blocks_list" style="margin-top:8px;font-size:13px"></div>'
+            +'</div>'
+
+            +'<div class="card" style="margin:0">'
+              +'<div class="title" style="margin-bottom:4px">Seat pricing</div>'
+              +'<div class="muted" style="font-size:12px;margin-bottom:6px">Pick a ticket type, then assign it to selected seats. With multiple ticket prices, every seat should be allocated.</div>'
+              +'<div class="grid" style="grid-template-columns:1fr;gap:6px;margin-bottom:6px">'
+                +'<label style="font-size:12px">Ticket type for selection</label>'
+                +'<select id="seat_price_ticketType"><option value="">— Choose ticket type —</option></select>'
+              +'</div>'
+              +'<div class="row" style="margin-bottom:4px">'
+                +'<button class="btn" id="seat_price_assign_selection">Assign to selection</button>'
+                +'<button class="btn" id="seat_price_clear">Clear from selection</button>'
+              +'</div>'
+              +'<div id="seat_price_summary" class="tip" style="font-size:12px;margin-top:4px">No pricing assignments yet.</div>'
+            +'</div>'
+          +'</div>'
+
+          +'<div class="card" style="margin:0">'
+            +'<div class="header">'
+              +'<div class="title">Seat layout</div>'
+              +'<button class="btn p" id="sm_saveLayout">Save layout</button>'
+            +'</div>'
+            +'<div class="muted" style="margin-bottom:6px;font-size:12px">'
+              +'Drag seats to adjust positions. Seats snap to a subtle grid and alignment guides show when you line up with other rows/columns or the canvas centre.'
+              +' Changes are only saved when you click “Save layout”.<br/>'
+              +'<strong>Tip:</strong> <strong>Alt+click</strong> a seat to grab the whole row, or <strong>Shift+click</strong> to build a custom selection, then drag to move them together.'
+            +'</div>'
+            +'<div class="seat-layout-wrap">'
+              +'<div class="seat-stage">Stage<div class="seat-stage-bar"></div></div>'
+              +'<div id="seatCanvas" style="position:relative;min-height:220px;"></div>'
+              +'<div class="seat-legend">'
+                +'<span><span class="seat-dot"></span> Available</span>'
+                +'<span><span class="seat-dot held"></span> Held</span>'
+                +'<span><span class="seat-dot sold"></span> Sold</span>'
+                +'<span><span class="seat-dot block"></span> Blocked</span>'
+              +'</div>'
+              +'<div class="seat-zoom-controls">'
+                +'<button type="button" class="btn" id="zoomOutBtn">−</button>'
+                +'<button type="button" class="btn" id="zoomResetBtn">100%</button>'
+                +'<button type="button" class="btn" id="zoomInBtn">+</button>'
+              +'</div>'
+            +'</div>'
+          +'</div>'
+        +'</div>'
+      +'</div>';
+
+
+    const backToTicketsBtn = document.getElementById('backToTickets');
+    const editShowBtn      = document.getElementById('editShowBtn');
+    const smStatus         = document.getElementById('sm_status');
+    const smSelect         = document.getElementById('sm_select');
+    const smTip            = document.getElementById('sm_tip');
+    const smName           = document.getElementById('sm_name');
+    const smCreate         = document.getElementById('sm_create');
+    const smErr            = document.getElementById('sm_err');
+    const qRows            = document.getElementById('q_rows');
+    const qCols            = document.getElementById('q_cols');
+    const qGenerate        = document.getElementById('q_generate');
+    const seatCanvas       = document.getElementById('seatCanvas');
+    const saveLayoutBtn    = document.getElementById('sm_saveLayout');
+
+    const zoomInBtn        = document.getElementById('zoomInBtn');
+    const zoomOutBtn       = document.getElementById('zoomOutBtn');
+    const zoomResetBtn     = document.getElementById('zoomResetBtn');
+
+    const blockNameInput   = document.getElementById('block_name');
+    const blockCreateBtn   = document.getElementById('block_create');
+    const blocksList       = document.getElementById('blocks_list');
+    const blockCapacityInput = document.getElementById('block_capacity');
+    const blockZoneInput     = document.getElementById('block_zone');
+    const blockTicketTypeSelect = document.getElementById('block_ticketType');
+
+    const seatPriceTicketTypeSelect   = document.getElementById('seat_price_ticketType');
+    const seatPriceAssignBtn          = document.getElementById('seat_price_assign_selection');
+    const seatPriceClearBtn           = document.getElementById('seat_price_clear');
+    const seatPriceSummary            = document.getElementById('seat_price_summary');
+
+    backToTicketsBtn.addEventListener('click', function(){
+      go('/admin/ui/shows/'+showId+'/tickets');
+    });
+    editShowBtn.addEventListener('click', function(){
+      go('/admin/ui/shows/'+showId+'/edit');
+    });
+
+    // Data state for this page
+    let seatMapsData = [];
+    let currentSeatMapId = null;
+    let layout = { seats: {}, elements: [] };
+    let seats = [];
+    let ticketTypes = [];
+
+    // selection state
+    const selectedSeatIds = new Set();
+    let selectedBlockId = null;
+
+    // zoom state
+    let zoom = 1;
+    function applyZoom(){
+      seatCanvas.style.transform = 'scale('+zoom+')';
+    }
+    applyZoom();
+
+    zoomInBtn.addEventListener('click', function(){
+      zoom = Math.min(3, zoom + 0.25);
+      applyZoom();
+    });
+    zoomOutBtn.addEventListener('click', function(){
+      zoom = Math.max(0.5, zoom - 0.25);
+      applyZoom();
+    });
+    zoomResetBtn.addEventListener('click', function(){
+      zoom = 1;
+      applyZoom();
+    });
+
+    function ensureLayout(){
+      if(!layout || typeof layout !== 'object') layout = { seats:{}, elements:[] };
+      if(!layout.seats || typeof layout.seats !== 'object') layout.seats = {};
+      if(!Array.isArray(layout.elements)) layout.elements = [];
+    }
+
+    function ensureSeatMeta(id){
+      ensureLayout();
+      let meta = layout.seats[id];
+      if(!meta){
+        meta = { x:40, y:30, rotation:0, ticketTypeId:null };
+        layout.seats[id] = meta;
+      }else{
+        if(typeof meta.x !== 'number') meta.x = 40;
+        if(typeof meta.y !== 'number') meta.y = 30;
+        if(typeof meta.rotation !== 'number') meta.rotation = 0;
+        if(!('ticketTypeId' in meta)) meta.ticketTypeId = null;
+      }
+      return meta;
+    }
+
+    function clearSelection(){
+      selectedSeatIds.forEach(function(id){
+        const el = seatCanvas.querySelector('[data-seat-id="'+id+'"]');
+        if(el) el.classList.remove('seat-selected');
+      });
+      selectedSeatIds.clear();
+      selectedBlockId = null;
+    }
+
+    function addSeatToSelection(id){
+      if(!selectedSeatIds.has(id)){
+        selectedSeatIds.add(id);
+        const el = seatCanvas.querySelector('[data-seat-id="'+id+'"]');
+        if(el) el.classList.add('seat-selected');
+      }
+    }
+
+    function recomputeSelectedBlockFromSeats(){
+      ensureLayout();
+      selectedBlockId = null;
+      const sel = Array.from(selectedSeatIds);
+      if(!sel.length) return;
+      const blocks = layout.elements.filter(function(e){ return e && e.type === 'block' && Array.isArray(e.seatIds); });
+      blocks.some(function(b){
+        if(!b.seatIds || !b.seatIds.length) return false;
+        const allIn = b.seatIds.every(function(id){ return selectedSeatIds.has(id); });
+        if(allIn){
+          selectedBlockId = b.id;
+          return true;
+        }
+        return false;
+      });
+    }
+
+    function selectSingleSeat(id){
+      clearSelection();
+      addSeatToSelection(id);
+      recomputeSelectedBlockFromSeats();
+      renderSeats();
+    }
+
+    function selectRowForSeat(id){
+      const seat = seats.find(function(s){ return s.id === id; });
+      if(!seat) return;
+      const rowKey = seat.rowLabel || seat.row || '';
+      clearSelection();
+      seats.forEach(function(s){
+        const key = s.rowLabel || s.row || '';
+        if(key === rowKey){
+          addSeatToSelection(s.id);
+        }
+      });
+      recomputeSelectedBlockFromSeats();
+      renderSeats();
+    }
+
+    // --- Alignment guides (safety rails) ---
+    const guideH = document.createElement('div');
+    guideH.className = 'guide-line h';
+    guideH.style.display = 'none';
+
+    const guideV = document.createElement('div');
+    guideV.className = 'guide-line v';
+    guideV.style.display = 'none';
+
+    function hideGuides(){
+      guideH.style.display = 'none';
+      guideV.style.display = 'none';
+    }
+    function showGuideH(y){
+      guideH.style.top = (y - 0.5)+'px';
+      guideH.style.display = 'block';
+    }
+    function showGuideV(x){
+      guideV.style.left = (x - 0.5)+'px';
+      guideV.style.display = 'block';
+    }
+
+    function ticketTypeLabelForId(id){
+      if(!id || !ticketTypes || !ticketTypes.length) return '';
+      const tt = ticketTypes.find(function(t){ return t.id === id; });
+      if(!tt) return '';
+      const price = (tt.pricePence || 0) / 100;
+      const priceLabel = price === 0 ? 'Free' : '£'+price.toFixed(2);
+      return tt.name + ' ('+priceLabel+')';
+    }
+
+    function updateSeatPricingSummary(){
+      if(!seatPriceSummary){
+        return;
+      }
+      if(!Array.isArray(seats) || !seats.length){
+        seatPriceSummary.textContent = 'No seats yet.';
+        return;
+      }
+      ensureLayout();
+      const countsByTt = {};
+      let unassigned = 0;
+      seats.forEach(function(s){
+        const meta = layout.seats[s.id];
+        const ttId = meta && meta.ticketTypeId;
+        if(ttId){
+          countsByTt[ttId] = (countsByTt[ttId] || 0) + 1;
+        }else{
+          unassigned++;
+        }
+      });
+      const parts = [];
+      Object.keys(countsByTt).forEach(function(ttId){
+        const n = countsByTt[ttId];
+        parts.push(ticketTypeLabelForId(ttId)+': '+n+' seat'+(n===1?'':'s'));
+      });
+      if(unassigned > 0){
+        parts.push(unassigned+' unassigned seat'+(unassigned===1?'':'s'));
+      }
+      seatPriceSummary.textContent = parts.length ? parts.join(' · ') : 'No pricing assignments yet.';
+    }
+
+    function refreshBlocksList(){
+      ensureLayout();
+      if(!blocksList) return;
+      const blocks = layout.elements.filter(function(e){ return e && e.type === 'block'; });
+      if(!blocks.length){
+        blocksList.innerHTML = '<div class="muted">No blocks yet.</div>';
+        return;
+      }
+      blocksList.innerHTML = blocks.map(function(b){
+        const seatCount = Array.isArray(b.seatIds) ? b.seatIds.length : 0;
+        const capacity = (typeof b.capacity === 'number' && b.capacity >= 0) ? b.capacity : seatCount;
+        const zone = (b.zone || '').trim();
+        const ttLabel = ticketTypeLabelForId(b.ticketTypeId);
+        const bits = [];
+        bits.push(capacity+' seats');
+        if(zone) bits.push('Zone: '+zone);
+        if(ttLabel) bits.push('Ticket: '+ttLabel);
+        return '<div class="row" data-block-row="'+b.id+'" style="justify-content:space-between;margin-bottom:4px">'
+          +'<div><strong>'+ (b.name || 'Untitled block') +'</strong> <span class="muted">· '+bits.join(' · ')+'</span></div>'
+          +'<div class="row" style="gap:4px">'
+            +'<button class="btn" data-block-select="'+b.id+'">Select</button>'
+            +'<button class="btn" data-block-delete="'+b.id+'">Delete</button>'
+          +'</div></div>';
       }).join('');
 
-      main.innerHTML =
-        '<div class="card">' +
-          '<div class="header">' +
-            '<div class="title">All events</div>' +
-            '<button class="btn p" data-view="/admin/ui/shows/create">Create show</button>' +
-          '</div>' +
-          '<div style="overflow:auto;">' +
-            '<table>' +
-              '<thead>' +
-                '<tr>' +
-                  '<th>Show</th>' +
-                  '<th>Date & time</th>' +
-                  '<th>Venue</th>' +
-                  '<th>Actions</th>' +
-                '</tr>' +
-              '</thead>' +
-              '<tbody>'+rows+'</tbody>' +
-            '</table>' +
-          '</div>' +
-        '</div>';
-    }catch(err){
-      showError(err && err.message ? err.message : String(err));
-    }
-  }
-
-  function buildShowForm(show){
-    const name = show && (show.name || show.title) || '';
-    const startUtc = show && (show.startUtc || show.date || '') || '';
-    const venueName = show && show.venue && show.venue.name || show && show.venueName || '';
-    const venueId = show && (show.venueId || (show.venue && show.venue.id));
-    const desc = show && (show.description || '') || '';
-
-    return (
-      '<div class="grid grid-2">' +
-        '<div>' +
-          '<label>Show title</label><br />' +
-          '<input type="text" id="showName" value="'+escapeHtml(name)+'" placeholder="e.g. Chuckl. Comedy Club" />' +
-        '</div>' +
-        '<div>' +
-          '<label>Date & time (local)</label><br />' +
-          '<input type="datetime-local" id="showStart" value="'+escapeHtml(startUtc)+'" />' +
-        '</div>' +
-        '<div>' +
-          '<label>Venue</label><br />' +
-          '<input type="text" id="showVenue" placeholder="Start typing venue name…" value="'+escapeHtml(venueName)+'" '+(venueId ? ('data-venue-id="'+escapeHtml(venueId)+'"') : '')+' />' +
-          '<div class="tip">This links the show to a venue. You can create a new one inline.</div>' +
-        '</div>' +
-        '<div>' +
-          '<label>Internal notes / description</label><br />' +
-          '<textarea id="showDesc" rows="3" placeholder="Optional notes for your team">'+escapeHtml(desc)+'</textarea>' +
-        '</div>' +
-      '</div>'
-    );
-  }
-
-  function wireShowForm(onSubmit){
-    const venueInput = document.getElementById('showVenue');
-    if(venueInput){ mountVenuePicker(venueInput); }
-
-    const btn = document.getElementById('showSaveBtn');
-    if(btn){
-      btn.addEventListener('click', async function(){
-        const nameEl = document.getElementById('showName');
-        const startEl = document.getElementById('showStart');
-        const descEl = document.getElementById('showDesc');
-
-        const payload = {
-          name: nameEl ? nameEl.value.trim() : '',
-          startUtc: startEl ? startEl.value : '',
-          description: descEl ? descEl.value : '',
-          venueId: venueInput && venueInput.dataset.venueId ? venueInput.dataset.venueId : null,
-          venueName: venueInput ? venueInput.value.trim() : '',
-        };
-
-        if(!payload.name){
-          alert('Please enter a show title.');
-          return;
-        }
-        if(!payload.startUtc){
-          if(!confirm('No date/time set. Continue anyway?')) return;
-        }
-        try{
-          await onSubmit(payload);
-        }catch(err){
-          alert('Save failed: '+(err && err.message ? err.message : String(err)));
-        }
-      });
-    }
-  }
-
-  function createShow(){
-    main.innerHTML =
-      '<div class="card">' +
-        '<div class="header">' +
-          '<div class="title">Create show</div>' +
-        '</div>' +
-        buildShowForm(null) +
-        '<div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end;">' +
-          '<button class="btn" data-view="/admin/ui/shows/current">Cancel</button>' +
-          '<button class="btn p" id="showSaveBtn">Save show</button>' +
-        '</div>' +
-      '</div>';
-
-    wireShowForm(async function(payload){
-      const res = await j('/admin/shows',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify(payload),
-      });
-      const id = res && (res.id || (res.show && res.show.id));
-      if(id){
-        go('/admin/ui/shows/'+encodeURIComponent(id)+'/tickets');
-      }else{
-        showMessage('Show created','Show saved, but we could not determine its id. Returning to All events.');
-        go('/admin/ui/shows/current');
-      }
-    });
-  }
-
-  async function editShow(showId){
-    main.innerHTML =
-      '<div class="card"><div class="title">Edit show</div><div class="muted">Loading…</div></div>';
-    try{
-      const res = await j('/admin/shows/'+encodeURIComponent(showId));
-      const show = res.show || res;
-
-      main.innerHTML =
-        '<div class="card">' +
-          '<div class="header">' +
-            '<div class="title">Edit show</div>' +
-            '<button class="btn" data-view="/admin/ui/shows/current">Back to all events</button>' +
-          '</div>' +
-          buildShowForm(show) +
-          '<div style="margin-top:16px;display:flex;gap:8px;justify-content:space-between;align-items:center;">' +
-            '<button class="btn" id="showTicketsBtn">Tickets</button>' +
-            '<div style="display:flex;gap:8px;">' +
-              '<button class="btn" data-view="/admin/ui/shows/current">Cancel</button>' +
-              '<button class="btn p" id="showSaveBtn">Save changes</button>' +
-            '</div>' +
-          '</div>' +
-        '</div>';
-
-      wireShowForm(async function(payload){
-        await j('/admin/shows/'+encodeURIComponent(showId),{
-          method:'PUT',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify(payload),
+      $$('[data-block-select]', blocksList).forEach(function(btn){
+        btn.addEventListener('click', function(e){
+          e.preventDefault();
+          const id = btn.getAttribute('data-block-select');
+          ensureLayout();
+          const block = layout.elements.find(function(el){ return el && el.id === id && el.type === 'block'; });
+          if(!block || !Array.isArray(block.seatIds) || !block.seatIds.length) return;
+          clearSelection();
+          block.seatIds.forEach(function(seatId){ addSeatToSelection(seatId); });
+          selectedBlockId = id;
+          renderSeats();
         });
-        showMessage('Saved','Show updated successfully.');
-        go('/admin/ui/shows/current');
       });
 
-      const tBtn = document.getElementById('showTicketsBtn');
-      if(tBtn){
-        tBtn.addEventListener('click', function(){
-          go('/admin/ui/shows/'+encodeURIComponent(showId)+'/tickets');
+      $$('[data-block-delete]', blocksList).forEach(function(btn){
+        btn.addEventListener('click', function(e){
+          e.preventDefault();
+          const id = btn.getAttribute('data-block-delete');
+          if(!id) return;
+          ensureLayout();
+          const idx = layout.elements.findIndex(function(el){ return el && el.id === id && el.type === 'block'; });
+          if(idx !== -1){
+            layout.elements.splice(idx,1);
+          }
+          if(selectedBlockId === id){
+            selectedBlockId = null;
+          }
+          refreshBlocksList();
+          renderSeats();
         });
+      });
+    }
+
+    async function loadTicketTypesForShow(){
+      try{
+        const res = await j('/admin/shows/'+showId+'/ticket-types');
+        ticketTypes = res.ticketTypes || [];
+
+        // Populate block ticket type select
+        if(blockTicketTypeSelect){
+          const currentVal = blockTicketTypeSelect.value;
+          blockTicketTypeSelect.innerHTML = '<option value="">— None —</option>' +
+            ticketTypes.map(function(tt){
+              const price = (tt.pricePence || 0) / 100;
+              const priceLabel = price === 0 ? 'Free' : '£'+price.toFixed(2);
+              return '<option value="'+tt.id+'">'+tt.name+' ('+priceLabel+')</option>';
+            }).join('');
+          if(currentVal && ticketTypes.some(function(t){ return t.id === currentVal; })){
+            blockTicketTypeSelect.value = currentVal;
+          }
+        }
+
+        // Populate seat pricing ticket type select
+        if(seatPriceTicketTypeSelect){
+          const currentVal2 = seatPriceTicketTypeSelect.value;
+          seatPriceTicketTypeSelect.innerHTML = '<option value="">— Choose ticket type —</option>' +
+            ticketTypes.map(function(tt){
+              const price = (tt.pricePence || 0) / 100;
+              const priceLabel = price === 0 ? 'Free' : '£'+price.toFixed(2);
+              return '<option value="'+tt.id+'">'+tt.name+' ('+priceLabel+')</option>';
+            }).join('');
+          if(currentVal2 && ticketTypes.some(function(t){ return t.id === currentVal2; })){
+            seatPriceTicketTypeSelect.value = currentVal2;
+          }
+        }
+
+        refreshBlocksList();
+        updateSeatPricingSummary();
+      }catch(e){
+        // soft-fail; blocks & pricing still work with no ticket types
       }
-    }catch(err){
-      showError(err && err.message ? err.message : String(err));
-    }
-  }
-
-  // -------- Ticket mode choice (Allocated vs Unallocated) --------
-
-  function ticketModePage(showId){
-    main.innerHTML =
-      '<div class="card">' +
-        '<div class="header">' +
-          '<div>' +
-            '<div class="title">How do you want to sell tickets?</div>' +
-            '<div class="muted">Choose between simple unallocated seating or a full seat map.</div>' +
-          '</div>' +
-          '<button class="btn" data-view="/admin/ui/shows/current">Back to all events</button>' +
-        '</div>' +
-        '<div class="mode-choice-wrap">' +
-          '<div class="mode-card" id="modeUnallocated">' +
-            '<div class="mode-card-title">Unallocated seating</div>' +
-            '<div class="mode-card-body">Quick to set up. Customers pick a ticket type, then sit anywhere in the venue (first come, first served).</div>' +
-            '<div class="mode-card-tag">Best for comedy clubs, standing gigs, GA events</div>' +
-          '</div>' +
-          '<div class="mode-card" id="modeAllocated">' +
-            '<div class="mode-card-title">Allocated seating</div>' +
-            '<div class="mode-card-body">Build a seat map and let customers choose specific seats when they book.</div>' +
-            '<div class="mode-card-tag">Best for theatres, cabaret layouts, premium seats</div>' +
-          '</div>' +
-        '</div>' +
-      '</div>';
-
-    const unalloc = document.getElementById('modeUnallocated');
-    const alloc = document.getElementById('modeAllocated');
-
-    if(unalloc){
-      unalloc.addEventListener('click', function(){
-        go('/admin/ui/shows/'+encodeURIComponent(showId)+'/tickets/unallocated');
-      });
-    }
-    if(alloc){
-      alloc.addEventListener('click', function(){
-        // For allocated seating we go straight to the seat-map designer
-        go('/admin/ui/events/'+encodeURIComponent(showId)+'/seat-map');
-      });
-    }
-  }
-
-  // -------- Unallocated ticket setup page --------
-
-  async function ticketsPage(showId){
-    main.innerHTML =
-      '<div class="card"><div class="title">Unallocated tickets</div><div class="muted">Loading…</div></div>';
-
-    let existing = null;
-    try {
-      const res = await j('/admin/shows/'+encodeURIComponent(showId)+'/tickets/unallocated');
-      existing = res && (res.ticketConfig || res);
-    } catch(_ignored){
-      // If endpoint does not exist yet, we’ll just show the empty form.
     }
 
-    const price = existing && existing.price != null ? String(existing.price) : '';
-    const capacity = existing && existing.capacity != null ? String(existing.capacity) : '';
-    const label = existing && existing.label || 'General Admission';
+    async function reloadSeatMaps(){
+      smStatus.textContent = 'Loading seat maps…';
+      smSelect.innerHTML = '';
+      seatMapsData = [];
+      currentSeatMapId = null;
 
-    main.innerHTML =
-      '<div class="card">' +
-        '<div class="header">' +
-          '<div>' +
-            '<div class="title">Unallocated tickets</div>' +
-            '<div class="muted">Set your price and capacity. Everyone holds the same type of ticket and can sit anywhere that’s available.</div>' +
-          '</div>' +
-          '<div style="display:flex;gap:8px;">' +
-            '<button class="btn" data-view="/admin/ui/shows/'+encodeURIComponent(showId)+'/tickets">Back</button>' +
-            '<button class="btn" data-view="/admin/ui/shows/current">All events</button>' +
-          '</div>' +
-        '</div>' +
-        '<div class="grid grid-3">' +
-          '<div>' +
-            '<label>Ticket label</label><br />' +
-            '<input type="text" id="gaLabel" value="'+escapeHtml(label)+'" placeholder="e.g. General Admission" />' +
-            '<div class="tip">Shown to customers on the booking page and e-tickets.</div>' +
-          '</div>' +
-          '<div>' +
-            '<label>Price (GBP)</label><br />' +
-            '<input type="number" step="0.01" min="0" id="gaPrice" value="'+escapeHtml(price)+'" />' +
-            '<div class="tip">Base ticket price, excluding any booking fees.</div>' +
-          '</div>' +
-          '<div>' +
-            '<label>Capacity</label><br />' +
-            '<input type="number" min="1" id="gaCapacity" value="'+escapeHtml(capacity)+'" />' +
-            '<div class="tip">Total number of tickets you want to sell for this event.</div>' +
-          '</div>' +
-        '</div>' +
-        '<div style="margin-top:16px;display:flex;justify-content:flex-end;gap:8px;">' +
-          '<button class="btn" data-view="/admin/ui/shows/'+encodeURIComponent(showId)+'/edit">Edit show details</button>' +
-          '<button class="btn p" id="gaSaveBtn">Save ticket setup</button>' +
-        '</div>' +
-      '</div>';
+      try{
+        let qs = 'showId='+encodeURIComponent(showId);
+        if(venueId) qs += '&venueId='+encodeURIComponent(venueId);
+        const maps = await j('/admin/seatmaps?'+qs);
 
-    const saveBtn = document.getElementById('gaSaveBtn');
-    if(saveBtn){
-      saveBtn.addEventListener('click', async function(){
-        const labelEl = document.getElementById('gaLabel');
-        const priceEl = document.getElementById('gaPrice');
-        const capEl = document.getElementById('gaCapacity');
-
-const payload = {          label: labelEl ? labelEl.value.trim() : '',
-          price: priceEl && priceEl.value ? parseFloat(priceEl.value) : null,
-          capacity: capEl && capEl.value ? parseInt(capEl.value,10) : null,
-        };
-
-        if(!payload.label){
-          alert('Please enter a ticket label.');
-          return;
-        }
-        if(payload.price == null || isNaN(payload.price)){
-          alert('Please enter a valid ticket price.');
-          return;
-        }
-        if(payload.capacity == null || isNaN(payload.capacity) || payload.capacity <= 0){
-          alert('Please enter a valid capacity.');
+        if(!Array.isArray(maps) || !maps.length){
+          smStatus.textContent = 'No seat maps yet. Create one below.';
+          smTip.textContent = 'Create a map for this show; you can optionally reuse it for future dates at this venue.';
+          seatCanvas.innerHTML = '<div class="muted">No seat map selected.</div>';
+          hideGuides();
+          layout = { seats:{}, elements:[] };
+          refreshBlocksList();
+          updateSeatPricingSummary();
           return;
         }
 
-        try{
-          await j('/admin/shows/'+encodeURIComponent(showId)+'/tickets/unallocated',{
-            method:'PUT',
-            headers:{'Content-Type':'application/json'},
-            body: JSON.stringify(payload),
-          });
-          showMessage('Saved','Unallocated ticket setup saved successfully.');
-          go('/admin/ui/shows/current');
-        }catch(err){
-          alert('Save failed: '+(err && err.message ? err.message : String(err)));
-        }
-      });
-    }
-  }
+        seatMapsData = maps;
+        smStatus.textContent = maps.length+' seat map'+(maps.length>1?'s':'')+' found.';
+        smSelect.innerHTML = maps.map(function(m){
+          let label = m.name || 'Untitled map';
+          if(m.isDefault) label += ' (default)';
+          return '<option value="'+m.id+'">'+label+'</option>';
+        }).join('');
 
-  // -------- Seat-map designer (allocated seating wizard) --------
+        const def = maps.find(function(m){ return m.isDefault; }) || maps[0];
+        currentSeatMapId = def.id;
+        smSelect.value = currentSeatMapId;
 
-  async function seatingPage(eventId){
-    // Local wizard state – in future this can be loaded from /admin/events/:id/seat-map
-    const state = {
-      layout: 'theatre',
-      rows: 10,
-      seatsPerRow: 20,
-      tables: 20,
-      seatsPerTable: 6,
-      gaCapacity: 400,
-    };
+        layout = (def.layout && typeof def.layout === 'object')
+          ? def.layout
+          : { seats:{}, elements:[] };
 
-    main.innerHTML =
-      '<div class="card">' +
-        '<div class="header">' +
-          '<div>' +
-            '<div class="title">Seat map layout</div>' +
-            '<div class="muted" id="seatStepLabel">Step 1 of 2 · Choose your layout</div>' +
-          '</div>' +
-          '<div style="display:flex;gap:8px;">' +
-            '<button class="btn" data-view="/admin/ui/shows/current">All events</button>' +
-          '</div>' +
-        '</div>' +
-        '<div class="grid grid-2" style="align-items:flex-start;">' +
-          '<div>' +
-            '<div class="muted" style="font-size:13px;margin-bottom:6px;">Quick start layouts</div>' +
-            '<div class="mode-choice-wrap" style="margin-top:8px;">' +
-              '<div class="mode-card" data-layout-choice="theatre">' +
-                '<div class="mode-card-title">Theatre rows</div>' +
-                '<div class="mode-card-body">Straight rows facing the stage. Perfect for classic theatre style.</div>' +
-                '<div class="mode-card-tag">Most common</div>' +
-              '</div>' +
-              '<div class="mode-card" data-layout-choice="cabaret">' +
-                '<div class="mode-card-title">Cabaret tables</div>' +
-                '<div class="mode-card-body">Round tables with seats around them. Good for clubs and cabaret rooms.</div>' +
-                '<div class="mode-card-tag">Tables and chairs</div>' +
-              '</div>' +
-              '<div class="mode-card" data-layout-choice="standing">' +
-                '<div class="mode-card-title">Standing / GA zone</div>' +
-                '<div class="mode-card-body">No fixed seats. Set a capacity and let people stand or pick any spot.</div>' +
-                '<div class="mode-card-tag">Standing room</div>' +
-              '</div>' +
-              '<div class="mode-card" data-layout-choice="custom">' +
-                '<div class="mode-card-title">Custom mix</div>' +
-                '<div class="mode-card-body">Rows and tables together. Use this when your venue has a more complex layout.</div>' +
-                '<div class="mode-card-tag">Advanced</div>' +
-              '</div>' +
-            '</div>' +
-          '</div>' +
-          '<div>' +
-            '<div class="muted" style="font-size:13px;margin-bottom:6px;">Layout details</div>' +
-            '<div class="grid grid-2" style="margin-bottom:12px;">' +
-              '<div data-layout-section="theatre cabaret custom">' +
-                '<label>Number of rows</label><br />' +
-                '<input type="number" min="1" id="seatRows" value="10" />' +
-                '<div class="tip">Applies to theatre rows. For cabaret, this is the number of rows of tables.</div>' +
-              '</div>' +
-              '<div data-layout-section="theatre custom">' +
-                '<label>Seats per row</label><br />' +
-                '<input type="number" min="1" id="seatPerRow" value="20" />' +
-                '<div class="tip">Total seats in each row.</div>' +
-              '</div>' +
-              '<div data-layout-section="cabaret custom">' +
-                '<label>Number of tables</label><br />' +
-                '<input type="number" min="1" id="seatTables" value="20" />' +
-                '<div class="tip">Total tables in the room.</div>' +
-              '</div>' +
-              '<div data-layout-section="cabaret custom">' +
-                '<label>Seats per table</label><br />' +
-                '<input type="number" min="1" id="seatPerTable" value="6" />' +
-                '<div class="tip">Useful for round tables and booths.</div>' +
-              '</div>' +
-              '<div data-layout-section="standing">' +
-                '<label>Standing capacity</label><br />' +
-                '<input type="number" min="1" id="seatGaCapacity" value="400" />' +
-                '<div class="tip">Maximum number of people in the space.</div>' +
-              '</div>' +
-            '</div>' +
-            '<div class="seat-layout-wrap">' +
-              '<div class="seat-stage">' +
-                '<div>STAGE</div>' +
-                '<div class="seat-stage-bar"></div>' +
-              '</div>' +
-              '<div id="seatLayoutSummary" style="margin-top:10px;font-size:13px;color:#0f172a;">' +
-                'Layout summary will appear here.' +
-              '</div>' +
-              '<div id="seatLayoutPreview" style="margin-top:10px;"></div>' +
-            '</div>' +
-            '<div style="margin-top:12px;display:flex;justify-content:flex-end;gap:8px;">' +
-              '<button class="btn" id="seatWizardBackBtn">Back</button>' +
-              '<button class="btn p" id="seatWizardSaveBtn">Save layout</button>' +
-            '</div>' +
-          '</div>' +
-        '</div>' +
-      '</div>';
-
-    const layoutCards = $$('.mode-card', main);
-    const rowsInput = $('#seatRows', main);
-    const perRowInput = $('#seatPerRow', main);
-    const tablesInput = $('#seatTables', main);
-    const perTableInput = $('#seatPerTable', main);
-    const gaCapInput = $('#seatGaCapacity', main);
-    const sections = $$('[data-layout-section]', main);
-    const summaryEl = $('#seatLayoutSummary', main);
-    const previewEl = $('#seatLayoutPreview', main);
-    const stepLabel = $('#seatStepLabel', main);
-    const backBtn = $('#seatWizardBackBtn', main);
-    const saveBtn = $('#seatWizardSaveBtn', main);
-
-    function applySectionVisibility(){
-      sections.forEach(function(sec){
-        const modes = (sec.getAttribute('data-layout-section') || '').split(/\s+/);
-        if (modes.indexOf(state.layout) !== -1){
-          sec.style.display = '';
-        } else {
-          sec.style.display = 'none';
-        }
-      });
-    }
-
-    function renderPreview(){
-      let total = 0;
-      let desc = '';
-
-      if (state.layout === 'theatre'){
-        total = (state.rows || 0) * (state.seatsPerRow || 0);
-        desc = 'Theatre rows · ' + state.rows + ' rows × ' + state.seatsPerRow + ' seats per row.';
-      } else if (state.layout === 'cabaret'){
-        total = (state.tables || 0) * (state.seatsPerTable || 0);
-        desc = 'Cabaret tables · ' + state.tables + ' tables × ' + state.seatsPerTable + ' seats per table.';
-      } else if (state.layout === 'standing'){
-        total = state.gaCapacity || 0;
-        desc = 'Standing / GA zone · capacity ' + total + '.';
-      } else {
-        const theatrePart = (state.rows || 0) * (state.seatsPerRow || 0);
-        const tablePart = (state.tables || 0) * (state.seatsPerTable || 0);
-        total = theatrePart + tablePart;
-        desc = 'Custom mix · ' + theatrePart + ' row seats plus ' + tablePart + ' table seats.';
+        clearSelection();
+        await reloadSeats();
+        refreshBlocksList();
+        updateSeatPricingSummary();
+      }catch(e){
+        smStatus.textContent = 'Failed to load seat maps';
+        smErr.textContent = e.message || String(e);
       }
+    }
 
-      summaryEl.textContent = 'Total seats: ' + total + '. ' + desc;
+    async function reloadSeats(){
+      if(!currentSeatMapId){
+        seatCanvas.innerHTML = '<div class="muted">No seat map selected.</div>';
+        hideGuides();
+        return;
+      }
+      try{
+        seats = await j('/seatmaps/'+currentSeatMapId+'/seats');
+        renderSeats();
+        refreshBlocksList();
+        updateSeatPricingSummary();
+      }catch(e){
+        seatCanvas.innerHTML = '<div class="error">Failed to load seats: '+(e.message||e)+'</div>';
+        hideGuides();
+      }
+    }
 
-      // Simple visual preview using the existing seat styles
-      previewEl.innerHTML = '';
-      if (state.layout === 'standing'){
-        previewEl.innerHTML =
-          '<div class="muted" style="font-size:13px;">Standing zone preview. People are free to move within the area.</div>';
+    function renderSeats(){
+      seatCanvas.innerHTML = '';
+      hideGuides();
+      ensureLayout();
+
+      if(!Array.isArray(seats) || !seats.length){
+        seatCanvas.innerHTML = '<div class="muted">No seats yet. Use the quick generator on the left.</div>';
+        seatCanvas.appendChild(guideH);
+        seatCanvas.appendChild(guideV);
+        hideGuides();
         return;
       }
 
-      const maxSeatsToDraw = 220;
-      let seatsToDraw = total;
-      let trimmed = false;
-      if (seatsToDraw > maxSeatsToDraw){
-        seatsToDraw = maxSeatsToDraw;
-        trimmed = true;
+      const hasPositions = Object.keys(layout.seats).length > 0;
+      if(!hasPositions){
+        // Default grid positions if no layout yet
+        const rowsMap = {};
+        seats.forEach(function(s){
+          const key = s.rowLabel || s.row || '';
+          if(!rowsMap[key]) rowsMap[key] = [];
+          rowsMap[key].push(s);
+        });
+
+        const rowKeys = Object.keys(rowsMap).sort();
+        const offsetX = 40;
+        const offsetY = 30;
+        const dx = 24;
+        const dy = 24;
+
+        rowKeys.forEach(function(rowKey, rowIndex){
+          const rowSeats = rowsMap[rowKey].sort(function(a,b){
+            const an = a.seatNumber != null ? a.seatNumber : a.number;
+            const bn = b.seatNumber != null ? b.seatNumber : b.number;
+            return an - bn;
+          });
+          const y = offsetY + rowIndex * dy;
+          rowSeats.forEach(function(s, colIndex){
+            const x = offsetX + colIndex * dx;
+            const meta = ensureSeatMeta(s.id);
+            meta.x = x;
+            meta.y = y;
+          });
+        });
       }
 
-      const grid = document.createElement('div');
-      grid.className = 'seat-grid';
+      seats.forEach(function(s){
+        const meta = ensureSeatMeta(s.id);
+        const pos = { x: meta.x, y: meta.y };
 
-      // Pick a rough column count so the grid looks reasonable
-      let cols = 10;
-      if (state.layout === 'cabaret'){ cols = 8; }
-      if (state.layout === 'custom'){ cols = 12; }
+        const seatEl = document.createElement('div');
+        seatEl.className = 'seat';
+        if(s.status === 'BLOCKED') seatEl.classList.add('seat-blocked');
+        if(s.status === 'HELD')    seatEl.classList.add('seat-held');
+        if(s.status === 'SOLD')    seatEl.classList.add('seat-sold');
 
-      grid.style.gridTemplateColumns = 'repeat(' + cols + ', 1fr)';
+        seatEl.setAttribute('data-seat-id', s.id);
+        seatEl.style.position = 'absolute';
+        seatEl.style.left = (pos.x - 9)+'px';
+        seatEl.style.top  = (pos.y - 9)+'px';
 
-      for (let i = 0; i < seatsToDraw; i++){
-        const seat = document.createElement('div');
-        seat.className = 'seat';
-        seat.innerHTML = '&nbsp;';
-        grid.appendChild(seat);
-      }
-
-      previewEl.appendChild(grid);
-
-      if (trimmed){
-        const note = document.createElement('div');
-        note.className = 'tip';
-        note.textContent = 'Preview trimmed to ' + maxSeatsToDraw + ' seats for performance. Full capacity is ' + total + ' seats.';
-        previewEl.appendChild(note);
-      }
-    }
-
-    function setLayout(layout){
-      state.layout = layout;
-
-      layoutCards.forEach(function(card){
-        const isActive = card.getAttribute('data-layout-choice') === layout;
-        card.style.outline = isActive ? '2px solid #111827' : '';
-        card.style.backgroundColor = isActive ? '#e5e7eb' : '';
-      });
-
-      stepLabel.textContent = 'Step 2 of 2 · Configure your ' + layout + ' layout';
-      applySectionVisibility();
-      renderPreview();
-    }
-
-    layoutCards.forEach(function(card){
-      card.addEventListener('click', function(){
-        const layout = card.getAttribute('data-layout-choice');
-        if (layout){
-          setLayout(layout);
+        const labelRow  = s.rowLabel || s.row || '';
+        const labelSeat = (s.seatNumber != null ? s.seatNumber : s.number);
+        let title = labelRow+' '+labelSeat;
+        const ttLabel = meta.ticketTypeId ? ticketTypeLabelForId(meta.ticketTypeId) : '';
+        if(ttLabel){
+          title += ' · '+ttLabel;
         }
+        seatEl.title = title;
+        seatEl.textContent = labelSeat;
+
+        if(selectedSeatIds.has(s.id)){
+          seatEl.classList.add('seat-selected');
+        }
+
+        seatCanvas.appendChild(seatEl);
       });
+
+      // Block overlays
+      ensureLayout();
+      const blocks = layout.elements.filter(function(e){ return e && e.type === 'block' && Array.isArray(e.seatIds) && e.seatIds.length; });
+      blocks.forEach(function(b){
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        b.seatIds.forEach(function(id){
+          const meta = layout.seats[id];
+          if(!meta) return;
+          const pos = meta;
+          if(pos.x < minX) minX = pos.x;
+          if(pos.x > maxX) maxX = pos.x;
+          if(pos.y < minY) minY = pos.y;
+          if(pos.y > maxY) maxY = pos.y;
+        });
+        if(!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) return;
+
+        const overlay = document.createElement('div');
+        overlay.className = 'seat-block-overlay';
+        if(selectedBlockId === b.id) overlay.classList.add('selected');
+        overlay.setAttribute('data-block-id', b.id);
+
+        const padding = 12;
+        const width = (maxX - minX) + padding*2;
+        const height = (maxY - minY) + padding*2;
+
+        overlay.style.left = (minX - padding)+'px';
+        overlay.style.top  = (minY - padding)+'px';
+        overlay.style.width = width+'px';
+        overlay.style.height = height+'px';
+
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'seat-block-overlay-label';
+        labelSpan.textContent = b.name
+          ? (b.zone ? (b.name+' – '+b.zone) : b.name)
+          : (b.zone || 'Block');
+
+        const handleSpan = document.createElement('span');
+        handleSpan.className = 'seat-block-overlay-handle';
+        handleSpan.textContent = '⋮⋮';
+
+        overlay.appendChild(labelSpan);
+        overlay.appendChild(handleSpan);
+
+        seatCanvas.appendChild(overlay);
+      });
+
+      seatCanvas.appendChild(guideH);
+      seatCanvas.appendChild(guideV);
+    }
+
+    // Switch between different maps
+    smSelect.addEventListener('change', async function(){
+      const id = smSelect.value;
+      currentSeatMapId = id || null;
+      const found = seatMapsData.find(function(m){ return m.id === id; });
+      if(found && found.layout && typeof found.layout === 'object'){
+        layout = found.layout;
+      }else{
+        layout = { seats:{}, elements:[] };
+      }
+      clearSelection();
+      await reloadSeats();
+      refreshBlocksList();
+      updateSeatPricingSummary();
     });
 
-    function wireNumberInput(el, key){
-      if (!el) return;
-      el.addEventListener('input', function(){
-        const v = parseInt(el.value, 10);
-        state[key] = isNaN(v) || v < 0 ? 0 : v;
-        renderPreview();
+    // Create new seat map
+    smCreate.addEventListener('click', async function(){
+      smErr.textContent = '';
+      const name = smName.value.trim();
+      if(!name){
+        smErr.textContent = 'Name is required';
+        return;
+      }
+      try{
+        const body = { showId: showId, name: name };
+        if(venueId) body.venueId = venueId;
+        const created = await j('/admin/seatmaps',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(body)
+        });
+        smName.value = '';
+        await reloadSeatMaps();
+        currentSeatMapId = created.id;
+        smSelect.value = currentSeatMapId;
+        layout = { seats:{}, elements:[] };
+        clearSelection();
+        await reloadSeats();
+        refreshBlocksList();
+        updateSeatPricingSummary();
+      }catch(e){
+        smErr.textContent = e.message || String(e);
+      }
+    });
+
+    // Quick generator → /seatmaps/:id/seats/bulk
+    qGenerate.addEventListener('click', async function(){
+      if(!currentSeatMapId){
+        alert('Select or create a seat map first.');
+        return;
+      }
+      const rows = Number(qRows.value) || 0;
+      const cols = Number(qCols.value) || 0;
+      if(rows <= 0 || cols <= 0){
+        alert('Rows and seats per row must be positive numbers.');
+        return;
+      }
+      const seatsPayload = [];
+      for(let r=0;r<rows;r++){
+        const rowLabel = String.fromCharCode(65 + r);
+        for(let c=0;c<cols;c++){
+          seatsPayload.push({
+            row: rowLabel,
+            number: c+1,
+            rowLabel: rowLabel,
+            seatNumber: c+1
+          });
+        }
+      }
+      try{
+        await j('/seatmaps/'+currentSeatMapId+'/seats/bulk',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ seats: seatsPayload })
+        });
+        clearSelection();
+        await reloadSeats();
+      }catch(e){
+        alert('Failed to generate seats: '+(e.message||e));
+      }
+    });
+
+    // Create block from current selection (with metadata)
+    blockCreateBtn.addEventListener('click', function(){
+      ensureLayout();
+      const seatIds = Array.from(selectedSeatIds);
+      if(!seatIds.length){
+        alert('Select one or more seats first.');
+        return;
+      }
+      const blocks = layout.elements.filter(function(e){ return e && e.type === 'block'; });
+      const name = (blockNameInput.value || '').trim() || ('Block '+(blocks.length+1));
+
+      let capacity = null;
+      const capStr = (blockCapacityInput && blockCapacityInput.value || '').trim();
+      if(capStr){
+        const n = Number(capStr);
+        if(Number.isFinite(n) && n >= 0){
+          capacity = n;
+        }
+      }
+
+      const zone = (blockZoneInput && blockZoneInput.value || '').trim() || null;
+      const ticketTypeId = (blockTicketTypeSelect && blockTicketTypeSelect.value) || null;
+
+      const id = 'block_'+Date.now()+'_'+Math.floor(Math.random()*1000);
+      layout.elements.push({
+        id: id,
+        type: 'block',
+        name: name,
+        seatIds: seatIds.slice(),
+        capacity: capacity,
+        zone: zone,
+        ticketTypeId: ticketTypeId
       });
-    }
 
-    wireNumberInput(rowsInput, 'rows');
-    wireNumberInput(perRowInput, 'seatsPerRow');
-    wireNumberInput(tablesInput, 'tables');
-    wireNumberInput(perTableInput, 'seatsPerTable');
+      if(blockNameInput) blockNameInput.value = '';
+      if(blockCapacityInput) blockCapacityInput.value = '';
+      if(blockZoneInput) blockZoneInput.value = '';
+      if(blockTicketTypeSelect) blockTicketTypeSelect.value = '';
 
-    if (gaCapInput){
-      gaCapInput.addEventListener('input', function(){
-        const v = parseInt(gaCapInput.value, 10);
-        state.gaCapacity = isNaN(v) || v < 0 ? 0 : v;
-        renderPreview();
+      selectedBlockId = id;
+      refreshBlocksList();
+      renderSeats();
+    });
+
+    // Seat pricing: assign / clear ticket type from selected seats
+    seatPriceAssignBtn.addEventListener('click', function(){
+      const ttId = seatPriceTicketTypeSelect && seatPriceTicketTypeSelect.value;
+      if(!ttId){
+        alert('Choose a ticket type first.');
+        return;
+      }
+      if(!selectedSeatIds.size){
+        alert('Select one or more seats first.');
+        return;
+      }
+      ensureLayout();
+      selectedSeatIds.forEach(function(id){
+        const meta = ensureSeatMeta(id);
+        meta.ticketTypeId = ttId;
       });
-    }
+      renderSeats();
+      updateSeatPricingSummary();
+    });
 
-    if (backBtn){
-      backBtn.addEventListener('click', function(){
-        // Go back to the ticket mode choice screen for this show
-        go('/admin/ui/shows/' + encodeURIComponent(eventId) + '/tickets');
+    seatPriceClearBtn.addEventListener('click', function(){
+      if(!selectedSeatIds.size){
+        alert('Select one or more seats to clear.');
+        return;
+      }
+      ensureLayout();
+      selectedSeatIds.forEach(function(id){
+        const meta = ensureSeatMeta(id);
+        if(meta.ticketTypeId){
+          meta.ticketTypeId = null;
+        }
       });
-    }
+      renderSeats();
+      updateSeatPricingSummary();
+    });
 
-    if (saveBtn){
-      saveBtn.addEventListener('click', async function(){
-        // For now we just log the config and show a message.
-        // Later this will POST to something like /admin/events/:id/seat-map.
-        console.log('Seat layout config for event', eventId, state);
-        alert('Layout saved locally. We will wire this to a real seat-map endpoint so it can drive allocated seating at checkout.');
+    // Drag behaviour with snap + alignment guides + group move (seats or blocks)
+    const GRID_SIZE = 4;
+    const SNAP_DIST = 8;
+    let dragState = null;
+
+    seatCanvas.addEventListener('mousedown', function(e){
+      // First: check if clicking a block overlay
+      const blockEl = e.target && e.target.closest ? e.target.closest('.seat-block-overlay') : null;
+      if(blockEl){
+        const blockId = blockEl.getAttribute('data-block-id');
+        if(blockId){
+          ensureLayout();
+          const block = layout.elements.find(function(el){ return el && el.id === blockId && el.type === 'block'; });
+          if(block && Array.isArray(block.seatIds) && block.seatIds.length){
+            clearSelection();
+            block.seatIds.forEach(function(seatId){ addSeatToSelection(seatId); });
+            selectedBlockId = blockId;
+            renderSeats();
+
+            if(e.button === 0){
+              ensureLayout();
+              const seatIds = Array.from(selectedSeatIds);
+              const startPositions = {};
+              seatIds.forEach(function(id){
+                const meta = ensureSeatMeta(id);
+                startPositions[id] = {
+                  x: meta.x,
+                  y: meta.y
+                };
+              });
+
+              dragState = {
+                seatIds: seatIds,
+                anchorSeatId: seatIds[0],
+                startMouseX: e.clientX,
+                startMouseY: e.clientY,
+                startPositions: startPositions
+              };
+            }
+          }
+        }
+        e.preventDefault();
+        return;
+      }
+
+      const seatEl = e.target && e.target.closest ? e.target.closest('.seat') : null;
+
+      // Clicked on empty canvas: clear selection
+      if(!seatEl){
+        clearSelection();
+        renderSeats();
+        return;
+      }
+
+      const seatId = seatEl.getAttribute('data-seat-id');
+      if(!seatId || seatEl.classList.contains('seat-sold')) return;
+
+      // selection logic
+      if(e.altKey){
+        selectRowForSeat(seatId);
+      }else if(e.shiftKey || e.metaKey || e.ctrlKey){
+        if(selectedSeatIds.has(seatId)){
+          selectedSeatIds.delete(seatId);
+          seatEl.classList.remove('seat-selected');
+        }else{
+          addSeatToSelection(seatId);
+        }
+        recomputeSelectedBlockFromSeats();
+        renderSeats();
+      }else{
+        selectSingleSeat(seatId);
+      }
+
+      // start drag for left button
+      if(e.button === 0 && selectedSeatIds.size){
+        ensureLayout();
+        const seatIds = Array.from(selectedSeatIds);
+        const startPositions = {};
+        seatIds.forEach(function(id){
+          const meta = ensureSeatMeta(id);
+          startPositions[id] = {
+            x: meta.x,
+            y: meta.y
+          };
+        });
+
+        dragState = {
+          seatIds: seatIds,
+          anchorSeatId: seatId,
+          startMouseX: e.clientX,
+          startMouseY: e.clientY,
+          startPositions: startPositions
+        };
+      }
+
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', function(e){
+      if(!dragState) return;
+
+      const rect = seatCanvas.getBoundingClientRect();
+      const dxScreen = e.clientX - dragState.startMouseX;
+      const dyScreen = e.clientY - dragState.startMouseY;
+
+      const dx = dxScreen / zoom;
+      const dy = dyScreen / zoom;
+
+      const widthLogical = rect.width / zoom;
+      const heightLogical = rect.height / zoom;
+
+      ensureLayout();
+
+      const anchorId = dragState.anchorSeatId;
+      const anchorStart = dragState.startPositions[anchorId];
+      if(!anchorStart) return;
+
+      let anchorX = anchorStart.x + dx;
+      let anchorY = anchorStart.y + dy;
+
+      // Snap to grid
+      anchorX = Math.round(anchorX / GRID_SIZE) * GRID_SIZE;
+      anchorY = Math.round(anchorY / GRID_SIZE) * GRID_SIZE;
+
+      const PADDING = 10;
+      anchorX = Math.max(PADDING, Math.min(widthLogical  - PADDING, anchorX));
+      anchorY = Math.max(PADDING, Math.min(heightLogical - PADDING, anchorY));
+
+      let snapX = null;
+      let snapY = null;
+      const canvasCenterX = widthLogical / 2;
+      const canvasCenterY = heightLogical / 2;
+
+      seats.forEach(function(s){
+        const meta = layout.seats[s.id];
+        if(!meta) return;
+        if(dragState.seatIds.indexOf(s.id) !== -1) return;
+        const pos = meta;
+        if(Math.abs(anchorX - pos.x) <= SNAP_DIST){
+          snapX = pos.x;
+        }
+        if(Math.abs(anchorY - pos.y) <= SNAP_DIST){
+          snapY = pos.y;
+        }
       });
-    }
 
-    // Initial state
-    setLayout('theatre');
+      if(Math.abs(anchorX - canvasCenterX) <= SNAP_DIST){
+        snapX = canvasCenterX;
+      }
+      if(Math.abs(anchorY - canvasCenterY) <= SNAP_DIST){
+        snapY = canvasCenterY;
+      }
+
+      if(snapX != null) anchorX = snapX;
+      if(snapY != null) anchorY = snapY;
+
+      if(snapY != null){
+        showGuideH(anchorY);
+      }else{
+        guideH.style.display = 'none';
+      }
+      if(snapX != null){
+        showGuideV(anchorX);
+      }else{
+        guideV.style.display = 'none';
+      }
+
+      const adjustDx = anchorX - (anchorStart.x + dx);
+      const adjustDy = anchorY - (anchorStart.y + dy);
+
+      dragState.seatIds.forEach(function(id){
+        const base = dragState.startPositions[id];
+        let x = base.x + dx + adjustDx;
+        let y = base.y + dy + adjustDy;
+
+        const PADDING = 10;
+        x = Math.max(PADDING, Math.min(widthLogical  - PADDING, x));
+        y = Math.max(PADDING, Math.min(heightLogical - PADDING, y));
+
+        const meta = ensureSeatMeta(id);
+        meta.x = x;
+        meta.y = y;
+
+        const el = seatCanvas.querySelector('[data-seat-id="'+id+'"]');
+        if(el){
+          el.style.left = (x - 9)+'px';
+          el.style.top  = (y - 9)+'px';
+        }
+      });
+
+      renderSeats();
+    });
+
+    document.addEventListener('mouseup', function(){
+      dragState = null;
+      hideGuides();
+    });
+
+    // Save layout → PATCH /admin/seatmaps/:id/layout
+    saveLayoutBtn.addEventListener('click', async function(){
+      if(!currentSeatMapId){
+        alert('No seat map selected.');
+        return;
+      }
+      ensureLayout();
+
+      // Enforce: if multiple ticket types exist, every seat must have a ticketTypeId
+      if(ticketTypes && ticketTypes.length > 1){
+        let unassigned = 0;
+        seats.forEach(function(s){
+          const meta = layout.seats[s.id];
+          if(!meta || !meta.ticketTypeId){
+            unassigned++;
+          }
+        });
+        if(unassigned > 0){
+          alert('There are '+unassigned+' seats not assigned to a ticket type. When using multiple prices, every seat must be allocated. Please assign them before saving.');
+          return;
+        }
+      }
+
+      try{
+        await j('/admin/seatmaps/'+currentSeatMapId+'/layout',{
+          method:'PATCH',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ layout: layout })
+        });
+        alert('Layout saved');
+      }catch(e){
+        alert('Failed to save layout: '+(e.message||e));
+      }
+    });
+
+    // Initial load
+    await loadTicketTypesForShow();
+    reloadSeatMaps();
   }
 
-
-  // -------- Other simple pages (placeholders) --------
+  // ---------- Simple stubs for other views ----------
 
   function orders(){
-    main.innerHTML =
-      '<div class="card">' +
-        '<div class="title">Orders</div>' +
-        '<div class="muted">Order management UI coming soon.</div>' +
-      '</div>';
+    main.innerHTML = '<div class="card"><div class="title">Orders</div><div class="muted">Orders view coming soon.</div></div>';
   }
 
   function venues(){
-    main.innerHTML =
-      '<div class="card">' +
-        '<div class="title">Venues</div>' +
-        '<div class="muted">Venue management UI coming soon. For now, you can create venues inline when creating shows.</div>' +
-      '</div>';
+    main.innerHTML = '<div class="card"><div class="title">Venues</div><div class="muted">Venue management UI coming soon (data API already exists).</div></div>';
   }
 
   function analytics(){
-    main.innerHTML =
-      '<div class="card">' +
-        '<div class="title">Analytics</div>' +
-        '<div class="muted">Sales and performance analytics will appear here.</div>' +
-      '</div>';
+    main.innerHTML = '<div class="card"><div class="title">Analytics</div><div class="muted">Analytics dashboard coming soon.</div></div>';
   }
 
   function audiences(){
-    main.innerHTML =
-      '<div class="card">' +
-        '<div class="title">Audiences</div>' +
-        '<div class="muted">Audience & mailing-list tools will live here.</div>' +
-      '</div>';
+    main.innerHTML = '<div class="card"><div class="title">Audiences</div><div class="muted">Audience tools coming soon.</div></div>';
   }
 
   function emailPage(){
-    main.innerHTML =
-      '<div class="card">' +
-        '<div class="title">Email campaigns</div>' +
-        '<div class="muted">Set up automated campaigns once this module is wired in.</div>' +
-      '</div>';
+    main.innerHTML = '<div class="card"><div class="title">Email Campaigns</div><div class="muted">Email campaign tools will plug into your existing Mailchimp/automation stack.</div></div>';
   }
 
   function account(){
-    main.innerHTML =
-      '<div class="card">' +
-        '<div class="title">Account</div>' +
-        '<div class="muted">Account settings for organisers will appear here.</div>' +
-      '</div>';
+    main.innerHTML = '<div class="card"><div class="title">Account</div><div class="muted">Account settings coming soon.</div></div>';
   }
 
-  // Kick things off on initial load
+  // Kick off initial route on page load
   route();
- // end IIFE
 })();
 </script>
 </body>
-</html>
-`);
+</html>`);
   }
 );
 
