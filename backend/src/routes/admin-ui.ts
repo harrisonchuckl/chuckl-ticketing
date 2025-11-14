@@ -69,16 +69,27 @@ router.get(
   .opt:hover{background:#f8fafc}
   .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--border);background:#f9fafb}
 
+  .tab-strip{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:4px}
+  .tab-btn{flex:1;appearance:none;border:none;background:transparent;padding:6px 8px;font-size:13px;border-radius:8px 8px 0 0;cursor:pointer;color:var(--muted)}
+  .tab-btn.active{background:#e5e7eb;color:var(--ink);font-weight:500}
+  .tab-pane{display:none;margin-top:4px}
+  .tab-pane.active{display:block}
+
   .seat-layout-wrap{
-    background:#020617;
+    background:#f9fafb;
+    background-image:
+      linear-gradient(#e5e7eb 1px, transparent 1px),
+      linear-gradient(90deg, #e5e7eb 1px, transparent 1px);
+    background-size:24px 24px;
     border-radius:12px;
     padding:16px;
-    color:#e5e7eb;
-    min-height:320px;
+    color:#0f172a;
+    min-height:360px;
     display:flex;
     flex-direction:column;
     gap:12px;
     position:relative;
+    overflow:auto;
   }
   #seatCanvas{
     position:relative;
@@ -86,7 +97,7 @@ router.get(
     min-height:220px;
     transform-origin:0 0;
   }
-  .guide-line{position:absolute;background:rgba(248,250,252,.85);pointer-events:none;z-index:5}
+  .guide-line{position:absolute;background:rgba(148,163,184,.7);pointer-events:none;z-index:5}
   .guide-line.h{height:1px;width:100%}
   .guide-line.v{width:1px;height:100%}
 
@@ -102,13 +113,26 @@ router.get(
     padding:4px 8px;
     font-size:12px;
   }
-  .seat-stage{font-size:12px;text-align:center;letter-spacing:.12em;text-transform:uppercase;color:#e5e7eb}
+  .seat-stage{
+    font-size:12px;
+    text-align:center;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    color:#0f172a;
+  }
   .seat-stage-bar{margin-top:4px;height:6px;border-radius:999px;background:rgba(148,163,184,.35)}
   .seat-dot{width:12px;height:12px;border-radius:3px;background:var(--seat-bg);border:1px solid var(--seat-border)}
   .seat-dot.block{background:#0f172a;border-color:#0b1120}
   .seat-dot.held{background:#f59e0b;border-color:#92400e}
   .seat-dot.sold{background:#9ca3af;border-color:#4b5563}
-  .seat-legend{font-size:12px;color:#e5e7eb;display:flex;gap:12px;flex-wrap:wrap;margin-top:4px}
+  .seat-legend{
+    font-size:12px;
+    color:#0f172a;
+    display:flex;
+    gap:12px;
+    flex-wrap:wrap;
+    margin-top:4px;
+  }
   .seat-legend span{display:inline-flex;align-items:center;gap:4px}
   .seat-grid{display:inline-grid;gap:4px;margin-top:4px}
   .seat{width:18px;height:18px;border-radius:4px;background:var(--seat-bg);border:1px solid var(--seat-border);display:flex;align-items:center;justify-content:center;font-size:10px;cursor:pointer;transition:transform .05s ease-out,box-shadow .05s ease-out}
@@ -122,7 +146,7 @@ router.get(
   .seat-block-overlay{
     position:absolute;
     border:1px dashed rgba(148,163,184,.9);
-    background:rgba(15,23,42,.35);
+    background:rgba(148,163,184,.12);
     border-radius:8px;
     padding:4px 6px;
     box-sizing:border-box;
@@ -131,7 +155,7 @@ router.get(
     align-items:flex-start;
     justify-content:space-between;
     font-size:11px;
-    color:#e5e7eb;
+    color:#0f172a;
     pointer-events:auto;
   }
   .seat-block-overlay-label{
@@ -156,16 +180,16 @@ router.get(
     justify-content:center;
     border-radius:6px;
     border:1px solid rgba(148,163,184,.85);
-    background:rgba(15,23,42,.85);
-    color:#e5e7eb;
+    background:rgba(255,255,255,.9);
+    color:#0f172a;
     padding:2px 4px;
     box-sizing:border-box;
     user-select:none;
   }
   .seat-el.stage{
-    background:#fbbf24;
-    color:#111827;
-    border-color:#f59e0b;
+    background:#e5f3ff;
+    color:#0f172a;
+    border-color:#60a5fa;
     font-weight:600;
     letter-spacing:.08em;
     text-transform:uppercase;
@@ -189,7 +213,7 @@ router.get(
   .seat-el.label{
     background:transparent;
     border:none;
-    color:#e5e7eb;
+    color:#0f172a;
     font-weight:500;
   }
   .seat-el.small-icon{
@@ -202,7 +226,7 @@ router.get(
     background:rgba(148,163,184,.25);
   }
   .seat-el.sofa{
-    background:#4b5563;
+    background:#e5e7eb;
     border-radius:999px;
   }
   .seat-el.selected{
@@ -303,7 +327,6 @@ router.get(
 
     // NEW: support /admin/ui/events/:eventId/seat-map → seat map designer
     if (path.startsWith('/admin/ui/events/') && path.endsWith('/seat-map')) {
-      // /admin/ui/events/:eventId/seat-map
       const parts = path.split('/');
       const eventId = parts[4]; // ['', 'admin', 'ui', 'events', ':eventId', 'seat-map']
       return seatingPage(eventId);
@@ -311,7 +334,7 @@ router.get(
 
     if (path.startsWith('/admin/ui/shows/') && path.endsWith('/edit')) return editShow(path.split('/')[4]);
     if (path.startsWith('/admin/ui/shows/') && path.endsWith('/tickets')) return ticketsPage(path.split('/')[4]);
-    if (path.startsWith('/admin/ui/shows/') && path.endsWith('/seating')) return seatingPage(path.split('/')[4]);
+    if (path.startsWith('/admin/ui/shows/') && path.endsWith('/seating')) return seatingPage(path.split('/')[4]); // legacy alias
 
     return home();
   }
@@ -587,7 +610,8 @@ router.get(
         $$('[data-seating]').forEach(function(a){
           a.addEventListener('click', function(e){
             e.preventDefault();
-            go('/admin/ui/shows/'+a.getAttribute('data-seating')+'/seating');
+            const id = a.getAttribute('data-seating');
+            go('/admin/ui/events/'+id+'/seat-map');
           });
         });
         $$('[data-tickets]').forEach(function(a){
@@ -700,7 +724,7 @@ router.get(
 
     $('#goSeating').addEventListener('click', function(e){
       e.preventDefault();
-      go('/admin/ui/shows/'+id+'/seating');
+      go('/admin/ui/events/'+id+'/seat-map');
     });
     $('#goTickets').addEventListener('click', function(e){
       e.preventDefault();
@@ -968,7 +992,7 @@ router.get(
     }
 
     $('#refreshSeatMaps').addEventListener('click', loadSeatMaps);
-    $('#editSeatMaps').addEventListener('click', function(){ go('/admin/ui/shows/'+id+'/seating'); });
+    $('#editSeatMaps').addEventListener('click', function(){ go('/admin/ui/events/'+id+'/seat-map'); });
     loadSeatMaps();
   }
 
@@ -1004,64 +1028,24 @@ router.get(
           +'</div>'
         +'</div>'
 
-        +'<div class="grid" style="gap:16px">'
-          +'<div class="grid grid-2" style="align-content:start;gap:12px">'
-            +'<div class="card" style="margin:0">'
-              +'<div class="title" style="margin-bottom:4px">Seat maps for this show</div>'
-              +'<div class="muted" id="sm_status">Loading seat maps…</div>'
-              +'<select id="sm_select" style="margin-top:8px;width:100%"></select>'
-              +'<div class="tip" id="sm_tip" style="margin-top:8px;font-size:12px">Seat maps are stored per show and can optionally be linked to a venue.</div>'
-            +'</div>'
-
-            +'<div class="card" style="margin:0">'
-              +'<div class="title" style="margin-bottom:4px">Create new seat map</div>'
-              +'<input id="sm_name" placeholder="e.g. Stalls layout" />'
-              +'<button class="btn p" id="sm_create" style="margin-top:8px;width:100%">Create seat map</button>'
-              +'<div class="error" id="sm_err" style="margin-top:4px"></div>'
-            +'</div>'
-
-            +'<div class="card" style="margin:0">'
-              +'<div class="title" style="margin-bottom:4px">Quick seat generator</div>'
-              +'<div class="muted" style="font-size:12px;margin-bottom:6px">Fast way to create a basic rectangular layout (A, B, C… rows).</div>'
-              +'<div class="grid grid-2" style="margin-bottom:6px">'
-                +'<div class="grid"><label>Rows</label><input id="q_rows" type="number" min="1" max="50" value="5"/></div>'
-                +'<div class="grid"><label>Seats per row</label><input id="q_cols" type="number" min="1" max="80" value="10"/></div>'
-              +'</div>'
-              +'<button class="btn" id="q_generate" style="width:100%;margin-top:4px">Generate seats</button>'
-              +'<div class="tip" style="font-size:12px">Uses /seatmaps/:id/seats/bulk, then reloads seats into the layout.</div>'
-            +'</div>'
-
-            +'<div class="card" style="margin:0">'
-              +'<div class="title" style="margin-bottom:4px">Seat blocks</div>'
-              +'<div class="muted" style="font-size:12px;margin-bottom:6px">Group seats into named blocks (e.g. “Stalls Left”, “Circle”), give them a zone and link to a ticket type.</div>'
-              +'<div class="grid" style="grid-template-columns:2fr auto;gap:6px;margin-bottom:6px">'
-                +'<input id="block_name" placeholder="e.g. Stalls Left" />'
-                +'<button class="btn" id="block_create">Create from selection</button>'
-              +'</div>'
-              +'<div class="grid grid-3" style="margin-bottom:6px">'
-                +'<div class="grid"><label style="font-size:12px">Capacity (optional)</label><input id="block_capacity" type="number" min="0" placeholder="Auto from seats"/></div>'
-                +'<div class="grid"><label style="font-size:12px">Pricing zone</label><input id="block_zone" placeholder="e.g. Zone A"/></div>'
-                +'<div class="grid"><label style="font-size:12px">Ticket type</label><select id="block_ticketType"><option value="">— None —</option></select></div>'
-              +'</div>'
-              +'<div class="tip" style="font-size:12px">Select one or more seats first, then create a block. You can drag the block label on the canvas to move all its seats.</div>'
-              +'<div id="blocks_list" style="margin-top:8px;font-size:13px"></div>'
-            +'</div>'
-
-            +'<div class="card" style="margin:0">'
-              +'<div class="title" style="margin-bottom:4px">Seat pricing</div>'
-              +'<div class="muted" style="font-size:12px;margin-bottom:6px">Pick a ticket type, then assign it to selected seats. With multiple ticket prices, every seat should be allocated.</div>'
-              +'<div class="grid" style="grid-template-columns:1fr;gap:6px;margin-bottom:6px">'
-                +'<label style="font-size:12px">Ticket type for selection</label>'
-                +'<select id="seat_price_ticketType"><option value="">— Choose ticket type —</option></select>'
-              +'</div>'
-              +'<div class="row" style="margin-bottom:4px">'
-                +'<button class="btn" id="seat_price_assign_selection">Assign to selection</button>'
-                +'<button class="btn" id="seat_price_clear">Clear from selection</button>'
-              +'</div>'
-              +'<div id="seat_price_summary" class="tip" style="font-size:12px;margin-top:4px">No pricing assignments yet.</div>'
-            +'</div>'
+        // Seat map selection + create
+        +'<div class="grid grid-2" style="align-content:start;gap:12px;margin-bottom:16px">'
+          +'<div class="card" style="margin:0">'
+            +'<div class="title" style="margin-bottom:4px">Seat maps for this show</div>'
+            +'<div class="muted" id="sm_status">Loading seat maps…</div>'
+            +'<select id="sm_select" style="margin-top:8px;width:100%"></select>'
+            +'<div class="tip" id="sm_tip" style="margin-top:8px;font-size:12px">Seat maps are stored per show and can optionally be linked to a venue.</div>'
           +'</div>'
 
+          +'<div class="card" style="margin:0">'
+            +'<div class="title" style="margin-bottom:4px">Create new seat map</div>'
+            +'<input id="sm_name" placeholder="e.g. Stalls layout" />'
+            +'<button class="btn p" id="sm_create" style="margin-top:8px;width:100%">Create seat map</button>'
+            +'<div class="error" id="sm_err" style="margin-top:4px"></div>'
+          +'</div>'
+        +'</div>'
+
+        +'<div class="grid" style="gap:16px;grid-template-columns:2fr 1fr">'
           +'<div class="card" style="margin:0">'
             +'<div class="header">'
               +'<div class="title">Seat layout</div>'
@@ -1088,6 +1072,102 @@ router.get(
               +'</div>'
             +'</div>'
           +'</div>'
+
+          +'<div class="card" style="margin:0" id="capacityPanel">'
+            +'<div class="title" style="margin-bottom:4px">Capacity & layout tools</div>'
+            +'<div class="muted" id="cap_summary" style="font-size:12px;margin-bottom:8px">No seats yet. Use the generator to create seats.</div>'
+
+            +'<div class="tab-strip">'
+              +'<button class="tab-btn active" id="capTabSection" data-tab="section">Sections & pricing</button>'
+              +'<button class="tab-btn" id="capTabTable" data-tab="table">Tables</button>'
+              +'<button class="tab-btn" id="capTabObject" data-tab="object">Objects</button>'
+              +'<button class="tab-btn" id="capTabText" data-tab="text">Text</button>'
+            +'</div>'
+
+            +'<div class="tab-pane active" id="capPaneSection">'
+              +'<div style="margin-bottom:8px">'
+                +'<div class="title" style="font-size:14px;margin-bottom:4px">Quick seat generator</div>'
+                +'<div class="muted" style="font-size:12px;margin-bottom:6px">Fast way to create a basic rectangular layout (A, B, C… rows).</div>'
+                +'<div class="grid grid-2" style="margin-bottom:6px">'
+                  +'<div class="grid"><label>Rows</label><input id="q_rows" type="number" min="1" max="50" value="5"/></div>'
+                  +'<div class="grid"><label>Seats per row</label><input id="q_cols" type="number" min="1" max="80" value="10"/></div>'
+                +'</div>'
+                +'<button class="btn" id="q_generate" style="width:100%;margin-top:4px">Generate seats</button>'
+                +'<div class="tip" style="font-size:12px">Uses /seatmaps/:id/seats/bulk, then reloads seats into the layout.</div>'
+              +'</div>'
+
+              +'<div style="margin-bottom:8px;border-top:1px solid var(--border);padding-top:8px">'
+                +'<div class="title" style="font-size:14px;margin-bottom:4px">Seat blocks</div>'
+                +'<div class="muted" style="font-size:12px;margin-bottom:6px">Group seats into named blocks (e.g. “Stalls Left”, “Circle”), give them a zone and link to a ticket type.</div>'
+                +'<div class="grid" style="grid-template-columns:2fr auto;gap:6px;margin-bottom:6px">'
+                  +'<input id="block_name" placeholder="e.g. Stalls Left" />'
+                  +'<button class="btn" id="block_create">Create from selection</button>'
+                +'</div>'
+                +'<div class="grid grid-3" style="margin-bottom:6px">'
+                  +'<div class="grid"><label style="font-size:12px">Capacity (optional)</label><input id="block_capacity" type="number" min="0" placeholder="Auto from seats"/></div>'
+                  +'<div class="grid"><label style="font-size:12px">Pricing zone</label><input id="block_zone" placeholder="e.g. Zone A"/></div>'
+                  +'<div class="grid"><label style="font-size:12px">Ticket type</label><select id="block_ticketType"><option value="">— None —</option></select></div>'
+                +'</div>'
+                +'<div class="tip" style="font-size:12px">Select one or more seats first, then create a block. You can drag the block label on the canvas to move all its seats.</div>'
+                +'<div id="blocks_list" style="margin-top:8px;font-size:13px"></div>'
+              +'</div>'
+
+              +'<div style="border-top:1px solid var(--border);padding-top:8px">'
+                +'<div class="title" style="font-size:14px;margin-bottom:4px">Seat pricing</div>'
+                +'<div class="muted" style="font-size:12px;margin-bottom:6px">Pick a ticket type, then assign it to selected seats. With multiple ticket prices, every seat should be allocated.</div>'
+                +'<div class="grid" style="grid-template-columns:1fr;gap:6px;margin-bottom:6px">'
+                  +'<label style="font-size:12px">Ticket type for selection</label>'
+                  +'<select id="seat_price_ticketType"><option value="">— Choose ticket type —</option></select>'
+                +'</div>'
+                +'<div class="row" style="margin-bottom:4px">'
+                  +'<button class="btn" id="seat_price_assign_selection">Assign to selection</button>'
+                  +'<button class="btn" id="seat_price_clear">Clear from selection</button>'
+                +'</div>'
+                +'<div id="seat_price_summary" class="tip" style="font-size:12px;margin-top:4px">No pricing assignments yet.</div>'
+              +'</div>'
+            +'</div>'
+
+            +'<div class="tab-pane" id="capPaneTable">'
+              +'<div class="muted" style="font-size:12px;margin-bottom:6px">Add table elements to the map. You can build seat blocks and pricing around them using the Sections tab.</div>'
+              +'<div class="grid grid-2" style="margin-bottom:6px">'
+                +'<button class="btn" id="addTableRound">Add round table</button>'
+                +'<button class="btn" id="addTableRect">Add rectangular table</button>'
+              +'</div>'
+              +'<div class="tip" style="font-size:12px">New tables appear in the centre of the canvas. Drag them into position, then assign seats/blocks.</div>'
+            +'</div>'
+
+            +'<div class="tab-pane" id="capPaneObject">'
+              +'<div class="muted" style="font-size:12px;margin-bottom:6px">Add objects like stages, aisles and icons to describe the room layout.</div>'
+              +'<div class="grid grid-2" style="margin-bottom:6px">'
+                +'<button class="btn" id="addZoneRect">Add rectangular zone</button>'
+                +'<button class="btn" id="addZoneCircle">Add circular zone</button>'
+              +'</div>'
+              +'<div class="grid grid-3" style="margin-bottom:6px">'
+                +'<button class="btn" id="addStage">Add stage block</button>'
+                +'<button class="btn" id="addToilets">Add toilets icon</button>'
+                +'<button class="btn" id="addStairs">Add stairs icon</button>'
+              +'</div>'
+              +'<div class="grid" style="margin-bottom:6px">'
+                +'<button class="btn" id="addAisle">Add aisle line</button>'
+              +'</div>'
+              +'<div class="tip" style="font-size:12px">Objects are purely visual, but are saved with the layout.</div>'
+            +'</div>'
+
+            +'<div class="tab-pane" id="capPaneText">'
+              +'<div class="muted" style="font-size:12px;margin-bottom:6px">Add free text labels to call out areas (e.g. “Accessible seats” or “Bar”).</div>'
+              +'<div class="grid" style="margin-bottom:6px">'
+                +'<div class="grid">'
+                  +'<label style="font-size:12px">Label text</label>'
+                  +'<input id="text_label_input" placeholder="e.g. Accessible seats" />'
+                +'</div>'
+              +'</div>'
+              +'<div class="row" style="margin-bottom:6px">'
+                +'<button class="btn" id="text_add_btn">Add text label</button>'
+              +'</div>'
+              +'<div class="tip" style="font-size:12px">New labels appear in the centre of the canvas; drag them into place.</div>'
+            +'</div>'
+
+          +'</div>'
         +'</div>'
       +'</div>';
 
@@ -1100,9 +1180,21 @@ router.get(
     const smName           = document.getElementById('sm_name');
     const smCreate         = document.getElementById('sm_create');
     const smErr            = document.getElementById('sm_err');
+
+    const capSummary       = document.getElementById('cap_summary');
+    const capTabSection    = document.getElementById('capTabSection');
+    const capTabTable      = document.getElementById('capTabTable');
+    const capTabObject     = document.getElementById('capTabObject');
+    const capTabText       = document.getElementById('capTabText');
+    const capPaneSection   = document.getElementById('capPaneSection');
+    const capPaneTable     = document.getElementById('capPaneTable');
+    const capPaneObject    = document.getElementById('capPaneObject');
+    const capPaneText      = document.getElementById('capPaneText');
+
     const qRows            = document.getElementById('q_rows');
     const qCols            = document.getElementById('q_cols');
     const qGenerate        = document.getElementById('q_generate');
+
     const seatCanvas       = document.getElementById('seatCanvas');
     const saveLayoutBtn    = document.getElementById('sm_saveLayout');
 
@@ -1122,12 +1214,49 @@ router.get(
     const seatPriceClearBtn           = document.getElementById('seat_price_clear');
     const seatPriceSummary            = document.getElementById('seat_price_summary');
 
+    const addTableRoundBtn = document.getElementById('addTableRound');
+    const addTableRectBtn  = document.getElementById('addTableRect');
+    const addZoneRectBtn   = document.getElementById('addZoneRect');
+    const addZoneCircleBtn = document.getElementById('addZoneCircle');
+    const addStageBtn      = document.getElementById('addStage');
+    const addToiletsBtn    = document.getElementById('addToilets');
+    const addStairsBtn     = document.getElementById('addStairs');
+    const addAisleBtn      = document.getElementById('addAisle');
+    const textLabelInput   = document.getElementById('text_label_input');
+    const textAddBtn       = document.getElementById('text_add_btn');
+
     backToTicketsBtn.addEventListener('click', function(){
       go('/admin/ui/shows/'+showId+'/tickets');
     });
     editShowBtn.addEventListener('click', function(){
       go('/admin/ui/shows/'+showId+'/edit');
     });
+
+    // Capacity tab switching
+    function setCapTab(active){
+      const tabs = [capTabSection, capTabTable, capTabObject, capTabText];
+      const panes = {
+        section: capPaneSection,
+        table: capPaneTable,
+        object: capPaneObject,
+        text: capPaneText
+      };
+      tabs.forEach(function(btn){
+        if(!btn) return;
+        const tab = btn.getAttribute('data-tab');
+        btn.classList.toggle('active', tab === active);
+      });
+      Object.keys(panes).forEach(function(key){
+        const pane = panes[key];
+        if(!pane) return;
+        pane.classList.toggle('active', key === active);
+      });
+    }
+    if(capTabSection) capTabSection.addEventListener('click', function(){ setCapTab('section'); });
+    if(capTabTable)   capTabTable.addEventListener('click',   function(){ setCapTab('table'); });
+    if(capTabObject)  capTabObject.addEventListener('click',  function(){ setCapTab('object'); });
+    if(capTabText)    capTabText.addEventListener('click',    function(){ setCapTab('text'); });
+    setCapTab('section');
 
     // Data state for this page
     let seatMapsData = [];
@@ -1162,6 +1291,31 @@ router.get(
       const spec = DEFAULT_ELEMENT_SPECS[type];
       if(!spec) return '';
       return spec.kind || '';
+    }
+
+    function addElement(type, overrides){
+      ensureLayout();
+      const spec = DEFAULT_ELEMENT_SPECS[type];
+      if(!spec || !seatCanvas) return;
+      const rect = seatCanvas.getBoundingClientRect();
+      const cx = (rect.width / zoom) / 2;
+      const cy = (rect.height / zoom) / 2;
+      const el = {
+        id: 'el_'+type+'_'+Date.now()+'_'+Math.floor(Math.random()*1000),
+        type: type,
+        x: cx,
+        y: cy,
+        w: spec.w,
+        h: spec.h,
+        label: spec.label,
+        meta: spec.meta ? JSON.parse(JSON.stringify(spec.meta)) : {}
+      };
+      if(overrides){
+        Object.assign(el, overrides);
+      }
+      layout.elements.push(el);
+      selectedElementId = el.id;
+      renderSeats();
     }
 
     // selection state
@@ -1216,6 +1370,7 @@ router.get(
       });
       selectedSeatIds.clear();
       selectedBlockId = null;
+      updateCapacitySummary();
     }
 
     function addSeatToSelection(id){
@@ -1224,6 +1379,7 @@ router.get(
         const el = seatCanvas.querySelector('[data-seat-id="'+id+'"]');
         if(el) el.classList.add('seat-selected');
       }
+      updateCapacitySummary();
     }
 
     function recomputeSelectedBlockFromSeats(){
@@ -1325,6 +1481,17 @@ router.get(
         parts.push(unassigned+' unassigned seat'+(unassigned===1?'':'s'));
       }
       seatPriceSummary.textContent = parts.length ? parts.join(' · ') : 'No pricing assignments yet.';
+    }
+
+    function updateCapacitySummary(){
+      if(!capSummary) return;
+      const total = Array.isArray(seats) ? seats.length : 0;
+      const selected = selectedSeatIds.size;
+      if(!total){
+        capSummary.textContent = 'No seats yet. Use the generator to create seats.';
+      }else{
+        capSummary.textContent = total+' seat'+(total===1?'':'s')+' · '+selected+' selected';
+      }
     }
 
     function refreshBlocksList(){
@@ -1430,6 +1597,8 @@ router.get(
       smSelect.innerHTML = '';
       seatMapsData = [];
       currentSeatMapId = null;
+      seats = [];
+      updateCapacitySummary();
 
       try{
         let qs = 'showId='+encodeURIComponent(showId);
@@ -1444,6 +1613,7 @@ router.get(
           layout = { seats:{}, elements:[] };
           refreshBlocksList();
           updateSeatPricingSummary();
+          updateCapacitySummary();
           return;
         }
 
@@ -1475,8 +1645,10 @@ router.get(
 
     async function reloadSeats(){
       if(!currentSeatMapId){
+        seats = [];
         seatCanvas.innerHTML = '<div class="muted">No seat map selected.</div>';
         hideGuides();
+        updateCapacitySummary();
         return;
       }
       try{
@@ -1485,8 +1657,10 @@ router.get(
         refreshBlocksList();
         updateSeatPricingSummary();
       }catch(e){
+        seats = [];
         seatCanvas.innerHTML = '<div class="error">Failed to load seats: '+(e.message||e)+'</div>';
         hideGuides();
+        updateCapacitySummary();
       }
     }
 
@@ -1496,10 +1670,11 @@ router.get(
       ensureLayout();
 
       if(!Array.isArray(seats) || !seats.length){
-        seatCanvas.innerHTML = '<div class="muted">No seats yet. Use the quick generator on the left.</div>';
+        seatCanvas.innerHTML = '<div class="muted">No seats yet. Use the quick generator on the right.</div>';
         seatCanvas.appendChild(guideH);
         seatCanvas.appendChild(guideV);
         hideGuides();
+        updateCapacitySummary();
         return;
       }
 
@@ -1628,6 +1803,7 @@ router.get(
 
       seatCanvas.appendChild(guideH);
       seatCanvas.appendChild(guideV);
+      updateCapacitySummary();
     }
 
     function renderElements(){
@@ -1831,10 +2007,27 @@ router.get(
       updateSeatPricingSummary();
     });
 
+    // Layout objects creation buttons
+    if(addTableRoundBtn) addTableRoundBtn.addEventListener('click', function(){ addElement('table-round'); });
+    if(addTableRectBtn)  addTableRectBtn.addEventListener('click',  function(){ addElement('table-rect'); });
+    if(addZoneRectBtn)   addZoneRectBtn.addEventListener('click',   function(){ addElement('zone-rect'); });
+    if(addZoneCircleBtn) addZoneCircleBtn.addEventListener('click', function(){ addElement('zone-circle'); });
+    if(addStageBtn)      addStageBtn.addEventListener('click',      function(){ addElement('stage-rect'); });
+    if(addToiletsBtn)    addToiletsBtn.addEventListener('click',    function(){ addElement('toilets'); });
+    if(addStairsBtn)     addStairsBtn.addEventListener('click',     function(){ addElement('stairs'); });
+    if(addAisleBtn)      addAisleBtn.addEventListener('click',      function(){ addElement('aisle-line'); });
+
+    if(textAddBtn) textAddBtn.addEventListener('click', function(){
+      const txt = (textLabelInput && textLabelInput.value.trim()) || 'Label';
+      addElement('label', { label: txt });
+      if(textLabelInput) textLabelInput.value = '';
+    });
+
     // Drag behaviour with snap + alignment guides + group move (seats or blocks)
     const GRID_SIZE = 4;
     const SNAP_DIST = 8;
     let dragState = null;
+    let dragElementState = null;
 
     seatCanvas.addEventListener('mousedown', function(e){
       // First: check if clicking a block overlay
@@ -1876,7 +2069,30 @@ router.get(
         return;
       }
 
+      const elementEl = e.target && e.target.closest ? e.target.closest('.seat-el') : null;
       const seatEl = e.target && e.target.closest ? e.target.closest('.seat') : null;
+
+      // Clicked on layout element (tables/zones/labels/etc.)
+      if(elementEl && !seatEl){
+        const elId = elementEl.dataset.elId;
+        ensureLayout();
+        const elObj = ensureElements().find(function(el){ return el && el.id === elId; });
+        if(elObj){
+          selectedElementId = elId;
+          renderElements();
+          if(e.button === 0){
+            dragElementState = {
+              elId: elId,
+              startMouseX: e.clientX,
+              startMouseY: e.clientY,
+              startX: elObj.x || 0,
+              startY: elObj.y || 0
+            };
+          }
+        }
+        e.preventDefault();
+        return;
+      }
 
       // Clicked on empty canvas: clear selection
       if(!seatEl){
@@ -1930,6 +2146,34 @@ router.get(
     });
 
     document.addEventListener('mousemove', function(e){
+      if(dragElementState){
+        const rect = seatCanvas.getBoundingClientRect();
+        const dxScreen = e.clientX - dragElementState.startMouseX;
+        const dyScreen = e.clientY - dragElementState.startMouseY;
+        const widthLogical = rect.width / zoom;
+        const heightLogical = rect.height / zoom;
+
+        let x = dragElementState.startX + dxScreen / zoom;
+        let y = dragElementState.startY + dyScreen / zoom;
+
+        x = Math.round(x / GRID_SIZE) * GRID_SIZE;
+        y = Math.round(y / GRID_SIZE) * GRID_SIZE;
+
+        const PADDING = 10;
+        x = Math.max(PADDING, Math.min(widthLogical  - PADDING, x));
+        y = Math.max(PADDING, Math.min(heightLogical - PADDING, y));
+
+        ensureLayout();
+        const elements = ensureElements();
+        const elObj = elements.find(function(el){ return el && el.id === dragElementState.elId; });
+        if(elObj){
+          elObj.x = x;
+          elObj.y = y;
+          renderSeats();
+        }
+        return;
+      }
+
       if(!dragState) return;
 
       const rect = seatCanvas.getBoundingClientRect();
@@ -2006,9 +2250,9 @@ router.get(
         let x = base.x + dx + adjustDx;
         let y = base.y + dy + adjustDy;
 
-        const PADDING = 10;
-        x = Math.max(PADDING, Math.min(widthLogical  - PADDING, x));
-        y = Math.max(PADDING, Math.min(heightLogical - PADDING, y));
+        const PADDING2 = 10;
+        x = Math.max(PADDING2, Math.min(widthLogical  - PADDING2, x));
+        y = Math.max(PADDING2, Math.min(heightLogical - PADDING2, y));
 
         const meta = ensureSeatMeta(id);
         meta.x = x;
@@ -2026,6 +2270,7 @@ router.get(
 
     document.addEventListener('mouseup', function(){
       dragState = null;
+      dragElementState = null;
       hideGuides();
     });
 
