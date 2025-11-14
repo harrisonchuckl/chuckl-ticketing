@@ -139,6 +139,70 @@ router.get(
     border-style:solid;
     border-color:#f97316;
   }
+    /* Generic layout elements (stage blocks, zones, tables, icons, labels) */
+  .seat-el{
+    position:absolute;
+    cursor:move;
+    font-size:11px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    border-radius:6px;
+    border:1px solid rgba(148,163,184,.85);
+    background:rgba(15,23,42,.85);
+    color:#e5e7eb;
+    padding:2px 4px;
+    box-sizing:border-box;
+    user-select:none;
+  }
+  .seat-el.stage{
+    background:#fbbf24;
+    color:#111827;
+    border-color:#f59e0b;
+    font-weight:600;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+  }
+  .seat-el.zone-rect{
+    background:rgba(56,189,248,.08);
+    border-style:dashed;
+  }
+  .seat-el.zone-circle{
+    background:rgba(74,222,128,.08);
+    border-radius:999px;
+    border-style:dashed;
+  }
+  .seat-el.aisle{
+    height:2px;
+    padding:0;
+    border-radius:999px;
+    background:#e5e7eb;
+    border:none;
+  }
+  .seat-el.label{
+    background:transparent;
+    border:none;
+    color:#e5e7eb;
+    font-weight:500;
+  }
+  .seat-el.small-icon{
+    width:18px;
+    height:18px;
+    border-radius:999px;
+    font-size:10px;
+  }
+  .seat-el.table{
+    background:rgba(148,163,184,.25);
+  }
+  .seat-el.sofa{
+    background:#4b5563;
+    border-radius:999px;
+  }
+  .seat-el.selected{
+    outline:2px solid #f97316;
+    outline-offset:2px;
+  }
+
 </style>
 </head>
 
@@ -1027,6 +1091,10 @@ router.get(
     const seatCanvas       = document.getElementById('seatCanvas');
     const saveLayoutBtn    = document.getElementById('sm_saveLayout');
 
+        const elPalette        = document.getElementById('el_palette');
+    const elInspector      = document.getElementById('el_inspector');
+
+
     const zoomInBtn        = document.getElementById('zoomInBtn');
     const zoomOutBtn       = document.getElementById('zoomOutBtn');
     const zoomResetBtn     = document.getElementById('zoomResetBtn');
@@ -1056,6 +1124,51 @@ router.get(
     let layout = { seats: {}, elements: [] };
     let seats = [];
     let ticketTypes = [];
+
+        // --- Generic layout elements (stage, tables, toilets, etc.) ---
+    const DEFAULT_ELEMENT_SPECS = {
+      'stage-rect': { w: 140, h: 46, label: 'STAGE', kind: 'stage' },
+      'zone-rect':  { w: 120, h: 60, label: '',      kind: 'zone-rect' },
+      'zone-circle':{ w: 80,  h: 80, label: '',      kind: 'zone-circle' },
+      'aisle-line': { w: 160, h: 2,  label: '',      kind: 'aisle' },
+      'label':      { w: 80,  h: 24, label: 'Label', kind: 'label' },
+      'toilets':    { w: 22,  h: 22, label: '🚻',    kind: 'small-icon' },
+      'stairs':     { w: 22,  h: 22, label: '⇅',     kind: 'small-icon' },
+      'table-round':{ w: 48,  h: 48, label: 'T',     kind: 'table', meta:{ chairs:8 } },
+      'table-rect': { w: 64,  h: 40, label: 'T',     kind: 'table', meta:{ chairs:6 } },
+      'sofa-2':     { w: 44,  h: 22, label: '⎼⎼',   kind: 'sofa' }
+    };
+
+    let selectedElementId = null;
+
+    function ensureElements(){
+      ensureLayout();
+      if(!Array.isArray(layout.elements)) layout.elements = [];
+      return layout.elements;
+    }
+
+    function elementClassForType(type){
+      const spec = DEFAULT_ELEMENT_SPECS[type];
+      if(!spec) return '';
+      return spec.kind || '';
+    }
+
+    function humanElementLabel(type){
+      switch(type){
+        case 'stage-rect': return 'Stage block';
+        case 'zone-rect': return 'Zone (rectangle)';
+        case 'zone-circle': return 'Zone (circle)';
+        case 'aisle-line': return 'Aisle / line';
+        case 'label': return 'Text label';
+        case 'toilets': return 'Toilets icon';
+        case 'stairs': return 'Stairs icon';
+        case 'table-round': return 'Round table';
+        case 'table-rect': return 'Rectangular table';
+        case 'sofa-2': return 'Sofa (2 seats)';
+        default: return type;
+      }
+    }
+
 
     // selection state
     const selectedSeatIds = new Set();
@@ -1395,6 +1508,107 @@ router.get(
         hideGuides();
         return;
       }
+
+            // render seats
+      seats.forEach(function(s){
+        let pos = layout.seats[s.id];
+        if(!pos){
+          pos = { x:40, y:30, rotation:0 };
+          layout.seats[s.id] = pos;
+        }
+
+        const seatEl = document.createElement('div');
+        seatEl.className = 'seat';
+        if(s.status === 'BLOCKED') seatEl.classList.add('seat-blocked');
+        if(s.status === 'HELD')    seatEl.classList.add('seat-held');
+        if(s.status === 'SOLD')    seatEl.classList.add('seat-sold');
+
+        seatEl.setAttribute('data-seat-id', s.id);
+        seatEl.style.position = 'absolute';
+        seatEl.style.left = (pos.x - 9)+'px';
+        seatEl.style.top  = (pos.y - 9)+'px';
+
+        const labelRow  = s.rowLabel || s.row || '';
+        const labelSeat = (s.seatNumber != null ? s.seatNumber : s.number);
+        seatEl.title = labelRow+' '+labelSeat;
+        seatEl.textContent = labelSeat;
+
+        if(selectedSeatIds.has(s.id)){
+          seatEl.classList.add('seat-selected');
+        }
+
+        seatCanvas.appendChild(seatEl);
+      });
+
+      // render generic layout elements on top
+      renderElements();
+
+      seatCanvas.appendChild(guideH);
+      seatCanvas.appendChild(guideV);
+    function renderElements(){
+      // remove any existing nodes
+      seatCanvas.querySelectorAll('.seat-el').forEach(function(n){ n.remove(); });
+
+      const elements = ensureElements();
+      if(!elements.length) return;
+
+      elements.forEach(function(el){
+        const node = document.createElement('div');
+        const kindClass = elementClassForType(el.type);
+        node.className = 'seat-el'+(kindClass ? ' '+kindClass : '');
+        if(selectedElementId === el.id) node.classList.add('selected');
+
+        node.dataset.elId = el.id;
+
+        const w = el.w || 40;
+        const h = el.h || 20;
+        node.style.left   = (el.x - w/2)+'px';
+        node.style.top    = (el.y - h/2)+'px';
+        node.style.width  = w+'px';
+        node.style.height = h+'px';
+
+        if(el.type === 'zone-circle'){
+          node.style.borderRadius = '999px';
+        }
+
+        // label / icon
+        node.textContent = el.label || '';
+
+        node.addEventListener('click', function(evt){
+          evt.stopPropagation();
+          selectedElementId = el.id;
+          renderElements();
+          renderElementInspector();
+        });
+
+        seatCanvas.appendChild(node);
+      });
+    }
+
+    function renderElementInspector(){
+      const elements = ensureElements();
+      const el = elements.find(function(e){ return e.id === selectedElementId; });
+      if(!el){
+        elInspector.innerHTML = '<div class="muted">Select an element to edit its label or properties.</div>';
+        return;
+      }
+
+      const safeLabel = (el.label || '').replace(/"/g,'&quot;');
+      let extra = '';
+
+      if(el.type === 'table-round' || el.type === 'table-rect'){
+        const chairs = (el.meta && el.meta.chairs) || '';
+        extra += ''
+          +'<div class="grid" style="margin-top:4px">'
+          +'<label>Chairs around table</label>'
+          +'<input id="el_chairs" type="number" min="1" max="24" value="'+chairs+'"/>'
+          +'</div>';
+      }
+
+      elInspector.innerHTML =
+        '<div style="margin-bottom:4px"><strong>'+humanElementLabel(el.type)+'</strong></div>'
+       +'<div class="grid" style="margin-bottom:4px">'
+
 
       const hasPositions = Object.keys(layout.seats).length > 0;
       if(!hasPositions){
