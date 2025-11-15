@@ -4,7 +4,7 @@ import { requireAdminOrOrganiser } from "../lib/authz.js";
 
 const router = Router();
 
-/** Single-page admin console at /admin/ui */
+/** Single-page admin console at /admin/ui* */
 router.get(
   ["/ui", "/ui/", "/ui/home", "/ui/*"],
   requireAdminOrOrganiser,
@@ -104,7 +104,7 @@ router.get(
   .seat-legend{font-size:12px;color:#e5e7eb;display:flex;gap:12px;flex-wrap:wrap;margin-top:4px}
   .seat-legend span{display:inline-flex;align-items:center;gap:4px}
   .seat-grid{display:inline-grid;gap:4px;margin-top:4px}
-  .seat{width:18px;height:18px;border-radius:4px;background:var(--seat-bg);border:1px solid var(--seat-border);display:flex;align-items:center;justify-content:center;font-size:10px;cursor:pointer;transition:transform .05s.ease-out,box-shadow .05s.ease-out}
+  .seat{width:18px;height:18px;border-radius:4px;background:var(--seat-bg);border:1px solid var(--seat-border);display:flex;align-items:center;justify-content:center;font-size:10px;cursor:pointer;transition:transform .05s ease-out,box-shadow .05s ease-out}
   .seat:hover{transform:translateY(-1px);box-shadow:0 1px 2px rgba(0,0,0,.45)}
   .seat-blocked{background:#0f172a;border-color:#0b1120}
   .seat-held{background:#f59e0b;border-color:#92400e}
@@ -126,18 +126,9 @@ router.get(
     color:#e5e7eb;
     pointer-events:auto;
   }
-  .seat-block-overlay-label{
-    font-weight:500;
-  }
-  .seat-block-overlay-handle{
-    font-size:10px;
-    opacity:.8;
-    margin-left:8px;
-  }
-  .seat-block-overlay.selected{
-    border-style:solid;
-    border-color:#f97316;
-  }
+  .seat-block-overlay-label{font-weight:500;}
+  .seat-block-overlay-handle{font-size:10px;opacity:.8;margin-left:8px;}
+  .seat-block-overlay.selected{border-style:solid;border-color:#f97316;}
 </style>
 </head>
 
@@ -169,21 +160,19 @@ router.get(
     <a class="sb-link" href="/admin/ui/account" data-view="/admin/ui/account">Account</a>
     <a class="sb-link" href="/auth/logout">Log out</a>
   </aside>
-  <main class="content" id="main">
-    <div class="card"><div class="title">Loading…</div></div>
-  </main>
+  <main class="content" id="main"><div class="card"><div class="title">Loading…</div></div></main>
 </div>
 
 <script>
 (function(){
   console.log('[Admin UI] script booting…');
-  const $ = (s,r=document)=>r.querySelector(s);
-  const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
-  const main = $('#main');
+  var $ = function(s,r){ return (r||document).querySelector(s); };
+  var $$ = function(s,r){ return Array.from((r||document).querySelectorAll(s)); };
+  var main = $('#main');
 
   // Sidebar nested menu
-  const showsToggle = $('#showsToggle');
-  const showsSub = $('#showsSub');
+  var showsToggle = $('#showsToggle');
+  var showsSub = $('#showsSub');
 
   if (showsToggle && showsSub) {
     showsToggle.addEventListener('click', function(e){
@@ -191,7 +180,7 @@ router.get(
       showsSub.style.display = showsSub.style.display === 'none' ? 'block' : 'none';
     });
   } else {
-    console.warn('[Admin UI] showsToggle or showsSub not found', { showsToggle, showsSub });
+    console.warn('[Admin UI] showsToggle or showsSub not found', { showsToggle: showsToggle, showsSub: showsSub });
   }
 
   function setActive(path){
@@ -215,15 +204,16 @@ router.get(
 
   // SPA nav
   document.addEventListener('click',function(e){
-    const a = e.target && e.target.closest && e.target.closest('a.sb-link');
+    var t = e.target;
+    var a = t && t.closest && t.closest('a.sb-link');
     if(a && a.getAttribute('data-view')){
       e.preventDefault();
       go(a.getAttribute('data-view'));
     }
   });
+
   window.addEventListener('popstate', route);
 
-  // --- Simple home view ---
   function home(){
     if (!main) {
       console.error('[Admin UI] #main element not found');
@@ -234,10 +224,9 @@ router.get(
       '<div class="muted">Use the menu to manage shows, venues and orders.</div></div>';
   }
 
-  // ========= ROUTER =========
   function route(){
     try {
-      const path = location.pathname.replace(/\\/$/, '');
+      var path = location.pathname.replace(/\\/$/, '');
       console.log('[Admin UI] route()', path);
       setActive(path);
 
@@ -273,12 +262,14 @@ router.get(
   }
 
   function mountVenuePicker(input){
-    const container = document.createElement('div');
+    var container = document.createElement('div');
     container.style.position = 'relative';
-    input.parentNode.insertBefore(container, input);
+    if (input.parentNode) {
+      input.parentNode.insertBefore(container, input);
+    }
     container.appendChild(input);
 
-    const pop = document.createElement('div');
+    var pop = document.createElement('div');
     pop.className = 'pop';
     container.appendChild(pop);
 
@@ -288,7 +279,7 @@ router.get(
       pop.innerHTML = '';
       if(list.length){
         list.forEach(function(v){
-          const el = document.createElement('div');
+          var el = document.createElement('div');
           el.className = 'opt';
           el.textContent = v.name + (v.city ? (' — '+v.city) : '');
           el.addEventListener('click', function(){
@@ -300,12 +291,12 @@ router.get(
         });
       }
       if(q && !list.some(function(v){ return (v.name || '').toLowerCase() === q.toLowerCase(); })){
-        const add = document.createElement('div');
+        var add = document.createElement('div');
         add.className = 'opt';
         add.innerHTML = '➕ Create venue “'+q+'”';
         add.addEventListener('click', async function(){
           try{
-            const created = await j('/admin/venues',{
+            var created = await j('/admin/venues',{
               method:'POST',
               headers:{'Content-Type':'application/json'},
               body: JSON.stringify({ name: q })
@@ -328,15 +319,19 @@ router.get(
 
     input.addEventListener('input', async function(){
       input.dataset.venueId = '';
-      const q = input.value.trim();
+      var q = input.value.trim();
       if(!q){ close(); return; }
-      render(await searchVenues(q), q);
+      var list = await searchVenues(q);
+      render(list, q);
     });
+
     input.addEventListener('focus', async function(){
-      const q = input.value.trim();
+      var q = input.value.trim();
       if(!q) return;
-      render(await searchVenues(q), q);
+      var list = await searchVenues(q);
+      render(list, q);
     });
+
     document.addEventListener('click', function(e){
       if(!pop.contains(e.target) && e.target !== input) close();
     });
@@ -344,12 +339,12 @@ router.get(
 
   // ---------- Upload helper ----------
   async function uploadPoster(file){
-    const form = new FormData();
+    var form = new FormData();
     form.append('file', file);
-    const res = await fetch('/admin/uploads',{ method:'POST', body: form, credentials:'include' });
-    const txt = await res.text();
+    var res = await fetch('/admin/uploads',{ method:'POST', body: form, credentials:'include' });
+    var txt = await res.text();
     if(!res.ok) throw new Error(txt || ('HTTP '+res.status));
-    const data = txt ? JSON.parse(txt) : {};
+    var data = txt ? JSON.parse(txt) : {};
     if(!data.ok || !data.url) throw new Error('Unexpected upload response');
     return data;
   }
@@ -367,7 +362,8 @@ router.get(
   function bindWysiwyg(container){
     container.querySelectorAll('[data-cmd]').forEach(function(b){
       b.addEventListener('click', function(){
-        document.execCommand(b.getAttribute('data-cmd'));
+        var cmd = b.getAttribute('data-cmd') || '';
+        if (cmd) document.execCommand(cmd);
       });
     });
   }
@@ -375,6 +371,7 @@ router.get(
   // ---------- Create show ----------
   async function createShow(){
     if (!main) return;
+
     main.innerHTML =
       '<div class="card">'
         +'<div class="header">'
@@ -447,35 +444,16 @@ router.get(
     bindWysiwyg(main);
     mountVenuePicker($('#venue_input'));
 
-    const drop = $('#drop');
-    const file = $('#file');
-    const bar  = $('#bar');
-    const prev = $('#prev');
-
-    drop.addEventListener('click', function(){ file.click(); });
-    drop.addEventListener('dragover', function(e){
-      e.preventDefault();
-      drop.classList.add('drag');
-    });
-    drop.addEventListener('dragleave', function(){
-      drop.classList.remove('drag');
-    });
-    drop.addEventListener('drop', async function(e){
-      e.preventDefault();
-      drop.classList.remove('drag');
-      const f = e.dataTransfer.files && e.dataTransfer.files[0];
-      if (f) await doUpload(f);
-    });
-    file.addEventListener('change', async function(){
-      const f = file.files && file.files[0];
-      if (f) await doUpload(f);
-    });
+    var drop = $('#drop');
+    var file = $('#file');
+    var bar  = $('#bar');
+    var prev = $('#prev');
 
     async function doUpload(f){
       $('#err').textContent = '';
       bar.style.width = '15%';
       try{
-        const out = await uploadPoster(f);
+        var out = await uploadPoster(f);
         prev.src = out.url;
         prev.style.display = 'block';
         bar.style.width = '100%';
@@ -486,42 +464,67 @@ router.get(
       }
     }
 
-    $('#save').addEventListener('click', async function(){
-      const errEl = $('#err');
+    drop.addEventListener('click', function(){ file.click(); });
+
+    drop.addEventListener('dragover', function(e){
+      e.preventDefault();
+      drop.classList.add('drag');
+    });
+
+    drop.addEventListener('dragleave', function(){
+      drop.classList.remove('drag');
+    });
+
+    drop.addEventListener('drop', async function(e){
+      e.preventDefault();
+      drop.classList.remove('drag');
+      var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) await doUpload(f);
+    });
+
+    file.addEventListener('change', async function(){
+      var f = file.files && file.files[0];
+      if (f) await doUpload(f);
+    });
+
+    var saveBtn = document.getElementById('save');
+
+    saveBtn.addEventListener('click', async function(){
+      var errEl = document.getElementById('err');
       errEl.textContent = '';
 
       try{
-        const title      = $('#sh_title').value.trim();
-        const dtRaw      = $('#sh_dt').value;
-        const venueInput = $('#venue_input');
-        const venueText  = venueInput.value.trim();
-        const venueId    = venueInput.dataset.venueId || null;
-        const imageUrl   = $('#prev').src || null;
-        const descHtml   = $('#desc').innerHTML.trim();
+        var title      = (document.getElementById('sh_title') ).value.trim();
+        var dtRaw      = (document.getElementById('sh_dt') ).value;
+        var venueInput = document.getElementById('venue_input');
+        var venueText  = venueInput.value.trim();
+        var venueId    = (venueInput.dataset || {}).venueId || null;
+        var imageUrl   = prev.src || null;
+        var descHtml   = (document.getElementById('desc')).innerHTML.trim();
 
         if (!title || !dtRaw || !venueText){
           throw new Error('Title, date/time and venue are required');
         }
 
-        const dateIso = new Date(dtRaw).toISOString();
+        var dateIso = new Date(dtRaw).toISOString();
 
-        const ftName        = $('#ft_name').value.trim();
-        const ftPriceStr    = $('#ft_price').value.trim();
-        const ftAllocStr    = $('#ft_allocation').value.trim();
+        var ftName        = (document.getElementById('ft_name')).value.trim();
+        var ftPriceStr    = (document.getElementById('ft_price')).value.trim();
+        var ftAllocStr    = (document.getElementById('ft_allocation')).value.trim();
 
-        let firstTicketPayload = null;
+        var firstTicketPayload = null;
         if (ftName || ftPriceStr || ftAllocStr){
-          let pricePence = 0;
+          var pricePence = 0;
           if (ftPriceStr){
-            const p = Number(ftPriceStr);
+            var p = Number(ftPriceStr);
             if (!Number.isFinite(p) || p < 0){
               throw new Error('First ticket price must be a non-negative number');
             }
             pricePence = Math.round(p * 100);
           }
-          let available = null;
+          var available = null;
           if (ftAllocStr){
-            const a = Number(ftAllocStr);
+            var a = Number(ftAllocStr);
             if (!Number.isFinite(a) || a < 0){
               throw new Error('First ticket allocation must be a non-negative number');
             }
@@ -530,20 +533,20 @@ router.get(
 
           firstTicketPayload = {
             name: ftName || 'General Admission',
-            pricePence,
-            available
+            pricePence: pricePence,
+            available: available
           };
         }
 
-        const showRes = await j('/admin/shows', {
+        var showRes = await j('/admin/shows', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            title,
+            title: title,
             date: dateIso,
-            venueText,
-            venueId,
-            imageUrl,
+            venueText: venueText,
+            venueId: venueId,
+            imageUrl: imageUrl,
             descriptionHtml: descHtml
           })
         });
@@ -552,12 +555,13 @@ router.get(
           throw new Error(showRes.error);
         }
 
-        const showId =
-          (showRes && (
-            showRes.id ||
-            (showRes.show && showRes.show.id) ||
-            (showRes.item && showRes.item.id)
-          )) || null;
+        var showId =
+          (showRes &&
+            (
+              showRes.id ||
+              (showRes.show && showRes.show.id) ||
+              (showRes.item && showRes.item.id)
+            )) || null;
 
         if (!showId){
           throw new Error('Failed to create show (no id returned from server)');
@@ -589,6 +593,7 @@ router.get(
   // ---------- Shows list ----------
   async function listShows(){
     if (!main) return;
+
     main.innerHTML =
       '<div class="card">'
         +'<div class="header"><div class="title">All events</div><button id="refresh" class="btn">Refresh</button></div>'
@@ -597,19 +602,19 @@ router.get(
       +'</div>';
 
     async function load(){
-      $('#tbody').innerHTML = '<tr><td colspan="7" class="muted">Loading…</td></tr>';
+      var tb = document.getElementById('tbody');
+      tb.innerHTML = '<tr><td colspan="7" class="muted">Loading…</td></tr>';
       try{
-        const jn = await j('/admin/shows');
-        const items = jn.items || [];
-        const tb = $('#tbody');
+        var jn = await j('/admin/shows');
+        var items = jn.items || [];
         tb.innerHTML = items.map(function(s){
-          const when = s.date ? new Date(s.date).toLocaleString('en-GB',{dateStyle:'short', timeStyle:'short'}) : '';
-          const total = (s._alloc && s._alloc.total) || 0;
-          const sold  = (s._alloc && s._alloc.sold) || 0;
-          const hold  = (s._alloc && s._alloc.hold) || 0;
-          const avail = Math.max(total-sold-hold,0);
-          const pct   = total ? Math.round((sold/total)*100) : 0;
-          const bar   = '<div style="background:#e5e7eb;height:6px;border-radius:999px;overflow:hidden;width:140px"><div style="background:#111827;height:6px;width:'+pct+'%"></div></div>';
+          var when = s.date ? new Date(s.date).toLocaleString('en-GB',{dateStyle:'short', timeStyle:'short'}) : '';
+          var total = (s._alloc && s._alloc.total) || 0;
+          var sold  = (s._alloc && s._alloc.sold) || 0;
+          var hold  = (s._alloc && s._alloc.hold) || 0;
+          var avail = Math.max(total-sold-hold,0);
+          var pct   = total ? Math.round((sold/total)*100) : 0;
+          var bar   = '<div style="background:#e5e7eb;height:6px;border-radius:999px;overflow:hidden;width:140px"><div style="background:#111827;height:6px;width:'+pct+'%"></div></div>';
           return '<tr>'
             +'<td>'+(s.title||'')+'</td>'
             +'<td>'+when+'</td>'
@@ -631,14 +636,16 @@ router.get(
         $$('[data-kebab]').forEach(function(b){
           b.addEventListener('click', function(e){
             e.preventDefault();
-            const id = b.getAttribute('data-kebab');
-            const m  = $('#m-'+id);
+            var id = b.getAttribute('data-kebab');
+            var m  = document.getElementById('m-'+id);
             $$('.menu').forEach(function(x){ x.classList.remove('open'); });
-            m.classList.add('open');
+            if (m) m.classList.add('open');
           });
         });
+
         document.addEventListener('click', function(e){
-          if(!e.target.closest || !e.target.closest('.kebab')){
+          var target = e.target;
+          if(!target || !target.closest || !target.closest('.kebab')){
             $$('.menu').forEach(function(x){ x.classList.remove('open'); });
           }
         });
@@ -646,27 +653,34 @@ router.get(
         $$('[data-edit]').forEach(function(a){
           a.addEventListener('click', function(e){
             e.preventDefault();
-            go('/admin/ui/shows/'+a.getAttribute('data-edit')+'/edit');
+            var id = a.getAttribute('data-edit');
+            if (id) go('/admin/ui/shows/'+id+'/edit');
           });
         });
+
         $$('[data-seating]').forEach(function(a){
           a.addEventListener('click', function(e){
             e.preventDefault();
-            go('/admin/ui/shows/'+a.getAttribute('data-seating')+'/seating');
+            var id = a.getAttribute('data-seating');
+            if (id) go('/admin/ui/shows/'+id+'/seating');
           });
         });
+
         $$('[data-tickets]').forEach(function(a){
           a.addEventListener('click', function(e){
             e.preventDefault();
-            go('/admin/ui/shows/'+a.getAttribute('data-tickets')+'/tickets');
+            var id = a.getAttribute('data-tickets');
+            if (id) go('/admin/ui/shows/'+id+'/tickets');
           });
         });
+
         $$('[data-dup]').forEach(function(a){
           a.addEventListener('click', async function(e){
             e.preventDefault();
             try{
-              const id = a.getAttribute('data-dup');
-              const r  = await j('/admin/shows/'+id+'/duplicate',{method:'POST'});
+              var id = a.getAttribute('data-dup');
+              if(!id) return;
+              var r  = await j('/admin/shows/'+id+'/duplicate',{method:'POST'});
               if(r.ok && r.newId){ go('/admin/ui/shows/'+r.newId+'/edit'); }
             }catch(err){
               alert('Duplicate failed: '+(err.message||err));
@@ -674,17 +688,18 @@ router.get(
           });
         });
       }catch(e){
-        $('#tbody').innerHTML = '<tr><td colspan="7" class="error">Failed to load shows: '+(e.message||e)+'</td></tr>';
+        tb.innerHTML = '<tr><td colspan="7" class="error">Failed to load shows: '+(e.message||e)+'</td></tr>';
       }
     }
 
-    $('#refresh').addEventListener('click', load);
+    var refreshBtn = document.getElementById('refresh');
+    refreshBtn.addEventListener('click', load);
     load();
   }
 
   // ---------- Edit show ----------
   async function editShow(id){
-    let s = null;
+    var s = null;
     try{
       s = await j('/admin/shows/'+id);
     }catch(e){
@@ -693,6 +708,7 @@ router.get(
       return;
     }
     if (!main) return;
+
     main.innerHTML =
       '<div class="card">'
         +'<div class="header"><div class="title">Edit show</div></div>'
@@ -721,74 +737,90 @@ router.get(
       +'</div>';
 
     bindWysiwyg(main);
-    mountVenuePicker($('#venue_input'));
+    mountVenuePicker(document.getElementById('venue_input'));
 
-    $('#sh_title').value = (s.item && s.item.title) || '';
-    $('#venue_input').value = (s.item && s.item.venue && s.item.venue.name) || (s.item && s.item.venueText) || '';
+    (document.getElementById('sh_title')).value = (s.item && s.item.title) || '';
+    var venueInput = document.getElementById('venue_input');
+    venueInput.value =
+      (s.item && s.item.venue && s.item.venue.name) ||
+      (s.item && s.item.venueText) || '';
+
     if (s.item && s.item.date){
-      const dt = new Date(s.item.date);
-      $('#sh_dt').value = dt.toISOString().slice(0,16);
+      var dt = new Date(s.item.date);
+      (document.getElementById('sh_dt')).value = dt.toISOString().slice(0,16);
     }
-    $('#desc').innerHTML = (s.item && s.item.description) || '';
+
+    (document.getElementById('desc')).innerHTML = (s.item && s.item.description) || '';
+
     if (s.item && s.item.imageUrl){
-      $('#prev').src = s.item.imageUrl;
-      $('#prev').style.display = 'block';
+      var prev = document.getElementById('prev');
+      prev.src = s.item.imageUrl;
+      prev.style.display = 'block';
     }
 
-    const drop = $('#drop'), file = $('#file'), bar = $('#bar'), prev = $('#prev');
-
-    drop.addEventListener('click', function(){ file.click(); });
-    drop.addEventListener('dragover', function(e){ e.preventDefault(); drop.classList.add('drag'); });
-    drop.addEventListener('dragleave', function(){ drop.classList.remove('drag'); });
-    drop.addEventListener('drop', async function(e){
-      e.preventDefault(); drop.classList.remove('drag');
-      const f = e.dataTransfer.files && e.dataTransfer.files[0];
-      if(f) await doUpload(f);
-    });
-    file.addEventListener('change', async function(){
-      const f = file.files && file.files[0];
-      if(f) await doUpload(f);
-    });
+    var drop = document.getElementById('drop');
+    var file = document.getElementById('file');
+    var bar  = document.getElementById('bar');
+    var prevImg = document.getElementById('prev');
 
     async function doUpload(f){
-      $('#err').textContent = '';
+      (document.getElementById('err')).textContent = '';
       bar.style.width = '15%';
       try{
-        const out = await uploadPoster(f);
-        prev.src = out.url;
-        prev.style.display = 'block';
+        var out = await uploadPoster(f);
+        prevImg.src = out.url;
+        prevImg.style.display = 'block';
         bar.style.width = '100%';
         setTimeout(function(){ bar.style.width='0%'; },800);
       }catch(e){
         bar.style.width = '0%';
-        $('#err').textContent = 'Upload failed: '+(e.message||e);
+        (document.getElementById('err')).textContent = 'Upload failed: '+(e.message||e);
       }
     }
 
-    $('#goSeating').addEventListener('click', function(e){
+    drop.addEventListener('click', function(){ file.click(); });
+    drop.addEventListener('dragover', function(e){ e.preventDefault(); drop.classList.add('drag'); });
+    drop.addEventListener('dragleave', function(){ drop.classList.remove('drag'); });
+
+    drop.addEventListener('drop', async function(e){
+      e.preventDefault(); drop.classList.remove('drag');
+      var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if(f) await doUpload(f);
+    });
+
+    file.addEventListener('change', async function(){
+      var f = file.files && file.files[0];
+      if(f) await doUpload(f);
+    });
+
+    (document.getElementById('goSeating')).addEventListener('click', function(e){
       e.preventDefault();
       go('/admin/ui/shows/'+id+'/seating');
     });
-    $('#goTickets').addEventListener('click', function(e){
+
+    (document.getElementById('goTickets')).addEventListener('click', function(e){
       e.preventDefault();
       go('/admin/ui/shows/'+id+'/tickets');
     });
 
-    $('#save').addEventListener('click', async function(){
-      $('#err').textContent = '';
+    (document.getElementById('save')).addEventListener('click', async function(){
+      var errEl = document.getElementById('err');
+      errEl.textContent = '';
       try{
-        const payload = {
-          title: $('#sh_title').value.trim(),
-          date: $('#sh_dt').value ? new Date($('#sh_dt').value).toISOString() : null,
-          venueText: $('#venue_input').value.trim(),
-          venueId: $('#venue_input').dataset.venueId || null,
-          imageUrl: $('#prev').src || null,
-          descriptionHtml: $('#desc').innerHTML.trim()
+        var payload = {
+          title: (document.getElementById('sh_title')).value.trim(),
+          date: (document.getElementById('sh_dt')).value
+            ? new Date((document.getElementById('sh_dt')).value).toISOString()
+            : null,
+          venueText: venueInput.value.trim(),
+          venueId: (venueInput.dataset || {}).venueId || null,
+          imageUrl: prevImg.src || null,
+          descriptionHtml: (document.getElementById('desc')).innerHTML.trim()
         };
         if(!payload.title || !payload.date || !payload.venueText || !payload.descriptionHtml){
           throw new Error('Title, date/time, venue and description are required');
         }
-        const r = await j('/admin/shows/'+id,{
+        var r = await j('/admin/shows/'+id,{
           method:'PATCH',
           headers:{'Content-Type':'application/json'},
           body: JSON.stringify(payload)
@@ -799,7 +831,7 @@ router.get(
           throw new Error((r && r.error) || 'Failed to save');
         }
       }catch(e){
-        $('#err').textContent = e.message || String(e);
+        errEl.textContent = e.message || String(e);
       }
     });
   }
@@ -807,17 +839,18 @@ router.get(
   // ---------- Tickets page ----------
   async function ticketsPage(id){
     if (!main) return;
+
     main.innerHTML = '<div class="card"><div class="title">Loading tickets…</div></div>';
-    let showResp;
+    var showResp;
     try{
       showResp = await j('/admin/shows/'+id);
     }catch(e){
       main.innerHTML = '<div class="card"><div class="error">Failed to load show: '+(e.message||e)+'</div></div>';
       return;
     }
-    const show = showResp.item || {};
-    const when = show.date ? new Date(show.date).toLocaleString('en-GB',{dateStyle:'full', timeStyle:'short'}) : '';
-    const venueName = show.venue ? (show.venue.name + (show.venue.city ? ' – '+show.venue.city : '')) : (show.venueText || '');
+    var show = showResp.item || {};
+    var when = show.date ? new Date(show.date).toLocaleString('en-GB',{dateStyle:'full', timeStyle:'short'}) : '';
+    var venueName = show.venue ? (show.venue.name + (show.venue.city ? ' – '+show.venue.city : '')) : (show.venueText || '');
 
     main.innerHTML =
       '<div class="card">'
@@ -878,38 +911,38 @@ router.get(
             +'</div>'
           +'</div>'
         +'</div>'
-      +'</div>`;
+      +'</div>';
 
-    $('#backToShows').addEventListener('click', function(){ go('/admin/ui/shows/current'); });
-    $('#editShowBtn').addEventListener('click', function(){ go('/admin/ui/shows/'+id+'/edit'); });
+    document.getElementById('backToShows').addEventListener('click', function(){ go('/admin/ui/shows/current'); });
+    document.getElementById('editShowBtn').addEventListener('click', function(){ go('/admin/ui/shows/'+id+'/edit'); });
 
-    // Ticket types UI
-    const addTypeForm = $('#addTypeForm');
-    const ticketTypesBody = $('#ticketTypesBody');
-    const ticketTypesEmpty = $('#ticketTypesEmpty');
+    var addTypeForm = document.getElementById('addTypeForm');
+    var ticketTypesBody = document.getElementById('ticketTypesBody');
+    var ticketTypesEmpty = document.getElementById('ticketTypesEmpty');
 
-    $('#addTypeBtn').addEventListener('click', function(){
+    document.getElementById('addTypeBtn').addEventListener('click', function(){
       addTypeForm.style.display = 'block';
-      $('#tt_name').focus();
+      document.getElementById('tt_name').focus();
     });
-    $('#tt_cancel').addEventListener('click', function(){
+
+    document.getElementById('tt_cancel').addEventListener('click', function(){
       addTypeForm.style.display = 'none';
-      $('#tt_err').textContent = '';
+      document.getElementById('tt_err').textContent = '';
     });
 
     async function loadTicketTypes(){
       try{
-        const res = await j('/admin/shows/'+id+'/ticket-types');
-        const items = res.ticketTypes || [];
+        var res = await j('/admin/shows/'+id+'/ticket-types');
+        var items = res.ticketTypes || [];
         if(!items.length){
           ticketTypesBody.innerHTML = '<tr><td colspan="4" class="muted">No ticket types yet.</td></tr>';
           ticketTypesEmpty.style.display = 'block';
         }else{
           ticketTypesEmpty.style.display = 'none';
           ticketTypesBody.innerHTML = items.map(function(tt){
-            const price = (tt.pricePence || 0) / 100;
-            const priceLabel = price === 0 ? 'Free' : '£'+price.toFixed(2);
-            const availLabel = tt.available == null ? 'Unlimited' : String(tt.available);
+            var price = (tt.pricePence || 0) / 100;
+            var priceLabel = price === 0 ? 'Free' : '£'+price.toFixed(2);
+            var availLabel = tt.available == null ? 'Unlimited' : String(tt.available);
             return '<tr>'
               +'<td>'+(tt.name || '')+'</td>'
               +'<td>'+priceLabel+'</td>'
@@ -920,7 +953,7 @@ router.get(
           $$('[data-del]', ticketTypesBody).forEach(function(btn){
             btn.addEventListener('click', async function(e){
               e.preventDefault();
-              const idToDel = btn.getAttribute('data-del');
+              var idToDel = btn.getAttribute('data-del');
               if(!idToDel) return;
               if(!confirm('Delete this ticket type?')) return;
               try{
@@ -937,32 +970,33 @@ router.get(
       }
     }
 
-    $('#tt_save').addEventListener('click', async function(){
-      $('#tt_err').textContent = '';
-      const name = $('#tt_name').value.trim();
-      const priceStr = $('#tt_price').value.trim();
-      const availStr = $('#tt_available').value.trim();
+    document.getElementById('tt_save').addEventListener('click', async function(){
+      var errEl = document.getElementById('tt_err');
+      errEl.textContent = '';
+      var name = document.getElementById('tt_name').value.trim();
+      var priceStr = document.getElementById('tt_price').value.trim();
+      var availStr = document.getElementById('tt_available').value.trim();
 
       if(!name){
-        $('#tt_err').textContent = 'Name is required';
+        errEl.textContent = 'Name is required';
         return;
       }
 
-      let pricePence = 0;
+      var pricePence = 0;
       if(priceStr){
-        const p = Number(priceStr);
+        var p = Number(priceStr);
         if(!Number.isFinite(p) || p < 0){
-          $('#tt_err').textContent = 'Price must be a non-negative number';
+          errEl.textContent = 'Price must be a non-negative number';
           return;
         }
         pricePence = Math.round(p * 100);
       }
 
-      let available = null;
+      var available = null;
       if(availStr){
-        const a = Number(availStr);
+        var a = Number(availStr);
         if(!Number.isFinite(a) || a < 0){
-          $('#tt_err').textContent = 'Available must be a non-negative number';
+          errEl.textContent = 'Available must be a non-negative number';
           return;
         }
         available = a;
@@ -972,50 +1006,114 @@ router.get(
         await j('/admin/shows/'+id+'/ticket-types',{
           method:'POST',
           headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ name, pricePence, available })
+          body: JSON.stringify({ name: name, pricePence: pricePence, available: available })
         });
-        $('#tt_name').value = '';
-        $('#tt_price').value = '';
-        $('#tt_available').value = '';
+        document.getElementById('tt_name').value = '';
+        document.getElementById('tt_price').value = '';
+        document.getElementById('tt_available').value = '';
         addTypeForm.style.display = 'none';
         loadTicketTypes();
       }catch(err){
-        $('#tt_err').textContent = err.message || String(err);
+        errEl.textContent = err.message || String(err);
       }
-   });
+    });
+
+    loadTicketTypes();
+
+    var seatMapsSummary = document.getElementById('seatMapsSummary');
+    var seatMapsList = document.getElementById('seatMapsList');
+    var venueId = show.venue && show.venue.id ? show.venue.id : null;
+
+    async function loadSeatMaps(){
+      seatMapsSummary.textContent = 'Loading seat maps…';
+      seatMapsList.innerHTML = '';
+      try{
+        var url = '/admin/seatmaps?showId='+encodeURIComponent(id);
+        if(venueId) url += '&venueId='+encodeURIComponent(venueId);
+        var maps = await j(url);
+        if(!Array.isArray(maps) || !maps.length){
+          seatMapsSummary.textContent = 'No seat maps yet for this show/venue.';
+          seatMapsList.innerHTML = '<div class="muted" style="font-size:13px">You can create a seat map using the “Create / edit seat map” button.</div>';
+          return;
+        }
+        seatMapsSummary.textContent = maps.length+' seat map'+(maps.length>1?'s':'')+' found.';
+        seatMapsList.innerHTML = maps.map(function(m){
+          var def = m.isDefault ? ' · <strong>Default</strong>' : '';
+          return '<div class="row" style="margin-bottom:4px;justify-content:space-between">'
+            +'<div><strong>'+m.name+'</strong> <span class="muted">v'+(m.version || 1)+'</span>'+def+'</div>'
+            +'<div class="row" style="gap:4px">'+(!m.isDefault ? '<button class="btn" data-make-default="'+m.id+'">Make default</button>' : '')+'</div>'
+          +'</div>';
+        }).join('');
+
+        $$('[data-make-default]', seatMapsList).forEach(function(btn){
+          btn.addEventListener('click', async function(e){
+            e.preventDefault();
+            var mapId = btn.getAttribute('data-make-default');
+            if(!mapId) return;
+            try{
+              await j('/admin/seatmaps/'+mapId+'/default',{
+                method:'PATCH',
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ isDefault:true })
+              });
+              loadSeatMaps();
+            }catch(err){
+              alert('Failed to update default: '+(err.message||err));
+            }
+          });
         });
-      }catch(e: any){
+      }catch(e){
         seatMapsSummary.textContent = 'Failed to load seat maps.';
         seatMapsList.innerHTML = '<div class="error" style="font-size:13px">'+(e.message||e)+'</div>';
       }
     }
 
-    (document.getElementById('refreshSeatMaps') as HTMLButtonElement).addEventListener('click', loadSeatMaps);
-    (document.getElementById('editSeatMaps') as HTMLButtonElement).addEventListener('click', function(){ go('/admin/ui/shows/'+id+'/seating'); });
+    document.getElementById('refreshSeatMaps').addEventListener('click', loadSeatMaps);
+    document.getElementById('editSeatMaps').addEventListener('click', function(){ go('/admin/ui/shows/'+id+'/seating'); });
 
     loadSeatMaps();
+
+    // Ticket structure selection (purely visual for now)
+    var structureGeneral = $('#structureGeneral');
+    var structureAllocated = $('#structureAllocated');
+    function setStructure(mode){
+      if(mode === 'allocated'){
+        structureAllocated.style.background = '#111827';
+        structureAllocated.style.color = '#fff';
+        structureGeneral.style.background = '#f9fafb';
+        structureGeneral.style.color = '#111827';
+      }else{
+        structureGeneral.style.background = '#111827';
+        structureGeneral.style.color = '#fff';
+        structureAllocated.style.background = '#f9fafb';
+        structureAllocated.style.color = '#111827';
+      }
+    }
+    structureGeneral.addEventListener('click', function(){ setStructure('general'); });
+    structureAllocated.addEventListener('click', function(){ setStructure('allocated'); });
+    setStructure(show.usesAllocatedSeating ? 'allocated' : 'general');
   }
 
   // ---------- Seating page ----------
-  async function seatingPage(showId: string){
+  async function seatingPage(showId){
     if (!main) return;
 
     main.innerHTML = '<div class="card"><div class="title">Loading seating…</div></div>';
 
-    let showResp: any;
+    var showResp;
     try{
       showResp = await j('/admin/shows/'+showId);
-    }catch(e: any){
+    }catch(e){
       main.innerHTML = '<div class="card"><div class="error">Failed to load show: '+(e.message||e)+'</div></div>';
       return;
     }
 
-    const show = showResp.item || {};
-    const when = show.date ? new Date(show.date).toLocaleString('en-GB',{dateStyle:'full', timeStyle:'short'}) : '';
-    const venueName = show.venue
+    var show = showResp.item || {};
+    var when = show.date ? new Date(show.date).toLocaleString('en-GB',{dateStyle:'full', timeStyle:'short'}) : '';
+    var venueName = show.venue
       ? (show.venue.name + (show.venue.city ? ' – '+show.venue.city : ''))
       : (show.venueText || '');
-    const venueId = show.venue && show.venue.id ? show.venue.id : null;
+    var venueId = show.venue && show.venue.id ? show.venue.id : null;
 
     main.innerHTML =
       '<div class="card">'
@@ -1117,35 +1215,35 @@ router.get(
         +'</div>'
       +'</div>';
 
-    const backToTicketsBtn = document.getElementById('backToTickets') as HTMLButtonElement;
-    const editShowBtn      = document.getElementById('editShowBtn') as HTMLButtonElement;
-    const smStatus         = document.getElementById('sm_status') as HTMLElement;
-    const smSelect         = document.getElementById('sm_select') as HTMLSelectElement;
-    const smTip            = document.getElementById('sm_tip') as HTMLElement;
-    const smName           = document.getElementById('sm_name') as HTMLInputElement;
-    const smCreate         = document.getElementById('sm_create') as HTMLButtonElement;
-    const smErr            = document.getElementById('sm_err') as HTMLElement;
-    const qRows            = document.getElementById('q_rows') as HTMLInputElement;
-    const qCols            = document.getElementById('q_cols') as HTMLInputElement;
-    const qGenerate        = document.getElementById('q_generate') as HTMLButtonElement;
-    const seatCanvas       = document.getElementById('seatCanvas') as HTMLElement;
-    const saveLayoutBtn    = document.getElementById('sm_saveLayout') as HTMLButtonElement;
+    var backToTicketsBtn = document.getElementById('backToTickets');
+    var editShowBtn      = document.getElementById('editShowBtn');
+    var smStatus         = document.getElementById('sm_status');
+    var smSelect         = document.getElementById('sm_select');
+    var smTip            = document.getElementById('sm_tip');
+    var smName           = document.getElementById('sm_name');
+    var smCreate         = document.getElementById('sm_create');
+    var smErr            = document.getElementById('sm_err');
+    var qRows            = document.getElementById('q_rows');
+    var qCols            = document.getElementById('q_cols');
+    var qGenerate        = document.getElementById('q_generate');
+    var seatCanvas       = document.getElementById('seatCanvas');
+    var saveLayoutBtn    = document.getElementById('sm_saveLayout');
 
-    const zoomInBtn        = document.getElementById('zoomInBtn') as HTMLButtonElement;
-    const zoomOutBtn       = document.getElementById('zoomOutBtn') as HTMLButtonElement;
-    const zoomResetBtn     = document.getElementById('zoomResetBtn') as HTMLButtonElement;
+    var zoomInBtn        = document.getElementById('zoomInBtn');
+    var zoomOutBtn       = document.getElementById('zoomOutBtn');
+    var zoomResetBtn     = document.getElementById('zoomResetBtn');
 
-    const blockNameInput   = document.getElementById('block_name') as HTMLInputElement;
-    const blockCreateBtn   = document.getElementById('block_create') as HTMLButtonElement;
-    const blocksList       = document.getElementById('blocks_list') as HTMLElement;
-    const blockCapacityInput = document.getElementById('block_capacity') as HTMLInputElement;
-    const blockZoneInput     = document.getElementById('block_zone') as HTMLInputElement;
-    const blockTicketTypeSelect = document.getElementById('block_ticketType') as HTMLSelectElement;
+    var blockNameInput   = document.getElementById('block_name');
+    var blockCreateBtn   = document.getElementById('block_create');
+    var blocksList       = document.getElementById('blocks_list');
+    var blockCapacityInput = document.getElementById('block_capacity');
+    var blockZoneInput     = document.getElementById('block_zone');
+    var blockTicketTypeSelect = document.getElementById('block_ticketType');
 
-    const seatPriceTicketTypeSelect   = document.getElementById('seat_price_ticketType') as HTMLSelectElement;
-    const seatPriceAssignBtn          = document.getElementById('seat_price_assign_selection') as HTMLButtonElement;
-    const seatPriceClearBtn           = document.getElementById('seat_price_clear') as HTMLButtonElement;
-    const seatPriceSummary            = document.getElementById('seat_price_summary') as HTMLElement;
+    var seatPriceTicketTypeSelect   = document.getElementById('seat_price_ticketType');
+    var seatPriceAssignBtn          = document.getElementById('seat_price_assign_selection');
+    var seatPriceClearBtn           = document.getElementById('seat_price_clear');
+    var seatPriceSummary            = document.getElementById('seat_price_summary');
 
     backToTicketsBtn.addEventListener('click', function(){
       go('/admin/ui/shows/'+showId+'/tickets');
@@ -1154,16 +1252,16 @@ router.get(
       go('/admin/ui/shows/'+showId+'/edit');
     });
 
-    let seatMapsData: any[] = [];
-    let currentSeatMapId: string | null = null;
-    let layout: any = { seats: {}, elements: [] };
-    let seats: any[] = [];
-    let ticketTypes: any[] = [];
+    var seatMapsData = [];
+    var currentSeatMapId = null;
+    var layout = { seats: {}, elements: [] };
+    var seats = [];
+    var ticketTypes = [];
 
-    const selectedSeatIds = new Set<string>();
-    let selectedBlockId: string | null = null;
+    var selectedSeatIds = new Set();
+    var selectedBlockId = null;
 
-    let zoom = 1;
+    var zoom = 1;
     function applyZoom(){
       seatCanvas.style.transform = 'scale('+zoom+')';
     }
@@ -1188,9 +1286,9 @@ router.get(
       if(!Array.isArray(layout.elements)) layout.elements = [];
     }
 
-    function ensureSeatMeta(id: string){
+    function ensureSeatMeta(id){
       ensureLayout();
-      let meta = layout.seats[id];
+      var meta = layout.seats[id];
       if(!meta){
         meta = { x:40, y:30, rotation:0, ticketTypeId:null };
         layout.seats[id] = meta;
@@ -1205,17 +1303,17 @@ router.get(
 
     function clearSelection(){
       selectedSeatIds.forEach(function(id){
-        const el = seatCanvas.querySelector('[data-seat-id="'+id+'"]') as HTMLElement | null;
+        var el = seatCanvas.querySelector('[data-seat-id="'+id+'"]');
         if(el) el.classList.remove('seat-selected');
       });
       selectedSeatIds.clear();
       selectedBlockId = null;
     }
 
-    function addSeatToSelection(id: string){
+    function addSeatToSelection(id){
       if(!selectedSeatIds.has(id)){
         selectedSeatIds.add(id);
-        const el = seatCanvas.querySelector('[data-seat-id="'+id+'"]') as HTMLElement | null;
+        var el = seatCanvas.querySelector('[data-seat-id="'+id+'"]');
         if(el) el.classList.add('seat-selected');
       }
     }
@@ -1223,12 +1321,12 @@ router.get(
     function recomputeSelectedBlockFromSeats(){
       ensureLayout();
       selectedBlockId = null;
-      const sel = Array.from(selectedSeatIds);
+      var sel = Array.from(selectedSeatIds);
       if(!sel.length) return;
-      const blocks = layout.elements.filter(function(e: any){ return e && e.type === 'block' && Array.isArray(e.seatIds); });
-      blocks.some(function(b: any){
+      var blocks = layout.elements.filter(function(e){ return e && e.type === 'block' && Array.isArray(e.seatIds); });
+      blocks.some(function(b){
         if(!b.seatIds || !b.seatIds.length) return false;
-        const allIn = b.seatIds.every(function(id: string){ return selectedSeatIds.has(id); });
+        var allIn = b.seatIds.every(function(id){ return selectedSeatIds.has(id); });
         if(allIn){
           selectedBlockId = b.id;
           return true;
@@ -1237,20 +1335,20 @@ router.get(
       });
     }
 
-    function selectSingleSeat(id: string){
+    function selectSingleSeat(id){
       clearSelection();
       addSeatToSelection(id);
       recomputeSelectedBlockFromSeats();
       renderSeats();
     }
 
-    function selectRowForSeat(id: string){
-      const seat = seats.find(function(s: any){ return s.id === id; });
+    function selectRowForSeat(id){
+      var seat = seats.find(function(s){ return s.id === id; });
       if(!seat) return;
-      const rowKey = seat.rowLabel || seat.row || '';
+      var rowKey = seat.rowLabel || seat.row || '';
       clearSelection();
-      seats.forEach(function(s: any){
-        const key = s.rowLabel || s.row || '';
+      seats.forEach(function(s){
+        var key = s.rowLabel || s.row || '';
         if(key === rowKey){
           addSeatToSelection(s.id);
         }
@@ -1259,11 +1357,11 @@ router.get(
       renderSeats();
     }
 
-    const guideH = document.createElement('div');
+    var guideH = document.createElement('div');
     guideH.className = 'guide-line h';
     guideH.style.display = 'none';
 
-    const guideV = document.createElement('div');
+    var guideV = document.createElement('div');
     guideV.className = 'guide-line v';
     guideV.style.display = 'none';
 
@@ -1271,21 +1369,21 @@ router.get(
       guideH.style.display = 'none';
       guideV.style.display = 'none';
     }
-    function showGuideH(y: number){
+    function showGuideH(y){
       guideH.style.top = (y - 0.5)+'px';
       guideH.style.display = 'block';
     }
-    function showGuideV(x: number){
+    function showGuideV(x){
       guideV.style.left = (x - 0.5)+'px';
       guideV.style.display = 'block';
     }
 
-    function ticketTypeLabelForId(id: string | null){
+    function ticketTypeLabelForId(id){
       if(!id || !ticketTypes || !ticketTypes.length) return '';
-      const tt = ticketTypes.find(function(t: any){ return t.id === id; });
+      var tt = ticketTypes.find(function(t){ return t.id === id; });
       if(!tt) return '';
-      const price = (tt.pricePence || 0) / 100;
-      const priceLabel = price === 0 ? 'Free' : '£'+price.toFixed(2);
+      var price = (tt.pricePence || 0) / 100;
+      var priceLabel = price === 0 ? 'Free' : '£'+price.toFixed(2);
       return tt.name + ' ('+priceLabel+')';
     }
 
@@ -1296,20 +1394,20 @@ router.get(
         return;
       }
       ensureLayout();
-      const countsByTt: Record<string, number> = {};
-      let unassigned = 0;
-      seats.forEach(function(s: any){
-        const meta = layout.seats[s.id];
-        const ttId = meta && meta.ticketTypeId;
+      var countsByTt = {};
+      var unassigned = 0;
+      seats.forEach(function(s){
+        var meta = layout.seats[s.id];
+        var ttId = meta && meta.ticketTypeId;
         if(ttId){
           countsByTt[ttId] = (countsByTt[ttId] || 0) + 1;
         }else{
           unassigned++;
         }
       });
-      const parts: string[] = [];
+      var parts = [];
       Object.keys(countsByTt).forEach(function(ttId){
-        const n = countsByTt[ttId];
+        var n = countsByTt[ttId];
         parts.push(ticketTypeLabelForId(ttId)+': '+n+' seat'+(n===1?'':'s'));
       });
       if(unassigned > 0){
@@ -1321,17 +1419,17 @@ router.get(
     function refreshBlocksList(){
       ensureLayout();
       if(!blocksList) return;
-      const blocks = layout.elements.filter(function(e: any){ return e && e.type === 'block'; });
+      var blocks = layout.elements.filter(function(e){ return e && e.type === 'block'; });
       if(!blocks.length){
         blocksList.innerHTML = '<div class="muted">No blocks yet.</div>';
         return;
       }
-      blocksList.innerHTML = blocks.map(function(b: any){
-        const seatCount = Array.isArray(b.seatIds) ? b.seatIds.length : 0;
-        const capacity = (typeof b.capacity === 'number' && b.capacity >= 0) ? b.capacity : seatCount;
-        const zone = (b.zone || '').trim();
-        const ttLabel = ticketTypeLabelForId(b.ticketTypeId);
-        const bits: string[] = [];
+      blocksList.innerHTML = blocks.map(function(b){
+        var seatCount = Array.isArray(b.seatIds) ? b.seatIds.length : 0;
+        var capacity = (typeof b.capacity === 'number' && b.capacity >= 0) ? b.capacity : seatCount;
+        var zone = (b.zone || '').trim();
+        var ttLabel = ticketTypeLabelForId(b.ticketTypeId);
+        var bits = [];
         bits.push(capacity+' seats');
         if(zone) bits.push('Zone: '+zone);
         if(ttLabel) bits.push('Ticket: '+ttLabel);
@@ -1346,12 +1444,12 @@ router.get(
       $$('[data-block-select]', blocksList).forEach(function(btn){
         btn.addEventListener('click', function(e){
           e.preventDefault();
-          const id = (btn as HTMLElement).getAttribute('data-block-select');
+          var id = btn.getAttribute('data-block-select');
           ensureLayout();
-          const block = layout.elements.find(function(el: any){ return el && el.id === id && el.type === 'block'; });
+          var block = layout.elements.find(function(el){ return el && el.id === id && el.type === 'block'; });
           if(!block || !Array.isArray(block.seatIds) || !block.seatIds.length) return;
           clearSelection();
-          block.seatIds.forEach(function(seatId: string){ addSeatToSelection(seatId); });
+          block.seatIds.forEach(function(seatId){ addSeatToSelection(seatId); });
           selectedBlockId = id;
           renderSeats();
         });
@@ -1360,10 +1458,10 @@ router.get(
       $$('[data-block-delete]', blocksList).forEach(function(btn){
         btn.addEventListener('click', function(e){
           e.preventDefault();
-          const id = (btn as HTMLElement).getAttribute('data-block-delete');
+          var id = btn.getAttribute('data-block-delete');
           if(!id) return;
           ensureLayout();
-          const idx = layout.elements.findIndex(function(el: any){ return el && el.id === id && el.type === 'block'; });
+          var idx = layout.elements.findIndex(function(el){ return el && el.id === id && el.type === 'block'; });
           if(idx !== -1){
             layout.elements.splice(idx,1);
           }
@@ -1378,31 +1476,31 @@ router.get(
 
     async function loadTicketTypesForShow(){
       try{
-        const res: any = await j('/admin/shows/'+showId+'/ticket-types');
+        var res = await j('/admin/shows/'+showId+'/ticket-types');
         ticketTypes = res.ticketTypes || [];
 
         if(blockTicketTypeSelect){
-          const currentVal = blockTicketTypeSelect.value;
+          var currentVal = blockTicketTypeSelect.value;
           blockTicketTypeSelect.innerHTML = '<option value="">— None —</option>' +
-            ticketTypes.map(function(tt: any){
-              const price = (tt.pricePence || 0) / 100;
-              const priceLabel = price === 0 ? 'Free' : '£'+price.toFixed(2);
+            ticketTypes.map(function(tt){
+              var price = (tt.pricePence || 0) / 100;
+              var priceLabel = price === 0 ? 'Free' : '£'+price.toFixed(2);
               return '<option value="'+tt.id+'">'+tt.name+' ('+priceLabel+')</option>';
             }).join('');
-          if(currentVal && ticketTypes.some(function(t: any){ return t.id === currentVal; })){
+          if(currentVal && ticketTypes.some(function(t){ return t.id === currentVal; })){
             blockTicketTypeSelect.value = currentVal;
           }
         }
 
         if(seatPriceTicketTypeSelect){
-          const currentVal2 = seatPriceTicketTypeSelect.value;
+          var currentVal2 = seatPriceTicketTypeSelect.value;
           seatPriceTicketTypeSelect.innerHTML = '<option value="">— Choose ticket type —</option>' +
-            ticketTypes.map(function(tt: any){
-              const price = (tt.pricePence || 0) / 100;
-              const priceLabel = price === 0 ? 'Free' : '£'+price.toFixed(2);
+            ticketTypes.map(function(tt){
+              var price = (tt.pricePence || 0) / 100;
+              var priceLabel = price === 0 ? 'Free' : '£'+price.toFixed(2);
               return '<option value="'+tt.id+'">'+tt.name+' ('+priceLabel+')</option>';
             }).join('');
-          if(currentVal2 && ticketTypes.some(function(t: any){ return t.id === currentVal2; })){
+          if(currentVal2 && ticketTypes.some(function(t){ return t.id === currentVal2; })){
             seatPriceTicketTypeSelect.value = currentVal2;
           }
         }
@@ -1421,9 +1519,9 @@ router.get(
       currentSeatMapId = null;
 
       try{
-        let qs = 'showId='+encodeURIComponent(showId);
+        var qs = 'showId='+encodeURIComponent(showId);
         if(venueId) qs += '&venueId='+encodeURIComponent(venueId);
-        const maps: any[] = await j('/admin/seatmaps?'+qs) as any[];
+        var maps = await j('/admin/seatmaps?'+qs);
 
         if(!Array.isArray(maps) || !maps.length){
           smStatus.textContent = 'No seat maps yet. Create one below.';
@@ -1438,13 +1536,13 @@ router.get(
 
         seatMapsData = maps;
         smStatus.textContent = maps.length+' seat map'+(maps.length>1?'s':'')+' found.';
-        smSelect.innerHTML = maps.map(function(m: any){
-          let label = m.name || 'Untitled map';
+        smSelect.innerHTML = maps.map(function(m){
+          var label = m.name || 'Untitled map';
           if(m.isDefault) label += ' (default)';
           return '<option value="'+m.id+'">'+label+'</option>';
         }).join('');
 
-        const def = maps.find(function(m: any){ return m.isDefault; }) || maps[0];
+        var def = maps.find(function(m){ return m.isDefault; }) || maps[0];
         currentSeatMapId = def.id;
         smSelect.value = currentSeatMapId;
 
@@ -1456,7 +1554,7 @@ router.get(
         await reloadSeats();
         refreshBlocksList();
         updateSeatPricingSummary();
-      }catch(e: any){
+      }catch(e){
         smStatus.textContent = 'Failed to load seat maps';
         smErr.textContent = e.message || String(e);
       }
@@ -1469,11 +1567,11 @@ router.get(
         return;
       }
       try{
-        seats = await j('/seatmaps/'+currentSeatMapId+'/seats') as any[];
+        seats = await j('/seatmaps/'+currentSeatMapId+'/seats');
         renderSeats();
         refreshBlocksList();
         updateSeatPricingSummary();
-      }catch(e: any){
+      }catch(e){
         seatCanvas.innerHTML = '<div class="error">Failed to load seats: '+(e.message||e)+'</div>';
         hideGuides();
       }
@@ -1492,42 +1590,42 @@ router.get(
         return;
       }
 
-      const hasPositions = Object.keys(layout.seats).length > 0;
+      var hasPositions = Object.keys(layout.seats).length > 0;
       if(!hasPositions){
-        const rowsMap: Record<string, any[]> = {};
-        seats.forEach(function(s: any){
-          const key = s.rowLabel || s.row || '';
+        var rowsMap = {};
+        seats.forEach(function(s){
+          var key = s.rowLabel || s.row || '';
           if(!rowsMap[key]) rowsMap[key] = [];
           rowsMap[key].push(s);
         });
 
-        const rowKeys = Object.keys(rowsMap).sort();
-        const offsetX = 40;
-        const offsetY = 30;
-        const dx = 24;
-        const dy = 24;
+        var rowKeys = Object.keys(rowsMap).sort();
+        var offsetX = 40;
+        var offsetY = 30;
+        var dx = 24;
+        var dy = 24;
 
         rowKeys.forEach(function(rowKey, rowIndex){
-          const rowSeats = rowsMap[rowKey].sort(function(a: any,b: any){
-            const an = a.seatNumber != null ? a.seatNumber : a.number;
-            const bn = b.seatNumber != null ? b.seatNumber : b.number;
+          var rowSeats = rowsMap[rowKey].sort(function(a,b){
+            var an = a.seatNumber != null ? a.seatNumber : a.number;
+            var bn = b.seatNumber != null ? b.seatNumber : b.number;
             return an - bn;
           });
-          const y = offsetY + rowIndex * dy;
-          rowSeats.forEach(function(s: any, colIndex: number){
-            const x = offsetX + colIndex * dx;
-            const meta = ensureSeatMeta(s.id);
+          var y = offsetY + rowIndex * dy;
+          rowSeats.forEach(function(s, colIndex){
+            var x = offsetX + colIndex * dx;
+            var meta = ensureSeatMeta(s.id);
             meta.x = x;
             meta.y = y;
           });
         });
       }
 
-      seats.forEach(function(s: any){
-        const meta = ensureSeatMeta(s.id);
-        const pos = { x: meta.x, y: meta.y };
+      seats.forEach(function(s){
+        var meta = ensureSeatMeta(s.id);
+        var pos = { x: meta.x, y: meta.y };
 
-        const seatEl = document.createElement('div');
+        var seatEl = document.createElement('div');
         seatEl.className = 'seat';
         if(s.status === 'BLOCKED') seatEl.classList.add('seat-blocked');
         if(s.status === 'HELD')    seatEl.classList.add('seat-held');
@@ -1538,10 +1636,10 @@ router.get(
         seatEl.style.left = (pos.x - 9)+'px';
         seatEl.style.top  = (pos.y - 9)+'px';
 
-        const labelRow  = s.rowLabel || s.row || '';
-        const labelSeat = (s.seatNumber != null ? s.seatNumber : s.number);
-        let title = labelRow+' '+labelSeat;
-        const ttLabel = meta.ticketTypeId ? ticketTypeLabelForId(meta.ticketTypeId) : '';
+        var labelRow  = s.rowLabel || s.row || '';
+        var labelSeat = (s.seatNumber != null ? s.seatNumber : s.number);
+        var title = labelRow+' '+labelSeat;
+        var ttLabel = meta.ticketTypeId ? ticketTypeLabelForId(meta.ticketTypeId) : '';
         if(ttLabel){
           title += ' · '+ttLabel;
         }
@@ -1556,13 +1654,13 @@ router.get(
       });
 
       ensureLayout();
-      const blocks = layout.elements.filter(function(e: any){ return e && e.type === 'block' && Array.isArray(e.seatIds) && e.seatIds.length; });
-      blocks.forEach(function(b: any){
-        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-        b.seatIds.forEach(function(id: string){
-          const meta = layout.seats[id];
+      var blocks = layout.elements.filter(function(e){ return e && e.type === 'block' && Array.isArray(e.seatIds) && e.seatIds.length; });
+      blocks.forEach(function(b){
+        var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        b.seatIds.forEach(function(id){
+          var meta = layout.seats[id];
           if(!meta) return;
-          const pos = meta;
+          var pos = meta;
           if(pos.x < minX) minX = pos.x;
           if(pos.x > maxX) maxX = pos.x;
           if(pos.y < minY) minY = pos.y;
@@ -1570,27 +1668,27 @@ router.get(
         });
         if(!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) return;
 
-        const overlay = document.createElement('div');
+        var overlay = document.createElement('div');
         overlay.className = 'seat-block-overlay';
         if(selectedBlockId === b.id) overlay.classList.add('selected');
         overlay.setAttribute('data-block-id', b.id);
 
-        const padding = 12;
-        const width = (maxX - minX) + padding*2;
-        const height = (maxY - minY) + padding*2;
+        var padding = 12;
+        var width = (maxX - minX) + padding*2;
+        var height = (maxY - minY) + padding*2;
 
         overlay.style.left = (minX - padding)+'px';
         overlay.style.top  = (minY - padding)+'px';
         overlay.style.width = width+'px';
         overlay.style.height = height+'px';
 
-        const labelSpan = document.createElement('span');
+        var labelSpan = document.createElement('span');
         labelSpan.className = 'seat-block-overlay-label';
         labelSpan.textContent = b.name
           ? (b.zone ? (b.name+' – '+b.zone) : b.name)
           : (b.zone || 'Block');
 
-        const handleSpan = document.createElement('span');
+        var handleSpan = document.createElement('span');
         handleSpan.className = 'seat-block-overlay-handle';
         handleSpan.textContent = '⋮⋮';
 
@@ -1605,9 +1703,9 @@ router.get(
     }
 
     smSelect.addEventListener('change', async function(){
-      const id = smSelect.value;
+      var id = smSelect.value;
       currentSeatMapId = id || null;
-      const found = seatMapsData.find(function(m: any){ return m.id === id; });
+      var found = seatMapsData.find(function(m){ return m.id === id; });
       if(found && found.layout && typeof found.layout === 'object'){
         layout = found.layout;
       }else{
@@ -1621,22 +1719,22 @@ router.get(
 
     smCreate.addEventListener('click', async function(){
       smErr.textContent = '';
-      const name = smName.value.trim();
+      var name = smName.value.trim();
       if(!name){
         smErr.textContent = 'Name is required';
         return;
       }
       try{
-        const body: any = { showId: showId, name: name };
+        var body = { showId: showId, name: name };
         if(venueId) body.venueId = venueId;
-        const created: any = await j('/admin/seatmaps',{
+        var created = await j('/admin/seatmaps',{
           method:'POST',
           headers:{'Content-Type':'application/json'},
           body: JSON.stringify(body)
         });
         smName.value = '';
         await reloadSeatMaps();
-        const newId =
+        var newId =
           (created &&
             (
               created.id ||
@@ -1655,7 +1753,7 @@ router.get(
         await reloadSeats();
         refreshBlocksList();
         updateSeatPricingSummary();
-      }catch(e: any){
+      }catch(e){
         smErr.textContent = e.message || String(e);
       }
     });
@@ -1665,16 +1763,16 @@ router.get(
         alert('Select or create a seat map first.');
         return;
       }
-      const rows = Number(qRows.value) || 0;
-      const cols = Number(qCols.value) || 0;
+      var rows = Number(qRows.value) || 0;
+      var cols = Number(qCols.value) || 0;
       if(rows <= 0 || cols <= 0){
         alert('Rows and seats per row must be positive numbers.');
         return;
       }
-      const seatsPayload: any[] = [];
-      for(let r=0;r<rows;r++){
-        const rowLabel = String.fromCharCode(65 + r);
-        for(let c=0;c<cols;c++){
+      var seatsPayload = [];
+      for(var r=0;r<rows;r++){
+        var rowLabel = String.fromCharCode(65 + r);
+        for(var c=0;c<cols;c++){
           seatsPayload.push({
             row: rowLabel,
             number: c+1,
@@ -1691,34 +1789,34 @@ router.get(
         });
         clearSelection();
         await reloadSeats();
-      }catch(e: any){
+      }catch(e){
         alert('Failed to generate seats: '+(e.message||e));
       }
     });
 
     blockCreateBtn.addEventListener('click', function(){
       ensureLayout();
-      const seatIds = Array.from(selectedSeatIds);
+      var seatIds = Array.from(selectedSeatIds);
       if(!seatIds.length){
         alert('Select one or more seats first.');
         return;
       }
-      const blocks = layout.elements.filter(function(e: any){ return e && e.type === 'block'; });
-      const name = (blockNameInput.value || '').trim() || ('Block '+(blocks.length+1));
+      var blocks = layout.elements.filter(function(e){ return e && e.type === 'block'; });
+      var name = (blockNameInput.value || '').trim() || ('Block '+(blocks.length+1));
 
-      let capacity: number | null = null;
-      const capStr = (blockCapacityInput && blockCapacityInput.value || '').trim();
+      var capacity = null;
+      var capStr = (blockCapacityInput && blockCapacityInput.value || '').trim();
       if(capStr){
-        const n = Number(capStr);
+        var n = Number(capStr);
         if(Number.isFinite(n) && n >= 0){
           capacity = n;
         }
       }
 
-      const zone = (blockZoneInput && blockZoneInput.value || '').trim() || null;
-      const ticketTypeId = (blockTicketTypeSelect && blockTicketTypeSelect.value) || null;
+      var zone = (blockZoneInput && blockZoneInput.value || '').trim() || null;
+      var ticketTypeId = (blockTicketTypeSelect && blockTicketTypeSelect.value) || null;
 
-      const id = 'block_'+Date.now()+'_'+Math.floor(Math.random()*1000);
+      var id = 'block_'+Date.now()+'_'+Math.floor(Math.random()*1000);
       layout.elements.push({
         id: id,
         type: 'block',
@@ -1740,7 +1838,7 @@ router.get(
     });
 
     seatPriceAssignBtn.addEventListener('click', function(){
-      const ttId = seatPriceTicketTypeSelect && seatPriceTicketTypeSelect.value;
+      var ttId = seatPriceTicketTypeSelect && seatPriceTicketTypeSelect.value;
       if(!ttId){
         alert('Choose a ticket type first.');
         return;
@@ -1751,7 +1849,7 @@ router.get(
       }
       ensureLayout();
       selectedSeatIds.forEach(function(id){
-        const meta = ensureSeatMeta(id);
+        var meta = ensureSeatMeta(id);
         meta.ticketTypeId = ttId;
       });
       renderSeats();
@@ -1765,7 +1863,7 @@ router.get(
       }
       ensureLayout();
       selectedSeatIds.forEach(function(id){
-        const meta = ensureSeatMeta(id);
+        var meta = ensureSeatMeta(id);
         if(meta.ticketTypeId){
           meta.ticketTypeId = null;
         }
@@ -1774,30 +1872,30 @@ router.get(
       updateSeatPricingSummary();
     });
 
-    const GRID_SIZE = 4;
-    const SNAP_DIST = 8;
-    let dragState: any = null;
+    var GRID_SIZE = 4;
+    var SNAP_DIST = 8;
+    var dragState = null;
 
-    seatCanvas.addEventListener('mousedown', function(e: MouseEvent){
-      const target = e.target as HTMLElement | null;
-      const blockEl = target && target.closest ? target.closest('.seat-block-overlay') as HTMLElement | null : null;
+    seatCanvas.addEventListener('mousedown', function(e){
+      var target = e.target;
+      var blockEl = target && target.closest ? target.closest('.seat-block-overlay') : null;
       if(blockEl){
-        const blockId = blockEl.getAttribute('data-block-id');
+        var blockId = blockEl.getAttribute('data-block-id');
         if(blockId){
           ensureLayout();
-          const block = layout.elements.find(function(el: any){ return el && el.id === blockId && el.type === 'block'; });
+          var block = layout.elements.find(function(el){ return el && el.id === blockId && el.type === 'block'; });
           if(block && Array.isArray(block.seatIds) && block.seatIds.length){
             clearSelection();
-            block.seatIds.forEach(function(seatId: string){ addSeatToSelection(seatId); });
+            block.seatIds.forEach(function(seatId){ addSeatToSelection(seatId); });
             selectedBlockId = blockId;
             renderSeats();
 
             if(e.button === 0){
               ensureLayout();
-              const seatIds = Array.from(selectedSeatIds);
-              const startPositions: Record<string, {x:number;y:number}> = {};
-              seatIds.forEach(function(id: string){
-                const meta = ensureSeatMeta(id);
+              var seatIds = Array.from(selectedSeatIds);
+              var startPositions = {};
+              seatIds.forEach(function(id){
+                var meta = ensureSeatMeta(id);
                 startPositions[id] = {
                   x: meta.x,
                   y: meta.y
@@ -1818,7 +1916,7 @@ router.get(
         return;
       }
 
-      const seatEl = target && target.closest ? target.closest('.seat') as HTMLElement | null : null;
+      var seatEl = target && target.closest ? target.closest('.seat') : null;
 
       if(!seatEl){
         clearSelection();
@@ -1826,7 +1924,7 @@ router.get(
         return;
       }
 
-      const seatId = seatEl.getAttribute('data-seat-id');
+      var seatId = seatEl.getAttribute('data-seat-id');
       if(!seatId || seatEl.classList.contains('seat-sold')) return;
 
       if(e.altKey){
@@ -1846,67 +1944,67 @@ router.get(
 
       if(e.button === 0 && selectedSeatIds.size){
         ensureLayout();
-        const seatIds = Array.from(selectedSeatIds);
-        const startPositions: Record<string, {x:number;y:number}> = {};
-        seatIds.forEach(function(id: string){
-          const meta = ensureSeatMeta(id);
-          startPositions[id] = {
+        var seatIds2 = Array.from(selectedSeatIds);
+        var startPositions2 = {};
+        seatIds2.forEach(function(id){
+          var meta = ensureSeatMeta(id);
+          startPositions2[id] = {
             x: meta.x,
             y: meta.y
           };
         });
 
         dragState = {
-          seatIds: seatIds,
+          seatIds: seatIds2,
           anchorSeatId: seatId,
           startMouseX: e.clientX,
           startMouseY: e.clientY,
-          startPositions: startPositions
+          startPositions: startPositions2
         };
       }
 
       e.preventDefault();
     });
 
-    document.addEventListener('mousemove', function(e: MouseEvent){
+    document.addEventListener('mousemove', function(e){
       if(!dragState) return;
 
-      const rect = seatCanvas.getBoundingClientRect();
-      const dxScreen = e.clientX - dragState.startMouseX;
-      const dyScreen = e.clientY - dragState.startMouseY;
+      var rect = seatCanvas.getBoundingClientRect();
+      var dxScreen = e.clientX - dragState.startMouseX;
+      var dyScreen = e.clientY - dragState.startMouseY;
 
-      const dx = dxScreen / zoom;
-      const dy = dyScreen / zoom;
+      var dx = dxScreen / zoom;
+      var dy = dyScreen / zoom;
 
-      const widthLogical = rect.width / zoom;
-      const heightLogical = rect.height / zoom;
+      var widthLogical = rect.width / zoom;
+      var heightLogical = rect.height / zoom;
 
       ensureLayout();
 
-      const anchorId = dragState.anchorSeatId;
-      const anchorStart = dragState.startPositions[anchorId];
+      var anchorId = dragState.anchorSeatId;
+      var anchorStart = dragState.startPositions[anchorId];
       if(!anchorStart) return;
 
-      let anchorX = anchorStart.x + dx;
-      let anchorY = anchorStart.y + dy;
+      var anchorX = anchorStart.x + dx;
+      var anchorY = anchorStart.y + dy;
 
       anchorX = Math.round(anchorX / GRID_SIZE) * GRID_SIZE;
       anchorY = Math.round(anchorY / GRID_SIZE) * GRID_SIZE;
 
-      const PADDING = 10;
+      var PADDING = 10;
       anchorX = Math.max(PADDING, Math.min(widthLogical  - PADDING, anchorX));
       anchorY = Math.max(PADDING, Math.min(heightLogical - PADDING, anchorY));
 
-      let snapX: number | null = null;
-      let snapY: number | null = null;
-      const canvasCenterX = widthLogical / 2;
-      const canvasCenterY = heightLogical / 2;
+      var snapX = null;
+      var snapY = null;
+      var canvasCenterX = widthLogical / 2;
+      var canvasCenterY = heightLogical / 2;
 
-      seats.forEach(function(s: any){
-        const meta = layout.seats[s.id];
+      seats.forEach(function(s){
+        var meta = layout.seats[s.id];
         if(!meta) return;
         if(dragState.seatIds.indexOf(s.id) !== -1) return;
-        const pos = meta;
+        var pos = meta;
         if(Math.abs(anchorX - pos.x) <= SNAP_DIST){
           snapX = pos.x;
         }
@@ -1936,23 +2034,23 @@ router.get(
         guideV.style.display = 'none';
       }
 
-      const adjustDx = anchorX - (anchorStart.x + dx);
-      const adjustDy = anchorY - (anchorStart.y + dy);
+      var adjustDx = anchorX - (anchorStart.x + dx);
+      var adjustDy = anchorY - (anchorStart.y + dy);
 
-      dragState.seatIds.forEach(function(id: string){
-        const base = dragState.startPositions[id];
-        let x = base.x + dx + adjustDx;
-        let y = base.y + dy + adjustDy;
+      dragState.seatIds.forEach(function(id){
+        var base = dragState.startPositions[id];
+        var x = base.x + dx + adjustDx;
+        var y = base.y + dy + adjustDy;
 
-        const PADDING = 10;
+        var PADDING = 10;
         x = Math.max(PADDING, Math.min(widthLogical  - PADDING, x));
         y = Math.max(PADDING, Math.min(heightLogical - PADDING, y));
 
-        const meta = ensureSeatMeta(id);
+        var meta = ensureSeatMeta(id);
         meta.x = x;
         meta.y = y;
 
-        const el = seatCanvas.querySelector('[data-seat-id="'+id+'"]') as HTMLElement | null;
+        var el = seatCanvas.querySelector('[data-seat-id="'+id+'"]');
         if(el){
           el.style.left = (x - 9)+'px';
           el.style.top  = (y - 9)+'px';
@@ -1975,9 +2073,9 @@ router.get(
       ensureLayout();
 
       if(ticketTypes && ticketTypes.length > 1){
-        let unassigned = 0;
-        seats.forEach(function(s: any){
-          const meta = layout.seats[s.id];
+        var unassigned = 0;
+        seats.forEach(function(s){
+          var meta = layout.seats[s.id];
           if(!meta || !meta.ticketTypeId){
             unassigned++;
           }
@@ -1995,7 +2093,7 @@ router.get(
           body: JSON.stringify({ layout: layout })
         });
         alert('Layout saved');
-      }catch(e: any){
+      }catch(e){
         alert('Failed to save layout: '+(e.message||e));
       }
     });
