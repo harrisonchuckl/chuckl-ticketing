@@ -225,7 +225,7 @@ router.get(
  
     function home(){
     if (!main) {
-      console.error('[Admin UI] #main element not found');
+      console.error('[Admin UI] #main element not found'));
       return;
     }
     main.innerHTML =
