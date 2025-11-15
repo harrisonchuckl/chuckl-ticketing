@@ -207,7 +207,7 @@ router.get(
     try{ return bodyText ? JSON.parse(bodyText) : {}; }catch(_){ return {}; }
   }
 
-  function go(path){
+   function go(path){
     history.pushState(null,'',path);
     route();
   }
@@ -222,18 +222,15 @@ router.get(
   });
   window.addEventListener('popstate', route);
 
- 
-function home(){
-  if (!main) {
-    console.error('[Admin UI] #main element not found');
-    return;
+  function home(){
+    if (!main) {
+      console.error('[Admin UI v2] #main element not found');
+      return;
+    }
+    main.innerHTML =
+      '<div class="card"><div class="title">Welcome</div>' +
+      '<div class="muted">Use the menu to manage shows, venues and orders.</div></div>';
   }
-  main.innerHTML =
-    '<div class="card"><div class="title">Welcome</div>' +
-    '<div class="muted">Use the menu to manage shows, venues and orders.</div></div>';
-}
-
-
 
   function route(){
     try {
@@ -261,6 +258,7 @@ function home(){
       console.error('[Admin UI] route() error:', err);
     }
   }
+
 
   // -------- Venues search + inline create (used in show editor/creator) --------
   async function searchVenues(q){
