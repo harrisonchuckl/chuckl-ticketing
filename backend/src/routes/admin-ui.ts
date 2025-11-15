@@ -175,6 +175,7 @@ router.get(
 
 <script>
 (function(){
+  console.log('[Admin UI] script booting…');
   const $ = (s,r=document)=>r.querySelector(s);
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
   const main = $('#main');
@@ -216,30 +217,43 @@ router.get(
   });
   window.addEventListener('popstate', route);
 
-  function route(){
-    // normalise any trailing slash
-    const path = location.pathname.replace(/\/$/, '');
-    setActive(path);
-
-    if (path === '/admin/ui' || path === '/admin/ui/home' || path === '/admin/ui/index.html') return home();
-    if (path === '/admin/ui/shows/create') return createShow();
-    if (path === '/admin/ui/shows/current') return listShows();
-    if (path === '/admin/ui/orders') return orders();
-    if (path === '/admin/ui/venues') return venues();
-    if (path === '/admin/ui/analytics') return analytics();
-    if (path === '/admin/ui/audiences') return audiences();
-    if (path === '/admin/ui/email') return emailPage();
-    if (path === '/admin/ui/account') return account();
-
-    if (path.startsWith('/admin/ui/shows/') && path.endsWith('/edit')) return editShow(path.split('/')[4]);
-    if (path.startsWith('/admin/ui/shows/') && path.endsWith('/tickets')) return ticketsPage(path.split('/')[4]);
-    if (path.startsWith('/admin/ui/shows/') && path.endsWith('/seating')) return seatingPage(path.split('/')[4]);
-
-    return home();
+ 
+    function home(){
+    if (!main) {
+      console.error('[Admin UI] #main element not found');
+      return;
+    }
+    main.innerHTML =
+      '<div class="card"><div class="title">Welcome</div>' +
+      '<div class="muted">Use the menu to manage shows, venues and orders.</div></div>';
   }
 
-  function home(){
-    main.innerHTML = '<div class="card"><div class="title">Welcome</div><div class="muted">Use the menu to manage shows, venues and orders.</div></div>';
+
+  function route(){
+    try {
+      // normalise any trailing slash
+      const path = location.pathname.replace(/\/$/, '');
+      console.log('[Admin UI] route()', path);
+      setActive(path);
+
+      if (path === '/admin/ui' || path === '/admin/ui/home' || path === '/admin/ui/index.html') return home();
+      if (path === '/admin/ui/shows/create') return createShow();
+      if (path === '/admin/ui/shows/current') return listShows();
+      if (path === '/admin/ui/orders') return orders();
+      if (path === '/admin/ui/venues') return venues();
+      if (path === '/admin/ui/analytics') return analytics();
+      if (path === '/admin/ui/audiences') return audiences();
+      if (path === '/admin/ui/email') return emailPage();
+      if (path === '/admin/ui/account') return account();
+
+      if (path.startsWith('/admin/ui/shows/') && path.endsWith('/edit')) return editShow(path.split('/')[4]);
+      if (path.startsWith('/admin/ui/shows/') && path.endsWith('/tickets')) return ticketsPage(path.split('/')[4]);
+      if (path.startsWith('/admin/ui/shows/') && path.endsWith('/seating')) return seatingPage(path.split('/')[4]);
+
+      return home();
+    } catch (err) {
+      console.error('[Admin UI] route() error:', err);
+    }
   }
 
   // -------- Venues search + inline create (used in show editor/creator) --------
@@ -2075,9 +2089,11 @@ router.get(
     main.innerHTML = '<div class="card"><div class="title">Account</div><div class="muted">Account settings coming soon.</div></div>';
   }
 
-  // Kick off initial route on page load
+   // Kick off initial route on page load
+  console.log('[Admin UI] initial route()');
   route();
 })();
+
 </script>
 </body>
 </html>`);
