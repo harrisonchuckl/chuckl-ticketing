@@ -23,6 +23,9 @@ import adminTicketTypesRouter from "./routes/admin-tickettypes.js";
 import adminSeatMapsRouter from "./routes/admin-seatmaps.js";
 import seatMapsRouter from "./routes/seatmaps.js";
 
+// NEW: seating-choice + stubs for unallocated / layout wizard
+import seatingChoiceRouter from "./routes/seating-choice.js";
+
 const app = express();
 
 // behind a proxy/load balancer (Railway / Cloud Run / etc.)
@@ -102,6 +105,12 @@ app.use("/admin/seatmaps", adminSeatMapsRouter);
 //  - PATCH /seatmaps/seat/:seatId/status
 //  - GET  /seatmaps/allocations/:allocationId
 app.use("/seatmaps", seatMapsRouter);
+
+// NEW: Seating choice + wizard entry points
+//  - GET /admin/seating-choice/:showId
+//  - GET /admin/seating/unallocated/:showId
+//  - GET /admin/seating/layout-wizard/:showId
+app.use("/admin", seatingChoiceRouter);
 
 // ---------- Admin SPA (Organiser Console) ----------
 
