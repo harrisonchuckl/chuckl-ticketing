@@ -183,10 +183,15 @@ router.get(
   // Sidebar nested menu
   const showsToggle = $('#showsToggle');
   const showsSub = $('#showsSub');
-  showsToggle.addEventListener('click', function(e){
-    e.preventDefault();
-    showsSub.style.display = showsSub.style.display === 'none' ? 'block' : 'none';
-  });
+
+  if (showsToggle && showsSub) {
+    showsToggle.addEventListener('click', function(e){
+      e.preventDefault();
+      showsSub.style.display = showsSub.style.display === 'none' ? 'block' : 'none';
+    });
+  } else {
+    console.warn('[Admin UI] showsToggle or showsSub not found', { showsToggle, showsSub });
+  }
 
   function setActive(path){
     $$('.sb-link').forEach(function(a){
