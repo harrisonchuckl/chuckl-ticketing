@@ -104,14 +104,13 @@ router.get(
   .seat-legend{font-size:12px;color:#e5e7eb;display:flex;gap:12px;flex-wrap:wrap;margin-top:4px}
   .seat-legend span{display:inline-flex;align-items:center;gap:4px}
   .seat-grid{display:inline-grid;gap:4px;margin-top:4px}
-  .seat{width:18px;height:18px;border-radius:4px;background:var(--seat-bg);border:1px solid var(--seat-border);display:flex;align-items:center;justify-content:center;font-size:10px;cursor:pointer;transition:transform .05s.ease-out,box-shadow .05s.ease-out}
+  .seat{width:18px;height:18px;border-radius:4px;background:var(--seat-bg);border:1px solid var(--seat-border);display:flex;align-items:center;justify-content:center;font-size:10px;cursor:pointer;transition:transform .05s ease-out,box-shadow .05s ease-out}
   .seat:hover{transform:translateY(-1px);box-shadow:0 1px 2px rgba(0,0,0,.45)}
   .seat-blocked{background:#0f172a;border-color:#0b1120}
   .seat-held{background:#f59e0b;border-color:#92400e}
   .seat-sold{background:#9ca3af;border-color:#4b5563;cursor:not-allowed}
   .seat-selected{outline:2px solid #f97316;outline-offset:1px}
 
-  /* Seat blocks / grids overlay */
   .seat-block-overlay{
     position:absolute;
     border:1px dashed rgba(148,163,184,.9);
@@ -127,18 +126,9 @@ router.get(
     color:#e5e7eb;
     pointer-events:auto;
   }
-  .seat-block-overlay-label{
-    font-weight:500;
-  }
-  .seat-block-overlay-handle{
-    font-size:10px;
-    opacity:.8;
-    margin-left:8px;
-  }
-  .seat-block-overlay.selected{
-    border-style:solid;
-    border-color:#f97316;
-  }
+  .seat-block-overlay-label{font-weight:500;}
+  .seat-block-overlay-handle{font-size:10px;opacity:.8;margin-left:8px;}
+  .seat-block-overlay.selected{border-style:solid;border-color:#f97316;}
 </style>
 </head>
 
@@ -207,7 +197,7 @@ router.get(
     try{ return bodyText ? JSON.parse(bodyText) : {}; }catch(_){ return {}; }
   }
 
-   function go(path){
+  function go(path){
     history.pushState(null,'',path);
     route();
   }
@@ -220,11 +210,12 @@ router.get(
       go(a.getAttribute('data-view'));
     }
   });
+
   window.addEventListener('popstate', route);
 
   function home(){
     if (!main) {
-      console.error('[Admin UI v2] #main element not found');
+      console.error('[Admin UI] #main element not found');
       return;
     }
     main.innerHTML =
@@ -234,7 +225,6 @@ router.get(
 
   function route(){
     try {
-      // normalise any trailing slash
       const path = location.pathname.replace(/\/$/, '');
       console.log('[Admin UI] route()', path);
       setActive(path);
@@ -259,8 +249,7 @@ router.get(
     }
   }
 
-
-  // -------- Venues search + inline create (used in show editor/creator) --------
+  // -------- Venues search + inline create --------
   async function searchVenues(q){
     if(!q) return [];
     try {
@@ -274,7 +263,9 @@ router.get(
   function mountVenuePicker(input){
     const container = document.createElement('div');
     container.style.position = 'relative';
-    input.parentNode.insertBefore(container, input);
+    if (input.parentNode) {
+      input.parentNode.insertBefore(container, input);
+    }
     container.appendChild(input);
 
     const pop = document.createElement('div');
@@ -329,15 +320,19 @@ router.get(
       input.dataset.venueId = '';
       const q = input.value.trim();
       if(!q){ close(); return; }
-      render(await searchVenues(q), q);
+      const list = await searchVenues(q);
+      render(list, q);
     });
+
     input.addEventListener('focus', async function(){
       const q = input.value.trim();
       if(!q) return;
-      render(await searchVenues(q), q);
+      const list = await searchVenues(q);
+      render(list, q);
     });
+
     document.addEventListener('click', function(e){
-      if(!pop.contains(e.target) && e.target !== input) close();
+      if(!pop.contains(e.target as Node) && e.target !== input) close();
     });
   }
 
@@ -366,13 +361,16 @@ router.get(
   function bindWysiwyg(container){
     container.querySelectorAll('[data-cmd]').forEach(function(b){
       b.addEventListener('click', function(){
-        document.execCommand(b.getAttribute('data-cmd'));
+        const cmd = (b as HTMLElement).getAttribute('data-cmd') || '';
+        if (cmd) document.execCommand(cmd);
       });
     });
   }
 
   // ---------- Create show ----------
   async function createShow(){
+    if (!main) return;
+
     main.innerHTML =
       '<div class="card">'
         +'<div class="header">'
@@ -443,34 +441,15 @@ router.get(
       +'</div>';
 
     bindWysiwyg(main);
-    mountVenuePicker($('#venue_input'));
+    mountVenuePicker($('#venue_input') as HTMLInputElement);
 
-    const drop = $('#drop');
-    const file = $('#file');
-    const bar  = $('#bar');
-    const prev = $('#prev');
+    const drop = $('#drop') as HTMLElement;
+    const file = $('#file') as HTMLInputElement;
+    const bar  = $('#bar') as HTMLElement;
+    const prev = $('#prev') as HTMLImageElement;
 
-    drop.addEventListener('click', function(){ file.click(); });
-    drop.addEventListener('dragover', function(e){
-      e.preventDefault();
-      drop.classList.add('drag');
-    });
-    drop.addEventListener('dragleave', function(){
-      drop.classList.remove('drag');
-    });
-    drop.addEventListener('drop', async function(e){
-      e.preventDefault();
-      drop.classList.remove('drag');
-      const f = e.dataTransfer.files && e.dataTransfer.files[0];
-      if (f) await doUpload(f);
-    });
-    file.addEventListener('change', async function(){
-      const f = file.files && file.files[0];
-      if (f) await doUpload(f);
-    });
-
-    async function doUpload(f){
-      $('#err').textContent = '';
+    async function doUpload(f: File){
+      (document.getElementById('err') as HTMLElement).textContent = '';
       bar.style.width = '15%';
       try{
         const out = await uploadPoster(f);
@@ -478,24 +457,49 @@ router.get(
         prev.style.display = 'block';
         bar.style.width = '100%';
         setTimeout(function(){ bar.style.width = '0%'; }, 800);
-      }catch(e){
+      }catch(e: any){
         bar.style.width = '0%';
-        $('#err').textContent = 'Upload failed: ' + (e.message || e);
+        (document.getElementById('err') as HTMLElement).textContent = 'Upload failed: ' + (e.message || e);
       }
     }
 
-    $('#save').addEventListener('click', async function(){
-      const errEl = $('#err');
+    drop.addEventListener('click', function(){ file.click(); });
+
+    drop.addEventListener('dragover', function(e){
+      e.preventDefault();
+      drop.classList.add('drag');
+    });
+
+    drop.addEventListener('dragleave', function(){
+      drop.classList.remove('drag');
+    });
+
+    drop.addEventListener('drop', async function(e: DragEvent){
+      e.preventDefault();
+      drop.classList.remove('drag');
+      const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) await doUpload(f);
+    });
+
+    file.addEventListener('change', async function(){
+      const f = file.files && file.files[0];
+      if (f) await doUpload(f);
+    });
+
+    const saveBtn = document.getElementById('save') as HTMLButtonElement;
+
+    saveBtn.addEventListener('click', async function(){
+      const errEl = document.getElementById('err') as HTMLElement;
       errEl.textContent = '';
 
       try{
-        const title      = $('#sh_title').value.trim();
-        const dtRaw      = $('#sh_dt').value;
-        const venueInput = $('#venue_input');
+        const title      = (document.getElementById('sh_title') as HTMLInputElement).value.trim();
+        const dtRaw      = (document.getElementById('sh_dt') as HTMLInputElement).value;
+        const venueInput = document.getElementById('venue_input') as HTMLInputElement;
         const venueText  = venueInput.value.trim();
-        const venueId    = venueInput.dataset.venueId || null;
-        const imageUrl   = $('#prev').src || null;
-        const descHtml   = $('#desc').innerHTML.trim();
+        const venueId    = (venueInput.dataset as any).venueId || null;
+        const imageUrl   = prev.src || null;
+        const descHtml   = (document.getElementById('desc') as HTMLElement).innerHTML.trim();
 
         if (!title || !dtRaw || !venueText){
           throw new Error('Title, date/time and venue are required');
@@ -503,12 +507,11 @@ router.get(
 
         const dateIso = new Date(dtRaw).toISOString();
 
-        // First ticket type fields (optional)
-        const ftName        = $('#ft_name').value.trim();
-        const ftPriceStr    = $('#ft_price').value.trim();
-        const ftAllocStr    = $('#ft_allocation').value.trim();
+        const ftName        = (document.getElementById('ft_name') as HTMLInputElement).value.trim();
+        const ftPriceStr    = (document.getElementById('ft_price') as HTMLInputElement).value.trim();
+        const ftAllocStr    = (document.getElementById('ft_allocation') as HTMLInputElement).value.trim();
 
-        let firstTicketPayload = null;
+        let firstTicketPayload: any = null;
         if (ftName || ftPriceStr || ftAllocStr){
           let pricePence = 0;
           if (ftPriceStr){
@@ -518,7 +521,7 @@ router.get(
             }
             pricePence = Math.round(p * 100);
           }
-          let available = null;
+          let available: number | null = null;
           if (ftAllocStr){
             const a = Number(ftAllocStr);
             if (!Number.isFinite(a) || a < 0){
@@ -534,7 +537,6 @@ router.get(
           };
         }
 
-        // Create the show (tolerant to different JSON shapes)
         const showRes = await j('/admin/shows', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -548,22 +550,22 @@ router.get(
           })
         });
 
-        if (showRes && showRes.error) {
-          throw new Error(showRes.error);
+        if (showRes && (showRes as any).error) {
+          throw new Error((showRes as any).error);
         }
 
         const showId =
-          (showRes && (
-            showRes.id ||
-            (showRes.show && showRes.show.id) ||
-            (showRes.item && showRes.item.id)
-          )) || null;
+          (showRes &&
+            (
+              (showRes as any).id ||
+              ((showRes as any).show && (showRes as any).show.id) ||
+              ((showRes as any).item && (showRes as any).item.id)
+            )) || null;
 
         if (!showId){
           throw new Error('Failed to create show (no id returned from server)');
         }
 
-        // Optionally create the first ticket type
         if (firstTicketPayload){
           try{
             await j('/admin/shows/' + showId + '/ticket-types', {
@@ -571,7 +573,7 @@ router.get(
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(firstTicketPayload)
             });
-          }catch(ttErr){
+          }catch(ttErr: any){
             alert(
               'Show created, but the first ticket type could not be saved: '
               + (ttErr.message || ttErr)
@@ -580,9 +582,8 @@ router.get(
           }
         }
 
-        // Go straight into the new Tickets page wizard
         go('/admin/ui/shows/' + showId + '/tickets');
-      }catch(e){
+      }catch(e: any){
         errEl.textContent = e.message || String(e);
       }
     });
@@ -590,6 +591,8 @@ router.get(
 
   // ---------- Shows list ----------
   async function listShows(){
+    if (!main) return;
+
     main.innerHTML =
       '<div class="card">'
         +'<div class="header"><div class="title">All events</div><button id="refresh" class="btn">Refresh</button></div>'
@@ -598,12 +601,12 @@ router.get(
       +'</div>';
 
     async function load(){
-      $('#tbody').innerHTML = '<tr><td colspan="7" class="muted">Loading…</td></tr>';
+      const tb = document.getElementById('tbody') as HTMLElement;
+      tb.innerHTML = '<tr><td colspan="7" class="muted">Loading…</td></tr>';
       try{
         const jn = await j('/admin/shows');
-        const items = jn.items || [];
-        const tb = $('#tbody');
-        tb.innerHTML = items.map(function(s){
+        const items = (jn as any).items || [];
+        tb.innerHTML = items.map(function(s: any){
           const when = s.date ? new Date(s.date).toLocaleString('en-GB',{dateStyle:'short', timeStyle:'short'}) : '';
           const total = (s._alloc && s._alloc.total) || 0;
           const sold  = (s._alloc && s._alloc.sold) || 0;
@@ -632,14 +635,16 @@ router.get(
         $$('[data-kebab]').forEach(function(b){
           b.addEventListener('click', function(e){
             e.preventDefault();
-            const id = b.getAttribute('data-kebab');
-            const m  = $('#m-'+id);
+            const id = (b as HTMLElement).getAttribute('data-kebab');
+            const m  = document.getElementById('m-'+id);
             $$('.menu').forEach(function(x){ x.classList.remove('open'); });
-            m.classList.add('open');
+            if (m) m.classList.add('open');
           });
         });
+
         document.addEventListener('click', function(e){
-          if(!e.target.closest || !e.target.closest('.kebab')){
+          const target = e.target as HTMLElement | null;
+          if(!target || !target.closest || !target.closest('.kebab')){
             $$('.menu').forEach(function(x){ x.classList.remove('open'); });
           }
         });
@@ -647,51 +652,62 @@ router.get(
         $$('[data-edit]').forEach(function(a){
           a.addEventListener('click', function(e){
             e.preventDefault();
-            go('/admin/ui/shows/'+a.getAttribute('data-edit')+'/edit');
+            const id = (a as HTMLElement).getAttribute('data-edit');
+            if (id) go('/admin/ui/shows/'+id+'/edit');
           });
         });
+
         $$('[data-seating]').forEach(function(a){
           a.addEventListener('click', function(e){
             e.preventDefault();
-            go('/admin/ui/shows/'+a.getAttribute('data-seating')+'/seating');
+            const id = (a as HTMLElement).getAttribute('data-seating');
+            if (id) go('/admin/ui/shows/'+id+'/seating');
           });
         });
+
         $$('[data-tickets]').forEach(function(a){
           a.addEventListener('click', function(e){
             e.preventDefault();
-            go('/admin/ui/shows/'+a.getAttribute('data-tickets')+'/tickets');
+            const id = (a as HTMLElement).getAttribute('data-tickets');
+            if (id) go('/admin/ui/shows/'+id+'/tickets');
           });
         });
+
         $$('[data-dup]').forEach(function(a){
           a.addEventListener('click', async function(e){
             e.preventDefault();
             try{
-              const id = a.getAttribute('data-dup');
+              const id = (a as HTMLElement).getAttribute('data-dup');
+              if(!id) return;
               const r  = await j('/admin/shows/'+id+'/duplicate',{method:'POST'});
-              if(r.ok && r.newId){ go('/admin/ui/shows/'+r.newId+'/edit'); }
-            }catch(err){
+              if((r as any).ok && (r as any).newId){ go('/admin/ui/shows/'+(r as any).newId+'/edit'); }
+            }catch(err: any){
               alert('Duplicate failed: '+(err.message||err));
             }
           });
         });
-      }catch(e){
-        $('#tbody').innerHTML = '<tr><td colspan="7" class="error">Failed to load shows: '+(e.message||e)+'</td></tr>';
+      }catch(e: any){
+        tb.innerHTML = '<tr><td colspan="7" class="error">Failed to load shows: '+(e.message||e)+'</td></tr>';
       }
     }
 
-    $('#refresh').addEventListener('click', load);
+    const refreshBtn = document.getElementById('refresh') as HTMLButtonElement;
+    refreshBtn.addEventListener('click', load);
     load();
   }
 
   // ---------- Edit show ----------
-  async function editShow(id){
-    let s = null;
+  async function editShow(id: string){
+    let s: any = null;
     try{
       s = await j('/admin/shows/'+id);
-    }catch(e){
+    }catch(e: any){
+      if (!main) return;
       main.innerHTML = '<div class="card"><div class="error">Failed to load show: '+(e.message||e)+'</div></div>';
       return;
     }
+    if (!main) return;
+
     main.innerHTML =
       '<div class="card">'
         +'<div class="header"><div class="title">Edit show</div></div>'
@@ -720,37 +736,34 @@ router.get(
       +'</div>';
 
     bindWysiwyg(main);
-    mountVenuePicker($('#venue_input'));
+    mountVenuePicker(document.getElementById('venue_input') as HTMLInputElement);
 
-    $('#sh_title').value = (s.item && s.item.title) || '';
-    $('#venue_input').value = (s.item && s.item.venue && s.item.venue.name) || (s.item && s.item.venueText) || '';
+    (document.getElementById('sh_title') as HTMLInputElement).value = (s.item && s.item.title) || '';
+    const venueInput = document.getElementById('venue_input') as HTMLInputElement;
+    venueInput.value =
+      (s.item && s.item.venue && s.item.venue.name) ||
+      (s.item && s.item.venueText) || '';
+
     if (s.item && s.item.date){
       const dt = new Date(s.item.date);
-      $('#sh_dt').value = dt.toISOString().slice(0,16);
+      (document.getElementById('sh_dt') as HTMLInputElement).value = dt.toISOString().slice(0,16);
     }
-    $('#desc').innerHTML = (s.item && s.item.description) || '';
+
+    (document.getElementById('desc') as HTMLElement).innerHTML = (s.item && s.item.description) || '';
+
     if (s.item && s.item.imageUrl){
-      $('#prev').src = s.item.imageUrl;
-      $('#prev').style.display = 'block';
+      const prev = document.getElementById('prev') as HTMLImageElement;
+      prev.src = s.item.imageUrl;
+      prev.style.display = 'block';
     }
 
-    const drop = $('#drop'), file = $('#file'), bar = $('#bar'), prev = $('#prev');
+    const drop = document.getElementById('drop') as HTMLElement;
+    const file = document.getElementById('file') as HTMLInputElement;
+    const bar  = document.getElementById('bar') as HTMLElement;
+    const prev = document.getElementById('prev') as HTMLImageElement;
 
-    drop.addEventListener('click', function(){ file.click(); });
-    drop.addEventListener('dragover', function(e){ e.preventDefault(); drop.classList.add('drag'); });
-    drop.addEventListener('dragleave', function(){ drop.classList.remove('drag'); });
-    drop.addEventListener('drop', async function(e){
-      e.preventDefault(); drop.classList.remove('drag');
-      const f = e.dataTransfer.files && e.dataTransfer.files[0];
-      if(f) await doUpload(f);
-    });
-    file.addEventListener('change', async function(){
-      const f = file.files && file.files[0];
-      if(f) await doUpload(f);
-    });
-
-    async function doUpload(f){
-      $('#err').textContent = '';
+    async function doUpload(f: File){
+      (document.getElementById('err') as HTMLElement).textContent = '';
       bar.style.width = '15%';
       try{
         const out = await uploadPoster(f);
@@ -758,31 +771,50 @@ router.get(
         prev.style.display = 'block';
         bar.style.width = '100%';
         setTimeout(function(){ bar.style.width='0%'; },800);
-      }catch(e){
+      }catch(e: any){
         bar.style.width = '0%';
-        $('#err').textContent = 'Upload failed: '+(e.message||e);
+        (document.getElementById('err') as HTMLElement).textContent = 'Upload failed: '+(e.message||e);
       }
     }
 
-    $('#goSeating').addEventListener('click', function(e){
+    drop.addEventListener('click', function(){ file.click(); });
+    drop.addEventListener('dragover', function(e){ e.preventDefault(); drop.classList.add('drag'); });
+    drop.addEventListener('dragleave', function(){ drop.classList.remove('drag'); });
+
+    drop.addEventListener('drop', async function(e: DragEvent){
+      e.preventDefault(); drop.classList.remove('drag');
+      const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if(f) await doUpload(f);
+    });
+
+    file.addEventListener('change', async function(){
+      const f = file.files && file.files[0];
+      if(f) await doUpload(f);
+    });
+
+    (document.getElementById('goSeating') as HTMLAnchorElement).addEventListener('click', function(e){
       e.preventDefault();
       go('/admin/ui/shows/'+id+'/seating');
     });
-    $('#goTickets').addEventListener('click', function(e){
+
+    (document.getElementById('goTickets') as HTMLAnchorElement).addEventListener('click', function(e){
       e.preventDefault();
       go('/admin/ui/shows/'+id+'/tickets');
     });
 
-    $('#save').addEventListener('click', async function(){
-      $('#err').textContent = '';
+    (document.getElementById('save') as HTMLButtonElement).addEventListener('click', async function(){
+      const errEl = document.getElementById('err') as HTMLElement;
+      errEl.textContent = '';
       try{
         const payload = {
-          title: $('#sh_title').value.trim(),
-          date: $('#sh_dt').value ? new Date($('#sh_dt').value).toISOString() : null,
-          venueText: $('#venue_input').value.trim(),
-          venueId: $('#venue_input').dataset.venueId || null,
-          imageUrl: $('#prev').src || null,
-          descriptionHtml: $('#desc').innerHTML.trim()
+          title: (document.getElementById('sh_title') as HTMLInputElement).value.trim(),
+          date: (document.getElementById('sh_dt') as HTMLInputElement).value
+            ? new Date((document.getElementById('sh_dt') as HTMLInputElement).value).toISOString()
+            : null,
+          venueText: venueInput.value.trim(),
+          venueId: (venueInput.dataset as any).venueId || null,
+          imageUrl: prev.src || null,
+          descriptionHtml: (document.getElementById('desc') as HTMLElement).innerHTML.trim()
         };
         if(!payload.title || !payload.date || !payload.venueText || !payload.descriptionHtml){
           throw new Error('Title, date/time, venue and description are required');
@@ -792,24 +824,26 @@ router.get(
           headers:{'Content-Type':'application/json'},
           body: JSON.stringify(payload)
         });
-        if(r && r.ok){
+        if(r && (r as any).ok){
           alert('Saved');
         }else{
-          throw new Error((r && r.error) || 'Failed to save');
+          throw new Error((r as any && (r as any).error) || 'Failed to save');
         }
-      }catch(e){
-        $('#err').textContent = e.message || String(e);
+      }catch(e: any){
+        errEl.textContent = e.message || String(e);
       }
     });
   }
 
-  // ---------- Tickets for a show ----------
-  async function ticketsPage(id){
+  // ---------- Tickets page ----------
+  async function ticketsPage(id: string){
+    if (!main) return;
+
     main.innerHTML = '<div class="card"><div class="title">Loading tickets…</div></div>';
-    let showResp;
+    let showResp: any;
     try{
       showResp = await j('/admin/shows/'+id);
-    }catch(e){
+    }catch(e: any){
       main.innerHTML = '<div class="card"><div class="error">Failed to load show: '+(e.message||e)+'</div></div>';
       return;
     }
@@ -878,33 +912,33 @@ router.get(
         +'</div>'
       +'</div>';
 
-    $('#backToShows').addEventListener('click', function(){ go('/admin/ui/shows/current'); });
-    $('#editShowBtn').addEventListener('click', function(){ go('/admin/ui/shows/'+id+'/edit'); });
+    (document.getElementById('backToShows') as HTMLButtonElement).addEventListener('click', function(){ go('/admin/ui/shows/current'); });
+    (document.getElementById('editShowBtn') as HTMLButtonElement).addEventListener('click', function(){ go('/admin/ui/shows/'+id+'/edit'); });
 
-    // Ticket types UI
-    const addTypeForm = $('#addTypeForm');
-    const ticketTypesBody = $('#ticketTypesBody');
-    const ticketTypesEmpty = $('#ticketTypesEmpty');
+    const addTypeForm = document.getElementById('addTypeForm') as HTMLElement;
+    const ticketTypesBody = document.getElementById('ticketTypesBody') as HTMLElement;
+    const ticketTypesEmpty = document.getElementById('ticketTypesEmpty') as HTMLElement;
 
-    $('#addTypeBtn').addEventListener('click', function(){
+    (document.getElementById('addTypeBtn') as HTMLButtonElement).addEventListener('click', function(){
       addTypeForm.style.display = 'block';
-      $('#tt_name').focus();
+      (document.getElementById('tt_name') as HTMLInputElement).focus();
     });
-    $('#tt_cancel').addEventListener('click', function(){
+
+    (document.getElementById('tt_cancel') as HTMLButtonElement).addEventListener('click', function(){
       addTypeForm.style.display = 'none';
-      $('#tt_err').textContent = '';
+      (document.getElementById('tt_err') as HTMLElement).textContent = '';
     });
 
     async function loadTicketTypes(){
       try{
-        const res = await j('/admin/shows/'+id+'/ticket-types');
+        const res: any = await j('/admin/shows/'+id+'/ticket-types');
         const items = res.ticketTypes || [];
         if(!items.length){
           ticketTypesBody.innerHTML = '<tr><td colspan="4" class="muted">No ticket types yet.</td></tr>';
           ticketTypesEmpty.style.display = 'block';
         }else{
           ticketTypesEmpty.style.display = 'none';
-          ticketTypesBody.innerHTML = items.map(function(tt){
+          ticketTypesBody.innerHTML = items.map(function(tt: any){
             const price = (tt.pricePence || 0) / 100;
             const priceLabel = price === 0 ? 'Free' : '£'+price.toFixed(2);
             const availLabel = tt.available == null ? 'Unlimited' : String(tt.available);
@@ -918,31 +952,32 @@ router.get(
           $$('[data-del]', ticketTypesBody).forEach(function(btn){
             btn.addEventListener('click', async function(e){
               e.preventDefault();
-              const idToDel = btn.getAttribute('data-del');
+              const idToDel = (btn as HTMLElement).getAttribute('data-del');
               if(!idToDel) return;
               if(!confirm('Delete this ticket type?')) return;
               try{
                 await j('/admin/ticket-types/'+idToDel,{ method:'DELETE' });
                 loadTicketTypes();
-              }catch(err){
+              }catch(err: any){
                 alert('Failed to delete: '+(err.message||err));
               }
             });
           });
         }
-      }catch(e){
+      }catch(e: any){
         ticketTypesBody.innerHTML = '<tr><td colspan="4" class="error">Failed to load ticket types: '+(e.message||e)+'</td></tr>';
       }
     }
 
-    $('#tt_save').addEventListener('click', async function(){
-      $('#tt_err').textContent = '';
-      const name = $('#tt_name').value.trim();
-      const priceStr = $('#tt_price').value.trim();
-      const availStr = $('#tt_available').value.trim();
+    (document.getElementById('tt_save') as HTMLButtonElement).addEventListener('click', async function(){
+      const errEl = document.getElementById('tt_err') as HTMLElement;
+      errEl.textContent = '';
+      const name = (document.getElementById('tt_name') as HTMLInputElement).value.trim();
+      const priceStr = (document.getElementById('tt_price') as HTMLInputElement).value.trim();
+      const availStr = (document.getElementById('tt_available') as HTMLInputElement).value.trim();
 
       if(!name){
-        $('#tt_err').textContent = 'Name is required';
+        errEl.textContent = 'Name is required';
         return;
       }
 
@@ -950,17 +985,17 @@ router.get(
       if(priceStr){
         const p = Number(priceStr);
         if(!Number.isFinite(p) || p < 0){
-          $('#tt_err').textContent = 'Price must be a non-negative number';
+          errEl.textContent = 'Price must be a non-negative number';
           return;
         }
         pricePence = Math.round(p * 100);
       }
 
-      let available = null;
+      let available: number | null = null;
       if(availStr){
         const a = Number(availStr);
         if(!Number.isFinite(a) || a < 0){
-          $('#tt_err').textContent = 'Available must be a non-negative number';
+          errEl.textContent = 'Available must be a non-negative number';
           return;
         }
         available = a;
@@ -972,21 +1007,20 @@ router.get(
           headers:{'Content-Type':'application/json'},
           body: JSON.stringify({ name, pricePence, available })
         });
-        $('#tt_name').value = '';
-        $('#tt_price').value = '';
-        $('#tt_available').value = '';
+        (document.getElementById('tt_name') as HTMLInputElement).value = '';
+        (document.getElementById('tt_price') as HTMLInputElement).value = '';
+        (document.getElementById('tt_available') as HTMLInputElement).value = '';
         addTypeForm.style.display = 'none';
         loadTicketTypes();
-      }catch(err){
-        $('#tt_err').textContent = err.message || String(err);
+      }catch(err: any){
+        errEl.textContent = err.message || String(err);
       }
     });
 
     loadTicketTypes();
 
-    // Seat maps summary
-    const seatMapsSummary = $('#seatMapsSummary');
-    const seatMapsList = $('#seatMapsList');
+    const seatMapsSummary = document.getElementById('seatMapsSummary') as HTMLElement;
+    const seatMapsList = document.getElementById('seatMapsList') as HTMLElement;
     const venueId = show.venue && show.venue.id ? show.venue.id : null;
 
     async function loadSeatMaps(){
@@ -995,14 +1029,14 @@ router.get(
       try{
         let url = '/admin/seatmaps?showId='+encodeURIComponent(id);
         if(venueId) url += '&venueId='+encodeURIComponent(venueId);
-        const maps = await j(url);
+        const maps: any[] = await j(url) as any[];
         if(!Array.isArray(maps) || !maps.length){
           seatMapsSummary.textContent = 'No seat maps yet for this show/venue.';
           seatMapsList.innerHTML = '<div class="muted" style="font-size:13px">You can create a seat map using the “Create / edit seat map” button.</div>';
           return;
         }
         seatMapsSummary.textContent = maps.length+' seat map'+(maps.length>1?'s':'')+' found.';
-        seatMapsList.innerHTML = maps.map(function(m){
+        seatMapsList.innerHTML = maps.map(function(m: any){
           const def = m.isDefault ? ' · <strong>Default</strong>' : '';
           return '<div class="row" style="margin-bottom:4px;justify-content:space-between">'
             +'<div><strong>'+m.name+'</strong> <span class="muted">v'+(m.version || 1)+'</span>'+def+'</div>'
@@ -1013,7 +1047,7 @@ router.get(
         $$('[data-make-default]', seatMapsList).forEach(function(btn){
           btn.addEventListener('click', async function(e){
             e.preventDefault();
-            const mapId = btn.getAttribute('data-make-default');
+            const mapId = (btn as HTMLElement).getAttribute('data-make-default');
             if(!mapId) return;
             try{
               await j('/admin/seatmaps/'+mapId+'/default',{
@@ -1022,30 +1056,33 @@ router.get(
                 body: JSON.stringify({ isDefault:true })
               });
               loadSeatMaps();
-            }catch(err){
+            }catch(err: any){
               alert('Failed to update default: '+(err.message||err));
             }
           });
         });
-      }catch(e){
+      }catch(e: any){
         seatMapsSummary.textContent = 'Failed to load seat maps.';
         seatMapsList.innerHTML = '<div class="error" style="font-size:13px">'+(e.message||e)+'</div>';
       }
     }
 
-    $('#refreshSeatMaps').addEventListener('click', loadSeatMaps);
-    $('#editSeatMaps').addEventListener('click', function(){ go('/admin/ui/shows/'+id+'/seating'); });
+    (document.getElementById('refreshSeatMaps') as HTMLButtonElement).addEventListener('click', loadSeatMaps);
+    (document.getElementById('editSeatMaps') as HTMLButtonElement).addEventListener('click', function(){ go('/admin/ui/shows/'+id+'/seating'); });
+
     loadSeatMaps();
   }
 
-  // ---------- Seating page with blocks, metadata & seat-level pricing ----------
-  async function seatingPage(showId){
+  // ---------- Seating page ----------
+  async function seatingPage(showId: string){
+    if (!main) return;
+
     main.innerHTML = '<div class="card"><div class="title">Loading seating…</div></div>';
 
-    let showResp;
+    let showResp: any;
     try{
       showResp = await j('/admin/shows/'+showId);
-    }catch(e){
+    }catch(e: any){
       main.innerHTML = '<div class="card"><div class="error">Failed to load show: '+(e.message||e)+'</div></div>';
       return;
     }
@@ -1157,36 +1194,35 @@ router.get(
         +'</div>'
       +'</div>';
 
+    const backToTicketsBtn = document.getElementById('backToTickets') as HTMLButtonElement;
+    const editShowBtn      = document.getElementById('editShowBtn') as HTMLButtonElement;
+    const smStatus         = document.getElementById('sm_status') as HTMLElement;
+    const smSelect         = document.getElementById('sm_select') as HTMLSelectElement;
+    const smTip            = document.getElementById('sm_tip') as HTMLElement;
+    const smName           = document.getElementById('sm_name') as HTMLInputElement;
+    const smCreate         = document.getElementById('sm_create') as HTMLButtonElement;
+    const smErr            = document.getElementById('sm_err') as HTMLElement;
+    const qRows            = document.getElementById('q_rows') as HTMLInputElement;
+    const qCols            = document.getElementById('q_cols') as HTMLInputElement;
+    const qGenerate        = document.getElementById('q_generate') as HTMLButtonElement;
+    const seatCanvas       = document.getElementById('seatCanvas') as HTMLElement;
+    const saveLayoutBtn    = document.getElementById('sm_saveLayout') as HTMLButtonElement;
 
-    const backToTicketsBtn = document.getElementById('backToTickets');
-    const editShowBtn      = document.getElementById('editShowBtn');
-    const smStatus         = document.getElementById('sm_status');
-    const smSelect         = document.getElementById('sm_select');
-    const smTip            = document.getElementById('sm_tip');
-    const smName           = document.getElementById('sm_name');
-    const smCreate         = document.getElementById('sm_create');
-    const smErr            = document.getElementById('sm_err');
-    const qRows            = document.getElementById('q_rows');
-    const qCols            = document.getElementById('q_cols');
-    const qGenerate        = document.getElementById('q_generate');
-    const seatCanvas       = document.getElementById('seatCanvas');
-    const saveLayoutBtn    = document.getElementById('sm_saveLayout');
+    const zoomInBtn        = document.getElementById('zoomInBtn') as HTMLButtonElement;
+    const zoomOutBtn       = document.getElementById('zoomOutBtn') as HTMLButtonElement;
+    const zoomResetBtn     = document.getElementById('zoomResetBtn') as HTMLButtonElement;
 
-    const zoomInBtn        = document.getElementById('zoomInBtn');
-    const zoomOutBtn       = document.getElementById('zoomOutBtn');
-    const zoomResetBtn     = document.getElementById('zoomResetBtn');
+    const blockNameInput   = document.getElementById('block_name') as HTMLInputElement;
+    const blockCreateBtn   = document.getElementById('block_create') as HTMLButtonElement;
+    const blocksList       = document.getElementById('blocks_list') as HTMLElement;
+    const blockCapacityInput = document.getElementById('block_capacity') as HTMLInputElement;
+    const blockZoneInput     = document.getElementById('block_zone') as HTMLInputElement;
+    const blockTicketTypeSelect = document.getElementById('block_ticketType') as HTMLSelectElement;
 
-    const blockNameInput   = document.getElementById('block_name');
-    const blockCreateBtn   = document.getElementById('block_create');
-    const blocksList       = document.getElementById('blocks_list');
-    const blockCapacityInput = document.getElementById('block_capacity');
-    const blockZoneInput     = document.getElementById('block_zone');
-    const blockTicketTypeSelect = document.getElementById('block_ticketType');
-
-    const seatPriceTicketTypeSelect   = document.getElementById('seat_price_ticketType');
-    const seatPriceAssignBtn          = document.getElementById('seat_price_assign_selection');
-    const seatPriceClearBtn           = document.getElementById('seat_price_clear');
-    const seatPriceSummary            = document.getElementById('seat_price_summary');
+    const seatPriceTicketTypeSelect   = document.getElementById('seat_price_ticketType') as HTMLSelectElement;
+    const seatPriceAssignBtn          = document.getElementById('seat_price_assign_selection') as HTMLButtonElement;
+    const seatPriceClearBtn           = document.getElementById('seat_price_clear') as HTMLButtonElement;
+    const seatPriceSummary            = document.getElementById('seat_price_summary') as HTMLElement;
 
     backToTicketsBtn.addEventListener('click', function(){
       go('/admin/ui/shows/'+showId+'/tickets');
@@ -1195,18 +1231,15 @@ router.get(
       go('/admin/ui/shows/'+showId+'/edit');
     });
 
-    // Data state for this page
-    let seatMapsData = [];
-    let currentSeatMapId = null;
-    let layout = { seats: {}, elements: [] };
-    let seats = [];
-    let ticketTypes = [];
+    let seatMapsData: any[] = [];
+    let currentSeatMapId: string | null = null;
+    let layout: any = { seats: {}, elements: [] };
+    let seats: any[] = [];
+    let ticketTypes: any[] = [];
 
-    // selection state
-    const selectedSeatIds = new Set();
-    let selectedBlockId = null;
+    const selectedSeatIds = new Set<string>();
+    let selectedBlockId: string | null = null;
 
-    // zoom state
     let zoom = 1;
     function applyZoom(){
       seatCanvas.style.transform = 'scale('+zoom+')';
@@ -1232,7 +1265,7 @@ router.get(
       if(!Array.isArray(layout.elements)) layout.elements = [];
     }
 
-    function ensureSeatMeta(id){
+    function ensureSeatMeta(id: string){
       ensureLayout();
       let meta = layout.seats[id];
       if(!meta){
@@ -1249,17 +1282,17 @@ router.get(
 
     function clearSelection(){
       selectedSeatIds.forEach(function(id){
-        const el = seatCanvas.querySelector('[data-seat-id="'+id+'"]');
+        const el = seatCanvas.querySelector('[data-seat-id="'+id+'"]') as HTMLElement | null;
         if(el) el.classList.remove('seat-selected');
       });
       selectedSeatIds.clear();
       selectedBlockId = null;
     }
 
-    function addSeatToSelection(id){
+    function addSeatToSelection(id: string){
       if(!selectedSeatIds.has(id)){
         selectedSeatIds.add(id);
-        const el = seatCanvas.querySelector('[data-seat-id="'+id+'"]');
+        const el = seatCanvas.querySelector('[data-seat-id="'+id+'"]') as HTMLElement | null;
         if(el) el.classList.add('seat-selected');
       }
     }
@@ -1269,10 +1302,10 @@ router.get(
       selectedBlockId = null;
       const sel = Array.from(selectedSeatIds);
       if(!sel.length) return;
-      const blocks = layout.elements.filter(function(e){ return e && e.type === 'block' && Array.isArray(e.seatIds); });
-      blocks.some(function(b){
+      const blocks = layout.elements.filter(function(e: any){ return e && e.type === 'block' && Array.isArray(e.seatIds); });
+      blocks.some(function(b: any){
         if(!b.seatIds || !b.seatIds.length) return false;
-        const allIn = b.seatIds.every(function(id){ return selectedSeatIds.has(id); });
+        const allIn = b.seatIds.every(function(id: string){ return selectedSeatIds.has(id); });
         if(allIn){
           selectedBlockId = b.id;
           return true;
@@ -1281,19 +1314,19 @@ router.get(
       });
     }
 
-    function selectSingleSeat(id){
+    function selectSingleSeat(id: string){
       clearSelection();
       addSeatToSelection(id);
       recomputeSelectedBlockFromSeats();
       renderSeats();
     }
 
-    function selectRowForSeat(id){
-      const seat = seats.find(function(s){ return s.id === id; });
+    function selectRowForSeat(id: string){
+      const seat = seats.find(function(s: any){ return s.id === id; });
       if(!seat) return;
       const rowKey = seat.rowLabel || seat.row || '';
       clearSelection();
-      seats.forEach(function(s){
+      seats.forEach(function(s: any){
         const key = s.rowLabel || s.row || '';
         if(key === rowKey){
           addSeatToSelection(s.id);
@@ -1303,7 +1336,6 @@ router.get(
       renderSeats();
     }
 
-    // --- Alignment guides (safety rails) ---
     const guideH = document.createElement('div');
     guideH.className = 'guide-line h';
     guideH.style.display = 'none';
@@ -1316,18 +1348,18 @@ router.get(
       guideH.style.display = 'none';
       guideV.style.display = 'none';
     }
-    function showGuideH(y){
+    function showGuideH(y: number){
       guideH.style.top = (y - 0.5)+'px';
       guideH.style.display = 'block';
     }
-    function showGuideV(x){
+    function showGuideV(x: number){
       guideV.style.left = (x - 0.5)+'px';
       guideV.style.display = 'block';
     }
 
-    function ticketTypeLabelForId(id){
+    function ticketTypeLabelForId(id: string | null){
       if(!id || !ticketTypes || !ticketTypes.length) return '';
-      const tt = ticketTypes.find(function(t){ return t.id === id; });
+      const tt = ticketTypes.find(function(t: any){ return t.id === id; });
       if(!tt) return '';
       const price = (tt.pricePence || 0) / 100;
       const priceLabel = price === 0 ? 'Free' : '£'+price.toFixed(2);
@@ -1335,17 +1367,15 @@ router.get(
     }
 
     function updateSeatPricingSummary(){
-      if(!seatPriceSummary){
-        return;
-      }
+      if(!seatPriceSummary) return;
       if(!Array.isArray(seats) || !seats.length){
         seatPriceSummary.textContent = 'No seats yet.';
         return;
       }
       ensureLayout();
-      const countsByTt = {};
+      const countsByTt: Record<string, number> = {};
       let unassigned = 0;
-      seats.forEach(function(s){
+      seats.forEach(function(s: any){
         const meta = layout.seats[s.id];
         const ttId = meta && meta.ticketTypeId;
         if(ttId){
@@ -1354,7 +1384,7 @@ router.get(
           unassigned++;
         }
       });
-      const parts = [];
+      const parts: string[] = [];
       Object.keys(countsByTt).forEach(function(ttId){
         const n = countsByTt[ttId];
         parts.push(ticketTypeLabelForId(ttId)+': '+n+' seat'+(n===1?'':'s'));
@@ -1368,17 +1398,17 @@ router.get(
     function refreshBlocksList(){
       ensureLayout();
       if(!blocksList) return;
-      const blocks = layout.elements.filter(function(e){ return e && e.type === 'block'; });
+      const blocks = layout.elements.filter(function(e: any){ return e && e.type === 'block'; });
       if(!blocks.length){
         blocksList.innerHTML = '<div class="muted">No blocks yet.</div>';
         return;
       }
-      blocksList.innerHTML = blocks.map(function(b){
+      blocksList.innerHTML = blocks.map(function(b: any){
         const seatCount = Array.isArray(b.seatIds) ? b.seatIds.length : 0;
         const capacity = (typeof b.capacity === 'number' && b.capacity >= 0) ? b.capacity : seatCount;
         const zone = (b.zone || '').trim();
         const ttLabel = ticketTypeLabelForId(b.ticketTypeId);
-        const bits = [];
+        const bits: string[] = [];
         bits.push(capacity+' seats');
         if(zone) bits.push('Zone: '+zone);
         if(ttLabel) bits.push('Ticket: '+ttLabel);
@@ -1393,12 +1423,12 @@ router.get(
       $$('[data-block-select]', blocksList).forEach(function(btn){
         btn.addEventListener('click', function(e){
           e.preventDefault();
-          const id = btn.getAttribute('data-block-select');
+          const id = (btn as HTMLElement).getAttribute('data-block-select');
           ensureLayout();
-          const block = layout.elements.find(function(el){ return el && el.id === id && el.type === 'block'; });
+          const block = layout.elements.find(function(el: any){ return el && el.id === id && el.type === 'block'; });
           if(!block || !Array.isArray(block.seatIds) || !block.seatIds.length) return;
           clearSelection();
-          block.seatIds.forEach(function(seatId){ addSeatToSelection(seatId); });
+          block.seatIds.forEach(function(seatId: string){ addSeatToSelection(seatId); });
           selectedBlockId = id;
           renderSeats();
         });
@@ -1407,10 +1437,10 @@ router.get(
       $$('[data-block-delete]', blocksList).forEach(function(btn){
         btn.addEventListener('click', function(e){
           e.preventDefault();
-          const id = btn.getAttribute('data-block-delete');
+          const id = (btn as HTMLElement).getAttribute('data-block-delete');
           if(!id) return;
           ensureLayout();
-          const idx = layout.elements.findIndex(function(el){ return el && el.id === id && el.type === 'block'; });
+          const idx = layout.elements.findIndex(function(el: any){ return el && el.id === id && el.type === 'block'; });
           if(idx !== -1){
             layout.elements.splice(idx,1);
           }
@@ -1425,41 +1455,39 @@ router.get(
 
     async function loadTicketTypesForShow(){
       try{
-        const res = await j('/admin/shows/'+showId+'/ticket-types');
+        const res: any = await j('/admin/shows/'+showId+'/ticket-types');
         ticketTypes = res.ticketTypes || [];
 
-        // Populate block ticket type select
         if(blockTicketTypeSelect){
           const currentVal = blockTicketTypeSelect.value;
           blockTicketTypeSelect.innerHTML = '<option value="">— None —</option>' +
-            ticketTypes.map(function(tt){
+            ticketTypes.map(function(tt: any){
               const price = (tt.pricePence || 0) / 100;
               const priceLabel = price === 0 ? 'Free' : '£'+price.toFixed(2);
               return '<option value="'+tt.id+'">'+tt.name+' ('+priceLabel+')</option>';
             }).join('');
-          if(currentVal && ticketTypes.some(function(t){ return t.id === currentVal; })){
+          if(currentVal && ticketTypes.some(function(t: any){ return t.id === currentVal; })){
             blockTicketTypeSelect.value = currentVal;
           }
         }
 
-        // Populate seat pricing ticket type select
         if(seatPriceTicketTypeSelect){
           const currentVal2 = seatPriceTicketTypeSelect.value;
           seatPriceTicketTypeSelect.innerHTML = '<option value="">— Choose ticket type —</option>' +
-            ticketTypes.map(function(tt){
+            ticketTypes.map(function(tt: any){
               const price = (tt.pricePence || 0) / 100;
               const priceLabel = price === 0 ? 'Free' : '£'+price.toFixed(2);
               return '<option value="'+tt.id+'">'+tt.name+' ('+priceLabel+')</option>';
             }).join('');
-          if(currentVal2 && ticketTypes.some(function(t){ return t.id === currentVal2; })){
+          if(currentVal2 && ticketTypes.some(function(t: any){ return t.id === currentVal2; })){
             seatPriceTicketTypeSelect.value = currentVal2;
           }
         }
 
         refreshBlocksList();
         updateSeatPricingSummary();
-      }catch(e){
-        // soft-fail; blocks & pricing still work with no ticket types
+      }catch{
+        // Ignore – still usable without ticket types
       }
     }
 
@@ -1472,7 +1500,7 @@ router.get(
       try{
         let qs = 'showId='+encodeURIComponent(showId);
         if(venueId) qs += '&venueId='+encodeURIComponent(venueId);
-        const maps = await j('/admin/seatmaps?'+qs);
+        const maps: any[] = await j('/admin/seatmaps?'+qs) as any[];
 
         if(!Array.isArray(maps) || !maps.length){
           smStatus.textContent = 'No seat maps yet. Create one below.';
@@ -1487,13 +1515,13 @@ router.get(
 
         seatMapsData = maps;
         smStatus.textContent = maps.length+' seat map'+(maps.length>1?'s':'')+' found.';
-        smSelect.innerHTML = maps.map(function(m){
+        smSelect.innerHTML = maps.map(function(m: any){
           let label = m.name || 'Untitled map';
           if(m.isDefault) label += ' (default)';
           return '<option value="'+m.id+'">'+label+'</option>';
         }).join('');
 
-        const def = maps.find(function(m){ return m.isDefault; }) || maps[0];
+        const def = maps.find(function(m: any){ return m.isDefault; }) || maps[0];
         currentSeatMapId = def.id;
         smSelect.value = currentSeatMapId;
 
@@ -1505,7 +1533,7 @@ router.get(
         await reloadSeats();
         refreshBlocksList();
         updateSeatPricingSummary();
-      }catch(e){
+      }catch(e: any){
         smStatus.textContent = 'Failed to load seat maps';
         smErr.textContent = e.message || String(e);
       }
@@ -1518,11 +1546,11 @@ router.get(
         return;
       }
       try{
-        seats = await j('/seatmaps/'+currentSeatMapId+'/seats');
+        seats = await j('/seatmaps/'+currentSeatMapId+'/seats') as any[];
         renderSeats();
         refreshBlocksList();
         updateSeatPricingSummary();
-      }catch(e){
+      }catch(e: any){
         seatCanvas.innerHTML = '<div class="error">Failed to load seats: '+(e.message||e)+'</div>';
         hideGuides();
       }
@@ -1543,9 +1571,8 @@ router.get(
 
       const hasPositions = Object.keys(layout.seats).length > 0;
       if(!hasPositions){
-        // Default grid positions if no layout yet
-        const rowsMap = {};
-        seats.forEach(function(s){
+        const rowsMap: Record<string, any[]> = {};
+        seats.forEach(function(s: any){
           const key = s.rowLabel || s.row || '';
           if(!rowsMap[key]) rowsMap[key] = [];
           rowsMap[key].push(s);
@@ -1558,13 +1585,13 @@ router.get(
         const dy = 24;
 
         rowKeys.forEach(function(rowKey, rowIndex){
-          const rowSeats = rowsMap[rowKey].sort(function(a,b){
+          const rowSeats = rowsMap[rowKey].sort(function(a: any,b: any){
             const an = a.seatNumber != null ? a.seatNumber : a.number;
             const bn = b.seatNumber != null ? b.seatNumber : b.number;
             return an - bn;
           });
           const y = offsetY + rowIndex * dy;
-          rowSeats.forEach(function(s, colIndex){
+          rowSeats.forEach(function(s: any, colIndex: number){
             const x = offsetX + colIndex * dx;
             const meta = ensureSeatMeta(s.id);
             meta.x = x;
@@ -1573,7 +1600,7 @@ router.get(
         });
       }
 
-      seats.forEach(function(s){
+      seats.forEach(function(s: any){
         const meta = ensureSeatMeta(s.id);
         const pos = { x: meta.x, y: meta.y };
 
@@ -1596,7 +1623,7 @@ router.get(
           title += ' · '+ttLabel;
         }
         seatEl.title = title;
-        seatEl.textContent = labelSeat;
+        seatEl.textContent = String(labelSeat);
 
         if(selectedSeatIds.has(s.id)){
           seatEl.classList.add('seat-selected');
@@ -1605,12 +1632,11 @@ router.get(
         seatCanvas.appendChild(seatEl);
       });
 
-      // Block overlays
       ensureLayout();
-      const blocks = layout.elements.filter(function(e){ return e && e.type === 'block' && Array.isArray(e.seatIds) && e.seatIds.length; });
-      blocks.forEach(function(b){
+      const blocks = layout.elements.filter(function(e: any){ return e && e.type === 'block' && Array.isArray(e.seatIds) && e.seatIds.length; });
+      blocks.forEach(function(b: any){
         let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-        b.seatIds.forEach(function(id){
+        b.seatIds.forEach(function(id: string){
           const meta = layout.seats[id];
           if(!meta) return;
           const pos = meta;
@@ -1655,11 +1681,10 @@ router.get(
       seatCanvas.appendChild(guideV);
     }
 
-    // Switch between different maps
     smSelect.addEventListener('change', async function(){
       const id = smSelect.value;
       currentSeatMapId = id || null;
-      const found = seatMapsData.find(function(m){ return m.id === id; });
+      const found = seatMapsData.find(function(m: any){ return m.id === id; });
       if(found && found.layout && typeof found.layout === 'object'){
         layout = found.layout;
       }else{
@@ -1671,7 +1696,6 @@ router.get(
       updateSeatPricingSummary();
     });
 
-    // Create new seat map
     smCreate.addEventListener('click', async function(){
       smErr.textContent = '';
       const name = smName.value.trim();
@@ -1680,9 +1704,9 @@ router.get(
         return;
       }
       try{
-        const body = { showId: showId, name: name };
+        const body: any = { showId: showId, name: name };
         if(venueId) body.venueId = venueId;
-        const created = await j('/admin/seatmaps',{
+        const created: any = await j('/admin/seatmaps',{
           method:'POST',
           headers:{'Content-Type':'application/json'},
           body: JSON.stringify(body)
@@ -1690,11 +1714,12 @@ router.get(
         smName.value = '';
         await reloadSeatMaps();
         const newId =
-          (created && (
-            created.id ||
-            (created.map && created.map.id) ||
-            (created.item && created.item.id)
-          )) || null;
+          (created &&
+            (
+              created.id ||
+              (created.map && created.map.id) ||
+              (created.item && created.item.id)
+            )) || null;
         if(newId){
           currentSeatMapId = newId;
           smSelect.value = currentSeatMapId;
@@ -1707,12 +1732,11 @@ router.get(
         await reloadSeats();
         refreshBlocksList();
         updateSeatPricingSummary();
-      }catch(e){
+      }catch(e: any){
         smErr.textContent = e.message || String(e);
       }
     });
 
-    // Quick generator → /seatmaps/:id/seats/bulk
     qGenerate.addEventListener('click', async function(){
       if(!currentSeatMapId){
         alert('Select or create a seat map first.');
@@ -1724,7 +1748,7 @@ router.get(
         alert('Rows and seats per row must be positive numbers.');
         return;
       }
-      const seatsPayload = [];
+      const seatsPayload: any[] = [];
       for(let r=0;r<rows;r++){
         const rowLabel = String.fromCharCode(65 + r);
         for(let c=0;c<cols;c++){
@@ -1744,12 +1768,11 @@ router.get(
         });
         clearSelection();
         await reloadSeats();
-      }catch(e){
+      }catch(e: any){
         alert('Failed to generate seats: '+(e.message||e));
       }
     });
 
-    // Create block from current selection (with metadata)
     blockCreateBtn.addEventListener('click', function(){
       ensureLayout();
       const seatIds = Array.from(selectedSeatIds);
@@ -1757,10 +1780,10 @@ router.get(
         alert('Select one or more seats first.');
         return;
       }
-      const blocks = layout.elements.filter(function(e){ return e && e.type === 'block'; });
+      const blocks = layout.elements.filter(function(e: any){ return e && e.type === 'block'; });
       const name = (blockNameInput.value || '').trim() || ('Block '+(blocks.length+1));
 
-      let capacity = null;
+      let capacity: number | null = null;
       const capStr = (blockCapacityInput && blockCapacityInput.value || '').trim();
       if(capStr){
         const n = Number(capStr);
@@ -1793,7 +1816,6 @@ router.get(
       renderSeats();
     });
 
-    // Seat pricing: assign / clear ticket type from selected seats
     seatPriceAssignBtn.addEventListener('click', function(){
       const ttId = seatPriceTicketTypeSelect && seatPriceTicketTypeSelect.value;
       if(!ttId){
@@ -1829,30 +1851,29 @@ router.get(
       updateSeatPricingSummary();
     });
 
-    // Drag behaviour with snap + alignment guides + group move (seats or blocks)
     const GRID_SIZE = 4;
     const SNAP_DIST = 8;
-    let dragState = null;
+    let dragState: any = null;
 
-    seatCanvas.addEventListener('mousedown', function(e){
-      // First: check if clicking a block overlay
-      const blockEl = e.target && e.target.closest ? e.target.closest('.seat-block-overlay') : null;
+    seatCanvas.addEventListener('mousedown', function(e: MouseEvent){
+      const target = e.target as HTMLElement | null;
+      const blockEl = target && target.closest ? target.closest('.seat-block-overlay') as HTMLElement | null : null;
       if(blockEl){
         const blockId = blockEl.getAttribute('data-block-id');
         if(blockId){
           ensureLayout();
-          const block = layout.elements.find(function(el){ return el && el.id === blockId && el.type === 'block'; });
+          const block = layout.elements.find(function(el: any){ return el && el.id === blockId && el.type === 'block'; });
           if(block && Array.isArray(block.seatIds) && block.seatIds.length){
             clearSelection();
-            block.seatIds.forEach(function(seatId){ addSeatToSelection(seatId); });
+            block.seatIds.forEach(function(seatId: string){ addSeatToSelection(seatId); });
             selectedBlockId = blockId;
             renderSeats();
 
             if(e.button === 0){
               ensureLayout();
               const seatIds = Array.from(selectedSeatIds);
-              const startPositions = {};
-              seatIds.forEach(function(id){
+              const startPositions: Record<string, {x:number;y:number}> = {};
+              seatIds.forEach(function(id: string){
                 const meta = ensureSeatMeta(id);
                 startPositions[id] = {
                   x: meta.x,
@@ -1874,9 +1895,8 @@ router.get(
         return;
       }
 
-      const seatEl = e.target && e.target.closest ? e.target.closest('.seat') : null;
+      const seatEl = target && target.closest ? target.closest('.seat') as HTMLElement | null : null;
 
-      // Clicked on empty canvas: clear selection
       if(!seatEl){
         clearSelection();
         renderSeats();
@@ -1886,7 +1906,6 @@ router.get(
       const seatId = seatEl.getAttribute('data-seat-id');
       if(!seatId || seatEl.classList.contains('seat-sold')) return;
 
-      // selection logic
       if(e.altKey){
         selectRowForSeat(seatId);
       }else if(e.shiftKey || e.metaKey || e.ctrlKey){
@@ -1902,12 +1921,11 @@ router.get(
         selectSingleSeat(seatId);
       }
 
-      // start drag for left button
       if(e.button === 0 && selectedSeatIds.size){
         ensureLayout();
         const seatIds = Array.from(selectedSeatIds);
-        const startPositions = {};
-        seatIds.forEach(function(id){
+        const startPositions: Record<string, {x:number;y:number}> = {};
+        seatIds.forEach(function(id: string){
           const meta = ensureSeatMeta(id);
           startPositions[id] = {
             x: meta.x,
@@ -1927,7 +1945,7 @@ router.get(
       e.preventDefault();
     });
 
-    document.addEventListener('mousemove', function(e){
+    document.addEventListener('mousemove', function(e: MouseEvent){
       if(!dragState) return;
 
       const rect = seatCanvas.getBoundingClientRect();
@@ -1949,7 +1967,6 @@ router.get(
       let anchorX = anchorStart.x + dx;
       let anchorY = anchorStart.y + dy;
 
-      // Snap to grid
       anchorX = Math.round(anchorX / GRID_SIZE) * GRID_SIZE;
       anchorY = Math.round(anchorY / GRID_SIZE) * GRID_SIZE;
 
@@ -1957,12 +1974,12 @@ router.get(
       anchorX = Math.max(PADDING, Math.min(widthLogical  - PADDING, anchorX));
       anchorY = Math.max(PADDING, Math.min(heightLogical - PADDING, anchorY));
 
-      let snapX = null;
-      let snapY = null;
+      let snapX: number | null = null;
+      let snapY: number | null = null;
       const canvasCenterX = widthLogical / 2;
       const canvasCenterY = heightLogical / 2;
 
-      seats.forEach(function(s){
+      seats.forEach(function(s: any){
         const meta = layout.seats[s.id];
         if(!meta) return;
         if(dragState.seatIds.indexOf(s.id) !== -1) return;
@@ -1999,7 +2016,7 @@ router.get(
       const adjustDx = anchorX - (anchorStart.x + dx);
       const adjustDy = anchorY - (anchorStart.y + dy);
 
-      dragState.seatIds.forEach(function(id){
+      dragState.seatIds.forEach(function(id: string){
         const base = dragState.startPositions[id];
         let x = base.x + dx + adjustDx;
         let y = base.y + dy + adjustDy;
@@ -2012,7 +2029,7 @@ router.get(
         meta.x = x;
         meta.y = y;
 
-        const el = seatCanvas.querySelector('[data-seat-id="'+id+'"]');
+        const el = seatCanvas.querySelector('[data-seat-id="'+id+'"]') as HTMLElement | null;
         if(el){
           el.style.left = (x - 9)+'px';
           el.style.top  = (y - 9)+'px';
@@ -2027,7 +2044,6 @@ router.get(
       hideGuides();
     });
 
-    // Save layout → PATCH /admin/seatmaps/:id/layout
     saveLayoutBtn.addEventListener('click', async function(){
       if(!currentSeatMapId){
         alert('No seat map selected.');
@@ -2035,10 +2051,9 @@ router.get(
       }
       ensureLayout();
 
-      // Enforce: if multiple ticket types exist, every seat must have a ticketTypeId
       if(ticketTypes && ticketTypes.length > 1){
         let unassigned = 0;
-        seats.forEach(function(s){
+        seats.forEach(function(s: any){
           const meta = layout.seats[s.id];
           if(!meta || !meta.ticketTypeId){
             unassigned++;
@@ -2057,47 +2072,49 @@ router.get(
           body: JSON.stringify({ layout: layout })
         });
         alert('Layout saved');
-      }catch(e){
+      }catch(e: any){
         alert('Failed to save layout: '+(e.message||e));
       }
     });
 
-    // Initial load
     await loadTicketTypesForShow();
     reloadSeatMaps();
   }
 
   // ---------- Simple stubs for other views ----------
-
   function orders(){
+    if (!main) return;
     main.innerHTML = '<div class="card"><div class="title">Orders</div><div class="muted">Orders view coming soon.</div></div>';
   }
 
   function venues(){
+    if (!main) return;
     main.innerHTML = '<div class="card"><div class="title">Venues</div><div class="muted">Venue management UI coming soon (data API already exists).</div></div>';
   }
 
   function analytics(){
+    if (!main) return;
     main.innerHTML = '<div class="card"><div class="title">Analytics</div><div class="muted">Analytics dashboard coming soon.</div></div>';
   }
 
   function audiences(){
+    if (!main) return;
     main.innerHTML = '<div class="card"><div class="title">Audiences</div><div class="muted">Audience tools coming soon.</div></div>';
   }
 
   function emailPage(){
+    if (!main) return;
     main.innerHTML = '<div class="card"><div class="title">Email Campaigns</div><div class="muted">Email campaign tools will plug into your existing Mailchimp/automation stack.</div></div>';
   }
 
   function account(){
+    if (!main) return;
     main.innerHTML = '<div class="card"><div class="title">Account</div><div class="muted">Account settings coming soon.</div></div>';
   }
 
-   // Kick off initial route on page load
   console.log('[Admin UI] initial route()');
   route();
 })();
-
 </script>
 </body>
 </html>`);
