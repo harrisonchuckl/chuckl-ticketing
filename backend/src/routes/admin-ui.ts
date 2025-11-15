@@ -223,15 +223,16 @@ router.get(
   window.addEventListener('popstate', route);
 
  
-    function home(){
-    if (!main) {
-      console.error('[Admin UI] #main element not found');
-      return;
-    }
-    main.innerHTML =
-      '<div class="card"><div class="title">Welcome</div>' +
-      '<div class="muted">Use the menu to manage shows, venues and orders.</div></div>';
+function home(){
+  if (!main) {
+    console.error('[Admin UI] #main element not found');
+    return;
   }
+  main.innerHTML =
+    '<div class="card"><div class="title">Welcome</div>' +
+    '<div class="muted">Use the menu to manage shows, venues and orders.</div></div>';
+}
+
 
 
   function route(){
