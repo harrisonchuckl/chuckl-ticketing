@@ -732,7 +732,7 @@ router.get("/builder/preview/:showId", (req, res) => {
 
   <script>
     (function () {
-      const layout = ${JSON.stringify(layout)}; // "tables" | "sections" | "mixed" | "blank"
+      const layout = ${JSON.stringify(layout)};
 
       const overlay = document.getElementById("config-overlay");
       const grid = document.getElementById("config-grid");
@@ -760,7 +760,6 @@ router.get("/builder/preview/:showId", (req, res) => {
       chip.textContent = layoutLabels[layout] || layoutLabels.tables;
 
       if (layout === "blank") {
-        // For blank canvas we just hide the overlay and show a simple message
         if (overlay) overlay.classList.add("hidden");
         if (previewSummary) {
           previewSummary.textContent = "Start from a true blank canvas. Use the editor to place sections, tables and seats exactly where you want them.";
@@ -771,80 +770,20 @@ router.get("/builder/preview/:showId", (req, res) => {
 
       const fieldDefsByLayout = {
         tables: [
-          {
-            key: "numTables",
-            label: "Number of tables",
-            hint: "e.g. 12–30",
-            defaultValue: 16,
-            min: 1
-          },
-          {
-            key: "seatsPerTable",
-            label: "Seats per table",
-            hint: "e.g. 8–12",
-            defaultValue: 8,
-            min: 1
-          }
+          { key: "numTables", label: "Number of tables", hint: "e.g. 12–30", defaultValue: 16, min: 1 },
+          { key: "seatsPerTable", label: "Seats per table", hint: "e.g. 8–12", defaultValue: 8, min: 1 }
         ],
         sections: [
-          {
-            key: "numSections",
-            label: "Number of sections",
-            hint: "e.g. stalls, circle, balcony",
-            defaultValue: 3,
-            min: 1
-          },
-          {
-            key: "rowsPerSection",
-            label: "Rows per section",
-            hint: "e.g. 8–20",
-            defaultValue: 10,
-            min: 1
-          },
-          {
-            key: "seatsPerRow",
-            label: "Seats per row",
-            hint: "e.g. 10–30",
-            defaultValue: 16,
-            min: 1
-          }
+          { key: "numSections", label: "Number of sections", hint: "e.g. stalls, circle, balcony", defaultValue: 3, min: 1 },
+          { key: "rowsPerSection", label: "Rows per section", hint: "e.g. 8–20", defaultValue: 10, min: 1 },
+          { key: "seatsPerRow", label: "Seats per row", hint: "e.g. 10–30", defaultValue: 16, min: 1 }
         ],
         mixed: [
-          {
-            key: "numSections",
-            label: "Number of row sections",
-            hint: "e.g. 2–6",
-            defaultValue: 3,
-            min: 1
-          },
-          {
-            key: "rowsPerSection",
-            label: "Rows per section",
-            hint: "e.g. 5–12",
-            defaultValue: 6,
-            min: 1
-          },
-          {
-            key: "seatsPerRow",
-            label: "Seats per row",
-            hint: "e.g. 10–20",
-            defaultValue: 12,
-            min: 1
-          },
-          {
-            key: "numTables",
-            label: "Number of tables",
-            hint: "e.g. 4–20",
-            defaultValue: 8,
-            min: 0
-          },
-          {
-            key: "seatsPerTable",
-            label: "Seats per table",
-            hint: "e.g. 4–10",
-            defaultValue: 6,
-            min: 0
-          }
+          { key: "numSections", label: "Number of row sections", hint: "e.g. 2–6", defaultValue: 3, min: 1 },
+          { key: "rowsPerSection", label: "Rows per section", hint: "e.g. 5–12", defaultValue: 6, min: 1 },
+          { key: "seatsPerRow", label: "Seats per row", hint: "e.g. 10–20", defaultValue: 12, min: 1 },
+          { key: "numTables", label: "Number of tables", hint: "e.g. 4–20", defaultValue: 8, min: 0 },
+          { key: "seatsPerTable", label: "Seats per table", hint: "e.g. 4–10", defaultValue: 6, min: 0 }
         ]
       };
 
@@ -881,59 +820,57 @@ router.get("/builder/preview/:showId", (req, res) => {
       function getValue(id, fallback) {
         const el = document.getElementById("field-" + id);
         if (!el || !(el instanceof HTMLInputElement)) return fallback;
-        var n = parseInt(el.value, 10);
+        const n = parseInt(el.value, 10);
         if (isNaN(n) || n < 0) return fallback;
         return n;
       }
 
       function updateTotals() {
-        var total = 0;
+        let total = 0;
 
         if (layout === "tables") {
-          var t = getValue("numTables", 0);
-          var s = getValue("seatsPerTable", 0);
+          const t = getValue("numTables", 0);
+          const s = getValue("seatsPerTable", 0);
           total = t * s;
         } else if (layout === "sections") {
-          var sec = getValue("numSections", 0);
-          var rows = getValue("rowsPerSection", 0);
-          var per = getValue("seatsPerRow", 0);
+          const sec = getValue("numSections", 0);
+          const rows = getValue("rowsPerSection", 0);
+          const per = getValue("seatsPerRow", 0);
           total = sec * rows * per;
         } else if (layout === "mixed") {
-          var sec2 = getValue("numSections", 0);
-          var rows2 = getValue("rowsPerSection", 0);
-          var per2 = getValue("seatsPerRow", 0);
-          var t2 = getValue("numTables", 0);
-          var s2 = getValue("seatsPerTable", 0);
+          const sec2 = getValue("numSections", 0);
+          const rows2 = getValue("rowsPerSection", 0);
+          const per2 = getValue("seatsPerRow", 0);
+          const t2 = getValue("numTables", 0);
+          const s2 = getValue("seatsPerTable", 0);
           total = sec2 * rows2 * per2 + t2 * s2;
         }
 
-        if (totalSpan) totalSpan.textContent = total > 0 ? String(total) : "–";
-        if (summaryCapacity) summaryCapacity.textContent = total > 0 ? String(total) : "TBC";
+        totalSpan.textContent = total > 0 ? String(total) : "–";
+        summaryCapacity.textContent = total > 0 ? String(total) : "TBC";
         drawPreview(total);
       }
 
       function drawPreview(totalSeats) {
-        if (!previewContainer) return;
         previewContainer.innerHTML = "";
-
         if (totalSeats <= 0) return;
 
         if (layout === "tables" || layout === "mixed") {
-          var numTables = getValue("numTables", 0);
-          var seatsPerTable = getValue("seatsPerTable", 0);
+          const numTables = getValue("numTables", 0);
+          const seatsPerTable = getValue("seatsPerTable", 0);
           if (numTables > 0 && seatsPerTable > 0) {
-            var group = document.createElement("div");
+            const group = document.createElement("div");
             group.className = layout === "mixed" ? "mixed-group" : "table-group";
-            var label = document.createElement("div");
+            const label = document.createElement("div");
             label.className = "layout-group-label";
             label.textContent = layout === "mixed" ? "Table zones" : "Cabaret tables";
             group.appendChild(label);
 
-            for (var i = 0; i < Math.min(numTables, 6); i++) {
-              var row = document.createElement("div");
+            for (let i = 0; i < Math.min(numTables, 6); i++) {
+              const row = document.createElement("div");
               row.className = "seats-row";
-              for (var j = 0; j < Math.min(seatsPerTable, 10); j++) {
-                var dot = document.createElement("div");
+              for (let j = 0; j < Math.min(seatsPerTable, 10); j++) {
+                const dot = document.createElement("div");
                 dot.className = "seat-dot";
                 if (j === 0) dot.classList.add("seat-dot--primary");
                 row.appendChild(dot);
@@ -945,22 +882,22 @@ router.get("/builder/preview/:showId", (req, res) => {
         }
 
         if (layout === "sections" || layout === "mixed") {
-          var numSections = getValue("numSections", 0);
-          var rows = getValue("rowsPerSection", 0);
-          var perRow = getValue("seatsPerRow", 0);
+          const numSections = getValue("numSections", 0);
+          const rows = getValue("rowsPerSection", 0);
+          const perRow = getValue("seatsPerRow", 0);
           if (numSections > 0 && rows > 0 && perRow > 0) {
-            var group2 = document.createElement("div");
+            const group2 = document.createElement("div");
             group2.className = layout === "mixed" ? "mixed-group" : "row-group";
-            var label2 = document.createElement("div");
+            const label2 = document.createElement("div");
             label2.className = "layout-group-label";
             label2.textContent = layout === "mixed" ? "Row sections" : "Theatre rows";
             group2.appendChild(label2);
 
-            for (var r = 0; r < Math.min(rows, 6); r++) {
-              var row2 = document.createElement("div");
+            for (let r = 0; r < Math.min(rows, 6); r++) {
+              const row2 = document.createElement("div");
               row2.className = "seats-row";
-              for (var c = 0; c < Math.min(perRow, 18); c++) {
-                var dot2 = document.createElement("div");
+              for (let c = 0; c < Math.min(perRow, 18); c++) {
+                const dot2 = document.createElement("div");
                 dot2.className = "seat-dot";
                 if (c === 0 && r === 0) dot2.classList.add("seat-dot--primary");
                 row2.appendChild(dot2);
@@ -980,19 +917,19 @@ router.get("/builder/preview/:showId", (req, res) => {
       renderFields();
       updateTotals();
 
-      btnContinue && btnContinue.addEventListener("click", function () {
-        if (overlay) overlay.classList.add("hidden");
+      btnContinue.addEventListener("click", () => {
+        overlay.classList.add("hidden");
       });
 
-      btnCancel && btnCancel.addEventListener("click", function () {
-        if (overlay) overlay.classList.add("hidden");
+      btnCancel.addEventListener("click", () => {
+        overlay.classList.add("hidden");
       });
 
-      btnBack && btnBack.addEventListener("click", function () {
+      btnBack.addEventListener("click", () => {
         window.history.back();
       });
 
-      btnNext && btnNext.addEventListener("click", function () {
+      btnNext.addEventListener("click", () => {
         alert("Next up: we'll plug this into the interactive seat-by-seat editor and ticket mapping.");
       });
 
