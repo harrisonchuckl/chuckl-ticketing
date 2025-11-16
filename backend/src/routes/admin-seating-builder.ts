@@ -1,52 +1,53 @@
+// backend/src/routes/admin-seating-builder.ts
 import { Router } from "express";
 
 const router = Router();
 
-router.get("/seating/builder/preview/:showId", (req, res) => {
+/**
+ * Full-screen seating builder shell.
+ *
+ * Route: GET /admin/seating/builder/:showId
+ *
+ * Query param: ?layout=tables|sections|mixed|blank
+ *
+ * - If layout=blank → go straight to empty canvas.
+ * - Otherwise → show a centred config panel (tables/rows/mixed).
+ *   When "Generate layout" is clicked we currently:
+ *     - Log the chosen values in the console
+ *     - Hide the overlay and reveal the canvas
+ *
+ * Next step after this shell is in place will be:
+ * - Actually generating seat/table/section objects into the canvas
+ *   and then persisting them via your existing seatmap APIs.
+ */
+
+router.get("/seating/builder/:showId", (req, res) => {
   const { showId } = req.params;
-  const layoutParam = typeof req.query.layout === "string" ? req.query.layout : "tables";
+  const layout = (req.query.layout as string) || "tables";
 
-  const layoutKey = ["tables", "sections", "mixed", "blank"].includes(layoutParam)
-    ? layoutParam
-    : "tables";
-
-  const layoutTitleMap: Record<string, string> = {
-    tables: "Tables & chairs",
-    sections: "Sections & rows",
-    mixed: "Mixed seating",
-    blank: "Blank canvas",
-  };
-
-  const layoutSubtitleMap: Record<string, string> = {
-    tables: "Cabaret-style maps with round or long tables.",
-    sections: "Classic theatre blocks with aisles and fixed seating.",
-    mixed: "Blend tables, rows and standing zones in one map.",
-    blank: "Start from an empty room and add only what you need.",
-  };
-
-  const layoutTitle = layoutTitleMap[layoutKey] || layoutTitleMap.tables;
-  const layoutSubtitle = layoutSubtitleMap[layoutKey] || layoutSubtitleMap.tables;
-
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.send(`<!DOCTYPE html>
+  res.type("html").send(`<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Design layout – TickIn Admin</title>
+  <title>Seat builder – Chuckl. Admin</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     :root {
-      --bg-soft: #f5f7ff;
-      --bg-strong: #0f172a;
-      --card-border: #e2e8f0;
-      --accent: #2563eb;
-      --accent-soft: #dbeafe;
-      --accent-strong: #1d4ed8;
-      --text-main: #0f172a;
+      --bg: #f5f7ff;
+      --bg-soft: #edf1ff;
+      --panel: #ffffff;
+      --border-subtle: #dde4ff;
+      --border-strong: #4b66ff;
+      --text-main: #111827;
       --text-muted: #6b7280;
-      --radius-lg: 22px;
-      --radius-md: 14px;
-      --radius-pill: 999px;
+      --accent: #2563eb;
+      --accent-soft: rgba(37, 99, 235, 0.08);
+      --danger: #ef4444;
+      --radius-lg: 20px;
+      --radius-md: 12px;
+      --shadow-soft: 0 18px 45px rgba(15, 23, 42, 0.10);
+      --shadow-subtle: 0 12px 30px rgba(15, 23, 42, 0.06);
+      --grid-line: rgba(148, 163, 184, 0.15);
     }
 
     * {
@@ -57,791 +58,924 @@ router.get("/seating/builder/preview/:showId", (req, res) => {
       margin: 0;
       padding: 0;
       height: 100%;
+      width: 100%;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
-        "Helvetica Neue", Arial, sans-serif;
+                   "Helvetica Neue", Arial, sans-serif;
+      background: radial-gradient(circle at top left, #eef2ff 0, #f5f7ff 40%, #f9fafb 100%);
       color: var(--text-main);
-      background:
-        radial-gradient(circle at top left, #eef2ff 0, transparent 55%),
-        radial-gradient(circle at bottom right, #e0f2fe 0, transparent 55%),
-        #f9fafb;
     }
 
     body {
       display: flex;
       flex-direction: column;
-      min-height: 100vh;
     }
 
-    .page {
-      flex: 1;
+    .builder-root {
       display: flex;
       flex-direction: column;
-    }
-
-    .top-bar {
-      height: 56px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.25);
-      backdrop-filter: blur(16px);
-      background: rgba(248, 250, 252, 0.9);
-      position: sticky;
-      top: 0;
-      z-index: 20;
-    }
-
-    .top-inner {
+      height: 100%;
       width: 100%;
-      max-width: 1240px;
+    }
+
+    /* Top bar */
+
+    .builder-topbar {
+      height: 56px;
       padding: 0 20px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 16px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+      background: linear-gradient(to bottom, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.96));
+      backdrop-filter: blur(10px);
+      position: relative;
+      z-index: 10;
     }
 
-    .top-left {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .step-pill {
-      padding: 4px 12px;
-      border-radius: var(--radius-pill);
-      border: 1px solid rgba(148, 163, 184, 0.55);
-      font-size: 12px;
-      font-weight: 500;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: #6b7280;
-      background: rgba(255, 255, 255, 0.9);
-    }
-
-    .top-title {
-      font-size: 14px;
-      font-weight: 500;
-      color: #111827;
-    }
-
-    .badge-layout {
-      padding: 4px 10px;
-      border-radius: var(--radius-pill);
-      background: rgba(219, 234, 254, 0.9);
-      border: 1px solid rgba(129, 140, 248, 0.4);
-      font-size: 12px;
-      color: #1e3a8a;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .badge-layout span.icon {
-      font-size: 14px;
-    }
-
-    .top-actions {
+    .topbar-left {
       display: flex;
       align-items: center;
       gap: 10px;
     }
 
-    .ghost-btn {
-      border-radius: var(--radius-pill);
-      padding: 6px 12px;
-      font-size: 13px;
-      background: rgba(255, 255, 255, 0.9);
-      border: 1px solid rgba(148, 163, 184, 0.7);
-      color: #4b5563;
+    .topbar-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(37, 99, 235, 0.06);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--accent);
+    }
+
+    .topbar-pill-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: #22c55e;
+      box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.2);
+    }
+
+    .topbar-title {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+    }
+
+    .topbar-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .topbar-link {
+      border: 0;
+      background: transparent;
+      font-size: 12px;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 6px 8px;
+      border-radius: 999px;
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      text-decoration: none;
-      cursor: pointer;
-      transition: background 0.18s ease, border-color 0.18s ease,
-        transform 0.18s ease, box-shadow 0.18s ease;
-      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
     }
 
-    .ghost-btn:hover {
-      background: #ffffff;
-      border-color: var(--accent);
-      transform: translateY(-1px);
-      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
-    }
-
-    .ghost-btn span.icon {
-      font-size: 14px;
+    .topbar-link:hover {
+      background: rgba(148, 163, 184, 0.12);
+      color: var(--text-main);
     }
 
     .primary-btn {
-      border-radius: var(--radius-pill);
-      padding: 8px 16px;
-      font-size: 13px;
-      font-weight: 500;
+      border-radius: 999px;
       border: none;
-      color: #f9fafb;
-      background: linear-gradient(135deg, #2563eb, #4f46e5);
+      background: var(--accent);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 16px;
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: 8px;
       cursor: pointer;
-      box-shadow: 0 16px 35px rgba(37, 99, 235, 0.4);
-      transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
-      text-decoration: none;
+      box-shadow: 0 12px 24px rgba(37, 99, 235, 0.28);
+      transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.08s ease;
     }
 
     .primary-btn:hover {
       transform: translateY(-1px);
-      box-shadow: 0 20px 45px rgba(37, 99, 235, 0.5);
-      filter: brightness(1.03);
+      box-shadow: 0 16px 32px rgba(37, 99, 235, 0.32);
+      background: #1d4ed8;
     }
 
-    .primary-btn span.icon {
-      font-size: 14px;
+    .primary-btn:active {
+      transform: translateY(0);
+      box-shadow: 0 6px 16px rgba(37, 99, 235, 0.3);
     }
 
-    .builder-shell {
+    /* Main layout */
+
+    .builder-main {
       flex: 1;
       display: flex;
-      justify-content: center;
-      padding: 20px;
+      min-height: 0;
     }
 
-    .builder-inner {
+    .builder-canvas-wrap {
+      flex: 1;
+      position: relative;
+      padding: 16px 0 16px 16px;
+      min-width: 0;
+    }
+
+    .builder-canvas {
+      height: 100%;
       width: 100%;
-      max-width: 1240px;
-      display: grid;
-      grid-template-columns: minmax(0, 3fr) minmax(260px, 1fr);
-      gap: 20px;
-      align-items: stretch;
-    }
-
-    @media (max-width: 1024px) {
-      .builder-inner {
-        grid-template-columns: minmax(0, 1.8fr) minmax(260px, 1fr);
-      }
-    }
-
-    @media (max-width: 820px) {
-      .builder-inner {
-        grid-template-columns: minmax(0, 1fr);
-      }
-    }
-
-    .canvas-card {
-      position: relative;
-      border-radius: 26px;
+      border-radius: 24px;
       background:
-        radial-gradient(circle at top left, rgba(255, 255, 255, 0.9), transparent 55%),
-        radial-gradient(circle at bottom right, rgba(191, 219, 254, 0.95), transparent 60%),
-        #111827;
-      box-shadow: 0 22px 60px rgba(15, 23, 42, 0.55);
-      padding: 18px 18px 18px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      overflow: hidden;
-    }
-
-    .canvas-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-    }
-
-    .canvas-header-left {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      color: #e5e7eb;
-    }
-
-    .canvas-title {
-      font-size: 15px;
-      font-weight: 500;
-      letter-spacing: 0.02em;
-      text-transform: uppercase;
-      opacity: 0.9;
-    }
-
-    .canvas-subtitle {
-      font-size: 13px;
-      color: #9ca3af;
-    }
-
-    .scale-pill {
-      padding: 4px 10px;
-      border-radius: var(--radius-pill);
-      border: 1px solid rgba(148, 163, 184, 0.5);
-      font-size: 11px;
-      color: #e5e7eb;
-      background: rgba(15, 23, 42, 0.7);
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .canvas-body {
+        linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+      background-size: 32px 32px;
+      background-color: #f9fafb;
+      box-shadow: var(--shadow-soft);
       position: relative;
-      flex: 1;
-      margin-top: 6px;
-      border-radius: 22px;
-      overflow: hidden;
-      background:
-        radial-gradient(circle at top center, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 1));
-      border: 1px solid rgba(148, 163, 184, 0.4);
-      display: flex;
-      flex-direction: column;
-    }
-
-    .canvas-toolbar {
-      height: 36px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 12px;
-      background: linear-gradient(
-        to right,
-        rgba(15, 23, 42, 0.98),
-        rgba(15, 23, 42, 0.9)
-      );
-      border-bottom: 1px solid rgba(31, 41, 55, 0.9);
-      color: #e5e7eb;
-      font-size: 11px;
-    }
-
-    .canvas-toolbar-left,
-    .canvas-toolbar-right {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .toolbar-pill {
-      padding: 4px 8px;
-      border-radius: var(--radius-pill);
-      border: 1px solid rgba(75, 85, 99, 0.9);
-      background: rgba(15, 23, 42, 0.9);
-      font-size: 11px;
-      color: #e5e7eb;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .toolbar-pill span.icon {
-      font-size: 12px;
-    }
-
-    .toolbar-divider {
-      width: 1px;
-      height: 18px;
-      background: rgba(75, 85, 99, 0.85);
-    }
-
-    .canvas-main {
-      flex: 1;
-      position: relative;
-      padding: 18px 20px;
-      color: #e5e7eb;
       overflow: hidden;
     }
 
-    .grid {
+    .canvas-placeholder {
       position: absolute;
       inset: 0;
-      background-image:
-        linear-gradient(rgba(31, 41, 55, 0.7) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(31, 41, 55, 0.7) 1px, transparent 1px);
-      background-size: 32px 32px;
-      opacity: 0.35;
-      pointer-events: none;
-    }
-
-    .stage {
-      position: absolute;
-      left: 50%;
-      top: 34px;
-      transform: translateX(-50%);
-      padding: 6px 18px;
-      border-radius: 999px;
-      background: linear-gradient(to bottom, #fef9c3, #facc15);
-      color: #422006;
-      font-weight: 600;
-      font-size: 11px;
-      letter-spacing: 0.16em;
-      text-transform: uppercase;
-      box-shadow: 0 10px 26px rgba(251, 191, 36, 0.7);
-    }
-
-    .seating-rows {
-      position: absolute;
-      inset: 86px 32px auto 32px;
       display: flex;
-      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    .canvas-placeholder-inner {
+      padding: 12px 16px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.78);
+      color: #e5e7eb;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 18px 45px rgba(15, 23, 42, 0.45);
+      display: inline-flex;
+      align-items: center;
       gap: 10px;
     }
 
-    .row {
-      display: flex;
-      gap: 8px;
-      justify-content: center;
-    }
-
-    .seat {
-      width: 18px;
-      height: 18px;
+    .canvas-pill-key {
+      padding: 3px 7px;
       border-radius: 6px;
-      background: radial-gradient(circle at 30% 20%, #93c5fd, #1d4ed8);
-      box-shadow: 0 4px 10px rgba(37, 99, 235, 0.8);
-    }
-
-    .table-zone {
-      position: absolute;
-      bottom: 32px;
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
-      gap: 30px;
-    }
-
-    .table {
-      width: 54px;
-      height: 54px;
-      border-radius: 999px;
-      background: radial-gradient(circle at 30% 20%, #fed7aa, #f97316);
-      box-shadow: 0 10px 24px rgba(248, 113, 22, 0.7);
-      position: relative;
-    }
-
-    .table::before,
-    .table::after {
-      content: "";
-      position: absolute;
-      width: 10px;
-      height: 10px;
-      border-radius: 999px;
-      background: #0f172a;
-      border: 2px solid #e5e7eb;
-    }
-
-    .table::before {
-      top: -8px;
-      left: 50%;
-      transform: translateX(-50%);
-    }
-
-    .table::after {
-      bottom: -8px;
-      left: 50%;
-      transform: translateX(-50%);
-    }
-
-    .table-seat-left,
-    .table-seat-right {
-      position: absolute;
-      width: 10px;
-      height: 10px;
-      border-radius: 999px;
-      background: #0f172a;
-      border: 2px solid #e5e7eb;
-    }
-
-    .table-seat-left {
-      left: -8px;
-      top: 50%;
-      transform: translateY(-50%);
-    }
-
-    .table-seat-right {
-      right: -8px;
-      top: 50%;
-      transform: translateY(-50%);
-    }
-
-    .canvas-hint {
-      position: absolute;
-      right: 20px;
-      bottom: 18px;
-      padding: 6px 10px;
-      border-radius: var(--radius-pill);
-      background: rgba(15, 23, 42, 0.86);
       border: 1px solid rgba(148, 163, 184, 0.6);
+      background: rgba(15, 23, 42, 0.7);
       font-size: 11px;
-      color: #e5e7eb;
-      display: inline-flex;
-      gap: 8px;
+    }
+
+    /* Right sidebar */
+
+    .builder-sidebar {
+      width: 260px;
+      border-left: 1px solid rgba(148, 163, 184, 0.25);
+      background: radial-gradient(circle at top, #eef2ff 0, #f9fafb 40%, #ffffff 100%);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .sidebar-section {
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 20px;
+      padding: 12px 12px 10px;
+      box-shadow: var(--shadow-subtle);
+      border: 1px solid rgba(209, 213, 219, 0.6);
+    }
+
+    .sidebar-title-row {
+      display: flex;
       align-items: center;
-      backdrop-filter: blur(12px);
+      justify-content: space-between;
+      margin-bottom: 6px;
     }
 
-    .canvas-hint span.key {
+    .sidebar-title {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #6b7280;
+    }
+
+    .sidebar-badge {
       padding: 2px 6px;
-      border-radius: 6px;
-      background: rgba(15, 23, 42, 0.95);
-      border: 1px solid rgba(148, 163, 184, 0.9);
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      border-radius: 999px;
       font-size: 10px;
+      background: rgba(37, 99, 235, 0.06);
+      color: var(--accent);
     }
 
-    /* Right-hand tools panel */
+    .sidebar-body {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
 
-    .tools-card {
-      border-radius: 22px;
-      background: rgba(255, 255, 255, 0.98);
-      box-shadow: 0 16px 40px rgba(15, 23, 42, 0.14);
-      border: 1px solid rgba(209, 213, 219, 0.95);
-      padding: 16px 16px 14px;
+    .tool-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .tool-pill {
+      padding: 4px 9px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.5);
+      font-size: 11px;
+      color: #4b5563;
+      background: rgba(249, 250, 251, 0.9);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: default;
+    }
+
+    .tool-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(37, 99, 235, 0.18);
+      border: 1px solid var(--accent);
+    }
+
+    /* Overlay config panel */
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at top, rgba(15, 23, 42, 0.16), rgba(15, 23, 42, 0.55));
+      z-index: 20;
+    }
+
+    .overlay-inner {
+      width: 460px;
+      max-width: calc(100% - 40px);
+      background: linear-gradient(to bottom right, #ffffff, #eef2ff);
+      border-radius: 24px;
+      box-shadow: 0 26px 70px rgba(15, 23, 42, 0.55);
+      border: 1px solid rgba(129, 140, 248, 0.5);
+      padding: 20px 22px 18px;
       display: flex;
       flex-direction: column;
       gap: 14px;
     }
 
-    .tools-header {
+    .overlay-header {
       display: flex;
-      flex-direction: column;
-      gap: 4px;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
     }
 
-    .tools-eyebrow {
+    .overlay-title-block {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .overlay-kicker {
       font-size: 11px;
       text-transform: uppercase;
-      letter-spacing: 0.16em;
-      color: #9ca3af;
-      font-weight: 600;
-    }
-
-    .tools-title {
-      font-size: 16px;
-      font-weight: 600;
-      letter-spacing: -0.02em;
-      color: #111827;
-    }
-
-    .tools-subtitle {
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-
-    .tool-section {
-      margin-top: 4px;
-      padding-top: 8px;
-      border-top: 1px dashed rgba(209, 213, 219, 0.9);
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .tool-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      padding: 6px 8px;
-      border-radius: 12px;
-      background: #f9fafb;
-      border: 1px solid rgba(229, 231, 235, 1);
-    }
-
-    .tool-main {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .tool-icon {
-      width: 26px;
-      height: 26px;
-      border-radius: 9px;
-      background: #e0f2fe;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 14px;
-    }
-
-    .tool-label {
-      display: flex;
-      flex-direction: column;
-      gap: 1px;
-    }
-
-    .tool-label-title {
-      font-size: 13px;
-      font-weight: 500;
-      color: #111827;
-    }
-
-    .tool-label-sub {
-      font-size: 11px;
+      letter-spacing: 0.12em;
       color: #6b7280;
     }
 
-    .tool-chip {
-      padding: 3px 8px;
-      border-radius: 999px;
-      border: 1px solid rgba(148, 163, 184, 0.6);
-      font-size: 10px;
-      color: #4b5563;
-      background: #f3f4f6;
+    .overlay-title {
+      font-size: 18px;
+      font-weight: 650;
+      letter-spacing: 0.01em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
 
-    .tools-footer {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
+    .overlay-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 10px;
+      background: radial-gradient(circle at top left, #e0ecff, #c7d2fe);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #1d4ed8;
+      box-shadow: 0 10px 22px rgba(79, 70, 229, 0.35);
+    }
+
+    .overlay-sub {
+      font-size: 12px;
+      color: #6b7280;
+      max-width: 320px;
+    }
+
+    .overlay-close {
+      border-radius: 999px;
+      border: none;
+      background: rgba(15, 23, 42, 0.06);
+      width: 28px;
+      height: 28px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: #4b5563;
+    }
+
+    .overlay-close:hover {
+      background: rgba(15, 23, 42, 0.12);
+    }
+
+    .overlay-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px 14px;
       margin-top: 2px;
     }
 
-    .hint-text {
-      font-size: 11px;
-      color: #9ca3af;
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 12px;
     }
 
-    .pill-row {
+    .field label {
+      color: #4b5563;
+      font-weight: 500;
       display: flex;
-      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .field-hint {
+      font-weight: 400;
+      color: #9ca3af;
+      font-size: 11px;
+    }
+
+    .field input[type="number"] {
+      border-radius: 10px;
+      border: 1px solid rgba(148, 163, 184, 0.9);
+      padding: 7px 9px;
+      font-size: 12px;
+      font-family: inherit;
+      outline: none;
+      width: 100%;
+      background: rgba(248, 250, 252, 0.9);
+    }
+
+    .field input[type="number"]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent-soft);
+      background: #ffffff;
+    }
+
+    .overlay-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-top: 6px;
+    }
+
+    .overlay-meta {
+      font-size: 11px;
+      color: #9ca3af;
+      display: flex;
+      align-items: center;
       gap: 6px;
     }
 
-    .pill {
-      padding: 3px 7px;
+    .overlay-meta-dot {
+      width: 6px;
+      height: 6px;
       border-radius: 999px;
-      background: #eff6ff;
-      font-size: 10px;
-      color: #1d4ed8;
+      background: rgba(37, 99, 235, 0.3);
     }
 
-    @media (max-width: 640px) {
-      .builder-shell {
-        padding: 16px;
+    .overlay-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .ghost-btn {
+      border-radius: 999px;
+      border: 0;
+      background: transparent;
+      font-size: 12px;
+      color: #6b7280;
+      padding: 6px 10px;
+      cursor: pointer;
+    }
+
+    .ghost-btn:hover {
+      background: rgba(148, 163, 184, 0.12);
+      color: #111827;
+    }
+
+    .primary-small {
+      padding: 7px 13px;
+      font-size: 12px;
+      box-shadow: 0 10px 24px rgba(37, 99, 235, 0.32);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    @media (max-width: 900px) {
+      .builder-main {
+        flex-direction: column;
       }
-      .canvas-card {
-        border-radius: 22px;
+      .builder-sidebar {
+        width: 100%;
+        border-left: none;
+        border-top: 1px solid rgba(148, 163, 184, 0.25);
+        flex-direction: row;
+        overflow-x: auto;
       }
-      .canvas-main {
-        padding: 14px 14px 18px;
-      }
-      .seating-rows {
-        inset: 82px 18px auto 18px;
-      }
-      .table-zone {
-        bottom: 22px;
+      .sidebar-section {
+        min-width: 200px;
       }
     }
   </style>
 </head>
 <body>
-  <div class="page">
-    <header class="top-bar">
-      <div class="top-inner">
-        <div class="top-left">
-          <div class="step-pill">Step 3 of 4 · Design your layout</div>
-          <div class="badge-layout">
-            <span class="icon">🧩</span>
-            <span>Starting from: ${layoutTitle}</span>
-          </div>
+  <div class="builder-root">
+    <header class="builder-topbar">
+      <div class="topbar-left">
+        <button class="topbar-link" type="button" id="js-back-to-layouts">
+          <span aria-hidden="true">←</span>
+          <span>Back to layouts</span>
+        </button>
+        <div class="topbar-title-block">
+          <div class="topbar-title">Seat map builder</div>
+          <div class="topbar-sub">Show ID: ${showId}</div>
         </div>
-        <div class="top-actions">
-          <button class="ghost-btn" type="button" data-back-layout>
-            <span class="icon">←</span>
-            <span>Back to layout choice</span>
-          </button>
-          <a class="primary-btn" href="#" data-go-tickets>
-            <span>Skip to ticket setup</span>
-            <span class="icon">→</span>
-          </a>
+        <div class="topbar-pill">
+          <span class="topbar-pill-dot"></span>
+          Live preview
         </div>
+      </div>
+      <div class="topbar-right">
+        <button class="topbar-link" type="button" id="js-reset-layout">
+          Reset canvas
+        </button>
+        <button class="primary-btn" type="button" id="js-save-and-continue">
+          <span>Save &amp; continue to pricing</span>
+          <span aria-hidden="true">↗</span>
+        </button>
       </div>
     </header>
 
-    <main class="builder-shell">
-      <div class="builder-inner">
-        <!-- Canvas side -->
-        <section class="canvas-card" aria-label="Seat map builder preview">
-          <header class="canvas-header">
-            <div class="canvas-header-left">
-              <div class="canvas-title">Room canvas</div>
-              <div class="canvas-subtitle">${layoutSubtitle}</div>
+    <main class="builder-main">
+      <section class="builder-canvas-wrap">
+        <div class="builder-canvas" id="js-canvas">
+          <div class="canvas-placeholder" id="js-canvas-placeholder">
+            <div class="canvas-placeholder-inner">
+              <span>Drag, zoom and drop tables, rows and zones here.</span>
+              <span class="canvas-pill-key">Scroll ⌥+Trackpad to zoom</span>
             </div>
-            <div class="scale-pill">
-              <span>Zoom</span>
-              <span>–</span>
-              <span>100%</span>
-              <span>+</span>
+          </div>
+
+          <!-- Overlay config panels will sit on top of the canvas -->
+          <div class="overlay" id="js-config-overlay">
+            <!-- Tables & chairs -->
+            <div class="overlay-inner" data-layout-panel="tables">
+              <div class="overlay-header">
+                <div class="overlay-title-block">
+                  <div class="overlay-kicker">Layout generator</div>
+                  <div class="overlay-title">
+                    <span class="overlay-icon">🍽</span>
+                    <span>Tables &amp; chairs</span>
+                  </div>
+                  <div class="overlay-sub">
+                    Tell us roughly how many tables and seats you need.
+                    We’ll drop a starting layout you can still tweak in the canvas.
+                  </div>
+                </div>
+                <button class="overlay-close" type="button" data-close-overlay>
+                  ✕
+                </button>
+              </div>
+
+              <div class="overlay-grid">
+                <div class="field">
+                  <label>
+                    Number of tables
+                    <span class="field-hint">e.g. 12</span>
+                  </label>
+                  <input type="number" min="1" value="12" id="tables-count">
+                </div>
+                <div class="field">
+                  <label>
+                    Seats per table
+                    <span class="field-hint">e.g. 8</span>
+                  </label>
+                  <input type="number" min="1" value="8" id="seats-per-table">
+                </div>
+                <div class="field">
+                  <label>
+                    Table spacing
+                    <span class="field-hint">pixels</span>
+                  </label>
+                  <input type="number" min="16" value="80" id="table-spacing">
+                </div>
+                <div class="field">
+                  <label>
+                    Ring depth
+                    <span class="field-hint">rows of tables</span>
+                  </label>
+                  <input type="number" min="1" value="3" id="table-rings">
+                </div>
+              </div>
+
+              <div class="overlay-footer">
+                <div class="overlay-meta">
+                  <span class="overlay-meta-dot"></span>
+                  <span id="tables-estimate">Estimated seats: 96</span>
+                </div>
+                <div class="overlay-actions">
+                  <button class="ghost-btn" type="button" data-skip-generate>
+                    Start from blank instead
+                  </button>
+                  <button class="primary-btn primary-small" type="button" data-generate-layout="tables">
+                    Generate layout
+                  </button>
+                </div>
+              </div>
             </div>
-          </header>
 
-          <div class="canvas-body">
-            <div class="canvas-toolbar">
-              <div class="canvas-toolbar-left">
-                <div class="toolbar-pill">
-                  <span class="icon">⬚</span>
-                  <span>Pan</span>
+            <!-- Sections & rows -->
+            <div class="overlay-inner hidden" data-layout-panel="sections">
+              <div class="overlay-header">
+                <div class="overlay-title-block">
+                  <div class="overlay-kicker">Layout generator</div>
+                  <div class="overlay-title">
+                    <span class="overlay-icon">🎭</span>
+                    <span>Sections &amp; rows</span>
+                  </div>
+                  <div class="overlay-sub">
+                    Classic theatre-style seating. We’ll auto-build sections and rows,
+                    ready for you to rename or resize.
+                  </div>
                 </div>
-                <div class="toolbar-pill">
-                  <span class="icon">⌖</span>
-                  <span>Seat blocks</span>
+                <button class="overlay-close" type="button" data-close-overlay>
+                  ✕
+                </button>
+              </div>
+
+              <div class="overlay-grid">
+                <div class="field">
+                  <label>
+                    Number of sections
+                    <span class="field-hint">stalls, circle…</span>
+                  </label>
+                  <input type="number" min="1" value="3" id="sections-count">
                 </div>
-                <div class="toolbar-pill">
-                  <span class="icon">🪑</span>
-                  <span>Tables</span>
+                <div class="field">
+                  <label>
+                    Rows per section
+                    <span class="field-hint">e.g. 8</span>
+                  </label>
+                  <input type="number" min="1" value="8" id="rows-per-section">
+                </div>
+                <div class="field">
+                  <label>
+                    Seats per row
+                    <span class="field-hint">e.g. 12</span>
+                  </label>
+                  <input type="number" min="1" value="12" id="seats-per-row">
+                </div>
+                <div class="field">
+                  <label>
+                    Row spacing
+                    <span class="field-hint">pixels</span>
+                  </label>
+                  <input type="number" min="16" value="48" id="row-spacing">
                 </div>
               </div>
-              <div class="canvas-toolbar-right">
-                <div class="toolbar-pill">
-                  <span class="icon">☰</span>
-                  <span>Layers</span>
+
+              <div class="overlay-footer">
+                <div class="overlay-meta">
+                  <span class="overlay-meta-dot"></span>
+                  <span id="sections-estimate">Estimated seats: 288</span>
                 </div>
-                <div class="toolbar-divider"></div>
-                <div style="font-size:11px;color:#9ca3af;">Drag, zoom and place seats – full editor coming next.</div>
+                <div class="overlay-actions">
+                  <button class="ghost-btn" type="button" data-skip-generate>
+                    Start from blank instead
+                  </button>
+                  <button class="primary-btn primary-small" type="button" data-generate-layout="sections">
+                    Generate layout
+                  </button>
+                </div>
               </div>
             </div>
 
-            <div class="canvas-main">
-              <div class="grid" aria-hidden="true"></div>
-              <div class="stage">STAGE</div>
+            <!-- Mixed seating -->
+            <div class="overlay-inner hidden" data-layout-panel="mixed">
+              <div class="overlay-header">
+                <div class="overlay-title-block">
+                  <div class="overlay-kicker">Layout generator</div>
+                  <div class="overlay-title">
+                    <span class="overlay-icon">🎟</span>
+                    <span>Mixed seating</span>
+                  </div>
+                  <div class="overlay-sub">
+                    Blend cabaret tables with theatre rows. Great for premium front tables
+                    and tiered seating behind.
+                  </div>
+                </div>
+                <button class="overlay-close" type="button" data-close-overlay>
+                  ✕
+                </button>
+              </div>
 
-              <!-- simple fake rows just for visual feel -->
-              <div class="seating-rows">
-                <div class="row">
-                  <div class="seat"></div>
-                  <div class="seat"></div>
-                  <div class="seat"></div>
-                  <div class="seat"></div>
-                  <div class="seat"></div>
-                  <div class="seat"></div>
-                  <div class="seat"></div>
-                  <div class="seat"></div>
+              <div class="overlay-grid">
+                <div class="field">
+                  <label>
+                    Sections
+                    <span class="field-hint">count</span>
+                  </label>
+                  <input type="number" min="0" value="2" id="mixed-sections-count">
                 </div>
-                <div class="row">
-                  <div class="seat"></div>
-                  <div class="seat"></div>
-                  <div class="seat"></div>
-                  <div class="seat"></div>
-                  <div class="seat"></div>
-                  <div class="seat"></div>
-                  <div class="seat"></div>
+                <div class="field">
+                  <label>
+                    Rows per section
+                    <span class="field-hint">e.g. 6</span>
+                  </label>
+                  <input type="number" min="0" value="6" id="mixed-rows-per-section">
                 </div>
-                <div class="row">
-                  <div class="seat"></div>
-                  <div class="seat"></div>
-                  <div class="seat"></div>
-                  <div class="seat"></div>
-                  <div class="seat"></div>
-                  <div class="seat"></div>
+                <div class="field">
+                  <label>
+                    Seats per row
+                    <span class="field-hint">e.g. 10</span>
+                  </label>
+                  <input type="number" min="0" value="10" id="mixed-seats-per-row">
+                </div>
+                <div class="field">
+                  <label>
+                    Tables
+                    <span class="field-hint">front of room</span>
+                  </label>
+                  <input type="number" min="0" value="6" id="mixed-tables-count">
+                </div>
+                <div class="field">
+                  <label>
+                    Seats per table
+                    <span class="field-hint">e.g. 8</span>
+                  </label>
+                  <input type="number" min="0" value="8" id="mixed-seats-per-table">
+                </div>
+                <div class="field">
+                  <label>
+                    Approx capacity goal
+                    <span class="field-hint">optional</span>
+                  </label>
+                  <input type="number" min="0" value="250" id="mixed-capacity-goal">
                 </div>
               </div>
 
-              <!-- simple tables hint for cabaret / mixed layouts -->
-              <div class="table-zone">
-                <div class="table">
-                  <div class="table-seat-left"></div>
-                  <div class="table-seat-right"></div>
+              <div class="overlay-footer">
+                <div class="overlay-meta">
+                  <span class="overlay-meta-dot"></span>
+                  <span id="mixed-estimate">Estimated seats: 248</span>
                 </div>
-                <div class="table">
-                  <div class="table-seat-left"></div>
-                  <div class="table-seat-right"></div>
+                <div class="overlay-actions">
+                  <button class="ghost-btn" type="button" data-skip-generate>
+                    Start from blank instead
+                  </button>
+                  <button class="primary-btn primary-small" type="button" data-generate-layout="mixed">
+                    Generate layout
+                  </button>
                 </div>
-              </div>
-
-              <div class="canvas-hint">
-                <span>Full drag & drop builder is the next step.</span>
-                <span class="key">⌘</span>
-                <span class="key">Scroll</span>
-                <span class="key">Drag</span>
               </div>
             </div>
           </div>
-        </section>
+          <!-- end overlay -->
+        </div>
+      </section>
 
-        <!-- Tools / inspector side -->
-        <aside class="tools-card" aria-label="Layout tools">
-          <header class="tools-header">
-            <div class="tools-eyebrow">Tools</div>
-            <div class="tools-title">Seat & table tools</div>
-            <div class="tools-subtitle">
-              This panel will become your live inspector for blocks, tables, zones and seat details.
+      <aside class="builder-sidebar">
+        <div class="sidebar-section">
+          <div class="sidebar-title-row">
+            <div class="sidebar-title">Tools</div>
+            <div class="sidebar-badge">Coming to life</div>
+          </div>
+          <div class="sidebar-body">
+            Drag, zoom and pan around the canvas. In the next pass we’ll light up
+            tools for adding <strong>sections</strong>, <strong>tables</strong>,
+            <strong>rows</strong> and <strong>holds</strong>.
+          </div>
+          <div class="tool-row">
+            <div class="tool-pill">
+              <span class="tool-dot"></span> Sections
             </div>
-          </header>
+            <div class="tool-pill">
+              <span class="tool-dot"></span> Tables
+            </div>
+            <div class="tool-pill">
+              <span class="tool-dot"></span> Rows
+            </div>
+            <div class="tool-pill">
+              <span class="tool-dot"></span> Zones
+            </div>
+          </div>
+        </div>
 
-          <section class="tool-section">
+        <div class="sidebar-section">
+          <div class="sidebar-title-row">
+            <div class="sidebar-title">Keyboard</div>
+          </div>
+          <div class="sidebar-body">
             <div class="tool-row">
-              <div class="tool-main">
-                <div class="tool-icon">🪑</div>
-                <div class="tool-label">
-                  <div class="tool-label-title">Rows & blocks</div>
-                  <div class="tool-label-sub">Add, number and label seating blocks.</div>
-                </div>
-              </div>
-              <div class="tool-chip">Coming online</div>
+              <div class="tool-pill"><span class="canvas-pill-key">⌘ + Z</span> Undo</div>
+              <div class="tool-pill"><span class="canvas-pill-key">⌘ + Y</span> Redo</div>
+              <div class="tool-pill"><span class="canvas-pill-key">⇧ + Drag</span> Multi-select</div>
+              <div class="tool-pill"><span class="canvas-pill-key">⌥ + Scroll</span> Zoom</div>
             </div>
-
-            <div class="tool-row">
-              <div class="tool-main">
-                <div class="tool-icon">🍸</div>
-                <div class="tool-label">
-                  <div class="tool-label-title">Tables</div>
-                  <div class="tool-label-sub">Auto-generate seats around round or long tables.</div>
-                </div>
-              </div>
-              <div class="tool-chip">Next phase</div>
-            </div>
-
-            <div class="tool-row">
-              <div class="tool-main">
-                <div class="tool-icon">🟦</div>
-                <div class="tool-label">
-                  <div class="tool-label-title">Zones & standing</div>
-                  <div class="tool-label-sub">Standing areas, VIP zones and bar sections.</div>
-                </div>
-              </div>
-              <div class="tool-chip">In design</div>
-            </div>
-          </section>
-
-          <section class="tools-footer">
-            <div class="hint-text">
-              For now this is a visual preview of the full builder. You can continue to ticket setup at any time –
-              all existing seating tools will keep working as they do today.
-            </div>
-            <div class="pill-row">
-              <div class="pill">No data is changed yet</div>
-              <div class="pill">Safe to explore</div>
-            </div>
-          </section>
-        </aside>
-      </div>
+          </div>
+        </div>
+      </aside>
     </main>
   </div>
 
   <script>
-    (function () {
-      const showId = ${JSON.stringify(showId)};
+    (function() {
+      var showId = ${JSON.stringify(showId)};
+      var initialLayout = ${JSON.stringify(layout || "tables")};
 
-      const backBtn = document.querySelector("[data-back-layout]");
+      var overlay = document.getElementById("js-config-overlay");
+      var canvasPlaceholder = document.getElementById("js-canvas-placeholder");
+
+      function showPanel(name) {
+        var panels = overlay.querySelectorAll("[data-layout-panel]");
+        panels.forEach(function(panel) {
+          if (panel.getAttribute("data-layout-panel") === name) {
+            panel.classList.remove("hidden");
+          } else {
+            panel.classList.add("hidden");
+          }
+        });
+      }
+
+      // Decide whether overlay is visible at all
+      if (!initialLayout || initialLayout === "blank") {
+        if (overlay) overlay.classList.add("hidden");
+      } else {
+        showPanel(initialLayout);
+      }
+
+      // Back button -> layout wizard step
+      var backBtn = document.getElementById("js-back-to-layouts");
       if (backBtn) {
-        backBtn.addEventListener("click", function (e) {
-          e.preventDefault();
+        backBtn.addEventListener("click", function() {
           window.location.href = "/admin/seating/layout-wizard/" + encodeURIComponent(showId);
         });
       }
 
-      const ticketsBtn = document.querySelector("[data-go-tickets]");
-      if (ticketsBtn) {
-        ticketsBtn.addEventListener("click", function (e) {
-          e.preventDefault();
-          // For now we send organisers back to the existing Tickets page for this show
-          window.location.href = "/admin/ui/shows/" + encodeURIComponent(showId) + "/tickets";
+      // Save & continue -> pricing step (placeholder for now)
+      var saveBtn = document.getElementById("js-save-and-continue");
+      if (saveBtn) {
+        saveBtn.addEventListener("click", function() {
+          // Later this will POST seatmap + redirect to pricing
+          alert("In the next pass this will save the map and move you to ticket pricing.");
         });
       }
+
+      // Reset canvas placeholder handler (for now just shows helper text again)
+      var resetBtn = document.getElementById("js-reset-layout");
+      if (resetBtn) {
+        resetBtn.addEventListener("click", function() {
+          if (canvasPlaceholder) {
+            canvasPlaceholder.style.opacity = "1";
+          }
+          // Later: wipe in-memory shapes
+        });
+      }
+
+      // Close overlay buttons
+      overlay.querySelectorAll("[data-close-overlay]").forEach(function(btn) {
+        btn.addEventListener("click", function() {
+          overlay.classList.add("hidden");
+        });
+      });
+
+      // "Start from blank instead" buttons
+      overlay.querySelectorAll("[data-skip-generate]").forEach(function(btn) {
+        btn.addEventListener("click", function() {
+          overlay.classList.add("hidden");
+        });
+      });
+
+      // Simple capacity estimates
+      function updateTablesEstimate() {
+        var tables = parseInt((document.getElementById("tables-count") || {}).value || "0", 10);
+        var seats = parseInt((document.getElementById("seats-per-table") || {}).value || "0", 10);
+        var el = document.getElementById("tables-estimate");
+        if (el) el.textContent = "Estimated seats: " + (tables * seats || 0);
+      }
+
+      function updateSectionsEstimate() {
+        var sections = parseInt((document.getElementById("sections-count") || {}).value || "0", 10);
+        var rows = parseInt((document.getElementById("rows-per-section") || {}).value || "0", 10);
+        var seats = parseInt((document.getElementById("seats-per-row") || {}).value || "0", 10);
+        var el = document.getElementById("sections-estimate");
+        if (el) el.textContent = "Estimated seats: " + (sections * rows * seats || 0);
+      }
+
+      function updateMixedEstimate() {
+        var sCount = parseInt((document.getElementById("mixed-sections-count") || {}).value || "0", 10);
+        var rows = parseInt((document.getElementById("mixed-rows-per-section") || {}).value || "0", 10);
+        var seatsRow = parseInt((document.getElementById("mixed-seats-per-row") || {}).value || "0", 10);
+        var tables = parseInt((document.getElementById("mixed-tables-count") || {}).value || "0", 10);
+        var seatsTable = parseInt((document.getElementById("mixed-seats-per-table") || {}).value || "0", 10);
+        var total = (sCount * rows * seatsRow) + (tables * seatsTable);
+        var el = document.getElementById("mixed-estimate");
+        if (el) el.textContent = "Estimated seats: " + (total || 0);
+      }
+
+      ["tables-count", "seats-per-table", "table-spacing", "table-rings"].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener("input", updateTablesEstimate);
+      });
+      updateTablesEstimate();
+
+      ["sections-count", "rows-per-section", "seats-per-row", "row-spacing"].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener("input", updateSectionsEstimate);
+      });
+      updateSectionsEstimate();
+
+      ["mixed-sections-count", "mixed-rows-per-section", "mixed-seats-per-row",
+       "mixed-tables-count", "mixed-seats-per-table", "mixed-capacity-goal"].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener("input", updateMixedEstimate);
+      });
+      updateMixedEstimate();
+
+      // "Generate layout" (for now just logs + hides overlay)
+      overlay.querySelectorAll("[data-generate-layout]").forEach(function(btn) {
+        btn.addEventListener("click", function() {
+          var type = btn.getAttribute("data-generate-layout");
+          var payload = { type: type, showId: showId };
+
+          if (type === "tables") {
+            payload.tables = parseInt((document.getElementById("tables-count") || {}).value || "0", 10);
+            payload.seatsPerTable = parseInt((document.getElementById("seats-per-table") || {}).value || "0", 10);
+            payload.spacing = parseInt((document.getElementById("table-spacing") || {}).value || "0", 10);
+            payload.rings = parseInt((document.getElementById("table-rings") || {}).value || "0", 10);
+          } else if (type === "sections") {
+            payload.sections = parseInt((document.getElementById("sections-count") || {}).value || "0", 10);
+            payload.rowsPerSection = parseInt((document.getElementById("rows-per-section") || {}).value || "0", 10);
+            payload.seatsPerRow = parseInt((document.getElementById("seats-per-row") || {}).value || "0", 10);
+            payload.rowSpacing = parseInt((document.getElementById("row-spacing") || {}).value || "0", 10);
+          } else if (type === "mixed") {
+            payload.sections = parseInt((document.getElementById("mixed-sections-count") || {}).value || "0", 10);
+            payload.rowsPerSection = parseInt((document.getElementById("mixed-rows-per-section") || {}).value || "0", 10);
+            payload.seatsPerRow = parseInt((document.getElementById("mixed-seats-per-row") || {}).value || "0", 10);
+            payload.tables = parseInt((document.getElementById("mixed-tables-count") || {}).value || "0", 10);
+            payload.seatsPerTable = parseInt((document.getElementById("mixed-seats-per-table") || {}).value || "0", 10);
+            payload.capacityGoal = parseInt((document.getElementById("mixed-capacity-goal") || {}).value || "0", 10);
+          }
+
+          console.log("[Builder] Generate layout config:", payload);
+
+          // Next iteration: actually draw shapes to the canvas using this config.
+          overlay.classList.add("hidden");
+          if (canvasPlaceholder) {
+            canvasPlaceholder.style.opacity = "0.8";
+          }
+        });
+      });
     })();
   </script>
 </body>
-</html>`);
+</html>
+`);
 });
 
 export default router;
