@@ -179,7 +179,11 @@ model SeatMap {
   name       String
   version    Int       @default(1)
   isDefault  Boolean   @default(false)
-  /// Full seat-map layout JSON used by admin routes
+
+  // NEW FIELDS
+  isTemplate       Boolean   @default(false)
+  createdByUserId  String?
+
   layout     Json?
 
   showId     String
@@ -187,11 +191,11 @@ model SeatMap {
 
   show       Show    @relation(fields: [showId], references: [id])
   venue      Venue?  @relation(fields: [venueId], references: [id])
-
   seats      Seat[]
   zones      Zone[]
   allocations ExternalAllocation[]
 }
+
 
 model Zone {
   id        String   @id @default(cuid())
