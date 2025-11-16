@@ -23,7 +23,7 @@ import adminTicketTypesRouter from "./routes/admin-tickettypes.js";
 import adminSeatMapsRouter from "./routes/admin-seatmaps.js";
 import seatMapsRouter from "./routes/seatmaps.js";
 
-// Seating choice + layout wizard
+// Seating choice + layout wizard (Steps 1–2)
 import seatingChoiceRouter from "./routes/seating-choice.js";
 
 // Full-screen builder (Step 3)
@@ -109,16 +109,17 @@ app.use("/admin/seatmaps", adminSeatMapsRouter);
 //  - GET  /seatmaps/allocations/:allocationId
 app.use("/seatmaps", seatMapsRouter);
 
+// ---------- Seating wizard + full-screen builder ----------
+
+// IMPORTANT: mount the full-screen builder BEFORE the seating-choice
+// router so it doesn't get shadowed by the old stub route.
+app.use("/admin/seating", adminSeatingBuilderRouter);
+
 // Seating choice + layout wizard (Steps 1–2)
 //  - GET /admin/seating-choice/:showId
 //  - GET /admin/seating/unallocated/:showId
 //  - GET /admin/seating/layout-wizard/:showId
 app.use("/admin", seatingChoiceRouter);
-app.use("/admin/seating", adminSeatingBuilderRouter);
-
-// Full-screen builder (Step 3)
-//  - GET /admin/seating/builder/:showId?layout=tables|sections|mixed|blank
-app.use("/admin", adminSeatingBuilderRouter);
 
 // ---------- Admin SPA (Organiser Console) ----------
 
