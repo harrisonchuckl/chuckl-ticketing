@@ -1,393 +1,334 @@
-// backend/src/routes/seating-choice.ts
 import { Router } from "express";
-import { requireAdminOrOrganiser } from "../lib/authz.js";
 
 const router = Router();
 
 /**
- * Seating choice screen:
- * /admin/seating-choice/:showId
+ * Step 1 of the seating wizard:
+ * Simple, minimal choice between Unallocated vs Allocated seating.
  *
- * This is the TWO SQUARES page:
- * - Unallocated Seating
- * - Allocated Seating
+ * Route: /admin/seating-choice/:showId
  */
-router.get(
-  "/seating-choice/:showId",
-  requireAdminOrOrganiser,
-  (req, res) => {
-    const { showId } = req.params;
+router.get("/seating-choice/:showId", (req, res) => {
+  const { showId } = req.params;
 
-    res.set("Cache-Control", "no-store");
-    res
-      .type("html")
-      .send(`<!doctype html>
+  const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>Choose seating – TickIn</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="UTF-8" />
+  <title>Choose seating style</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root {
-      --bg: #f3f4f6;
-      --panel: #ffffff;
-      --border: #e5e7eb;
-      --text: #111827;
-      --muted: #6b7280;
-      --primary: #111827;
-      --primary-soft: #1118270d;
-      --primary-border: #11182733;
+      --bg-page: #f5f5f7;
+      --card-bg: #ffffff;
+      --card-border: #e5e5ea;
+      --card-border-active: #007aff;
+      --card-shadow: 0 18px 30px rgba(0, 0, 0, 0.06);
+      --text-main: #111111;
+      --text-muted: #6e6e73;
+      --accent: #007aff;
+      --radius-xl: 18px;
+      --radius-xxl: 22px;
     }
+
     * {
       box-sizing: border-box;
     }
+
     html, body {
       margin: 0;
       padding: 0;
       height: 100%;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-        sans-serif;
-      color: var(--text);
-      background: var(--bg);
+      width: 100%;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+        "Helvetica Neue", Arial, sans-serif;
+      background: radial-gradient(circle at top, #fdfdfd 0, #f5f5f7 55%, #f0f0f5 100%);
+      color: var(--text-main);
     }
+
     body {
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 24px;
+      padding: 32px 16px;
     }
-    .wrap {
-      max-width: 1080px;
+
+    .shell {
       width: 100%;
-      margin: 0 auto;
+      max-width: 960px;
+      background: transparent;
     }
-    .card {
-      background: var(--panel);
-      border-radius: 16px;
-      border: 1px solid var(--border);
-      box-shadow: 0 18px 40px rgba(15,23,42,0.08);
-      padding: 24px 24px 28px;
+
+    .panel {
+      background: var(--card-bg);
+      border-radius: 28px;
+      box-shadow: var(--card-shadow);
+      padding: 32px 40px 28px;
+      border: 1px solid rgba(0, 0, 0, 0.02);
     }
+
     .header {
-      margin-bottom: 24px;
+      text-align: center;
+      margin-bottom: 28px;
     }
-    .header-title {
-      font-size: 22px;
-      font-weight: 600;
-      margin-bottom: 4px;
-    }
-    .header-sub {
-      font-size: 14px;
-      color: var(--muted);
-    }
-    .pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 12px;
-      padding: 4px 10px;
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      background: #f9fafb;
-      color: var(--muted);
-      margin-top: 10px;
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 20px;
-    }
-    @media (max-width: 800px) {
-      .grid {
-        grid-template-columns: minmax(0, 1fr);
-      }
-    }
-    .seat-card {
-      position: relative;
-      border-radius: 16px;
-      border: 1px solid var(--border);
-      background: #ffffff;
-      padding: 20px 18px 18px;
-      cursor: pointer;
-      transition:
-        box-shadow 0.16s ease-out,
-        transform 0.12s ease-out,
-        border-color 0.16s ease-out,
-        background 0.16s ease-out;
-    }
-    .seat-card:hover {
-      box-shadow: 0 18px 40px rgba(15,23,42,0.12);
-      transform: translateY(-1px);
-      border-color: var(--primary-border);
-      background: #f9fafb;
-    }
-    .seat-card h2 {
+
+    .title {
       margin: 0 0 4px;
-      font-size: 18px;
+      font-size: 24px;
       font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 8px;
+      letter-spacing: -0.01em;
     }
-    .seat-card h2 span.icon {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 24px;
-      height: 24px;
-      border-radius: 999px;
-      background: var(--primary-soft);
-      color: var(--primary);
-      font-size: 13px;
-    }
-    .seat-card p {
+
+    .subtitle {
       margin: 0;
       font-size: 14px;
-      color: var(--muted);
+      color: var(--text-muted);
     }
-    .seat-card-footer {
-      margin-top: 16px;
+
+    .choices {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+      margin-top: 4px;
+    }
+
+    @media (max-width: 720px) {
+      .panel {
+        padding: 24px 20px 22px;
+      }
+
+      .choices {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .choice-card {
+      position: relative;
+      border-radius: var(--radius-xxl);
+      background: linear-gradient(145deg, #ffffff, #fafafa);
+      border: 1px solid var(--card-border);
+      padding: 20px 22px;
+      text-align: left;
+      cursor: pointer;
       display: flex;
-      justify-content: space-between;
+      flex-direction: column;
+      justify-content: center;
+      transition:
+        box-shadow 140ms ease,
+        transform 140ms ease,
+        border-color 140ms ease,
+        background 140ms ease;
+      outline: none;
+    }
+
+    .choice-card--primary {
+      background: linear-gradient(140deg, #ffffff, #f7f8ff);
+    }
+
+    .choice-label {
+      font-size: 17px;
+      font-weight: 600;
+      margin-bottom: 4px;
+      display: flex;
       align-items: center;
       gap: 8px;
-      flex-wrap: wrap;
     }
-    .seat-card-meta {
-      font-size: 12px;
-      color: var(--muted);
-    }
-    .btn {
-      appearance: none;
-      border: 1px solid var(--primary);
-      background: var(--primary);
-      color: #ffffff;
+
+    .choice-pill {
+      padding: 2px 8px;
       border-radius: 999px;
-      padding: 8px 16px;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      color: var(--text-muted);
+    }
+
+    .choice-text {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin: 0;
+    }
+
+    .choice-card:hover {
+      box-shadow: 0 22px 40px rgba(0, 0, 0, 0.08);
+      transform: translateY(-1px);
+      border-color: rgba(0, 0, 0, 0.05);
+      background: linear-gradient(145deg, #ffffff, #f8f8fb);
+    }
+
+    .choice-card:focus-visible {
+      border-color: var(--card-border-active);
+      box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.32);
+    }
+
+    .choice-card--primary:hover {
+      border-color: rgba(0, 122, 255, 0.45);
+      background: linear-gradient(145deg, #ffffff, #eef3ff);
+    }
+
+    .footer {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      margin-top: 18px;
+      font-size: 13px;
+    }
+
+    .back-link {
+      color: var(--text-muted);
+      text-decoration: none;
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: 4px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      background: rgba(255, 255, 255, 0.8);
+      backdrop-filter: blur(10px);
       transition:
-        background 0.16s ease-out,
-        border-color 0.16s ease-out,
-        transform 0.08s ease-out,
-        box-shadow 0.12s ease-out;
-      white-space: nowrap;
+        background 140ms ease,
+        border-color 140ms ease,
+        color 140ms ease,
+        transform 140ms ease,
+        box-shadow 140ms ease;
     }
-    .btn:hover {
-      background: #020617;
-      border-color: #020617;
-      transform: translateY(-0.5px);
-      box-shadow: 0 10px 30px rgba(15,23,42,0.35);
+
+    .back-link svg {
+      width: 13px;
+      height: 13px;
     }
-    .btn.secondary {
+
+    .back-link:hover {
       background: #ffffff;
-      color: var(--primary);
-      border-color: var(--border);
-      box-shadow: none;
-    }
-    .btn.secondary:hover {
-      border-color: var(--primary-border);
-      background: #f9fafb;
-      box-shadow: 0 10px 26px rgba(15,23,42,0.08);
-    }
-    .footer-row {
-      margin-top: 20px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-    .footer-note {
-      font-size: 12px;
-      color: var(--muted);
-    }
-    .link {
-      font-size: 13px;
-      color: var(--primary);
-      text-decoration: none;
-    }
-    .link:hover {
-      text-decoration: underline;
+      border-color: rgba(0, 0, 0, 0.14);
+      color: var(--text-main);
+      transform: translateY(-0.5px);
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.06);
     }
   </style>
 </head>
 <body>
-<div class="wrap" id="root" data-show-id="${showId}">
-  <div class="card">
-    <div class="header">
-      <div class="header-title">How do you want to sell seats for this event?</div>
-      <div class="header-sub">
-        Choose between simple unallocated seating or a full seat map with specific seats.
+  <div class="shell">
+    <div class="panel">
+      <div class="header">
+        <h1 class="title">How do you want to sell seats for this event?</h1>
+        <p class="subtitle">Choose a simple unallocated layout or a full seat map.</p>
       </div>
-      <div class="pill">
-        <span>Step 1 of 4</span>
-        <span aria-hidden="true">•</span>
-        <span>Seating style</span>
-      </div>
-    </div>
 
-    <div class="grid">
-      <!-- Unallocated -->
-      <div class="seat-card" id="card-unallocated">
-        <h2>
-          <span class="icon">GA</span>
-          Unallocated Seating
-        </h2>
-        <p>
-          Sell tickets without a seat map. Perfect for comedy clubs and gigs where
-          customers can sit anywhere.
-        </p>
-        <div class="seat-card-footer">
-          <div class="seat-card-meta">
-            No seat selection • Quick to set up • Best for simple layouts
+      <div class="choices">
+        <button class="choice-card" data-kind="unallocated">
+          <div class="choice-label">
+            Unallocated seating
+            <span class="choice-pill">Recommended for clubs</span>
           </div>
-          <button class="btn secondary" id="btn-unallocated">
-            Select
-          </button>
-        </div>
-      </div>
+          <p class="choice-text">
+            Sell tickets without assigning specific seats. Guests sit anywhere.
+          </p>
+        </button>
 
-      <!-- Allocated -->
-      <div class="seat-card" id="card-allocated">
-        <h2>
-          <span class="icon">🎟</span>
-          Allocated Seating
-        </h2>
-        <p>
-          Create or reuse a detailed seating map. Let customers pick exact seats
-          and assign them to different ticket types and prices.
-        </p>
-        <div class="seat-card-footer">
-          <div class="seat-card-meta">
-            Seat picker • Zones & blocks • Best for theatres & mixed layouts
+        <button class="choice-card choice-card--primary" data-kind="allocated">
+          <div class="choice-label">
+            Allocated seating
+            <span class="choice-pill">Seat map</span>
           </div>
-          <button class="btn" id="btn-allocated">
-            Select
-          </button>
-        </div>
+          <p class="choice-text">
+            Build a seating plan so customers can choose exact seats.
+          </p>
+        </button>
       </div>
-    </div>
 
-    <div class="footer-row">
-      <div class="footer-note">
-        You can change seating style later before going on sale.
+      <div class="footer">
+        <a class="back-link" href="/admin/ui/shows/${encodeURIComponent(
+          showId
+        )}/edit">
+          <svg viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M11.3 4.3a1 1 0 0 1 0 1.4L8.41 8.59 14 9a1 1 0 1 1-.07 2L8.4 10.99l2.9 2.9a1 1 0 0 1-1.42 1.42l-4.24-4.25a1.25 1.25 0 0 1 0-1.77l4.24-4.24a1 1 0 0 1 1.42 0z" fill="currentColor" />
+          </svg>
+          Back to event details
+        </a>
       </div>
-      <a class="link" id="back-to-show">Back to event details</a>
     </div>
   </div>
-</div>
 
-<script>
-(function() {
-  var root = document.getElementById('root');
-  if (!root) return;
-  var showId = root.getAttribute('data-show-id') || '';
+  <script>
+    (function () {
+      const showId = ${JSON.stringify(showId)};
+      const cards = document.querySelectorAll(".choice-card");
 
-  function go(path) {
-    if (!showId) return;
-    window.location.href = path.replace(':showId', encodeURIComponent(showId));
-  }
+      function go(kind) {
+        if (!showId) return;
+        const base = "/admin/seating";
+        if (kind === "unallocated") {
+          window.location.href = base + "/unallocated/" + encodeURIComponent(showId);
+        } else if (kind === "allocated") {
+          window.location.href = base + "/layout-wizard/" + encodeURIComponent(showId);
+        }
+      }
 
-  var cardUnalloc = document.getElementById('card-unallocated');
-  var cardAlloc   = document.getElementById('card-allocated');
-  var btnUnalloc  = document.getElementById('btn-unallocated');
-  var btnAlloc    = document.getElementById('btn-allocated');
-  var backLink    = document.getElementById('back-to-show');
+      cards.forEach(function (card) {
+        card.addEventListener("click", function () {
+          const kind = card.getAttribute("data-kind");
+          go(kind);
+        });
 
-  if (cardUnalloc) {
-    cardUnalloc.addEventListener('click', function() {
-      go('/admin/seating/unallocated/:showId');
-    });
-  }
-  if (btnUnalloc) {
-    btnUnalloc.addEventListener('click', function(ev) {
-      ev.stopPropagation();
-      go('/admin/seating/unallocated/:showId');
-    });
-  }
-
-  if (cardAlloc) {
-    cardAlloc.addEventListener('click', function() {
-      go('/admin/seating/layout-wizard/:showId');
-    });
-  }
-  if (btnAlloc) {
-    btnAlloc.addEventListener('click', function(ev) {
-      ev.stopPropagation();
-      go('/admin/seating/layout-wizard/:showId');
-    });
-  }
-
-  if (backLink) {
-    backLink.addEventListener('click', function(ev) {
-      ev.preventDefault();
-      if (!showId) return;
-      // back to the standard admin UI edit screen for this show
-      window.location.href = '/admin/ui/shows/' + encodeURIComponent(showId) + '/edit';
-    });
-  }
-})();
-</script>
+        card.addEventListener("keyup", function (ev) {
+          if (ev.key === "Enter" || ev.key === " ") {
+            ev.preventDefault();
+            const kind = card.getAttribute("data-kind");
+            go(kind);
+          }
+        });
+      });
+    })();
+  </script>
 </body>
-</html>`);
-  }
-);
+</html>`;
+
+  res.type("html").send(html);
+});
 
 /**
- * Minimal stubs so clicks don't 404.
- * We will replace these with the full flows next.
+ * Stub pages so the choices work immediately.
+ * We'll replace these with the real wizard/builder soon.
  */
-router.get(
-  "/seating/unallocated/:showId",
-  requireAdminOrOrganiser,
-  (req, res) => {
-    const { showId } = req.params;
-    res
-      .type("html")
-      .send(`<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>Unallocated seating – TickIn</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-</head>
-<body style="font-family:system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin:24px;">
-  <h1>Unallocated seating – coming next</h1>
-  <p>This is a placeholder for the unallocated seating flow for show <code>${showId}</code>.</p>
-  <p>Next step: this page will become the "Add ticket types for unallocated events" screen.</p>
-  <p><a href="/admin/ui/shows/${showId}/tickets">Go to tickets page for this show</a></p>
-</body>
-</html>`);
-  }
-);
 
-router.get(
-  "/seating/layout-wizard/:showId",
-  requireAdminOrOrganiser,
-  (req, res) => {
-    const { showId } = req.params;
-    res
-      .type("html")
-      .send(`<!doctype html>
+// Unallocated seating – stub
+router.get("/seating/unallocated/:showId", (req, res) => {
+  const { showId } = req.params;
+  res.type("html").send(`<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>Layout wizard – TickIn</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="UTF-8" />
+  <title>Unallocated seating (stub)</title>
 </head>
-<body style="font-family:system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin:24px;">
-  <h1>Layout wizard – coming next</h1>
-  <p>This will become the full layout-type selection page (Tables & Chairs, Sections & Rows, Mixed Seating, Blank Canvas) for show <code>${showId}</code>.</p>
-  <p>For now it's just a stub so your navigation works.</p>
-  <p><a href="/admin/seating-choice/${showId}">Back to seating choice</a></p>
+<body>
+  <h1>Unallocated seating for show ${showId}</h1>
+  <p>This is a placeholder. Here we'll build the unallocated ticket-type flow.</p>
+  <p><a href="/admin/ui/shows/${encodeURIComponent(
+    showId
+  )}/tickets">Back to Tickets page</a></p>
 </body>
 </html>`);
-  }
-);
+});
+
+// Layout wizard – stub
+router.get("/seating/layout-wizard/:showId", (req, res) => {
+  const { showId } = req.params;
+  res.type("html").send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Layout wizard (stub)</title>
+</head>
+<body>
+  <h1>Layout wizard for show ${showId}</h1>
+  <p>This is a placeholder. Next step will be the 4-box layout-type page (Tables & Chairs, Sections & Rows, Mixed, Blank canvas).</p>
+  <p><a href="/admin/seating-choice/${encodeURIComponent(
+    showId
+  )}">Back to seating choice</a></p>
+</body>
+</html>`);
+});
 
 export default router;
