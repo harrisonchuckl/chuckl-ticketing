@@ -333,6 +333,7 @@ function renderSeatingChoicePage(showId: string) {
 
 /**
  * Step 2 – layout type wizard (Tables & Chairs, Sections & Rows, Mixed, Blank)
+ *  >>> UPDATED to be cleaner, more modern, bigger icons/titles, less text.
  */
 function renderLayoutWizardPage(showId: string) {
   const backUrl = `/admin/seating-choice/${encodeURIComponent(showId)}`;
@@ -353,8 +354,6 @@ function renderLayoutWizardPage(showId: string) {
       --card-bg: #ffffff;
       --border-subtle: #e2e4ea;
       --accent: #2563eb;
-      --accent-soft: rgba(37, 99, 235, 0.08);
-      --accent-ring: rgba(37, 99, 235, 0.45);
       --text-main: #0f172a;
       --text-muted: #6b7280;
       --shadow-soft: 0 18px 45px rgba(15, 23, 42, 0.08);
@@ -510,7 +509,9 @@ function renderLayoutWizardPage(showId: string) {
       transition: all 150ms ease-out;
       display: flex;
       flex-direction: column;
-      min-height: 140px;
+      align-items: flex-start;
+      justify-content: space-between;
+      aspect-ratio: 1 / 1; /* more square */
     }
 
     .layout-card:hover {
@@ -527,42 +528,44 @@ function renderLayoutWizardPage(showId: string) {
     .layout-header {
       display: flex;
       align-items: center;
-      gap: 12px;
-      margin-bottom: 6px;
+      gap: 14px;
+      width: 100%;
     }
 
     .layout-icon {
-      width: 40px;
-      height: 40px;
-      border-radius: 14px;
+      width: 52px;
+      height: 52px;
+      border-radius: 18px;
       background: radial-gradient(circle at 30% 20%, #eff6ff 0, #dbeafe 40%, #bfdbfe 100%);
       display: flex;
       align-items: center;
       justify-content: center;
       position: relative;
       overflow: hidden;
+      flex-shrink: 0;
     }
 
     .icon-dot, .icon-line, .icon-block {
       position: absolute;
       border-radius: 999px;
-      background: rgba(15,23,42,0.85);
+      background: rgba(15,23,42,0.9);
     }
 
-    .icon-dot { width: 5px; height: 5px; }
+    .icon-dot { width: 6px; height: 6px; }
     .icon-line { height: 3px; border-radius: 999px; }
-    .icon-block { border-radius: 6px; }
+    .icon-block { border-radius: 7px; }
 
     .layout-title {
-      font-size: 15px;
+      font-size: 17px;
       font-weight: 600;
       letter-spacing: -0.02em;
+      margin-bottom: 2px;
     }
 
     .layout-text {
-      font-size: 13px;
+      font-size: 12px;
       color: var(--text-muted);
-      max-width: 320px;
+      max-width: 260px;
     }
 
     .layout-meta {
@@ -613,7 +616,7 @@ function renderLayoutWizardPage(showId: string) {
             <span>Step 2 of 4 · Layout type</span>
           </div>
           <h1>What kind of seating layout do you need?</h1>
-          <p class="subtitle">Pick the layout that best matches this venue. You can refine rows, tables and seats in the next step.</p>
+          <p class="subtitle">Pick the layout that best matches this room. You’ll fine-tune it in the builder.</p>
         </div>
         <a class="back-link" href="${backUrl}">
           <span class="back-chevron">←</span>
@@ -628,22 +631,22 @@ function renderLayoutWizardPage(showId: string) {
             <div class="layout-card primary">
               <div class="layout-header">
                 <div class="layout-icon">
-                  <div class="icon-dot" style="top: 9px; left: 10px;"></div>
-                  <div class="icon-dot" style="top: 9px; right: 10px;"></div>
-                  <div class="icon-dot" style="bottom: 9px; left: 10px;"></div>
-                  <div class="icon-dot" style="bottom: 9px; right: 10px;"></div>
-                  <div class="icon-line" style="width: 70%; top: 50%; left: 15%; transform: translateY(-50%); background: rgba(30,64,175,0.8);"></div>
+                  <div class="icon-dot" style="top: 11px; left: 12px;"></div>
+                  <div class="icon-dot" style="top: 11px; right: 12px;"></div>
+                  <div class="icon-dot" style="bottom: 11px; left: 12px;"></div>
+                  <div class="icon-dot" style="bottom: 11px; right: 12px;"></div>
+                  <div class="icon-line" style="width: 70%; top: 50%; left: 15%; transform: translateY(-50%); background: rgba(30,64,175,0.9);"></div>
                 </div>
                 <div>
                   <div class="layout-title">Tables & chairs</div>
                   <div class="layout-text">
-                    For cabaret-style rooms. Drop in round or rectangular tables and auto-generate seats around them.
+                    Cabaret-style with round or long tables and seats auto-generated around them.
                   </div>
                 </div>
               </div>
               <div class="layout-meta">
-                <span class="meta-chip">Ideal for clubs</span>
-                <span class="meta-chip">Round & long tables</span>
+                <span class="meta-chip">Comedy rooms</span>
+                <span class="meta-chip">Drinks & tables</span>
               </div>
             </div>
           </a>
@@ -653,20 +656,20 @@ function renderLayoutWizardPage(showId: string) {
             <div class="layout-card">
               <div class="layout-header">
                 <div class="layout-icon">
-                  <div class="icon-line" style="width: 80%; top: 10px; left: 10%; background: rgba(15,23,42,0.85);"></div>
-                  <div class="icon-line" style="width: 80%; top: 18px; left: 10%; background: rgba(15,23,42,0.8);"></div>
-                  <div class="icon-line" style="width: 80%; top: 26px; left: 10%; background: rgba(15,23,42,0.75);"></div>
+                  <div class="icon-line" style="width: 80%; top: 14px; left: 10%; background: rgba(15,23,42,0.9);"></div>
+                  <div class="icon-line" style="width: 80%; top: 22px; left: 10%; background: rgba(15,23,42,0.85);"></div>
+                  <div class="icon-line" style="width: 80%; top: 30px; left: 10%; background: rgba(15,23,42,0.8);"></div>
                 </div>
                 <div>
                   <div class="layout-title">Sections & rows</div>
                   <div class="layout-text">
-                    Classic theatre layout with blocks, aisles and rows. Perfect for fixed-seating auditoriums.
+                    Classic theatre blocks with aisles and numbered seats.
                   </div>
                 </div>
               </div>
               <div class="layout-meta">
-                <span class="meta-chip">Stalls / Circle / Balcony</span>
-                <span class="meta-chip">Seat numbers</span>
+                <span class="meta-chip">Stalls / circle</span>
+                <span class="meta-chip">Fixed seating</span>
               </div>
             </div>
           </a>
@@ -676,21 +679,21 @@ function renderLayoutWizardPage(showId: string) {
             <div class="layout-card">
               <div class="layout-header">
                 <div class="layout-icon">
-                  <div class="icon-dot" style="top: 9px; left: 9px;"></div>
-                  <div class="icon-dot" style="top: 9px; right: 9px;"></div>
-                  <div class="icon-line" style="width: 70%; bottom: 8px; left: 15%; background: rgba(15,23,42,0.82);"></div>
-                  <div class="icon-block" style="width: 16px; height: 10px; top: 15px; left: 12px; background: rgba(15,23,42,0.78); border-radius: 4px;"></div>
-                  <div class="icon-block" style="width: 16px; height: 10px; top: 15px; right: 12px; background: rgba(15,23,42,0.74); border-radius: 4px;"></div>
+                  <div class="icon-dot" style="top: 12px; left: 10px;"></div>
+                  <div class="icon-dot" style="top: 12px; right: 10px;"></div>
+                  <div class="icon-line" style="width: 70%; bottom: 11px; left: 15%; background: rgba(15,23,42,0.9);"></div>
+                  <div class="icon-block" style="width: 18px; height: 11px; top: 18px; left: 11px; background: rgba(15,23,42,0.86); border-radius: 5px;"></div>
+                  <div class="icon-block" style="width: 18px; height: 11px; top: 18px; right: 11px; background: rgba(15,23,42,0.78); border-radius: 5px;"></div>
                 </div>
                 <div>
                   <div class="layout-title">Mixed seating</div>
                   <div class="layout-text">
-                    Combine tables, rows and standing areas in one flexible layout for multi-use spaces.
+                    Blend tables, rows and standing zones in one flexible map.
                   </div>
                 </div>
               </div>
               <div class="layout-meta">
-                <span class="meta-chip">Hybrid rooms</span>
+                <span class="meta-chip">Hybrid spaces</span>
                 <span class="meta-chip">Standing + seated</span>
               </div>
             </div>
@@ -701,18 +704,18 @@ function renderLayoutWizardPage(showId: string) {
             <div class="layout-card">
               <div class="layout-header">
                 <div class="layout-icon">
-                  <div class="icon-block" style="width: 24px; height: 14px; top: 9px; left: 8px; background: rgba(15,23,42,0.85);"></div>
-                  <div class="icon-block" style="width: 14px; height: 10px; bottom: 9px; right: 8px; background: rgba(15,23,42,0.7);"></div>
+                  <div class="icon-block" style="width: 26px; height: 16px; top: 11px; left: 9px; background: rgba(15,23,42,0.9); border-radius: 6px;"></div>
+                  <div class="icon-block" style="width: 16px; height: 11px; bottom: 10px; right: 9px; background: rgba(15,23,42,0.72); border-radius: 5px;"></div>
                 </div>
                 <div>
                   <div class="layout-title">Blank canvas</div>
                   <div class="layout-text">
-                    Start from an empty room and add exactly what you need. The most flexible option.
+                    Start from an empty room and design exactly what you want.
                   </div>
                 </div>
               </div>
               <div class="layout-meta">
-                <span class="meta-chip">Design from scratch</span>
+                <span class="meta-chip">Full control</span>
                 <span class="meta-chip">Any configuration</span>
               </div>
             </div>
@@ -720,7 +723,7 @@ function renderLayoutWizardPage(showId: string) {
         </div>
 
         <p class="footer-note">
-          Next step: layout builder – you’ll place tables, rows and seats on a full canvas, then assign ticket types to each area.
+          Next: the full-screen builder where you’ll place seats, then assign ticket types and prices.
         </p>
       </div>
     </div>
