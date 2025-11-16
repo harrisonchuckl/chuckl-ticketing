@@ -3,51 +3,39 @@ import { Router } from "express";
 
 const router = Router();
 
-/**
- * Full-screen seating builder shell.
- *
- * Route: GET /admin/seating/builder/:showId
- *
- * Query param: ?layout=tables|sections|mixed|blank
- *
- * - If layout=blank → go straight to empty canvas.
- * - Otherwise → show a centred config panel (tables/rows/mixed).
- *   When "Generate layout" is clicked we currently:
- *     - Log the chosen values in the console
- *     - Hide the overlay and reveal the canvas
- *
- * Next step after this shell is in place will be:
- * - Actually generating seat/table/section objects into the canvas
- *   and then persisting them via your existing seatmap APIs.
- */
+type LayoutKey = "tables" | "sections" | "mixed" | "blank";
 
-router.get("/seating/builder/:showId", (req, res) => {
-  const { showId } = req.params;
-  const layout = (req.query.layout as string) || "tables";
+function normaliseLayout(raw: string | undefined): LayoutKey {
+  if (raw === "sections" || raw === "mixed" || raw === "blank") return raw;
+  return "tables";
+}
 
-  res.type("html").send(`<!doctype html>
+router.get("/builder/preview/:showId", (req, res) => {
+  const showId = req.params.showId;
+  const layout = normaliseLayout(req.query.layout as string | undefined);
+
+  const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Seat builder – Chuckl. Admin</title>
+  <title>Seat map builder – TickIn</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     :root {
-      --bg: #f5f7ff;
-      --bg-soft: #edf1ff;
-      --panel: #ffffff;
-      --border-subtle: #dde4ff;
-      --border-strong: #4b66ff;
-      --text-main: #111827;
-      --text-muted: #6b7280;
+      --bg: #f3f5fb;
+      --card-bg: #ffffff;
       --accent: #2563eb;
-      --accent-soft: rgba(37, 99, 235, 0.08);
-      --danger: #ef4444;
-      --radius-lg: 20px;
-      --radius-md: 12px;
-      --shadow-soft: 0 18px 45px rgba(15, 23, 42, 0.10);
-      --shadow-subtle: 0 12px 30px rgba(15, 23, 42, 0.06);
-      --grid-line: rgba(148, 163, 184, 0.15);
+      --accent-soft: rgba(37, 99, 235, 0.12);
+      --accent-strong: rgba(37, 99, 235, 0.18);
+      --border-subtle: rgba(15, 23, 42, 0.06);
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --pill-bg: #e2e8f0;
+      --pill-text: #475569;
+      --radius-lg: 22px;
+      --radius-xl: 26px;
+      --shadow-soft: 0 18px 45px rgba(15, 23, 42, 0.12);
+      --shadow-card: 0 12px 30px rgba(15, 23, 42, 0.08);
     }
 
     * {
@@ -60,153 +48,244 @@ router.get("/seating/builder/:showId", (req, res) => {
       height: 100%;
       width: 100%;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
-                   "Helvetica Neue", Arial, sans-serif;
-      background: radial-gradient(circle at top left, #eef2ff 0, #f5f7ff 40%, #f9fafb 100%);
+        "Segoe UI", sans-serif;
       color: var(--text-main);
+      background: radial-gradient(circle at top left, #e0ecff, #f6f7fc 44%, #eef1ff 85%);
     }
 
     body {
       display: flex;
-      flex-direction: column;
+      align-items: stretch;
+      justify-content: center;
     }
 
     .builder-root {
+      width: 100%;
+      max-width: 1440px;
+      margin: 18px auto;
+      padding: 16px 20px 20px;
       display: flex;
       flex-direction: column;
-      height: 100%;
-      width: 100%;
+      gap: 16px;
+      border-radius: 28px;
+      background: linear-gradient(145deg, #f9f9ff, #f2f5ff);
+      box-shadow: var(--shadow-soft);
     }
 
-    /* Top bar */
+    /* Header / steps */
 
-    .builder-topbar {
-      height: 56px;
-      padding: 0 20px;
+    .builder-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.25);
-      background: linear-gradient(to bottom, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.96));
-      backdrop-filter: blur(10px);
-      position: relative;
-      z-index: 10;
+      gap: 16px;
     }
 
-    .topbar-left {
+    .header-left {
       display: flex;
-      align-items: center;
-      gap: 10px;
+      flex-direction: column;
+      gap: 6px;
     }
 
-    .topbar-pill {
+    .step-pill {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      padding: 4px 10px;
+      padding: 3px 10px;
       border-radius: 999px;
-      background: rgba(37, 99, 235, 0.06);
       font-size: 11px;
-      font-weight: 500;
-      color: var(--accent);
-    }
-
-    .topbar-pill-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 999px;
-      background: #22c55e;
-      box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.2);
-    }
-
-    .topbar-title {
-      font-size: 14px;
-      font-weight: 600;
-      letter-spacing: 0.01em;
-    }
-
-    .topbar-sub {
-      font-size: 12px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      background: rgba(15, 23, 42, 0.03);
       color: var(--text-muted);
     }
 
-    .topbar-right {
+    .step-pill span.step-number {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 999px;
+      background: #0f172a;
+      color: #fff;
+      font-weight: 600;
+      font-size: 10px;
+    }
+
+    .builder-title {
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    .builder-subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .header-right {
       display: flex;
       align-items: center;
       gap: 10px;
     }
 
-    .topbar-link {
-      border: 0;
-      background: transparent;
-      font-size: 12px;
-      color: var(--text-muted);
-      cursor: pointer;
-      padding: 6px 8px;
+    .header-chip {
+      font-size: 11px;
+      padding: 5px 10px;
       border-radius: 999px;
+      background: rgba(148, 163, 184, 0.15);
+      color: #475569;
+    }
+
+    .header-close {
+      border-radius: 999px;
+      border: 0;
+      background: white;
+      width: 34px;
+      height: 34px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 16px rgba(15, 23, 42, 0.1);
+      cursor: pointer;
+    }
+
+    .header-close span {
+      font-size: 17px;
+      line-height: 1;
+    }
+
+    .header-close:hover {
+      transform: translateY(-1px);
+    }
+
+    /* Shell layout */
+
+    .builder-shell {
+      display: grid;
+      grid-template-columns: 220px minmax(0, 1fr) 260px;
+      gap: 16px;
+      height: calc(100vh - 120px);
+      min-height: 520px;
+    }
+
+    .panel {
+      border-radius: var(--radius-lg);
+      background: rgba(255, 255, 255, 0.92);
+      box-shadow: var(--shadow-card);
+      padding: 16px 16px 14px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .panel-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+
+    /* Left tools */
+
+    .tool-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .tool-button {
+      border-radius: 999px;
+      border: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 10px;
+      font-size: 12px;
+      background: rgba(148, 163, 184, 0.06);
+      color: var(--text-main);
+      cursor: default;
+    }
+
+    .tool-main {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .tool-emoji {
+      width: 24px;
+      height: 24px;
+      border-radius: 999px;
+      background: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
+      font-size: 14px;
+    }
+
+    .tool-label {
+      font-weight: 500;
+      letter-spacing: -0.01em;
+    }
+
+    .tool-meta {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    .tool-badge {
+      font-size: 10px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: rgba(37, 99, 235, 0.06);
+      color: var(--accent);
+    }
+
+    /* Canvas */
+
+    .canvas-inner {
+      position: relative;
+      flex: 1;
+      border-radius: 18px;
+      background-image: linear-gradient(
+          to right,
+          rgba(148, 163, 184, 0.16) 1px,
+          transparent 1px
+        ),
+        linear-gradient(
+          to bottom,
+          rgba(148, 163, 184, 0.16) 1px,
+          transparent 1px
+        );
+      background-size: 32px 32px;
+      background-position: center;
+      overflow: hidden;
+    }
+
+    .canvas-overlay-label {
+      position: absolute;
+      top: 10px;
+      left: 12px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.9);
+      color: white;
+      font-size: 11px;
       display: inline-flex;
       align-items: center;
       gap: 6px;
     }
 
-    .topbar-link:hover {
-      background: rgba(148, 163, 184, 0.12);
-      color: var(--text-main);
-    }
-
-    .primary-btn {
+    .canvas-overlay-label span.dot {
+      width: 6px;
+      height: 6px;
       border-radius: 999px;
-      border: none;
-      background: var(--accent);
-      color: #fff;
-      font-size: 13px;
-      font-weight: 600;
-      padding: 8px 16px;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      cursor: pointer;
-      box-shadow: 0 12px 24px rgba(37, 99, 235, 0.28);
-      transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.08s ease;
-    }
-
-    .primary-btn:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 16px 32px rgba(37, 99, 235, 0.32);
-      background: #1d4ed8;
-    }
-
-    .primary-btn:active {
-      transform: translateY(0);
-      box-shadow: 0 6px 16px rgba(37, 99, 235, 0.3);
-    }
-
-    /* Main layout */
-
-    .builder-main {
-      flex: 1;
-      display: flex;
-      min-height: 0;
-    }
-
-    .builder-canvas-wrap {
-      flex: 1;
-      position: relative;
-      padding: 16px 0 16px 16px;
-      min-width: 0;
-    }
-
-    .builder-canvas {
-      height: 100%;
-      width: 100%;
-      border-radius: 24px;
-      background:
-        linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
-        linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
-      background-size: 32px 32px;
-      background-color: #f9fafb;
-      box-shadow: var(--shadow-soft);
-      position: relative;
-      overflow: hidden;
+      background: #22c55e;
     }
 
     .canvas-placeholder {
@@ -216,201 +295,235 @@ router.get("/seating/builder/:showId", (req, res) => {
       align-items: center;
       justify-content: center;
       pointer-events: none;
-      color: var(--text-muted);
-      font-size: 13px;
     }
 
     .canvas-placeholder-inner {
-      padding: 12px 16px;
-      border-radius: 999px;
-      background: rgba(15, 23, 42, 0.78);
-      color: #e5e7eb;
-      backdrop-filter: blur(8px);
-      box-shadow: 0 18px 45px rgba(15, 23, 42, 0.45);
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
+      padding: 14px 18px;
+      border-radius: 18px;
+      background: rgba(248, 250, 252, 0.96);
+      box-shadow: 0 14px 36px rgba(15, 23, 42, 0.18);
+      text-align: left;
+      max-width: 360px;
     }
 
-    .canvas-pill-key {
-      padding: 3px 7px;
-      border-radius: 6px;
-      border: 1px solid rgba(148, 163, 184, 0.6);
-      background: rgba(15, 23, 42, 0.7);
-      font-size: 11px;
+    .canvas-placeholder-inner h2 {
+      font-size: 15px;
+      margin: 0 0 4px;
     }
 
-    /* Right sidebar */
-
-    .builder-sidebar {
-      width: 260px;
-      border-left: 1px solid rgba(148, 163, 184, 0.25);
-      background: radial-gradient(circle at top, #eef2ff 0, #f9fafb 40%, #ffffff 100%);
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-
-    .sidebar-section {
-      background: rgba(255, 255, 255, 0.9);
-      border-radius: 20px;
-      padding: 12px 12px 10px;
-      box-shadow: var(--shadow-subtle);
-      border: 1px solid rgba(209, 213, 219, 0.6);
-    }
-
-    .sidebar-title-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 6px;
-    }
-
-    .sidebar-title {
+    .canvas-placeholder-inner p {
       font-size: 12px;
-      font-weight: 600;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      color: #6b7280;
-    }
-
-    .sidebar-badge {
-      padding: 2px 6px;
-      border-radius: 999px;
-      font-size: 10px;
-      background: rgba(37, 99, 235, 0.06);
-      color: var(--accent);
-    }
-
-    .sidebar-body {
-      font-size: 12px;
+      margin: 0 0 10px;
       color: var(--text-muted);
-      line-height: 1.4;
     }
 
-    .tool-row {
+    .canvas-placeholder-pills {
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
-      margin-top: 8px;
     }
 
-    .tool-pill {
-      padding: 4px 9px;
+    .canvas-placeholder-pill {
+      padding: 4px 8px;
       border-radius: 999px;
-      border: 1px solid rgba(148, 163, 184, 0.5);
       font-size: 11px;
-      color: #4b5563;
-      background: rgba(249, 250, 251, 0.9);
+      background: rgba(148, 163, 184, 0.16);
+      color: #475569;
+    }
+
+    /* Generated layout preview */
+
+    .layout-preview {
+      position: absolute;
+      inset: 54px 28px 24px 28px;
+      display: flex;
+      flex-wrap: wrap;
+      align-content: flex-start;
+      gap: 16px;
+      overflow: auto;
+      padding: 4px;
+    }
+
+    .layout-group-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .table-group,
+    .row-group,
+    .mixed-group {
       display: inline-flex;
+      flex-direction: column;
       align-items: center;
       gap: 6px;
-      cursor: default;
+      padding: 8px 10px;
+      border-radius: 14px;
+      background: rgba(15, 23, 42, 0.03);
+      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.10);
     }
 
-    .tool-dot {
-      width: 8px;
-      height: 8px;
+    .seats-row {
+      display: flex;
+      gap: 4px;
+    }
+
+    .seat-dot {
+      width: 10px;
+      height: 10px;
       border-radius: 999px;
-      background: rgba(37, 99, 235, 0.18);
-      border: 1px solid var(--accent);
+      background: white;
+      box-shadow: 0 2px 4px rgba(15, 23, 42, 0.25);
     }
 
-    /* Overlay config panel */
+    .seat-dot--primary {
+      background: var(--accent);
+    }
 
-    .overlay {
-      position: absolute;
+    /* Right summary */
+
+    .summary-body {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      flex: 1;
+    }
+
+    .summary-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      padding: 6px 8px;
+      border-radius: 10px;
+      background: rgba(148, 163, 184, 0.07);
+    }
+
+    .summary-row span.label {
+      color: var(--text-muted);
+    }
+
+    .summary-row span.value {
+      font-weight: 500;
+    }
+
+    .summary-note {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+
+    .summary-footer {
+      margin-top: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .primary-btn {
+      border-radius: 999px;
+      border: 0;
+      padding: 9px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      background: var(--accent);
+      color: white;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: pointer;
+      box-shadow: 0 10px 24px var(--accent-strong);
+    }
+
+    .primary-btn:hover {
+      filter: brightness(1.03);
+      transform: translateY(-0.5px);
+    }
+
+    .ghost-btn {
+      border-radius: 999px;
+      border: 0;
+      padding: 8px 12px;
+      font-size: 12px;
+      background: rgba(15, 23, 42, 0.03);
+      color: var(--text-muted);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+
+    /* Config overlay (Step 3) */
+
+    .config-overlay {
+      position: fixed;
       inset: 0;
       display: flex;
       align-items: center;
       justify-content: center;
-      background: radial-gradient(circle at top, rgba(15, 23, 42, 0.16), rgba(15, 23, 42, 0.55));
-      z-index: 20;
+      background: radial-gradient(circle at top, rgba(15, 23, 42, 0.30), rgba(15, 23, 42, 0.58));
+      z-index: 10;
     }
 
-    .overlay-inner {
-      width: 460px;
-      max-width: calc(100% - 40px);
-      background: linear-gradient(to bottom right, #ffffff, #eef2ff);
-      border-radius: 24px;
-      box-shadow: 0 26px 70px rgba(15, 23, 42, 0.55);
-      border: 1px solid rgba(129, 140, 248, 0.5);
-      padding: 20px 22px 18px;
+    .config-card {
+      width: 480px;
+      max-width: 92vw;
+      border-radius: var(--radius-xl);
+      background: rgba(248, 250, 252, 0.98);
+      box-shadow: 0 26px 60px rgba(15, 23, 42, 0.4);
+      padding: 18px 20px 16px;
       display: flex;
       flex-direction: column;
       gap: 14px;
     }
 
-    .overlay-header {
+    .config-header {
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      gap: 12px;
+      align-items: flex-start;
+      gap: 10px;
     }
 
-    .overlay-title-block {
+    .config-title-block {
       display: flex;
       flex-direction: column;
       gap: 3px;
     }
 
-    .overlay-kicker {
+    .config-caption {
       font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 0.12em;
-      color: #6b7280;
+      color: rgba(148, 163, 184, 1);
     }
 
-    .overlay-title {
+    .config-heading {
       font-size: 18px;
-      font-weight: 650;
-      letter-spacing: 0.01em;
-      display: flex;
-      align-items: center;
-      gap: 8px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
     }
 
-    .overlay-icon {
-      width: 28px;
-      height: 28px;
-      border-radius: 10px;
-      background: radial-gradient(circle at top left, #e0ecff, #c7d2fe);
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      color: #1d4ed8;
-      box-shadow: 0 10px 22px rgba(79, 70, 229, 0.35);
-    }
-
-    .overlay-sub {
+    .config-subtitle {
       font-size: 12px;
-      color: #6b7280;
-      max-width: 320px;
+      color: var(--text-muted);
+      max-width: 280px;
     }
 
-    .overlay-close {
+    .config-chip {
+      padding: 5px 10px;
       border-radius: 999px;
-      border: none;
-      background: rgba(15, 23, 42, 0.06);
-      width: 28px;
-      height: 28px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      color: #4b5563;
+      font-size: 11px;
+      background: rgba(148, 163, 184, 0.14);
+      color: #475569;
     }
 
-    .overlay-close:hover {
-      background: rgba(15, 23, 42, 0.12);
-    }
-
-    .overlay-grid {
+    .config-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 10px 14px;
-      margin-top: 2px;
+      margin-top: 4px;
     }
 
     .field {
@@ -420,562 +533,659 @@ router.get("/seating/builder/:showId", (req, res) => {
       font-size: 12px;
     }
 
-    .field label {
-      color: #4b5563;
-      font-weight: 500;
+    .field-label-row {
       display: flex;
+      align-items: center;
       justify-content: space-between;
-      align-items: baseline;
-      gap: 8px;
+      gap: 4px;
+    }
+
+    .field-label {
+      font-weight: 500;
     }
 
     .field-hint {
-      font-weight: 400;
-      color: #9ca3af;
-      font-size: 11px;
+      font-size: 10px;
+      color: var(--text-muted);
     }
 
     .field input[type="number"] {
-      border-radius: 10px;
-      border: 1px solid rgba(148, 163, 184, 0.9);
+      border-radius: 11px;
+      border: 1px solid rgba(148, 163, 184, 0.7);
       padding: 7px 9px;
-      font-size: 12px;
+      font-size: 13px;
       font-family: inherit;
       outline: none;
-      width: 100%;
-      background: rgba(248, 250, 252, 0.9);
+      background: #ffffff;
     }
 
     .field input[type="number"]:focus {
       border-color: var(--accent);
       box-shadow: 0 0 0 1px var(--accent-soft);
-      background: #ffffff;
     }
 
-    .overlay-footer {
+    .config-footer {
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      gap: 10px;
+      justify-content: space-between;
+      gap: 16px;
       margin-top: 6px;
     }
 
-    .overlay-meta {
-      font-size: 11px;
-      color: #9ca3af;
-      display: flex;
-      align-items: center;
-      gap: 6px;
+    .config-total {
+      font-size: 12px;
+      color: var(--text-muted);
     }
 
-    .overlay-meta-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 999px;
-      background: rgba(37, 99, 235, 0.3);
+    .config-total strong {
+      color: var(--text-main);
     }
 
-    .overlay-actions {
+    .config-actions {
       display: flex;
-      align-items: center;
       gap: 8px;
     }
 
-    .ghost-btn {
-      border-radius: 999px;
-      border: 0;
-      background: transparent;
-      font-size: 12px;
-      color: #6b7280;
-      padding: 6px 10px;
-      cursor: pointer;
-    }
-
-    .ghost-btn:hover {
-      background: rgba(148, 163, 184, 0.12);
-      color: #111827;
-    }
-
-    .primary-small {
-      padding: 7px 13px;
-      font-size: 12px;
-      box-shadow: 0 10px 24px rgba(37, 99, 235, 0.32);
+    .config-actions .primary-btn {
+      padding-inline: 16px;
     }
 
     .hidden {
       display: none !important;
     }
 
-    @media (max-width: 900px) {
-      .builder-main {
-        flex-direction: column;
+    /* Tiny responsive tweak */
+    @media (max-width: 1100px) {
+      .builder-shell {
+        grid-template-columns: 200px minmax(0, 1fr);
       }
-      .builder-sidebar {
-        width: 100%;
-        border-left: none;
-        border-top: 1px solid rgba(148, 163, 184, 0.25);
+      .panel--right {
+        display: none;
+      }
+    }
+
+    @media (max-width: 900px) {
+      .builder-root {
+        margin: 0;
+        border-radius: 0;
+        box-shadow: none;
+      }
+      .builder-shell {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto auto;
+        height: auto;
+      }
+      .panel--left {
+        order: 2;
         flex-direction: row;
         overflow-x: auto;
       }
-      .sidebar-section {
-        min-width: 200px;
+      .tool-list {
+        flex-direction: row;
       }
     }
   </style>
 </head>
 <body>
   <div class="builder-root">
-    <header class="builder-topbar">
-      <div class="topbar-left">
-        <button class="topbar-link" type="button" id="js-back-to-layouts">
-          <span aria-hidden="true">←</span>
-          <span>Back to layouts</span>
-        </button>
-        <div class="topbar-title-block">
-          <div class="topbar-title">Seat map builder</div>
-          <div class="topbar-sub">Show ID: ${showId}</div>
+    <header class="builder-header">
+      <div class="header-left">
+        <div class="step-pill">
+          <span class="step-number" id="step-pill-number">3</span>
+          <span id="step-pill-label">Layout details</span>
         </div>
-        <div class="topbar-pill">
-          <span class="topbar-pill-dot"></span>
-          Live preview
+        <div class="builder-title" id="builder-title">Seat map builder</div>
+        <div class="builder-subtitle" id="builder-subtitle">
+          Tune the size of the room, then we’ll auto-create a layout you can refine.
         </div>
       </div>
-      <div class="topbar-right">
-        <button class="topbar-link" type="button" id="js-reset-layout">
-          Reset canvas
-        </button>
-        <button class="primary-btn" type="button" id="js-save-and-continue">
-          <span>Save &amp; continue to pricing</span>
-          <span aria-hidden="true">↗</span>
+      <div class="header-right">
+        <div class="header-chip" id="layout-chip">Starting from: tables & chairs</div>
+        <button class="header-close" type="button" onclick="window.history.back()">
+          <span>✕</span>
         </button>
       </div>
     </header>
 
-    <main class="builder-main">
-      <section class="builder-canvas-wrap">
-        <div class="builder-canvas" id="js-canvas">
-          <div class="canvas-placeholder" id="js-canvas-placeholder">
-            <div class="canvas-placeholder-inner">
-              <span>Drag, zoom and drop tables, rows and zones here.</span>
-              <span class="canvas-pill-key">Scroll ⌥+Trackpad to zoom</span>
-            </div>
-          </div>
-
-          <!-- Overlay config panels will sit on top of the canvas -->
-          <div class="overlay" id="js-config-overlay">
-            <!-- Tables & chairs -->
-            <div class="overlay-inner" data-layout-panel="tables">
-              <div class="overlay-header">
-                <div class="overlay-title-block">
-                  <div class="overlay-kicker">Layout generator</div>
-                  <div class="overlay-title">
-                    <span class="overlay-icon">🍽</span>
-                    <span>Tables &amp; chairs</span>
-                  </div>
-                  <div class="overlay-sub">
-                    Tell us roughly how many tables and seats you need.
-                    We’ll drop a starting layout you can still tweak in the canvas.
-                  </div>
-                </div>
-                <button class="overlay-close" type="button" data-close-overlay>
-                  ✕
-                </button>
-              </div>
-
-              <div class="overlay-grid">
-                <div class="field">
-                  <label>
-                    Number of tables
-                    <span class="field-hint">e.g. 12</span>
-                  </label>
-                  <input type="number" min="1" value="12" id="tables-count">
-                </div>
-                <div class="field">
-                  <label>
-                    Seats per table
-                    <span class="field-hint">e.g. 8</span>
-                  </label>
-                  <input type="number" min="1" value="8" id="seats-per-table">
-                </div>
-                <div class="field">
-                  <label>
-                    Table spacing
-                    <span class="field-hint">pixels</span>
-                  </label>
-                  <input type="number" min="16" value="80" id="table-spacing">
-                </div>
-                <div class="field">
-                  <label>
-                    Ring depth
-                    <span class="field-hint">rows of tables</span>
-                  </label>
-                  <input type="number" min="1" value="3" id="table-rings">
-                </div>
-              </div>
-
-              <div class="overlay-footer">
-                <div class="overlay-meta">
-                  <span class="overlay-meta-dot"></span>
-                  <span id="tables-estimate">Estimated seats: 96</span>
-                </div>
-                <div class="overlay-actions">
-                  <button class="ghost-btn" type="button" data-skip-generate>
-                    Start from blank instead
-                  </button>
-                  <button class="primary-btn primary-small" type="button" data-generate-layout="tables">
-                    Generate layout
-                  </button>
-                </div>
+    <section class="builder-shell">
+      <!-- Left tools -->
+      <aside class="panel panel--left">
+        <div class="panel-title">Tools</div>
+        <div class="tool-list">
+          <button class="tool-button" type="button">
+            <div class="tool-main">
+              <span class="tool-emoji">🎭</span>
+              <div>
+                <div class="tool-label">Stage & zones</div>
+                <div class="tool-meta">Define where the action happens</div>
               </div>
             </div>
-
-            <!-- Sections & rows -->
-            <div class="overlay-inner hidden" data-layout-panel="sections">
-              <div class="overlay-header">
-                <div class="overlay-title-block">
-                  <div class="overlay-kicker">Layout generator</div>
-                  <div class="overlay-title">
-                    <span class="overlay-icon">🎭</span>
-                    <span>Sections &amp; rows</span>
-                  </div>
-                  <div class="overlay-sub">
-                    Classic theatre-style seating. We’ll auto-build sections and rows,
-                    ready for you to rename or resize.
-                  </div>
-                </div>
-                <button class="overlay-close" type="button" data-close-overlay>
-                  ✕
-                </button>
-              </div>
-
-              <div class="overlay-grid">
-                <div class="field">
-                  <label>
-                    Number of sections
-                    <span class="field-hint">stalls, circle…</span>
-                  </label>
-                  <input type="number" min="1" value="3" id="sections-count">
-                </div>
-                <div class="field">
-                  <label>
-                    Rows per section
-                    <span class="field-hint">e.g. 8</span>
-                  </label>
-                  <input type="number" min="1" value="8" id="rows-per-section">
-                </div>
-                <div class="field">
-                  <label>
-                    Seats per row
-                    <span class="field-hint">e.g. 12</span>
-                  </label>
-                  <input type="number" min="1" value="12" id="seats-per-row">
-                </div>
-                <div class="field">
-                  <label>
-                    Row spacing
-                    <span class="field-hint">pixels</span>
-                  </label>
-                  <input type="number" min="16" value="48" id="row-spacing">
-                </div>
-              </div>
-
-              <div class="overlay-footer">
-                <div class="overlay-meta">
-                  <span class="overlay-meta-dot"></span>
-                  <span id="sections-estimate">Estimated seats: 288</span>
-                </div>
-                <div class="overlay-actions">
-                  <button class="ghost-btn" type="button" data-skip-generate>
-                    Start from blank instead
-                  </button>
-                  <button class="primary-btn primary-small" type="button" data-generate-layout="sections">
-                    Generate layout
-                  </button>
-                </div>
+            <span class="tool-badge">Soon</span>
+          </button>
+          <button class="tool-button" type="button">
+            <div class="tool-main">
+              <span class="tool-emoji">🪑</span>
+              <div>
+                <div class="tool-label">Seating blocks</div>
+                <div class="tool-meta">Tables, rows & hybrids</div>
               </div>
             </div>
-
-            <!-- Mixed seating -->
-            <div class="overlay-inner hidden" data-layout-panel="mixed">
-              <div class="overlay-header">
-                <div class="overlay-title-block">
-                  <div class="overlay-kicker">Layout generator</div>
-                  <div class="overlay-title">
-                    <span class="overlay-icon">🎟</span>
-                    <span>Mixed seating</span>
-                  </div>
-                  <div class="overlay-sub">
-                    Blend cabaret tables with theatre rows. Great for premium front tables
-                    and tiered seating behind.
-                  </div>
-                </div>
-                <button class="overlay-close" type="button" data-close-overlay>
-                  ✕
-                </button>
-              </div>
-
-              <div class="overlay-grid">
-                <div class="field">
-                  <label>
-                    Sections
-                    <span class="field-hint">count</span>
-                  </label>
-                  <input type="number" min="0" value="2" id="mixed-sections-count">
-                </div>
-                <div class="field">
-                  <label>
-                    Rows per section
-                    <span class="field-hint">e.g. 6</span>
-                  </label>
-                  <input type="number" min="0" value="6" id="mixed-rows-per-section">
-                </div>
-                <div class="field">
-                  <label>
-                    Seats per row
-                    <span class="field-hint">e.g. 10</span>
-                  </label>
-                  <input type="number" min="0" value="10" id="mixed-seats-per-row">
-                </div>
-                <div class="field">
-                  <label>
-                    Tables
-                    <span class="field-hint">front of room</span>
-                  </label>
-                  <input type="number" min="0" value="6" id="mixed-tables-count">
-                </div>
-                <div class="field">
-                  <label>
-                    Seats per table
-                    <span class="field-hint">e.g. 8</span>
-                  </label>
-                  <input type="number" min="0" value="8" id="mixed-seats-per-table">
-                </div>
-                <div class="field">
-                  <label>
-                    Approx capacity goal
-                    <span class="field-hint">optional</span>
-                  </label>
-                  <input type="number" min="0" value="250" id="mixed-capacity-goal">
-                </div>
-              </div>
-
-              <div class="overlay-footer">
-                <div class="overlay-meta">
-                  <span class="overlay-meta-dot"></span>
-                  <span id="mixed-estimate">Estimated seats: 248</span>
-                </div>
-                <div class="overlay-actions">
-                  <button class="ghost-btn" type="button" data-skip-generate>
-                    Start from blank instead
-                  </button>
-                  <button class="primary-btn primary-small" type="button" data-generate-layout="mixed">
-                    Generate layout
-                  </button>
-                </div>
+            <span class="tool-badge">Soon</span>
+          </button>
+          <button class="tool-button" type="button">
+            <div class="tool-main">
+              <span class="tool-emoji">🚪</span>
+              <div>
+                <div class="tool-label">Objects</div>
+                <div class="tool-meta">Bars, doors, aisles</div>
               </div>
             </div>
-          </div>
-          <!-- end overlay -->
-        </div>
-      </section>
-
-      <aside class="builder-sidebar">
-        <div class="sidebar-section">
-          <div class="sidebar-title-row">
-            <div class="sidebar-title">Tools</div>
-            <div class="sidebar-badge">Coming to life</div>
-          </div>
-          <div class="sidebar-body">
-            Drag, zoom and pan around the canvas. In the next pass we’ll light up
-            tools for adding <strong>sections</strong>, <strong>tables</strong>,
-            <strong>rows</strong> and <strong>holds</strong>.
-          </div>
-          <div class="tool-row">
-            <div class="tool-pill">
-              <span class="tool-dot"></span> Sections
-            </div>
-            <div class="tool-pill">
-              <span class="tool-dot"></span> Tables
-            </div>
-            <div class="tool-pill">
-              <span class="tool-dot"></span> Rows
-            </div>
-            <div class="tool-pill">
-              <span class="tool-dot"></span> Zones
-            </div>
-          </div>
-        </div>
-
-        <div class="sidebar-section">
-          <div class="sidebar-title-row">
-            <div class="sidebar-title">Keyboard</div>
-          </div>
-          <div class="sidebar-body">
-            <div class="tool-row">
-              <div class="tool-pill"><span class="canvas-pill-key">⌘ + Z</span> Undo</div>
-              <div class="tool-pill"><span class="canvas-pill-key">⌘ + Y</span> Redo</div>
-              <div class="tool-pill"><span class="canvas-pill-key">⇧ + Drag</span> Multi-select</div>
-              <div class="tool-pill"><span class="canvas-pill-key">⌥ + Scroll</span> Zoom</div>
-            </div>
-          </div>
+            <span class="tool-badge">Soon</span>
+          </button>
         </div>
       </aside>
-    </main>
+
+      <!-- Canvas -->
+      <main class="panel panel--center">
+        <div class="canvas-inner" id="canvas">
+          <div class="canvas-overlay-label">
+            <span class="dot"></span>
+            <span id="canvas-label-text">Preview only – layout not saved yet</span>
+          </div>
+
+          <div class="canvas-placeholder" id="canvas-placeholder">
+            <div class="canvas-placeholder-inner">
+              <h2 id="placeholder-heading">We’ll build this room for you</h2>
+              <p id="placeholder-text">
+                Adjust the numbers on the right, then hit <strong>Continue</strong>. We’ll auto-create a
+                starter layout you can tweak, rather than dragging every seat by hand.
+              </p>
+              <div class="canvas-placeholder-pills">
+                <span class="canvas-placeholder-pill">Auto-generated seats</span>
+                <span class="canvas-placeholder-pill">Perfect for quick setups</span>
+                <span class="canvas-placeholder-pill">Edit everything later</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="layout-preview" id="layout-preview"></div>
+        </div>
+      </main>
+
+      <!-- Right summary / config mirror -->
+      <aside class="panel panel--right">
+        <div class="panel-title">Summary</div>
+        <div class="summary-body">
+          <div class="summary-row">
+            <span class="label">Layout type</span>
+            <span class="value" id="summary-layout">Tables & chairs</span>
+          </div>
+          <div class="summary-row" id="summary-row-sections">
+            <span class="label">Sections</span>
+            <span class="value" id="summary-sections">–</span>
+          </div>
+          <div class="summary-row" id="summary-row-rows">
+            <span class="label">Rows per section</span>
+            <span class="value" id="summary-rows">–</span>
+          </div>
+          <div class="summary-row" id="summary-row-seats-per-row">
+            <span class="label">Seats per row</span>
+            <span class="value" id="summary-seats-per-row">–</span>
+          </div>
+          <div class="summary-row" id="summary-row-tables">
+            <span class="label">Tables</span>
+            <span class="value" id="summary-tables">–</span>
+          </div>
+          <div class="summary-row" id="summary-row-seats-per-table">
+            <span class="label">Seats per table</span>
+            <span class="value" id="summary-seats-per-table">–</span>
+          </div>
+          <div class="summary-row">
+            <span class="label">Estimated seats</span>
+            <span class="value" id="summary-total">0</span>
+          </div>
+          <div class="summary-note">
+            This is a quick estimate based on your starter settings. You’ll still be able to nudge,
+            resize and refine the layout seat-by-seat in the final builder.
+          </div>
+        </div>
+        <div class="summary-footer">
+          <button class="primary-btn" type="button" id="summary-continue">
+            Continue to seat map
+          </button>
+          <button class="ghost-btn" type="button" onclick="window.history.back()">
+            Back to layout style
+          </button>
+        </div>
+      </aside>
+    </section>
+  </div>
+
+  <!-- Config overlay (Step 3 of 4) -->
+  <div class="config-overlay" id="config-overlay">
+    <div class="config-card">
+      <div class="config-header">
+        <div class="config-title-block">
+          <div class="config-caption">Step 3 of 4 · Layout details</div>
+          <div class="config-heading" id="config-heading">Tables & chairs</div>
+          <div class="config-subtitle" id="config-subtitle">
+            Tell us how big this room is and we’ll auto-create tables and seats for you.
+          </div>
+        </div>
+        <div class="config-chip" id="config-chip">Quick starter</div>
+      </div>
+
+      <div class="config-grid">
+        <!-- Sections (for sections & rows / mixed) -->
+        <div class="field" data-layouts="sections,mixed">
+          <div class="field-label-row">
+            <span class="field-label">Number of sections</span>
+            <span class="field-hint">Stalls, circle, balcony…</span>
+          </div>
+          <input type="number" id="field-sections" min="1" max="40" value="3" />
+        </div>
+
+        <div class="field" data-layouts="sections,mixed">
+          <div class="field-label-row">
+            <span class="field-label">Rows per section</span>
+            <span class="field-hint">Front to back</span>
+          </div>
+          <input type="number" id="field-rows" min="1" max="80" value="8" />
+        </div>
+
+        <div class="field" data-layouts="sections,mixed">
+          <div class="field-label-row">
+            <span class="field-label">Seats per row</span>
+            <span class="field-hint">Left to right</span>
+          </div>
+          <input type="number" id="field-seats-per-row" min="1" max="80" value="16" />
+        </div>
+
+        <!-- Tables (for tables / mixed) -->
+        <div class="field" data-layouts="tables,mixed">
+          <div class="field-label-row">
+            <span class="field-label">Number of tables</span>
+            <span class="field-hint">Round or long</span>
+          </div>
+          <input type="number" id="field-tables" min="1" max="120" value="12" />
+        </div>
+
+        <div class="field" data-layouts="tables,mixed">
+          <div class="field-label-row">
+            <span class="field-label">Seats per table</span>
+            <span class="field-hint">Per cabaret table</span>
+          </div>
+          <input type="number" id="field-seats-per-table" min="1" max="20" value="8" />
+        </div>
+      </div>
+
+      <div class="config-footer">
+        <div class="config-total">
+          Estimated seats: <strong id="config-total">0</strong>
+        </div>
+        <div class="config-actions">
+          <button class="ghost-btn" type="button" id="config-skip">
+            Skip for now
+          </button>
+          <button class="primary-btn" type="button" id="config-continue">
+            Continue
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
-    (function() {
-      var showId = ${JSON.stringify(showId)};
-      var initialLayout = ${JSON.stringify(layout || "tables")};
+    (function () {
+      var showId = "${showId}";
+      var initialLayout = "${layout}"; // "tables" | "sections" | "mixed" | "blank"
 
-      var overlay = document.getElementById("js-config-overlay");
-      var canvasPlaceholder = document.getElementById("js-canvas-placeholder");
+      // --- Shared state ---
+      var state = {
+        layout: initialLayout,
+        sections: 3,
+        rowsPerSection: 8,
+        seatsPerRow: 16,
+        tables: 12,
+        seatsPerTable: 8
+      };
 
-      function showPanel(name) {
-        var panels = overlay.querySelectorAll("[data-layout-panel]");
-        panels.forEach(function(panel) {
-          if (panel.getAttribute("data-layout-panel") === name) {
-            panel.classList.remove("hidden");
+      // Elements
+      var overlay = document.getElementById("config-overlay");
+      var layoutChip = document.getElementById("layout-chip");
+      var builderTitle = document.getElementById("builder-title");
+      var builderSubtitle = document.getElementById("builder-subtitle");
+      var stepNumber = document.getElementById("step-pill-number");
+      var stepLabel = document.getElementById("step-pill-label");
+
+      var configHeading = document.getElementById("config-heading");
+      var configSubtitle = document.getElementById("config-subtitle");
+      var configChip = document.getElementById("config-chip");
+      var configTotal = document.getElementById("config-total");
+
+      var fieldSections = document.getElementById("field-sections");
+      var fieldRows = document.getElementById("field-rows");
+      var fieldSeatsPerRow = document.getElementById("field-seats-per-row");
+      var fieldTables = document.getElementById("field-tables");
+      var fieldSeatsPerTable = document.getElementById("field-seats-per-table");
+
+      var summaryLayout = document.getElementById("summary-layout");
+      var summarySections = document.getElementById("summary-sections");
+      var summaryRows = document.getElementById("summary-rows");
+      var summarySeatsPerRow = document.getElementById("summary-seats-per-row");
+      var summaryTables = document.getElementById("summary-tables");
+      var summarySeatsPerTable = document.getElementById("summary-seats-per-table");
+      var summaryTotal = document.getElementById("summary-total");
+      var summaryContinue = document.getElementById("summary-continue");
+      var summaryRowSections = document.getElementById("summary-row-sections");
+      var summaryRowRows = document.getElementById("summary-row-rows");
+      var summaryRowSeatsPerRow = document.getElementById("summary-row-seats-per-row");
+      var summaryRowTables = document.getElementById("summary-row-tables");
+      var summaryRowSeatsPerTable = document.getElementById("summary-row-seats-per-table");
+
+      var canvasPlaceholder = document.getElementById("canvas-placeholder");
+      var layoutPreview = document.getElementById("layout-preview");
+
+      var configContinue = document.getElementById("config-continue");
+      var configSkip = document.getElementById("config-skip");
+
+      // --- Layout-specific copy ---
+
+      function layoutLabel(layout) {
+        if (layout === "sections") return "Sections & rows";
+        if (layout === "mixed") return "Mixed seating";
+        if (layout === "blank") return "Blank canvas";
+        return "Tables & chairs";
+      }
+
+      function applyLayoutCopy(layout) {
+        var label = layoutLabel(layout);
+        layoutChip.textContent = "Starting from: " + label;
+        summaryLayout.textContent = label;
+
+        if (layout === "blank") {
+          builderTitle.textContent = "Blank canvas builder";
+          builderSubtitle.textContent =
+            "Start with a clean grid, then drop in sections, rows and tables exactly where you want them.";
+        } else {
+          builderTitle.textContent = "Seat map builder";
+          builderSubtitle.textContent =
+            "Set the basics for this room, then refine the auto-generated layout in the builder.";
+        }
+
+        configHeading.textContent = label;
+
+        if (layout === "tables") {
+          configSubtitle.textContent =
+            "Cabaret-style maps with round or long tables and seats auto-generated around them.";
+          configChip.textContent = "Cabaret rooms";
+        } else if (layout === "sections") {
+          configSubtitle.textContent =
+            "Classic theatre blocks with aisles, numbered rows and fixed seating.";
+          configChip.textContent = "Theatre style";
+        } else if (layout === "mixed") {
+          configSubtitle.textContent =
+            "Blend tables, rows and standing zones in one flexible map.";
+          configChip.textContent = "Hybrid layouts";
+        }
+      }
+
+      // Show/hide config fields depending on layout
+
+      function refreshFieldVisibility(layout) {
+        var fields = document.querySelectorAll(".field");
+        fields.forEach(function (el) {
+          var layouts = el.getAttribute("data-layouts");
+          if (!layouts) return;
+          var list = layouts.split(",");
+          if (list.indexOf(layout) !== -1) {
+            el.classList.remove("hidden");
           } else {
-            panel.classList.add("hidden");
+            el.classList.add("hidden");
           }
         });
+
+        // Summary rows visibility
+        var hasSections = layout === "sections" || layout === "mixed";
+        var hasTables = layout === "tables" || layout === "mixed";
+
+        summaryRowSections.style.display = hasSections ? "flex" : "none";
+        summaryRowRows.style.display = hasSections ? "flex" : "none";
+        summaryRowSeatsPerRow.style.display = hasSections ? "flex" : "none";
+
+        summaryRowTables.style.display = hasTables ? "flex" : "none";
+        summaryRowSeatsPerTable.style.display = hasTables ? "flex" : "none";
       }
 
-      // Decide whether overlay is visible at all
-      if (!initialLayout || initialLayout === "blank") {
-        if (overlay) overlay.classList.add("hidden");
-      } else {
-        showPanel(initialLayout);
+      // --- Numbers + totals ---
+
+      function safeNumber(input, fallback) {
+        var v = parseInt(input.value, 10);
+        if (isNaN(v) || v <= 0) return fallback;
+        return v;
       }
 
-      // Back button -> layout wizard step
-      var backBtn = document.getElementById("js-back-to-layouts");
-      if (backBtn) {
-        backBtn.addEventListener("click", function() {
-          window.location.href = "/admin/seating/layout-wizard/" + encodeURIComponent(showId);
-        });
+      function syncStateFromInputs() {
+        state.sections = safeNumber(fieldSections, state.sections);
+        state.rowsPerSection = safeNumber(fieldRows, state.rowsPerSection);
+        state.seatsPerRow = safeNumber(fieldSeatsPerRow, state.seatsPerRow);
+        state.tables = safeNumber(fieldTables, state.tables);
+        state.seatsPerTable = safeNumber(fieldSeatsPerTable, state.seatsPerTable);
       }
 
-      // Save & continue -> pricing step (placeholder for now)
-      var saveBtn = document.getElementById("js-save-and-continue");
-      if (saveBtn) {
-        saveBtn.addEventListener("click", function() {
-          // Later this will POST seatmap + redirect to pricing
-          alert("In the next pass this will save the map and move you to ticket pricing.");
-        });
+      function computeTotal(layout) {
+        var total = 0;
+        if (layout === "tables") {
+          total = state.tables * state.seatsPerTable;
+        } else if (layout === "sections") {
+          total = state.sections * state.rowsPerSection * state.seatsPerRow;
+        } else if (layout === "mixed") {
+          var theatre = state.sections * state.rowsPerSection * state.seatsPerRow;
+          var cabaret = state.tables * state.seatsPerTable;
+          total = theatre + cabaret;
+        } else {
+          total = 0;
+        }
+        return total;
       }
 
-      // Reset canvas placeholder handler (for now just shows helper text again)
-      var resetBtn = document.getElementById("js-reset-layout");
-      if (resetBtn) {
-        resetBtn.addEventListener("click", function() {
-          if (canvasPlaceholder) {
-            canvasPlaceholder.style.opacity = "1";
+      function refreshTotals() {
+        var total = computeTotal(state.layout);
+        configTotal.textContent = String(total);
+        summaryTotal.textContent = String(total);
+
+        summarySections.textContent = String(state.sections);
+        summaryRows.textContent = String(state.rowsPerSection);
+        summarySeatsPerRow.textContent = String(state.seatsPerRow);
+        summaryTables.textContent = String(state.tables);
+        summarySeatsPerTable.textContent = String(state.seatsPerTable);
+      }
+
+      // --- Generate visual preview on canvas ---
+
+      function clearPreview() {
+        layoutPreview.innerHTML = "";
+      }
+
+      function createSeatDot(primary) {
+        var seat = document.createElement("div");
+        seat.className = primary ? "seat-dot seat-dot--primary" : "seat-dot";
+        return seat;
+      }
+
+      function renderTablesPreview() {
+        var groupLabel = document.createElement("div");
+        groupLabel.className = "layout-group-label";
+        groupLabel.textContent = "Auto-generated tables";
+        layoutPreview.appendChild(groupLabel);
+
+        for (var t = 0; t < state.tables; t++) {
+          var group = document.createElement("div");
+          group.className = "table-group";
+
+          var seatsRow = document.createElement("div");
+          seatsRow.className = "seats-row";
+
+          for (var s = 0; s < state.seatsPerTable; s++) {
+            var primary = s === 0;
+            seatsRow.appendChild(createSeatDot(primary));
           }
-          // Later: wipe in-memory shapes
-        });
+
+          group.appendChild(seatsRow);
+          layoutPreview.appendChild(group);
+        }
       }
 
-      // Close overlay buttons
-      overlay.querySelectorAll("[data-close-overlay]").forEach(function(btn) {
-        btn.addEventListener("click", function() {
+      function renderSectionsPreview() {
+        var label = document.createElement("div");
+        label.className = "layout-group-label";
+        label.textContent = "Auto-generated rows";
+        layoutPreview.appendChild(label);
+
+        for (var section = 0; section < state.sections; section++) {
+          var group = document.createElement("div");
+          group.className = "row-group";
+
+          for (var r = 0; r < state.rowsPerSection; r++) {
+            var row = document.createElement("div");
+            row.className = "seats-row";
+            for (var s = 0; s < state.seatsPerRow; s++) {
+              var primary = r === 0 && (s === 0 || s === state.seatsPerRow - 1);
+              row.appendChild(createSeatDot(primary));
+            }
+            group.appendChild(row);
+          }
+
+          layoutPreview.appendChild(group);
+        }
+      }
+
+      function renderMixedPreview() {
+        var label = document.createElement("div");
+        label.className = "layout-group-label";
+        label.textContent = "Hybrid layout";
+        layoutPreview.appendChild(label);
+
+        var hybrid = document.createElement("div");
+        hybrid.className = "mixed-group";
+
+        // Top: a few rows
+        for (var r = 0; r < Math.min(state.rowsPerSection, 4); r++) {
+          var row = document.createElement("div");
+          row.className = "seats-row";
+          for (var s = 0; s < Math.min(state.seatsPerRow, 14); s++) {
+            var primary = r === 0 && (s === 0 || s === Math.min(state.seatsPerRow, 14) - 1);
+            row.appendChild(createSeatDot(primary));
+          }
+          hybrid.appendChild(row);
+        }
+
+        // Bottom: a few tables
+        var tablesRow = document.createElement("div");
+        tablesRow.className = "seats-row";
+        for (var t = 0; t < Math.min(state.tables, 6); t++) {
+          var tbl = document.createElement("div");
+          tbl.className = "seat-dot seat-dot--primary";
+          tablesRow.appendChild(tbl);
+        }
+        hybrid.appendChild(tablesRow);
+
+        layoutPreview.appendChild(hybrid);
+      }
+
+      function renderBlankPreview() {
+        var label = document.createElement("div");
+        label.className = "layout-group-label";
+        label.textContent = "Blank canvas";
+        layoutPreview.appendChild(label);
+      }
+
+      function generatePreview() {
+        clearPreview();
+
+        if (state.layout === "tables") {
+          renderTablesPreview();
+        } else if (state.layout === "sections") {
+          renderSectionsPreview();
+        } else if (state.layout === "mixed") {
+          renderMixedPreview();
+        } else {
+          renderBlankPreview();
+        }
+      }
+
+      // --- Config overlay control ---
+
+      function enterStep3() {
+        if (state.layout === "blank") {
+          // No overlay – go straight to builder
           overlay.classList.add("hidden");
-        });
-      });
+          canvasPlaceholder.classList.remove("hidden");
+          stepNumber.textContent = "4";
+          stepLabel.textContent = "Seat map builder";
+          generatePreview();
+          return;
+        }
 
-      // "Start from blank instead" buttons
-      overlay.querySelectorAll("[data-skip-generate]").forEach(function(btn) {
-        btn.addEventListener("click", function() {
-          overlay.classList.add("hidden");
-        });
-      });
+        overlay.classList.remove("hidden");
+        stepNumber.textContent = "3";
+        stepLabel.textContent = "Layout details";
 
-      // Simple capacity estimates
-      function updateTablesEstimate() {
-        var tables = parseInt((document.getElementById("tables-count") || {}).value || "0", 10);
-        var seats = parseInt((document.getElementById("seats-per-table") || {}).value || "0", 10);
-        var el = document.getElementById("tables-estimate");
-        if (el) el.textContent = "Estimated seats: " + (tables * seats || 0);
+        applyLayoutCopy(state.layout);
+        refreshFieldVisibility(state.layout);
+        refreshTotals();
       }
 
-      function updateSectionsEstimate() {
-        var sections = parseInt((document.getElementById("sections-count") || {}).value || "0", 10);
-        var rows = parseInt((document.getElementById("rows-per-section") || {}).value || "0", 10);
-        var seats = parseInt((document.getElementById("seats-per-row") || {}).value || "0", 10);
-        var el = document.getElementById("sections-estimate");
-        if (el) el.textContent = "Estimated seats: " + (sections * rows * seats || 0);
+      function goToStep4() {
+        overlay.classList.add("hidden");
+        canvasPlaceholder.classList.add("hidden");
+        stepNumber.textContent = "4";
+        stepLabel.textContent = "Seat map builder";
+        generatePreview();
       }
 
-      function updateMixedEstimate() {
-        var sCount = parseInt((document.getElementById("mixed-sections-count") || {}).value || "0", 10);
-        var rows = parseInt((document.getElementById("mixed-rows-per-section") || {}).value || "0", 10);
-        var seatsRow = parseInt((document.getElementById("mixed-seats-per-row") || {}).value || "0", 10);
-        var tables = parseInt((document.getElementById("mixed-tables-count") || {}).value || "0", 10);
-        var seatsTable = parseInt((document.getElementById("mixed-seats-per-table") || {}).value || "0", 10);
-        var total = (sCount * rows * seatsRow) + (tables * seatsTable);
-        var el = document.getElementById("mixed-estimate");
-        if (el) el.textContent = "Estimated seats: " + (total || 0);
-      }
+      // Input events
+      [fieldSections, fieldRows, fieldSeatsPerRow, fieldTables, fieldSeatsPerTable].forEach(
+        function (input) {
+          input.addEventListener("input", function () {
+            syncStateFromInputs();
+            refreshTotals();
+          });
+        }
+      );
 
-      ["tables-count", "seats-per-table", "table-spacing", "table-rings"].forEach(function(id) {
-        var el = document.getElementById(id);
-        if (el) el.addEventListener("input", updateTablesEstimate);
+      configContinue.addEventListener("click", function () {
+        syncStateFromInputs();
+        refreshTotals();
+        goToStep4();
       });
-      updateTablesEstimate();
 
-      ["sections-count", "rows-per-section", "seats-per-row", "row-spacing"].forEach(function(id) {
-        var el = document.getElementById(id);
-        if (el) el.addEventListener("input", updateSectionsEstimate);
+      configSkip.addEventListener("click", function () {
+        goToStep4();
       });
-      updateSectionsEstimate();
 
-      ["mixed-sections-count", "mixed-rows-per-section", "mixed-seats-per-row",
-       "mixed-tables-count", "mixed-seats-per-table", "mixed-capacity-goal"].forEach(function(id) {
-        var el = document.getElementById(id);
-        if (el) el.addEventListener("input", updateMixedEstimate);
+      summaryContinue.addEventListener("click", function () {
+        // Later: POST config + layout to backend to create a real seat map record
+        // For now we just log – this keeps the flow visual and non-breaking.
+        console.log("Seat map config for show " + showId + ":", state);
+        alert(
+          "This is the visual preview step only for now. " +
+          "Next iteration we will wire this to actually save seat maps in the database."
+        );
       });
-      updateMixedEstimate();
 
-      // "Generate layout" (for now just logs + hides overlay)
-      overlay.querySelectorAll("[data-generate-layout]").forEach(function(btn) {
-        btn.addEventListener("click", function() {
-          var type = btn.getAttribute("data-generate-layout");
-          var payload = { type: type, showId: showId };
+      // --- Initialise ---
 
-          if (type === "tables") {
-            payload.tables = parseInt((document.getElementById("tables-count") || {}).value || "0", 10);
-            payload.seatsPerTable = parseInt((document.getElementById("seats-per-table") || {}).value || "0", 10);
-            payload.spacing = parseInt((document.getElementById("table-spacing") || {}).value || "0", 10);
-            payload.rings = parseInt((document.getElementById("table-rings") || {}).value || "0", 10);
-          } else if (type === "sections") {
-            payload.sections = parseInt((document.getElementById("sections-count") || {}).value || "0", 10);
-            payload.rowsPerSection = parseInt((document.getElementById("rows-per-section") || {}).value || "0", 10);
-            payload.seatsPerRow = parseInt((document.getElementById("seats-per-row") || {}).value || "0", 10);
-            payload.rowSpacing = parseInt((document.getElementById("row-spacing") || {}).value || "0", 10);
-          } else if (type === "mixed") {
-            payload.sections = parseInt((document.getElementById("mixed-sections-count") || {}).value || "0", 10);
-            payload.rowsPerSection = parseInt((document.getElementById("mixed-rows-per-section") || {}).value || "0", 10);
-            payload.seatsPerRow = parseInt((document.getElementById("mixed-seats-per-row") || {}).value || "0", 10);
-            payload.tables = parseInt((document.getElementById("mixed-tables-count") || {}).value || "0", 10);
-            payload.seatsPerTable = parseInt((document.getElementById("mixed-seats-per-table") || {}).value || "0", 10);
-            payload.capacityGoal = parseInt((document.getElementById("mixed-capacity-goal") || {}).value || "0", 10);
-          }
-
-          console.log("[Builder] Generate layout config:", payload);
-
-          // Next iteration: actually draw shapes to the canvas using this config.
-          overlay.classList.add("hidden");
-          if (canvasPlaceholder) {
-            canvasPlaceholder.style.opacity = "0.8";
-          }
-        });
-      });
+      applyLayoutCopy(state.layout);
+      refreshFieldVisibility(state.layout);
+      refreshTotals();
+      enterStep3();
     })();
   </script>
 </body>
-</html>
-`);
+</html>`;
+
+  res.status(200).send(html);
 });
 
 export default router;
