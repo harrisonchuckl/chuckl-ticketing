@@ -20,15 +20,13 @@ router.get("/seating-choice/:showId", (req, res) => {
   <style>
     :root {
       --bg-page: #f5f5f7;
-      --card-bg: #ffffff;
-      --card-border: #e5e5ea;
-      --card-border-active: #007aff;
-      --card-shadow: 0 18px 30px rgba(0, 0, 0, 0.06);
+      --bg-panel: #ffffff;
+      --border-subtle: #e5e5ea;
+      --border-strong: #007aff;
+      --shadow-soft: 0 18px 35px rgba(0, 0, 0, 0.06);
       --text-main: #111111;
       --text-muted: #6e6e73;
       --accent: #007aff;
-      --radius-xl: 18px;
-      --radius-xxl: 22px;
     }
 
     * {
@@ -42,7 +40,7 @@ router.get("/seating-choice/:showId", (req, res) => {
       width: 100%;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
         "Helvetica Neue", Arial, sans-serif;
-      background: radial-gradient(circle at top, #fdfdfd 0, #f5f5f7 55%, #f0f0f5 100%);
+      background: radial-gradient(circle at top, #ffffff 0, #f5f5f7 55%, #f0f0f5 100%);
       color: var(--text-main);
     }
 
@@ -55,25 +53,31 @@ router.get("/seating-choice/:showId", (req, res) => {
 
     .shell {
       width: 100%;
-      max-width: 960px;
-      background: transparent;
+      max-width: 920px;
     }
 
     .panel {
-      background: var(--card-bg);
-      border-radius: 28px;
-      box-shadow: var(--card-shadow);
-      padding: 32px 40px 28px;
-      border: 1px solid rgba(0, 0, 0, 0.02);
+      background: var(--bg-panel);
+      border-radius: 30px;
+      box-shadow: var(--shadow-soft);
+      border: 1px solid rgba(0, 0, 0, 0.03);
+      padding: 28px 32px 24px;
+    }
+
+    @media (max-width: 720px) {
+      .panel {
+        border-radius: 24px;
+        padding: 24px 18px 20px;
+      }
     }
 
     .header {
       text-align: center;
-      margin-bottom: 28px;
+      margin-bottom: 22px;
     }
 
     .title {
-      margin: 0 0 4px;
+      margin: 0 0 6px;
       font-size: 24px;
       font-weight: 600;
       letter-spacing: -0.01em;
@@ -81,7 +85,7 @@ router.get("/seating-choice/:showId", (req, res) => {
 
     .subtitle {
       margin: 0;
-      font-size: 14px;
+      font-size: 13px;
       color: var(--text-muted);
     }
 
@@ -89,14 +93,10 @@ router.get("/seating-choice/:showId", (req, res) => {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 18px;
-      margin-top: 4px;
+      margin-top: 10px;
     }
 
     @media (max-width: 720px) {
-      .panel {
-        padding: 24px 20px 22px;
-      }
-
       .choices {
         grid-template-columns: 1fr;
       }
@@ -104,44 +104,75 @@ router.get("/seating-choice/:showId", (req, res) => {
 
     .choice-card {
       position: relative;
-      border-radius: var(--radius-xxl);
+      border-radius: 22px;
       background: linear-gradient(145deg, #ffffff, #fafafa);
-      border: 1px solid var(--card-border);
-      padding: 20px 22px;
-      text-align: left;
+      border: 1px solid var(--border-subtle);
+      padding: 20px 22px 18px;
       cursor: pointer;
       display: flex;
-      flex-direction: column;
-      justify-content: center;
+      flex-direction: row;
+      align-items: center;
+      gap: 14px;
       transition:
-        box-shadow 140ms ease,
-        transform 140ms ease,
-        border-color 140ms ease,
-        background 140ms ease;
+        box-shadow 150ms ease,
+        transform 150ms ease,
+        border-color 150ms ease,
+        background 150ms ease;
       outline: none;
     }
 
     .choice-card--primary {
-      background: linear-gradient(140deg, #ffffff, #f7f8ff);
+      background: linear-gradient(135deg, #ffffff, #f7f8ff);
+    }
+
+    .choice-card:hover {
+      box-shadow: 0 22px 40px rgba(0, 0, 0, 0.08);
+      transform: translateY(-1px);
+      border-color: rgba(0, 0, 0, 0.06);
+      background: linear-gradient(145deg, #ffffff, #f8f8fb);
+    }
+
+    .choice-card--primary:hover {
+      border-color: rgba(0, 122, 255, 0.45);
+      background: linear-gradient(145deg, #ffffff, #edf2ff);
+    }
+
+    .choice-card:focus-visible {
+      border-color: var(--border-strong);
+      box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.35);
+    }
+
+    .choice-icon-wrap {
+      flex-shrink: 0;
+      width: 38px;
+      height: 38px;
+      border-radius: 14px;
+      background: rgba(0, 0, 0, 0.03);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .choice-card--primary .choice-icon-wrap {
+      background: rgba(0, 122, 255, 0.08);
+    }
+
+    .choice-icon {
+      width: 22px;
+      height: 22px;
+      color: var(--accent);
+    }
+
+    .choice-content {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
     }
 
     .choice-label {
-      font-size: 17px;
+      font-size: 16px;
       font-weight: 600;
-      margin-bottom: 4px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .choice-pill {
-      padding: 2px 8px;
-      border-radius: 999px;
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      border: 1px solid rgba(0, 0, 0, 0.08);
-      color: var(--text-muted);
+      letter-spacing: -0.01em;
     }
 
     .choice-text {
@@ -150,27 +181,9 @@ router.get("/seating-choice/:showId", (req, res) => {
       margin: 0;
     }
 
-    .choice-card:hover {
-      box-shadow: 0 22px 40px rgba(0, 0, 0, 0.08);
-      transform: translateY(-1px);
-      border-color: rgba(0, 0, 0, 0.05);
-      background: linear-gradient(145deg, #ffffff, #f8f8fb);
-    }
-
-    .choice-card:focus-visible {
-      border-color: var(--card-border-active);
-      box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.32);
-    }
-
-    .choice-card--primary:hover {
-      border-color: rgba(0, 122, 255, 0.45);
-      background: linear-gradient(145deg, #ffffff, #eef3ff);
-    }
-
     .footer {
       display: flex;
       justify-content: flex-end;
-      align-items: center;
       margin-top: 18px;
       font-size: 13px;
     }
@@ -184,14 +197,14 @@ router.get("/seating-choice/:showId", (req, res) => {
       padding: 6px 10px;
       border-radius: 999px;
       border: 1px solid rgba(0, 0, 0, 0.06);
-      background: rgba(255, 255, 255, 0.8);
+      background: rgba(255, 255, 255, 0.82);
       backdrop-filter: blur(10px);
       transition:
-        background 140ms ease,
-        border-color 140ms ease,
-        color 140ms ease,
-        transform 140ms ease,
-        box-shadow 140ms ease;
+        background 150ms ease,
+        border-color 150ms ease,
+        color 150ms ease,
+        transform 150ms ease,
+        box-shadow 150ms ease;
     }
 
     .back-link svg {
@@ -213,28 +226,35 @@ router.get("/seating-choice/:showId", (req, res) => {
     <div class="panel">
       <div class="header">
         <h1 class="title">How do you want to sell seats for this event?</h1>
-        <p class="subtitle">Choose a simple unallocated layout or a full seat map.</p>
+        <p class="subtitle">You can change this later before tickets go on sale.</p>
       </div>
 
       <div class="choices">
         <button class="choice-card" data-kind="unallocated">
-          <div class="choice-label">
-            Unallocated seating
-            <span class="choice-pill">Recommended for clubs</span>
+          <div class="choice-icon-wrap">
+            <svg class="choice-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="3" y="9" width="18" height="8" rx="2.4" ry="2.4" fill="none" stroke="currentColor" stroke-width="1.4" />
+              <path d="M6 7h12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+              <path d="M7 18h10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+            </svg>
           </div>
-          <p class="choice-text">
-            Sell tickets without assigning specific seats. Guests sit anywhere.
-          </p>
+          <div class="choice-content">
+            <div class="choice-label">Unallocated seating</div>
+            <p class="choice-text">Guests choose any available seat. Best for simple comedy club layouts.</p>
+          </div>
         </button>
 
         <button class="choice-card choice-card--primary" data-kind="allocated">
-          <div class="choice-label">
-            Allocated seating
-            <span class="choice-pill">Seat map</span>
+          <div class="choice-icon-wrap">
+            <svg class="choice-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="3.5" y="6" width="17" height="12" rx="2.2" ry="2.2" fill="none" stroke="currentColor" stroke-width="1.4" />
+              <path d="M8 6v12M16 6v12M3.5 12h17" fill="none" stroke="currentColor" stroke-width="1.3" />
+            </svg>
           </div>
-          <p class="choice-text">
-            Build a seating plan so customers can choose exact seats.
-          </p>
+          <div class="choice-content">
+            <div class="choice-label">Allocated seating</div>
+            <p class="choice-text">Design a seating map so customers can pick exact seats at checkout.</p>
+          </div>
         </button>
       </div>
 
