@@ -707,17 +707,6 @@ router.get("/seating/unallocated/:showId", (req, res) => {
  * Route: GET /admin/seating/builder/preview/:showId
  * (Full-screen editor will live in a separate router; this is a temporary stub.)
  */
-router.get("/seating/builder/preview/:showId", (req, res) => {
-  const { showId } = req.params;
-  const layout = String(req.query.layout || "tables");
-  res.status(200).send({
-    message:
-      "Seat map builder preview stub for show " +
-      showId +
-      " using layout '" +
-      layout +
-      "'.",
-  });
-});
+
 
 export default router;
