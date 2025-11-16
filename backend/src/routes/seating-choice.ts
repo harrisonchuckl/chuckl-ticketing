@@ -1,28 +1,44 @@
+// backend/src/routes/seating-choice.ts
 import { Router } from "express";
 
 const router = Router();
 
-router.get("/seating/layout-wizard/:showId", (req, res) => {
-  const { showId } = req.params;
+/**
+ * Simple shared shell so both pages feel like part of the same flow.
+ */
+function renderShell(options: {
+  title: string;
+  body: string;
+  stepLabel?: string;
+  showId: string;
+}) {
+  const { title, body, stepLabel, showId } = options;
 
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.send(`<!DOCTYPE html>
+  const stepText = stepLabel
+    ? `<div class="step-pill">${stepLabel}</div>`
+    : "";
+
+  const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Choose layout – TickIn Admin</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>${title}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root {
-      --bg: #f5f7ff;
-      --card-border: #e3e6f2;
-      --card-border-hover: #2563eb;
-      --card-shadow: 0 18px 45px rgba(15, 23, 42, 0.13);
+      --bg: #f3f6fb;
+      --card-bg: #ffffff;
+      --card-border: #e1e7f3;
+      --card-border-active: #3b82f6;
+      --card-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
       --text-main: #0f172a;
-      --text-muted: #6b7280;
-      --chip-text: #4b5563;
+      --text-muted: #64748b;
+      --pill-bg: #e0edff;
+      --pill-text: #2563eb;
       --accent: #2563eb;
-      --radius-lg: 22px;
+      --accent-soft: #e0edff;
+      --radius-xl: 24px;
+      --radius-lg: 20px;
       --radius-pill: 999px;
     }
 
@@ -33,425 +49,675 @@ router.get("/seating/layout-wizard/:showId", (req, res) => {
     html, body {
       margin: 0;
       padding: 0;
-      height: 100%;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
         "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
       color: var(--text-main);
-      background:
-        radial-gradient(circle at top left, #eef2ff 0, transparent 55%),
-        radial-gradient(circle at bottom right, #e0f2fe 0, transparent 55%),
-        #f9fafb;
+      height: 100%;
     }
 
     body {
       display: flex;
-      flex-direction: column;
+      min-height: 100vh;
+      align-items: stretch;
+      justify-content: center;
     }
 
     .page {
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .top-bar {
-      height: 56px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.25);
-      backdrop-filter: blur(16px);
-      background: rgba(248, 250, 252, 0.86);
-      position: sticky;
-      top: 0;
-      z-index: 10;
-    }
-
-    .top-inner {
       width: 100%;
       max-width: 1120px;
-      padding: 0 20px;
+      margin: 32px auto;
+      padding: 0 24px 48px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .page-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 12px;
+      gap: 16px;
     }
 
-    .top-title {
-      font-size: 14px;
-      font-weight: 500;
-      letter-spacing: 0.02em;
+    .page-header-left {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .step-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      background: var(--pill-bg);
+      color: var(--pill-text);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
       text-transform: uppercase;
-      color: #6b7280;
     }
 
-    .back-link {
+    .headline {
+      font-size: 22px;
+      line-height: 1.25;
+      letter-spacing: -0.02em;
+      font-weight: 650;
+    }
+
+    .subhead {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .page-header-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .ghost-button {
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(148, 163, 184, 0.5);
+      padding: 7px 14px;
+      background: rgba(255, 255, 255, 0.7);
+      font-size: 12px;
+      color: var(--text-main);
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 6px 10px;
-      border-radius: 999px;
-      font-size: 13px;
-      color: #4b5563;
+      cursor: pointer;
       text-decoration: none;
-      border: 1px solid rgba(148, 163, 184, 0.5);
-      background: rgba(255, 255, 255, 0.9);
       backdrop-filter: blur(10px);
-      transition: background 0.18s ease, border-color 0.18s ease,
-        transform 0.18s ease, box-shadow 0.18s ease;
-      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
     }
 
-    .back-link span.icon {
-      font-size: 14px;
-      transform: translateY(-0.5px);
-    }
-
-    .back-link:hover {
+    .ghost-button:hover {
       border-color: var(--accent);
+      color: var(--accent);
       background: #ffffff;
-      transform: translateY(-1px);
-      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
     }
 
-    .content {
+    .ghost-button-icon {
+      font-size: 13px;
+    }
+
+    .page-body {
       flex: 1;
-      padding: 26px 20px 40px;
       display: flex;
+      align-items: center;
       justify-content: center;
     }
 
-    .content-inner {
+    .cards-wrapper {
       width: 100%;
-      max-width: 960px;
+      max-width: 880px;
+    }
+
+    /* --- Step 1: two cards layout --- */
+
+    .choice-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 32px;
+      align-items: stretch;
+    }
+
+    @media (max-width: 900px) {
+      .choice-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    .choice-card {
+      background: radial-gradient(circle at top left, #eef4ff 0, #ffffff 40%);
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--card-border);
+      box-shadow: 0 12px 35px rgba(15, 23, 42, 0.06);
+      padding: 28px 24px 26px;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      transition:
+        transform 160ms ease-out,
+        box-shadow 160ms ease-out,
+        border-color 160ms ease-out,
+        background 160ms ease-out;
       display: flex;
-      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .choice-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--card-shadow);
+      border-color: var(--card-border-active);
+      background: radial-gradient(circle at top left, #e0edff 0, #ffffff 45%);
+    }
+
+    .choice-main {
+      display: flex;
+      gap: 18px;
       align-items: center;
     }
 
-    .intro {
-      width: 100%;
-      max-width: 640px;
-      margin-bottom: 28px;
+    .choice-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 18px;
+      background: linear-gradient(135deg, #e0edff, #f5f7ff);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      position: relative;
+    }
+
+    .chip {
+      font-size: 11px;
+      border-radius: 999px;
+      padding: 3px 9px;
+      border: 1px solid rgba(148, 163, 184, 0.45);
+      color: #64748b;
+      background: rgba(255, 255, 255, 0.8);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+    }
+
+    .choice-meta {
       display: flex;
       flex-direction: column;
       gap: 4px;
     }
 
-    .intro-eyebrow {
-      font-size: 13px;
+    .choice-title {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+
+    .choice-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .choice-footer {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 6px;
+      min-width: 140px;
+    }
+
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      justify-content: flex-end;
+    }
+
+    .select-label {
+      font-size: 11px;
+      font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.08em;
-      color: #9ca3af;
-      font-weight: 600;
+      color: var(--accent);
     }
 
-    .intro h1 {
-      margin: 0;
-      font-size: 24px;
-      font-weight: 600;
-      letter-spacing: -0.02em;
-      color: #111827;
-    }
-
-    .intro p {
-      margin: 2px 0 0;
-      font-size: 14px;
-      color: var(--text-muted);
-      max-width: 520px;
-    }
+    /* --- Step 2: layout wizard cards --- */
 
     .layout-grid {
-      width: 100%;
-      max-width: 720px;
-      margin: 0 auto;
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 24px; /* even gap horizontally & vertically */
-      justify-items: stretch;
+      gap: 28px;
+      justify-content: center;
       align-items: stretch;
     }
 
     @media (max-width: 900px) {
       .layout-grid {
-        grid-template-columns: 1fr;
-        max-width: 400px;
+        grid-template-columns: minmax(0, 1fr);
       }
     }
 
     .layout-card {
-      position: relative;
-      border-radius: var(--radius-lg);
+      background: radial-gradient(circle at top, #eef4ff 0, #ffffff 55%);
+      border-radius: var(--radius-xl);
       border: 1px solid var(--card-border);
-      background:
-        radial-gradient(circle at top left, rgba(255, 255, 255, 0.8), transparent 55%),
-        radial-gradient(circle at bottom right, rgba(219, 234, 254, 0.9), transparent 60%),
-        #f9fafb;
-      box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
-      padding: 16px 18px 14px;
+      box-shadow: 0 12px 35px rgba(15, 23, 42, 0.05);
+      padding: 24px 22px 20px;
       cursor: pointer;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      gap: 12px;
-      aspect-ratio: 4 / 5;       /* more compact, tile-like */
-      min-height: 210px;
+      gap: 18px;
       transition:
-        transform 0.18s ease,
-        box-shadow 0.18s ease,
-        border-color 0.18s ease,
-        background 0.18s ease;
+        transform 160ms ease-out,
+        box-shadow 160ms ease-out,
+        border-color 160ms ease-out,
+        background 160ms ease-out;
     }
 
     .layout-card:hover {
-      transform: translateY(-4px);
-      border-color: var(--card-border-hover);
+      transform: translateY(-2px);
+      border-color: var(--card-border-active);
       box-shadow: var(--card-shadow);
-      background:
-        radial-gradient(circle at top left, rgba(239, 246, 255, 0.4), transparent 55%),
-        radial-gradient(circle at bottom right, rgba(219, 234, 254, 1), transparent 60%),
-        #ffffff;
+      background: radial-gradient(circle at top, #e0edff 0, #ffffff 60%);
     }
 
-    .layout-card:focus-visible {
-      outline: 2px solid var(--accent);
-      outline-offset: 2px;
-    }
-
-    .layout-main {
+    .layout-top {
       display: flex;
-      flex-direction: row;
-      gap: 12px;
+      gap: 14px;
       align-items: flex-start;
     }
 
     .layout-icon {
-      flex-shrink: 0;
-      width: 46px;
-      height: 46px;
-      border-radius: 18px;
+      width: 40px;
+      height: 40px;
+      border-radius: 16px;
+      background: linear-gradient(145deg, #e0edff, #f9fbff);
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      font-size: 24px;
-      background:
-        radial-gradient(circle at 0% 0%, #e0edff 0, #eef2ff 40%, #e0f2fe 100%);
-      box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
+      flex-shrink: 0;
+      position: relative;
     }
 
-    .layout-text {
+    .layout-title-block {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .layout-title {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+
+    .layout-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .layout-bottom {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .layout-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .layout-pill {
+      font-size: 11px;
+      border-radius: 999px;
+      padding: 3px 8px;
+      border: 1px solid rgba(148, 163, 184, 0.45);
+      color: #64748b;
+      background: rgba(255, 255, 255, 0.9);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+    }
+
+    .layout-select-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+    }
+
+    /* --- icons --- */
+
+    .icon-grid {
+      width: 20px;
+      height: 20px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-auto-rows: 1fr;
+      gap: 2px;
+    }
+
+    .icon-grid span {
+      width: 100%;
+      height: 100%;
+      border-radius: 4px;
+      background: #93c5fd;
+    }
+
+    .icon-rows {
+      width: 20px;
       display: flex;
       flex-direction: column;
       gap: 3px;
     }
 
-    .layout-title {
-      font-size: 17px;
-      font-weight: 600;
-      letter-spacing: -0.01em;
-      color: #111827;
-    }
-
-    .layout-desc {
-      font-size: 13px;
-      line-height: 1.4;
-      color: var(--text-muted);
-    }
-
-    .layout-chips {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-top: 2px;
-    }
-
-    .chip {
-      border-radius: var(--radius-pill);
-      padding: 3px 8px;
-      font-size: 11px;
-      border: 1px solid rgba(148, 163, 184, 0.4);
-      background: rgba(255, 255, 255, 0.85);
-      color: var(--chip-text);
-      white-space: nowrap;
-    }
-
-    .layout-card:hover .chip {
-      background: rgba(239, 246, 255, 0.95);
-      border-color: rgba(129, 140, 248, 0.8);
-    }
-
-    .layout-footer {
-      display: flex;
-      align-items: center;
-      justify-content: flex-start;
-      font-size: 11px;
-      color: #9ca3af;
-      margin-top: 6px;
-    }
-
-    .layout-step-pill {
-      padding: 3px 9px;
+    .icon-rows span {
+      height: 4px;
       border-radius: 999px;
-      background: rgba(15, 23, 42, 0.04);
-      border: 1px solid rgba(148, 163, 184, 0.35);
-      font-size: 11px;
-      font-weight: 500;
-      color: #6b7280;
+      background: #60a5fa;
     }
 
-    @media (max-width: 640px) {
-      .content {
-        padding: 20px 16px 28px;
-      }
-      .intro h1 {
-        font-size: 20px;
-      }
-      .layout-card {
-        aspect-ratio: auto;
-        min-height: 200px;
-      }
+    .icon-mixed {
+      width: 20px;
+      height: 20px;
+      position: relative;
+    }
+
+    .icon-mixed .block {
+      position: absolute;
+      border-radius: 4px;
+      background: #93c5fd;
+    }
+
+    .icon-mixed .block.a {
+      inset: 0 8px 8px 0;
+    }
+
+    .icon-mixed .block.b {
+      inset: 8px 0 0 8px;
+      background: #bfdbfe;
+    }
+
+    .icon-blank {
+      width: 20px;
+      height: 14px;
+      border-radius: 6px;
+      border: 2px solid #93c5fd;
+      background: #eff6ff;
     }
   </style>
 </head>
 <body>
   <div class="page">
-    <header class="top-bar">
-      <div class="top-inner">
-        <div class="top-title">Step 2 of 4 · Layout style</div>
-        <a href="#" class="back-link" data-back-link>
-          <span class="icon">←</span>
+    <header class="page-header">
+      <div class="page-header-left">
+        ${stepText}
+        <div class="headline">${title}</div>
+      </div>
+      <div class="page-header-right">
+        <a class="ghost-button" href="/admin/ui/shows/${showId}/edit">
+          <span class="ghost-button-icon">←</span>
           <span>Back to event details</span>
         </a>
       </div>
     </header>
-
-    <main class="content">
-      <div class="content-inner">
-        <section class="intro">
-          <div class="intro-eyebrow">Layout style</div>
-          <h1>How would you like this room to look?</h1>
-          <p>Pick a starting layout for this event. You can still refine rows, tables and zones in the builder.</p>
-        </section>
-
-        <section class="layout-grid">
-          <!-- Tables & chairs -->
-          <button class="layout-card" type="button" data-layout="tables">
-            <div class="layout-main">
-              <div class="layout-icon" aria-hidden="true">🪑</div>
-              <div class="layout-text">
-                <div class="layout-title">Tables & chairs</div>
-                <div class="layout-desc">
-                  Cabaret-style maps with round or long tables and seats auto-generated around them.
-                </div>
-              </div>
-            </div>
-            <div>
-              <div class="layout-chips">
-                <span class="chip">Comedy rooms</span>
-                <span class="chip">Drinks & tables</span>
-              </div>
-              <div class="layout-footer">
-                <span class="layout-step-pill">Best for cabaret layouts</span>
-              </div>
-            </div>
-          </button>
-
-          <!-- Sections & rows -->
-          <button class="layout-card" type="button" data-layout="sections">
-            <div class="layout-main">
-              <div class="layout-icon" aria-hidden="true">🎭</div>
-              <div class="layout-text">
-                <div class="layout-title">Sections & rows</div>
-                <div class="layout-desc">
-                  Classic theatre blocks with aisles, numbered rows and fixed seating.
-                </div>
-              </div>
-            </div>
-            <div>
-              <div class="layout-chips">
-                <span class="chip">Stalls / circle</span>
-                <span class="chip">Fixed seating</span>
-              </div>
-              <div class="layout-footer">
-                <span class="layout-step-pill">Best for theatres</span>
-              </div>
-            </div>
-          </button>
-
-          <!-- Mixed seating -->
-          <button class="layout-card" type="button" data-layout="mixed">
-            <div class="layout-main">
-              <div class="layout-icon" aria-hidden="true">🧩</div>
-              <div class="layout-text">
-                <div class="layout-title">Mixed seating</div>
-                <div class="layout-desc">
-                  Blend tables, rows and standing zones in a single flexible map.
-                </div>
-              </div>
-            </div>
-            <div>
-              <div class="layout-chips">
-                <span class="chip">Flexible setups</span>
-                <span class="chip">VIP zones</span>
-              </div>
-              <div class="layout-footer">
-                <span class="layout-step-pill">Best for hybrid rooms</span>
-              </div>
-            </div>
-          </button>
-
-          <!-- Blank canvas -->
-          <button class="layout-card" type="button" data-layout="blank">
-            <div class="layout-main">
-              <div class="layout-icon" aria-hidden="true">⬜</div>
-              <div class="layout-text">
-                <div class="layout-title">Blank canvas</div>
-                <div class="layout-desc">
-                  Start from an empty room and add only the tables, rows and zones you need.
-                </div>
-              </div>
-            </div>
-            <div>
-              <div class="layout-chips">
-                <span class="chip">Any configuration</span>
-                <span class="chip">Full control</span>
-              </div>
-              <div class="layout-footer">
-                <span class="layout-step-pill">Design from scratch</span>
-              </div>
-            </div>
-          </button>
-        </section>
+    <main class="page-body">
+      <div class="cards-wrapper">
+        ${body}
       </div>
     </main>
   </div>
-
-  <script>
-    (function () {
-      const showId = ${JSON.stringify(showId)};
-
-      const cards = document.querySelectorAll(".layout-card");
-      cards.forEach((card) => {
-        card.addEventListener("click", () => {
-          const layout = card.getAttribute("data-layout");
-          if (!layout) return;
-          window.location.href =
-            "/admin/seating/builder/preview/" + encodeURIComponent(showId) +
-            "?layout=" + encodeURIComponent(layout);
-        });
-      });
-
-      const backLink = document.querySelector("[data-back-link]");
-      if (backLink) {
-        backLink.addEventListener("click", function (e) {
-          e.preventDefault();
-          window.location.href = "/admin/ui/shows/" + encodeURIComponent(showId) + "/edit";
-        });
-      }
-    })();
-  </script>
 </body>
-</html>`);
+</html>`;
+
+  return html;
+}
+
+/**
+ * STEP 1 (of 4) — Unallocated vs Allocated seating
+ * Route: GET /admin/seating-choice/:showId
+ */
+router.get("/seating-choice/:showId", (req, res) => {
+  const { showId } = req.params;
+
+  const body = `
+    <section class="choice-grid">
+      <article class="choice-card" data-choice="unallocated">
+        <div class="choice-main">
+          <div class="choice-icon">
+            <div class="icon-rows">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </div>
+          <div class="choice-meta">
+            <div class="choice-title">Unallocated seating</div>
+            <div class="choice-desc">
+              Simple tickets, no seat map. Perfect for comedy clubs and general admission events.
+            </div>
+          </div>
+        </div>
+        <div class="choice-footer">
+          <div class="chip-row">
+            <div class="chip">Quick to set up</div>
+            <div class="chip">Best for GA rooms</div>
+          </div>
+          <div class="select-label">Choose this style</div>
+        </div>
+      </article>
+
+      <article class="choice-card" data-choice="allocated">
+        <div class="choice-main">
+          <div class="choice-icon">
+            <div class="icon-grid">
+              <span></span><span></span><span></span>
+              <span></span><span></span><span></span>
+              <span></span><span></span><span></span>
+            </div>
+          </div>
+          <div class="choice-meta">
+            <div class="choice-title">Allocated seating</div>
+            <div class="choice-desc">
+              Build a detailed seating map. Let customers pick exact seats by price and area.
+            </div>
+          </div>
+        </div>
+        <div class="choice-footer">
+          <div class="chip-row">
+            <div class="chip">Seat picker</div>
+            <div class="chip">Zones &amp; price levels</div>
+          </div>
+          <div class="select-label">Choose this style</div>
+        </div>
+      </article>
+    </section>
+
+    <script>
+      (function () {
+        var showId = "${showId}";
+        var cards = document.querySelectorAll(".choice-card");
+        if (!cards || !cards.length) return;
+
+        cards.forEach(function (card) {
+          card.addEventListener("click", function () {
+            var choice = card.getAttribute("data-choice");
+            if (choice === "unallocated") {
+              window.location.href = "/admin/seating/unallocated/" + showId;
+            } else if (choice === "allocated") {
+              window.location.href = "/admin/seating/layout-wizard/" + showId;
+            }
+          });
+        });
+      })();
+    </script>
+  `;
+
+  const html = renderShell({
+    title: "How do you want to sell seats for this event?",
+    body,
+    stepLabel: "Step 1 of 4 · Seating style",
+    showId,
+  });
+
+  res.status(200).send(html);
+});
+
+/**
+ * STEP 2 (of 4) — Layout type (tables, rows, mixed, blank)
+ * Route: GET /admin/seating/layout-wizard/:showId
+ */
+router.get("/seating/layout-wizard/:showId", (req, res) => {
+  const { showId } = req.params;
+
+  const body = `
+    <section class="layout-grid">
+      <article class="layout-card" data-layout="tables">
+        <div class="layout-top">
+          <div class="layout-icon">
+            <div class="icon-grid">
+              <span></span><span></span>
+              <span></span><span></span>
+            </div>
+          </div>
+          <div class="layout-title-block">
+            <div class="layout-title">Tables &amp; chairs</div>
+            <div class="layout-desc">
+              Cabaret-style maps with round or long tables and seats auto-generated around them.
+            </div>
+          </div>
+        </div>
+        <div class="layout-bottom">
+          <div class="layout-tags">
+            <span class="layout-pill">Comedy rooms</span>
+            <span class="layout-pill">Drinks &amp; tables</span>
+          </div>
+          <div class="layout-select-label">Use this layout</div>
+        </div>
+      </article>
+
+      <article class="layout-card" data-layout="sections">
+        <div class="layout-top">
+          <div class="layout-icon">
+            <div class="icon-rows">
+              <span></span>
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </div>
+          <div class="layout-title-block">
+            <div class="layout-title">Sections &amp; rows</div>
+            <div class="layout-desc">
+              Classic theatre blocks with aisles, numbered rows and fixed seating.
+            </div>
+          </div>
+        </div>
+        <div class="layout-bottom">
+          <div class="layout-tags">
+            <span class="layout-pill">Stalls / circle</span>
+            <span class="layout-pill">Fixed seating</span>
+          </div>
+          <div class="layout-select-label">Use this layout</div>
+        </div>
+      </article>
+
+      <article class="layout-card" data-layout="mixed">
+        <div class="layout-top">
+          <div class="layout-icon">
+            <div class="icon-mixed">
+              <div class="block a"></div>
+              <div class="block b"></div>
+            </div>
+          </div>
+          <div class="layout-title-block">
+            <div class="layout-title">Mixed seating</div>
+            <div class="layout-desc">
+              Blend tables, rows and standing zones in a single flexible map.
+            </div>
+          </div>
+        </div>
+        <div class="layout-bottom">
+          <div class="layout-tags">
+            <span class="layout-pill">Flexible setups</span>
+            <span class="layout-pill">VIP areas</span>
+          </div>
+          <div class="layout-select-label">Use this layout</div>
+        </div>
+      </article>
+
+      <article class="layout-card" data-layout="blank">
+        <div class="layout-top">
+          <div class="layout-icon">
+            <div class="icon-blank"></div>
+          </div>
+          <div class="layout-title-block">
+            <div class="layout-title">Blank canvas</div>
+            <div class="layout-desc">
+              Start from an empty room and add only the tables, rows and zones you need.
+            </div>
+          </div>
+        </div>
+        <div class="layout-bottom">
+          <div class="layout-tags">
+            <span class="layout-pill">Any configuration</span>
+            <span class="layout-pill">Full control</span>
+          </div>
+          <div class="layout-select-label">Use this layout</div>
+        </div>
+      </article>
+    </section>
+
+    <script>
+      (function () {
+        var showId = "${showId}";
+        var cards = document.querySelectorAll(".layout-card");
+        if (!cards || !cards.length) return;
+
+        cards.forEach(function (card) {
+          card.addEventListener("click", function () {
+            var layout = card.getAttribute("data-layout") || "tables";
+            var url = "/admin/seating/builder/preview/" + showId + "?layout=" + layout;
+            window.location.href = url;
+          });
+        });
+      })();
+    </script>
+  `;
+
+  const html = renderShell({
+    title: "How would you like this room to look?",
+    body,
+    stepLabel: "Step 2 of 4 · Layout style",
+    showId,
+  });
+
+  res.status(200).send(html);
+});
+
+/**
+ * STEP 1 — UNALLOCATED stub
+ * Route: GET /admin/seating/unallocated/:showId
+ * (For now, just a placeholder until we plug in the ticket-types screen.)
+ */
+router.get("/seating/unallocated/:showId", (req, res) => {
+  const { showId } = req.params;
+  res.status(200).send({
+    message:
+      "Unallocated seating setup page stub. This will lead to ticket-type creation for show " +
+      showId,
+  });
+});
+
+/**
+ * STEP 3 — Builder preview stub
+ * Route: GET /admin/seating/builder/preview/:showId
+ * (Full-screen editor will live in a separate router; this is a temporary stub.)
+ */
+router.get("/seating/builder/preview/:showId", (req, res) => {
+  const { showId } = req.params;
+  const layout = String(req.query.layout || "tables");
+  res.status(200).send({
+    message:
+      "Seat map builder preview stub for show " +
+      showId +
+      " using layout '" +
+      layout +
+      "'.",
+  });
 });
 
 export default router;
