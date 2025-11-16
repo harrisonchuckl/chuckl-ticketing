@@ -26,6 +26,9 @@ import seatMapsRouter from "./routes/seatmaps.js";
 // NEW: seating-choice + stubs for unallocated / layout wizard
 import seatingChoiceRouter from "./routes/seating-choice.js";
 
+// NEW: full-screen builder preview (Step 3 of 4)
+import seatingBuilderRouter from "./routes/admin-seating-builder.js";
+
 const app = express();
 
 // behind a proxy/load balancer (Railway / Cloud Run / etc.)
@@ -111,6 +114,10 @@ app.use("/seatmaps", seatMapsRouter);
 //  - GET /admin/seating/unallocated/:showId
 //  - GET /admin/seating/layout-wizard/:showId
 app.use("/admin", seatingChoiceRouter);
+
+// NEW: Full-screen builder preview (Step 3)
+//  - GET /admin/seating/builder/preview/:showId
+app.use("/admin", seatingBuilderRouter);
 
 // ---------- Admin SPA (Organiser Console) ----------
 
