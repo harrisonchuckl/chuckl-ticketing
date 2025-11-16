@@ -3,30 +3,37 @@ import { Router } from "express";
 const router = Router();
 
 /**
- * Step 1 of the seating wizard:
- * Simple, minimal choice between Unallocated vs Allocated seating.
- *
- * Route: /admin/seating-choice/:showId
+ * Step 1 – seating style choice (Unallocated vs Allocated)
  */
-router.get("/seating-choice/:showId", (req, res) => {
-  const { showId } = req.params;
+function renderSeatingChoicePage(showId: string) {
+  const backUrl = `/admin/ui/shows/${encodeURIComponent(showId)}/edit`;
+  const unallocatedUrl = `/admin/seating/unallocated/${encodeURIComponent(
+    showId
+  )}`;
+  const allocatedUrl = `/admin/seating/layout-wizard/${encodeURIComponent(
+    showId
+  )}`;
 
-  const html = `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Choose seating style</title>
+  <title>Seating style – TickIn Admin</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root {
-      --bg-page: #f5f5f7;
-      --bg-panel: #ffffff;
-      --border-subtle: #e5e5ea;
-      --border-strong: #007aff;
-      --shadow-soft: 0 18px 35px rgba(0, 0, 0, 0.06);
-      --text-main: #111111;
-      --text-muted: #6e6e73;
-      --accent: #007aff;
+      --bg: #f5f7fb;
+      --card-bg: #ffffff;
+      --border-subtle: #e2e4ea;
+      --border-strong: #c4c7d2;
+      --accent: #2563eb;
+      --accent-soft: rgba(37, 99, 235, 0.08);
+      --accent-ring: rgba(37, 99, 235, 0.45);
+      --text-main: #0f172a;
+      --text-muted: #6b7280;
+      --shadow-soft: 0 18px 45px rgba(15, 23, 42, 0.08);
+      --radius-xl: 24px;
+      --radius-pill: 999px;
     }
 
     * {
@@ -37,50 +44,86 @@ router.get("/seating-choice/:showId", (req, res) => {
       margin: 0;
       padding: 0;
       height: 100%;
-      width: 100%;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
-        "Helvetica Neue", Arial, sans-serif;
-      background: radial-gradient(circle at top, #ffffff 0, #f5f5f7 55%, #f0f0f5 100%);
+        "Segoe UI", sans-serif;
       color: var(--text-main);
+      background: radial-gradient(circle at top left, #eef2ff 0, #f9fafb 40%, #f3f4f6 100%);
     }
 
     body {
       display: flex;
+      align-items: stretch;
+      justify-content: center;
+    }
+
+    .page {
+      flex: 1;
+      min-height: 100vh;
+      display: flex;
       align-items: center;
       justify-content: center;
-      padding: 32px 16px;
+      padding: 32px 24px;
     }
 
     .shell {
       width: 100%;
-      max-width: 920px;
-    }
-
-    .panel {
-      background: var(--bg-panel);
-      border-radius: 30px;
+      max-width: 1080px;
+      background: linear-gradient(135deg, rgba(255,255,255,0.92), rgba(248,250,252,0.98));
+      border-radius: 32px;
       box-shadow: var(--shadow-soft);
-      border: 1px solid rgba(0, 0, 0, 0.03);
-      padding: 28px 32px 24px;
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      padding: 28px 28px 26px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
     }
 
-    @media (max-width: 720px) {
-      .panel {
-        border-radius: 24px;
-        padding: 24px 18px 20px;
+    @media (min-width: 900px) {
+      .shell {
+        padding: 28px 32px 26px;
       }
     }
 
-    .header {
-      text-align: center;
-      margin-bottom: 22px;
+    .shell-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
     }
 
-    .title {
-      margin: 0 0 6px;
-      font-size: 24px;
+    .title-block {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .step-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: var(--radius-pill);
+      background: rgba(15, 23, 42, 0.03);
+      color: var(--text-muted);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-weight: 500;
+    }
+
+    .step-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--accent);
+      box-shadow: 0 0 0 3px rgba(37,99,235,0.25);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 22px;
+      letter-spacing: -0.03em;
       font-weight: 600;
-      letter-spacing: -0.01em;
     }
 
     .subtitle {
@@ -89,266 +132,844 @@ router.get("/seating-choice/:showId", (req, res) => {
       color: var(--text-muted);
     }
 
-    .choices {
+    .back-link {
+      font-size: 13px;
+      color: var(--text-muted);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(148, 163, 184, 0.5);
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(8px);
+      transition: all 140ms ease-out;
+    }
+
+    .back-link:hover {
+      border-color: rgba(148, 163, 184, 0.9);
+      background: #ffffff;
+      color: #111827;
+    }
+
+    .back-chevron {
+      font-size: 14px;
+      transform: translateY(-0.5px);
+    }
+
+    .content {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      margin-top: 6px;
+    }
+
+    .cards-row {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 18px;
-      margin-top: 10px;
+      gap: 16px;
     }
 
     @media (max-width: 720px) {
-      .choices {
-        grid-template-columns: 1fr;
+      .cards-row {
+        grid-template-columns: minmax(0, 1fr);
       }
     }
 
     .choice-card {
       position: relative;
-      border-radius: 22px;
-      background: linear-gradient(145deg, #ffffff, #fafafa);
+      border-radius: var(--radius-xl);
       border: 1px solid var(--border-subtle);
-      padding: 20px 22px 18px;
+      background: var(--card-bg);
+      padding: 18px 18px 16px;
       cursor: pointer;
+      overflow: hidden;
+      transition: all 150ms ease-out;
       display: flex;
-      flex-direction: row;
-      align-items: center;
-      gap: 14px;
-      transition:
-        box-shadow 150ms ease,
-        transform 150ms ease,
-        border-color 150ms ease,
-        background 150ms ease;
-      outline: none;
-    }
-
-    .choice-card--primary {
-      background: linear-gradient(135deg, #ffffff, #f7f8ff);
+      flex-direction: column;
+      min-height: 124px;
     }
 
     .choice-card:hover {
-      box-shadow: 0 22px 40px rgba(0, 0, 0, 0.08);
-      transform: translateY(-1px);
-      border-color: rgba(0, 0, 0, 0.06);
-      background: linear-gradient(145deg, #ffffff, #f8f8fb);
+      border-color: var(--accent);
+      box-shadow: 0 16px 35px rgba(15, 23, 42, 0.11);
+      transform: translateY(-2px);
     }
 
-    .choice-card--primary:hover {
-      border-color: rgba(0, 122, 255, 0.45);
-      background: linear-gradient(145deg, #ffffff, #edf2ff);
+    .choice-card:active {
+      transform: translateY(0);
+      box-shadow: 0 10px 20px rgba(15, 23, 42, 0.09);
     }
 
-    .choice-card:focus-visible {
-      border-color: var(--border-strong);
-      box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.35);
-    }
-
-    .choice-icon-wrap {
-      flex-shrink: 0;
-      width: 38px;
-      height: 38px;
-      border-radius: 14px;
-      background: rgba(0, 0, 0, 0.03);
-      display: flex;
+    .badge {
+      display: inline-flex;
       align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      background: #eff6ff;
+      color: #1d4ed8;
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+
+    .badge-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: #2563eb;
+    }
+
+    .card-title {
+      font-size: 16px;
+      letter-spacing: -0.02em;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .card-text {
+      font-size: 13px;
+      color: var(--text-muted);
+      max-width: 340px;
+    }
+
+    .chip-row {
+      margin-top: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .chip {
+      font-size: 11px;
+      padding: 3px 9px;
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(148, 163, 184, 0.6);
+      color: #4b5563;
+      background: rgba(249, 250, 251, 0.8);
+    }
+
+    .choice-card.accent {
+      background: radial-gradient(circle at top left, #eef2ff 0, #ffffff 55%);
+    }
+
+    .choice-card.accent .chip {
+      border-color: rgba(37, 99, 235, 0.35);
+      background: rgba(239, 246, 255, 0.7);
+      color: #1d4ed8;
+    }
+
+    a.card-link {
+      text-decoration: none;
+      color: inherit;
+      display: block;
+      height: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="shell">
+      <div class="shell-header">
+        <div class="title-block">
+          <div class="step-pill">
+            <span class="step-dot"></span>
+            <span>Step 1 of 4 · Seating style</span>
+          </div>
+          <h1>How do you want to sell seats for this event?</h1>
+          <p class="subtitle">Choose between simple unallocated seating or a detailed seat map. You can change this later.</p>
+        </div>
+        <a class="back-link" href="${backUrl}">
+          <span class="back-chevron">←</span>
+          <span>Back to event details</span>
+        </a>
+      </div>
+
+      <div class="content">
+        <div class="cards-row">
+          <a class="card-link" href="${unallocatedUrl}">
+            <div class="choice-card">
+              <span class="badge">
+                <span class="badge-dot"></span>
+                <span>General admission</span>
+              </span>
+              <div class="card-title">Unallocated seating</div>
+              <div class="card-text">
+                Sell tickets without seat numbers. Ideal for comedy clubs and relaxed events where customers sit anywhere.
+              </div>
+              <div class="chip-row">
+                <span class="chip">Fast to set up</span>
+                <span class="chip">No seat map</span>
+              </div>
+            </div>
+          </a>
+
+          <a class="card-link" href="${allocatedUrl}">
+            <div class="choice-card accent">
+              <span class="badge">
+                <span class="badge-dot"></span>
+                <span>Seat picker</span>
+              </span>
+              <div class="card-title">Allocated seating</div>
+              <div class="card-text">
+                Let customers choose their exact seats with a reusable seating map tailored to this venue.
+              </div>
+              <div class="chip-row">
+                <span class="chip">Seat map</span>
+                <span class="chip">Zones &amp; rows</span>
+                <span class="chip">Perfect for theatres</span>
+              </div>
+            </div>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+/**
+ * Step 2 – layout type wizard (Tables & Chairs, Sections & Rows, Mixed, Blank)
+ */
+function renderLayoutWizardPage(showId: string) {
+  const backUrl = `/admin/seating-choice/${encodeURIComponent(showId)}`;
+  // For now we just send users to a stub builder with a placeholder seatmap ID.
+  const builderBase = `/admin/seating/builder/preview-${encodeURIComponent(
+    showId
+  )}`;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Layout type – TickIn Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card-bg: #ffffff;
+      --border-subtle: #e2e4ea;
+      --accent: #2563eb;
+      --accent-soft: rgba(37, 99, 235, 0.08);
+      --accent-ring: rgba(37, 99, 235, 0.45);
+      --text-main: #0f172a;
+      --text-muted: #6b7280;
+      --shadow-soft: 0 18px 45px rgba(15, 23, 42, 0.08);
+      --radius-xl: 24px;
+      --radius-pill: 999px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+        "Segoe UI", sans-serif;
+      color: var(--text-main);
+      background: radial-gradient(circle at top left, #eef2ff 0, #f9fafb 40%, #f3f4f6 100%);
+    }
+
+    body {
+      display: flex;
+      align-items: stretch;
       justify-content: center;
     }
 
-    .choice-card--primary .choice-icon-wrap {
-      background: rgba(0, 122, 255, 0.08);
+    .page {
+      flex: 1;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 24px;
     }
 
-    .choice-icon {
-      width: 22px;
-      height: 22px;
-      color: var(--accent);
+    .shell {
+      width: 100%;
+      max-width: 1080px;
+      background: linear-gradient(135deg, rgba(255,255,255,0.94), rgba(248,250,252,0.99));
+      border-radius: 32px;
+      box-shadow: var(--shadow-soft);
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      padding: 28px 28px 26px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
     }
 
-    .choice-content {
+    @media (min-width: 900px) {
+      .shell { padding: 28px 32px 26px; }
+    }
+
+    .shell-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .title-block {
       display: flex;
       flex-direction: column;
       gap: 4px;
     }
 
-    .choice-label {
-      font-size: 16px;
-      font-weight: 600;
-      letter-spacing: -0.01em;
+    .step-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: var(--radius-pill);
+      background: rgba(15, 23, 42, 0.03);
+      color: var(--text-muted);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-weight: 500;
     }
 
-    .choice-text {
+    .step-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--accent);
+      box-shadow: 0 0 0 3px rgba(37,99,235,0.25);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 22px;
+      letter-spacing: -0.03em;
+      font-weight: 600;
+    }
+
+    .subtitle {
+      margin: 0;
       font-size: 13px;
       color: var(--text-muted);
-      margin: 0;
-    }
-
-    .footer {
-      display: flex;
-      justify-content: flex-end;
-      margin-top: 18px;
-      font-size: 13px;
     }
 
     .back-link {
+      font-size: 13px;
       color: var(--text-muted);
       text-decoration: none;
       display: inline-flex;
       align-items: center;
-      gap: 4px;
+      gap: 6px;
       padding: 6px 10px;
-      border-radius: 999px;
-      border: 1px solid rgba(0, 0, 0, 0.06);
-      background: rgba(255, 255, 255, 0.82);
-      backdrop-filter: blur(10px);
-      transition:
-        background 150ms ease,
-        border-color 150ms ease,
-        color 150ms ease,
-        transform 150ms ease,
-        box-shadow 150ms ease;
-    }
-
-    .back-link svg {
-      width: 13px;
-      height: 13px;
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(148, 163, 184, 0.5);
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(8px);
+      transition: all 140ms ease-out;
     }
 
     .back-link:hover {
+      border-color: rgba(148, 163, 184, 0.9);
       background: #ffffff;
-      border-color: rgba(0, 0, 0, 0.14);
-      color: var(--text-main);
+      color: #111827;
+    }
+
+    .back-chevron {
+      font-size: 14px;
       transform: translateY(-0.5px);
-      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.06);
+    }
+
+    .content {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      margin-top: 6px;
+    }
+
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    @media (max-width: 860px) {
+      .cards-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    .layout-card {
+      position: relative;
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--border-subtle);
+      background: var(--card-bg);
+      padding: 18px 18px 16px;
+      cursor: pointer;
+      overflow: hidden;
+      transition: all 150ms ease-out;
+      display: flex;
+      flex-direction: column;
+      min-height: 140px;
+    }
+
+    .layout-card:hover {
+      border-color: var(--accent);
+      box-shadow: 0 16px 35px rgba(15, 23, 42, 0.11);
+      transform: translateY(-2px);
+    }
+
+    .layout-card:active {
+      transform: translateY(0);
+      box-shadow: 0 10px 20px rgba(15, 23, 42, 0.09);
+    }
+
+    .layout-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 6px;
+    }
+
+    .layout-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 14px;
+      background: radial-gradient(circle at 30% 20%, #eff6ff 0, #dbeafe 40%, #bfdbfe 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .icon-dot, .icon-line, .icon-block {
+      position: absolute;
+      border-radius: 999px;
+      background: rgba(15,23,42,0.85);
+    }
+
+    .icon-dot { width: 5px; height: 5px; }
+    .icon-line { height: 3px; border-radius: 999px; }
+    .icon-block { border-radius: 6px; }
+
+    .layout-title {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    .layout-text {
+      font-size: 13px;
+      color: var(--text-muted);
+      max-width: 320px;
+    }
+
+    .layout-meta {
+      margin-top: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .meta-chip {
+      font-size: 11px;
+      padding: 3px 9px;
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(148, 163, 184, 0.6);
+      color: #4b5563;
+      background: rgba(249, 250, 251, 0.8);
+    }
+
+    .layout-card.primary {
+      background: radial-gradient(circle at top left, #eef2ff 0, #ffffff 60%);
+    }
+
+    .layout-card.primary .layout-icon {
+      background: radial-gradient(circle at 20% 15%, #eff6ff 0, #dbeafe 35%, #bfdbfe 80%);
+    }
+
+    a.layout-link {
+      text-decoration: none;
+      color: inherit;
+      display: block;
+      height: 100%;
+    }
+
+    .footer-note {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
     }
   </style>
 </head>
 <body>
-  <div class="shell">
-    <div class="panel">
-      <div class="header">
-        <h1 class="title">How do you want to sell seats for this event?</h1>
-        <p class="subtitle">You can change this later before tickets go on sale.</p>
-      </div>
-
-      <div class="choices">
-        <button class="choice-card" data-kind="unallocated">
-          <div class="choice-icon-wrap">
-            <svg class="choice-icon" viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="3" y="9" width="18" height="8" rx="2.4" ry="2.4" fill="none" stroke="currentColor" stroke-width="1.4" />
-              <path d="M6 7h12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
-              <path d="M7 18h10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
-            </svg>
+  <div class="page">
+    <div class="shell">
+      <div class="shell-header">
+        <div class="title-block">
+          <div class="step-pill">
+            <span class="step-dot"></span>
+            <span>Step 2 of 4 · Layout type</span>
           </div>
-          <div class="choice-content">
-            <div class="choice-label">Unallocated seating</div>
-            <p class="choice-text">Guests choose any available seat. Best for simple comedy club layouts.</p>
-          </div>
-        </button>
-
-        <button class="choice-card choice-card--primary" data-kind="allocated">
-          <div class="choice-icon-wrap">
-            <svg class="choice-icon" viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="3.5" y="6" width="17" height="12" rx="2.2" ry="2.2" fill="none" stroke="currentColor" stroke-width="1.4" />
-              <path d="M8 6v12M16 6v12M3.5 12h17" fill="none" stroke="currentColor" stroke-width="1.3" />
-            </svg>
-          </div>
-          <div class="choice-content">
-            <div class="choice-label">Allocated seating</div>
-            <p class="choice-text">Design a seating map so customers can pick exact seats at checkout.</p>
-          </div>
-        </button>
-      </div>
-
-      <div class="footer">
-        <a class="back-link" href="/admin/ui/shows/${encodeURIComponent(
-          showId
-        )}/edit">
-          <svg viewBox="0 0 20 20" aria-hidden="true">
-            <path d="M11.3 4.3a1 1 0 0 1 0 1.4L8.41 8.59 14 9a1 1 0 1 1-.07 2L8.4 10.99l2.9 2.9a1 1 0 0 1-1.42 1.42l-4.24-4.25a1.25 1.25 0 0 1 0-1.77l4.24-4.24a1 1 0 0 1 1.42 0z" fill="currentColor" />
-          </svg>
-          Back to event details
+          <h1>What kind of seating layout do you need?</h1>
+          <p class="subtitle">Pick the layout that best matches this venue. You can refine rows, tables and seats in the next step.</p>
+        </div>
+        <a class="back-link" href="${backUrl}">
+          <span class="back-chevron">←</span>
+          <span>Back to seating style</span>
         </a>
+      </div>
+
+      <div class="content">
+        <div class="cards-grid">
+          <!-- Tables & Chairs -->
+          <a class="layout-link" href="${builderBase}?layout=tables">
+            <div class="layout-card primary">
+              <div class="layout-header">
+                <div class="layout-icon">
+                  <div class="icon-dot" style="top: 9px; left: 10px;"></div>
+                  <div class="icon-dot" style="top: 9px; right: 10px;"></div>
+                  <div class="icon-dot" style="bottom: 9px; left: 10px;"></div>
+                  <div class="icon-dot" style="bottom: 9px; right: 10px;"></div>
+                  <div class="icon-line" style="width: 70%; top: 50%; left: 15%; transform: translateY(-50%); background: rgba(30,64,175,0.8);"></div>
+                </div>
+                <div>
+                  <div class="layout-title">Tables & chairs</div>
+                  <div class="layout-text">
+                    For cabaret-style rooms. Drop in round or rectangular tables and auto-generate seats around them.
+                  </div>
+                </div>
+              </div>
+              <div class="layout-meta">
+                <span class="meta-chip">Ideal for clubs</span>
+                <span class="meta-chip">Round & long tables</span>
+              </div>
+            </div>
+          </a>
+
+          <!-- Sections & Rows -->
+          <a class="layout-link" href="${builderBase}?layout=sections">
+            <div class="layout-card">
+              <div class="layout-header">
+                <div class="layout-icon">
+                  <div class="icon-line" style="width: 80%; top: 10px; left: 10%; background: rgba(15,23,42,0.85);"></div>
+                  <div class="icon-line" style="width: 80%; top: 18px; left: 10%; background: rgba(15,23,42,0.8);"></div>
+                  <div class="icon-line" style="width: 80%; top: 26px; left: 10%; background: rgba(15,23,42,0.75);"></div>
+                </div>
+                <div>
+                  <div class="layout-title">Sections & rows</div>
+                  <div class="layout-text">
+                    Classic theatre layout with blocks, aisles and rows. Perfect for fixed-seating auditoriums.
+                  </div>
+                </div>
+              </div>
+              <div class="layout-meta">
+                <span class="meta-chip">Stalls / Circle / Balcony</span>
+                <span class="meta-chip">Seat numbers</span>
+              </div>
+            </div>
+          </a>
+
+          <!-- Mixed seating -->
+          <a class="layout-link" href="${builderBase}?layout=mixed">
+            <div class="layout-card">
+              <div class="layout-header">
+                <div class="layout-icon">
+                  <div class="icon-dot" style="top: 9px; left: 9px;"></div>
+                  <div class="icon-dot" style="top: 9px; right: 9px;"></div>
+                  <div class="icon-line" style="width: 70%; bottom: 8px; left: 15%; background: rgba(15,23,42,0.82);"></div>
+                  <div class="icon-block" style="width: 16px; height: 10px; top: 15px; left: 12px; background: rgba(15,23,42,0.78); border-radius: 4px;"></div>
+                  <div class="icon-block" style="width: 16px; height: 10px; top: 15px; right: 12px; background: rgba(15,23,42,0.74); border-radius: 4px;"></div>
+                </div>
+                <div>
+                  <div class="layout-title">Mixed seating</div>
+                  <div class="layout-text">
+                    Combine tables, rows and standing areas in one flexible layout for multi-use spaces.
+                  </div>
+                </div>
+              </div>
+              <div class="layout-meta">
+                <span class="meta-chip">Hybrid rooms</span>
+                <span class="meta-chip">Standing + seated</span>
+              </div>
+            </div>
+          </a>
+
+          <!-- Blank canvas -->
+          <a class="layout-link" href="${builderBase}?layout=blank">
+            <div class="layout-card">
+              <div class="layout-header">
+                <div class="layout-icon">
+                  <div class="icon-block" style="width: 24px; height: 14px; top: 9px; left: 8px; background: rgba(15,23,42,0.85);"></div>
+                  <div class="icon-block" style="width: 14px; height: 10px; bottom: 9px; right: 8px; background: rgba(15,23,42,0.7);"></div>
+                </div>
+                <div>
+                  <div class="layout-title">Blank canvas</div>
+                  <div class="layout-text">
+                    Start from an empty room and add exactly what you need. The most flexible option.
+                  </div>
+                </div>
+              </div>
+              <div class="layout-meta">
+                <span class="meta-chip">Design from scratch</span>
+                <span class="meta-chip">Any configuration</span>
+              </div>
+            </div>
+          </a>
+        </div>
+
+        <p class="footer-note">
+          Next step: layout builder – you’ll place tables, rows and seats on a full canvas, then assign ticket types to each area.
+        </p>
       </div>
     </div>
   </div>
-
-  <script>
-    (function () {
-      const showId = ${JSON.stringify(showId)};
-      const cards = document.querySelectorAll(".choice-card");
-
-      function go(kind) {
-        if (!showId) return;
-        const base = "/admin/seating";
-        if (kind === "unallocated") {
-          window.location.href = base + "/unallocated/" + encodeURIComponent(showId);
-        } else if (kind === "allocated") {
-          window.location.href = base + "/layout-wizard/" + encodeURIComponent(showId);
-        }
-      }
-
-      cards.forEach(function (card) {
-        card.addEventListener("click", function () {
-          const kind = card.getAttribute("data-kind");
-          go(kind);
-        });
-
-        card.addEventListener("keyup", function (ev) {
-          if (ev.key === "Enter" || ev.key === " ") {
-            ev.preventDefault();
-            const kind = card.getAttribute("data-kind");
-            go(kind);
-          }
-        });
-      });
-    })();
-  </script>
 </body>
 </html>`;
-
-  res.type("html").send(html);
-});
+}
 
 /**
- * Stub pages so the choices work immediately.
- * We'll replace these with the real wizard/builder soon.
+ * Stub – Unallocated seating ticket setup.
+ * For now this simply links back into the existing Tickets page.
  */
+function renderUnallocatedStub(showId: string) {
+  const ticketsUrl = `/admin/ui/shows/${encodeURIComponent(showId)}/tickets`;
 
-// Unallocated seating – stub
-router.get("/seating/unallocated/:showId", (req, res) => {
-  const { showId } = req.params;
-  res.type("html").send(`<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Unallocated seating (stub)</title>
+  <title>Unallocated seating – TickIn Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+        "Segoe UI", sans-serif;
+      background: #f3f4f6;
+      color: #0f172a;
+    }
+    .card {
+      max-width: 640px;
+      margin: 40px auto;
+      padding: 24px 22px;
+      border-radius: 18px;
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      box-shadow: 0 14px 35px rgba(15, 23, 42, 0.08);
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 20px;
+    }
+    p {
+      margin: 0 0 16px;
+      font-size: 14px;
+      color: #4b5563;
+    }
+    a.button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: none;
+      background: #111827;
+      color: #f9fafb;
+      font-size: 14px;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    a.button:hover {
+      background: #020617;
+    }
+  </style>
 </head>
 <body>
-  <h1>Unallocated seating for show ${showId}</h1>
-  <p>This is a placeholder. Here we'll build the unallocated ticket-type flow.</p>
-  <p><a href="/admin/ui/shows/${encodeURIComponent(
-    showId
-  )}/tickets">Back to Tickets page</a></p>
+  <div class="card">
+    <h1>Unallocated seating</h1>
+    <p>
+      This event will use simple general admission tickets with no seat map.
+      You can now set up your ticket types as usual.
+    </p>
+    <a class="button" href="${ticketsUrl}">Go to ticket types</a>
+  </div>
 </body>
-</html>`);
+</html>`;
+}
+
+/**
+ * Stub – Seatmap builder placeholder
+ */
+function renderBuilderStub(seatmapId: string) {
+  const pricingUrl = `/admin/seating/pricing/${encodeURIComponent(seatmapId)}`;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Seat map builder (preview) – TickIn Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+        "Segoe UI", sans-serif;
+      background: #020617;
+      color: #e5e7eb;
+    }
+    .card {
+      max-width: 860px;
+      margin: 32px auto;
+      padding: 24px 22px;
+      border-radius: 18px;
+      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid rgba(148, 163, 184, 0.5);
+      box-shadow: 0 30px 80px rgba(15, 23, 42, 0.7);
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 20px;
+    }
+    p {
+      margin: 0 0 16px;
+      font-size: 14px;
+      color: #9ca3af;
+    }
+    code {
+      font-size: 12px;
+      background: rgba(15,23,42,0.9);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    a.button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: none;
+      background: #f9fafb;
+      color: #020617;
+      font-size: 14px;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    a.button:hover {
+      background: #e5e7eb;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Seat map builder – coming next</h1>
+    <p>
+      This is a placeholder for the full-screen layout builder.
+      You navigated here with seat map ID <code>${seatmapId}</code>.
+    </p>
+    <p>
+      In the next phase, this page will show the drag-and-drop editor for tables, rows and mixed layouts.
+    </p>
+    <a class="button" href="${pricingUrl}">Continue to pricing step</a>
+  </div>
+</body>
+</html>`;
+}
+
+/**
+ * Stub – Pricing / ticket assignment placeholder
+ */
+function renderPricingStub(seatmapId: string) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Seat map pricing – TickIn Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+        "Segoe UI", sans-serif;
+      background: #f9fafb;
+      color: #0f172a;
+    }
+    .card {
+      max-width: 720px;
+      margin: 40px auto;
+      padding: 24px 22px;
+      border-radius: 18px;
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 20px;
+    }
+    p {
+      margin: 0 0 16px;
+      font-size: 14px;
+      color: #4b5563;
+    }
+    code {
+      font-size: 12px;
+      background: #f3f4f6;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Pricing & ticket assignment – coming next</h1>
+    <p>
+      This is a placeholder for assigning ticket types and prices to seats
+      for seat map <code>${seatmapId}</code>.
+    </p>
+    <p>
+      In the final version, this step will let you configure ticket types,
+      map them to zones or individual seats, and publish the event for sale.
+    </p>
+  </div>
+</body>
+</html>`;
+}
+
+// --------- Routes ---------
+
+// Step 1 – seating style choice
+router.get("/seating-choice/:showId", (req, res) => {
+  const { showId } = req.params;
+  res.type("html").send(renderSeatingChoicePage(showId));
 });
 
-// Layout wizard – stub
+// Unallocated seating stub
+router.get("/seating/unallocated/:showId", (req, res) => {
+  const { showId } = req.params;
+  res.type("html").send(renderUnallocatedStub(showId));
+});
+
+// Step 2 – layout type wizard
 router.get("/seating/layout-wizard/:showId", (req, res) => {
   const { showId } = req.params;
-  res.type("html").send(`<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Layout wizard (stub)</title>
-</head>
-<body>
-  <h1>Layout wizard for show ${showId}</h1>
-  <p>This is a placeholder. Next step will be the 4-box layout-type page (Tables & Chairs, Sections & Rows, Mixed, Blank canvas).</p>
-  <p><a href="/admin/seating-choice/${encodeURIComponent(
-    showId
-  )}">Back to seating choice</a></p>
-</body>
-</html>`);
+  res.type("html").send(renderLayoutWizardPage(showId));
+});
+
+// Builder stub
+router.get("/seating/builder/:seatmapId", (req, res) => {
+  const { seatmapId } = req.params;
+  res.type("html").send(renderBuilderStub(seatmapId));
+});
+
+// Pricing stub
+router.get("/seating/pricing/:seatmapId", (req, res) => {
+  const { seatmapId } = req.params;
+  res.type("html").send(renderPricingStub(seatmapId));
 });
 
 export default router;
