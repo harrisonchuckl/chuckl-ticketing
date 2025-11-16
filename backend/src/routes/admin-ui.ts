@@ -631,11 +631,11 @@ router.get(
           throw new Error('Failed to create show (no id returned from server)');
         }
 
-        if (firstTicketPayload){
+                if (firstTicketPayload){
           try{
             await j('/admin/shows/' + showId + '/ticket-types', {
-              method:'POST',
-              headers:{'Content-Type':'application/json'},
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(firstTicketPayload)
             });
           }catch(ttErr){
@@ -647,13 +647,12 @@ router.get(
           }
         }
 
-        // For now: keep redirect to Tickets page.
-        // Once seating-choice is fully in place, we'll change this to:
-        // go('/admin/seating-choice/' + showId);
-        go('/admin/ui/shows/' + showId + '/tickets');
+        // NEW: go straight into the seating-choice wizard (unallocated vs allocated)
+        window.location.href = '/admin/seating-choice/' + showId;
       }catch(e){
         errEl.textContent = e.message || String(e);
       }
+
     });
   }
 
