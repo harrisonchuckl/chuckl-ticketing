@@ -15,16 +15,13 @@ router.get("/seating/layout-wizard/:showId", (req, res) => {
   <style>
     :root {
       --bg: #f5f7ff;
-      --bg-soft: #f9fbff;
       --card-border: #e3e6f2;
       --card-border-hover: #2563eb;
       --card-shadow: 0 18px 45px rgba(15, 23, 42, 0.13);
       --text-main: #0f172a;
       --text-muted: #6b7280;
-      --chip-bg: #edf0ff;
       --chip-text: #4b5563;
       --accent: #2563eb;
-      --accent-soft: rgba(37, 99, 235, 0.1);
       --radius-lg: 22px;
       --radius-pill: 999px;
     }
@@ -126,11 +123,16 @@ router.get("/seating/layout-wizard/:showId", (req, res) => {
 
     .content-inner {
       width: 100%;
-      max-width: 1120px;
+      max-width: 960px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
 
     .intro {
-      margin-bottom: 24px;
+      width: 100%;
+      max-width: 640px;
+      margin-bottom: 28px;
       display: flex;
       flex-direction: column;
       gap: 4px;
@@ -160,14 +162,20 @@ router.get("/seating/layout-wizard/:showId", (req, res) => {
     }
 
     .layout-grid {
+      width: 100%;
+      max-width: 720px;
+      margin: 0 auto;
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 20px;
+      gap: 24px; /* even gap horizontally & vertically */
+      justify-items: stretch;
+      align-items: stretch;
     }
 
     @media (max-width: 900px) {
       .layout-grid {
         grid-template-columns: 1fr;
+        max-width: 400px;
       }
     }
 
@@ -186,10 +194,8 @@ router.get("/seating/layout-wizard/:showId", (req, res) => {
       flex-direction: column;
       justify-content: space-between;
       gap: 12px;
-      /* make them more like tiles, not huge panels */
-      aspect-ratio: 4 / 3;
-      min-height: 200px;
-      max-height: 260px;
+      aspect-ratio: 4 / 5;       /* more compact, tile-like */
+      min-height: 210px;
       transition:
         transform 0.18s ease,
         box-shadow 0.18s ease,
@@ -228,7 +234,6 @@ router.get("/seating/layout-wizard/:showId", (req, res) => {
       align-items: center;
       justify-content: center;
       font-size: 24px;
-      color: #111827;
       background:
         radial-gradient(circle at 0% 0%, #e0edff 0, #eef2ff 40%, #e0f2fe 100%);
       box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
@@ -278,10 +283,10 @@ router.get("/seating/layout-wizard/:showId", (req, res) => {
     .layout-footer {
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      justify-content: flex-start;
       font-size: 11px;
       color: #9ca3af;
-      margin-top: 4px;
+      margin-top: 6px;
     }
 
     .layout-step-pill {
@@ -303,7 +308,7 @@ router.get("/seating/layout-wizard/:showId", (req, res) => {
       }
       .layout-card {
         aspect-ratio: auto;
-        min-height: 190px;
+        min-height: 200px;
       }
     }
   </style>
@@ -332,7 +337,7 @@ router.get("/seating/layout-wizard/:showId", (req, res) => {
           <!-- Tables & chairs -->
           <button class="layout-card" type="button" data-layout="tables">
             <div class="layout-main">
-              <div class="layout-icon" aria-hidden="true">󰐾</div>
+              <div class="layout-icon" aria-hidden="true">🪑</div>
               <div class="layout-text">
                 <div class="layout-title">Tables & chairs</div>
                 <div class="layout-desc">
@@ -354,7 +359,7 @@ router.get("/seating/layout-wizard/:showId", (req, res) => {
           <!-- Sections & rows -->
           <button class="layout-card" type="button" data-layout="sections">
             <div class="layout-main">
-              <div class="layout-icon" aria-hidden="true">≡</div>
+              <div class="layout-icon" aria-hidden="true">🎭</div>
               <div class="layout-text">
                 <div class="layout-title">Sections & rows</div>
                 <div class="layout-desc">
@@ -376,7 +381,7 @@ router.get("/seating/layout-wizard/:showId", (req, res) => {
           <!-- Mixed seating -->
           <button class="layout-card" type="button" data-layout="mixed">
             <div class="layout-main">
-              <div class="layout-icon" aria-hidden="true">◎</div>
+              <div class="layout-icon" aria-hidden="true">🧩</div>
               <div class="layout-text">
                 <div class="layout-title">Mixed seating</div>
                 <div class="layout-desc">
@@ -398,7 +403,7 @@ router.get("/seating/layout-wizard/:showId", (req, res) => {
           <!-- Blank canvas -->
           <button class="layout-card" type="button" data-layout="blank">
             <div class="layout-main">
-              <div class="layout-icon" aria-hidden="true">▢</div>
+              <div class="layout-icon" aria-hidden="true">⬜</div>
               <div class="layout-text">
                 <div class="layout-title">Blank canvas</div>
                 <div class="layout-desc">
@@ -430,7 +435,6 @@ router.get("/seating/layout-wizard/:showId", (req, res) => {
         card.addEventListener("click", () => {
           const layout = card.getAttribute("data-layout");
           if (!layout) return;
-          // Preview builder route, still using showId at this stage
           window.location.href =
             "/admin/seating/builder/preview/" + encodeURIComponent(showId) +
             "?layout=" + encodeURIComponent(layout);
