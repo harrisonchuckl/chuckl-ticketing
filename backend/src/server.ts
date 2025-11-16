@@ -114,6 +114,7 @@ app.use("/seatmaps", seatMapsRouter);
 //  - GET /admin/seating/unallocated/:showId
 //  - GET /admin/seating/layout-wizard/:showId
 app.use("/admin", seatingChoiceRouter);
+app.use("/admin/seating", adminSeatingBuilderRouter);
 
 // Full-screen builder (Step 3)
 //  - GET /admin/seating/builder/:showId?layout=tables|sections|mixed|blank
