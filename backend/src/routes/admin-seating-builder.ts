@@ -1,3 +1,4 @@
+// backend/src/routes/admin-seating-builder.ts
 import { Router } from "express";
 
 const router = Router();
@@ -5,13 +6,24 @@ const router = Router();
 type LayoutKey = "tables" | "sections" | "mixed" | "blank";
 
 function normaliseLayout(raw: string | undefined): LayoutKey {
-  if (raw === "sections" || raw === "mixed" || raw === "blank") return raw;
+  if (raw === "tables" || raw === "sections" || raw === "mixed" || raw === "blank") {
+    return raw;
+  }
   return "tables";
 }
 
 router.get("/builder/preview/:showId", (req, res) => {
   const showId = req.params.showId;
   const layout = normaliseLayout(req.query.layout as string | undefined);
+
+  const layoutLabelMap: Record<LayoutKey, string> = {
+    tables: "Tables & chairs",
+    sections: "Sections & rows",
+    mixed: "Mixed seating",
+    blank: "Blank canvas",
+  };
+
+  const layoutLabel = layoutLabelMap[layout];
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -573,9 +585,426 @@ router.get("/builder/preview/:showId", (req, res) => {
 </head>
 <body>
   <div class="builder-root">
-    <!-- header + three-panel shell omitted for brevity in this snippet -->
-    <!-- (full file already pasted, so in your code editor you’ll have the complete HTML + JS from above) -->
+    <header class="builder-header">
+      <div class="header-left">
+        <div class="step-pill">
+          <span class="step-number">3</span>
+          <span>Layout details</span>
+        </div>
+        <div class="builder-title">${layoutLabel}</div>
+        <div class="builder-subtitle">
+          Configure the room once and reuse this layout for future shows at this venue.
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="header-chip">Show ID: ${showId}</div>
+        <button class="header-close" type="button" onclick="window.close && window.close()">
+          <span>×</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="builder-shell">
+      <aside class="panel">
+        <div class="panel-title">Tools</div>
+        <div class="tool-list">
+          <div class="tool-button">
+            <div class="tool-main">
+              <div class="tool-emoji">🎭</div>
+              <div>
+                <div class="tool-label">Stage & focal point</div>
+                <div class="tool-meta">Front of room, entrances, bars</div>
+              </div>
+            </div>
+            <span class="tool-badge">Coming soon</span>
+          </div>
+          <div class="tool-button">
+            <div class="tool-main">
+              <div class="tool-emoji">🪑</div>
+              <div>
+                <div class="tool-label">Seat blocks</div>
+                <div class="tool-meta">Rows, tables, zones</div>
+              </div>
+            </div>
+            <span class="tool-badge">Coming soon</span>
+          </div>
+          <div class="tool-button">
+            <div class="tool-main">
+              <div class="tool-emoji">🎟️</div>
+              <div>
+                <div class="tool-label">Ticket tiers</div>
+                <div class="tool-meta">Link seats to prices</div>
+              </div>
+            </div>
+            <span class="tool-badge">Next</span>
+          </div>
+        </div>
+      </aside>
+
+      <section class="panel">
+        <div class="panel-title">Room preview</div>
+        <div class="canvas-inner" id="canvas-inner">
+          <div class="canvas-overlay-label">
+            <span class="dot"></span>
+            Live layout preview
+          </div>
+          <div class="canvas-placeholder" id="canvas-placeholder">
+            <div class="canvas-placeholder-inner">
+              <h2>Your layout will appear here</h2>
+              <p id="preview-summary">
+                Adjust the numbers on the right and we'll sketch a layout preview before you save.
+              </p>
+              <div class="canvas-placeholder-pills">
+                <span class="canvas-placeholder-pill">Drag &amp; drop editor coming next</span>
+                <span class="canvas-placeholder-pill">Re-use layouts across shows</span>
+                <span class="canvas-placeholder-pill">Perfect for comedy, music &amp; cabaret</span>
+              </div>
+            </div>
+          </div>
+          <div class="layout-preview" id="layout-preview"></div>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <div class="panel-title">Summary</div>
+        <div class="summary-body">
+          <div class="summary-row">
+            <span class="label">Layout type</span>
+            <span class="value" id="summary-layout">${layoutLabel}</span>
+          </div>
+          <div class="summary-row">
+            <span class="label">Estimated capacity</span>
+            <span class="value" id="summary-capacity">–</span>
+          </div>
+          <div class="summary-row">
+            <span class="label">Stage & facilities</span>
+            <span class="value">Stage + bar + exits</span>
+          </div>
+          <div class="summary-note">
+            This step is just to sketch the room. You'll assign ticket prices to specific seats in the next step.
+          </div>
+        </div>
+        <div class="summary-footer">
+          <button class="primary-btn" type="button" id="btn-next">
+            Continue to ticket mapping
+          </button>
+          <button class="ghost-btn" type="button" id="btn-back">
+            ← Back to seating style
+          </button>
+        </div>
+      </aside>
+    </main>
   </div>
+
+  <!-- Configuration overlay (Step 3 inputs) -->
+  <div class="config-overlay" id="config-overlay">
+    <div class="config-card">
+      <div class="config-header">
+        <div class="config-title-block">
+          <div class="config-caption">Step 3 of 4</div>
+          <div class="config-heading">Tell us about this room</div>
+          <div class="config-subtitle" id="config-subtitle">
+            We'll use these numbers to sketch the first version of your layout. You can fine-tune it in the editor.
+          </div>
+        </div>
+        <div class="config-chip" id="config-chip">${layoutLabel}</div>
+      </div>
+
+      <div class="config-grid" id="config-grid">
+        <!-- Fields injected by script -->
+      </div>
+
+      <div class="config-footer">
+        <div class="config-total">
+          Estimated seats: <strong id="config-total-value">–</strong>
+        </div>
+        <div class="config-actions">
+          <button class="ghost-btn" type="button" id="config-cancel">
+            Cancel
+          </button>
+          <button class="primary-btn" type="button" id="config-continue">
+            Continue
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const layout = ${JSON.stringify(layout)}; // "tables" | "sections" | "mixed" | "blank"
+
+      const overlay = document.getElementById("config-overlay");
+      const grid = document.getElementById("config-grid");
+      const totalSpan = document.getElementById("config-total-value");
+      const summaryCapacity = document.getElementById("summary-capacity");
+      const previewContainer = document.getElementById("layout-preview");
+      const previewSummary = document.getElementById("preview-summary");
+      const summaryLayout = document.getElementById("summary-layout");
+      const chip = document.getElementById("config-chip");
+      const subtitle = document.getElementById("config-subtitle");
+
+      const btnContinue = document.getElementById("config-continue");
+      const btnCancel = document.getElementById("config-cancel");
+      const btnNext = document.getElementById("btn-next");
+      const btnBack = document.getElementById("btn-back");
+
+      const layoutLabels = {
+        tables: "Tables & chairs",
+        sections: "Sections & rows",
+        mixed: "Mixed seating",
+        blank: "Blank canvas",
+      };
+
+      summaryLayout.textContent = layoutLabels[layout] || layoutLabels.tables;
+      chip.textContent = layoutLabels[layout] || layoutLabels.tables;
+
+      if (layout === "blank") {
+        // For blank canvas we just hide the overlay and show a simple message
+        if (overlay) overlay.classList.add("hidden");
+        if (previewSummary) {
+          previewSummary.textContent = "Start from a true blank canvas. Use the editor to place sections, tables and seats exactly where you want them.";
+        }
+        summaryCapacity.textContent = "Flexible";
+        return;
+      }
+
+      const fieldDefsByLayout = {
+        tables: [
+          {
+            key: "numTables",
+            label: "Number of tables",
+            hint: "e.g. 12–30",
+            defaultValue: 16,
+            min: 1
+          },
+          {
+            key: "seatsPerTable",
+            label: "Seats per table",
+            hint: "e.g. 8–12",
+            defaultValue: 8,
+            min: 1
+          }
+        ],
+        sections: [
+          {
+            key: "numSections",
+            label: "Number of sections",
+            hint: "e.g. stalls, circle, balcony",
+            defaultValue: 3,
+            min: 1
+          },
+          {
+            key: "rowsPerSection",
+            label: "Rows per section",
+            hint: "e.g. 8–20",
+            defaultValue: 10,
+            min: 1
+          },
+          {
+            key: "seatsPerRow",
+            label: "Seats per row",
+            hint: "e.g. 10–30",
+            defaultValue: 16,
+            min: 1
+          }
+        ],
+        mixed: [
+          {
+            key: "numSections",
+            label: "Number of row sections",
+            hint: "e.g. 2–6",
+            defaultValue: 3,
+            min: 1
+          },
+          {
+            key: "rowsPerSection",
+            label: "Rows per section",
+            hint: "e.g. 5–12",
+            defaultValue: 6,
+            min: 1
+          },
+          {
+            key: "seatsPerRow",
+            label: "Seats per row",
+            hint: "e.g. 10–20",
+            defaultValue: 12,
+            min: 1
+          },
+          {
+            key: "numTables",
+            label: "Number of tables",
+            hint: "e.g. 4–20",
+            defaultValue: 8,
+            min: 0
+          },
+          {
+            key: "seatsPerTable",
+            label: "Seats per table",
+            hint: "e.g. 4–10",
+            defaultValue: 6,
+            min: 0
+          }
+        ]
+      };
+
+      const fields = fieldDefsByLayout[layout] || fieldDefsByLayout.tables;
+
+      function renderFields() {
+        if (!grid) return;
+        grid.innerHTML = "";
+        fields.forEach(function (f) {
+          const wrapper = document.createElement("div");
+          wrapper.className = "field";
+          const labelRow = document.createElement("div");
+          labelRow.className = "field-label-row";
+          const label = document.createElement("div");
+          label.className = "field-label";
+          label.textContent = f.label;
+          const hint = document.createElement("div");
+          hint.className = "field-hint";
+          hint.textContent = f.hint || "";
+          labelRow.appendChild(label);
+          wrapper.appendChild(labelRow);
+          wrapper.appendChild(hint);
+          const input = document.createElement("input");
+          input.type = "number";
+          input.min = String(f.min ?? 0);
+          input.value = String(f.defaultValue ?? 0);
+          input.id = "field-" + f.key;
+          input.addEventListener("input", updateTotals);
+          wrapper.appendChild(input);
+          grid.appendChild(wrapper);
+        });
+      }
+
+      function getValue(id, fallback) {
+        const el = document.getElementById("field-" + id);
+        if (!el || !(el instanceof HTMLInputElement)) return fallback;
+        var n = parseInt(el.value, 10);
+        if (isNaN(n) || n < 0) return fallback;
+        return n;
+      }
+
+      function updateTotals() {
+        var total = 0;
+
+        if (layout === "tables") {
+          var t = getValue("numTables", 0);
+          var s = getValue("seatsPerTable", 0);
+          total = t * s;
+        } else if (layout === "sections") {
+          var sec = getValue("numSections", 0);
+          var rows = getValue("rowsPerSection", 0);
+          var per = getValue("seatsPerRow", 0);
+          total = sec * rows * per;
+        } else if (layout === "mixed") {
+          var sec2 = getValue("numSections", 0);
+          var rows2 = getValue("rowsPerSection", 0);
+          var per2 = getValue("seatsPerRow", 0);
+          var t2 = getValue("numTables", 0);
+          var s2 = getValue("seatsPerTable", 0);
+          total = sec2 * rows2 * per2 + t2 * s2;
+        }
+
+        if (totalSpan) totalSpan.textContent = total > 0 ? String(total) : "–";
+        if (summaryCapacity) summaryCapacity.textContent = total > 0 ? String(total) : "TBC";
+        drawPreview(total);
+      }
+
+      function drawPreview(totalSeats) {
+        if (!previewContainer) return;
+        previewContainer.innerHTML = "";
+
+        if (totalSeats <= 0) return;
+
+        if (layout === "tables" || layout === "mixed") {
+          var numTables = getValue("numTables", 0);
+          var seatsPerTable = getValue("seatsPerTable", 0);
+          if (numTables > 0 && seatsPerTable > 0) {
+            var group = document.createElement("div");
+            group.className = layout === "mixed" ? "mixed-group" : "table-group";
+            var label = document.createElement("div");
+            label.className = "layout-group-label";
+            label.textContent = layout === "mixed" ? "Table zones" : "Cabaret tables";
+            group.appendChild(label);
+
+            for (var i = 0; i < Math.min(numTables, 6); i++) {
+              var row = document.createElement("div");
+              row.className = "seats-row";
+              for (var j = 0; j < Math.min(seatsPerTable, 10); j++) {
+                var dot = document.createElement("div");
+                dot.className = "seat-dot";
+                if (j === 0) dot.classList.add("seat-dot--primary");
+                row.appendChild(dot);
+              }
+              group.appendChild(row);
+            }
+            previewContainer.appendChild(group);
+          }
+        }
+
+        if (layout === "sections" || layout === "mixed") {
+          var numSections = getValue("numSections", 0);
+          var rows = getValue("rowsPerSection", 0);
+          var perRow = getValue("seatsPerRow", 0);
+          if (numSections > 0 && rows > 0 && perRow > 0) {
+            var group2 = document.createElement("div");
+            group2.className = layout === "mixed" ? "mixed-group" : "row-group";
+            var label2 = document.createElement("div");
+            label2.className = "layout-group-label";
+            label2.textContent = layout === "mixed" ? "Row sections" : "Theatre rows";
+            group2.appendChild(label2);
+
+            for (var r = 0; r < Math.min(rows, 6); r++) {
+              var row2 = document.createElement("div");
+              row2.className = "seats-row";
+              for (var c = 0; c < Math.min(perRow, 18); c++) {
+                var dot2 = document.createElement("div");
+                dot2.className = "seat-dot";
+                if (c === 0 && r === 0) dot2.classList.add("seat-dot--primary");
+                row2.appendChild(dot2);
+              }
+              group2.appendChild(row2);
+            }
+            previewContainer.appendChild(group2);
+          }
+        }
+
+        if (previewSummary) {
+          previewSummary.textContent =
+            "This is a visual sketch only. The next version of the editor will let you drag, rotate and fine-tune every block.";
+        }
+      }
+
+      renderFields();
+      updateTotals();
+
+      btnContinue && btnContinue.addEventListener("click", function () {
+        if (overlay) overlay.classList.add("hidden");
+      });
+
+      btnCancel && btnCancel.addEventListener("click", function () {
+        if (overlay) overlay.classList.add("hidden");
+      });
+
+      btnBack && btnBack.addEventListener("click", function () {
+        window.history.back();
+      });
+
+      btnNext && btnNext.addEventListener("click", function () {
+        alert("Next up: we'll plug this into the interactive seat-by-seat editor and ticket mapping.");
+      });
+
+      if (layout === "tables") {
+        subtitle.textContent = "Perfect for comedy clubs, cabaret and gala dinners. Set your table counts once, then reuse them.";
+      } else if (layout === "sections") {
+        subtitle.textContent = "Classic theatre style. We'll sketch sections and rows so you can tweak them in the editor.";
+      } else if (layout === "mixed") {
+        subtitle.textContent = "Blend reserved rows with cabaret tables – ideal for flexible spaces and premium zones.";
+      }
+    })();
+  </script>
 </body>
 </html>`;
 
