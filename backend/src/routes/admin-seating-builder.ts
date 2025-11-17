@@ -245,218 +245,249 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
 /* -------------------------------------------------------------
    ROUTE: GET builder full-page HTML
    (this loads the Konva editor; wizard is still available)
+   NOTE: we deliberately *do not* hit Prisma here any more –
+   the JS front-end calls /builder/api/seatmaps/:showId to
+   fetch show + venue data.
 -------------------------------------------------------------- */
-router.get("/builder/preview/:showId", async (req, res) => {
-  try {
-    const showId = req.params.showId;
-    const layout = normaliseLayout(req.query.layout as string | undefined);
+router.get("/builder/preview/:showId", (req, res) => {
+  const showId = req.params.showId;
+  const layout = normaliseLayout(req.query.layout as string | undefined);
 
-    const show = await prisma.show.findUnique({
-      where: { id: showId },
-      include: { venue: true },
-    });
-
-    const showTitle = show?.title ?? "Seat map designer";
-    const venueName = show?.venue?.name ?? "Venue";
-    const venueCity = show?.venue?.city ?? "";
-    const showDate = show?.date
-      ? new Date(show.date).toLocaleDateString("en-GB", {
-          weekday: "short",
-          day: "numeric",
-          month: "short",
-          year: "numeric",
-        })
-      : "";
-
-    const html = `
-<!DOCTYPE html>
+  const html = `<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>TickIn Seat Designer – ${showTitle}</title>
+    <title>TickIn Seat Designer</title>
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <link rel="stylesheet" href="/static/seating-builder.css" />
   </head>
   <body class="tickin-builder-body">
     <div class="tickin-builder-shell">
-      <!-- Top bar -->
       <header class="tickin-builder-topbar">
         <div class="tb-topbar-left">
           <div class="tb-logo-badge">
             <span class="tb-logo-dot"></span>
-            <span class="tb-logo-text">TickIn</span>
+            <span class="tb-logo-text">TickIn Builder</span>
           </div>
           <div class="tb-show-meta">
-            <h1 class="tb-show-title">${showTitle}</h1>
+            <h1 class="tb-show-title" id="tb-show-title">Seat map designer</h1>
             <div class="tb-show-subtitle">
-              <span>${venueName}</span>
-              ${venueCity ? `<span class="tb-dot">•</span><span>${venueCity}</span>` : ""}
-              ${showDate ? `<span class="tb-dot">•</span><span>${showDate}</span>` : ""}
+              <span id="tb-show-venue">Loading show details…</span>
+              <span class="tb-dot">·</span>
+              <span id="tb-show-date"></span>
             </div>
           </div>
         </div>
         <div class="tb-topbar-right">
-          <button type="button" class="tb-topbar-btn tb-btn-ghost" id="tb-exit-builder">
-            Exit
+          <button type="button" class="tb-topbar-btn tb-btn-ghost" id="tb-btn-back">
+            Back to wizard
           </button>
-          <button type="button" class="tb-topbar-btn tb-btn-primary" id="tb-save-layout">
+          <button type="button" class="tb-topbar-btn tb-btn-primary" id="tb-btn-save">
             Save layout
           </button>
         </div>
       </header>
 
-      <!-- Main 3-column layout -->
-      <div class="tickin-builder-main">
-        <!-- Left tools rail (copy / paste / zoom etc. – wired later in JS) -->
+      <main class="tickin-builder-main">
         <aside class="tb-rail-left">
           <div class="tb-rail-group">
             <div class="tb-rail-label">Tools</div>
-            <button class="tb-rail-icon-btn" data-tool="select" title="Select (V)">
-              <span class="tb-rail-icon tb-icon-select"></span>
+            <button class="tb-rail-icon-btn" data-tool="select" title="Select / Move">
+              <div class="tb-rail-icon tb-icon-select"></div>
             </button>
-            <button class="tb-rail-icon-btn" data-tool="pan" title="Pan (Space)">
-              <span class="tb-rail-icon tb-icon-hand"></span>
+            <button class="tb-rail-icon-btn" data-tool="pan" title="Pan canvas">
+              <div class="tb-rail-icon tb-icon-hand"></div>
             </button>
-            <button class="tb-rail-icon-btn" data-tool="grid" title="Toggle grid (G)">
-              <span class="tb-rail-icon tb-icon-grid"></span>
+            <button class="tb-rail-icon-btn" data-tool="grid" title="Toggle grid">
+              <div class="tb-rail-icon tb-icon-grid"></div>
             </button>
           </div>
-
           <div class="tb-rail-group tb-rail-group-bottom">
             <div class="tb-rail-label">Zoom</div>
-            <button class="tb-rail-icon-btn" id="tb-zoom-in" title="Zoom in (+)">
-              +
-            </button>
-            <button class="tb-rail-icon-btn" id="tb-zoom-out" title="Zoom out (-)">
-              –
-            </button>
+            <button class="tb-rail-icon-btn" data-zoom="in" title="Zoom in">+</button>
+            <button class="tb-rail-icon-btn" data-zoom="out" title="Zoom out">−</button>
           </div>
         </aside>
 
-        <!-- Centre: tabs + canvas -->
-        <main class="tb-center">
-          <!-- Tabs row -->
+        <section class="tb-center">
           <div class="tb-tabs">
             <button class="tb-tab is-active" data-tab="map">Map</button>
             <button class="tb-tab" data-tab="tiers">Tiers</button>
             <button class="tb-tab" data-tab="holds">Holds</button>
           </div>
-
-          <!-- Tab panels -->
           <div class="tb-tab-panels">
-            <section class="tb-tab-panel is-active" id="tb-tab-map">
-              <!-- Existing Konva builder mounts into #app -->
+            <div class="tb-tab-panel is-active" id="tb-tab-map">
               <div id="app"></div>
-            </section>
-
-            <section class="tb-tab-panel" id="tb-tab-tiers">
+            </div>
+            <div class="tb-tab-panel" id="tb-tab-tiers">
               <div class="tb-empty-panel">
-                <h2>Tiers (coming soon)</h2>
-                <p>
-                  Here you’ll assign seats to price tiers and link them directly
-                  to your ticket types.
-                </p>
+                <h2>Tiers coming soon</h2>
+                <p>Set up pricing tiers and link them to sections and seats.</p>
               </div>
-            </section>
-
-            <section class="tb-tab-panel" id="tb-tab-holds">
+            </div>
+            <div class="tb-tab-panel" id="tb-tab-holds">
               <div class="tb-empty-panel">
-                <h2>Holds (coming soon)</h2>
-                <p>
-                  Use holds to reserve blocks of seats for artists, sponsors, or
-                  guest lists without putting them on general sale.
-                </p>
+                <h2>Holds coming soon</h2>
+                <p>Reserve blocks of seats for guests, agents, or sponsors.</p>
               </div>
-            </section>
+            </div>
           </div>
-        </main>
+        </section>
 
-        <!-- Right side: layout summary / saved maps -->
         <aside class="tb-side-panel">
-          <div class="tb-side-section">
-            <h2 class="tb-side-heading">Layout details</h2>
-            <dl class="tb-side-meta">
+          <section class="tb-side-section">
+            <h3 class="tb-side-heading">Layout summary</h3>
+            <div class="tb-side-meta">
               <div>
-                <dt>Layout type</dt>
-                <dd>${layout}</dd>
+                <dt>Show</dt>
+                <dd id="tb-meta-show-title">Loading…</dd>
+              </div>
+              <div>
+                <dt>Venue</dt>
+                <dd id="tb-meta-venue-name">–</dd>
               </div>
               <div>
                 <dt>Estimated capacity</dt>
-                <dd id="tb-estimated-capacity">Flexible</dd>
+                <dd id="tb-meta-capacity">Flexible</dd>
               </div>
-            </dl>
-          </div>
-
-          <div class="tb-side-section">
-            <h2 class="tb-side-heading">Saved seat maps</h2>
-            <p class="tb-side-help">
-              You can reuse layouts you’ve already created for this venue.
-            </p>
-            <div id="tb-saved-layouts" class="tb-saved-list">
-              <!-- seating-builder.js will populate this -->
             </div>
-          </div>
+          </section>
+
+          <section class="tb-side-section">
+            <h3 class="tb-side-heading">Saved layouts</h3>
+            <p class="tb-side-help">
+              Re-use layouts across shows at the same venue. Coming soon: click to switch.
+            </p>
+            <div class="tb-saved-list" id="tb-saved-list"></div>
+          </section>
         </aside>
-      </div>
+      </main>
     </div>
 
     <script>
-      window.__SEATMAP_SHOW_ID__ = ${JSON.stringify(showId)};
-      window.__SEATMAP_LAYOUT__ = ${JSON.stringify(layout)};
+      (function () {
+        var showId = ${JSON.stringify(showId)};
+        var layout = ${JSON.stringify(layout)};
 
-      // Basic tab switching (Map / Tiers / Holds).
-      // The actual functionality still lives in seating-builder.js – this is just UI chrome.
-      document.addEventListener("DOMContentLoaded", () => {
-        const tabButtons = Array.from(document.querySelectorAll(".tb-tab"));
-        const panels = {
+        // Expose to seating-builder.js
+        window.__SEATMAP_SHOW_ID__ = showId;
+        window.__SEATMAP_LAYOUT__ = layout;
+        window.__TICKIN_SAVE_BUTTON__ = document.getElementById("tb-btn-save");
+        window.__TICKIN_BACK_BUTTON__ = document.getElementById("tb-btn-back");
+
+        // Tab switching
+        var tabs = document.querySelectorAll(".tb-tab");
+        var panels = {
           map: document.getElementById("tb-tab-map"),
           tiers: document.getElementById("tb-tab-tiers"),
-          holds: document.getElementById("tb-tab-holds"),
+          holds: document.getElementById("tb-tab-holds")
         };
 
-        tabButtons.forEach((btn) => {
-          btn.addEventListener("click", () => {
-            const tab = btn.getAttribute("data-tab");
-            if (!tab || !panels[tab]) return;
+        tabs.forEach(function (tab) {
+          tab.addEventListener("click", function () {
+            var target = tab.getAttribute("data-tab");
+            if (!target || !panels[target]) return;
 
-            tabButtons.forEach((b) => b.classList.toggle("is-active", b === btn));
-            Object.entries(panels).forEach(([key, panel]) => {
-              panel.classList.toggle("is-active", key === tab);
+            tabs.forEach(function (t) { t.classList.remove("is-active"); });
+            Object.keys(panels).forEach(function (key) {
+              panels[key].classList.remove("is-active");
             });
+
+            tab.classList.add("is-active");
+            panels[target].classList.add("is-active");
           });
         });
 
-        // Exit button: just go back in history for now.
-        const exitBtn = document.getElementById("tb-exit-builder");
-        if (exitBtn) {
-          exitBtn.addEventListener("click", () => {
+        // Fetch show + venue details to populate top bar + side panel
+        fetch("/admin/seating/builder/api/seatmaps/" + encodeURIComponent(showId))
+          .then(function (res) { return res.ok ? res.json() : null; })
+          .then(function (data) {
+            if (!data || !data.show) return;
+            var show = data.show;
+            var venue = show.venue || null;
+
+            var titleEl = document.getElementById("tb-show-title");
+            var venueEl = document.getElementById("tb-show-venue");
+            var dateEl = document.getElementById("tb-show-date");
+            var metaShowTitle = document.getElementById("tb-meta-show-title");
+            var metaVenueName = document.getElementById("tb-meta-venue-name");
+            var metaCapacity = document.getElementById("tb-meta-capacity");
+
+            if (titleEl) titleEl.textContent = show.title || "Seat map designer";
+            if (venueEl) {
+              if (venue) {
+                var cityPart = venue.city ? " · " + venue.city : "";
+                venueEl.textContent = venue.name + cityPart;
+              } else {
+                venueEl.textContent = "Venue not set";
+              }
+            }
+            if (dateEl && show.date) {
+              try {
+                var d = new Date(show.date);
+                var opts = { day: "numeric", month: "short", year: "numeric" };
+                dateEl.textContent = d.toLocaleDateString("en-GB", opts);
+              } catch (_) {}
+            }
+
+            if (metaShowTitle) metaShowTitle.textContent = show.title || "Untitled show";
+            if (metaVenueName) {
+              metaVenueName.textContent = venue ? venue.name : "TBC";
+            }
+            if (metaCapacity && venue && typeof venue.capacity === "number") {
+              metaCapacity.textContent = String(venue.capacity);
+            }
+
+            // Basic population of saved layouts list (read-only for now)
+            var listEl = document.getElementById("tb-saved-list");
+            if (listEl && Array.isArray(data.previousMaps)) {
+              data.previousMaps.forEach(function (m) {
+                var div = document.createElement("div");
+                div.className = "tb-saved-item";
+                var title = document.createElement("div");
+                title.className = "tb-saved-item-title";
+                title.textContent = m.name || "Layout";
+                var meta = document.createElement("div");
+                meta.className = "tb-saved-item-meta";
+                var ver = document.createElement("span");
+                ver.textContent = "v" + (m.version || 1);
+                var when = document.createElement("span");
+                try {
+                  var d2 = new Date(m.createdAt);
+                  when.textContent = d2.toLocaleDateString("en-GB");
+                } catch (_) {
+                  when.textContent = "";
+                }
+                meta.appendChild(ver);
+                meta.appendChild(when);
+                div.appendChild(title);
+                div.appendChild(meta);
+                listEl.appendChild(div);
+              });
+            }
+          })
+          .catch(function (err) {
+            console.error("Failed to load show info for builder", err);
+          });
+
+        // Basic back button for now: go back in history
+        var backBtn = document.getElementById("tb-btn-back");
+        if (backBtn) {
+          backBtn.addEventListener("click", function () {
             if (window.history.length > 1) {
               window.history.back();
-            } else {
-              window.location.href = "/admin/ui/shows";
             }
           });
         }
-
-        // Save button: seating-builder.js will hook into this via ID.
-        const saveBtn = document.getElementById("tb-save-layout");
-        if (saveBtn) {
-window.__TICKIN_SAVE_BUTTON__ = saveBtn;
-        }
-      });
+      })();
     </script>
 
     <script src="/static/konva.min.js"></script>
     <script src="/static/seating-builder.js"></script>
   </body>
-</html>
-`;
+</html>`;
 
-    res.status(200).send(html);
-  } catch (err) {
-    console.error("Error in GET /builder/preview/:showId", err);
-    res.status(500).send("Internal error");
-  }
+  res.status(200).send(html);
 });
 
 export default router;
