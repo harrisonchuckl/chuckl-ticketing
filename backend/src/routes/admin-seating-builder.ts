@@ -482,7 +482,7 @@ router.get("/builder/preview/:showId", (req, res) => {
       })();
     </script>
 
-    <script src="/static/konva.min.js"></script>
+<script src="https://unpkg.com/konva@9.3.3/konva.min.js"></script>
     <script src="/static/seating-builder.js"></script>
   </body>
 </html>`;
