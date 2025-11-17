@@ -4,6 +4,8 @@ import cors from "cors";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import cookieParser from "cookie-parser";
+import path from "path";
+import { fileURLToPath } from "url";
 
 // ---- Existing routers in your repo ----
 import authRouter from "./routes/auth.js";
@@ -34,6 +36,10 @@ const app = express();
 // behind a proxy/load balancer (Railway / Cloud Run / etc.)
 app.set("trust proxy", 1);
 
+// Resolve __dirname for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 // Core middleware
 app.use(
   cors({
@@ -46,6 +52,13 @@ app.use(morgan("dev"));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+
+// Serve static assets for the seating builder (JS + CSS + any other static files)
+// This makes /static/seating-builder.js and /static/seating-builder.css work.
+app.use(
+  "/static",
+  express.static(path.join(__dirname, "..", "public", "static"))
+);
 
 // Basic global rate limit (tune as needed)
 app.use(
@@ -103,10 +116,10 @@ app.use("/admin", adminTicketTypesRouter);
 app.use("/admin/seatmaps", adminSeatMapsRouter);
 
 // Seat-level operations (used by the seating editor)
-//  - GET  /seatmaps/:seatMapId/seats
-//  - POST /seatmaps/:seatMapId/seats/bulk
+//  - GET   /seatmaps/:seatMapId/seats
+//  - POST  /seatmaps/:seatMapId/seats/bulk
 //  - PATCH /seatmaps/seat/:seatId/status
-//  - GET  /seatmaps/allocations/:allocationId
+//  - GET   /seatmaps/allocations/:allocationId
 app.use("/seatmaps", seatMapsRouter);
 
 // ---------- Seating wizard + full-screen builder ----------
