@@ -37,33 +37,53 @@ async function getUserIdFromRequest(req: any): Promise<string | null> {
 /* -------------------------------------------------------------
    ROUTE: GET available seat maps for this show
    (Used by the builder's loader on page open)
+
+   NOTE: we intentionally *avoid* prisma.show.findUnique here to
+   sidestep the organiserId migration drift in production. We read
+   Show via raw SQL instead.
 -------------------------------------------------------------- */
 router.get("/builder/api/seatmaps/:showId", async (req, res) => {
   try {
     const showId = req.params.showId;
     const userId = await getUserIdFromRequest(req);
 
-    const show = await prisma.show.findUnique({
-      where: { id: showId },
-      include: {
-        venue: true,
-        seatMaps: {
-          orderBy: { createdAt: "desc" },
-        },
-      },
-    });
+    // Read the Show row via raw SQL so we don't reference organiserId
+    const rawShows = await prisma.$queryRaw<
+      { id: string; title: string | null; date: Date | null; venueId: string | null }[]
+    >`SELECT "id","title","date","venueId" FROM "Show" WHERE "id" = ${showId} LIMIT 1`;
 
-    if (!show) {
+    const showRow = rawShows[0];
+    if (!showRow) {
       return res.status(404).json({ error: "Show not found" });
     }
 
-    const venueId = show.venueId ?? undefined;
+    // Look up the venue (normal Prisma; Venue table doesn't have the drift)
+    let venue: any = null;
+    if (showRow.venueId) {
+      venue = await prisma.venue.findUnique({
+        where: { id: showRow.venueId },
+        select: {
+          id: true,
+          name: true,
+          city: true,
+          capacity: true,
+        },
+      });
+    }
 
+    // This show's active seat map(s)
+    const seatMapsForShow = await prisma.seatMap.findMany({
+      where: { showId },
+      orderBy: { createdAt: "desc" },
+    });
+    const activeSeatMap = seatMapsForShow.length > 0 ? seatMapsForShow[0] : null;
+
+    // Previous layouts + templates at this venue (for the right-hand list)
     let previousMaps: any[] = [];
     let templates: any[] = [];
 
-    if (venueId) {
-      const base = { venueId };
+    if (showRow.venueId) {
+      const base = { venueId: showRow.venueId };
       const previousWhere: any = { ...base, isTemplate: false };
       const templateWhere: any = { ...base, isTemplate: true };
 
@@ -101,19 +121,17 @@ router.get("/builder/api/seatmaps/:showId", async (req, res) => {
       });
     }
 
-    const activeSeatMap = show.seatMaps.length > 0 ? show.seatMaps[0] : null;
-
     return res.json({
       show: {
-        id: show.id,
-        title: show.title,
-        date: show.date,
-        venue: show.venue
+        id: showRow.id,
+        title: showRow.title,
+        date: showRow.date,
+        venue: venue
           ? {
-              id: show.venue.id,
-              name: show.venue.name,
-              city: show.venue.city,
-              capacity: show.venue.capacity,
+              id: venue.id,
+              name: venue.name,
+              city: venue.city,
+              capacity: venue.capacity,
             }
           : null,
       },
@@ -138,20 +156,6 @@ router.get("/builder/api/seatmaps/:showId", async (req, res) => {
 
 /* -------------------------------------------------------------
    ROUTE: POST save seat map (wizard OR full Konva canvas)
-   Body:
-   {
-      seatMapId?: string;
-      name?: string;
-      saveAsTemplate?: boolean;
-
-      // Wizard (optional)
-      layoutType?: "tables" | "sections" | "mixed" | "blank";
-      config?: { ... };
-      estimatedCapacity?: number;
-
-      // Konva JSON (optional)
-      konvaJson?: object;
-   }
 -------------------------------------------------------------- */
 router.post("/builder/api/seatmaps/:showId", async (req, res) => {
   try {
@@ -166,12 +170,13 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
       konvaJson,
     } = req.body ?? {};
 
-    const show = await prisma.show.findUnique({
-      where: { id: showId },
-      include: { venue: true },
-    });
+    const showRow = (
+      await prisma.$queryRaw<
+        { id: string; venueId: string | null }[]
+      >`SELECT "id","venueId" FROM "Show" WHERE "id" = ${showId} LIMIT 1`
+    )[0];
 
-    if (!show) {
+    if (!showRow) {
       return res.status(404).json({ error: "Show not found" });
     }
 
@@ -179,14 +184,9 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
 
     const finalName =
       name ||
-      (show.venue?.name ?? "Room") +
+      (showRow.venueId ? "Room layout" : "Room") +
         (layoutType ? ` – ${layoutType}` : " – Layout");
 
-    /**
-     * Unified layout payload:
-     * Stores BOTH wizard config AND full Konva JSON.
-     * This means templates are compatible with both systems.
-     */
     const layoutPayload = {
       layoutType: layoutType ?? null,
       config: config ?? null,
@@ -194,7 +194,7 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
       konvaJson: konvaJson ?? null,
       meta: {
         showId,
-        venueId: show.venueId ?? null,
+        venueId: showRow.venueId ?? null,
         savedAt: new Date().toISOString(),
       },
     };
@@ -221,8 +221,8 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
           layout: layoutPayload as any,
           isTemplate: !!saveAsTemplate,
           createdByUserId: userId ?? null,
-          showId: show.id,
-          venueId: show.venueId ?? null,
+          showId: showRow.id,
+          venueId: showRow.venueId ?? null,
         },
       });
     }
@@ -245,9 +245,9 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
 /* -------------------------------------------------------------
    ROUTE: GET builder full-page HTML
    (this loads the Konva editor; wizard is still available)
-   NOTE: we deliberately *do not* hit Prisma here any more –
-   the JS front-end calls /builder/api/seatmaps/:showId to
-   fetch show + venue data.
+
+   NOTE: preview route no longer touches Prisma at all; it just
+   bootstraps the shell and lets seating-builder.js call the API.
 -------------------------------------------------------------- */
 router.get("/builder/preview/:showId", (req, res) => {
   const showId = req.params.showId;
