@@ -1,28 +1,26 @@
 // backend/public/static/seating-builder.js
-// Plain JS Konva seating builder for TickIn
+// TickIn Konva seating builder
+//
 // - Click a tool on the left, then click on the canvas to add shapes
-// - All shapes are draggable
-// - Selected shape shows resize handles (Konva.Transformer)
-// - Cursor changes:
-//     • default on empty canvas
-//     • grab / grabbing over draggable elements
-//     • two-headed arrows over resize handles
-// - Undo / redo / clear + zoom + save with full Konva JSON
-
-/* global Konva */
-
-// Read globals injected by admin-seating-builder.ts
-var SHOW_ID = window.__SEATMAP_SHOW_ID__;
-var INITIAL_LAYOUT = window.__SEATMAP_LAYOUT__ || "blank";
-var SAVE_BUTTON = window.__TICKIN_SAVE_BUTTON__;
-var BACK_BUTTON = window.__TICKIN_BACK_BUTTON__;
-
-// Basic guard
-if (!SHOW_ID) {
-  console.error("seating-builder.js: missing window.__SEATMAP_SHOW_ID__");
-}
+// - Shapes are draggable, resizable (via Transformer)
+// - Cursor changes to hand over shapes, two-headed arrows over resize handles
+// - Delete / Backspace removes the selected shape
+// - Undo / redo one action at a time
+//
+// IMPORTANT: history + saved JSON store ONLY the main drawing layer,
+// not the grid layer, so the grid always stays clean.
 
 (function () {
+  /* global Konva */
+
+  var SHOW_ID = window.__SEATMAP_SHOW_ID__;
+  var INITIAL_LAYOUT = window.__SEATMAP_LAYOUT__ || "blank";
+  var SAVE_BUTTON = window.__TICKIN_SAVE_BUTTON__;
+
+  if (!SHOW_ID) {
+    console.error("seating-builder.js: missing window.__SEATMAP_SHOW_ID__");
+  }
+
   var container = document.getElementById("app");
   if (!container) {
     console.error("seating-builder.js: #app not found");
@@ -33,12 +31,11 @@ if (!SHOW_ID) {
   // Stage + layers
   // ---------------------------------------------------------------------------
 
-  var stageWidth = container.clientWidth || 1100;
-  var stageHeight = container.clientHeight || 640;
-
-  // Resize container so it has a nice ratio
   container.style.width = "100%";
   container.style.height = "100%";
+
+  var stageWidth = container.clientWidth || 1100;
+  var stageHeight = container.clientHeight || 640;
 
   var stage = new Konva.Stage({
     container: "app",
@@ -46,12 +43,14 @@ if (!SHOW_ID) {
     height: stageHeight,
   });
 
-  var gridLayer = new Konva.Layer();
+  // Separate grid & main drawing layers
+  var gridLayer = new Konva.Layer({ listening: false });
   var mainLayer = new Konva.Layer();
+
   stage.add(gridLayer);
   stage.add(mainLayer);
 
-  // Transformer for selection / resize
+  // Transformer (for selection + resize)
   var transformer = new Konva.Transformer({
     rotateEnabled: false,
     padding: 10,
@@ -89,110 +88,135 @@ if (!SHOW_ID) {
   var zoomResetBtn = document.getElementById("sb-zoom-reset");
   var seatCountLabel = document.getElementById("sb-seat-count");
   var selectionSummaryLabel = document.getElementById("sb-selection-summary");
-
   var containerEl = stage.container();
 
   // ---------------------------------------------------------------------------
-  // State: current tool, history for undo / redo
+  // State: current tool, history, flags
   // ---------------------------------------------------------------------------
 
-  var currentTool = null; // "section" | "row" | "single" | "circle-table" | "rect-table" | "stage" | "bar" | "exit" | "text"
-
+  var currentTool = null; // "section" | "row" | "single" | etc.
   var history = [];
   var historyIndex = -1;
 
-  function pushHistory() {
-    try {
-      var json = stage.toJSON();
-      // If we've undone some steps, truncate future
-      if (historyIndex < history.length - 1) {
-        history = history.slice(0, historyIndex + 1);
-      }
-      history.push(json);
-      historyIndex = history.length - 1;
-      updateSeatCount();
-    } catch (err) {
-      console.error("Failed to push history", err);
-    }
-  }
-
-  function loadHistory(index) {
-    if (index < 0 || index >= history.length) return;
-    try {
-      var json = history[index];
-      stage.destroyChildren();
-      // Recreate layers from JSON
-      var restored = Konva.Node.create(json, "app");
-
-      // Note: Node.create will create a new Stage, we only want children
-      // So we clear our stage and manually move layers
-      stage.add(restored.findOne("Layer:nth-child(1)"));
-      stage.add(restored.findOne("Layer:nth-child(2)"));
-
-      // Rewire references
-      var layers = stage.getLayers();
-      gridLayer = layers[0];
-      mainLayer = layers[1];
-
-      // Add transformer back (it’s part of JSON, but we want a reference)
-      transformer = mainLayer.findOne("Transformer") || transformer;
-      historyIndex = index;
-
-      // Re-attach cursors + drag handlers on shapes
-      rebindNodeEvents();
-      updateSeatCount();
-    } catch (err) {
-      console.error("Failed to load history", err);
-    }
-  }
-
-  function undo() {
-    if (historyIndex <= 0) return;
-    loadHistory(historyIndex - 1);
-  }
-
-  function redo() {
-    if (historyIndex >= history.length - 1) return;
-    loadHistory(historyIndex + 1);
-  }
+  // If true, the *next* background click will NOT create a new item,
+  // it will just deselect (used after drag / resize).
+  var suppressNextClickAdd = false;
 
   // ---------------------------------------------------------------------------
-  // Grid background
+  // Grid
   // ---------------------------------------------------------------------------
 
   function drawGrid() {
-    var gridSize = 40;
+    var gridSize = 40; // 40px squares
     var width = stage.width();
     var height = stage.height();
 
     gridLayer.destroyChildren();
 
-    for (var i = 0; i < width / gridSize; i++) {
+    for (var x = 0; x <= width; x += gridSize) {
       gridLayer.add(
         new Konva.Line({
-          points: [i * gridSize, 0, i * gridSize, height],
-          stroke: "rgba(148,163,184,0.35)",
-          strokeWidth: 0.5,
-        })
-      );
-    }
-    for (var j = 0; j < height / gridSize; j++) {
-      gridLayer.add(
-        new Konva.Line({
-          points: [0, j * gridSize, width, j * gridSize],
-          stroke: "rgba(148,163,184,0.35)",
+          points: [x, 0, x, height],
+          stroke: "rgba(148,163,184,0.28)",
           strokeWidth: 0.5,
         })
       );
     }
 
-    gridLayer.batchDraw();
+    for (var y = 0; y <= height; y += gridSize) {
+      gridLayer.add(
+        new Konva.Line({
+          points: [0, y, width, y],
+          stroke: "rgba(148,163,184,0.28)",
+          strokeWidth: 0.5,
+        })
+      );
+    }
+
+    gridLayer.draw();
   }
 
   drawGrid();
 
   // ---------------------------------------------------------------------------
-  // Helpers for shapes
+  // History helpers (only serialise mainLayer)
+  // ---------------------------------------------------------------------------
+
+  function snapshotMainLayer() {
+    try {
+      return mainLayer.toJSON();
+    } catch (err) {
+      console.error("snapshotMainLayer failed", err);
+      return null;
+    }
+  }
+
+  function restoreMainLayerFromJSON(json) {
+    try {
+      var restored = Konva.Node.create(json);
+      if (!(restored instanceof Konva.Layer)) {
+        console.error("Expected a Layer JSON but got", restored);
+        return;
+      }
+
+      stage.remove(mainLayer);
+      mainLayer.destroy();
+
+      mainLayer = restored;
+      stage.add(mainLayer);
+
+      // Get transformer or recreate it
+      transformer = mainLayer.findOne("Transformer");
+      if (!transformer) {
+        transformer = new Konva.Transformer({
+          rotateEnabled: false,
+          padding: 10,
+          anchorSize: 8,
+          borderStroke: "#2563eb",
+          borderStrokeWidth: 1,
+          anchorStroke: "#2563eb",
+          anchorFill: "#ffffff",
+          anchorStrokeWidth: 1,
+        });
+        mainLayer.add(transformer);
+      }
+
+      rebindNodeEvents();
+      setupTransformerAnchorCursors();
+      mainLayer.draw();
+      updateSeatCount();
+    } catch (err) {
+      console.error("restoreMainLayerFromJSON failed", err);
+    }
+  }
+
+  function pushHistory() {
+    var json = snapshotMainLayer();
+    if (!json) return;
+
+    if (historyIndex < history.length - 1) {
+      history = history.slice(0, historyIndex + 1);
+    }
+    history.push(json);
+    historyIndex = history.length - 1;
+
+    updateSeatCount();
+  }
+
+  function undo() {
+    if (historyIndex <= 0) return;
+    historyIndex -= 1;
+    restoreMainLayerFromJSON(history[historyIndex]);
+  }
+
+  function redo() {
+    if (historyIndex >= history.length - 1) return;
+    historyIndex += 1;
+    restoreMainLayerFromJSON(history[historyIndex]);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Shape helpers
   // ---------------------------------------------------------------------------
 
   var ID_COUNTER = 1;
@@ -211,7 +235,7 @@ if (!SHOW_ID) {
       id: nextId(type),
     });
 
-    // Hover cursor: hand
+    // Hand cursor behaviour
     group.on("mouseenter", function () {
       containerEl.style.cursor = "grab";
     });
@@ -224,11 +248,12 @@ if (!SHOW_ID) {
     group.on("mouseup", function () {
       containerEl.style.cursor = "grab";
     });
+
     group.on("dragend", function () {
+      suppressNextClickAdd = true; // next background click is just deselect
       pushHistory();
     });
 
-    // Select on click
     group.on("click tap", function (e) {
       e.cancelBubble = true;
       selectNode(group);
@@ -239,18 +264,17 @@ if (!SHOW_ID) {
 
   function createSection(x, y) {
     var group = baseGroup(x - 60, y - 30, "section");
-
-    var rect = new Konva.Rect({
-      width: 120,
-      height: 60,
-      cornerRadius: 8,
-      stroke: "#64748b",
-      strokeWidth: 1.4,
-      dash: [6, 4],
-      fill: "rgba(148, 163, 184, 0.06)",
-    });
-
-    group.add(rect);
+    group.add(
+      new Konva.Rect({
+        width: 120,
+        height: 60,
+        cornerRadius: 8,
+        stroke: "#64748b",
+        strokeWidth: 1.4,
+        dash: [6, 4],
+        fill: "rgba(148,163,184,0.06)",
+      })
+    );
     mainLayer.add(group);
     return group;
   }
@@ -262,14 +286,15 @@ if (!SHOW_ID) {
     var count = 10;
 
     for (var i = 0; i < count; i++) {
-      var seat = new Konva.Circle({
-        x: i * (seatRadius * 2 + gap),
-        y: 0,
-        radius: seatRadius,
-        stroke: "#64748b",
-        strokeWidth: 1.1,
-      });
-      group.add(seat);
+      group.add(
+        new Konva.Circle({
+          x: i * (seatRadius * 2 + gap),
+          y: 0,
+          radius: seatRadius,
+          stroke: "#64748b",
+          strokeWidth: 1.1,
+        })
+      );
     }
 
     mainLayer.add(group);
@@ -278,12 +303,13 @@ if (!SHOW_ID) {
 
   function createSingleSeat(x, y) {
     var group = baseGroup(x, y, "single");
-    var seat = new Konva.Circle({
-      radius: 7,
-      stroke: "#64748b",
-      strokeWidth: 1.3,
-    });
-    group.add(seat);
+    group.add(
+      new Konva.Circle({
+        radius: 7,
+        stroke: "#64748b",
+        strokeWidth: 1.3,
+      })
+    );
     mainLayer.add(group);
     return group;
   }
@@ -291,12 +317,13 @@ if (!SHOW_ID) {
   function createCircularTable(x, y) {
     var group = baseGroup(x, y, "circle-table");
 
-    var table = new Konva.Circle({
-      radius: 18,
-      stroke: "#64748b",
-      strokeWidth: 1.2,
-    });
-    group.add(table);
+    group.add(
+      new Konva.Circle({
+        radius: 18,
+        stroke: "#64748b",
+        strokeWidth: 1.2,
+      })
+    );
 
     var seatRadius = 6;
     var seats = 8;
@@ -305,14 +332,15 @@ if (!SHOW_ID) {
       var angle = (i / seats) * Math.PI * 2;
       var sx = Math.cos(angle) * r;
       var sy = Math.sin(angle) * r;
-      var seat = new Konva.Circle({
-        x: sx,
-        y: sy,
-        radius: seatRadius,
-        stroke: "#64748b",
-        strokeWidth: 1.1,
-      });
-      group.add(seat);
+      group.add(
+        new Konva.Circle({
+          x: sx,
+          y: sy,
+          radius: seatRadius,
+          stroke: "#64748b",
+          strokeWidth: 1.1,
+        })
+      );
     }
 
     mainLayer.add(group);
@@ -322,20 +350,21 @@ if (!SHOW_ID) {
   function createRectTable(x, y) {
     var group = baseGroup(x, y, "rect-table");
 
-    var table = new Konva.Rect({
-      width: 70,
-      height: 30,
-      cornerRadius: 6,
-      stroke: "#64748b",
-      strokeWidth: 1.2,
-    });
-    group.add(table);
+    group.add(
+      new Konva.Rect({
+        width: 70,
+        height: 30,
+        cornerRadius: 6,
+        stroke: "#64748b",
+        strokeWidth: 1.2,
+      })
+    );
 
     var seatRadius = 6;
     var sideSeats = 3;
     var shortSideSeats = 2;
 
-    // top
+    // top & bottom
     for (var i = 0; i < sideSeats; i++) {
       group.add(
         new Konva.Circle({
@@ -346,12 +375,9 @@ if (!SHOW_ID) {
           strokeWidth: 1.1,
         })
       );
-    }
-    // bottom
-    for (var j = 0; j < sideSeats; j++) {
       group.add(
         new Konva.Circle({
-          x: -28 + j * 28,
+          x: -28 + i * 28,
           y: 22,
           radius: seatRadius,
           stroke: "#64748b",
@@ -359,24 +385,22 @@ if (!SHOW_ID) {
         })
       );
     }
-    // left
-    for (var k = 0; k < shortSideSeats; k++) {
+
+    // sides
+    for (var j = 0; j < shortSideSeats; j++) {
       group.add(
         new Konva.Circle({
           x: -40,
-          y: -10 + k * 20,
+          y: -10 + j * 20,
           radius: seatRadius,
           stroke: "#64748b",
           strokeWidth: 1.1,
         })
       );
-    }
-    // right
-    for (var l = 0; l < shortSideSeats; l++) {
       group.add(
         new Konva.Circle({
           x: 40,
-          y: -10 + l * 20,
+          y: -10 + j * 20,
           radius: seatRadius,
           stroke: "#64748b",
           strokeWidth: 1.1,
@@ -525,7 +549,8 @@ if (!SHOW_ID) {
 
     if (selectionSummaryLabel) {
       var type = node.getAttr("sbType") || "object";
-      selectionSummaryLabel.textContent = "Selected " + type + ". Drag to move or resize.";
+      selectionSummaryLabel.textContent =
+        "Selected " + type + ". Drag to move or resize.";
     }
 
     mainLayer.draw();
@@ -565,7 +590,7 @@ if (!SHOW_ID) {
     });
   }
 
-  // Re-attach hover / drag events if we restore from history
+  // Rebind events after restoring from history / backend
   function rebindNodeEvents() {
     mainLayer.find(".sb-object").each(function (node) {
       node.off("mouseenter mouseleave mousedown mouseup dragend click tap");
@@ -583,6 +608,7 @@ if (!SHOW_ID) {
         containerEl.style.cursor = "grab";
       });
       node.on("dragend", function () {
+        suppressNextClickAdd = true;
         pushHistory();
       });
       node.on("click tap", function (e) {
@@ -592,41 +618,46 @@ if (!SHOW_ID) {
     });
   }
 
-  // Background click = deselect
-  stage.on("click tap", function (e) {
-    if (e.target === stage || e.target === gridLayer || e.target.parent === gridLayer) {
-      // Clicked on empty area
-      selectNode(null);
-
-      if (currentTool) {
-        // Add shape on click if a tool is active
-        var pos = stage.getPointerPosition();
-        if (!pos) return;
-        var n = createFromTool(currentTool, pos.x, pos.y);
-        if (n) {
-          selectNode(n);
-          pushHistory();
-        }
-      }
-    } else if (currentTool) {
-      // If clicked on a shape while a tool is active, still create new
-      var pos2 = stage.getPointerPosition();
-      if (!pos2) return;
-      var n2 = createFromTool(currentTool, pos2.x, pos2.y);
-      if (n2) {
-        selectNode(n2);
-        pushHistory();
-      }
-    }
-  });
-
-  // Transform end → save new state
   transformer.on("transformend", function () {
+    suppressNextClickAdd = true;
     pushHistory();
   });
 
   // ---------------------------------------------------------------------------
-  // Tool button handling
+  // Stage click behaviour
+  // ---------------------------------------------------------------------------
+
+  stage.on("click tap", function (e) {
+    var pos = stage.getPointerPosition();
+    if (!pos) return;
+
+    var clickedEmpty =
+      e.target === stage ||
+      e.target.getLayer() === gridLayer ||
+      e.target.parent === gridLayer;
+
+    if (clickedEmpty) {
+      // If a tool is active & we haven't just dragged/resized, drop a new item
+      if (currentTool && !suppressNextClickAdd) {
+        var node = createFromTool(currentTool, pos.x, pos.y);
+        if (node) {
+          selectNode(node);
+          pushHistory();
+        }
+      } else {
+        // Just deselect
+        selectNode(null);
+      }
+
+      // Reset suppression after the first empty click post-drag/resize
+      suppressNextClickAdd = false;
+    }
+    // If clicked on a shape, selection is handled by the group click handler.
+    // We don't auto-add another element in that case.
+  });
+
+  // ---------------------------------------------------------------------------
+  // Tool buttons
   // ---------------------------------------------------------------------------
 
   toolButtons.forEach(function (btn) {
@@ -635,7 +666,6 @@ if (!SHOW_ID) {
       if (!tool) return;
 
       if (currentTool === tool) {
-        // toggle off
         currentTool = null;
         btn.classList.remove("is-active");
       } else {
@@ -649,8 +679,10 @@ if (!SHOW_ID) {
   });
 
   // ---------------------------------------------------------------------------
-  // Zoom controls
+  // Zoom
   // ---------------------------------------------------------------------------
+
+  var currentScale = 1;
 
   function setZoom(scale, center) {
     var oldScale = stage.scaleX();
@@ -674,8 +706,6 @@ if (!SHOW_ID) {
       zoomResetBtn.textContent = Math.round(scale * 100) + "%";
     }
   }
-
-  var currentScale = 1;
 
   if (zoomInBtn) {
     zoomInBtn.addEventListener("click", function () {
@@ -704,15 +734,11 @@ if (!SHOW_ID) {
   // ---------------------------------------------------------------------------
 
   if (undoBtn) {
-    undoBtn.addEventListener("click", function () {
-      undo();
-    });
+    undoBtn.addEventListener("click", undo);
   }
 
   if (redoBtn) {
-    redoBtn.addEventListener("click", function () {
-      redo();
-    });
+    redoBtn.addEventListener("click", redo);
   }
 
   if (clearBtn) {
@@ -725,17 +751,45 @@ if (!SHOW_ID) {
   }
 
   // ---------------------------------------------------------------------------
-  // Seat count + inspector
+  // Delete selected element with Backspace / Delete
+  // ---------------------------------------------------------------------------
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Delete" || e.key === "Backspace") {
+      var nodes = transformer.nodes();
+      if (nodes && nodes.length > 0) {
+        e.preventDefault();
+        nodes.forEach(function (n) {
+          n.destroy();
+        });
+        transformer.nodes([]);
+        mainLayer.draw();
+        updateSeatCount();
+        if (selectionSummaryLabel) {
+          selectionSummaryLabel.textContent =
+            "Nothing selected. Click on a seat, table or object to see quick details here.";
+        }
+        pushHistory();
+      }
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Seat count
   // ---------------------------------------------------------------------------
 
   function updateSeatCount() {
     var total = 0;
-    // seats are circles that are not part of stage / bar / exit / text etc.
+
     mainLayer.find(".sb-object").each(function (node) {
       var type = node.getAttr("sbType");
-      if (type === "row" || type === "circle-table" || type === "rect-table" || type === "single") {
-        // Count circles underneath
-        node.find("Circle").each(function (c) {
+      if (
+        type === "row" ||
+        type === "circle-table" ||
+        type === "rect-table" ||
+        type === "single"
+      ) {
+        node.find("Circle").each(function () {
           total += 1;
         });
       }
@@ -747,7 +801,7 @@ if (!SHOW_ID) {
   }
 
   // ---------------------------------------------------------------------------
-  // Saving
+  // Save to backend
   // ---------------------------------------------------------------------------
 
   function gatherLayoutPayload() {
@@ -755,7 +809,7 @@ if (!SHOW_ID) {
       layoutType: INITIAL_LAYOUT,
       config: null,
       estimatedCapacity: null,
-      konvaJson: stage.toJSON(),
+      konvaJson: snapshotMainLayer(),
     };
   }
 
@@ -766,9 +820,7 @@ if (!SHOW_ID) {
       "/admin/seating/builder/api/seatmaps/" + encodeURIComponent(SHOW_ID),
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       }
     )
@@ -777,26 +829,23 @@ if (!SHOW_ID) {
         return res.json();
       })
       .then(function () {
-        if (SAVE_BUTTON) {
-          var original = SAVE_BUTTON.textContent;
-          SAVE_BUTTON.textContent = "Saved";
-          SAVE_BUTTON.disabled = true;
-          setTimeout(function () {
-            SAVE_BUTTON.textContent = original || "Save layout";
-            SAVE_BUTTON.disabled = false;
-          }, 1500);
-        }
+        if (!SAVE_BUTTON) return;
+        var original = SAVE_BUTTON.textContent;
+        SAVE_BUTTON.textContent = "Saved";
+        SAVE_BUTTON.disabled = true;
+        setTimeout(function () {
+          SAVE_BUTTON.textContent = original || "Save layout";
+          SAVE_BUTTON.disabled = false;
+        }, 1500);
       })
       .catch(function (err) {
         console.error("Failed to save seat map", err);
-        if (SAVE_BUTTON) {
-          var original2 = SAVE_BUTTON.textContent;
-          SAVE_BUTTON.textContent = "Error";
-          SAVE_BUTTON.disabled = false;
-          setTimeout(function () {
-            SAVE_BUTTON.textContent = original2 || "Save layout";
-          }, 2000);
-        }
+        if (!SAVE_BUTTON) return;
+        var original2 = SAVE_BUTTON.textContent;
+        SAVE_BUTTON.textContent = "Error";
+        setTimeout(function () {
+          SAVE_BUTTON.textContent = original2 || "Save layout";
+        }, 2000);
       });
   }
 
@@ -805,7 +854,7 @@ if (!SHOW_ID) {
   }
 
   // ---------------------------------------------------------------------------
-  // Initial load: if we have an existing layout with konvaJson, restore it
+  // Initial load: restore main layer from backend if present
   // ---------------------------------------------------------------------------
 
   function loadExisting() {
@@ -818,7 +867,6 @@ if (!SHOW_ID) {
       })
       .then(function (data) {
         if (!data || !data.activeSeatMap || !data.activeSeatMap.layout) {
-          // nothing yet – blank grid
           pushHistory();
           return;
         }
@@ -829,40 +877,8 @@ if (!SHOW_ID) {
           return;
         }
 
-        try {
-          var json = layout.konvaJson;
-          // Rebuild from JSON
-          stage.destroyChildren();
-          var restored = Konva.Node.create(json, "app");
-          stage.add(restored.findOne("Layer:nth-child(1)"));
-          stage.add(restored.findOne("Layer:nth-child(2)"));
-
-          var layers = stage.getLayers();
-          gridLayer = layers[0];
-          mainLayer = layers[1];
-
-          transformer = mainLayer.findOne("Transformer") || transformer;
-          if (!transformer) {
-            transformer = new Konva.Transformer({
-              rotateEnabled: false,
-              padding: 10,
-            });
-            mainLayer.add(transformer);
-          }
-
-          drawGrid();
-          rebindNodeEvents();
-          updateSeatCount();
-          pushHistory();
-        } catch (err) {
-          console.error("Failed to restore layout from konvaJson", err);
-          stage.destroyChildren();
-          stage.add(gridLayer);
-          stage.add(mainLayer);
-          mainLayer.add(transformer);
-          drawGrid();
-          pushHistory();
-        }
+        restoreMainLayerFromJSON(layout.konvaJson);
+        pushHistory();
       })
       .catch(function (err) {
         console.error("Error loading existing seat map", err);
