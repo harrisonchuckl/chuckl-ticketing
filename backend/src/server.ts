@@ -5,7 +5,6 @@ import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import cookieParser from "cookie-parser";
 import path from "path";
-import { fileURLToPath } from "url";
 
 // ---- Existing routers in your repo ----
 import authRouter from "./routes/auth.js";
@@ -35,10 +34,6 @@ const app = express();
 
 // behind a proxy/load balancer (Railway / Cloud Run / etc.)
 app.set("trust proxy", 1);
-
-// Resolve __dirname for ES modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // Core middleware
 app.use(
