@@ -246,34 +246,217 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
    ROUTE: GET builder full-page HTML
    (this loads the Konva editor; wizard is still available)
 -------------------------------------------------------------- */
-router.get("/builder/preview/:showId", (req, res) => {
-  const showId = req.params.showId;
-  const layout = normaliseLayout(req.query.layout as string | undefined);
+router.get("/builder/preview/:showId", async (req, res) => {
+  try {
+    const showId = req.params.showId;
+    const layout = normaliseLayout(req.query.layout as string | undefined);
 
-  const html = `
+    const show = await prisma.show.findUnique({
+      where: { id: showId },
+      include: { venue: true },
+    });
+
+    const showTitle = show?.title ?? "Seat map designer";
+    const venueName = show?.venue?.name ?? "Venue";
+    const venueCity = show?.venue?.city ?? "";
+    const showDate = show?.date
+      ? new Date(show.date).toLocaleDateString("en-GB", {
+          weekday: "short",
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        })
+      : "";
+
+    const html = `
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>TickIn Seat Designer</title>
+    <title>TickIn Seat Designer – ${showTitle}</title>
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <link rel="stylesheet" href="/static/seating-builder.css" />
   </head>
-  <body>
-    <div id="app"></div>
+  <body class="tickin-builder-body">
+    <div class="tickin-builder-shell">
+      <!-- Top bar -->
+      <header class="tickin-builder-topbar">
+        <div class="tb-topbar-left">
+          <div class="tb-logo-badge">
+            <span class="tb-logo-dot"></span>
+            <span class="tb-logo-text">TickIn</span>
+          </div>
+          <div class="tb-show-meta">
+            <h1 class="tb-show-title">${showTitle}</h1>
+            <div class="tb-show-subtitle">
+              <span>${venueName}</span>
+              ${venueCity ? `<span class="tb-dot">•</span><span>${venueCity}</span>` : ""}
+              ${showDate ? `<span class="tb-dot">•</span><span>${showDate}</span>` : ""}
+            </div>
+          </div>
+        </div>
+        <div class="tb-topbar-right">
+          <button type="button" class="tb-topbar-btn tb-btn-ghost" id="tb-exit-builder">
+            Exit
+          </button>
+          <button type="button" class="tb-topbar-btn tb-btn-primary" id="tb-save-layout">
+            Save layout
+          </button>
+        </div>
+      </header>
+
+      <!-- Main 3-column layout -->
+      <div class="tickin-builder-main">
+        <!-- Left tools rail (copy / paste / zoom etc. – wired later in JS) -->
+        <aside class="tb-rail-left">
+          <div class="tb-rail-group">
+            <div class="tb-rail-label">Tools</div>
+            <button class="tb-rail-icon-btn" data-tool="select" title="Select (V)">
+              <span class="tb-rail-icon tb-icon-select"></span>
+            </button>
+            <button class="tb-rail-icon-btn" data-tool="pan" title="Pan (Space)">
+              <span class="tb-rail-icon tb-icon-hand"></span>
+            </button>
+            <button class="tb-rail-icon-btn" data-tool="grid" title="Toggle grid (G)">
+              <span class="tb-rail-icon tb-icon-grid"></span>
+            </button>
+          </div>
+
+          <div class="tb-rail-group tb-rail-group-bottom">
+            <div class="tb-rail-label">Zoom</div>
+            <button class="tb-rail-icon-btn" id="tb-zoom-in" title="Zoom in (+)">
+              +
+            </button>
+            <button class="tb-rail-icon-btn" id="tb-zoom-out" title="Zoom out (-)">
+              –
+            </button>
+          </div>
+        </aside>
+
+        <!-- Centre: tabs + canvas -->
+        <main class="tb-center">
+          <!-- Tabs row -->
+          <div class="tb-tabs">
+            <button class="tb-tab is-active" data-tab="map">Map</button>
+            <button class="tb-tab" data-tab="tiers">Tiers</button>
+            <button class="tb-tab" data-tab="holds">Holds</button>
+          </div>
+
+          <!-- Tab panels -->
+          <div class="tb-tab-panels">
+            <section class="tb-tab-panel is-active" id="tb-tab-map">
+              <!-- Existing Konva builder mounts into #app -->
+              <div id="app"></div>
+            </section>
+
+            <section class="tb-tab-panel" id="tb-tab-tiers">
+              <div class="tb-empty-panel">
+                <h2>Tiers (coming soon)</h2>
+                <p>
+                  Here you’ll assign seats to price tiers and link them directly
+                  to your ticket types.
+                </p>
+              </div>
+            </section>
+
+            <section class="tb-tab-panel" id="tb-tab-holds">
+              <div class="tb-empty-panel">
+                <h2>Holds (coming soon)</h2>
+                <p>
+                  Use holds to reserve blocks of seats for artists, sponsors, or
+                  guest lists without putting them on general sale.
+                </p>
+              </div>
+            </section>
+          </div>
+        </main>
+
+        <!-- Right side: layout summary / saved maps -->
+        <aside class="tb-side-panel">
+          <div class="tb-side-section">
+            <h2 class="tb-side-heading">Layout details</h2>
+            <dl class="tb-side-meta">
+              <div>
+                <dt>Layout type</dt>
+                <dd>${layout}</dd>
+              </div>
+              <div>
+                <dt>Estimated capacity</dt>
+                <dd id="tb-estimated-capacity">Flexible</dd>
+              </div>
+            </dl>
+          </div>
+
+          <div class="tb-side-section">
+            <h2 class="tb-side-heading">Saved seat maps</h2>
+            <p class="tb-side-help">
+              You can reuse layouts you’ve already created for this venue.
+            </p>
+            <div id="tb-saved-layouts" class="tb-saved-list">
+              <!-- seating-builder.js will populate this -->
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
     <script>
       window.__SEATMAP_SHOW_ID__ = ${JSON.stringify(showId)};
       window.__SEATMAP_LAYOUT__ = ${JSON.stringify(layout)};
+
+      // Basic tab switching (Map / Tiers / Holds).
+      // The actual functionality still lives in seating-builder.js – this is just UI chrome.
+      document.addEventListener("DOMContentLoaded", () => {
+        const tabButtons = Array.from(document.querySelectorAll(".tb-tab"));
+        const panels = {
+          map: document.getElementById("tb-tab-map"),
+          tiers: document.getElementById("tb-tab-tiers"),
+          holds: document.getElementById("tb-tab-holds"),
+        };
+
+        tabButtons.forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const tab = btn.getAttribute("data-tab");
+            if (!tab || !panels[tab]) return;
+
+            tabButtons.forEach((b) => b.classList.toggle("is-active", b === btn));
+            Object.entries(panels).forEach(([key, panel]) => {
+              panel.classList.toggle("is-active", key === tab);
+            });
+          });
+        });
+
+        // Exit button: just go back in history for now.
+        const exitBtn = document.getElementById("tb-exit-builder");
+        if (exitBtn) {
+          exitBtn.addEventListener("click", () => {
+            if (window.history.length > 1) {
+              window.history.back();
+            } else {
+              window.location.href = "/admin/ui/shows";
+            }
+          });
+        }
+
+        // Save button: seating-builder.js will hook into this via ID.
+        const saveBtn = document.getElementById("tb-save-layout");
+        if (saveBtn) {
+          (window as any).__TICKIN_SAVE_BUTTON__ = saveBtn;
+        }
+      });
     </script>
-    <!-- Konva via CDN to avoid needing a local /static/konva.min.js -->
-    <script src="https://unpkg.com/konva@9/konva.min.js"></script>
-    <!-- Your builder logic -->
+
+    <script src="/static/konva.min.js"></script>
     <script src="/static/seating-builder.js"></script>
   </body>
 </html>
 `;
 
-  res.status(200).send(html);
+    res.status(200).send(html);
+  } catch (err) {
+    console.error("Error in GET /builder/preview/:showId", err);
+    res.status(500).send("Internal error");
+  }
 });
 
 export default router;
