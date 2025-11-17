@@ -1,21 +1,6 @@
-:root {
-  --bg: #f3f5fb;
-  --panel-bg: #ffffff;
-  --accent: #2563eb;
-  --accent-soft: rgba(37, 99, 235, 0.12);
-  --accent-strong: rgba(37, 99, 235, 0.25);
-  --border-subtle: rgba(15, 23, 42, 0.06);
-  --text-main: #0f172a;
-  --text-muted: #64748b;
-  --danger: #b91c1c;
-  --success: #16a34a;
-  --shadow-soft: 0 18px 45px rgba(15, 23, 42, 0.14);
-  --shadow-panel: 0 10px 30px rgba(15, 23, 42, 0.08);
-  --radius-lg: 20px;
-}
+/* backend/public/static/seating-builder.css */
 
-/* Global reset / base
-   -------------------------------------------------- */
+/* Global ---------------------------------------------------- */
 
 *,
 *::before,
@@ -28,343 +13,454 @@ body {
   margin: 0;
   padding: 0;
   height: 100%;
-  width: 100%;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
-    "Segoe UI", sans-serif;
-  color: var(--text-main);
-  background: radial-gradient(
-      circle at top left,
-      #e0ecff,
-      #f6f7fc 45%,
-      #eef1ff 85%
-    )
-    fixed;
+    Segoe UI, sans-serif;
+  color: #0f172a;
+  background: radial-gradient(circle at top left, #e0f2fe 0, #eff6ff 40%, #f9fafb 100%);
 }
 
 body {
   display: flex;
-  align-items: stretch;
-  justify-content: center;
 }
 
-/* Root layout – 3 panel Eventbrite-style editor
-   -------------------------------------------------- */
+/* App shell ------------------------------------------------- */
 
-#sb-root {
+#app {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  padding: 16px;
+}
+
+.seatbuilder-shell {
+  background: #ffffff;
+  border-radius: 18px;
+  box-shadow:
+    0 18px 45px rgba(15, 23, 42, 0.13),
+    0 0 0 1px rgba(148, 163, 184, 0.2);
   width: 100%;
   max-width: 1440px;
-  margin: 18px auto;
-  padding: 16px 18px 20px;
-  background: linear-gradient(145deg, #f9f9ff, #f1f4ff);
-  border-radius: 28px;
-  box-shadow: var(--shadow-soft);
+  min-height: 720px;
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr) 280px;
-  gap: 14px;
-  min-height: calc(100vh - 36px);
-}
-
-/* Left toolbar (tools palette)
-   -------------------------------------------------- */
-
-#sb-toolbar-left {
-  background: rgba(255, 255, 255, 0.96);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-panel);
-  padding: 12px 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  border: 1px solid var(--border-subtle);
-}
-
-.tool-section-title {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.16em;
-  color: var(--text-muted);
-  margin-bottom: 4px;
-}
-
-#sb-toolbar-left hr {
-  border: 0;
-  border-top: 1px dashed rgba(148, 163, 184, 0.5);
-  margin: 6px 0;
-}
-
-/* Tool buttons – like Eventbrite chips
-   -------------------------------------------------- */
-
-.tool-btn {
-  width: 100%;
-  border-radius: 999px;
-  border: 0;
-  padding: 7px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  text-align: left;
-  background: rgba(148, 163, 184, 0.08);
-  color: var(--text-main);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
-  transition: background 140ms ease-out, transform 120ms ease-out,
-    box-shadow 140ms ease-out, color 140ms ease-out;
-}
-
-.tool-btn::before {
-  content: "";
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  background: #ffffff;
-  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.12);
-}
-
-.tool-btn:hover {
-  background: rgba(148, 163, 184, 0.18);
-  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.16);
-  transform: translateY(-1px);
-}
-
-.tool-btn:active {
-  transform: translateY(0);
-  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.18);
-}
-
-/* Middle canvas area
-   -------------------------------------------------- */
-
-#sb-canvas-container {
-  background: rgba(255, 255, 255, 0.96);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-panel);
-  border: 1px solid var(--border-subtle);
-  display: flex;
-  flex-direction: column;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-columns: 260px minmax(0, 1fr) 320px;
+  grid-template-areas:
+    "header header header"
+    "sidebar canvas inspector";
   overflow: hidden;
 }
 
-#sb-canvas-container::before {
-  /* top mini toolbar bar */
-  content: "Seat map · Drag, resize and arrange";
-  height: 40px;
-  padding: 10px 14px;
-  font-size: 12px;
-  color: var(--text-muted);
-  border-bottom: 1px solid var(--border-subtle);
-  background: rgba(248, 250, 252, 0.96);
-}
+/* Header ---------------------------------------------------- */
 
-#sb-canvas {
-  flex: 1;
-  position: relative;
-  background-image: linear-gradient(
-      to right,
-      rgba(148, 163, 184, 0.2) 1px,
-      transparent 1px
-    ),
-    linear-gradient(to bottom, rgba(148, 163, 184, 0.2) 1px, transparent 1px);
-  background-size: 32px 32px;
-  background-position: center;
-}
-
-/* Right-hand inspector / actions
-   -------------------------------------------------- */
-
-#sb-sidebar-right {
-  background: rgba(255, 255, 255, 0.96);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-panel);
-  border: 1px solid var(--border-subtle);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-/* Inspector header */
-
-#sb-inspector {
-  padding: 10px 12px 8px;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-#sb-inspector h3 {
-  margin: 0 0 4px;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-#inspector-content {
-  font-size: 12px;
-  color: var(--text-main);
-}
-
-/* Inspector fields */
-
-.ins-field {
+.seatbuilder-header {
+  grid-area: header;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid #e2e8f0;
+  background: linear-gradient(to right, #eff6ff, #f9fafb);
+}
+
+.seatbuilder-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.seatbuilder-header-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.seatbuilder-header-show {
+  font-size: 18px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.seatbuilder-header-pill {
+  display: inline-flex;
+  align-items: center;
   gap: 6px;
-  margin-bottom: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.08);
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 500;
 }
 
-.ins-field label {
-  font-size: 11px;
-  color: var(--text-muted);
-  flex: 0 0 64px;
+.seatbuilder-header-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #22c55e;
 }
 
-.ins-field input[type="number"],
-.ins-field input[type="text"] {
-  flex: 1;
-  padding: 4px 7px;
-  border-radius: 8px;
-  border: 1px solid rgba(148, 163, 184, 0.7);
-  font-size: 11px;
-  color: var(--text-main);
-  outline: none;
+/* Panels layout -------------------------------------------- */
+
+.seatbuilder-sidebar {
+  grid-area: sidebar;
+  border-right: 1px solid #e2e8f0;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: #f8fafc;
 }
 
-.ins-field input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent-soft);
+.seatbuilder-canvas-panel {
+  grid-area: canvas;
+  padding: 14px 12px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #f1f5f9;
 }
 
-/* Actions footer */
+.seatbuilder-inspector {
+  grid-area: inspector;
+  border-left: 1px solid #e2e8f0;
+  padding: 14px 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #f8fafc;
+}
 
-#sb-actions {
-  margin-top: auto;
-  padding: 10px 12px 12px;
-  border-top: 1px solid var(--border-subtle);
+/* Sidebar / tools ------------------------------------------ */
+
+.sidebar-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #94a3b8;
+  margin-bottom: 2px;
+}
+
+.sidebar-description {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 8px;
+}
+
+.tool-group {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-/* Action buttons */
+.tool-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
 
-.action-btn {
+.tool-button {
+  appearance: none;
+  border: 1px solid #cbd5f5;
+  background: #ffffff;
+  color: #1e293b;
   border-radius: 999px;
-  border: 0;
-  padding: 9px 12px;
-  font-size: 12px;
+  padding: 6px 10px;
+  font-size: 11px;
   font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   cursor: pointer;
+  transition:
+    background 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease,
+    border-color 150ms ease,
+    transform 80ms ease;
+}
+
+.tool-button span.icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 2px solid #1d4ed8;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  transition: transform 120ms ease-out, box-shadow 140ms ease-out,
-    background 140ms ease-out, color 140ms ease-out;
+  font-size: 11px;
 }
 
-/* Primary = Save layout */
-#save-btn {
-  background: var(--accent);
-  color: #ffffff;
-  box-shadow: 0 10px 24px var(--accent-strong);
+.tool-button:hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.3);
 }
 
-#save-btn:hover {
+.tool-button:active {
+  transform: translateY(1px);
+}
+
+.tool-button.is-active {
   background: #1d4ed8;
-  transform: translateY(-1px);
-  box-shadow: 0 14px 32px var(--accent-strong);
+  color: #eff6ff;
+  border-color: #1d4ed8;
 }
 
-/* Secondary = export/import */
-
-#export-json-btn,
-#import-json-btn {
-  background: rgba(37, 99, 235, 0.06);
-  color: var(--accent);
+.tool-button.is-active span.icon {
+  border-color: #eff6ff;
 }
 
-#export-json-btn:hover,
-#import-json-btn:hover {
-  background: rgba(37, 99, 235, 0.1);
+/* Action buttons (undo / redo / clear) --------------------- */
+
+.action-row {
+  display: flex;
+  gap: 6px;
 }
 
-/* Undo / redo / clear are in the left toolbar,
-   but we’ll give them a subtle style difference */
+.action-button {
+  flex: 1;
+  border-radius: 999px;
+  font-size: 11px;
+  padding: 6px 0;
+  text-align: center;
+  cursor: pointer;
+  border: 1px solid #cbd5f5;
+  background: #ffffff;
+  color: #0f172a;
+  font-weight: 500;
+  transition:
+    background 150ms ease,
+    color 150ms ease,
+    border-color 150ms ease,
+    opacity 120ms ease;
+}
 
-.tool-btn#undo-btn,
-.tool-btn#redo-btn {
+.action-button:hover:not(.is-disabled) {
+  background: #e0f2fe;
+  border-color: #60a5fa;
+}
+
+.action-button.is-disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Canvas area ---------------------------------------------- */
+
+.canvas-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.canvas-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.canvas-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.04);
+  color: #0f172a;
+  font-size: 11px;
+}
+
+.canvas-zoom-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.canvas-zoom-button {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid #cbd5f5;
+  background: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease;
+}
+
+.canvas-zoom-button:hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
+}
+
+/* The Konva container gets the grid look via CSS background */
+
+#seatmap-canvas {
+  flex: 1;
+  border-radius: 14px;
+  overflow: hidden;
+  background-color: #f8fafc;
+  box-shadow:
+    inset 0 0 0 1px rgba(148, 163, 184, 0.3),
+    0 10px 25px rgba(15, 23, 42, 0.15);
+  position: relative;
+}
+
+/* Sub-grid pattern */
+#seatmap-canvas::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(#e5e7eb 1px, transparent 1px),
+    linear-gradient(90deg, #e5e7eb 1px, transparent 1px);
+  background-size: 32px 32px;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Ensure Konva canvas fills container */
+#seatmap-canvas > canvas {
+  display: block;
+}
+
+/* Inspector ------------------------------------------------- */
+
+.inspector-section {
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 10px 12px;
+  box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.inspector-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.inspector-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.inspector-badge {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
   font-weight: 500;
 }
 
-.tool-btn#clear-btn {
-  color: var(--danger);
+.inspector-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: #475569;
 }
 
-/* Simple toast style (if you add them later) */
-.toast {
-  position: fixed;
-  bottom: 18px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 8px 14px;
+.inspector-row-label {
+  color: #94a3b8;
+}
+
+.inspector-note {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+/* Primary save button */
+
+.primary-button {
+  margin-top: 6px;
+  padding: 8px 10px;
   border-radius: 999px;
-  font-size: 12px;
-  background: #0f172a;
-  color: #e5e7eb;
-  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.4);
+  border: none;
+  cursor: pointer;
+  background: linear-gradient(90deg, #1d4ed8, #2563eb);
+  color: #eff6ff;
+  font-size: 13px;
+  font-weight: 600;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  z-index: 60;
+  box-shadow:
+    0 10px 20px rgba(37, 99, 235, 0.4),
+    0 0 0 1px rgba(191, 219, 254, 0.5);
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease,
+    filter 120ms ease;
 }
 
-.toast--success {
-  background: var(--success);
+.primary-button:hover {
+  filter: brightness(1.03);
+  transform: translateY(-1px);
 }
 
-.toast--error {
-  background: var(--danger);
+.primary-button:active {
+  transform: translateY(0);
+  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.45);
 }
 
-/* Responsive tweaks – stack on smaller screens
-   -------------------------------------------------- */
+.primary-button.is-busy {
+  opacity: 0.7;
+  cursor: default;
+}
 
-@media (max-width: 1180px) {
-  #sb-root {
+/* Selection summary in inspector */
+
+.selection-summary {
+  font-size: 12px;
+  color: #475569;
+}
+
+.selection-summary strong {
+  font-weight: 600;
+}
+
+/* Small helper text */
+
+.helper-text {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 4px;
+}
+
+/* Responsive-ish tweaks ------------------------------------ */
+
+@media (max-width: 1100px) {
+  .seatbuilder-shell {
+    grid-template-columns: 230px minmax(0, 1fr) 260px;
+  }
+}
+
+@media (max-width: 900px) {
+  #app {
+    padding: 8px;
+  }
+  .seatbuilder-shell {
     grid-template-columns: 220px minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
     grid-template-areas:
-      "tools actions"
-      "tools canvas";
-  }
-
-  #sb-toolbar-left {
-    grid-area: tools;
-  }
-
-  #sb-canvas-container {
-    grid-area: canvas;
-  }
-
-  #sb-sidebar-right {
-    grid-area: actions;
-  }
-}
-
-@media (max-width: 880px) {
-  #sb-root {
-    max-width: 100%;
-    margin: 0;
-    border-radius: 0;
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto auto;
-  }
-
-  #sb-toolbar-left,
-  #sb-sidebar-right {
-    order: -1;
+      "header header"
+      "sidebar canvas"
+      "inspector inspector";
   }
 }
