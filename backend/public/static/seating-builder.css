@@ -1,11 +1,29 @@
-/* backend/public/static/seating-builder.css */
+/* seating-builder.css
+ * TickIn seating designer UI
+ * This file styles the shell (top bar, tabs, side panel) AND
+ * gives the Konva builder a nicer environment without changing
+ * any JS behaviour.
+ */
 
-/* Global ---------------------------------------------------- */
-
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
+:root {
+  --tb-bg: #f3f4f8;
+  --tb-surface: #ffffff;
+  --tb-surface-soft: #f9fafb;
+  --tb-border-subtle: #e5e7eb;
+  --tb-border-strong: #d1d5db;
+  --tb-text-main: #111827;
+  --tb-text-muted: #6b7280;
+  --tb-text-soft: #9ca3af;
+  --tb-accent: #2563eb;
+  --tb-accent-soft: #eff3ff;
+  --tb-accent-strong: #1d4ed8;
+  --tb-danger: #dc2626;
+  --tb-radius-lg: 16px;
+  --tb-radius-md: 10px;
+  --tb-radius-sm: 6px;
+  --tb-shadow-soft: 0 10px 25px rgba(15, 23, 42, 0.08);
+  --tb-shadow-subtle: 0 1px 3px rgba(15, 23, 42, 0.08);
+  --tb-grid-line: rgba(148, 163, 184, 0.18);
 }
 
 html,
@@ -13,454 +31,545 @@ body {
   margin: 0;
   padding: 0;
   height: 100%;
+}
+
+.tickin-builder-body {
+  min-height: 100vh;
+  margin: 0;
+  background: radial-gradient(circle at top left, #e5edff 0, #f3f4f8 28%, #f3f4f8 100%);
+  color: var(--tb-text-main);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
-    Segoe UI, sans-serif;
-  color: #0f172a;
-  background: radial-gradient(circle at top left, #e0f2fe 0, #eff6ff 40%, #f9fafb 100%);
+    "Segoe UI", sans-serif;
 }
 
-body {
+/* Shell layout */
+
+.tickin-builder-shell {
+  min-height: 100vh;
   display: flex;
+  flex-direction: column;
 }
 
-/* App shell ------------------------------------------------- */
+/* Top bar */
 
-#app {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  align-items: stretch;
-  padding: 16px;
-}
-
-.seatbuilder-shell {
-  background: #ffffff;
-  border-radius: 18px;
-  box-shadow:
-    0 18px 45px rgba(15, 23, 42, 0.13),
-    0 0 0 1px rgba(148, 163, 184, 0.2);
-  width: 100%;
-  max-width: 1440px;
-  min-height: 720px;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  grid-template-columns: 260px minmax(0, 1fr) 320px;
-  grid-template-areas:
-    "header header header"
-    "sidebar canvas inspector";
-  overflow: hidden;
-}
-
-/* Header ---------------------------------------------------- */
-
-.seatbuilder-header {
-  grid-area: header;
+.tickin-builder-topbar {
+  height: 64px;
+  padding: 0 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 20px;
-  border-bottom: 1px solid #e2e8f0;
-  background: linear-gradient(to right, #eff6ff, #f9fafb);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+  box-shadow: var(--tb-shadow-subtle);
+  position: sticky;
+  top: 0;
+  z-index: 40;
 }
 
-.seatbuilder-header-left {
+.tb-topbar-left {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.seatbuilder-header-title {
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: #64748b;
-}
-
-.seatbuilder-header-show {
-  font-size: 18px;
-  font-weight: 600;
-  color: #0f172a;
-}
-
-.seatbuilder-header-pill {
-  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: rgba(59, 130, 246, 0.08);
-  color: #1d4ed8;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.seatbuilder-header-pill-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: #22c55e;
-}
-
-/* Panels layout -------------------------------------------- */
-
-.seatbuilder-sidebar {
-  grid-area: sidebar;
-  border-right: 1px solid #e2e8f0;
-  padding: 14px 16px;
-  display: flex;
-  flex-direction: column;
   gap: 16px;
-  background: #f8fafc;
 }
 
-.seatbuilder-canvas-panel {
-  grid-area: canvas;
-  padding: 14px 12px 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  background: #f1f5f9;
-}
-
-.seatbuilder-inspector {
-  grid-area: inspector;
-  border-left: 1px solid #e2e8f0;
-  padding: 14px 16px 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  background: #f8fafc;
-}
-
-/* Sidebar / tools ------------------------------------------ */
-
-.sidebar-section-title {
-  font-size: 13px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: #94a3b8;
-  margin-bottom: 2px;
-}
-
-.sidebar-description {
-  font-size: 12px;
-  color: #64748b;
-  margin-bottom: 8px;
-}
-
-.tool-group {
-  display: flex;
-  flex-direction: column;
+.tb-logo-badge {
+  display: inline-flex;
+  align-items: center;
   gap: 6px;
-}
-
-.tool-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.tool-button {
-  appearance: none;
-  border: 1px solid #cbd5f5;
-  background: #ffffff;
-  color: #1e293b;
-  border-radius: 999px;
   padding: 6px 10px;
-  font-size: 11px;
-  font-weight: 500;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  transition:
-    background 150ms ease,
-    color 150ms ease,
-    box-shadow 150ms ease,
-    border-color 150ms ease,
-    transform 80ms ease;
-}
-
-.tool-button span.icon {
-  width: 16px;
-  height: 16px;
+  background: #0f172a;
   border-radius: 999px;
-  border: 2px solid #1d4ed8;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-}
-
-.tool-button:hover {
-  background: #eff6ff;
-  border-color: #93c5fd;
-  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.3);
-}
-
-.tool-button:active {
-  transform: translateY(1px);
-}
-
-.tool-button.is-active {
-  background: #1d4ed8;
-  color: #eff6ff;
-  border-color: #1d4ed8;
-}
-
-.tool-button.is-active span.icon {
-  border-color: #eff6ff;
-}
-
-/* Action buttons (undo / redo / clear) --------------------- */
-
-.action-row {
-  display: flex;
-  gap: 6px;
-}
-
-.action-button {
-  flex: 1;
-  border-radius: 999px;
-  font-size: 11px;
-  padding: 6px 0;
-  text-align: center;
-  cursor: pointer;
-  border: 1px solid #cbd5f5;
-  background: #ffffff;
-  color: #0f172a;
-  font-weight: 500;
-  transition:
-    background 150ms ease,
-    color 150ms ease,
-    border-color 150ms ease,
-    opacity 120ms ease;
-}
-
-.action-button:hover:not(.is-disabled) {
-  background: #e0f2fe;
-  border-color: #60a5fa;
-}
-
-.action-button.is-disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-/* Canvas area ---------------------------------------------- */
-
-.canvas-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  color: #e5e7eb;
   font-size: 12px;
-  color: #64748b;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
-.canvas-toolbar-left {
+.tb-logo-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #6366f1, #22c1c3);
+}
+
+.tb-logo-text {
+  transform: translateY(0.5px);
+}
+
+.tb-show-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tb-show-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--tb-text-main);
+}
+
+.tb-show-subtitle {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--tb-text-muted);
+}
+
+.tb-dot {
+  margin: 0 2px;
+}
+
+.tb-topbar-right {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.canvas-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 9px;
-  border-radius: 999px;
-  background: rgba(15, 23, 42, 0.04);
-  color: #0f172a;
-  font-size: 11px;
-}
+/* Buttons */
 
-.canvas-zoom-controls {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.canvas-zoom-button {
-  width: 24px;
-  height: 24px;
+.tb-topbar-btn {
   border-radius: 999px;
-  border: 1px solid #cbd5f5;
-  background: #ffffff;
+  border: 1px solid transparent;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
-  cursor: pointer;
-  transition:
-    background 150ms ease,
-    border-color 150ms ease;
+  gap: 6px;
+  transition: background 120ms ease, border-color 120ms ease,
+    color 120ms ease, box-shadow 120ms ease, transform 60ms ease;
 }
 
-.canvas-zoom-button:hover {
-  background: #eff6ff;
-  border-color: #93c5fd;
+.tb-topbar-btn:active {
+  transform: translateY(1px);
 }
 
-/* The Konva container gets the grid look via CSS background */
+.tb-btn-primary {
+  background: linear-gradient(135deg, #2563eb, #4f46e5);
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.35);
+}
 
-#seatmap-canvas {
+.tb-btn-primary:hover {
+  background: linear-gradient(135deg, #1d4ed8, #4338ca);
+}
+
+.tb-btn-ghost {
+  background: transparent;
+  border-color: rgba(148, 163, 184, 0.6);
+  color: var(--tb-text-muted);
+}
+
+.tb-btn-ghost:hover {
+  background: rgba(15, 23, 42, 0.04);
+}
+
+/* Main layout */
+
+.tickin-builder-main {
   flex: 1;
-  border-radius: 14px;
-  overflow: hidden;
-  background-color: #f8fafc;
-  box-shadow:
-    inset 0 0 0 1px rgba(148, 163, 184, 0.3),
-    0 10px 25px rgba(15, 23, 42, 0.15);
-  position: relative;
+  display: flex;
+  min-height: 0;
+  padding: 16px 18px 20px;
+  gap: 14px;
 }
 
-/* Sub-grid pattern */
-#seatmap-canvas::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(#e5e7eb 1px, transparent 1px),
-    linear-gradient(90deg, #e5e7eb 1px, transparent 1px);
-  background-size: 32px 32px;
-  opacity: 0.5;
-  pointer-events: none;
+/* Left rail */
+
+.tb-rail-left {
+  width: 72px;
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: var(--tb-radius-lg);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  box-shadow: var(--tb-shadow-soft);
+  padding: 10px 6px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 
-/* Ensure Konva canvas fills container */
-#seatmap-canvas > canvas {
-  display: block;
-}
-
-/* Inspector ------------------------------------------------- */
-
-.inspector-section {
-  border-radius: 12px;
-  background: #ffffff;
-  padding: 10px 12px;
-  box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.25);
+.tb-rail-group {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.inspector-section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.tb-rail-group-bottom {
+  margin-top: 12px;
 }
 
-.inspector-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #0f172a;
+.tb-rail-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--tb-text-soft);
+  padding: 2px 8px 4px;
 }
 
-.inspector-badge {
-  font-size: 11px;
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: #eff6ff;
-  color: #1d4ed8;
-  font-weight: 500;
-}
-
-.inspector-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 12px;
-  color: #475569;
-}
-
-.inspector-row-label {
-  color: #94a3b8;
-}
-
-.inspector-note {
-  font-size: 11px;
-  color: #94a3b8;
-}
-
-/* Primary save button */
-
-.primary-button {
-  margin-top: 6px;
-  padding: 8px 10px;
-  border-radius: 999px;
-  border: none;
+.tb-rail-icon-btn {
+  width: 48px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: transparent;
   cursor: pointer;
-  background: linear-gradient(90deg, #1d4ed8, #2563eb);
-  color: #eff6ff;
-  font-size: 13px;
-  font-weight: 600;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  box-shadow:
-    0 10px 20px rgba(37, 99, 235, 0.4),
-    0 0 0 1px rgba(191, 219, 254, 0.5);
-  transition:
-    transform 120ms ease,
-    box-shadow 120ms ease,
-    filter 120ms ease;
+  transition: background 120ms ease, border-color 120ms ease,
+    box-shadow 120ms ease, transform 60ms ease;
+  color: var(--tb-text-muted);
+  font-size: 18px;
 }
 
-.primary-button:hover {
-  filter: brightness(1.03);
-  transform: translateY(-1px);
+.tb-rail-icon-btn:hover {
+  background: rgba(15, 23, 42, 0.04);
+  border-color: rgba(148, 163, 184, 0.7);
 }
 
-.primary-button:active {
-  transform: translateY(0);
-  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.45);
+.tb-rail-icon-btn:active {
+  transform: translateY(1px);
 }
 
-.primary-button.is-busy {
-  opacity: 0.7;
-  cursor: default;
+.tb-rail-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid rgba(148, 163, 184, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
 }
 
-/* Selection summary in inspector */
+/* Simple icon styling hints */
+.tb-icon-select {
+  border-style: dashed;
+}
+.tb-icon-hand {
+  border-radius: 999px;
+}
+.tb-icon-grid {
+  background-image: linear-gradient(
+      to right,
+      rgba(148, 163, 184, 0.7) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      rgba(148, 163, 184, 0.7) 1px,
+      transparent 1px
+    );
+  background-size: 4px 4px;
+}
 
-.selection-summary {
+/* Centre column */
+
+.tb-center {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Tabs */
+
+.tb-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.86);
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  box-shadow: var(--tb-shadow-subtle);
+  align-self: flex-start;
+}
+
+.tb-tab {
+  border: none;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  color: var(--tb-text-muted);
+  background: transparent;
+  transition: background 120ms ease, color 120ms ease,
+    box-shadow 120ms ease, transform 60ms ease;
+}
+
+.tb-tab.is-active {
+  background: #0f172a;
+  color: #f9fafb;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.4);
+}
+
+.tb-tab:active {
+  transform: translateY(1px);
+}
+
+/* Tab panels */
+
+.tb-tab-panels {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: radial-gradient(circle at top, #ffffff 0, #f9fafb 40%, #f3f4f8 100%);
+  border-radius: var(--tb-radius-lg);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  box-shadow: var(--tb-shadow-soft);
+  overflow: hidden;
+  padding: 12px;
+}
+
+.tb-tab-panel {
+  display: none;
+  height: 100%;
+}
+
+.tb-tab-panel.is-active {
+  display: flex;
+}
+
+/* Map tab (Konva area) */
+
+#tb-tab-map {
+  flex-direction: column;
+}
+
+/* This is the host for the existing Konva-powered editor */
+#app {
+  flex: 1;
+  min-height: 0;
+  border-radius: 12px;
+  background-image: linear-gradient(
+      to right,
+      var(--tb-grid-line) 1px,
+      transparent 1px
+    ),
+    linear-gradient(to bottom, var(--tb-grid-line) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-color: var(--tb-surface-soft);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.4);
+  padding: 12px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Make any div Konva mounts into fill the space nicely */
+#app > div {
+  width: 100%;
+  height: 100%;
+}
+
+/* Konva toolbar & buttons (these are generated by seating-builder.js;
+   selectors are intentionally broad but scoped to #app) */
+
+#app button {
+  appearance: none;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  background: rgba(255, 255, 255, 0.96);
+  padding: 5px 10px;
+  margin: 0 4px 6px 0;
   font-size: 12px;
-  color: #475569;
+  font-weight: 500;
+  color: var(--tb-text-muted);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease,
+    color 120ms ease, box-shadow 120ms ease, transform 60ms ease;
 }
 
-.selection-summary strong {
+#app button:hover {
+  border-color: var(--tb-accent);
+  color: var(--tb-accent-strong);
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.25);
+}
+
+#app button:active {
+  transform: translateY(1px);
+}
+
+/* You may already have "Undo / Redo / Clear Canvas" buttons –
+   they’ll pick up the same pill style automatically. */
+
+/* Tiers / Holds placeholder panels */
+
+.tb-empty-panel {
+  margin: auto;
+  max-width: 420px;
+  text-align: center;
+  padding: 32px 28px;
+  border-radius: var(--tb-radius-md);
+  background: linear-gradient(145deg, #ffffff, #f3f4ff);
+  border: 1px dashed rgba(148, 163, 184, 0.7);
+  color: var(--tb-text-muted);
+  box-shadow: var(--tb-shadow-subtle);
+}
+
+.tb-empty-panel h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
   font-weight: 600;
+  color: var(--tb-text-main);
 }
 
-/* Small helper text */
-
-.helper-text {
-  font-size: 11px;
-  color: #94a3b8;
-  margin-top: 4px;
+.tb-empty-panel p {
+  margin: 0;
+  font-size: 13px;
 }
 
-/* Responsive-ish tweaks ------------------------------------ */
+/* Right side panel */
 
-@media (max-width: 1100px) {
-  .seatbuilder-shell {
-    grid-template-columns: 230px minmax(0, 1fr) 260px;
+.tb-side-panel {
+  width: 280px;
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: var(--tb-radius-lg);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  box-shadow: var(--tb-shadow-soft);
+  padding: 14px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+}
+
+.tb-side-section {
+  padding: 10px 8px 12px;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #ffffff, #f4f4ff);
+  border: 1px solid rgba(209, 213, 219, 0.8);
+}
+
+.tb-side-heading {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--tb-text-soft);
+}
+
+.tb-side-meta {
+  margin: 0;
+  padding: 0;
+}
+
+.tb-side-meta > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 13px;
+  padding-top: 2px;
+}
+
+.tb-side-meta dt {
+  margin: 0;
+  color: var(--tb-text-muted);
+}
+
+.tb-side-meta dd {
+  margin: 0;
+  color: var(--tb-text-main);
+  font-weight: 500;
+}
+
+.tb-side-help {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--tb-text-muted);
+}
+
+.tb-saved-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+/* Seat map chips (to be populated via JS later) */
+
+.tb-saved-item {
+  border-radius: 10px;
+  border: 1px solid rgba(209, 213, 219, 0.9);
+  padding: 6px 9px;
+  background: rgba(255, 255, 255, 0.96);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease,
+    box-shadow 120ms ease, transform 60ms ease;
+  font-size: 12px;
+}
+
+.tb-saved-item:hover {
+  background: var(--tb-accent-soft);
+  border-color: rgba(59, 130, 246, 0.9);
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.25);
+}
+
+.tb-saved-item:active {
+  transform: translateY(1px);
+}
+
+.tb-saved-item-title {
+  font-weight: 600;
+  color: var(--tb-text-main);
+}
+
+.tb-saved-item-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--tb-text-soft);
+}
+
+/* Generic utility: scrollbars a bit nicer */
+
+.tb-side-panel::-webkit-scrollbar,
+.tb-saved-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.tb-side-panel::-webkit-scrollbar-thumb,
+.tb-saved-list::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.8);
+  border-radius: 999px;
+}
+
+/* Mobile-ish / narrow screens: keep it usable */
+
+@media (max-width: 1024px) {
+  .tickin-builder-main {
+    padding: 10px;
+    gap: 10px;
   }
-}
 
-@media (max-width: 900px) {
-  #app {
+  .tb-rail-left {
+    display: none;
+  }
+
+  .tb-center {
+    order: 1;
+  }
+
+  .tb-side-panel {
+    display: none;
+  }
+
+  .tb-tab-panels {
     padding: 8px;
-  }
-  .seatbuilder-shell {
-    grid-template-columns: 220px minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr) auto;
-    grid-template-areas:
-      "header header"
-      "sidebar canvas"
-      "inspector inspector";
   }
 }
