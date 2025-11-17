@@ -1,3 +1,4 @@
+// backend/src/routes/admin-seating-builder.ts
 import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
 import { verifyJwt } from "../utils/security.js";
@@ -5,8 +6,8 @@ import { verifyJwt } from "../utils/security.js";
 const prisma = new PrismaClient();
 const router = Router();
 
-/** 
- * LayoutKey is still used for analytics + templates 
+/**
+ * LayoutKey is still used for analytics + templates
  * but now the saved layout includes full Konva JSON.
  */
 type LayoutKey = "tables" | "sections" | "mixed" | "blank";
@@ -34,7 +35,7 @@ async function getUserIdFromRequest(req: any): Promise<string | null> {
 }
 
 /* -------------------------------------------------------------
-   ROUTE: GET available seat maps for this show  
+   ROUTE: GET available seat maps for this show
    (Used by the builder's loader on page open)
 -------------------------------------------------------------- */
 router.get("/builder/api/seatmaps/:showId", async (req, res) => {
@@ -249,13 +250,9 @@ router.get("/builder/preview/:showId", (req, res) => {
   const showId = req.params.showId;
   const layout = normaliseLayout(req.query.layout as string | undefined);
 
-  // The actual HTML is now stored in FILE 2 (frontend/html)
-  // We deliver a simple shell here that loads your static build.
-  // You can replace this with your frontend bundler later.
-
   const html = `
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <title>TickIn Seat Designer</title>
