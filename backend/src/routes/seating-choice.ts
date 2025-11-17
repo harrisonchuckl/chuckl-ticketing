@@ -1,6 +1,8 @@
 // backend/src/routes/seating-choice.ts
 import { Router } from "express";
+import { PrismaClient } from "@prisma/client";
 
+const prisma = new PrismaClient();
 const router = Router();
 
 /**
@@ -438,6 +440,80 @@ function renderShell(options: {
       border: 2px solid #93c5fd;
       background: #eff6ff;
     }
+
+    /* --- NEW: saved template panel --- */
+
+    .template-panel {
+      margin-top: 32px;
+      padding: 18px 20px;
+      border-radius: 20px;
+      border: 1px dashed rgba(148, 163, 184, 0.6);
+      background: linear-gradient(135deg, #f8fafc, #eef4ff);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .template-header {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .template-title {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+
+    .template-subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .template-form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 6px;
+    }
+
+    .template-select {
+      min-width: 220px;
+      flex: 1;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.7);
+      padding: 7px 11px;
+      font-size: 13px;
+      font-family: inherit;
+      background: #ffffff;
+      color: var(--text-main);
+    }
+
+    .template-button {
+      border-radius: 999px;
+      border: 0;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      background: var(--accent);
+      color: #ffffff;
+      cursor: pointer;
+      box-shadow: 0 10px 20px rgba(37, 99, 235, 0.25);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .template-button:hover {
+      filter: brightness(1.03);
+      transform: translateY(-1px);
+    }
+
+    .template-empty {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
   </style>
 </head>
 <body>
@@ -544,7 +620,7 @@ router.get("/seating-choice/:showId", (req, res) => {
         });
       })();
     </script>
-  `;
+  ";
 
   const html = renderShell({
     title: "How do you want to sell seats for this event?",
@@ -559,9 +635,85 @@ router.get("/seating-choice/:showId", (req, res) => {
 /**
  * STEP 2 (of 4) — Layout type (tables, rows, mixed, blank)
  * Route: GET /admin/seating/layout-wizard/:showId
+ *
+ * NOW WITH:
+ *   C) "Load a saved seating template for this venue"
  */
-router.get("/seating/layout-wizard/:showId", (req, res) => {
+router.get("/seating/layout-wizard/:showId", async (req, res) => {
   const { showId } = req.params;
+
+  // Default panel text if we can't find anything
+  let templatesHtml = `
+    <section class="template-panel">
+      <p class="template-empty">
+        Once you've saved a layout for this venue, you'll be able to reuse it here.
+      </p>
+    </section>
+  `;
+
+  try {
+    const show = await prisma.show.findUnique({
+      where: { id: showId },
+      select: { venueId: true }
+    });
+
+    if (show?.venueId) {
+      // Try to pick up a user ID if auth middleware has attached one.
+      const anyReq: any = req;
+      const currentUserId =
+        anyReq.user?.id ||
+        anyReq.user?.sub ||
+        anyReq.user?.userId ||
+        null;
+
+      const where: any = {
+        venueId: show.venueId,
+        isTemplate: true
+      };
+
+      if (currentUserId) {
+        where.createdByUserId = currentUserId;
+      }
+
+      const templates = await prisma.seatMap.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        select: { id: true, name: true, version: true }
+      });
+
+      if (templates.length > 0) {
+        const options = templates
+          .map(
+            (t) =>
+              `<option value="${t.id}">${t.name || "Saved layout"} (v${t.version ?? 1})</option>`
+          )
+          .join("");
+
+        templatesHtml = `
+          <section class="template-panel">
+            <div class="template-header">
+              <div class="template-title">Or load a saved layout for this venue</div>
+              <div class="template-subtitle">
+                These layouts were created for this venue by you. Pick one to jump straight into the builder.
+              </div>
+            </div>
+            <form class="template-form" method="GET" action="/admin/seating/builder/preview/${showId}">
+              <input type="hidden" name="layout" value="tables" />
+              <select name="seatMapId" class="template-select">
+                <option value="">Select a saved layout…</option>
+                ${options}
+              </select>
+              <button type="submit" class="template-button">
+                Use this layout
+              </button>
+            </form>
+          </section>
+        `;
+      }
+    }
+  } catch (err) {
+    console.error("layout-wizard templates lookup failed", err);
+  }
 
   const body = `
     <section class="layout-grid">
@@ -661,6 +813,8 @@ router.get("/seating/layout-wizard/:showId", (req, res) => {
       </article>
     </section>
 
+    ${templatesHtml}
+
     <script>
       (function () {
         var showId = "${showId}";
@@ -707,6 +861,5 @@ router.get("/seating/unallocated/:showId", (req, res) => {
  * Route: GET /admin/seating/builder/preview/:showId
  * (Full-screen editor will live in a separate router; this is a temporary stub.)
  */
-
 
 export default router;
