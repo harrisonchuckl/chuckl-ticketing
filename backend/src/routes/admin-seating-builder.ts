@@ -302,6 +302,27 @@ router.get("/builder/preview/:showId", (req, res) => {
               <div class="tb-rail-icon tb-icon-grid"></div>
             </button>
           </div>
+
+          <!-- Explanatory copy moved from centre into the tall left column -->
+          <div class="tb-rail-group">
+            <div class="tb-rail-label">Seat designer</div>
+            <p>
+              Drop in sections, tables and seats. Drag to reposition and use zoom in the centre panel.
+            </p>
+            <div class="tb-rail-label">Seating</div>
+            <p>
+              Use section blocks, rows of seats, single seats and tables to sketch the room.
+            </p>
+            <div class="tb-rail-label">Room &amp; labelling</div>
+            <p>
+              Add stages, bars or kiosks, exits and text labels to make the map clear for staff and customers.
+            </p>
+            <div class="tb-rail-label">Tips</div>
+            <p>
+              Click a seat, table or object to see its quick details. You can reuse this layout for future shows at the same venue – we’ll store it as a template behind the scenes.
+            </p>
+          </div>
+
           <div class="tb-rail-group tb-rail-group-bottom">
             <div class="tb-rail-label">Zoom</div>
             <button class="tb-rail-icon-btn" data-zoom="in" title="Zoom in">+</button>
@@ -370,9 +391,14 @@ router.get("/builder/preview/:showId", (req, res) => {
         var layout = ${JSON.stringify(layout)};
 
         // Expose to seating-builder.js
+        // (used for Konva canvas + save/back behaviour)
+        // @ts-ignore
         window.__SEATMAP_SHOW_ID__ = showId;
+        // @ts-ignore
         window.__SEATMAP_LAYOUT__ = layout;
+        // @ts-ignore
         window.__TICKIN_SAVE_BUTTON__ = document.getElementById("tb-btn-save");
+        // @ts-ignore
         window.__TICKIN_BACK_BUTTON__ = document.getElementById("tb-btn-back");
 
         // Tab switching
@@ -482,7 +508,7 @@ router.get("/builder/preview/:showId", (req, res) => {
       })();
     </script>
 
-<script src="https://unpkg.com/konva@9.3.3/konva.min.js"></script>
+    <script src="https://unpkg.com/konva@9.3.3/konva.min.js"></script>
     <script src="/static/seating-builder.js"></script>
   </body>
 </html>`;
