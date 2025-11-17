@@ -1,9 +1,4 @@
-/* seating-builder.css
- * TickIn seating designer UI
- * This file styles the shell (top bar, tabs, side panel) AND
- * gives the Konva builder a nicer environment without changing
- * any JS behaviour.
- */
+/* TickIn seating designer UI – slim fixed left rail, Konva map centre, info panel right */
 
 :root {
   --tb-bg: #f3f4f8;
@@ -24,9 +19,6 @@
   --tb-shadow-soft: 0 10px 25px rgba(15, 23, 42, 0.08);
   --tb-shadow-subtle: 0 1px 3px rgba(15, 23, 42, 0.08);
   --tb-grid-line: rgba(148, 163, 184, 0.18);
-
-  --tb-tools-collapsed-width: 80px;
-  --tb-tools-expanded-width: 280px;
 }
 
 html,
@@ -134,7 +126,7 @@ body {
   gap: 10px;
 }
 
-/* Buttons */
+/* Top-bar buttons */
 
 .tb-topbar-btn {
   border-radius: 999px;
@@ -186,297 +178,321 @@ body {
   gap: 14px;
 }
 
-/* NEW: Left tools sidebar (collapsible like Canva) */
+/* Slim left rail – fixed width, no hover expansion */
 
-.tb-tools {
-  display: flex;
-  flex-direction: column;
+.tb-left-rail {
+  width: 88px;
   background: rgba(255, 255, 255, 0.96);
   border-radius: var(--tb-radius-lg);
   border: 1px solid rgba(148, 163, 184, 0.25);
   box-shadow: var(--tb-shadow-soft);
-  padding: 10px 8px 10px 8px;
-  width: var(--tb-tools-expanded-width);
-  max-height: calc(100vh - 96px);
-  position: sticky;
-  top: 80px;
-  transition: width 140ms ease, box-shadow 140ms ease;
-  overflow: hidden;
-}
-
-/* Collapse behaviour */
-
-.tb-tools[data-collapsed="true"] {
-  width: var(--tb-tools-collapsed-width);
-}
-
-.tb-tools[data-collapsed="true"]:hover {
-  width: 220px;
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
-}
-
-/* Tools header */
-
-.tb-tools-header {
+  padding: 10px 8px 12px;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  padding: 0 4px 6px 4px;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
-  margin-bottom: 6px;
+  flex-direction: column;
 }
 
-.tb-tools-title {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--tb-text-soft);
-  white-space: nowrap;
-}
-
-.tb-tools-toggle {
-  border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.6);
-  background: rgba(248, 250, 252, 0.95);
-  padding: 4px 6px;
-  font-size: 11px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--tb-text-muted);
-  transition: background 120ms ease, border-color 120ms ease,
-    color 120ms ease, transform 60ms ease;
-}
-
-.tb-tools-toggle:hover {
-  background: rgba(226, 232, 240, 0.9);
-  border-color: rgba(148, 163, 184, 0.9);
-}
-
-.tb-tools-toggle:active {
-  transform: translateY(1px);
-}
-
-.tb-tools-toggle-icon {
-  font-size: 10px;
-}
-
-/* When collapsed: hide title text to keep column tight */
-
-.tb-tools[data-collapsed="true"] .tb-tools-title {
-  opacity: 0;
-  pointer-events: none;
-  width: 0;
-}
-
-/* Scroll area */
-
-.tb-tools-scroll {
-  margin-top: 4px;
-  padding-right: 4px;
-  overflow-y: auto;
+.tb-left-scroll {
   flex: 1;
+  overflow-y: auto;
+  padding-right: 2px;
 }
 
-.tb-tools-scroll::-webkit-scrollbar {
-  width: 6px;
-}
-
-.tb-tools-scroll::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.8);
-  border-radius: 999px;
-}
-
-/* Groups */
-
-.tb-tools-group {
+.tb-left-group {
   margin-bottom: 10px;
 }
 
-.tb-tools-group-label {
+.tb-left-group-label {
   font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.08em;
   color: var(--tb-text-soft);
-  padding: 4px 4px 6px 4px;
+  padding: 4px 4px 6px;
 }
 
 /* Tool buttons */
 
-.tb-tool-btn {
+.tb-left-item {
   width: 100%;
   border-radius: 12px;
   border: 1px solid transparent;
   background: transparent;
-  cursor: pointer;
-  padding: 6px 6px 8px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
+  padding: 6px 4px 8px;
+  cursor: pointer;
   transition: background 120ms ease, border-color 120ms ease,
     box-shadow 120ms ease, transform 60ms ease, color 120ms ease;
   color: var(--tb-text-muted);
   font-size: 11px;
+  text-align: center;
 }
 
-.tb-tool-btn:hover {
-  background: rgba(248, 250, 252, 0.96);
-  border-color: rgba(148, 163, 184, 0.9);
-  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.12);
+.tb-left-item:hover {
+  background: rgba(15, 23, 42, 0.03);
+  border-color: rgba(148, 163, 184, 0.7);
 }
 
-.tb-tool-btn:active {
+.tb-left-item:active {
   transform: translateY(1px);
 }
 
-/* Active tool (via JS .is-active) */
-
-.tb-tool-btn.is-active {
-  background: var(--tb-accent-soft);
-  border-color: rgba(37, 99, 235, 0.9);
-  color: var(--tb-accent-strong);
-  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.25);
-}
-
-/* Danger-style tool (clear canvas) */
-
-.tb-tool-btn.tb-tool-danger {
+.tb-left-item-danger {
   color: var(--tb-danger);
 }
 
-.tb-tool-btn.tb-tool-danger:hover {
+.tb-left-item-danger:hover {
   border-color: rgba(220, 38, 38, 0.8);
-  background: rgba(254, 242, 242, 0.96);
+  background: rgba(248, 113, 113, 0.06);
 }
 
-/* Icons */
+.tb-left-label {
+  line-height: 1.25;
+}
 
-.tb-tool-icon {
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  border: 1.5px solid rgba(148, 163, 184, 0.9);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7);
+/* Active tool state (driven by JS via .tool-button + .is-active) */
+
+.tool-button.is-active,
+.tool-button.is-active:hover {
+  border-color: rgba(37, 99, 235, 0.85);
+  background: rgba(239, 246, 255, 0.95);
+  color: var(--tb-accent-strong);
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.24);
+}
+
+/* Icons – thin outline family */
+
+.tb-left-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1.4px solid rgba(148, 163, 184, 0.9);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   position: relative;
+  box-sizing: border-box;
 }
 
-/* Thin outline style – all icons share this base */
+/* Generic glyph base */
 
-.tb-icon-section::before,
-.tb-icon-row::before,
-.tb-icon-seat::before,
-.tb-icon-circle-table::before,
-.tb-icon-rect-table::before,
-.tb-icon-stage::before,
-.tb-icon-bar::before,
-.tb-icon-exit::before,
-.tb-icon-text::before,
-.tb-icon-undo::before,
-.tb-icon-redo::before,
-.tb-icon-clear::before {
+.tb-left-icon::before,
+.tb-left-icon::after {
   content: "";
   position: absolute;
-  inset: 4px;
-  border-radius: 4px;
-  border: 1.5px solid rgba(148, 163, 184, 0.9);
+  box-sizing: border-box;
 }
 
-/* Specific glyph hints */
+/* Section block */
 
 .tb-icon-section::before {
-  border-style: dashed;
+  width: 14px;
+  height: 10px;
+  border-radius: 4px;
+  border: 1.3px solid rgba(148, 163, 184, 0.95);
 }
+
+/* Row of seats */
 
 .tb-icon-row::before {
-  border: none;
-  border-top: 1.5px solid rgba(148, 163, 184, 0.9);
-  border-bottom: 1.5px solid rgba(148, 163, 184, 0.9);
-  top: 8px;
-  bottom: 8px;
+  width: 14px;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.9);
+  top: 9px;
 }
+
+.tb-icon-row::after {
+  width: 12px;
+  height: 6px;
+  border-radius: 999px;
+  border: 1.2px solid rgba(148, 163, 184, 0.9);
+  bottom: 6px;
+}
+
+/* Single seat */
 
 .tb-icon-seat::before {
+  width: 8px;
+  height: 8px;
   border-radius: 999px;
+  border: 1.4px solid rgba(148, 163, 184, 0.95);
 }
+
+.tb-icon-seat::after {
+  width: 10px;
+  height: 5px;
+  border-radius: 999px;
+  border: 1.4px solid rgba(148, 163, 184, 0.95);
+  bottom: 6px;
+}
+
+/* Circular table */
 
 .tb-icon-circle-table::before {
+  width: 14px;
+  height: 14px;
   border-radius: 999px;
+  border: 1.4px solid rgba(148, 163, 184, 0.95);
 }
+
+/* Rectangular table */
 
 .tb-icon-rect-table::before {
+  width: 16px;
+  height: 10px;
   border-radius: 4px;
+  border: 1.4px solid rgba(148, 163, 184, 0.95);
 }
+
+/* Stage */
 
 .tb-icon-stage::before {
-  border-radius: 4px;
-  bottom: 6px;
-  top: 12px;
+  width: 16px;
+  height: 7px;
+  border-radius: 3px;
+  border: 1.4px solid rgba(148, 163, 184, 0.95);
+  bottom: 7px;
 }
+
+.tb-icon-stage::after {
+  width: 10px;
+  height: 1.5px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.9);
+  top: 7px;
+}
+
+/* Bar */
 
 .tb-icon-bar::before {
-  border-radius: 4px;
-  left: 6px;
-  right: 6px;
+  width: 14px;
+  height: 10px;
+  border-radius: 3px;
+  border: 1.4px solid rgba(148, 163, 184, 0.95);
 }
+
+.tb-icon-bar::after {
+  width: 10px;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.9);
+  top: 7px;
+}
+
+/* Exit */
 
 .tb-icon-exit::before {
-  border-color: rgba(34, 197, 94, 0.9);
+  width: 14px;
+  height: 10px;
+  border-radius: 3px;
+  border: 1.4px solid rgba(34, 197, 94, 0.9);
 }
 
-.tb-icon-text::before {
-  border: none;
-  top: 6px;
-  bottom: 6px;
-  left: 7px;
-  right: 7px;
-  border-top: 1.5px solid rgba(148, 163, 184, 0.95);
-  border-bottom: 1.5px solid rgba(148, 163, 184, 0.95);
+.tb-icon-exit::after {
+  width: 8px;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.9);
+  right: 4px;
+  top: 11px;
 }
+
+/* Text label (T icon) */
+
+.tb-icon-text::before {
+  width: 10px;
+  height: 12px;
+  border-radius: 0;
+  border-top: 1.4px solid rgba(148, 163, 184, 0.95);
+}
+
+.tb-icon-text::after {
+  width: 1.4px;
+  height: 10px;
+  background: rgba(148, 163, 184, 0.95);
+  top: 9px;
+}
+
+/* Undo / Redo – circular arrows */
 
 .tb-icon-undo::before,
 .tb-icon-redo::before {
+  width: 14px;
+  height: 14px;
   border-radius: 999px;
+  border: 1.4px solid rgba(148, 163, 184, 0.95);
 }
+
+/* Undo – arrow pointing counter-clockwise (to the left) */
+
+.tb-icon-undo::after {
+  width: 6px;
+  height: 6px;
+  border-radius: 1.5px;
+  border-left: 1.4px solid rgba(148, 163, 184, 0.95);
+  border-bottom: 1.4px solid rgba(148, 163, 184, 0.95);
+  transform: rotate(45deg);
+  left: 5px;
+  top: 6px;
+}
+
+/* Redo – arrow pointing clockwise (to the right) */
+
+.tb-icon-redo::after {
+  width: 6px;
+  height: 6px;
+  border-radius: 1.5px;
+  border-right: 1.4px solid rgba(148, 163, 184, 0.95);
+  border-bottom: 1.4px solid rgba(148, 163, 184, 0.95);
+  transform: rotate(-45deg);
+  right: 5px;
+  top: 6px;
+}
+
+/* Clear canvas – red trash / cross */
 
 .tb-icon-clear::before {
-  border-color: rgba(220, 38, 38, 0.9);
+  width: 13px;
+  height: 11px;
+  border-radius: 3px;
+  border: 1.4px solid rgba(220, 38, 38, 0.9);
+  bottom: 7px;
 }
 
-/* Labels */
-
-.tb-tool-label {
-  text-align: center;
-  line-height: 1.2;
-  word-break: break-word;
+.tb-icon-clear::after {
+  width: 7px;
+  height: 7px;
+  border-radius: 1px;
+  border-top: 1.4px solid rgba(220, 38, 38, 0.9);
+  border-bottom: 1.4px solid rgba(220, 38, 38, 0.9);
+  top: 6px;
 }
 
-/* When narrowly collapsed (icon + text stacked tightly) */
-
-.tb-tools[data-collapsed="true"] .tb-tool-btn {
-  padding-left: 4px;
-  padding-right: 4px;
-}
-
-/* Centre column */
+/* Centre canvas area */
 
 .tb-center {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  background: linear-gradient(145deg, #e5e7eb 0, #f9fafb 40%, #f9fafb 100%);
+  border-radius: var(--tb-radius-lg);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  box-shadow: var(--tb-shadow-soft);
 }
 
-/* Tabs row (tabs + zoom inline) */
-
-.tb-tabs-row {
+.tb-center-header {
+  height: 44px;
+  padding: 6px 12px 6px 14px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+  background: radial-gradient(circle at top left, #eef2ff 0, #ffffff 40%, #ffffff 100%);
+  border-top-left-radius: var(--tb-radius-lg);
+  border-top-right-radius: var(--tb-radius-lg);
 }
 
 /* Tabs */
@@ -485,75 +501,62 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 4px;
-  background: rgba(255, 255, 255, 0.86);
+  padding: 2px;
+  background: rgba(15, 23, 42, 0.04);
   border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  box-shadow: var(--tb-shadow-subtle);
 }
 
 .tb-tab {
-  border: none;
+  min-width: 58px;
+  padding: 4px 10px;
   border-radius: 999px;
-  padding: 6px 14px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  color: var(--tb-text-muted);
+  border: none;
   background: transparent;
-  transition: background 120ms ease, color 120ms ease,
-    box-shadow 120ms ease, transform 60ms ease;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--tb-text-muted);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease;
 }
 
 .tb-tab.is-active {
-  background: #0f172a;
-  color: #f9fafb;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.4);
+  background: #ffffff;
+  color: var(--tb-text-main);
+  box-shadow: 0 4px 10px rgba(148, 163, 184, 0.4);
 }
 
-.tb-tab:active {
-  transform: translateY(1px);
-}
+/* Zoom toolbar */
 
-/* Zoom controls (inline with tabs) */
-
-.tb-zoom {
+.tb-zoom-toolbar {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  background: rgba(255, 255, 255, 0.9);
   border-radius: 999px;
-  padding: 4px;
-  border: 1px solid rgba(148, 163, 184, 0.3);
-  box-shadow: var(--tb-shadow-subtle);
+  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  overflow: hidden;
+  box-shadow: 0 4px 10px rgba(148, 163, 184, 0.4);
 }
 
 .tb-zoom-btn {
-  border-radius: 999px;
-  border: 1px solid transparent;
+  min-width: 30px;
+  padding: 3px 8px;
+  border: none;
   background: transparent;
-  padding: 4px 9px;
   font-size: 12px;
-  font-weight: 500;
   cursor: pointer;
   color: var(--tb-text-muted);
-  transition: background 120ms ease, border-color 120ms ease,
-    color 120ms ease, transform 60ms ease;
+  transition: background 120ms ease, color 120ms ease;
 }
 
 .tb-zoom-btn:hover {
-  background: rgba(248, 250, 252, 0.96);
-  border-color: rgba(148, 163, 184, 0.9);
-  color: var(--tb-accent-strong);
+  background: rgba(15, 23, 42, 0.04);
+  color: var(--tb-text-main);
 }
 
-.tb-zoom-btn:active {
-  transform: translateY(1px);
-}
-
-.tb-zoom-reset {
-  min-width: 52px;
-  text-align: center;
+.tb-zoom-label {
+  font-variant-numeric: tabular-nums;
+  border-inline: 1px solid rgba(148, 163, 184, 0.5);
+  font-weight: 500;
 }
 
 /* Tab panels */
@@ -561,252 +564,185 @@ body {
 .tb-tab-panels {
   flex: 1;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
-  background: radial-gradient(circle at top, #ffffff 0, #f9fafb 40%, #f3f4f8 100%);
-  border-radius: var(--tb-radius-lg);
-  border: 1px solid rgba(148, 163, 184, 0.35);
-  box-shadow: var(--tb-shadow-soft);
-  overflow: hidden;
-  padding: 12px;
+  position: relative;
 }
 
 .tb-tab-panel {
+  position: absolute;
+  inset: 0;
   display: none;
-  height: 100%;
 }
 
 .tb-tab-panel.is-active {
-  display: flex;
+  display: block;
 }
 
-/* Map tab (Konva area) */
-
-#tb-tab-map {
-  flex-direction: column;
-}
-
-/* This is the host for the existing Konva-powered editor */
+/* Konva container */
 
 #app {
-  flex: 1;
-  min-height: 0;
-  border-radius: 12px;
+  position: absolute;
+  inset: 0;
+  margin: 10px;
+  border-radius: var(--tb-radius-md);
   background-image: linear-gradient(
       to right,
       var(--tb-grid-line) 1px,
       transparent 1px
     ),
-    linear-gradient(to bottom, var(--tb-grid-line) 1px, transparent 1px);
-  background-size: 24px 24px;
-  background-color: var(--tb-surface-soft);
-  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.4);
-  padding: 12px;
-  position: relative;
+    linear-gradient(
+      to bottom,
+      var(--tb-grid-line) 1px,
+      transparent 1px
+    );
+  background-size: 32px 32px;
+  background-position: center;
   overflow: hidden;
 }
 
-/* Make any div Konva mounts into fill the space nicely */
+/* Konva stage should fill #app – this is done in JS; these styles
+   just ensure no scrollbars from the container itself. */
 #app > div {
   width: 100%;
   height: 100%;
 }
 
-/* Konva toolbar & buttons (if any are rendered in-app) */
-
-#app button {
-  appearance: none;
-  border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.6);
-  background: rgba(255, 255, 255, 0.96);
-  padding: 5px 10px;
-  margin: 0 4px 6px 0;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--tb-text-muted);
-  cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease,
-    color 120ms ease, box-shadow 120ms ease, transform 60ms ease;
-}
-
-#app button:hover {
-  border-color: var(--tb-accent);
-  color: var(--tb-accent-strong);
-  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.25);
-}
-
-#app button:active {
-  transform: translateY(1px);
-}
-
-/* Tiers / Holds placeholder panels */
+/* Empty placeholder panels (Tiers / Holds) */
 
 .tb-empty-panel {
-  margin: auto;
-  max-width: 420px;
-  text-align: center;
-  padding: 32px 28px;
-  border-radius: var(--tb-radius-md);
-  background: linear-gradient(145deg, #ffffff, #f3f4ff);
-  border: 1px dashed rgba(148, 163, 184, 0.7);
-  color: var(--tb-text-muted);
-  box-shadow: var(--tb-shadow-subtle);
-}
-
-.tb-empty-panel h2 {
-  margin: 0 0 8px;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--tb-text-main);
-}
-
-.tb-empty-panel p {
-  margin: 0;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--tb-text-soft);
   font-size: 13px;
 }
 
-/* Right side panel */
+/* Right-hand inspector panel */
 
 .tb-side-panel {
-  width: 280px;
+  width: 260px;
   background: rgba(255, 255, 255, 0.96);
   border-radius: var(--tb-radius-lg);
   border: 1px solid rgba(148, 163, 184, 0.25);
   box-shadow: var(--tb-shadow-soft);
-  padding: 14px 16px 16px;
+  padding: 14px 14px 12px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  overflow-y: auto;
+  gap: 10px;
 }
 
 .tb-side-section {
-  padding: 10px 8px 12px;
+  padding: 10px 10px 10px;
   border-radius: 12px;
-  background: linear-gradient(145deg, #ffffff, #f4f4ff);
-  border: 1px solid rgba(209, 213, 219, 0.8);
+  background: radial-gradient(circle at top left, #f9fafb 0, #ffffff 50%, #ffffff 100%);
+  border: 1px solid rgba(229, 231, 235, 0.9);
 }
 
 .tb-side-heading {
   margin: 0 0 6px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  letter-spacing: 0.09em;
   color: var(--tb-text-soft);
 }
 
 .tb-side-meta {
-  margin: 0;
-  padding: 0;
-}
-
-.tb-side-meta > div {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-  font-size: 13px;
-  padding-top: 2px;
+  display: grid;
+  grid-template-columns: 1fr;
+  row-gap: 4px;
+  font-size: 12px;
 }
 
 .tb-side-meta dt {
-  margin: 0;
-  color: var(--tb-text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--tb-text-soft);
 }
 
 .tb-side-meta dd {
-  margin: 0;
+  margin: 0 0 6px;
+  font-size: 13px;
   color: var(--tb-text-main);
-  font-weight: 500;
 }
 
 .tb-side-help {
-  margin: 0 0 8px;
+  margin: 2px 0 0;
   font-size: 12px;
   color: var(--tb-text-muted);
 }
 
+/* Saved layouts list */
+
 .tb-saved-list {
+  max-height: 180px;
+  overflow-y: auto;
+  padding-right: 2px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 220px;
-  overflow-y: auto;
 }
 
-/* Seat map chips (to be populated via JS later) */
-
 .tb-saved-item {
+  padding: 7px 8px;
   border-radius: 10px;
-  border: 1px solid rgba(209, 213, 219, 0.9);
-  padding: 6px 9px;
-  background: rgba(255, 255, 255, 0.96);
+  background: #f9fafb;
+  border: 1px solid rgba(229, 231, 235, 0.95);
+  cursor: default;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease,
-    box-shadow 120ms ease, transform 60ms ease;
-  font-size: 12px;
-}
-
-.tb-saved-item:hover {
-  background: var(--tb-accent-soft);
-  border-color: rgba(59, 130, 246, 0.9);
-  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.25);
-}
-
-.tb-saved-item:active {
-  transform: translateY(1px);
 }
 
 .tb-saved-item-title {
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--tb-text-main);
 }
 
 .tb-saved-item-meta {
   display: flex;
   justify-content: space-between;
-  gap: 8px;
+  font-size: 11px;
   color: var(--tb-text-soft);
 }
 
-/* Generic utility: scrollbars a bit nicer */
+/* Scrollbar styling (WebKit) */
 
-.tb-side-panel::-webkit-scrollbar,
+.tb-left-scroll::-webkit-scrollbar,
 .tb-saved-list::-webkit-scrollbar {
   width: 6px;
 }
 
-.tb-side-panel::-webkit-scrollbar-thumb,
+.tb-left-scroll::-webkit-scrollbar-track,
+.tb-saved-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tb-left-scroll::-webkit-scrollbar-thumb,
 .tb-saved-list::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.8);
+  background: rgba(148, 163, 184, 0.6);
   border-radius: 999px;
 }
 
-/* Mobile-ish / narrow screens: keep it usable */
+/* Responsive tweaks */
 
-@media (max-width: 1024px) {
+@media (max-width: 1100px) {
+  .tb-side-panel {
+    width: 230px;
+  }
+}
+
+@media (max-width: 960px) {
   .tickin-builder-main {
-    padding: 10px;
-    gap: 10px;
-  }
-
-  .tb-tools {
-    display: none;
-  }
-
-  .tb-center {
-    order: 1;
+    padding-inline: 10px;
   }
 
   .tb-side-panel {
     display: none;
-  }
-
-  .tb-tab-panels {
-    padding: 8px;
   }
 }
