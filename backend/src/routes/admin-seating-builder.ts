@@ -1,7 +1,9 @@
 // backend/src/routes/admin-seating-builder.ts
 import { Router } from "express";
+import { PrismaClient } from "@prisma/client";
 
 const router = Router();
+const prisma = new PrismaClient();
 
 type LayoutKey = "tables" | "sections" | "mixed" | "blank";
 
@@ -12,9 +14,30 @@ function normaliseLayout(raw: string | undefined): LayoutKey {
   return "tables";
 }
 
-router.get("/builder/preview/:showId", (req, res) => {
+router.get("/builder/preview/:showId", async (req, res) => {
   const showId = req.params.showId;
   const layout = normaliseLayout(req.query.layout as string | undefined);
+  const seatMapId = req.query.seatMapId as string | undefined;
+
+  // NEW: if a template is selected, look it up so we can show a label
+  let loadedFromTemplateLabel = "";
+  try {
+    if (seatMapId) {
+      const seatMap = await prisma.seatMap.findUnique({
+        where: { id: seatMapId },
+        select: { name: true, version: true }
+      });
+      if (seatMap) {
+        loadedFromTemplateLabel = `${seatMap.name} (v${seatMap.version ?? 1})`;
+      }
+    }
+  } catch (err) {
+    console.error("seatMap lookup in builder failed", err);
+  }
+
+  const fromTemplateChip = loadedFromTemplateLabel
+    ? `<div class="header-chip">Loaded from: ${loadedFromTemplateLabel}</div>`
+    : "";
 
   const layoutLabelMap: Record<LayoutKey, string> = {
     tables: "Tables & chairs",
@@ -598,6 +621,7 @@ router.get("/builder/preview/:showId", (req, res) => {
       </div>
       <div class="header-right">
         <div class="header-chip">Show ID: ${showId}</div>
+        ${fromTemplateChip}
         <button class="header-close" type="button" onclick="window.close && window.close()">
           <span>×</span>
         </button>
