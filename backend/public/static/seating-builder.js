@@ -33,7 +33,7 @@
   // Helpers
   // ---------------------------------------------------------------------------
 
-  // ⭐ NEW: createShell inserts NOTHING except an empty canvas container.
+  // createShell inserts ONLY an empty canvas container.
   function createShell() {
     app.innerHTML = `
       <div id="seatmap-canvas" class="seatmap-canvas"></div>
@@ -80,7 +80,7 @@
       text += `<br/>Contains approximately <strong>${extraSeats}</strong> seats.`;
     }
 
-    if (node.hasName("seat")) {
+    if (node.hasName && node.hasName("seat")) {
       text += `<br/>This is a single seat.`;
     }
 
@@ -423,7 +423,7 @@
       const side = i % 2 === 0 ? -1 : 1;
       const offsetIndex = Math.floor(i / 2);
       const sx = rect.width() / 2 + side * 16;
-      const sy = (offsetIndex - (seats / 4)) * spacing;
+      const sy = (offsetIndex - seats / 4) * spacing;
       group.add(makeSeat(sx, sy));
     }
 
@@ -472,7 +472,8 @@
   async function saveLayout() {
     if (!stage || !currentData || isSaving) return;
 
-    const btn = document.getElementById("sb-save");
+    // Prefer the top-right "Save layout" button if present
+    const btn = window.__TICKIN_SAVE_BUTTON__ || document.getElementById("sb-save");
     isSaving = true;
     if (btn) btn.classList.add("is-busy");
 
@@ -525,17 +526,20 @@
     // 1️⃣ Build minimal shell
     createShell();
 
-    // 2️⃣ Hook up tool buttons from backend UI
+    // 2️⃣ Hook up tool buttons from TickIn builder UI (left sidebar)
     document.querySelectorAll("[data-tool]").forEach((btn) => {
       btn.addEventListener("click", () => {
-        setCurrentTool(btn.getAttribute("data-tool"));
+        const tool = btn.getAttribute("data-tool");
+        if (!tool) return;
+        setCurrentTool(tool);
       });
     });
 
     const undoBtn = document.getElementById("sb-undo");
     const redoBtn = document.getElementById("sb-redo");
     const clearBtn = document.getElementById("sb-clear");
-    const saveBtn = document.getElementById("sb-save");
+    const saveBtn =
+      window.__TICKIN_SAVE_BUTTON__ || document.getElementById("sb-save");
 
     if (undoBtn)
       undoBtn.addEventListener("click", function () {
@@ -552,6 +556,7 @@
     if (clearBtn)
       clearBtn.addEventListener("click", function () {
         if (!layer) return;
+        if (!window.confirm("Clear all items from the canvas?")) return;
         withHistorySnapshot(() => {
           layer.destroyChildren();
           layer.draw();
@@ -561,7 +566,7 @@
 
     if (saveBtn) saveBtn.addEventListener("click", saveLayout);
 
-    // 3️⃣ Zoom controls
+    // 3️⃣ Zoom controls (now in tabs row)
     let zoomLevel = 1;
     const zoomInBtn = document.getElementById("sb-zoom-in");
     const zoomOutBtn = document.getElementById("sb-zoom-out");
@@ -571,8 +576,9 @@
       if (!stage) return;
       stage.scale({ x: zoomLevel, y: zoomLevel });
       stage.batchDraw();
-      if (zoomResetBtn)
+      if (zoomResetBtn) {
         zoomResetBtn.textContent = `${Math.round(zoomLevel * 100)}%`;
+      }
     }
 
     if (zoomInBtn)
@@ -583,7 +589,7 @@
 
     if (zoomOutBtn)
       zoomOutBtn.addEventListener("click", () => {
-        zoomLevel = Math.max(zoomLevel - 0.1, 0.5);
+        zoomLevel = Math.max(zoomLevel - 0.1, 0.4);
         applyZoom();
       });
 
@@ -603,28 +609,43 @@
       currentData = null;
     }
 
-    // 5️⃣ Fill inspector top info
+    // 5️⃣ Fill inspector / meta info
     if (currentData && currentData.show) {
       const show = currentData.show;
-      const header = document.getElementById("sb-show-title");
-      const showLabel = document.getElementById("sb-inspector-show");
-      const venueLabel = document.getElementById("sb-inspector-venue");
+
+      // Support both "sb-*" (older) and "tb-*" (new TickIn shell)
+      const header =
+        document.getElementById("sb-show-title") ||
+        document.getElementById("tb-show-title");
+      const showLabel =
+        document.getElementById("sb-inspector-show") ||
+        document.getElementById("tb-meta-show-title");
+      const venueLabel =
+        document.getElementById("sb-inspector-venue") ||
+        document.getElementById("tb-meta-venue-name");
 
       if (header) {
-        header.textContent = `${show.title} – ${new Date(
-          show.date
-        ).toLocaleDateString("en-GB", {
-          weekday: "short",
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-        })}`;
+        try {
+          header.textContent = `${show.title} – ${new Date(
+            show.date
+          ).toLocaleDateString("en-GB", {
+            weekday: "short",
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          })}`;
+        } catch {
+          header.textContent = show.title || "Seat map designer";
+        }
       }
 
-      if (showLabel) showLabel.textContent = show.title;
+      if (showLabel) showLabel.textContent = show.title || "Untitled show";
+
       if (venueLabel) {
         if (show.venue) {
-          venueLabel.textContent = `${show.venue.name} (${show.venue.city || "TBC"})`;
+          venueLabel.textContent = `${show.venue.name} ${
+            show.venue.city ? "(" + show.venue.city + ")" : ""
+          }`;
         } else {
           venueLabel.textContent = "Not linked to a venue";
         }
@@ -656,7 +677,6 @@
 
         withHistorySnapshot(() => {
           const { x, y } = pos;
-          const centre = { x: stage.width() / 2, y: stage.height() / 2 };
           let node = null;
 
           switch (currentTool) {
@@ -707,6 +727,7 @@
     pushHistory();
     updateSeatCount();
     updateSelectionSummary(null);
+    applyZoom();
   }
 
   // ---------------------------------------------------------------------------
