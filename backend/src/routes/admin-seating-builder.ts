@@ -265,9 +265,9 @@ router.get("/builder/preview/:showId", (req, res) => {
       window.__SEATMAP_SHOW_ID__ = ${JSON.stringify(showId)};
       window.__SEATMAP_LAYOUT__ = ${JSON.stringify(layout)};
     </script>
-    <!-- Konva via CDN -->
+    <!-- Konva via CDN to avoid needing a local /static/konva.min.js -->
     <script src="https://unpkg.com/konva@9/konva.min.js"></script>
-    <!-- Your seating builder logic -->
+    <!-- Your builder logic -->
     <script src="/static/seating-builder.js"></script>
   </body>
 </html>
