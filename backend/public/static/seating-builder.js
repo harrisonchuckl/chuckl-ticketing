@@ -124,11 +124,11 @@
           <div class="canvas-toolbar">
             <div class="canvas-toolbar-left">
               <div class="canvas-pill">
-                Layout type: <strong style="margin-left:4px;" id="sb-layout-type">${layoutType}</strong>
+                Layout type:
+                <strong style="margin-left:4px;" id="sb-layout-type">${layoutType}</strong>
               </div>
-              <div class="helper-text">
-                Click the canvas with a tool selected to add items. Drag seats and objects to fine tune.
-              </div>
+              <!-- Helper text that used to sit in the centre has been removed
+                   to keep the canvas area visually clean. -->
             </div>
             <div class="canvas-zoom-controls">
               <button class="canvas-zoom-button" id="sb-zoom-out">−</button>
