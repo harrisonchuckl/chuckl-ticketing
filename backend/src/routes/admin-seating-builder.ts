@@ -170,9 +170,8 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
     } = req.body ?? {};
 
     const showRow = (
-      await prisma.$queryRaw<
-        { id: string; venueId: string | null }[]
-      >`SELECT "id","venueId" FROM "Show" WHERE "id" = ${showId} LIMIT 1`
+      await prisma.$queryRaw<{ id: string; venueId: string | null }[]>
+        `SELECT "id","venueId" FROM "Show" WHERE "id" = ${showId} LIMIT 1`
     )[0];
 
     if (!showRow) {
@@ -183,8 +182,8 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
 
     const finalName =
       name ||
-      (showRow.venueId ? "Room layout" : "Room") +
-        (layoutType ? ` – ${layoutType}` : " – Layout");
+      ((showRow.venueId ? "Room layout" : "Room") +
+        (layoutType ? ` – ${layoutType}` : " – Layout"));
 
     const layoutPayload = {
       layoutType: layoutType ?? null,
@@ -243,10 +242,8 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
 
 /* -------------------------------------------------------------
    ROUTE: GET builder full-page HTML
-   (this loads the Konva editor; wizard is still available)
-
-   NOTE: preview route no longer touches Prisma at all; it just
-   bootstraps the shell and lets seating-builder.js call the API.
+   (Konva editor lives in #app; left rail is now a fixed slim bar
+   with icon + label, no hover expansion.)
 -------------------------------------------------------------- */
 router.get("/builder/preview/:showId", (req, res) => {
   const showId = req.params.showId;
@@ -288,108 +285,96 @@ router.get("/builder/preview/:showId", (req, res) => {
       </header>
 
       <main class="tickin-builder-main">
-        <!-- NEW: Canva-style collapsible tools sidebar (280px expanded) -->
-        <aside class="tb-tools" id="tb-tools" data-collapsed="false">
-          <div class="tb-tools-header">
-            <span class="tb-tools-title">Tools</span>
-            <button class="tb-tools-toggle" id="tb-tools-toggle" type="button" aria-label="Collapse tools">
-              <span class="tb-tools-toggle-icon">⟨⟩</span>
-            </button>
-          </div>
+        <!-- Slim, non-expanding left rail -->
+        <aside class="tb-left-rail" aria-label="Seating tools">
+          <div class="tb-left-scroll">
+            <div class="tb-left-group">
+              <div class="tb-left-group-label">Seating</div>
 
-          <div class="tb-tools-scroll">
-            <!-- Seating group -->
-            <div class="tb-tools-group">
-              <div class="tb-tools-group-label">Seating</div>
-
-              <button class="tb-tool-btn tool-button" type="button" data-tool="section">
-                <div class="tb-tool-icon tb-icon-section"></div>
-                <span class="tb-tool-label">Section block</span>
+              <button class="tb-left-item tool-button" data-tool="section">
+                <span class="tb-left-icon tb-icon-section"></span>
+                <span class="tb-left-label">Section block</span>
               </button>
 
-              <button class="tb-tool-btn tool-button" type="button" data-tool="row">
-                <div class="tb-tool-icon tb-icon-row"></div>
-                <span class="tb-tool-label">Row of seats</span>
+              <button class="tb-left-item tool-button" data-tool="row">
+                <span class="tb-left-icon tb-icon-row"></span>
+                <span class="tb-left-label">Row of seats</span>
               </button>
 
-              <button class="tb-tool-btn tool-button" type="button" data-tool="single">
-                <div class="tb-tool-icon tb-icon-seat"></div>
-                <span class="tb-tool-label">Single seat</span>
+              <button class="tb-left-item tool-button" data-tool="single">
+                <span class="tb-left-icon tb-icon-seat"></span>
+                <span class="tb-left-label">Single seat</span>
               </button>
 
-              <button class="tb-tool-btn tool-button" type="button" data-tool="circle-table">
-                <div class="tb-tool-icon tb-icon-circle-table"></div>
-                <span class="tb-tool-label">Circular table</span>
+              <button class="tb-left-item tool-button" data-tool="circle-table">
+                <span class="tb-left-icon tb-icon-circle-table"></span>
+                <span class="tb-left-label">Circular table</span>
               </button>
 
-              <button class="tb-tool-btn tool-button" type="button" data-tool="rect-table">
-                <div class="tb-tool-icon tb-icon-rect-table"></div>
-                <span class="tb-tool-label">Rectangular table</span>
+              <button class="tb-left-item tool-button" data-tool="rect-table">
+                <span class="tb-left-icon tb-icon-rect-table"></span>
+                <span class="tb-left-label">Rectangular table</span>
               </button>
             </div>
 
-            <!-- Room & labelling group -->
-            <div class="tb-tools-group">
-              <div class="tb-tools-group-label">Room &amp; labelling</div>
+            <div class="tb-left-group">
+              <div class="tb-left-group-label">Room &amp; labelling</div>
 
-              <button class="tb-tool-btn tool-button" type="button" data-tool="stage">
-                <div class="tb-tool-icon tb-icon-stage"></div>
-                <span class="tb-tool-label">Stage</span>
+              <button class="tb-left-item tool-button" data-tool="stage">
+                <span class="tb-left-icon tb-icon-stage"></span>
+                <span class="tb-left-label">Stage</span>
               </button>
 
-              <button class="tb-tool-btn tool-button" type="button" data-tool="bar">
-                <div class="tb-tool-icon tb-icon-bar"></div>
-                <span class="tb-tool-label">Bar / kiosk</span>
+              <button class="tb-left-item tool-button" data-tool="bar">
+                <span class="tb-left-icon tb-icon-bar"></span>
+                <span class="tb-left-label">Bar / kiosk</span>
               </button>
 
-              <button class="tb-tool-btn tool-button" type="button" data-tool="exit">
-                <div class="tb-tool-icon tb-icon-exit"></div>
-                <span class="tb-tool-label">Exit</span>
+              <button class="tb-left-item tool-button" data-tool="exit">
+                <span class="tb-left-icon tb-icon-exit"></span>
+                <span class="tb-left-label">Exit</span>
               </button>
 
-              <button class="tb-tool-btn tool-button" type="button" data-tool="text">
-                <div class="tb-tool-icon tb-icon-text"></div>
-                <span class="tb-tool-label">Text label</span>
+              <button class="tb-left-item tool-button" data-tool="text">
+                <span class="tb-left-icon tb-icon-text"></span>
+                <span class="tb-left-label">Text label</span>
               </button>
             </div>
 
-            <!-- Actions group -->
-            <div class="tb-tools-group">
-              <div class="tb-tools-group-label">Actions</div>
+            <div class="tb-left-group">
+              <div class="tb-left-group-label">Actions</div>
 
-              <button class="tb-tool-btn" type="button" id="sb-undo">
-                <div class="tb-tool-icon tb-icon-undo"></div>
-                <span class="tb-tool-label">Undo</span>
+              <button class="tb-left-item" id="sb-undo">
+                <span class="tb-left-icon tb-icon-undo"></span>
+                <span class="tb-left-label">Undo</span>
               </button>
 
-              <button class="tb-tool-btn" type="button" id="sb-redo">
-                <div class="tb-tool-icon tb-icon-redo"></div>
-                <span class="tb-tool-label">Redo</span>
+              <button class="tb-left-item" id="sb-redo">
+                <span class="tb-left-icon tb-icon-redo"></span>
+                <span class="tb-left-label">Redo</span>
               </button>
 
-              <button class="tb-tool-btn tb-tool-danger" type="button" id="sb-clear">
-                <div class="tb-tool-icon tb-icon-clear"></div>
-                <span class="tb-tool-label">Clear canvas</span>
+              <button class="tb-left-item tb-left-item-danger" id="sb-clear">
+                <span class="tb-left-icon tb-icon-clear"></span>
+                <span class="tb-left-label">Clear canvas</span>
               </button>
             </div>
           </div>
         </aside>
 
         <section class="tb-center">
-          <!-- NEW: Tabs + Zoom row (zoom moved here, not in left column) -->
-          <div class="tb-tabs-row">
+          <div class="tb-center-header">
             <div class="tb-tabs">
               <button class="tb-tab is-active" data-tab="map">Map</button>
               <button class="tb-tab" data-tab="tiers">Tiers</button>
               <button class="tb-tab" data-tab="holds">Holds</button>
             </div>
 
-            <div class="tb-zoom" aria-label="Zoom controls">
-              <button type="button" class="tb-zoom-btn" id="sb-zoom-out" title="Zoom out">−</button>
-              <button type="button" class="tb-zoom-btn tb-zoom-reset" id="sb-zoom-reset" title="Reset zoom">
-                100%
-              </button>
-              <button type="button" class="tb-zoom-btn" id="sb-zoom-in" title="Zoom in">+</button>
+            <!-- Zoom inline with tabs -->
+            <div class="tb-zoom-toolbar" aria-label="Zoom">
+              <button class="tb-zoom-btn" id="sb-zoom-out">−</button>
+              <button class="tb-zoom-btn tb-zoom-label" id="sb-zoom-reset">100%</button>
+              <button class="tb-zoom-btn" id="sb-zoom-in">+</button>
             </div>
           </div>
 
@@ -418,11 +403,15 @@ router.get("/builder/preview/:showId", (req, res) => {
             <div class="tb-side-meta">
               <div>
                 <dt>Show</dt>
-                <dd id="tb-meta-show-title">Loading…</dd>
+                <dd id="tb-meta-show-title">
+                  <span id="sb-inspector-show">Loading…</span>
+                </dd>
               </div>
               <div>
                 <dt>Venue</dt>
-                <dd id="tb-meta-venue-name">TBC</dd>
+                <dd id="tb-meta-venue-name">
+                  <span id="sb-inspector-venue">–</span>
+                </dd>
               </div>
               <div>
                 <dt>Estimated capacity</dt>
@@ -437,7 +426,7 @@ router.get("/builder/preview/:showId", (req, res) => {
 
           <section class="tb-side-section">
             <h3 class="tb-side-heading">Selection</h3>
-            <p id="sb-selection-summary" class="tb-side-help">
+            <p class="tb-side-help" id="sb-selection-summary">
               Nothing selected. Click on a seat, table or object to see quick details here.
             </p>
           </section>
@@ -473,7 +462,7 @@ router.get("/builder/preview/:showId", (req, res) => {
         var panels = {
           map: document.getElementById("tb-tab-map"),
           tiers: document.getElementById("tb-tab-tiers"),
-          holds: document.getElementById("tb-tab-holds")
+          holds: document.getElementById("tb-tab-holds"),
         };
 
         tabs.forEach(function (tab) {
@@ -481,7 +470,9 @@ router.get("/builder/preview/:showId", (req, res) => {
             var target = tab.getAttribute("data-tab");
             if (!target || !panels[target]) return;
 
-            tabs.forEach(function (t) { t.classList.remove("is-active"); });
+            tabs.forEach(function (t) {
+              t.classList.remove("is-active");
+            });
             Object.keys(panels).forEach(function (key) {
               panels[key].classList.remove("is-active");
             });
@@ -493,7 +484,9 @@ router.get("/builder/preview/:showId", (req, res) => {
 
         // Fetch show + venue details to populate top bar + side panel
         fetch("/admin/seating/builder/api/seatmaps/" + encodeURIComponent(showId))
-          .then(function (res) { return res.ok ? res.json() : null; })
+          .then(function (res) {
+            return res.ok ? res.json() : null;
+          })
           .then(function (data) {
             if (!data || !data.show) return;
             var show = data.show;
@@ -531,7 +524,7 @@ router.get("/builder/preview/:showId", (req, res) => {
               metaCapacity.textContent = String(venue.capacity);
             }
 
-            // Basic population of saved layouts list (read-only for now)
+            // Populate saved layouts list (read-only for now)
             var listEl = document.getElementById("tb-saved-list");
             if (listEl && Array.isArray(data.previousMaps)) {
               data.previousMaps.forEach(function (m) {
@@ -563,7 +556,7 @@ router.get("/builder/preview/:showId", (req, res) => {
             console.error("Failed to load show info for builder", err);
           });
 
-        // Basic back button for now: go back in history
+        // Back button: go back in history
         var backBtn = document.getElementById("tb-btn-back");
         if (backBtn) {
           backBtn.addEventListener("click", function () {
@@ -571,33 +564,6 @@ router.get("/builder/preview/:showId", (req, res) => {
               window.history.back();
             }
           });
-        }
-
-        // NEW: Tools sidebar collapse state with localStorage
-        var toolsEl = document.getElementById("tb-tools");
-        var toggleEl = document.getElementById("tb-tools-toggle");
-        var STORAGE_KEY = "tickin.toolsCollapsed";
-
-        if (toolsEl) {
-          try {
-            var stored = window.localStorage.getItem(STORAGE_KEY);
-            if (stored === "true" || stored === "false") {
-              toolsEl.setAttribute("data-collapsed", stored);
-            }
-          } catch (e) {
-            // ignore storage errors
-          }
-
-          if (toggleEl) {
-            toggleEl.addEventListener("click", function () {
-              var current = toolsEl.getAttribute("data-collapsed") === "true";
-              var next = !current;
-              toolsEl.setAttribute("data-collapsed", String(next));
-              try {
-                window.localStorage.setItem(STORAGE_KEY, String(next));
-              } catch (e) {}
-            });
-          }
         }
       })();
     </script>
