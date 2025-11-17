@@ -33,153 +33,10 @@
   // Helpers
   // ---------------------------------------------------------------------------
 
+  // ⭐ NEW: createShell inserts NOTHING except an empty canvas container.
   function createShell() {
     app.innerHTML = `
-      <div class="seatbuilder-shell">
-        <header class="seatbuilder-header">
-          <div class="seatbuilder-header-left">
-            <div class="seatbuilder-header-title">Seat designer</div>
-            <div class="seatbuilder-header-show" id="sb-show-title">Loading show...</div>
-          </div>
-          <div class="seatbuilder-header-pill">
-            <span class="seatbuilder-header-pill-dot"></span>
-            Live layout preview
-          </div>
-        </header>
-
-        <aside class="seatbuilder-sidebar">
-          <div>
-            <div class="sidebar-section-title">Tools</div>
-            <div class="sidebar-description">
-              Drop in sections, tables and seats. Drag to reposition, use zoom in the centre panel.
-            </div>
-
-            <div class="tool-group">
-              <div class="helper-text">Seating</div>
-              <div class="tool-row">
-                <button class="tool-button" data-tool="section">
-                  <span class="icon">S</span>
-                  Section block
-                </button>
-                <button class="tool-button" data-tool="row">
-                  <span class="icon">R</span>
-                  Row of seats
-                </button>
-                <button class="tool-button" data-tool="single">
-                  <span class="icon">•</span>
-                  Single seat
-                </button>
-              </div>
-
-              <div class="tool-row">
-                <button class="tool-button" data-tool="circle-table">
-                  <span class="icon">○</span>
-                  Circular table
-                </button>
-                <button class="tool-button" data-tool="rect-table">
-                  <span class="icon">▭</span>
-                  Rectangular table
-                </button>
-              </div>
-            </div>
-
-            <div class="tool-group" style="margin-top:12px;">
-              <div class="helper-text">Room & labelling</div>
-              <div class="tool-row">
-                <button class="tool-button" data-tool="stage">
-                  <span class="icon">🎭</span>
-                  Stage
-                </button>
-                <button class="tool-button" data-tool="bar">
-                  <span class="icon">🍺</span>
-                  Bar / kiosk
-                </button>
-                <button class="tool-button" data-tool="exit">
-                  <span class="icon">↗</span>
-                  Exit
-                </button>
-              </div>
-              <div class="tool-row">
-                <button class="tool-button" data-tool="text">
-                  <span class="icon">T</span>
-                  Text label
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <div class="sidebar-section-title" style="margin-top:4px;">Actions</div>
-            <div class="action-row">
-              <button id="sb-undo" class="action-button is-disabled">Undo</button>
-              <button id="sb-redo" class="action-button is-disabled">Redo</button>
-            </div>
-            <div class="action-row" style="margin-top:6px;">
-              <button id="sb-clear" class="action-button">Clear canvas</button>
-            </div>
-          </div>
-        </aside>
-
-        <section class="seatbuilder-canvas-panel">
-          <div class="canvas-toolbar">
-            <div class="canvas-toolbar-left">
-              <div class="canvas-pill">
-                Layout type:
-                <strong style="margin-left:4px;" id="sb-layout-type">${layoutType}</strong>
-              </div>
-              <!-- Helper text that used to sit in the centre has been removed
-                   to keep the canvas area visually clean. -->
-            </div>
-            <div class="canvas-zoom-controls">
-              <button class="canvas-zoom-button" id="sb-zoom-out">−</button>
-              <button class="canvas-zoom-button" id="sb-zoom-reset">100%</button>
-              <button class="canvas-zoom-button" id="sb-zoom-in">+</button>
-            </div>
-          </div>
-
-          <div id="seatmap-canvas"></div>
-        </section>
-
-        <aside class="seatbuilder-inspector">
-          <div class="inspector-section">
-            <div class="inspector-section-header">
-              <div class="inspector-title">Layout details</div>
-              <span class="inspector-badge" id="sb-seat-count">0 seats</span>
-            </div>
-            <div class="inspector-row">
-              <span class="inspector-row-label">Show</span>
-              <span id="sb-inspector-show">–</span>
-            </div>
-            <div class="inspector-row">
-              <span class="inspector-row-label">Venue</span>
-              <span id="sb-inspector-venue">–</span>
-            </div>
-            <div class="inspector-row">
-              <span class="inspector-row-label">Layout type</span>
-              <span id="sb-inspector-layout">${layoutType}</span>
-            </div>
-            <p class="inspector-note">
-              This step is just to sketch the room. You’ll map seats to ticket types in the next screen.
-            </p>
-            <button id="sb-save" class="primary-button">
-              <span>Save layout</span>
-            </button>
-          </div>
-
-          <div class="inspector-section">
-            <div class="inspector-section-header">
-              <div class="inspector-title">Selection</div>
-            </div>
-            <div class="selection-summary" id="sb-selection-summary">
-              Nothing selected. Click on a seat, table or object to see quick details here.
-            </div>
-          </div>
-
-          <div class="helper-text">
-            Tip: you can reuse this layout for future shows at the same venue – we’ll store it as a template behind the scenes.
-          </div>
-        </aside>
-      </div>
+      <div id="seatmap-canvas" class="seatmap-canvas"></div>
     `;
   }
 
@@ -240,10 +97,11 @@
   function pushHistory() {
     if (!stage) return;
     const json = stage.toJSON();
-    // Trim any redo history
+
     history = history.slice(0, historyIndex + 1);
     history.push(json);
     historyIndex = history.length - 1;
+
     updateHistoryButtons();
   }
 
@@ -251,6 +109,7 @@
     if (index < 0 || index >= history.length) return;
     historyIndex = index;
     const json = history[historyIndex];
+
     hydrateStageFromJSON(json);
     updateHistoryButtons();
     updateSeatCount();
@@ -260,32 +119,31 @@
   function updateHistoryButtons() {
     const undoBtn = document.getElementById("sb-undo");
     const redoBtn = document.getElementById("sb-redo");
-    if (undoBtn) {
-      undoBtn.classList.toggle("is-disabled", historyIndex <= 0);
-    }
-    if (redoBtn) {
+
+    if (undoBtn) undoBtn.classList.toggle("is-disabled", historyIndex <= 0);
+    if (redoBtn)
       redoBtn.classList.toggle(
         "is-disabled",
         historyIndex < 0 || historyIndex >= history.length - 1
       );
-    }
   }
+
+  // ---------------------------------------------------------------------------
+  // Stage setup
+  // ---------------------------------------------------------------------------
 
   function hydrateStageFromJSON(json) {
     const container = document.getElementById("seatmap-canvas");
     if (!container) return;
 
-    // Destroy any previous stage
-    if (stage) {
-      stage.destroy();
-    }
+    if (stage) stage.destroy();
 
     if (json) {
       const newStage = Konva.Node.fromJSON(json);
       newStage.container(container);
       stage = newStage;
-      // Try to get the first layer, or create one if missing
       layer = stage.findOne("Layer") || stage.getLayers()[0];
+
       if (!layer) {
         layer = new Konva.Layer();
         stage.add(layer);
@@ -293,7 +151,7 @@
     } else {
       const { width, height } = container.getBoundingClientRect();
       stage = new Konva.Stage({
-        container: container,
+        container,
         width: width || 900,
         height: height || 560,
       });
@@ -303,8 +161,7 @@
 
     attachStageHandlers();
 
-    // Keep stage responsive
-    window.addEventListener("resize", function () {
+    window.addEventListener("resize", () => {
       if (!stage) return;
       const rect = container.getBoundingClientRect();
       stage.size({
@@ -317,14 +174,12 @@
   function attachStageHandlers() {
     if (!stage || !layer) return;
 
-    // Clear previous handlers to avoid duplicates
     stage.off("click");
     stage.off("mousedown");
 
     stage.on("click", function (e) {
       const clicked = e.target;
 
-      // If clicked empty canvas
       if (clicked === stage) {
         updateSelectionSummary(null);
         return;
@@ -333,6 +188,10 @@
       updateSelectionSummary(clicked);
     });
   }
+
+  // ---------------------------------------------------------------------------
+  // Shape makers
+  // ---------------------------------------------------------------------------
 
   function makeSeat(x, y) {
     return new Konva.Circle({
@@ -360,8 +219,7 @@
 
     const spacing = 24;
     for (let i = 0; i < count; i++) {
-      const seat = makeSeat(i * spacing, 0);
-      group.add(seat);
+      group.add(makeSeat(i * spacing, 0));
     }
 
     return group;
@@ -378,26 +236,28 @@
       label: "Section",
     });
 
-    const rect = new Konva.Rect({
-      width,
-      height,
-      fill: "#e0f2fe",
-      stroke: "#1d4ed8",
-      strokeWidth: 2,
-      cornerRadius: 10,
-    });
+    group.add(
+      new Konva.Rect({
+        width,
+        height,
+        fill: "#e0f2fe",
+        stroke: "#1d4ed8",
+        strokeWidth: 2,
+        cornerRadius: 10,
+      })
+    );
 
-    const label = new Konva.Text({
-      text: "Section",
-      fontSize: 14,
-      fontStyle: "600",
-      fill: "#1e293b",
-      x: 10,
-      y: 8,
-    });
+    group.add(
+      new Konva.Text({
+        text: "Section",
+        fontSize: 14,
+        fontStyle: "600",
+        fill: "#1e293b",
+        x: 10,
+        y: 8,
+      })
+    );
 
-    group.add(rect);
-    group.add(label);
     return group;
   }
 
@@ -412,27 +272,29 @@
       label: "Stage",
     });
 
-    const rect = new Konva.Rect({
-      width,
-      height,
-      fill: "#dbeafe",
-      stroke: "#1d4ed8",
-      strokeWidth: 2,
-      cornerRadius: 8,
-    });
+    group.add(
+      new Konva.Rect({
+        width,
+        height,
+        fill: "#dbeafe",
+        stroke: "#1d4ed8",
+        strokeWidth: 2,
+        cornerRadius: 8,
+      })
+    );
 
-    const label = new Konva.Text({
-      text: "Stage",
-      fontSize: 16,
-      fontStyle: "600",
-      fill: "#1f2937",
-      align: "center",
-      width,
-      y: height / 2 - 10,
-    });
+    group.add(
+      new Konva.Text({
+        text: "Stage",
+        fontSize: 16,
+        fontStyle: "600",
+        fill: "#1f2937",
+        align: "center",
+        width,
+        y: height / 2 - 10,
+      })
+    );
 
-    group.add(rect);
-    group.add(label);
     return group;
   }
 
@@ -445,27 +307,29 @@
       label: "Bar",
     });
 
-    const rect = new Konva.Rect({
-      width: 120,
-      height: 40,
-      fill: "#f97316",
-      stroke: "#c2410c",
-      strokeWidth: 2,
-      cornerRadius: 6,
-    });
+    group.add(
+      new Konva.Rect({
+        width: 120,
+        height: 40,
+        fill: "#f97316",
+        stroke: "#c2410c",
+        strokeWidth: 2,
+        cornerRadius: 6,
+      })
+    );
 
-    const label = new Konva.Text({
-      text: "Bar",
-      fontSize: 13,
-      fontStyle: "600",
-      fill: "#ffffff",
-      align: "center",
-      width: 120,
-      y: 12,
-    });
+    group.add(
+      new Konva.Text({
+        text: "Bar",
+        fontSize: 13,
+        fontStyle: "600",
+        fill: "#ffffff",
+        align: "center",
+        width: 120,
+        y: 12,
+      })
+    );
 
-    group.add(rect);
-    group.add(label);
     return group;
   }
 
@@ -478,27 +342,29 @@
       label: "Exit",
     });
 
-    const rect = new Konva.Rect({
-      width: 80,
-      height: 30,
-      fill: "#22c55e",
-      stroke: "#15803d",
-      strokeWidth: 2,
-      cornerRadius: 6,
-    });
+    group.add(
+      new Konva.Rect({
+        width: 80,
+        height: 30,
+        fill: "#22c55e",
+        stroke: "#15803d",
+        strokeWidth: 2,
+        cornerRadius: 6,
+      })
+    );
 
-    const label = new Konva.Text({
-      text: "Exit",
-      fontSize: 12,
-      fontStyle: "600",
-      fill: "#ffffff",
-      align: "center",
-      width: 80,
-      y: 8,
-    });
+    group.add(
+      new Konva.Text({
+        text: "Exit",
+        fontSize: 12,
+        fontStyle: "600",
+        fill: "#ffffff",
+        align: "center",
+        width: 80,
+        y: 8,
+      })
+    );
 
-    group.add(rect);
-    group.add(label);
     return group;
   }
 
@@ -512,22 +378,20 @@
       seatCount: seats,
     });
 
-    const table = new Konva.Circle({
-      radius: 40,
-      fill: "#f9fafb",
-      stroke: "#64748b",
-      strokeWidth: 2,
-    });
-
-    group.add(table);
+    group.add(
+      new Konva.Circle({
+        radius: 40,
+        fill: "#f9fafb",
+        stroke: "#64748b",
+        strokeWidth: 2,
+      })
+    );
 
     const radius = 56;
+
     for (let i = 0; i < seats; i++) {
       const angle = (i / seats) * Math.PI * 2;
-      const sx = radius * Math.cos(angle);
-      const sy = radius * Math.sin(angle);
-      const seat = makeSeat(sx, sy);
-      group.add(seat);
+      group.add(makeSeat(radius * Math.cos(angle), radius * Math.sin(angle)));
     }
 
     return group;
@@ -560,8 +424,7 @@
       const offsetIndex = Math.floor(i / 2);
       const sx = rect.width() / 2 + side * 16;
       const sy = (offsetIndex - (seats / 4)) * spacing;
-      const seat = makeSeat(sx, sy);
-      group.add(seat);
+      group.add(makeSeat(sx, sy));
     }
 
     return group;
@@ -598,19 +461,12 @@
 
     group.add(bg);
     group.add(text);
+
     return group;
   }
 
-  function getCanvasCenter() {
-    if (!stage) return { x: 400, y: 260 };
-    return {
-      x: stage.width() / 2,
-      y: stage.height() / 2,
-    };
-  }
-
   // ---------------------------------------------------------------------------
-  // Save to backend
+  // Saving
   // ---------------------------------------------------------------------------
 
   async function saveLayout() {
@@ -624,11 +480,9 @@
       const active = currentData.activeSeatMap;
       const show = currentData.show;
 
-      // Stage JSON as JS object, not string
       const jsonString = stage.toJSON();
       const konvaJson = JSON.parse(jsonString);
 
-      // Estimate capacity as number of individual seats
       const seats = layer ? layer.find(".seat").length : 0;
 
       const payload = {
@@ -652,8 +506,7 @@
         return;
       }
 
-      const data = await res.json();
-      console.log("Seatmap saved", data);
+      console.log("Seatmap saved", await res.json());
       alert("Layout saved.");
     } catch (err) {
       console.error("Error saving layout", err);
@@ -669,13 +522,13 @@
   // ---------------------------------------------------------------------------
 
   async function init() {
+    // 1️⃣ Build minimal shell
     createShell();
 
-    // Wire up tool buttons
-    document.querySelectorAll(".tool-button").forEach((btn) => {
+    // 2️⃣ Hook up tool buttons from backend UI
+    document.querySelectorAll("[data-tool]").forEach((btn) => {
       btn.addEventListener("click", () => {
-        const tool = btn.getAttribute("data-tool");
-        setCurrentTool(tool);
+        setCurrentTool(btn.getAttribute("data-tool"));
       });
     });
 
@@ -684,20 +537,20 @@
     const clearBtn = document.getElementById("sb-clear");
     const saveBtn = document.getElementById("sb-save");
 
-    undoBtn &&
-      undoBtn.addEventListener("click", () => {
+    if (undoBtn)
+      undoBtn.addEventListener("click", function () {
         if (historyIndex <= 0) return;
         loadHistoryIndex(historyIndex - 1);
       });
 
-    redoBtn &&
-      redoBtn.addEventListener("click", () => {
+    if (redoBtn)
+      redoBtn.addEventListener("click", function () {
         if (historyIndex >= history.length - 1) return;
         loadHistoryIndex(historyIndex + 1);
       });
 
-    clearBtn &&
-      clearBtn.addEventListener("click", () => {
+    if (clearBtn)
+      clearBtn.addEventListener("click", function () {
         if (!layer) return;
         withHistorySnapshot(() => {
           layer.destroyChildren();
@@ -706,9 +559,9 @@
         updateSelectionSummary(null);
       });
 
-    saveBtn && saveBtn.addEventListener("click", saveLayout);
+    if (saveBtn) saveBtn.addEventListener("click", saveLayout);
 
-    // Zoom controls
+    // 3️⃣ Zoom controls
     let zoomLevel = 1;
     const zoomInBtn = document.getElementById("sb-zoom-in");
     const zoomOutBtn = document.getElementById("sb-zoom-out");
@@ -718,48 +571,47 @@
       if (!stage) return;
       stage.scale({ x: zoomLevel, y: zoomLevel });
       stage.batchDraw();
-      if (zoomResetBtn) {
+      if (zoomResetBtn)
         zoomResetBtn.textContent = `${Math.round(zoomLevel * 100)}%`;
-      }
     }
 
-    zoomInBtn &&
+    if (zoomInBtn)
       zoomInBtn.addEventListener("click", () => {
         zoomLevel = Math.min(zoomLevel + 0.1, 2);
         applyZoom();
       });
 
-    zoomOutBtn &&
+    if (zoomOutBtn)
       zoomOutBtn.addEventListener("click", () => {
         zoomLevel = Math.max(zoomLevel - 0.1, 0.5);
         applyZoom();
       });
 
-    zoomResetBtn &&
+    if (zoomResetBtn)
       zoomResetBtn.addEventListener("click", () => {
         zoomLevel = 1;
         applyZoom();
       });
 
-    // Load initial data + layout
+    // 4️⃣ Load seatmap data
     try {
       const res = await fetch(API_URL);
-      if (!res.ok) {
-        console.error("Failed to load seatmap data", await res.text());
-        throw new Error("Failed to load layout");
-      }
+      if (!res.ok) throw new Error("Failed to fetch seatmap data");
       currentData = await res.json();
     } catch (err) {
-      console.error(err);
+      console.error("Cannot load seatmap data", err);
       currentData = null;
     }
 
-    // Update header / inspector with show & venue info
+    // 5️⃣ Fill inspector top info
     if (currentData && currentData.show) {
       const show = currentData.show;
-      const headerEl = document.getElementById("sb-show-title");
-      if (headerEl) {
-        headerEl.textContent = `${show.title} – ${new Date(
+      const header = document.getElementById("sb-show-title");
+      const showLabel = document.getElementById("sb-inspector-show");
+      const venueLabel = document.getElementById("sb-inspector-venue");
+
+      if (header) {
+        header.textContent = `${show.title} – ${new Date(
           show.date
         ).toLocaleDateString("en-GB", {
           weekday: "short",
@@ -768,10 +620,8 @@
           year: "numeric",
         })}`;
       }
-      const showLabel = document.getElementById("sb-inspector-show");
-      if (showLabel) showLabel.textContent = show.title;
 
-      const venueLabel = document.getElementById("sb-inspector-venue");
+      if (showLabel) showLabel.textContent = show.title;
       if (venueLabel) {
         if (show.venue) {
           venueLabel.textContent = `${show.venue.name} (${show.venue.city || "TBC"})`;
@@ -781,26 +631,24 @@
       }
     }
 
-    // Hydrate stage from existing layout if present
-    let initialJson = null;
+    // 6️⃣ Load existing Konva layout
+    let initial = null;
+
     if (
       currentData &&
       currentData.activeSeatMap &&
       currentData.activeSeatMap.layout &&
       currentData.activeSeatMap.layout.konvaJson
     ) {
-      initialJson = JSON.stringify(
-        currentData.activeSeatMap.layout.konvaJson
-      );
+      initial = JSON.stringify(currentData.activeSeatMap.layout.konvaJson);
     }
 
-    hydrateStageFromJSON(initialJson);
+    hydrateStageFromJSON(initial);
 
-    // When clicking canvas with a tool selected, add elements at pointer position
+    // 7️⃣ Tool behaviour on canvas
     if (stage && layer) {
       stage.on("mousedown.addTool", function (evt) {
         if (!currentTool) return;
-        // Avoid placing when clicking existing shape – they can just drag it
         if (evt.target !== stage) return;
 
         const pos = stage.getPointerPosition();
@@ -808,61 +656,36 @@
 
         withHistorySnapshot(() => {
           const { x, y } = pos;
+          const centre = { x: stage.width() / 2, y: stage.height() / 2 };
           let node = null;
-          const centre = getCanvasCenter();
 
           switch (currentTool) {
             case "single":
               node = makeSeat(x, y);
               break;
             case "row":
-              node = makeRowOfSeats(x || centre.x - 120, y || centre.y, 10);
+              node = makeRowOfSeats(x, y, 10);
               break;
             case "section":
-              node = makeSectionBlock(
-                x || centre.x - 110,
-                y || centre.y - 70
-              );
+              node = makeSectionBlock(x, y);
               break;
             case "stage":
-              node = makeStageBlock(
-                x || centre.x - 180,
-                y || centre.y - 30
-              );
+              node = makeStageBlock(x, y);
               break;
             case "bar":
-              node = makeBarBlock(
-                x || centre.x - 60,
-                y || centre.y - 20
-              );
+              node = makeBarBlock(x, y);
               break;
             case "exit":
-              node = makeExitBlock(
-                x || centre.x - 40,
-                y || centre.y - 15
-              );
+              node = makeExitBlock(x, y);
               break;
             case "circle-table":
-              node = makeCircularTable(
-                x || centre.x,
-                y || centre.y,
-                10
-              );
+              node = makeCircularTable(x, y, 10);
               break;
             case "rect-table":
-              node = makeRectTable(
-                x || centre.x,
-                y || centre.y,
-                8
-              );
+              node = makeRectTable(x, y, 8);
               break;
             case "text":
-              node = makeTextLabel(
-                x || centre.x - 40,
-                y || centre.y - 20
-              );
-              break;
-            default:
+              node = makeTextLabel(x, y);
               break;
           }
 
@@ -874,20 +697,20 @@
         });
       });
 
-      // When dragging ends, store new snapshot
-      layer.on("dragend", function () {
+      layer.on("dragend", () => {
         pushHistory();
         updateSeatCount();
       });
     }
 
-    // Seed history + counters
+    // 8️⃣ Seed history + counters
     pushHistory();
     updateSeatCount();
     updateSelectionSummary(null);
   }
 
-  // Kick off
+  // ---------------------------------------------------------------------------
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);
   } else {
