@@ -26,7 +26,7 @@ COPY backend/package*.json ./backend/
 COPY backend/prisma ./backend/prisma
 RUN cd backend && (npm ci --ignore-scripts || npm install --no-audit --no-fund --ignore-scripts)
 
-# Copy the rest of the backend source
+# Copy the rest of the backend source (includes /public/static)
 COPY backend ./backend
 
 # Generate Prisma client (again in builder context)
@@ -45,6 +45,9 @@ COPY --from=builder /app/backend/dist ./dist
 # Copy prisma schema and generated client + prod node_modules
 COPY --from=proddeps /app/backend/node_modules ./node_modules
 COPY --from=proddeps /app/backend/prisma ./prisma
+
+# ✅ NEW: copy static assets (CSS/JS) for the seating builder
+COPY --from=builder /app/backend/public ./public
 
 ENV NODE_ENV=production
 EXPOSE 4000
