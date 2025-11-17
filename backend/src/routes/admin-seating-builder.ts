@@ -441,7 +441,7 @@ router.get("/builder/preview/:showId", async (req, res) => {
         // Save button: seating-builder.js will hook into this via ID.
         const saveBtn = document.getElementById("tb-save-layout");
         if (saveBtn) {
-          (window as any).__TICKIN_SAVE_BUTTON__ = saveBtn;
+window.__TICKIN_SAVE_BUTTON__ = saveBtn;
         }
       });
     </script>
