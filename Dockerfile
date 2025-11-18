@@ -9,6 +9,7 @@ ENV PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1
 COPY backend/package*.json ./
 COPY backend/prisma ./prisma
 
+
 # Install prod deps (no scripts to avoid prisma running before we say so)
 RUN (npm ci --omit=dev --ignore-scripts || npm install --omit=dev --no-audit --no-fund --ignore-scripts)
 
