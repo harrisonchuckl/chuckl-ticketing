@@ -10,14 +10,15 @@
     console.error("seating-builder: missing window.__SEATMAP_SHOW_ID__");
     return;
   }
-  
+
   const container = document.getElementById("app");
   if (!container) {
     // eslint-disable-next-line no-console
     console.error("seating-builder: #app not found");
     return;
   }
-  
+
+  const inspectorEl = document.getElementById("sb-inspector");
 
   // ---------- Config ----------
   const GRID_SIZE = 32; // perfect square grid
@@ -47,7 +48,7 @@
   let historyIndex = -1;
   let isRestoringHistory = false;
 
-  // Simple seat counter (you can wire this into the inspector later)
+  // Simple seat counter
   const seatCountEl = document.getElementById("sb-seat-count");
 
   // ---------- Helpers: UI / tools ----------
@@ -89,6 +90,14 @@
 
     if (seatCountEl) {
       seatCountEl.textContent = seats === 1 ? "1 seat" : `${seats} seats`;
+    }
+
+    // expose for sidebar
+    window.__SEATMAP_CURRENT_SEAT_COUNT__ = seats;
+
+    // keep inspector summary live
+    if (typeof window.renderSeatmapInspector === "function") {
+      window.renderSeatmapInspector(selectedNode || null);
     }
   }
 
@@ -1117,6 +1126,7 @@
           throw new Error(`Save failed (${res.status})`);
         }
       } catch (err) {
+        // eslint-disable-next-line no-console
         console.error("Error saving seat map", err);
         window.alert("There was a problem saving this layout.");
       } finally {
@@ -1125,6 +1135,347 @@
       }
     });
   }
+
+  // ---------- Right-hand inspector panel ----------
+
+  function getEstimatedCapacity() {
+    // Prefer explicit global if set
+    if (typeof window.__SEATMAP_ESTIMATED_CAPACITY__ === "number") {
+      return window.__SEATMAP_ESTIMATED_CAPACITY__;
+    }
+    // Fallback to data attribute on #app
+    const attr = container.getAttribute("data-estimated-capacity");
+    if (!attr) return null;
+    const n = Number(attr);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function applyRowSeatsUpdate(group, seatsPerRow, rowCount) {
+    if (!group || !Number.isFinite(seatsPerRow) || !Number.isFinite(rowCount)) return;
+    if (seatsPerRow <= 0 || rowCount <= 0) return;
+
+    group.setAttr("seatsPerRow", seatsPerRow);
+    group.setAttr("rowCount", rowCount);
+
+    // Remove existing seats
+    group.getChildren().forEach((child) => {
+      if (child instanceof Konva.Circle && child.getAttr("isSeat")) {
+        child.destroy();
+      }
+    });
+
+    const spacing = 20;
+    const seatRadius = 6;
+    const rowSpacing = 20;
+
+    for (let r = 0; r < rowCount; r += 1) {
+      const rowY = (r - (rowCount - 1) / 2) * rowSpacing;
+      for (let i = 0; i < seatsPerRow; i += 1) {
+        const sx = (i - (seatsPerRow - 1) / 2) * spacing;
+        const seat = new Konva.Circle({
+          x: sx,
+          y: rowY,
+          radius: seatRadius,
+          stroke: "#4b5563",
+          strokeWidth: 1.3,
+          isSeat: true,
+        });
+        group.add(seat);
+      }
+    }
+
+    mapLayer.batchDraw();
+    updateSeatCount();
+    pushHistory();
+    selectNode(group);
+  }
+
+  function applyCircularTableUpdate(group, seatCount) {
+    if (!group || !Number.isFinite(seatCount) || seatCount <= 0) return;
+
+    group.setAttr("seatCount", seatCount);
+
+    // Remove existing seats (keep centre table circle)
+    group.getChildren().forEach((child) => {
+      if (child instanceof Konva.Circle && child.getAttr("isSeat")) {
+        child.destroy();
+      }
+    });
+
+    const seatRadius = 7;
+    const seatGap = 4;
+
+    const centreSpacing = seatRadius * 2 + seatGap;
+    const seatRingRadius = Math.max(
+      32,
+      (seatCount * centreSpacing) / (2 * Math.PI)
+    );
+
+    const table = group.findOne("Circle");
+    if (table && !table.getAttr("isSeat")) {
+      const tableRadius = Math.max(24, seatRingRadius - seatRadius - seatGap);
+      table.radius(tableRadius);
+    }
+
+    for (let i = 0; i < seatCount; i += 1) {
+      const angle = (i / seatCount) * Math.PI * 2;
+      const sx = Math.cos(angle) * seatRingRadius;
+      const sy = Math.sin(angle) * seatRingRadius;
+      const seat = new Konva.Circle({
+        x: sx,
+        y: sy,
+        radius: seatRadius,
+        stroke: "#4b5563",
+        strokeWidth: 1.3,
+        isSeat: true,
+      });
+      group.add(seat);
+    }
+
+    mapLayer.batchDraw();
+    updateSeatCount();
+    pushHistory();
+    selectNode(group);
+  }
+
+  function applyRectTableUpdate(group, longSideSeats, shortSideSeats) {
+    if (!group) return;
+    if (!Number.isFinite(longSideSeats) || longSideSeats < 0) return;
+    if (!Number.isFinite(shortSideSeats) || shortSideSeats < 0) return;
+
+    group.setAttr("longSideSeats", longSideSeats);
+    group.setAttr("shortSideSeats", shortSideSeats);
+
+    // Remove only seat circles
+    group.getChildren().forEach((child) => {
+      if (child instanceof Konva.Circle && child.getAttr("isSeat")) {
+        child.destroy();
+      }
+    });
+
+    const seatRadius = 6;
+    const seatGap = 4;
+    const longSpan =
+      longSideSeats > 0 ? (longSideSeats - 1) * (seatRadius * 2 + seatGap) : 0;
+    const shortSpan =
+      shortSideSeats > 0
+        ? (shortSideSeats - 1) * (seatRadius * 2 + seatGap)
+        : 0;
+
+    const width = longSpan + seatRadius * 4;
+    const height = shortSpan + seatRadius * 4;
+
+    const table = group.findOne("Rect");
+    if (table) {
+      table.width(width);
+      table.height(height);
+      table.offsetX(width / 2);
+      table.offsetY(height / 2);
+    }
+
+    // long sides (top + bottom)
+    for (let i = 0; i < longSideSeats; i += 1) {
+      const sx =
+        -width / 2 + seatRadius * 2 + i * (seatRadius * 2 + seatGap);
+
+      const topSeat = new Konva.Circle({
+        x: sx,
+        y: -height / 2 - 10,
+        radius: seatRadius,
+        stroke: "#4b5563",
+        strokeWidth: 1.3,
+        isSeat: true,
+      });
+
+      const bottomSeat = new Konva.Circle({
+        x: sx,
+        y: height / 2 + 10,
+        radius: seatRadius,
+        stroke: "#4b5563",
+        strokeWidth: 1.3,
+        isSeat: true,
+      });
+
+      group.add(topSeat);
+      group.add(bottomSeat);
+    }
+
+    // short sides (left + right)
+    for (let i = 0; i < shortSideSeats; i += 1) {
+      const sy =
+        -height / 2 + seatRadius * 2 + i * (seatRadius * 2 + seatGap);
+
+      const leftSeat = new Konva.Circle({
+        x: -width / 2 - 10,
+        y: sy,
+        radius: seatRadius,
+        stroke: "#4b5563",
+        strokeWidth: 1.3,
+        isSeat: true,
+      });
+
+      const rightSeat = new Konva.Circle({
+        x: width / 2 + 10,
+        y: sy,
+        radius: seatRadius,
+        stroke: "#4b5563",
+        strokeWidth: 1.3,
+        isSeat: true,
+      });
+
+      group.add(leftSeat);
+      group.add(rightSeat);
+    }
+
+    mapLayer.batchDraw();
+    updateSeatCount();
+    pushHistory();
+    selectNode(group);
+  }
+
+  function renderInspector(node) {
+    if (!inspectorEl) return;
+
+    const estCapacity = getEstimatedCapacity();
+    const seatsOnMap =
+      typeof window.__SEATMAP_CURRENT_SEAT_COUNT__ === "number"
+        ? window.__SEATMAP_CURRENT_SEAT_COUNT__
+        : 0;
+
+    // Base layout summary
+    let html = `
+      <div class="sb-card sb-card-summary">
+        <h3 class="sb-card-title">Layout</h3>
+        <div class="sb-summary-row">
+          <span>Estimated capacity</span>
+          <strong>${estCapacity != null ? estCapacity : "–"}</strong>
+        </div>
+        <div class="sb-summary-row">
+          <span>Seats on map</span>
+          <strong>${seatsOnMap}</strong>
+        </div>
+      </div>
+    `;
+
+    // Selection panel
+    if (!node) {
+      html += `
+        <div class="sb-card sb-card-selection">
+          <h3 class="sb-card-title">Selection</h3>
+          <p class="sb-empty">Click a row, table or object to edit its details.</p>
+        </div>
+      `;
+      inspectorEl.innerHTML = html;
+      return;
+    }
+
+    const shapeType = node.getAttr("shapeType");
+
+    if (shapeType === "row-seats") {
+      const seatsPerRow = node.getAttr("seatsPerRow") || 10;
+      const rowCount = node.getAttr("rowCount") || 1;
+
+      html += `
+        <div class="sb-card sb-card-selection">
+          <h3 class="sb-card-title">Rows of seats</h3>
+          <label class="sb-field">
+            <span>Seats per row</span>
+            <input id="sb-row-seats-per-row" type="number" min="1" value="${seatsPerRow}">
+          </label>
+          <label class="sb-field">
+            <span>Number of rows</span>
+            <input id="sb-row-row-count" type="number" min="1" value="${rowCount}">
+          </label>
+        </div>
+      `;
+
+      inspectorEl.innerHTML = html;
+
+      const seatsInput = document.getElementById("sb-row-seats-per-row");
+      const rowsInput = document.getElementById("sb-row-row-count");
+
+      const apply = () => {
+        const s = parseInt(seatsInput.value, 10);
+        const r = parseInt(rowsInput.value, 10);
+        applyRowSeatsUpdate(node, s, r);
+      };
+
+      seatsInput.addEventListener("change", apply);
+      rowsInput.addEventListener("change", apply);
+      return;
+    }
+
+    if (shapeType === "circular-table") {
+      const seatCount = node.getAttr("seatCount") || 8;
+
+      html += `
+        <div class="sb-card sb-card-selection">
+          <h3 class="sb-card-title">Circular table</h3>
+          <label class="sb-field">
+            <span>Seats around table</span>
+            <input id="sb-circle-seat-count" type="number" min="1" value="${seatCount}">
+          </label>
+        </div>
+      `;
+
+      inspectorEl.innerHTML = html;
+
+      const seatInput = document.getElementById("sb-circle-seat-count");
+      const apply = () => {
+        const s = parseInt(seatInput.value, 10);
+        applyCircularTableUpdate(node, s);
+      };
+
+      seatInput.addEventListener("change", apply);
+      return;
+    }
+
+    if (shapeType === "rect-table") {
+      const longSideSeats = node.getAttr("longSideSeats") || 4;
+      const shortSideSeats = node.getAttr("shortSideSeats") || 2;
+
+      html += `
+        <div class="sb-card sb-card-selection">
+          <h3 class="sb-card-title">Rectangular table</h3>
+          <label class="sb-field">
+            <span>Seats on long sides</span>
+            <input id="sb-rect-long" type="number" min="0" value="${longSideSeats}">
+          </label>
+          <label class="sb-field">
+            <span>Seats on short sides</span>
+            <input id="sb-rect-short" type="number" min="0" value="${shortSideSeats}">
+          </label>
+        </div>
+      `;
+
+      inspectorEl.innerHTML = html;
+
+      const longInput = document.getElementById("sb-rect-long");
+      const shortInput = document.getElementById("sb-rect-short");
+
+      const apply = () => {
+        const l = parseInt(longInput.value, 10);
+        const s = parseInt(shortInput.value, 10);
+        applyRectTableUpdate(node, l, s);
+      };
+
+      longInput.addEventListener("change", apply);
+      shortInput.addEventListener("change", apply);
+      return;
+    }
+
+    // Default for other objects (stage, bar, exit, section, label, etc.)
+    html += `
+      <div class="sb-card sb-card-selection">
+        <h3 class="sb-card-title">Selection</h3>
+        <p class="sb-empty">No editable properties for this item yet.</p>
+      </div>
+    `;
+    inspectorEl.innerHTML = html;
+  }
+
+  // expose to rest of builder
+  window.renderSeatmapInspector = renderInspector;
 
   // ---------- Load existing layout ----------
 
@@ -1188,12 +1539,12 @@
       historyIndex = 0;
       updateUndoRedoButtons();
     } catch (err) {
+      // eslint-disable-next-line no-console
       console.error("Error loading existing seat map", err);
       pushHistory();
       updateSeatCount();
     }
   }
-  
 
   // ---------- Boot ----------
 
