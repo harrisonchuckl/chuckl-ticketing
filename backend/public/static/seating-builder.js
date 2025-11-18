@@ -20,7 +20,7 @@
 
   // ---------- Config ----------
   const GRID_SIZE = 32; // perfect square grid
-  const STAGE_PADDING = 40;
+  const STAGE_PADDING = 40; // kept for future use if needed
   const MIN_ZOOM = 0.4;
   const MAX_ZOOM = 2.4;
   const ZOOM_STEP = 0.1;
@@ -35,13 +35,16 @@
   let activeTool = null; // "section" | "row" | "single" | "circle-table" | ...
   let selectedNode = null;
 
-  // history is per-mapLayer JSON so we can re-create nodes & re-attach handlers
-  let history = [];
-  let historyIndex = -1;
+  // history now uses undo / redo stacks of mapLayer JSON
+  let undoStack = [];
+  let redoStack = [];
   let isRestoringHistory = false;
 
   // Simple seat counter (you can wire this into the inspector later)
   const seatCountEl = document.getElementById("sb-seat-count");
+
+  // Selection (inspector) panel
+  let selectionPanelEl = document.getElementById("sb-selection-panel");
 
   // ---------- Helpers: UI / tools ----------
 
@@ -88,10 +91,22 @@
   // ---------- Grid ----------
 
   function drawSquareGrid() {
+    if (!gridLayer || !stage) return;
+
     gridLayer.destroyChildren();
 
     const width = stage.width();
     const height = stage.height();
+
+    // optional soft background
+    const bg = new Konva.Rect({
+      x: 0,
+      y: 0,
+      width,
+      height,
+      fill: "#ffffff",
+    });
+    gridLayer.add(bg);
 
     for (let x = 0; x <= width; x += GRID_SIZE) {
       const line = new Konva.Line({
@@ -114,48 +129,45 @@
     gridLayer.batchDraw();
   }
 
-  // ---------- History ----------
+  function resizeStageToContainer() {
+    if (!stage) return;
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+    stage.size({ width, height });
+    drawSquareGrid();
+  }
+
+  // ---------- History (undo / redo) ----------
 
   function updateUndoRedoButtons() {
     const undoBtn = document.getElementById("sb-undo");
     const redoBtn = document.getElementById("sb-redo");
 
     if (undoBtn) {
-      undoBtn.disabled = historyIndex <= 0;
-      undoBtn.style.opacity = historyIndex <= 0 ? 0.4 : 1;
+      undoBtn.disabled = undoStack.length === 0;
+      undoBtn.style.opacity = undoStack.length === 0 ? 0.4 : 1;
     }
     if (redoBtn) {
-      redoBtn.disabled = historyIndex >= history.length - 1;
-      redoBtn.style.opacity = historyIndex >= history.length - 1 ? 0.4 : 1;
+      redoBtn.disabled = redoStack.length === 0;
+      redoBtn.style.opacity = redoStack.length === 0 ? 0.4 : 1;
     }
   }
 
-  function pushHistory() {
-    if (isRestoringHistory || !mapLayer) return;
-
-    const json = mapLayer.toJSON();
-
-    // cut off any "redo" entries
-    if (historyIndex < history.length - 1) {
-      history = history.slice(0, historyIndex + 1);
-    }
-
-    history.push(json);
-    historyIndex = history.length - 1;
-    updateUndoRedoButtons();
+  function getSnapshot() {
+    if (!mapLayer) return null;
+    return mapLayer.toJSON();
   }
 
-  function restoreHistory(toIndex) {
-    if (toIndex < 0 || toIndex >= history.length) return;
+  function restoreSnapshot(json) {
+    if (!json || !stage) return;
+
     isRestoringHistory = true;
 
-    historyIndex = toIndex;
-    const json = history[historyIndex];
-
-    // Re-create layer from JSON
-    const newLayer = Konva.Node.create(json);
-    mapLayer.destroy();
-    mapLayer = newLayer;
+    const restored = Konva.Node.create(json);
+    if (mapLayer) {
+      mapLayer.destroy();
+    }
+    mapLayer = restored;
     stage.add(mapLayer);
 
     // Re-attach behaviour to all top-level groups (tables, rows, etc.)
@@ -165,28 +177,59 @@
 
     mapLayer.draw();
     updateSeatCount();
-    updateUndoRedoButtons();
-    clearSelection(); // selection no longer valid
+    clearSelection();
 
     isRestoringHistory = false;
   }
 
+  function pushHistory() {
+    if (isRestoringHistory || !mapLayer) return;
+
+    const snapshot = getSnapshot();
+    if (!snapshot) return;
+
+    undoStack.push(snapshot);
+    // any new action clears the redo stack
+    redoStack = [];
+    updateUndoRedoButtons();
+  }
+
   function undo() {
-    if (historyIndex <= 0) return;
-    restoreHistory(historyIndex - 1);
+    if (undoStack.length === 0) return;
+
+    const current = getSnapshot();
+    const prev = undoStack.pop();
+    if (!prev) return;
+
+    if (current) {
+      redoStack.push(current);
+    }
+
+    restoreSnapshot(prev);
+    updateUndoRedoButtons();
   }
 
   function redo() {
-    if (historyIndex >= history.length - 1) return;
-    restoreHistory(historyIndex + 1);
+    if (redoStack.length === 0) return;
+
+    const current = getSnapshot();
+    const next = redoStack.pop();
+    if (!next) return;
+
+    if (current) {
+      undoStack.push(current);
+    }
+
+    restoreSnapshot(next);
+    updateUndoRedoButtons();
   }
 
-  // ---------- Selection / transformer ----------
+  // ---------- Selection / transformer & inspector ----------
 
   function configureTransformerForNode(node) {
-    if (!transformer) return;
+    if (!transformer || !node) return;
 
-    const shapeType = node && node.getAttr("shapeType");
+    const shapeType = node.getAttr("shapeType");
 
     // Seating elements: rotate only, no resize
     if (
@@ -200,16 +243,174 @@
       return;
     }
 
-    // Non-seating elements – only Stage + Bar/Kiosk are resizable
-    if (shapeType === "stage" || shapeType === "bar") {
+    // Non-seating elements – Stage, Bar and Exit are resizable
+    if (
+      shapeType === "stage" ||
+      shapeType === "bar" ||
+      shapeType === "exit"
+    ) {
       transformer.rotateEnabled(false);
       transformer.enabledAnchors(["middle-left", "middle-right"]);
       return;
     }
 
-    // Everything else (section / exit / text label): no resize, no rotate
+    // Text / section and anything else: no resize, no rotate
     transformer.rotateEnabled(false);
     transformer.enabledAnchors([]);
+  }
+
+  function renderSeatmapInspector(node) {
+    // element-specific inspector on the right-hand side
+    if (!selectionPanelEl) {
+      selectionPanelEl = document.getElementById("sb-selection-panel");
+    }
+    if (!selectionPanelEl) {
+      return; // silently do nothing if the panel doesn't exist
+    }
+
+    if (!node) {
+      selectionPanelEl.innerHTML =
+        '<p class="sb-selection-empty">Nothing selected. Click on a seat, table or object to see details here.</p>';
+      return;
+    }
+
+    const shapeType = node.getAttr("shapeType") || "unknown";
+
+    // TEXT LABEL
+    if (shapeType === "text") {
+      const textNode = node.findOne("Text");
+      if (!textNode) {
+        selectionPanelEl.innerHTML =
+          "<p>Text label selected, but no text node found.</p>";
+        return;
+      }
+
+      const text = textNode.text();
+      const fontSize = textNode.fontSize();
+      const isBold = /bold|700/.test(textNode.fontStyle());
+      const isItalic = /italic/.test(textNode.fontStyle());
+
+      selectionPanelEl.innerHTML = `
+        <div class="sb-field">
+          <label>Text</label>
+          <input id="sb-label-text" type="text" value="${text.replace(
+            /"/g,
+            "&quot;"
+          )}" />
+        </div>
+        <div class="sb-field">
+          <label>Font size</label>
+          <input id="sb-label-size" type="number" min="8" max="64" value="${fontSize}" />
+        </div>
+        <div class="sb-field-row">
+          <label>Style</label>
+          <div class="sb-toggle-group">
+            <button id="sb-label-bold" class="${
+              isBold ? "active" : ""
+            }"><b>B</b></button>
+            <button id="sb-label-italic" class="${
+              isItalic ? "active" : ""
+            }"><i>I</i></button>
+          </div>
+        </div>
+      `;
+
+      const textInput = document.getElementById("sb-label-text");
+      const sizeInput = document.getElementById("sb-label-size");
+      const boldBtn = document.getElementById("sb-label-bold");
+      const italicBtn = document.getElementById("sb-label-italic");
+
+      if (textInput) {
+        textInput.addEventListener("input", () => {
+          textNode.text(textInput.value);
+          mapLayer.batchDraw();
+          pushHistory();
+        });
+      }
+
+      if (sizeInput) {
+        sizeInput.addEventListener("change", () => {
+          const v = parseInt(sizeInput.value, 10) || fontSize;
+          textNode.fontSize(v);
+          mapLayer.batchDraw();
+          pushHistory();
+        });
+      }
+
+      if (boldBtn) {
+        boldBtn.addEventListener("click", () => {
+          const currentlyBold = /bold|700/.test(textNode.fontStyle());
+          const italic = /italic/.test(textNode.fontStyle());
+          textNode.fontStyle(
+            `${currentlyBold ? "" : "bold"}${italic ? " italic" : ""}`.trim()
+          );
+          mapLayer.batchDraw();
+          pushHistory();
+          renderSeatmapInspector(node); // refresh button state
+        });
+      }
+
+      if (italicBtn) {
+        italicBtn.addEventListener("click", () => {
+          const bold = /bold|700/.test(textNode.fontStyle());
+          const currentlyItalic = /italic/.test(textNode.fontStyle());
+          textNode.fontStyle(
+            `${bold ? "bold" : ""} ${currentlyItalic ? "" : "italic"}`.trim()
+          );
+          mapLayer.batchDraw();
+          pushHistory();
+          renderSeatmapInspector(node);
+        });
+      }
+
+      return;
+    }
+
+    // STAGE / EXIT – simple summary
+    if (shapeType === "stage" || shapeType === "exit") {
+      const rect = node.findOne("Rect");
+      const width = rect ? rect.width() : 0;
+      const height = rect ? rect.height() : 0;
+
+      selectionPanelEl.innerHTML = `
+        <p><strong>${
+          shapeType === "stage" ? "Stage" : "Exit"
+        }</strong></p>
+        <p>Width: ${Math.round(width)}px<br/>Height: ${Math.round(
+        height
+      )}px</p>
+        <p>Drag the side handles on the canvas to resize.</p>
+      `;
+      return;
+    }
+
+    // Seating groups – show seat count within the group
+    if (
+      shapeType === "row-seats" ||
+      shapeType === "circular-table" ||
+      shapeType === "rect-table"
+    ) {
+      const seats = node.find("Circle").filter((c) => c.getAttr("isSeat"))
+        .length;
+      selectionPanelEl.innerHTML = `
+        <p><strong>${
+          shapeType === "row-seats"
+            ? "Row of seats"
+            : shapeType === "circular-table"
+            ? "Circular table"
+            : "Rectangular table"
+        }</strong></p>
+        <p>Seats in this group: ${seats}</p>
+        <p>Seat-count editing will live here in a later step.</p>
+      `;
+      return;
+    }
+
+    // Default / fallback
+    selectionPanelEl.innerHTML = `
+      <p><strong>Object type:</strong> ${shapeType}</p>
+      <p>No additional controls for this element yet.</p>
+    `;
   }
 
   function clearSelection() {
@@ -218,10 +419,7 @@
       transformer.nodes([]);
       overlayLayer.draw();
     }
-    // If you have a custom inspector, call it with null:
-    if (typeof window.renderSeatmapInspector === "function") {
-      window.renderSeatmapInspector(null);
-    }
+    renderSeatmapInspector(null);
   }
 
   function selectNode(node) {
@@ -229,11 +427,7 @@
     configureTransformerForNode(node);
     transformer.nodes([node]);
     overlayLayer.draw();
-
-    // Hook for the inspector panel (existing implementation kept)
-    if (typeof window.renderSeatmapInspector === "function") {
-      window.renderSeatmapInspector(node);
-    }
+    renderSeatmapInspector(node);
   }
 
   // ---------- Shape factories ----------
@@ -265,31 +459,46 @@
 
   function createStage(x, y) {
     const group = new Konva.Group({
-      x: snap(x) - 100,
-      y: snap(y) - 24,
+      x: snap(x) - 120,
+      y: snap(y) - 28,
       draggable: true,
       name: "stage",
       shapeType: "stage",
     });
 
+    const rectWidth = 240;
+    const rectHeight = 56;
+
     const rect = new Konva.Rect({
-      width: 200,
-      height: 52,
-      cornerRadius: 10,
-      stroke: "#111827",
-      strokeWidth: 1.7,
+      name: "body",
+      width: rectWidth,
+      height: rectHeight,
+      cornerRadius: 12,
+      // modern gradient fill matching UI
+      fillLinearGradientStartPoint: { x: 0, y: 0 },
+      fillLinearGradientEndPoint: { x: rectWidth, y: 0 },
+      fillLinearGradientColorStops: [
+        0,
+        "#0f172a",
+        1,
+        "#2563eb",
+      ],
+      stroke: "#0f172a",
+      strokeWidth: 1.6,
     });
 
     const label = new Konva.Text({
+      name: "label",
       text: "STAGE",
       fontSize: 18,
-      fontStyle: "bold",
-      fontFamily: "system-ui",
+      fontStyle: "700",
+      fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
       align: "center",
       verticalAlign: "middle",
-      width: rect.width(),
-      height: rect.height(),
-      fill: "#111827",
+      width: rectWidth,
+      height: rectHeight,
+      fill: "#ffffff",
+      listening: false,
     });
 
     group.add(rect);
@@ -307,6 +516,7 @@
     });
 
     const rect = new Konva.Rect({
+      name: "body",
       width: 140,
       height: 36,
       cornerRadius: 8,
@@ -315,6 +525,7 @@
     });
 
     const label = new Konva.Text({
+      name: "label",
       text: "BAR",
       fontSize: 14,
       fontFamily: "system-ui",
@@ -323,6 +534,7 @@
       width: rect.width(),
       height: rect.height(),
       fill: "#4b5563",
+      listening: false,
     });
 
     group.add(rect);
@@ -339,23 +551,29 @@
       shapeType: "exit",
     });
 
+    const rectWidth = 100;
+    const rectHeight = 36;
+
     const rect = new Konva.Rect({
-      width: 100,
-      height: 36,
+      name: "body",
+      width: rectWidth,
+      height: rectHeight,
       cornerRadius: 8,
       stroke: "#16a34a",
       strokeWidth: 1.6,
     });
 
     const label = new Konva.Text({
+      name: "label",
       text: "EXIT",
       fontSize: 14,
       fontFamily: "system-ui",
       align: "center",
       verticalAlign: "middle",
-      width: rect.width(),
-      height: rect.height(),
+      width: rectWidth,
+      height: rectHeight,
       fill: "#16a34a",
+      listening: false,
     });
 
     group.add(rect);
@@ -375,7 +593,7 @@
     const text = new Konva.Text({
       text: "Label",
       fontSize: 14,
-      fontFamily: "system-ui",
+      fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
       fill: "#111827",
     });
 
@@ -569,6 +787,8 @@
   function attachNodeBehaviour(node) {
     if (!(node instanceof Konva.Group)) return;
 
+    const shapeType = node.getAttr("shapeType");
+
     node.on("mouseover", () => {
       stage.container().style.cursor = "grab";
     });
@@ -592,21 +812,39 @@
       pushHistory();
     });
 
-    node.on("transformend", () => {
-      const shapeType = node.getAttr("shapeType");
+    // Double-click to edit text labels
+    if (shapeType === "text") {
+      node.on("dblclick dbltap", () => {
+        const textNode = node.findOne("Text");
+        if (!textNode) return;
+        const currentText = textNode.text();
+        const next = window.prompt("Edit label text:", currentText);
+        if (next !== null) {
+          textNode.text(next);
+          mapLayer.batchDraw();
+          pushHistory();
+          renderSeatmapInspector(node);
+        }
+      });
+    }
 
-      // For Stage and Bar, convert scale into width only (keep label neat)
-      if (shapeType === "stage" || shapeType === "bar") {
+    node.on("transformend", () => {
+      const st = node.getAttr("shapeType");
+
+      // For Stage, Bar and Exit, convert scale into width/height only (keep label neat)
+      if (st === "stage" || st === "bar" || st === "exit") {
         const scaleX = node.scaleX();
         const scaleY = node.scaleY();
 
-        const rect = node.findOne("Rect");
-        const label = node.findOne("Text");
+        const rect = node.findOne("Rect[name=body]") || node.findOne("Rect");
+        const label =
+          node.findOne("Text[name=label]") || node.findOne("Text");
 
         if (rect) {
           rect.width(rect.width() * scaleX);
           rect.height(rect.height() * scaleY);
         }
+
         if (label && rect) {
           label.width(rect.width());
           label.height(rect.height());
@@ -621,6 +859,7 @@
 
       mapLayer.batchDraw();
       pushHistory();
+      renderSeatmapInspector(node);
     });
   }
 
@@ -653,8 +892,8 @@
   // ---------- Init Konva ----------
 
   function initStage() {
-    const width = container.clientWidth - STAGE_PADDING * 2;
-    const height = container.clientHeight - STAGE_PADDING * 2;
+    const width = container.clientWidth;
+    const height = container.clientHeight;
 
     stage = new Konva.Stage({
       container: "app",
@@ -688,6 +927,9 @@
       borderStrokeWidth: 1.2,
     });
     overlayLayer.add(transformer);
+
+    // keep grid responsive to window size
+    window.addEventListener("resize", resizeStageToContainer);
   }
 
   // ---------- Canvas interactions ----------
@@ -812,6 +1054,8 @@
 
     if (undoBtn) undoBtn.addEventListener("click", undo);
     if (redoBtn) redoBtn.addEventListener("click", redo);
+
+    updateUndoRedoButtons();
   }
 
   // Tool buttons
@@ -874,7 +1118,10 @@
         `/admin/seating/builder/api/seatmaps/${encodeURIComponent(showId)}`
       );
       if (!res.ok) {
-        pushHistory(); // empty base
+        // no existing layout – just start with empty map
+        undoStack = [];
+        redoStack = [];
+        pushHistory(); // base empty state
         updateSeatCount();
         return;
       }
@@ -884,7 +1131,9 @@
       const konvaJson = active && active.layout && active.layout.konvaJson;
 
       if (!konvaJson) {
-        pushHistory(); // empty base state
+        undoStack = [];
+        redoStack = [];
+        pushHistory(); // base empty state
         updateSeatCount();
         return;
       }
@@ -899,6 +1148,8 @@
       }
 
       if (!parsed) {
+        undoStack = [];
+        redoStack = [];
         pushHistory();
         updateSeatCount();
         return;
@@ -927,12 +1178,14 @@
       updateSeatCount();
 
       // initialise history with this as base
-      history = [mapLayer.toJSON()];
-      historyIndex = 0;
-      updateUndoRedoButtons();
+      undoStack = [];
+      redoStack = [];
+      pushHistory();
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error("Error loading existing seat map", err);
+      undoStack = [];
+      redoStack = [];
       pushHistory(); // at least have initial state
       updateSeatCount();
     }
@@ -950,6 +1203,9 @@
   stage.on("mousedown", handleStageClick);
   document.addEventListener("keydown", handleKeyDown);
 
-  // first history entry + attempt to load existing
+  // initial responsive resize
+  resizeStageToContainer();
+
+  // load existing (and set first history entry)
   loadExistingLayout();
 })();
