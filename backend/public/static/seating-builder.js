@@ -17,7 +17,6 @@
     console.error("seating-builder: #app not found");
     return;
   }
-
   
   const inspectorEl = document.getElementById("sb-inspector");
 
