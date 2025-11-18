@@ -30,7 +30,7 @@ RUN cd backend && (npm ci --ignore-scripts || npm install --no-audit --no-fund -
 COPY backend ./backend
 
 # Generate Prisma client (again in builder context)
-RUN cd backend && npx prisma generate --schema=prisma/schema.prisma
+RUN cd backend && PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1 npx prisma generate --schema=prisma/schema.prisma
 
 # Build TS -> dist (tsconfig set to emit even if types complain)
 RUN cd backend && npm run build
