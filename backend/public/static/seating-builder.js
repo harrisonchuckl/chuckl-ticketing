@@ -11,7 +11,6 @@
     return;
   }
   
-
   const container = document.getElementById("app");
   if (!container) {
     // eslint-disable-next-line no-console
