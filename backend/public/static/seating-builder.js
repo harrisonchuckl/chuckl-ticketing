@@ -27,8 +27,8 @@
 
   // spacing config for circular tables
   const CIRC_SEAT_RADIUS = 7;
-  const CIRC_DESIRED_GAP = 12; // gap between table edge and seat edge (larger to avoid touching)
-  const CIRC_MIN_TABLE_RADIUS = 28;
+  const CIRC_DESIRED_GAP = 8; // gap between table edge and seat edge
+  const CIRC_MIN_TABLE_RADIUS = 24;
 
   // ---------- State ----------
   let stage;
@@ -54,70 +54,47 @@
   // Simple seat counter (wired to Seats on map)
   const seatCountEl = document.getElementById("sb-seat-count");
 
-  // cached reference to the SELECTION card on the right-hand side
-  let cachedSelectionCard = null;
+  // Right-hand inspector container (created lazily)
+  let inspectorEl = null;
 
-  // ---------- Helpers: selection card / inspector DOM ----------
-
-  function resolveSelectionCard() {
-    // Reuse if still in DOM
-    if (cachedSelectionCard && document.body.contains(cachedSelectionCard)) {
-      return cachedSelectionCard;
+  function ensureInspectorEl() {
+    // If we already have a live element, reuse it
+    if (inspectorEl && document.body.contains(inspectorEl)) {
+      return inspectorEl;
     }
 
-    // Prefer explicit ID if you've added one in future
-    let el = document.getElementById("sb-inspector");
-    if (el) {
-      cachedSelectionCard = el;
-      return el;
+    // If template has been updated to include #sb-inspector explicitly, use that
+    const direct = document.getElementById("sb-inspector");
+    if (direct) {
+      inspectorEl = direct;
+      return inspectorEl;
     }
 
-    // Fallback: find the existing "Nothing selected..." panel and claim it
-    const nodes = document.querySelectorAll("div, section, aside");
-    for (let i = 0; i < nodes.length; i += 1) {
-      const node = nodes[i];
-      const text = (node.textContent || "").trim();
-      if (
-        text.includes("Nothing selected") &&
-        text.includes("Click on a seat, table or object to see quick details here")
-      ) {
-        node.id = "sb-inspector"; // helpful for future
-        cachedSelectionCard = node;
-        return node;
-      }
+    // Fallback: find the existing "Nothing selected…" helper text and
+    // replace it with a dedicated inspector container.
+    const hintParagraph = Array.from(
+      document.querySelectorAll("p, span, div")
+    ).find((el) => {
+      const text = (el.textContent || "").trim();
+      return text.startsWith(
+        "Nothing selected. Click on a seat, table or object to see quick details here."
+      );
+    });
+
+    if (hintParagraph && hintParagraph.parentElement) {
+      const parent = hintParagraph.parentElement;
+      hintParagraph.remove();
+
+      const panel = document.createElement("div");
+      panel.id = "sb-inspector";
+      panel.className = "sb-inspector-body";
+
+      parent.appendChild(panel);
+      inspectorEl = panel;
+      return inspectorEl;
     }
 
     return null;
-  }
-
-  // Ensures we have a dedicated child inside the selection card to render our UI into
-  function getInspectorRoot(selectionCard) {
-    if (!selectionCard) return null;
-
-    let root = selectionCard.querySelector(".sb-inspector-root");
-    if (!root) {
-      root = document.createElement("div");
-      root.className = "sb-inspector-root";
-      root.style.marginTop = "8px";
-      selectionCard.appendChild(root);
-    }
-    return root;
-  }
-
-  // Hide / show the default "Nothing selected…" paragraph when appropriate
-  function toggleDefaultSelectionMessage(selectionCard, show) {
-    if (!selectionCard) return;
-    const paragraphs = selectionCard.querySelectorAll("p, span");
-    paragraphs.forEach((p) => {
-      const text = (p.textContent || "").trim();
-      if (
-        text.includes("Nothing selected") &&
-        text.includes("Click on a seat, table or object to see quick details here")
-      ) {
-        // Only toggle this specific message
-        p.style.display = show ? "" : "none";
-      }
-    });
   }
 
   // ---------- Helpers: UI / tools ----------
@@ -515,8 +492,7 @@
     const ringRadiusFromCirc =
       (seatCount * circumferencePerSeat) / (2 * Math.PI);
 
-    const minRingRadius =
-      CIRC_MIN_TABLE_RADIUS + seatRadius + desiredGap;
+    const minRingRadius = CIRC_MIN_TABLE_RADIUS + seatRadius + desiredGap;
 
     const seatRingRadius = Math.max(ringRadiusFromCirc, minRingRadius);
     const tableRadius = seatRingRadius - seatRadius - desiredGap;
@@ -745,8 +721,7 @@
     const ringRadiusFromCirc =
       (seatCount * circumferencePerSeat) / (2 * Math.PI);
 
-    const minRingRadius =
-      CIRC_MIN_TABLE_RADIUS + seatRadius + desiredGap;
+    const minRingRadius = CIRC_MIN_TABLE_RADIUS + seatRadius + desiredGap;
 
     const seatRingRadius = Math.max(ringRadiusFromCirc, minRingRadius);
     const tableRadius = seatRingRadius - seatRadius - desiredGap;
@@ -864,32 +839,25 @@
   // ---------- Selection inspector (right-hand panel) ----------
 
   function renderInspector(node) {
-    const selectionCard = resolveSelectionCard();
-    if (!selectionCard) return;
+    const panel = ensureInspectorEl();
+    if (!panel) return;
 
-    const inspectorRoot = getInspectorRoot(selectionCard);
-    if (!inspectorRoot) return;
-
-    inspectorRoot.innerHTML = "";
+    const inspector = panel;
+    inspector.innerHTML = "";
 
     if (!node) {
-      // No selection – show default message, clear our custom UI
-      toggleDefaultSelectionMessage(selectionCard, true);
+      inspector.innerHTML =
+        '<p class="sb-inspector-empty">Click a table, row or block to edit its settings.</p>';
       return;
     }
-
-    // Hide the default "Nothing selected..." message and show our controls
-    toggleDefaultSelectionMessage(selectionCard, false);
 
     const shapeType = node.getAttr("shapeType");
 
     // Multiple selection? – just show a basic message for now
     const nodes = transformer ? transformer.nodes() : [];
     if (nodes && nodes.length > 1) {
-      const p = document.createElement("p");
-      p.className = "sb-inspector-multi";
-      p.textContent = `${nodes.length} items selected. Move them together by dragging any selected item.`;
-      inspectorRoot.appendChild(p);
+      inspector.innerHTML =
+        `<p class="sb-inspector-multi">${nodes.length} items selected. Move them together by dragging any selected item.</p>`;
       return;
     }
 
@@ -920,21 +888,17 @@
 
       label.appendChild(input);
       wrapper.appendChild(label);
-      inspectorRoot.appendChild(wrapper);
-    }
-
-    function addTitle(text) {
-      const title = document.createElement("h4");
-      title.textContent = text;
-      title.className = "sb-inspector-title";
-      inspectorRoot.appendChild(title);
+      inspector.appendChild(wrapper);
     }
 
     if (shapeType === "row-seats") {
       const seatsPerRow = node.getAttr("seatsPerRow") || 10;
       const rowCount = node.getAttr("rowCount") || 1;
 
-      addTitle("Row block");
+      const title = document.createElement("h4");
+      title.textContent = "Row block";
+      title.className = "sb-inspector-title";
+      inspector.appendChild(title);
 
       addNumberField("Seats per row", seatsPerRow, 1, 1, (val) => {
         const currentRowCount = node.getAttr("rowCount") || rowCount;
@@ -952,7 +916,10 @@
     if (shapeType === "circular-table") {
       const seatCount = node.getAttr("seatCount") || 8;
 
-      addTitle("Circular table");
+      const title = document.createElement("h4");
+      title.textContent = "Circular table";
+      title.className = "sb-inspector-title";
+      inspector.appendChild(title);
 
       addNumberField("Seats around table", seatCount, 1, 1, (val) => {
         updateCircularTableGeometry(node, val);
@@ -965,26 +932,45 @@
       const longSideSeats = node.getAttr("longSideSeats") ?? 4;
       const shortSideSeats = node.getAttr("shortSideSeats") ?? 2;
 
-      addTitle("Rectangular table");
+      const title = document.createElement("h4");
+      title.textContent = "Rectangular table";
+      title.className = "sb-inspector-title";
+      inspector.appendChild(title);
 
-      addNumberField("Seats on long side", longSideSeats, 0, 1, (val) => {
-        const currentShort = node.getAttr("shortSideSeats") ?? shortSideSeats;
-        updateRectTableGeometry(node, val, currentShort);
-      });
+      addNumberField(
+        "Seats on long side",
+        longSideSeats,
+        0,
+        1,
+        (val) => {
+          const currentShort = node.getAttr("shortSideSeats") ?? shortSideSeats;
+          updateRectTableGeometry(node, val, currentShort);
+        }
+      );
 
-      addNumberField("Seats on short side", shortSideSeats, 0, 1, (val) => {
-        const currentLong = node.getAttr("longSideSeats") ?? longSideSeats;
-        updateRectTableGeometry(node, currentLong, val);
-      });
+      addNumberField(
+        "Seats on short side",
+        shortSideSeats,
+        0,
+        1,
+        (val) => {
+          const currentLong = node.getAttr("longSideSeats") ?? longSideSeats;
+          updateRectTableGeometry(node, currentLong, val);
+        }
+      );
 
       return;
     }
 
     // Fallback for other shapes
-    addTitle("Selection");
+    const title = document.createElement("h4");
+    title.textContent = "Selection";
+    title.className = "sb-inspector-title";
+    inspector.appendChild(title);
+
     const p = document.createElement("p");
     p.textContent = "This element has no editable settings yet.";
-    inspectorRoot.appendChild(p);
+    inspector.appendChild(p);
   }
 
   // expose inspector hook for other scripts (and for our own calls below)
