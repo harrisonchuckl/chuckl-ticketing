@@ -27,8 +27,9 @@
 
   // spacing config for circular tables
   const CIRC_SEAT_RADIUS = 7;
-  const CIRC_DESIRED_GAP = 8; // gap between table edge and seat edge
-  const CIRC_MIN_TABLE_RADIUS = 24;
+  // slightly larger gap so seats don't visually touch the table edge
+  const CIRC_DESIRED_GAP = 12; // gap between table edge and seat edge
+  const CIRC_MIN_TABLE_RADIUS = 28;
 
   // ---------- State ----------
   let stage;
@@ -53,9 +54,6 @@
 
   // Simple seat counter (wired to Seats on map)
   const seatCountEl = document.getElementById("sb-seat-count");
-
-  // Right-hand inspector container
-  const inspectorEl = document.getElementById("sb-inspector");
 
   // ---------- Helpers: UI / tools ----------
 
@@ -801,13 +799,15 @@
   // ---------- Selection inspector (right-hand panel) ----------
 
   function renderInspector(node) {
+    // Re-query DOM each time so it still works if script loads before HTML
+    const inspectorEl = document.getElementById("sb-inspector");
     if (!inspectorEl) return;
 
     inspectorEl.innerHTML = "";
 
     if (!node) {
       inspectorEl.innerHTML =
-        "<p class=\"sb-inspector-empty\">Click a table, row or block to edit its settings.</p>";
+        '<p class="sb-inspector-empty">Click a table, row or block to edit its settings.</p>';
       return;
     }
 
