@@ -2,6 +2,9 @@
 FROM node:20-bullseye-slim AS proddeps
 WORKDIR /app/backend
 
+# Ensure Prisma doesn't die if its checksum endpoint 500s
+ENV PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1
+
 # Copy package manifests and Prisma schema first (cache-friendly)
 COPY backend/package*.json ./
 COPY backend/prisma ./prisma
@@ -29,8 +32,11 @@ RUN cd backend && (npm ci --ignore-scripts || npm install --no-audit --no-fund -
 # Copy the rest of the backend source (includes /public/static)
 COPY backend ./backend
 
+# Ensure Prisma checksum issues don't break this stage either
+ENV PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1
+
 # Generate Prisma client (again in builder context)
-RUN cd backend && PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1 npx prisma generate --schema=prisma/schema.prisma
+RUN cd backend && npx prisma generate --schema=prisma/schema.prisma
 
 # Build TS -> dist (tsconfig set to emit even if types complain)
 RUN cd backend && npm run build
