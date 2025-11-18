@@ -17,6 +17,7 @@
     console.error("seating-builder: #app not found");
     return;
   }
+  
 
   // ---------- Config ----------
   const GRID_SIZE = 32; // perfect square grid
