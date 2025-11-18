@@ -24,7 +24,8 @@
   const MIN_ZOOM = 0.4;
   const MAX_ZOOM = 2.4;
   const ZOOM_STEP = 0.1;
-  const SEAT_MIN_GAP = 4; // minimum gap between seat edges
+  const SEAT_RADIUS = 6;
+  const SEAT_GAP = 4; // minimum clear gap between seats
 
   // ---------- State ----------
   let stage;
@@ -119,10 +120,23 @@
 
   function resizeStageToContainer() {
     if (!stage) return;
-    const width = container.clientWidth - STAGE_PADDING * 2;
-    const height = container.clientHeight - STAGE_PADDING * 2;
-    stage.size({ width, height });
+    const rect = container.getBoundingClientRect();
+    const usableWidth = Math.max(200, rect.width - STAGE_PADDING * 2);
+    const usableHeight = Math.max(200, rect.height - STAGE_PADDING * 2);
+
+    const currentScale = stage.scaleX() || 1;
+
+    // Make the *scaled* stage fill the usable area so the grid always fills
+    stage.width(usableWidth / currentScale);
+    stage.height(usableHeight / currentScale);
+
+    stage.position({
+      x: STAGE_PADDING,
+      y: STAGE_PADDING,
+    });
+
     drawSquareGrid();
+    stage.batchDraw();
   }
 
   // ---------- History ----------
@@ -132,14 +146,12 @@
     const redoBtn = document.getElementById("sb-redo");
 
     if (undoBtn) {
-      const canUndo = historyIndex > 0;
-      undoBtn.disabled = !canUndo;
-      undoBtn.style.opacity = canUndo ? 1 : 0.4;
+      undoBtn.disabled = historyIndex <= 0;
+      undoBtn.style.opacity = historyIndex <= 0 ? 0.4 : 1;
     }
     if (redoBtn) {
-      const canRedo = historyIndex < history.length - 1;
-      redoBtn.disabled = !canRedo;
-      redoBtn.style.opacity = canRedo ? 1 : 0.4;
+      redoBtn.disabled = historyIndex >= history.length - 1;
+      redoBtn.style.opacity = historyIndex >= history.length - 1 ? 0.4 : 1;
     }
   }
 
@@ -158,14 +170,6 @@
     updateUndoRedoButtons();
   }
 
-  function reattachBehaviourToLayer(layer) {
-    if (!layer) return;
-    const children = layer.getChildren ? layer.getChildren() : [];
-    children.forEach((node) => {
-      attachNodeBehaviour(node);
-    });
-  }
-
   function restoreHistory(toIndex) {
     if (toIndex < 0 || toIndex >= history.length) return;
     isRestoringHistory = true;
@@ -178,9 +182,11 @@
     mapLayer.destroy();
     mapLayer = newLayer;
     stage.add(mapLayer);
-    overlayLayer.moveToTop();
 
-    reattachBehaviourToLayer(mapLayer);
+    // Re-attach behaviour to all top-level groups (tables, rows, etc.)
+    mapLayer.getChildren().forEach((node) => {
+      attachNodeBehaviour(node);
+    });
 
     mapLayer.draw();
     updateSeatCount();
@@ -219,7 +225,7 @@
       return;
     }
 
-    // Non-seating elements – Stage, Bar/Kiosk, Exit resizable horizontally
+    // Non-seating elements – Stage / Bar / Exit are resizable horizontally
     if (shapeType === "stage" || shapeType === "bar" || shapeType === "exit") {
       transformer.rotateEnabled(false);
       transformer.enabledAnchors(["middle-left", "middle-right"]);
@@ -237,7 +243,6 @@
       transformer.nodes([]);
       overlayLayer.draw();
     }
-    // If you have a custom inspector, call it with null:
     if (typeof window.renderSeatmapInspector === "function") {
       window.renderSeatmapInspector(null);
     }
@@ -246,20 +251,172 @@
   function selectNode(node) {
     selectedNode = node;
     configureTransformerForNode(node);
-    transformer.nodes(node ? [node] : []);
+    transformer.nodes([node]);
     overlayLayer.draw();
 
-    // Hook for the inspector panel (existing implementation kept)
     if (typeof window.renderSeatmapInspector === "function") {
-      window.renderSeatmapInspector(node || null);
+      window.renderSeatmapInspector(node);
     }
   }
 
-  // ---------- Shape factories ----------
+  // ---------- Shape helpers ----------
 
   function snap(v) {
     return Math.round(v / GRID_SIZE) * GRID_SIZE;
   }
+
+  // Dynamic circular table geometry so seats never overlap
+  function buildCircularTableContent(group) {
+    const seatCount = group.getAttr("seatCount") || 8;
+
+    group.destroyChildren();
+
+    const seatRadius = SEAT_RADIUS;
+    const minTableRadius = 18;
+    const seatRingOffset = 12;
+
+    const minArc = 2 * seatRadius + SEAT_GAP;
+    const requiredCircumference = minArc * seatCount;
+    const requiredRadius = requiredCircumference / (2 * Math.PI);
+    const tableRadius = Math.max(minTableRadius, requiredRadius - seatRingOffset);
+    const seatRingRadius = tableRadius + seatRingOffset;
+
+    const table = new Konva.Circle({
+      radius: tableRadius,
+      stroke: "#4b5563",
+      strokeWidth: 1.4,
+    });
+    group.add(table);
+
+    for (let i = 0; i < seatCount; i += 1) {
+      const angle = (i / seatCount) * Math.PI * 2;
+      const sx = Math.cos(angle) * seatRingRadius;
+      const sy = Math.sin(angle) * seatRingRadius;
+      const seat = new Konva.Circle({
+        x: sx,
+        y: sy,
+        radius: seatRadius,
+        stroke: "#4b5563",
+        strokeWidth: 1.3,
+        isSeat: true,
+      });
+      group.add(seat);
+    }
+  }
+
+  // Dynamic rectangular table geometry so seats don't squash / overlap
+  function buildRectTableContent(group) {
+    const longSideSeats = group.getAttr("longSideSeats") || 4;
+    const shortSideSeats = group.getAttr("shortSideSeats") || 2;
+
+    group.destroyChildren();
+
+    const seatRadius = SEAT_RADIUS;
+    const seatSpacing = 2 * seatRadius + SEAT_GAP;
+
+    const baseWidth = 80;
+    const baseHeight = 32;
+
+    const width = Math.max(baseWidth, seatSpacing * (longSideSeats + 1));
+    const height = Math.max(baseHeight, seatSpacing * (shortSideSeats + 1));
+
+    const table = new Konva.Rect({
+      width,
+      height,
+      cornerRadius: 6,
+      stroke: "#4b5563",
+      strokeWidth: 1.4,
+      offsetX: width / 2,
+      offsetY: height / 2,
+    });
+
+    group.add(table);
+
+    // long sides (top + bottom)
+    for (let i = 0; i < longSideSeats; i += 1) {
+      const frac = (i + 1) / (longSideSeats + 1);
+      const sx = (frac - 0.5) * width;
+
+      const topSeat = new Konva.Circle({
+        x: sx,
+        y: -height / 2 - 10,
+        radius: seatRadius,
+        stroke: "#4b5563",
+        strokeWidth: 1.3,
+        isSeat: true,
+      });
+
+      const bottomSeat = new Konva.Circle({
+        x: sx,
+        y: height / 2 + 10,
+        radius: seatRadius,
+        stroke: "#4b5563",
+        strokeWidth: 1.3,
+        isSeat: true,
+      });
+
+      group.add(topSeat);
+      group.add(bottomSeat);
+    }
+
+    // short sides (left + right)
+    for (let i = 0; i < shortSideSeats; i += 1) {
+      const frac = (i + 1) / (shortSideSeats + 1);
+      const sy = (frac - 0.5) * height;
+
+      const leftSeat = new Konva.Circle({
+        x: -width / 2 - 10,
+        y: sy,
+        radius: seatRadius,
+        stroke: "#4b5563",
+        strokeWidth: 1.3,
+        isSeat: true,
+      });
+
+      const rightSeat = new Konva.Circle({
+        x: width / 2 + 10,
+        y: sy,
+        radius: seatRadius,
+        stroke: "#4b5563",
+        strokeWidth: 1.3,
+        isSeat: true,
+      });
+
+      group.add(leftSeat);
+      group.add(rightSeat);
+    }
+  }
+
+  // Dynamic row-of-seats geometry (supports multiple rows)
+  function buildRowOfSeatsContent(group) {
+    const seatCount = group.getAttr("rowSeatCount") || 10;
+    const rowCount = group.getAttr("rowCount") || 1;
+
+    group.destroyChildren();
+
+    const seatRadius = SEAT_RADIUS;
+    const seatSpacing = 2 * seatRadius + SEAT_GAP;
+    const rowSpacing = seatSpacing + 6;
+
+    for (let row = 0; row < rowCount; row += 1) {
+      const y = (row - (rowCount - 1) / 2) * rowSpacing;
+
+      for (let i = 0; i < seatCount; i += 1) {
+        const x = (i - (seatCount - 1) / 2) * seatSpacing;
+        const seat = new Konva.Circle({
+          x,
+          y,
+          radius: seatRadius,
+          stroke: "#4b5563",
+          strokeWidth: 1.3,
+          isSeat: true,
+        });
+        group.add(seat);
+      }
+    }
+  }
+
+  // ---------- Shape factories ----------
 
   function createSectionBlock(x, y) {
     const group = new Konva.Group({
@@ -284,22 +441,27 @@
 
   function createStage(x, y) {
     const group = new Konva.Group({
-      x: snap(x) - 100,
-      y: snap(y) - 24,
+      x: snap(x) - 120,
+      y: snap(y) - 26,
       draggable: true,
       name: "stage",
       shapeType: "stage",
     });
 
+    const width = 240;
+    const height = 52;
+
     const rect = new Konva.Rect({
-      width: 200,
-      height: 52,
-      cornerRadius: 10,
-      stroke: "#0f172a",
+      width,
+      height,
+      cornerRadius: 12,
+      stroke: "#111827",
       strokeWidth: 1.7,
-      fillLinearGradientStartPoint: { x: 0, y: 0 },
-      fillLinearGradientEndPoint: { x: 200, y: 0 },
-      fillLinearGradientColorStops: [0, "#0f172a", 1, "#1d4ed8"],
+      fillLinearGradientStartPoint: { x: -width / 2, y: 0 },
+      fillLinearGradientEndPoint: { x: width / 2, y: 0 },
+      fillLinearGradientColorStops: [0, "#0f6fff", 1, "#22c1c3"], // simple on-brand gradient
+      offsetX: width / 2,
+      offsetY: height / 2,
     });
 
     const label = new Konva.Text({
@@ -309,9 +471,11 @@
       fontFamily: "system-ui",
       align: "center",
       verticalAlign: "middle",
-      width: rect.width(),
-      height: rect.height(),
-      fill: "#f9fafb",
+      width,
+      height,
+      fill: "#ffffff",
+      offsetX: width / 2,
+      offsetY: height / 2,
     });
 
     group.add(rect);
@@ -328,12 +492,17 @@
       shapeType: "bar",
     });
 
+    const width = 140;
+    const height = 36;
+
     const rect = new Konva.Rect({
-      width: 140,
-      height: 36,
+      width,
+      height,
       cornerRadius: 8,
       stroke: "#4b5563",
       strokeWidth: 1.5,
+      offsetX: width / 2,
+      offsetY: height / 2,
     });
 
     const label = new Konva.Text({
@@ -342,9 +511,11 @@
       fontFamily: "system-ui",
       align: "center",
       verticalAlign: "middle",
-      width: rect.width(),
-      height: rect.height(),
+      width,
+      height,
       fill: "#4b5563",
+      offsetX: width / 2,
+      offsetY: height / 2,
     });
 
     group.add(rect);
@@ -361,12 +532,17 @@
       shapeType: "exit",
     });
 
+    const width = 100;
+    const height = 36;
+
     const rect = new Konva.Rect({
-      width: 100,
-      height: 36,
+      width,
+      height,
       cornerRadius: 8,
       stroke: "#16a34a",
       strokeWidth: 1.6,
+      offsetX: width / 2,
+      offsetY: height / 2,
     });
 
     const label = new Konva.Text({
@@ -375,9 +551,11 @@
       fontFamily: "system-ui",
       align: "center",
       verticalAlign: "middle",
-      width: rect.width(),
-      height: rect.height(),
+      width,
+      height,
       fill: "#16a34a",
+      offsetX: width / 2,
+      offsetY: height / 2,
     });
 
     group.add(rect);
@@ -415,7 +593,7 @@
     });
 
     const circle = new Konva.Circle({
-      radius: 8,
+      radius: SEAT_RADIUS,
       stroke: "#4b5563",
       strokeWidth: 1.4,
       isSeat: true,
@@ -435,42 +613,7 @@
     });
 
     group.setAttr("seatCount", seatCount);
-
-    const seatRadius = 7;
-    const baseTableRadius = 24;
-    const minCenterGap = 2 * seatRadius + SEAT_MIN_GAP;
-
-    // ensure no overlap: 2R sin(pi/n) >= minCenterGap
-    const angle = Math.PI / seatCount;
-    const requiredR =
-      angle > 0 ? minCenterGap / (2 * Math.sin(angle)) : baseTableRadius;
-    const tableRadius = Math.max(baseTableRadius, requiredR);
-
-    const table = new Konva.Circle({
-      radius: tableRadius,
-      stroke: "#4b5563",
-      strokeWidth: 1.4,
-    });
-
-    group.add(table);
-
-    const seatRingRadius = tableRadius + seatRadius + 4;
-
-    for (let i = 0; i < seatCount; i += 1) {
-      const a = (i / seatCount) * Math.PI * 2;
-      const sx = Math.cos(a) * seatRingRadius;
-      const sy = Math.sin(a) * seatRingRadius;
-      const seat = new Konva.Circle({
-        x: sx,
-        y: sy,
-        radius: seatRadius,
-        stroke: "#4b5563",
-        strokeWidth: 1.3,
-        isSeat: true,
-      });
-      group.add(seat);
-    }
-
+    buildCircularTableContent(group);
     return group;
   }
 
@@ -492,87 +635,7 @@
     group.setAttr("longSideSeats", longSideSeats);
     group.setAttr("shortSideSeats", shortSideSeats);
 
-    const seatRadius = 6;
-    const minGap = SEAT_MIN_GAP;
-
-    // scale table so seats along each side don't overlap
-    const baseWidth = 80;
-    const baseHeight = 32;
-
-    const width = Math.max(
-      baseWidth,
-      (longSideSeats + 1) * (2 * seatRadius + minGap)
-    );
-    const height = Math.max(
-      baseHeight,
-      (shortSideSeats + 1) * (2 * seatRadius + minGap)
-    );
-
-    const table = new Konva.Rect({
-      width,
-      height,
-      cornerRadius: 6,
-      stroke: "#4b5563",
-      strokeWidth: 1.4,
-      offsetX: width / 2,
-      offsetY: height / 2,
-    });
-
-    group.add(table);
-
-    // long sides (top + bottom)
-    for (let i = 0; i < longSideSeats; i += 1) {
-      const frac = (i + 1) / (longSideSeats + 1);
-      const sx = (frac - 0.5) * width;
-
-      const topSeat = new Konva.Circle({
-        x: sx,
-        y: -height / 2 - seatRadius - 4,
-        radius: seatRadius,
-        stroke: "#4b5563",
-        strokeWidth: 1.3,
-        isSeat: true,
-      });
-
-      const bottomSeat = new Konva.Circle({
-        x: sx,
-        y: height / 2 + seatRadius + 4,
-        radius: seatRadius,
-        stroke: "#4b5563",
-        strokeWidth: 1.3,
-        isSeat: true,
-      });
-
-      group.add(topSeat);
-      group.add(bottomSeat);
-    }
-
-    // short sides (left + right)
-    for (let i = 0; i < shortSideSeats; i += 1) {
-      const frac = (i + 1) / (shortSideSeats + 1);
-      const sy = (frac - 0.5) * height;
-
-      const leftSeat = new Konva.Circle({
-        x: -width / 2 - seatRadius + -4,
-        y: sy,
-        radius: seatRadius,
-        stroke: "#4b5563",
-        strokeWidth: 1.3,
-        isSeat: true,
-      });
-
-      const rightSeat = new Konva.Circle({
-        x: width / 2 + seatRadius + 4,
-        y: sy,
-        radius: seatRadius,
-        stroke: "#4b5563",
-        strokeWidth: 1.3,
-        isSeat: true,
-      });
-
-      group.add(leftSeat);
-      group.add(rightSeat);
-    }
+    buildRectTableContent(group);
 
     return group;
   }
@@ -589,26 +652,7 @@
     group.setAttr("rowSeatCount", seatCount);
     group.setAttr("rowCount", rowCount);
 
-    const spacing = 20;
-    const rowSpacing = 24;
-    const seatRadius = 6;
-
-    for (let r = 0; r < rowCount; r += 1) {
-      const ry = (r - (rowCount - 1) / 2) * rowSpacing;
-
-      for (let i = 0; i < seatCount; i += 1) {
-        const sx = (i - (seatCount - 1) / 2) * spacing;
-        const seat = new Konva.Circle({
-          x: sx,
-          y: ry,
-          radius: seatRadius,
-          stroke: "#4b5563",
-          strokeWidth: 1.3,
-          isSeat: true,
-        });
-        group.add(seat);
-      }
-    }
+    buildRowOfSeatsContent(group);
 
     return group;
   }
@@ -617,6 +661,8 @@
 
   function attachNodeBehaviour(node) {
     if (!(node instanceof Konva.Group)) return;
+
+    const shapeType = node.getAttr("shapeType");
 
     node.on("mouseover", () => {
       stage.container().style.cursor = "grab";
@@ -632,26 +678,6 @@
       selectNode(node);
     });
 
-    // double-click text labels to edit
-    node.on("dblclick dbltap", () => {
-      const shapeType = node.getAttr("shapeType");
-      if (shapeType !== "text") return;
-
-      const textNode = node.findOne("Text");
-      if (!textNode) return;
-
-      const current = textNode.text();
-      const next = window.prompt("Edit label text:", current);
-      if (next === null) return;
-
-      const trimmed = String(next).trim();
-      if (trimmed) {
-        textNode.text(trimmed);
-        mapLayer.batchDraw();
-        pushHistory();
-      }
-    });
-
     node.on("dragend", () => {
       node.position({
         x: snap(node.x()),
@@ -662,119 +688,111 @@
     });
 
     node.on("transformend", () => {
-      const shapeType = node.getAttr("shapeType");
+      const st = node.getAttr("shapeType");
 
-      // For Stage, Bar and Exit, convert scale into width only (keep label neat)
-      if (shapeType === "stage" || shapeType === "bar" || shapeType === "exit") {
+      if (st === "stage" || st === "bar" || st === "exit") {
         const scaleX = node.scaleX();
-        const scaleY = node.scaleY();
-
         const rect = node.findOne("Rect");
         const label = node.findOne("Text");
 
         if (rect) {
           rect.width(rect.width() * scaleX);
-          rect.height(rect.height() * scaleY);
-
-          // keep gradient aligned with width
-          if (shapeType === "stage") {
-            rect.fillLinearGradientEndPoint({
-              x: rect.width(),
-              y: 0,
-            });
-          }
         }
         if (label && rect) {
           label.width(rect.width());
-          label.height(rect.height());
+          label.offsetX(rect.width() / 2);
         }
 
-        // reset group scale so text doesn't stretch
         node.scale({ x: 1, y: 1 });
       } else {
-        // For seating / other elements, we only want rotation – never scale
+        // seating / other elements: we only want rotation – never scale
         node.scale({ x: 1, y: 1 });
       }
 
       mapLayer.batchDraw();
       pushHistory();
     });
+
+    // Text label inline edit (double-click)
+    if (shapeType === "text") {
+      node.on("dblclick", () => {
+        const textNode = node.findOne("Text");
+        if (!textNode) return;
+        const current = textNode.text();
+        const next = window.prompt("Label text", current);
+        if (next !== null) {
+          textNode.text(next);
+          mapLayer.batchDraw();
+          pushHistory();
+        }
+      });
+    }
   }
 
   function createNodeForTool(tool, pos) {
     const { x, y } = pos;
 
-    if (tool === "row") {
-      const seatsInput = window.prompt(
-        "How many seats in each row?",
-        "10"
-      );
-      if (seatsInput === null) return null;
-      const seatCount = Math.max(
-        1,
-        parseInt(seatsInput, 10) || 10
-      );
-
-      const rowsInput = window.prompt(
-        "How many rows in this block?",
-        "1"
-      );
-      if (rowsInput === null) return null;
-      const rowCount = Math.max(
-        1,
-        parseInt(rowsInput, 10) || 1
-      );
-
-      return createRowOfSeats(x, y, seatCount, rowCount);
-    }
-
-    if (tool === "circle-table") {
-      const input = window.prompt(
-        "How many seats around the table?",
-        "8"
-      );
-      if (input === null) return null;
-      const seatCount = Math.max(1, parseInt(input, 10) || 8);
-      return createCircularTable(x, y, seatCount);
-    }
-
-    if (tool === "rect-table") {
-      const input = window.prompt(
-        "How many seats on the long side and short side? (e.g. 4x2 or 4,2)",
-        "4x2"
-      );
-      if (input === null) return null;
-
-      let cleaned = String(input).toLowerCase().replace(" ", "");
-      cleaned = cleaned.replace("x", ",");
-      const parts = cleaned.split(",");
-
-      let longSideSeats = parseInt(parts[0], 10);
-      let shortSideSeats = parseInt(parts[1], 10);
-
-      if (!Number.isFinite(longSideSeats) || longSideSeats <= 0) {
-        longSideSeats = 4;
-      }
-      if (!Number.isFinite(shortSideSeats) || shortSideSeats <= 0) {
-        shortSideSeats = 2;
-      }
-
-      return createRectTable(x, y, { longSideSeats, shortSideSeats });
-    }
-
     switch (tool) {
       case "section":
         return createSectionBlock(x, y);
+
+      case "row": {
+        const seatRaw = window.prompt("How many seats in each row?", "10");
+        if (seatRaw === null) return null;
+        const seatCount = Math.max(1, Number.parseInt(seatRaw, 10) || 10);
+
+        const rowRaw = window.prompt("How many rows in this section?", "1");
+        if (rowRaw === null) return null;
+        const rowCount = Math.max(1, Number.parseInt(rowRaw, 10) || 1);
+
+        return createRowOfSeats(x, y, seatCount, rowCount);
+      }
+
       case "single":
         return createSingleSeat(x, y);
+
+      case "circle-table": {
+        const raw = window.prompt(
+          "How many seats around this table?",
+          "8"
+        );
+        if (raw === null) return null;
+        const seatCount = Math.max(1, Number.parseInt(raw, 10) || 8);
+        return createCircularTable(x, y, seatCount);
+      }
+
+      case "rect-table": {
+        const raw = window.prompt(
+          "How many seats on the long and short sides? (e.g. 4x2)",
+          "4x2"
+        );
+        if (raw === null) return null;
+
+        let longSideSeats = 4;
+        let shortSideSeats = 2;
+
+        const cleaned = String(raw).toLowerCase().replace(/\s+/g, "");
+        const parts = cleaned.split(/x|,|:/);
+        if (parts.length >= 2) {
+          longSideSeats = Math.max(0, Number.parseInt(parts[0], 10) || 4);
+          shortSideSeats = Math.max(0, Number.parseInt(parts[1], 10) || 2);
+        }
+
+        return createRectTable(x, y, { longSideSeats, shortSideSeats });
+      }
+
       case "stage":
         return createStage(x, y);
+
       case "bar":
         return createBar(x, y);
+
       case "exit":
         return createExit(x, y);
+
       case "text":
         return createTextLabel(x, y);
+
       default:
         return null;
     }
@@ -783,13 +801,11 @@
   // ---------- Init Konva ----------
 
   function initStage() {
-    const width = container.clientWidth - STAGE_PADDING * 2;
-    const height = container.clientHeight - STAGE_PADDING * 2;
-
+    // initial size – will be adjusted by resizeStageToContainer()
     stage = new Konva.Stage({
       container: "app",
-      width,
-      height,
+      width: 800,
+      height: 600,
     });
 
     // Clean base background – remove any CSS grid image underneath
@@ -805,8 +821,6 @@
     stage.add(mapLayer);
     stage.add(overlayLayer);
 
-    drawSquareGrid();
-
     transformer = new Konva.Transformer({
       rotateEnabled: true,
       enabledAnchors: [],
@@ -818,6 +832,8 @@
       borderStrokeWidth: 1.2,
     });
     overlayLayer.add(transformer);
+
+    resizeStageToContainer();
   }
 
   // ---------- Canvas interactions ----------
@@ -826,6 +842,7 @@
     const clickedOnEmpty =
       evt.target === stage || evt.target.getParent() === gridLayer;
 
+    // If clicked on existing node, let the node's own handlers deal with it
     if (!clickedOnEmpty) {
       return;
     }
@@ -870,25 +887,10 @@
     const oldScale = stage.scaleX();
     if (Math.abs(clamped - oldScale) < 0.0001) return;
 
-    const center = {
-      x: stage.width() / 2,
-      y: stage.height() / 2,
-    };
-
-    const mousePointTo = {
-      x: (center.x - stage.x()) / oldScale,
-      y: (center.y - stage.y()) / oldScale,
-    };
-
     stage.scale({ x: clamped, y: clamped });
 
-    const newPos = {
-      x: center.x - mousePointTo.x * clamped,
-      y: center.y - mousePointTo.y * clamped,
-    };
-
-    stage.position(newPos);
-    stage.batchDraw();
+    // Ensure the scaled stage still fills the container, then redraw grid
+    resizeStageToContainer();
 
     const label = document.getElementById("sb-zoom-reset");
     if (label) {
@@ -1019,7 +1021,6 @@
         return;
       }
 
-      // konvaJson may be either a Stage or Layer; we expect Stage JSON
       let parsed;
       try {
         parsed =
@@ -1039,7 +1040,6 @@
       let sourceLayer = foundLayers[0];
 
       if (foundLayers.length > 1) {
-        // attempt to pick the first layer with children
         const withChildren = foundLayers.find((l) => l.getChildren().length);
         if (withChildren) sourceLayer = withChildren;
       }
@@ -1050,14 +1050,12 @@
       mapLayer.destroy();
       mapLayer = restored;
       stage.add(mapLayer);
-      overlayLayer.moveToTop();
 
-      reattachBehaviourToLayer(mapLayer);
+      mapLayer.getChildren().forEach((node) => attachNodeBehaviour(node));
 
       mapLayer.draw();
       updateSeatCount();
 
-      // initialise history with this as base
       history = [mapLayer.toJSON()];
       historyIndex = 0;
       updateUndoRedoButtons();
@@ -1082,7 +1080,6 @@
   document.addEventListener("keydown", handleKeyDown);
   window.addEventListener("resize", resizeStageToContainer);
 
-  // initial resize + first history entry + attempt to load existing
-  resizeStageToContainer();
+  // first history entry + attempt to load existing
   loadExistingLayout();
 })();
