@@ -325,7 +325,7 @@
       strokeWidth: 1.6,
       fillLinearGradientStartPoint: { x: 0, y: 0 },
       fillLinearGradientEndPoint: { x: 200, y: 0 },
-      fillLinearGradientColorStops: [0, "#1d4ed8", 1, "#22c1c3"], // bluer fade
+      fillLinearGradientColorStops: [0, "#1d4ed8", 1, "#22c1c3"],
       name: "body-rect",
     });
 
@@ -433,7 +433,6 @@
 
     group.add(text);
 
-    // allow inline editing on double-click
     group.on("dblclick", () => {
       const newText = window.prompt("Text for this label:", text.text());
       if (newText != null) {
@@ -480,15 +479,12 @@
     const seatRadius = 7;
     const seatGap = 4; // desired gap between seat edge and table edge
 
-    // spacing between seat centres so they don't overlap
     const centreSpacing = seatRadius * 2 + seatGap;
     const seatRingRadius = Math.max(
       32,
       (seatCount * centreSpacing) / (2 * Math.PI)
     );
 
-    // choose table radius so there is always at least `seatGap` between
-    // the table edge and the inner edge of the seats
     const tableRadius = Math.max(24, seatRingRadius - seatRadius - seatGap);
 
     const table = new Konva.Circle({
@@ -561,7 +557,6 @@
 
     group.add(table);
 
-    // long sides (top + bottom)
     for (let i = 0; i < longSideSeats; i += 1) {
       const sx =
         -width / 2 + seatRadius * 2 + i * (seatRadius * 2 + seatGap);
@@ -588,7 +583,6 @@
       group.add(bottomSeat);
     }
 
-    // short sides (left + right)
     for (let i = 0; i < shortSideSeats; i += 1) {
       const sy =
         -height / 2 + seatRadius * 2 + i * (seatRadius * 2 + seatGap);
@@ -667,12 +661,11 @@
       y: bounds.y - padding,
       width: bounds.width + padding * 2,
       height: bounds.height + padding * 2,
-      fill: "rgba(0,0,0,0)", // invisible but clickable
+      fill: "rgba(0,0,0,0)",
       listening: true,
       name: "hit-rect",
     });
 
-    // send behind all other children
     group.add(hitRect);
     hitRect.moveToBottom();
   }
@@ -681,7 +674,6 @@
     if (!(node instanceof Konva.Group)) return null;
     const rect = node.findOne(".body-rect");
     if (rect) return rect;
-    // fallback: first rect that is not the hit-rect
     const rects = node.find("Rect");
     for (let i = 0; i < rects.length; i += 1) {
       if (rects[i].name() !== "hit-rect") return rects[i];
@@ -694,7 +686,6 @@
   function attachNodeBehaviour(node) {
     if (!(node instanceof Konva.Group)) return;
 
-    // Make the whole bounding box clickable (not just the circles)
     ensureHitRect(node);
 
     node.on("mouseover", () => {
@@ -706,16 +697,25 @@
     });
 
     node.on("mousedown", (e) => {
-      // prevent background click from firing
       e.cancelBubble = true;
-      const additive = !!(e.evt && e.evt.shiftKey);
-      selectNode(node, additive);
+
+      const nodes = transformer ? transformer.nodes() : [];
+      const alreadySelected = nodes.includes(node);
+      const shift = !!(e.evt && e.evt.shiftKey);
+
+      if (shift) {
+        // Toggle this node in the existing selection
+        selectNode(node, true);
+      } else if (!alreadySelected) {
+        // Start a new single selection
+        selectNode(node, false);
+      }
+      // If already selected and no shift, keep the multi-selection as-is
     });
 
     node.on("dragstart", () => {
       const nodes = transformer ? transformer.nodes() : [];
-      if (!nodes.includes(node)) {
-        // if you drag an unselected node, treat it as a single selection
+      if (!nodes.length) {
         selectNode(node, false);
       }
       lastDragPos = { x: node.x(), y: node.y() };
@@ -746,7 +746,6 @@
     });
 
     node.on("dragend", () => {
-      // snap all selected nodes to the grid
       const nodes = transformer ? transformer.nodes() : [node];
       nodes.forEach((n) => {
         n.position({
@@ -777,7 +776,6 @@
           rect.width(rect.width() * scaleX);
           rect.height(rect.height() * scaleY);
 
-          // keep stage gradient spanning full width
           if (shapeType === "stage") {
             rect.fillLinearGradientEndPoint({
               x: rect.width(),
@@ -792,10 +790,8 @@
           label.y(rect.y());
         }
 
-        // reset group scale so text doesn't stretch
         node.scale({ x: 1, y: 1 });
       } else {
-        // Seating / other elements – rotation only, no scaling
         node.scale({ x: 1, y: 1 });
       }
 
@@ -931,17 +927,13 @@
     const clickedOnEmpty =
       evt.target === stage || evt.target.getParent() === gridLayer;
 
-    if (!clickedOnEmpty) {
-      return;
-    }
+    if (!clickedOnEmpty) return;
 
-    // If no active tool, just clear selection
     if (!activeTool) {
       clearSelection();
       return;
     }
 
-    // position in mapLayer coordinates (so zoom doesn't break placement)
     const pos = mapLayer.getRelativePointerPosition();
     if (!pos) return;
 
@@ -953,21 +945,18 @@
     mapLayer.batchDraw();
     updateSeatCount();
     selectNode(node);
-    pushHistory(); // create is always a separate undo step
+    pushHistory();
   }
 
-  // keyboard shortcuts (delete, copy, paste)
   function handleKeyDown(e) {
     const nodes = transformer ? transformer.nodes() : [];
 
-    // ignore when typing in an input / textarea
     const tag =
       document.activeElement && document.activeElement.tagName
         ? document.activeElement.tagName.toLowerCase()
         : "";
     if (tag === "input" || tag === "textarea") return;
 
-    // Delete
     if (e.key === "Delete" || e.key === "Backspace") {
       if (!nodes.length) return;
       nodes.forEach((n) => n.destroy());
@@ -979,7 +968,6 @@
       return;
     }
 
-    // Copy
     if (
       (e.key === "c" || e.key === "C") &&
       (e.metaKey || e.ctrlKey)
@@ -990,7 +978,6 @@
       return;
     }
 
-    // Paste
     if (
       (e.key === "v" || e.key === "V") &&
       (e.metaKey || e.ctrlKey)
@@ -1016,7 +1003,8 @@
     }
   }
 
-  // zoom
+  // ---------- Zoom ----------
+
   function setZoom(scale) {
     if (!stage) return;
 
@@ -1026,8 +1014,6 @@
 
     stage.scale({ x: clamped, y: clamped });
 
-    // Adjust stage size so the visible grid area expands/contracts with zoom,
-    // instead of shrinking into the middle of the canvas.
     stage.size({
       width: baseStageWidth / clamped,
       height: baseStageHeight / clamped,
@@ -1064,7 +1050,8 @@
     }
   }
 
-  // Clear canvas
+  // ---------- Buttons ----------
+
   function hookClearButton() {
     const clearBtn = document.getElementById("sb-clear");
     if (!clearBtn) return;
@@ -1081,7 +1068,6 @@
     });
   }
 
-  // Undo / Redo buttons
   function hookUndoRedoButtons() {
     const undoBtn = document.getElementById("sb-undo");
     const redoBtn = document.getElementById("sb-redo");
@@ -1090,7 +1076,6 @@
     if (redoBtn) redoBtn.addEventListener("click", redo);
   }
 
-  // Tool buttons
   function hookToolButtons() {
     document.querySelectorAll(".tool-button").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -1101,7 +1086,6 @@
     });
   }
 
-  // Save button
   function hookSaveButton() {
     const saveBtn = window.__TICKIN_SAVE_BUTTON__;
     if (!saveBtn) return;
@@ -1132,7 +1116,6 @@
           throw new Error(`Save failed (${res.status})`);
         }
       } catch (err) {
-        // eslint-disable-next-line no-console
         console.error("Error saving seat map", err);
         window.alert("There was a problem saving this layout.");
       } finally {
@@ -1142,7 +1125,7 @@
     });
   }
 
-  // ---------- Load existing layout (if any) ----------
+  // ---------- Load existing layout ----------
 
   async function loadExistingLayout() {
     try {
@@ -1150,7 +1133,7 @@
         `/admin/seating/builder/api/seatmaps/${encodeURIComponent(showId)}`
       );
       if (!res.ok) {
-        pushHistory(); // empty base
+        pushHistory();
         updateSeatCount();
         return;
       }
@@ -1160,7 +1143,7 @@
       const konvaJson = active && active.layout && active.layout.konvaJson;
 
       if (!konvaJson) {
-        pushHistory(); // empty base state
+        pushHistory();
         updateSeatCount();
         return;
       }
@@ -1204,9 +1187,8 @@
       historyIndex = 0;
       updateUndoRedoButtons();
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.error("Error loading existing seat map", err);
-      pushHistory(); // at least have initial state
+      pushHistory();
       updateSeatCount();
     }
   }
