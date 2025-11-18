@@ -24,6 +24,7 @@
   const MIN_ZOOM = 0.4;
   const MAX_ZOOM = 2.4;
   const ZOOM_STEP = 0.1;
+  const SEAT_MIN_GAP = 4; // minimum gap between seat edges
 
   // ---------- State ----------
   let stage;
@@ -39,9 +40,6 @@
   let history = [];
   let historyIndex = -1;
   let isRestoringHistory = false;
-
-  // track current zoom applied to layers (stage itself stays scale 1)
-  let currentZoom = 1;
 
   // Simple seat counter (you can wire this into the inspector later)
   const seatCountEl = document.getElementById("sb-seat-count");
@@ -88,15 +86,6 @@
     }
   }
 
-  // Small helper for positive int prompts
-  function askPositiveInt(message, defaultValue) {
-    const result = window.prompt(message, String(defaultValue));
-    if (result == null) return null;
-    const num = parseInt(result, 10);
-    if (Number.isNaN(num) || num <= 0) return null;
-    return num;
-  }
-
   // ---------- Grid ----------
 
   function drawSquareGrid() {
@@ -132,11 +121,8 @@
     if (!stage) return;
     const width = container.clientWidth - STAGE_PADDING * 2;
     const height = container.clientHeight - STAGE_PADDING * 2;
-
-    stage.width(width);
-    stage.height(height);
+    stage.size({ width, height });
     drawSquareGrid();
-    stage.batchDraw();
   }
 
   // ---------- History ----------
@@ -145,14 +131,13 @@
     const undoBtn = document.getElementById("sb-undo");
     const redoBtn = document.getElementById("sb-redo");
 
-    const canUndo = historyIndex > 0;
-    const canRedo = historyIndex >= 0 && historyIndex < history.length - 1;
-
     if (undoBtn) {
+      const canUndo = historyIndex > 0;
       undoBtn.disabled = !canUndo;
       undoBtn.style.opacity = canUndo ? 1 : 0.4;
     }
     if (redoBtn) {
+      const canRedo = historyIndex < history.length - 1;
       redoBtn.disabled = !canRedo;
       redoBtn.style.opacity = canRedo ? 1 : 0.4;
     }
@@ -173,6 +158,14 @@
     updateUndoRedoButtons();
   }
 
+  function reattachBehaviourToLayer(layer) {
+    if (!layer) return;
+    const children = layer.getChildren ? layer.getChildren() : [];
+    children.forEach((node) => {
+      attachNodeBehaviour(node);
+    });
+  }
+
   function restoreHistory(toIndex) {
     if (toIndex < 0 || toIndex >= history.length) return;
     isRestoringHistory = true;
@@ -185,15 +178,9 @@
     mapLayer.destroy();
     mapLayer = newLayer;
     stage.add(mapLayer);
+    overlayLayer.moveToTop();
 
-    // Apply current zoom to restored layer
-    mapLayer.scale({ x: currentZoom, y: currentZoom });
-    mapLayer.position({ x: 0, y: 0 });
-
-    // Re-attach behaviour to all top-level groups (tables, rows, etc.)
-    mapLayer.getChildren().each((node) => {
-      attachNodeBehaviour(node);
-    });
+    reattachBehaviourToLayer(mapLayer);
 
     mapLayer.draw();
     updateSeatCount();
@@ -216,9 +203,9 @@
   // ---------- Selection / transformer ----------
 
   function configureTransformerForNode(node) {
-    if (!transformer) return;
+    if (!transformer || !node) return;
 
-    const shapeType = node && node.getAttr("shapeType");
+    const shapeType = node.getAttr("shapeType");
 
     // Seating elements: rotate only, no resize
     if (
@@ -239,7 +226,7 @@
       return;
     }
 
-    // Text labels & any other items: no resize, no rotate
+    // Everything else (section / text label): no resize, no rotate
     transformer.rotateEnabled(false);
     transformer.enabledAnchors([]);
   }
@@ -259,12 +246,12 @@
   function selectNode(node) {
     selectedNode = node;
     configureTransformerForNode(node);
-    transformer.nodes([node]);
+    transformer.nodes(node ? [node] : []);
     overlayLayer.draw();
 
     // Hook for the inspector panel (existing implementation kept)
     if (typeof window.renderSeatmapInspector === "function") {
-      window.renderSeatmapInspector(node);
+      window.renderSeatmapInspector(node || null);
     }
   }
 
@@ -311,13 +298,8 @@
       stroke: "#0f172a",
       strokeWidth: 1.7,
       fillLinearGradientStartPoint: { x: 0, y: 0 },
-      fillLinearGradientEndPoint: { x: 200, y: 52 },
-      fillLinearGradientColorStops: [
-        0,
-        "#1d4ed8", // Chuckl / TickIn blue
-        1,
-        "#3b82f6",
-      ],
+      fillLinearGradientEndPoint: { x: 200, y: 0 },
+      fillLinearGradientColorStops: [0, "#0f172a", 1, "#1d4ed8"],
     });
 
     const label = new Konva.Text({
@@ -329,7 +311,7 @@
       verticalAlign: "middle",
       width: rect.width(),
       height: rect.height(),
-      fill: "#ffffff",
+      fill: "#f9fafb",
     });
 
     group.add(rect);
@@ -454,8 +436,15 @@
 
     group.setAttr("seatCount", seatCount);
 
-    const tableRadius = 24;
     const seatRadius = 7;
+    const baseTableRadius = 24;
+    const minCenterGap = 2 * seatRadius + SEAT_MIN_GAP;
+
+    // ensure no overlap: 2R sin(pi/n) >= minCenterGap
+    const angle = Math.PI / seatCount;
+    const requiredR =
+      angle > 0 ? minCenterGap / (2 * Math.sin(angle)) : baseTableRadius;
+    const tableRadius = Math.max(baseTableRadius, requiredR);
 
     const table = new Konva.Circle({
       radius: tableRadius,
@@ -465,10 +454,12 @@
 
     group.add(table);
 
+    const seatRingRadius = tableRadius + seatRadius + 4;
+
     for (let i = 0; i < seatCount; i += 1) {
-      const angle = (i / seatCount) * Math.PI * 2;
-      const sx = Math.cos(angle) * (tableRadius + 14);
-      const sy = Math.sin(angle) * (tableRadius + 14);
+      const a = (i / seatCount) * Math.PI * 2;
+      const sx = Math.cos(a) * seatRingRadius;
+      const sy = Math.sin(a) * seatRingRadius;
       const seat = new Konva.Circle({
         x: sx,
         y: sy,
@@ -501,8 +492,22 @@
     group.setAttr("longSideSeats", longSideSeats);
     group.setAttr("shortSideSeats", shortSideSeats);
 
-    const width = 80;
-    const height = 32;
+    const seatRadius = 6;
+    const minGap = SEAT_MIN_GAP;
+
+    // scale table so seats along each side don't overlap
+    const baseWidth = 80;
+    const baseHeight = 32;
+
+    const width = Math.max(
+      baseWidth,
+      (longSideSeats + 1) * (2 * seatRadius + minGap)
+    );
+    const height = Math.max(
+      baseHeight,
+      (shortSideSeats + 1) * (2 * seatRadius + minGap)
+    );
+
     const table = new Konva.Rect({
       width,
       height,
@@ -515,8 +520,6 @@
 
     group.add(table);
 
-    const seatRadius = 6;
-
     // long sides (top + bottom)
     for (let i = 0; i < longSideSeats; i += 1) {
       const frac = (i + 1) / (longSideSeats + 1);
@@ -524,7 +527,7 @@
 
       const topSeat = new Konva.Circle({
         x: sx,
-        y: -height / 2 - 10,
+        y: -height / 2 - seatRadius - 4,
         radius: seatRadius,
         stroke: "#4b5563",
         strokeWidth: 1.3,
@@ -533,7 +536,7 @@
 
       const bottomSeat = new Konva.Circle({
         x: sx,
-        y: height / 2 + 10,
+        y: height / 2 + seatRadius + 4,
         radius: seatRadius,
         stroke: "#4b5563",
         strokeWidth: 1.3,
@@ -550,7 +553,7 @@
       const sy = (frac - 0.5) * height;
 
       const leftSeat = new Konva.Circle({
-        x: -width / 2 - 10,
+        x: -width / 2 - seatRadius + -4,
         y: sy,
         radius: seatRadius,
         stroke: "#4b5563",
@@ -559,7 +562,7 @@
       });
 
       const rightSeat = new Konva.Circle({
-        x: width / 2 + 10,
+        x: width / 2 + seatRadius + 4,
         y: sy,
         radius: seatRadius,
         stroke: "#4b5563",
@@ -574,7 +577,7 @@
     return group;
   }
 
-  function createRowOfSeats(x, y, seatCount = 10) {
+  function createRowOfSeats(x, y, seatCount = 10, rowCount = 1) {
     const group = new Konva.Group({
       x: snap(x),
       y: snap(y),
@@ -584,21 +587,27 @@
     });
 
     group.setAttr("rowSeatCount", seatCount);
+    group.setAttr("rowCount", rowCount);
 
     const spacing = 20;
+    const rowSpacing = 24;
     const seatRadius = 6;
 
-    for (let i = 0; i < seatCount; i += 1) {
-      const sx = (i - (seatCount - 1) / 2) * spacing;
-      const seat = new Konva.Circle({
-        x: sx,
-        y: 0,
-        radius: seatRadius,
-        stroke: "#4b5563",
-        strokeWidth: 1.3,
-        isSeat: true,
-      });
-      group.add(seat);
+    for (let r = 0; r < rowCount; r += 1) {
+      const ry = (r - (rowCount - 1) / 2) * rowSpacing;
+
+      for (let i = 0; i < seatCount; i += 1) {
+        const sx = (i - (seatCount - 1) / 2) * spacing;
+        const seat = new Konva.Circle({
+          x: sx,
+          y: ry,
+          radius: seatRadius,
+          stroke: "#4b5563",
+          strokeWidth: 1.3,
+          isSeat: true,
+        });
+        group.add(seat);
+      }
     }
 
     return group;
@@ -623,90 +632,22 @@
       selectNode(node);
     });
 
-    // Double-click to edit properties for certain shapes
-    node.on("dblclick", () => {
+    // double-click text labels to edit
+    node.on("dblclick dbltap", () => {
       const shapeType = node.getAttr("shapeType");
-      const pos = node.position();
+      if (shapeType !== "text") return;
 
-      if (shapeType === "text") {
-        const textNode = node.findOne("Text");
-        const current = textNode ? textNode.text() : "Label";
-        const next = window.prompt("Update label text:", current);
-        if (next != null && textNode && next.trim() !== "") {
-          textNode.text(next.trim());
-          mapLayer.batchDraw();
-          pushHistory();
-        }
-        return;
-      }
+      const textNode = node.findOne("Text");
+      if (!textNode) return;
 
-      // Edit circular table seat count
-      if (shapeType === "circular-table") {
-        const current = node.getAttr("seatCount") || 8;
-        const next = askPositiveInt(
-          "How many seats around this table?",
-          current
-        );
-        if (next == null) return;
+      const current = textNode.text();
+      const next = window.prompt("Edit label text:", current);
+      if (next === null) return;
 
-        const newGroup = createCircularTable(pos.x, pos.y, next);
-        attachNodeBehaviour(newGroup);
-        node.destroy();
-        mapLayer.add(newGroup);
+      const trimmed = String(next).trim();
+      if (trimmed) {
+        textNode.text(trimmed);
         mapLayer.batchDraw();
-        updateSeatCount();
-        selectNode(newGroup);
-        pushHistory();
-        return;
-      }
-
-      // Edit rectangular table seat counts
-      if (shapeType === "rect-table") {
-        const currentLong = node.getAttr("longSideSeats") || 4;
-        const currentShort = node.getAttr("shortSideSeats") || 2;
-
-        const longSideSeats = askPositiveInt(
-          "How many seats on each long side?",
-          currentLong
-        );
-        if (longSideSeats == null) return;
-
-        const shortSideSeats = askPositiveInt(
-          "How many seats on each short side?",
-          currentShort
-        );
-        if (shortSideSeats == null) return;
-
-        const newGroup = createRectTable(pos.x, pos.y, {
-          longSideSeats,
-          shortSideSeats,
-        });
-        attachNodeBehaviour(newGroup);
-        node.destroy();
-        mapLayer.add(newGroup);
-        mapLayer.batchDraw();
-        updateSeatCount();
-        selectNode(newGroup);
-        pushHistory();
-        return;
-      }
-
-      // Edit row of seats count
-      if (shapeType === "row-seats") {
-        const currentCount = node.getAttr("rowSeatCount") || 10;
-        const seatCount = askPositiveInt(
-          "How many seats in this row?",
-          currentCount
-        );
-        if (seatCount == null) return;
-
-        const newGroup = createRowOfSeats(pos.x, pos.y, seatCount);
-        attachNodeBehaviour(newGroup);
-        node.destroy();
-        mapLayer.add(newGroup);
-        mapLayer.batchDraw();
-        updateSeatCount();
-        selectNode(newGroup);
         pushHistory();
       }
     });
@@ -734,6 +675,14 @@
         if (rect) {
           rect.width(rect.width() * scaleX);
           rect.height(rect.height() * scaleY);
+
+          // keep gradient aligned with width
+          if (shapeType === "stage") {
+            rect.fillLinearGradientEndPoint({
+              x: rect.width(),
+              y: 0,
+            });
+          }
         }
         if (label && rect) {
           label.width(rect.width());
@@ -755,42 +704,64 @@
   function createNodeForTool(tool, pos) {
     const { x, y } = pos;
 
-    // For seating tools, ask for configuration before creating
     if (tool === "row") {
-      const seatCount = askPositiveInt(
-        "How many seats in this row?",
-        10
+      const seatsInput = window.prompt(
+        "How many seats in each row?",
+        "10"
       );
-      if (seatCount == null) return null;
-      return createRowOfSeats(x, y, seatCount);
+      if (seatsInput === null) return null;
+      const seatCount = Math.max(
+        1,
+        parseInt(seatsInput, 10) || 10
+      );
+
+      const rowsInput = window.prompt(
+        "How many rows in this block?",
+        "1"
+      );
+      if (rowsInput === null) return null;
+      const rowCount = Math.max(
+        1,
+        parseInt(rowsInput, 10) || 1
+      );
+
+      return createRowOfSeats(x, y, seatCount, rowCount);
     }
 
     if (tool === "circle-table") {
-      const seatCount = askPositiveInt(
-        "How many seats around this table?",
-        8
+      const input = window.prompt(
+        "How many seats around the table?",
+        "8"
       );
-      if (seatCount == null) return null;
+      if (input === null) return null;
+      const seatCount = Math.max(1, parseInt(input, 10) || 8);
       return createCircularTable(x, y, seatCount);
     }
 
     if (tool === "rect-table") {
-      const longSideSeats = askPositiveInt(
-        "How many seats on each long side?",
-        4
+      const input = window.prompt(
+        "How many seats on the long side and short side? (e.g. 4x2 or 4,2)",
+        "4x2"
       );
-      if (longSideSeats == null) return null;
+      if (input === null) return null;
 
-      const shortSideSeats = askPositiveInt(
-        "How many seats on each short side?",
-        2
-      );
-      if (shortSideSeats == null) return null;
+      let cleaned = String(input).toLowerCase().replace(" ", "");
+      cleaned = cleaned.replace("x", ",");
+      const parts = cleaned.split(",");
+
+      let longSideSeats = parseInt(parts[0], 10);
+      let shortSideSeats = parseInt(parts[1], 10);
+
+      if (!Number.isFinite(longSideSeats) || longSideSeats <= 0) {
+        longSideSeats = 4;
+      }
+      if (!Number.isFinite(shortSideSeats) || shortSideSeats <= 0) {
+        shortSideSeats = 2;
+      }
 
       return createRectTable(x, y, { longSideSeats, shortSideSeats });
     }
 
-    // Non-seating tools
     switch (tool) {
       case "section":
         return createSectionBlock(x, y);
@@ -893,22 +864,31 @@
     }
   }
 
-  // zoom – scale map + overlay layers, keep grid full canvas
+  // zoom
   function setZoom(scale) {
     const clamped = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, scale));
-    if (Math.abs(clamped - currentZoom) < 0.0001) return;
+    const oldScale = stage.scaleX();
+    if (Math.abs(clamped - oldScale) < 0.0001) return;
 
-    currentZoom = clamped;
+    const center = {
+      x: stage.width() / 2,
+      y: stage.height() / 2,
+    };
 
-    if (mapLayer && overlayLayer) {
-      mapLayer.scale({ x: currentZoom, y: currentZoom });
-      overlayLayer.scale({ x: currentZoom, y: currentZoom });
-      mapLayer.position({ x: 0, y: 0 });
-      overlayLayer.position({ x: 0, y: 0 });
-    }
+    const mousePointTo = {
+      x: (center.x - stage.x()) / oldScale,
+      y: (center.y - stage.y()) / oldScale,
+    };
 
+    stage.scale({ x: clamped, y: clamped });
+
+    const newPos = {
+      x: center.x - mousePointTo.x * clamped,
+      y: center.y - mousePointTo.y * clamped,
+    };
+
+    stage.position(newPos);
     stage.batchDraw();
-    drawSquareGrid(); // keep grid covering the whole area
 
     const label = document.getElementById("sb-zoom-reset");
     if (label) {
@@ -923,12 +903,12 @@
 
     if (btnIn) {
       btnIn.addEventListener("click", () => {
-        setZoom(currentZoom + ZOOM_STEP);
+        setZoom(stage.scaleX() + ZOOM_STEP);
       });
     }
     if (btnOut) {
       btnOut.addEventListener("click", () => {
-        setZoom(currentZoom - ZOOM_STEP);
+        setZoom(stage.scaleX() - ZOOM_STEP);
       });
     }
     if (btnReset) {
@@ -1070,12 +1050,9 @@
       mapLayer.destroy();
       mapLayer = restored;
       stage.add(mapLayer);
+      overlayLayer.moveToTop();
 
-      // Apply current zoom
-      mapLayer.scale({ x: currentZoom, y: currentZoom });
-      mapLayer.position({ x: 0, y: 0 });
-
-      mapLayer.getChildren().each((node) => attachNodeBehaviour(node));
+      reattachBehaviourToLayer(mapLayer);
 
       mapLayer.draw();
       updateSeatCount();
@@ -1103,11 +1080,9 @@
 
   stage.on("mousedown", handleStageClick);
   document.addEventListener("keydown", handleKeyDown);
-
-  // responsive resize
   window.addEventListener("resize", resizeStageToContainer);
-  resizeStageToContainer();
 
-  // first history entry + attempt to load existing
+  // initial resize + first history entry + attempt to load existing
+  resizeStageToContainer();
   loadExistingLayout();
 })();
