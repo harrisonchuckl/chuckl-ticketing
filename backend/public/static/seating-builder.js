@@ -17,7 +17,6 @@
     console.error("seating-builder: #app not found");
     return;
   }
-  
 
   // ---------- Config ----------
   const GRID_SIZE = 32; // perfect square grid
@@ -36,6 +35,10 @@
   let activeTool = null; // "section" | "row" | "single" | "circle-table" | ...
   let selectedNode = null;
   let copiedNodesJson = [];
+
+  // multi-selection and grouped drag state
+  let selectedNodes = new Set();
+  let dragStartPositions = null;
 
   // history is per-mapLayer JSON so we can re-create nodes & re-attach handlers
   let history = [];
@@ -224,6 +227,9 @@
 
   function clearSelection() {
     selectedNode = null;
+    selectedNodes.clear();
+    dragStartPositions = null;
+
     if (transformer) {
       transformer.nodes([]);
       overlayLayer.draw();
@@ -234,7 +240,10 @@
   }
 
   function selectNode(node, additive = false) {
-    if (!transformer) return;
+    if (!transformer || !node) {
+      clearSelection();
+      return;
+    }
 
     let nodes = transformer.nodes();
 
@@ -254,6 +263,9 @@
 
     // expose "primary" node for older code
     selectedNode = nodes.length === 1 ? nodes[0] : null;
+
+    // keep multi-select state in sync
+    selectedNodes = new Set(nodes);
 
     if (typeof window.renderSeatmapInspector === "function") {
       window.renderSeatmapInspector(nodes[0] || null);
@@ -308,7 +320,8 @@
       strokeWidth: 1.6,
       fillLinearGradientStartPoint: { x: 0, y: 0 },
       fillLinearGradientEndPoint: { x: 200, y: 0 },
-      fillLinearGradientColorStops: [0, "#1d4ed8", 1, "#22c1c3"], // bluer fade
+      // bluer fade you preferred
+      fillLinearGradientColorStops: [0, "#1d4ed8", 1, "#22c1c3"],
     });
 
     const label = new Konva.Text({
@@ -446,6 +459,7 @@
     return group;
   }
 
+  // Circular table with guaranteed gap between table + seats
   function createCircularTable(x, y, seatCount = 8) {
     const group = new Konva.Group({
       x: snap(x),
@@ -458,16 +472,17 @@
     group.setAttr("seatCount", seatCount);
 
     const seatRadius = 7;
-    const seatGap = 4; // gap between seats
+    const seatGap = 4; // visual gap between seat and table edge
 
-    // radius at which seat centres sit so they don't overlap
+    // spacing for seats so they don’t overlap each other
     const centreSpacing = seatRadius * 2 + seatGap;
     const seatRingRadius = Math.max(
       32,
       (seatCount * centreSpacing) / (2 * Math.PI)
     );
 
-    const tableRadius = Math.max(24, seatRingRadius - 14);
+    // table sits inside the ring of seats so you always see a gap
+    const tableRadius = Math.max(24, seatRingRadius - (seatRadius + seatGap));
 
     const table = new Konva.Circle({
       radius: tableRadius,
@@ -540,9 +555,7 @@
     // long sides (top + bottom)
     for (let i = 0; i < longSideSeats; i += 1) {
       const sx =
-        -width / 2 +
-        seatRadius * 2 +
-        i * (seatRadius * 2 + seatGap);
+        -width / 2 + seatRadius * 2 + i * (seatRadius * 2 + seatGap);
 
       const topSeat = new Konva.Circle({
         x: sx,
@@ -569,9 +582,7 @@
     // short sides (left + right)
     for (let i = 0; i < shortSideSeats; i += 1) {
       const sy =
-        -height / 2 +
-        seatRadius * 2 +
-        i * (seatRadius * 2 + seatGap);
+        -height / 2 + seatRadius * 2 + i * (seatRadius * 2 + seatGap);
 
       const leftSeat = new Konva.Circle({
         x: -width / 2 - 10,
@@ -635,6 +646,7 @@
 
   // ---------- Hit-area helper ----------
 
+  // Ensures the whole block is draggable/clickable (not just on top of seats)
   function ensureHitRect(group) {
     if (!(group instanceof Konva.Group)) return;
     if (group.findOne(".hit-rect")) return;
@@ -652,7 +664,6 @@
       name: "hit-rect",
     });
 
-    // send behind all other children
     group.add(hitRect);
     hitRect.moveToBottom();
   }
@@ -662,7 +673,7 @@
   function attachNodeBehaviour(node) {
     if (!(node instanceof Konva.Group)) return;
 
-    // Make the whole bounding box clickable (not just the circles)
+    // Make the whole bounding box clickable / draggable
     ensureHitRect(node);
 
     node.on("mouseover", () => {
@@ -680,11 +691,51 @@
       selectNode(node, additive);
     });
 
-    node.on("dragend", () => {
-      node.position({
-        x: snap(node.x()),
-        y: snap(node.y()),
+    // Group drag: if multiple nodes are selected, move them together
+    node.on("dragstart", () => {
+      if (selectedNodes.size > 1 && selectedNodes.has(node)) {
+        dragStartPositions = {};
+        selectedNodes.forEach((n) => {
+          dragStartPositions[n._id] = { x: n.x(), y: n.y() };
+        });
+      } else {
+        dragStartPositions = null;
+      }
+    });
+
+    node.on("dragmove", () => {
+      if (!dragStartPositions || !selectedNodes.has(node)) return;
+
+      const startMain = dragStartPositions[node._id];
+      if (!startMain) return;
+
+      const dx = node.x() - startMain.x;
+      const dy = node.y() - startMain.y;
+
+      selectedNodes.forEach((n) => {
+        if (n === node) return;
+        const start = dragStartPositions[n._id];
+        if (!start) return;
+        n.position({ x: start.x + dx, y: start.y + dy });
       });
+
+      mapLayer.batchDraw();
+    });
+
+    node.on("dragend", () => {
+      const nodesToSnap =
+        dragStartPositions && selectedNodes.size > 1 && selectedNodes.has(node)
+          ? Array.from(selectedNodes)
+          : [node];
+
+      nodesToSnap.forEach((n) => {
+        n.position({
+          x: snap(n.x()),
+          y: snap(n.y()),
+        });
+      });
+
+      dragStartPositions = null;
       mapLayer.batchDraw();
       pushHistory();
     });
@@ -902,10 +953,7 @@
     }
 
     // Copy
-    if (
-      (e.key === "c" || e.key === "C") &&
-      (e.metaKey || e.ctrlKey)
-    ) {
+    if ((e.key === "c" || e.key === "C") && (e.metaKey || e.ctrlKey)) {
       if (!nodes.length) return;
       copiedNodesJson = nodes.map((n) => n.toJSON());
       e.preventDefault();
@@ -913,10 +961,7 @@
     }
 
     // Paste
-    if (
-      (e.key === "v" || e.key === "V") &&
-      (e.metaKey || e.ctrlKey)
-    ) {
+    if ((e.key === "v" || e.key === "V") && (e.metaKey || e.ctrlKey)) {
       if (!copiedNodesJson.length) return;
 
       const newNodes = copiedNodesJson.map((json) => {
@@ -931,8 +976,16 @@
       mapLayer.batchDraw();
       updateSeatCount();
       pushHistory();
-      selectNode(newNodes[0]);
+
+      // select all pasted nodes as a group so they drag together
       transformer.nodes(newNodes);
+      selectedNodes = new Set(newNodes);
+      selectedNode = newNodes.length === 1 ? newNodes[0] : null;
+
+      if (typeof window.renderSeatmapInspector === "function") {
+        window.renderSeatmapInspector(newNodes[0] || null);
+      }
+
       e.preventDefault();
     }
   }
@@ -967,6 +1020,9 @@
     if (label) {
       label.textContent = `${Math.round(clamped * 100)}%`;
     }
+
+    // redraw grid so it stays crisp at new zoom
+    drawSquareGrid();
   }
 
   function hookZoomButtons() {
@@ -1138,7 +1194,6 @@
     }
   }
 
-  
   // ---------- Boot ----------
 
   initStage();
