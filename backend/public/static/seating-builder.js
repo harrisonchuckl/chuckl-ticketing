@@ -10,6 +10,7 @@
     console.error("seating-builder: missing window.__SEATMAP_SHOW_ID__");
     return;
   }
+  
 
   const container = document.getElementById("app");
   if (!container) {
