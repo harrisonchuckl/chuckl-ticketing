@@ -27,6 +27,9 @@
 
   // ---------- State ----------
   let stage;
+  let baseStageWidth = 0;
+  let baseStageHeight = 0;
+
   let gridLayer;
   let mapLayer;
   let overlayLayer;
@@ -36,9 +39,7 @@
   let selectedNode = null;
   let copiedNodesJson = [];
 
-  // multi-selection and grouped drag state
-  let selectedNodes = new Set();
-  let dragStartPositions = null;
+  let lastDragPos = null;
 
   // history is per-mapLayer JSON so we can re-create nodes & re-attach handlers
   let history = [];
@@ -93,6 +94,8 @@
   // ---------- Grid ----------
 
   function drawSquareGrid() {
+    if (!gridLayer || !stage) return;
+
     gridLayer.destroyChildren();
 
     const width = stage.width();
@@ -123,7 +126,17 @@
     if (!stage) return;
     const width = container.clientWidth - STAGE_PADDING * 2;
     const height = container.clientHeight - STAGE_PADDING * 2;
-    stage.size({ width, height });
+
+    baseStageWidth = width;
+    baseStageHeight = height;
+
+    const currentScale = stage.scaleX() || 1;
+
+    stage.size({
+      width: baseStageWidth / currentScale,
+      height: baseStageHeight / currentScale,
+    });
+
     drawSquareGrid();
   }
 
@@ -213,23 +226,20 @@
       return;
     }
 
-    // Non-seating elements – only Stage + Bar/Kiosk are resizable
-    if (shapeType === "stage" || shapeType === "bar") {
+    // Non-seating elements – Stage, Bar, Exit are resizable horizontally
+    if (shapeType === "stage" || shapeType === "bar" || shapeType === "exit") {
       transformer.rotateEnabled(false);
       transformer.enabledAnchors(["middle-left", "middle-right"]);
       return;
     }
 
-    // Everything else (section / exit / text label): no resize, no rotate
+    // Everything else (section / text label): no resize, no rotate
     transformer.rotateEnabled(false);
     transformer.enabledAnchors([]);
   }
 
   function clearSelection() {
     selectedNode = null;
-    selectedNodes.clear();
-    dragStartPositions = null;
-
     if (transformer) {
       transformer.nodes([]);
       overlayLayer.draw();
@@ -240,10 +250,7 @@
   }
 
   function selectNode(node, additive = false) {
-    if (!transformer || !node) {
-      clearSelection();
-      return;
-    }
+    if (!transformer) return;
 
     let nodes = transformer.nodes();
 
@@ -263,9 +270,6 @@
 
     // expose "primary" node for older code
     selectedNode = nodes.length === 1 ? nodes[0] : null;
-
-    // keep multi-select state in sync
-    selectedNodes = new Set(nodes);
 
     if (typeof window.renderSeatmapInspector === "function") {
       window.renderSeatmapInspector(nodes[0] || null);
@@ -297,6 +301,7 @@
       cornerRadius: 8,
       stroke: "#4b5563",
       strokeWidth: 1.5,
+      name: "body-rect",
     });
 
     group.add(rect);
@@ -320,8 +325,8 @@
       strokeWidth: 1.6,
       fillLinearGradientStartPoint: { x: 0, y: 0 },
       fillLinearGradientEndPoint: { x: 200, y: 0 },
-      // bluer fade you preferred
-      fillLinearGradientColorStops: [0, "#1d4ed8", 1, "#22c1c3"],
+      fillLinearGradientColorStops: [0, "#1d4ed8", 1, "#22c1c3"], // bluer fade
+      name: "body-rect",
     });
 
     const label = new Konva.Text({
@@ -356,6 +361,7 @@
       cornerRadius: 8,
       stroke: "#4b5563",
       strokeWidth: 1.5,
+      name: "body-rect",
     });
 
     const label = new Konva.Text({
@@ -389,6 +395,7 @@
       cornerRadius: 8,
       stroke: "#16a34a",
       strokeWidth: 1.6,
+      name: "body-rect",
     });
 
     const label = new Konva.Text({
@@ -459,7 +466,6 @@
     return group;
   }
 
-  // Circular table with guaranteed gap between table + seats
   function createCircularTable(x, y, seatCount = 8) {
     const group = new Konva.Group({
       x: snap(x),
@@ -472,22 +478,24 @@
     group.setAttr("seatCount", seatCount);
 
     const seatRadius = 7;
-    const seatGap = 4; // visual gap between seat and table edge
+    const seatGap = 4; // desired gap between seat edge and table edge
 
-    // spacing for seats so they don’t overlap each other
+    // spacing between seat centres so they don't overlap
     const centreSpacing = seatRadius * 2 + seatGap;
     const seatRingRadius = Math.max(
       32,
       (seatCount * centreSpacing) / (2 * Math.PI)
     );
 
-    // table sits inside the ring of seats so you always see a gap
-    const tableRadius = Math.max(24, seatRingRadius - (seatRadius + seatGap));
+    // choose table radius so there is always at least `seatGap` between
+    // the table edge and the inner edge of the seats
+    const tableRadius = Math.max(24, seatRingRadius - seatRadius - seatGap);
 
     const table = new Konva.Circle({
       radius: tableRadius,
       stroke: "#4b5563",
       strokeWidth: 1.4,
+      name: "body-rect",
     });
 
     group.add(table);
@@ -548,6 +556,7 @@
       strokeWidth: 1.4,
       offsetX: width / 2,
       offsetY: height / 2,
+      name: "body-rect",
     });
 
     group.add(table);
@@ -646,7 +655,6 @@
 
   // ---------- Hit-area helper ----------
 
-  // Ensures the whole block is draggable/clickable (not just on top of seats)
   function ensureHitRect(group) {
     if (!(group instanceof Konva.Group)) return;
     if (group.findOne(".hit-rect")) return;
@@ -664,8 +672,21 @@
       name: "hit-rect",
     });
 
+    // send behind all other children
     group.add(hitRect);
     hitRect.moveToBottom();
+  }
+
+  function getBodyRect(node) {
+    if (!(node instanceof Konva.Group)) return null;
+    const rect = node.findOne(".body-rect");
+    if (rect) return rect;
+    // fallback: first rect that is not the hit-rect
+    const rects = node.find("Rect");
+    for (let i = 0; i < rects.length; i += 1) {
+      if (rects[i].name() !== "hit-rect") return rects[i];
+    }
+    return null;
   }
 
   // ---------- Behaviour attachment ----------
@@ -673,7 +694,7 @@
   function attachNodeBehaviour(node) {
     if (!(node instanceof Konva.Group)) return;
 
-    // Make the whole bounding box clickable / draggable
+    // Make the whole bounding box clickable (not just the circles)
     ensureHitRect(node);
 
     node.on("mouseover", () => {
@@ -691,51 +712,49 @@
       selectNode(node, additive);
     });
 
-    // Group drag: if multiple nodes are selected, move them together
     node.on("dragstart", () => {
-      if (selectedNodes.size > 1 && selectedNodes.has(node)) {
-        dragStartPositions = {};
-        selectedNodes.forEach((n) => {
-          dragStartPositions[n._id] = { x: n.x(), y: n.y() };
-        });
-      } else {
-        dragStartPositions = null;
+      const nodes = transformer ? transformer.nodes() : [];
+      if (!nodes.includes(node)) {
+        // if you drag an unselected node, treat it as a single selection
+        selectNode(node, false);
       }
+      lastDragPos = { x: node.x(), y: node.y() };
     });
 
     node.on("dragmove", () => {
-      if (!dragStartPositions || !selectedNodes.has(node)) return;
+      const nodes = transformer ? transformer.nodes() : [];
+      if (!lastDragPos) {
+        lastDragPos = { x: node.x(), y: node.y() };
+        return;
+      }
 
-      const startMain = dragStartPositions[node._id];
-      if (!startMain) return;
+      const dx = node.x() - lastDragPos.x;
+      const dy = node.y() - lastDragPos.y;
 
-      const dx = node.x() - startMain.x;
-      const dy = node.y() - startMain.y;
+      if (nodes.length > 1) {
+        nodes.forEach((n) => {
+          if (n === node) return;
+          n.position({
+            x: n.x() + dx,
+            y: n.y() + dy,
+          });
+        });
+      }
 
-      selectedNodes.forEach((n) => {
-        if (n === node) return;
-        const start = dragStartPositions[n._id];
-        if (!start) return;
-        n.position({ x: start.x + dx, y: start.y + dy });
-      });
-
+      lastDragPos = { x: node.x(), y: node.y() };
       mapLayer.batchDraw();
     });
 
     node.on("dragend", () => {
-      const nodesToSnap =
-        dragStartPositions && selectedNodes.size > 1 && selectedNodes.has(node)
-          ? Array.from(selectedNodes)
-          : [node];
-
-      nodesToSnap.forEach((n) => {
+      // snap all selected nodes to the grid
+      const nodes = transformer ? transformer.nodes() : [node];
+      nodes.forEach((n) => {
         n.position({
           x: snap(n.x()),
           y: snap(n.y()),
         });
       });
-
-      dragStartPositions = null;
+      lastDragPos = null;
       mapLayer.batchDraw();
       pushHistory();
     });
@@ -743,11 +762,15 @@
     node.on("transformend", () => {
       const shapeType = node.getAttr("shapeType");
 
-      if (shapeType === "stage" || shapeType === "bar") {
+      if (
+        shapeType === "stage" ||
+        shapeType === "bar" ||
+        shapeType === "exit"
+      ) {
         const scaleX = node.scaleX();
         const scaleY = node.scaleY();
 
-        const rect = node.findOne("Rect");
+        const rect = getBodyRect(node);
         const label = node.findOne("Text");
 
         if (rect) {
@@ -866,6 +889,9 @@
     const width = container.clientWidth - STAGE_PADDING * 2;
     const height = container.clientHeight - STAGE_PADDING * 2;
 
+    baseStageWidth = width;
+    baseStageHeight = height;
+
     stage = new Konva.Stage({
       container: "app",
       width,
@@ -915,7 +941,8 @@
       return;
     }
 
-    const pos = stage.getPointerPosition();
+    // position in mapLayer coordinates (so zoom doesn't break placement)
+    const pos = mapLayer.getRelativePointerPosition();
     if (!pos) return;
 
     const node = createNodeForTool(activeTool, pos);
@@ -953,7 +980,10 @@
     }
 
     // Copy
-    if ((e.key === "c" || e.key === "C") && (e.metaKey || e.ctrlKey)) {
+    if (
+      (e.key === "c" || e.key === "C") &&
+      (e.metaKey || e.ctrlKey)
+    ) {
       if (!nodes.length) return;
       copiedNodesJson = nodes.map((n) => n.toJSON());
       e.preventDefault();
@@ -961,7 +991,10 @@
     }
 
     // Paste
-    if ((e.key === "v" || e.key === "V") && (e.metaKey || e.ctrlKey)) {
+    if (
+      (e.key === "v" || e.key === "V") &&
+      (e.metaKey || e.ctrlKey)
+    ) {
       if (!copiedNodesJson.length) return;
 
       const newNodes = copiedNodesJson.map((json) => {
@@ -976,53 +1009,37 @@
       mapLayer.batchDraw();
       updateSeatCount();
       pushHistory();
-
-      // select all pasted nodes as a group so they drag together
       transformer.nodes(newNodes);
-      selectedNodes = new Set(newNodes);
+      overlayLayer.draw();
       selectedNode = newNodes.length === 1 ? newNodes[0] : null;
-
-      if (typeof window.renderSeatmapInspector === "function") {
-        window.renderSeatmapInspector(newNodes[0] || null);
-      }
-
       e.preventDefault();
     }
   }
 
   // zoom
   function setZoom(scale) {
+    if (!stage) return;
+
     const clamped = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, scale));
-    const oldScale = stage.scaleX();
+    const oldScale = stage.scaleX() || 1;
     if (Math.abs(clamped - oldScale) < 0.0001) return;
-
-    const center = {
-      x: stage.width() / 2,
-      y: stage.height() / 2,
-    };
-
-    const mousePointTo = {
-      x: (center.x - stage.x()) / oldScale,
-      y: (center.y - stage.y()) / oldScale,
-    };
 
     stage.scale({ x: clamped, y: clamped });
 
-    const newPos = {
-      x: center.x - mousePointTo.x * clamped,
-      y: center.y - mousePointTo.y * clamped,
-    };
+    // Adjust stage size so the visible grid area expands/contracts with zoom,
+    // instead of shrinking into the middle of the canvas.
+    stage.size({
+      width: baseStageWidth / clamped,
+      height: baseStageHeight / clamped,
+    });
 
-    stage.position(newPos);
+    drawSquareGrid();
     stage.batchDraw();
 
     const label = document.getElementById("sb-zoom-reset");
     if (label) {
       label.textContent = `${Math.round(clamped * 100)}%`;
     }
-
-    // redraw grid so it stays crisp at new zoom
-    drawSquareGrid();
   }
 
   function hookZoomButtons() {
@@ -1032,12 +1049,12 @@
 
     if (btnIn) {
       btnIn.addEventListener("click", () => {
-        setZoom(stage.scaleX() + ZOOM_STEP);
+        setZoom((stage.scaleX() || 1) + ZOOM_STEP);
       });
     }
     if (btnOut) {
       btnOut.addEventListener("click", () => {
-        setZoom(stage.scaleX() - ZOOM_STEP);
+        setZoom((stage.scaleX() || 1) - ZOOM_STEP);
       });
     }
     if (btnReset) {
