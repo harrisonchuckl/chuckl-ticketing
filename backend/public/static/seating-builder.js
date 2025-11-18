@@ -18,6 +18,7 @@
     return;
   }
   
+  
   const inspectorEl = document.getElementById("sb-inspector");
 
   // ---------- Config ----------
