@@ -51,50 +51,22 @@
   let historyIndex = -1;
   let isRestoringHistory = false;
 
-  // Simple seat counter (wired to Seats on map)
-  const seatCountEl = document.getElementById("sb-seat-count");
-
-  // Right-hand inspector container (created lazily)
+  // Sidebar DOM refs (lazy so script can load before HTML)
+  let seatCountEl = null;
   let inspectorEl = null;
 
-  function ensureInspectorEl() {
-    // If we already have a live element, reuse it
-    if (inspectorEl && document.body.contains(inspectorEl)) {
-      return inspectorEl;
+  function getSeatCountElement() {
+    if (!seatCountEl) {
+      seatCountEl = document.getElementById("sb-seat-count");
     }
+    return seatCountEl;
+  }
 
-    // If template has been updated to include #sb-inspector explicitly, use that
-    const direct = document.getElementById("sb-inspector");
-    if (direct) {
-      inspectorEl = direct;
-      return inspectorEl;
+  function getInspectorElement() {
+    if (!inspectorEl) {
+      inspectorEl = document.getElementById("sb-inspector");
     }
-
-    // Fallback: find the existing "Nothing selected…" helper text and
-    // replace it with a dedicated inspector container.
-    const hintParagraph = Array.from(
-      document.querySelectorAll("p, span, div")
-    ).find((el) => {
-      const text = (el.textContent || "").trim();
-      return text.startsWith(
-        "Nothing selected. Click on a seat, table or object to see quick details here."
-      );
-    });
-
-    if (hintParagraph && hintParagraph.parentElement) {
-      const parent = hintParagraph.parentElement;
-      hintParagraph.remove();
-
-      const panel = document.createElement("div");
-      panel.id = "sb-inspector";
-      panel.className = "sb-inspector-body";
-
-      parent.appendChild(panel);
-      inspectorEl = panel;
-      return inspectorEl;
-    }
-
-    return null;
+    return inspectorEl;
   }
 
   // ---------- Helpers: UI / tools ----------
@@ -117,8 +89,10 @@
 
     // cursor hint
     if (!activeTool) {
-      mapLayer.getStage().container().style.cursor = "default";
-    } else {
+      if (mapLayer && mapLayer.getStage()) {
+        mapLayer.getStage().container().style.cursor = "default";
+      }
+    } else if (mapLayer && mapLayer.getStage()) {
       mapLayer.getStage().container().style.cursor = "crosshair";
     }
   }
@@ -134,8 +108,9 @@
       if (node && node.getAttr("isSeat")) seats += 1;
     }
 
-    if (seatCountEl) {
-      seatCountEl.textContent = seats === 1 ? "1 seat" : `${seats} seats`;
+    const el = getSeatCountElement();
+    if (el) {
+      el.textContent = seats === 1 ? "1 seat" : `${seats} seats`;
     }
   }
 
@@ -492,7 +467,8 @@
     const ringRadiusFromCirc =
       (seatCount * circumferencePerSeat) / (2 * Math.PI);
 
-    const minRingRadius = CIRC_MIN_TABLE_RADIUS + seatRadius + desiredGap;
+    const minRingRadius =
+      CIRC_MIN_TABLE_RADIUS + seatRadius + desiredGap;
 
     const seatRingRadius = Math.max(ringRadiusFromCirc, minRingRadius);
     const tableRadius = seatRingRadius - seatRadius - desiredGap;
@@ -721,7 +697,8 @@
     const ringRadiusFromCirc =
       (seatCount * circumferencePerSeat) / (2 * Math.PI);
 
-    const minRingRadius = CIRC_MIN_TABLE_RADIUS + seatRadius + desiredGap;
+    const minRingRadius =
+      CIRC_MIN_TABLE_RADIUS + seatRadius + desiredGap;
 
     const seatRingRadius = Math.max(ringRadiusFromCirc, minRingRadius);
     const tableRadius = seatRingRadius - seatRadius - desiredGap;
@@ -839,29 +816,34 @@
   // ---------- Selection inspector (right-hand panel) ----------
 
   function renderInspector(node) {
-    const panel = ensureInspectorEl();
-    if (!panel) return;
+    const el = getInspectorElement();
+    if (!el) return;
 
-    const inspector = panel;
-    inspector.innerHTML = "";
+    el.innerHTML = "";
 
     if (!node) {
-      inspector.innerHTML =
-        '<p class="sb-inspector-empty">Click a table, row or block to edit its settings.</p>';
+      el.innerHTML =
+        '<p class="sb-inspector-empty">Click a table, row or seat block to edit its settings.</p>';
       return;
     }
 
     const shapeType = node.getAttr("shapeType");
 
-    // Multiple selection? – just show a basic message for now
+    // Multiple selection – just show a basic message for now
     const nodes = transformer ? transformer.nodes() : [];
     if (nodes && nodes.length > 1) {
-      inspector.innerHTML =
-        `<p class="sb-inspector-multi">${nodes.length} items selected. Move them together by dragging any selected item.</p>`;
+      el.innerHTML =
+        `<p class="sb-inspector-multi">${nodes.length} items selected. Drag to move them together.</p>`;
       return;
     }
 
-    // Shared helpers
+    function addTitle(text) {
+      const h = document.createElement("h4");
+      h.className = "sb-inspector-title";
+      h.textContent = text;
+      el.appendChild(h);
+    }
+
     function addNumberField(labelText, value, min, step, onCommit) {
       const wrapper = document.createElement("div");
       wrapper.className = "sb-field-row";
@@ -888,17 +870,14 @@
 
       label.appendChild(input);
       wrapper.appendChild(label);
-      inspector.appendChild(wrapper);
+      el.appendChild(wrapper);
     }
 
     if (shapeType === "row-seats") {
       const seatsPerRow = node.getAttr("seatsPerRow") || 10;
       const rowCount = node.getAttr("rowCount") || 1;
 
-      const title = document.createElement("h4");
-      title.textContent = "Row block";
-      title.className = "sb-inspector-title";
-      inspector.appendChild(title);
+      addTitle("Row block");
 
       addNumberField("Seats per row", seatsPerRow, 1, 1, (val) => {
         const currentRowCount = node.getAttr("rowCount") || rowCount;
@@ -916,10 +895,7 @@
     if (shapeType === "circular-table") {
       const seatCount = node.getAttr("seatCount") || 8;
 
-      const title = document.createElement("h4");
-      title.textContent = "Circular table";
-      title.className = "sb-inspector-title";
-      inspector.appendChild(title);
+      addTitle("Circular table");
 
       addNumberField("Seats around table", seatCount, 1, 1, (val) => {
         updateCircularTableGeometry(node, val);
@@ -932,10 +908,7 @@
       const longSideSeats = node.getAttr("longSideSeats") ?? 4;
       const shortSideSeats = node.getAttr("shortSideSeats") ?? 2;
 
-      const title = document.createElement("h4");
-      title.textContent = "Rectangular table";
-      title.className = "sb-inspector-title";
-      inspector.appendChild(title);
+      addTitle("Rectangular table");
 
       addNumberField(
         "Seats on long side",
@@ -963,25 +936,21 @@
     }
 
     // Fallback for other shapes
-    const title = document.createElement("h4");
-    title.textContent = "Selection";
-    title.className = "sb-inspector-title";
-    inspector.appendChild(title);
-
+    addTitle("Selection");
     const p = document.createElement("p");
     p.textContent = "This element has no editable settings yet.";
-    inspector.appendChild(p);
+    el.appendChild(p);
   }
 
-  // expose inspector hook for other scripts (and for our own calls below)
+  // expose inspector hook
   window.renderSeatmapInspector = renderInspector;
 
   // ---------- Selection / transformer ----------
 
   function configureTransformerForNode(node) {
-    if (!transformer) return;
+    if (!transformer || !node) return;
 
-    const shapeType = node && node.getAttr("shapeType");
+    const shapeType = node.getAttr("shapeType");
 
     // Seating elements: rotate only, no resize
     if (
@@ -1013,9 +982,7 @@
       transformer.nodes([]);
       overlayLayer.draw();
     }
-    if (typeof window.renderSeatmapInspector === "function") {
-      window.renderSeatmapInspector(null);
-    }
+    renderInspector(null);
   }
 
   function selectNode(node, additive = false) {
@@ -1037,21 +1004,15 @@
     transformer.nodes(nodes);
     overlayLayer.draw();
 
-    // expose "primary" node for older code
     selectedNode = nodes.length === 1 ? nodes[0] : null;
 
-    if (typeof window.renderSeatmapInspector === "function") {
-      if (nodes.length === 1) {
-        window.renderSeatmapInspector(nodes[0]);
-      } else if (nodes.length > 1) {
-        window.renderSeatmapInspector(nodes[0]); // inspector will show multi-selection msg
-      } else {
-        window.renderSeatmapInspector(null);
-      }
-    }
-
-    if (nodes[0]) {
+    if (nodes.length === 1) {
       configureTransformerForNode(nodes[0]);
+      renderInspector(nodes[0]);
+    } else if (nodes.length > 1) {
+      renderInspector(nodes[0]); // inspector shows multi-selection message
+    } else {
+      renderInspector(null);
     }
   }
 
@@ -1078,13 +1039,10 @@
       const shift = !!(e.evt && e.evt.shiftKey);
 
       if (shift) {
-        // Toggle this node in the existing selection
         selectNode(node, true);
       } else if (!alreadySelected) {
-        // Start a new single selection
         selectNode(node, false);
       }
-      // If already selected and no shift, keep the multi-selection as-is
     });
 
     node.on("dragstart", () => {
@@ -1373,12 +1331,12 @@
       transformer.nodes(newNodes);
       overlayLayer.draw();
       selectedNode = newNodes.length === 1 ? newNodes[0] : null;
-      if (typeof window.renderSeatmapInspector === "function") {
-        if (newNodes.length === 1) {
-          window.renderSeatmapInspector(newNodes[0]);
-        } else {
-          window.renderSeatmapInspector(newNodes[0]);
-        }
+      if (newNodes.length === 1) {
+        renderInspector(newNodes[0]);
+      } else if (newNodes.length > 1) {
+        renderInspector(newNodes[0]);
+      } else {
+        renderInspector(null);
       }
       e.preventDefault();
     }
@@ -1593,7 +1551,5 @@
   loadExistingLayout();
 
   // initial inspector state
-  if (typeof window.renderSeatmapInspector === "function") {
-    window.renderSeatmapInspector(null);
-  }
+  renderInspector(null);
 })();
