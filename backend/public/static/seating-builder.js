@@ -912,34 +912,52 @@
       el.appendChild(h);
     }
 
-    function addNumberField(labelText, value, min, step, onCommit) {
-      const wrapper = document.createElement("div");
-      wrapper.className = "sb-field-row";
+   function addNumberField(labelText, value, min, step, onCommit) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "sb-field-row";
 
-      const label = document.createElement("label");
-      label.className = "sb-label";
-      label.textContent = labelText;
+  const label = document.createElement("label");
+  label.className = "sb-label";
+  label.textContent = labelText;
 
-      const input = document.createElement("input");
-      input.type = "number";
-      input.min = String(min);
-      input.step = String(step || 1);
-      input.value = String(value);
-      input.className = "sb-input";
+  const input = document.createElement("input");
+  input.type = "number";
+  input.min = String(min);
+  input.step = String(step || 1);
+  input.value = String(value);
+  input.className = "sb-input";
 
-      input.addEventListener("change", () => {
-        const parsed = parseInt(input.value, 10);
-        if (!Number.isFinite(parsed) || parsed < min) return;
-        onCommit(parsed);
-        mapLayer.batchDraw();
-        updateSeatCount();
-        pushHistory();
-      });
+  // Shared commit function so we can call it from multiple events
+  function commit() {
+    const parsed = parseInt(input.value, 10);
+    if (!Number.isFinite(parsed) || parsed < min) return;
 
-      label.appendChild(input);
-      wrapper.appendChild(label);
-      el.appendChild(wrapper);
+    onCommit(parsed);
+    mapLayer.batchDraw();
+    updateSeatCount();
+    pushHistory();
+  }
+
+  // Commit when the value changes
+  input.addEventListener("change", commit);
+
+  // Commit when the field loses focus (safety net)
+  input.addEventListener("blur", commit);
+
+  // Commit immediately when the user hits Enter
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      commit();
+      input.blur();
     }
+  });
+
+  label.appendChild(input);
+  wrapper.appendChild(label);
+  el.appendChild(wrapper);
+}
+
 
     if (shapeType === "row-seats") {
       const seatsPerRow = node.getAttr("seatsPerRow") || 10;
