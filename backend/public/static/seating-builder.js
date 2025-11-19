@@ -1747,7 +1747,7 @@ if (shapeType === "row-seats") {
     overlayLayer.add(transformer);
   }
 
-  // ---------- Canvas interactions ----------
+    // ---------- Canvas interactions ----------
 
   function handleStageClick(evt) {
     const clickedOnEmpty =
@@ -1760,7 +1760,19 @@ if (shapeType === "row-seats") {
       return;
     }
 
-    const pos = mapLayer.getRelativePointerPosition();
+    // Try to use the pointer position, but fall back to centre of stage.
+    let pos = mapLayer.getRelativePointerPosition();
+
+    if (!pos && stage) {
+      pos = { x: stage.width() / 2, y: stage.height() / 2 };
+    }
+
+    // For now, always create row blocks in the centre – avoids the
+    // “top-right off screen” bug and makes them easy to grab.
+    if (activeTool === "row" && stage) {
+      pos = { x: stage.width() / 2, y: stage.height() / 2 };
+    }
+
     if (!pos) return;
 
     const node = createNodeForTool(activeTool, pos);
@@ -1773,6 +1785,7 @@ if (shapeType === "row-seats") {
     selectNode(node);
     pushHistory();
   }
+
 
   function handleKeyDown(e) {
     const nodes = transformer ? transformer.nodes() : [];
