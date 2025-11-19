@@ -18,6 +18,74 @@
     return;
   }
 
+  // ---------- NEW: Ensure sidebar DOM (seat count + inspector) ----------
+  function ensureSidebarDom() {
+    // If inspector already exists (e.g. from server-rendered template), do nothing
+    if (document.getElementById("sb-inspector")) {
+      return;
+    }
+
+    // We'll wrap the existing #app in a flex layout and add a sidebar to the right
+    const parent = container.parentNode;
+    if (!parent) return;
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "sb-layout";
+    wrapper.style.display = "flex";
+    wrapper.style.gap = "16px";
+    wrapper.style.height = "100%";
+    wrapper.style.boxSizing = "border-box";
+
+    // Replace original container with wrapper, then put container inside wrapper
+    parent.replaceChild(wrapper, container);
+
+    const canvasCol = document.createElement("div");
+    canvasCol.className = "sb-canvas-col";
+    canvasCol.style.flex = "1 1 auto";
+    canvasCol.style.minWidth = "0"; // allow proper flex shrinking
+    canvasCol.appendChild(container);
+
+    const sidebarCol = document.createElement("aside");
+    sidebarCol.className = "sb-sidebar-col";
+    sidebarCol.style.width = "260px";
+    sidebarCol.style.flex = "0 0 260px";
+    sidebarCol.style.borderLeft = "1px solid #e5e7eb";
+    sidebarCol.style.padding = "12px 12px 12px 8px";
+    sidebarCol.style.boxSizing = "border-box";
+    sidebarCol.style.fontFamily =
+      '-apple-system,BlinkMacSystemFont,"system-ui","Segoe UI",sans-serif';
+    sidebarCol.style.fontSize = "13px";
+    sidebarCol.style.color = "#111827";
+    sidebarCol.style.backgroundColor = "#f9fafb";
+
+    sidebarCol.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:12px;height:100%;">
+        <div>
+          <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;margin-bottom:4px;">
+            Total seats
+          </div>
+          <div id="sb-seat-count" style="font-size:14px;font-weight:600;color:#111827;">
+            0 seats
+          </div>
+        </div>
+
+        <div style="flex:1 1 auto;min-height:0;">
+          <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;margin-bottom:4px;">
+            Selection
+          </div>
+          <div id="sb-inspector"
+               style="background:#ffffff;border:1px solid #e5e7eb;border-radius:8px;padding:8px;overflow:auto;height:100%;">
+          </div>
+        </div>
+      </div>
+    `;
+
+    wrapper.appendChild(canvasCol);
+    wrapper.appendChild(sidebarCol);
+  }
+
+  ensureSidebarDom();
+
   // ---------- Config ----------
   const GRID_SIZE = 32; // perfect square grid
   const STAGE_PADDING = 40;
