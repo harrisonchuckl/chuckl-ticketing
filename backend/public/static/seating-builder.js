@@ -889,9 +889,9 @@ function seatLabelFromIndex(mode, index, start) {
   const table = getBodyRect(group);
   if (!table || !(table instanceof Konva.Circle)) return;
 
-  // remove old seats + labels
+  // Remove ALL children except the table itself
   group.getChildren().forEach((child) => {
-    if (child.getAttr("isSeat") || child.getAttr("isSeatLabel")) {
+    if (child !== table) {
       child.destroy();
     }
   });
@@ -944,9 +944,9 @@ function updateRectTableGeometry(group, longSideSeats, shortSideSeats) {
   const table = getBodyRect(group);
   if (!table || !(table instanceof Konva.Rect)) return;
 
-  // remove all current seats + labels
+  // Remove ALL children except the table rectangle itself
   group.getChildren().forEach((child) => {
-    if (child.getAttr("isSeat") || child.getAttr("isSeatLabel")) {
+    if (child !== table) {
       child.destroy();
     }
   });
@@ -970,7 +970,7 @@ function updateRectTableGeometry(group, longSideSeats, shortSideSeats) {
 
   let seatIndex = 0;
 
-  // long sides
+  // long sides (top + bottom)
   for (let i = 0; i < longSideSeats; i += 1) {
     const sx =
       -width / 2 + seatRadius * 2 + i * (seatRadius * 2 + seatGap);
@@ -1003,6 +1003,42 @@ function updateRectTableGeometry(group, longSideSeats, shortSideSeats) {
     group.add(bottomSeat);
     group.add(bottomLabel);
   }
+
+  // short sides (left + right)
+  for (let i = 0; i < shortSideSeats; i += 1) {
+    const sy =
+      -height / 2 + seatRadius * 2 + i * (seatRadius * 2 + seatGap);
+
+    const leftX = -width / 2 - 10;
+    const rightX = width / 2 + 10;
+
+    const leftSeat = new Konva.Circle({
+      x: leftX,
+      y: sy,
+      radius: seatRadius,
+      stroke: "#4b5563",
+      strokeWidth: 1.3,
+      isSeat: true,
+    });
+    const leftLabel = makeSeatLabelText(String(++seatIndex), leftX, sy);
+
+    const rightSeat = new Konva.Circle({
+      x: rightX,
+      y: sy,
+      radius: seatRadius,
+      strokeWidth: 1.3,
+      stroke: "#4b5563",
+      isSeat: true,
+    });
+    const rightLabel = makeSeatLabelText(String(++seatIndex), rightX, sy);
+
+    group.add(leftSeat);
+    group.add(leftLabel);
+    group.add(rightSeat);
+    group.add(rightLabel);
+  }
+}
+
 
   // short sides
   for (let i = 0; i < shortSideSeats; i += 1) {
@@ -1627,13 +1663,20 @@ if (shapeType === "row-seats") {
   }
 
   function createNodeForTool(tool, pos) {
-    const { x, y } = pos;
+  // Safe pointer position with a fallback to stage centre
+  let pointerX = stage ? stage.width() / 2 : 0;
+  let pointerY = stage ? stage.height() / 2 : 0;
 
-    switch (tool) {
-      case "section":
-        return createSectionBlock(x, y);
+  if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
+    pointerX = pos.x;
+    pointerY = pos.y;
+  }
 
-         case "row": {
+  switch (tool) {
+    case "section":
+      return createSectionBlock(pointerX, pointerY);
+
+    case "row": {
       const seatsPerRowStr = window.prompt(
         "How many seats in each row?",
         "10"
@@ -1650,18 +1693,64 @@ if (shapeType === "row-seats") {
       const rowCount = parseInt(rowCountStr, 10);
       if (!Number.isFinite(rowCount) || rowCount <= 0) return null;
 
-      // Always drop new row blocks in the centre of the canvas
-      const node = createRowOfSeats(0, 0, seatsPerRow, rowCount);
-
-      if (stage) {
-        node.position({
-          x: snap(stage.width() / 2),
-          y: snap(stage.height() / 2),
-        });
-      }
-
-      return node;
+      // IMPORTANT: force row blocks to appear bang in the centre
+      const cx = stage ? stage.width() / 2 : pointerX;
+      const cy = stage ? stage.height() / 2 : pointerY;
+      return createRowOfSeats(cx, cy, seatsPerRow, rowCount);
     }
+
+    case "single":
+      return createSingleSeat(pointerX, pointerY);
+
+    case "circle-table": {
+      const seatCountStr = window.prompt(
+        "How many seats around this table?",
+        "8"
+      );
+      if (seatCountStr == null) return null;
+      const seatCount = parseInt(seatCountStr, 10);
+      if (!Number.isFinite(seatCount) || seatCount <= 0) return null;
+      return createCircularTable(pointerX, pointerY, seatCount);
+    }
+
+    case "rect-table": {
+      const input = window.prompt(
+        "Rectangular table – seats per long side, seats per short side (e.g. 4,2)",
+        "4,2"
+      );
+      if (input == null) return null;
+      const parts = input.split(",");
+      if (parts.length !== 2) return null;
+      const longSideSeats = parseInt(parts[0].trim(), 10);
+      const shortSideSeats = parseInt(parts[1].trim(), 10);
+      if (
+        !Number.isFinite(longSideSeats) ||
+        longSideSeats < 0 ||
+        !Number.isFinite(shortSideSeats) ||
+        shortSideSeats < 0
+      ) {
+        return null;
+      }
+      return createRectTable(pointerX, pointerY, { longSideSeats, shortSideSeats });
+    }
+
+    case "stage":
+      return createStage(pointerX, pointerY);
+
+    case "bar":
+      return createBar(pointerX, pointerY);
+
+    case "exit":
+      return createExit(pointerX, pointerY);
+
+    case "text":
+      return createTextLabel(pointerX, pointerY);
+
+    default:
+      return null;
+  }
+}
+
 
 
       case "single":
