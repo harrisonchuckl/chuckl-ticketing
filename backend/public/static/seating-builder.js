@@ -350,16 +350,29 @@
     return label;
   }
 
-  function seatLabelFromIndex(mode, index) {
-    const n = index + 1;
-    if (mode === "letters") {
-      const baseCharCode = "A".charCodeAt(0);
-      const letter = String.fromCharCode(baseCharCode + ((n - 1) % 26));
-      return letter;
-    }
-    // default numeric
-    return String(n);
+ // Excel-style row labels: 0 -> A, 25 -> Z, 26 -> AA, etc.
+function rowLabelFromIndex(index) {
+  let n = Math.max(0, Math.floor(index));
+  let label = "";
+  while (n >= 0) {
+    label = String.fromCharCode((n % 26) + 65) + label;
+    n = Math.floor(n / 26) - 1;
   }
+  return label;
+}
+
+// Seat labels, with configurable start + mode
+function seatLabelFromIndex(mode, index, start) {
+  const base = Number.isFinite(start) ? start : 1; // e.g. 1 or 5
+  const n = base + index;
+
+  if (mode === "letters") {
+    // 1 -> A, 2 -> B … using the same helper
+    return rowLabelFromIndex(n - 1);
+  }
+  return String(n);
+}
+
 
   // ---------- Shape factories ----------
 
@@ -730,90 +743,137 @@
   }
 
   function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
-    const group = new Konva.Group({
-      x: snap(x),
-      y: snap(y),
-      draggable: true,
-      name: "row-seats",
-      shapeType: "row-seats",
-    });
+  const group = new Konva.Group({
+    x: snap(x),
+    y: snap(y),
+    draggable: true,
+    name: "row-seats",
+    shapeType: "row-seats",
+  });
 
-    group.setAttr("seatsPerRow", seatsPerRow);
-    group.setAttr("rowCount", rowCount);
-    group.setAttr("seatLabelMode", "numbers");
+  // Core configuration
+  group.setAttr("seatsPerRow", seatsPerRow);
+  group.setAttr("rowCount", rowCount);
 
-    const spacing = 20;
-    const seatRadius = 6;
-    const rowSpacing = 20;
+  // Label + layout config (defaults)
+  group.setAttr("seatLabelMode", "numbers");   // "numbers" | "letters"
+  group.setAttr("seatStart", 1);               // seat numbers start at
+  group.setAttr("rowLabelPrefix", "");         // e.g. "Row "
+  group.setAttr("rowLabelStart", 0);           // 0 => A, 1 => B …
 
-    for (let r = 0; r < rowCount; r += 1) {
-      const rowY = (r - (rowCount - 1) / 2) * rowSpacing;
-      for (let i = 0; i < seatsPerRow; i += 1) {
-        const sx = (i - (seatsPerRow - 1) / 2) * spacing;
+  group.setAttr("alignment", "center");        // "left" | "center" | "right"
+  group.setAttr("curve", 0);                   // -10 .. 10
+  group.setAttr("skew", 0);                    // -10 .. 10
 
-        const seat = new Konva.Circle({
-          x: sx,
-          y: rowY,
-          radius: seatRadius,
-          stroke: "#4b5563",
-          strokeWidth: 1.3,
-          isSeat: true,
-        });
+  // Initial geometry build
+  updateRowGroupGeometry(group, seatsPerRow, rowCount);
 
-        const labelText = seatLabelFromIndex("numbers", i);
-        const label = makeSeatLabelText(labelText, sx, rowY);
+  return group;
+}
 
-        group.add(seat);
-        group.add(label);
-      }
-    }
-
-    return group;
-  }
 
   // ---------- Geometry updaters ----------
 
   function updateRowGroupGeometry(group, seatsPerRow, rowCount) {
-    if (!(group instanceof Konva.Group)) return;
+  if (!(group instanceof Konva.Group)) return;
 
-    seatsPerRow = Math.max(1, Math.floor(seatsPerRow));
-    rowCount = Math.max(1, Math.floor(rowCount));
+  seatsPerRow = Math.max(1, Math.floor(seatsPerRow));
+  rowCount = Math.max(1, Math.floor(rowCount));
 
-    group.setAttr("seatsPerRow", seatsPerRow);
-    group.setAttr("rowCount", rowCount);
+  group.setAttr("seatsPerRow", seatsPerRow);
+  group.setAttr("rowCount", rowCount);
 
-    const seatLabelMode = group.getAttr("seatLabelMode") || "numbers";
+  const seatLabelMode = group.getAttr("seatLabelMode") || "numbers";
+  const seatStart = group.getAttr("seatStart") || 1;
+  const rowLabelPrefix = group.getAttr("rowLabelPrefix") || "";
+  const rowLabelStart = group.getAttr("rowLabelStart") || 0;
 
-    // remove existing seats + labels
-    group.find((node) => node.getAttr("isSeat") || node.getAttr("isSeatLabel"))
-      .forEach((n) => n.destroy());
+  const alignment = group.getAttr("alignment") || "center"; // left / center / right
+  const curve = group.getAttr("curve") || 0;                 // -10..10
+  const skew = group.getAttr("skew") || 0;                   // -10..10
 
-    const spacing = 20;
-    const seatRadius = 6;
-    const rowSpacing = 20;
+  // Wipe existing seats + labels
+  group
+    .find((node) => node.getAttr("isSeat") || node.getAttr("isSeatLabel") || node.getAttr("isRowLabel"))
+    .forEach((n) => n.destroy());
 
-    for (let r = 0; r < rowCount; r += 1) {
-      const rowY = (r - (rowCount - 1) / 2) * rowSpacing;
-      for (let i = 0; i < seatsPerRow; i += 1) {
-        const sx = (i - (seatsPerRow - 1) / 2) * spacing;
+  const spacing = 20;
+  const seatRadius = 6;
+  const rowSpacing = 20;
 
-        const seat = new Konva.Circle({
-          x: sx,
-          y: rowY,
-          radius: seatRadius,
-          stroke: "#4b5563",
-          strokeWidth: 1.3,
-          isSeat: true,
-        });
+  const curveFactor = curve / 10; // -1 .. 1
+  const skewFactor = skew / 10;   // -1 .. 1
+  const centerIndex = (seatsPerRow - 1) / 2;
 
-        const labelText = seatLabelFromIndex(seatLabelMode, i);
-        const label = makeSeatLabelText(labelText, sx, rowY);
+  function computeSeatX(i) {
+    if (alignment === "left") {
+      return i * spacing;
+    }
+    if (alignment === "right") {
+      return -(seatsPerRow - 1) * spacing + i * spacing;
+    }
+    // center
+    return (i - centerIndex) * spacing;
+  }
 
-        group.add(seat);
-        group.add(label);
-      }
+  for (let r = 0; r < rowCount; r += 1) {
+    const baseRowY = (r - (rowCount - 1) / 2) * rowSpacing;
+    let rowMinX = Infinity;
+
+    for (let i = 0; i < seatsPerRow; i += 1) {
+      let sx = computeSeatX(i);
+
+      // Curve: bend row into a shallow arc
+      const offsetIndex = i - centerIndex;
+      const curveOffset = curveFactor * offsetIndex * offsetIndex * 1.2;
+
+      let rowY = baseRowY + curveOffset;
+
+      // Skew: tilt block left/right based on row index
+      sx += skewFactor * baseRowY;
+
+      const seat = new Konva.Circle({
+        x: sx,
+        y: rowY,
+        radius: seatRadius,
+        stroke: "#4b5563",
+        strokeWidth: 1.3,
+        isSeat: true,
+      });
+
+      const labelText = seatLabelFromIndex(seatLabelMode, i, seatStart);
+      const label = makeSeatLabelText(labelText, sx, rowY);
+
+      group.add(seat);
+      group.add(label);
+
+      if (sx < rowMinX) rowMinX = sx;
+    }
+
+    // Row label (A, B, C…) down the left
+    const rowLabelText =
+      rowLabelPrefix + rowLabelFromIndex(rowLabelStart + r);
+
+    if (rowLabelText) {
+      const rowLabel = new Konva.Text({
+        x: rowMinX - 18,
+        y: baseRowY,
+        text: rowLabelText,
+        fontSize: 11,
+        fontFamily: "system-ui",
+        fill: "#4b5563",
+        align: "right",
+        verticalAlign: "middle",
+        listening: false,
+        isRowLabel: true,
+      });
+
+      rowLabel.offsetY(rowLabel.height() / 2);
+      group.add(rowLabel);
     }
   }
+}
+
 
   function updateCircularTableGeometry(group, seatCount) {
     if (!(group instanceof Konva.Group)) return;
@@ -970,6 +1030,7 @@
 
   // ---------- Selection inspector (right-hand panel) ----------
 
+    // ---------- Selection inspector (right-hand panel) ----------
   function renderInspector(node) {
     const el = getInspectorElement();
     if (!el) return;
@@ -986,10 +1047,11 @@
     const nodes = transformer ? transformer.nodes() : [];
 
     if (nodes && nodes.length > 1) {
-      el.innerHTML =
-        `<p class="sb-inspector-multi">${nodes.length} items selected. Drag to move them together.</p>`;
+      el.innerHTML = `<p class="sb-inspector-multi">${nodes.length} items selected. Drag to move them together.</p>`;
       return;
     }
+
+    // ----- Helper builders for inspector fields -----
 
     function addTitle(text) {
       const h = document.createElement("h4");
@@ -1094,47 +1156,214 @@
       el.appendChild(wrapper);
     }
 
-    // ---- Row blocks ----
-    if (shapeType === "row-seats") {
-      const seatsPerRow = node.getAttr("seatsPerRow") || 10;
-      const rowCount = node.getAttr("rowCount") || 1;
-      const seatLabelMode = node.getAttr("seatLabelMode") || "numbers";
-      const totalSeats = seatsPerRow * rowCount;
+    // NEW: free-text field (for things like row label prefix, table name, etc.)
+    function addTextField(labelText, value, onCommit) {
+      const wrapper = document.createElement("div");
+      wrapper.className = "sb-field-row";
 
-      addTitle("Seat block");
+      const label = document.createElement("label");
+      label.className = "sb-label";
 
-      addNumberField("Seats per row", seatsPerRow, 1, 1, (val) => {
-        const currentRowCount = node.getAttr("rowCount") || rowCount;
-        updateRowGroupGeometry(node, val, currentRowCount);
-      });
+      const span = document.createElement("span");
+      span.textContent = labelText;
+      span.style.display = "block";
+      span.style.marginBottom = "2px";
 
-      addNumberField("Number of rows", rowCount, 1, 1, (val) => {
-        const currentSeatsPerRow = node.getAttr("seatsPerRow") || seatsPerRow;
-        updateRowGroupGeometry(node, currentSeatsPerRow, val);
-      });
+      const input = document.createElement("input");
+      input.type = "text";
+      input.value = value || "";
+      input.className = "sb-input";
 
-      addStaticRow(
-        "Total seats in block",
-        `${totalSeats} seat${totalSeats === 1 ? "" : "s"}`
-      );
+      function commit() {
+        onCommit(input.value || "");
+        mapLayer.batchDraw();
+        updateSeatCount();
+        pushHistory();
+      }
 
-      addSelectField(
-        "Seat labels",
-        seatLabelMode,
-        [
-          { value: "numbers", label: "1, 2, 3..." },
-          { value: "letters", label: "A, B, C..." },
-        ],
-        (mode) => {
-          node.setAttr("seatLabelMode", mode);
-          const currentSeatsPerRow = node.getAttr("seatsPerRow") || seatsPerRow;
-          const currentRowCount = node.getAttr("rowCount") || rowCount;
-          updateRowGroupGeometry(node, currentSeatsPerRow, currentRowCount);
+      input.addEventListener("blur", commit);
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          commit();
+          input.blur();
         }
-      );
+      });
 
-      return;
+      label.appendChild(span);
+      label.appendChild(input);
+      wrapper.appendChild(label);
+      el.appendChild(wrapper);
     }
+
+    // NEW: slider field (for curve / skew / etc.)
+    function addRangeField(labelText, value, min, max, step, onCommit) {
+      const wrapper = document.createElement("div");
+      wrapper.className = "sb-field-row";
+
+      const label = document.createElement("label");
+      label.className = "sb-label";
+
+      const span = document.createElement("span");
+      span.textContent = labelText;
+      span.style.display = "block";
+      span.style.marginBottom = "2px";
+
+      const row = document.createElement("div");
+      row.style.display = "flex";
+      row.style.alignItems = "center";
+      row.style.gap = "6px";
+
+      const input = document.createElement("input");
+      input.type = "range";
+      input.min = String(min);
+      input.max = String(max);
+      input.step = String(step || 1);
+      input.value = String(value);
+
+      const valueLabel = document.createElement("span");
+      valueLabel.style.fontSize = "11px";
+      valueLabel.style.color = "#6b7280";
+      valueLabel.textContent = String(value);
+
+      function commit() {
+        const parsed = parseInt(input.value, 10);
+        if (!Number.isFinite(parsed)) return;
+        valueLabel.textContent = String(parsed);
+        onCommit(parsed);
+        mapLayer.batchDraw();
+        updateSeatCount();
+        pushHistory();
+      }
+
+      input.addEventListener("input", () => {
+        valueLabel.textContent = input.value;
+      });
+      input.addEventListener("change", commit);
+      input.addEventListener("mouseup", commit);
+      input.addEventListener("touchend", commit);
+
+      row.appendChild(input);
+      row.appendChild(valueLabel);
+
+      label.appendChild(span);
+      label.appendChild(row);
+      wrapper.appendChild(label);
+      el.appendChild(wrapper);
+    }
+
+
+    // ---- Row blocks ----
+if (shapeType === "row-seats") {
+  const seatsPerRow = node.getAttr("seatsPerRow") || 10;
+  const rowCount = node.getAttr("rowCount") || 1;
+  const seatLabelMode = node.getAttr("seatLabelMode") || "numbers";
+  const seatStart = node.getAttr("seatStart") || 1;
+  const rowLabelPrefix = node.getAttr("rowLabelPrefix") || "";
+  const rowLabelStart = node.getAttr("rowLabelStart") || 0;
+  const alignment = node.getAttr("alignment") || "center";
+  const curve = node.getAttr("curve") || 0;
+  const skew = node.getAttr("skew") || 0;
+
+  const totalSeats = seatsPerRow * rowCount;
+
+  function rebuild() {
+    const currentSeatsPerRow = node.getAttr("seatsPerRow") || seatsPerRow;
+    const currentRowCount = node.getAttr("rowCount") || rowCount;
+    updateRowGroupGeometry(node, currentSeatsPerRow, currentRowCount);
+    mapLayer.batchDraw();
+    updateSeatCount();
+    pushHistory();
+  }
+
+  addTitle("Seat block");
+
+  addNumberField("Seats per row", seatsPerRow, 1, 1, (val) => {
+    node.setAttr("seatsPerRow", val);
+    rebuild();
+  });
+
+  addNumberField("Number of rows", rowCount, 1, 1, (val) => {
+    node.setAttr("rowCount", val);
+    rebuild();
+  });
+
+  addStaticRow(
+    "Total seats in block",
+    `${totalSeats} seat${totalSeats === 1 ? "" : "s"}`
+  );
+
+  addNumberField("Seat numbers start at", seatStart, 1, 1, (val) => {
+    node.setAttr("seatStart", val);
+    rebuild();
+  });
+
+  addSelectField(
+    "Seat labels",
+    seatLabelMode,
+    [
+      { value: "numbers", label: "1, 2, 3..." },
+      { value: "letters", label: "A, B, C..." },
+    ],
+    (mode) => {
+      node.setAttr("seatLabelMode", mode);
+      rebuild();
+    }
+  );
+
+  addTextField("Row label prefix", rowLabelPrefix, (val) => {
+    node.setAttr("rowLabelPrefix", val);
+    rebuild();
+  });
+
+  // First row letter A/B/C …
+  const firstRowLetter = rowLabelFromIndex(rowLabelStart);
+  const rowOptions = [];
+  for (let i = 0; i < 26; i += 1) {
+    rowOptions.push({
+      value: String(i),
+      label: rowLabelFromIndex(i),
+    });
+  }
+
+  addSelectField(
+    "First row letter",
+    String(rowLabelStart),
+    rowOptions,
+    (val) => {
+      const idx = parseInt(val, 10);
+      node.setAttr("rowLabelStart", Number.isFinite(idx) ? idx : 0);
+      rebuild();
+    }
+  );
+
+  addSelectField(
+    "Alignment",
+    alignment,
+    [
+      { value: "center", label: "Centre" },
+      { value: "left", label: "Left" },
+      { value: "right", label: "Right" },
+    ],
+    (val) => {
+      node.setAttr("alignment", val);
+      rebuild();
+    }
+  );
+
+  addRangeField("Curve rows", curve, -10, 10, 1, (val) => {
+    node.setAttr("curve", val);
+    rebuild();
+  });
+
+  addRangeField("Skew rows", skew, -10, 10, 1, (val) => {
+    node.setAttr("skew", val);
+    rebuild();
+  });
+
+  return;
+}
+
 
     // ---- Circular tables ----
     if (shapeType === "circular-table") {
