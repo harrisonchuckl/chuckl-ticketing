@@ -425,11 +425,11 @@ router.get("/builder/preview/:showId", (req, res) => {
           </section>
 
           <section class="tb-side-section">
-            <h3 class="tb-side-heading">Selection</h3>
-            <p class="tb-side-help" id="sb-selection-summary">
-              Nothing selected. Click on a seat, table or object to see quick details here.
-            </p>
-          </section>
+  <h3 class="tb-side-heading">Selection</h3>
+  <div id="sb-inspector" class="tb-side-help">
+    <!-- seating-builder.js will populate this via renderInspector() -->
+  </div>
+</section>
 
           <section class="tb-side-section">
             <h3 class="tb-side-heading">Saved layouts</h3>
