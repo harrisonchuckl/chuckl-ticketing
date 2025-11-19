@@ -1633,25 +1633,36 @@ if (shapeType === "row-seats") {
       case "section":
         return createSectionBlock(x, y);
 
-      case "row": {
-        const seatsPerRowStr = window.prompt(
-          "How many seats in each row?",
-          "10"
-        );
-        if (seatsPerRowStr == null) return null;
-        const seatsPerRow = parseInt(seatsPerRowStr, 10);
-        if (!Number.isFinite(seatsPerRow) || seatsPerRow <= 0) return null;
+         case "row": {
+      const seatsPerRowStr = window.prompt(
+        "How many seats in each row?",
+        "10"
+      );
+      if (seatsPerRowStr == null) return null;
+      const seatsPerRow = parseInt(seatsPerRowStr, 10);
+      if (!Number.isFinite(seatsPerRow) || seatsPerRow <= 0) return null;
 
-        const rowCountStr = window.prompt(
-          "How many rows in this block?",
-          "1"
-        );
-        if (rowCountStr == null) return null;
-        const rowCount = parseInt(rowCountStr, 10);
-        if (!Number.isFinite(rowCount) || rowCount <= 0) return null;
+      const rowCountStr = window.prompt(
+        "How many rows in this block?",
+        "1"
+      );
+      if (rowCountStr == null) return null;
+      const rowCount = parseInt(rowCountStr, 10);
+      if (!Number.isFinite(rowCount) || rowCount <= 0) return null;
 
-        return createRowOfSeats(x, y, seatsPerRow, rowCount);
+      // Always drop new row blocks in the centre of the canvas
+      const node = createRowOfSeats(0, 0, seatsPerRow, rowCount);
+
+      if (stage) {
+        node.position({
+          x: snap(stage.width() / 2),
+          y: snap(stage.height() / 2),
+        });
       }
+
+      return node;
+    }
+
 
       case "single":
         return createSingleSeat(x, y);
