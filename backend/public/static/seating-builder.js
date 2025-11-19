@@ -793,9 +793,15 @@ function seatLabelFromIndex(mode, index, start) {
   const skew = group.getAttr("skew") || 0;                   // -10..10
 
   // Wipe existing seats + labels
-  group
-    .find((node) => node.getAttr("isSeat") || node.getAttr("isSeatLabel") || node.getAttr("isRowLabel"))
-    .forEach((n) => n.destroy());
+  group.getChildren().forEach((child) => {
+    if (
+      child.getAttr("isSeat") ||
+      child.getAttr("isSeatLabel") ||
+      child.getAttr("isRowLabel")
+    ) {
+      child.destroy();
+    }
+  });
 
   const spacing = 20;
   const seatRadius = 6;
@@ -874,159 +880,164 @@ function seatLabelFromIndex(mode, index, start) {
   }
 }
 
-
   function updateCircularTableGeometry(group, seatCount) {
-    if (!(group instanceof Konva.Group)) return;
+  if (!(group instanceof Konva.Group)) return;
 
-    seatCount = Math.max(1, Math.floor(seatCount));
-    group.setAttr("seatCount", seatCount);
+  seatCount = Math.max(1, Math.floor(seatCount));
+  group.setAttr("seatCount", seatCount);
 
-    const table = getBodyRect(group);
-    if (!table || !(table instanceof Konva.Circle)) return;
+  const table = getBodyRect(group);
+  if (!table || !(table instanceof Konva.Circle)) return;
 
-    // remove old seats + labels
-    group.find((node) => node.getAttr("isSeat") || node.getAttr("isSeatLabel"))
-      .forEach((n) => n.destroy());
-
-    const seatRadius = CIRC_SEAT_RADIUS;
-    const desiredGap = CIRC_DESIRED_GAP;
-
-    const circumferencePerSeat = seatRadius * 2 + desiredGap;
-    const ringRadiusFromCirc =
-      (seatCount * circumferencePerSeat) / (2 * Math.PI);
-
-    const minRingRadius =
-      CIRC_MIN_TABLE_RADIUS + seatRadius + desiredGap;
-
-    const seatRingRadius = Math.max(ringRadiusFromCirc, minRingRadius);
-    const tableRadius = seatRingRadius - seatRadius - desiredGap;
-
-    table.radius(tableRadius);
-
-    for (let i = 0; i < seatCount; i += 1) {
-      const angle = (i / seatCount) * Math.PI * 2;
-      const sx = Math.cos(angle) * seatRingRadius;
-      const sy = Math.sin(angle) * seatRingRadius;
-
-      const seat = new Konva.Circle({
-        x: sx,
-        y: sy,
-        radius: seatRadius,
-        stroke: "#4b5563",
-        strokeWidth: 1.3,
-        isSeat: true,
-      });
-
-      const label = makeSeatLabelText(String(i + 1), sx, sy);
-
-      group.add(seat);
-      group.add(label);
+  // remove old seats + labels
+  group.getChildren().forEach((child) => {
+    if (child.getAttr("isSeat") || child.getAttr("isSeatLabel")) {
+      child.destroy();
     }
+  });
+
+  const seatRadius = CIRC_SEAT_RADIUS;
+  const desiredGap = CIRC_DESIRED_GAP;
+
+  const circumferencePerSeat = seatRadius * 2 + desiredGap;
+  const ringRadiusFromCirc =
+    (seatCount * circumferencePerSeat) / (2 * Math.PI);
+
+  const minRingRadius =
+    CIRC_MIN_TABLE_RADIUS + seatRadius + desiredGap;
+
+  const seatRingRadius = Math.max(ringRadiusFromCirc, minRingRadius);
+  const tableRadius = seatRingRadius - seatRadius - desiredGap;
+
+  table.radius(tableRadius);
+
+  for (let i = 0; i < seatCount; i += 1) {
+    const angle = (i / seatCount) * Math.PI * 2;
+    const sx = Math.cos(angle) * seatRingRadius;
+    const sy = Math.sin(angle) * seatRingRadius;
+
+    const seat = new Konva.Circle({
+      x: sx,
+      y: sy,
+      radius: seatRadius,
+      stroke: "#4b5563",
+      strokeWidth: 1.3,
+      isSeat: true,
+    });
+
+    const label = makeSeatLabelText(String(i + 1), sx, sy);
+
+    group.add(seat);
+    group.add(label);
+  }
+}
+
+function updateRectTableGeometry(group, longSideSeats, shortSideSeats) {
+  if (!(group instanceof Konva.Group)) return;
+
+  longSideSeats = Math.max(0, Math.floor(longSideSeats));
+  shortSideSeats = Math.max(0, Math.floor(shortSideSeats));
+
+  group.setAttr("longSideSeats", longSideSeats);
+  group.setAttr("shortSideSeats", shortSideSeats);
+
+  const table = getBodyRect(group);
+  if (!table || !(table instanceof Konva.Rect)) return;
+
+  // remove all current seats + labels
+  group.getChildren().forEach((child) => {
+    if (child.getAttr("isSeat") || child.getAttr("isSeatLabel")) {
+      child.destroy();
+    }
+  });
+
+  const seatRadius = 6;
+  const seatGap = 4;
+  const longSpan =
+    longSideSeats > 0 ? (longSideSeats - 1) * (seatRadius * 2 + seatGap) : 0;
+  const shortSpan =
+    shortSideSeats > 0
+      ? (shortSideSeats - 1) * (seatRadius * 2 + seatGap)
+      : 0;
+
+  const width = longSpan + seatRadius * 4;
+  const height = shortSpan + seatRadius * 4;
+
+  table.width(width);
+  table.height(height);
+  table.offsetX(width / 2);
+  table.offsetY(height / 2);
+
+  let seatIndex = 0;
+
+  // long sides
+  for (let i = 0; i < longSideSeats; i += 1) {
+    const sx =
+      -width / 2 + seatRadius * 2 + i * (seatRadius * 2 + seatGap);
+
+    const topY = -height / 2 - 10;
+    const bottomY = height / 2 + 10;
+
+    const topSeat = new Konva.Circle({
+      x: sx,
+      y: topY,
+      radius: seatRadius,
+      stroke: "#4b5563",
+      strokeWidth: 1.3,
+      isSeat: true,
+    });
+    const topLabel = makeSeatLabelText(String(++seatIndex), sx, topY);
+
+    const bottomSeat = new Konva.Circle({
+      x: sx,
+      y: bottomY,
+      radius: seatRadius,
+      stroke: "#4b5563",
+      strokeWidth: 1.3,
+      isSeat: true,
+    });
+    const bottomLabel = makeSeatLabelText(String(++seatIndex), sx, bottomY);
+
+    group.add(topSeat);
+    group.add(topLabel);
+    group.add(bottomSeat);
+    group.add(bottomLabel);
   }
 
-  function updateRectTableGeometry(group, longSideSeats, shortSideSeats) {
-    if (!(group instanceof Konva.Group)) return;
+  // short sides
+  for (let i = 0; i < shortSideSeats; i += 1) {
+    const sy =
+      -height / 2 + seatRadius * 2 + i * (seatRadius * 2 + seatGap);
 
-    longSideSeats = Math.max(0, Math.floor(longSideSeats));
-    shortSideSeats = Math.max(0, Math.floor(shortSideSeats));
+    const leftX = -width / 2 - 10;
+    const rightX = width / 2 + 10;
 
-    group.setAttr("longSideSeats", longSideSeats);
-    group.setAttr("shortSideSeats", shortSideSeats);
+    const leftSeat = new Konva.Circle({
+      x: leftX,
+      y: sy,
+      radius: seatRadius,
+      stroke: "#4b5563",
+      strokeWidth: 1.3,
+      isSeat: true,
+    });
+    const leftLabel = makeSeatLabelText(String(++seatIndex), leftX, sy);
 
-    const table = getBodyRect(group);
-    if (!table || !(table instanceof Konva.Rect)) return;
+    const rightSeat = new Konva.Circle({
+      x: rightX,
+      y: sy,
+      radius: seatRadius,
+      stroke: "#4b5563",
+      strokeWidth: 1.3,
+      isSeat: true,
+    });
+    const rightLabel = makeSeatLabelText(String(++seatIndex), rightX, sy);
 
-    // remove all current seats + labels
-    group.find((node) => node.getAttr("isSeat") || node.getAttr("isSeatLabel"))
-      .forEach((n) => n.destroy());
-
-    const seatRadius = 6;
-    const seatGap = 4;
-    const longSpan =
-      longSideSeats > 0 ? (longSideSeats - 1) * (seatRadius * 2 + seatGap) : 0;
-    const shortSpan =
-      shortSideSeats > 0
-        ? (shortSideSeats - 1) * (seatRadius * 2 + seatGap)
-        : 0;
-
-    const width = longSpan + seatRadius * 4;
-    const height = shortSpan + seatRadius * 4;
-
-    table.width(width);
-    table.height(height);
-    table.offsetX(width / 2);
-    table.offsetY(height / 2);
-
-    let seatIndex = 0;
-
-    // long sides
-    for (let i = 0; i < longSideSeats; i += 1) {
-      const sx =
-        -width / 2 + seatRadius * 2 + i * (seatRadius * 2 + seatGap);
-
-      const topY = -height / 2 - 10;
-      const bottomY = height / 2 + 10;
-
-      const topSeat = new Konva.Circle({
-        x: sx,
-        y: topY,
-        radius: seatRadius,
-        stroke: "#4b5563",
-        strokeWidth: 1.3,
-        isSeat: true,
-      });
-      const topLabel = makeSeatLabelText(String(++seatIndex), sx, topY);
-
-      const bottomSeat = new Konva.Circle({
-        x: sx,
-        y: bottomY,
-        radius: seatRadius,
-        stroke: "#4b5563",
-        strokeWidth: 1.3,
-        isSeat: true,
-      });
-      const bottomLabel = makeSeatLabelText(String(++seatIndex), sx, bottomY);
-
-      group.add(topSeat);
-      group.add(topLabel);
-      group.add(bottomSeat);
-      group.add(bottomLabel);
-    }
-
-    // short sides
-    for (let i = 0; i < shortSideSeats; i += 1) {
-      const sy =
-        -height / 2 + seatRadius * 2 + i * (seatRadius * 2 + seatGap);
-
-      const leftX = -width / 2 - 10;
-      const rightX = width / 2 + 10;
-
-      const leftSeat = new Konva.Circle({
-        x: leftX,
-        y: sy,
-        radius: seatRadius,
-        stroke: "#4b5563",
-        strokeWidth: 1.3,
-        isSeat: true,
-      });
-      const leftLabel = makeSeatLabelText(String(++seatIndex), leftX, sy);
-
-      const rightSeat = new Konva.Circle({
-        x: rightX,
-        y: sy,
-        radius: seatRadius,
-        stroke: "#4b5563",
-        strokeWidth: 1.3,
-        isSeat: true,
-      });
-      const rightLabel = makeSeatLabelText(String(++seatIndex), rightX, sy);
-
-      group.add(leftSeat);
-      group.add(leftLabel);
-      group.add(rightSeat);
-      group.add(rightLabel);
-    }
+    group.add(leftSeat);
+    group.add(leftLabel);
+    group.add(rightSeat);
+    group.add(rightLabel);
   }
+}
 
   // ---------- Selection inspector (right-hand panel) ----------
 
