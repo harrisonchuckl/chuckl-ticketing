@@ -738,7 +738,9 @@
 
   // -------- Row of seats --------
 
-  ffunction createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
+  // -------- Row of seats --------
+
+function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
   const snappedX = snap(x);
   const snappedY = snap(y);
 
@@ -778,6 +780,7 @@
 
   return group;
 }
+
 
 
   // ---------- Geometry updaters ----------
@@ -1648,7 +1651,7 @@
       case "section":
         return createSectionBlock(pointerX, pointerY);
 
-      case "row": {
+            case "row": {
         const seatsPerRowStr = window.prompt(
           "How many seats in each row?",
           "10"
@@ -1665,8 +1668,13 @@
         const rowCount = parseInt(rowCountStr, 10);
         if (!Number.isFinite(rowCount) || rowCount <= 0) return null;
 
-        const node = createRowOfSeats(pointerX, pointerY, seatsPerRow, rowCount);
-        node.position({ x: snap(pointerX), y: snap(pointerY) });
+        const node = createRowOfSeats(
+          pointerX,
+          pointerY,
+          seatsPerRow,
+          rowCount
+        );
+        // No extra positioning here – createRowOfSeats already snaps/places it
         return node;
       }
 
