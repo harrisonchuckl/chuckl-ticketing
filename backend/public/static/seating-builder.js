@@ -741,35 +741,35 @@
     return group;
   }
 
-  function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
-  // Create the row block at the supplied position (like all other tools)
-  const group = new Konva.Group({
-    x: snap(x),
-    y: snap(y),
-    draggable: true,
-    name: "row-seats",
-    shapeType: "row-seats",
-  });
+    function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
+    // Create the row block exactly where the user clicked
+    const group = new Konva.Group({
+      x: snap(x),
+      y: snap(y),
+      draggable: true,
+      name: "row-seats",
+      shapeType: "row-seats",
+    });
 
-  // Core configuration
-  group.setAttr("seatsPerRow", seatsPerRow);
-  group.setAttr("rowCount", rowCount);
+    // Core configuration
+    group.setAttr("seatsPerRow", seatsPerRow);
+    group.setAttr("rowCount", rowCount);
 
-  // Label + layout config (defaults)
-  group.setAttr("seatLabelMode", "numbers");   // "numbers" | "letters"
-  group.setAttr("seatStart", 1);               // seat numbers start at
-  group.setAttr("rowLabelPrefix", "");         // e.g. "Row "
-  group.setAttr("rowLabelStart", 0);           // 0 => A, 1 => B …
+    // Label + layout config (defaults)
+    group.setAttr("seatLabelMode", "numbers");   // "numbers" | "letters"
+    group.setAttr("seatStart", 1);               // seat numbers start at
+    group.setAttr("rowLabelPrefix", "");         // e.g. "Row "
+    group.setAttr("rowLabelStart", 0);           // 0 => A, 1 => B …
 
-  group.setAttr("alignment", "center");        // "left" | "center" | "right"
-  group.setAttr("curve", 0);                   // -10 .. 10
-  group.setAttr("skew", 0);                    // -10 .. 10
+    group.setAttr("alignment", "center");        // "left" | "center" | "right"
+    group.setAttr("curve", 0);                   // -10 .. 10
+    group.setAttr("skew", 0);                    // -10 .. 10
 
-  // Initial geometry build
-  updateRowGroupGeometry(group, seatsPerRow, rowCount);
+    // Initial geometry build
+    updateRowGroupGeometry(group, seatsPerRow, rowCount);
 
-  return group;
-}
+    return group;
+  }
 
 
   // ---------- Geometry updaters ----------
@@ -1652,25 +1652,26 @@
       return createSectionBlock(pointerX, pointerY);
 
        case "row": {
-  const seatsPerRowStr = window.prompt(
-    "How many seats in each row?",
-    "10"
-  );
-  if (seatsPerRowStr == null) return null;
-  const seatsPerRow = parseInt(seatsPerRowStr, 10);
-  if (!Number.isFinite(seatsPerRow) || seatsPerRow <= 0) return null;
+      const seatsPerRowStr = window.prompt(
+        "How many seats in each row?",
+        "10"
+      );
+      if (seatsPerRowStr == null) return null;
+      const seatsPerRow = parseInt(seatsPerRowStr, 10);
+      if (!Number.isFinite(seatsPerRow) || seatsPerRow <= 0) return null;
 
-  const rowCountStr = window.prompt(
-    "How many rows in this block?",
-    "1"
-  );
-  if (rowCountStr == null) return null;
-  const rowCount = parseInt(rowCountStr, 10);
-  if (!Number.isFinite(rowCount) || rowCount <= 0) return null;
+      const rowCountStr = window.prompt(
+        "How many rows in this block?",
+        "1"
+      );
+      if (rowCountStr == null) return null;
+      const rowCount = parseInt(rowCountStr, 10);
+      if (!Number.isFinite(rowCount) || rowCount <= 0) return null;
 
-  // Place the row block exactly where the user clicked
-  return createRowOfSeats(pointerX, pointerY, seatsPerRow, rowCount);
-}
+      // Place the row block where the user clicked
+      return createRowOfSeats(pointerX, pointerY, seatsPerRow, rowCount);
+    }
+
 
     case "single":
       return createSingleSeat(pointerX, pointerY);
