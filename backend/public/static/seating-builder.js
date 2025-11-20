@@ -85,7 +85,7 @@
   // ---------- Config ----------
 
   const GRID_SIZE = 32;
-  const STAGE_PADDING = 40;
+  const STAGE_PADDING = 0;
   const MIN_ZOOM = 0.4;
   const MAX_ZOOM = 2.4;
   const ZOOM_STEP = 0.1;
@@ -747,7 +747,7 @@ function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
   // eslint-disable-next-line no-console
   console.log("createRowOfSeats at", { x, y, snappedX, snappedY });
 
-  // IMPORTANT: put the group directly at the snapped grid position
+  // Put the group directly at the snapped grid position
   const group = new Konva.Group({
     x: snappedX,
     y: snappedY,
@@ -775,9 +775,6 @@ function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
 
   return group;
 }
-
-
-
 
 
   // ---------- Geometry updaters ----------
@@ -1644,31 +1641,32 @@ function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
     // eslint-disable-next-line no-console
     console.log("createNodeForTool", tool, { pointerX, pointerY });
 
-    switch (tool) {
+        switch (tool) {
       case "section":
         return createSectionBlock(pointerX, pointerY);
 
-              case "row": {
-      const seatsPerRowStr = window.prompt(
-        "How many seats in each row?",
-        "10"
-      );
-      if (seatsPerRowStr == null) return null;
-      const seatsPerRow = parseInt(seatsPerRowStr, 10);
-      if (!Number.isFinite(seatsPerRow) || seatsPerRow <= 0) return null;
+      case "row": {
+        const seatsPerRowStr = window.prompt(
+          "How many seats in each row?",
+          "10"
+        );
+        if (seatsPerRowStr == null) return null;
+        const seatsPerRow = parseInt(seatsPerRowStr, 10);
+        if (!Number.isFinite(seatsPerRow) || seatsPerRow <= 0) return null;
 
-      const rowCountStr = window.prompt(
-        "How many rows in this block?",
-        "1"
-      );
-      if (rowCountStr == null) return null;
-      const rowCount = parseInt(rowCountStr, 10);
-      if (!Number.isFinite(rowCount) || rowCount <= 0) return null;
+        const rowCountStr = window.prompt(
+          "How many rows in this block?",
+          "1"
+        );
+        if (rowCountStr == null) return null;
+        const rowCount = parseInt(rowCountStr, 10);
+        if (!Number.isFinite(rowCount) || rowCount <= 0) return null;
 
-      const node = createRowOfSeats(pointerX, pointerY, seatsPerRow, rowCount);
-      // no extra positioning here – createRowOfSeats already snaps the group
-      return node;
-    }
+        // Let createRowOfSeats handle snapping and positioning
+        const node = createRowOfSeats(pointerX, pointerY, seatsPerRow, rowCount);
+        return node;
+      }
+
 
 
       case "single":
@@ -1728,18 +1726,24 @@ function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
 
   // ---------- Init Konva ----------
 
-  function initStage() {
-    const width = container.clientWidth - STAGE_PADDING * 2;
-    const height = container.clientHeight - STAGE_PADDING * 2;
+    function resizeStageToContainer() {
+    if (!stage) return;
+
+    const width = container.clientWidth;
+    const height = container.clientHeight;
 
     baseStageWidth = width;
     baseStageHeight = height;
 
-    stage = new Konva.Stage({
-      container: "app",
-      width,
-      height,
+    const currentScale = stage.scaleX() || 1;
+
+    stage.size({
+      width: baseStageWidth / currentScale,
+      height: baseStageHeight / currentScale,
     });
+
+    drawSquareGrid();
+  }
 
     const domContainer = stage.container();
     domContainer.style.backgroundImage = "none";
