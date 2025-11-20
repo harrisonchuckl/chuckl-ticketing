@@ -741,40 +741,39 @@
     return group;
   }
 
-  function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
-    // Fallback to centre of stage if x / y are not valid numbers
-    const hasValidX = typeof x === "number" && Number.isFinite(x);
-    const hasValidY = typeof y === "number" && Number.isFinite(y);
-    const stageCenterX = stage ? stage.width() / 2 : 0;
-    const stageCenterY = stage ? stage.height() / 2 : 0;
+ function createRowOfSeats(_x, _y, seatsPerRow = 10, rowCount = 1) {
+  // Always create row blocks in the centre of the stage so they are visible
+  const stageCenterX = stage ? stage.width() / 2 : 0;
+  const stageCenterY = stage ? stage.height() / 2 : 0;
 
-    const group = new Konva.Group({
-      x: snap(hasValidX ? x : stageCenterX),
-      y: snap(hasValidY ? y : stageCenterY),
-      draggable: true,
-      name: "row-seats",
-      shapeType: "row-seats",
-    });
+  const group = new Konva.Group({
+    x: snap(stageCenterX),
+    y: snap(stageCenterY),
+    draggable: true,
+    name: "row-seats",
+    shapeType: "row-seats",
+  });
 
-    // Core configuration
-    group.setAttr("seatsPerRow", seatsPerRow);
-    group.setAttr("rowCount", rowCount);
+  // Core configuration
+  group.setAttr("seatsPerRow", seatsPerRow);
+  group.setAttr("rowCount", rowCount);
 
-    // Label + layout config (defaults)
-    group.setAttr("seatLabelMode", "numbers"); // "numbers" | "letters"
-    group.setAttr("seatStart", 1); // seat numbers start at
-    group.setAttr("rowLabelPrefix", ""); // e.g. "Row "
-    group.setAttr("rowLabelStart", 0); // 0 => A, 1 => B …
+  // Label + layout config (defaults)
+  group.setAttr("seatLabelMode", "numbers");   // "numbers" | "letters"
+  group.setAttr("seatStart", 1);               // seat numbers start at
+  group.setAttr("rowLabelPrefix", "");         // e.g. "Row "
+  group.setAttr("rowLabelStart", 0);           // 0 => A, 1 => B …
 
-    group.setAttr("alignment", "center"); // "left" | "center" | "right"
-    group.setAttr("curve", 0); // -10 .. 10
-    group.setAttr("skew", 0); // -10 .. 10
+  group.setAttr("alignment", "center");        // "left" | "center" | "right"
+  group.setAttr("curve", 0);                   // -10 .. 10
+  group.setAttr("skew", 0);                    // -10 .. 10
 
-    // Initial geometry build
-    updateRowGroupGeometry(group, seatsPerRow, rowCount);
+  // Initial geometry build
+  updateRowGroupGeometry(group, seatsPerRow, rowCount);
 
-    return group;
-  }
+  return group;
+}
+
 
   // ---------- Geometry updaters ----------
 
@@ -1642,96 +1641,91 @@
   // ---------- Node creation based on active tool ----------
 
   function createNodeForTool(tool, pos) {
-    // Safe pointer position with a fallback to stage centre
-    let pointerX = stage ? stage.width() / 2 : 0;
-    let pointerY = stage ? stage.height() / 2 : 0;
+  // Pointer position (for everything except row blocks)
+  let pointerX = stage ? stage.width() / 2 : 0;
+  let pointerY = stage ? stage.height() / 2 : 0;
 
-    if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
-      pointerX = pos.x;
-      pointerY = pos.y;
-    }
-
-    switch (tool) {
-      case "section":
-        return createSectionBlock(pointerX, pointerY);
-
-      case "row": {
-        const seatsPerRowStr = window.prompt(
-          "How many seats in each row?",
-          "10"
-        );
-        if (seatsPerRowStr == null) return null;
-        const seatsPerRow = parseInt(seatsPerRowStr, 10);
-        if (!Number.isFinite(seatsPerRow) || seatsPerRow <= 0) return null;
-
-        const rowCountStr = window.prompt(
-          "How many rows in this block?",
-          "1"
-        );
-        if (rowCountStr == null) return null;
-        const rowCount = parseInt(rowCountStr, 10);
-        if (!Number.isFinite(rowCount) || rowCount <= 0) return null;
-
-        // Force row blocks to appear bang in the centre
-        const cx = stage ? stage.width() / 2 : pointerX;
-        const cy = stage ? stage.height() / 2 : pointerY;
-        return createRowOfSeats(cx, cy, seatsPerRow, rowCount);
-      }
-
-      case "single":
-        return createSingleSeat(pointerX, pointerY);
-
-      case "circle-table": {
-        const seatCountStr = window.prompt(
-          "How many seats around this table?",
-          "8"
-        );
-        if (seatCountStr == null) return null;
-        const seatCount = parseInt(seatCountStr, 10);
-        if (!Number.isFinite(seatCount) || seatCount <= 0) return null;
-        return createCircularTable(pointerX, pointerY, seatCount);
-      }
-
-      case "rect-table": {
-        const input = window.prompt(
-          "Rectangular table – seats per long side, seats per short side (e.g. 4,2)",
-          "4,2"
-        );
-        if (input == null) return null;
-        const parts = input.split(",");
-        if (parts.length !== 2) return null;
-        const longSideSeats = parseInt(parts[0].trim(), 10);
-        const shortSideSeats = parseInt(parts[1].trim(), 10);
-        if (
-          !Number.isFinite(longSideSeats) ||
-          longSideSeats < 0 ||
-          !Number.isFinite(shortSideSeats) ||
-          shortSideSeats < 0
-        ) {
-          return null;
-        }
-        return createRectTable(pointerX, pointerY, {
-          longSideSeats,
-          shortSideSeats,
-        });
-      }
-
-      case "stage":
-        return createStage(pointerX, pointerY);
-
-      case "bar":
-        return createBar(pointerX, pointerY);
-
-      case "exit":
-        return createExit(pointerX, pointerY);
-
-      case "text":
-        return createTextLabel(pointerX, pointerY);
-
-      default:
-        return null;
-    }
+  if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
+    pointerX = pos.x;
+    pointerY = pos.y;
   }
+
+  switch (tool) {
+    case "section":
+      return createSectionBlock(pointerX, pointerY);
+
+    case "row": {
+      const seatsPerRowStr = window.prompt(
+        "How many seats in each row?",
+        "10"
+      );
+      if (seatsPerRowStr == null) return null;
+      const seatsPerRow = parseInt(seatsPerRowStr, 10);
+      if (!Number.isFinite(seatsPerRow) || seatsPerRow <= 0) return null;
+
+      const rowCountStr = window.prompt(
+        "How many rows in this block?",
+        "1"
+      );
+      if (rowCountStr == null) return null;
+      const rowCount = parseInt(rowCountStr, 10);
+      if (!Number.isFinite(rowCount) || rowCount <= 0) return null;
+
+      // Row blocks ignore pointer position and always spawn centre-stage
+      return createRowOfSeats(0, 0, seatsPerRow, rowCount);
+    }
+
+    case "single":
+      return createSingleSeat(pointerX, pointerY);
+
+    case "circle-table": {
+      const seatCountStr = window.prompt(
+        "How many seats around this table?",
+        "8"
+      );
+      if (seatCountStr == null) return null;
+      const seatCount = parseInt(seatCountStr, 10);
+      if (!Number.isFinite(seatCount) || seatCount <= 0) return null;
+      return createCircularTable(pointerX, pointerY, seatCount);
+    }
+
+    case "rect-table": {
+      const input = window.prompt(
+        "Rectangular table – seats per long side, seats per short side (e.g. 4,2)",
+        "4,2"
+      );
+      if (input == null) return null;
+      const parts = input.split(",");
+      if (parts.length !== 2) return null;
+      const longSideSeats = parseInt(parts[0].trim(), 10);
+      const shortSideSeats = parseInt(parts[1].trim(), 10);
+      if (
+        !Number.isFinite(longSideSeats) ||
+        longSideSeats < 0 ||
+        !Number.isFinite(shortSideSeats) ||
+        shortSideSeats < 0
+      ) {
+        return null;
+      }
+      return createRectTable(pointerX, pointerY, { longSideSeats, shortSideSeats });
+    }
+
+    case "stage":
+      return createStage(pointerX, pointerY);
+
+    case "bar":
+      return createBar(pointerX, pointerY);
+
+    case "exit":
+      return createExit(pointerX, pointerY);
+
+    case "text":
+      return createTextLabel(pointerX, pointerY);
+
+    default:
+      return null;
+  }
+}
 
   // ---------- Init Konva ----------
 
@@ -1777,30 +1771,30 @@
 
   // ---------- Canvas interactions ----------
 
-  function handleStageClick(evt) {
-    const clickedOnEmpty =
-      evt.target === stage || evt.target.getParent() === gridLayer;
+function handleStageClick(evt) {
+  const clickedOnEmpty =
+    evt.target === stage || evt.target.getParent() === gridLayer;
 
-    if (!clickedOnEmpty) return;
+  if (!clickedOnEmpty) return;
 
-    if (!activeTool) {
-      clearSelection();
-      return;
-    }
-
-    const pointerPos = stage.getPointerPosition();
-    if (!pointerPos) return;
-
-    const node = createNodeForTool(activeTool, pointerPos);
-    if (!node) return;
-
-    mapLayer.add(node);
-    attachNodeBehaviour(node);
-    mapLayer.batchDraw();
-    updateSeatCount();
-    selectNode(node);
-    pushHistory();
+  if (!activeTool) {
+    clearSelection();
+    return;
   }
+
+  const pointerPos = stage.getPointerPosition();
+  if (!pointerPos) return;
+
+  const node = createNodeForTool(activeTool, pointerPos);
+  if (!node) return;
+
+  mapLayer.add(node);
+  attachNodeBehaviour(node);
+  mapLayer.batchDraw();
+  updateSeatCount();
+  selectNode(node);
+  pushHistory();
+}
 
   function handleKeyDown(e) {
     const nodes = transformer ? transformer.nodes() : [];
