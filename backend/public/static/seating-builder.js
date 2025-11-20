@@ -267,11 +267,8 @@
     const newLayer = Konva.Node.create(json);
     mapLayer.destroy();
     mapLayer = newLayer;
-
-    // Reset any stray offsets / scales
     mapLayer.position({ x: 0, y: 0 });
     mapLayer.scale({ x: 1, y: 1 });
-
     stage.add(mapLayer);
 
     mapLayer.getChildren().forEach((node) => {
@@ -753,7 +750,12 @@
     const snappedY = snap(y);
 
     // eslint-disable-next-line no-console
-    console.log("createRowOfSeats at", { x, y, snappedX, snappedY });
+    console.log("createRowOfSeats at", {
+      x,
+      y,
+      snappedX,
+      snappedY,
+    });
 
     const group = new Konva.Group({
       x: snappedX,
@@ -762,8 +764,6 @@
       name: "row-seats",
       shapeType: "row-seats",
     });
-
-    group.offset({ x: 0, y: 0 });
 
     // Core configuration
     group.setAttr("seatsPerRow", seatsPerRow);
@@ -901,7 +901,7 @@
     const table = getBodyRect(group);
     if (!table || !(table instanceof Konva.Circle)) return;
 
-    // remove old seats + labels (covers both old and new layouts)
+    // remove old seats + labels
     group
       .find(
         (node) =>
@@ -959,7 +959,7 @@
     const table = getBodyRect(group);
     if (!table || !(table instanceof Konva.Rect)) return;
 
-    // remove all current seats + labels (covers old saved layouts too)
+    // remove all current seats + labels
     group
       .find(
         (node) =>
@@ -970,7 +970,7 @@
       .forEach((n) => n.destroy());
 
     const seatRadius = 6;
-    const seatGap = 4;
+    the seatGap = 4;
     const longSpan =
       longSideSeats > 0 ? (longSideSeats - 1) * (seatRadius * 2 + seatGap) : 0;
     const shortSpan =
@@ -1079,7 +1079,7 @@
       return;
     }
 
-    // ----- Helper builders -----
+    // ----- Helper builders for inspector fields -----
 
     function addTitle(text) {
       const h = document.createElement("h4");
@@ -1396,6 +1396,9 @@
 
       addNumberField("Seats around table", seatCount, 1, 1, (val) => {
         updateCircularTableGeometry(node, val);
+        mapLayer.batchDraw();
+        updateSeatCount();
+        pushHistory();
       });
 
       addStaticRow(
@@ -1683,9 +1686,7 @@
         if (!Number.isFinite(rowCount) || rowCount <= 0) return null;
 
         const node = createRowOfSeats(pointerX, pointerY, seatsPerRow, rowCount);
-
         node.position({ x: snap(pointerX), y: snap(pointerY) });
-
         return node;
       }
 
@@ -1791,6 +1792,14 @@
   // ---------- Canvas interactions ----------
 
   function handleStageClick(evt) {
+    // Ignore clicks that didn't actually hit the canvas (e.g. toolbar, sliders)
+    const isCanvas =
+      evt.evt &&
+      evt.evt.target &&
+      evt.evt.target.tagName &&
+      evt.evt.target.tagName.toLowerCase() === "canvas";
+    if (!isCanvas) return;
+
     const clickedOnEmpty =
       evt.target === stage || evt.target.getParent() === gridLayer;
 
@@ -1835,20 +1844,14 @@
       return;
     }
 
-    if (
-      (e.key === "c" || e.key === "C") &&
-      (e.metaKey || e.ctrlKey)
-    ) {
+    if ((e.key === "c" || e.key === "C") && (e.metaKey || e.ctrlKey)) {
       if (!nodes.length) return;
       copiedNodesJson = nodes.map((n) => n.toJSON());
       e.preventDefault();
       return;
     }
 
-    if (
-      (e.key === "v" || e.key === "V") &&
-      (e.metaKey || e.ctrlKey)
-    ) {
+    if ((e.key === "v" || e.key === "V") && (e.metaKey || e.ctrlKey)) {
       if (!copiedNodesJson.length) return;
 
       const newNodes = copiedNodesJson.map((json) => {
