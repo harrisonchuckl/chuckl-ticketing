@@ -19,11 +19,9 @@
   }
 
   // ---------- Ensure sidebar DOM (seat count + inspector) ----------
+
   function ensureSidebarDom() {
-    // If inspector already exists (from server-rendered HTML), do nothing
-    if (document.getElementById("sb-inspector")) {
-      return;
-    }
+    if (document.getElementById("sb-inspector")) return;
 
     const parent = container.parentNode;
     if (!parent) return;
@@ -85,6 +83,7 @@
   ensureSidebarDom();
 
   // ---------- Config ----------
+
   const GRID_SIZE = 32;
   const STAGE_PADDING = 40;
   const MIN_ZOOM = 0.4;
@@ -97,6 +96,7 @@
   const CIRC_MIN_TABLE_RADIUS = 24;
 
   // ---------- State ----------
+
   let stage;
   let baseStageWidth = 0;
   let baseStageHeight = 0;
@@ -122,16 +122,12 @@
   let inspectorEl = null;
 
   function getSeatCountElement() {
-    if (!seatCountEl) {
-      seatCountEl = document.getElementById("sb-seat-count");
-    }
+    if (!seatCountEl) seatCountEl = document.getElementById("sb-seat-count");
     return seatCountEl;
   }
 
   function getInspectorElement() {
-    if (!inspectorEl) {
-      inspectorEl = document.getElementById("sb-inspector");
-    }
+    if (!inspectorEl) inspectorEl = document.getElementById("sb-inspector");
     return inspectorEl;
   }
 
@@ -173,9 +169,7 @@
     });
 
     const el = getSeatCountElement();
-    if (el) {
-      el.textContent = seats === 1 ? "1 seat" : `${seats} seats`;
-    }
+    if (el) el.textContent = seats === 1 ? "1 seat" : `${seats} seats`;
   }
 
   // ---------- Grid ----------
@@ -211,6 +205,7 @@
 
   function resizeStageToContainer() {
     if (!stage) return;
+
     const width = container.clientWidth - STAGE_PADDING * 2;
     const height = container.clientHeight - STAGE_PADDING * 2;
 
@@ -331,7 +326,6 @@
     return null;
   }
 
-  // Seat label helpers
   function makeSeatLabelText(text, x, y) {
     const label = new Konva.Text({
       x,
@@ -346,7 +340,6 @@
       isSeatLabel: true,
     });
 
-    // Rough centring – adjust after measuring
     label.offsetX(label.width() / 2);
     label.offsetY(label.height() / 2);
     return label;
@@ -365,11 +358,10 @@
 
   // Seat labels, with configurable start + mode
   function seatLabelFromIndex(mode, index, start) {
-    const base = Number.isFinite(start) ? start : 1; // e.g. 1 or 5
+    const base = Number.isFinite(start) ? start : 1;
     const n = base + index;
 
     if (mode === "letters") {
-      // 1 -> A, 2 -> B … using the same helper
       return rowLabelFromIndex(n - 1);
     }
     return String(n);
@@ -635,6 +627,7 @@
 
     const seatRadius = 6;
     const seatGap = 4;
+
     const longSpan =
       longSideSeats > 0 ? (longSideSeats - 1) * (seatRadius * 2 + seatGap) : 0;
     const shortSpan =
@@ -749,14 +742,6 @@
     const snappedX = snap(x);
     const snappedY = snap(y);
 
-    // eslint-disable-next-line no-console
-    console.log("createRowOfSeats at", {
-      x,
-      y,
-      snappedX,
-      snappedY,
-    });
-
     const group = new Konva.Group({
       x: snappedX,
       y: snappedY,
@@ -765,23 +750,19 @@
       shapeType: "row-seats",
     });
 
-    // Core configuration
     group.setAttr("seatsPerRow", seatsPerRow);
     group.setAttr("rowCount", rowCount);
 
-    // Label + layout config (defaults)
-    group.setAttr("seatLabelMode", "numbers"); // "numbers" | "letters"
-    group.setAttr("seatStart", 1); // seat numbers start at
-    group.setAttr("rowLabelPrefix", ""); // e.g. "Row "
-    group.setAttr("rowLabelStart", 0); // 0 => A, 1 => B …
+    // label + layout
+    group.setAttr("seatLabelMode", "numbers");
+    group.setAttr("seatStart", 1);
+    group.setAttr("rowLabelPrefix", "");
+    group.setAttr("rowLabelStart", 0);
+    group.setAttr("alignment", "center");
+    group.setAttr("curve", 0);
+    group.setAttr("skew", 0);
 
-    group.setAttr("alignment", "center"); // "left" | "center" | "right"
-    group.setAttr("curve", 0); // -10 .. 10
-    group.setAttr("skew", 0); // -10 .. 10
-
-    // Initial geometry build
     updateRowGroupGeometry(group, seatsPerRow, rowCount);
-
     return group;
   }
 
@@ -801,11 +782,10 @@
     const rowLabelPrefix = group.getAttr("rowLabelPrefix") || "";
     const rowLabelStart = group.getAttr("rowLabelStart") || 0;
 
-    const alignment = group.getAttr("alignment") || "center"; // left / center / right
-    const curve = group.getAttr("curve") || 0; // -10..10
-    const skew = group.getAttr("skew") || 0; // -10..10
+    const alignment = group.getAttr("alignment") || "center";
+    const curve = group.getAttr("curve") || 0;
+    const skew = group.getAttr("skew") || 0;
 
-    // Wipe existing seats + labels
     group
       .find(
         (node) =>
@@ -819,8 +799,8 @@
     const seatRadius = 6;
     const rowSpacing = 20;
 
-    const curveFactor = curve / 10; // -1 .. 1
-    const skewFactor = skew / 10; // -1 .. 1
+    const curveFactor = curve / 10;
+    const skewFactor = skew / 10;
     const centerIndex = (seatsPerRow - 1) / 2;
 
     function computeSeatX(i) {
@@ -830,7 +810,6 @@
       if (alignment === "right") {
         return -(seatsPerRow - 1) * spacing + i * spacing;
       }
-      // centre
       return (i - centerIndex) * spacing;
     }
 
@@ -841,13 +820,11 @@
       for (let i = 0; i < seatsPerRow; i += 1) {
         let sx = computeSeatX(i);
 
-        // Curve: bend row into a shallow arc
         const offsetIndex = i - centerIndex;
         const curveOffset = curveFactor * offsetIndex * offsetIndex * 1.2;
 
         const rowY = baseRowY + curveOffset;
 
-        // Skew: tilt block left/right based on row index
         sx += skewFactor * baseRowY;
 
         const seat = new Konva.Circle({
@@ -868,7 +845,6 @@
         if (sx < rowMinX) rowMinX = sx;
       }
 
-      // Row label (A, B, C…) down the left
       const rowLabelText =
         rowLabelPrefix + rowLabelFromIndex(rowLabelStart + r);
 
@@ -901,7 +877,6 @@
     const table = getBodyRect(group);
     if (!table || !(table instanceof Konva.Circle)) return;
 
-    // remove old seats + labels
     group
       .find(
         (node) =>
@@ -959,7 +934,6 @@
     const table = getBodyRect(group);
     if (!table || !(table instanceof Konva.Rect)) return;
 
-    // remove all current seats + labels
     group
       .find(
         (node) =>
@@ -970,7 +944,8 @@
       .forEach((n) => n.destroy());
 
     const seatRadius = 6;
-    the seatGap = 4;
+    const seatGap = 4;
+
     const longSpan =
       longSideSeats > 0 ? (longSideSeats - 1) * (seatRadius * 2 + seatGap) : 0;
     const shortSpan =
@@ -988,7 +963,6 @@
 
     let seatIndex = 0;
 
-    // long sides (top + bottom)
     for (let i = 0; i < longSideSeats; i += 1) {
       const sx =
         -width / 2 + seatRadius * 2 + i * (seatRadius * 2 + seatGap);
@@ -1022,7 +996,6 @@
       group.add(bottomLabel);
     }
 
-    // short sides (left + right)
     for (let i = 0; i < shortSideSeats; i += 1) {
       const sy =
         -height / 2 + seatRadius * 2 + i * (seatRadius * 2 + seatGap);
@@ -1078,8 +1051,6 @@
       el.innerHTML = `<p class="sb-inspector-multi">${nodes.length} items selected. Drag to move them together.</p>`;
       return;
     }
-
-    // ----- Helper builders for inspector fields -----
 
     function addTitle(text) {
       const h = document.createElement("h4");
@@ -1455,14 +1426,12 @@
       return;
     }
 
-    // Fallback
     addTitle("Selection");
     const p = document.createElement("p");
     p.textContent = "This element has no editable settings yet.";
     el.appendChild(p);
   }
 
-  // expose inspector hook (debugging / future)
   window.renderSeatmapInspector = renderInspector;
 
   // ---------- Selection / transformer ----------
@@ -1564,9 +1533,7 @@
 
     node.on("dragstart", () => {
       const nodes = transformer ? transformer.nodes() : [];
-      if (!nodes.length) {
-        selectNode(node, false);
-      }
+      if (!nodes.length) selectNode(node, false);
       lastDragPos = { x: node.x(), y: node.y() };
     });
 
@@ -1652,7 +1619,6 @@
   // ---------- Node creation based on active tool ----------
 
   function createNodeForTool(tool, pos) {
-    // Default to stage centre, override with pointer if provided
     let pointerX = stage ? stage.width() / 2 : 0;
     let pointerY = stage ? stage.height() / 2 : 0;
 
@@ -1792,14 +1758,6 @@
   // ---------- Canvas interactions ----------
 
   function handleStageClick(evt) {
-    // Ignore clicks that didn't actually hit the canvas (e.g. toolbar, sliders)
-    const isCanvas =
-      evt.evt &&
-      evt.evt.target &&
-      evt.evt.target.tagName &&
-      evt.evt.target.tagName.toLowerCase() === "canvas";
-    if (!isCanvas) return;
-
     const clickedOnEmpty =
       evt.target === stage || evt.target.getParent() === gridLayer;
 
@@ -1844,14 +1802,20 @@
       return;
     }
 
-    if ((e.key === "c" || e.key === "C") && (e.metaKey || e.ctrlKey)) {
+    if (
+      (e.key === "c" || e.key === "C") &&
+      (e.metaKey || e.ctrlKey)
+    ) {
       if (!nodes.length) return;
       copiedNodesJson = nodes.map((n) => n.toJSON());
       e.preventDefault();
       return;
     }
 
-    if ((e.key === "v" || e.key === "V") && (e.metaKey || e.ctrlKey)) {
+    if (
+      (e.key === "v" || e.key === "V") &&
+      (e.metaKey || e.ctrlKey)
+    ) {
       if (!copiedNodesJson.length) return;
 
       const newNodes = copiedNodesJson.map((json) => {
