@@ -738,33 +738,47 @@
 
   // -------- Row of seats --------
 
-  function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
-    const snappedX = snap(x);
-    const snappedY = snap(y);
+  ffunction createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
+  const snappedX = snap(x);
+  const snappedY = snap(y);
 
-    const group = new Konva.Group({
-      x: snappedX,
-      y: snappedY,
-      draggable: true,
-      name: "row-seats",
-      shapeType: "row-seats",
-    });
+  // Debug log so we can see what we're doing
+  // eslint-disable-next-line no-console
+  console.log("createRowOfSeats at", { x, y, snappedX, snappedY });
 
-    group.setAttr("seatsPerRow", seatsPerRow);
-    group.setAttr("rowCount", rowCount);
+  // IMPORTANT: don't use x/y on the group here, use absolutePosition
+  const group = new Konva.Group({
+    draggable: true,
+    name: "row-seats",
+    shapeType: "row-seats",
+  });
 
-    // label + layout
-    group.setAttr("seatLabelMode", "numbers");
-    group.setAttr("seatStart", 1);
-    group.setAttr("rowLabelPrefix", "");
-    group.setAttr("rowLabelStart", 0);
-    group.setAttr("alignment", "center");
-    group.setAttr("curve", 0);
-    group.setAttr("skew", 0);
+  // Force the group to live exactly where the pointer was (snapped)
+  group.absolutePosition({
+    x: snappedX,
+    y: snappedY,
+  });
 
-    updateRowGroupGeometry(group, seatsPerRow, rowCount);
-    return group;
-  }
+  // Core configuration
+  group.setAttr("seatsPerRow", seatsPerRow);
+  group.setAttr("rowCount", rowCount);
+
+  // Label + layout config (defaults)
+  group.setAttr("seatLabelMode", "numbers");   // "numbers" | "letters"
+  group.setAttr("seatStart", 1);               // seat numbers start at
+  group.setAttr("rowLabelPrefix", "");         // e.g. "Row "
+  group.setAttr("rowLabelStart", 0);           // 0 => A, 1 => B …
+
+  group.setAttr("alignment", "center");        // "left" | "center" | "right"
+  group.setAttr("curve", 0);                   // -10 .. 10
+  group.setAttr("skew", 0);                    // -10 .. 10
+
+  // Build the seats inside the group at local coordinates
+  updateRowGroupGeometry(group, seatsPerRow, rowCount);
+
+  return group;
+}
+
 
   // ---------- Geometry updaters ----------
 
