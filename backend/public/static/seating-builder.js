@@ -740,25 +740,22 @@
 
   // -------- Row of seats --------
 
+// -------- Row of seats --------
+
 function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
   const snappedX = snap(x);
   const snappedY = snap(y);
 
-  // Debug log so we can see what we're doing
   // eslint-disable-next-line no-console
   console.log("createRowOfSeats at", { x, y, snappedX, snappedY });
 
-  // IMPORTANT: don't use x/y on the group here, use absolutePosition
+  // Position the group directly where we clicked (snapped to grid)
   const group = new Konva.Group({
+    x: snappedX,
+    y: snappedY,
     draggable: true,
     name: "row-seats",
     shapeType: "row-seats",
-  });
-
-  // Force the group to live exactly where the pointer was (snapped)
-  group.absolutePosition({
-    x: snappedX,
-    y: snappedY,
   });
 
   // Core configuration
@@ -780,6 +777,7 @@ function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
 
   return group;
 }
+
 
 
 
@@ -1652,31 +1650,25 @@ function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
         return createSectionBlock(pointerX, pointerY);
 
             case "row": {
-        const seatsPerRowStr = window.prompt(
-          "How many seats in each row?",
-          "10"
-        );
-        if (seatsPerRowStr == null) return null;
-        const seatsPerRow = parseInt(seatsPerRowStr, 10);
-        if (!Number.isFinite(seatsPerRow) || seatsPerRow <= 0) return null;
+  const seatsPerRowStr = window.prompt(
+    "How many seats in each row?",
+    "10"
+  );
+  if (seatsPerRowStr == null) return null;
+  const seatsPerRow = parseInt(seatsPerRowStr, 10);
+  if (!Number.isFinite(seatsPerRow) || seatsPerRow <= 0) return null;
 
-        const rowCountStr = window.prompt(
-          "How many rows in this block?",
-          "1"
-        );
-        if (rowCountStr == null) return null;
-        const rowCount = parseInt(rowCountStr, 10);
-        if (!Number.isFinite(rowCount) || rowCount <= 0) return null;
+  const rowCountStr = window.prompt(
+    "How many rows in this block?",
+    "1"
+  );
+  if (rowCountStr == null) return null;
+  const rowCount = parseInt(rowCountStr, 10);
+  if (!Number.isFinite(rowCount) || rowCount <= 0) return null;
 
-        const node = createRowOfSeats(
-          pointerX,
-          pointerY,
-          seatsPerRow,
-          rowCount
-        );
-        // No extra positioning here – createRowOfSeats already snaps/places it
-        return node;
-      }
+  // Positioning is handled inside createRowOfSeats
+  return createRowOfSeats(pointerX, pointerY, seatsPerRow, rowCount);
+}
 
       case "single":
         return createSingleSeat(pointerX, pointerY);
