@@ -742,34 +742,41 @@
   }
 
   function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
-    // Create the block exactly where the user clicked
-    const group = new Konva.Group({
-      x: snap(x),
-      y: snap(y),
-      draggable: true,
-      name: "row-seats",
-      shapeType: "row-seats",
-    });
+  // Use where the user clicked, with a safe fallback to the stage centre
+  const hasValidX = typeof x === "number" && Number.isFinite(x);
+  const hasValidY = typeof y === "number" && Number.isFinite(y);
 
-    // Core configuration
-    group.setAttr("seatsPerRow", seatsPerRow);
-    group.setAttr("rowCount", rowCount);
+  const fallbackX = stage ? stage.width() / 2 : 0;
+  const fallbackY = stage ? stage.height() / 2 : 0;
 
-    // Label + layout config (defaults)
-    group.setAttr("seatLabelMode", "numbers"); // "numbers" | "letters"
-    group.setAttr("seatStart", 1);             // seat numbers start at
-    group.setAttr("rowLabelPrefix", "");       // e.g. "Row "
-    group.setAttr("rowLabelStart", 0);         // 0 => A, 1 => B …
+  const group = new Konva.Group({
+    x: snap(hasValidX ? x : fallbackX),
+    y: snap(hasValidY ? y : fallbackY),
+    draggable: true,
+    name: "row-seats",
+    shapeType: "row-seats",
+  });
 
-    group.setAttr("alignment", "center");      // "left" | "center" | "right"
-    group.setAttr("curve", 0);                 // -10 .. 10
-    group.setAttr("skew", 0);                  // -10 .. 10
+  // Core configuration
+  group.setAttr("seatsPerRow", seatsPerRow);
+  group.setAttr("rowCount", rowCount);
 
-    // Initial geometry build
-    updateRowGroupGeometry(group, seatsPerRow, rowCount);
+  // Label + layout config (defaults)
+  group.setAttr("seatLabelMode", "numbers");   // "numbers" | "letters"
+  group.setAttr("seatStart", 1);               // seat numbers start at
+  group.setAttr("rowLabelPrefix", "");         // e.g. "Row "
+  group.setAttr("rowLabelStart", 0);           // 0 => A, 1 => B …
 
-    return group;
-  }
+  group.setAttr("alignment", "center");        // "left" | "center" | "right"
+  group.setAttr("curve", 0);                   // -10 .. 10
+  group.setAttr("skew", 0);                    // -10 .. 10
+
+  // Initial geometry build
+  updateRowGroupGeometry(group, seatsPerRow, rowCount);
+
+  return group;
+}
+
 
 
 
@@ -1669,7 +1676,7 @@
       const rowCount = parseInt(rowCountStr, 10);
       if (!Number.isFinite(rowCount) || rowCount <= 0) return null;
 
-      // Create the row block exactly at the click position
+          // Place the row block where the user clicked
       return createRowOfSeats(pointerX, pointerY, seatsPerRow, rowCount);
     }
 
