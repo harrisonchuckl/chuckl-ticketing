@@ -736,9 +736,6 @@
     return group;
   }
 
-  // -------- Row of seats --------
-
-  // -------- Row of seats --------
 
 // -------- Row of seats --------
 
@@ -746,10 +743,11 @@ function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
   const snappedX = snap(x);
   const snappedY = snap(y);
 
+  // Debug log so we can see what we're doing
   // eslint-disable-next-line no-console
   console.log("createRowOfSeats at", { x, y, snappedX, snappedY });
 
-  // Position the group directly where we clicked (snapped to grid)
+  // IMPORTANT: put the group directly at the snapped grid position
   const group = new Konva.Group({
     x: snappedX,
     y: snappedY,
@@ -777,6 +775,7 @@ function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
 
   return group;
 }
+
 
 
 
@@ -1649,26 +1648,28 @@ function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
       case "section":
         return createSectionBlock(pointerX, pointerY);
 
-            case "row": {
-  const seatsPerRowStr = window.prompt(
-    "How many seats in each row?",
-    "10"
-  );
-  if (seatsPerRowStr == null) return null;
-  const seatsPerRow = parseInt(seatsPerRowStr, 10);
-  if (!Number.isFinite(seatsPerRow) || seatsPerRow <= 0) return null;
+              case "row": {
+      const seatsPerRowStr = window.prompt(
+        "How many seats in each row?",
+        "10"
+      );
+      if (seatsPerRowStr == null) return null;
+      const seatsPerRow = parseInt(seatsPerRowStr, 10);
+      if (!Number.isFinite(seatsPerRow) || seatsPerRow <= 0) return null;
 
-  const rowCountStr = window.prompt(
-    "How many rows in this block?",
-    "1"
-  );
-  if (rowCountStr == null) return null;
-  const rowCount = parseInt(rowCountStr, 10);
-  if (!Number.isFinite(rowCount) || rowCount <= 0) return null;
+      const rowCountStr = window.prompt(
+        "How many rows in this block?",
+        "1"
+      );
+      if (rowCountStr == null) return null;
+      const rowCount = parseInt(rowCountStr, 10);
+      if (!Number.isFinite(rowCount) || rowCount <= 0) return null;
 
-  // Positioning is handled inside createRowOfSeats
-  return createRowOfSeats(pointerX, pointerY, seatsPerRow, rowCount);
-}
+      const node = createRowOfSeats(pointerX, pointerY, seatsPerRow, rowCount);
+      // no extra positioning here – createRowOfSeats already snaps the group
+      return node;
+    }
+
 
       case "single":
         return createSingleSeat(pointerX, pointerY);
