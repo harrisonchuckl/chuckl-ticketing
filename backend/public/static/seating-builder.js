@@ -85,7 +85,7 @@
   // ---------- Config ----------
 
   const GRID_SIZE = 32;
-  const STAGE_PADDING = 0;
+  const STAGE_PADDING = 0; // full tile
   const MIN_ZOOM = 0.4;
   const MAX_ZOOM = 2.4;
   const ZOOM_STEP = 0.1;
@@ -736,46 +736,39 @@
     return group;
   }
 
+  // -------- Row of seats --------
 
-// -------- Row of seats --------
+  function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
+    const snappedX = snap(x);
+    const snappedY = snap(y);
 
-function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
-  const snappedX = snap(x);
-  const snappedY = snap(y);
+    // eslint-disable-next-line no-console
+    console.log("createRowOfSeats at", { x, y, snappedX, snappedY });
 
-  // Debug log so we can see what we're doing
-  // eslint-disable-next-line no-console
-  console.log("createRowOfSeats at", { x, y, snappedX, snappedY });
+    const group = new Konva.Group({
+      x: snappedX,
+      y: snappedY,
+      draggable: true,
+      name: "row-seats",
+      shapeType: "row-seats",
+    });
 
-  // Put the group directly at the snapped grid position
-  const group = new Konva.Group({
-    x: snappedX,
-    y: snappedY,
-    draggable: true,
-    name: "row-seats",
-    shapeType: "row-seats",
-  });
+    // core config
+    group.setAttr("seatsPerRow", seatsPerRow);
+    group.setAttr("rowCount", rowCount);
 
-  // Core configuration
-  group.setAttr("seatsPerRow", seatsPerRow);
-  group.setAttr("rowCount", rowCount);
+    // label + layout defaults
+    group.setAttr("seatLabelMode", "numbers");
+    group.setAttr("seatStart", 1);
+    group.setAttr("rowLabelPrefix", "");
+    group.setAttr("rowLabelStart", 0);
+    group.setAttr("alignment", "center");
+    group.setAttr("curve", 0);
+    group.setAttr("skew", 0);
 
-  // Label + layout config (defaults)
-  group.setAttr("seatLabelMode", "numbers");   // "numbers" | "letters"
-  group.setAttr("seatStart", 1);               // seat numbers start at
-  group.setAttr("rowLabelPrefix", "");         // e.g. "Row "
-  group.setAttr("rowLabelStart", 0);           // 0 => A, 1 => B …
-
-  group.setAttr("alignment", "center");        // "left" | "center" | "right"
-  group.setAttr("curve", 0);                   // -10 .. 10
-  group.setAttr("skew", 0);                    // -10 .. 10
-
-  // Build the seats inside the group at local coordinates
-  updateRowGroupGeometry(group, seatsPerRow, rowCount);
-
-  return group;
-}
-
+    updateRowGroupGeometry(group, seatsPerRow, rowCount);
+    return group;
+  }
 
   // ---------- Geometry updaters ----------
 
@@ -1641,7 +1634,7 @@ function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
     // eslint-disable-next-line no-console
     console.log("createNodeForTool", tool, { pointerX, pointerY });
 
-        switch (tool) {
+    switch (tool) {
       case "section":
         return createSectionBlock(pointerX, pointerY);
 
@@ -1662,12 +1655,9 @@ function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
         const rowCount = parseInt(rowCountStr, 10);
         if (!Number.isFinite(rowCount) || rowCount <= 0) return null;
 
-        // Let createRowOfSeats handle snapping and positioning
         const node = createRowOfSeats(pointerX, pointerY, seatsPerRow, rowCount);
         return node;
       }
-
-
 
       case "single":
         return createSingleSeat(pointerX, pointerY);
@@ -1726,24 +1716,18 @@ function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
 
   // ---------- Init Konva ----------
 
-    function resizeStageToContainer() {
-    if (!stage) return;
-
-    const width = container.clientWidth;
-    const height = container.clientHeight;
+  function initStage() {
+    const width = container.clientWidth - STAGE_PADDING * 2;
+    const height = container.clientHeight - STAGE_PADDING * 2;
 
     baseStageWidth = width;
     baseStageHeight = height;
 
-    const currentScale = stage.scaleX() || 1;
-
-    stage.size({
-      width: baseStageWidth / currentScale,
-      height: baseStageHeight / currentScale,
+    stage = new Konva.Stage({
+      container: "app",
+      width,
+      height,
     });
-
-    drawSquareGrid();
-  }
 
     const domContainer = stage.container();
     domContainer.style.backgroundImage = "none";
