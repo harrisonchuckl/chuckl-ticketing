@@ -742,16 +742,10 @@
   }
 
   function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
-  // Use where the user clicked, with a safe fallback to the stage centre
-  const hasValidX = typeof x === "number" && Number.isFinite(x);
-  const hasValidY = typeof y === "number" && Number.isFinite(y);
-
-  const fallbackX = stage ? stage.width() / 2 : 0;
-  const fallbackY = stage ? stage.height() / 2 : 0;
-
+  // Create the row block at the supplied position (like all other tools)
   const group = new Konva.Group({
-    x: snap(hasValidX ? x : fallbackX),
-    y: snap(hasValidY ? y : fallbackY),
+    x: snap(x),
+    y: snap(y),
     draggable: true,
     name: "row-seats",
     shapeType: "row-seats",
@@ -776,8 +770,6 @@
 
   return group;
 }
-
-
 
 
   // ---------- Geometry updaters ----------
@@ -1660,25 +1652,25 @@
       return createSectionBlock(pointerX, pointerY);
 
        case "row": {
-      const seatsPerRowStr = window.prompt(
-        "How many seats in each row?",
-        "10"
-      );
-      if (seatsPerRowStr == null) return null;
-      const seatsPerRow = parseInt(seatsPerRowStr, 10);
-      if (!Number.isFinite(seatsPerRow) || seatsPerRow <= 0) return null;
+  const seatsPerRowStr = window.prompt(
+    "How many seats in each row?",
+    "10"
+  );
+  if (seatsPerRowStr == null) return null;
+  const seatsPerRow = parseInt(seatsPerRowStr, 10);
+  if (!Number.isFinite(seatsPerRow) || seatsPerRow <= 0) return null;
 
-      const rowCountStr = window.prompt(
-        "How many rows in this block?",
-        "1"
-      );
-      if (rowCountStr == null) return null;
-      const rowCount = parseInt(rowCountStr, 10);
-      if (!Number.isFinite(rowCount) || rowCount <= 0) return null;
+  const rowCountStr = window.prompt(
+    "How many rows in this block?",
+    "1"
+  );
+  if (rowCountStr == null) return null;
+  const rowCount = parseInt(rowCountStr, 10);
+  if (!Number.isFinite(rowCount) || rowCount <= 0) return null;
 
-          // Place the row block where the user clicked
-      return createRowOfSeats(pointerX, pointerY, seatsPerRow, rowCount);
-    }
+  // Place the row block exactly where the user clicked
+  return createRowOfSeats(pointerX, pointerY, seatsPerRow, rowCount);
+}
 
     case "single":
       return createSingleSeat(pointerX, pointerY);
