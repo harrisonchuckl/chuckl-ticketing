@@ -1240,8 +1240,14 @@
       return;
     }
 
-   const shapeType = node.getAttr("shapeType") || node.name();
-  const nodes = transformer ? transformer.nodes() : [];
+    const shapeType = node.getAttr("shapeType") || node.name();
+    const nodes = transformer ? transformer.nodes() : [];
+
+    // Debug: confirm we’re being called + what’s selected
+    // eslint-disable-next-line no-console
+    console.log("[renderInspector] shapeType:", shapeType, {
+      multiCount: nodes ? nodes.length : 0,
+    });
 
     if (nodes && nodes.length > 1) {
       el.innerHTML = `<p class="sb-inspector-multi">${nodes.length} items selected. Drag to move them together.</p>`;
@@ -1622,15 +1628,17 @@
       return;
     }
 
+    // Fallback for non-configurable shapes
     addTitle("Selection");
     const p = document.createElement("p");
     p.textContent = "This element has no editable settings yet.";
     el.appendChild(p);
   }
 
+  // expose so we can poke it from console if needed
   window.renderSeatmapInspector = renderInspector;
 
-    // ---------- Selection / transformer ----------
+  // ---------- Selection / transformer ----------
 
   function configureTransformerForNode(node) {
     if (!transformer || !node) return;
@@ -1668,9 +1676,18 @@
   }
 
   function selectNode(node, additive = false) {
-    if (!transformer || !node) return;
+    if (!node) {
+      clearSelection();
+      return;
+    }
 
-    let nodes = transformer.nodes();
+    if (!transformer) {
+      selectedNode = node;
+      renderInspector(node);
+      return;
+    }
+
+    let nodes = transformer.nodes() || [];
 
     if (additive) {
       const already = nodes.includes(node);
@@ -1706,6 +1723,12 @@
     // Make sure each group always has a sane hit rect
     ensureHitRect(node);
 
+    // Click selection (also supports shift for multi-select)
+    node.on("click", (evt) => {
+      const isShift = !!(evt.evt && evt.evt.shiftKey);
+      selectNode(node, isShift);
+    });
+
     // Cursor hints
     node.on("mouseover", () => {
       stage.container().style.cursor = "grab";
@@ -1715,10 +1738,9 @@
       stage.container().style.cursor = activeTool ? "crosshair" : "default";
     });
 
-    // Drag behaviour (selection itself is handled centrally on the stage)
+    // Drag behaviour (selection itself is handled centrally on click too)
     node.on("dragstart", () => {
       const nodes = transformer ? transformer.nodes() : [];
-      // If nothing is selected yet, select this node when drag starts
       if (!nodes.length) selectNode(node, false);
       lastDragPos = { x: node.x(), y: node.y() };
     });
@@ -1733,7 +1755,6 @@
       const dx = node.x() - lastDragPos.x;
       const dy = node.y() - lastDragPos.y;
 
-      // Move multi-selection together
       if (nodes.length > 1) {
         nodes.forEach((n) => {
           if (n !== node) {
@@ -1794,7 +1815,6 @@
 
         node.scale({ x: 1, y: 1 });
       } else {
-        // For rows / tables, just reset scale so geometry functions stay in charge
         node.scale({ x: 1, y: 1 });
       }
 
