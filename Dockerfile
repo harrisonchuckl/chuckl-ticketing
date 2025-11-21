@@ -18,10 +18,11 @@ RUN npx prisma generate --schema=prisma/schema.prisma
 FROM node:20-bullseye-slim AS builder
 WORKDIR /app/backend
 
-# Native build prerequisites (sharp etc.)
-RUN apt-get update \
- && apt-get install -y --no-install-recommends python3 build-essential ca-certificates openssl \
- && rm -rf /var/lib/apt/lists/*
+# Native build prerequisites (sharp etc.) – be tolerant of flaky mirrors on Railway
+RUN apt-get update || true \
+  && apt-get install -y --no-install-recommends --fix-missing \
+       python3 build-essential ca-certificates openssl || true \
+  && rm -rf /var/lib/apt/lists/* || true
 
 # Re-use node_modules (including generated Prisma client) from proddeps
 COPY --from=proddeps /app/backend/node_modules ./node_modules
