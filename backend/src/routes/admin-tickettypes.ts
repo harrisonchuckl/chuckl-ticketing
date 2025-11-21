@@ -1,101 +1,582 @@
-// backend/src/routes/admin-tickettypes.ts
-import { Router, type Request, type Response } from 'express';
-import { prisma } from '../db.js';
+import { Router } from "express";
+import { PrismaClient } from "@prisma/client";
+import { verifyJwt } from "../utils/security.js";
 
+const prisma = new PrismaClient();
 const router = Router();
 
-// List ticket types for a show
-router.get('/shows/:showId/ticket-types', async (req: Request, res: Response) => {
+/**
+ * LayoutKey is still used for analytics + templates
+ * but now the saved layout includes full Konva JSON.
+ */
+type LayoutKey = "tables" | "sections" | "mixed" | "blank";
+
+function normaliseLayout(raw: string | undefined): LayoutKey {
+  if (raw === "tables" || raw === "sections" || raw === "mixed" || raw === "blank") {
+    return raw;
+  }
+  return "tables";
+}
+
+/**
+ * Helper: extract userId from JWT cookie
+ */
+async function getUserIdFromRequest(req: any): Promise<string | null> {
   try {
-    const { showId } = req.params;
-    const types = await prisma.ticketType.findMany({
+    const token = (req.cookies && req.cookies.auth) || null;
+    if (!token) return null;
+    const payload = await verifyJwt<{ sub?: string }>(token);
+    if (!payload || !payload.sub) return null;
+    return String(payload.sub);
+  } catch {
+    return null;
+  }
+}
+
+/* -------------------------------------------------------------
+   ROUTE: GET available seat maps for this show
+   (Used by the builder's loader on page open)
+
+   NOTE: we intentionally *avoid* prisma.show.findUnique here to
+   sidestep the organiserId migration drift in production. We read
+   Show via raw SQL instead.
+-------------------------------------------------------------- */
+router.get("/builder/api/seatmaps/:showId", async (req, res) => {
+  try {
+    const showId = req.params.showId;
+    const userId = await getUserIdFromRequest(req);
+
+    // Read the Show row via raw SQL so we don't reference organiserId
+    const rawShows = await prisma.$queryRaw<
+      { id: string; title: string | null; date: Date | null; venueId: string | null }[]
+    >`SELECT "id","title","date","venueId" FROM "Show" WHERE "id" = ${showId} LIMIT 1`;
+
+    const showRow = rawShows[0];
+    if (!showRow) {
+      return res.status(404).json({ error: "Show not found" });
+    }
+
+    // Look up the venue (normal Prisma; Venue table doesn't have the drift)
+    let venue: any = null;
+    if (showRow.venueId) {
+      venue = await prisma.venue.findUnique({
+        where: { id: showRow.venueId },
+        select: {
+          id: true,
+          name: true,
+          city: true,
+          capacity: true,
+        },
+      });
+    }
+
+    // This show's active seat map(s)
+    const seatMapsForShow = await prisma.seatMap.findMany({
       where: { showId },
-      orderBy: { createdAt: 'asc' }
+      orderBy: { createdAt: "desc" },
     });
-    res.json({ ok: true, ticketTypes: types });
-  } catch (e: any) {
-    res.status(500).json({ error: true, message: e?.message ?? 'Failed to load ticket types' });
+    const activeSeatMap = seatMapsForShow.length > 0 ? seatMapsForShow[0] : null;
+
+    // Previous layouts + templates at this venue (for the right-hand list)
+    let previousMaps: any[] = [];
+    let templates: any[] = [];
+
+    if (showRow.venueId) {
+      const base = { venueId: showRow.venueId };
+      const previousWhere: any = { ...base, isTemplate: false };
+      const templateWhere: any = { ...base, isTemplate: true };
+
+      if (userId) {
+        previousWhere.createdByUserId = userId;
+        templateWhere.createdByUserId = userId;
+      }
+
+      previousMaps = await prisma.seatMap.findMany({
+        where: previousWhere,
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          name: true,
+          createdAt: true,
+          version: true,
+          layout: true,
+          isTemplate: true,
+          isDefault: true,
+        },
+      });
+
+      templates = await prisma.seatMap.findMany({
+        where: templateWhere,
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          name: true,
+          createdAt: true,
+          version: true,
+          layout: true,
+          isTemplate: true,
+          isDefault: true,
+        },
+      });
+    }
+
+    return res.json({
+      show: {
+        id: showRow.id,
+        title: showRow.title,
+        date: showRow.date,
+        venue: venue
+          ? {
+              id: venue.id,
+              name: venue.name,
+              city: venue.city,
+              capacity: venue.capacity,
+            }
+          : null,
+      },
+      activeSeatMap: activeSeatMap
+        ? {
+            id: activeSeatMap.id,
+            name: activeSeatMap.name,
+            layout: activeSeatMap.layout,
+            isTemplate: activeSeatMap.isTemplate,
+            isDefault: activeSeatMap.isDefault,
+            version: activeSeatMap.version,
+          }
+        : null,
+      previousMaps,
+      templates,
+    });
+  } catch (err) {
+    console.error("Error in GET /builder/api/seatmaps/:showId", err);
+    return res.status(500).json({ error: "internal_error" });
   }
 });
 
-// Create
-router.post('/shows/:showId/ticket-types', async (req: Request, res: Response) => {
+/* -------------------------------------------------------------
+   ROUTE: POST save seat map (wizard OR full Konva canvas)
+-------------------------------------------------------------- */
+router.post("/builder/api/seatmaps/:showId", async (req, res) => {
   try {
-    const { showId } = req.params;
-    const { name, pricePence, available } = req.body || {};
+    const showId = req.params.showId;
+    const {
+      seatMapId,
+      saveAsTemplate,
+      name,
+      layoutType,
+      config,
+      estimatedCapacity,
+      konvaJson,
+    } = req.body ?? {};
 
-    if (!name || !String(name).trim()) {
-      return res.status(400).json({ error: true, message: 'Name is required' });
+    const showRow = (
+      await prisma.$queryRaw<{ id: string; venueId: string | null }[]>
+        `SELECT "id","venueId" FROM "Show" WHERE "id" = ${showId} LIMIT 1`
+    )[0];
+
+    if (!showRow) {
+      return res.status(404).json({ error: "Show not found" });
     }
 
-    const price = Number(pricePence);
-    if (!Number.isFinite(price) || price < 0) {
-      return res.status(400).json({ error: true, message: 'pricePence must be a non-negative number' });
-    }
+    const userId = await getUserIdFromRequest(req);
 
-    const avail = available == null || available === '' ? null : Number(available);
-    if (avail != null && (!Number.isFinite(avail) || avail < 0)) {
-      return res.status(400).json({ error: true, message: 'available must be a non-negative number' });
-    }
+    const finalName =
+      name ||
+      ((showRow.venueId ? "Room layout" : "Room") +
+        (layoutType ? ` – ${layoutType}` : " – Layout"));
 
-    const created = await prisma.ticketType.create({
-      data: {
+    const layoutPayload = {
+      layoutType: layoutType ?? null,
+      config: config ?? null,
+      estimatedCapacity: estimatedCapacity ?? null,
+      konvaJson: konvaJson ?? null,
+      meta: {
         showId,
-        name: String(name).trim(),
-        pricePence: price,
-        available: avail
-      }
-    });
+        venueId: showRow.venueId ?? null,
+        savedAt: new Date().toISOString(),
+      },
+    };
 
-    res.json({ ok: true, ticketType: created });
-  } catch (e: any) {
-    res.status(500).json({ error: true, message: e?.message ?? 'Failed to create ticket type' });
+    let saved;
+
+    if (seatMapId) {
+      // update
+      saved = await prisma.seatMap.update({
+        where: { id: seatMapId },
+        data: {
+          name: finalName,
+          layout: layoutPayload as any,
+          isTemplate: !!saveAsTemplate,
+          updatedAt: new Date(),
+          version: { increment: 1 },
+        },
+      });
+    } else {
+      // create
+      saved = await prisma.seatMap.create({
+        data: {
+          name: finalName,
+          layout: layoutPayload as any,
+          isTemplate: !!saveAsTemplate,
+          createdByUserId: userId ?? null,
+          showId: showRow.id,
+          venueId: showRow.venueId ?? null,
+        },
+      });
+    }
+
+    return res.json({
+      ok: true,
+      seatMap: {
+        id: saved.id,
+        name: saved.name,
+        version: saved.version,
+        isTemplate: saved.isTemplate,
+      },
+    });
+  } catch (err) {
+    console.error("Error in POST /builder/api/seatmaps/:showId", err);
+    return res.status(500).json({ error: "internal_error" });
   }
 });
 
-// Update
-router.put('/ticket-types/:id', async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const { name, pricePence, available } = req.body || {};
+/* -------------------------------------------------------------
+   ROUTE: GET builder full-page HTML
+   (Konva editor lives in #app; left rail is now a fixed slim bar
+   with icon + label, no hover expansion.)
+-------------------------------------------------------------- */
+router.get("/builder/preview/:showId", (req, res) => {
+  const showId = req.params.showId;
+  const layout = normaliseLayout(req.query.layout as string | undefined);
 
-    const data: any = {};
-    if (name != null) data.name = String(name).trim();
-    if (pricePence != null) {
-      const price = Number(pricePence);
-      if (!Number.isFinite(price) || price < 0) {
-        return res.status(400).json({ error: true, message: 'pricePence must be a non-negative number' });
-      }
-      data.pricePence = price;
-    }
-    if (available !== undefined) {
-      const avail = available === '' || available == null ? null : Number(available);
-      if (avail != null && (!Number.isFinite(avail) || avail < 0)) {
-        return res.status(400).json({ error: true, message: 'available must be a non-negative number' });
-      }
-      data.available = avail;
-    }
+  const html = `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>TickIn Seat Designer</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <link rel="stylesheet" href="/static/seating-builder.css" />
+  </head>
+  <body class="tickin-builder-body">
+    <div class="tickin-builder-shell">
+      <header class="tickin-builder-topbar">
+        <div class="tb-topbar-left">
+          <div class="tb-logo-badge">
+            <span class="tb-logo-dot"></span>
+            <span class="tb-logo-text">TickIn Builder</span>
+          </div>
+          <div class="tb-show-meta">
+            <h1 class="tb-show-title" id="tb-show-title">Seat map designer</h1>
+            <div class="tb-show-subtitle">
+              <span id="tb-show-venue">Loading show details…</span>
+              <span class="tb-dot">·</span>
+              <span id="tb-show-date"></span>
+            </div>
+          </div>
+        </div>
+        <div class="tb-topbar-right">
+          <button type="button" class="tb-topbar-btn tb-btn-ghost" id="tb-btn-back">
+            Back to wizard
+          </button>
+          <button type="button" class="tb-topbar-btn tb-btn-primary" id="tb-btn-save">
+            Save layout
+          </button>
+        </div>
+      </header>
 
-    const updated = await prisma.ticketType.update({
-      where: { id },
-      data
-    });
+      <main class="tickin-builder-main">
+        <!-- Slim, non-expanding left rail -->
+        <aside class="tb-left-rail" aria-label="Seating tools">
+          <div class="tb-left-scroll">
+            <div class="tb-left-group">
+              <div class="tb-left-group-label">Seating</div>
 
-    res.json({ ok: true, ticketType: updated });
-  } catch (e: any) {
-    res.status(500).json({ error: true, message: e?.message ?? 'Failed to update ticket type' });
-  }
-});
+              <button class="tb-left-item tool-button" data-tool="section">
+                <span class="tb-left-icon tb-icon-section"></span>
+                <span class="tb-left-label">Section block</span>
+              </button>
 
-// Delete
-router.delete('/ticket-types/:id', async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    await prisma.ticketType.delete({ where: { id } });
-    res.json({ ok: true });
-  } catch (e: any) {
-    res.status(500).json({ error: true, message: e?.message ?? 'Failed to delete ticket type' });
-  }
+              <button class="tb-left-item tool-button" data-tool="row">
+                <span class="tb-left-icon tb-icon-row"></span>
+                <span class="tb-left-label">Row of seats</span>
+              </button>
+
+              <button class="tb-left-item tool-button" data-tool="single">
+                <span class="tb-left-icon tb-icon-seat"></span>
+                <span class="tb-left-label">Single seat</span>
+              </button>
+
+              <button class="tb-left-item tool-button" data-tool="circle-table">
+                <span class="tb-left-icon tb-icon-circle-table"></span>
+                <span class="tb-left-label">Circular table</span>
+              </button>
+
+              <button class="tb-left-item tool-button" data-tool="rect-table">
+                <span class="tb-left-icon tb-icon-rect-table"></span>
+                <span class="tb-left-label">Rectangular table</span>
+              </button>
+            </div>
+
+            <div class="tb-left-group">
+              <div class="tb-left-group-label">Room &amp; labelling</div>
+
+              <button class="tb-left-item tool-button" data-tool="stage">
+                <span class="tb-left-icon tb-icon-stage"></span>
+                <span class="tb-left-label">Stage</span>
+              </button>
+
+              <button class="tb-left-item tool-button" data-tool="bar">
+                <span class="tb-left-icon tb-icon-bar"></span>
+                <span class="tb-left-label">Bar / kiosk</span>
+              </button>
+
+              <button class="tb-left-item tool-button" data-tool="exit">
+                <span class="tb-left-icon tb-icon-exit"></span>
+                <span class="tb-left-label">Exit</span>
+              </button>
+
+              <button class="tb-left-item tool-button" data-tool="text">
+                <span class="tb-left-icon tb-icon-text"></span>
+                <span class="tb-left-label">Text label</span>
+              </button>
+            </div>
+
+            <div class="tb-left-group">
+              <div class="tb-left-group-label">Actions</div>
+
+              <button class="tb-left-item" id="sb-undo">
+                <span class="tb-left-icon tb-icon-undo"></span>
+                <span class="tb-left-label">Undo</span>
+              </button>
+
+              <button class="tb-left-item" id="sb-redo">
+                <span class="tb-left-icon tb-icon-redo"></span>
+                <span class="tb-left-label">Redo</span>
+              </button>
+
+              <button class="tb-left-item tb-left-item-danger" id="sb-clear">
+                <span class="tb-left-icon tb-icon-clear"></span>
+                <span class="tb-left-label">Clear canvas</span>
+              </button>
+            </div>
+          </div>
+        </aside>
+
+        <section class="tb-center">
+          <div class="tb-center-header">
+            <div class="tb-tabs">
+              <button class="tb-tab is-active" data-tab="map">Map</button>
+              <button class="tb-tab" data-tab="tiers">Tiers</button>
+              <button class="tb-tab" data-tab="holds">Holds</button>
+            </div>
+
+            <!-- Zoom inline with tabs -->
+            <div class="tb-zoom-toolbar" aria-label="Zoom">
+              <button class="tb-zoom-btn" id="sb-zoom-out">−</button>
+              <button class="tb-zoom-btn tb-zoom-label" id="sb-zoom-reset">100%</button>
+              <button class="tb-zoom-btn" id="sb-zoom-in">+</button>
+            </div>
+          </div>
+
+          <div class="tb-tab-panels">
+            <div class="tb-tab-panel is-active" id="tb-tab-map">
+              <div id="app"></div>
+            </div>
+            <div class="tb-tab-panel" id="tb-tab-tiers">
+              <div class="tb-empty-panel">
+                <h2>Tiers coming soon</h2>
+                <p>Set up pricing tiers and link them to sections and seats.</p>
+              </div>
+            </div>
+            <div class="tb-tab-panel" id="tb-tab-holds">
+              <div class="tb-empty-panel">
+                <h2>Holds coming soon</h2>
+                <p>Reserve blocks of seats for guests, agents, or sponsors.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <aside class="tb-side-panel">
+          <section class="tb-side-section">
+            <h3 class="tb-side-heading">Layout summary</h3>
+            <div class="tb-side-meta">
+              <div>
+                <dt>Show</dt>
+                <dd id="tb-meta-show-title">
+                  <span id="sb-inspector-show">Loading…</span>
+                </dd>
+              </div>
+              <div>
+                <dt>Venue</dt>
+                <dd id="tb-meta-venue-name">
+                  <span id="sb-inspector-venue">–</span>
+                </dd>
+              </div>
+              <div>
+                <dt>Estimated capacity</dt>
+                <dd id="tb-meta-capacity">Flexible</dd>
+              </div>
+              <div>
+                <dt>Seats on map</dt>
+                <dd id="sb-seat-count">0 seats</dd>
+              </div>
+            </div>
+          </section>
+
+          <section class="tb-side-section">
+            <h3 class="tb-side-heading">Selection</h3>
+            <!-- THIS is the element seating-builder.js writes into -->
+            <div id="sb-inspector" class="tb-inspector">
+              <p class="tb-side-help sb-inspector-empty">
+                Click on a seat, table or object to edit its settings.
+              </p>
+            </div>
+          </section>
+
+          <section class="tb-side-section">
+            <h3 class="tb-side-heading">Saved layouts</h3>
+            <p class="tb-side-help">
+              Re-use layouts across shows at the same venue. Coming soon: click to switch.
+            </p>
+            <div class="tb-saved-list" id="tb-saved-list"></div>
+          </section>
+        </aside>
+      </main>
+    </div>
+
+    <script>
+      (function () {
+        var showId = ${JSON.stringify(showId)};
+        var layout = ${JSON.stringify(layout)};
+
+        // Expose to seating-builder.js
+        // @ts-ignore
+        window.__SEATMAP_SHOW_ID__ = showId;
+        // @ts-ignore
+        window.__SEATMAP_LAYOUT__ = layout;
+        // @ts-ignore
+        window.__TICKIN_SAVE_BUTTON__ = document.getElementById("tb-btn-save");
+        // @ts-ignore
+        window.__TICKIN_BACK_BUTTON__ = document.getElementById("tb-btn-back");
+
+        // Tab switching
+        var tabs = document.querySelectorAll(".tb-tab");
+        var panels = {
+          map: document.getElementById("tb-tab-map"),
+          tiers: document.getElementById("tb-tab-tiers"),
+          holds: document.getElementById("tb-tab-holds"),
+        };
+
+        tabs.forEach(function (tab) {
+          tab.addEventListener("click", function () {
+            var target = tab.getAttribute("data-tab");
+            if (!target || !panels[target]) return;
+
+            tabs.forEach(function (t) {
+              t.classList.remove("is-active");
+            });
+            Object.keys(panels).forEach(function (key) {
+              panels[key].classList.remove("is-active");
+            });
+
+            tab.classList.add("is-active");
+            panels[target].classList.add("is-active");
+          });
+        });
+
+        // Fetch show + venue details to populate top bar + side panel
+        fetch("/admin/seating/builder/api/seatmaps/" + encodeURIComponent(showId))
+          .then(function (res) {
+            return res.ok ? res.json() : null;
+          })
+          .then(function (data) {
+            if (!data || !data.show) return;
+            var show = data.show;
+            var venue = show.venue || null;
+
+            var titleEl = document.getElementById("tb-show-title");
+            var venueEl = document.getElementById("tb-show-venue");
+            var dateEl = document.getElementById("tb-show-date");
+            var metaShowTitle = document.getElementById("tb-meta-show-title");
+            var metaVenueName = document.getElementById("tb-meta-venue-name");
+            var metaCapacity = document.getElementById("tb-meta-capacity");
+
+            if (titleEl) titleEl.textContent = show.title || "Seat map designer";
+            if (venueEl) {
+              if (venue) {
+                var cityPart = venue.city ? " · " + venue.city : "";
+                venueEl.textContent = venue.name + cityPart;
+              } else {
+                venueEl.textContent = "Venue not set";
+              }
+            }
+            if (dateEl && show.date) {
+              try {
+                var d = new Date(show.date);
+                var opts = { day: "numeric", month: "short", year: "numeric" };
+                dateEl.textContent = d.toLocaleDateString("en-GB", opts);
+              } catch (_) {}
+            }
+
+            if (metaShowTitle) metaShowTitle.textContent = show.title || "Untitled show";
+            if (metaVenueName) {
+              metaVenueName.textContent = venue ? venue.name : "TBC";
+            }
+            if (metaCapacity && venue && typeof venue.capacity === "number") {
+              metaCapacity.textContent = String(venue.capacity);
+            }
+
+            // Populate saved layouts list (read-only for now)
+            var listEl = document.getElementById("tb-saved-list");
+            if (listEl && Array.isArray(data.previousMaps)) {
+              data.previousMaps.forEach(function (m) {
+                var div = document.createElement("div");
+                div.className = "tb-saved-item";
+                var title = document.createElement("div");
+                title.className = "tb-saved-item-title";
+                title.textContent = m.name || "Layout";
+                var meta = document.createElement("div");
+                meta.className = "tb-saved-item-meta";
+                var ver = document.createElement("span");
+                ver.textContent = "v" + (m.version || 1);
+                var when = document.createElement("span");
+                try {
+                  var d2 = new Date(m.createdAt);
+                  when.textContent = d2.toLocaleDateString("en-GB");
+                } catch (_) {
+                  when.textContent = "";
+                }
+                meta.appendChild(ver);
+                meta.appendChild(when);
+                div.appendChild(title);
+                div.appendChild(meta);
+                listEl.appendChild(div);
+              });
+            }
+          })
+          .catch(function (err) {
+            console.error("Failed to load show info for builder", err);
+          });
+
+        // Back button: go back in history
+        var backBtn = document.getElementById("tb-btn-back");
+        if (backBtn) {
+          backBtn.addEventListener("click", function () {
+            if (window.history.length > 1) {
+              window.history.back();
+            }
+          });
+        }
+      })();
+    </script>
+
+    <script src="https://unpkg.com/konva@9.3.3/konva.min.js"></script>
+    <script src="/static/seating-builder.js"></script>
+  </body>
+</html>`;
+
+  res.status(200).send(html);
 });
 
 export default router;
