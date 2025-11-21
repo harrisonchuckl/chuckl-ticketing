@@ -1062,48 +1062,100 @@
     ensureHitRect(group);
   }
 
-  // ---------- DEBUG HELPERS (temporary) ----------
+ // --------------- DEBUG HELPERS (temporary) ---------------
 
+// Dump detailed info about each row-seats group + the stage/layer
 function debugDumpRows(context) {
-  if (!mapLayer || !stage) return;
+  if (!mapLayer || !stage) {
+    // eslint-disable-next-line no-console
+    console.log("debugDumpRows: no mapLayer or stage");
+    return;
+  }
 
   // eslint-disable-next-line no-console
-  console.log("==== ROW DEBUG:", context, "====");
+  console.log("===== ROW DEBUG =====", context || "");
 
+  // Stage + layer state
   const stageScale = stage.scaleX();
   const stageSize = { width: stage.width(), height: stage.height() };
+  const stagePos = stage.position();
+
+  const layerScale = mapLayer.scale();
   const layerPos = mapLayer.position();
-  const layerScale = mapLayer.scaleX();
 
   // eslint-disable-next-line no-console
-  console.log("Stage", { stageScale, stageSize });
+  console.log("Stage:", { stageScale, stageSize, stagePos });
   // eslint-disable-next-line no-console
-  console.log("mapLayer", { layerPos, layerScale });
+  console.log("mapLayer:", { layerScale, layerPos });
 
-  mapLayer.find("Group").forEach((g) => {
+  mapLayer.find("Group").forEach((g, idx) => {
     const type = g.getAttr("shapeType");
     if (type !== "row-seats") return;
 
     const pos = g.position();
-    const abs = g.absolutePosition();
+    const absPos = g.getAbsolutePosition();
     const scale = g.scale();
-    const rect = g.getClientRect({ relativeTo: mapLayer });
-    const parent = g.getParent() && g.getParent().name
-      ? g.getParent().name()
-      : g.getParent();
+    const rotation = g.rotation();
+
+    // client rects in different spaces
+    const rectLocal = g.getClientRect({ relativeTo: g });
+    const rectLayer = g.getClientRect({ relativeTo: mapLayer });
+    const rectStage = g.getClientRect(); // relative to stage
+
+    const hit = g.findOne(".hit-rect");
+    const hitInfo = hit
+      ? {
+          x: hit.x(),
+          y: hit.y(),
+          width: hit.width(),
+          height: hit.height(),
+          absPos: hit.getAbsolutePosition(),
+        }
+      : null;
+
+    // first seat circle, if any
+    const seat = g.findOne((node) => node.getAttr && node.getAttr("isSeat"));
+    let seatInfo = null;
+    if (seat) {
+      seatInfo = {
+        localPos: { x: seat.x(), y: seat.y() },
+        absPos: seat.getAbsolutePosition(),
+      };
+    }
+
+    const meta = {
+      seatsPerRow: g.getAttr("seatsPerRow"),
+      rowCount: g.getAttr("rowCount"),
+      seatLabelMode: g.getAttr("seatLabelMode"),
+      seatStart: g.getAttr("seatStart"),
+      rowLabelPrefix: g.getAttr("rowLabelPrefix"),
+      rowLabelStart: g.getAttr("rowLabelStart"),
+      alignment: g.getAttr("alignment"),
+      curve: g.getAttr("curve"),
+      skew: g.getAttr("skew"),
+    };
 
     // eslint-disable-next-line no-console
-    console.log("ROW GROUP", {
-      id: g._id,
-      type,
-      parent,
+    console.log(`Row[${idx}]`, {
       pos,
-      abs,
+      absPos,
       scale,
-      rect,
+      rotation,
+      rectLocal,
+      rectLayer,
+      rectStage,
+      hitInfo,
+      seatInfo,
+      meta,
     });
   });
+
+  // eslint-disable-next-line no-console
+  console.log("===== END ROW DEBUG =====");
 }
+
+// expose it so you can call from console
+window.debugDumpRows = debugDumpRows;
 
   
   // ---------- Selection inspector (right-hand panel) ----------
