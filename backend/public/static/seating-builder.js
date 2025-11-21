@@ -1532,117 +1532,120 @@ function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
 
   // ---------- Behaviour attachment ----------
 
-  function attachNodeBehaviour(node) {
-    if (!(node instanceof Konva.Group)) return;
+ function attachNodeBehaviour(node) {
+  if (!(node instanceof Konva.Group)) return;
 
-    ensureHitRect(node);
+  // ❌ DO NOT create a hit-rect here.
+  //    Rows-of-seats don't have geometry yet when created.
+  //    We let createNodeForTool() and updateRowGroupGeometry() decide when
+  //    hit-rects must exist.
 
-    node.on("mouseover", () => {
-      stage.container().style.cursor = "grab";
-    });
+  node.on("mouseover", () => {
+    stage.container().style.cursor = "grab";
+  });
 
-    node.on("mouseout", () => {
-      stage.container().style.cursor = activeTool ? "crosshair" : "default";
-    });
+  node.on("mouseout", () => {
+    stage.container().style.cursor = activeTool ? "crosshair" : "default";
+  });
 
-    node.on("mousedown", (e) => {
-      e.cancelBubble = true;
+  node.on("mousedown", (e) => {
+    e.cancelBubble = true;
 
-      const nodes = transformer ? transformer.nodes() : [];
-      const alreadySelected = nodes.includes(node);
-      const shift = !!(e.evt && e.evt.shiftKey);
+    const nodes = transformer ? transformer.nodes() : [];
+    const already = nodes.includes(node);
+    const shift = !!(e.evt && e.evt.shiftKey);
 
-      if (shift) {
-        selectNode(node, true);
-      } else if (!alreadySelected) {
-        selectNode(node, false);
-      }
-    });
+    if (shift) {
+      selectNode(node, true);
+    } else if (!already) {
+      selectNode(node, false);
+    }
+  });
 
-    node.on("dragstart", () => {
-      const nodes = transformer ? transformer.nodes() : [];
-      if (!nodes.length) selectNode(node, false);
+  node.on("dragstart", () => {
+    const nodes = transformer ? transformer.nodes() : [];
+    if (!nodes.length) selectNode(node, false);
+    lastDragPos = { x: node.x(), y: node.y() };
+  });
+
+  node.on("dragmove", () => {
+    const nodes = transformer ? transformer.nodes() : [];
+    if (!lastDragPos) {
       lastDragPos = { x: node.x(), y: node.y() };
-    });
+      return;
+    }
 
-    node.on("dragmove", () => {
-      const nodes = transformer ? transformer.nodes() : [];
-      if (!lastDragPos) {
-        lastDragPos = { x: node.x(), y: node.y() };
-        return;
-      }
+    const dx = node.x() - lastDragPos.x;
+    const dy = node.y() - lastDragPos.y;
 
-      const dx = node.x() - lastDragPos.x;
-      const dy = node.y() - lastDragPos.y;
-
-      if (nodes.length > 1) {
-        nodes.forEach((n) => {
-          if (n === node) return;
-          n.position({
-            x: n.x() + dx,
-            y: n.y() + dy,
-          });
-        });
-      }
-
-      lastDragPos = { x: node.x(), y: node.y() };
-      mapLayer.batchDraw();
-    });
-
-    node.on("dragend", () => {
-      const nodes = transformer ? transformer.nodes() : [node];
+    if (nodes.length > 1) {
       nodes.forEach((n) => {
-        n.position({
-          x: snap(n.x()),
-          y: snap(n.y()),
-        });
+        if (n !== node) {
+          n.position({ x: n.x() + dx, y: n.y() + dy });
+        }
       });
-      lastDragPos = null;
-      mapLayer.batchDraw();
-      pushHistory();
+    }
+
+    lastDragPos = { x: node.x(), y: node.y() };
+    mapLayer.batchDraw();
+  });
+
+  node.on("dragend", () => {
+    const nodes = transformer ? transformer.nodes() : [node];
+    nodes.forEach((n) => {
+      n.position({
+        x: snap(n.x()),
+        y: snap(n.y()),
+      });
     });
 
-    node.on("transformend", () => {
-      const shapeType = node.getAttr("shapeType");
+    lastDragPos = null;
+    mapLayer.batchDraw();
+    pushHistory();
+  });
 
-      if (
-        shapeType === "stage" ||
-        shapeType === "bar" ||
-        shapeType === "exit"
-      ) {
-        const scaleX = node.scaleX();
-        const scaleY = node.scaleY();
+  node.on("transformend", () => {
+    const shapeType = node.getAttr("shapeType");
 
-        const rect = getBodyRect(node);
-        const label = node.findOne("Text");
+    if (
+      shapeType === "stage" ||
+      shapeType === "bar" ||
+      shapeType === "exit"
+    ) {
+      const scaleX = node.scaleX();
+      const scaleY = node.scaleY();
+      const rect = getBodyRect(node);
+      const label = node.findOne("Text");
 
-        if (rect) {
-          rect.width(rect.width() * scaleX);
-          rect.height(rect.height() * scaleY);
+      if (rect) {
+        rect.width(rect.width() * scaleX);
+        rect.height(rect.height() * scaleY);
 
-          if (shapeType === "stage") {
-            rect.fillLinearGradientEndPoint({
-              x: rect.width(),
-              y: 0,
-            });
-          }
+        if (shapeType === "stage") {
+          rect.fillLinearGradientEndPoint({
+            x: rect.width(),
+            y: 0,
+          });
         }
-        if (label && rect) {
-          label.width(rect.width());
-          label.height(rect.height());
-          label.x(rect.x());
-          label.y(rect.y());
-        }
-
-        node.scale({ x: 1, y: 1 });
-      } else {
-        node.scale({ x: 1, y: 1 });
       }
 
-      mapLayer.batchDraw();
-      pushHistory();
-    });
-  }
+      if (label && rect) {
+        label.width(rect.width());
+        label.height(rect.height());
+        label.x(rect.x());
+        label.y(rect.y());
+      }
+
+      node.scale({ x: 1, y: 1 });
+    } else {
+      node.scale({ x: 1, y: 1 });
+    }
+
+    mapLayer.batchDraw();
+    pushHistory();
+  });
+}
+
 
   // ---------- Node creation based on active tool ----------
 
