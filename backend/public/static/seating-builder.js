@@ -1630,9 +1630,7 @@
 
   window.renderSeatmapInspector = renderInspector;
 
-  // ---------- Selection / transformer ----------
-
-   // ---------- Selection / transformer ----------
+    // ---------- Selection / transformer ----------
 
   function configureTransformerForNode(node) {
     if (!transformer || !node) return;
@@ -1806,48 +1804,6 @@
     });
   }
 
-    node.on("transformend", () => {
-    const shapeType = node.getAttr("shapeType") || node.name();
-      
-      if (
-        shapeType === "stage" ||
-        shapeType === "bar" ||
-        shapeType === "exit"
-      ) {
-        const scaleX = node.scaleX();
-        const scaleY = node.scaleY();
-        const rect = getBodyRect(node);
-        const label = node.findOne("Text");
-
-        if (rect) {
-          rect.width(rect.width() * scaleX);
-          rect.height(rect.height() * scaleY);
-
-          if (shapeType === "stage") {
-            rect.fillLinearGradientEndPoint({
-              x: rect.width(),
-              y: 0,
-            });
-          }
-        }
-
-        if (label && rect) {
-          label.width(rect.width());
-          label.height(rect.height());
-          label.x(rect.x());
-          label.y(rect.y());
-        }
-
-        node.scale({ x: 1, y: 1 });
-      } else {
-        node.scale({ x: 1, y: 1 });
-      }
-
-      ensureHitRect(node);
-      mapLayer.batchDraw();
-      pushHistory();
-    });
-  }
 
   // ---------- Node creation based on active tool ----------
 
