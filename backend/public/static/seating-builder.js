@@ -1062,6 +1062,50 @@
     ensureHitRect(group);
   }
 
+  // ---------- DEBUG HELPERS (temporary) ----------
+
+function debugDumpRows(context) {
+  if (!mapLayer || !stage) return;
+
+  // eslint-disable-next-line no-console
+  console.log("==== ROW DEBUG:", context, "====");
+
+  const stageScale = stage.scaleX();
+  const stageSize = { width: stage.width(), height: stage.height() };
+  const layerPos = mapLayer.position();
+  const layerScale = mapLayer.scaleX();
+
+  // eslint-disable-next-line no-console
+  console.log("Stage", { stageScale, stageSize });
+  // eslint-disable-next-line no-console
+  console.log("mapLayer", { layerPos, layerScale });
+
+  mapLayer.find("Group").forEach((g) => {
+    const type = g.getAttr("shapeType");
+    if (type !== "row-seats") return;
+
+    const pos = g.position();
+    const abs = g.absolutePosition();
+    const scale = g.scale();
+    const rect = g.getClientRect({ relativeTo: mapLayer });
+    const parent = g.getParent() && g.getParent().name
+      ? g.getParent().name()
+      : g.getParent();
+
+    // eslint-disable-next-line no-console
+    console.log("ROW GROUP", {
+      id: g._id,
+      type,
+      parent,
+      pos,
+      abs,
+      scale,
+      rect,
+    });
+  });
+}
+
+  
   // ---------- Selection inspector (right-hand panel) ----------
 
   function renderInspector(node) {
