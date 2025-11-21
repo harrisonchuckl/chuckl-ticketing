@@ -1632,11 +1632,13 @@
 
   // ---------- Selection / transformer ----------
 
+   // ---------- Selection / transformer ----------
+
   function configureTransformerForNode(node) {
     if (!transformer || !node) return;
 
-  const shapeType = node.getAttr("shapeType") || node.name();
-    
+    const shapeType = node.getAttr("shapeType") || node.name();
+
     if (
       shapeType === "row-seats" ||
       shapeType === "single-seat" ||
@@ -1668,7 +1670,7 @@
   }
 
   function selectNode(node, additive = false) {
-    if (!transformer) return;
+    if (!transformer || !node) return;
 
     let nodes = transformer.nodes();
 
@@ -1698,7 +1700,7 @@
     }
   }
 
-    // ---------- Behaviour attachment ----------
+  // ---------- Behaviour attachment ----------
 
   function attachNodeBehaviour(node) {
     if (!(node instanceof Konva.Group)) return;
@@ -1761,7 +1763,7 @@
     });
 
     node.on("transformend", () => {
-      const shapeType = node.getAttr("shapeType");
+      const shapeType = node.getAttr("shapeType") || node.name();
 
       if (
         shapeType === "stage" ||
@@ -1998,10 +2000,15 @@
     const shift = !!(evt.evt && evt.evt.shiftKey);
     const target = evt.target;
 
+    let group = null;
+
+    // Only call findAncestor on nodes that actually have it
+    if (target && target !== stage && typeof target.findAncestor === "function") {
+      group = target.findAncestor("Group", true);
+    }
+
     // 1) If we clicked on any shape that belongs to a Group on the mapLayer,
     //    select that group (rows, tables, stage, etc.)
-    const group = target.findAncestor("Group", true);
-
     if (group && group.getLayer && group.getLayer() === mapLayer) {
       selectNode(group, shift);
       return;
@@ -2009,7 +2016,7 @@
 
     // 2) If we didn't hit a group, treat as an "empty" click on the grid/stage
     const clickedOnEmpty =
-      target === stage || target.getLayer && target.getLayer() === gridLayer;
+      target === stage || (target.getLayer && target.getLayer() === gridLayer);
 
     // No active tool: just clear selection when clicking empty space
     if (!activeTool) {
