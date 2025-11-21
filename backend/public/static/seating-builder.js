@@ -1698,14 +1698,15 @@
     }
   }
 
-  // ---------- Behaviour attachment ----------
+    // ---------- Behaviour attachment ----------
 
   function attachNodeBehaviour(node) {
     if (!(node instanceof Konva.Group)) return;
 
-    // Rebuild hit-rect for restored nodes (ensures proper bounds)
+    // Make sure each group always has a sane hit rect
     ensureHitRect(node);
 
+    // Cursor hints
     node.on("mouseover", () => {
       stage.container().style.cursor = "grab";
     });
@@ -1714,22 +1715,10 @@
       stage.container().style.cursor = activeTool ? "crosshair" : "default";
     });
 
-    node.on("mousedown", (e) => {
-      e.cancelBubble = true;
-
-      const nodes = transformer ? transformer.nodes() : [];
-      const already = nodes.includes(node);
-      const shift = !!(e.evt && e.evt.shiftKey);
-
-      if (shift) {
-        selectNode(node, true);
-      } else if (!already) {
-        selectNode(node, false);
-      }
-    });
-
+    // Drag behaviour (selection itself is handled centrally on the stage)
     node.on("dragstart", () => {
       const nodes = transformer ? transformer.nodes() : [];
+      // If nothing is selected yet, select this node when drag starts
       if (!nodes.length) selectNode(node, false);
       lastDragPos = { x: node.x(), y: node.y() };
     });
@@ -1744,6 +1733,7 @@
       const dx = node.x() - lastDragPos.x;
       const dy = node.y() - lastDragPos.y;
 
+      // Move multi-selection together
       if (nodes.length > 1) {
         nodes.forEach((n) => {
           if (n !== node) {
@@ -1769,6 +1759,50 @@
       mapLayer.batchDraw();
       pushHistory();
     });
+
+    node.on("transformend", () => {
+      const shapeType = node.getAttr("shapeType");
+
+      if (
+        shapeType === "stage" ||
+        shapeType === "bar" ||
+        shapeType === "exit"
+      ) {
+        const scaleX = node.scaleX();
+        const scaleY = node.scaleY();
+        const rect = getBodyRect(node);
+        const label = node.findOne("Text");
+
+        if (rect) {
+          rect.width(rect.width() * scaleX);
+          rect.height(rect.height() * scaleY);
+
+          if (shapeType === "stage") {
+            rect.fillLinearGradientEndPoint({
+              x: rect.width(),
+              y: 0,
+            });
+          }
+        }
+
+        if (label && rect) {
+          label.width(rect.width());
+          label.height(rect.height());
+          label.x(rect.x());
+          label.y(rect.y());
+        }
+
+        node.scale({ x: 1, y: 1 });
+      } else {
+        // For rows / tables, just reset scale so geometry functions stay in charge
+        node.scale({ x: 1, y: 1 });
+      }
+
+      ensureHitRect(node);
+      mapLayer.batchDraw();
+      pushHistory();
+    });
+  }
 
     node.on("transformend", () => {
     const shapeType = node.getAttr("shapeType") || node.name();
@@ -1956,18 +1990,37 @@
     overlayLayer.add(transformer);
   }
 
-  // ---------- Canvas interactions ----------
+   // ---------- Canvas interactions ----------
 
   function handleStageClick(evt) {
-    const clickedOnEmpty =
-      evt.target === stage || evt.target.getParent() === gridLayer;
+    if (!stage || !mapLayer) return;
 
-    if (!clickedOnEmpty) return;
+    const shift = !!(evt.evt && evt.evt.shiftKey);
+    const target = evt.target;
 
-    if (!activeTool) {
-      clearSelection();
+    // 1) If we clicked on any shape that belongs to a Group on the mapLayer,
+    //    select that group (rows, tables, stage, etc.)
+    const group = target.findAncestor("Group", true);
+
+    if (group && group.getLayer && group.getLayer() === mapLayer) {
+      selectNode(group, shift);
       return;
     }
+
+    // 2) If we didn't hit a group, treat as an "empty" click on the grid/stage
+    const clickedOnEmpty =
+      target === stage || target.getLayer && target.getLayer() === gridLayer;
+
+    // No active tool: just clear selection when clicking empty space
+    if (!activeTool) {
+      if (clickedOnEmpty) {
+        clearSelection();
+      }
+      return;
+    }
+
+    // 3) Active tool selected and click is on empty space → create a new node
+    if (!clickedOnEmpty) return;
 
     const pointerPos = stage.getPointerPosition();
     if (!pointerPos) return;
