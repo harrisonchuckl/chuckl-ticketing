@@ -1157,9 +1157,9 @@
     // eslint-disable-next-line no-console
     console.log("mapLayer:", { layerScale, layerPos });
 
-    mapLayer.find("Group").forEach((g, idx) => {
-      const type = g.getAttr("shapeType");
-      if (type !== "row-seats") return;
+   mapLayer.find("Group").forEach((g, idx) => {
+  const type = g.getAttr("shapeType") || g.name();
+  if (type !== "row-seats") return;
 
       const pos = g.position();
       const absPos = g.getAbsolutePosition();
@@ -1240,8 +1240,8 @@
       return;
     }
 
-    const shapeType = node.getAttr("shapeType");
-    const nodes = transformer ? transformer.nodes() : [];
+   const shapeType = node.getAttr("shapeType") || node.name();
+  const nodes = transformer ? transformer.nodes() : [];
 
     if (nodes && nodes.length > 1) {
       el.innerHTML = `<p class="sb-inspector-multi">${nodes.length} items selected. Drag to move them together.</p>`;
@@ -1635,8 +1635,8 @@
   function configureTransformerForNode(node) {
     if (!transformer || !node) return;
 
-    const shapeType = node.getAttr("shapeType");
-
+  const shapeType = node.getAttr("shapeType") || node.name();
+    
     if (
       shapeType === "row-seats" ||
       shapeType === "single-seat" ||
@@ -1771,8 +1771,8 @@
     });
 
     node.on("transformend", () => {
-      const shapeType = node.getAttr("shapeType");
-
+    const shapeType = node.getAttr("shapeType") || node.name();
+      
       if (
         shapeType === "stage" ||
         shapeType === "bar" ||
