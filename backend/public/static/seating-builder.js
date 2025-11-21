@@ -21,6 +21,8 @@
   // ---------- Ensure sidebar DOM (seat count + inspector) ----------
 
   function ensureSidebarDom() {
+    // NEW HTML already provides #sb-inspector and #sb-seat-count
+    // so if they exist, don't wrap #app again.
     if (document.getElementById("sb-inspector")) return;
 
     const parent = container.parentNode;
@@ -762,7 +764,10 @@
     group.setAttr("seatStart", 1);
     group.setAttr("rowLabelPrefix", "");
     group.setAttr("rowLabelStart", 0);
-    group.setAttr("alignment", "center");
+
+    // IMPORTANT CHANGE: default to "left" so the first seat starts at the click
+    group.setAttr("alignment", "left");
+
     group.setAttr("curve", 0);
     group.setAttr("skew", 0);
 
@@ -786,7 +791,7 @@
     const rowLabelPrefix = group.getAttr("rowLabelPrefix") || "";
     const rowLabelStart = group.getAttr("rowLabelStart") || 0;
 
-    const alignment = group.getAttr("alignment") || "center";
+    const alignment = group.getAttr("alignment") || "left";
     const curve = group.getAttr("curve") || 0;
     const skew = group.getAttr("skew") || 0;
 
@@ -814,11 +819,15 @@
       if (alignment === "right") {
         return -(seatsPerRow - 1) * spacing + i * spacing;
       }
+      // centre
       return (i - centerIndex) * spacing;
     }
 
     for (let r = 0; r < rowCount; r += 1) {
-      const baseRowY = (r - (rowCount - 1) / 2) * rowSpacing;
+      // IMPORTANT CHANGE:
+      // first row sits at y = 0 (click position), subsequent rows go DOWN
+      const baseRowY = r * rowSpacing;
+
       let rowMinX = Infinity;
 
       for (let i = 0; i < seatsPerRow; i += 1) {
@@ -1261,7 +1270,7 @@
       const seatStart = node.getAttr("seatStart") || 1;
       const rowLabelPrefix = node.getAttr("rowLabelPrefix") || "";
       const rowLabelStart = node.getAttr("rowLabelStart") || 0;
-      const alignment = node.getAttr("alignment") || "center";
+      const alignment = node.getAttr("alignment") || "left";
       const curve = node.getAttr("curve") || 0;
       const skew = node.getAttr("skew") || 0;
 
