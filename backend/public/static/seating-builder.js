@@ -738,148 +738,162 @@
     return group;
   }
 
-  // -------- Row of seats --------
+ // -------- Row of seats --------
 
-  function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
-    const snappedX = snap(x);
-    const snappedY = snap(y);
+function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
+  const snappedX = snap(x);
+  const snappedY = snap(y);
 
-    // eslint-disable-next-line no-console
-    console.log("createRowOfSeats at", { x, y, snappedX, snappedY });
+  // eslint-disable-next-line no-console
+  console.log("createRowOfSeats at", { x, y, snappedX, snappedY });
 
-    const group = new Konva.Group({
-      x: snappedX,
-      y: snappedY,
-      draggable: true,
-      name: "row-seats",
-      shapeType: "row-seats",
-    });
+  const group = new Konva.Group({
+    x: snappedX,
+    y: snappedY,
+    draggable: true,
+    name: "row-seats",
+    shapeType: "row-seats",
+  });
 
-    // core config
-    group.setAttr("seatsPerRow", seatsPerRow);
-    group.setAttr("rowCount", rowCount);
+  // core config
+  group.setAttr("seatsPerRow", seatsPerRow);
+  group.setAttr("rowCount", rowCount);
 
-    // label + layout defaults
-    group.setAttr("seatLabelMode", "numbers");
-    group.setAttr("seatStart", 1);
-    group.setAttr("rowLabelPrefix", "");
-    group.setAttr("rowLabelStart", 0);
+  // label + layout defaults
+  group.setAttr("seatLabelMode", "numbers");
+  group.setAttr("seatStart", 1);
+  group.setAttr("rowLabelPrefix", "");
+  group.setAttr("rowLabelStart", 0);
 
-    // IMPORTANT CHANGE: default to "left" so the first seat starts at the click
-    group.setAttr("alignment", "left");
+  // default alignment for new blocks
+  group.setAttr("alignment", "left");
 
-    group.setAttr("curve", 0);
-    group.setAttr("skew", 0);
+  group.setAttr("curve", 0);
+  group.setAttr("skew", 0);
 
-    updateRowGroupGeometry(group, seatsPerRow, rowCount);
-    return group;
-  }
+  // build geometry BEFORE we finalise hit-rect
+  updateRowGroupGeometry(group, seatsPerRow, rowCount);
+
+  // 🔧 IMPORTANT: remove any stale hit-rect that may have been created
+  // before geometry existed, then rebuild with correct bounds
+  const staleHit = group.findOne(".hit-rect");
+  if (staleHit) staleHit.destroy();
+  ensureHitRect(group);
+
+  return group;
+}
 
   // ---------- Geometry updaters ----------
 
   function updateRowGroupGeometry(group, seatsPerRow, rowCount) {
-    if (!(group instanceof Konva.Group)) return;
+  if (!(group instanceof Konva.Group)) return;
 
-    seatsPerRow = Math.max(1, Math.floor(seatsPerRow));
-    rowCount = Math.max(1, Math.floor(rowCount));
+  seatsPerRow = Math.max(1, Math.floor(seatsPerRow));
+  rowCount = Math.max(1, Math.floor(rowCount));
 
-    group.setAttr("seatsPerRow", seatsPerRow);
-    group.setAttr("rowCount", rowCount);
+  group.setAttr("seatsPerRow", seatsPerRow);
+  group.setAttr("rowCount", rowCount);
 
-    const seatLabelMode = group.getAttr("seatLabelMode") || "numbers";
-    const seatStart = group.getAttr("seatStart") || 1;
-    const rowLabelPrefix = group.getAttr("rowLabelPrefix") || "";
-    const rowLabelStart = group.getAttr("rowLabelStart") || 0;
+  const seatLabelMode = group.getAttr("seatLabelMode") || "numbers";
+  const seatStart = group.getAttr("seatStart") || 1;
+  const rowLabelPrefix = group.getAttr("rowLabelPrefix") || "";
+  const rowLabelStart = group.getAttr("rowLabelStart") || 0;
 
-    const alignment = group.getAttr("alignment") || "left";
-    const curve = group.getAttr("curve") || 0;
-    const skew = group.getAttr("skew") || 0;
+  const alignment = group.getAttr("alignment") || "left";
+  const curve = group.getAttr("curve") || 0;
+  const skew = group.getAttr("skew") || 0;
 
-    group
-      .find(
-        (node) =>
-          node.getAttr("isSeat") ||
-          node.getAttr("isSeatLabel") ||
-          node.getAttr("isRowLabel")
-      )
-      .forEach((n) => n.destroy());
+  // remove existing seats + labels, but KEEP hit-rect (we’ll recreate it at the end)
+  group
+    .find(
+      (node) =>
+        node.getAttr("isSeat") ||
+        node.getAttr("isSeatLabel") ||
+        node.getAttr("isRowLabel")
+    )
+    .forEach((n) => n.destroy());
 
-    const spacing = 20;
-    const seatRadius = 6;
-    const rowSpacing = 20;
+  const spacing = 20;
+  const seatRadius = 6;
+  const rowSpacing = 20;
 
-    const curveFactor = curve / 10;
-    const skewFactor = skew / 10;
-    const centerIndex = (seatsPerRow - 1) / 2;
+  const curveFactor = curve / 10;
+  const skewFactor = skew / 10;
+  const centerIndex = (seatsPerRow - 1) / 2;
 
-    function computeSeatX(i) {
-      if (alignment === "left") {
-        return i * spacing;
-      }
-      if (alignment === "right") {
-        return -(seatsPerRow - 1) * spacing + i * spacing;
-      }
-      // centre
-      return (i - centerIndex) * spacing;
+  function computeSeatX(i) {
+    if (alignment === "left") {
+      return i * spacing;
+    }
+    if (alignment === "right") {
+      return -(seatsPerRow - 1) * spacing + i * spacing;
+    }
+    // centre
+    return (i - centerIndex) * spacing;
+  }
+
+  for (let r = 0; r < rowCount; r += 1) {
+    // first row sits at y = 0 (click position), subsequent rows go DOWN
+    const baseRowY = r * rowSpacing;
+
+    let rowMinX = Infinity;
+
+    for (let i = 0; i < seatsPerRow; i += 1) {
+      let sx = computeSeatX(i);
+
+      const offsetIndex = i - centerIndex;
+      const curveOffset = curveFactor * offsetIndex * offsetIndex * 1.2;
+
+      const rowY = baseRowY + curveOffset;
+
+      sx += skewFactor * baseRowY;
+
+      const seat = new Konva.Circle({
+        x: sx,
+        y: rowY,
+        radius: seatRadius,
+        stroke: "#4b5563",
+        strokeWidth: 1.3,
+        isSeat: true,
+      });
+
+      const labelText = seatLabelFromIndex(seatLabelMode, i, seatStart);
+      const label = makeSeatLabelText(labelText, sx, rowY);
+
+      group.add(seat);
+      group.add(label);
+
+      if (sx < rowMinX) rowMinX = sx;
     }
 
-    for (let r = 0; r < rowCount; r += 1) {
-      // IMPORTANT CHANGE:
-      // first row sits at y = 0 (click position), subsequent rows go DOWN
-      const baseRowY = r * rowSpacing;
+    const rowLabelText =
+      rowLabelPrefix + rowLabelFromIndex(rowLabelStart + r);
 
-      let rowMinX = Infinity;
+    if (rowLabelText) {
+      const rowLabel = new Konva.Text({
+        x: rowMinX - 18,
+        y: baseRowY,
+        text: rowLabelText,
+        fontSize: 11,
+        fontFamily: "system-ui",
+        fill: "#4b5563",
+        align: "right",
+        verticalAlign: "middle",
+        listening: false,
+        isRowLabel: true,
+      });
 
-      for (let i = 0; i < seatsPerRow; i += 1) {
-        let sx = computeSeatX(i);
-
-        const offsetIndex = i - centerIndex;
-        const curveOffset = curveFactor * offsetIndex * offsetIndex * 1.2;
-
-        const rowY = baseRowY + curveOffset;
-
-        sx += skewFactor * baseRowY;
-
-        const seat = new Konva.Circle({
-          x: sx,
-          y: rowY,
-          radius: seatRadius,
-          stroke: "#4b5563",
-          strokeWidth: 1.3,
-          isSeat: true,
-        });
-
-        const labelText = seatLabelFromIndex(seatLabelMode, i, seatStart);
-        const label = makeSeatLabelText(labelText, sx, rowY);
-
-        group.add(seat);
-        group.add(label);
-
-        if (sx < rowMinX) rowMinX = sx;
-      }
-
-      const rowLabelText =
-        rowLabelPrefix + rowLabelFromIndex(rowLabelStart + r);
-
-      if (rowLabelText) {
-        const rowLabel = new Konva.Text({
-          x: rowMinX - 18,
-          y: baseRowY,
-          text: rowLabelText,
-          fontSize: 11,
-          fontFamily: "system-ui",
-          fill: "#4b5563",
-          align: "right",
-          verticalAlign: "middle",
-          listening: false,
-          isRowLabel: true,
-        });
-
-        rowLabel.offsetY(rowLabel.height() / 2);
-        group.add(rowLabel);
-      }
+      rowLabel.offsetY(rowLabel.height() / 2);
+      group.add(rowLabel);
     }
   }
+
+  // 🔧 CRITICAL: now that geometry is rebuilt, rebuild the hit-rect so
+  // the group’s interactive/clipping bounds match the new seat layout
+  const oldHit = group.findOne(".hit-rect");
+  if (oldHit) oldHit.destroy();
+  ensureHitRect(group);
+}
 
   function updateCircularTableGeometry(group, seatCount) {
     if (!(group instanceof Konva.Group)) return;
@@ -932,6 +946,7 @@
 
       group.add(seat);
       group.add(label);
+      
     }
   }
 
