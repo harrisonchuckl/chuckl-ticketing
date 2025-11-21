@@ -296,19 +296,70 @@
     return Math.round(v / GRID_SIZE) * GRID_SIZE;
   }
 
+  // **FIXED**: robust, stage-aware hit rect computation
   function ensureHitRect(group) {
     if (!(group instanceof Konva.Group)) return;
+
     const existing = group.findOne(".hit-rect");
     if (existing) existing.destroy();
 
-    const bounds = group.getClientRect({ relativeTo: group });
+    // If the group is not yet on a stage, don't try to build a hit rect yet.
+    // We'll rebuild it when the node is attached (attachNodeBehaviour).
+    if (!group.getStage()) return;
+
+    let absRect;
+    try {
+      absRect = group.getClientRect();
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error("ensureHitRect: getClientRect failed", e);
+      return;
+    }
+
+    if (
+      !absRect ||
+      !Number.isFinite(absRect.x) ||
+      !Number.isFinite(absRect.y) ||
+      !Number.isFinite(absRect.width) ||
+      !Number.isFinite(absRect.height)
+    ) {
+      // eslint-disable-next-line no-console
+      console.warn("ensureHitRect: invalid client rect", absRect);
+      return;
+    }
+
+    const absPos = group.getAbsolutePosition();
     const padding = GRID_SIZE * 0.4;
 
+    // Convert stage-space rect into group-local coordinates.
+    const localX = absRect.x - absPos.x - padding;
+    const localY = absRect.y - absPos.y - padding;
+    const localWidth = absRect.width + padding * 2;
+    const localHeight = absRect.height + padding * 2;
+
+    if (
+      !Number.isFinite(localX) ||
+      !Number.isFinite(localY) ||
+      !Number.isFinite(localWidth) ||
+      !Number.isFinite(localHeight)
+    ) {
+      // eslint-disable-next-line no-console
+      console.warn("ensureHitRect: computed NaN rect", {
+        absRect,
+        absPos,
+        localX,
+        localY,
+        localWidth,
+        localHeight,
+      });
+      return;
+    }
+
     const hitRect = new Konva.Rect({
-      x: bounds.x - padding,
-      y: bounds.y - padding,
-      width: bounds.width + padding * 2,
-      height: bounds.height + padding * 2,
+      x: localX,
+      y: localY,
+      width: localWidth,
+      height: localHeight,
       fill: "rgba(0,0,0,0)",
       listening: true,
       name: "hit-rect",
@@ -781,7 +832,7 @@
     // build geometry BEFORE we finalise hit-rect
     updateRowGroupGeometry(group, seatsPerRow, rowCount);
 
-    // ensure hit rect now that geometry exists
+    // ensure hit rect now that geometry exists (will only build once on-stage)
     ensureHitRect(group);
 
     return group;
@@ -861,6 +912,22 @@
           isSeat: true,
         });
 
+        if (Number.isNaN(sx) || Number.isNaN(rowY)) {
+          // eslint-disable-next-line no-console
+          console.error("❌ NaN seat produced", {
+            i,
+            r,
+            sx,
+            rowY,
+            alignment,
+            curve,
+            skew,
+            centerIndex,
+            curveFactor,
+            skewFactor,
+          });
+        }
+
         const labelText = seatLabelFromIndex(seatLabelMode, i, seatStart);
         const label = makeSeatLabelText(labelText, sx, rowY);
 
@@ -892,7 +959,7 @@
       }
     }
 
-    // rebuild hit-rect for new geometry
+    // rebuild hit-rect for new geometry (now safe & stage-aware)
     ensureHitRect(group);
   }
 
@@ -1062,102 +1129,116 @@
     ensureHitRect(group);
   }
 
- // --------------- DEBUG HELPERS (temporary) ---------------
+  // --------------- DEBUG HELPERS (temporary) ---------------
 
-// Dump detailed info about each row-seats group + the stage/layer
-function debugDumpRows(context) {
-  if (!mapLayer || !stage) {
-    // eslint-disable-next-line no-console
-    console.log("debugDumpRows: no mapLayer or stage");
-    return;
-  }
-
-  // eslint-disable-next-line no-console
-  console.log("===== ROW DEBUG =====", context || "");
-
-  // Stage + layer state
-  const stageScale = stage.scaleX();
-  const stageSize = { width: stage.width(), height: stage.height() };
-  const stagePos = stage.position();
-
-  const layerScale = mapLayer.scale();
-  const layerPos = mapLayer.position();
-
-  // eslint-disable-next-line no-console
-  console.log("Stage:", { stageScale, stageSize, stagePos });
-  // eslint-disable-next-line no-console
-  console.log("mapLayer:", { layerScale, layerPos });
-
-  mapLayer.find("Group").forEach((g, idx) => {
-    const type = g.getAttr("shapeType");
-    if (type !== "row-seats") return;
-
-    const pos = g.position();
-    const absPos = g.getAbsolutePosition();
-    const scale = g.scale();
-    const rotation = g.rotation();
-
-    // client rects in different spaces
-    const rectLocal = g.getClientRect({ relativeTo: g });
-    const rectLayer = g.getClientRect({ relativeTo: mapLayer });
-    const rectStage = g.getClientRect(); // relative to stage
-
-    const hit = g.findOne(".hit-rect");
-    const hitInfo = hit
-      ? {
-          x: hit.x(),
-          y: hit.y(),
-          width: hit.width(),
-          height: hit.height(),
-          absPos: hit.getAbsolutePosition(),
-        }
-      : null;
-
-    // first seat circle, if any
-    const seat = g.findOne((node) => node.getAttr && node.getAttr("isSeat"));
-    let seatInfo = null;
-    if (seat) {
-      seatInfo = {
-        localPos: { x: seat.x(), y: seat.y() },
-        absPos: seat.getAbsolutePosition(),
-      };
+  // Dump detailed info about each row-seats group + the stage/layer
+  function debugDumpRows(context) {
+    if (!mapLayer || !stage) {
+      // eslint-disable-next-line no-console
+      console.log("debugDumpRows: no mapLayer or stage");
+      return;
     }
 
-    const meta = {
-      seatsPerRow: g.getAttr("seatsPerRow"),
-      rowCount: g.getAttr("rowCount"),
-      seatLabelMode: g.getAttr("seatLabelMode"),
-      seatStart: g.getAttr("seatStart"),
-      rowLabelPrefix: g.getAttr("rowLabelPrefix"),
-      rowLabelStart: g.getAttr("rowLabelStart"),
-      alignment: g.getAttr("alignment"),
-      curve: g.getAttr("curve"),
-      skew: g.getAttr("skew"),
-    };
+    // eslint-disable-next-line no-console
+    console.log("===== ROW DEBUG =====", context || "");
+
+    // Stage + layer state
+    const stageScale = stage.scaleX();
+    const stageSize = { width: stage.width(), height: stage.height() };
+    const stagePos = stage.position();
+
+    const layerScale = mapLayer.scale();
+    const layerPos = mapLayer.position();
 
     // eslint-disable-next-line no-console
-    console.log(`Row[${idx}]`, {
-      pos,
-      absPos,
-      scale,
-      rotation,
-      rectLocal,
-      rectLayer,
-      rectStage,
-      hitInfo,
-      seatInfo,
-      meta,
+    console.log("Stage:", { stageScale, stageSize, stagePos });
+    // eslint-disable-next-line no-console
+    console.log("mapLayer:", { layerScale, layerPos });
+
+    mapLayer.find("Group").forEach((g, idx) => {
+      const type = g.getAttr("shapeType");
+      if (type !== "row-seats") return;
+
+      const pos = g.position();
+      const absPos = g.getAbsolutePosition();
+      const scale = g.scale();
+      const rotation = g.rotation();
+
+      // client rects in different spaces
+      let rectLocal;
+      let rectLayer;
+      let rectStage;
+      try {
+        rectLocal = g.getClientRect({ relativeTo: g });
+      } catch (e) {
+        rectLocal = { x: NaN, y: NaN, width: NaN, height: NaN };
+      }
+      try {
+        rectLayer = g.getClientRect({ relativeTo: mapLayer });
+      } catch (e) {
+        rectLayer = { x: NaN, y: NaN, width: NaN, height: NaN };
+      }
+      try {
+        rectStage = g.getClientRect(); // relative to stage
+      } catch (e) {
+        rectStage = { x: NaN, y: NaN, width: NaN, height: NaN };
+      }
+
+      const hit = g.findOne(".hit-rect");
+      const hitInfo = hit
+        ? {
+            x: hit.x(),
+            y: hit.y(),
+            width: hit.width(),
+            height: hit.height(),
+            absPos: hit.getAbsolutePosition(),
+          }
+        : null;
+
+      // first seat circle, if any
+      const seat = g.findOne((node) => node.getAttr && node.getAttr("isSeat"));
+      let seatInfo = null;
+      if (seat) {
+        seatInfo = {
+          localPos: { x: seat.x(), y: seat.y() },
+          absPos: seat.getAbsolutePosition(),
+        };
+      }
+
+      const meta = {
+        seatsPerRow: g.getAttr("seatsPerRow"),
+        rowCount: g.getAttr("rowCount"),
+        seatLabelMode: g.getAttr("seatLabelMode"),
+        seatStart: g.getAttr("seatStart"),
+        rowLabelPrefix: g.getAttr("rowLabelPrefix"),
+        rowLabelStart: g.getAttr("rowLabelStart"),
+        alignment: g.getAttr("alignment"),
+        curve: g.getAttr("curve"),
+        skew: g.getAttr("skew"),
+      };
+
+      // eslint-disable-next-line no-console
+      console.log(`Row[${idx}]`, {
+        pos,
+        absPos,
+        scale,
+        rotation,
+        rectLocal,
+        rectLayer,
+        rectStage,
+        hitInfo,
+        seatInfo,
+        meta,
+      });
     });
-  });
 
-  // eslint-disable-next-line no-console
-  console.log("===== END ROW DEBUG =====");
-}
+    // eslint-disable-next-line no-console
+    console.log("===== END ROW DEBUG =====");
+  }
 
-// expose it so you can call from console
-window.debugDumpRows = debugDumpRows;
+  // expose it so you can call from console
+  window.debugDumpRows = debugDumpRows;
 
-  
   // ---------- Selection inspector (right-hand panel) ----------
 
   function renderInspector(node) {
