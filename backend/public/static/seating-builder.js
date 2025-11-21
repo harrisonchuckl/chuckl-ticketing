@@ -296,70 +296,40 @@
     return Math.round(v / GRID_SIZE) * GRID_SIZE;
   }
 
-  // **FIXED**: robust, stage-aware hit rect computation
+  // FIX: guard against invalid client rects so we don't build NaN hit-rects
   function ensureHitRect(group) {
     if (!(group instanceof Konva.Group)) return;
-
     const existing = group.findOne(".hit-rect");
     if (existing) existing.destroy();
 
-    // If the group is not yet on a stage, don't try to build a hit rect yet.
-    // We'll rebuild it when the node is attached (attachNodeBehaviour).
-    if (!group.getStage()) return;
-
-    let absRect;
+    let bounds;
     try {
-      absRect = group.getClientRect();
-    } catch (e) {
+      bounds = group.getClientRect({ relativeTo: group });
+    } catch (err) {
       // eslint-disable-next-line no-console
-      console.error("ensureHitRect: getClientRect failed", e);
+      console.error("ensureHitRect: error in getClientRect", err);
       return;
     }
 
     if (
-      !absRect ||
-      !Number.isFinite(absRect.x) ||
-      !Number.isFinite(absRect.y) ||
-      !Number.isFinite(absRect.width) ||
-      !Number.isFinite(absRect.height)
+      !bounds ||
+      !Number.isFinite(bounds.x) ||
+      !Number.isFinite(bounds.y) ||
+      !Number.isFinite(bounds.width) ||
+      !Number.isFinite(bounds.height)
     ) {
       // eslint-disable-next-line no-console
-      console.warn("ensureHitRect: invalid client rect", absRect);
+      console.error("ensureHitRect: invalid client rect", bounds);
       return;
     }
 
-    const absPos = group.getAbsolutePosition();
     const padding = GRID_SIZE * 0.4;
 
-    // Convert stage-space rect into group-local coordinates.
-    const localX = absRect.x - absPos.x - padding;
-    const localY = absRect.y - absPos.y - padding;
-    const localWidth = absRect.width + padding * 2;
-    const localHeight = absRect.height + padding * 2;
-
-    if (
-      !Number.isFinite(localX) ||
-      !Number.isFinite(localY) ||
-      !Number.isFinite(localWidth) ||
-      !Number.isFinite(localHeight)
-    ) {
-      // eslint-disable-next-line no-console
-      console.warn("ensureHitRect: computed NaN rect", {
-        absRect,
-        absPos,
-        localX,
-        localY,
-        localWidth,
-        localHeight,
-      });
-      return;
-    }
-
     const hitRect = new Konva.Rect({
-      x: localX,
-      y: localY,
-      width: localWidth,
-      height: localHeight,
+      x: bounds.x - padding,
+      y: bounds.y - padding,
+      width: bounds.width + padding * 2,
+      height: bounds.height + padding * 2,
       fill: "rgba(0,0,0,0)",
       listening: true,
       name: "hit-rect",
@@ -832,7 +802,7 @@
     // build geometry BEFORE we finalise hit-rect
     updateRowGroupGeometry(group, seatsPerRow, rowCount);
 
-    // ensure hit rect now that geometry exists (will only build once on-stage)
+    // ensure hit rect now that geometry exists
     ensureHitRect(group);
 
     return group;
@@ -840,23 +810,46 @@
 
   // ---------- Geometry updaters ----------
 
+  // FIX: harden all numeric inputs and skip NaN seats to avoid NaN client rects
   function updateRowGroupGeometry(group, seatsPerRow, rowCount) {
     if (!(group instanceof Konva.Group)) return;
 
-    seatsPerRow = Math.max(1, Math.floor(seatsPerRow));
-    rowCount = Math.max(1, Math.floor(rowCount));
+    // Coerce to numbers and guard against NaN / bad values
+    let s = Number(seatsPerRow);
+    let r = Number(rowCount);
+    if (!Number.isFinite(s) || s < 1) s = 1;
+    if (!Number.isFinite(r) || r < 1) r = 1;
+
+    seatsPerRow = Math.floor(s);
+    rowCount = Math.floor(r);
 
     group.setAttr("seatsPerRow", seatsPerRow);
     group.setAttr("rowCount", rowCount);
 
     const seatLabelMode = group.getAttr("seatLabelMode") || "numbers";
-    const seatStart = group.getAttr("seatStart") || 1;
-    const rowLabelPrefix = group.getAttr("rowLabelPrefix") || "";
-    const rowLabelStart = group.getAttr("rowLabelStart") || 0;
+    const seatStartRaw = group.getAttr("seatStart");
+    const seatStart = Number.isFinite(Number(seatStartRaw))
+      ? Number(seatStartRaw)
+      : 1;
 
-    const alignment = group.getAttr("alignment") || "left";
-    const curve = group.getAttr("curve") || 0;
-    const skew = group.getAttr("skew") || 0;
+    const rowLabelPrefix = group.getAttr("rowLabelPrefix") || "";
+    const rowLabelStartRaw = group.getAttr("rowLabelStart");
+    const rowLabelStart = Number.isFinite(Number(rowLabelStartRaw))
+      ? Number(rowLabelStartRaw)
+      : 0;
+
+    const alignmentRaw = group.getAttr("alignment") || "left";
+    const alignment =
+      alignmentRaw === "left" ||
+      alignmentRaw === "right" ||
+      alignmentRaw === "center"
+        ? alignmentRaw
+        : "left";
+
+    const curveRaw = Number(group.getAttr("curve") || 0);
+    const skewRaw = Number(group.getAttr("skew") || 0);
+    const curve = Number.isFinite(curveRaw) ? curveRaw : 0;
+    const skew = Number.isFinite(skewRaw) ? skewRaw : 0;
 
     // remove existing seats + labels
     group
@@ -887,9 +880,9 @@
       return (i - centerIndex) * spacing;
     }
 
-    for (let r = 0; r < rowCount; r += 1) {
+    for (let rIdx = 0; rIdx < rowCount; rIdx += 1) {
       // first row sits at y = 0 (click position), subsequent rows go DOWN
-      const baseRowY = r * rowSpacing;
+      const baseRowY = rIdx * rowSpacing;
 
       let rowMinX = Infinity;
 
@@ -899,9 +892,30 @@
         const offsetIndex = i - centerIndex;
         const curveOffset = curveFactor * offsetIndex * offsetIndex * 1.2;
 
-        const rowY = baseRowY + curveOffset;
+        let rowY = baseRowY + curveOffset;
 
         sx += skewFactor * baseRowY;
+
+        // If any coordinate is NaN, skip this seat (don't poison the group)
+        if (!Number.isFinite(sx) || !Number.isFinite(rowY)) {
+          // eslint-disable-next-line no-console
+          console.error("❌ NaN seat produced", {
+            i,
+            r: rIdx,
+            sx,
+            rowY,
+            alignment,
+            curve,
+            skew,
+            centerIndex,
+            curveFactor,
+            skewFactor,
+            seatsPerRow,
+            rowCount,
+          });
+          // Skip this seat completely
+          continue;
+        }
 
         const seat = new Konva.Circle({
           x: sx,
@@ -912,23 +926,11 @@
           isSeat: true,
         });
 
-        if (Number.isNaN(sx) || Number.isNaN(rowY)) {
-          // eslint-disable-next-line no-console
-          console.error("❌ NaN seat produced", {
-            i,
-            r,
-            sx,
-            rowY,
-            alignment,
-            curve,
-            skew,
-            centerIndex,
-            curveFactor,
-            skewFactor,
-          });
-        }
-
-        const labelText = seatLabelFromIndex(seatLabelMode, i, seatStart);
+        const labelText = seatLabelFromIndex(
+          seatLabelMode,
+          i,
+          seatStart
+        );
         const label = makeSeatLabelText(labelText, sx, rowY);
 
         group.add(seat);
@@ -938,7 +940,7 @@
       }
 
       const rowLabelText =
-        rowLabelPrefix + rowLabelFromIndex(rowLabelStart + r);
+        rowLabelPrefix + rowLabelFromIndex(rowLabelStart + rIdx);
 
       if (rowLabelText) {
         const rowLabel = new Konva.Text({
@@ -959,7 +961,7 @@
       }
     }
 
-    // rebuild hit-rect for new geometry (now safe & stage-aware)
+    // rebuild hit-rect for new geometry
     ensureHitRect(group);
   }
 
@@ -1165,24 +1167,9 @@
       const rotation = g.rotation();
 
       // client rects in different spaces
-      let rectLocal;
-      let rectLayer;
-      let rectStage;
-      try {
-        rectLocal = g.getClientRect({ relativeTo: g });
-      } catch (e) {
-        rectLocal = { x: NaN, y: NaN, width: NaN, height: NaN };
-      }
-      try {
-        rectLayer = g.getClientRect({ relativeTo: mapLayer });
-      } catch (e) {
-        rectLayer = { x: NaN, y: NaN, width: NaN, height: NaN };
-      }
-      try {
-        rectStage = g.getClientRect(); // relative to stage
-      } catch (e) {
-        rectStage = { x: NaN, y: NaN, width: NaN, height: NaN };
-      }
+      const rectLocal = g.getClientRect({ relativeTo: g });
+      const rectLayer = g.getClientRect({ relativeTo: mapLayer });
+      const rectStage = g.getClientRect(); // relative to stage
 
       const hit = g.findOne(".hit-rect");
       const hitInfo = hit
