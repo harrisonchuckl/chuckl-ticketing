@@ -35,18 +35,12 @@ async function getUserIdFromRequest(req: any): Promise<string | null> {
 
 /* -------------------------------------------------------------
    ROUTE: GET available seat maps for this show
-   (Used by the builder's loader on page open)
-
-   NOTE: we intentionally *avoid* prisma.show.findUnique here to
-   sidestep the organiserId migration drift in production. We read
-   Show via raw SQL instead.
 -------------------------------------------------------------- */
 router.get("/builder/api/seatmaps/:showId", async (req, res) => {
   try {
     const showId = req.params.showId;
     const userId = await getUserIdFromRequest(req);
 
-    // Read the Show row via raw SQL so we don't reference organiserId
     const rawShows = await prisma.$queryRaw<
       { id: string; title: string | null; date: Date | null; venueId: string | null }[]
     >`SELECT "id","title","date","venueId" FROM "Show" WHERE "id" = ${showId} LIMIT 1`;
@@ -56,7 +50,6 @@ router.get("/builder/api/seatmaps/:showId", async (req, res) => {
       return res.status(404).json({ error: "Show not found" });
     }
 
-    // Look up the venue (normal Prisma; Venue table doesn't have the drift)
     let venue: any = null;
     if (showRow.venueId) {
       venue = await prisma.venue.findUnique({
@@ -70,14 +63,12 @@ router.get("/builder/api/seatmaps/:showId", async (req, res) => {
       });
     }
 
-    // This show's active seat map(s)
     const seatMapsForShow = await prisma.seatMap.findMany({
       where: { showId },
       orderBy: { createdAt: "desc" },
     });
     const activeSeatMap = seatMapsForShow.length > 0 ? seatMapsForShow[0] : null;
 
-    // Previous layouts + templates at this venue (for the right-hand list)
     let previousMaps: any[] = [];
     let templates: any[] = [];
 
@@ -154,7 +145,7 @@ router.get("/builder/api/seatmaps/:showId", async (req, res) => {
 });
 
 /* -------------------------------------------------------------
-   ROUTE: POST save seat map (wizard OR full Konva canvas)
+   ROUTE: POST save seat map
 -------------------------------------------------------------- */
 router.post("/builder/api/seatmaps/:showId", async (req, res) => {
   try {
@@ -200,7 +191,6 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
     let saved;
 
     if (seatMapId) {
-      // update
       saved = await prisma.seatMap.update({
         where: { id: seatMapId },
         data: {
@@ -212,7 +202,6 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
         },
       });
     } else {
-      // create
       saved = await prisma.seatMap.create({
         data: {
           name: finalName,
@@ -242,8 +231,6 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
 
 /* -------------------------------------------------------------
    ROUTE: GET builder full-page HTML
-   (Konva editor lives in #app; left rail is now a fixed slim bar
-   with icon + label, no hover expansion.)
 -------------------------------------------------------------- */
 router.get("/builder/preview/:showId", (req, res) => {
   const showId = req.params.showId;
@@ -370,7 +357,6 @@ router.get("/builder/preview/:showId", (req, res) => {
               <button class="tb-tab" data-tab="holds">Holds</button>
             </div>
 
-            <!-- Zoom inline with tabs -->
             <div class="tb-zoom-toolbar" aria-label="Zoom">
               <button class="tb-zoom-btn" id="sb-zoom-out">−</button>
               <button class="tb-zoom-btn tb-zoom-label" id="sb-zoom-reset">100%</button>
@@ -426,9 +412,11 @@ router.get("/builder/preview/:showId", (req, res) => {
 
           <section class="tb-side-section">
             <h3 class="tb-side-heading">Selection</h3>
-            <p class="tb-side-help" id="sb-selection-summary">
-              Nothing selected. Click on a seat, table or object to see quick details here.
-            </p>
+            <div id="sb-inspector" class="tb-inspector">
+              <p class="sb-inspector-empty">
+                Click on a seat, table or object to edit its settings.
+              </p>
+            </div>
           </section>
 
           <section class="tb-side-section">
@@ -457,7 +445,6 @@ router.get("/builder/preview/:showId", (req, res) => {
         // @ts-ignore
         window.__TICKIN_BACK_BUTTON__ = document.getElementById("tb-btn-back");
 
-        // Tab switching
         var tabs = document.querySelectorAll(".tb-tab");
         var panels = {
           map: document.getElementById("tb-tab-map"),
@@ -482,7 +469,6 @@ router.get("/builder/preview/:showId", (req, res) => {
           });
         });
 
-        // Fetch show + venue details to populate top bar + side panel
         fetch("/admin/seating/builder/api/seatmaps/" + encodeURIComponent(showId))
           .then(function (res) {
             return res.ok ? res.json() : null;
@@ -524,7 +510,6 @@ router.get("/builder/preview/:showId", (req, res) => {
               metaCapacity.textContent = String(venue.capacity);
             }
 
-            // Populate saved layouts list (read-only for now)
             var listEl = document.getElementById("tb-saved-list");
             if (listEl && Array.isArray(data.previousMaps)) {
               data.previousMaps.forEach(function (m) {
@@ -556,7 +541,6 @@ router.get("/builder/preview/:showId", (req, res) => {
             console.error("Failed to load show info for builder", err);
           });
 
-        // Back button: go back in history
         var backBtn = document.getElementById("tb-btn-back");
         if (backBtn) {
           backBtn.addEventListener("click", function () {
