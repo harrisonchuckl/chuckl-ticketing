@@ -838,18 +838,19 @@
       ? Number(rowLabelStartRaw)
       : 0;
 
-    const alignmentRaw = group.getAttr("alignment") || "left";
-    const alignment =
-      alignmentRaw === "left" ||
-      alignmentRaw === "right" ||
-      alignmentRaw === "center"
-        ? alignmentRaw
-        : "left";
+    const alignmentRaw = group.getAttr("alignment") || "center";
+const alignment =
+  alignmentRaw === "left" ||
+  alignmentRaw === "right" ||
+  alignmentRaw === "center"
+    ? alignmentRaw
+    : "center";
 
-    const curveRaw = Number(group.getAttr("curve") || 0);
-    const skewRaw = Number(group.getAttr("skew") || 0);
-    const curve = Number.isFinite(curveRaw) ? curveRaw : 0;
-    const skew = Number.isFinite(skewRaw) ? skewRaw : 0;
+const curveRaw = Number(group.getAttr("curve"));
+const skewRaw = Number(group.getAttr("skew"));
+const curve = Number.isFinite(curveRaw) ? curveRaw : 0;
+const skew = Number.isFinite(skewRaw) ? skewRaw : 0;
+
 
     // remove existing seats + labels
     group
@@ -865,8 +866,9 @@
     const seatRadius = 6;
     const rowSpacing = 20;
 
-    const curveFactor = curve / 10;
-    const skewFactor = skew / 10;
+const curveFactor = curve / 8;  // more aggressive curve
+const skewFactor = skew / 10;
+
     const centerIndex = (seatsPerRow - 1) / 2;
 
     function computeSeatX(i) {
@@ -926,15 +928,18 @@
           isSeat: true,
         });
 
-        const labelText = seatLabelFromIndex(
-          seatLabelMode,
-          i,
-          seatStart
-        );
-        const label = makeSeatLabelText(labelText, sx, rowY);
+        // Only draw labels if mode is not "none"
+let labelText = "";
+if (seatLabelMode !== "none") {
+  labelText = seatLabelFromIndex(seatLabelMode, i, seatStart);
+}
 
-        group.add(seat);
-        group.add(label);
+group.add(seat);
+if (labelText) {
+  const label = makeSeatLabelText(labelText, sx, rowY);
+  group.add(label);
+}
+
 
         if (sx < rowMinX) rowMinX = sx;
       }
@@ -1452,16 +1457,16 @@
     }
 
     // ---- Row blocks ----
-    if (shapeType === "row-seats") {
-      const seatsPerRow = node.getAttr("seatsPerRow") || 10;
-      const rowCount = node.getAttr("rowCount") || 1;
-      const seatLabelMode = node.getAttr("seatLabelMode") || "numbers";
-      const seatStart = node.getAttr("seatStart") || 1;
-      const rowLabelPrefix = node.getAttr("rowLabelPrefix") || "";
-      const rowLabelStart = node.getAttr("rowLabelStart") || 0;
-      const alignment = node.getAttr("alignment") || "left";
-      const curve = node.getAttr("curve") || 0;
-      const skew = node.getAttr("skew") || 0;
+ if (shapeType === "row-seats") {
+  const seatsPerRow = Number(node.getAttr("seatsPerRow") ?? 10);
+  const rowCount = Number(node.getAttr("rowCount") ?? 1);
+  const seatLabelMode = node.getAttr("seatLabelMode") || "numbers"; // "numbers" | "letters" | "none"
+  const seatStart = Number(node.getAttr("seatStart") ?? 1);
+  const rowLabelPrefix = node.getAttr("rowLabelPrefix") || "";
+  const rowLabelStart = Number(node.getAttr("rowLabelStart") ?? 0);
+  const curve = Number(node.getAttr("curve") ?? 0);
+  const skew = Number(node.getAttr("skew") ?? 0);
+
 
       const totalSeats = seatsPerRow * rowCount;
 
@@ -1498,17 +1503,19 @@
       });
 
       addSelectField(
-        "Seat labels",
-        seatLabelMode,
-        [
-          { value: "numbers", label: "1, 2, 3..." },
-          { value: "letters", label: "A, B, C..." },
-        ],
-        (mode) => {
-          node.setAttr("seatLabelMode", mode);
-          rebuild();
-        }
-      );
+  "Seat labels",
+  seatLabelMode,
+  [
+    { value: "numbers", label: "1, 2, 3..." },
+    { value: "letters", label: "A, B, C..." },
+    { value: "none", label: "No seat labels" },
+  ],
+  (mode) => {
+    node.setAttr("seatLabelMode", mode);
+    rebuild();
+  }
+);
+
 
       addTextField("Row label prefix", rowLabelPrefix, (val) => {
         node.setAttr("rowLabelPrefix", val);
@@ -1535,28 +1542,29 @@
       );
 
       addSelectField(
-        "Alignment",
-        alignment,
-        [
-          { value: "center", label: "Centre" },
-          { value: "left", label: "Left" },
-          { value: "right", label: "Right" },
-        ],
-        (val) => {
-          node.setAttr("alignment", val);
-          rebuild();
-        }
-      );
+  "Alignment",
+  alignment,
+  [
+    { value: "center", label: "Centre" },
+    { value: "left", label: "Left" },
+    { value: "right", label: "Right" },
+  ],
+  (val) => {
+    node.setAttr("alignment", val);
+    rebuild();
+  }
+);
 
-      addRangeField("Curve rows", curve, -10, 10, 1, (val) => {
-        node.setAttr("curve", val);
-        rebuild();
-      });
 
-      addRangeField("Skew rows", skew, -10, 10, 1, (val) => {
-        node.setAttr("skew", val);
-        rebuild();
-      });
+      addRangeField("Curve rows", curve, -40, 40, 1, (val) => {
+  node.setAttr("curve", val);
+  rebuild();
+});
+
+addRangeField("Skew rows", skew, -40, 40, 1, (val) => {
+  node.setAttr("skew", val);
+  rebuild();
+});
 
       return;
     }
