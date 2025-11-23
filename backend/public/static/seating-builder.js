@@ -226,10 +226,12 @@
   const MAX_ZOOM = 2.4;
   const ZOOM_STEP = 0.1;
 
-  // circular table geometry
-  const CIRC_SEAT_RADIUS = 8;
+  // seat + circular table geometry
+  // use the same radius everywhere so table seats match normal seats
+  const SEAT_RADIUS = 10; // single seats, rows, and table seats
   const CIRC_DESIRED_GAP = 8;
   const CIRC_MIN_TABLE_RADIUS = 26;
+
 
   // ---------- State ----------
 
@@ -796,8 +798,8 @@
     const seatFill = isLabelled ? "#ffffff" : "#111827";
     const seatStroke = isLabelled ? "#4b5563" : "#111827";
 
-    const circle = new Konva.Circle({
-      radius: 10,
+      const circle = new Konva.Circle({
+      radius: SEAT_RADIUS,
       stroke: seatStroke,
       strokeWidth: 1.7,
       fill: seatFill,
@@ -838,7 +840,7 @@
     group.setAttr("seatStart", 1); // internal only
     group.setAttr("tableLabel", nextTableLabel());
 
-    const seatRadius = CIRC_SEAT_RADIUS;
+    const seatRadius = SEAT_RADIUS;
     const desiredGap = CIRC_DESIRED_GAP;
 
     const circumferencePerSeat = seatRadius * 2 + desiredGap;
@@ -946,7 +948,7 @@
     group.setAttr("seatStart", 1);
     group.setAttr("tableLabel", nextTableLabel());
 
-    const seatRadius = 9;
+    const seatRadius = SEAT_RADIUS;
     const seatGap = 6;
 
     const longSpan =
@@ -1142,9 +1144,11 @@
     group.setAttr("rowLabelStart", 0); // index -> A
     group.setAttr("rowLabelBothSides", false);
 
-    // curvature / skew
+    // curvature only (skew removed for MVP)
     group.setAttr("curve", 0);
-    group.setAttr("skew", 0);
+
+    // rowOrder: "asc" = front row is first label, "desc" = back row is first label
+    group.setAttr("rowOrder", "asc");
 
     updateRowGroupGeometry(group, seatsPerRow, rowCount);
     ensureHitRect(group);
@@ -1152,9 +1156,7 @@
     return group;
   }
 
-  // ---------- Geometry updaters ----------
-
-  function updateRowGroupGeometry(group, seatsPerRow, rowCount) {
+   function updateRowGroupGeometry(group, seatsPerRow, rowCount) {
     if (!(group instanceof Konva.Group)) return;
 
     let s = Number(seatsPerRow);
@@ -1191,33 +1193,18 @@
         ? alignmentRaw
         : "center";
 
-    // clamp curve & skew to [-15, 15] so things don't explode
+    // row order – asc (front to back) or desc (back to front)
+    const rowOrderRaw = group.getAttr("rowOrder") || "asc";
+    const rowOrder = rowOrderRaw === "desc" ? "desc" : "asc";
+    group.setAttr("rowOrder", rowOrder);
+
+    // clamp curve to [-15, 15]
     const curveRaw = Number(group.getAttr("curve"));
-    const skewRaw = Number(group.getAttr("skew"));
     const curve = Math.max(
       -15,
       Math.min(15, Number.isFinite(curveRaw) ? curveRaw : 0)
     );
-    const skew = Math.max(
-      -15,
-      Math.min(15, Number.isFinite(skewRaw) ? skewRaw : 0)
-    );
     group.setAttr("curve", curve);
-    group.setAttr("skew", skew);
-
-    if (DEBUG_SKEW) {
-      // eslint-disable-next-line no-console
-      console.log("updateRowGroupGeometry", {
-        id: group._id,
-        seatsPerRow,
-        rowCount,
-        curve,
-        skew,
-        alignment,
-        rotation: group.rotation(),
-        position: group.position(),
-      });
-    }
 
     // remove existing seats + labels
     group
@@ -1230,12 +1217,10 @@
       .forEach((n) => n.destroy());
 
     const spacing = 26;
-    const seatRadius = 10;
+    const seatRadius = SEAT_RADIUS;
     const rowSpacing = 28;
 
     const curveFactor = curve / 10; // more gentle curve
-    const skewFactor = skew / 4; // per-seat vertical skew so even 1 row is obvious
-
     const centerIndex = (seatsPerRow - 1) / 2;
 
     function computeSeatX(i) {
@@ -1258,7 +1243,6 @@
       let firstSeatX = null;
       let firstSeatY = null;
       let lastSeatX = null;
-      let midSeatY = null;
 
       for (let i = 0; i < seatsPerRow; i += 1) {
         let sx = computeSeatX(i);
@@ -1266,29 +1250,7 @@
         const offsetIndex = i - centerIndex;
         const curveOffset = curveFactor * offsetIndex * offsetIndex;
 
-        let rowY = baseRowY + curveOffset;
-
-        // apply skew – tilt the row so seats form a diagonal
-        rowY += offsetIndex * skewFactor;
-
-        if (!Number.isFinite(sx) || !Number.isFinite(rowY)) {
-          // eslint-disable-next-line no-console
-          console.error("❌ NaN seat produced", {
-            i,
-            r: rIdx,
-            sx,
-            rowY,
-            alignment,
-            curve,
-            skew,
-            centerIndex,
-            curveFactor,
-            skewFactor,
-            seatsPerRow,
-            rowCount,
-          });
-          continue;
-        }
+        const rowY = baseRowY + curveOffset;
 
         if (firstSeatX == null) {
           firstSeatX = sx;
@@ -1296,8 +1258,20 @@
         }
         lastSeatX = sx;
 
-        if (i === Math.round(centerIndex)) {
-          midSeatY = rowY;
+        if (!Number.isFinite(sx) || !Number.isFinite(rowY)) {
+          // eslint-disable-next-line no-console
+          console.error("❌ invalid seat position", {
+            i,
+            r: rIdx,
+            sx,
+            rowY,
+            alignment,
+            curve,
+            centerIndex,
+            seatsPerRow,
+            rowCount,
+          });
+          continue;
         }
 
         const seat = new Konva.Circle({
@@ -1322,12 +1296,16 @@
         }
       }
 
+      // decide which logical row index this visual row is, based on rowOrder
+      const logicalRowIdx =
+        rowOrder === "desc" ? rowCount - 1 - rIdx : rIdx;
+
       const rowLabelText =
-        rowLabelPrefix + rowLabelFromIndex(rowLabelStart + rIdx);
+        rowLabelPrefix + rowLabelFromIndex(rowLabelStart + logicalRowIdx);
 
       if (rowLabelText && firstSeatX != null && firstSeatY != null) {
         const labelOffset = seatRadius * 2.0; // tighter to first seat
-        const labelY = midSeatY != null ? midSeatY : firstSeatY;
+        const labelY = firstSeatY; // keep letter aligned with the first seat, not the middle
 
         // left-hand label
         const leftLabel = new Konva.Text({
@@ -1380,6 +1358,7 @@
     keepLabelsUpright(group);
   }
 
+
   function updateCircularTableGeometry(group, seatCount) {
     if (!(group instanceof Konva.Group)) return;
 
@@ -1398,7 +1377,8 @@
       )
       .forEach((n) => n.destroy());
 
-    const seatRadius = CIRC_SEAT_RADIUS;
+    const seatRadius = SEAT_RADIUS;
+
     const desiredGap = CIRC_DESIRED_GAP;
 
     const circumferencePerSeat = seatRadius * 2 + desiredGap;
@@ -1496,7 +1476,7 @@
       )
       .forEach((n) => n.destroy());
 
-    const seatRadius = 9;
+    const seatRadius = SEAT_RADIUS;
     const seatGap = 6;
 
     const longSpan =
@@ -2068,7 +2048,7 @@
       return;
     }
 
-    // ---- Row blocks ----
+       // ---- Row blocks ----
     if (shapeType === "row-seats") {
       const seatsPerRow = Number(node.getAttr("seatsPerRow") ?? 10);
       const rowCount = Number(node.getAttr("rowCount") ?? 1);
@@ -2079,10 +2059,8 @@
       const curve = Number.isFinite(Number(node.getAttr("curve")))
         ? Number(node.getAttr("curve"))
         : 0;
-      const skew = Number.isFinite(Number(node.getAttr("skew")))
-        ? Number(node.getAttr("skew"))
-        : 0;
       const rowLabelBothSides = !!node.getAttr("rowLabelBothSides");
+      const rowOrder = node.getAttr("rowOrder") || "asc";
 
       const totalSeats = seatsPerRow * rowCount;
 
@@ -2097,6 +2075,19 @@
       }
 
       addTitle("Seat block");
+
+      // rotation control
+      addNumberField(
+        "Rotation (deg)",
+        Math.round(node.rotation() || 0),
+        -360,
+        1,
+        (val) => {
+          node.rotation(val);
+          keepLabelsUpright(node);
+          if (overlayLayer) overlayLayer.batchDraw();
+        }
+      );
 
       addNumberField("Seats per row", seatsPerRow, 1, 1, (val) => {
         node.setAttr("seatsPerRow", val);
@@ -2145,6 +2136,26 @@
         rebuild();
       });
 
+      // NEW: row order select – appears directly under "First row label"
+      addSelectField(
+        "Row order",
+        rowOrder,
+        [
+          {
+            value: "asc",
+            label: "Rows ascending (front to back)",
+          },
+          {
+            value: "desc",
+            label: "Rows descending (back to front)",
+          },
+        ],
+        (val) => {
+          node.setAttr("rowOrder", val === "desc" ? "desc" : "asc");
+          rebuild();
+        }
+      );
+
       addCheckboxField(
         "Row labels both sides",
         rowLabelBothSides,
@@ -2159,26 +2170,34 @@
         rebuild();
       });
 
-      addRangeField("Skew rows", skew, -15, 15, 1, (val) => {
-        node.setAttr("skew", val);
-        rebuild();
-        if (DEBUG_SKEW) {
-          debugDumpRows("skew-slider-change");
-        }
-      });
+      // skew removed for MVP
 
       return;
     }
 
     // ---- Circular tables ----
-    if (shapeType === "circular-table") {
+       if (shapeType === "circular-table") {
       const seatCount = node.getAttr("seatCount") || 8;
       const seatLabelMode = node.getAttr("seatLabelMode") || "numbers";
       const tableLabel = node.getAttr("tableLabel") || "";
 
       addTitle("Round table");
 
+      // rotation control
+      addNumberField(
+        "Rotation (deg)",
+        Math.round(node.rotation() || 0),
+        -360,
+        1,
+        (val) => {
+          node.rotation(val);
+          keepLabelsUpright(node);
+          if (overlayLayer) overlayLayer.batchDraw();
+        }
+      );
+
       addTextField("Table label", tableLabel, (val) => {
+
         node.setAttr("tableLabel", val || "");
         updateCircularTableGeometry(
           node,
@@ -2222,7 +2241,7 @@
     }
 
     // ---- Rectangular tables ----
-    if (shapeType === "rect-table") {
+        if (shapeType === "rect-table") {
       const longSideSeats = node.getAttr("longSideSeats") ?? 4;
       const shortSideSeats = node.getAttr("shortSideSeats") ?? 2;
       const seatLabelMode = node.getAttr("seatLabelMode") || "numbers";
@@ -2232,7 +2251,21 @@
 
       addTitle("Rectangular table");
 
+      // rotation control
+      addNumberField(
+        "Rotation (deg)",
+        Math.round(node.rotation() || 0),
+        -360,
+        1,
+        (val) => {
+          node.rotation(val);
+          keepLabelsUpright(node);
+          if (overlayLayer) overlayLayer.batchDraw();
+        }
+      );
+
       addTextField("Table label", tableLabel, (val) => {
+
         node.setAttr("tableLabel", val || "");
         updateRectTableGeometry(
           node,
@@ -2408,10 +2441,12 @@
     ensureHitRect(node);
 
     const shapeType = node.getAttr("shapeType") || node.name();
-
     node.on("click", (evt) => {
-      const isShift =
-        isShiftPressed || !!(evt.evt && evt.evt.shiftKey);
+      const e = evt.evt || evt;
+      const additive =
+        isShiftPressed ||
+        !!(e.shiftKey || e.metaKey || e.ctrlKey);
+
       // clicking on any canvas element should drop the left-hand tool
       activeTool = null;
       document
@@ -2419,7 +2454,7 @@
         .forEach((btn) => btn.classList.remove("is-active"));
       stage.container().style.cursor = "default";
 
-      selectNode(node, isShift);
+      selectNode(node, additive);
     });
 
     node.on("mouseover", () => {
@@ -2688,8 +2723,9 @@
   function handleStageClick(evt) {
     if (!stage || !mapLayer) return;
 
-    const shift =
-      isShiftPressed || !!(evt.evt && evt.evt.shiftKey);
+        const e = evt.evt || evt;
+    const shiftOrMulti =
+      isShiftPressed || !!(e.shiftKey || e.metaKey || e.ctrlKey);
     const target = evt.target;
 
     let group = null;
@@ -2698,8 +2734,8 @@
       group = target.findAncestor("Group", true);
     }
 
-    if (group && group.getLayer && group.getLayer() === mapLayer) {
-      selectNode(group, shift);
+       if (group && group.getLayer && group.getLayer() === mapLayer) {
+      selectNode(group, shiftOrMulti);
       return;
     }
 
