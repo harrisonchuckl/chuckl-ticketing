@@ -419,7 +419,7 @@ router.get("/builder/preview/:showId", (req, res) => {
               <button class="tb-left-item tool-button" data-tool="exit">
                 <img
                   class="tb-tool-icon icon-dark"
-                  src="/seatmap-icons/exit-dark.png"
+                  src="/seatmap-icons/exit-black.png"
                   alt="Exit"
                 />
                 <img
@@ -434,12 +434,12 @@ router.get("/builder/preview/:showId", (req, res) => {
               <button class="tb-left-item tool-button" data-tool="text">
                 <img
                   class="tb-tool-icon icon-dark"
-                  src="/seatmap-icons/text-black.png"
+                  src="/seatmap-icons/Text-black.png"
                   alt="Text label"
                 />
                 <img
                   class="tb-tool-icon icon-blue"
-                  src="/seatmap-icons/text-blue.png"
+                  src="/seatmap-icons/Text-blue.png"
                   alt="Text label (selected)"
                 />
                 <span class="tb-left-label">Text label</span>
