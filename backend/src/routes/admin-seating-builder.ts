@@ -238,22 +238,158 @@ router.get("/builder/preview/:showId", (req, res) => {
 
   const html = `<!DOCTYPE html>
 <html lang="en">
-    <head>
+  <head>
     <meta charset="utf-8" />
     <title>TickIn Seat Designer</title>
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <link rel="stylesheet" href="/static/seating-builder.css" />
 
-    <!-- Icon swap styling: dark (default) → blue (when selected) -->
+    <!-- Brand + toolbar styling (inline so we can iterate quickly) -->
     <style>
-      /* Shared icon sizing inside left toolbar buttons */
-      .tb-left-item.tool-button img.tb-tool-icon {
-        width: 22px;
-        height: 22px;
-        display: inline-block;
+      :root {
+        --tixall-blue: #08B8E8;
+        --tixall-blue-soft: #E6F9FF;
+        --tixall-dark: #182828;
+        --tixall-grey-soft: #F4F5F7;
+        --tixall-border-subtle: #E2E4EA;
       }
 
-      /* Default state: show dark icon, hide blue icon */
+      body.tickin-builder-body {
+        background: #f5f7fa;
+        color: var(--tixall-dark);
+      }
+
+      .tickin-builder-shell {
+        background: #ffffff;
+      }
+
+      .tickin-builder-topbar {
+        border-bottom: 1px solid var(--tixall-border-subtle);
+        background: linear-gradient(90deg, #ffffff, #f7fbff);
+      }
+
+      .tb-logo-badge {
+        background: #071018;
+        border-radius: 999px;
+        padding: 4px 10px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .tb-logo-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        background: var(--tixall-blue);
+      }
+
+      .tb-logo-text {
+        font-weight: 600;
+        font-size: 13px;
+        color: #ffffff;
+      }
+
+      .tb-topbar-btn.tb-btn-primary {
+        border-radius: 999px;
+        border: 0;
+        background: linear-gradient(135deg, var(--tixall-blue), #08c8f8);
+        color: #ffffff;
+        box-shadow: 0 10px 24px rgba(8, 184, 232, 0.4);
+        font-weight: 600;
+      }
+
+      .tb-topbar-btn.tb-btn-primary:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 14px 30px rgba(8, 184, 232, 0.45);
+      }
+
+      .tb-topbar-btn.tb-btn-ghost {
+        border-radius: 999px;
+        border: 1px solid var(--tixall-border-subtle);
+        background: #ffffff;
+        color: var(--tixall-dark);
+      }
+
+      /* LEFT RAIL */
+      .tb-left-rail {
+        background: linear-gradient(180deg, #f7fafc, #f2f5f9);
+        border-right: 1px solid var(--tixall-border-subtle);
+      }
+
+      .tb-left-scroll {
+        padding: 16px 10px 18px;
+      }
+
+      .tb-left-group {
+        margin-bottom: 18px;
+      }
+
+      .tb-left-group-label {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #7a828f;
+        margin: 0 6px 8px;
+      }
+
+      /* Base left-rail button styling */
+      .tb-left-item {
+        border: 0;
+        background: transparent;
+        border-radius: 999px;
+        padding: 8px 10px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        text-align: left;
+        cursor: pointer;
+        transition:
+          background 0.15s ease,
+          box-shadow 0.15s ease,
+          transform 0.06s ease,
+          border-color 0.15s ease;
+        font-size: 12px;
+        color: var(--tixall-dark);
+        box-sizing: border-box;
+      }
+
+      .tb-left-item + .tb-left-item {
+        margin-top: 4px;
+      }
+
+      .tb-left-item:hover {
+        background: rgba(8, 184, 232, 0.06);
+      }
+
+      .tb-left-item:active {
+        transform: translateY(1px);
+      }
+
+      /* Tool buttons (with icons + label) */
+      .tb-left-item.tool-button {
+        border: 1px solid transparent;
+        background: rgba(255, 255, 255, 0.9);
+        box-shadow: 0 1px 0 rgba(12, 18, 24, 0.03);
+      }
+
+      .tb-left-item.tool-button.is-active {
+        background: var(--tixall-blue-soft);
+        border-color: rgba(8, 184, 232, 0.7);
+        box-shadow: 0 0 0 1px rgba(8, 184, 232, 0.22);
+      }
+
+      /* Bigger icons – Canva style */
+      .tb-left-item.tool-button img.tb-tool-icon {
+        width: 30px;
+        height: 30px;
+        display: inline-block;
+        flex-shrink: 0;
+      }
+
+      /* Icon swap dark → blue when active */
       .tb-left-item.tool-button img.icon-dark {
         display: inline-block;
       }
@@ -262,7 +398,6 @@ router.get("/builder/preview/:showId", (req, res) => {
         display: none;
       }
 
-      /* When the tool is active (JS adds .is-active): show blue, hide dark */
       .tb-left-item.tool-button.is-active img.icon-dark {
         display: none;
       }
@@ -270,9 +405,69 @@ router.get("/builder/preview/:showId", (req, res) => {
       .tb-left-item.tool-button.is-active img.icon-blue {
         display: inline-block;
       }
+
+      .tb-left-label {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--tixall-dark);
+        white-space: nowrap;
+      }
+
+      /* Undo / Redo / Clear icons – round chips to match tools */
+      .tb-left-icon {
+        width: 26px;
+        height: 26px;
+        border-radius: 999px;
+        background: var(--tixall-grey-soft);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+
+      .tb-left-item.tb-left-item-danger {
+        color: #b3261e;
+      }
+
+      .tb-left-item.tb-left-item-danger .tb-left-icon {
+        background: #ffeceb;
+      }
+
+      /* Centre canvas area border tweak to feel lighter */
+      .tb-center-header {
+        border-bottom: 1px solid var(--tixall-border-subtle);
+        background: #ffffff;
+      }
+
+      .tb-tab.is-active {
+        color: var(--tixall-dark);
+        border-bottom-color: var(--tixall-blue);
+      }
+
+      .tb-zoom-btn.tb-zoom-label {
+        border-radius: 999px;
+        border-color: var(--tixall-border-subtle);
+        background: #ffffff;
+      }
+
+      /* Right side panel subtle styling */
+      .tb-side-panel {
+        background: #fbfcfe;
+        border-left: 1px solid var(--tixall-border-subtle);
+      }
+
+      .tb-side-section {
+        border-radius: 18px;
+        border: 1px solid var(--tixall-border-subtle);
+        background: #ffffff;
+      }
+
+      .tb-side-heading {
+        color: var(--tixall-dark);
+      }
     </style>
   </head>
-<body class="tickin-builder-body">
+  <body class="tickin-builder-body">
     <div class="tickin-builder-shell">
       <header class="tickin-builder-topbar">
         <div class="tb-topbar-left">
@@ -300,7 +495,7 @@ router.get("/builder/preview/:showId", (req, res) => {
       </header>
 
       <main class="tickin-builder-main">
-             <!-- Slim, non-expanding left rail -->
+        <!-- Slim, non-expanding left rail -->
         <aside class="tb-left-rail" aria-label="Seating tools">
           <div class="tb-left-scroll">
             <div class="tb-left-group">
