@@ -227,11 +227,9 @@
   const ZOOM_STEP = 0.1;
 
   // seat + circular table geometry
-  // use the same radius everywhere so table seats match normal seats
-  const SEAT_RADIUS = 10; // single seats, rows, and table seats
+  const SEAT_RADIUS = 10;
   const CIRC_DESIRED_GAP = 8;
   const CIRC_MIN_TABLE_RADIUS = 26;
-
 
   // ---------- State ----------
 
@@ -259,15 +257,11 @@
   let tableCounter = 1;
 
   // global default seat label mode for *new* blocks
-  // "none" => dark dots, no labels
-  // "numbers" => 1,2,3...
-  // "letters" => A,B,C...
   let globalSeatLabelMode = "none";
 
   // track shift key for robust multi-select
   let isShiftPressed = false;
 
-  // enable some noisy logging for skew debugging
   const DEBUG_SKEW = true;
 
   // Sidebar DOM refs
@@ -304,7 +298,6 @@
 
     if (!mapLayer || !mapLayer.getStage()) return;
 
-    // default cursor is arrow
     if (!activeTool) {
       mapLayer.getStage().container().style.cursor = "default";
     } else {
@@ -448,7 +441,6 @@
     return Math.round(v / GRID_SIZE) * GRID_SIZE;
   }
 
-  // FIX: guard against invalid client rects so we don't build NaN hit-rects
   function ensureHitRect(group) {
     if (!(group instanceof Konva.Group)) return;
     const existing = group.findOne(".hit-rect");
@@ -522,7 +514,7 @@
     return label;
   }
 
-  // Excel-style row labels: 0 -> A, 25 -> Z, 26 -> AA, etc.
+  // Excel-style row labels
   function rowLabelFromIndex(index) {
     let n = Math.max(0, Math.floor(index));
     let label = "";
@@ -533,7 +525,6 @@
     return label;
   }
 
-  // Reverse of rowLabelFromIndex ("A" -> 0, "Z" -> 25, "AA" -> 26 ...)
   function rowIndexFromLabel(label) {
     if (!label) return 0;
     const s = String(label).toUpperCase().replace(/[^A-Z]/g, "");
@@ -545,7 +536,6 @@
     return Math.max(0, n - 1);
   }
 
-  // Seat labels, with configurable start + mode
   function seatLabelFromIndex(mode, index, start) {
     const base = Number.isFinite(start) ? start : 1;
     const n = base + index;
@@ -556,7 +546,7 @@
     return String(n);
   }
 
-  // Inline text editing for table labels (double-click on label)
+  // Inline text editing
   function beginInlineTextEdit(textNode, onCommit) {
     if (!stage || !textNode) return;
 
@@ -798,7 +788,7 @@
     const seatFill = isLabelled ? "#ffffff" : "#111827";
     const seatStroke = isLabelled ? "#4b5563" : "#111827";
 
-      const circle = new Konva.Circle({
+    const circle = new Konva.Circle({
       radius: SEAT_RADIUS,
       stroke: seatStroke,
       strokeWidth: 1.7,
@@ -837,7 +827,7 @@
 
     group.setAttr("seatCount", seatCount);
     group.setAttr("seatLabelMode", mode);
-    group.setAttr("seatStart", 1); // internal only
+    group.setAttr("seatStart", 1);
     group.setAttr("tableLabel", nextTableLabel());
 
     const seatRadius = SEAT_RADIUS;
@@ -955,8 +945,7 @@
       longSideSeats > 0 ? (longSideSeats - 1) * (seatRadius * 2 + seatGap) : 0;
     const shortSpan =
       shortSideSeats > 0
-        ? (shortSideSeats - 1) * (seatRadius * 2 + seatGap)
-        : 0;
+        ? (shortSideSeats - 1) * (seatRadius * 2 + seatGap) : 0;
 
     const width = longSpan + seatRadius * 4;
     const height = shortSpan + seatRadius * 4;
@@ -1136,18 +1125,15 @@
     group.setAttr("seatsPerRow", seatsPerRow);
     group.setAttr("rowCount", rowCount);
 
-    // label + layout defaults (from global)
     const mode = globalSeatLabelMode || "numbers";
     group.setAttr("seatLabelMode", mode);
     group.setAttr("seatStart", 1);
     group.setAttr("rowLabelPrefix", "");
-    group.setAttr("rowLabelStart", 0); // index -> A
+    group.setAttr("rowLabelStart", 0);
     group.setAttr("rowLabelBothSides", false);
 
-    // curvature only (skew removed for MVP)
     group.setAttr("curve", 0);
 
-    // rowOrder: "asc" = front row is first label, "desc" = back row is first label
     group.setAttr("rowOrder", "asc");
 
     updateRowGroupGeometry(group, seatsPerRow, rowCount);
@@ -1156,7 +1142,7 @@
     return group;
   }
 
-   function updateRowGroupGeometry(group, seatsPerRow, rowCount) {
+  function updateRowGroupGeometry(group, seatsPerRow, rowCount) {
     if (!(group instanceof Konva.Group)) return;
 
     let s = Number(seatsPerRow);
@@ -1184,7 +1170,6 @@
 
     const rowLabelBothSides = !!group.getAttr("rowLabelBothSides");
 
-    // alignment – internal only, default to centre
     const alignmentRaw = group.getAttr("alignment") || "center";
     const alignment =
       alignmentRaw === "left" ||
@@ -1193,12 +1178,10 @@
         ? alignmentRaw
         : "center";
 
-    // row order – asc (front to back) or desc (back to front)
     const rowOrderRaw = group.getAttr("rowOrder") || "asc";
     const rowOrder = rowOrderRaw === "desc" ? "desc" : "asc";
     group.setAttr("rowOrder", rowOrder);
 
-    // clamp curve to [-15, 15]
     const curveRaw = Number(group.getAttr("curve"));
     const curve = Math.max(
       -15,
@@ -1206,7 +1189,6 @@
     );
     group.setAttr("curve", curve);
 
-    // remove existing seats + labels
     group
       .find(
         (node) =>
@@ -1220,7 +1202,7 @@
     const seatRadius = SEAT_RADIUS;
     const rowSpacing = 28;
 
-    const curveFactor = curve / 10; // more gentle curve
+    const curveFactor = curve / 10;
     const centerIndex = (seatsPerRow - 1) / 2;
 
     function computeSeatX(i) {
@@ -1296,7 +1278,6 @@
         }
       }
 
-      // decide which logical row index this visual row is, based on rowOrder
       const logicalRowIdx =
         rowOrder === "desc" ? rowCount - 1 - rIdx : rIdx;
 
@@ -1304,10 +1285,9 @@
         rowLabelPrefix + rowLabelFromIndex(rowLabelStart + logicalRowIdx);
 
       if (rowLabelText && firstSeatX != null && firstSeatY != null) {
-        const labelOffset = seatRadius * 2.0; // tighter to first seat
-        const labelY = firstSeatY; // keep letter aligned with the first seat, not the middle
+        const labelOffset = seatRadius * 2.0;
+        const labelY = firstSeatY;
 
-        // left-hand label
         const leftLabel = new Konva.Text({
           text: rowLabelText,
           fontSize: 14,
@@ -1328,7 +1308,6 @@
         leftLabel.offsetY(leftLabel.height() / 2);
         group.add(leftLabel);
 
-        // optional right-hand label
         if (rowLabelBothSides && lastSeatX != null) {
           const rightLabel = new Konva.Text({
             text: rowLabelText,
@@ -1354,10 +1333,8 @@
     }
 
     ensureHitRect(group);
-    // keep labels upright if the block has been rotated
     keepLabelsUpright(group);
   }
-
 
   function updateCircularTableGeometry(group, seatCount) {
     if (!(group instanceof Konva.Group)) return;
@@ -1378,7 +1355,6 @@
       .forEach((n) => n.destroy());
 
     const seatRadius = SEAT_RADIUS;
-
     const desiredGap = CIRC_DESIRED_GAP;
 
     const circumferencePerSeat = seatRadius * 2 + desiredGap;
@@ -1483,8 +1459,7 @@
       longSideSeats > 0 ? (longSideSeats - 1) * (seatRadius * 2 + seatGap) : 0;
     const shortSpan =
       shortSideSeats > 0
-        ? (shortSideSeats - 1) * (seatRadius * 2 + seatGap)
-        : 0;
+        ? (shortSideSeats - 1) * (seatRadius * 2 + seatGap) : 0;
 
     const width = longSpan + seatRadius * 4;
     const height = shortSpan + seatRadius * 4;
@@ -1977,7 +1952,6 @@
         (mode) => {
           globalSeatLabelMode = mode;
 
-          // Also apply to all existing seat-bearing shapes
           if (mapLayer) {
             mapLayer.find("Group").forEach((g) => {
               const type = g.getAttr("shapeType") || g.name();
@@ -2038,7 +2012,6 @@
       return;
     }
 
-    // from here on, we have a node-specific inspector
     const shapeType = node.getAttr("shapeType") || node.name();
 
     const nodes = transformer ? transformer.nodes() : [];
@@ -2048,7 +2021,7 @@
       return;
     }
 
-       // ---- Row blocks ----
+    // ---- Row blocks ----
     if (shapeType === "row-seats") {
       const seatsPerRow = Number(node.getAttr("seatsPerRow") ?? 10);
       const rowCount = Number(node.getAttr("rowCount") ?? 1);
@@ -2076,7 +2049,7 @@
 
       addTitle("Seat block");
 
-      // rotation control
+      // rotation control (will now be kept in sync on transformend)
       addNumberField(
         "Rotation (deg)",
         Math.round(node.rotation() || 0),
@@ -2136,7 +2109,6 @@
         rebuild();
       });
 
-      // NEW: row order select – appears directly under "First row label"
       addSelectField(
         "Row order",
         rowOrder,
@@ -2170,20 +2142,17 @@
         rebuild();
       });
 
-      // skew removed for MVP
-
       return;
     }
 
     // ---- Circular tables ----
-       if (shapeType === "circular-table") {
+    if (shapeType === "circular-table") {
       const seatCount = node.getAttr("seatCount") || 8;
       const seatLabelMode = node.getAttr("seatLabelMode") || "numbers";
       const tableLabel = node.getAttr("tableLabel") || "";
 
       addTitle("Round table");
 
-      // rotation control
       addNumberField(
         "Rotation (deg)",
         Math.round(node.rotation() || 0),
@@ -2197,7 +2166,6 @@
       );
 
       addTextField("Table label", tableLabel, (val) => {
-
         node.setAttr("tableLabel", val || "");
         updateCircularTableGeometry(
           node,
@@ -2241,7 +2209,7 @@
     }
 
     // ---- Rectangular tables ----
-        if (shapeType === "rect-table") {
+    if (shapeType === "rect-table") {
       const longSideSeats = node.getAttr("longSideSeats") ?? 4;
       const shortSideSeats = node.getAttr("shortSideSeats") ?? 2;
       const seatLabelMode = node.getAttr("seatLabelMode") || "numbers";
@@ -2251,7 +2219,6 @@
 
       addTitle("Rectangular table");
 
-      // rotation control
       addNumberField(
         "Rotation (deg)",
         Math.round(node.rotation() || 0),
@@ -2265,7 +2232,6 @@
       );
 
       addTextField("Table label", tableLabel, (val) => {
-
         node.setAttr("tableLabel", val || "");
         updateRectTableGeometry(
           node,
@@ -2330,7 +2296,7 @@
       return;
     }
 
-    // Fallback for non-configurable shapes
+    // Fallback
     addTitle("Selection");
     const p = document.createElement("p");
     p.className = "sb-inspector-empty";
@@ -2447,7 +2413,7 @@
         isShiftPressed ||
         !!(e.shiftKey || e.metaKey || e.ctrlKey);
 
-      // clicking on any canvas element should drop the left-hand tool
+      // clicking a canvas element drops the left-hand tool
       activeTool = null;
       document
         .querySelectorAll(".tool-button")
@@ -2555,9 +2521,11 @@
       ensureHitRect(node);
       mapLayer.batchDraw();
       pushHistory();
+
+      // NEW: keep inspector rotation value in sync after manual rotate
+      renderInspector(node);
     });
 
-    // Inline table-label editing on double-click of the label itself
     if (shapeType === "circular-table" || shapeType === "rect-table") {
       node.on("dblclick", (evt) => {
         const target = evt.target;
@@ -2723,33 +2691,31 @@
   function handleStageClick(evt) {
     if (!stage || !mapLayer) return;
 
-        const e = evt.evt || evt;
-    const shiftOrMulti =
-      isShiftPressed || !!(e.shiftKey || e.metaKey || e.ctrlKey);
     const target = evt.target;
 
-    let group = null;
-
-    if (target && target !== stage && typeof target.findAncestor === "function") {
-      group = target.findAncestor("Group", true);
-    }
-
-       if (group && group.getLayer && group.getLayer() === mapLayer) {
-      selectNode(group, shiftOrMulti);
-      return;
+    // If we clicked on a shape in mapLayer, let the shape's click handler
+    // manage selection (so shift-select doesn't get toggled twice).
+    if (
+      target &&
+      target !== stage &&
+      typeof target.findAncestor === "function"
+    ) {
+      const group = target.findAncestor("Group", true);
+      if (group && group.getLayer && group.getLayer() === mapLayer) {
+        return;
+      }
     }
 
     const clickedOnEmpty =
       target === stage || (target.getLayer && target.getLayer() === gridLayer);
 
+    if (!clickedOnEmpty) return;
+
+    // No active tool -> just clear selection when clicking empty space
     if (!activeTool) {
-      if (clickedOnEmpty) {
-        clearSelection();
-      }
+      clearSelection();
       return;
     }
-
-    if (!clickedOnEmpty) return;
 
     const pointerPos = stage.getPointerPosition();
     if (!pointerPos) return;
@@ -2811,7 +2777,6 @@
         node.x(node.x() + GRID_SIZE);
         node.y(node.y() + GRID_SIZE);
 
-        // if it's a table, auto-increment the label so copies are 3, 4, 5...
         const type = node.getAttr("shapeType");
         if (type === "circular-table" || type === "rect-table") {
           node.setAttr("tableLabel", nextTableLabel());
