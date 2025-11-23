@@ -18,11 +18,6 @@
     return;
   }
 
-  // ---------- Global seat style ----------
-
-  const SEAT_RADIUS = 10;
-  const SEAT_STROKE_WIDTH = 1.7;
-
   // ---------- Inject modern styles (Apple / Canva vibes) ----------
 
   function injectSeatmapStyles() {
@@ -116,7 +111,7 @@
 
       .tool-button {
         width: 100%;
-        height: 56px;
+        height: 52px;
         box-sizing: border-box;
         border-radius: 14px;
         border: 1px solid #e5e7eb;
@@ -125,7 +120,7 @@
         align-items: center;
         justify-content: center;
         margin-bottom: 6px;
-        box-shadow: 0 4px 14px rgba(15,23,42,0.05);
+        box-shadow: 0 6px 18px rgba(15,23,42,0.05);
         cursor: pointer;
         transition:
           transform .09s ease,
@@ -232,6 +227,7 @@
   const ZOOM_STEP = 0.1;
 
   // circular table geometry
+  const CIRC_SEAT_RADIUS = 8;
   const CIRC_DESIRED_GAP = 8;
   const CIRC_MIN_TABLE_RADIUS = 26;
 
@@ -294,6 +290,7 @@
 
     if (!mapLayer || !mapLayer.getStage()) return;
 
+    // default cursor is arrow
     if (!activeTool) {
       mapLayer.getStage().container().style.cursor = "default";
     } else {
@@ -782,9 +779,9 @@
     });
 
     const circle = new Konva.Circle({
-      radius: SEAT_RADIUS,
+      radius: 10,
       stroke: "#4b5563",
-      strokeWidth: SEAT_STROKE_WIDTH,
+      strokeWidth: 1.7,
       fill: "#ffffff",
       isSeat: true,
     });
@@ -814,24 +811,21 @@
 
     group.setAttr("seatCount", seatCount);
     group.setAttr("seatLabelMode", "numbers");
-    group.setAttr("seatStart", 1); // stored but no UI
+    group.setAttr("seatStart", 1); // internal only
     group.setAttr("tableLabel", nextTableLabel());
 
-    const seatRadius = SEAT_RADIUS;
+    const seatRadius = CIRC_SEAT_RADIUS;
     const desiredGap = CIRC_DESIRED_GAP;
 
     const circumferencePerSeat = seatRadius * 2 + desiredGap;
     const ringRadiusFromCirc =
       (seatCount * circumferencePerSeat) / (2 * Math.PI);
 
-    const minSeatRing =
+    const minRingRadius =
       CIRC_MIN_TABLE_RADIUS + seatRadius + desiredGap;
 
-    const seatRingRadius = Math.max(ringRadiusFromCirc, minSeatRing);
-    const tableRadius = Math.max(
-      seatRingRadius - seatRadius - desiredGap,
-      CIRC_MIN_TABLE_RADIUS
-    );
+    const seatRingRadius = Math.max(ringRadiusFromCirc, minRingRadius);
+    const tableRadius = seatRingRadius - seatRadius - desiredGap;
 
     const table = new Konva.Circle({
       radius: tableRadius,
@@ -879,7 +873,7 @@
         y: sy,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: SEAT_STROKE_WIDTH,
+        strokeWidth: 1.6,
         fill: "#ffffff",
         isSeat: true,
       });
@@ -918,10 +912,10 @@
     group.setAttr("longSideSeats", longSideSeats);
     group.setAttr("shortSideSeats", shortSideSeats);
     group.setAttr("seatLabelMode", "numbers");
-    group.setAttr("seatStart", 1); // stored but no UI
+    group.setAttr("seatStart", 1);
     group.setAttr("tableLabel", nextTableLabel());
 
-    const seatRadius = SEAT_RADIUS;
+    const seatRadius = 9;
     const seatGap = 6;
 
     const longSpan =
@@ -977,20 +971,19 @@
     let seatIndex = 0;
 
     // long sides (top + bottom)
-    const verticalOffset = SEAT_RADIUS + 6;
     for (let i = 0; i < longSideSeats; i += 1) {
       const sx =
         -width / 2 + seatRadius * 2 + i * (seatRadius * 2 + seatGap);
 
-      const topSeatY = -height / 2 - verticalOffset;
-      const bottomSeatY = height / 2 + verticalOffset;
+      const topSeatY = -height / 2 - 14;
+      const bottomSeatY = height / 2 + 14;
 
       const topSeat = new Konva.Circle({
         x: sx,
         y: topSeatY,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: SEAT_STROKE_WIDTH,
+        strokeWidth: 1.7,
         fill: "#ffffff",
         isSeat: true,
       });
@@ -1000,7 +993,7 @@
         y: bottomSeatY,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: SEAT_STROKE_WIDTH,
+        strokeWidth: 1.7,
         fill: "#ffffff",
         isSeat: true,
       });
@@ -1032,20 +1025,19 @@
     }
 
     // short sides (left + right)
-    const horizontalOffset = SEAT_RADIUS + 6;
     for (let i = 0; i < shortSideSeats; i += 1) {
       const sy =
         -height / 2 + seatRadius * 2 + i * (seatRadius * 2 + seatGap);
 
-      const leftSeatX = -width / 2 - horizontalOffset;
-      const rightSeatX = width / 2 + horizontalOffset;
+      const leftSeatX = -width / 2 - 14;
+      const rightSeatX = width / 2 + 14;
 
       const leftSeat = new Konva.Circle({
         x: leftSeatX,
         y: sy,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: SEAT_STROKE_WIDTH,
+        strokeWidth: 1.7,
         fill: "#ffffff",
         isSeat: true,
       });
@@ -1054,7 +1046,7 @@
         y: sy,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: SEAT_STROKE_WIDTH,
+        strokeWidth: 1.7,
         fill: "#ffffff",
         isSeat: true,
       });
@@ -1154,7 +1146,7 @@
 
     const rowLabelBothSides = !!group.getAttr("rowLabelBothSides");
 
-    // alignment (currently fixed to centre if absent)
+    // alignment – internal only, default to centre
     const alignmentRaw = group.getAttr("alignment") || "center";
     const alignment =
       alignmentRaw === "left" ||
@@ -1163,17 +1155,12 @@
         ? alignmentRaw
         : "center";
 
-    // curve / skew with clamping
+    // clamp curve & skew to [-15, 15] so things don't explode
     const curveRaw = Number(group.getAttr("curve"));
-    let curve = Number.isFinite(curveRaw) ? curveRaw : 0;
-    if (curve > 15) curve = 15;
-    if (curve < -15) curve = -15;
-    group.setAttr("curve", curve);
-
     const skewRaw = Number(group.getAttr("skew"));
-    let skew = Number.isFinite(skewRaw) ? skewRaw : 0;
-    if (skew > 20) skew = 20;
-    if (skew < -20) skew = -20;
+    const curve = Math.max(-15, Math.min(15, Number.isFinite(curveRaw) ? curveRaw : 0));
+    const skew = Math.max(-15, Math.min(15, Number.isFinite(skewRaw) ? skewRaw : 0));
+    group.setAttr("curve", curve);
     group.setAttr("skew", skew);
 
     // remove existing seats + labels
@@ -1186,15 +1173,14 @@
       )
       .forEach((n) => n.destroy());
 
-    const spacing = 24;
-    const seatRadius = SEAT_RADIUS;
-    const rowSpacing = 30;
+    const spacing = 26;
+    const seatRadius = 10;
+    const rowSpacing = 28;
 
-    const curveFactor = curve / 8;
+    const curveFactor = curve / 10;   // more gentle curve
+    const skewFactor = skew / 3;      // stronger skew so it's clearly visible
+
     const centerIndex = (seatsPerRow - 1) / 2;
-
-    // skew in pixels per row – positive values skew rows to the right
-    const skewPerRowPx = skew;
 
     function computeSeatX(i) {
       if (alignment === "left") {
@@ -1212,17 +1198,18 @@
       let firstSeatX = null;
       let firstSeatY = null;
       let lastSeatX = null;
-      let labelY = null;
-
-      const rowSkewOffset =
-        (rIdx - (rowCount - 1) / 2) * skewPerRowPx;
+      let midSeatY = null;
 
       for (let i = 0; i < seatsPerRow; i += 1) {
-        let sx = computeSeatX(i) + rowSkewOffset;
+        let sx = computeSeatX(i);
 
         const offsetIndex = i - centerIndex;
-        const curveOffset = curveFactor * offsetIndex * offsetIndex * 1.2;
+        const curveOffset = curveFactor * offsetIndex * offsetIndex;
+
         let rowY = baseRowY + curveOffset;
+
+        // apply skew – later rows pushed further along X axis
+        sx += skewFactor * (rIdx * rowSpacing / 10);
 
         if (!Number.isFinite(sx) || !Number.isFinite(rowY)) {
           // eslint-disable-next-line no-console
@@ -1236,7 +1223,7 @@
             skew,
             centerIndex,
             curveFactor,
-            skewPerRowPx,
+            skewFactor,
             seatsPerRow,
             rowCount,
           });
@@ -1250,7 +1237,7 @@
         lastSeatX = sx;
 
         if (i === Math.round(centerIndex)) {
-          labelY = rowY;
+          midSeatY = rowY;
         }
 
         const seat = new Konva.Circle({
@@ -1258,7 +1245,7 @@
           y: rowY,
           radius: seatRadius,
           stroke: "#4b5563",
-          strokeWidth: SEAT_STROKE_WIDTH,
+          strokeWidth: 1.7,
           fill: "#ffffff",
           isSeat: true,
         });
@@ -1278,11 +1265,11 @@
       const rowLabelText =
         rowLabelPrefix + rowLabelFromIndex(rowLabelStart + rIdx);
 
-      const finalLabelY =
-        labelY != null ? labelY : firstSeatY != null ? firstSeatY : 0;
+      if (rowLabelText && firstSeatX != null && firstSeatY != null) {
+        const labelOffset = seatRadius * 3.2;
+        const labelY = midSeatY != null ? midSeatY : firstSeatY;
 
-      if (rowLabelText && firstSeatX != null) {
-        // left-hand label – aligned to mid-height of the row
+        // left-hand label
         const leftLabel = new Konva.Text({
           text: rowLabelText,
           fontSize: 14,
@@ -1296,13 +1283,13 @@
         });
 
         leftLabel.position({
-          x: firstSeatX - 35,
-          y: finalLabelY,
+          x: firstSeatX - labelOffset,
+          y: labelY,
         });
         leftLabel.offsetY(leftLabel.height() / 2);
         group.add(leftLabel);
 
-        // optional right-hand label – next to last seat
+        // optional right-hand label
         if (rowLabelBothSides && lastSeatX != null) {
           const rightLabel = new Konva.Text({
             text: rowLabelText,
@@ -1317,8 +1304,8 @@
           });
 
           rightLabel.position({
-            x: lastSeatX + 35,
-            y: finalLabelY,
+            x: lastSeatX + labelOffset,
+            y: labelY,
           });
           rightLabel.offsetY(rightLabel.height() / 2);
           group.add(rightLabel);
@@ -1327,6 +1314,8 @@
     }
 
     ensureHitRect(group);
+    // keep labels upright if the block has been rotated
+    keepLabelsUpright(group);
   }
 
   function updateCircularTableGeometry(group, seatCount) {
@@ -1347,21 +1336,18 @@
       )
       .forEach((n) => n.destroy());
 
-    const seatRadius = SEAT_RADIUS;
+    const seatRadius = CIRC_SEAT_RADIUS;
     const desiredGap = CIRC_DESIRED_GAP;
 
     const circumferencePerSeat = seatRadius * 2 + desiredGap;
     const ringRadiusFromCirc =
       (seatCount * circumferencePerSeat) / (2 * Math.PI);
 
-    const minSeatRing =
+    const minRingRadius =
       CIRC_MIN_TABLE_RADIUS + seatRadius + desiredGap;
 
-    const seatRingRadius = Math.max(ringRadiusFromCirc, minSeatRing);
-    const tableRadius = Math.max(
-      seatRingRadius - seatRadius - desiredGap,
-      CIRC_MIN_TABLE_RADIUS
-    );
+    const seatRingRadius = Math.max(ringRadiusFromCirc, minRingRadius);
+    const tableRadius = seatRingRadius - seatRadius - desiredGap;
 
     table.radius(tableRadius);
     table.fill("#ffffff");
@@ -1402,7 +1388,7 @@
         y: sy,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: SEAT_STROKE_WIDTH,
+        strokeWidth: 1.7,
         fill: "#ffffff",
         isSeat: true,
       });
@@ -1444,7 +1430,7 @@
       )
       .forEach((n) => n.destroy());
 
-    const seatRadius = SEAT_RADIUS;
+    const seatRadius = 9;
     const seatGap = 6;
 
     const longSpan =
@@ -1491,20 +1477,19 @@
 
     let seatIndex = 0;
 
-    const verticalOffset = SEAT_RADIUS + 6;
     for (let i = 0; i < longSideSeats; i += 1) {
       const sx =
         -width / 2 + seatRadius * 2 + i * (seatRadius * 2 + seatGap);
 
-      const topY = -height / 2 - verticalOffset;
-      const bottomY = height / 2 + verticalOffset;
+      const topY = -height / 2 - 14;
+      const bottomY = height / 2 + 14;
 
       const topSeat = new Konva.Circle({
         x: sx,
         y: topY,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: SEAT_STROKE_WIDTH,
+        strokeWidth: 1.7,
         fill: "#ffffff",
         isSeat: true,
       });
@@ -1513,7 +1498,7 @@
         y: bottomY,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: SEAT_STROKE_WIDTH,
+        strokeWidth: 1.7,
         fill: "#ffffff",
         isSeat: true,
       });
@@ -1544,20 +1529,19 @@
       }
     }
 
-    const horizontalOffset = SEAT_RADIUS + 6;
     for (let i = 0; i < shortSideSeats; i += 1) {
       const sy =
         -height / 2 + seatRadius * 2 + i * (seatRadius * 2 + seatGap);
 
-      const leftX = -width / 2 - horizontalOffset;
-      const rightX = width / 2 + horizontalOffset;
+      const leftX = -width / 2 - 14;
+      const rightX = width / 2 + 14;
 
       const leftSeat = new Konva.Circle({
         x: leftX,
         y: sy,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: SEAT_STROKE_WIDTH,
+        strokeWidth: 1.7,
         fill: "#ffffff",
         isSeat: true,
       });
@@ -1566,7 +1550,7 @@
         y: sy,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: SEAT_STROKE_WIDTH,
+        strokeWidth: 1.7,
         fill: "#ffffff",
         isSeat: true,
       });
@@ -2033,7 +2017,7 @@
         rebuild();
       });
 
-      addRangeField("Skew rows", skew, -20, 20, 1, (val) => {
+      addRangeField("Skew rows", skew, -15, 15, 1, (val) => {
         node.setAttr("skew", val);
         rebuild();
       });
@@ -2064,7 +2048,6 @@
         pushHistory();
       });
 
-      // Seat labels mode (UI only; start value fixed at 1)
       addSelectField(
         "Seat labels",
         seatLabelMode,
@@ -2283,11 +2266,18 @@
 
     node.on("click", (evt) => {
       const isShift = !!(evt.evt && evt.evt.shiftKey);
+      // clicking on any canvas element should drop the left-hand tool
+      activeTool = null;
+      document
+        .querySelectorAll(".tool-button")
+        .forEach((btn) => btn.classList.remove("is-active"));
+      stage.container().style.cursor = "default";
+
       selectNode(node, isShift);
     });
 
     node.on("mouseover", () => {
-      stage.container().style.cursor = activeTool ? "crosshair" : "grab";
+      stage.container().style.cursor = "grab";
     });
 
     node.on("mouseout", () => {
@@ -2295,11 +2285,6 @@
     });
 
     node.on("dragstart", () => {
-      // As soon as you move anything on the map, exit placement mode
-      if (activeTool) {
-        setActiveTool(null);
-      }
-
       const nodes = transformer ? transformer.nodes() : [];
       if (!nodes.length) selectNode(node, false);
       lastDragPos = { x: node.x(), y: node.y() };
@@ -2378,7 +2363,6 @@
         node.scale({ x: 1, y: 1 });
       }
 
-      // keep seat numbers + row labels + table labels upright
       if (
         tShape === "row-seats" ||
         tShape === "circular-table" ||
@@ -2527,7 +2511,6 @@
     const domContainer = stage.container();
     domContainer.style.backgroundImage = "none";
     domContainer.style.backgroundColor = "#f9fafb";
-    domContainer.style.cursor = "default";
 
     gridLayer = new Konva.Layer({ listening: false });
     mapLayer = new Konva.Layer();
@@ -2639,24 +2622,23 @@
         const node = Konva.Node.create(json);
         node.x(node.x() + GRID_SIZE);
         node.y(node.y() + GRID_SIZE);
-        mapLayer.add(node);
 
-        // If we're pasting a table, give it a fresh number
-        const shapeType = node.getAttr("shapeType") || node.name();
-        if (shapeType === "circular-table" || shapeType === "rect-table") {
-          const newLabel = nextTableLabel();
-          node.setAttr("tableLabel", newLabel);
-
-          if (shapeType === "circular-table") {
-            const seatCount = node.getAttr("seatCount") || 8;
-            updateCircularTableGeometry(node, seatCount);
+        // if it's a table, auto-increment the label so copies are 3, 4, 5...
+        const type = node.getAttr("shapeType");
+        if (type === "circular-table" || type === "rect-table") {
+          node.setAttr("tableLabel", nextTableLabel());
+          if (type === "circular-table") {
+            updateCircularTableGeometry(node, node.getAttr("seatCount") || 8);
           } else {
-            const longSideSeats = node.getAttr("longSideSeats") ?? 4;
-            const shortSideSeats = node.getAttr("shortSideSeats") ?? 2;
-            updateRectTableGeometry(node, longSideSeats, shortSideSeats);
+            updateRectTableGeometry(
+              node,
+              node.getAttr("longSideSeats") ?? 4,
+              node.getAttr("shortSideSeats") ?? 2
+            );
           }
         }
 
+        mapLayer.add(node);
         attachNodeBehaviour(node);
         return node;
       });
@@ -2879,7 +2861,6 @@
       historyIndex = 0;
       updateUndoRedoButtons();
 
-      // set tableCounter based on any existing tables
       initTableCounterFromExisting();
     } catch (err) {
       // eslint-disable-next-line no-console
