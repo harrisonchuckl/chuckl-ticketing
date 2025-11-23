@@ -1230,7 +1230,8 @@
     const rowSpacing = 28;
 
     const curveFactor = curve / 10; // more gentle curve
-    const skewFactor = skew / 3; // stronger skew so it's clearly visible
+    // make skew more obvious: each row is shifted skew * factor pixels
+    const skewFactor = skew * 0.6;
 
     const centerIndex = (seatsPerRow - 1) / 2;
 
@@ -1265,7 +1266,7 @@
         let rowY = baseRowY + curveOffset;
 
         // apply skew – later rows pushed further along X axis
-        sx += skewFactor * (rIdx * rowSpacing / 10);
+        sx += skewFactor * rIdx;
 
         if (!Number.isFinite(sx) || !Number.isFinite(rowY)) {
           // eslint-disable-next-line no-console
@@ -1322,8 +1323,9 @@
         rowLabelPrefix + rowLabelFromIndex(rowLabelStart + rIdx);
 
       if (rowLabelText && firstSeatX != null && firstSeatY != null) {
-        const labelOffset = seatRadius * 3.2;
-        const labelY = midSeatY != null ? midSeatY : firstSeatY;
+        // bring the row label a bit closer and align to the FIRST seat
+        const labelOffset = seatRadius * 2.4;
+        const labelY = firstSeatY; // stick with the first seat's Y for alignment
 
         // left-hand label
         const leftLabel = new Konva.Text({
@@ -1983,7 +1985,7 @@
       addTitle("Layout defaults");
 
       addSelectField(
-        "Default seat labels for new blocks",
+        "Default seat labels for all blocks",
         globalSeatLabelMode,
         [
           { value: "none", label: "No seat labels (dots)" },
@@ -1991,13 +1993,72 @@
           { value: "letters", label: "A, B, C..." },
         ],
         (mode) => {
+          // update global default
           globalSeatLabelMode = mode;
+
+          if (!mapLayer) return;
+
+          // apply to ALL existing seating elements
+          mapLayer.find("Group").forEach((g) => {
+            const type = g.getAttr("shapeType");
+
+            // rows
+            if (type === "row-seats") {
+              g.setAttr("seatLabelMode", mode);
+              const spr = g.getAttr("seatsPerRow") || 10;
+              const rc = g.getAttr("rowCount") || 1;
+              updateRowGroupGeometry(g, spr, rc);
+              return;
+            }
+
+            // circular tables
+            if (type === "circular-table") {
+              g.setAttr("seatLabelMode", mode);
+              const count = g.getAttr("seatCount") || 8;
+              updateCircularTableGeometry(g, count);
+              return;
+            }
+
+            // rectangular tables
+            if (type === "rect-table") {
+              g.setAttr("seatLabelMode", mode);
+              const longSideSeats = g.getAttr("longSideSeats") ?? 4;
+              const shortSideSeats = g.getAttr("shortSideSeats") ?? 2;
+              updateRectTableGeometry(g, longSideSeats, shortSideSeats);
+              return;
+            }
+
+            // single seat
+            if (type === "single-seat") {
+              g.setAttr("seatLabelMode", mode);
+
+              const circle = g.findOne("Circle");
+              const existingLabel = g.findOne((n) =>
+                n.getAttr && n.getAttr("isSeatLabel")
+              );
+              if (existingLabel) existingLabel.destroy();
+
+              const isLabelled = mode !== "none";
+              if (circle) {
+                circle.fill(isLabelled ? "#ffffff" : "#111827");
+                circle.stroke(isLabelled ? "#4b5563" : "#111827");
+              }
+
+              if (isLabelled) {
+                const labelText = seatLabelFromIndex(mode, 0, 1);
+                const label = makeSeatLabelText(labelText, 0, 0);
+                g.add(label);
+              }
+
+              ensureHitRect(g);
+            }
+          });
         }
       );
 
       addStaticRow(
         "Tip",
-        "These defaults apply to new rows/tables. Existing blocks can be edited individually."
+        "Changing this now updates every existing row/table/single seat on the map."
       );
 
       return;
@@ -2419,11 +2480,7 @@
     node.on("transformend", () => {
       const tShape = node.getAttr("shapeType") || node.name();
 
-      if (
-        tShape === "stage" ||
-        tShape === "bar" ||
-        tShape === "exit"
-      ) {
+      if (tShape === "stage" || tShape === "bar" || tShape === "exit") {
         const scaleX = node.scaleX();
         const scaleY = node.scaleY();
         const rect = getBodyRect(node);
