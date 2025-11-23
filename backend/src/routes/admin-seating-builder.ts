@@ -238,13 +238,41 @@ router.get("/builder/preview/:showId", (req, res) => {
 
   const html = `<!DOCTYPE html>
 <html lang="en">
-  <head>
+    <head>
     <meta charset="utf-8" />
     <title>TickIn Seat Designer</title>
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <link rel="stylesheet" href="/static/seating-builder.css" />
+
+    <!-- Icon swap styling: dark (default) → blue (when selected) -->
+    <style>
+      /* Shared icon sizing inside left toolbar buttons */
+      .tb-left-item.tool-button img.tb-tool-icon {
+        width: 22px;
+        height: 22px;
+        display: inline-block;
+      }
+
+      /* Default state: show dark icon, hide blue icon */
+      .tb-left-item.tool-button img.icon-dark {
+        display: inline-block;
+      }
+
+      .tb-left-item.tool-button img.icon-blue {
+        display: none;
+      }
+
+      /* When the tool is active (JS adds .is-active): show blue, hide dark */
+      .tb-left-item.tool-button.is-active img.icon-dark {
+        display: none;
+      }
+
+      .tb-left-item.tool-button.is-active img.icon-blue {
+        display: inline-block;
+      }
+    </style>
   </head>
-  <body class="tickin-builder-body">
+<body class="tickin-builder-body">
     <div class="tickin-builder-shell">
       <header class="tickin-builder-topbar">
         <div class="tb-topbar-left">
@@ -272,34 +300,84 @@ router.get("/builder/preview/:showId", (req, res) => {
       </header>
 
       <main class="tickin-builder-main">
-        <!-- Slim, non-expanding left rail -->
+             <!-- Slim, non-expanding left rail -->
         <aside class="tb-left-rail" aria-label="Seating tools">
           <div class="tb-left-scroll">
             <div class="tb-left-group">
               <div class="tb-left-group-label">Seating</div>
 
+              <!-- Section block -->
               <button class="tb-left-item tool-button" data-tool="section">
-                <span class="tb-left-icon tb-icon-section"></span>
+                <img
+                  class="tb-tool-icon icon-dark"
+                  src="/seatmap-icons/section-dark.png"
+                  alt="Section block"
+                />
+                <img
+                  class="tb-tool-icon icon-blue"
+                  src="/seatmap-icons/section-blue.png"
+                  alt="Section block (selected)"
+                />
                 <span class="tb-left-label">Section block</span>
               </button>
 
+              <!-- Row of seats -->
               <button class="tb-left-item tool-button" data-tool="row">
-                <span class="tb-left-icon tb-icon-row"></span>
+                <img
+                  class="tb-tool-icon icon-dark"
+                  src="/seatmap-icons/row-black.png"
+                  alt="Row of seats"
+                />
+                <img
+                  class="tb-tool-icon icon-blue"
+                  src="/seatmap-icons/row-blue.png"
+                  alt="Row of seats (selected)"
+                />
                 <span class="tb-left-label">Row of seats</span>
               </button>
 
+              <!-- Single seat -->
               <button class="tb-left-item tool-button" data-tool="single">
-                <span class="tb-left-icon tb-icon-seat"></span>
+                <img
+                  class="tb-tool-icon icon-dark"
+                  src="/seatmap-icons/single-dark.png"
+                  alt="Single seat"
+                />
+                <img
+                  class="tb-tool-icon icon-blue"
+                  src="/seatmap-icons/single-blue.png"
+                  alt="Single seat (selected)"
+                />
                 <span class="tb-left-label">Single seat</span>
               </button>
 
+              <!-- Circular table -->
               <button class="tb-left-item tool-button" data-tool="circle-table">
-                <span class="tb-left-icon tb-icon-circle-table"></span>
+                <img
+                  class="tb-tool-icon icon-dark"
+                  src="/seatmap-icons/circle-table-black.png"
+                  alt="Circular table"
+                />
+                <img
+                  class="tb-tool-icon icon-blue"
+                  src="/seatmap-icons/circle-table-blue.png"
+                  alt="Circular table (selected)"
+                />
                 <span class="tb-left-label">Circular table</span>
               </button>
 
+              <!-- Rectangular table -->
               <button class="tb-left-item tool-button" data-tool="rect-table">
-                <span class="tb-left-icon tb-icon-rect-table"></span>
+                <img
+                  class="tb-tool-icon icon-dark"
+                  src="/seatmap-icons/rectangle-table-black.png"
+                  alt="Rectangular table"
+                />
+                <img
+                  class="tb-tool-icon icon-blue"
+                  src="/seatmap-icons/rectangle-table-blue.png"
+                  alt="Rectangular table (selected)"
+                />
                 <span class="tb-left-label">Rectangular table</span>
               </button>
             </div>
@@ -307,23 +385,63 @@ router.get("/builder/preview/:showId", (req, res) => {
             <div class="tb-left-group">
               <div class="tb-left-group-label">Room &amp; labelling</div>
 
+              <!-- Stage -->
               <button class="tb-left-item tool-button" data-tool="stage">
-                <span class="tb-left-icon tb-icon-stage"></span>
+                <img
+                  class="tb-tool-icon icon-dark"
+                  src="/seatmap-icons/stage-dark.png"
+                  alt="Stage"
+                />
+                <img
+                  class="tb-tool-icon icon-blue"
+                  src="/seatmap-icons/stage-blue.png"
+                  alt="Stage (selected)"
+                />
                 <span class="tb-left-label">Stage</span>
               </button>
 
+              <!-- Bar / kiosk -->
               <button class="tb-left-item tool-button" data-tool="bar">
-                <span class="tb-left-icon tb-icon-bar"></span>
+                <img
+                  class="tb-tool-icon icon-dark"
+                  src="/seatmap-icons/bar-dark.png"
+                  alt="Bar / kiosk"
+                />
+                <img
+                  class="tb-tool-icon icon-blue"
+                  src="/seatmap-icons/bar-blue.png"
+                  alt="Bar / kiosk (selected)"
+                />
                 <span class="tb-left-label">Bar / kiosk</span>
               </button>
 
+              <!-- Exit -->
               <button class="tb-left-item tool-button" data-tool="exit">
-                <span class="tb-left-icon tb-icon-exit"></span>
+                <img
+                  class="tb-tool-icon icon-dark"
+                  src="/seatmap-icons/exit-dark.png"
+                  alt="Exit"
+                />
+                <img
+                  class="tb-tool-icon icon-blue"
+                  src="/seatmap-icons/exit-blue.png"
+                  alt="Exit (selected)"
+                />
                 <span class="tb-left-label">Exit</span>
               </button>
 
+              <!-- Text label -->
               <button class="tb-left-item tool-button" data-tool="text">
-                <span class="tb-left-icon tb-icon-text"></span>
+                <img
+                  class="tb-tool-icon icon-dark"
+                  src="/seatmap-icons/text-black.png"
+                  alt="Text label"
+                />
+                <img
+                  class="tb-tool-icon icon-blue"
+                  src="/seatmap-icons/text-blue.png"
+                  alt="Text label (selected)"
+                />
                 <span class="tb-left-label">Text label</span>
               </button>
             </div>
@@ -331,6 +449,7 @@ router.get("/builder/preview/:showId", (req, res) => {
             <div class="tb-left-group">
               <div class="tb-left-group-label">Actions</div>
 
+              <!-- Leaving these using existing icon fonts/spans for now -->
               <button class="tb-left-item" id="sb-undo">
                 <span class="tb-left-icon tb-icon-undo"></span>
                 <span class="tb-left-label">Undo</span>
