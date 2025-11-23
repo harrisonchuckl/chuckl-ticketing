@@ -60,6 +60,10 @@ app.use(
   express.static(path.join(__dirname, "..", "public", "static"))
 );
 
+// NEW: serve public assets (icons, etc.) from /public/*
+// e.g. /public/seatmap-icons/row-dark.png -> http://localhost:3000/seatmap-icons/row-dark.png
+app.use(express.static(path.join(__dirname, "..", "public")));
+
 // Basic global rate limit (tune as needed)
 app.use(
   rateLimit({
@@ -104,42 +108,3 @@ app.use("/admin", adminShowsRouter);
 
 // Ticket types for shows
 //  - GET  /admin/shows/:showId/ticket-types
-//  - POST /admin/shows/:showId/ticket-types
-//  - PUT  /admin/ticket-types/:id
-//  - DELETE /admin/ticket-types/:id
-app.use("/admin", adminTicketTypesRouter);
-
-// Seat map CRUD + external allocations
-//  - GET/POST /admin/seatmaps
-//  - PATCH    /admin/seatmaps/:id/default
-//  - POST     /admin/seatmaps/:id/allocations
-app.use("/admin/seatmaps", adminSeatMapsRouter);
-
-// Seat-level operations (used by the seating editor)
-//  - GET   /seatmaps/:seatMapId/seats
-//  - POST  /seatmaps/:seatMapId/seats/bulk
-//  - PATCH /seatmaps/seat/:seatId/status
-//  - GET   /seatmaps/allocations/:allocationId
-app.use("/seatmaps", seatMapsRouter);
-
-// ---------- Seating wizard + full-screen builder ----------
-
-// IMPORTANT: mount the full-screen builder BEFORE the seating-choice
-// router so it doesn't get shadowed by the old stub route.
-app.use("/admin/seating", adminSeatingBuilderRouter);
-
-// Seating choice + layout wizard (Steps 1–2)
-//  - GET /admin/seating-choice/:showId
-//  - GET /admin/seating/unallocated/:showId
-//  - GET /admin/seating/layout-wizard/:showId
-app.use("/admin", seatingChoiceRouter);
-
-// ---------- Admin SPA (Organiser Console) ----------
-
-// Admin Console SPA at /admin/ui/*
-app.use("/admin", adminUiRouter);
-
-// 404 handler (JSON)
-app.use((_req, res) => res.status(404).json({ error: "Not found" }));
-
-export default app;
