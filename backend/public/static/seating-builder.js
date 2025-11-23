@@ -2472,7 +2472,7 @@
       mapLayer.batchDraw();
     });
 
-    node.on("dragend", () => {
+        node.on("dragend", () => {
       const nodes = transformer ? transformer.nodes() : [node];
       nodes.forEach((n) => {
         n.position({
@@ -2486,7 +2486,7 @@
       pushHistory();
     });
 
-       node.on("transformend", () => {
+    node.on("transformend", () => {
       const tShape = node.getAttr("shapeType") || node.name();
 
       if (
@@ -2536,10 +2536,6 @@
       pushHistory();
 
       // keep the inspector in sync (Rotation deg, etc.)
-      renderInspector(node);
-    });
-
-      // NEW: keep inspector rotation value in sync after manual rotate
       renderInspector(node);
     });
 
