@@ -40,7 +40,7 @@ app.set("trust proxy", 1);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Core middleware
+// ---------- Core middleware ----------
 app.use(
   cors({
     origin: "*",
@@ -53,18 +53,20 @@ app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Serve static assets for the seating builder (JS + CSS + any other static files)
+// ---------- Static assets ----------
+
+// Seating builder static bundle (JS + CSS)
 // This makes /static/seating-builder.js and /static/seating-builder.css work.
 app.use(
   "/static",
   express.static(path.join(__dirname, "..", "public", "static"))
 );
 
-// NEW: serve public assets (icons, etc.) from /public/*
-// e.g. /public/seatmap-icons/row-dark.png -> http://localhost:3000/seatmap-icons/row-dark.png
+// NEW: serve everything under /public at the root
+// e.g. /public/seatmap-icons/row.png -> https://your-domain/seatmap-icons/row.png
 app.use(express.static(path.join(__dirname, "..", "public")));
 
-// Basic global rate limit (tune as needed)
+// ---------- Basic global rate limit (tune as needed) ----------
 app.use(
   rateLimit({
     windowMs: 60 * 1000,
@@ -74,12 +76,11 @@ app.use(
   })
 );
 
-// Health checks
+// ---------- Health checks ----------
 app.get("/healthz", (_req, res) => res.status(200).send("ok"));
 app.get("/readyz", (_req, res) => res.status(200).send("ready"));
 
 // ---------- Public / core API ----------
-
 app.use("/auth", authRouter);
 app.use("/bootstrap", bootstrapRouter);
 app.use("/checkout", checkoutRouter);
@@ -108,3 +109,43 @@ app.use("/admin", adminShowsRouter);
 
 // Ticket types for shows
 //  - GET  /admin/shows/:showId/ticket-types
+//  - POST /admin/shows/:showId/ticket-types
+//  - PUT  /admin/ticket-types/:id
+//  - DELETE /admin/ticket-types/:id
+app.use("/admin", adminTicketTypesRouter);
+
+// Seat map CRUD + external allocations
+//  - GET/POST /admin/seatmaps
+//  - PATCH    /admin/seatmaps/:id/default
+//  - POST     /admin/seatmaps/:id/allocations
+app.use("/admin/seatmaps", adminSeatMapsRouter);
+
+// Seat-level operations (used by the seating editor)
+//  - GET   /seatmaps/:seatMapId/seats
+//  - POST  /seatmaps/:seatMapId/seats/bulk
+//  - PATCH /seatmaps/seat/:seatId/status
+//  - GET   /seatmaps/allocations/:allocationId
+app.use("/seatmaps", seatMapsRouter);
+
+// ---------- Seating wizard + full-screen builder ----------
+
+// IMPORTANT: mount the full-screen builder BEFORE the seating-choice
+// router so it doesn't get shadowed by the old stub route.
+app.use("/admin/seating", adminSeatingBuilderRouter);
+
+// Seating choice + layout wizard (Steps 1–2)
+//  - GET /admin/seating-choice/:showId
+//  - GET /admin/seating/unallocated/:showId
+//  - GET /admin/seating/layout-wizard/:showId
+app.use("/admin", seatingChoiceRouter);
+
+// ---------- Admin SPA (Organiser Console) ----------
+
+// Admin Console SPA at /admin/ui/*
+app.use("/admin", adminUiRouter);
+
+// ---------- 404 handler (JSON) ----------
+app.use((_req, res) => res.status(404).json({ error: "Not found" }));
+
+// ---------- Export app for start.ts ----------
+export default app;
