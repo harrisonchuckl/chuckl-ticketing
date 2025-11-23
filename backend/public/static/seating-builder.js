@@ -787,13 +787,13 @@
     group.setAttr("rowCount", rowCount);
 
     // label + layout defaults
-    group.setAttr("seatLabelMode", "numbers");
+    group.setAttr("seatLabelMode", "numbers"); // "numbers" | "letters" | "none"
     group.setAttr("seatStart", 1);
     group.setAttr("rowLabelPrefix", "");
     group.setAttr("rowLabelStart", 0);
 
-    // default alignment for new blocks
-    group.setAttr("alignment", "left");
+    // default alignment for new blocks (centre, since we’ve removed the control)
+    group.setAttr("alignment", "center");
 
     // curvature / skew
     group.setAttr("curve", 0);
@@ -839,18 +839,17 @@
       : 0;
 
     const alignmentRaw = group.getAttr("alignment") || "center";
-const alignment =
-  alignmentRaw === "left" ||
-  alignmentRaw === "right" ||
-  alignmentRaw === "center"
-    ? alignmentRaw
-    : "center";
+    const alignment =
+      alignmentRaw === "left" ||
+      alignmentRaw === "right" ||
+      alignmentRaw === "center"
+        ? alignmentRaw
+        : "center";
 
-const curveRaw = Number(group.getAttr("curve"));
-const skewRaw = Number(group.getAttr("skew"));
-const curve = Number.isFinite(curveRaw) ? curveRaw : 0;
-const skew = Number.isFinite(skewRaw) ? skewRaw : 0;
-
+    const curveRaw = Number(group.getAttr("curve"));
+    const skewRaw = Number(group.getAttr("skew"));
+    const curve = Number.isFinite(curveRaw) ? curveRaw : 0;
+    const skew = Number.isFinite(skewRaw) ? skewRaw : 0;
 
     // remove existing seats + labels
     group
@@ -866,8 +865,8 @@ const skew = Number.isFinite(skewRaw) ? skewRaw : 0;
     const seatRadius = 6;
     const rowSpacing = 20;
 
-const curveFactor = curve / 8;  // more aggressive curve
-const skewFactor = skew / 10;
+    const curveFactor = curve / 8; // curvature strength
+    const skewFactor = skew / 10;
 
     const centerIndex = (seatsPerRow - 1) / 2;
 
@@ -915,7 +914,6 @@ const skewFactor = skew / 10;
             seatsPerRow,
             rowCount,
           });
-          // Skip this seat completely
           continue;
         }
 
@@ -929,17 +927,16 @@ const skewFactor = skew / 10;
         });
 
         // Only draw labels if mode is not "none"
-let labelText = "";
-if (seatLabelMode !== "none") {
-  labelText = seatLabelFromIndex(seatLabelMode, i, seatStart);
-}
+        let labelText = "";
+        if (seatLabelMode !== "none") {
+          labelText = seatLabelFromIndex(seatLabelMode, i, seatStart);
+        }
 
-group.add(seat);
-if (labelText) {
-  const label = makeSeatLabelText(labelText, sx, rowY);
-  group.add(label);
-}
-
+        group.add(seat);
+        if (labelText) {
+          const label = makeSeatLabelText(labelText, sx, rowY);
+          group.add(label);
+        }
 
         if (sx < rowMinX) rowMinX = sx;
       }
@@ -1138,7 +1135,6 @@ if (labelText) {
 
   // --------------- DEBUG HELPERS (temporary) ---------------
 
-  // Dump detailed info about each row-seats group + the stage/layer
   function debugDumpRows(context) {
     if (!mapLayer || !stage) {
       // eslint-disable-next-line no-console
@@ -1149,7 +1145,6 @@ if (labelText) {
     // eslint-disable-next-line no-console
     console.log("===== ROW DEBUG =====", context || "");
 
-    // Stage + layer state
     const stageScale = stage.scaleX();
     const stageSize = { width: stage.width(), height: stage.height() };
     const stagePos = stage.position();
@@ -1162,19 +1157,18 @@ if (labelText) {
     // eslint-disable-next-line no-console
     console.log("mapLayer:", { layerScale, layerPos });
 
-   mapLayer.find("Group").forEach((g, idx) => {
-  const type = g.getAttr("shapeType") || g.name();
-  if (type !== "row-seats") return;
+    mapLayer.find("Group").forEach((g, idx) => {
+      const type = g.getAttr("shapeType") || g.name();
+      if (type !== "row-seats") return;
 
       const pos = g.position();
       const absPos = g.getAbsolutePosition();
       const scale = g.scale();
       const rotation = g.rotation();
 
-      // client rects in different spaces
       const rectLocal = g.getClientRect({ relativeTo: g });
       const rectLayer = g.getClientRect({ relativeTo: mapLayer });
-      const rectStage = g.getClientRect(); // relative to stage
+      const rectStage = g.getClientRect();
 
       const hit = g.findOne(".hit-rect");
       const hitInfo = hit
@@ -1187,7 +1181,6 @@ if (labelText) {
           }
         : null;
 
-      // first seat circle, if any
       const seat = g.findOne((node) => node.getAttr && node.getAttr("isSeat"));
       let seatInfo = null;
       if (seat) {
@@ -1228,7 +1221,6 @@ if (labelText) {
     console.log("===== END ROW DEBUG =====");
   }
 
-  // expose it so you can call from console
   window.debugDumpRows = debugDumpRows;
 
   // ---------- Selection inspector (right-hand panel) ----------
@@ -1307,6 +1299,8 @@ if (labelText) {
       label.appendChild(input);
       wrapper.appendChild(label);
       el.appendChild(wrapper);
+
+      return input;
     }
 
     function addStaticRow(labelText, valueText) {
@@ -1360,6 +1354,8 @@ if (labelText) {
       label.appendChild(select);
       wrapper.appendChild(label);
       el.appendChild(wrapper);
+
+      return select;
     }
 
     function addTextField(labelText, value, onCommit) {
@@ -1457,16 +1453,15 @@ if (labelText) {
     }
 
     // ---- Row blocks ----
- if (shapeType === "row-seats") {
-  const seatsPerRow = Number(node.getAttr("seatsPerRow") ?? 10);
-  const rowCount = Number(node.getAttr("rowCount") ?? 1);
-  const seatLabelMode = node.getAttr("seatLabelMode") || "numbers"; // "numbers" | "letters" | "none"
-  const seatStart = Number(node.getAttr("seatStart") ?? 1);
-  const rowLabelPrefix = node.getAttr("rowLabelPrefix") || "";
-  const rowLabelStart = Number(node.getAttr("rowLabelStart") ?? 0);
-  const curve = Number(node.getAttr("curve") ?? 0);
-  const skew = Number(node.getAttr("skew") ?? 0);
-
+    if (shapeType === "row-seats") {
+      const seatsPerRow = Number(node.getAttr("seatsPerRow") ?? 10);
+      const rowCount = Number(node.getAttr("rowCount") ?? 1);
+      const seatLabelMode = node.getAttr("seatLabelMode") || "numbers"; // "numbers" | "letters" | "none"
+      const seatStart = Number(node.getAttr("seatStart") ?? 1);
+      const rowLabelPrefix = node.getAttr("rowLabelPrefix") || "";
+      const rowLabelStart = Number(node.getAttr("rowLabelStart") ?? 0);
+      const curve = Number(node.getAttr("curve") ?? 0);
+      const skew = Number(node.getAttr("skew") ?? 0);
 
       const totalSeats = seatsPerRow * rowCount;
 
@@ -1497,25 +1492,47 @@ if (labelText) {
         `${totalSeats} seat${totalSeats === 1 ? "" : "s"}`
       );
 
-      addNumberField("Seat numbers start at", seatStart, 1, 1, (val) => {
-        node.setAttr("seatStart", val);
-        rebuild();
-      });
+      // Seat numbers start at (we'll disable it when labels are "none")
+      const seatStartInput = addNumberField(
+        "Seat numbers start at",
+        seatStart,
+        1,
+        1,
+        (val) => {
+          node.setAttr("seatStart", val);
+          rebuild();
+        }
+      );
 
-      addSelectField(
-  "Seat labels",
-  seatLabelMode,
-  [
-    { value: "numbers", label: "1, 2, 3..." },
-    { value: "letters", label: "A, B, C..." },
-    { value: "none", label: "No seat labels" },
-  ],
-  (mode) => {
-    node.setAttr("seatLabelMode", mode);
-    rebuild();
-  }
-);
+      // Seat labels mode: numbers / letters / none
+      const seatLabelSelect = addSelectField(
+        "Seat labels",
+        seatLabelMode,
+        [
+          { value: "numbers", label: "1, 2, 3..." },
+          { value: "letters", label: "A, B, C..." },
+          { value: "none", label: "No seat labels" },
+        ],
+        (mode) => {
+          node.setAttr("seatLabelMode", mode);
 
+          // Toggle the "Seat numbers start at" control
+          if (seatStartInput) {
+            const disabled = mode === "none";
+            seatStartInput.disabled = disabled;
+            seatStartInput.style.opacity = disabled ? "0.6" : "1";
+          }
+
+          rebuild();
+        }
+      );
+
+      // Apply initial disabled state based on current mode
+      if (seatStartInput && seatLabelSelect) {
+        const disabled = seatLabelMode === "none";
+        seatStartInput.disabled = disabled;
+        seatStartInput.style.opacity = disabled ? "0.6" : "1";
+      }
 
       addTextField("Row label prefix", rowLabelPrefix, (val) => {
         node.setAttr("rowLabelPrefix", val);
@@ -1541,30 +1558,16 @@ if (labelText) {
         }
       );
 
-      addSelectField(
-  "Alignment",
-  alignment,
-  [
-    { value: "center", label: "Centre" },
-    { value: "left", label: "Left" },
-    { value: "right", label: "Right" },
-  ],
-  (val) => {
-    node.setAttr("alignment", val);
-    rebuild();
-  }
-);
-
-
+      // Curve + skew sliders
       addRangeField("Curve rows", curve, -40, 40, 1, (val) => {
-  node.setAttr("curve", val);
-  rebuild();
-});
+        node.setAttr("curve", val);
+        rebuild();
+      });
 
-addRangeField("Skew rows", skew, -40, 40, 1, (val) => {
-  node.setAttr("skew", val);
-  rebuild();
-});
+      addRangeField("Skew rows", skew, -40, 40, 1, (val) => {
+        node.setAttr("skew", val);
+        rebuild();
+      });
 
       return;
     }
@@ -1643,7 +1646,6 @@ addRangeField("Skew rows", skew, -40, 40, 1, (val) => {
     el.appendChild(p);
   }
 
-  // expose so we can poke it from console if needed
   window.renderSeatmapInspector = renderInspector;
 
   // ---------- Selection / transformer ----------
@@ -1731,13 +1733,11 @@ addRangeField("Skew rows", skew, -40, 40, 1, (val) => {
     // Make sure each group always has a sane hit rect
     ensureHitRect(node);
 
-    // Click selection (also supports shift for multi-select)
     node.on("click", (evt) => {
       const isShift = !!(evt.evt && evt.evt.shiftKey);
       selectNode(node, isShift);
     });
 
-    // Cursor hints
     node.on("mouseover", () => {
       stage.container().style.cursor = "grab";
     });
@@ -1746,7 +1746,6 @@ addRangeField("Skew rows", skew, -40, 40, 1, (val) => {
       stage.container().style.cursor = activeTool ? "crosshair" : "default";
     });
 
-    // Drag behaviour (selection itself is handled centrally on click too)
     node.on("dragstart", () => {
       const nodes = transformer ? transformer.nodes() : [];
       if (!nodes.length) selectNode(node, false);
@@ -1831,7 +1830,6 @@ addRangeField("Skew rows", skew, -40, 40, 1, (val) => {
       pushHistory();
     });
   }
-
 
   // ---------- Node creation based on active tool ----------
 
@@ -1976,7 +1974,7 @@ addRangeField("Skew rows", skew, -40, 40, 1, (val) => {
     overlayLayer.add(transformer);
   }
 
-   // ---------- Canvas interactions ----------
+  // ---------- Canvas interactions ----------
 
   function handleStageClick(evt) {
     if (!stage || !mapLayer) return;
@@ -1986,23 +1984,18 @@ addRangeField("Skew rows", skew, -40, 40, 1, (val) => {
 
     let group = null;
 
-    // Only call findAncestor on nodes that actually have it
     if (target && target !== stage && typeof target.findAncestor === "function") {
       group = target.findAncestor("Group", true);
     }
 
-    // 1) If we clicked on any shape that belongs to a Group on the mapLayer,
-    //    select that group (rows, tables, stage, etc.)
     if (group && group.getLayer && group.getLayer() === mapLayer) {
       selectNode(group, shift);
       return;
     }
 
-    // 2) If we didn't hit a group, treat as an "empty" click on the grid/stage
     const clickedOnEmpty =
       target === stage || (target.getLayer && target.getLayer() === gridLayer);
 
-    // No active tool: just clear selection when clicking empty space
     if (!activeTool) {
       if (clickedOnEmpty) {
         clearSelection();
@@ -2010,7 +2003,6 @@ addRangeField("Skew rows", skew, -40, 40, 1, (val) => {
       return;
     }
 
-    // 3) Active tool selected and click is on empty space → create a new node
     if (!clickedOnEmpty) return;
 
     const pointerPos = stage.getPointerPosition();
@@ -2047,20 +2039,14 @@ addRangeField("Skew rows", skew, -40, 40, 1, (val) => {
       return;
     }
 
-    if (
-      (e.key === "c" || e.key === "C") &&
-      (e.metaKey || e.ctrlKey)
-    ) {
+    if ((e.key === "c" || e.key === "C") && (e.metaKey || e.ctrlKey)) {
       if (!nodes.length) return;
       copiedNodesJson = nodes.map((n) => n.toJSON());
       e.preventDefault();
       return;
     }
 
-    if (
-      (e.key === "v" || e.key === "V") &&
-      (e.metaKey || e.ctrlKey)
-    ) {
+    if ((e.key === "v" || e.key === "V") && (e.metaKey || e.ctrlKey)) {
       if (!copiedNodesJson.length) return;
 
       const newNodes = copiedNodesJson.map((json) => {
