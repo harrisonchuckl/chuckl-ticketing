@@ -93,9 +93,9 @@
   const ZOOM_STEP = 0.1;
 
   // circular table geometry
-  const CIRC_SEAT_RADIUS = 7;
-  const CIRC_DESIRED_GAP = 8;
-  const CIRC_MIN_TABLE_RADIUS = 24;
+  const CIRC_SEAT_RADIUS = 10;    // bigger seats on circular tables
+  const CIRC_DESIRED_GAP = 10;
+  const CIRC_MIN_TABLE_RADIUS = 28;
 
   // ---------- State ----------
 
@@ -355,13 +355,14 @@
       x,
       y,
       text,
-      fontSize: 10,
+      fontSize: 14, // bigger numbers
       fontFamily: "system-ui",
       fill: "#111827",
       align: "center",
       verticalAlign: "middle",
       listening: false,
       isSeatLabel: true,
+      name: "seat-label",
     });
 
     label.offsetX(label.width() / 2);
@@ -407,7 +408,7 @@
       height: 48,
       cornerRadius: 8,
       stroke: "#4b5563",
-      strokeWidth: 1.5,
+      strokeWidth: 1.8,
       name: "body-rect",
     });
 
@@ -430,7 +431,7 @@
       height: 52,
       cornerRadius: 12,
       stroke: "#0f172a",
-      strokeWidth: 1.6,
+      strokeWidth: 1.8,
       fillLinearGradientStartPoint: { x: 0, y: 0 },
       fillLinearGradientEndPoint: { x: 200, y: 0 },
       fillLinearGradientColorStops: [0, "#1d4ed8", 1, "#22c1c3"],
@@ -469,7 +470,7 @@
       height: 36,
       cornerRadius: 8,
       stroke: "#4b5563",
-      strokeWidth: 1.5,
+      strokeWidth: 1.8,
       name: "body-rect",
     });
 
@@ -504,7 +505,7 @@
       height: 36,
       cornerRadius: 8,
       stroke: "#16a34a",
-      strokeWidth: 1.6,
+      strokeWidth: 1.8,
       name: "body-rect",
     });
 
@@ -568,9 +569,9 @@
     });
 
     const circle = new Konva.Circle({
-      radius: 8,
+      radius: 13,
       stroke: "#4b5563",
-      strokeWidth: 1.4,
+      strokeWidth: 1.8,
       isSeat: true,
     });
 
@@ -609,7 +610,7 @@
     const table = new Konva.Circle({
       radius: tableRadius,
       stroke: "#4b5563",
-      strokeWidth: 1.4,
+      strokeWidth: 1.8,
       name: "body-rect",
     });
 
@@ -625,7 +626,7 @@
         y: sy,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: 1.3,
+        strokeWidth: 1.7,
         isSeat: true,
       });
 
@@ -657,15 +658,14 @@
     group.setAttr("longSideSeats", longSideSeats);
     group.setAttr("shortSideSeats", shortSideSeats);
 
-    const seatRadius = 6;
-    const seatGap = 4;
+    const seatRadius = 10;
+    const seatGap = 6;
 
     const longSpan =
       longSideSeats > 0 ? (longSideSeats - 1) * (seatRadius * 2 + seatGap) : 0;
     const shortSpan =
       shortSideSeats > 0
-        ? (shortSideSeats - 1) * (seatRadius * 2 + seatGap)
-        : 0;
+        ? (shortSideSeats - 1) * (seatRadius * 2 + seatGap) : 0;
 
     const width = longSpan + seatRadius * 4;
     const height = shortSpan + seatRadius * 4;
@@ -675,7 +675,7 @@
       height,
       cornerRadius: 6,
       stroke: "#4b5563",
-      strokeWidth: 1.4,
+      strokeWidth: 1.8,
       offsetX: width / 2,
       offsetY: height / 2,
       name: "body-rect",
@@ -690,15 +690,15 @@
       const sx =
         -width / 2 + seatRadius * 2 + i * (seatRadius * 2 + seatGap);
 
-      const topSeatY = -height / 2 - 10;
-      const bottomSeatY = height / 2 + 10;
+      const topSeatY = -height / 2 - 14;
+      const bottomSeatY = height / 2 + 14;
 
       const topSeat = new Konva.Circle({
         x: sx,
         y: topSeatY,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: 1.3,
+        strokeWidth: 1.7,
         isSeat: true,
       });
       const topLabel = makeSeatLabelText(String(++seatIndex), sx, topSeatY);
@@ -708,7 +708,7 @@
         y: bottomSeatY,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: 1.3,
+        strokeWidth: 1.7,
         isSeat: true,
       });
       const bottomLabel = makeSeatLabelText(
@@ -728,15 +728,15 @@
       const sy =
         -height / 2 + seatRadius * 2 + i * (seatRadius * 2 + seatGap);
 
-      const leftSeatX = -width / 2 - 10;
-      const rightSeatX = width / 2 + 10;
+      const leftSeatX = -width / 2 - 14;
+      const rightSeatX = width / 2 + 14;
 
       const leftSeat = new Konva.Circle({
         x: leftSeatX,
         y: sy,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: 1.3,
+        strokeWidth: 1.7,
         isSeat: true,
       });
       const leftLabel = makeSeatLabelText(
@@ -750,7 +750,7 @@
         y: sy,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: 1.3,
+        strokeWidth: 1.7,
         isSeat: true,
       });
       const rightLabel = makeSeatLabelText(String(++seatIndex), rightSeatX, sy);
@@ -787,13 +787,13 @@
     group.setAttr("rowCount", rowCount);
 
     // label + layout defaults
-    group.setAttr("seatLabelMode", "numbers"); // "numbers" | "letters" | "none"
+    group.setAttr("seatLabelMode", "numbers");
     group.setAttr("seatStart", 1);
     group.setAttr("rowLabelPrefix", "");
     group.setAttr("rowLabelStart", 0);
 
-    // default alignment for new blocks (centre, since we’ve removed the control)
-    group.setAttr("alignment", "center");
+    // default alignment for new blocks
+    group.setAttr("alignment", "left");
 
     // curvature / skew
     group.setAttr("curve", 0);
@@ -861,12 +861,13 @@
       )
       .forEach((n) => n.destroy());
 
-    const spacing = 20;
-    const seatRadius = 6;
-    const rowSpacing = 20;
+    // spacing + geometry
+    const spacing = 26;
+    const seatRadius = 11;
+    const rowSpacing = 26;
 
-    const curveFactor = curve / 8; // curvature strength
-    const skewFactor = skew / 10;
+    const curveFactor = curve / 8; // more aggressive curve
+    const skewFactor = skew / 3; // stronger skew per row
 
     const centerIndex = (seatsPerRow - 1) / 2;
 
@@ -885,7 +886,8 @@
       // first row sits at y = 0 (click position), subsequent rows go DOWN
       const baseRowY = rIdx * rowSpacing;
 
-      let rowMinX = Infinity;
+      let rowFirstSeatX = null;
+      let rowFirstSeatY = null;
 
       for (let i = 0; i < seatsPerRow; i += 1) {
         let sx = computeSeatX(i);
@@ -895,7 +897,8 @@
 
         let rowY = baseRowY + curveOffset;
 
-        sx += skewFactor * baseRowY;
+        // skew – fan rows sideways more strongly
+        sx += skewFactor * rIdx;
 
         // If any coordinate is NaN, skip this seat (don't poison the group)
         if (!Number.isFinite(sx) || !Number.isFinite(rowY)) {
@@ -914,6 +917,7 @@
             seatsPerRow,
             rowCount,
           });
+          // Skip this seat completely
           continue;
         }
 
@@ -922,7 +926,7 @@
           y: rowY,
           radius: seatRadius,
           stroke: "#4b5563",
-          strokeWidth: 1.3,
+          strokeWidth: 1.7,
           isSeat: true,
         });
 
@@ -938,24 +942,30 @@
           group.add(label);
         }
 
-        if (sx < rowMinX) rowMinX = sx;
+        // track first/leftmost seat for row label
+        if (rowFirstSeatX == null || sx < rowFirstSeatX) {
+          rowFirstSeatX = sx;
+          rowFirstSeatY = rowY;
+        }
       }
 
       const rowLabelText =
         rowLabelPrefix + rowLabelFromIndex(rowLabelStart + rIdx);
 
-      if (rowLabelText) {
+      if (rowLabelText && rowFirstSeatX != null && rowFirstSeatY != null) {
         const rowLabel = new Konva.Text({
-          x: rowMinX - 18,
-          y: baseRowY,
+          x: rowFirstSeatX - (seatRadius + 18), // always just left of first seat
+          y: rowFirstSeatY,
           text: rowLabelText,
-          fontSize: 11,
+          fontSize: 18,
           fontFamily: "system-ui",
+          fontStyle: "bold",
           fill: "#4b5563",
           align: "right",
           verticalAlign: "middle",
           listening: false,
           isRowLabel: true,
+          name: "row-label",
         });
 
         rowLabel.offsetY(rowLabel.height() / 2);
@@ -1010,7 +1020,7 @@
         y: sy,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: 1.3,
+        strokeWidth: 1.7,
         isSeat: true,
       });
 
@@ -1044,15 +1054,14 @@
       )
       .forEach((n) => n.destroy());
 
-    const seatRadius = 6;
-    const seatGap = 4;
+    const seatRadius = 10;
+    const seatGap = 6;
 
     const longSpan =
       longSideSeats > 0 ? (longSideSeats - 1) * (seatRadius * 2 + seatGap) : 0;
     const shortSpan =
       shortSideSeats > 0
-        ? (shortSideSeats - 1) * (seatRadius * 2 + seatGap)
-        : 0;
+        ? (shortSideSeats - 1) * (seatRadius * 2 + seatGap) : 0;
 
     const width = longSpan + seatRadius * 4;
     const height = shortSpan + seatRadius * 4;
@@ -1068,15 +1077,15 @@
       const sx =
         -width / 2 + seatRadius * 2 + i * (seatRadius * 2 + seatGap);
 
-      const topY = -height / 2 - 10;
-      const bottomY = height / 2 + 10;
+      const topY = -height / 2 - 14;
+      const bottomY = height / 2 + 14;
 
       const topSeat = new Konva.Circle({
         x: sx,
         y: topY,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: 1.3,
+        strokeWidth: 1.7,
         isSeat: true,
       });
       const topLabel = makeSeatLabelText(String(++seatIndex), sx, topY);
@@ -1086,7 +1095,7 @@
         y: bottomY,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: 1.3,
+        strokeWidth: 1.7,
         isSeat: true,
       });
       const bottomLabel = makeSeatLabelText(String(++seatIndex), sx, bottomY);
@@ -1101,15 +1110,15 @@
       const sy =
         -height / 2 + seatRadius * 2 + i * (seatRadius * 2 + seatGap);
 
-      const leftX = -width / 2 - 10;
-      const rightX = width / 2 + 10;
+      const leftX = -width / 2 - 14;
+      const rightX = width / 2 + 14;
 
       const leftSeat = new Konva.Circle({
         x: leftX,
         y: sy,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: 1.3,
+        strokeWidth: 1.7,
         isSeat: true,
       });
       const leftLabel = makeSeatLabelText(String(++seatIndex), leftX, sy);
@@ -1119,7 +1128,7 @@
         y: sy,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: 1.3,
+        strokeWidth: 1.7,
         isSeat: true,
       });
       const rightLabel = makeSeatLabelText(String(++seatIndex), rightX, sy);
@@ -1240,7 +1249,6 @@
     const shapeType = node.getAttr("shapeType") || node.name();
     const nodes = transformer ? transformer.nodes() : [];
 
-    // Debug: confirm we’re being called + what’s selected
     // eslint-disable-next-line no-console
     console.log("[renderInspector] shapeType:", shapeType, {
       multiCount: nodes ? nodes.length : 0,
@@ -1258,7 +1266,7 @@
       el.appendChild(h);
     }
 
-    function addNumberField(labelText, value, min, step, onCommit) {
+    function addNumberField(labelText, value, min, step, onCommit, opts) {
       const wrapper = document.createElement("div");
       wrapper.className = "sb-field-row";
 
@@ -1276,6 +1284,10 @@
       input.step = String(step || 1);
       input.value = String(value);
       input.className = "sb-input";
+
+      if (opts && opts.fieldId) {
+        input.dataset.fieldId = opts.fieldId;
+      }
 
       function commit() {
         const parsed = parseInt(input.value, 10);
@@ -1492,7 +1504,7 @@
         `${totalSeats} seat${totalSeats === 1 ? "" : "s"}`
       );
 
-      // Seat numbers start at (we'll disable it when labels are "none")
+      // Seat number start – we keep a handle on the input so we can disable it
       const seatStartInput = addNumberField(
         "Seat numbers start at",
         seatStart,
@@ -1501,10 +1513,11 @@
         (val) => {
           node.setAttr("seatStart", val);
           rebuild();
-        }
+        },
+        { fieldId: "seat-start" }
       );
 
-      // Seat labels mode: numbers / letters / none
+      // Seat labels dropdown
       const seatLabelSelect = addSelectField(
         "Seat labels",
         seatLabelMode,
@@ -1515,23 +1528,21 @@
         ],
         (mode) => {
           node.setAttr("seatLabelMode", mode);
+          rebuild();
 
-          // Toggle the "Seat numbers start at" control
           if (seatStartInput) {
             const disabled = mode === "none";
             seatStartInput.disabled = disabled;
-            seatStartInput.style.opacity = disabled ? "0.6" : "1";
+            seatStartInput.style.opacity = disabled ? 0.5 : 1;
           }
-
-          rebuild();
         }
       );
 
-      // Apply initial disabled state based on current mode
+      // apply initial disabled state for "Seat numbers start at"
       if (seatStartInput && seatLabelSelect) {
         const disabled = seatLabelMode === "none";
         seatStartInput.disabled = disabled;
-        seatStartInput.style.opacity = disabled ? "0.6" : "1";
+        seatStartInput.style.opacity = disabled ? 0.5 : 1;
       }
 
       addTextField("Row label prefix", rowLabelPrefix, (val) => {
@@ -1558,7 +1569,7 @@
         }
       );
 
-      // Curve + skew sliders
+      // Curve / skew sliders
       addRangeField("Curve rows", curve, -40, 40, 1, (val) => {
         node.setAttr("curve", val);
         rebuild();
@@ -1730,7 +1741,6 @@
   function attachNodeBehaviour(node) {
     if (!(node instanceof Konva.Group)) return;
 
-    // Make sure each group always has a sane hit rect
     ensureHitRect(node);
 
     node.on("click", (evt) => {
@@ -1823,6 +1833,23 @@
         node.scale({ x: 1, y: 1 });
       } else {
         node.scale({ x: 1, y: 1 });
+      }
+
+      // keep seat numbers / row labels upright for rows & tables
+      if (
+        shapeType === "row-seats" ||
+        shapeType === "circular-table" ||
+        shapeType === "rect-table"
+      ) {
+        const rotation = node.rotation();
+        node
+          .find(
+            (child) =>
+              child.getAttr("isSeatLabel") || child.getAttr("isRowLabel")
+          )
+          .forEach((label) => {
+            label.rotation(-rotation);
+          });
       }
 
       ensureHitRect(node);
@@ -2039,14 +2066,20 @@
       return;
     }
 
-    if ((e.key === "c" || e.key === "C") && (e.metaKey || e.ctrlKey)) {
+    if (
+      (e.key === "c" || e.key === "C") &&
+      (e.metaKey || e.ctrlKey)
+    ) {
       if (!nodes.length) return;
       copiedNodesJson = nodes.map((n) => n.toJSON());
       e.preventDefault();
       return;
     }
 
-    if ((e.key === "v" || e.key === "V") && (e.metaKey || e.ctrlKey)) {
+    if (
+      (e.key === "v" || e.key === "V") &&
+      (e.metaKey || e.ctrlKey)
+    ) {
       if (!copiedNodesJson.length) return;
 
       const newNodes = copiedNodesJson.map((json) => {
