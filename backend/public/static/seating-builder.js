@@ -18,6 +18,148 @@
     return;
   }
 
+  // ---------- Inject modern styles (Apple / Canva vibes) ----------
+
+  function injectSeatmapStyles() {
+    if (document.getElementById("sb-seatmap-style")) return;
+
+    const style = document.createElement("style");
+    style.id = "sb-seatmap-style";
+    style.textContent = `
+      .sb-layout {
+        font-family: -apple-system,BlinkMacSystemFont,"system-ui","Segoe UI",sans-serif;
+      }
+
+      .sb-sidebar-col {
+        background: radial-gradient(circle at top left,#eef2ff 0,#f9fafb 42%,#f3f4f6 100%);
+        border-left: 1px solid #e5e7eb;
+      }
+
+      #sb-inspector {
+        background: #ffffff;
+        border-radius: 16px;
+        border: 1px solid rgba(148,163,184,0.35);
+        box-shadow: 0 14px 40px rgba(15,23,42,0.12);
+        padding: 10px;
+      }
+
+      .sb-inspector-title {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .12em;
+        color: #6b7280;
+        margin: 2px 0 6px;
+      }
+
+      .sb-inspector-empty {
+        font-size: 12px;
+        color: #6b7280;
+        padding: 8px 2px;
+      }
+
+      .sb-field-row {
+        margin-bottom: 10px;
+      }
+
+      .sb-label span {
+        font-size: 11px;
+        color: #6b7280;
+        font-weight: 500;
+        text-transform: none;
+      }
+
+      .sb-input,
+      .sb-select {
+        width: 100%;
+        box-sizing: border-box;
+        border-radius: 10px;
+        border: 1px solid #e5e7eb;
+        padding: 6px 9px;
+        font-size: 13px;
+        background: #f9fafb;
+        outline: none;
+        transition: border-color .12s ease, box-shadow .12s ease, background .12s ease;
+      }
+
+      .sb-input:focus,
+      .sb-select:focus {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 1px rgba(37,99,235,0.25);
+        background: #ffffff;
+      }
+
+      .sb-static-label {
+        font-size: 11px;
+        color: #6b7280;
+      }
+
+      .sb-static-value {
+        font-size: 13px;
+        font-weight: 500;
+        color: #111827;
+      }
+
+      .sb-field-row.sb-field-static {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 4px 2px;
+        border-radius: 8px;
+        background: linear-gradient(90deg,#f9fafb, #eef2ff);
+      }
+
+      .tool-button {
+        width: 100%;
+        height: 52px;
+        box-sizing: border-box;
+        border-radius: 14px;
+        border: 1px solid #e5e7eb;
+        background: #ffffff;
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 6px;
+        box-shadow: 0 6px 18px rgba(15,23,42,0.05);
+        cursor: pointer;
+        transition:
+          transform .09s ease,
+          box-shadow .09s ease,
+          border-color .09s ease,
+          background .09s ease;
+      }
+
+      .tool-button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 26px rgba(15,23,42,0.12);
+        border-color: rgba(148,163,184,0.7);
+      }
+
+      .tool-button.is-active {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 1px rgba(37,99,235,0.28),0 12px 28px rgba(37,99,235,0.28);
+        background: linear-gradient(135deg,#eff6ff,#e0f2fe);
+      }
+
+      .tool-button > * {
+        pointer-events: none;
+      }
+
+      .tool-button svg,
+      .tool-button img {
+        width: 22px;
+        height: 22px;
+      }
+
+      .tool-button span {
+        font-size: 14px;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  injectSeatmapStyles();
+
   // ---------- Ensure sidebar DOM (seat count + inspector) ----------
 
   function ensureSidebarDom() {
@@ -45,14 +187,8 @@
     sidebarCol.className = "sb-sidebar-col";
     sidebarCol.style.width = "260px";
     sidebarCol.style.flex = "0 0 260px";
-    sidebarCol.style.borderLeft = "1px solid #e5e7eb";
     sidebarCol.style.padding = "12px 12px 12px 8px";
     sidebarCol.style.boxSizing = "border-box";
-    sidebarCol.style.fontFamily =
-      '-apple-system,BlinkMacSystemFont,"system-ui","Segoe UI",sans-serif';
-    sidebarCol.style.fontSize = "13px";
-    sidebarCol.style.color = "#111827";
-    sidebarCol.style.backgroundColor = "#f9fafb";
 
     sidebarCol.innerHTML = `
       <div style="display:flex;flex-direction:column;gap:12px;height:100%;">
@@ -70,7 +206,7 @@
             Selection
           </div>
           <div id="sb-inspector"
-               style="background:#ffffff;border:1px solid #e5e7eb;border-radius:8px;padding:8px;overflow:auto;height:100%;">
+               style="overflow:auto;height:100%;">
           </div>
         </div>
       </div>
@@ -405,6 +541,63 @@
     return String(n);
   }
 
+  // Inline text editing for table labels (double-click on label)
+  function beginInlineTextEdit(textNode, onCommit) {
+    if (!stage || !textNode) return;
+
+    const oldText = textNode.text();
+
+    const textPos = textNode.getAbsolutePosition();
+    const stageBox = stage.container().getBoundingClientRect();
+
+    const areaPosition = {
+      x: stageBox.left + textPos.x - textNode.width() / 2,
+      y: stageBox.top + textPos.y - textNode.height() / 2,
+    };
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = oldText;
+    input.style.position = "absolute";
+    input.style.left = `${areaPosition.x}px`;
+    input.style.top = `${areaPosition.y}px`;
+    input.style.zIndex = "9999";
+    input.style.borderRadius = "8px";
+    input.style.border = "1px solid #2563eb";
+    input.style.padding = "4px 8px";
+    input.style.fontSize = "13px";
+    input.style.fontFamily =
+      '-apple-system,BlinkMacSystemFont,"system-ui","Segoe UI",sans-serif';
+    input.style.boxShadow = "0 8px 24px rgba(15,23,42,0.18)";
+    input.style.background = "#ffffff";
+    input.style.color = "#111827";
+    input.style.outline = "none";
+    input.style.minWidth = "50px";
+
+    document.body.appendChild(input);
+    input.focus();
+    input.select();
+
+    function finish(commit) {
+      if (!input.parentNode) return;
+      const newVal = commit ? input.value : oldText;
+      onCommit(newVal);
+      document.body.removeChild(input);
+    }
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        finish(true);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        finish(false);
+      }
+    });
+
+    input.addEventListener("blur", () => finish(true));
+  }
+
   // ---------- Shape factories ----------
 
   function createSectionBlock(x, y) {
@@ -617,7 +810,7 @@
 
     group.setAttr("seatCount", seatCount);
     group.setAttr("seatLabelMode", "numbers");
-    group.setAttr("seatStart", 1);
+    group.setAttr("seatStart", 1); // still stored, but no UI
     group.setAttr("tableLabel", nextTableLabel());
 
     const seatRadius = CIRC_SEAT_RADIUS;
@@ -643,7 +836,6 @@
 
     group.add(table);
 
-    // centre table label
     const tableLabelText = group.getAttr("tableLabel") || "";
     if (tableLabelText) {
       const centreLabel = new Konva.Text({
@@ -719,7 +911,7 @@
     group.setAttr("longSideSeats", longSideSeats);
     group.setAttr("shortSideSeats", shortSideSeats);
     group.setAttr("seatLabelMode", "numbers");
-    group.setAttr("seatStart", 1);
+    group.setAttr("seatStart", 1); // still stored, but no UI
     group.setAttr("tableLabel", nextTableLabel());
 
     const seatRadius = 8;
@@ -749,7 +941,6 @@
 
     group.add(table);
 
-    // centre table label
     const tableLabelText = group.getAttr("tableLabel") || "";
     if (tableLabelText) {
       const centreLabel = new Konva.Text({
@@ -914,8 +1105,8 @@
     group.setAttr("rowLabelStart", 0); // index -> A
     group.setAttr("rowLabelBothSides", false);
 
-    // default alignment for new blocks
-    group.setAttr("alignment", "left");
+    // alignment – fixed underneath (no UI now)
+    // if not set, updateRowGroupGeometry defaults to "center"
 
     // curvature / skew
     group.setAttr("curve", 0);
@@ -957,6 +1148,7 @@
 
     const rowLabelBothSides = !!group.getAttr("rowLabelBothSides");
 
+    // alignment is now "internal" only – default to centre if missing
     const alignmentRaw = group.getAttr("alignment") || "center";
     const alignment =
       alignmentRaw === "left" ||
@@ -1490,7 +1682,7 @@
     const nodes = transformer ? transformer.nodes() : [];
 
     if (nodes && nodes.length > 1) {
-      el.innerHTML = `<p class="sb-inspector-multi">${nodes.length} items selected. Drag to move them together.</p>`;
+      el.innerHTML = `<p class="sb-inspector-empty">${nodes.length} items selected. Drag to move them together.</p>`;
       return;
     }
 
@@ -1738,7 +1930,6 @@
         ? Number(node.getAttr("skew"))
         : 0;
       const rowLabelBothSides = !!node.getAttr("rowLabelBothSides");
-      const alignment = node.getAttr("alignment") || "left";
 
       const totalSeats = seatsPerRow * rowCount;
 
@@ -1810,20 +2001,6 @@
         }
       );
 
-      addSelectField(
-        "Alignment",
-        alignment,
-        [
-          { value: "center", label: "Centre" },
-          { value: "left", label: "Left" },
-          { value: "right", label: "Right" },
-        ],
-        (val) => {
-          node.setAttr("alignment", val);
-          rebuild();
-        }
-      );
-
       addRangeField("Curve rows", curve, -40, 40, 1, (val) => {
         node.setAttr("curve", val);
         rebuild();
@@ -1841,14 +2018,16 @@
     if (shapeType === "circular-table") {
       const seatCount = node.getAttr("seatCount") || 8;
       const seatLabelMode = node.getAttr("seatLabelMode") || "numbers";
-      const seatStart = Number(node.getAttr("seatStart") ?? 1);
       const tableLabel = node.getAttr("tableLabel") || "";
 
       addTitle("Round table");
 
       addTextField("Table label", tableLabel, (val) => {
         node.setAttr("tableLabel", val || "");
-        updateCircularTableGeometry(node, node.getAttr("seatCount") || seatCount);
+        updateCircularTableGeometry(
+          node,
+          node.getAttr("seatCount") || seatCount
+        );
       });
 
       addNumberField("Seats around table", seatCount, 1, 1, (val) => {
@@ -1858,11 +2037,7 @@
         pushHistory();
       });
 
-      addNumberField("Seat numbers start at", seatStart, 1, 1, (val) => {
-        node.setAttr("seatStart", val);
-        updateCircularTableGeometry(node, node.getAttr("seatCount") || seatCount);
-      });
-
+      // Seat labels mode (UI only; start value fixed at 1)
       addSelectField(
         "Seat labels",
         seatLabelMode,
@@ -1873,7 +2048,10 @@
         ],
         (mode) => {
           node.setAttr("seatLabelMode", mode);
-          updateCircularTableGeometry(node, node.getAttr("seatCount") || seatCount);
+          updateCircularTableGeometry(
+            node,
+            node.getAttr("seatCount") || seatCount
+          );
         }
       );
 
@@ -1893,7 +2071,6 @@
       const longSideSeats = node.getAttr("longSideSeats") ?? 4;
       const shortSideSeats = node.getAttr("shortSideSeats") ?? 2;
       const seatLabelMode = node.getAttr("seatLabelMode") || "numbers";
-      const seatStart = Number(node.getAttr("seatStart") ?? 1);
       const tableLabel = node.getAttr("tableLabel") || "";
 
       const totalSeats = 2 * longSideSeats + 2 * shortSideSeats;
@@ -1939,15 +2116,6 @@
         }
       );
 
-      addNumberField("Seat numbers start at", seatStart, 1, 1, (val) => {
-        node.setAttr("seatStart", val);
-        updateRectTableGeometry(
-          node,
-          node.getAttr("longSideSeats") ?? longSideSeats,
-          node.getAttr("shortSideSeats") ?? shortSideSeats
-        );
-      });
-
       addSelectField(
         "Seat labels",
         seatLabelMode,
@@ -1977,6 +2145,7 @@
     // Fallback for non-configurable shapes
     addTitle("Selection");
     const p = document.createElement("p");
+    p.className = "sb-inspector-empty";
     p.textContent = "This element has no editable settings yet.";
     el.appendChild(p);
   }
@@ -1984,6 +2153,22 @@
   window.renderSeatmapInspector = renderInspector;
 
   // ---------- Selection / transformer ----------
+
+  function keepLabelsUpright(node) {
+    const angle = node.rotation();
+    const negate = -angle;
+
+    node
+      .find(
+        (child) =>
+          child.getAttr("isSeatLabel") ||
+          child.getAttr("isRowLabel") ||
+          child.name() === "table-label"
+      )
+      .forEach((lbl) => {
+        lbl.rotation(negate);
+      });
+  }
 
   function configureTransformerForNode(node) {
     if (!transformer || !node) return;
@@ -2062,26 +2247,12 @@
 
   // ---------- Behaviour attachment ----------
 
-  function keepLabelsUpright(node) {
-    const angle = node.rotation();
-    const negate = -angle;
-
-    node
-      .find(
-        (child) =>
-          child.getAttr("isSeatLabel") ||
-          child.getAttr("isRowLabel") ||
-          child.name() === "table-label"
-      )
-      .forEach((lbl) => {
-        lbl.rotation(negate);
-      });
-  }
-
   function attachNodeBehaviour(node) {
     if (!(node instanceof Konva.Group)) return;
 
     ensureHitRect(node);
+
+    const shapeType = node.getAttr("shapeType") || node.name();
 
     node.on("click", (evt) => {
       const isShift = !!(evt.evt && evt.evt.shiftKey);
@@ -2139,12 +2310,12 @@
     });
 
     node.on("transformend", () => {
-      const shapeType = node.getAttr("shapeType") || node.name();
+      const tShape = node.getAttr("shapeType") || node.name();
 
       if (
-        shapeType === "stage" ||
-        shapeType === "bar" ||
-        shapeType === "exit"
+        tShape === "stage" ||
+        tShape === "bar" ||
+        tShape === "exit"
       ) {
         const scaleX = node.scaleX();
         const scaleY = node.scaleY();
@@ -2155,7 +2326,7 @@
           rect.width(rect.width() * scaleX);
           rect.height(rect.height() * scaleY);
 
-          if (shapeType === "stage") {
+          if (tShape === "stage") {
             rect.fillLinearGradientEndPoint({
               x: rect.width(),
               y: 0,
@@ -2177,9 +2348,9 @@
 
       // keep seat numbers + row labels + table labels upright
       if (
-        shapeType === "row-seats" ||
-        shapeType === "circular-table" ||
-        shapeType === "rect-table"
+        tShape === "row-seats" ||
+        tShape === "circular-table" ||
+        tShape === "rect-table"
       ) {
         keepLabelsUpright(node);
       }
@@ -2188,6 +2359,26 @@
       mapLayer.batchDraw();
       pushHistory();
     });
+
+    // Inline table-label editing on double-click of the label itself
+    if (shapeType === "circular-table" || shapeType === "rect-table") {
+      node.on("dblclick", (evt) => {
+        const target = evt.target;
+        if (!target || target.name() !== "table-label") return;
+
+        const textNode = target;
+        const group = node;
+
+        beginInlineTextEdit(textNode, (newText) => {
+          const val = (newText || "").trim();
+          textNode.text(val);
+          group.setAttr("tableLabel", val);
+          mapLayer.batchDraw();
+          pushHistory();
+          renderInspector(group);
+        });
+      });
+    }
   }
 
   // ---------- Node creation based on active tool ----------
