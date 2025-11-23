@@ -1145,7 +1145,7 @@
     return group;
   }
 
-  function updateRowGroupGeometry(group, seatsPerRow, rowCount) {
+    function updateRowGroupGeometry(group, seatsPerRow, rowCount) {
     if (!(group instanceof Konva.Group)) return;
 
     let s = Number(seatsPerRow);
@@ -1192,6 +1192,7 @@
     );
     group.setAttr("curve", curve);
 
+    // clear existing seats + labels
     group
       .find(
         (node) =>
@@ -1284,13 +1285,11 @@
       const logicalRowIdx =
         rowOrder === "desc" ? rowCount - 1 - rIdx : rIdx;
 
-            const rowLabelText =
+      const rowLabelText =
         rowLabelPrefix + rowLabelFromIndex(rowLabelStart + logicalRowIdx);
 
       if (rowLabelText && firstSeatX != null && firstSeatY != null) {
-        // constant visual gap from the *seat edge* to the first letter,
-        // regardless of how long the label is (A vs AD vs A10 etc.)
-        const labelGap = seatRadius * 1.4; // tweak this if you want a bit more / less space
+        const labelGap = seatRadius * 1.4;
         const labelY = firstSeatY;
 
         // left-hand label
@@ -1306,16 +1305,14 @@
           isRowLabel: true,
         });
 
-        // Position is the point where the RIGHT edge of the text should sit
         leftLabel.position({
           x: firstSeatX - (seatRadius + labelGap),
           y: labelY,
         });
-        leftLabel.offsetX(leftLabel.width()); // pin right edge at x
+        leftLabel.offsetX(leftLabel.width());
         leftLabel.offsetY(leftLabel.height() / 2);
         group.add(leftLabel);
 
-        // optional right-hand label
         if (rowLabelBothSides && lastSeatX != null) {
           const rightLabel = new Konva.Text({
             text: rowLabelText,
@@ -1329,16 +1326,15 @@
             isRowLabel: true,
           });
 
-          // Position is the point where the LEFT edge of the text should sit
           rightLabel.position({
             x: lastSeatX + (seatRadius + labelGap),
             y: labelY,
           });
-          // left edge pinned at x, only centre vertically
           rightLabel.offsetY(rightLabel.height() / 2);
           group.add(rightLabel);
         }
       }
+    }
 
     ensureHitRect(group);
     keepLabelsUpright(group);
