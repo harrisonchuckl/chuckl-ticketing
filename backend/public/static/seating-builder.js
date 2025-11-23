@@ -262,6 +262,9 @@
   // track shift key for robust multi-select
   let isShiftPressed = false;
 
+  // prevent recursive dragmove events when multi-dragging
+  let isSyncDragging = false;
+
   const DEBUG_SKEW = true;
 
   // Sidebar DOM refs
@@ -1281,13 +1284,16 @@
       const logicalRowIdx =
         rowOrder === "desc" ? rowCount - 1 - rIdx : rIdx;
 
-      const rowLabelText =
+            const rowLabelText =
         rowLabelPrefix + rowLabelFromIndex(rowLabelStart + logicalRowIdx);
 
       if (rowLabelText && firstSeatX != null && firstSeatY != null) {
-        const labelOffset = seatRadius * 2.0;
+        // constant visual gap from the *seat edge* to the first letter,
+        // regardless of how long the label is (A vs AD vs A10 etc.)
+        const labelGap = seatRadius * 1.4; // tweak this if you want a bit more / less space
         const labelY = firstSeatY;
 
+        // left-hand label
         const leftLabel = new Konva.Text({
           text: rowLabelText,
           fontSize: 14,
@@ -1300,14 +1306,16 @@
           isRowLabel: true,
         });
 
+        // Position is the point where the RIGHT edge of the text should sit
         leftLabel.position({
-          x: firstSeatX - labelOffset,
+          x: firstSeatX - (seatRadius + labelGap),
           y: labelY,
         });
-        leftLabel.offsetX(leftLabel.width() / 2);
+        leftLabel.offsetX(leftLabel.width()); // pin right edge at x
         leftLabel.offsetY(leftLabel.height() / 2);
         group.add(leftLabel);
 
+        // optional right-hand label
         if (rowLabelBothSides && lastSeatX != null) {
           const rightLabel = new Konva.Text({
             text: rowLabelText,
@@ -1321,16 +1329,16 @@
             isRowLabel: true,
           });
 
+          // Position is the point where the LEFT edge of the text should sit
           rightLabel.position({
-            x: lastSeatX + labelOffset,
+            x: lastSeatX + (seatRadius + labelGap),
             y: labelY,
           });
-          rightLabel.offsetX(rightLabel.width() / 2);
+          // left edge pinned at x, only centre vertically
           rightLabel.offsetY(rightLabel.height() / 2);
           group.add(rightLabel);
         }
       }
-    }
 
     ensureHitRect(group);
     keepLabelsUpright(group);
@@ -2437,7 +2445,10 @@
       lastDragPos = { x: node.x(), y: node.y() };
     });
 
-    node.on("dragmove", () => {
+        node.on("dragmove", () => {
+      // avoid recursive dragmove calls when we move other nodes programmatically
+      if (isSyncDragging) return;
+
       const nodes = transformer ? transformer.nodes() : [];
       if (!lastDragPos) {
         lastDragPos = { x: node.x(), y: node.y() };
@@ -2448,11 +2459,13 @@
       const dy = node.y() - lastDragPos.y;
 
       if (nodes.length > 1) {
+        isSyncDragging = true;
         nodes.forEach((n) => {
           if (n !== node) {
             n.position({ x: n.x() + dx, y: n.y() + dy });
           }
         });
+        isSyncDragging = false;
       }
 
       lastDragPos = { x: node.x(), y: node.y() };
@@ -2473,7 +2486,7 @@
       pushHistory();
     });
 
-    node.on("transformend", () => {
+       node.on("transformend", () => {
       const tShape = node.getAttr("shapeType") || node.name();
 
       if (
@@ -2521,6 +2534,10 @@
       ensureHitRect(node);
       mapLayer.batchDraw();
       pushHistory();
+
+      // keep the inspector in sync (Rotation deg, etc.)
+      renderInspector(node);
+    });
 
       // NEW: keep inspector rotation value in sync after manual rotate
       renderInspector(node);
