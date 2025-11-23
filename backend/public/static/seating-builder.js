@@ -1,4 +1,4 @@
-// TickIn seating builder – square grid, drag / rotate, per-action undo
+// TixAll seating builder – square grid, drag / rotate, per-action undo
 /* global Konva */
 
 (function () {
@@ -226,8 +226,17 @@
   const MAX_ZOOM = 2.4;
   const ZOOM_STEP = 0.1;
 
+  // Shared seat styling
+  const SEAT_RADIUS = 11;
+  const SEAT_STROKE_WIDTH = 1.6;
+  const SEAT_FONT_SIZE = 11;
+
+  // Row label offsets (same both sides)
+  const ROW_LABEL_OFFSET_X = 35;
+  const ROW_LABEL_OFFSET_Y = 10;
+
   // circular table geometry
-  const CIRC_SEAT_RADIUS = 8;
+  const CIRC_SEAT_RADIUS = SEAT_RADIUS;
   const CIRC_DESIRED_GAP = 8;
   const CIRC_MIN_TABLE_RADIUS = 26;
 
@@ -492,7 +501,7 @@
       x,
       y,
       text,
-      fontSize: 11,
+      fontSize: SEAT_FONT_SIZE,
       fontFamily: "system-ui",
       fontStyle: "bold",
       fill: "#111827",
@@ -778,9 +787,9 @@
     });
 
     const circle = new Konva.Circle({
-      radius: 10,
+      radius: SEAT_RADIUS,
       stroke: "#4b5563",
-      strokeWidth: 1.7,
+      strokeWidth: SEAT_STROKE_WIDTH,
       fill: "#ffffff",
       isSeat: true,
     });
@@ -810,7 +819,7 @@
 
     group.setAttr("seatCount", seatCount);
     group.setAttr("seatLabelMode", "numbers");
-    group.setAttr("seatStart", 1); // still stored, but no UI
+    group.setAttr("seatStart", 1); // internal only
     group.setAttr("tableLabel", nextTableLabel());
 
     const seatRadius = CIRC_SEAT_RADIUS;
@@ -872,7 +881,7 @@
         y: sy,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: 1.6,
+        strokeWidth: SEAT_STROKE_WIDTH,
         fill: "#ffffff",
         isSeat: true,
       });
@@ -911,10 +920,10 @@
     group.setAttr("longSideSeats", longSideSeats);
     group.setAttr("shortSideSeats", shortSideSeats);
     group.setAttr("seatLabelMode", "numbers");
-    group.setAttr("seatStart", 1); // still stored, but no UI
+    group.setAttr("seatStart", 1); // internal only
     group.setAttr("tableLabel", nextTableLabel());
 
-    const seatRadius = 8;
+    const seatRadius = SEAT_RADIUS;
     const seatGap = 4;
 
     const longSpan =
@@ -982,7 +991,7 @@
         y: topSeatY,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: 1.6,
+        strokeWidth: SEAT_STROKE_WIDTH,
         fill: "#ffffff",
         isSeat: true,
       });
@@ -992,7 +1001,7 @@
         y: bottomSeatY,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: 1.6,
+        strokeWidth: SEAT_STROKE_WIDTH,
         fill: "#ffffff",
         isSeat: true,
       });
@@ -1036,7 +1045,7 @@
         y: sy,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: 1.6,
+        strokeWidth: SEAT_STROKE_WIDTH,
         fill: "#ffffff",
         isSeat: true,
       });
@@ -1045,7 +1054,7 @@
         y: sy,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: 1.6,
+        strokeWidth: SEAT_STROKE_WIDTH,
         fill: "#ffffff",
         isSeat: true,
       });
@@ -1104,9 +1113,6 @@
     group.setAttr("rowLabelPrefix", "");
     group.setAttr("rowLabelStart", 0); // index -> A
     group.setAttr("rowLabelBothSides", false);
-
-    // alignment – fixed underneath (no UI now)
-    // if not set, updateRowGroupGeometry defaults to "center"
 
     // curvature / skew
     group.setAttr("curve", 0);
@@ -1173,13 +1179,14 @@
       .forEach((n) => n.destroy());
 
     const spacing = 24;
-    const seatRadius = 9;
+    const seatRadius = SEAT_RADIUS;
     const rowSpacing = 24;
 
-    const curveFactor = curve / 8; // more aggressive
-    const skewFactor = skew / 10;
+    const curveFactor = curve / 8; // stronger curve
+    const skewFactor = skew / 30; // row skew factor
 
     const centerIndex = (seatsPerRow - 1) / 2;
+    const rowCenterIndex = (rowCount - 1) / 2;
 
     function computeSeatX(i) {
       if (alignment === "left") {
@@ -1193,6 +1200,7 @@
 
     for (let rIdx = 0; rIdx < rowCount; rIdx += 1) {
       const baseRowY = rIdx * rowSpacing;
+      const rowOffsetIndex = rIdx - rowCenterIndex;
 
       let firstSeatX = null;
       let firstSeatY = null;
@@ -1207,7 +1215,7 @@
         let rowY = baseRowY + curveOffset;
 
         // apply skew – later rows pushed further along X
-        sx += skewFactor * baseRowY;
+        sx += skewFactor * rowOffsetIndex * spacing;
 
         if (!Number.isFinite(sx) || !Number.isFinite(rowY)) {
           // eslint-disable-next-line no-console
@@ -1239,7 +1247,7 @@
           y: rowY,
           radius: seatRadius,
           stroke: "#4b5563",
-          strokeWidth: 1.7,
+          strokeWidth: SEAT_STROKE_WIDTH,
           fill: "#ffffff",
           isSeat: true,
         });
@@ -1267,17 +1275,22 @@
           fontFamily: "system-ui",
           fontStyle: "bold",
           fill: "#111827",
-          align: "right",
+          align: "center",
           verticalAlign: "middle",
           listening: false,
           isRowLabel: true,
         });
 
-        leftLabel.position({
-          x: firstSeatX - 35,
-          y: firstSeatY,
+        leftLabel.offset({
+          x: leftLabel.width() / 2,
+          y: leftLabel.height() / 2,
         });
-        leftLabel.offsetY(leftLabel.height() / 2);
+
+        leftLabel.position({
+          x: firstSeatX - ROW_LABEL_OFFSET_X,
+          y: firstSeatY - ROW_LABEL_OFFSET_Y,
+        });
+
         group.add(leftLabel);
 
         // optional right-hand label – next to last seat
@@ -1288,17 +1301,22 @@
             fontFamily: "system-ui",
             fontStyle: "bold",
             fill: "#111827",
-            align: "left",
+            align: "center",
             verticalAlign: "middle",
             listening: false,
             isRowLabel: true,
           });
 
-          rightLabel.position({
-            x: lastSeatX + 35,
-            y: firstSeatY,
+          rightLabel.offset({
+            x: rightLabel.width() / 2,
+            y: rightLabel.height() / 2,
           });
-          rightLabel.offsetY(rightLabel.height() / 2);
+
+          rightLabel.position({
+            x: lastSeatX + ROW_LABEL_OFFSET_X,
+            y: firstSeatY - ROW_LABEL_OFFSET_Y,
+          });
+
           group.add(rightLabel);
         }
       }
@@ -1377,7 +1395,7 @@
         y: sy,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: 1.6,
+        strokeWidth: SEAT_STROKE_WIDTH,
         fill: "#ffffff",
         isSeat: true,
       });
@@ -1419,7 +1437,7 @@
       )
       .forEach((n) => n.destroy());
 
-    const seatRadius = 8;
+    const seatRadius = SEAT_RADIUS;
     const seatGap = 4;
 
     const longSpan =
@@ -1478,7 +1496,7 @@
         y: topY,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: 1.6,
+        strokeWidth: SEAT_STROKE_WIDTH,
         fill: "#ffffff",
         isSeat: true,
       });
@@ -1487,7 +1505,7 @@
         y: bottomY,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: 1.6,
+        strokeWidth: SEAT_STROKE_WIDTH,
         fill: "#ffffff",
         isSeat: true,
       });
@@ -1530,7 +1548,7 @@
         y: sy,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: 1.6,
+        strokeWidth: SEAT_STROKE_WIDTH,
         fill: "#ffffff",
         isSeat: true,
       });
@@ -1539,7 +1557,7 @@
         y: sy,
         radius: seatRadius,
         stroke: "#4b5563",
-        strokeWidth: 1.6,
+        strokeWidth: SEAT_STROKE_WIDTH,
         fill: "#ffffff",
         isSeat: true,
       });
@@ -2032,9 +2050,7 @@
 
       addNumberField("Seats around table", seatCount, 1, 1, (val) => {
         updateCircularTableGeometry(node, val);
-        mapLayer.batchDraw();
-        updateSeatCount();
-        pushHistory();
+        renderInspector(node); // refresh static "Total seats" row
       });
 
       // Seat labels mode (UI only; start value fixed at 1)
@@ -2052,17 +2068,16 @@
             node,
             node.getAttr("seatCount") || seatCount
           );
+          renderInspector(node);
         }
       );
 
+      const total = node.getAttr("seatCount") || seatCount;
       addStaticRow(
         "Total seats at table",
-        `${seatCount} seat${seatCount === 1 ? "" : "s"}`
+        `${total} seat${total === 1 ? "" : "s"}`
       );
 
-      mapLayer.batchDraw();
-      updateSeatCount();
-      pushHistory();
       return;
     }
 
@@ -2095,9 +2110,7 @@
           const currentShort =
             node.getAttr("shortSideSeats") ?? shortSideSeats;
           updateRectTableGeometry(node, val, currentShort);
-          mapLayer.batchDraw();
-          updateSeatCount();
-          pushHistory();
+          renderInspector(node);
         }
       );
 
@@ -2110,9 +2123,7 @@
           const currentLong =
             node.getAttr("longSideSeats") ?? longSideSeats;
           updateRectTableGeometry(node, currentLong, val);
-          mapLayer.batchDraw();
-          updateSeatCount();
-          pushHistory();
+          renderInspector(node);
         }
       );
 
@@ -2131,6 +2142,7 @@
             node.getAttr("longSideSeats") ?? longSideSeats,
             node.getAttr("shortSideSeats") ?? shortSideSeats
           );
+          renderInspector(node);
         }
       );
 
