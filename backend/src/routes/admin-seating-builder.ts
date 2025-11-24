@@ -530,7 +530,7 @@ router.get("/builder/preview/:showId", (req, res) => {
               <button class="tb-left-item tool-button" data-tool="line">
                 <img
                   class="tb-tool-icon icon-dark"
-                  src="/seatmap-icons/line-dark.png"
+                  src="/seatmap-icons/line-black.png"
                   alt="Line"
                 />
                 <img
