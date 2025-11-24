@@ -315,15 +315,12 @@ router.get("/builder/preview/:showId", (req, res) => {
       .tb-left-rail {
         background: linear-gradient(180deg, #f7fafc, #f2f5f9);
         border-right: 1px solid var(--tixall-border-subtle);
-        position: relative;
-        overflow: visible !important;
-        z-index: 10;
+        overflow: visible;
       }
 
       .tb-left-scroll {
         padding: 16px 10px 18px;
-        position: relative;
-        overflow: visible !important;
+        overflow: visible;
       }
 
       .tb-left-group {
@@ -378,10 +375,9 @@ router.get("/builder/preview/:showId", (req, res) => {
         border: 0 !important;
         box-shadow: none !important;
         transition: none !important;
-        min-height: 72px; /* enough room for 44px icon + 2-line label */
+        min-height: 72px;
       }
 
-      /* Don’t apply hover background / shadows on these tools */
       .tb-left-item.tool-button:hover,
       .tb-left-item.tool-button:focus,
       .tb-left-item.tool-button:active {
@@ -391,12 +387,10 @@ router.get("/builder/preview/:showId", (req, res) => {
         transform: none !important;
       }
 
-      /* Extra vertical spacing between tool buttons */
       .tb-left-item.tool-button + .tb-left-item.tool-button {
         margin-top: 8px;
       }
 
-      /* Icon size – no stretching */
       .tb-left-item.tool-button img.tb-tool-icon {
         width: 44px;
         height: 44px;
@@ -412,14 +406,6 @@ router.get("/builder/preview/:showId", (req, res) => {
 
       .tb-left-item.tool-button img.icon-blue {
         display: none;
-      }
-
-      .tb-left-item.tool-button:hover img.icon-dark {
-        display: none;
-      }
-
-      .tb-left-item.tool-button:hover img.icon-blue {
-        display: block;
       }
 
       .tb-left-item.tool-button.is-active img.icon-dark {
@@ -438,40 +424,60 @@ router.get("/builder/preview/:showId", (req, res) => {
         color: var(--tixall-dark);
         white-space: normal;
         text-align: center;
-        max-width: 80px;        /* stop text running wider than icon */
-        word-break: break-word; /* wrap long words instead of overlap */
+        max-width: 80px;
+        word-break: break-word;
       }
 
       /* Fly-out tool groups (Photoshop-style) */
       .tool-group {
         position: relative;
         margin-bottom: 8px;
+        display: flex;
+        align-items: stretch;
       }
 
-      /* Top-level grouped buttons: horizontal row layout */
-      .tool-group > .tb-left-item.tool-button {
+      .tool-group .tool-root {
+        flex: 1 1 auto;
         flex-direction: row;
         align-items: center;
         justify-content: flex-start;
-        padding: 8px 10px;
-        min-height: auto;
+        padding: 8px 8px 8px 6px;
+        min-height: 48px;
       }
 
-      .tool-group > .tb-left-item.tool-button img.tb-tool-icon {
-        width: 32px;
-        height: 32px;
+      .tool-group .tool-root img.tb-tool-icon {
+        width: 24px;
+        height: 24px;
       }
 
-      .tool-group > .tb-left-item.tool-button .tb-left-label {
-        max-width: none;
-        white-space: nowrap;
+      .tool-group .tool-root .tb-left-label {
+        margin-left: 6px;
+        margin-right: 4px;
         text-align: left;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 80px;
+      }
+
+      .tool-flyout-toggle {
+        border: 0;
+        background: transparent;
+        padding: 0 4px 0 2px;
+        display: flex;
+        align-items: center;
+        cursor: pointer;
+        font-size: 11px;
+        color: #7a828f;
+      }
+
+      .tool-flyout-toggle:hover {
+        color: var(--tixall-dark);
       }
 
       .tool-flyout-chevron {
-        margin-left: auto;
         font-size: 10px;
-        opacity: 0.7;
+        line-height: 1;
       }
 
       .tool-flyout {
@@ -487,10 +493,9 @@ router.get("/builder/preview/:showId", (req, res) => {
         box-shadow: 0 12px 32px rgba(15,23,42,0.20);
         border: 1px solid rgba(148,163,184,0.35);
         z-index: 9999;
-        min-width: 160px;
+        min-width: 170px;
       }
 
-      /* Visible when JS toggles .is-open */
       .tool-group.is-open .tool-flyout {
         display: flex;
       }
@@ -508,6 +513,7 @@ router.get("/builder/preview/:showId", (req, res) => {
       .tool-flyout .tb-left-item.tool-button .tb-left-label {
         max-width: none;
         white-space: nowrap;
+        text-align: left;
       }
 
       .tool-flyout .tb-left-item.tool-button img.tb-tool-icon {
@@ -604,8 +610,8 @@ router.get("/builder/preview/:showId", (req, res) => {
               <div class="tb-left-group-label">Seating</div>
 
               <!-- Group: Line + Section -->
-              <div class="tool-group">
-                <button class="tb-left-item tool-button" data-tool="line">
+              <div class="tool-group" data-group="line-section">
+                <button class="tb-left-item tool-button tool-root" data-tool="line">
                   <img
                     class="tb-tool-icon icon-dark"
                     src="/seatmap-icons/line-black.png"
@@ -617,6 +623,8 @@ router.get("/builder/preview/:showId", (req, res) => {
                     alt="Line (selected)"
                   />
                   <span class="tb-left-label">Line / section</span>
+                </button>
+                <button class="tool-flyout-toggle" type="button" aria-label="More line tools">
                   <span class="tool-flyout-chevron">▾</span>
                 </button>
 
@@ -652,8 +660,8 @@ router.get("/builder/preview/:showId", (req, res) => {
               </div>
 
               <!-- Group: Rows + Single seat -->
-              <div class="tool-group">
-                <button class="tb-left-item tool-button" data-tool="row">
+              <div class="tool-group" data-group="rows-single">
+                <button class="tb-left-item tool-button tool-root" data-tool="row">
                   <img
                     class="tb-tool-icon icon-dark"
                     src="/seatmap-icons/row-black.png"
@@ -665,6 +673,8 @@ router.get("/builder/preview/:showId", (req, res) => {
                     alt="Row of seats (selected)"
                   />
                   <span class="tb-left-label">Rows / single</span>
+                </button>
+                <button class="tool-flyout-toggle" type="button" aria-label="More row tools">
                   <span class="tool-flyout-chevron">▾</span>
                 </button>
 
@@ -700,8 +710,8 @@ router.get("/builder/preview/:showId", (req, res) => {
               </div>
 
               <!-- Group: Tables -->
-              <div class="tool-group">
-                <button class="tb-left-item tool-button" data-tool="circle-table">
+              <div class="tool-group" data-group="tables">
+                <button class="tb-left-item tool-button tool-root" data-tool="circle-table">
                   <img
                     class="tb-tool-icon icon-dark"
                     src="/seatmap-icons/circle-table-black.png"
@@ -713,6 +723,8 @@ router.get("/builder/preview/:showId", (req, res) => {
                     alt="Circular table (selected)"
                   />
                   <span class="tb-left-label">Tables</span>
+                </button>
+                <button class="tool-flyout-toggle" type="button" aria-label="More table tools">
                   <span class="tool-flyout-chevron">▾</span>
                 </button>
 
@@ -752,8 +764,8 @@ router.get("/builder/preview/:showId", (req, res) => {
               <div class="tb-left-group-label">Room &amp; labelling</div>
 
               <!-- Group: Stage / Bar / Exit -->
-              <div class="tool-group">
-                <button class="tb-left-item tool-button" data-tool="stage">
+              <div class="tool-group" data-group="room-objects">
+                <button class="tb-left-item tool-button tool-root" data-tool="stage">
                   <img
                     class="tb-tool-icon icon-dark"
                     src="/seatmap-icons/stage-dark.png"
@@ -765,6 +777,8 @@ router.get("/builder/preview/:showId", (req, res) => {
                     alt="Stage (selected)"
                   />
                   <span class="tb-left-label">Room objects</span>
+                </button>
+                <button class="tool-flyout-toggle" type="button" aria-label="More room objects">
                   <span class="tool-flyout-chevron">▾</span>
                 </button>
 
@@ -1052,38 +1066,80 @@ router.get("/builder/preview/:showId", (req, res) => {
           });
         }
 
-        // ---------- Tool group fly-outs: click-to-open ----------
-        var toolGroups = document.querySelectorAll(".tool-group");
+        // ------------------------------
+        // Fly-out behaviour
+        // ------------------------------
+        var groups = document.querySelectorAll(".tool-group");
 
-        function closeAllToolGroups() {
-          toolGroups.forEach(function (g) {
+        function closeAllGroups() {
+          groups.forEach(function (g) {
             g.classList.remove("is-open");
           });
         }
 
-        toolGroups.forEach(function (group) {
-          var trigger = group.querySelector(".tb-left-item.tool-button");
+        groups.forEach(function (group) {
+          var toggle = group.querySelector(".tool-flyout-toggle");
           var flyout = group.querySelector(".tool-flyout");
-          if (!trigger || !flyout) return;
+          var rootBtn = group.querySelector(".tool-root");
 
-          trigger.addEventListener("click", function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            var isOpen = group.classList.contains("is-open");
-            closeAllToolGroups();
-            if (!isOpen) {
-              group.classList.add("is-open");
-            }
-          });
+          if (toggle && flyout) {
+            toggle.addEventListener("click", function (ev) {
+              ev.stopPropagation();
+              var isOpen = group.classList.contains("is-open");
+              closeAllGroups();
+              if (!isOpen) {
+                group.classList.add("is-open");
+              }
+            });
 
-          flyout.addEventListener("click", function (e) {
-            // keep open while selecting an item; seatmap JS handles the actual tool selection
-            e.stopPropagation();
-          });
+            flyout.addEventListener("click", function (ev) {
+              var target = ev.target as HTMLElement | null;
+              if (!target) return;
+              var optionBtn = target.closest(".tb-left-item.tool-button[data-tool]") as HTMLElement | null;
+              if (!optionBtn) return;
+
+              var toolName = optionBtn.getAttribute("data-tool") || "";
+
+              // Update root button label + icons + data-tool so it reflects the chosen variant
+              if (rootBtn) {
+                var newLabelNode = optionBtn.querySelector(".tb-left-label");
+                var rootLabelNode = rootBtn.querySelector(".tb-left-label");
+                if (newLabelNode && rootLabelNode) {
+                  rootLabelNode.textContent = newLabelNode.textContent || "";
+                }
+
+                var newDark = optionBtn.querySelector("img.icon-dark") as HTMLImageElement | null;
+                var newBlue = optionBtn.querySelector("img.icon-blue") as HTMLImageElement | null;
+                var rootDark = rootBtn.querySelector("img.icon-dark") as HTMLImageElement | null;
+                var rootBlue = rootBtn.querySelector("img.icon-blue") as HTMLImageElement | null;
+
+                if (rootDark && newDark) {
+                  rootDark.src = newDark.src;
+                  rootDark.alt = newDark.alt;
+                }
+                if (rootBlue && newBlue) {
+                  rootBlue.src = newBlue.src;
+                  rootBlue.alt = newBlue.alt;
+                }
+
+                if (toolName) {
+                  rootBtn.setAttribute("data-tool", toolName);
+                }
+              }
+
+              // Let the normal seating-builder.js listeners handle tool activation
+              // then close the panel.
+              group.classList.remove("is-open");
+            });
+          }
         });
 
-        document.addEventListener("click", function () {
-          closeAllToolGroups();
+        // Close fly-outs when clicking anywhere else
+        document.addEventListener("click", function (ev) {
+          var target = ev.target as HTMLElement | null;
+          if (!target) return;
+          if (target.closest(".tool-group")) return;
+          closeAllGroups();
         });
       })();
     </script>
