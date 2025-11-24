@@ -315,10 +315,16 @@ router.get("/builder/preview/:showId", (req, res) => {
       .tb-left-rail {
         background: linear-gradient(180deg, #f7fafc, #f2f5f9);
         border-right: 1px solid var(--tixall-border-subtle);
+        position: relative;
+        overflow: visible;
+        z-index: 20;
       }
 
+      /* Keep overlay scrollbar off the actual tool icons */
       .tb-left-scroll {
-        padding: 16px 10px 18px;
+        padding: 16px 18px 18px 10px; /* extra right padding for scrollbar */
+        overflow-y: auto;
+        overflow-x: hidden;
       }
 
       .tb-left-group {
@@ -445,18 +451,23 @@ router.get("/builder/preview/:showId", (req, res) => {
 
       .tool-group > .tb-left-item.tool-button {
         position: relative;
+        padding-bottom: 18px; /* room for caret */
       }
 
       .tool-flyout-chevron {
-        margin-left: 4px;
+        position: absolute;
+        right: 6px;
+        bottom: 6px;
         font-size: 10px;
-        opacity: 0.7;
+        opacity: 0.75;
+        pointer-events: none;
       }
 
       .tool-flyout {
         position: absolute;
         left: 100%;
         top: 0;
+        transform: translateX(8px);
         display: none;
         flex-direction: column;
         gap: 4px;
@@ -465,8 +476,8 @@ router.get("/builder/preview/:showId", (req, res) => {
         border-radius: 12px;
         box-shadow: 0 12px 32px rgba(15,23,42,0.20);
         border: 1px solid rgba(148,163,184,0.35);
-        z-index: 20;
-        min-width: 160px;
+        z-index: 999; /* sit above canvas + side panel */
+        min-width: 170px;
       }
 
       .tool-group:hover .tool-flyout {
