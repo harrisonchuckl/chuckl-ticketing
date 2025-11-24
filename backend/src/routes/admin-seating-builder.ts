@@ -360,7 +360,7 @@ router.get("/builder/preview/:showId", (req, res) => {
         background: rgba(8, 184, 232, 0.06);
       }
 
-            /* Tool buttons: icon ABOVE text, centred */
+      /* Tool buttons: icon ABOVE text, centred */
       .tb-left-item.tool-button {
         flex-direction: column;
         align-items: center;
@@ -437,6 +437,60 @@ router.get("/builder/preview/:showId", (req, res) => {
         word-break: break-word; /* wrap long words instead of overlap */
       }
 
+      /* Fly-out tool groups (Photoshop-style) */
+      .tool-group {
+        position: relative;
+        margin-bottom: 8px;
+      }
+
+      .tool-group > .tb-left-item.tool-button {
+        position: relative;
+      }
+
+      .tool-flyout-chevron {
+        margin-left: 4px;
+        font-size: 10px;
+        opacity: 0.7;
+      }
+
+      .tool-flyout {
+        position: absolute;
+        left: 100%;
+        top: 0;
+        display: none;
+        flex-direction: column;
+        gap: 4px;
+        padding: 6px;
+        background: #ffffff;
+        border-radius: 12px;
+        box-shadow: 0 12px 32px rgba(15,23,42,0.20);
+        border: 1px solid rgba(148,163,184,0.35);
+        z-index: 20;
+        min-width: 160px;
+      }
+
+      .tool-group:hover .tool-flyout {
+        display: flex;
+      }
+
+      .tool-flyout .tb-left-item.tool-button {
+        min-height: 0;
+        padding: 8px 10px;
+        flex-direction: row;
+        justify-content: flex-start;
+        text-align: left;
+        border-radius: 12px;
+        gap: 8px;
+      }
+
+      .tool-flyout .tb-left-item.tool-button .tb-left-label {
+        max-width: none;
+      }
+
+      .tool-flyout .tb-left-item.tool-button img.tb-tool-icon {
+        width: 24px;
+        height: 24px;
+      }
 
       /* Undo / Redo / Clear chips */
       .tb-left-icon {
@@ -523,150 +577,220 @@ router.get("/builder/preview/:showId", (req, res) => {
         <!-- Slim, non-expanding left rail -->
         <aside class="tb-left-rail" aria-label="Seating tools">
           <div class="tb-left-scroll">
-                       <div class="tb-left-group">
+            <div class="tb-left-group">
               <div class="tb-left-group-label">Seating</div>
 
-              <!-- Line tool (new) -->
-              <button class="tb-left-item tool-button" data-tool="line">
-                <img
-                  class="tb-tool-icon icon-dark"
-                  src="/seatmap-icons/line-black.png"
-                  alt="Line"
-                />
-                <img
-                  class="tb-tool-icon icon-blue"
-                  src="/seatmap-icons/line-blue.png"
-                  alt="Line (selected)"
-                />
-                <span class="tb-left-label">Line</span>
-              </button>
+              <!-- Group: Line + Section -->
+              <div class="tool-group">
+                <button class="tb-left-item tool-button" data-tool="line">
+                  <img
+                    class="tb-tool-icon icon-dark"
+                    src="/seatmap-icons/line-black.png"
+                    alt="Line"
+                  />
+                  <img
+                    class="tb-tool-icon icon-blue"
+                    src="/seatmap-icons/line-blue.png"
+                    alt="Line (selected)"
+                  />
+                  <span class="tb-left-label">Line / section</span>
+                  <span class="tool-flyout-chevron">▾</span>
+                </button>
 
-              <!-- Section block -->
-              <button class="tb-left-item tool-button" data-tool="section">
-                <img
-                  class="tb-tool-icon icon-dark"
-                  src="/seatmap-icons/section-dark.png"
-                  alt="Section block"
-                />
-                <img
-                  class="tb-tool-icon icon-blue"
-                  src="/seatmap-icons/section-blue.png"
-                  alt="Section block (selected)"
-                />
-                <span class="tb-left-label">Section block</span>
-              </button>
+                <div class="tool-flyout">
+                  <button class="tb-left-item tool-button" data-tool="line">
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/line-black.png"
+                      alt="Line"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/line-blue.png"
+                      alt="Line (selected)"
+                    />
+                    <span class="tb-left-label">Line</span>
+                  </button>
 
-              <!-- Row of seats -->
-              <button class="tb-left-item tool-button" data-tool="row">
-                <img
-                  class="tb-tool-icon icon-dark"
-                  src="/seatmap-icons/row-black.png"
-                  alt="Row of seats"
-                />
-                <img
-                  class="tb-tool-icon icon-blue"
-                  src="/seatmap-icons/row-blue.png"
-                  alt="Row of seats (selected)"
-                />
-                <span class="tb-left-label">Row of seats</span>
-              </button>
+                  <button class="tb-left-item tool-button" data-tool="section">
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/section-dark.png"
+                      alt="Section block"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/section-blue.png"
+                      alt="Section block (selected)"
+                    />
+                    <span class="tb-left-label">Section block</span>
+                  </button>
+                </div>
+              </div>
 
-              <!-- Single seat -->
-              <button class="tb-left-item tool-button" data-tool="single">
-                <img
-                  class="tb-tool-icon icon-dark"
-                  src="/seatmap-icons/single-dark.png"
-                  alt="Single seat"
-                />
-                <img
-                  class="tb-tool-icon icon-blue"
-                  src="/seatmap-icons/single-blue.png"
-                  alt="Single seat (selected)"
-                />
-                <span class="tb-left-label">Single seat</span>
-              </button>
+              <!-- Group: Rows + Single seat -->
+              <div class="tool-group">
+                <button class="tb-left-item tool-button" data-tool="row">
+                  <img
+                    class="tb-tool-icon icon-dark"
+                    src="/seatmap-icons/row-black.png"
+                    alt="Row of seats"
+                  />
+                  <img
+                    class="tb-tool-icon icon-blue"
+                    src="/seatmap-icons/row-blue.png"
+                    alt="Row of seats (selected)"
+                  />
+                  <span class="tb-left-label">Rows / single</span>
+                  <span class="tool-flyout-chevron">▾</span>
+                </button>
 
-              <!-- Circular table -->
-              <button class="tb-left-item tool-button" data-tool="circle-table">
-                <img
-                  class="tb-tool-icon icon-dark"
-                  src="/seatmap-icons/circle-table-black.png"
-                  alt="Circular table"
-                />
-                <img
-                  class="tb-tool-icon icon-blue"
-                  src="/seatmap-icons/circle-table-blue.png"
-                  alt="Circular table (selected)"
-                />
-                <span class="tb-left-label">Circular table</span>
-              </button>
+                <div class="tool-flyout">
+                  <button class="tb-left-item tool-button" data-tool="row">
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/row-black.png"
+                      alt="Row of seats"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/row-blue.png"
+                      alt="Row of seats (selected)"
+                    />
+                    <span class="tb-left-label">Row of seats</span>
+                  </button>
 
-              <!-- Rectangular table -->
-              <button class="tb-left-item tool-button" data-tool="rect-table">
-                <img
-                  class="tb-tool-icon icon-dark"
-                  src="/seatmap-icons/rectangle-table-black.png"
-                  alt="Rectangular table"
-                />
-                <img
-                  class="tb-tool-icon icon-blue"
-                  src="/seatmap-icons/rectangle-table-blue.png"
-                  alt="Rectangular table (selected)"
-                />
-                <span class="tb-left-label">Rectangular table</span>
-              </button>
+                  <button class="tb-left-item tool-button" data-tool="single">
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/single-dark.png"
+                      alt="Single seat"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/single-blue.png"
+                      alt="Single seat (selected)"
+                    />
+                    <span class="tb-left-label">Single seat</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Group: Tables -->
+              <div class="tool-group">
+                <button class="tb-left-item tool-button" data-tool="circle-table">
+                  <img
+                    class="tb-tool-icon icon-dark"
+                    src="/seatmap-icons/circle-table-black.png"
+                    alt="Circular table"
+                  />
+                  <img
+                    class="tb-tool-icon icon-blue"
+                    src="/seatmap-icons/circle-table-blue.png"
+                    alt="Circular table (selected)"
+                  />
+                  <span class="tb-left-label">Tables</span>
+                  <span class="tool-flyout-chevron">▾</span>
+                </button>
+
+                <div class="tool-flyout">
+                  <button class="tb-left-item tool-button" data-tool="circle-table">
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/circle-table-black.png"
+                      alt="Circular table"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/circle-table-blue.png"
+                      alt="Circular table (selected)"
+                    />
+                    <span class="tb-left-label">Circular table</span>
+                  </button>
+
+                  <button class="tb-left-item tool-button" data-tool="rect-table">
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/rectangle-table-black.png"
+                      alt="Rectangular table"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/rectangle-table-blue.png"
+                      alt="Rectangular table (selected)"
+                    />
+                    <span class="tb-left-label">Rectangular table</span>
+                  </button>
+                </div>
+              </div>
             </div>
-
 
             <div class="tb-left-group">
               <div class="tb-left-group-label">Room &amp; labelling</div>
 
-              <!-- Stage -->
-              <button class="tb-left-item tool-button" data-tool="stage">
-                <img
-                  class="tb-tool-icon icon-dark"
-                  src="/seatmap-icons/stage-dark.png"
-                  alt="Stage"
-                />
-                <img
-                  class="tb-tool-icon icon-blue"
-                  src="/seatmap-icons/stage-blue.png"
-                  alt="Stage (selected)"
-                />
-                <span class="tb-left-label">Stage</span>
-              </button>
+              <!-- Group: Stage / Bar / Exit -->
+              <div class="tool-group">
+                <button class="tb-left-item tool-button" data-tool="stage">
+                  <img
+                    class="tb-tool-icon icon-dark"
+                    src="/seatmap-icons/stage-dark.png"
+                    alt="Stage"
+                  />
+                  <img
+                    class="tb-tool-icon icon-blue"
+                    src="/seatmap-icons/stage-blue.png"
+                    alt="Stage (selected)"
+                  />
+                  <span class="tb-left-label">Room objects</span>
+                  <span class="tool-flyout-chevron">▾</span>
+                </button>
 
-              <!-- Bar / kiosk -->
-              <button class="tb-left-item tool-button" data-tool="bar">
-                <img
-                  class="tb-tool-icon icon-dark"
-                  src="/seatmap-icons/bar-dark.png"
-                  alt="Bar / kiosk"
-                />
-                <img
-                  class="tb-tool-icon icon-blue"
-                  src="/seatmap-icons/bar-blue.png"
-                  alt="Bar / kiosk (selected)"
-                />
-                <span class="tb-left-label">Bar / kiosk</span>
-              </button>
+                <div class="tool-flyout">
+                  <button class="tb-left-item tool-button" data-tool="stage">
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/stage-dark.png"
+                      alt="Stage"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/stage-blue.png"
+                      alt="Stage (selected)"
+                    />
+                    <span class="tb-left-label">Stage</span>
+                  </button>
 
-              <!-- Exit -->
-              <button class="tb-left-item tool-button" data-tool="exit">
-                <img
-                  class="tb-tool-icon icon-dark"
-                  src="/seatmap-icons/exit-black.png"
-                  alt="Exit"
-                />
-                <img
-                  class="tb-tool-icon icon-blue"
-                  src="/seatmap-icons/exit-blue.png"
-                  alt="Exit (selected)"
-                />
-                <span class="tb-left-label">Exit</span>
-              </button>
+                  <button class="tb-left-item tool-button" data-tool="bar">
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/bar-dark.png"
+                      alt="Bar / kiosk"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/bar-blue.png"
+                      alt="Bar / kiosk (selected)"
+                    />
+                    <span class="tb-left-label">Bar / kiosk</span>
+                  </button>
 
-              <!-- Text label -->
+                  <button class="tb-left-item tool-button" data-tool="exit">
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/exit-black.png"
+                      alt="Exit"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/exit-blue.png"
+                      alt="Exit (selected)"
+                    />
+                    <span class="tb-left-label">Exit</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Text label (standalone tool) -->
               <button class="tb-left-item tool-button" data-tool="text">
                 <img
                   class="tb-tool-icon icon-dark"
