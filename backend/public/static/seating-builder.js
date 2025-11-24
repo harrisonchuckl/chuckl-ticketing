@@ -3140,14 +3140,14 @@
 
   // ---------- Boot ----------
 
-  initStage();
+    initStage();
   hookToolButtons();
   hookZoomButtons();
   hookClearButton();
   hookUndoRedoButtons();
   hookSaveButton();
 
-stage.on("click", handleStageClick);
+  stage.on("click", handleStageClick);
 
   // Double-click empty canvas to finish the current line
   stage.on("dblclick", (evt) => {
@@ -3171,3 +3171,4 @@ stage.on("click", handleStageClick);
 
   renderInspector(null);
 })();
+
