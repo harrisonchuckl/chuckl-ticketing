@@ -323,8 +323,10 @@ router.get("/builder/preview/:showId", (req, res) => {
         overflow: visible;
       }
 
-            .tb-left-group {
-        margin-bottom: 18px;
+             .tb-left-group {
+        /* Slightly tighter spacing between groups so the gap
+           between Tables and Room objects doesn’t feel huge */
+        margin-bottom: 12px;
       }
 
       /* Sub-headings – only used for "Actions" now */
@@ -442,16 +444,17 @@ router.get("/builder/preview/:showId", (req, res) => {
       }
 
       /* Fly-out tool groups (Photoshop-style) */
-           .tool-group {
+      .tool-group {
         position: relative;
         margin-bottom: 8px;
-        display: flex;
-        align-items: center;
+        /* Make the root button span the full width so its centre
+           lines up with standalone buttons like "Text label" and Actions */
+        display: block;
       }
 
-      /* Root tool button: icon above label, centred (same as other tool buttons) */
+      /* Root tool button: full-width, icon above label, centred */
       .tool-group .tool-root {
-        flex: 1 1 auto;
+        width: 100%;
         min-height: 72px;
       }
 
@@ -468,16 +471,28 @@ router.get("/builder/preview/:showId", (req, res) => {
       }
 
 
+
       .tool-flyout-toggle {
         border: 0;
         background: transparent;
-        padding: 0 4px 0 2px;
+        padding: 0;
         display: flex;
         align-items: center;
+        justify-content: center;
         cursor: pointer;
         font-size: 11px;
         color: #7a828f;
+
+        /* Float over the right edge so the main button can stay
+           full-width and perfectly centred */
+        position: absolute;
+        right: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 18px;
+        height: 18px;
       }
+
 
       .tool-flyout-toggle:hover {
         color: var(--tixall-dark);
