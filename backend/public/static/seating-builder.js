@@ -1230,200 +1230,198 @@
     return group;
   }
 
-    function updateRowGroupGeometry(group, seatsPerRow, rowCount) {
-    if (!(group instanceof Konva.Group)) return;
+  function updateRowGroupGeometry(group, seatsPerRow, rowCount) {
+  if (!(group instanceof Konva.Group)) return;
 
-    let s = Number(seatsPerRow);
-    let r = Number(rowCount);
-    if (!Number.isFinite(s) || s < 1) s = 1;
-    if (!Number.isFinite(r) || r < 1) r = 1;
+  let s = Number(seatsPerRow);
+  let r = Number(rowCount);
+  if (!Number.isFinite(s) || s < 1) s = 1;
+  if (!Number.isFinite(r) || r < 1) r = 1;
 
-    seatsPerRow = Math.floor(s);
-    rowCount = Math.floor(r);
+  seatsPerRow = Math.floor(s);
+  rowCount = Math.floor(r);
 
-    group.setAttr("seatsPerRow", seatsPerRow);
-    group.setAttr("rowCount", rowCount);
+  group.setAttr("seatsPerRow", seatsPerRow);
+  group.setAttr("rowCount", rowCount);
 
-    const seatLabelMode = group.getAttr("seatLabelMode") || "numbers";
-    const seatStartRaw = group.getAttr("seatStart");
-    const seatStart = Number.isFinite(Number(seatStartRaw))
-      ? Number(seatStartRaw)
-      : 1;
+  const seatLabelMode = group.getAttr("seatLabelMode") || "numbers";
+  const seatStartRaw = group.getAttr("seatStart");
+  const seatStart = Number.isFinite(Number(seatStartRaw))
+    ? Number(seatStartRaw)
+    : 1;
 
-    const rowLabelPrefix = group.getAttr("rowLabelPrefix") || "";
-    const rowLabelStartRaw = group.getAttr("rowLabelStart");
-    const rowLabelStart = Number.isFinite(Number(rowLabelStartRaw))
-      ? Number(rowLabelStartRaw)
-      : 0;
+  const rowLabelPrefix = group.getAttr("rowLabelPrefix") || "";
+  const rowLabelStartRaw = group.getAttr("rowLabelStart");
+  const rowLabelStart = Number.isFinite(Number(rowLabelStartRaw))
+    ? Number(rowLabelStartRaw)
+    : 0;
 
-    const rowLabelBothSides = !!group.getAttr("rowLabelBothSides");
+  const rowLabelBothSides = !!group.getAttr("rowLabelBothSides");
 
-    const alignmentRaw = group.getAttr("alignment") || "center";
-    const alignment =
-      alignmentRaw === "left" ||
-      alignmentRaw === "right" ||
-      alignmentRaw === "center"
-        ? alignmentRaw
-        : "center";
+  const alignmentRaw = group.getAttr("alignment") || "center";
+  const alignment =
+    alignmentRaw === "left" ||
+    alignmentRaw === "right" ||
+    alignmentRaw === "center"
+      ? alignmentRaw
+      : "center";
 
-    const rowOrderRaw = group.getAttr("rowOrder") || "asc";
-    const rowOrder = rowOrderRaw === "desc" ? "desc" : "asc";
-    group.setAttr("rowOrder", rowOrder);
+  const rowOrderRaw = group.getAttr("rowOrder") || "asc";
+  const rowOrder = rowOrderRaw === "desc" ? "desc" : "asc";
+  group.setAttr("rowOrder", rowOrder);
 
-    const curveRaw = Number(group.getAttr("curve"));
-    const curve = Math.max(
-      -15,
-      Math.min(15, Number.isFinite(curveRaw) ? curveRaw : 0)
-    );
-    group.setAttr("curve", curve);
+  const curveRaw = Number(group.getAttr("curve"));
+  const curve = Math.max(
+    -15,
+    Math.min(15, Number.isFinite(curveRaw) ? curveRaw : 0)
+  );
+  group.setAttr("curve", curve);
 
-    // clear existing seats + labels
-    group
-      .find(
-        (node) =>
-          node.getAttr("isSeat") ||
-          node.getAttr("isSeatLabel") ||
-          node.getAttr("isRowLabel")
-      )
-      .forEach((n) => n.destroy());
+  // clear existing seats + labels
+  group
+    .find((node) =>
+      node.getAttr("isSeat") ||
+      node.getAttr("isSeatLabel") ||
+      node.getAttr("isRowLabel")
+    )
+    .forEach((n) => n.destroy());
 
-    const spacing = 26;
-    const seatRadius = SEAT_RADIUS;
-    const rowSpacing = 28;
+  const spacing = 26;
+  const seatRadius = SEAT_RADIUS;
+  const rowSpacing = 28;
 
-    const curveFactor = curve / 10;
-    const centerIndex = (seatsPerRow - 1) / 2;
+  const curveFactor = curve / 10;
+  const centerIndex = (seatsPerRow - 1) / 2;
 
-    function computeSeatX(i) {
-      if (alignment === "left") {
-        return i * spacing;
+  function computeSeatX(i) {
+    if (alignment === "left") {
+      return i * spacing;
+    }
+    if (alignment === "right") {
+      return -(seatsPerRow - 1) * spacing + i * spacing;
+    }
+    return (i - centerIndex) * spacing;
+  }
+
+  const isLabelled = seatLabelMode !== "none";
+  const seatFill = isLabelled ? "#ffffff" : "#111827";
+  const seatStroke = isLabelled ? "#4b5563" : "#111827";
+
+  for (let rIdx = 0; rIdx < rowCount; rIdx += 1) {
+    const baseRowY = rIdx * rowSpacing;
+
+    let firstSeatX = null;
+    let lastSeatX = null;
+
+    for (let i = 0; i < seatsPerRow; i += 1) {
+      let sx = computeSeatX(i);
+
+      const offsetIndex = i - centerIndex;
+      const curveOffset = curveFactor * offsetIndex * offsetIndex;
+      const rowY = baseRowY + curveOffset;
+
+      if (firstSeatX == null) {
+        firstSeatX = sx;
       }
-      if (alignment === "right") {
-        return -(seatsPerRow - 1) * spacing + i * spacing;
+      lastSeatX = sx;
+
+      if (!Number.isFinite(sx) || !Number.isFinite(rowY)) {
+        // eslint-disable-next-line no-console
+        console.error("❌ invalid seat position", {
+          i,
+          r: rIdx,
+          sx,
+          rowY,
+          alignment,
+          curve,
+          centerIndex,
+          seatsPerRow,
+          rowCount,
+        });
+        continue;
       }
-      return (i - centerIndex) * spacing;
+
+      const seat = new Konva.Circle({
+        x: sx,
+        y: rowY,
+        radius: seatRadius,
+        stroke: seatStroke,
+        strokeWidth: 1.7,
+        fill: seatFill,
+        isSeat: true,
+      });
+
+      let labelText = "";
+      if (seatLabelMode !== "none") {
+        labelText = seatLabelFromIndex(seatLabelMode, i, seatStart);
+      }
+
+      group.add(seat);
+      if (labelText) {
+        const label = makeSeatLabelText(labelText, sx, rowY);
+        group.add(label);
+      }
     }
 
-    const isLabelled = seatLabelMode !== "none";
-    const seatFill = isLabelled ? "#ffffff" : "#111827";
-    const seatStroke = isLabelled ? "#4b5563" : "#111827";
+    const logicalRowIdx =
+      rowOrder === "desc" ? rowCount - 1 - rIdx : rIdx;
 
-    for (let rIdx = 0; rIdx < rowCount; rIdx += 1) {
-      const baseRowY = rIdx * rowSpacing;
+    const rowLabelText =
+      rowLabelPrefix + rowLabelFromIndex(rowLabelStart + logicalRowIdx);
 
-      let firstSeatX = null;
-      let firstSeatY = null;
-      let lastSeatX = null;
+    if (rowLabelText && firstSeatX != null) {
+      const labelGap = seatRadius * 1.4;
+      // 🔥 Use the *centre* of the row (baseRowY) instead of first seat Y
+      const labelY = baseRowY;
 
-      for (let i = 0; i < seatsPerRow; i += 1) {
-        let sx = computeSeatX(i);
+      // left-hand label
+      const leftLabel = new Konva.Text({
+        text: rowLabelText,
+        fontSize: 14,
+        fontFamily: "system-ui",
+        fontStyle: "bold",
+        fill: "#111827",
+        align: "right",
+        verticalAlign: "middle",
+        listening: false,
+        isRowLabel: true,
+      });
 
-        const offsetIndex = i - centerIndex;
-        const curveOffset = curveFactor * offsetIndex * offsetIndex;
+      leftLabel.position({
+        x: firstSeatX - (seatRadius + labelGap),
+        y: labelY,
+      });
+      leftLabel.offsetX(leftLabel.width());
+      leftLabel.offsetY(leftLabel.height() / 2);
+      group.add(leftLabel);
 
-        const rowY = baseRowY + curveOffset;
-
-        if (firstSeatX == null) {
-          firstSeatX = sx;
-          firstSeatY = rowY;
-        }
-        lastSeatX = sx;
-
-        if (!Number.isFinite(sx) || !Number.isFinite(rowY)) {
-          // eslint-disable-next-line no-console
-          console.error("❌ invalid seat position", {
-            i,
-            r: rIdx,
-            sx,
-            rowY,
-            alignment,
-            curve,
-            centerIndex,
-            seatsPerRow,
-            rowCount,
-          });
-          continue;
-        }
-
-        const seat = new Konva.Circle({
-          x: sx,
-          y: rowY,
-          radius: seatRadius,
-          stroke: seatStroke,
-          strokeWidth: 1.7,
-          fill: seatFill,
-          isSeat: true,
-        });
-
-        let labelText = "";
-        if (seatLabelMode !== "none") {
-          labelText = seatLabelFromIndex(seatLabelMode, i, seatStart);
-        }
-
-        group.add(seat);
-        if (labelText) {
-          const label = makeSeatLabelText(labelText, sx, rowY);
-          group.add(label);
-        }
-      }
-
-      const logicalRowIdx =
-        rowOrder === "desc" ? rowCount - 1 - rIdx : rIdx;
-
-      const rowLabelText =
-        rowLabelPrefix + rowLabelFromIndex(rowLabelStart + logicalRowIdx);
-
-      if (rowLabelText && firstSeatX != null && firstSeatY != null) {
-        const labelGap = seatRadius * 1.4;
-        const labelY = firstSeatY;
-
-        // left-hand label
-        const leftLabel = new Konva.Text({
+      if (rowLabelBothSides && lastSeatX != null) {
+        const rightLabel = new Konva.Text({
           text: rowLabelText,
           fontSize: 14,
           fontFamily: "system-ui",
           fontStyle: "bold",
           fill: "#111827",
-          align: "right",
+          align: "left",
           verticalAlign: "middle",
           listening: false,
           isRowLabel: true,
         });
 
-        leftLabel.position({
-          x: firstSeatX - (seatRadius + labelGap),
+        rightLabel.position({
+          x: lastSeatX + (seatRadius + labelGap),
           y: labelY,
         });
-        leftLabel.offsetX(leftLabel.width());
-        leftLabel.offsetY(leftLabel.height() / 2);
-        group.add(leftLabel);
-
-        if (rowLabelBothSides && lastSeatX != null) {
-          const rightLabel = new Konva.Text({
-            text: rowLabelText,
-            fontSize: 14,
-            fontFamily: "system-ui",
-            fontStyle: "bold",
-            fill: "#111827",
-            align: "left",
-            verticalAlign: "middle",
-            listening: false,
-            isRowLabel: true,
-          });
-
-          rightLabel.position({
-            x: lastSeatX + (seatRadius + labelGap),
-            y: labelY,
-          });
-          rightLabel.offsetY(rightLabel.height() / 2);
-          group.add(rightLabel);
-        }
+        rightLabel.offsetY(rightLabel.height() / 2);
+        group.add(rightLabel);
       }
     }
-
-    ensureHitRect(group);
-    keepLabelsUpright(group);
   }
+
+  ensureHitRect(group);
+  keepLabelsUpright(group);
+}
+
 
   function updateCircularTableGeometry(group, seatCount) {
     if (!(group instanceof Konva.Group)) return;
@@ -2783,53 +2781,64 @@
   // ---------- Canvas interactions ----------
 
   function handleStageClick(evt) {
-    if (!stage || !mapLayer) return;
+  if (!stage || !mapLayer) return;
 
-    const target = evt.target;
+  const target = evt.target;
 
-    // If we clicked on a shape in mapLayer, let the shape's click handler
-    // manage selection (so shift-select doesn't get toggled twice).
-    if (
-      target &&
-      target !== stage &&
-      typeof target.findAncestor === "function"
-    ) {
-      const group = target.findAncestor("Group", true);
-      if (group && group.getLayer && group.getLayer() === mapLayer) {
-        return;
-      }
-    }
-
-      const clickedOnEmpty =
-      target === stage || (target.getLayer && target.getLayer() === gridLayer);
-
-    if (!clickedOnEmpty) return;
-
-    // No active tool -> just clear selection when clicking empty space
-    if (!activeTool) {
-      clearSelection();
-      return;
-    }
-
-    const pointerPos = stage.getPointerPosition();
-    if (!pointerPos) return;
-
-    // Line tool uses its own multi-click behaviour
-    if (activeTool === "line") {
-      handleLineClick(pointerPos);
-      return;
-    }
-
-    const node = createNodeForTool(activeTool, pointerPos);
-    if (!node) return;
-
-    mapLayer.add(node);
-    attachNodeBehaviour(node);
-    mapLayer.batchDraw();
-    updateSeatCount();
-    selectNode(node);
-    pushHistory();
+  // Did we hit a group (seat block, table, stage, etc.) in the map layer?
+  let group = null;
+  if (target && typeof target.findAncestor === "function") {
+    group = target.findAncestor("Group", true);
   }
+  if (group && group.getLayer && group.getLayer() === mapLayer) {
+    // Clicked a real object, so select it (and support shift / cmd multi-select)
+    const e = evt.evt || evt;
+    const additive =
+      isShiftPressed || !!(e && (e.shiftKey || e.metaKey || e.ctrlKey));
+
+    selectNode(group, additive);
+
+    // Drop any placement tool so we don't accidentally place new stuff on click
+    if (activeTool && activeTool !== "line") {
+      setActiveTool(null);
+    }
+
+    return;
+  }
+
+  // Otherwise, did we click empty canvas?
+  const clickedOnEmpty =
+    target === stage || (target.getLayer && target.getLayer() === gridLayer);
+
+  if (!clickedOnEmpty) return;
+
+  // No tool active → just clear the selection
+  if (!activeTool) {
+    clearSelection();
+    return;
+  }
+
+  const pointerPos = stage.getPointerPosition();
+  if (!pointerPos) return;
+
+  // Line tool has its own multi-click behaviour
+  if (activeTool === "line") {
+    handleLineClick(pointerPos);
+    return;
+  }
+
+  // Any other tool = create a node at the click
+  const node = createNodeForTool(activeTool, pointerPos);
+  if (!node) return;
+
+  mapLayer.add(node);
+  attachNodeBehaviour(node);
+  mapLayer.batchDraw();
+  updateSeatCount();
+  selectNode(node);
+  pushHistory();
+}
+
 
   function handleKeyDown(e) {
     // track shift for robust multi-select
@@ -3138,7 +3147,7 @@
   hookUndoRedoButtons();
   hookSaveButton();
 
-  stage.on("mousedown", handleStageClick);
+stage.on("click", handleStageClick);
 
   // Double-click empty canvas to finish the current line
   stage.on("dblclick", (evt) => {
