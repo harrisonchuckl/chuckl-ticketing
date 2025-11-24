@@ -248,6 +248,11 @@
 
   let lastDragPos = null;
 
+  // Line drawing state (for the new Line tool)
+  let currentLineGroup = null;    // Konva.Group that contains the line + hit rect
+  let currentLine = null;         // Konva.Line inside the group
+  let currentLinePoints = [];     // [x1, y1, x2, y2, ...]
+
   // history is per-mapLayer JSON
   let history = [];
   let historyIndex = -1;
@@ -283,8 +288,18 @@
 
   // ---------- Helpers: UI / tools ----------
 
-  function setActiveTool(tool) {
+    function setActiveTool(tool) {
+    // If we are leaving line mode and a line is mid-draw, finish it
+    if (activeTool === "line" && tool !== "line" && currentLineGroup) {
+      const commit = currentLinePoints && currentLinePoints.length >= 4;
+      finishCurrentLine(commit);
+    }
+
     if (activeTool === tool) {
+      // Toggling the same tool off
+      if (tool === "line" && currentLineGroup) {
+        finishCurrentLine(true);
+      }
       activeTool = null;
     } else {
       activeTool = tool;
@@ -298,6 +313,17 @@
         btn.classList.remove("is-active");
       }
     });
+
+    if (!mapLayer || !mapLayer.getStage()) return;
+
+    if (!activeTool) {
+      mapLayer.getStage().container().style.cursor = "default";
+    } else {
+      mapLayer.getStage().container().style.cursor =
+        activeTool === "line" ? "crosshair" : "crosshair";
+    }
+  }
+
 
     if (!mapLayer || !mapLayer.getStage()) return;
 
@@ -439,6 +465,75 @@
   }
 
   // ---------- Shape helpers ----------
+
+    // ---------- Line tool helpers (multi-point line) ----------
+
+  function finishCurrentLine(commit) {
+    if (!currentLineGroup) return;
+
+    if (!commit || currentLinePoints.length < 4) {
+      // Not enough points or cancelled – just remove
+      currentLineGroup.destroy();
+    } else {
+      // Trim the trailing placeholder point and finalise geometry
+      if (currentLinePoints.length >= 4) {
+        currentLinePoints.splice(currentLinePoints.length - 2, 2);
+        if (currentLine) currentLine.points(currentLinePoints);
+      }
+      ensureHitRect(currentLineGroup);
+    }
+
+    currentLineGroup = null;
+    currentLine = null;
+    currentLinePoints = [];
+
+    if (mapLayer) {
+      mapLayer.batchDraw();
+      updateSeatCount();
+      pushHistory();
+    }
+  }
+
+  function handleLineClick(pointerPos) {
+    if (!stage || !mapLayer) return;
+    const x = snap(pointerPos.x);
+    const y = snap(pointerPos.y);
+
+    // First click: create a new group + line
+    if (!currentLineGroup) {
+      currentLineGroup = new Konva.Group({
+        x: 0,
+        y: 0,
+        draggable: true,
+        name: "line",
+        shapeType: "line",
+      });
+
+      currentLine = new Konva.Line({
+        points: [x, y, x, y], // placeholder second point
+        stroke: "#111827",
+        strokeWidth: 2,
+        lineCap: "round",
+        lineJoin: "round",
+      });
+
+      currentLineGroup.add(currentLine);
+      ensureHitRect(currentLineGroup);
+      mapLayer.add(currentLineGroup);
+      attachNodeBehaviour(currentLineGroup);
+
+      currentLinePoints = [x, y, x, y];
+    } else {
+      // Subsequent clicks: update last point and add a new placeholder
+      currentLinePoints[currentLinePoints.length - 2] = x;
+      currentLinePoints[currentLinePoints.length - 1] = y;
+      currentLinePoints.push(x, y);
+
+      if (currentLine) currentLine.points(currentLinePoints);
+    }
+
+    mapLayer.batchDraw();
+  }
 
   function snap(v) {
     return Math.round(v / GRID_SIZE) * GRID_SIZE;
@@ -2715,7 +2810,7 @@
       }
     }
 
-    const clickedOnEmpty =
+      const clickedOnEmpty =
       target === stage || (target.getLayer && target.getLayer() === gridLayer);
 
     if (!clickedOnEmpty) return;
@@ -2728,6 +2823,12 @@
 
     const pointerPos = stage.getPointerPosition();
     if (!pointerPos) return;
+
+    // Line tool uses its own multi-click behaviour
+    if (activeTool === "line") {
+      handleLineClick(pointerPos);
+      return;
+    }
 
     const node = createNodeForTool(activeTool, pointerPos);
     if (!node) return;
@@ -3048,6 +3149,20 @@
   hookSaveButton();
 
   stage.on("mousedown", handleStageClick);
+
+  // Double-click empty canvas to finish the current line
+  stage.on("dblclick", (evt) => {
+    if (activeTool !== "line" || !currentLineGroup) return;
+
+    const target = evt.target;
+    const clickedOnEmpty =
+      target === stage || (target.getLayer && target.getLayer() === gridLayer);
+
+    if (!clickedOnEmpty) return;
+
+    finishCurrentLine(true);
+  });
+
   document.addEventListener("keydown", handleKeyDown);
   document.addEventListener("keyup", handleKeyUp);
   window.addEventListener("resize", resizeStageToContainer);
