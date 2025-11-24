@@ -436,29 +436,34 @@ router.get("/builder/preview/:showId", (req, res) => {
         align-items: stretch;
       }
 
-      .tool-group .tool-root {
+            .tool-group .tool-root {
         flex: 1 1 auto;
-        flex-direction: row;
+        /* Stack icon above text like the main tool buttons */
+        flex-direction: column;
         align-items: center;
         justify-content: flex-start;
-        padding: 8px 8px 8px 6px;
-        min-height: 48px;
+        padding: 10px 4px 8px;
+        min-height: 72px;
       }
 
       .tool-group .tool-root img.tb-tool-icon {
-        width: 24px;
-        height: 24px;
+        /* Match the main tool icon size so it feels consistent */
+        width: 44px;
+        height: 44px;
       }
 
       .tool-group .tool-root .tb-left-label {
-        margin-left: 6px;
-        margin-right: 4px;
-        text-align: left;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        /* Put text under the icon and let it wrap */
+        margin-left: 0;
+        margin-right: 0;
+        text-align: center;
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
         max-width: 80px;
+        word-break: break-word;
       }
+
 
       .tool-flyout-toggle {
         border: 0;
