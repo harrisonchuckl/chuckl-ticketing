@@ -355,30 +355,27 @@ router.get("/builder/preview/:showId", (req, res) => {
         margin-top: 4px;
       }
 
-      /* No visual hover / active raise */
+      /* Completely flat – no hover / active raise */
       .tb-left-item:hover,
-      .tb-left-item:focus-visible {
-        background: transparent;
-        box-shadow: none;
-        border-color: transparent;
-        transform: none;
-      }
-
+      .tb-left-item:focus-visible,
       .tb-left-item:active {
-        transform: none;
+        background: transparent !important;
+        box-shadow: none !important;
+        border-color: transparent !important;
+        transform: none !important;
       }
 
-      /* Tool buttons (with icons + label) – completely flat */
-      .tb-left-item.tool-button {
-        border: 0;
-        background: transparent;
-        box-shadow: none;
-      }
-
-      .tb-left-item.tool-button.is-active {
-        border: 0;
-        background: transparent;
-        box-shadow: none;
+      /* Tool buttons – nuke all visual effects in every state */
+      .tb-left-item.tool-button,
+      .tb-left-item.tool-button:hover,
+      .tb-left-item.tool-button:focus-visible,
+      .tb-left-item.tool-button:active,
+      .tb-left-item.tool-button.is-active,
+      .tb-left-item.tool-button.is-active:hover {
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+        transform: none !important;
       }
 
       /* Bigger icons – Canva style */
@@ -389,7 +386,7 @@ router.get("/builder/preview/:showId", (req, res) => {
         flex-shrink: 0;
       }
 
-      /* Icon swap dark → blue on hover or active */
+      /* Icon swap dark → blue (only visual cue) */
       .tb-left-item.tool-button img.icon-dark {
         display: inline-block;
       }
@@ -398,7 +395,7 @@ router.get("/builder/preview/:showId", (req, res) => {
         display: none;
       }
 
-      /* Hover: show blue icon (preview) */
+      /* Hover: preview blue icon */
       .tb-left-item.tool-button:hover img.icon-dark {
         display: none;
       }
@@ -407,7 +404,7 @@ router.get("/builder/preview/:showId", (req, res) => {
         display: inline-block;
       }
 
-      /* Active: keep blue icon after click (JS adds .is-active) */
+      /* Active: keep blue icon after click (.is-active is added by JS) */
       .tb-left-item.tool-button.is-active img.icon-dark {
         display: none;
       }
@@ -423,7 +420,7 @@ router.get("/builder/preview/:showId", (req, res) => {
         white-space: nowrap;
       }
 
-      /* Undo / Redo / Clear icons – round chips to match tools */
+      /* Undo / Redo / Clear icons – chips unchanged */
       .tb-left-icon {
         width: 26px;
         height: 26px;
