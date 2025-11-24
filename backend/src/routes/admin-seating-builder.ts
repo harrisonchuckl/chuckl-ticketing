@@ -371,20 +371,25 @@ router.get("/builder/preview/:showId", (req, res) => {
       /* Tool buttons (with icons + label) */
       .tb-left-item.tool-button {
         border: 1px solid transparent;
-        background: rgba(255, 255, 255, 0.9);
-        box-shadow: 0 1px 0 rgba(12, 18, 24, 0.03);
+        background: transparent; /* same as rail tile */
+        box-shadow: none;
+        padding: 10px 12px;
+      }
+
+      .tb-left-item.tool-button:hover {
+        background: rgba(8, 184, 232, 0.04);
       }
 
       .tb-left-item.tool-button.is-active {
-        background: var(--tixall-blue-soft);
-        border-color: rgba(8, 184, 232, 0.7);
-        box-shadow: 0 0 0 1px rgba(8, 184, 232, 0.22);
+        background: transparent;
+        border-color: rgba(8, 184, 232, 0.85);
+        box-shadow: 0 0 0 1px rgba(8, 184, 232, 0.4);
       }
 
-      /* Bigger icons – Canva style */
+      /* Bigger icons – Canva style, with extra breathing room */
       .tb-left-item.tool-button img.tb-tool-icon {
-        width: 30px;
-        height: 30px;
+        width: 36px;
+        height: 36px;
         display: inline-block;
         flex-shrink: 0;
       }
@@ -406,11 +411,16 @@ router.get("/builder/preview/:showId", (req, res) => {
         display: inline-block;
       }
 
+      /* Keep default label styling for Undo/Redo from base CSS,
+         only soften labels for tool buttons */
       .tb-left-label {
-        font-size: 12px;
-        font-weight: 500;
-        color: var(--tixall-dark);
         white-space: nowrap;
+      }
+
+      .tb-left-item.tool-button .tb-left-label {
+        font-size: 11px;
+        font-weight: 400;
+        color: #7b8495; /* similar to Undo/Redo, nice and faint */
       }
 
       /* Undo / Redo / Clear icons – round chips to match tools */
