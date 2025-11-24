@@ -360,22 +360,23 @@ router.get("/builder/preview/:showId", (req, res) => {
         background: rgba(8, 184, 232, 0.06);
       }
 
-      /* Tool buttons: icon ABOVE text, centred */
+            /* Tool buttons: icon ABOVE text, centred */
       .tb-left-item.tool-button {
         flex-direction: column;
         align-items: center;
-        justify-content: center;
+        justify-content: flex-start;
         text-align: center;
-        padding: 10px 4px;
-        gap: 4px;
-        border-radius: 16px;
+        padding: 12px 4px 10px;
+        gap: 6px;
+        border-radius: 18px;
         background: transparent !important;
         border: 0 !important;
         box-shadow: none !important;
         transition: none !important;
+        min-height: 72px; /* enough room for 44px icon + 2-line label */
       }
 
-      /* Kill any external hover / focus / active styling on tool buttons */
+      /* Don’t apply hover background / shadows on these tools */
       .tb-left-item.tool-button:hover,
       .tb-left-item.tool-button:focus,
       .tb-left-item.tool-button:active {
@@ -385,10 +386,15 @@ router.get("/builder/preview/:showId", (req, res) => {
         transform: none !important;
       }
 
-      /* Icon size + no stretching */
+      /* Extra vertical spacing between tool buttons */
+      .tb-left-item.tool-button + .tb-left-item.tool-button {
+        margin-top: 8px;
+      }
+
+      /* Icon size – no stretching */
       .tb-left-item.tool-button img.tb-tool-icon {
-        width: 40px;
-        height: 40px;
+        width: 44px;
+        height: 44px;
         display: block;
         flex-shrink: 0;
         object-fit: contain;
@@ -403,7 +409,6 @@ router.get("/builder/preview/:showId", (req, res) => {
         display: none;
       }
 
-      /* Hover: show blue icon only */
       .tb-left-item.tool-button:hover img.icon-dark {
         display: none;
       }
@@ -412,7 +417,6 @@ router.get("/builder/preview/:showId", (req, res) => {
         display: block;
       }
 
-      /* Selected (is-active): keep blue icon */
       .tb-left-item.tool-button.is-active img.icon-dark {
         display: none;
       }
@@ -422,13 +426,17 @@ router.get("/builder/preview/:showId", (req, res) => {
       }
 
       .tb-left-item.tool-button .tb-left-label {
+        display: block;
         font-size: 11px;
         line-height: 1.2;
         font-weight: 500;
         color: var(--tixall-dark);
         white-space: normal;
         text-align: center;
+        max-width: 80px;        /* stop text running wider than icon */
+        word-break: break-word; /* wrap long words instead of overlap */
       }
+
 
       /* Undo / Redo / Clear chips */
       .tb-left-icon {
@@ -515,8 +523,23 @@ router.get("/builder/preview/:showId", (req, res) => {
         <!-- Slim, non-expanding left rail -->
         <aside class="tb-left-rail" aria-label="Seating tools">
           <div class="tb-left-scroll">
-            <div class="tb-left-group">
+                       <div class="tb-left-group">
               <div class="tb-left-group-label">Seating</div>
+
+              <!-- Line tool (new) -->
+              <button class="tb-left-item tool-button" data-tool="line">
+                <img
+                  class="tb-tool-icon icon-dark"
+                  src="/seatmap-icons/line-dark.png"
+                  alt="Line"
+                />
+                <img
+                  class="tb-tool-icon icon-blue"
+                  src="/seatmap-icons/line-blue.png"
+                  alt="Line (selected)"
+                />
+                <span class="tb-left-label">Line</span>
+              </button>
 
               <!-- Section block -->
               <button class="tb-left-item tool-button" data-tool="section">
@@ -593,6 +616,7 @@ router.get("/builder/preview/:showId", (req, res) => {
                 <span class="tb-left-label">Rectangular table</span>
               </button>
             </div>
+
 
             <div class="tb-left-group">
               <div class="tb-left-group-label">Room &amp; labelling</div>
