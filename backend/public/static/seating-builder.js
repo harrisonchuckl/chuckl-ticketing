@@ -222,9 +222,11 @@
 
   const GRID_SIZE = 32;
   const STAGE_PADDING = 0;
-  const MIN_ZOOM = 0.4;
-  const MAX_ZOOM = 2.4;
-  const ZOOM_STEP = 0.1;
+
+  // Zoom config – allow much stronger zoom out + a bit more zoom in
+  const MIN_ZOOM = 0.05;   // 5% (see a huge area)
+  const MAX_ZOOM = 4;      // 400% zoom in
+  const ZOOM_STEP = 0.15;  // slightly bigger jumps per click
 
   // seat + circular table geometry
   const SEAT_RADIUS = 10;
@@ -246,12 +248,17 @@
   let selectedNode = null;
   let copiedNodesJson = [];
 
-  let lastDragPos = null;
+    // track shift key for robust multi-select
+  let isShiftPressed = false;
+
+  // multi-drag state: snapshot of positions when drag starts
+  let multiDragState = null;
 
   // Line drawing state (for the new Line tool)
   let currentLineGroup = null;    // Konva.Group that contains the line + hit rect
   let currentLine = null;         // Konva.Line inside the group
   let currentLinePoints = [];     // [x1, y1, x2, y2, ...]
+
 
   // history is per-mapLayer JSON
   let history = [];
@@ -262,13 +269,8 @@
   let tableCounter = 1;
 
   // global default seat label mode for *new* blocks
-  let globalSeatLabelMode = "none";
-
-  // track shift key for robust multi-select
-  let isShiftPressed = false;
-
-  // prevent recursive dragmove events when multi-dragging
-  let isSyncDragging = false;
+  // "numbers" = 1, 2, 3... by default during planning
+  let globalSeatLabelMode = "numbers";
 
   const DEBUG_SKEW = true;
 
@@ -2518,52 +2520,74 @@
       stage.container().style.cursor = activeTool ? "crosshair" : "default";
     });
 
-    node.on("dragstart", () => {
+        node.on("dragstart", () => {
       const nodes = transformer ? transformer.nodes() : [];
-      if (!nodes.length) selectNode(node, false);
-      lastDragPos = { x: node.x(), y: node.y() };
+
+      // If nothing is selected yet, select this node first
+      if (!nodes.length) {
+        selectNode(node, false);
+      }
+
+      const activeNodes = transformer ? transformer.nodes() : [node];
+
+      // If we’re dragging multiple nodes, snapshot their starting positions
+      if (activeNodes.length > 1) {
+        multiDragState = {
+          dragger: node,
+          basePositions: new Map(),
+        };
+
+        activeNodes.forEach((n) => {
+          multiDragState.basePositions.set(n, { x: n.x(), y: n.y() });
+        });
+      } else {
+        multiDragState = null;
+      }
     });
 
-        node.on("dragmove", () => {
-      // avoid recursive dragmove calls when we move other nodes programmatically
-      if (isSyncDragging) return;
-
-      const nodes = transformer ? transformer.nodes() : [];
-      if (!lastDragPos) {
-        lastDragPos = { x: node.x(), y: node.y() };
+    node.on("dragmove", () => {
+      if (!multiDragState || multiDragState.dragger !== node) {
+        // Single-node drag: let Konva handle it
+        mapLayer.batchDraw();
         return;
       }
 
-      const dx = node.x() - lastDragPos.x;
-      const dy = node.y() - lastDragPos.y;
+      const activeNodes = transformer ? transformer.nodes() : [node];
+      const base = multiDragState.basePositions.get(node);
+      if (!base) return;
 
-      if (nodes.length > 1) {
-        isSyncDragging = true;
-        nodes.forEach((n) => {
-          if (n !== node) {
-            n.position({ x: n.x() + dx, y: n.y() + dy });
-          }
+      const dx = node.x() - base.x;
+      const dy = node.y() - base.y;
+
+      // Move all selected nodes by the same delta, preserving their layout
+      activeNodes.forEach((n) => {
+        if (n === node) return; // this one is already being dragged by Konva
+        const orig = multiDragState.basePositions.get(n);
+        if (!orig) return;
+        n.position({
+          x: orig.x + dx,
+          y: orig.y + dy,
         });
-        isSyncDragging = false;
-      }
+      });
 
-      lastDragPos = { x: node.x(), y: node.y() };
       mapLayer.batchDraw();
     });
 
-        node.on("dragend", () => {
-      const nodes = transformer ? transformer.nodes() : [node];
-      nodes.forEach((n) => {
+    node.on("dragend", () => {
+      const activeNodes = transformer ? transformer.nodes() : [node];
+
+      activeNodes.forEach((n) => {
         n.position({
           x: snap(n.x()),
           y: snap(n.y()),
         });
       });
 
-      lastDragPos = null;
+      multiDragState = null;
       mapLayer.batchDraw();
       pushHistory();
     });
+
 
     node.on("transformend", () => {
       const tShape = node.getAttr("shapeType") || node.name();
