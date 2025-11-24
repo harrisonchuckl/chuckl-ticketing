@@ -1069,7 +1069,12 @@ router.get("/builder/preview/:showId", (req, res) => {
         // ------------------------------
         // Fly-out behaviour
         // ------------------------------
-        var groups = document.querySelectorAll(".tool-group");
+                // ------------------------------
+        // Fly-out behaviour
+        // ------------------------------
+        var groups = Array.prototype.slice.call(
+          document.querySelectorAll(".tool-group")
+        );
 
         function closeAllGroups() {
           groups.forEach(function (g) {
@@ -1093,9 +1098,12 @@ router.get("/builder/preview/:showId", (req, res) => {
             });
 
             flyout.addEventListener("click", function (ev) {
-              var target = ev.target as HTMLElement | null;
-              if (!target) return;
-              var optionBtn = target.closest(".tb-left-item.tool-button[data-tool]") as HTMLElement | null;
+              var target = ev.target;
+              if (!target || !(target instanceof HTMLElement)) return;
+
+              var optionBtn = target.closest(
+                ".tb-left-item.tool-button[data-tool]"
+              );
               if (!optionBtn) return;
 
               var toolName = optionBtn.getAttribute("data-tool") || "";
@@ -1108,10 +1116,10 @@ router.get("/builder/preview/:showId", (req, res) => {
                   rootLabelNode.textContent = newLabelNode.textContent || "";
                 }
 
-                var newDark = optionBtn.querySelector("img.icon-dark") as HTMLImageElement | null;
-                var newBlue = optionBtn.querySelector("img.icon-blue") as HTMLImageElement | null;
-                var rootDark = rootBtn.querySelector("img.icon-dark") as HTMLImageElement | null;
-                var rootBlue = rootBtn.querySelector("img.icon-blue") as HTMLImageElement | null;
+                var newDark = optionBtn.querySelector("img.icon-dark");
+                var newBlue = optionBtn.querySelector("img.icon-blue");
+                var rootDark = rootBtn.querySelector("img.icon-dark");
+                var rootBlue = rootBtn.querySelector("img.icon-blue");
 
                 if (rootDark && newDark) {
                   rootDark.src = newDark.src;
@@ -1136,11 +1144,12 @@ router.get("/builder/preview/:showId", (req, res) => {
 
         // Close fly-outs when clicking anywhere else
         document.addEventListener("click", function (ev) {
-          var target = ev.target as HTMLElement | null;
-          if (!target) return;
+          var target = ev.target;
+          if (!target || !(target instanceof HTMLElement)) return;
           if (target.closest(".tool-group")) return;
           closeAllGroups();
         });
+
       })();
     </script>
 
