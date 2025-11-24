@@ -827,6 +827,56 @@
     return group;
   }
 
+    function createSquare(x, y) {
+    const size = 100;
+
+    const group = new Konva.Group({
+      x: snap(x) - size / 2,
+      y: snap(y) - size / 2,
+      draggable: true,
+      name: "square",
+      shapeType: "square",
+    });
+
+    const rect = new Konva.Rect({
+      width: size,
+      height: size,
+      cornerRadius: 4,
+      stroke: "#4b5563",
+      strokeWidth: 1.7,
+      name: "body-rect",
+      fill: "#ffffff",
+    });
+
+    group.add(rect);
+    ensureHitRect(group);
+    return group;
+  }
+
+  function createCircle(x, y) {
+    const radius = 50;
+
+    const group = new Konva.Group({
+      x: snap(x),
+      y: snap(y),
+      draggable: true,
+      name: "circle",
+      shapeType: "circle",
+    });
+
+    const circle = new Konva.Circle({
+      radius,
+      stroke: "#4b5563",
+      strokeWidth: 1.7,
+      name: "body-rect",
+      fill: "#ffffff",
+    });
+
+    group.add(circle);
+    ensureHitRect(group);
+    return group;
+  }
+
   function createTextLabel(x, y) {
     const group = new Konva.Group({
       x: snap(x),
@@ -2455,6 +2505,7 @@
     }
 
     // ---- Rectangular tables ----
+        // ---- Rectangular tables ----
     if (shapeType === "rect-table") {
       const longSideSeats = node.getAttr("longSideSeats") ?? 4;
       const shortSideSeats = node.getAttr("shortSideSeats") ?? 2;
@@ -2542,6 +2593,72 @@
       return;
     }
 
+    // ---- Text labels ----
+    if (shapeType === "text" || shapeType === "label") {
+      const textNode = node.findOne("Text");
+      if (!textNode) {
+        addTitle("Text label");
+        const p = document.createElement("p");
+        p.className = "sb-inspector-empty";
+        p.textContent = "This text label has no editable content.";
+        el.appendChild(p);
+        return;
+      }
+
+      addTitle("Text label");
+
+      // Text content
+      addTextField("Text", textNode.text(), (val) => {
+        textNode.text(val || "");
+        ensureHitRect(node);
+      });
+
+      // Font size
+      const initialFontSize = Number(textNode.fontSize()) || 14;
+      addNumberField("Font size", initialFontSize, 6, 1, (val) => {
+        textNode.fontSize(val);
+        ensureHitRect(node);
+      });
+
+      // Font style toggles
+      let bold = !!String(textNode.fontStyle())
+        .toLowerCase()
+        .includes("bold");
+      let italic = !!String(textNode.fontStyle())
+        .toLowerCase()
+        .includes("italic");
+      let underline = !!textNode.underline();
+
+      function applyTextStyles() {
+        const parts = [];
+        if (bold) parts.push("bold");
+        if (italic) parts.push("italic");
+        textNode.fontStyle(parts.join(" ") || "normal");
+        textNode.underline(underline);
+        ensureHitRect(node);
+        mapLayer.batchDraw();
+        pushHistory();
+      }
+
+      addCheckboxField("Bold", bold, (checked) => {
+        bold = checked;
+        applyTextStyles();
+      });
+
+      addCheckboxField("Italic", italic, (checked) => {
+        italic = checked;
+        applyTextStyles();
+      });
+
+      addCheckboxField("Underline", underline, (checked) => {
+        underline = checked;
+        applyTextStyles();
+      });
+
+      mapLayer.batchDraw();
+      return;
+    }
+
     // Fallback
     addTitle("Selection");
     const p = document.createElement("p");
@@ -2571,11 +2688,12 @@
       });
   }
 
-  function configureTransformerForNode(node) {
+    function configureTransformerForNode(node) {
     if (!transformer || !node) return;
 
     const shapeType = node.getAttr("shapeType") || node.name();
 
+    // Seats / tables: rotation only, no resize
     if (
       shapeType === "row-seats" ||
       shapeType === "single-seat" ||
@@ -2587,15 +2705,34 @@
       return;
     }
 
-    if (shapeType === "stage" || shapeType === "bar" || shapeType === "exit") {
+    // Room objects + drawing shapes: resize in all directions (no rotation)
+    if (
+      shapeType === "stage" ||
+      shapeType === "bar" ||
+      shapeType === "exit" ||
+      shapeType === "section" ||
+      shapeType === "square" ||
+      shapeType === "circle"
+    ) {
       transformer.rotateEnabled(false);
-      transformer.enabledAnchors(["middle-left", "middle-right"]);
+      transformer.enabledAnchors([
+        "top-left",
+        "top-center",
+        "top-right",
+        "middle-left",
+        "middle-right",
+        "bottom-left",
+        "bottom-center",
+        "bottom-right",
+      ]);
       return;
     }
 
+    // Default: no resize/rotation
     transformer.rotateEnabled(false);
     transformer.enabledAnchors([]);
   }
+
 
   function clearSelection() {
     selectedNode = null;
@@ -2734,38 +2871,53 @@
     });
 
     // ---- Transform behaviour ----
-    node.on("transformend", () => {
+       node.on("transformend", () => {
       const tShape = node.getAttr("shapeType") || node.name();
 
       if (
         tShape === "stage" ||
         tShape === "bar" ||
-        tShape === "exit"
+        tShape === "exit" ||
+        tShape === "section" ||
+        tShape === "square" ||
+        tShape === "circle"
       ) {
         const scaleX = node.scaleX();
         const scaleY = node.scaleY();
-        const rect = getBodyRect(node);
+        const body = getBodyRect(node);
         const label = node.findOne("Text");
 
-        if (rect) {
-          rect.width(rect.width() * scaleX);
-          rect.height(rect.height() * scaleY);
+        if (body) {
+          if (body instanceof Konva.Circle) {
+            // Keep circles as circles – uniform scale
+            const radius = body.radius();
+            const uniformScale = Math.max(
+              Math.abs(scaleX || 1),
+              Math.abs(scaleY || 1)
+            );
+            body.radius(radius * uniformScale);
+          } else {
+            // Rectangles (stage / bar / exit / section / square)
+            body.width(body.width() * scaleX);
+            body.height(body.height() * scaleY);
 
-          if (tShape === "stage") {
-            rect.fillLinearGradientEndPoint({
-              x: rect.width(),
-              y: 0,
-            });
+            if (tShape === "stage") {
+              body.fillLinearGradientEndPoint({
+                x: body.width(),
+                y: 0,
+              });
+            }
           }
         }
 
-        if (label && rect) {
-          label.width(rect.width());
-          label.height(rect.height());
-          label.x(rect.x());
-          label.y(rect.y());
+        if (label && body && body instanceof Konva.Rect) {
+          label.width(body.width());
+          label.height(body.height());
+          label.x(body.x());
+          label.y(body.y());
         }
 
+        // Reset group scale so future transforms are clean
         node.scale({ x: 1, y: 1 });
       } else {
         node.scale({ x: 1, y: 1 });
@@ -2887,7 +3039,7 @@
         });
       }
 
-      case "stage":
+            case "stage":
         return createStage(pointerX, pointerY);
 
       case "bar":
@@ -2896,6 +3048,12 @@
       case "exit":
         return createExit(pointerX, pointerY);
 
+      case "square":
+        return createSquare(pointerX, pointerY);
+
+      case "circle":
+        return createCircle(pointerX, pointerY);
+
       case "text":
         return createTextLabel(pointerX, pointerY);
 
@@ -2903,6 +3061,7 @@
         return null;
     }
   }
+
 
   // ---------- Init Konva ----------
 
