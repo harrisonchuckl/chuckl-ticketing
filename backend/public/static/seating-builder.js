@@ -223,10 +223,10 @@
   const GRID_SIZE = 32;
   const STAGE_PADDING = 0;
 
-  // Zoom config – allow much stronger zoom out + a bit more zoom in
-  const MIN_ZOOM = 0.05;   // 5% (see a huge area)
-  const MAX_ZOOM = 4;      // 400% zoom in
-  const ZOOM_STEP = 0.15;  // slightly bigger jumps per click
+   // Zoom config – keep things stable (no super extreme zoom-out)
+  const MIN_ZOOM = 0.2;   // 20% (still see a lot, but maths stays sane)
+  const MAX_ZOOM = 4;     // 400% zoom in
+  const ZOOM_STEP = 0.1;  // smoother steps
 
   // seat + circular table geometry
   const SEAT_RADIUS = 10;
@@ -1211,9 +1211,16 @@
       shapeType: "row-seats",
     });
 
-    // core config
+        // core config
     group.setAttr("seatsPerRow", seatsPerRow);
     group.setAttr("rowCount", rowCount);
+
+    // NEW: per-row seat counts
+    // true = every row uses seatsPerRow
+    // false = use rowSeatCounts array instead
+    group.setAttr("everyRowSameSeats", true);
+    group.setAttr("rowSeatCounts", null);
+
 
     const mode = globalSeatLabelMode || "numbers";
     group.setAttr("seatLabelMode", mode);
@@ -1232,197 +1239,223 @@
     return group;
   }
 
-  function updateRowGroupGeometry(group, seatsPerRow, rowCount) {
-  if (!(group instanceof Konva.Group)) return;
+    function updateRowGroupGeometry(group, seatsPerRow, rowCount) {
+    if (!(group instanceof Konva.Group)) return;
 
-  let s = Number(seatsPerRow);
-  let r = Number(rowCount);
-  if (!Number.isFinite(s) || s < 1) s = 1;
-  if (!Number.isFinite(r) || r < 1) r = 1;
+    // --- Core seatsPerRow / rowCount normalisation ---
+    let s = Number(seatsPerRow);
+    let r = Number(rowCount);
 
-  seatsPerRow = Math.floor(s);
-  rowCount = Math.floor(r);
-
-  group.setAttr("seatsPerRow", seatsPerRow);
-  group.setAttr("rowCount", rowCount);
-
-  const seatLabelMode = group.getAttr("seatLabelMode") || "numbers";
-  const seatStartRaw = group.getAttr("seatStart");
-  const seatStart = Number.isFinite(Number(seatStartRaw))
-    ? Number(seatStartRaw)
-    : 1;
-
-  const rowLabelPrefix = group.getAttr("rowLabelPrefix") || "";
-  const rowLabelStartRaw = group.getAttr("rowLabelStart");
-  const rowLabelStart = Number.isFinite(Number(rowLabelStartRaw))
-    ? Number(rowLabelStartRaw)
-    : 0;
-
-  const rowLabelBothSides = !!group.getAttr("rowLabelBothSides");
-
-  const alignmentRaw = group.getAttr("alignment") || "center";
-  const alignment =
-    alignmentRaw === "left" ||
-    alignmentRaw === "right" ||
-    alignmentRaw === "center"
-      ? alignmentRaw
-      : "center";
-
-  const rowOrderRaw = group.getAttr("rowOrder") || "asc";
-  const rowOrder = rowOrderRaw === "desc" ? "desc" : "asc";
-  group.setAttr("rowOrder", rowOrder);
-
-  const curveRaw = Number(group.getAttr("curve"));
-  const curve = Math.max(
-    -15,
-    Math.min(15, Number.isFinite(curveRaw) ? curveRaw : 0)
-  );
-  group.setAttr("curve", curve);
-
-  // clear existing seats + labels
-  group
-    .find((node) =>
-      node.getAttr("isSeat") ||
-      node.getAttr("isSeatLabel") ||
-      node.getAttr("isRowLabel")
-    )
-    .forEach((n) => n.destroy());
-
-  const spacing = 26;
-  const seatRadius = SEAT_RADIUS;
-  const rowSpacing = 28;
-
-  const curveFactor = curve / 10;
-  const centerIndex = (seatsPerRow - 1) / 2;
-
-  function computeSeatX(i) {
-    if (alignment === "left") {
-      return i * spacing;
+    if (!Number.isFinite(s) || s < 1) {
+      s = Number(group.getAttr("seatsPerRow")) || 1;
     }
-    if (alignment === "right") {
-      return -(seatsPerRow - 1) * spacing + i * spacing;
+    if (!Number.isFinite(r) || r < 1) {
+      r = Number(group.getAttr("rowCount")) || 1;
     }
-    return (i - centerIndex) * spacing;
-  }
 
-  const isLabelled = seatLabelMode !== "none";
-  const seatFill = isLabelled ? "#ffffff" : "#111827";
-  const seatStroke = isLabelled ? "#4b5563" : "#111827";
+    s = Math.max(1, Math.floor(s));
+    r = Math.max(1, Math.floor(r));
 
-  for (let rIdx = 0; rIdx < rowCount; rIdx += 1) {
-    const baseRowY = rIdx * rowSpacing;
+    group.setAttr("seatsPerRow", s);
+    group.setAttr("rowCount", r);
 
-    let firstSeatX = null;
-    let lastSeatX = null;
+    // --- NEW: per-row seat counts support ---
+    const everyRowSameRaw = group.getAttr("everyRowSameSeats");
+    const everyRowSame = everyRowSameRaw !== false; // default = true
 
-    for (let i = 0; i < seatsPerRow; i += 1) {
-      let sx = computeSeatX(i);
+    let rowSeatCounts = group.getAttr("rowSeatCounts");
+    if (!Array.isArray(rowSeatCounts)) {
+      rowSeatCounts = [];
+    }
 
-      const offsetIndex = i - centerIndex;
-      const curveOffset = curveFactor * offsetIndex * offsetIndex;
-      const rowY = baseRowY + curveOffset;
-
-      if (firstSeatX == null) {
-        firstSeatX = sx;
+    // Normalise rowSeatCounts length to rowCount, using s as default
+    const normalisedRowSeatCounts = [];
+    for (let i = 0; i < r; i += 1) {
+      const raw = parseInt(rowSeatCounts[i], 10);
+      if (Number.isFinite(raw) && raw > 0) {
+        normalisedRowSeatCounts[i] = raw;
+      } else {
+        normalisedRowSeatCounts[i] = s;
       }
-      lastSeatX = sx;
+    }
+    group.setAttr("rowSeatCounts", normalisedRowSeatCounts);
 
-      if (!Number.isFinite(sx) || !Number.isFinite(rowY)) {
-        // eslint-disable-next-line no-console
-        console.error("❌ invalid seat position", {
-          i,
-          r: rIdx,
-          sx,
-          rowY,
-          alignment,
-          curve,
-          centerIndex,
-          seatsPerRow,
-          rowCount,
+    const seatLabelMode = group.getAttr("seatLabelMode") || "numbers";
+    const seatStartRaw = group.getAttr("seatStart");
+    const seatStart = Number.isFinite(Number(seatStartRaw))
+      ? Number(seatStartRaw)
+      : 1;
+
+    const rowLabelPrefix = group.getAttr("rowLabelPrefix") || "";
+    const rowLabelStartRaw = group.getAttr("rowLabelStart");
+    const rowLabelStart = Number.isFinite(Number(rowLabelStartRaw))
+      ? Number(rowLabelStartRaw)
+      : 0;
+
+    const rowLabelBothSides = !!group.getAttr("rowLabelBothSides");
+
+    const alignmentRaw = group.getAttr("alignment") || "center";
+    const alignment =
+      alignmentRaw === "left" ||
+      alignmentRaw === "right" ||
+      alignmentRaw === "center"
+        ? alignmentRaw
+        : "center";
+
+    const rowOrderRaw = group.getAttr("rowOrder") || "asc";
+    const rowOrder = rowOrderRaw === "desc" ? "desc" : "asc";
+    group.setAttr("rowOrder", rowOrder);
+
+    const curveRaw = Number(group.getAttr("curve"));
+    const curve = Math.max(
+      -15,
+      Math.min(15, Number.isFinite(curveRaw) ? curveRaw : 0)
+    );
+    group.setAttr("curve", curve);
+
+    // Clear existing seats + labels
+    group
+      .find((node) =>
+        node.getAttr("isSeat") ||
+        node.getAttr("isSeatLabel") ||
+        node.getAttr("isRowLabel")
+      )
+      .forEach((n) => n.destroy());
+
+    const spacing = 26;
+    const seatRadius = SEAT_RADIUS;
+    const rowSpacing = 28;
+
+    const curveFactor = curve / 10;
+
+    function computeSeatX(i, rowSeats) {
+      if (alignment === "left") {
+        return i * spacing;
+      }
+      if (alignment === "right") {
+        return -(rowSeats - 1) * spacing + i * spacing;
+      }
+      const centerIndex = (rowSeats - 1) / 2;
+      return (i - centerIndex) * spacing;
+    }
+
+    const isLabelled = seatLabelMode !== "none";
+    const seatFill = isLabelled ? "#ffffff" : "#111827";
+    const seatStroke = isLabelled ? "#4b5563" : "#111827";
+
+    for (let rIdx = 0; rIdx < r; rIdx += 1) {
+      const baseRowY = rIdx * rowSpacing;
+
+      const rowSeats = everyRowSame
+        ? s
+        : normalisedRowSeatCounts[rIdx] || s;
+
+      let firstSeatX = null;
+      let lastSeatX = null;
+
+      for (let i = 0; i < rowSeats; i += 1) {
+        const sx = computeSeatX(i, rowSeats);
+
+        const centerIndex = (rowSeats - 1) / 2;
+        const offsetIndex = i - centerIndex;
+        const curveOffset = curveFactor * offsetIndex * offsetIndex;
+        const rowY = baseRowY + curveOffset;
+
+        if (firstSeatX == null) firstSeatX = sx;
+        lastSeatX = sx;
+
+        if (!Number.isFinite(sx) || !Number.isFinite(rowY)) {
+          // eslint-disable-next-line no-console
+          console.error("❌ invalid seat position", {
+            i,
+            r: rIdx,
+            sx,
+            rowY,
+            alignment,
+            curve,
+            rowSeats,
+          });
+          continue;
+        }
+
+        const seat = new Konva.Circle({
+          x: sx,
+          y: rowY,
+          radius: seatRadius,
+          stroke: seatStroke,
+          strokeWidth: 1.7,
+          fill: seatFill,
+          isSeat: true,
         });
-        continue;
+
+        group.add(seat);
+
+        if (seatLabelMode !== "none") {
+          const labelText = seatLabelFromIndex(seatLabelMode, i, seatStart);
+          const label = makeSeatLabelText(labelText, sx, rowY);
+          group.add(label);
+        }
       }
 
-      const seat = new Konva.Circle({
-        x: sx,
-        y: rowY,
-        radius: seatRadius,
-        stroke: seatStroke,
-        strokeWidth: 1.7,
-        fill: seatFill,
-        isSeat: true,
-      });
+      // Row labels
+      const logicalRowIdx =
+        rowOrder === "desc" ? r - 1 - rIdx : rIdx;
 
-      let labelText = "";
-      if (seatLabelMode !== "none") {
-        labelText = seatLabelFromIndex(seatLabelMode, i, seatStart);
-      }
+      const rowLabelText =
+        rowLabelPrefix + rowLabelFromIndex(rowLabelStart + logicalRowIdx);
 
-      group.add(seat);
-      if (labelText) {
-        const label = makeSeatLabelText(labelText, sx, rowY);
-        group.add(label);
-      }
-    }
+      if (rowLabelText && firstSeatX != null) {
+        const labelGap = seatRadius * 1.4;
+        const labelY = baseRowY; // centre of row
 
-    const logicalRowIdx =
-      rowOrder === "desc" ? rowCount - 1 - rIdx : rIdx;
-
-    const rowLabelText =
-      rowLabelPrefix + rowLabelFromIndex(rowLabelStart + logicalRowIdx);
-
-    if (rowLabelText && firstSeatX != null) {
-      const labelGap = seatRadius * 1.4;
-      // 🔥 Use the *centre* of the row (baseRowY) instead of first seat Y
-      const labelY = baseRowY;
-
-      // left-hand label
-      const leftLabel = new Konva.Text({
-        text: rowLabelText,
-        fontSize: 14,
-        fontFamily: "system-ui",
-        fontStyle: "bold",
-        fill: "#111827",
-        align: "right",
-        verticalAlign: "middle",
-        listening: false,
-        isRowLabel: true,
-      });
-
-      leftLabel.position({
-        x: firstSeatX - (seatRadius + labelGap),
-        y: labelY,
-      });
-      leftLabel.offsetX(leftLabel.width());
-      leftLabel.offsetY(leftLabel.height() / 2);
-      group.add(leftLabel);
-
-      if (rowLabelBothSides && lastSeatX != null) {
-        const rightLabel = new Konva.Text({
+        // Left-hand label
+        const leftLabel = new Konva.Text({
           text: rowLabelText,
           fontSize: 14,
           fontFamily: "system-ui",
           fontStyle: "bold",
           fill: "#111827",
-          align: "left",
+          align: "right",
           verticalAlign: "middle",
           listening: false,
           isRowLabel: true,
         });
 
-        rightLabel.position({
-          x: lastSeatX + (seatRadius + labelGap),
+        leftLabel.position({
+          x: firstSeatX - (seatRadius + labelGap),
           y: labelY,
         });
-        rightLabel.offsetY(rightLabel.height() / 2);
-        group.add(rightLabel);
+        leftLabel.offsetX(leftLabel.width());
+        leftLabel.offsetY(leftLabel.height() / 2);
+        group.add(leftLabel);
+
+        if (rowLabelBothSides && lastSeatX != null) {
+          const rightLabel = new Konva.Text({
+            text: rowLabelText,
+            fontSize: 14,
+            fontFamily: "system-ui",
+            fontStyle: "bold",
+            fill: "#111827",
+            align: "left",
+            verticalAlign: "middle",
+            listening: false,
+            isRowLabel: true,
+          });
+
+          rightLabel.position({
+            x: lastSeatX + (seatRadius + labelGap),
+            y: labelY,
+          });
+          rightLabel.offsetY(rightLabel.height() / 2);
+          group.add(rightLabel);
+        }
       }
     }
+
+    ensureHitRect(group);
+    keepLabelsUpright(group);
   }
 
-  ensureHitRect(group);
-  keepLabelsUpright(group);
-}
 
 
   function updateCircularTableGeometry(group, seatCount) {
@@ -2110,7 +2143,7 @@
       return;
     }
 
-    // ---- Row blocks ----
+        // ---- Row blocks ----
     if (shapeType === "row-seats") {
       const seatsPerRow = Number(node.getAttr("seatsPerRow") ?? 10);
       const rowCount = Number(node.getAttr("rowCount") ?? 1);
@@ -2124,12 +2157,30 @@
       const rowLabelBothSides = !!node.getAttr("rowLabelBothSides");
       const rowOrder = node.getAttr("rowOrder") || "asc";
 
-      const totalSeats = seatsPerRow * rowCount;
+      const everyRowSameRaw = node.getAttr("everyRowSameSeats");
+      const everyRowSame = everyRowSameRaw !== false; // default true
+      let rowSeatCounts = node.getAttr("rowSeatCounts");
+      if (!Array.isArray(rowSeatCounts)) {
+        rowSeatCounts = [];
+      }
+
+      // Total seats depends on mode
+      let totalSeats;
+      if (everyRowSame) {
+        totalSeats = seatsPerRow * rowCount;
+      } else {
+        totalSeats = 0;
+        for (let i = 0; i < rowCount; i += 1) {
+          const raw = parseInt(rowSeatCounts[i], 10);
+          totalSeats += Number.isFinite(raw) && raw > 0 ? raw : seatsPerRow;
+        }
+      }
 
       function rebuild() {
         const currentSeatsPerRow =
           node.getAttr("seatsPerRow") || seatsPerRow;
-        const currentRowCount = node.getAttr("rowCount") || rowCount;
+        const currentRowCount =
+          node.getAttr("rowCount") || rowCount;
         updateRowGroupGeometry(node, currentSeatsPerRow, currentRowCount);
         mapLayer.batchDraw();
         updateSeatCount();
@@ -2138,7 +2189,7 @@
 
       addTitle("Seat block");
 
-      // rotation control (will now be kept in sync on transformend)
+      // Rotation
       addNumberField(
         "Rotation (deg)",
         Math.round(node.rotation() || 0),
@@ -2151,6 +2202,7 @@
         }
       );
 
+      // Seats per row (default)
       addNumberField("Seats per row", seatsPerRow, 1, 1, (val) => {
         node.setAttr("seatsPerRow", val);
         rebuild();
@@ -2226,6 +2278,58 @@
         }
       );
 
+      // NEW: toggle per-row seat counts
+      addCheckboxField(
+        "Every row has the same number of seats",
+        everyRowSame,
+        (checked) => {
+          node.setAttr("everyRowSameSeats", checked);
+          if (checked) {
+            // When re-enabling, it's okay if rowSeatCounts stays –
+            // geometry will just ignore it.
+          }
+          rebuild();
+          // Rerender to show/hide the per-row field
+          renderInspector(node);
+        }
+      );
+
+      // When custom mode is on, show comma-separated seat counts
+      if (!everyRowSame) {
+        // Build a sensible default string for current rows
+        const rowsForDisplay = [];
+        for (let i = 0; i < rowCount; i += 1) {
+          const raw = parseInt(rowSeatCounts[i], 10);
+          if (Number.isFinite(raw) && raw > 0) {
+            rowsForDisplay[i] = raw;
+          } else {
+            rowsForDisplay[i] = seatsPerRow;
+          }
+        }
+
+        addTextField(
+          "Seats per row (comma-separated)",
+          rowsForDisplay.join(", "),
+          (val) => {
+            const parts = String(val || "").split(",");
+            const result = [];
+            for (let i = 0; i < rowCount; i += 1) {
+              const raw = parseInt((parts[i] || "").trim(), 10);
+              result[i] =
+                Number.isFinite(raw) && raw > 0 ? raw : seatsPerRow;
+            }
+            node.setAttr("rowSeatCounts", result);
+            // Also update seatsPerRow to something sensible (max), used as fallback
+            const maxSeats = result.reduce(
+              (m, n) => (n > m ? n : m),
+              1
+            );
+            node.setAttr("seatsPerRow", maxSeats);
+            rebuild();
+          }
+        );
+      }
+
       addRangeField("Curve rows", curve, -15, 15, 1, (val) => {
         node.setAttr("curve", val);
         rebuild();
@@ -2233,6 +2337,7 @@
 
       return;
     }
+
 
     // ---- Circular tables ----
     if (shapeType === "circular-table") {
@@ -2490,28 +2595,14 @@
 
   // ---------- Behaviour attachment ----------
 
-  function attachNodeBehaviour(node) {
+    function attachNodeBehaviour(node) {
     if (!(node instanceof Konva.Group)) return;
 
     ensureHitRect(node);
 
     const shapeType = node.getAttr("shapeType") || node.name();
-    node.on("click", (evt) => {
-      const e = evt.evt || evt;
-      const additive =
-        isShiftPressed ||
-        !!(e.shiftKey || e.metaKey || e.ctrlKey);
 
-      // clicking a canvas element drops the left-hand tool
-      activeTool = null;
-      document
-        .querySelectorAll(".tool-button")
-        .forEach((btn) => btn.classList.remove("is-active"));
-      stage.container().style.cursor = "default";
-
-      selectNode(node, additive);
-    });
-
+    // Hover cursor
     node.on("mouseover", () => {
       stage.container().style.cursor = "grab";
     });
@@ -2520,7 +2611,8 @@
       stage.container().style.cursor = activeTool ? "crosshair" : "default";
     });
 
-        node.on("dragstart", () => {
+    // ---- Drag behaviour (supports multi-drag with SHIFT) ----
+    node.on("dragstart", () => {
       const nodes = transformer ? transformer.nodes() : [];
 
       // If nothing is selected yet, select this node first
@@ -2588,7 +2680,7 @@
       pushHistory();
     });
 
-
+    // ---- Transform behaviour ----
     node.on("transformend", () => {
       const tShape = node.getAttr("shapeType") || node.name();
 
@@ -2642,6 +2734,7 @@
       renderInspector(node);
     });
 
+    // ---- Inline table-label editing ----
     if (shapeType === "circular-table" || shapeType === "rect-table") {
       node.on("dblclick", (evt) => {
         const target = evt.target;
@@ -2661,6 +2754,7 @@
       });
     }
   }
+
 
   // ---------- Node creation based on active tool ----------
 
@@ -2804,64 +2898,63 @@
 
   // ---------- Canvas interactions ----------
 
-  function handleStageClick(evt) {
-  if (!stage || !mapLayer) return;
+    function handleStageClick(evt) {
+    if (!stage || !mapLayer) return;
 
-  const target = evt.target;
+    const pointerPos = stage.getPointerPosition();
+    if (!pointerPos) return;
 
-  // Did we hit a group (seat block, table, stage, etc.) in the map layer?
-  let group = null;
-  if (target && typeof target.findAncestor === "function") {
-    group = target.findAncestor("Group", true);
-  }
-  if (group && group.getLayer && group.getLayer() === mapLayer) {
-    // Clicked a real object, so select it (and support shift / cmd multi-select)
-    const e = evt.evt || evt;
-    const additive =
-      isShiftPressed || !!(e && (e.shiftKey || e.metaKey || e.ctrlKey));
+    const target = evt.target;
 
-    selectNode(group, additive);
-
-    // Drop any placement tool so we don't accidentally place new stuff on click
-    if (activeTool && activeTool !== "line") {
-      setActiveTool(null);
+    // 1) If the Line tool is active, every click adds/extends the line,
+    //    regardless of whether we clicked on the grid, a line, or another shape.
+    if (activeTool === "line") {
+      handleLineClick(pointerPos);
+      return;
     }
 
-    return;
+    // 2) Otherwise, normal behaviour: selection or place object.
+    let group = null;
+    if (target && typeof target.findAncestor === "function") {
+      group = target.findAncestor("Group", true);
+    }
+
+    // Clicked on an existing object in the map layer → select it
+    if (group && group.getLayer && group.getLayer() === mapLayer) {
+      const e = evt.evt || evt;
+      const additive =
+        isShiftPressed || !!(e && (e.shiftKey || e.metaKey || e.ctrlKey));
+
+      // Drop the placement tool when you click an object
+      setActiveTool(null);
+      selectNode(group, additive);
+      return;
+    }
+
+    // Otherwise, see if we clicked on "empty" canvas
+    const clickedOnEmpty =
+      target === stage || (target.getLayer && target.getLayer() === gridLayer);
+
+    if (!clickedOnEmpty) return;
+
+    // No active tool → just clear selection
+    if (!activeTool) {
+      clearSelection();
+      return;
+    }
+
+    // For all other tools: create a node on empty click
+    const node = createNodeForTool(activeTool, pointerPos);
+    if (!node) return;
+
+    mapLayer.add(node);
+    attachNodeBehaviour(node);
+    mapLayer.batchDraw();
+    updateSeatCount();
+    selectNode(node);
+    pushHistory();
   }
 
-  // Otherwise, did we click empty canvas?
-  const clickedOnEmpty =
-    target === stage || (target.getLayer && target.getLayer() === gridLayer);
-
-  if (!clickedOnEmpty) return;
-
-  // No tool active → just clear the selection
-  if (!activeTool) {
-    clearSelection();
-    return;
-  }
-
-  const pointerPos = stage.getPointerPosition();
-  if (!pointerPos) return;
-
-  // Line tool has its own multi-click behaviour
-  if (activeTool === "line") {
-    handleLineClick(pointerPos);
-    return;
-  }
-
-  // Any other tool = create a node at the click
-  const node = createNodeForTool(activeTool, pointerPos);
-  if (!node) return;
-
-  mapLayer.add(node);
-  attachNodeBehaviour(node);
-  mapLayer.batchDraw();
-  updateSeatCount();
-  selectNode(node);
-  pushHistory();
-}
 
 
   function handleKeyDown(e) {
