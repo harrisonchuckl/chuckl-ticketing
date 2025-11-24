@@ -346,11 +346,7 @@ router.get("/builder/preview/:showId", (req, res) => {
         width: 100%;
         text-align: left;
         cursor: pointer;
-        transition:
-          background 0.15s ease,
-          box-shadow 0.15s ease,
-          transform 0.06s ease,
-          border-color 0.15s ease;
+        transition: color 0.15s ease;
         font-size: 12px;
         color: var(--tixall-dark);
         box-sizing: border-box;
@@ -360,41 +356,37 @@ router.get("/builder/preview/:showId", (req, res) => {
         margin-top: 4px;
       }
 
+      /* No background change on hover – keep it subtle */
       .tb-left-item:hover {
-        background: rgba(8, 184, 232, 0.06);
+        background: transparent;
       }
 
       .tb-left-item:active {
-        transform: translateY(1px);
+        transform: none;
       }
 
-      /* Tool buttons (with icons + label) */
+      /* Tool buttons (with icons + label) – no borders/shadows */
       .tb-left-item.tool-button {
-        border: 1px solid transparent;
-        background: transparent; /* same as rail tile */
+        border: 0;
+        background: transparent;
         box-shadow: none;
-        padding: 10px 12px;
-      }
-
-      .tb-left-item.tool-button:hover {
-        background: rgba(8, 184, 232, 0.04);
       }
 
       .tb-left-item.tool-button.is-active {
+        border: 0;
         background: transparent;
-        border-color: rgba(8, 184, 232, 0.85);
-        box-shadow: 0 0 0 1px rgba(8, 184, 232, 0.4);
+        box-shadow: none;
       }
 
-      /* Bigger icons – Canva style, with extra breathing room */
+      /* Bigger icons – Canva style */
       .tb-left-item.tool-button img.tb-tool-icon {
-        width: 36px;
-        height: 36px;
+        width: 30px;
+        height: 30px;
         display: inline-block;
         flex-shrink: 0;
       }
 
-      /* Icon swap dark → blue when active */
+      /* Default state: dark icon */
       .tb-left-item.tool-button img.icon-dark {
         display: inline-block;
       }
@@ -403,6 +395,16 @@ router.get("/builder/preview/:showId", (req, res) => {
         display: none;
       }
 
+      /* Hover state: show blue icon, hide dark */
+      .tb-left-item.tool-button:hover img.icon-dark {
+        display: none;
+      }
+
+      .tb-left-item.tool-button:hover img.icon-blue {
+        display: inline-block;
+      }
+
+      /* Active state: keep blue icon persistent */
       .tb-left-item.tool-button.is-active img.icon-dark {
         display: none;
       }
@@ -411,19 +413,14 @@ router.get("/builder/preview/:showId", (req, res) => {
         display: inline-block;
       }
 
-      /* Keep default label styling for Undo/Redo from base CSS,
-         only soften labels for tool buttons */
       .tb-left-label {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--tixall-dark);
         white-space: nowrap;
       }
 
-      .tb-left-item.tool-button .tb-left-label {
-        font-size: 11px;
-        font-weight: 400;
-        color: #7b8495; /* similar to Undo/Redo, nice and faint */
-      }
-
-      /* Undo / Redo / Clear icons – round chips to match tools */
+      /* Undo / Redo / Clear icons – round chips */
       .tb-left-icon {
         width: 26px;
         height: 26px;
