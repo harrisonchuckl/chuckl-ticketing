@@ -315,16 +315,14 @@ router.get("/builder/preview/:showId", (req, res) => {
       .tb-left-rail {
         background: linear-gradient(180deg, #f7fafc, #f2f5f9);
         border-right: 1px solid var(--tixall-border-subtle);
-        position: relative;
-        overflow: visible;
-        z-index: 20;
+        /* allow flyouts to escape the rail */
+        overflow: visible !important;
       }
 
-      /* Keep overlay scrollbar off the actual tool icons */
       .tb-left-scroll {
-        padding: 16px 18px 18px 10px; /* extra right padding for scrollbar */
-        overflow-y: auto;
-        overflow-x: hidden;
+        padding: 16px 10px 18px;
+        /* allow flyouts to escape the scroll area */
+        overflow: visible !important;
       }
 
       .tb-left-group {
@@ -366,7 +364,7 @@ router.get("/builder/preview/:showId", (req, res) => {
         background: rgba(8, 184, 232, 0.06);
       }
 
-      /* Tool buttons: icon ABOVE text, centred */
+      /* Tool buttons: icon ABOVE text, centred (default behaviour) */
       .tb-left-item.tool-button {
         flex-direction: column;
         align-items: center;
@@ -449,25 +447,38 @@ router.get("/builder/preview/:showId", (req, res) => {
         margin-bottom: 8px;
       }
 
+      /* Top-level group buttons: row layout so chevron sits to the right */
       .tool-group > .tb-left-item.tool-button {
-        position: relative;
-        padding-bottom: 18px; /* room for caret */
+        flex-direction: row;
+        align-items: center;
+        justify-content: flex-start;
+        min-height: 44px;
+        padding: 8px 10px;
+      }
+
+      .tool-group > .tb-left-item.tool-button img.tb-tool-icon {
+        width: 28px;
+        height: 28px;
+      }
+
+      .tool-group > .tb-left-item.tool-button .tb-left-label {
+        max-width: none;
+        text-align: left;
+      }
+
+      .tool-group > .tb-left-item.tool-button .tool-flyout-chevron {
+        margin-left: auto; /* push arrow to the far right */
       }
 
       .tool-flyout-chevron {
-        position: absolute;
-        right: 6px;
-        bottom: 6px;
         font-size: 10px;
-        opacity: 0.75;
-        pointer-events: none;
+        opacity: 0.7;
       }
 
       .tool-flyout {
         position: absolute;
         left: 100%;
         top: 0;
-        transform: translateX(8px);
         display: none;
         flex-direction: column;
         gap: 4px;
@@ -476,8 +487,9 @@ router.get("/builder/preview/:showId", (req, res) => {
         border-radius: 12px;
         box-shadow: 0 12px 32px rgba(15,23,42,0.20);
         border: 1px solid rgba(148,163,184,0.35);
-        z-index: 999; /* sit above canvas + side panel */
-        min-width: 170px;
+        z-index: 9999; /* float above canvas and side panels */
+        min-width: 160px;
+        margin-left: 8px;
       }
 
       .tool-group:hover .tool-flyout {
