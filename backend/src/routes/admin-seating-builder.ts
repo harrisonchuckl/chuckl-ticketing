@@ -315,13 +315,14 @@ router.get("/builder/preview/:showId", (req, res) => {
       .tb-left-rail {
         background: linear-gradient(180deg, #f7fafc, #f2f5f9);
         border-right: 1px solid var(--tixall-border-subtle);
-        /* allow flyouts to escape the rail */
+        position: relative;
         overflow: visible !important;
+        z-index: 10;
       }
 
       .tb-left-scroll {
         padding: 16px 10px 18px;
-        /* allow flyouts to escape the scroll area */
+        position: relative;
         overflow: visible !important;
       }
 
@@ -364,7 +365,7 @@ router.get("/builder/preview/:showId", (req, res) => {
         background: rgba(8, 184, 232, 0.06);
       }
 
-      /* Tool buttons: icon ABOVE text, centred (default behaviour) */
+      /* Tool buttons: icon ABOVE text, centred (default) */
       .tb-left-item.tool-button {
         flex-direction: column;
         align-items: center;
@@ -447,30 +448,28 @@ router.get("/builder/preview/:showId", (req, res) => {
         margin-bottom: 8px;
       }
 
-      /* Top-level group buttons: row layout so chevron sits to the right */
+      /* Top-level grouped buttons: horizontal row layout */
       .tool-group > .tb-left-item.tool-button {
         flex-direction: row;
         align-items: center;
         justify-content: flex-start;
-        min-height: 44px;
         padding: 8px 10px;
+        min-height: auto;
       }
 
       .tool-group > .tb-left-item.tool-button img.tb-tool-icon {
-        width: 28px;
-        height: 28px;
+        width: 32px;
+        height: 32px;
       }
 
       .tool-group > .tb-left-item.tool-button .tb-left-label {
         max-width: none;
+        white-space: nowrap;
         text-align: left;
       }
 
-      .tool-group > .tb-left-item.tool-button .tool-flyout-chevron {
-        margin-left: auto; /* push arrow to the far right */
-      }
-
       .tool-flyout-chevron {
+        margin-left: auto;
         font-size: 10px;
         opacity: 0.7;
       }
@@ -487,12 +486,12 @@ router.get("/builder/preview/:showId", (req, res) => {
         border-radius: 12px;
         box-shadow: 0 12px 32px rgba(15,23,42,0.20);
         border: 1px solid rgba(148,163,184,0.35);
-        z-index: 9999; /* float above canvas and side panels */
+        z-index: 9999;
         min-width: 160px;
-        margin-left: 8px;
       }
 
-      .tool-group:hover .tool-flyout {
+      /* Visible when JS toggles .is-open */
+      .tool-group.is-open .tool-flyout {
         display: flex;
       }
 
@@ -508,6 +507,7 @@ router.get("/builder/preview/:showId", (req, res) => {
 
       .tool-flyout .tb-left-item.tool-button .tb-left-label {
         max-width: none;
+        white-space: nowrap;
       }
 
       .tool-flyout .tb-left-item.tool-button img.tb-tool-icon {
@@ -1051,6 +1051,40 @@ router.get("/builder/preview/:showId", (req, res) => {
             }
           });
         }
+
+        // ---------- Tool group fly-outs: click-to-open ----------
+        var toolGroups = document.querySelectorAll(".tool-group");
+
+        function closeAllToolGroups() {
+          toolGroups.forEach(function (g) {
+            g.classList.remove("is-open");
+          });
+        }
+
+        toolGroups.forEach(function (group) {
+          var trigger = group.querySelector(".tb-left-item.tool-button");
+          var flyout = group.querySelector(".tool-flyout");
+          if (!trigger || !flyout) return;
+
+          trigger.addEventListener("click", function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var isOpen = group.classList.contains("is-open");
+            closeAllToolGroups();
+            if (!isOpen) {
+              group.classList.add("is-open");
+            }
+          });
+
+          flyout.addEventListener("click", function (e) {
+            // keep open while selecting an item; seatmap JS handles the actual tool selection
+            e.stopPropagation();
+          });
+        });
+
+        document.addEventListener("click", function () {
+          closeAllToolGroups();
+        });
       })();
     </script>
 
