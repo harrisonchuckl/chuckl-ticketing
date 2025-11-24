@@ -334,7 +334,7 @@ router.get("/builder/preview/:showId", (req, res) => {
         margin: 0 6px 8px;
       }
 
-      /* Base left-rail button styling */
+      /* Base left-rail button styling (Undo / Redo / Clear etc) */
       .tb-left-item {
         border: 0;
         background: transparent;
@@ -342,85 +342,95 @@ router.get("/builder/preview/:showId", (req, res) => {
         padding: 8px 10px;
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 8px;
         width: 100%;
         text-align: left;
         cursor: pointer;
         font-size: 12px;
         color: var(--tixall-dark);
         box-sizing: border-box;
+        transition: background 0.15s ease;
       }
 
       .tb-left-item + .tb-left-item {
         margin-top: 4px;
       }
 
-      /* Completely flat – no hover / active raise */
-      .tb-left-item:hover,
-      .tb-left-item:focus-visible,
-      .tb-left-item:active {
-        background: transparent !important;
-        box-shadow: none !important;
-        border-color: transparent !important;
-        transform: none !important;
+      .tb-left-item:hover {
+        background: rgba(8, 184, 232, 0.06);
       }
 
-      /* Tool buttons – nuke all visual effects in every state */
-      .tb-left-item.tool-button,
+      /* Tool buttons: icon ABOVE text, centred */
+      .tb-left-item.tool-button {
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 10px 4px;
+        gap: 4px;
+        border-radius: 16px;
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+        transition: none !important;
+      }
+
+      /* Kill any external hover / focus / active styling on tool buttons */
       .tb-left-item.tool-button:hover,
-      .tb-left-item.tool-button:focus-visible,
-      .tb-left-item.tool-button:active,
-      .tb-left-item.tool-button.is-active,
-      .tb-left-item.tool-button.is-active:hover {
+      .tb-left-item.tool-button:focus,
+      .tb-left-item.tool-button:active {
         background: transparent !important;
         border: 0 !important;
         box-shadow: none !important;
         transform: none !important;
       }
 
-      /* Bigger icons – Canva style */
+      /* Icon size + no stretching */
       .tb-left-item.tool-button img.tb-tool-icon {
-        width: 30px;
-        height: 30px;
-        display: inline-block;
+        width: 40px;
+        height: 40px;
+        display: block;
         flex-shrink: 0;
+        object-fit: contain;
       }
 
-      /* Icon swap dark → blue (only visual cue) */
+      /* Icon swap dark → blue */
       .tb-left-item.tool-button img.icon-dark {
-        display: inline-block;
+        display: block;
       }
 
       .tb-left-item.tool-button img.icon-blue {
         display: none;
       }
 
-      /* Hover: preview blue icon */
+      /* Hover: show blue icon only */
       .tb-left-item.tool-button:hover img.icon-dark {
         display: none;
       }
 
       .tb-left-item.tool-button:hover img.icon-blue {
-        display: inline-block;
+        display: block;
       }
 
-      /* Active: keep blue icon after click (.is-active is added by JS) */
+      /* Selected (is-active): keep blue icon */
       .tb-left-item.tool-button.is-active img.icon-dark {
         display: none;
       }
 
       .tb-left-item.tool-button.is-active img.icon-blue {
-        display: inline-block;
+        display: block;
       }
 
-      .tb-left-label {
-        font-size: 12px;
+      .tb-left-item.tool-button .tb-left-label {
+        font-size: 11px;
+        line-height: 1.2;
         font-weight: 500;
         color: var(--tixall-dark);
-        white-space: nowrap;
+        white-space: normal;
+        text-align: center;
       }
 
-      /* Undo / Redo / Clear icons – chips unchanged */
+      /* Undo / Redo / Clear chips */
       .tb-left-icon {
         width: 26px;
         height: 26px;
