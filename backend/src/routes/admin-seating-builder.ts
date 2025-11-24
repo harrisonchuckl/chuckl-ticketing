@@ -323,18 +323,31 @@ router.get("/builder/preview/:showId", (req, res) => {
         overflow: visible;
       }
 
-      .tb-left-group {
+            .tb-left-group {
         margin-bottom: 18px;
       }
 
+      /* Sub-headings – only used for "Actions" now */
       .tb-left-group-label {
         font-size: 11px;
         font-weight: 600;
         letter-spacing: 0.08em;
         text-transform: uppercase;
         color: #7a828f;
-        margin: 0 6px 8px;
+        margin: 0 0 8px;
+        text-align: center;
       }
+
+      /* Centre the action buttons (Undo / Redo / Clear) */
+      .tb-left-group-actions .tb-left-item {
+        justify-content: center;
+        text-align: center;
+      }
+
+      .tb-left-group-actions .tb-left-label {
+        text-align: center;
+      }
+
 
       /* Base left-rail button styling (Undo / Redo / Clear etc) */
       .tb-left-item {
@@ -429,39 +442,29 @@ router.get("/builder/preview/:showId", (req, res) => {
       }
 
       /* Fly-out tool groups (Photoshop-style) */
-      .tool-group {
+           .tool-group {
         position: relative;
         margin-bottom: 8px;
         display: flex;
-        align-items: stretch;
+        align-items: center;
       }
 
-            .tool-group .tool-root {
+      /* Root tool button: icon above label, centred (same as other tool buttons) */
+      .tool-group .tool-root {
         flex: 1 1 auto;
-        /* Stack icon above text like the main tool buttons */
-        flex-direction: column;
-        align-items: center;
-        justify-content: flex-start;
-        padding: 10px 4px 8px;
         min-height: 72px;
       }
 
       .tool-group .tool-root img.tb-tool-icon {
-        /* Match the main tool icon size so it feels consistent */
         width: 44px;
         height: 44px;
       }
 
       .tool-group .tool-root .tb-left-label {
-        /* Put text under the icon and let it wrap */
-        margin-left: 0;
-        margin-right: 0;
-        text-align: center;
-        white-space: normal;
-        overflow: visible;
-        text-overflow: clip;
+        margin: 0;
         max-width: 80px;
-        word-break: break-word;
+        white-space: normal;
+        text-align: center;
       }
 
 
@@ -609,11 +612,10 @@ router.get("/builder/preview/:showId", (req, res) => {
 
       <main class="tickin-builder-main">
         <!-- Slim, non-expanding left rail -->
-        <aside class="tb-left-rail" aria-label="Seating tools">
+               <aside class="tb-left-rail" aria-label="Seating tools">
           <div class="tb-left-scroll">
+            <!-- Seating tools – icon + text only (no sub-heading) -->
             <div class="tb-left-group">
-              <div class="tb-left-group-label">Seating</div>
-
               <!-- Group: Line + Section -->
               <div class="tool-group" data-group="line-section">
                 <button class="tb-left-item tool-button tool-root" data-tool="line">
@@ -765,9 +767,8 @@ router.get("/builder/preview/:showId", (req, res) => {
               </div>
             </div>
 
+            <!-- Room objects – icon + text only (no sub-heading) -->
             <div class="tb-left-group">
-              <div class="tb-left-group-label">Room &amp; labelling</div>
-
               <!-- Group: Stage / Bar / Exit -->
               <div class="tool-group" data-group="room-objects">
                 <button class="tb-left-item tool-button tool-root" data-tool="stage">
@@ -848,7 +849,8 @@ router.get("/builder/preview/:showId", (req, res) => {
               </button>
             </div>
 
-            <div class="tb-left-group">
+            <!-- Actions – the only section with a heading -->
+            <div class="tb-left-group tb-left-group-actions">
               <div class="tb-left-group-label">Actions</div>
 
               <!-- Leaving these using existing icon fonts/spans for now -->
@@ -869,6 +871,7 @@ router.get("/builder/preview/:showId", (req, res) => {
             </div>
           </div>
         </aside>
+
 
         <section class="tb-center">
           <div class="tb-center-header">
