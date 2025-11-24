@@ -312,21 +312,24 @@ router.get("/builder/preview/:showId", (req, res) => {
       }
 
       /* LEFT RAIL */
+            /* LEFT RAIL */
       .tb-left-rail {
         background: linear-gradient(180deg, #f7fafc, #f2f5f9);
         border-right: 1px solid var(--tixall-border-subtle);
         overflow: visible;
+        /* tiny bit of extra horizontal breathing space */
+        padding-inline: 4px;
       }
 
       .tb-left-scroll {
-        padding: 16px 10px 18px;
+        /* more even padding so it feels less squashed / gappy */
+        padding: 18px 14px 20px;
         overflow: visible;
       }
 
-             .tb-left-group {
-        /* Slightly tighter spacing between groups so the gap
-           between Tables and Room objects doesn’t feel huge */
-        margin-bottom: 12px;
+      .tb-left-group {
+        /* slightly tighter spacing so gaps feel consistent */
+        margin-bottom: 10px;
       }
 
       /* Sub-headings – only used for "Actions" now */
@@ -349,7 +352,6 @@ router.get("/builder/preview/:showId", (req, res) => {
       .tb-left-group-actions .tb-left-label {
         text-align: center;
       }
-
 
       /* Base left-rail button styling (Undo / Redo / Clear etc) */
       .tb-left-item {
@@ -446,9 +448,7 @@ router.get("/builder/preview/:showId", (req, res) => {
       /* Fly-out tool groups (Photoshop-style) */
       .tool-group {
         position: relative;
-        margin-bottom: 8px;
-        /* Make the root button span the full width so its centre
-           lines up with standalone buttons like "Text label" and Actions */
+        margin-bottom: 6px; /* slightly tighter so vertical rhythm feels cleaner */
         display: block;
       }
 
@@ -467,39 +467,37 @@ router.get("/builder/preview/:showId", (req, res) => {
         margin: 0;
         max-width: 80px;
         white-space: normal;
-        text-align: center;
+        text-align:center;
       }
-
-
 
       .tool-flyout-toggle {
         border: 0;
         background: transparent;
         padding: 0;
+
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        font-size: 11px;
         color: #7a828f;
 
-        /* Float over the right edge so the main button can stay
-           full-width and perfectly centred */
+        /* Bigger hit area, nudged further right, centred on tool icon area */
         position: absolute;
-        right: 0;
+        right: -6px;
         top: 50%;
         transform: translateY(-50%);
-        width: 18px;
-        height: 18px;
+        width: 22px;
+        height: 22px;
+        border-radius: 999px;
       }
-
 
       .tool-flyout-toggle:hover {
         color: var(--tixall-dark);
+        background: rgba(8, 184, 232, 0.06);
       }
 
       .tool-flyout-chevron {
-        font-size: 10px;
+        font-size: 13px; /* bigger arrow */
         line-height: 1;
       }
 
@@ -522,6 +520,7 @@ router.get("/builder/preview/:showId", (req, res) => {
       .tool-group.is-open .tool-flyout {
         display: flex;
       }
+
 
       .tool-flyout .tb-left-item.tool-button {
         min-height: 0;
@@ -647,8 +646,9 @@ router.get("/builder/preview/:showId", (req, res) => {
                   <span class="tb-left-label">Line / section</span>
                 </button>
                 <button class="tool-flyout-toggle" type="button" aria-label="More line tools">
-                  <span class="tool-flyout-chevron">▾</span>
-                </button>
+  <span class="tool-flyout-chevron">▸</span>
+</button>
+
 
                 <div class="tool-flyout">
                   <button class="tb-left-item tool-button" data-tool="line">
@@ -696,9 +696,10 @@ router.get("/builder/preview/:showId", (req, res) => {
                   />
                   <span class="tb-left-label">Rows / single</span>
                 </button>
-                <button class="tool-flyout-toggle" type="button" aria-label="More row tools">
-                  <span class="tool-flyout-chevron">▾</span>
-                </button>
+                <button class="tool-flyout-toggle" type="button" aria-label="More line tools">
+  <span class="tool-flyout-chevron">▸</span>
+</button>
+
 
                 <div class="tool-flyout">
                   <button class="tb-left-item tool-button" data-tool="row">
@@ -746,9 +747,10 @@ router.get("/builder/preview/:showId", (req, res) => {
                   />
                   <span class="tb-left-label">Tables</span>
                 </button>
-                <button class="tool-flyout-toggle" type="button" aria-label="More table tools">
-                  <span class="tool-flyout-chevron">▾</span>
-                </button>
+                <button class="tool-flyout-toggle" type="button" aria-label="More line tools">
+  <span class="tool-flyout-chevron">▸</span>
+</button>
+
 
                 <div class="tool-flyout">
                   <button class="tb-left-item tool-button" data-tool="circle-table">
@@ -799,9 +801,10 @@ router.get("/builder/preview/:showId", (req, res) => {
                   />
                   <span class="tb-left-label">Room objects</span>
                 </button>
-                <button class="tool-flyout-toggle" type="button" aria-label="More room objects">
-                  <span class="tool-flyout-chevron">▾</span>
-                </button>
+                <button class="tool-flyout-toggle" type="button" aria-label="More line tools">
+  <span class="tool-flyout-chevron">▸</span>
+</button>
+
 
                 <div class="tool-flyout">
                   <button class="tb-left-item tool-button" data-tool="stage">
