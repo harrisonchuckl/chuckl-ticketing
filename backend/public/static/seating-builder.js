@@ -1223,13 +1223,20 @@
 
 
     const mode = globalSeatLabelMode || "numbers";
-    group.setAttr("seatLabelMode", mode);
+        group.setAttr("seatLabelMode", mode);
     group.setAttr("seatStart", 1);
     group.setAttr("rowLabelPrefix", "");
     group.setAttr("rowLabelStart", 0);
+
+    // New: unified row-label position
+    // "left" | "right" | "both" | "none"
+    group.setAttr("rowLabelPosition", "left");
+
+    // Legacy flag kept for backwards-compatibility with old layouts
     group.setAttr("rowLabelBothSides", false);
 
     group.setAttr("curve", 0);
+
 
     group.setAttr("rowOrder", "asc");
 
@@ -1239,7 +1246,7 @@
     return group;
   }
 
-    function updateRowGroupGeometry(group, seatsPerRow, rowCount) {
+      function updateRowGroupGeometry(group, seatsPerRow, rowCount) {
     if (!(group instanceof Konva.Group)) return;
 
     // --- Core seatsPerRow / rowCount normalisation ---
@@ -1259,7 +1266,7 @@
     group.setAttr("seatsPerRow", s);
     group.setAttr("rowCount", r);
 
-    // --- NEW: per-row seat counts support ---
+    // --- Per-row seat counts support ---
     const everyRowSameRaw = group.getAttr("everyRowSameSeats");
     const everyRowSame = everyRowSameRaw !== false; // default = true
 
@@ -1292,7 +1299,23 @@
       ? Number(rowLabelStartRaw)
       : 0;
 
-    const rowLabelBothSides = !!group.getAttr("rowLabelBothSides");
+    // New: unified row-label position
+    let rowLabelPosition = group.getAttr("rowLabelPosition");
+    const legacyBothSides = !!group.getAttr("rowLabelBothSides");
+
+    if (
+      rowLabelPosition !== "left" &&
+      rowLabelPosition !== "right" &&
+      rowLabelPosition !== "both" &&
+      rowLabelPosition !== "none"
+    ) {
+      // Fall back to legacy behaviour
+      rowLabelPosition = legacyBothSides ? "both" : "left";
+    }
+
+    group.setAttr("rowLabelPosition", rowLabelPosition);
+    // Keep legacy flag roughly in sync
+    group.setAttr("rowLabelBothSides", rowLabelPosition === "both");
 
     const alignmentRaw = group.getAttr("alignment") || "center";
     const alignment =
@@ -1352,6 +1375,8 @@
 
       let firstSeatX = null;
       let lastSeatX = null;
+      let firstSeatY = null;
+      let lastSeatY = null;
 
       for (let i = 0; i < rowSeats; i += 1) {
         const sx = computeSeatX(i, rowSeats);
@@ -1361,8 +1386,12 @@
         const curveOffset = curveFactor * offsetIndex * offsetIndex;
         const rowY = baseRowY + curveOffset;
 
-        if (firstSeatX == null) firstSeatX = sx;
+        if (firstSeatX == null) {
+          firstSeatX = sx;
+          firstSeatY = rowY;
+        }
         lastSeatX = sx;
+        lastSeatY = rowY;
 
         if (!Number.isFinite(sx) || !Number.isFinite(rowY)) {
           // eslint-disable-next-line no-console
@@ -1406,30 +1435,43 @@
 
       if (rowLabelText && firstSeatX != null) {
         const labelGap = seatRadius * 1.4;
-        const labelY = baseRowY; // centre of row
+
+        // Use the *curved* Y positions so labels hug the ends of the row
+        const labelYLeft =
+          firstSeatY != null ? firstSeatY : baseRowY;
+        const labelYRight =
+          lastSeatY != null ? lastSeatY : baseRowY;
+
+        const showLeft =
+          rowLabelPosition === "left" || rowLabelPosition === "both";
+        const showRight =
+          rowLabelPosition === "right" || rowLabelPosition === "both";
 
         // Left-hand label
-        const leftLabel = new Konva.Text({
-          text: rowLabelText,
-          fontSize: 14,
-          fontFamily: "system-ui",
-          fontStyle: "bold",
-          fill: "#111827",
-          align: "right",
-          verticalAlign: "middle",
-          listening: false,
-          isRowLabel: true,
-        });
+        if (showLeft && firstSeatX != null) {
+          const leftLabel = new Konva.Text({
+            text: rowLabelText,
+            fontSize: 14,
+            fontFamily: "system-ui",
+            fontStyle: "bold",
+            fill: "#111827",
+            align: "right",
+            verticalAlign: "middle",
+            listening: false,
+            isRowLabel: true,
+          });
 
-        leftLabel.position({
-          x: firstSeatX - (seatRadius + labelGap),
-          y: labelY,
-        });
-        leftLabel.offsetX(leftLabel.width());
-        leftLabel.offsetY(leftLabel.height() / 2);
-        group.add(leftLabel);
+          leftLabel.position({
+            x: firstSeatX - (seatRadius + labelGap),
+            y: labelYLeft,
+          });
+          leftLabel.offsetX(leftLabel.width());
+          leftLabel.offsetY(leftLabel.height() / 2);
+          group.add(leftLabel);
+        }
 
-        if (rowLabelBothSides && lastSeatX != null) {
+        // Right-hand label
+        if (showRight && lastSeatX != null) {
           const rightLabel = new Konva.Text({
             text: rowLabelText,
             fontSize: 14,
@@ -1444,7 +1486,7 @@
 
           rightLabel.position({
             x: lastSeatX + (seatRadius + labelGap),
-            y: labelY,
+            y: labelYRight,
           });
           rightLabel.offsetY(rightLabel.height() / 2);
           group.add(rightLabel);
@@ -1455,6 +1497,7 @@
     ensureHitRect(group);
     keepLabelsUpright(group);
   }
+
 
 
 
@@ -1824,7 +1867,7 @@
 
   // ---------- Selection inspector (right-hand panel) ----------
 
-  function renderInspector(node) {
+    function renderInspector(node) {
     const el = getInspectorElement();
     if (!el) return;
 
@@ -2142,6 +2185,379 @@
       el.innerHTML = `<p class="sb-inspector-empty">${nodes.length} items selected. Drag to move them together.</p>`;
       return;
     }
+
+    // ---- Row blocks ----
+    if (shapeType === "row-seats") {
+      const seatsPerRow = Number(node.getAttr("seatsPerRow") ?? 10);
+      const rowCount = Number(node.getAttr("rowCount") ?? 1);
+      const seatLabelMode = node.getAttr("seatLabelMode") || "numbers";
+      const seatStart = Number(node.getAttr("seatStart") ?? 1);
+      const rowLabelPrefix = node.getAttr("rowLabelPrefix") || "";
+      const rowLabelStart = Number(node.getAttr("rowLabelStart") ?? 0);
+      const curve = Number.isFinite(Number(node.getAttr("curve")))
+        ? Number(node.getAttr("curve"))
+        : 0;
+      const rowOrder = node.getAttr("rowOrder") || "asc";
+
+      // New: unified row-label position
+      let rowLabelPosition = node.getAttr("rowLabelPosition");
+      const legacyBothSidesInspector = !!node.getAttr("rowLabelBothSides");
+      if (
+        rowLabelPosition !== "left" &&
+        rowLabelPosition !== "right" &&
+        rowLabelPosition !== "both" &&
+        rowLabelPosition !== "none"
+      ) {
+        rowLabelPosition = legacyBothSidesInspector ? "both" : "left";
+      }
+
+      const everyRowSameRaw = node.getAttr("everyRowSameSeats");
+      const everyRowSame = everyRowSameRaw !== false; // default true
+      let rowSeatCounts = node.getAttr("rowSeatCounts");
+      if (!Array.isArray(rowSeatCounts)) {
+        rowSeatCounts = [];
+      }
+
+      // Total seats depends on mode
+      let totalSeats;
+      if (everyRowSame) {
+        totalSeats = seatsPerRow * rowCount;
+      } else {
+        totalSeats = 0;
+        for (let i = 0; i < rowCount; i += 1) {
+          const raw = parseInt(rowSeatCounts[i], 10);
+          totalSeats += Number.isFinite(raw) && raw > 0 ? raw : seatsPerRow;
+        }
+      }
+
+      function rebuild() {
+        const currentSeatsPerRow =
+          node.getAttr("seatsPerRow") || seatsPerRow;
+        const currentRowCount =
+          node.getAttr("rowCount") || rowCount;
+        updateRowGroupGeometry(node, currentSeatsPerRow, currentRowCount);
+        mapLayer.batchDraw();
+        updateSeatCount();
+        pushHistory();
+      }
+
+      addTitle("Seat block");
+
+      // Rotation
+      addNumberField(
+        "Rotation (deg)",
+        Math.round(node.rotation() || 0),
+        -360,
+        1,
+        (val) => {
+          node.rotation(val);
+          keepLabelsUpright(node);
+          if (overlayLayer) overlayLayer.batchDraw();
+        }
+      );
+
+      // Seats per row (default)
+      addNumberField("Seats per row", seatsPerRow, 1, 1, (val) => {
+        node.setAttr("seatsPerRow", val);
+        rebuild();
+      });
+
+      addNumberField("Number of rows", rowCount, 1, 1, (val) => {
+        node.setAttr("rowCount", val);
+        rebuild();
+      });
+
+      addStaticRow(
+        "Total seats in block",
+        `${totalSeats} seat${totalSeats === 1 ? "" : "s"}`
+      );
+
+      addNumberField("Seat numbers start at", seatStart, 1, 1, (val) => {
+        node.setAttr("seatStart", val);
+        rebuild();
+      });
+
+      addSelectField(
+        "Seat labels",
+        seatLabelMode,
+        [
+          { value: "numbers", label: "1, 2, 3..." },
+          { value: "letters", label: "A, B, C..." },
+          { value: "none", label: "No seat labels" },
+        ],
+        (mode) => {
+          node.setAttr("seatLabelMode", mode);
+          rebuild();
+        }
+      );
+
+      addTextField("Row label prefix", rowLabelPrefix, (val) => {
+        node.setAttr("rowLabelPrefix", val);
+        rebuild();
+      });
+
+      const firstRowLabelText = rowLabelFromIndex(rowLabelStart);
+
+      addTextField("First row label", firstRowLabelText, (val) => {
+        const idx = rowIndexFromLabel(val);
+        node.setAttr("rowLabelStart", idx);
+        rebuild();
+      });
+
+      addSelectField(
+        "Row order",
+        rowOrder,
+        [
+          {
+            value: "asc",
+            label: "Rows ascending (front to back)",
+          },
+          {
+            value: "desc",
+            label: "Rows descending (back to front)",
+          },
+        ],
+        (val) => {
+          node.setAttr("rowOrder", val === "desc" ? "desc" : "asc");
+          rebuild();
+        }
+      );
+
+      // NEW: Row label position selector
+      addSelectField(
+        "Row label position",
+        rowLabelPosition,
+        [
+          { value: "left", label: "Left side only" },
+          { value: "right", label: "Right side only" },
+          { value: "both", label: "Both sides" },
+          { value: "none", label: "No row labels" },
+        ],
+        (val) => {
+          const allowed = ["left", "right", "both", "none"];
+          const safe = allowed.includes(val) ? val : "left";
+          node.setAttr("rowLabelPosition", safe);
+          // keep legacy flag roughly aligned
+          node.setAttr("rowLabelBothSides", safe === "both");
+          rebuild();
+        }
+      );
+
+      // NEW: toggle per-row seat counts
+      addCheckboxField(
+        "Every row has the same number of seats",
+        everyRowSame,
+        (checked) => {
+          node.setAttr("everyRowSameSeats", checked);
+          rebuild();
+          // Rerender to show/hide the per-row field
+          renderInspector(node);
+        }
+      );
+
+      // When custom mode is on, show comma-separated seat counts
+      if (!everyRowSame) {
+        // Build a sensible default string for current rows
+        const rowsForDisplay = [];
+        for (let i = 0; i < rowCount; i += 1) {
+          const raw = parseInt(rowSeatCounts[i], 10);
+          if (Number.isFinite(raw) && raw > 0) {
+            rowsForDisplay[i] = raw;
+          } else {
+            rowsForDisplay[i] = seatsPerRow;
+          }
+        }
+
+        addTextField(
+          "Seats per row (comma-separated)",
+          rowsForDisplay.join(", "),
+          (val) => {
+            const parts = String(val || "").split(",");
+            const result = [];
+            for (let i = 0; i < rowCount; i += 1) {
+              const raw = parseInt((parts[i] || "").trim(), 10);
+              result[i] =
+                Number.isFinite(raw) && raw > 0 ? raw : seatsPerRow;
+            }
+            node.setAttr("rowSeatCounts", result);
+            // Also update seatsPerRow to something sensible (max), used as fallback
+            const maxSeats = result.reduce(
+              (m, n) => (n > m ? n : m),
+              1
+            );
+            node.setAttr("seatsPerRow", maxSeats);
+            rebuild();
+          }
+        );
+      }
+
+      addRangeField("Curve rows", curve, -15, 15, 1, (val) => {
+        node.setAttr("curve", val);
+        rebuild();
+      });
+
+      return;
+    }
+
+    // ---- Circular tables ----
+    if (shapeType === "circular-table") {
+      const seatCount = node.getAttr("seatCount") || 8;
+      const seatLabelMode = node.getAttr("seatLabelMode") || "numbers";
+      const tableLabel = node.getAttr("tableLabel") || "";
+
+      addTitle("Round table");
+
+      addNumberField(
+        "Rotation (deg)",
+        Math.round(node.rotation() || 0),
+        -360,
+        1,
+        (val) => {
+          node.rotation(val);
+          keepLabelsUpright(node);
+          if (overlayLayer) overlayLayer.batchDraw();
+        }
+      );
+
+      addTextField("Table label", tableLabel, (val) => {
+        node.setAttr("tableLabel", val || "");
+        updateCircularTableGeometry(
+          node,
+          node.getAttr("seatCount") || seatCount
+        );
+      });
+
+      addNumberField("Seats around table", seatCount, 1, 1, (val) => {
+        updateCircularTableGeometry(node, val);
+        mapLayer.batchDraw();
+        updateSeatCount();
+        pushHistory();
+      });
+
+      addSelectField(
+        "Seat labels",
+        seatLabelMode,
+        [
+          { value: "numbers", label: "1, 2, 3..." },
+          { value: "letters", label: "A, B, C..." },
+          { value: "none", label: "No seat labels" },
+        ],
+        (mode) => {
+          node.setAttr("seatLabelMode", mode);
+          updateCircularTableGeometry(
+            node,
+            node.getAttr("seatCount") || seatCount
+          );
+        }
+      );
+
+      addStaticRow(
+        "Total seats at table",
+        `${seatCount} seat${seatCount === 1 ? "" : "s"}`
+      );
+
+      mapLayer.batchDraw();
+      updateSeatCount();
+      pushHistory();
+      return;
+    }
+
+    // ---- Rectangular tables ----
+    if (shapeType === "rect-table") {
+      const longSideSeats = node.getAttr("longSideSeats") ?? 4;
+      const shortSideSeats = node.getAttr("shortSideSeats") ?? 2;
+      const seatLabelMode = node.getAttr("seatLabelMode") || "numbers";
+      const tableLabel = node.getAttr("tableLabel") || "";
+
+      const totalSeats = 2 * longSideSeats + 2 * shortSideSeats;
+
+      addTitle("Rectangular table");
+
+      addNumberField(
+        "Rotation (deg)",
+        Math.round(node.rotation() || 0),
+        -360,
+        1,
+        (val) => {
+          node.rotation(val);
+          keepLabelsUpright(node);
+          if (overlayLayer) overlayLayer.batchDraw();
+        }
+      );
+
+      addTextField("Table label", tableLabel, (val) => {
+        node.setAttr("tableLabel", val || "");
+        updateRectTableGeometry(
+          node,
+          node.getAttr("longSideSeats") ?? longSideSeats,
+          node.getAttr("shortSideSeats") ?? shortSideSeats
+        );
+      });
+
+      addNumberField(
+        "Seats on long side",
+        longSideSeats,
+        0,
+        1,
+        (val) => {
+          const currentShort =
+            node.getAttr("shortSideSeats") ?? shortSideSeats;
+          updateRectTableGeometry(node, val, currentShort);
+          mapLayer.batchDraw();
+          updateSeatCount();
+          pushHistory();
+        }
+      );
+
+      addNumberField(
+        "Seats on short side",
+        shortSideSeats,
+        0,
+        1,
+        (val) => {
+          const currentLong =
+            node.getAttr("longSideSeats") ?? longSideSeats;
+          updateRectTableGeometry(node, currentLong, val);
+          mapLayer.batchDraw();
+          updateSeatCount();
+          pushHistory();
+        }
+      );
+
+      addSelectField(
+        "Seat labels",
+        seatLabelMode,
+        [
+          { value: "numbers", label: "1, 2, 3..." },
+          { value: "letters", label: "A, B, C..." },
+          { value: "none", label: "No seat labels" },
+        ],
+        (mode) => {
+          node.setAttr("seatLabelMode", mode);
+          updateRectTableGeometry(
+            node,
+            node.getAttr("longSideSeats") ?? longSideSeats,
+            node.getAttr("shortSideSeats") ?? shortSideSeats
+          );
+        }
+      );
+
+      addStaticRow(
+        "Total seats at table",
+        `${totalSeats} seat${totalSeats === 1 ? "" : "s"}`
+      );
+
+      return;
+    }
+
+    // Fallback
+    addTitle("Selection");
+    const p = document.createElement("p");
+    p.className = "sb-inspector-empty";
+    p.textContent = "This element has no editable settings yet.";
+    el.appendChild(p);
+  }
+
 
         // ---- Row blocks ----
     if (shapeType === "row-seats") {
@@ -3266,9 +3682,15 @@
 
   stage.on("click", handleStageClick);
 
-  // Double-click empty canvas to finish the current line
-  stage.on("dblclick", (evt) => {
+  // Double-click anywhere to finish the current line (if any)
+  stage.on("dblclick", () => {
     if (activeTool !== "line" || !currentLineGroup) return;
+    // Finalise the current line, no more points added
+    finishCurrentLine(true);
+    // Tool stays active so you can start another line if you want;
+    // to fully stop drawing lines, just click the Line button again to toggle it off.
+  });
+      
 
     const target = evt.target;
     const clickedOnEmpty =
