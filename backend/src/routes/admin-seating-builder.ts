@@ -631,7 +631,7 @@ router.get("/builder/preview/:showId", (req, res) => {
             <!-- Seating tools – icon + text only (no sub-heading) -->
             <div class="tb-left-group">
               <!-- Group: Line + Section -->
-              <div class="tool-group" data-group="line-section">
+                            <div class="tool-group" data-group="line-section">
                 <button class="tb-left-item tool-button tool-root" data-tool="line">
                   <img
                     class="tb-tool-icon icon-dark"
@@ -643,12 +643,11 @@ router.get("/builder/preview/:showId", (req, res) => {
                     src="/seatmap-icons/line-blue.png"
                     alt="Line (selected)"
                   />
-                  <span class="tb-left-label">Line / section</span>
+                  <span class="tb-left-label">Line / shapes</span>
                 </button>
                 <button class="tool-flyout-toggle" type="button" aria-label="More line tools">
-  <span class="tool-flyout-chevron">▸</span>
-</button>
-
+                  <span class="tool-flyout-chevron">▸</span>
+                </button>
 
                 <div class="tool-flyout">
                   <button class="tb-left-item tool-button" data-tool="line">
@@ -677,6 +676,36 @@ router.get("/builder/preview/:showId", (req, res) => {
                       alt="Section block (selected)"
                     />
                     <span class="tb-left-label">Section block</span>
+                  </button>
+
+                  <!-- NEW: Square tool -->
+                  <button class="tb-left-item tool-button" data-tool="square">
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/section-dark.png"
+                      alt="Square"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/section-blue.png"
+                      alt="Square (selected)"
+                    />
+                    <span class="tb-left-label">Square</span>
+                  </button>
+
+                  <!-- NEW: Circle tool -->
+                  <button class="tb-left-item tool-button" data-tool="circle">
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/circle-table-black.png"
+                      alt="Circle"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/circle-table-blue.png"
+                      alt="Circle (selected)"
+                    />
+                    <span class="tb-left-label">Circle</span>
                   </button>
                 </div>
               </div>
