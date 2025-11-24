@@ -324,16 +324,6 @@
     }
   }
 
-
-    if (!mapLayer || !mapLayer.getStage()) return;
-
-    if (!activeTool) {
-      mapLayer.getStage().container().style.cursor = "default";
-    } else {
-      mapLayer.getStage().container().style.cursor = "crosshair";
-    }
-  }
-
   function updateSeatCount() {
     if (!mapLayer || !mapLayer.find) return;
 
