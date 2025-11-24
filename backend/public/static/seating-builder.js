@@ -223,7 +223,7 @@
   const GRID_SIZE = 32;
   const STAGE_PADDING = 0;
 
-   // Zoom config – keep things stable (no super extreme zoom-out)
+  // Zoom config – keep things stable (no super extreme zoom-out)
   const MIN_ZOOM = 0.2;   // 20% (still see a lot, but maths stays sane)
   const MAX_ZOOM = 4;     // 400% zoom in
   const ZOOM_STEP = 0.1;  // smoother steps
@@ -248,7 +248,7 @@
   let selectedNode = null;
   let copiedNodesJson = [];
 
-    // track shift key for robust multi-select
+  // track shift key for robust multi-select
   let isShiftPressed = false;
 
   // multi-drag state: snapshot of positions when drag starts
@@ -258,7 +258,6 @@
   let currentLineGroup = null;    // Konva.Group that contains the line + hit rect
   let currentLine = null;         // Konva.Line inside the group
   let currentLinePoints = [];     // [x1, y1, x2, y2, ...]
-
 
   // history is per-mapLayer JSON
   let history = [];
@@ -290,7 +289,7 @@
 
   // ---------- Helpers: UI / tools ----------
 
-    function setActiveTool(tool) {
+  function setActiveTool(tool) {
     // If we are leaving line mode and a line is mid-draw, finish it
     if (activeTool === "line" && tool !== "line" && currentLineGroup) {
       const commit = currentLinePoints && currentLinePoints.length >= 4;
@@ -456,9 +455,7 @@
     restoreHistory(historyIndex + 1);
   }
 
-  // ---------- Shape helpers ----------
-
-    // ---------- Line tool helpers (multi-point line) ----------
+  // ---------- Line tool helpers (multi-point line) ----------
 
   function finishCurrentLine(commit) {
     if (!currentLineGroup) return;
@@ -1211,7 +1208,7 @@
       shapeType: "row-seats",
     });
 
-        // core config
+    // core config
     group.setAttr("seatsPerRow", seatsPerRow);
     group.setAttr("rowCount", rowCount);
 
@@ -1221,9 +1218,8 @@
     group.setAttr("everyRowSameSeats", true);
     group.setAttr("rowSeatCounts", null);
 
-
     const mode = globalSeatLabelMode || "numbers";
-        group.setAttr("seatLabelMode", mode);
+    group.setAttr("seatLabelMode", mode);
     group.setAttr("seatStart", 1);
     group.setAttr("rowLabelPrefix", "");
     group.setAttr("rowLabelStart", 0);
@@ -1237,7 +1233,6 @@
 
     group.setAttr("curve", 0);
 
-
     group.setAttr("rowOrder", "asc");
 
     updateRowGroupGeometry(group, seatsPerRow, rowCount);
@@ -1246,7 +1241,7 @@
     return group;
   }
 
-      function updateRowGroupGeometry(group, seatsPerRow, rowCount) {
+  function updateRowGroupGeometry(group, seatsPerRow, rowCount) {
     if (!(group instanceof Konva.Group)) return;
 
     // --- Core seatsPerRow / rowCount normalisation ---
@@ -1497,9 +1492,6 @@
     ensureHitRect(group);
     keepLabelsUpright(group);
   }
-
-
-
 
   function updateCircularTableGeometry(group, seatCount) {
     if (!(group instanceof Konva.Group)) return;
@@ -1867,7 +1859,7 @@
 
   // ---------- Selection inspector (right-hand panel) ----------
 
-    function renderInspector(node) {
+  function renderInspector(node) {
     const el = getInspectorElement();
     if (!el) return;
 
@@ -2558,6 +2550,9 @@
     el.appendChild(p);
   }
 
+  // expose for external callers if needed
+  window.renderSeatmapInspector = renderInspector;
+
   // ---------- Selection / transformer ----------
 
   function keepLabelsUpright(node) {
@@ -2653,7 +2648,7 @@
 
   // ---------- Behaviour attachment ----------
 
-    function attachNodeBehaviour(node) {
+  function attachNodeBehaviour(node) {
     if (!(node instanceof Konva.Group)) return;
 
     ensureHitRect(node);
@@ -2813,7 +2808,6 @@
     }
   }
 
-
   // ---------- Node creation based on active tool ----------
 
   function createNodeForTool(tool, pos) {
@@ -2956,7 +2950,7 @@
 
   // ---------- Canvas interactions ----------
 
-    function handleStageClick(evt) {
+  function handleStageClick(evt) {
     if (!stage || !mapLayer) return;
 
     const pointerPos = stage.getPointerPosition();
@@ -3012,8 +3006,6 @@
     selectNode(node);
     pushHistory();
   }
-
-
 
   function handleKeyDown(e) {
     // track shift for robust multi-select
@@ -3315,7 +3307,7 @@
 
   // ---------- Boot ----------
 
-    initStage();
+  initStage();
   hookToolButtons();
   hookZoomButtons();
   hookClearButton();
@@ -3325,7 +3317,7 @@
   stage.on("click", handleStageClick);
 
   // Double-click anywhere to finish the current line (if any)
-    stage.on("dblclick", () => {
+  stage.on("dblclick", () => {
     if (activeTool !== "line" || !currentLineGroup) return;
     // Finalise the current line, no more points added
     finishCurrentLine(true);
@@ -3342,15 +3334,3 @@
 
   renderInspector(null);
 })();
-
-
-  document.addEventListener("keydown", handleKeyDown);
-  document.addEventListener("keyup", handleKeyUp);
-  window.addEventListener("resize", resizeStageToContainer);
-
-  resizeStageToContainer();
-  loadExistingLayout();
-
-  renderInspector(null);
-})();
-
