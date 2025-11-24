@@ -346,7 +346,6 @@ router.get("/builder/preview/:showId", (req, res) => {
         width: 100%;
         text-align: left;
         cursor: pointer;
-        transition: color 0.15s ease;
         font-size: 12px;
         color: var(--tixall-dark);
         box-sizing: border-box;
@@ -356,16 +355,20 @@ router.get("/builder/preview/:showId", (req, res) => {
         margin-top: 4px;
       }
 
-      /* No background change on hover – keep it subtle */
-      .tb-left-item:hover {
+      /* No visual hover / active raise */
+      .tb-left-item:hover,
+      .tb-left-item:focus-visible {
         background: transparent;
+        box-shadow: none;
+        border-color: transparent;
+        transform: none;
       }
 
       .tb-left-item:active {
         transform: none;
       }
 
-      /* Tool buttons (with icons + label) – no borders/shadows */
+      /* Tool buttons (with icons + label) – completely flat */
       .tb-left-item.tool-button {
         border: 0;
         background: transparent;
@@ -386,7 +389,7 @@ router.get("/builder/preview/:showId", (req, res) => {
         flex-shrink: 0;
       }
 
-      /* Default state: dark icon */
+      /* Icon swap dark → blue on hover or active */
       .tb-left-item.tool-button img.icon-dark {
         display: inline-block;
       }
@@ -395,7 +398,7 @@ router.get("/builder/preview/:showId", (req, res) => {
         display: none;
       }
 
-      /* Hover state: show blue icon, hide dark */
+      /* Hover: show blue icon (preview) */
       .tb-left-item.tool-button:hover img.icon-dark {
         display: none;
       }
@@ -404,7 +407,7 @@ router.get("/builder/preview/:showId", (req, res) => {
         display: inline-block;
       }
 
-      /* Active state: keep blue icon persistent */
+      /* Active: keep blue icon after click (JS adds .is-active) */
       .tb-left-item.tool-button.is-active img.icon-dark {
         display: none;
       }
@@ -420,7 +423,7 @@ router.get("/builder/preview/:showId", (req, res) => {
         white-space: nowrap;
       }
 
-      /* Undo / Redo / Clear icons – round chips */
+      /* Undo / Redo / Clear icons – round chips to match tools */
       .tb-left-icon {
         width: 26px;
         height: 26px;
