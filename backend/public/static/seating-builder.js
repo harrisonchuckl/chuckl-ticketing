@@ -889,23 +889,6 @@
       });
   }
 
-
-    const padding = GRID_SIZE * 0.4;
-
-    const hitRect = new Konva.Rect({
-      x: bounds.x - padding,
-      y: bounds.y - padding,
-      width: bounds.width + padding * 2,
-      height: bounds.height + padding * 2,
-      fill: "rgba(0,0,0,0)",
-      listening: true,
-      name: "hit-rect",
-    });
-
-    group.add(hitRect);
-    hitRect.moveToBottom();
-  }
-
   function getBodyRect(node) {
     if (!(node instanceof Konva.Group)) return null;
     const rect = node.findOne(".body-rect");
