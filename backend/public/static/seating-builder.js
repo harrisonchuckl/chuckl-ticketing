@@ -252,12 +252,16 @@
       // multi-drag state: snapshot of positions when drag starts
   let multiDragState = null;
 
-  // Line drawing state (for the Line + Curved Line tools)
-  let currentLineGroup = null;    // Konva.Group that contains the line + hit rect + handles
-  let currentLine = null;         // Konva.Line inside the group
-  let currentLinePoints = [];     // [x1, y1, x2, y2, ...] (while drawing we keep a trailing "placeholder" point)
-  let currentLineToolType = null; // "line" | "curve-line"
-  let currentLineUndoStack = [];  // stack of removed segments while drawing, for line-REDO support
+    // Line drawing state (for the Line + Curved Line tools)
+  let currentLineGroup = null;
+  let currentLine = null;
+  let currentLinePoints = [];
+  let currentLineToolType = null;
+  let currentLineUndoStack = [];
+
+  // Freehand curve-line state
+  let isCurveDrawing = false;
+  let curveRawPoints = [];
 
   // Arrow drawing state (2-point arrows)
   let arrowDrawingGroup = null;   // Konva.Group for the arrow currently being drawn
@@ -294,41 +298,39 @@
 
   // ---------- Helpers: UI / tools ----------
 
-    function setActiveTool(tool) {
-    // If we are leaving a line tool and a line is mid-draw, finish it
+     function setActiveTool(tool) {
+    // If we are leaving a line tool and something is mid-draw, finish it
     if (
       (activeTool === "line" || activeTool === "curve-line") &&
       tool !== activeTool &&
       currentLineGroup
     ) {
-      const commit = currentLinePoints && currentLinePoints.length >= 4;
-      finishCurrentLine(commit);
+      if (currentLineToolType === "line") {
+        const commit = currentLinePoints && currentLinePoints.length >= 4;
+        finishCurrentLine(commit);
+      } else if (currentLineToolType === "curve-line") {
+        const commit = curveRawPoints && curveRawPoints.length >= 4;
+        finishCurveLine(commit);
+      }
     }
 
     if (activeTool === tool) {
       // Toggling the same tool off
-      if (
-        (tool === "line" || tool === "curve-line") &&
-        currentLineGroup
-      ) {
+      if (tool === "line" && currentLineGroup && currentLineToolType === "line") {
         finishCurrentLine(true);
+      } else if (
+        tool === "curve-line" &&
+        currentLineGroup &&
+        currentLineToolType === "curve-line"
+      ) {
+        finishCurveLine(true);
       }
       activeTool = null;
     } else {
       activeTool = tool;
     }
 
-
-    document.querySelectorAll(".tool-button").forEach((btn) => {
-      const t = btn.getAttribute("data-tool");
-      if (t && t === activeTool) {
-        btn.classList.add("is-active");
-      } else {
-        btn.classList.remove("is-active");
-      }
-    });
-
-        if (!mapLayer || !mapLayer.getStage()) return;
+    if (!mapLayer || !mapLayer.getStage()) return;
 
     if (!activeTool) {
       mapLayer.getStage().container().style.cursor = "grab";
@@ -336,6 +338,7 @@
       mapLayer.getStage().container().style.cursor = "crosshair";
     }
   }
+
 
 
   function updateSeatCount() {
@@ -458,28 +461,23 @@
     isRestoringHistory = false;
   }
 
-    function undo() {
-    // While actively drawing a line / curve, undo should remove the last segment,
-    // not revert the whole layout.
+      function undo() {
+    // While actively drawing a straight line, undo removes the last segment.
     if (
-      (activeTool === "line" || activeTool === "curve-line") &&
+      currentLineToolType === "line" &&
+      activeTool === "line" &&
       currentLineGroup &&
       currentLine &&
       currentLinePoints &&
       currentLinePoints.length >= 4
     ) {
-      // Pattern while drawing:
-      // For N vertices we store N+1 points, where the last pair is a "placeholder"
-      // at the current end. We want to remove the last vertex + placeholder.
       if (currentLinePoints.length > 4) {
-        // Remove last 4 numbers (last vertex + placeholder) and push them onto a stack
         const removed = currentLinePoints.splice(
           currentLinePoints.length - 4,
           4
         );
         currentLineUndoStack.push(removed);
 
-        // Re-create a placeholder for the new last vertex
         const lx = currentLinePoints[currentLinePoints.length - 2];
         const ly = currentLinePoints[currentLinePoints.length - 1];
         currentLinePoints.push(lx, ly);
@@ -487,7 +485,6 @@
         currentLine.points(currentLinePoints);
         if (mapLayer) mapLayer.batchDraw();
       } else {
-        // Only the very first point left – cancel the line entirely
         currentLineGroup.destroy();
         currentLineGroup = null;
         currentLine = null;
@@ -502,15 +499,15 @@
     // Normal undo for everything else
     if (historyIndex <= 0) return;
     restoreHistory(historyIndex - 1);
-    // Once we step the main history, any in-progress line redo stack no longer makes sense
     currentLineUndoStack = [];
   }
 
-  function redo() {
-    // If we are currently drawing a line and we have undone segments,
-    // redo should re-attach the last removed segment.
+
+    function redo() {
+    // Redo last removed segment while drawing a straight line
     if (
-      (activeTool === "line" || activeTool === "curve-line") &&
+      currentLineToolType === "line" &&
+      activeTool === "line" &&
       currentLineGroup &&
       currentLine &&
       currentLinePoints &&
@@ -521,10 +518,6 @@
         const vx = removed[0];
         const vy = removed[1];
 
-        // While drawing, our points end with a "placeholder" duplicate of the last vertex.
-        // To "redo" a vertex, we emulate another click:
-        // 1) move the existing placeholder to the restored vertex
-        // 2) add a new placeholder for that vertex
         const pts = currentLinePoints;
         if (pts.length >= 2) {
           pts[pts.length - 2] = vx;
@@ -542,6 +535,7 @@
     if (historyIndex >= history.length - 1) return;
     restoreHistory(historyIndex + 1);
   }
+
 
 
   // ---------- Line tool helpers (multi-point line) ----------
@@ -567,6 +561,174 @@
     currentLineGroup = null;
     currentLine = null;
     currentLinePoints = [];
+    currentLineToolType = null;
+    currentLineUndoStack = [];
+
+    if (mapLayer) {
+      mapLayer.batchDraw();
+      updateSeatCount();
+      pushHistory();
+    }
+  }
+
+    // ----- Curve-line freehand helpers -----
+
+  function smoothCurvePoints(rawPoints, tolerance) {
+    if (!rawPoints || rawPoints.length <= 4) {
+      return rawPoints ? rawPoints.slice() : [];
+    }
+
+    const pts = [];
+    for (let i = 0; i < rawPoints.length; i += 2) {
+      pts.push({ x: rawPoints[i], y: rawPoints[i + 1] });
+    }
+
+    const tol = Number.isFinite(tolerance) ? tolerance : 4;
+    const sqTol = tol * tol;
+
+    function sqSegDist(p, p1, p2) {
+      let x = p1.x;
+      let y = p1.y;
+      let dx = p2.x - x;
+      let dy = p2.y - y;
+
+      if (dx !== 0 || dy !== 0) {
+        const t =
+          ((p.x - x) * dx + (p.y - y) * dy) / (dx * dx + dy * dy);
+        if (t > 1) {
+          x = p2.x;
+          y = p2.y;
+        } else if (t > 0) {
+          x += dx * t;
+          y += dy * t;
+        }
+      }
+
+      dx = p.x - x;
+      dy = p.y - y;
+      return dx * dx + dy * dy;
+    }
+
+    function simplifySegment(points, first, last, sqTol, simplified) {
+      let index = -1;
+      let maxSqDist = sqTol;
+
+      for (let i = first + 1; i < last; i += 1) {
+        const sqDist = sqSegDist(points[i], points[first], points[last]);
+        if (sqDist > maxSqDist) {
+          index = i;
+          maxSqDist = sqDist;
+        }
+      }
+
+      if (index !== -1) {
+        if (index - first > 1) {
+          simplifySegment(points, first, index, sqTol, simplified);
+        }
+        simplified.push(points[index]);
+        if (last - index > 1) {
+          simplifySegment(points, index, last, sqTol, simplified);
+        }
+      }
+    }
+
+    const simplified = [pts[0]];
+    simplifySegment(pts, 0, pts.length - 1, sqTol, simplified);
+    simplified.push(pts[pts.length - 1]);
+
+    const out = [];
+    simplified.forEach((p) => {
+      out.push(p.x, p.y);
+    });
+    return out;
+  }
+
+  function startCurveLine(pointerPos) {
+    if (!stage || !mapLayer) return;
+
+    const x = pointerPos.x;
+    const y = pointerPos.y;
+
+    // If something else was mid-draw, drop it
+    if (currentLineGroup) {
+      currentLineGroup.destroy();
+      currentLineGroup = null;
+      currentLine = null;
+      currentLinePoints = [];
+    }
+
+    isCurveDrawing = true;
+    currentLineToolType = "curve-line";
+    curveRawPoints = [x, y];
+
+    currentLineGroup = new Konva.Group({
+      x: 0,
+      y: 0,
+      draggable: true,
+      name: "curve-line",
+      shapeType: "curve-line",
+    });
+
+    currentLine = new Konva.Line({
+      points: curveRawPoints.slice(),
+      stroke: "#111827",
+      strokeWidth: 2,
+      lineCap: "round",
+      lineJoin: "round",
+      tension: 0.5,
+    });
+
+    currentLineGroup.add(currentLine);
+    ensureHitRect(currentLineGroup);
+    mapLayer.add(currentLineGroup);
+    attachNodeBehaviour(currentLineGroup);
+  }
+
+  function updateCurveLine(pointerPos) {
+    if (!isCurveDrawing || !currentLine) return;
+
+    const x = pointerPos.x;
+    const y = pointerPos.y;
+
+    const lastX = curveRawPoints[curveRawPoints.length - 2];
+    const lastY = curveRawPoints[curveRawPoints.length - 1];
+    const dx = x - lastX;
+    const dy = y - lastY;
+    const distSq = dx * dx + dy * dy;
+
+    // Only add a new point if we've moved at least ~3px
+    if (distSq < 9) return;
+
+    curveRawPoints.push(x, y);
+    currentLine.points(curveRawPoints);
+    mapLayer && mapLayer.batchDraw();
+  }
+
+  function finishCurveLine(commit) {
+    if (!currentLineGroup) return;
+
+    const hasEnoughPoints = curveRawPoints && curveRawPoints.length >= 4;
+    isCurveDrawing = false;
+
+    if (!commit || !hasEnoughPoints) {
+      currentLineGroup.destroy();
+    } else {
+      const smoothed = smoothCurvePoints(curveRawPoints, 4);
+      currentLinePoints = smoothed.slice();
+
+      if (currentLine) {
+        currentLine.points(currentLinePoints);
+        currentLine.tension(0.5);
+      }
+
+      ensureHitRect(currentLineGroup);
+      buildLineHandles(currentLineGroup);
+      selectNode(currentLineGroup);
+    }
+
+    currentLineGroup = null;
+    currentLine = null;
+    curveRawPoints = [];
     currentLineToolType = null;
     currentLineUndoStack = [];
 
@@ -3940,47 +4102,52 @@
 
   // ---------- Canvas interactions ----------
 
-    function handleStageClick(evt) {
+      // ---------- Canvas interactions: click / selection / placement ----------
+
+  function handleStageClick(evt) {
     if (!stage || !mapLayer) return;
 
     const pointerPos = stage.getPointerPosition();
     if (!pointerPos) return;
 
     const target = evt.target;
+    const isHandle =
+      target &&
+      target.getAttr &&
+      (target.getAttr("isLineHandle") || target.getAttr("isArrowHandle"));
 
-    // 1) If a line tool is active, every click adds/extends the line,
-    //    regardless of what we clicked on.
-    if (activeTool === "line" || activeTool === "curve-line") {
+    // 1) LINE TOOL (click-to-add points)
+    // Only fire on normal canvas clicks – NOT when clicking a handle.
+    if (activeTool === "line" && !isHandle) {
       handleLineClick(pointerPos, activeTool);
       return;
     }
 
-    // 1b) If Arrow tool is active, first click = start, second = end
+    // 1b) ARROW TOOL (click start, click end)
     if (activeTool === "arrow") {
       handleArrowClick(pointerPos);
       return;
     }
 
-
-    // 2) Otherwise, normal behaviour: selection or place object.
+    // 2) Otherwise, standard selection / placement.
     let group = null;
     if (target && typeof target.findAncestor === "function") {
       group = target.findAncestor("Group", true);
     }
 
-    // Clicked on an existing object in the map layer → select it
+    // Clicked on an existing object → select it
     if (group && group.getLayer && group.getLayer() === mapLayer) {
       const e = evt.evt || evt;
       const additive =
         isShiftPressed || !!(e && (e.shiftKey || e.metaKey || e.ctrlKey));
 
-      // Drop the placement tool when you click an object
+      // Drop placement tool once you interact with an element
       setActiveTool(null);
       selectNode(group, additive);
       return;
     }
 
-    // Otherwise, see if we clicked on "empty" canvas
+    // Clicked on empty canvas?
     const clickedOnEmpty =
       target === stage || (target.getLayer && target.getLayer() === gridLayer);
 
@@ -3992,7 +4159,7 @@
       return;
     }
 
-    // For all other tools: create a node on empty click
+    // 3) Creating a node from a placement tool
     const node = createNodeForTool(activeTool, pointerPos);
     if (!node) return;
 
@@ -4002,7 +4169,12 @@
     updateSeatCount();
     selectNode(node);
     pushHistory();
+
+    // NEW: as soon as you've placed the element, drop the tool
+    // so the next click doesn't add another one.
+    setActiveTool(null);
   }
+
 
     function handleKeyDown(e) {
     // track shift for robust multi-select
@@ -4031,6 +4203,25 @@
         ? document.activeElement.tagName.toLowerCase()
         : "";
     if (tag === "input" || tag === "textarea") return;
+
+          // Keyboard shortcuts: Undo / Redo
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && (e.key === "z" || e.key === "Z")) {
+      e.preventDefault();
+      undo();
+      return;
+    }
+
+    if (
+      (e.metaKey || e.ctrlKey) &&
+      (e.key === "y" ||
+        e.key === "Y" ||
+        (e.shiftKey && (e.key === "z" || e.key === "Z")))
+    ) {
+      e.preventDefault();
+      redo();
+      return;
+    }
+
 
     if (e.key === "Delete" || e.key === "Backspace") {
       if (!nodes.length) return;
@@ -4168,10 +4359,19 @@
     }
   }
 
-  function handleStageMouseDown(evt) {
+    function handleStageMouseDown(evt) {
     if (!stage) return;
 
-    // Do not pan while a drawing tool is active
+    // Freehand curve-line drawing
+    if (activeTool === "curve-line") {
+      const pointerPos = stage.getPointerPosition();
+      if (!pointerPos) return;
+      startCurveLine(pointerPos);
+      if (evt.evt) evt.evt.preventDefault();
+      return;
+    }
+
+    // Do not pan while another drawing tool is active
     if (activeTool) return;
 
     const target = evt.target;
@@ -4189,8 +4389,19 @@
     stage.container().style.cursor = "grabbing";
   }
 
-  function handleStageMouseMove() {
-    if (!stage || !isPanning || !lastPanPointerPos) return;
+
+    function handleStageMouseMove() {
+    if (!stage) return;
+
+    // While drawing a curve-line, keep extending the path
+    if (activeTool === "curve-line" && isCurveDrawing && currentLine) {
+      const pos = stage.getPointerPosition();
+      if (!pos) return;
+      updateCurveLine(pos);
+      return;
+    }
+
+    if (!isPanning || !lastPanPointerPos) return;
 
     const pos = stage.getPointerPosition();
     if (!pos) return;
@@ -4207,12 +4418,22 @@
     lastPanPointerPos = pos;
   }
 
-  function handleStageMouseUp() {
-    if (!stage || !isPanning) return;
+
+   function handleStageMouseUp() {
+    if (!stage) return;
+
+    // Finish freehand curve-line on mouse up
+    if (activeTool === "curve-line" && isCurveDrawing) {
+      finishCurveLine(true);
+      return;
+    }
+
+    if (!isPanning) return;
     isPanning = false;
     lastPanPointerPos = null;
     updateDefaultCursor();
   }
+
 
   // ---------- Buttons ----------
 
@@ -4379,6 +4600,8 @@
 
     // ---------- Boot ----------
 
+    // ---------- Boot ----------
+
   initStage();
   updateDefaultCursor();
   hookToolButtons();
@@ -4389,28 +4612,19 @@
 
   stage.on("click", handleStageClick);
 
-      // Canvas interactions
+  // Canvas interactions
   stage.on("mousedown", handleStageMouseDown);
   stage.on("mousemove", handleStageMouseMove);
   stage.on("mouseup", handleStageMouseUp);
   stage.on("mouseleave", handleStageMouseUp);
-  stage.on("click", handleStageClick);
 
-  // Double-click anywhere to finish the current line (if any)
+  // Double-click anywhere to finish the current straight line (if any)
   stage.on("dblclick", () => {
-
-    if (
-      (activeTool !== "line" && activeTool !== "curve-line") ||
-      !currentLineGroup
-    ) {
+    if (activeTool !== "line" || !currentLineGroup) {
       return;
     }
-    // Finalise the current line, no more points added
     finishCurrentLine(true);
-    // Tool stays active so you can start another line if you want;
-    // to fully stop drawing lines, just click the tool again to toggle it off.
   });
-
 
   document.addEventListener("keydown", handleKeyDown);
   document.addEventListener("keyup", handleKeyUp);
