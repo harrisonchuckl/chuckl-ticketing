@@ -1824,6 +1824,35 @@ function createBar(x, y) {
   return group;
 
   }
+
+  function createArc(x, y) {
+  const group = new Konva.Group({
+    x,
+    y,
+    draggable: true,
+    name: "arc",
+    shapeType: "arc",
+  });
+
+  // A default 180° arc, sized reasonably so you can see and grab it
+  const arc = new Konva.Arc({
+    x: 0,
+    y: 0,
+    innerRadius: 60,
+    outerRadius: 80,
+    angle: 180,        // sweep in degrees
+    rotation: -90,     // open upwards by default
+    stroke: "#111827",
+    strokeWidth: 2,
+    listening: true,
+    name: "body-arc",
+  });
+
+  group.add(arc);
+  ensureHitRect(group);
+  return group;
+}
+
   function createSingleSeat(x, y) {
     const group = new Konva.Group({
       x: x,
@@ -2924,7 +2953,7 @@ function createBar(x, y) {
 
   const btn = document.createElement("button");
   btn.type = "button";
-  btn.textContent = "Flip 180°";
+  btn.textContent = "Mirror angle";
   btn.style.width = "100%";
   btn.style.fontSize = "11px";
   btn.style.padding = "6px 8px";
@@ -4316,21 +4345,27 @@ if (
       return;
     }
 
-    // Arrow: allow rotation and diagonal resize
-    if (shapeType === "arrow") {
-      transformer.rotateEnabled(true);
-      transformer.enabledAnchors([
-        "top-left",
-        "top-center",
-        "top-right",
-        "middle-left",
-        "middle-right",
-        "bottom-left",
-        "bottom-center",
-        "bottom-right",
-      ]);
-      return;
-    }
+     // Arrow + line drawings: allow rotation and resize in all directions
+  if (
+    shapeType === "arrow" ||
+    shapeType === "line" ||
+    shapeType === "curve-line" ||
+    shapeType === "arc"
+  ) {
+    transformer.rotateEnabled(true);
+    transformer.enabledAnchors([
+      "top-left",
+      "top-center",
+      "top-right",
+      "middle-left",
+      "middle-right",
+      "bottom-left",
+      "bottom-center",
+      "bottom-right",
+    ]);
+    return;
+  }
+
 
     // Default: no resize/rotation
     transformer.rotateEnabled(false);
@@ -4600,10 +4635,15 @@ if (
 
       // Reset group scale so future transforms are clean
       node.scale({ x: 1, y: 1 });
-    } else if (tShape !== "arrow") {
-      // For most other shapes we bake the transform into geometry and reset scale
+        } else if (
+      tShape !== "arrow" &&
+      tShape !== "line" &&
+      tShape !== "curve-line" &&
+      tShape !== "arc"
+    ) {
       node.scale({ x: 1, y: 1 });
     }
+
 
     if (
       tShape === "row-seats" ||
@@ -4675,6 +4715,9 @@ if (
     switch (tool) {
       case "section":
         return createSectionBlock(pointerX, pointerY);
+
+        case "arc":
+      return createArc(pointerX, pointerY);
 
       case "row": {
         const seatsPerRowStr = window.prompt(
