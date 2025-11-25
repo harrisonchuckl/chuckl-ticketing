@@ -665,7 +665,7 @@ router.get("/builder/preview/:showId", (req, res) => {
                     <span class="tb-left-label">Line</span>
                   </button>
 
-                  <!-- NEW: Curved line tool -->
+                                    <!-- NEW: Curved line tool -->
                   <button class="tb-left-item tool-button" data-tool="curve-line">
                     <img
                       class="tb-tool-icon icon-dark"
@@ -680,20 +680,36 @@ router.get("/builder/preview/:showId", (req, res) => {
                     <span class="tb-left-label">Curved line</span>
                   </button>
 
-                      <!-- NEW: Arrow tool -->
-    <button class="tb-left-item tool-button" data-tool="arrow">
-      <img
-        class="tb-tool-icon icon-dark"
-        src="/seatmap-icons/line-black.png"
-        alt="Arrow"
-      />
-      <img
-        class="tb-tool-icon icon-blue"
-        src="/seatmap-icons/line-blue.png"
-        alt="Arrow (selected)"
-      />
-      <span class="tb-left-label">Arrow</span>
-    </button>
+                  <!-- NEW: Arc tool (separate from curved line) -->
+                  <button class="tb-left-item tool-button" data-tool="arc">
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/line-black.png"
+                      alt="Arc"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/line-blue.png"
+                      alt="Arc (selected)"
+                    />
+                    <span class="tb-left-label">Arc</span>
+                  </button>
+
+                  <!-- NEW: Arrow tool -->
+                  <button class="tb-left-item tool-button" data-tool="arrow">
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/line-black.png"
+                      alt="Arrow"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/line-blue.png"
+                      alt="Arrow (selected)"
+                    />
+                    <span class="tb-left-label">Arrow</span>
+                  </button>
+
 
 
                   <button class="tb-left-item tool-button" data-tool="section">
@@ -911,10 +927,68 @@ router.get("/builder/preview/:showId", (req, res) => {
                     <span class="tb-left-label">Exit</span>
                   </button>
                 </div>
+                            </div>
+
+              <!-- NEW: Symbols submenu -->
+              <div class="tool-group" data-group="symbols">
+                <!-- Root "Symbols" button (just opens the fly-out) -->
+                <button class="tb-left-item tool-button tool-root" type="button">
+                  <span class="tb-left-label">Symbols</span>
+                </button>
+                <button
+                  class="tool-flyout-toggle"
+                  type="button"
+                  aria-label="More symbol tools"
+                >
+                  <span class="tool-flyout-chevron">▸</span>
+                </button>
+
+                <div class="tool-flyout">
+                  <!-- Bar -->
+                  <button class="tb-left-item tool-button" data-tool="symbol-bar">
+                    <span class="tb-left-label">🍺 Bar</span>
+                  </button>
+
+                  <!-- Toilets (mixed) -->
+                  <button class="tb-left-item tool-button" data-tool="symbol-wc-mixed">
+                    <span class="tb-left-label">🚻 Toilets</span>
+                  </button>
+
+                  <!-- Gents -->
+                  <button class="tb-left-item tool-button" data-tool="symbol-wc-male">
+                    <span class="tb-left-label">🚹 Gents</span>
+                  </button>
+
+                  <!-- Ladies -->
+                  <button class="tb-left-item tool-button" data-tool="symbol-wc-female">
+                    <span class="tb-left-label">🚺 Ladies</span>
+                  </button>
+
+                  <!-- Exit -->
+                  <button class="tb-left-item tool-button" data-tool="symbol-exit">
+                    <span class="tb-left-label">⬅ Exit</span>
+                  </button>
+
+                  <!-- Accessible -->
+                  <button class="tb-left-item tool-button" data-tool="symbol-disabled">
+                    <span class="tb-left-label">♿ Accessible</span>
+                  </button>
+
+                  <!-- First Aid -->
+                  <button class="tb-left-item tool-button" data-tool="symbol-first-aid">
+                    <span class="tb-left-label">✚ First aid</span>
+                  </button>
+
+                  <!-- Info -->
+                  <button class="tb-left-item tool-button" data-tool="symbol-info">
+                    <span class="tb-left-label">ℹ Info</span>
+                  </button>
+                </div>
               </div>
 
               <!-- Text label (standalone tool) -->
               <button class="tb-left-item tool-button" data-tool="text">
+
                 <img
                   class="tb-tool-icon icon-dark"
                   src="/seatmap-icons/Text-black.png"
