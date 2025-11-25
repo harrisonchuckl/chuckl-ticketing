@@ -3,8 +3,6 @@
 
 (function () {
   const showId = window.__SEATMAP_SHOW_ID__;
-  const initialLayoutKey = window.__SEATMAP_LAYOUT__ || "blank";
-
   if (!showId) {
     // eslint-disable-next-line no-console
     console.error("seating-builder: missing window.__SEATMAP_SHOW_ID__");
@@ -251,15 +249,15 @@
   // track shift key for robust multi-select
   let isShiftPressed = false;
 
-  // multi-drag state: snapshot of positions when drag starts
+    // multi-drag state: snapshot of positions when drag starts
   let multiDragState = null;
 
-   // Line drawing state (for the Line + Curved Line tools)
+  // Line drawing state (for the Line + Curved Line tools)
   let currentLineGroup = null;    // Konva.Group that contains the line + hit rect + handles
   let currentLine = null;         // Konva.Line inside the group
-  let currentLinePoints = [];     // [x1, y1, x2, y2, ...]
+  let currentLinePoints = [];     // [x1, y1, x2, y2, ...] (while drawing we keep a trailing "placeholder" point)
   let currentLineToolType = null; // "line" | "curve-line"
-
+  let currentLineUndoStack = [];  // stack of removed segments while drawing, for line-REDO support
 
   // history is per-mapLayer JSON
   let history = [];
@@ -325,14 +323,15 @@
       }
     });
 
-    if (!mapLayer || !mapLayer.getStage()) return;
+        if (!mapLayer || !mapLayer.getStage()) return;
 
-       if (!activeTool) {
-      mapLayer.getStage().container().style.cursor = "default";
+    if (!activeTool) {
+      mapLayer.getStage().container().style.cursor = "grab";
     } else {
       mapLayer.getStage().container().style.cursor = "crosshair";
     }
   }
+
 
   function updateSeatCount() {
     if (!mapLayer || !mapLayer.find) return;
@@ -468,8 +467,12 @@
       // For N vertices we store N+1 points, where the last pair is a "placeholder"
       // at the current end. We want to remove the last vertex + placeholder.
       if (currentLinePoints.length > 4) {
-        // Remove last 4 numbers (last vertex + placeholder)
-        currentLinePoints.splice(currentLinePoints.length - 4, 4);
+        // Remove last 4 numbers (last vertex + placeholder) and push them onto a stack
+        const removed = currentLinePoints.splice(
+          currentLinePoints.length - 4,
+          4
+        );
+        currentLineUndoStack.push(removed);
 
         // Re-create a placeholder for the new last vertex
         const lx = currentLinePoints[currentLinePoints.length - 2];
@@ -485,6 +488,7 @@
         currentLine = null;
         currentLinePoints = [];
         currentLineToolType = null;
+        currentLineUndoStack = [];
         if (mapLayer) mapLayer.batchDraw();
       }
       return;
@@ -493,16 +497,51 @@
     // Normal undo for everything else
     if (historyIndex <= 0) return;
     restoreHistory(historyIndex - 1);
+    // Once we step the main history, any in-progress line redo stack no longer makes sense
+    currentLineUndoStack = [];
   }
 
   function redo() {
+    // If we are currently drawing a line and we have undone segments,
+    // redo should re-attach the last removed segment.
+    if (
+      (activeTool === "line" || activeTool === "curve-line") &&
+      currentLineGroup &&
+      currentLine &&
+      currentLinePoints &&
+      currentLineUndoStack.length > 0
+    ) {
+      const removed = currentLineUndoStack.pop();
+      if (removed && removed.length === 4) {
+        const vx = removed[0];
+        const vy = removed[1];
+
+        // While drawing, our points end with a "placeholder" duplicate of the last vertex.
+        // To "redo" a vertex, we emulate another click:
+        // 1) move the existing placeholder to the restored vertex
+        // 2) add a new placeholder for that vertex
+        const pts = currentLinePoints;
+        if (pts.length >= 2) {
+          pts[pts.length - 2] = vx;
+          pts[pts.length - 1] = vy;
+          pts.push(vx, vy);
+          currentLinePoints = pts;
+          currentLine.points(currentLinePoints);
+          if (mapLayer) mapLayer.batchDraw();
+        }
+      }
+      return;
+    }
+
+    // Normal redo for layout history
     if (historyIndex >= history.length - 1) return;
     restoreHistory(historyIndex + 1);
   }
 
+
   // ---------- Line tool helpers (multi-point line) ----------
 
-    function finishCurrentLine(commit) {
+      function finishCurrentLine(commit) {
     if (!currentLineGroup) return;
 
     if (!commit || currentLinePoints.length < 4) {
@@ -524,6 +563,7 @@
     currentLine = null;
     currentLinePoints = [];
     currentLineToolType = null;
+    currentLineUndoStack = [];
 
     if (mapLayer) {
       mapLayer.batchDraw();
@@ -532,15 +572,20 @@
     }
   }
 
+
   function handleLineClick(pointerPos, toolType) {
     if (!stage || !mapLayer) return;
     const x = snap(pointerPos.x);
     const y = snap(pointerPos.y);
 
-    // First click: create a new group + line
+        // First click: create a new group + line
     if (!currentLineGroup) {
+      // New line = fresh undo stack for segments
+      currentLineUndoStack = [];
+
       const shapeType =
         toolType === "curve-line" ? "curve-line" : "line";
+
 
       currentLineGroup = new Konva.Group({
         x: 0,
@@ -2859,6 +2904,77 @@
       return;
     }
 
+        // ---- Line / Curved line ----
+    if (shapeType === "line" || shapeType === "curve-line") {
+      const lineShape = node.findOne((n) => n instanceof Konva.Line);
+
+      addTitle(shapeType === "curve-line" ? "Curved line" : "Line");
+
+      if (!lineShape) {
+        const p = document.createElement("p");
+        p.className = "sb-inspector-empty";
+        p.textContent = "This line has no editable geometry.";
+        el.appendChild(p);
+        return;
+      }
+
+      const strokeColor =
+        lineShape.stroke && lineShape.stroke()
+          ? lineShape.stroke()
+          : "#111827";
+      const strokeWidth =
+        Number(lineShape.strokeWidth && lineShape.strokeWidth()) || 2;
+      const dashArr = lineShape.dash && lineShape.dash();
+      const lineStyle =
+        dashArr && dashArr.length ? "dashed" : "solid";
+
+      addColorField("Stroke colour", strokeColor, (val) => {
+        const v = val || "#111827";
+        lineShape.stroke(v);
+        if (mapLayer) {
+          mapLayer.batchDraw();
+          pushHistory();
+        }
+      });
+
+      addNumberField(
+        "Stroke thickness (px)",
+        strokeWidth,
+        0.5,
+        0.5,
+        (val) => {
+          lineShape.strokeWidth(val);
+          ensureHitRect(node);
+          if (mapLayer) {
+            mapLayer.batchDraw();
+            pushHistory();
+          }
+        }
+      );
+
+      addSelectField(
+        "Line style",
+        lineStyle,
+        [
+          { value: "solid", label: "Solid" },
+          { value: "dashed", label: "Dashed" },
+        ],
+        (style) => {
+          if (style === "dashed") {
+            lineShape.dash([12, 4]);
+          } else {
+            lineShape.dash([]);
+          }
+          if (mapLayer) {
+            mapLayer.batchDraw();
+            pushHistory();
+          }
+        }
+      );
+
+      return;
+    }
+
     // ---- Text labels ----
     if (shapeType === "text" || shapeType === "label") {
       const textNode = node.findOne("Text");
@@ -3666,6 +3782,67 @@
     }
   }
 
+  // ---------- Canvas panning (hand tool behaviour) ----------
+
+  let isPanning = false;
+  let lastPanPointerPos = null;
+
+  function updateDefaultCursor() {
+    if (!stage) return;
+    if (activeTool) {
+      stage.container().style.cursor = "crosshair";
+    } else {
+      // Default "select" mode over background = open hand
+      stage.container().style.cursor = "grab";
+    }
+  }
+
+  function handleStageMouseDown(evt) {
+    if (!stage) return;
+
+    // Do not pan while a drawing tool is active
+    if (activeTool) return;
+
+    const target = evt.target;
+    const clickedOnEmpty =
+      target === stage ||
+      (target.getLayer && target.getLayer() === gridLayer);
+
+    if (!clickedOnEmpty) return;
+
+    const pointerPos = stage.getPointerPosition();
+    if (!pointerPos) return;
+
+    isPanning = true;
+    lastPanPointerPos = pointerPos;
+    stage.container().style.cursor = "grabbing";
+  }
+
+  function handleStageMouseMove() {
+    if (!stage || !isPanning || !lastPanPointerPos) return;
+
+    const pos = stage.getPointerPosition();
+    if (!pos) return;
+
+    const dx = pos.x - lastPanPointerPos.x;
+    const dy = pos.y - lastPanPointerPos.y;
+
+    stage.position({
+      x: stage.x() + dx,
+      y: stage.y() + dy,
+    });
+
+    stage.batchDraw();
+    lastPanPointerPos = pos;
+  }
+
+  function handleStageMouseUp() {
+    if (!stage || !isPanning) return;
+    isPanning = false;
+    lastPanPointerPos = null;
+    updateDefaultCursor();
+  }
+
   // ---------- Buttons ----------
 
   function hookClearButton() {
@@ -3829,9 +4006,10 @@
     }
   }
 
-  // ---------- Boot ----------
+    // ---------- Boot ----------
 
   initStage();
+  updateDefaultCursor();
   hookToolButtons();
   hookZoomButtons();
   hookClearButton();
@@ -3840,8 +4018,16 @@
 
   stage.on("click", handleStageClick);
 
-    // Double-click anywhere to finish the current line (if any)
+      // Canvas interactions
+  stage.on("mousedown", handleStageMouseDown);
+  stage.on("mousemove", handleStageMouseMove);
+  stage.on("mouseup", handleStageMouseUp);
+  stage.on("mouseleave", handleStageMouseUp);
+  stage.on("click", handleStageClick);
+
+  // Double-click anywhere to finish the current line (if any)
   stage.on("dblclick", () => {
+
     if (
       (activeTool !== "line" && activeTool !== "curve-line") ||
       !currentLineGroup
