@@ -1259,7 +1259,7 @@ router.get("/builder/preview/:showId", (req, res) => {
               }
             });
 
-            flyout.addEventListener("click", function (ev) {
+                        flyout.addEventListener("click", function (ev) {
               var target = ev.target;
               if (!target || !(target instanceof HTMLElement)) return;
 
@@ -1297,10 +1297,16 @@ router.get("/builder/preview/:showId", (req, res) => {
                 }
               }
 
+              // 🔵 Re-apply active visual state now that the root's data-tool has changed
+              if (window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__) {
+                window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__(toolName);
+              }
+
               // Let the normal seating-builder.js listeners handle tool activation
               // then close the panel.
               group.classList.remove("is-open");
             });
+
           }
         });
 
