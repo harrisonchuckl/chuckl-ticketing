@@ -240,7 +240,7 @@
   const CIRC_DESIRED_GAP = 8;
   const CIRC_MIN_TABLE_RADIUS = 26;
 
-  // ---------- State ----------
+   // ---------- State ----------
 
   let stage;
   let baseStageWidth = 0;
@@ -251,13 +251,55 @@
   let overlayLayer;
   let transformer;
 
+  // currently selected tool in the left toolbar
   let activeTool = null;
 
-    let activeTool = null;
+  // current selection + copy buffer
   let selectedNode = null;
   let copiedNodesJson = [];
 
-  // 🔵 Helper: update left-hand tool button state (black ↔ blue icons)
+  // track shift key for robust multi-select
+  let isShiftPressed = false;
+
+  // multi-drag state: snapshot of positions when drag starts
+  let multiDragState = null;
+
+  // Line drawing state (for the Line + Curved Line tools)
+  let currentLineGroup = null;
+  let currentLine = null;
+  let currentLinePoints = [];
+  let currentLineToolType = null;
+  let currentLineUndoStack = [];
+
+  // Freehand curve-line state
+  let isCurveDrawing = false;
+  let curveRawPoints = [];
+
+  // Arrow drawing state (2-point arrows)
+  let arrowDrawingGroup = null;   // Konva.Group for the arrow currently being drawn
+  let arrowShape = null;          // Konva.Arrow shape inside that group
+  let arrowStartPoint = null;     // { x, y } for the first click
+
+  // history is per-mapLayer JSON
+  let history = [];
+  let historyIndex = -1;
+  let isRestoringHistory = false;
+
+  // table numbering counter (for all circular + rectangular tables)
+  let tableCounter = 1;
+
+  // global default seat label mode for *new* blocks
+  // "numbers" = 1, 2, 3... by default during planning
+  let globalSeatLabelMode = "numbers";
+
+  const DEBUG_SKEW = true;
+
+  // Sidebar DOM refs
+  let seatCountEl = null;
+  let inspectorEl = null;
+
+
+    // 🔵 Helper: update left-hand tool button state (black ↔ blue icons)
   function updateToolButtonActiveState(currentTool) {
     try {
       const buttons = document.querySelectorAll(
@@ -266,10 +308,24 @@
 
       buttons.forEach(function (btn) {
         const btnTool = btn.getAttribute("data-tool");
-        if (currentTool && btnTool === currentTool) {
+        const isActive = currentTool && btnTool === currentTool;
+
+        if (isActive) {
           btn.classList.add("is-active");
         } else {
           btn.classList.remove("is-active");
+        }
+
+        // Optional: swap PNGs if the button has icon data attributes
+        const img = btn.querySelector("img");
+        if (img) {
+          const defaultSrc = btn.getAttribute("data-icon-default");
+          const activeSrc = btn.getAttribute("data-icon-active");
+          if (isActive && activeSrc) {
+            img.src = activeSrc; // blue icon
+          } else if (defaultSrc) {
+            img.src = defaultSrc; // dark icon
+          }
         }
       });
     } catch (e) {
@@ -278,6 +334,7 @@
       console.warn("updateToolButtonActiveState error", e);
     }
   }
+
 
   // Expose so the preview HTML script can also force a refresh after fly-out changes
   window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
@@ -1655,84 +1712,53 @@ function createBar(x, y) {
 }
 
 
-  function createSymbolNode(symbolType, x, y) {
-  const group = new Konva.Group({
-    x: x - 18,
-    y: y - 18,
-    draggable: true,
-    name: "symbol",
-    shapeType: "symbol",
-  });
-
-  group.setAttr("symbolType", symbolType);
-
-  // Base icon background
-  const rect = new Konva.Rect({
-    width: 36,
-    height: 36,
-    cornerRadius: 8,
-    name: "body-rect",
-    fill: "#111827",
-    stroke: "#0f172a",
-    strokeWidth: 1.4,
-  });
-
-  // Choose a simple pictogram / text per symbolType
-  const SYMBOL_LABELS = {
-    "bar": "🍺",
-    "wc-mixed": "WC",
-    "wc-male": "M",
-    "wc-female": "F",
-    "exit-symbol": "⬅",
-    "disabled": "♿",
-    "first-aid": "✚",
-    "info": "i",
-  };
-
-  const SYMBOL_FONT_SIZES = {
-    "bar": 18,
-    "wc-mixed": 13,
-    "wc-male": 16,
-    "wc-female": 16,
-    "exit-symbol": 18,
-    "disabled": 18,
-    "first-aid": 18,
-    "info": 18,
-  };
-
-  const text = SYMBOL_LABELS[symbolType] || "?";
-  const fontSize = SYMBOL_FONT_SIZES[symbolType] || 16;
-
-  const label = new Konva.Text({
-    text,
-    fontSize,
-    fontFamily: "system-ui",
-    fontStyle: "bold",
-    fill: "#ffffff",
-    align: "center",
-    verticalAlign: "middle",
-    width: rect.width(),
-    height: rect.height(),
-    listening: false,
-    name: "symbol-label",
-  });
-
-  group.add(rect);
-  group.add(label);
-  ensureHitRect(group);
-
-  // Inline edit of symbol text on double-click (so you can rename / tweak)
-  group.on("dblclick", () => {
-    beginInlineTextEdit(label, (newText) => {
-      label.text(newText || label.text());
-      ensureHitRect(group);
-      if (mapLayer) mapLayer.batchDraw();
-      pushHistory();
+    function createSymbolNode(symbolType, x, y) {
+    const group = new Konva.Group({
+      x: x - 18,
+      y: y - 18,
+      draggable: true,
+      name: "symbol",
+      shapeType: "symbol",
     });
-  });
 
-  return group;
-}
+    group.setAttr("symbolType", symbolType);
+
+    // Map each symbol type to the DARK (map) icon you uploaded.
+    // ⚠️ Update the filenames/paths here to match your GitHub /public/seatmap-icons folder.
+    const ICON_SRC = {
+      bar:          "/seatmap-icons/barsymbol-dark.png",
+      "wc-mixed":   "/seatmap-icons/mixedtoilets-dark.png",
+      "wc-male":    "/seatmap-icons/maletoilets-dark.png",
+      "wc-female":  "/seatmap-icons/femaletoilets-dark.png",
+      "exit-symbol":"/seatmap-icons/emergencyexit-dark.png",
+      disabled:     "/seatmap-icons/disabledtoilets-dark.png",
+      "first-aid":  "/seatmap-icons/firstaid-dark.png",
+      info:         "/seatmap-icons/information-dark.png",
+    };
+
+    const imageObj = new window.Image();
+    imageObj.src = ICON_SRC[symbolType] || ICON_SRC.info;
+
+    const icon = new Konva.Image({
+      image: imageObj,
+      width: 36,
+      height: 36,
+      offsetX: 18,
+      offsetY: 18,
+      // we still call this "body-rect" so hit-testing & selection work nicely
+      name: "body-rect",
+    });
+
+    imageObj.onload = () => {
+      if (mapLayer) mapLayer.batchDraw();
+    };
+
+    group.add(icon);
+    ensureHitRect(group);
+
+    return group;
+  }
+
 
   function createSquare(x, y) {
     const size = 100;
@@ -4137,7 +4163,6 @@ function createBar(x, y) {
       shapeType === "section" ||
       shapeType === "square" ||
       shapeType === "circle" ||
-      shapeType === "symbol"
     ) {
       const body = getBodyRect(node);
 
