@@ -3696,71 +3696,72 @@
 
     }
 
-    // ---- Text labels ----
-    if (shapeType === "text" || shapeType === "label") {
-      const textNode = node.findOne("Text");
-      if (!textNode) {
-        addTitle("Text label");
-        const p = document.createElement("p");
-        p.className = "sb-inspector-empty";
-        p.textContent = "This text label has no editable content.";
-        el.appendChild(p);
-        return;
-      }
+   // ---- Text labels ----
+if (shapeType === "text" || shapeType === "label") {
+  const textNode = node.findOne("Text");
+  if (!textNode) {
+    addTitle("Text label");
+    const p = document.createElement("p");
+    p.className = "sb-inspector-empty";
+    p.textContent = "This text label has no editable content.";
+    el.appendChild(p);
+    return;
+  }
 
-      addTitle("Text label");
+  addTitle("Text label");
 
-      // Text content
-      addTextField("Text", textNode.text(), (val) => {
-        textNode.text(val || "");
-        ensureHitRect(node);
-      });
+  // Text content
+  addTextField("Text", textNode.text(), (val) => {
+    textNode.text(val || "");
+    ensureHitRect(node);
+  });
 
-      // Font size
-      const initialFontSize = Number(textNode.fontSize()) || 14;
-      addNumberField("Font size", initialFontSize, 6, 1, (val) => {
-        textNode.fontSize(val);
-        ensureHitRect(node);
-      });
+  // Font size
+  const initialFontSize = Number(textNode.fontSize()) || 14;
+  addNumberField("Font size", initialFontSize, 6, 1, (val) => {
+    textNode.fontSize(val);
+    ensureHitRect(node);
+  });
 
-      // Font style toggles
-      let bold = !!String(textNode.fontStyle())
-        .toLowerCase()
-        .includes("bold");
-      let italic = !!String(textNode.fontStyle())
-        .toLowerCase()
-        .includes("italic");
-      let underline = !!textNode.underline();
+  // Font style toggles
+  let bold = !!String(textNode.fontStyle())
+    .toLowerCase()
+    .includes("bold");
+  let italic = !!String(textNode.fontStyle())
+    .toLowerCase()
+    .includes("italic");
+  let underline = !!textNode.underline();
 
-      function applyTextStyles() {
-        const parts = [];
-        if (bold) parts.push("bold");
-        if (italic) parts.push("italic");
-        textNode.fontStyle(parts.join(" ") || "normal");
-        textNode.underline(underline);
-        ensureHitRect(node);
-        mapLayer.batchDraw();
-        pushHistory();
-      }
+  function applyTextStyles() {
+    const parts = [];
+    if (bold) parts.push("bold");
+    if (italic) parts.push("italic");
+    textNode.fontStyle(parts.join(" ") || "normal");
+    textNode.underline(underline);
+    ensureHitRect(node);
+    mapLayer.batchDraw();
+    pushHistory();
+  }
 
-      addCheckboxField("Bold", bold, (checked) => {
-        bold = checked;
-        applyTextStyles();
-      });
+  addCheckboxField("Bold", bold, (checked) => {
+    bold = checked;
+    applyTextStyles();
+  });
 
-      addCheckboxField("Italic", italic, (checked) => {
-        italic = checked;
-        applyTextStyles();
-      });
+  addCheckboxField("Italic", italic, (checked) => {
+    italic = checked;
+    applyTextStyles();
+  });
 
-      addCheckboxField("Underline", underline, (checked) => {
-        underline = checked;
-        applyTextStyles();
-      });
+  addCheckboxField("Underline", underline, (checked) => {
+    underline = checked;
+    applyTextStyles();
+  });
 
-      mapLayer.batchDraw();
-      return;
-    }
+  mapLayer.batchDraw();
+  return;
+}
+
 
     // ---- Stage block ----
     if (shapeType === "stage") {
