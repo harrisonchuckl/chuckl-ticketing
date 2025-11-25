@@ -470,7 +470,7 @@ router.get("/builder/preview/:showId", (req, res) => {
         text-align:center;
       }
 
-      .tool-flyout-toggle {
+            .tool-flyout-toggle {
         border: 0;
         background: transparent;
         padding: 0;
@@ -483,11 +483,11 @@ router.get("/builder/preview/:showId", (req, res) => {
 
         /* Bigger hit area, nudged further right, centred on tool icon area */
         position: absolute;
-        right: -6px;
+        right: -10px;          /* further out from the tool */
         top: 50%;
         transform: translateY(-50%);
-        width: 22px;
-        height: 22px;
+        width: 26px;           /* bigger clickable circle */
+        height: 26px;          /* bigger clickable circle */
         border-radius: 999px;
       }
 
@@ -497,9 +497,10 @@ router.get("/builder/preview/:showId", (req, res) => {
       }
 
       .tool-flyout-chevron {
-        font-size: 13px; /* bigger arrow */
+        font-size: 15px;       /* bigger arrow glyph */
         line-height: 1;
       }
+
 
       .tool-flyout {
         position: absolute;
