@@ -2831,7 +2831,7 @@
       el.appendChild(wrapper);
     }
 
-          function addFlipButton(node) {
+                 function addFlipButton(node) {
   const wrapper = document.createElement("div");
   wrapper.className = "sb-field-row";
 
@@ -2849,16 +2849,18 @@
 
   btn.addEventListener("click", (e) => {
     e.preventDefault();
+    if (!node) return;
 
-    // 1) Normalise current rotation so it never runs away
-    const currentRot = normaliseAngle(node.rotation() || 0);
-    node.rotation(currentRot);
+    // 1) Reset any negative scales so we don’t double-flip
+    const sx = Math.abs(node.scaleX() || 1);
+    const sy = Math.abs(node.scaleY() || 1);
+    node.scale({ x: sx, y: sy });
 
-    // 2) Flip horizontally (mirror across the Y-axis)
-    const sx = Number(node.scaleX() || 1);
-    node.scaleX(sx * -1);
+    // 2) Flip the angle: 20° → −20°, −35° → 35°, etc.
+    const current = node.rotation() || 0;
+    node.rotation(-current);
 
-    // 3) Keep labels readable / upright where needed
+    // 3) Keep seat / row / table labels upright
     keepLabelsUpright(node);
 
     if (mapLayer) {
@@ -2869,13 +2871,14 @@
     }
 
     pushHistory();
-    // Refresh inspector so Rotation (deg) value shows the normalised value
+    // Refresh inspector so Rotation (deg) reflects the new value
     renderInspector(node);
   });
 
   wrapper.appendChild(btn);
   el.appendChild(wrapper);
 }
+
 
 
 
@@ -3780,71 +3783,83 @@
 
     }
 
-   // ---- Text labels ----
-if (shapeType === "text" || shapeType === "label") {
-  const textNode = node.findOne("Text");
-  if (!textNode) {
-    addTitle("Text label");
-    const p = document.createElement("p");
-    p.className = "sb-inspector-empty";
-    p.textContent = "This text label has no editable content.";
-    el.appendChild(p);
-    return;
-  }
+       // ---- Text labels ----
+    if (shapeType === "text" || shapeType === "label") {
+      const textNode = node.findOne("Text");
+      if (!textNode) {
+        addTitle("Text label");
+        const p = document.createElement("p");
+        p.className = "sb-inspector-empty";
+        p.textContent = "This text label has no editable content.";
+        el.appendChild(p);
+        return;
+      }
 
-  addTitle("Text label");
+      addTitle("Text label");
 
-  // Text content
-  addTextField("Text", textNode.text(), (val) => {
-    textNode.text(val || "");
-    ensureHitRect(node);
-  });
+      // Text content
+      addTextField("Text", textNode.text(), (val) => {
+        textNode.text(val || "");
+        ensureHitRect(node);
+      });
 
-  // Font size
-  const initialFontSize = Number(textNode.fontSize()) || 14;
-  addNumberField("Font size", initialFontSize, 6, 1, (val) => {
-    textNode.fontSize(val);
-    ensureHitRect(node);
-  });
+      // Font size
+      const initialFontSize = Number(textNode.fontSize()) || 14;
+      addNumberField("Font size", initialFontSize, 6, 1, (val) => {
+        textNode.fontSize(val);
+        ensureHitRect(node);
+      });
 
-  // Font style toggles
-  let bold = !!String(textNode.fontStyle())
-    .toLowerCase()
-    .includes("bold");
-  let italic = !!String(textNode.fontStyle())
-    .toLowerCase()
-    .includes("italic");
-  let underline = !!textNode.underline();
+      // Font style toggles – derive initial state from existing style/decoration
+      const style = String(textNode.fontStyle() || "").toLowerCase();
+      let bold = style.includes("bold");
+      let italic = style.includes("italic");
 
-  function applyTextStyles() {
-    const parts = [];
-    if (bold) parts.push("bold");
-    if (italic) parts.push("italic");
-    textNode.fontStyle(parts.join(" ") || "normal");
-    textNode.underline(underline);
-    ensureHitRect(node);
-    mapLayer.batchDraw();
-    pushHistory();
-  }
+      const deco =
+        typeof textNode.textDecoration === "function"
+          ? String(textNode.textDecoration() || "").toLowerCase()
+          : "";
+      let underline = deco.includes("underline");
 
-  addCheckboxField("Bold", bold, (checked) => {
-    bold = checked;
-    applyTextStyles();
-  });
+      function applyTextStyles() {
+        const parts = [];
+        if (bold) parts.push("bold");
+        if (italic) parts.push("italic");
+        textNode.fontStyle(parts.join(" ") || "normal");
 
-  addCheckboxField("Italic", italic, (checked) => {
-    italic = checked;
-    applyTextStyles();
-  });
+        if (typeof textNode.textDecoration === "function") {
+          textNode.textDecoration(underline ? "underline" : "");
+        } else {
+          // Fallback if Konva version only supports underline()
+          textNode.underline(underline);
+        }
 
-  addCheckboxField("Underline", underline, (checked) => {
-    underline = checked;
-    applyTextStyles();
-  });
+        ensureHitRect(node);
+        // NOTE: redraw + history are handled by the shared addCheckboxField /
+        // addNumberField / addTextField helpers, so we DON'T call them here.
+      }
 
-  mapLayer.batchDraw();
-  return;
-}
+      addCheckboxField("Bold", bold, (checked) => {
+        bold = checked;
+        applyTextStyles();
+      });
+
+      addCheckboxField("Italic", italic, (checked) => {
+        italic = checked;
+        applyTextStyles();
+      });
+
+      addCheckboxField("Underline", underline, (checked) => {
+        underline = checked;
+        applyTextStyles();
+      });
+
+      // One initial normalisation pass in case styles were partially set
+      applyTextStyles();
+      if (mapLayer) mapLayer.batchDraw();
+      return;
+    }
+
 
 
     // ---- Stage block ----
