@@ -249,7 +249,7 @@
   // track shift key for robust multi-select
   let isShiftPressed = false;
 
-    // multi-drag state: snapshot of positions when drag starts
+      // multi-drag state: snapshot of positions when drag starts
   let multiDragState = null;
 
   // Line drawing state (for the Line + Curved Line tools)
@@ -258,6 +258,11 @@
   let currentLinePoints = [];     // [x1, y1, x2, y2, ...] (while drawing we keep a trailing "placeholder" point)
   let currentLineToolType = null; // "line" | "curve-line"
   let currentLineUndoStack = [];  // stack of removed segments while drawing, for line-REDO support
+
+  // Arrow drawing state (2-point arrows)
+  let arrowDrawingGroup = null;   // Konva.Group for the arrow currently being drawn
+  let arrowShape = null;          // Konva.Arrow shape inside that group
+  let arrowStartPoint = null;     // { x, y } for the first click
 
   // history is per-mapLayer JSON
   let history = [];
@@ -625,6 +630,66 @@
     mapLayer.batchDraw();
   }
 
+    // ---------- Arrow tool helpers (2-point arrow) ----------
+
+  function handleArrowClick(pointerPos) {
+    if (!stage || !mapLayer) return;
+    const x = snap(pointerPos.x);
+    const y = snap(pointerPos.y);
+
+    // First click: create arrow group + arrow shape
+    if (!arrowDrawingGroup) {
+      arrowStartPoint = { x, y };
+
+      arrowDrawingGroup = new Konva.Group({
+        x: 0,
+        y: 0,
+        draggable: true,
+        name: "arrow",
+        shapeType: "arrow",
+      });
+
+      arrowShape = new Konva.Arrow({
+        points: [x, y, x, y], // start & temporary end
+        stroke: "#111827",
+        strokeWidth: 2,
+        fill: "#111827",
+        lineCap: "round",
+        lineJoin: "round",
+        pointerLength: 14,
+        pointerWidth: 14,
+        pointerAtBeginning: false,
+      });
+
+      arrowDrawingGroup.add(arrowShape);
+      ensureHitRect(arrowDrawingGroup);
+      mapLayer.add(arrowDrawingGroup);
+      attachNodeBehaviour(arrowDrawingGroup);
+
+      mapLayer.batchDraw();
+      return;
+    }
+
+    // Second click: set end point, add handles, finish
+    if (arrowShape && arrowStartPoint) {
+      arrowShape.points([
+        arrowStartPoint.x,
+        arrowStartPoint.y,
+        x,
+        y,
+      ]);
+      ensureHitRect(arrowDrawingGroup);
+      buildArrowHandles(arrowDrawingGroup);
+      selectNode(arrowDrawingGroup);
+      mapLayer.batchDraw();
+      pushHistory();
+    }
+
+    arrowDrawingGroup = null;
+    arrowShape = null;
+    arrowStartPoint = null;
+  }
+
 
   function snap(v) {
     return Math.round(v / GRID_SIZE) * GRID_SIZE;
@@ -741,6 +806,84 @@
 
     group
       .find((n) => n.getAttr && n.getAttr("isLineHandle"))
+      .forEach((h) => {
+        h.visible(!!visible);
+      });
+  }
+
+    // ----- Editable arrow handles (start & end) -----
+
+  function buildArrowHandles(group) {
+    if (!(group instanceof Konva.Group)) return;
+
+    const shapeType = group.getAttr("shapeType") || group.name();
+    if (shapeType !== "arrow") return;
+
+    const arrow = group.findOne((n) => n instanceof Konva.Arrow);
+    if (!arrow) return;
+
+    // Remove any existing arrow handles
+    group
+      .find((n) => n.getAttr && n.getAttr("isArrowHandle"))
+      .forEach((h) => h.destroy());
+
+    const pts = arrow.points() || [];
+    if (!pts || pts.length < 4) return;
+
+    const [x1, y1, x2, y2] = pts;
+
+    function createHandle(hx, hy, endpointIndex) {
+      const handle = new Konva.Circle({
+        x: hx,
+        y: hy,
+        radius: 6,
+        fill: "#ffffff",
+        stroke: "#2563eb",
+        strokeWidth: 1.5,
+        draggable: true,
+        name: "arrow-handle",
+      });
+
+      handle.setAttr("isArrowHandle", true);
+      // 0 = start (points[0,1]), 1 = end (points[2,3])
+      handle.setAttr("endpointIndex", endpointIndex);
+
+      handle.on("dragmove", () => {
+        const p = arrow.points().slice();
+        const idx = handle.getAttr("endpointIndex");
+        if (idx === 0) {
+          p[0] = handle.x();
+          p[1] = handle.y();
+        } else if (idx === 1) {
+          p[2] = handle.x();
+          p[3] = handle.y();
+        }
+        arrow.points(p);
+        ensureHitRect(group);
+        mapLayer && mapLayer.batchDraw();
+      });
+
+      handle.on("dragend", () => {
+        ensureHitRect(group);
+        mapLayer && mapLayer.batchDraw();
+        pushHistory();
+      });
+
+      group.add(handle);
+    }
+
+    createHandle(x1, y1, 0);
+    createHandle(x2, y2, 1);
+
+    showArrowHandles(group, true);
+    group.draw();
+  }
+
+  function showArrowHandles(group, visible) {
+    if (!(group instanceof Konva.Group)) return;
+
+    group
+      .find((n) => n.getAttr && n.getAttr("isArrowHandle"))
       .forEach((h) => {
         h.visible(!!visible);
       });
@@ -2904,7 +3047,7 @@
       return;
     }
 
-        // ---- Line / Curved line ----
+           // ---- Line / Curved line ----
     if (shapeType === "line" || shapeType === "curve-line") {
       const lineShape = node.findOne((n) => n instanceof Konva.Line);
 
@@ -2965,6 +3108,87 @@
           } else {
             lineShape.dash([]);
           }
+          if (mapLayer) {
+            mapLayer.batchDraw();
+            pushHistory();
+          }
+        }
+      );
+
+      return;
+    }
+
+    // ---- Arrow ----
+    if (shapeType === "arrow") {
+      const arrow = node.findOne((n) => n instanceof Konva.Arrow);
+
+      addTitle("Arrow");
+
+      if (!arrow) {
+        const p = document.createElement("p");
+        p.className = "sb-inspector-empty";
+        p.textContent = "This arrow has no editable geometry.";
+        el.appendChild(p);
+        return;
+      }
+
+      const strokeColor =
+        arrow.stroke && arrow.stroke() ? arrow.stroke() : "#111827";
+      const strokeWidth =
+        Number(arrow.strokeWidth && arrow.strokeWidth()) || 2;
+      const pointerLength =
+        Number(arrow.pointerLength && arrow.pointerLength()) || 14;
+      const pointerWidth =
+        Number(arrow.pointerWidth && arrow.pointerWidth()) || 14;
+      const doubleEnded = !!arrow.pointerAtBeginning();
+
+      addColorField("Stroke colour", strokeColor, (val) => {
+        const v = val || "#111827";
+        arrow.stroke(v);
+        arrow.fill(v);
+        if (mapLayer) {
+          mapLayer.batchDraw();
+          pushHistory();
+        }
+      });
+
+      addNumberField(
+        "Stroke thickness (px)",
+        strokeWidth,
+        0.5,
+        0.5,
+        (val) => {
+          arrow.strokeWidth(val);
+          ensureHitRect(node);
+          if (mapLayer) {
+            mapLayer.batchDraw();
+            pushHistory();
+          }
+        }
+      );
+
+      addNumberField(
+        "Arrowhead size (px)",
+        Math.round((pointerLength + pointerWidth) / 2),
+        4,
+        1,
+        (val) => {
+          const size = Math.max(4, val);
+          arrow.pointerLength(size);
+          arrow.pointerWidth(size);
+          ensureHitRect(node);
+          if (mapLayer) {
+            mapLayer.batchDraw();
+            pushHistory();
+          }
+        }
+      );
+
+      addCheckboxField(
+        "Arrowheads at both ends",
+        doubleEnded,
+        (checked) => {
+          arrow.pointerAtBeginning(!!checked);
           if (mapLayer) {
             mapLayer.batchDraw();
             pushHistory();
@@ -3139,7 +3363,7 @@
       });
   }
 
-    function configureTransformerForNode(node) {
+     function configureTransformerForNode(node) {
     if (!transformer || !node) return;
 
     const shapeType = node.getAttr("shapeType") || node.name();
@@ -3156,7 +3380,7 @@
       return;
     }
 
-    // Room objects + drawing shapes: resize in all directions (no rotation)
+    // Room objects + basic shapes: resize in all directions (no rotation)
     if (
       shapeType === "stage" ||
       shapeType === "bar" ||
@@ -3179,19 +3403,38 @@
       return;
     }
 
+    // Arrow: allow rotation and diagonal resize
+    if (shapeType === "arrow") {
+      transformer.rotateEnabled(true);
+      transformer.enabledAnchors([
+        "top-left",
+        "top-center",
+        "top-right",
+        "middle-left",
+        "middle-right",
+        "bottom-left",
+        "bottom-center",
+        "bottom-right",
+      ]);
+      return;
+    }
+
     // Default: no resize/rotation
     transformer.rotateEnabled(false);
     transformer.enabledAnchors([]);
   }
 
 
-    function clearSelection() {
-    if (
-      selectedNode &&
-      (selectedNode.getAttr("shapeType") === "line" ||
-        selectedNode.getAttr("shapeType") === "curve-line")
-    ) {
-      showLineHandles(selectedNode, false);
+      function clearSelection() {
+    if (selectedNode) {
+      const t =
+        selectedNode.getAttr("shapeType") || selectedNode.name();
+      if (t === "line" || t === "curve-line") {
+        showLineHandles(selectedNode, false);
+      }
+      if (t === "arrow") {
+        showArrowHandles(selectedNode, false);
+      }
     }
 
     selectedNode = null;
@@ -3203,30 +3446,41 @@
   }
 
 
+
     function selectNode(node, additive = false) {
     if (!node) {
       clearSelection();
       return;
     }
 
-    // Hide handles on previously-selected line when changing selection
+        // Hide handles on previous selection when changing selection
     if (!additive && selectedNode) {
-      const prevType = selectedNode.getAttr("shapeType") || selectedNode.name();
+      const prevType =
+        selectedNode.getAttr("shapeType") || selectedNode.name();
       if (prevType === "line" || prevType === "curve-line") {
         showLineHandles(selectedNode, false);
       }
+      if (prevType === "arrow") {
+        showArrowHandles(selectedNode, false);
+      }
     }
 
-    if (!transformer) {
+
+        if (!transformer) {
       selectedNode = node;
       const t = node.getAttr("shapeType") || node.name();
       if (t === "line" || t === "curve-line") {
         buildLineHandles(node);
         showLineHandles(node, true);
       }
+      if (t === "arrow") {
+        buildArrowHandles(node);
+        showArrowHandles(node, true);
+      }
       renderInspector(node);
       return;
     }
+
 
     let nodes = transformer.nodes() || [];
 
@@ -3247,16 +3501,19 @@
 
     selectedNode = nodes.length === 1 ? nodes[0] : null;
 
-    if (nodes.length === 1) {
+        if (nodes.length === 1) {
       const t = nodes[0].getAttr("shapeType") || nodes[0].name();
       if (t === "line" || t === "curve-line") {
         buildLineHandles(nodes[0]);
         showLineHandles(nodes[0], true);
       }
+      if (t === "arrow") {
+        buildArrowHandles(nodes[0]);
+        showArrowHandles(nodes[0], true);
+      }
       configureTransformerForNode(nodes[0]);
       renderInspector(nodes[0]);
 
-      renderInspector(nodes[0]);
     } else if (nodes.length > 1) {
       renderInspector(nodes[0]);
     } else {
@@ -3400,7 +3657,8 @@
 
         // Reset group scale so future transforms are clean
         node.scale({ x: 1, y: 1 });
-      } else {
+            } else if (tShape !== "arrow") {
+        // For most shapes we bake the transform into geometry and reset scale
         node.scale({ x: 1, y: 1 });
       }
 
@@ -3590,7 +3848,7 @@
 
   // ---------- Canvas interactions ----------
 
-  function handleStageClick(evt) {
+    function handleStageClick(evt) {
     if (!stage || !mapLayer) return;
 
     const pointerPos = stage.getPointerPosition();
@@ -3598,12 +3856,19 @@
 
     const target = evt.target;
 
-        // 1) If a line tool is active, every click adds/extends the line,
-    //    regardless of whether we clicked on the grid, a line, or another shape.
+    // 1) If a line tool is active, every click adds/extends the line,
+    //    regardless of what we clicked on.
     if (activeTool === "line" || activeTool === "curve-line") {
       handleLineClick(pointerPos, activeTool);
       return;
     }
+
+    // 1b) If Arrow tool is active, first click = start, second = end
+    if (activeTool === "arrow") {
+      handleArrowClick(pointerPos);
+      return;
+    }
+
 
     // 2) Otherwise, normal behaviour: selection or place object.
     let group = null;
@@ -3647,13 +3912,27 @@
     pushHistory();
   }
 
-  function handleKeyDown(e) {
+    function handleKeyDown(e) {
     // track shift for robust multi-select
     if (e.key === "Shift") {
       isShiftPressed = true;
     }
 
+    // Esc should cancel an in-progress arrow
+    if (e.key === "Escape") {
+      if (activeTool === "arrow" && arrowDrawingGroup) {
+        arrowDrawingGroup.destroy();
+        arrowDrawingGroup = null;
+        arrowShape = null;
+        arrowStartPoint = null;
+        mapLayer && mapLayer.batchDraw();
+        e.preventDefault();
+        return;
+      }
+    }
+
     const nodes = transformer ? transformer.nodes() : [];
+
 
     const tag =
       document.activeElement && document.activeElement.tagName
