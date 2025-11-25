@@ -1328,94 +1328,94 @@
   }
 
   function applyStageStyle(group) {
-    if (!(group instanceof Konva.Group)) return;
-    const type = group.getAttr("shapeType") || group.name();
-    if (type !== "stage") return;
+  if (!(group instanceof Konva.Group)) return;
+  const type = group.getAttr("shapeType") || group.name();
+  if (type !== "stage") return;
 
-    const body = getBodyRect(group);
-    if (!body) return;
-    const label = group.findOne("Text");
+  const body = getBodyRect(group);
+  if (!body) return;
+  const label = group.findOne("Text");
 
-    // --- Fill mode: solid vs gradient ---
-    let fillMode = group.getAttr("stageFillMode");
-    if (fillMode !== "solid" && fillMode !== "gradient") {
-      fillMode = "gradient";
-    }
-    group.setAttr("stageFillMode", fillMode);
-
-    // --- Solid colour setup ---
-    let solidColor =
-      group.getAttr("stageSolidColor") || body.fill() || "#111827";
-    group.setAttr("stageSolidColor", solidColor);
-
-    // --- Gradient setup ---
-    let startColor =
-      group.getAttr("stageGradientStartColor") || "#1d4ed8"; // brand blue
-    let endColor =
-      group.getAttr("stageGradientEndColor") || "#22c1c3"; // brand teal
-    group.setAttr("stageGradientStartColor", startColor);
-    group.setAttr("stageGradientEndColor", endColor);
-
-    let direction = group.getAttr("stageGradientDirection") || "lr";
-    if (direction !== "lr" && direction !== "tb" && direction !== "diag") {
-      direction = "lr";
-    }
-    group.setAttr("stageGradientDirection", direction);
-
-    const width = body.width();
-    const height = body.height();
-
-    if (fillMode === "solid") {
-      // Solid fill
-      body.fill(solidColor);
-      body.fillLinearGradientColorStops([]);
-    } else {
-      // Gradient fill
-      let startPoint = { x: 0, y: 0 };
-      let endPoint = { x: width, y: 0 }; // left → right
-
-      if (direction === "tb") {
-        // top → bottom
-        endPoint = { x: 0, y: height };
-      } else if (direction === "diag") {
-        // diagonal TL → BR
-        endPoint = { x: width, y: height };
-      }
-
-      body.fill("");
-      body.fillLinearGradientStartPoint(startPoint);
-      body.fillLinearGradientEndPoint(endPoint);
-      body.fillLinearGradientColorStops([
-        0,
-        startColor,
-        1,
-        endColor,
-      ]);
-    }
-
-    // --- Text colour (auto vs manual) ---
-    let autoText =
-      group.getAttr("stageTextAutoColor") !== false; // default: true
-    group.setAttr("stageTextAutoColor", autoText);
-
-    let manualTextColor =
-      group.getAttr("stageTextColor") ||
-      (label && label.fill && label.fill()) ||
-      "#ffffff";
-    group.setAttr("stageTextColor", manualTextColor);
-
-    let effectiveBg =
-      fillMode === "solid"
-        ? solidColor
-        : blendTwoHex(startColor, endColor);
-    let finalTextColor = autoText
-      ? computeContrastTextColor(effectiveBg)
-      : manualTextColor;
-
-    if (label) {
-      label.fill(finalTextColor);
-    }
+  // --- Fill mode: solid vs gradient ---
+  let fillMode = group.getAttr("stageFillMode");
+  if (fillMode !== "solid" && fillMode !== "gradient") {
+    // Default to solid now
+    fillMode = "solid";
   }
+  group.setAttr("stageFillMode", fillMode);
+
+  // --- Solid colour setup (default: black) ---
+  let solidColor =
+    group.getAttr("stageSolidColor") || body.fill() || "#000000";
+  group.setAttr("stageSolidColor", solidColor);
+
+  // --- Gradient setup (kept for backwards-compatibility / options) ---
+  let startColor =
+    group.getAttr("stageGradientStartColor") || "#1d4ed8"; // brand blue
+  let endColor =
+    group.getAttr("stageGradientEndColor") || "#22c1c3";   // brand teal
+  group.setAttr("stageGradientStartColor", startColor);
+  group.setAttr("stageGradientEndColor", endColor);
+
+  let direction = group.getAttr("stageGradientDirection") || "lr";
+  if (direction !== "lr" && direction !== "tb" && direction !== "diag") {
+    direction = "lr";
+  }
+  group.setAttr("stageGradientDirection", direction);
+
+  const width = body.width();
+  const height = body.height();
+
+  if (fillMode === "solid") {
+    // Solid fill
+    body.fill(solidColor);
+    body.fillLinearGradientColorStops([]);
+  } else {
+    // Gradient fill
+    let startPoint = { x: 0, y: 0 };
+    let endPoint = { x: width, y: 0 }; // left → right
+
+    if (direction === "tb") {
+      endPoint = { x: 0, y: height };      // top → bottom
+    } else if (direction === "diag") {
+      endPoint = { x: width, y: height };  // diagonal
+    }
+
+    body.fill("");
+    body.fillLinearGradientStartPoint(startPoint);
+    body.fillLinearGradientEndPoint(endPoint);
+    body.fillLinearGradientColorStops([
+      0,
+      startColor,
+      1,
+      endColor,
+    ]);
+  }
+
+  // --- Text colour (auto vs manual) ---
+  let autoText = group.getAttr("stageTextAutoColor") !== false; // default: true
+  group.setAttr("stageTextAutoColor", autoText);
+
+  let manualTextColor =
+    group.getAttr("stageTextColor") ||
+    (label && label.fill && label.fill()) ||
+    "#ffffff";
+  group.setAttr("stageTextColor", manualTextColor);
+
+  const effectiveBg =
+    fillMode === "solid"
+      ? solidColor
+      : blendTwoHex(startColor, endColor);
+
+  const finalTextColor = autoText
+    ? computeContrastTextColor(effectiveBg)
+    : manualTextColor;
+
+  if (label) {
+    label.fill(finalTextColor);
+  }
+}
+
 
     function createSectionBlock(x, y) {
     const group = new Konva.Group({
@@ -1445,58 +1445,61 @@
 
 
   function createStage(x, y) {
-    const group = new Konva.Group({
-      // no snap: allow precise placement
-      x: x - 100,
-      y: y - 24,
-      draggable: true,
-      name: "stage",
-      shapeType: "stage",
-    });
+  const group = new Konva.Group({
+    // no snap: allow precise placement
+    x: x - 100,
+    y: y - 24,
+    draggable: true,
+    name: "stage",
+    shapeType: "stage",
+  });
 
-    // Default stage styling attributes
-    group.setAttr("stageLabel", "STAGE");
+  // Default stage styling attributes
+  group.setAttr("stageLabel", "STAGE");
 
-    group.setAttr("stageFillMode", "gradient");
-    group.setAttr("stageGradientPreset", "brand");
-    group.setAttr("stageGradientStartColor", "#1d4ed8");
-    group.setAttr("stageGradientEndColor", "#22c1c3");
-    group.setAttr("stageGradientDirection", "lr");
+  // NEW DEFAULT: solid black background with white text
+  group.setAttr("stageFillMode", "solid");
+  group.setAttr("stageSolidColor", "#000000");
 
-    group.setAttr("stageSolidColor", "#111827");
+  // Keep gradient options available in the inspector
+  group.setAttr("stageGradientPreset", "brand");
+  group.setAttr("stageGradientStartColor", "#1d4ed8");
+  group.setAttr("stageGradientEndColor", "#22c1c3");
+  group.setAttr("stageGradientDirection", "lr");
 
-    group.setAttr("stageTextAutoColor", true);
-    group.setAttr("stageTextColor", "#ffffff");
+  group.setAttr("stageTextAutoColor", true);
+  group.setAttr("stageTextColor", "#ffffff");
 
-    const rect = new Konva.Rect({
-      width: 200,
-      height: 52,
-      cornerRadius: 12,
-      stroke: "#0f172a",
-      strokeWidth: 1.8,
-      name: "body-rect",
-    });
+  const rect = new Konva.Rect({
+    width: 200,
+    height: 52,
+    cornerRadius: 12,
+    stroke: "#0f172a",
+    strokeWidth: 1.8,
+    name: "body-rect",
+  });
 
-    const label = new Konva.Text({
-      text: group.getAttr("stageLabel"),
-      name: "stage-label",
-      fontSize: 18,
-      fontStyle: "bold",
-      fontFamily: "system-ui",
-      align: "center",
-      verticalAlign: "middle",
-      width: rect.width(),
-      height: rect.height(),
-      fill: "#ffffff",
-    });
+  const label = new Konva.Text({
+    text: group.getAttr("stageLabel"),
+    name: "stage-label",
+    fontSize: 18,
+    fontStyle: "bold",
+    fontFamily: "system-ui",
+    align: "center",
+    verticalAlign: "middle",
+    width: rect.width(),
+    height: rect.height(),
+    fill: "#ffffff",
+  });
 
-    group.add(rect);
-    group.add(label);
+  group.add(rect);
+  group.add(label);
 
-    applyStageStyle(group);
-    ensureHitRect(group);
-    return group;
-  }
+  applyStageStyle(group);
+  ensureHitRect(group);
+  return group;
+}
+
 
   function createBar(x, y) {
     const group = new Konva.Group({
@@ -2744,51 +2747,52 @@
       el.appendChild(wrapper);
     }
 
-                function addFlipButton(node) {
-      const wrapper = document.createElement("div");
-      wrapper.className = "sb-field-row";
+          function addFlipButton(node) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "sb-field-row";
 
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.textContent = "Flip 180°";
-      btn.style.width = "100%";
-      btn.style.fontSize = "11px";
-      btn.style.padding = "6px 8px";
-      btn.style.borderRadius = "8px";
-      btn.style.border = "1px solid #e5e7eb";
-      btn.style.background = "#ffffff";
-      btn.style.cursor = "pointer";
-      btn.style.boxShadow = "0 1px 3px rgba(15,23,42,0.08)";
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.textContent = "Flip 180°";
+  btn.style.width = "100%";
+  btn.style.fontSize = "11px";
+  btn.style.padding = "6px 8px";
+  btn.style.borderRadius = "8px";
+  btn.style.border = "1px solid #e5e7eb";
+  btn.style.background = "#ffffff";
+  btn.style.cursor = "pointer";
+  btn.style.boxShadow = "0 1px 3px rgba(15,23,42,0.08)";
 
-      btn.addEventListener("click", (e) => {
-        e.preventDefault();
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
 
-        // 1) Normalise current rotation so it never runs away
-        const currentRot = normaliseAngle(node.rotation() || 0);
-        node.rotation(currentRot);
+    // 1) Normalise current rotation so it never runs away
+    const currentRot = normaliseAngle(node.rotation() || 0);
+    node.rotation(currentRot);
 
-        // 2) Flip through the Y-axis (horizontal mirror)
-        const sx = Number(node.scaleX() || 1);
-        node.scaleX(sx * -1);
+    // 2) Flip horizontally (mirror across the Y-axis)
+    const sx = Number(node.scaleX() || 1);
+    node.scaleX(sx * -1);
 
-        // 3) Keep labels readable / upright where needed
-        keepLabelsUpright(node);
+    // 3) Keep labels readable / upright where needed
+    keepLabelsUpright(node);
 
-        if (mapLayer) {
-          mapLayer.batchDraw();
-        }
-        if (overlayLayer) {
-          overlayLayer.batchDraw();
-        }
-
-        pushHistory();
-        // Refresh inspector so Rotation (deg) value shows the normalised value
-        renderInspector(node);
-      });
-
-      wrapper.appendChild(btn);
-      el.appendChild(wrapper);
+    if (mapLayer) {
+      mapLayer.batchDraw();
     }
+    if (overlayLayer) {
+      overlayLayer.batchDraw();
+    }
+
+    pushHistory();
+    // Refresh inspector so Rotation (deg) value shows the normalised value
+    renderInspector(node);
+  });
+
+  wrapper.appendChild(btn);
+  el.appendChild(wrapper);
+}
+
 
 
 
@@ -4242,186 +4246,198 @@
   // ---------- Behaviour attachment ----------
 
    function attachNodeBehaviour(node) {
-    if (!(node instanceof Konva.Group)) return;
+  if (!(node instanceof Konva.Group)) return;
+
+  ensureHitRect(node);
+
+  const shapeType = node.getAttr("shapeType") || node.name();
+
+  // Always keep selection blocks behind other elements
+  if (shapeType === "section" && mapLayer && node.getLayer() === mapLayer) {
+    node.moveToBottom();
+    mapLayer.batchDraw();
+  }
+
+  // Hover cursor
+  node.on("mouseover", () => {
+    if (!stage) return;
+    // If any creation / drawing tool is active, show crosshair even when hovering shapes
+    if (activeTool) {
+      stage.container().style.cursor = "crosshair";
+    } else {
+      stage.container().style.cursor = "grab";
+    }
+  });
+
+  node.on("mouseout", () => {
+    // Use the central helper so it stays in sync with tools
+    updateDefaultCursor();
+  });
+
+  // ---- Drag behaviour (supports multi-drag with SHIFT) ----
+  node.on("dragstart", () => {
+    // As soon as we move any element, drop the active creation tool
+    // so clicking elsewhere doesn't create another element.
+    setActiveTool(null);
+    updateDefaultCursor();
+
+    const nodes = transformer ? transformer.nodes() : [];
+
+    // If nothing is selected yet, select this node first
+    if (!nodes.length) {
+      selectNode(node, false);
+    }
+
+    const activeNodes = transformer ? transformer.nodes() : [node];
+
+    // If we’re dragging multiple nodes, snapshot their starting positions
+    if (activeNodes.length > 1) {
+      multiDragState = {
+        dragger: node,
+        basePositions: new Map(),
+      };
+
+      activeNodes.forEach((n) => {
+        multiDragState.basePositions.set(n, { x: n.x(), y: n.y() });
+      });
+    } else {
+      multiDragState = null;
+    }
+  });
+
+  node.on("dragmove", () => {
+    if (!multiDragState || multiDragState.dragger !== node) {
+      // Single-node drag: just redraw
+      mapLayer.batchDraw();
+      return;
+    }
+
+    const activeNodes = transformer ? transformer.nodes() : [node];
+    const base = multiDragState.basePositions.get(node);
+    if (!base) return;
+
+    const dx = node.x() - base.x;
+    const dy = node.y() - base.y;
+
+    // Move all selected nodes by the same delta, preserving their layout
+    activeNodes.forEach((n) => {
+      if (n === node) return; // this one is already being dragged by Konva
+      const orig = multiDragState.basePositions.get(n);
+      if (!orig) return;
+      n.position({
+        x: orig.x + dx,
+        y: orig.y + dy,
+      });
+    });
+
+    mapLayer.batchDraw();
+  });
+
+  node.on("dragend", () => {
+    const activeNodes = transformer ? transformer.nodes() : [node];
+
+    // IMPORTANT: no snapping here – allow pixel-perfect placement
+    activeNodes.forEach((n) => {
+      n.position({
+        x: n.x(),
+        y: n.y(),
+      });
+    });
+
+    multiDragState = null;
+    mapLayer.batchDraw();
+    pushHistory();
+  });
+
+  // ---- Transform behaviour ----
+  node.on("transformend", () => {
+    const tShape = node.getAttr("shapeType") || node.name();
+
+    if (
+      tShape === "stage" ||
+      tShape === "bar" ||
+      tShape === "exit" ||
+      tShape === "section" ||
+      tShape === "square" ||
+      tShape === "circle"
+    ) {
+      const scaleX = node.scaleX();
+      const scaleY = node.scaleY();
+      const body = getBodyRect(node);
+      const label = node.findOne("Text");
+
+      if (body) {
+        if (body instanceof Konva.Circle) {
+          // Keep circles as circles – uniform scale
+          const radius = body.radius();
+          const uniformScale = Math.max(
+            Math.abs(scaleX || 1),
+            Math.abs(scaleY || 1)
+          );
+          body.radius(radius * uniformScale);
+        } else {
+          // Rectangles (stage / bar / exit / section / square)
+          body.width(body.width() * scaleX);
+          body.height(body.height() * scaleY);
+        }
+      }
+
+      // Stage gradient / solid styling should be recalculated after resize
+      if (tShape === "stage") {
+        applyStageStyle(node);
+      }
+
+      if (label && body && body instanceof Konva.Rect) {
+        label.width(body.width());
+        label.height(body.height());
+        label.x(body.x());
+        label.y(body.y());
+      }
+
+      // Reset group scale so future transforms are clean
+      node.scale({ x: 1, y: 1 });
+    } else if (tShape !== "arrow") {
+      // For most other shapes we bake the transform into geometry and reset scale
+      node.scale({ x: 1, y: 1 });
+    }
+
+    if (
+      tShape === "row-seats" ||
+      tShape === "circular-table" ||
+      tShape === "rect-table"
+    ) {
+      keepLabelsUpright(node);
+    }
 
     ensureHitRect(node);
+    mapLayer.batchDraw();
+    pushHistory();
 
-    const shapeType = node.getAttr("shapeType") || node.name();
+    // keep the inspector in sync (Rotation deg, etc.)
+    renderInspector(node);
+  });
 
-    // Hover cursor
-    node.on("mouseover", () => {
-      if (!stage) return;
-      stage.container().style.cursor = "grab";
-    });
+  // ---- Inline table-label editing ----
+  if (shapeType === "circular-table" || shapeType === "rect-table") {
+    node.on("dblclick", (evt) => {
+      const target = evt.target;
+      if (!target || target.name() !== "table-label") return;
 
-    node.on("mouseout", () => {
-      // Use the central helper so it stays in sync with tools
-      updateDefaultCursor();
-    });
+      const textNode = target;
+      const group = node;
 
-    // ---- Drag behaviour (supports multi-drag with SHIFT) ----
-    node.on("dragstart", () => {
-      // As soon as we move any element, drop the active creation tool
-      // so clicking elsewhere doesn't create another element.
-      setActiveTool(null);
-      updateDefaultCursor();
-
-      const nodes = transformer ? transformer.nodes() : [];
-
-      // If nothing is selected yet, select this node first
-      if (!nodes.length) {
-        selectNode(node, false);
-      }
-
-      const activeNodes = transformer ? transformer.nodes() : [node];
-
-      // If we’re dragging multiple nodes, snapshot their starting positions
-      if (activeNodes.length > 1) {
-        multiDragState = {
-          dragger: node,
-          basePositions: new Map(),
-        };
-
-        activeNodes.forEach((n) => {
-          multiDragState.basePositions.set(n, { x: n.x(), y: n.y() });
-        });
-      } else {
-        multiDragState = null;
-      }
-    });
-
-    node.on("dragmove", () => {
-      if (!multiDragState || multiDragState.dragger !== node) {
-        // Single-node drag: just redraw
+      beginInlineTextEdit(textNode, (newText) => {
+        const val = (newText || "").trim();
+        textNode.text(val);
+        group.setAttr("tableLabel", val);
         mapLayer.batchDraw();
-        return;
-      }
-
-      const activeNodes = transformer ? transformer.nodes() : [node];
-      const base = multiDragState.basePositions.get(node);
-      if (!base) return;
-
-      const dx = node.x() - base.x;
-      const dy = node.y() - base.y;
-
-      // Move all selected nodes by the same delta, preserving their layout
-      activeNodes.forEach((n) => {
-        if (n === node) return; // this one is already being dragged by Konva
-        const orig = multiDragState.basePositions.get(n);
-        if (!orig) return;
-        n.position({
-          x: orig.x + dx,
-          y: orig.y + dy,
-        });
+        pushHistory();
+        renderInspector(group);
       });
-
-      mapLayer.batchDraw();
     });
-
-    node.on("dragend", () => {
-      const activeNodes = transformer ? transformer.nodes() : [node];
-
-      // IMPORTANT: no snapping here – allow pixel-perfect placement
-      activeNodes.forEach((n) => {
-        n.position({
-          x: n.x(),
-          y: n.y(),
-        });
-      });
-
-      multiDragState = null;
-      mapLayer.batchDraw();
-      pushHistory();
-    });
-
-    // ---- Transform behaviour ----
-    node.on("transformend", () => {
-      const tShape = node.getAttr("shapeType") || node.name();
-
-      if (
-        tShape === "stage" ||
-        tShape === "bar" ||
-        tShape === "exit" ||
-        tShape === "section" ||
-        tShape === "square" ||
-        tShape === "circle"
-      ) {
-        const scaleX = node.scaleX();
-        const scaleY = node.scaleY();
-        const body = getBodyRect(node);
-        const label = node.findOne("Text");
-
-        if (body) {
-          if (body instanceof Konva.Circle) {
-            // Keep circles as circles – uniform scale
-            const radius = body.radius();
-            const uniformScale = Math.max(
-              Math.abs(scaleX || 1),
-              Math.abs(scaleY || 1)
-            );
-            body.radius(radius * uniformScale);
-          } else {
-            // Rectangles (stage / bar / exit / section / square)
-            body.width(body.width() * scaleX);
-            body.height(body.height() * scaleY);
-          }
-        }
-
-        // Stage gradient / solid styling should be recalculated after resize
-        if (tShape === "stage") {
-          applyStageStyle(node);
-        }
-
-        if (label && body && body instanceof Konva.Rect) {
-          label.width(body.width());
-          label.height(body.height());
-          label.x(body.x());
-          label.y(body.y());
-        }
-
-        // Reset group scale so future transforms are clean
-        node.scale({ x: 1, y: 1 });
-      } else if (tShape !== "arrow") {
-        // For most other shapes we bake the transform into geometry and reset scale
-        node.scale({ x: 1, y: 1 });
-      }
-
-      if (
-        tShape === "row-seats" ||
-        tShape === "circular-table" ||
-        tShape === "rect-table"
-      ) {
-        keepLabelsUpright(node);
-      }
-
-      ensureHitRect(node);
-      mapLayer.batchDraw();
-      pushHistory();
-
-      // keep the inspector in sync (Rotation deg, etc.)
-      renderInspector(node);
-    });
-
-    // ---- Inline table-label editing ----
-    if (shapeType === "circular-table" || shapeType === "rect-table") {
-      node.on("dblclick", (evt) => {
-        const target = evt.target;
-        if (!target || target.name() !== "table-label") return;
-
-        const textNode = target;
-        const group = node;
-
-        beginInlineTextEdit(textNode, (newText) => {
-          const val = (newText || "").trim();
-          textNode.text(val);
-          group.setAttr("tableLabel", val);
-          mapLayer.batchDraw();
-          pushHistory();
-          renderInspector(group);
-        });
-      });
-    }
   }
+}
+
 
 
   // ---------- Node creation based on active tool ----------
