@@ -2,6 +2,14 @@
 /* global Konva */
 
 (function () {
+  // Prevent the builder from initialising twice (which caused double prompts / double elements)
+  if (window.__TIXALL_SEATMAP_BUILDER_ACTIVE__) {
+    // eslint-disable-next-line no-console
+    console.warn("seating-builder: already initialised, skipping second run");
+    return;
+  }
+  window.__TIXALL_SEATMAP_BUILDER_ACTIVE__ = true;
+
   const showId = window.__SEATMAP_SHOW_ID__;
   if (!showId) {
     // eslint-disable-next-line no-console
@@ -15,6 +23,7 @@
     console.error("seating-builder: #app not found");
     return;
   }
+
 
   // ---------- Inject modern styles (Apple / Canva vibes) ----------
 
@@ -2325,7 +2334,7 @@
 
   window.debugDumpRows = debugDumpRows;
 
-  // ---------- Selection inspector (right-hand panel) ----------
+    // ---------- Selection inspector (right-hand panel) ----------
 
   function renderInspector(node) {
     const el = getInspectorElement();
@@ -2333,6 +2342,7 @@
 
     el.innerHTML = "";
 
+    // ---- Small DOM helpers ----
     function addTitle(text) {
       const h = document.createElement("h4");
       h.className = "sb-inspector-title";
@@ -2562,7 +2572,7 @@
       el.appendChild(wrapper);
     }
 
-        function addColorField(labelText, value, onCommit) {
+    function addColorField(labelText, value, onCommit) {
       const wrapper = document.createElement("div");
       wrapper.className = "sb-field-row";
 
@@ -2627,6 +2637,264 @@
       el.appendChild(wrapper);
     }
 
+    // ---- Multi-selection helpers (alignment & distribution) ----
+
+    function getMultiSelectionNodes() {
+      if (!transformer || !transformer.nodes) return [];
+      return transformer
+        .nodes()
+        .filter(
+          (n) =>
+            n &&
+            n.getLayer &&
+            n.getLayer() === mapLayer &&
+            n instanceof Konva.Group
+        );
+    }
+
+    function alignOrDistributeSelection(action) {
+      if (!mapLayer) return;
+
+      const nodes = getMultiSelectionNodes();
+      if (!nodes || nodes.length < 2) return;
+
+      const items = nodes
+        .map((n) => {
+          let rect;
+          try {
+            rect = n.getClientRect({ relativeTo: mapLayer });
+          } catch (err) {
+            rect = null;
+          }
+          return { node: n, rect };
+        })
+        .filter(
+          ({ rect }) =>
+            rect &&
+            Number.isFinite(rect.x) &&
+            Number.isFinite(rect.y) &&
+            Number.isFinite(rect.width) &&
+            Number.isFinite(rect.height)
+        );
+
+      if (items.length < 2) return;
+
+      const xs = items.map((it) => it.rect.x);
+      const ys = items.map((it) => it.rect.y);
+      const rights = items.map((it) => it.rect.x + it.rect.width);
+      const bottoms = items.map((it) => it.rect.y + it.rect.height);
+
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...rights);
+      const minY = Math.min(...ys);
+      const maxY = Math.max(...bottoms);
+
+      const targetCenterX = (minX + maxX) / 2;
+      const targetCenterY = (minY + maxY) / 2;
+
+      // ----- Alignments -----
+      if (action === "align-top") {
+        items.forEach(({ node, rect }) => {
+          const dy = minY - rect.y;
+          node.y(snap(node.y() + dy));
+        });
+      } else if (action === "align-middle") {
+        items.forEach(({ node, rect }) => {
+          const center = rect.y + rect.height / 2;
+          const dy = targetCenterY - center;
+          node.y(snap(node.y() + dy));
+        });
+      } else if (action === "align-bottom") {
+        items.forEach(({ node, rect }) => {
+          const bottom = rect.y + rect.height;
+          const dy = maxY - bottom;
+          node.y(snap(node.y() + dy));
+        });
+      } else if (action === "align-left") {
+        items.forEach(({ node, rect }) => {
+          const dx = minX - rect.x;
+          node.x(snap(node.x() + dx));
+        });
+      } else if (action === "align-center") {
+        items.forEach(({ node, rect }) => {
+          const center = rect.x + rect.width / 2;
+          const dx = targetCenterX - center;
+          node.x(snap(node.x() + dx));
+        });
+      } else if (action === "align-right") {
+        items.forEach(({ node, rect }) => {
+          const right = rect.x + rect.width;
+          const dx = maxX - right;
+          node.x(snap(node.x() + dx));
+        });
+      }
+
+      // ----- Distribution (keep first & last fixed) -----
+      if (action === "distribute-horizontal" && items.length > 2) {
+        const sorted = items.slice().sort((a, b) => a.rect.x - b.rect.x);
+        const first = sorted[0];
+        const last = sorted[sorted.length - 1];
+
+        const outerSpan =
+          (last.rect.x + last.rect.width) - first.rect.x;
+        const totalWidth = sorted.reduce(
+          (sum, it) => sum + it.rect.width,
+          0
+        );
+        const gaps = sorted.length - 1;
+        const gapSize =
+          gaps > 0 ? (outerSpan - totalWidth) / gaps : 0;
+
+        let cursor = first.rect.x + first.rect.width;
+
+        for (let i = 1; i < sorted.length - 1; i += 1) {
+          const it = sorted[i];
+          const targetX = cursor + gapSize;
+          const dx = targetX - it.rect.x;
+          it.node.x(snap(it.node.x() + dx));
+          cursor = targetX + it.rect.width;
+        }
+      }
+
+      if (action === "distribute-vertical" && items.length > 2) {
+        const sorted = items.slice().sort((a, b) => a.rect.y - b.rect.y);
+        const first = sorted[0];
+        const last = sorted[sorted.length - 1];
+
+        const outerSpan =
+          (last.rect.y + last.rect.height) - first.rect.y;
+        const totalHeight = sorted.reduce(
+          (sum, it) => sum + it.rect.height,
+          0
+        );
+        const gaps = sorted.length - 1;
+        const gapSize =
+          gaps > 0 ? (outerSpan - totalHeight) / gaps : 0;
+
+        let cursor = first.rect.y + first.rect.height;
+
+        for (let i = 1; i < sorted.length - 1; i += 1) {
+          const it = sorted[i];
+          const targetY = cursor + gapSize;
+          const dy = targetY - it.rect.y;
+          it.node.y(snap(it.node.y() + dy));
+          cursor = targetY + it.rect.height;
+        }
+      }
+
+      mapLayer.batchDraw();
+      if (overlayLayer) overlayLayer.batchDraw();
+      pushHistory();
+    }
+
+    function addAlignButtonsPanel(selectedCount) {
+      addTitle("Multiple selection");
+      addStaticRow(
+        "Items selected",
+        `${selectedCount} object${selectedCount === 1 ? "" : "s"}`
+      );
+
+      const hint = document.createElement("p");
+      hint.className = "sb-inspector-empty";
+      hint.style.marginTop = "4px";
+      hint.textContent =
+        "Hold Shift and click to add/remove items. Use the buttons below to align or distribute.";
+      el.appendChild(hint);
+
+      function makeMiniButton(label, title, action) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = label;
+        btn.title = title;
+        btn.style.fontSize = "11px";
+        btn.style.padding = "4px 6px";
+        btn.style.borderRadius = "8px";
+        btn.style.border = "1px solid #e5e7eb";
+        btn.style.background = "#ffffff";
+        btn.style.cursor = "pointer";
+        btn.style.boxShadow = "0 1px 3px rgba(15,23,42,0.08)";
+        btn.style.whiteSpace = "nowrap";
+
+        btn.addEventListener("click", (e) => {
+          e.preventDefault();
+          alignOrDistributeSelection(action);
+        });
+
+        return btn;
+      }
+
+      // Align (vertical)
+      const alignLabel = document.createElement("div");
+      alignLabel.className = "sb-static-label";
+      alignLabel.style.marginTop = "8px";
+      alignLabel.textContent = "Align";
+      el.appendChild(alignLabel);
+
+      const gridAlign = document.createElement("div");
+      gridAlign.style.display = "grid";
+      gridAlign.style.gridTemplateColumns = "repeat(3,minmax(0,1fr))";
+      gridAlign.style.gap = "4px";
+      gridAlign.style.marginTop = "4px";
+
+      gridAlign.appendChild(
+        makeMiniButton("Top", "Align tops", "align-top")
+      );
+      gridAlign.appendChild(
+        makeMiniButton("Middle", "Align centres vertically", "align-middle")
+      );
+      gridAlign.appendChild(
+        makeMiniButton("Bottom", "Align bottoms", "align-bottom")
+      );
+
+      const gridAlign2 = document.createElement("div");
+      gridAlign2.style.display = "grid";
+      gridAlign2.style.gridTemplateColumns = "repeat(3,minmax(0,1fr))";
+      gridAlign2.style.gap = "4px";
+      gridAlign2.style.marginTop = "4px";
+
+      gridAlign2.appendChild(
+        makeMiniButton("Left", "Align left edges", "align-left")
+      );
+      gridAlign2.appendChild(
+        makeMiniButton("Centre", "Align centres horizontally", "align-center")
+      );
+      gridAlign2.appendChild(
+        makeMiniButton("Right", "Align right edges", "align-right")
+      );
+
+      el.appendChild(gridAlign);
+      el.appendChild(gridAlign2);
+
+      // Distribute
+      const distLabel = document.createElement("div");
+      distLabel.className = "sb-static-label";
+      distLabel.style.marginTop = "10px";
+      distLabel.textContent = "Distribute";
+      el.appendChild(distLabel);
+
+      const distRow = document.createElement("div");
+      distRow.style.display = "grid";
+      distRow.style.gridTemplateColumns = "repeat(2,minmax(0,1fr))";
+      distRow.style.gap = "6px";
+      distRow.style.marginTop = "4px";
+
+      distRow.appendChild(
+        makeMiniButton(
+          "Horizontally",
+          "Distribute with equal gaps horizontally",
+          "distribute-horizontal"
+        )
+      );
+      distRow.appendChild(
+        makeMiniButton(
+          "Vertically",
+          "Distribute with equal gaps vertically",
+          "distribute-vertical"
+        )
+      );
+
+      el.appendChild(distRow);
+    }
 
     // ----- Global layout defaults (no selection) -----
     if (!node) {
@@ -2703,14 +2971,15 @@
       return;
     }
 
-    const shapeType = node.getAttr("shapeType") || node.name();
-
     const nodes = transformer ? transformer.nodes() : [];
 
+    // ----- Multiple selection panel -----
     if (nodes && nodes.length > 1) {
-      el.innerHTML = `<p class="sb-inspector-empty">${nodes.length} items selected. Drag to move them together.</p>`;
+      addAlignButtonsPanel(nodes.length);
       return;
     }
+
+    const shapeType = node.getAttr("shapeType") || node.name();
 
     // ---- Row blocks ----
     if (shapeType === "row-seats") {
@@ -2989,7 +3258,6 @@
     }
 
     // ---- Rectangular tables ----
-        // ---- Rectangular tables ----
     if (shapeType === "rect-table") {
       const longSideSeats = node.getAttr("longSideSeats") ?? 4;
       const shortSideSeats = node.getAttr("shortSideSeats") ?? 2;
@@ -3077,7 +3345,7 @@
       return;
     }
 
-           // ---- Line / Curved line ----
+    // ---- Line / Curved line ----
     if (shapeType === "line" || shapeType === "curve-line") {
       const lineShape = node.findOne((n) => n instanceof Konva.Line);
 
@@ -3295,7 +3563,7 @@
       return;
     }
 
-        // ---- Stage block ----
+    // ---- Stage block ----
     if (shapeType === "stage") {
       const body = getBodyRect(node);
       const labelNode = node.findOne("Text");
@@ -3482,7 +3750,7 @@
       return;
     }
 
-            // ---- Basic shapes: section block / square / circle ----
+    // ---- Basic shapes: section block / square / circle ----
     if (
       shapeType === "section" ||
       shapeType === "square" ||
