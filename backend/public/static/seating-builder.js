@@ -307,7 +307,7 @@
 
   // ---------- Helpers: UI / tools ----------
 
-     function setActiveTool(tool) {
+          function setActiveTool(tool) {
     // If we are leaving a line tool and something is mid-draw, finish it
     if (
       (activeTool === "line" || activeTool === "curve-line") &&
@@ -322,6 +322,8 @@
         finishCurveLine(commit);
       }
     }
+
+    const previousTool = activeTool;
 
     if (activeTool === tool) {
       // Toggling the same tool off
@@ -339,6 +341,16 @@
       activeTool = tool;
     }
 
+    // When switching to a placement tool, automatically clear any current selection
+    if (
+      activeTool &&
+      activeTool !== "line" &&
+      activeTool !== "curve-line" &&
+      activeTool !== "arrow"
+    ) {
+      clearSelection();
+    }
+
     if (!mapLayer || !mapLayer.getStage()) return;
 
     if (!activeTool) {
@@ -347,6 +359,7 @@
       mapLayer.getStage().container().style.cursor = "crosshair";
     }
   }
+
 
 
 
@@ -865,6 +878,16 @@
   function snap(v) {
     return Math.round(v / GRID_SIZE) * GRID_SIZE;
   }
+
+  // Normalise angles so they always stay between 0° and 360°
+  function normaliseAngle(deg) {
+    let a = Number(deg);
+    if (!Number.isFinite(a)) a = 0;
+    a = a % 360;
+    if (a < 0) a += 360;
+    return a;
+  }
+
 
    // ---------- Hit-rect + editable line handles ----------
 
@@ -2629,7 +2652,7 @@
       el.appendChild(wrapper);
     }
 
-        function addFlipButton(node) {
+                function addFlipButton(node) {
       const wrapper = document.createElement("div");
       wrapper.className = "sb-field-row";
 
@@ -2647,10 +2670,16 @@
 
       btn.addEventListener("click", (e) => {
         e.preventDefault();
-        const current = Number(node.rotation() || 0);
-        node.rotation(current + 180);
 
-        // Keep seat / table labels upright if present
+        // 1) Normalise current rotation so it never runs away
+        const currentRot = normaliseAngle(node.rotation() || 0);
+        node.rotation(currentRot);
+
+        // 2) Flip through the Y-axis (horizontal mirror)
+        const sx = Number(node.scaleX() || 1);
+        node.scaleX(sx * -1);
+
+        // 3) Keep labels readable / upright where needed
         keepLabelsUpright(node);
 
         if (mapLayer) {
@@ -2659,14 +2688,16 @@
         if (overlayLayer) {
           overlayLayer.batchDraw();
         }
+
         pushHistory();
-        // Refresh inspector so Rotation (deg) value updates
+        // Refresh inspector so Rotation (deg) value shows the normalised value
         renderInspector(node);
       });
 
       wrapper.appendChild(btn);
       el.appendChild(wrapper);
     }
+
 
 
     // ---- Multi-selection helpers (alignment & distribution) ----
@@ -3077,11 +3108,13 @@
         -360,
         1,
         (val) => {
-          node.rotation(val);
+          const angle = normaliseAngle(val);
+          node.rotation(angle);
           keepLabelsUpright(node);
           if (overlayLayer) overlayLayer.batchDraw();
         }
       );
+
 
             // Quick flip (180° rotation shortcut)
       addFlipButton(node);
@@ -3411,8 +3444,9 @@
         Math.round(node.rotation() || 0),
         -360,
         1,
-        (val) => {
-          node.rotation(val);
+      (val) => {
+          const angle = normaliseAngle(val);
+          node.rotation(angle);
           if (overlayLayer) overlayLayer.batchDraw();
         }
       );
@@ -3498,8 +3532,9 @@
         Math.round(node.rotation() || 0),
         -360,
         1,
-        (val) => {
-          node.rotation(val);
+       (val) => {
+          const angle = normaliseAngle(val);
+          node.rotation(angle);
           if (overlayLayer) overlayLayer.batchDraw();
         }
       );
@@ -4342,40 +4377,121 @@
       case "single":
         return createSingleSeat(pointerX, pointerY);
 
-      case "circle-table": {
+            case "circle-table": {
         const seatCountStr = window.prompt(
           "How many seats around this table?",
           "8"
         );
-        if (seatCountStr == null) return null;
+        if (seatCountStr == null) {
+          // eslint-disable-next-line no-console
+          console.log("[seatmap] circular-table: cancelled by user");
+          return null;
+        }
+
         const seatCount = parseInt(seatCountStr, 10);
-        if (!Number.isFinite(seatCount) || seatCount <= 0) return null;
-        return createCircularTable(pointerX, pointerY, seatCount);
+        if (!Number.isFinite(seatCount) || seatCount <= 0) {
+          // eslint-disable-next-line no-console
+          console.warn("[seatmap] circular-table: invalid seat count", {
+            seatCountStr,
+            seatCount,
+          });
+          return null;
+        }
+
+        // eslint-disable-next-line no-console
+        console.log("[seatmap] circular-table: creating", {
+          x: pointerX,
+          y: pointerY,
+          seatCount,
+        });
+
+        try {
+          const node = createCircularTable(pointerX, pointerY, seatCount);
+          if (!node) {
+            // eslint-disable-next-line no-console
+            console.warn("[seatmap] circular-table: createCircularTable returned null");
+          }
+          window.__LAST_TABLE_DEBUG__ = { type: "circular", x: pointerX, y: pointerY, seatCount, node };
+          return node;
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error("[seatmap] circular-table: error creating table", err);
+          window.__LAST_TABLE_ERROR__ = err;
+          return null;
+        }
       }
 
-      case "rect-table": {
+
+            case "rect-table": {
         const input = window.prompt(
           "Rectangular table – seats per long side, seats per short side (e.g. 4,2)",
           "4,2"
         );
-        if (input == null) return null;
+        if (input == null) {
+          // eslint-disable-next-line no-console
+          console.log("[seatmap] rect-table: cancelled by user");
+          return null;
+        }
+
         const parts = input.split(",");
-        if (parts.length !== 2) return null;
+        if (parts.length !== 2) {
+          // eslint-disable-next-line no-console
+          console.warn("[seatmap] rect-table: invalid input format", { input });
+          return null;
+        }
+
         const longSideSeats = parseInt(parts[0].trim(), 10);
         const shortSideSeats = parseInt(parts[1].trim(), 10);
+
         if (
           !Number.isFinite(longSideSeats) ||
           longSideSeats < 0 ||
           !Number.isFinite(shortSideSeats) ||
           shortSideSeats < 0
         ) {
+          // eslint-disable-next-line no-console
+          console.warn("[seatmap] rect-table: invalid seat counts", {
+            input,
+            longSideSeats,
+            shortSideSeats,
+          });
           return null;
         }
-        return createRectTable(pointerX, pointerY, {
+
+        // eslint-disable-next-line no-console
+        console.log("[seatmap] rect-table: creating", {
+          x: pointerX,
+          y: pointerY,
           longSideSeats,
           shortSideSeats,
         });
+
+        try {
+          const node = createRectTable(pointerX, pointerY, {
+            longSideSeats,
+            shortSideSeats,
+          });
+          if (!node) {
+            // eslint-disable-next-line no-console
+            console.warn("[seatmap] rect-table: createRectTable returned null");
+          }
+          window.__LAST_TABLE_DEBUG__ = {
+            type: "rect",
+            x: pointerX,
+            y: pointerY,
+            longSideSeats,
+            shortSideSeats,
+            node,
+          };
+          return node;
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error("[seatmap] rect-table: error creating table", err);
+          window.__LAST_TABLE_ERROR__ = err;
+          return null;
+        }
       }
+
 
       case "stage":
         return createStage(pointerX, pointerY);
@@ -4478,7 +4594,7 @@
     // 2) Placement tools (rows, single seats, tables, shapes, text, etc.)
     // If a placement tool is active, ALWAYS create at the click position,
     // even if we clicked on top of another shape (inside a VIP box, etc.).
-    if (
+        if (
       activeTool &&
       activeTool !== "line" &&
       activeTool !== "curve-line" &&
@@ -4488,6 +4604,13 @@
       if (!node) return;
 
       mapLayer.add(node);
+
+      // NEW: send basic shapes to the back (background layers)
+      const t = node.getAttr("shapeType") || node.name();
+      if (t === "square" || t === "circle") {
+        node.moveToBottom();
+      }
+
       attachNodeBehaviour(node);
       mapLayer.batchDraw();
       updateSeatCount();
@@ -4499,6 +4622,7 @@
       updateDefaultCursor();
       return;
     }
+
 
     // 3) No active placement tool → standard selection behaviour
     let group = null;
