@@ -2791,6 +2791,49 @@ function createBar(x, y) {
       el.appendChild(wrapper);
     }
 
+function addNumberField(labelText, value, min, step, onCommit) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "sb-field-row";
+
+  const label = document.createElement("label");
+  label.className = "sb-label";
+
+  const span = document.createElement("span");
+  span.textContent = labelText;
+  span.style.display = "block";
+  span.style.marginBottom = "2px";
+
+  const input = document.createElement("input");
+  input.type = "number";
+  input.value = value;
+  input.min = String(min);
+  input.step = String(step || 1);
+  input.className = "sb-input";
+
+  function commit() {
+    const parsed = parseFloat(input.value);
+    if (!Number.isFinite(parsed)) return;
+    onCommit(parsed);
+    setActiveTool(null, { force: true });
+    mapLayer.batchDraw();
+    updateSeatCount();
+    pushHistory();
+  }
+
+  input.addEventListener("blur", commit);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      commit();
+      input.blur();
+    }
+  });
+
+  label.appendChild(span);
+  label.appendChild(input);
+  wrapper.appendChild(label);
+  el.appendChild(wrapper);
+}
 
         function addRangeField(labelText, value, min, max, step, onCommit) {
       const safeValue = Number.isFinite(Number(value)) ? Number(value) : 0;
