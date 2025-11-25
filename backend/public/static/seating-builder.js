@@ -1571,6 +1571,86 @@
     ensureHitRect(group);
     return group;
   }
+
+  function createSymbolNode(symbolType, x, y) {
+  const group = new Konva.Group({
+    x: x - 18,
+    y: y - 18,
+    draggable: true,
+    name: "symbol",
+    shapeType: "symbol",
+  });
+
+  group.setAttr("symbolType", symbolType);
+
+  // Base icon background
+  const rect = new Konva.Rect({
+    width: 36,
+    height: 36,
+    cornerRadius: 8,
+    name: "body-rect",
+    fill: "#111827",
+    stroke: "#0f172a",
+    strokeWidth: 1.4,
+  });
+
+  // Choose a simple pictogram / text per symbolType
+  const SYMBOL_LABELS = {
+    "bar": "🍺",
+    "wc-mixed": "WC",
+    "wc-male": "M",
+    "wc-female": "F",
+    "exit-symbol": "⬅",
+    "disabled": "♿",
+    "first-aid": "✚",
+    "info": "i",
+  };
+
+  const SYMBOL_FONT_SIZES = {
+    "bar": 18,
+    "wc-mixed": 13,
+    "wc-male": 16,
+    "wc-female": 16,
+    "exit-symbol": 18,
+    "disabled": 18,
+    "first-aid": 18,
+    "info": 18,
+  };
+
+  const text = SYMBOL_LABELS[symbolType] || "?";
+  const fontSize = SYMBOL_FONT_SIZES[symbolType] || 16;
+
+  const label = new Konva.Text({
+    text,
+    fontSize,
+    fontFamily: "system-ui",
+    fontStyle: "bold",
+    fill: "#ffffff",
+    align: "center",
+    verticalAlign: "middle",
+    width: rect.width(),
+    height: rect.height(),
+    listening: false,
+    name: "symbol-label",
+  });
+
+  group.add(rect);
+  group.add(label);
+  ensureHitRect(group);
+
+  // Inline edit of symbol text on double-click (so you can rename / tweak)
+  group.on("dblclick", () => {
+    beginInlineTextEdit(label, (newText) => {
+      label.text(newText || label.text());
+      ensureHitRect(group);
+      if (mapLayer) mapLayer.batchDraw();
+      pushHistory();
+    });
+  });
+
+  return group;
+}
+
   function createSquare(x, y) {
     const size = 100;
 
@@ -3951,10 +4031,11 @@ if (shapeType === "text" || shapeType === "label") {
     }
 
     // ---- Basic shapes: section block / square / circle ----
-    if (
+ if (
       shapeType === "section" ||
       shapeType === "square" ||
-      shapeType === "circle"
+      shapeType === "circle" ||
+      shapeType === "symbol"
     ) {
       const body = getBodyRect(node);
 
@@ -4104,14 +4185,16 @@ if (shapeType === "text" || shapeType === "label") {
     }
 
     // Room objects + basic shapes: resize in all directions (no rotation)
-    if (
+        if (
       shapeType === "stage" ||
       shapeType === "bar" ||
       shapeType === "exit" ||
       shapeType === "section" ||
       shapeType === "square" ||
-      shapeType === "circle"
+      shapeType === "circle" ||
+      shapeType === "symbol"
     ) {
+
       transformer.rotateEnabled(false);
       transformer.enabledAnchors([
         "top-left",
@@ -4619,6 +4702,31 @@ if (shapeType === "text" || shapeType === "label") {
 
       case "text":
         return createTextLabel(pointerX, pointerY);
+
+              case "symbol-bar":
+        return createSymbolNode("bar", pointerX, pointerY);
+
+      case "symbol-wc-mixed":
+        return createSymbolNode("wc-mixed", pointerX, pointerY);
+
+      case "symbol-wc-male":
+        return createSymbolNode("wc-male", pointerX, pointerY);
+
+      case "symbol-wc-female":
+        return createSymbolNode("wc-female", pointerX, pointerY);
+
+      case "symbol-exit":
+        return createSymbolNode("exit-symbol", pointerX, pointerY);
+
+      case "symbol-disabled":
+        return createSymbolNode("disabled", pointerX, pointerY);
+
+      case "symbol-first-aid":
+        return createSymbolNode("first-aid", pointerX, pointerY);
+
+      case "symbol-info":
+        return createSymbolNode("info", pointerX, pointerY);
+
 
       default:
         return null;
