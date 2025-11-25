@@ -680,6 +680,22 @@ router.get("/builder/preview/:showId", (req, res) => {
                     <span class="tb-left-label">Curved line</span>
                   </button>
 
+                      <!-- NEW: Arrow tool -->
+    <button class="tb-left-item tool-button" data-tool="arrow">
+      <img
+        class="tb-tool-icon icon-dark"
+        src="/seatmap-icons/line-black.png"
+        alt="Arrow"
+      />
+      <img
+        class="tb-tool-icon icon-blue"
+        src="/seatmap-icons/line-blue.png"
+        alt="Arrow (selected)"
+      />
+      <span class="tb-left-label">Arrow</span>
+    </button>
+
+
                   <button class="tb-left-item tool-button" data-tool="section">
                     <img
                       class="tb-tool-icon icon-dark"
