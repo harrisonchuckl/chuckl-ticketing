@@ -649,7 +649,7 @@ router.get("/builder/preview/:showId", (req, res) => {
                   <span class="tool-flyout-chevron">▸</span>
                 </button>
 
-                <div class="tool-flyout">
+                                <div class="tool-flyout">
                   <button class="tb-left-item tool-button" data-tool="line">
                     <img
                       class="tb-tool-icon icon-dark"
@@ -662,6 +662,21 @@ router.get("/builder/preview/:showId", (req, res) => {
                       alt="Line (selected)"
                     />
                     <span class="tb-left-label">Line</span>
+                  </button>
+
+                  <!-- NEW: Curved line tool -->
+                  <button class="tb-left-item tool-button" data-tool="curve-line">
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/line-black.png"
+                      alt="Curved line"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/line-blue.png"
+                      alt="Curved line (selected)"
+                    />
+                    <span class="tb-left-label">Curved line</span>
                   </button>
 
                   <button class="tb-left-item tool-button" data-tool="section">
@@ -677,6 +692,7 @@ router.get("/builder/preview/:showId", (req, res) => {
                     />
                     <span class="tb-left-label">Section block</span>
                   </button>
+
 
                   <!-- NEW: Square tool -->
                   <button class="tb-left-item tool-button" data-tool="square">
