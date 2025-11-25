@@ -2629,6 +2629,46 @@
       el.appendChild(wrapper);
     }
 
+        function addFlipButton(node) {
+      const wrapper = document.createElement("div");
+      wrapper.className = "sb-field-row";
+
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = "Flip 180°";
+      btn.style.width = "100%";
+      btn.style.fontSize = "11px";
+      btn.style.padding = "6px 8px";
+      btn.style.borderRadius = "8px";
+      btn.style.border = "1px solid #e5e7eb";
+      btn.style.background = "#ffffff";
+      btn.style.cursor = "pointer";
+      btn.style.boxShadow = "0 1px 3px rgba(15,23,42,0.08)";
+
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        const current = Number(node.rotation() || 0);
+        node.rotation(current + 180);
+
+        // Keep seat / table labels upright if present
+        keepLabelsUpright(node);
+
+        if (mapLayer) {
+          mapLayer.batchDraw();
+        }
+        if (overlayLayer) {
+          overlayLayer.batchDraw();
+        }
+        pushHistory();
+        // Refresh inspector so Rotation (deg) value updates
+        renderInspector(node);
+      });
+
+      wrapper.appendChild(btn);
+      el.appendChild(wrapper);
+    }
+
+
     // ---- Multi-selection helpers (alignment & distribution) ----
 
     function getMultiSelectionNodes() {
@@ -3043,6 +3083,10 @@
         }
       );
 
+            // Quick flip (180° rotation shortcut)
+      addFlipButton(node);
+
+
       // Seats per row (default)
       addNumberField("Seats per row", seatsPerRow, 1, 1, (val) => {
         node.setAttr("seatsPerRow", val);
@@ -3351,7 +3395,7 @@
         return;
       }
 
-      const strokeColor =
+            const strokeColor =
         lineShape.stroke && lineShape.stroke()
           ? lineShape.stroke()
           : "#111827";
@@ -3360,6 +3404,21 @@
       const dashArr = lineShape.dash && lineShape.dash();
       const lineStyle =
         dashArr && dashArr.length ? "dashed" : "solid";
+
+      // Rotation at group level
+      addNumberField(
+        "Rotation (deg)",
+        Math.round(node.rotation() || 0),
+        -360,
+        1,
+        (val) => {
+          node.rotation(val);
+          if (overlayLayer) overlayLayer.batchDraw();
+        }
+      );
+
+      // Flip helper (180°)
+      addFlipButton(node);
 
       addColorField("Stroke colour", strokeColor, (val) => {
         const v = val || "#111827";
@@ -3406,6 +3465,7 @@
       );
 
       return;
+
     }
 
     // ---- Arrow ----
@@ -3422,7 +3482,7 @@
         return;
       }
 
-      const strokeColor =
+            const strokeColor =
         arrow.stroke && arrow.stroke() ? arrow.stroke() : "#111827";
       const strokeWidth =
         Number(arrow.strokeWidth && arrow.strokeWidth()) || 2;
@@ -3431,6 +3491,21 @@
       const pointerWidth =
         Number(arrow.pointerWidth && arrow.pointerWidth()) || 14;
       const doubleEnded = !!arrow.pointerAtBeginning();
+
+      // Rotation at group level
+      addNumberField(
+        "Rotation (deg)",
+        Math.round(node.rotation() || 0),
+        -360,
+        1,
+        (val) => {
+          node.rotation(val);
+          if (overlayLayer) overlayLayer.batchDraw();
+        }
+      );
+
+      // Flip helper (180°)
+      addFlipButton(node);
 
       addColorField("Stroke colour", strokeColor, (val) => {
         const v = val || "#111827";
@@ -3487,6 +3562,7 @@
       );
 
       return;
+
     }
 
     // ---- Text labels ----
@@ -4509,6 +4585,49 @@
       return;
     }
 
+          // Keyboard nudging with arrow keys
+    if (
+      e.key === "ArrowUp" ||
+      e.key === "ArrowDown" ||
+      e.key === "ArrowLeft" ||
+      e.key === "ArrowRight"
+    ) {
+      // If no selection, do nothing (let browser scroll)
+      const selected =
+        nodes && nodes.length
+          ? nodes
+          : selectedNode
+          ? [selectedNode]
+          : [];
+
+      if (!selected.length) return;
+
+      const step = e.shiftKey ? 10 : 1; // Shift+Arrow = 10px, Arrow = 1px
+
+      let dx = 0;
+      let dy = 0;
+      if (e.key === "ArrowUp") dy = -step;
+      if (e.key === "ArrowDown") dy = step;
+      if (e.key === "ArrowLeft") dx = -step;
+      if (e.key === "ArrowRight") dx = step;
+
+      selected.forEach((n) => {
+        n.position({
+          x: n.x() + dx,
+          y: n.y() + dy,
+        });
+      });
+
+      if (mapLayer) {
+        mapLayer.batchDraw();
+        pushHistory();
+      }
+
+      e.preventDefault();
+      return;
+    }
+
+      
     if (
       (e.key === "c" || e.key === "C") &&
       (e.metaKey || e.ctrlKey)
