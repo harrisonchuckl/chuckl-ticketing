@@ -252,8 +252,40 @@
   let transformer;
 
   let activeTool = null;
+
+    let activeTool = null;
   let selectedNode = null;
   let copiedNodesJson = [];
+
+  // 🔵 Helper: update left-hand tool button state (black ↔ blue icons)
+  function updateToolButtonActiveState(currentTool) {
+    try {
+      const buttons = document.querySelectorAll(
+        ".tb-left-item.tool-button[data-tool]"
+      );
+
+      buttons.forEach(function (btn) {
+        const btnTool = btn.getAttribute("data-tool");
+        if (currentTool && btnTool === currentTool) {
+          btn.classList.add("is-active");
+        } else {
+          btn.classList.remove("is-active");
+        }
+      });
+    } catch (e) {
+      // fail-safe – don't crash the builder if the left-hand DOM isn't present
+      // eslint-disable-next-line no-console
+      console.warn("updateToolButtonActiveState error", e);
+    }
+  }
+
+  // Expose so the preview HTML script can also force a refresh after fly-out changes
+  window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
+
+  let selectedNode = null;
+  let copiedNodesJson = [];
+
+
 
   // track shift key for robust multi-select
   let isShiftPressed = false;
@@ -307,7 +339,7 @@
 
   // ---------- Helpers: UI / tools ----------
 
-          function setActiveTool(tool) {
+           function setActiveTool(tool) {
     // If we are leaving a line tool and something is mid-draw, finish it
     if (
       (activeTool === "line" || activeTool === "curve-line") &&
@@ -317,17 +349,21 @@
       if (currentLineToolType === "line") {
         const commit = currentLinePoints && currentLinePoints.length >= 4;
         finishCurrentLine(commit);
-      } else if (currentLineToolType === "curve-line") {
+      } else if (
+        currentLineToolType === "curve-line"
+      ) {
         const commit = curveRawPoints && curveRawPoints.length >= 4;
         finishCurveLine(commit);
       }
     }
 
-    const previousTool = activeTool;
-
     if (activeTool === tool) {
       // Toggling the same tool off
-      if (tool === "line" && currentLineGroup && currentLineToolType === "line") {
+      if (
+        tool === "line" &&
+        currentLineGroup &&
+        currentLineToolType === "line"
+      ) {
         finishCurrentLine(true);
       } else if (
         tool === "curve-line" &&
@@ -358,7 +394,11 @@
     } else {
       mapLayer.getStage().container().style.cursor = "crosshair";
     }
+
+    // 🔵 Sync left-hand button highlight + icon swap
+    updateToolButtonActiveState(activeTool);
   }
+
 
 
 
