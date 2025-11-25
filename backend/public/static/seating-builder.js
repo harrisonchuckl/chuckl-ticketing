@@ -4109,11 +4109,13 @@ function createBar(x, y) {
     }
 
     // ---- Basic shapes: section block / square / circle ----
- if (
-      shapeType === "section" ||
-      shapeType === "square" ||
-      shapeType === "circle" ||
-    ) {
+// ---- Basic shapes: section block / square / circle ----
+if (
+  shapeType === "section" ||
+  shapeType === "square" ||
+  shapeType === "circle"
+) {
+
       const body = getBodyRect(node);
 
       addTitle(
