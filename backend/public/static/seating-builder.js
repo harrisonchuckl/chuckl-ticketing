@@ -4848,7 +4848,6 @@ function createBar(x, y) {
       enabledAnchors: [],
       anchorSize: 7,
       borderStroke: "#2563eb",
-      anchorStroke: "#2563eb",
       anchorFill: "#ffffff",
       anchorStrokeWidth: 1.2,
       borderStrokeWidth: 1.2,
