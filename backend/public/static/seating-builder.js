@@ -344,6 +344,14 @@
     return seatCountEl;
   }
 
+    function getInspectorElement() {
+    if (!inspectorEl) {
+      inspectorEl = document.getElementById("sb-inspector");
+    }
+    return inspectorEl;
+  }
+
+
   // ---------- Helpers: UI / tools ----------
 
            function setActiveTool(tool) {
