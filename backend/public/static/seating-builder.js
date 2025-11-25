@@ -1026,31 +1026,40 @@
     input.addEventListener("blur", () => finish(true));
   }
 
-  // ---------- Shape factories ----------
+    // ---------- Shape factories ----------
 
-    function applyBasicShapeStyle(node) {
+  // Shared styling for basic shapes (section / square / circle)
+  function applyBasicShapeStyle(node) {
     if (!(node instanceof Konva.Group)) return;
 
     const shapeType = node.getAttr("shapeType") || node.name();
-    if (shapeType !== "section" && shapeType !== "square" && shapeType !== "circle") {
+    if (
+      shapeType !== "section" &&
+      shapeType !== "square" &&
+      shapeType !== "circle"
+    ) {
       return;
     }
 
     const body = getBodyRect(node);
     if (!body) return;
 
+    // --- Fill enabled ---
     let fillEnabled = node.getAttr("shapeFillEnabled");
     if (fillEnabled === undefined || fillEnabled === null) {
       fillEnabled = true;
     }
     fillEnabled = !!fillEnabled;
 
+    // --- Fill colour ---
     let fillColor = node.getAttr("shapeFillColor");
     if (!fillColor) {
       fillColor = body.fill() || "#ffffff";
     }
 
-    let strokeColor = node.getAttr("shapeStrokeColor") || body.stroke() || "#4b5563";
+    // --- Stroke colour / width ---
+    let strokeColor =
+      node.getAttr("shapeStrokeColor") || body.stroke() || "#4b5563";
 
     let strokeWidth = node.getAttr("shapeStrokeWidth");
     if (!Number.isFinite(Number(strokeWidth))) {
@@ -1058,11 +1067,24 @@
     }
     strokeWidth = Number(strokeWidth);
 
+    // --- Stroke style (solid / dashed / dotted) ---
+    let strokeStyle = node.getAttr("shapeStrokeStyle");
+    if (
+      strokeStyle !== "solid" &&
+      strokeStyle !== "dashed" &&
+      strokeStyle !== "dotted"
+    ) {
+      strokeStyle = "solid";
+    }
+    node.setAttr("shapeStrokeStyle", strokeStyle);
+
+    // Persist back on the group
     node.setAttr("shapeFillEnabled", fillEnabled);
     node.setAttr("shapeFillColor", fillColor);
     node.setAttr("shapeStrokeColor", strokeColor);
     node.setAttr("shapeStrokeWidth", strokeWidth);
 
+    // Apply to the body shape
     if (fillEnabled) {
       body.fill(fillColor || "#ffffff");
     } else {
@@ -1071,10 +1093,154 @@
 
     body.stroke(strokeColor);
     body.strokeWidth(strokeWidth);
+
+    // Dash pattern
+    if (strokeStyle === "dashed") {
+      body.dash([10, 4]); // longer dash, short gap
+    } else if (strokeStyle === "dotted") {
+      body.dash([2, 4]); // dotty look
+    } else {
+      body.dash([]); // solid
+    }
   }
 
+  // ---------- Stage style helpers ----------
 
-    function createSectionBlock(x, y) {
+  function hexToRgb(hex) {
+    const fallback = { r: 17, g: 24, b: 39 }; // #111827
+    if (typeof hex !== "string") return fallback;
+    let c = hex.trim();
+    if (!c) return fallback;
+    if (c[0] === "#") c = c.slice(1);
+    if (c.length === 3) {
+      c = c[0] + c[0] + c[1] + c[1] + c[2] + c[2];
+    }
+    if (c.length !== 6) return fallback;
+    const num = parseInt(c, 16);
+    if (!Number.isFinite(num)) return fallback;
+    return {
+      r: (num >> 16) & 255,
+      g: (num >> 8) & 255,
+      b: num & 255,
+    };
+  }
+
+  function rgbToHex(r, g, b) {
+    function toHex(v) {
+      const h = Math.max(0, Math.min(255, v)) .toString(16);
+      return h.length === 1 ? "0" + h : h;
+    }
+    return "#" + toHex(r) + toHex(g) + toHex(b);
+  }
+
+  function blendTwoHex(hexA, hexB) {
+    const a = hexToRgb(hexA);
+    const b = hexToRgb(hexB);
+    const r = Math.round((a.r + b.r) / 2);
+    const g = Math.round((a.g + b.g) / 2);
+    const c = Math.round((a.b + b.b) / 2);
+    return rgbToHex(r, g, c);
+  }
+
+  // Simple brightness-based contrast
+  function computeContrastTextColor(bgHex) {
+    const { r, g, b } = hexToRgb(bgHex);
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+    // Lighter backgrounds → dark text, darker backgrounds → white text
+    return brightness > 140 ? "#111827" : "#ffffff";
+  }
+
+  function applyStageStyle(group) {
+    if (!(group instanceof Konva.Group)) return;
+    const type = group.getAttr("shapeType") || group.name();
+    if (type !== "stage") return;
+
+    const body = getBodyRect(group);
+    if (!body) return;
+    const label = group.findOne("Text");
+
+    // --- Fill mode: solid vs gradient ---
+    let fillMode = group.getAttr("stageFillMode");
+    if (fillMode !== "solid" && fillMode !== "gradient") {
+      fillMode = "gradient";
+    }
+    group.setAttr("stageFillMode", fillMode);
+
+    // --- Solid colour setup ---
+    let solidColor =
+      group.getAttr("stageSolidColor") || body.fill() || "#111827";
+    group.setAttr("stageSolidColor", solidColor);
+
+    // --- Gradient setup ---
+    let startColor =
+      group.getAttr("stageGradientStartColor") || "#1d4ed8"; // brand blue
+    let endColor =
+      group.getAttr("stageGradientEndColor") || "#22c1c3"; // brand teal
+    group.setAttr("stageGradientStartColor", startColor);
+    group.setAttr("stageGradientEndColor", endColor);
+
+    let direction = group.getAttr("stageGradientDirection") || "lr";
+    if (direction !== "lr" && direction !== "tb" && direction !== "diag") {
+      direction = "lr";
+    }
+    group.setAttr("stageGradientDirection", direction);
+
+    const width = body.width();
+    const height = body.height();
+
+    if (fillMode === "solid") {
+      // Solid fill
+      body.fill(solidColor);
+      body.fillLinearGradientColorStops([]);
+    } else {
+      // Gradient fill
+      let startPoint = { x: 0, y: 0 };
+      let endPoint = { x: width, y: 0 }; // left → right
+
+      if (direction === "tb") {
+        // top → bottom
+        endPoint = { x: 0, y: height };
+      } else if (direction === "diag") {
+        // diagonal TL → BR
+        endPoint = { x: width, y: height };
+      }
+
+      body.fill("");
+      body.fillLinearGradientStartPoint(startPoint);
+      body.fillLinearGradientEndPoint(endPoint);
+      body.fillLinearGradientColorStops([
+        0,
+        startColor,
+        1,
+        endColor,
+      ]);
+    }
+
+    // --- Text colour (auto vs manual) ---
+    let autoText =
+      group.getAttr("stageTextAutoColor") !== false; // default: true
+    group.setAttr("stageTextAutoColor", autoText);
+
+    let manualTextColor =
+      group.getAttr("stageTextColor") ||
+      (label && label.fill && label.fill()) ||
+      "#ffffff";
+    group.setAttr("stageTextColor", manualTextColor);
+
+    let effectiveBg =
+      fillMode === "solid"
+        ? solidColor
+        : blendTwoHex(startColor, endColor);
+    let finalTextColor = autoText
+      ? computeContrastTextColor(effectiveBg)
+      : manualTextColor;
+
+    if (label) {
+      label.fill(finalTextColor);
+    }
+  }
+
+  function createSectionBlock(x, y) {
     const group = new Konva.Group({
       x: snap(x) - 80,
       y: snap(y) - 24,
@@ -1099,7 +1265,6 @@
     return group;
   }
 
-
   function createStage(x, y) {
     const group = new Konva.Group({
       x: snap(x) - 100,
@@ -1109,20 +1274,32 @@
       shapeType: "stage",
     });
 
+    // Default stage styling attributes
+    group.setAttr("stageLabel", "STAGE");
+
+    group.setAttr("stageFillMode", "gradient");
+    group.setAttr("stageGradientPreset", "brand");
+    group.setAttr("stageGradientStartColor", "#1d4ed8");
+    group.setAttr("stageGradientEndColor", "#22c1c3");
+    group.setAttr("stageGradientDirection", "lr");
+
+    group.setAttr("stageSolidColor", "#111827");
+
+    group.setAttr("stageTextAutoColor", true);
+    group.setAttr("stageTextColor", "#ffffff");
+
     const rect = new Konva.Rect({
       width: 200,
       height: 52,
       cornerRadius: 12,
       stroke: "#0f172a",
       strokeWidth: 1.8,
-      fillLinearGradientStartPoint: { x: 0, y: 0 },
-      fillLinearGradientEndPoint: { x: 200, y: 0 },
-      fillLinearGradientColorStops: [0, "#1d4ed8", 1, "#22c1c3"],
       name: "body-rect",
     });
 
     const label = new Konva.Text({
-      text: "STAGE",
+      text: group.getAttr("stageLabel"),
+      name: "stage-label",
       fontSize: 18,
       fontStyle: "bold",
       fontFamily: "system-ui",
@@ -1135,6 +1312,8 @@
 
     group.add(rect);
     group.add(label);
+
+    applyStageStyle(group);
     ensureHitRect(group);
     return group;
   }
@@ -1211,7 +1390,7 @@
     return group;
   }
 
-      function createSquare(x, y) {
+  function createSquare(x, y) {
     const size = 100;
 
     const group = new Konva.Group({
@@ -1238,8 +1417,7 @@
     return group;
   }
 
-
-   function createCircle(x, y) {
+  function createCircle(x, y) {
     const radius = 50;
 
     const group = new Konva.Group({
@@ -1263,7 +1441,6 @@
     ensureHitRect(group);
     return group;
   }
-
 
   function createTextLabel(x, y) {
     const group = new Konva.Group({
@@ -1339,300 +1516,8 @@
     return label;
   }
 
-  function createCircularTable(x, y, seatCount = 8) {
-    const group = new Konva.Group({
-      x: snap(x),
-      y: snap(y),
-      draggable: true,
-      name: "circular-table",
-      shapeType: "circular-table",
-    });
+  // (keep createCircularTable / createRectTable etc as they are below)
 
-    const mode = globalSeatLabelMode || "numbers";
-
-    group.setAttr("seatCount", seatCount);
-    group.setAttr("seatLabelMode", mode);
-    group.setAttr("seatStart", 1);
-    group.setAttr("tableLabel", nextTableLabel());
-
-    const seatRadius = SEAT_RADIUS;
-    const desiredGap = CIRC_DESIRED_GAP;
-
-    const circumferencePerSeat = seatRadius * 2 + desiredGap;
-    const ringRadiusFromCirc =
-      (seatCount * circumferencePerSeat) / (2 * Math.PI);
-
-    const minRingRadius =
-      CIRC_MIN_TABLE_RADIUS + seatRadius + desiredGap;
-
-    const seatRingRadius = Math.max(ringRadiusFromCirc, minRingRadius);
-    const tableRadius = seatRingRadius - seatRadius - desiredGap;
-
-    const table = new Konva.Circle({
-      radius: tableRadius,
-      stroke: "#4b5563",
-      strokeWidth: 1.8,
-      fill: "#ffffff",
-      name: "body-rect",
-    });
-
-    group.add(table);
-
-    const tableLabelText = group.getAttr("tableLabel") || "";
-    if (tableLabelText) {
-      const centreLabel = new Konva.Text({
-        text: tableLabelText,
-        fontSize: 13,
-        fontFamily: "system-ui",
-        fontStyle: "bold",
-        fill: "#111827",
-        align: "center",
-        verticalAlign: "middle",
-        width: tableRadius * 2,
-        height: tableRadius * 2,
-        offsetX: tableRadius,
-        offsetY: tableRadius,
-        listening: false,
-        name: "table-label",
-      });
-      group.add(centreLabel);
-    }
-
-    const seatLabelMode = group.getAttr("seatLabelMode") || "numbers";
-    const seatStartRaw = group.getAttr("seatStart");
-    const seatStart = Number.isFinite(Number(seatStartRaw))
-      ? Number(seatStartRaw)
-      : 1;
-
-    const isLabelled = seatLabelMode !== "none";
-    const seatFill = isLabelled ? "#ffffff" : "#111827";
-    const seatStroke = isLabelled ? "#4b5563" : "#111827";
-
-    for (let i = 0; i < seatCount; i += 1) {
-      const angle = (i / seatCount) * Math.PI * 2;
-      const sx = Math.cos(angle) * seatRingRadius;
-      const sy = Math.sin(angle) * seatRingRadius;
-
-      const seat = new Konva.Circle({
-        x: sx,
-        y: sy,
-        radius: seatRadius,
-        stroke: seatStroke,
-        strokeWidth: 1.6,
-        fill: seatFill,
-        isSeat: true,
-      });
-
-      group.add(seat);
-
-      if (seatLabelMode !== "none") {
-        const labelText = seatLabelFromIndex(
-          seatLabelMode,
-          i,
-          seatStart
-        );
-        const label = makeSeatLabelText(labelText, sx, sy);
-        group.add(label);
-      }
-    }
-
-    ensureHitRect(group);
-    return group;
-  }
-
-  function createRectTable(
-    x,
-    y,
-    config = { longSideSeats: 4, shortSideSeats: 2 }
-  ) {
-    const { longSideSeats, shortSideSeats } = config;
-
-    const group = new Konva.Group({
-      x: snap(x),
-      y: snap(y),
-      draggable: true,
-      name: "rect-table",
-      shapeType: "rect-table",
-    });
-
-    const mode = globalSeatLabelMode || "numbers";
-
-    group.setAttr("longSideSeats", longSideSeats);
-    group.setAttr("shortSideSeats", shortSideSeats);
-    group.setAttr("seatLabelMode", mode);
-    group.setAttr("seatStart", 1);
-    group.setAttr("tableLabel", nextTableLabel());
-
-    const seatRadius = SEAT_RADIUS;
-    const seatGap = 6;
-
-    const longSpan =
-      longSideSeats > 0 ? (longSideSeats - 1) * (seatRadius * 2 + seatGap) : 0;
-    const shortSpan =
-      shortSideSeats > 0
-        ? (shortSideSeats - 1) * (seatRadius * 2 + seatGap) : 0;
-
-    const width = longSpan + seatRadius * 4;
-    const height = shortSpan + seatRadius * 4;
-
-    const table = new Konva.Rect({
-      width,
-      height,
-      cornerRadius: 6,
-      stroke: "#4b5563",
-      strokeWidth: 1.8,
-      fill: "#ffffff",
-      offsetX: width / 2,
-      offsetY: height / 2,
-      name: "body-rect",
-    });
-
-    group.add(table);
-
-    const tableLabelText = group.getAttr("tableLabel") || "";
-    if (tableLabelText) {
-      const centreLabel = new Konva.Text({
-        text: tableLabelText,
-        fontSize: 13,
-        fontFamily: "system-ui",
-        fontStyle: "bold",
-        fill: "#111827",
-        align: "center",
-        verticalAlign: "middle",
-        width,
-        height,
-        offsetX: width / 2,
-        offsetY: height / 2,
-        listening: false,
-        name: "table-label",
-      });
-      group.add(centreLabel);
-    }
-
-    const seatLabelMode = group.getAttr("seatLabelMode") || "numbers";
-    const seatStartRaw = group.getAttr("seatStart");
-    const seatStart = Number.isFinite(Number(seatStartRaw))
-      ? Number(seatStartRaw)
-      : 1;
-
-    const isLabelled = seatLabelMode !== "none";
-    const seatFill = isLabelled ? "#ffffff" : "#111827";
-    const seatStroke = isLabelled ? "#4b5563" : "#111827";
-
-    let seatIndex = 0;
-
-    // long sides (top + bottom)
-    for (let i = 0; i < longSideSeats; i += 1) {
-      const sx =
-        -width / 2 + seatRadius * 2 + i * (seatRadius * 2 + seatGap);
-
-      const topSeatY = -height / 2 - 14;
-      const bottomSeatY = height / 2 + 14;
-
-      const topSeat = new Konva.Circle({
-        x: sx,
-        y: topSeatY,
-        radius: seatRadius,
-        stroke: seatStroke,
-        strokeWidth: 1.7,
-        fill: seatFill,
-        isSeat: true,
-      });
-
-      const bottomSeat = new Konva.Circle({
-        x: sx,
-        y: bottomSeatY,
-        radius: seatRadius,
-        stroke: seatStroke,
-        strokeWidth: 1.7,
-        fill: seatFill,
-        isSeat: true,
-      });
-
-      group.add(topSeat);
-      group.add(bottomSeat);
-
-      if (seatLabelMode !== "none") {
-        const topText = seatLabelFromIndex(
-          seatLabelMode,
-          seatIndex,
-          seatStart
-        );
-        seatIndex += 1;
-        const bottomText = seatLabelFromIndex(
-          seatLabelMode,
-          seatIndex,
-          seatStart
-        );
-        seatIndex += 1;
-
-        const topLabel = makeSeatLabelText(topText, sx, topSeatY);
-        const bottomLabel = makeSeatLabelText(bottomText, sx, bottomSeatY);
-        group.add(topLabel);
-        group.add(bottomLabel);
-      } else {
-        seatIndex += 2;
-      }
-    }
-
-    // short sides (left + right)
-    for (let i = 0; i < shortSideSeats; i += 1) {
-      const sy =
-        -height / 2 + seatRadius * 2 + i * (seatRadius * 2 + seatGap);
-
-      const leftSeatX = -width / 2 - 14;
-      const rightSeatX = width / 2 + 14;
-
-      const leftSeat = new Konva.Circle({
-        x: leftSeatX,
-        y: sy,
-        radius: seatRadius,
-        stroke: seatStroke,
-        strokeWidth: 1.7,
-        fill: seatFill,
-        isSeat: true,
-      });
-      const rightSeat = new Konva.Circle({
-        x: rightSeatX,
-        y: sy,
-        radius: seatRadius,
-        stroke: seatStroke,
-        strokeWidth: 1.7,
-        fill: seatFill,
-        isSeat: true,
-      });
-
-      group.add(leftSeat);
-      group.add(rightSeat);
-
-      if (seatLabelMode !== "none") {
-        const leftText = seatLabelFromIndex(
-          seatLabelMode,
-          seatIndex,
-          seatStart
-        );
-        seatIndex += 1;
-        const rightText = seatLabelFromIndex(
-          seatLabelMode,
-          seatIndex,
-          seatStart
-        );
-        seatIndex += 1;
-
-        const leftLabel = makeSeatLabelText(leftText, leftSeatX, sy);
-        const rightLabel = makeSeatLabelText(rightText, rightSeatX, sy);
-        group.add(leftLabel);
-        group.add(rightLabel);
-      } else {
-        seatIndex += 2;
-      }
-    }
-
-    ensureHitRect(group);
-    return group;
-  }
-
-  // -------- Row of seats --------
 
   function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
     const snappedX = snap(x);
@@ -3265,7 +3150,194 @@
       return;
     }
 
-        // ---- Basic shapes: section block / square / circle ----
+        // ---- Stage block ----
+    if (shapeType === "stage") {
+      const body = getBodyRect(node);
+      const labelNode = node.findOne("Text");
+
+      addTitle("Stage");
+
+      // Initialise attributes from existing visuals if missing (for old layouts)
+      let stageLabel = node.getAttr("stageLabel") || (labelNode && labelNode.text()) || "STAGE";
+      node.setAttr("stageLabel", stageLabel);
+
+      let fillMode = node.getAttr("stageFillMode");
+      if (fillMode !== "solid" && fillMode !== "gradient") {
+        // Infer from whether a gradient is present
+        const stops =
+          body && body.fillLinearGradientColorStops
+            ? body.fillLinearGradientColorStops()
+            : null;
+        fillMode = stops && stops.length >= 4 ? "gradient" : "solid";
+      }
+      node.setAttr("stageFillMode", fillMode);
+
+      // Gradient defaults
+      let startColor =
+        node.getAttr("stageGradientStartColor") || "#1d4ed8";
+      let endColor =
+        node.getAttr("stageGradientEndColor") || "#22c1c3";
+      node.setAttr("stageGradientStartColor", startColor);
+      node.setAttr("stageGradientEndColor", endColor);
+
+      let gradientPreset =
+        node.getAttr("stageGradientPreset") || "brand";
+      node.setAttr("stageGradientPreset", gradientPreset);
+
+      let direction = node.getAttr("stageGradientDirection") || "lr";
+      if (direction !== "lr" && direction !== "tb" && direction !== "diag") {
+        direction = "lr";
+      }
+      node.setAttr("stageGradientDirection", direction);
+
+      // Solid colour default
+      let solidColor =
+        node.getAttr("stageSolidColor") ||
+        (body && body.fill && body.fill()) ||
+        "#111827";
+      node.setAttr("stageSolidColor", solidColor);
+
+      // Text colour / auto
+      let autoText =
+        node.getAttr("stageTextAutoColor") !== false; // default true
+      node.setAttr("stageTextAutoColor", autoText);
+
+      let textColor =
+        node.getAttr("stageTextColor") ||
+        (labelNode && labelNode.fill && labelNode.fill()) ||
+        "#ffffff";
+      node.setAttr("stageTextColor", textColor);
+
+      // Commit initial styling normalisation
+      applyStageStyle(node);
+
+      // --- Label field ---
+      addTextField("Label", stageLabel, (val) => {
+        const value = (val || "").trim() || "STAGE";
+        node.setAttr("stageLabel", value);
+        if (labelNode) {
+          labelNode.text(value);
+        }
+        ensureHitRect(node);
+      });
+
+      // --- Fill mode toggle ---
+      addSelectField(
+        "Fill mode",
+        fillMode,
+        [
+          { value: "solid", label: "Solid colour" },
+          { value: "gradient", label: "Gradient" },
+        ],
+        (mode) => {
+          const safeMode = mode === "solid" ? "solid" : "gradient";
+          node.setAttr("stageFillMode", safeMode);
+          applyStageStyle(node);
+          renderInspector(node); // refresh visible options
+        }
+      );
+
+      if (fillMode === "solid") {
+        // Solid background colour picker
+        addColorField("Background colour", solidColor, (val) => {
+          const v = val || "#111827";
+          node.setAttr("stageSolidColor", v);
+          applyStageStyle(node);
+        });
+      } else {
+        // Gradient options
+        addSelectField(
+          "Gradient preset",
+          gradientPreset,
+          [
+            { value: "brand", label: "Brand blue → teal" },
+            { value: "purple-pink", label: "Purple → pink" },
+            { value: "orange-red", label: "Orange → red" },
+            { value: "custom", label: "Custom" },
+          ],
+          (preset) => {
+            let p = preset;
+            if (
+              p !== "brand" &&
+              p !== "purple-pink" &&
+              p !== "orange-red" &&
+              p !== "custom"
+            ) {
+              p = "brand";
+            }
+            node.setAttr("stageGradientPreset", p);
+
+            if (p === "brand") {
+              node.setAttr("stageGradientStartColor", "#1d4ed8");
+              node.setAttr("stageGradientEndColor", "#22c1c3");
+            } else if (p === "purple-pink") {
+              node.setAttr("stageGradientStartColor", "#7e22ce");
+              node.setAttr("stageGradientEndColor", "#ec4899");
+            } else if (p === "orange-red") {
+              node.setAttr("stageGradientStartColor", "#fb923c");
+              node.setAttr("stageGradientEndColor", "#ef4444");
+            }
+            applyStageStyle(node);
+            renderInspector(node); // show / hide custom fields
+          }
+        );
+
+        // If custom, show start/end colour pickers
+        if (gradientPreset === "custom") {
+          addColorField("Gradient start colour", startColor, (val) => {
+            node.setAttr(
+              "stageGradientStartColor",
+              val || "#1d4ed8"
+            );
+            applyStageStyle(node);
+          });
+
+          addColorField("Gradient end colour", endColor, (val) => {
+            node.setAttr("stageGradientEndColor", val || "#22c1c3");
+            applyStageStyle(node);
+          });
+        }
+
+        // Gradient direction
+        addSelectField(
+          "Gradient direction",
+          direction,
+          [
+            { value: "lr", label: "Left → Right" },
+            { value: "tb", label: "Top → Bottom" },
+            { value: "diag", label: "Diagonal" },
+          ],
+          (val) => {
+            const safe =
+              val === "tb" || val === "diag" ? val : "lr";
+            node.setAttr("stageGradientDirection", safe);
+            applyStageStyle(node);
+          }
+        );
+      }
+
+      // --- Text colour controls ---
+      addCheckboxField(
+        "Auto text colour for contrast",
+        autoText,
+        (checked) => {
+          node.setAttr("stageTextAutoColor", !!checked);
+          applyStageStyle(node);
+        }
+      );
+
+      addColorField("Text colour", textColor, (val) => {
+        const v = val || "#ffffff";
+        node.setAttr("stageTextColor", v);
+        node.setAttr("stageTextAutoColor", false);
+        applyStageStyle(node);
+        renderInspector(node); // sync checkbox state
+      });
+
+      return;
+    }
+
+            // ---- Basic shapes: section block / square / circle ----
     if (
       shapeType === "section" ||
       shapeType === "square" ||
@@ -3305,6 +3377,25 @@
           ? Number(strokeWidthRaw)
           : body.strokeWidth() || 1.7;
 
+      // Determine current stroke style from attr or dash pattern
+      let strokeStyleAttr = node.getAttr("shapeStrokeStyle");
+      let strokeStyle;
+      if (
+        strokeStyleAttr === "solid" ||
+        strokeStyleAttr === "dashed" ||
+        strokeStyleAttr === "dotted"
+      ) {
+        strokeStyle = strokeStyleAttr;
+      } else {
+        const dashArr = body.dash && body.dash();
+        if (dashArr && dashArr.length) {
+          strokeStyle = dashArr[0] <= 3 ? "dotted" : "dashed";
+        } else {
+          strokeStyle = "solid";
+        }
+        node.setAttr("shapeStrokeStyle", strokeStyle);
+      }
+
       addCheckboxField("Fill background", fillEnabled, (checked) => {
         node.setAttr("shapeFillEnabled", checked);
         applyBasicShapeStyle(node);
@@ -3315,10 +3406,12 @@
         applyBasicShapeStyle(node);
       });
 
-      addNumberField(
-        "Outline thickness",
+      // Slider 0–10px for outline thickness
+      addRangeField(
+        "Outline thickness (px)",
         strokeWidth,
         0,
+        10,
         0.5,
         (val) => {
           node.setAttr("shapeStrokeWidth", val);
@@ -3330,6 +3423,23 @@
         node.setAttr("shapeStrokeColor", val || "#4b5563");
         applyBasicShapeStyle(node);
       });
+
+      // Outline style: solid / dotted / dashed
+      addSelectField(
+        "Outline style",
+        strokeStyle,
+        [
+          { value: "solid", label: "Solid" },
+          { value: "dotted", label: "Dots" },
+          { value: "dashed", label: "Dashes" },
+        ],
+        (val) => {
+          const safe =
+            val === "dotted" || val === "dashed" ? val : "solid";
+          node.setAttr("shapeStrokeStyle", safe);
+          applyBasicShapeStyle(node);
+        }
+      );
 
       return;
     }
@@ -3609,7 +3719,7 @@
     });
 
     // ---- Transform behaviour ----
-       node.on("transformend", () => {
+         node.on("transformend", () => {
       const tShape = node.getAttr("shapeType") || node.name();
 
       if (
@@ -3638,14 +3748,12 @@
             // Rectangles (stage / bar / exit / section / square)
             body.width(body.width() * scaleX);
             body.height(body.height() * scaleY);
-
-            if (tShape === "stage") {
-              body.fillLinearGradientEndPoint({
-                x: body.width(),
-                y: 0,
-              });
-            }
           }
+        }
+
+        // Stage gradient / solid styling should be recalculated after resize
+        if (tShape === "stage") {
+          applyStageStyle(node);
         }
 
         if (label && body && body instanceof Konva.Rect) {
@@ -3657,8 +3765,8 @@
 
         // Reset group scale so future transforms are clean
         node.scale({ x: 1, y: 1 });
-            } else if (tShape !== "arrow") {
-        // For most shapes we bake the transform into geometry and reset scale
+      } else if (tShape !== "arrow") {
+        // For most other shapes we bake the transform into geometry and reset scale
         node.scale({ x: 1, y: 1 });
       }
 
@@ -3677,6 +3785,7 @@
       // keep the inspector in sync (Rotation deg, etc.)
       renderInspector(node);
     });
+
 
     // ---- Inline table-label editing ----
     if (shapeType === "circular-table" || shapeType === "rect-table") {
