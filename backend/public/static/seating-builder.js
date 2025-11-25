@@ -254,10 +254,12 @@
   // multi-drag state: snapshot of positions when drag starts
   let multiDragState = null;
 
-  // Line drawing state (for the new Line tool)
-  let currentLineGroup = null;    // Konva.Group that contains the line + hit rect
+   // Line drawing state (for the Line + Curved Line tools)
+  let currentLineGroup = null;    // Konva.Group that contains the line + hit rect + handles
   let currentLine = null;         // Konva.Line inside the group
   let currentLinePoints = [];     // [x1, y1, x2, y2, ...]
+  let currentLineToolType = null; // "line" | "curve-line"
+
 
   // history is per-mapLayer JSON
   let history = [];
@@ -289,22 +291,30 @@
 
   // ---------- Helpers: UI / tools ----------
 
-  function setActiveTool(tool) {
-    // If we are leaving line mode and a line is mid-draw, finish it
-    if (activeTool === "line" && tool !== "line" && currentLineGroup) {
+    function setActiveTool(tool) {
+    // If we are leaving a line tool and a line is mid-draw, finish it
+    if (
+      (activeTool === "line" || activeTool === "curve-line") &&
+      tool !== activeTool &&
+      currentLineGroup
+    ) {
       const commit = currentLinePoints && currentLinePoints.length >= 4;
       finishCurrentLine(commit);
     }
 
     if (activeTool === tool) {
       // Toggling the same tool off
-      if (tool === "line" && currentLineGroup) {
+      if (
+        (tool === "line" || tool === "curve-line") &&
+        currentLineGroup
+      ) {
         finishCurrentLine(true);
       }
       activeTool = null;
     } else {
       activeTool = tool;
     }
+
 
     document.querySelectorAll(".tool-button").forEach((btn) => {
       const t = btn.getAttribute("data-tool");
@@ -317,11 +327,10 @@
 
     if (!mapLayer || !mapLayer.getStage()) return;
 
-    if (!activeTool) {
+       if (!activeTool) {
       mapLayer.getStage().container().style.cursor = "default";
     } else {
-      mapLayer.getStage().container().style.cursor =
-        activeTool === "line" ? "crosshair" : "crosshair";
+      mapLayer.getStage().container().style.cursor = "crosshair";
     }
   }
 
@@ -457,7 +466,7 @@
 
   // ---------- Line tool helpers (multi-point line) ----------
 
-  function finishCurrentLine(commit) {
+    function finishCurrentLine(commit) {
     if (!currentLineGroup) return;
 
     if (!commit || currentLinePoints.length < 4) {
@@ -470,11 +479,15 @@
         if (currentLine) currentLine.points(currentLinePoints);
       }
       ensureHitRect(currentLineGroup);
+      buildLineHandles(currentLineGroup);
+      // Auto-select the finished line so you can edit it immediately
+      selectNode(currentLineGroup);
     }
 
     currentLineGroup = null;
     currentLine = null;
     currentLinePoints = [];
+    currentLineToolType = null;
 
     if (mapLayer) {
       mapLayer.batchDraw();
@@ -483,20 +496,25 @@
     }
   }
 
-  function handleLineClick(pointerPos) {
+  function handleLineClick(pointerPos, toolType) {
     if (!stage || !mapLayer) return;
     const x = snap(pointerPos.x);
     const y = snap(pointerPos.y);
 
     // First click: create a new group + line
     if (!currentLineGroup) {
+      const shapeType =
+        toolType === "curve-line" ? "curve-line" : "line";
+
       currentLineGroup = new Konva.Group({
         x: 0,
         y: 0,
         draggable: true,
-        name: "line",
-        shapeType: "line",
+        name: shapeType,
+        shapeType,
       });
+
+      currentLineToolType = shapeType;
 
       currentLine = new Konva.Line({
         points: [x, y, x, y], // placeholder second point
@@ -504,6 +522,8 @@
         strokeWidth: 2,
         lineCap: "round",
         lineJoin: "round",
+        // tension > 0 makes it a smooth curve
+        tension: shapeType === "curve-line" ? 0.5 : 0,
       });
 
       currentLineGroup.add(currentLine);
@@ -523,6 +543,7 @@
 
     mapLayer.batchDraw();
   }
+
 
   function snap(v) {
     return Math.round(v / GRID_SIZE) * GRID_SIZE;
@@ -553,6 +574,77 @@
       console.error("ensureHitRect: invalid client rect", bounds);
       return;
     }
+
+      // ----- Editable line handles (for line + curved line) -----
+
+  function buildLineHandles(group) {
+    if (!(group instanceof Konva.Group)) return;
+
+    const shapeType = group.getAttr("shapeType") || group.name();
+    if (shapeType !== "line" && shapeType !== "curve-line") return;
+
+    const line = group.findOne((n) => n instanceof Konva.Line);
+    if (!line) return;
+
+    // Remove any existing handles
+    group
+      .find((n) => n.getAttr && n.getAttr("isLineHandle"))
+      .forEach((h) => h.destroy());
+
+    const pts = line.points() || [];
+    for (let i = 0; i < pts.length; i += 2) {
+      const hx = pts[i];
+      const hy = pts[i + 1];
+
+      const handle = new Konva.Circle({
+        x: hx,
+        y: hy,
+        radius: 6,
+        fill: "#ffffff",
+        stroke: "#2563eb",
+        strokeWidth: 1.5,
+        draggable: true,
+        name: "line-handle",
+      });
+
+      handle.setAttr("isLineHandle", true);
+      handle.setAttr("pointIndex", i);
+
+      handle.on("dragmove", () => {
+        const p = line.points().slice();
+        const idx = handle.getAttr("pointIndex");
+        if (!Number.isFinite(idx)) return;
+
+        p[idx] = handle.x();
+        p[idx + 1] = handle.y();
+
+        line.points(p);
+        ensureHitRect(group);
+        mapLayer && mapLayer.batchDraw();
+      });
+
+      handle.on("dragend", () => {
+        ensureHitRect(group);
+        mapLayer && mapLayer.batchDraw();
+        pushHistory();
+      });
+
+      group.add(handle);
+    }
+
+    showLineHandles(group, true);
+    group.draw();
+  }
+
+  function showLineHandles(group, visible) {
+    if (!(group instanceof Konva.Group)) return;
+
+    group
+      .find((n) => n.getAttr && n.getAttr("isLineHandle"))
+      .forEach((h) => {
+        h.visible(!!visible);
+      });
+  }
 
     const padding = GRID_SIZE * 0.4;
 
@@ -692,7 +784,53 @@
 
   // ---------- Shape factories ----------
 
-  function createSectionBlock(x, y) {
+    function applyBasicShapeStyle(node) {
+    if (!(node instanceof Konva.Group)) return;
+
+    const shapeType = node.getAttr("shapeType") || node.name();
+    if (shapeType !== "section" && shapeType !== "square" && shapeType !== "circle") {
+      return;
+    }
+
+    const body = getBodyRect(node);
+    if (!body) return;
+
+    let fillEnabled = node.getAttr("shapeFillEnabled");
+    if (fillEnabled === undefined || fillEnabled === null) {
+      fillEnabled = true;
+    }
+    fillEnabled = !!fillEnabled;
+
+    let fillColor = node.getAttr("shapeFillColor");
+    if (!fillColor) {
+      fillColor = body.fill() || "#ffffff";
+    }
+
+    let strokeColor = node.getAttr("shapeStrokeColor") || body.stroke() || "#4b5563";
+
+    let strokeWidth = node.getAttr("shapeStrokeWidth");
+    if (!Number.isFinite(Number(strokeWidth))) {
+      strokeWidth = body.strokeWidth() || 1.7;
+    }
+    strokeWidth = Number(strokeWidth);
+
+    node.setAttr("shapeFillEnabled", fillEnabled);
+    node.setAttr("shapeFillColor", fillColor);
+    node.setAttr("shapeStrokeColor", strokeColor);
+    node.setAttr("shapeStrokeWidth", strokeWidth);
+
+    if (fillEnabled) {
+      body.fill(fillColor || "#ffffff");
+    } else {
+      body.fill("rgba(0,0,0,0)");
+    }
+
+    body.stroke(strokeColor);
+    body.strokeWidth(strokeWidth);
+  }
+
+
+    function createSectionBlock(x, y) {
     const group = new Konva.Group({
       x: snap(x) - 80,
       y: snap(y) - 24,
@@ -712,9 +850,11 @@
     });
 
     group.add(rect);
+    applyBasicShapeStyle(group);
     ensureHitRect(group);
     return group;
   }
+
 
   function createStage(x, y) {
     const group = new Konva.Group({
@@ -827,7 +967,7 @@
     return group;
   }
 
-    function createSquare(x, y) {
+      function createSquare(x, y) {
     const size = 100;
 
     const group = new Konva.Group({
@@ -849,11 +989,13 @@
     });
 
     group.add(rect);
+    applyBasicShapeStyle(group);
     ensureHitRect(group);
     return group;
   }
 
-  function createCircle(x, y) {
+
+   function createCircle(x, y) {
     const radius = 50;
 
     const group = new Konva.Group({
@@ -873,9 +1015,11 @@
     });
 
     group.add(circle);
+    applyBasicShapeStyle(group);
     ensureHitRect(group);
     return group;
   }
+
 
   function createTextLabel(x, y) {
     const group = new Konva.Group({
@@ -2144,6 +2288,72 @@
       el.appendChild(wrapper);
     }
 
+        function addColorField(labelText, value, onCommit) {
+      const wrapper = document.createElement("div");
+      wrapper.className = "sb-field-row";
+
+      const label = document.createElement("label");
+      label.className = "sb-label";
+
+      const span = document.createElement("span");
+      span.textContent = labelText;
+      span.style.display = "block";
+      span.style.marginBottom = "2px";
+
+      const row = document.createElement("div");
+      row.style.display = "flex";
+      row.style.alignItems = "center";
+      row.style.gap = "6px";
+
+      const colorInput = document.createElement("input");
+      colorInput.type = "color";
+
+      const initialHex =
+        typeof value === "string" &&
+        /^#([0-9a-fA-F]{3}){1,2}$/.test(value)
+          ? value
+          : "#ffffff";
+
+      colorInput.value = initialHex;
+
+      const textInput = document.createElement("input");
+      textInput.type = "text";
+      textInput.value = value || initialHex;
+      textInput.className = "sb-input";
+
+      function commit(val) {
+        onCommit(val);
+        mapLayer.batchDraw();
+        updateSeatCount();
+        pushHistory();
+      }
+
+      colorInput.addEventListener("change", () => {
+        textInput.value = colorInput.value;
+        commit(colorInput.value);
+      });
+
+      textInput.addEventListener("blur", () => {
+        commit(textInput.value || "");
+      });
+
+      textInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          commit(textInput.value || "");
+          textInput.blur();
+        }
+      });
+
+      row.appendChild(colorInput);
+      row.appendChild(textInput);
+      label.appendChild(span);
+      label.appendChild(row);
+      wrapper.appendChild(label);
+      el.appendChild(wrapper);
+    }
+
+
     // ----- Global layout defaults (no selection) -----
     if (!node) {
       addTitle("Layout defaults");
@@ -2659,6 +2869,75 @@
       return;
     }
 
+        // ---- Basic shapes: section block / square / circle ----
+    if (
+      shapeType === "section" ||
+      shapeType === "square" ||
+      shapeType === "circle"
+    ) {
+      const body = getBodyRect(node);
+
+      addTitle(
+        shapeType === "section" ? "Selection block" : "Shape"
+      );
+
+      if (!body) {
+        const p = document.createElement("p");
+        p.className = "sb-inspector-empty";
+        p.textContent = "This shape has no editable geometry.";
+        el.appendChild(p);
+        return;
+      }
+
+      const fillEnabled =
+        node.getAttr("shapeFillEnabled") !== false;
+
+      const rawFill = node.getAttr("shapeFillColor") || body.fill();
+      const fillColor =
+        rawFill && rawFill !== "rgba(0,0,0,0)"
+          ? rawFill
+          : "#ffffff";
+
+      const strokeColor =
+        node.getAttr("shapeStrokeColor") ||
+        body.stroke() ||
+        "#4b5563";
+
+      const strokeWidthRaw = node.getAttr("shapeStrokeWidth");
+      const strokeWidth =
+        Number.isFinite(Number(strokeWidthRaw))
+          ? Number(strokeWidthRaw)
+          : body.strokeWidth() || 1.7;
+
+      addCheckboxField("Fill background", fillEnabled, (checked) => {
+        node.setAttr("shapeFillEnabled", checked);
+        applyBasicShapeStyle(node);
+      });
+
+      addColorField("Fill colour", fillColor, (val) => {
+        node.setAttr("shapeFillColor", val || "#ffffff");
+        applyBasicShapeStyle(node);
+      });
+
+      addNumberField(
+        "Outline thickness",
+        strokeWidth,
+        0,
+        0.5,
+        (val) => {
+          node.setAttr("shapeStrokeWidth", val);
+          applyBasicShapeStyle(node);
+        }
+      );
+
+      addColorField("Outline colour", strokeColor, (val) => {
+        node.setAttr("shapeStrokeColor", val || "#4b5563");
+        applyBasicShapeStyle(node);
+      });
+
+      return;
+    }
+
     // Fallback
     addTitle("Selection");
     const p = document.createElement("p");
@@ -2734,7 +3013,15 @@
   }
 
 
-  function clearSelection() {
+    function clearSelection() {
+    if (
+      selectedNode &&
+      (selectedNode.getAttr("shapeType") === "line" ||
+        selectedNode.getAttr("shapeType") === "curve-line")
+    ) {
+      showLineHandles(selectedNode, false);
+    }
+
     selectedNode = null;
     if (transformer) {
       transformer.nodes([]);
@@ -2743,19 +3030,34 @@
     renderInspector(null);
   }
 
-  function selectNode(node, additive = false) {
+
+    function selectNode(node, additive = false) {
     if (!node) {
       clearSelection();
       return;
     }
 
+    // Hide handles on previously-selected line when changing selection
+    if (!additive && selectedNode) {
+      const prevType = selectedNode.getAttr("shapeType") || selectedNode.name();
+      if (prevType === "line" || prevType === "curve-line") {
+        showLineHandles(selectedNode, false);
+      }
+    }
+
     if (!transformer) {
       selectedNode = node;
+      const t = node.getAttr("shapeType") || node.name();
+      if (t === "line" || t === "curve-line") {
+        buildLineHandles(node);
+        showLineHandles(node, true);
+      }
       renderInspector(node);
       return;
     }
 
     let nodes = transformer.nodes() || [];
+
 
     if (additive) {
       const already = nodes.includes(node);
@@ -2768,13 +3070,20 @@
       nodes = [node];
     }
 
-    transformer.nodes(nodes);
+        transformer.nodes(nodes);
     overlayLayer.draw();
 
     selectedNode = nodes.length === 1 ? nodes[0] : null;
 
     if (nodes.length === 1) {
+      const t = nodes[0].getAttr("shapeType") || nodes[0].name();
+      if (t === "line" || t === "curve-line") {
+        buildLineHandles(nodes[0]);
+        showLineHandles(nodes[0], true);
+      }
       configureTransformerForNode(nodes[0]);
+      renderInspector(nodes[0]);
+
       renderInspector(nodes[0]);
     } else if (nodes.length > 1) {
       renderInspector(nodes[0]);
@@ -3117,10 +3426,10 @@
 
     const target = evt.target;
 
-    // 1) If the Line tool is active, every click adds/extends the line,
+        // 1) If a line tool is active, every click adds/extends the line,
     //    regardless of whether we clicked on the grid, a line, or another shape.
-    if (activeTool === "line") {
-      handleLineClick(pointerPos);
+    if (activeTool === "line" || activeTool === "curve-line") {
+      handleLineClick(pointerPos, activeTool);
       return;
     }
 
@@ -3475,14 +3784,20 @@
 
   stage.on("click", handleStageClick);
 
-  // Double-click anywhere to finish the current line (if any)
+    // Double-click anywhere to finish the current line (if any)
   stage.on("dblclick", () => {
-    if (activeTool !== "line" || !currentLineGroup) return;
+    if (
+      (activeTool !== "line" && activeTool !== "curve-line") ||
+      !currentLineGroup
+    ) {
+      return;
+    }
     // Finalise the current line, no more points added
     finishCurrentLine(true);
     // Tool stays active so you can start another line if you want;
-    // to fully stop drawing lines, just click the Line button again to toggle it off.
+    // to fully stop drawing lines, just click the tool again to toggle it off.
   });
+
 
   document.addEventListener("keydown", handleKeyDown);
   document.addEventListener("keyup", handleKeyUp);
