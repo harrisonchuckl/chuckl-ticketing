@@ -1394,10 +1394,11 @@
     }
   }
 
-  function createSectionBlock(x, y) {
+    function createSectionBlock(x, y) {
     const group = new Konva.Group({
-      x: snap(x) - 80,
-      y: snap(y) - 24,
+      // no snap: allow precise placement
+      x: x - 80,
+      y: y - 24,
       draggable: true,
       name: "section",
       shapeType: "section",
@@ -1419,10 +1420,12 @@
     return group;
   }
 
+
   function createStage(x, y) {
     const group = new Konva.Group({
-      x: snap(x) - 100,
-      y: snap(y) - 24,
+      // no snap: allow precise placement
+      x: x - 100,
+      y: y - 24,
       draggable: true,
       name: "stage",
       shapeType: "stage",
@@ -1474,8 +1477,8 @@
 
   function createBar(x, y) {
     const group = new Konva.Group({
-      x: snap(x) - 70,
-      y: snap(y) - 18,
+      x: x - 70,
+      y: y - 18,
       draggable: true,
       name: "bar",
       shapeType: "bar",
@@ -1507,11 +1510,10 @@
     ensureHitRect(group);
     return group;
   }
-
   function createExit(x, y) {
     const group = new Konva.Group({
-      x: snap(x) - 50,
-      y: snap(y) - 18,
+      x: x - 50,
+      y: y - 18,
       draggable: true,
       name: "exit",
       shapeType: "exit",
@@ -1543,13 +1545,12 @@
     ensureHitRect(group);
     return group;
   }
-
   function createSquare(x, y) {
     const size = 100;
 
     const group = new Konva.Group({
-      x: snap(x) - size / 2,
-      y: snap(y) - size / 2,
+      x: x - size / 2,
+      y: y - size / 2,
       draggable: true,
       name: "square",
       shapeType: "square",
@@ -1570,13 +1571,12 @@
     ensureHitRect(group);
     return group;
   }
-
   function createCircle(x, y) {
     const radius = 50;
 
     const group = new Konva.Group({
-      x: snap(x),
-      y: snap(y),
+      x: x,
+      y: y,
       draggable: true,
       name: "circle",
       shapeType: "circle",
@@ -1595,11 +1595,10 @@
     ensureHitRect(group);
     return group;
   }
-
   function createTextLabel(x, y) {
     const group = new Konva.Group({
-      x: snap(x),
-      y: snap(y),
+      x: x,
+      y: y,
       draggable: true,
       name: "label",
       shapeType: "text",
@@ -1628,11 +1627,10 @@
 
     return group;
   }
-
   function createSingleSeat(x, y) {
     const group = new Konva.Group({
-      x: snap(x),
-      y: snap(y),
+      x: x,
+      y: y,
       draggable: true,
       name: "single-seat",
       shapeType: "single-seat",
@@ -1673,13 +1671,10 @@
   // (keep createCircularTable / createRectTable etc as they are below)
 
 
-  function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
-    const snappedX = snap(x);
-    const snappedY = snap(y);
-
+    function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
     const group = new Konva.Group({
-      x: snappedX,
-      y: snappedY,
+      x: x,
+      y: y,
       draggable: true,
       name: "row-seats",
       shapeType: "row-seats",
@@ -1690,8 +1685,6 @@
     group.setAttr("rowCount", rowCount);
 
     // NEW: per-row seat counts
-    // true = every row uses seatsPerRow
-    // false = use rowSeatCounts array instead
     group.setAttr("everyRowSameSeats", true);
     group.setAttr("rowSeatCounts", null);
 
@@ -1702,14 +1695,12 @@
     group.setAttr("rowLabelStart", 0);
 
     // New: unified row-label position
-    // "left" | "right" | "both" | "none"
     group.setAttr("rowLabelPosition", "left");
 
     // Legacy flag kept for backwards-compatibility with old layouts
     group.setAttr("rowLabelBothSides", false);
 
     group.setAttr("curve", 0);
-
     group.setAttr("rowOrder", "asc");
 
     updateRowGroupGeometry(group, seatsPerRow, rowCount);
@@ -1717,6 +1708,7 @@
 
     return group;
   }
+
 
   function updateRowGroupGeometry(group, seatsPerRow, rowCount) {
     if (!(group instanceof Konva.Group)) return;
@@ -4046,7 +4038,7 @@
 
   // ---------- Behaviour attachment ----------
 
-  function attachNodeBehaviour(node) {
+   function attachNodeBehaviour(node) {
     if (!(node instanceof Konva.Group)) return;
 
     ensureHitRect(node);
@@ -4055,15 +4047,22 @@
 
     // Hover cursor
     node.on("mouseover", () => {
+      if (!stage) return;
       stage.container().style.cursor = "grab";
     });
 
     node.on("mouseout", () => {
-      stage.container().style.cursor = activeTool ? "crosshair" : "default";
+      // Use the central helper so it stays in sync with tools
+      updateDefaultCursor();
     });
 
     // ---- Drag behaviour (supports multi-drag with SHIFT) ----
     node.on("dragstart", () => {
+      // As soon as we move any element, drop the active creation tool
+      // so clicking elsewhere doesn't create another element.
+      setActiveTool(null);
+      updateDefaultCursor();
+
       const nodes = transformer ? transformer.nodes() : [];
 
       // If nothing is selected yet, select this node first
@@ -4090,7 +4089,7 @@
 
     node.on("dragmove", () => {
       if (!multiDragState || multiDragState.dragger !== node) {
-        // Single-node drag: let Konva handle it
+        // Single-node drag: just redraw
         mapLayer.batchDraw();
         return;
       }
@@ -4119,10 +4118,11 @@
     node.on("dragend", () => {
       const activeNodes = transformer ? transformer.nodes() : [node];
 
+      // IMPORTANT: no snapping here – allow pixel-perfect placement
       activeNodes.forEach((n) => {
         n.position({
-          x: snap(n.x()),
-          y: snap(n.y()),
+          x: n.x(),
+          y: n.y(),
         });
       });
 
@@ -4132,7 +4132,7 @@
     });
 
     // ---- Transform behaviour ----
-         node.on("transformend", () => {
+    node.on("transformend", () => {
       const tShape = node.getAttr("shapeType") || node.name();
 
       if (
@@ -4199,7 +4199,6 @@
       renderInspector(node);
     });
 
-
     // ---- Inline table-label editing ----
     if (shapeType === "circular-table" || shapeType === "rect-table") {
       node.on("dblclick", (evt) => {
@@ -4221,9 +4220,11 @@
     }
   }
 
+
   // ---------- Node creation based on active tool ----------
 
-  function createNodeForTool(tool, pos) {
+    function createNodeForTool(tool, pos) {
+    // default to centre if for some reason we don't have a pointer
     let pointerX = stage ? stage.width() / 2 : 0;
     let pointerY = stage ? stage.height() / 2 : 0;
 
@@ -4300,7 +4301,7 @@
         });
       }
 
-            case "stage":
+      case "stage":
         return createStage(pointerX, pointerY);
 
       case "bar":
@@ -4322,6 +4323,7 @@
         return null;
     }
   }
+
 
 
   // ---------- Init Konva ----------
@@ -4372,7 +4374,7 @@
 
       // ---------- Canvas interactions: click / selection / placement ----------
 
-  function handleStageClick(evt) {
+    function handleStageClick(evt) {
     if (!stage || !mapLayer) return;
 
     const pointerPos = stage.getPointerPosition();
@@ -4386,7 +4388,7 @@
 
     // 1) LINE TOOL (click-to-add points)
     // Only fire on normal canvas clicks – NOT when clicking a handle.
-    if (activeTool === "line" && !isHandle) {
+    if ((activeTool === "line" || activeTool === "curve-line") && !isHandle) {
       handleLineClick(pointerPos, activeTool);
       return;
     }
@@ -4397,7 +4399,32 @@
       return;
     }
 
-    // 2) Otherwise, standard selection / placement.
+    // 2) Placement tools (rows, single seats, tables, shapes, text, etc.)
+    // If a placement tool is active, ALWAYS create at the click position,
+    // even if we clicked on top of another shape (inside a VIP box, etc.).
+    if (
+      activeTool &&
+      activeTool !== "line" &&
+      activeTool !== "curve-line" &&
+      activeTool !== "arrow"
+    ) {
+      const node = createNodeForTool(activeTool, pointerPos);
+      if (!node) return;
+
+      mapLayer.add(node);
+      attachNodeBehaviour(node);
+      mapLayer.batchDraw();
+      updateSeatCount();
+      selectNode(node);
+      pushHistory();
+
+      // Drop the tool after placing so next click doesn't create another
+      setActiveTool(null);
+      updateDefaultCursor();
+      return;
+    }
+
+    // 3) No active placement tool → standard selection behaviour
     let group = null;
     if (target && typeof target.findAncestor === "function") {
       group = target.findAncestor("Group", true);
@@ -4409,39 +4436,19 @@
       const additive =
         isShiftPressed || !!(e && (e.shiftKey || e.metaKey || e.ctrlKey));
 
-      // Drop placement tool once you interact with an element
-      setActiveTool(null);
       selectNode(group, additive);
       return;
     }
 
-    // Clicked on empty canvas?
+    // 4) Clicked on empty canvas → clear selection
     const clickedOnEmpty =
       target === stage || (target.getLayer && target.getLayer() === gridLayer);
 
-    if (!clickedOnEmpty) return;
-
-    // No active tool → just clear selection
-    if (!activeTool) {
+    if (clickedOnEmpty) {
       clearSelection();
-      return;
     }
-
-    // 3) Creating a node from a placement tool
-    const node = createNodeForTool(activeTool, pointerPos);
-    if (!node) return;
-
-    mapLayer.add(node);
-    attachNodeBehaviour(node);
-    mapLayer.batchDraw();
-    updateSeatCount();
-    selectNode(node);
-    pushHistory();
-
-    // NEW: as soon as you've placed the element, drop the tool
-    // so the next click doesn't add another one.
-    setActiveTool(null);
   }
+
 
 
     function handleKeyDown(e) {
