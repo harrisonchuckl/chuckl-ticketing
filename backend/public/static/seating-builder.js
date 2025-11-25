@@ -716,10 +716,12 @@
     const lastY = curveRawPoints[curveRawPoints.length - 1];
     const dx = x - lastX;
     const dy = y - lastY;
-    const distSq = dx * dx + dy * dy;
+        const distSq = dx * dx + dy * dy;
 
-    // Only add a new point if we've moved at least ~3px
-    if (distSq < 9) return;
+    // Only add a new point if we've moved at least ~6px
+    // (fewer points → smoother curve + fewer edit handles)
+    if (distSq < 36) return;
+
 
     curveRawPoints.push(x, y);
     currentLine.points(curveRawPoints);
@@ -735,13 +737,15 @@
     if (!commit || !hasEnoughPoints) {
       currentLineGroup.destroy();
     } else {
-      const smoothed = smoothCurvePoints(curveRawPoints, 4);
+      // Higher tolerance → fewer points → smoother big curves
+      const smoothed = smoothCurvePoints(curveRawPoints, 10);
       currentLinePoints = smoothed.slice();
 
-      if (currentLine) {
+           if (currentLine) {
         currentLine.points(currentLinePoints);
-        currentLine.tension(0.5);
+        currentLine.tension(0.6); // slightly more curve
       }
+
 
       ensureHitRect(currentLineGroup);
       buildLineHandles(currentLineGroup);
