@@ -336,62 +336,12 @@
   }
 
 
-  // Expose so the preview HTML script can also force a refresh after fly-out changes
+   // Expose so the preview HTML script can also force a refresh after fly-out changes
   window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
-
-  let selectedNode = null;
-  let copiedNodesJson = [];
-
-
-
-  // track shift key for robust multi-select
-  let isShiftPressed = false;
-
-      // multi-drag state: snapshot of positions when drag starts
-  let multiDragState = null;
-
-    // Line drawing state (for the Line + Curved Line tools)
-  let currentLineGroup = null;
-  let currentLine = null;
-  let currentLinePoints = [];
-  let currentLineToolType = null;
-  let currentLineUndoStack = [];
-
-  // Freehand curve-line state
-  let isCurveDrawing = false;
-  let curveRawPoints = [];
-
-  // Arrow drawing state (2-point arrows)
-  let arrowDrawingGroup = null;   // Konva.Group for the arrow currently being drawn
-  let arrowShape = null;          // Konva.Arrow shape inside that group
-  let arrowStartPoint = null;     // { x, y } for the first click
-
-  // history is per-mapLayer JSON
-  let history = [];
-  let historyIndex = -1;
-  let isRestoringHistory = false;
-
-  // table numbering counter (for all circular + rectangular tables)
-  let tableCounter = 1;
-
-  // global default seat label mode for *new* blocks
-  // "numbers" = 1, 2, 3... by default during planning
-  let globalSeatLabelMode = "numbers";
-
-  const DEBUG_SKEW = true;
-
-  // Sidebar DOM refs
-  let seatCountEl = null;
-  let inspectorEl = null;
 
   function getSeatCountElement() {
     if (!seatCountEl) seatCountEl = document.getElementById("sb-seat-count");
     return seatCountEl;
-  }
-
-  function getInspectorElement() {
-    if (!inspectorEl) inspectorEl = document.getElementById("sb-inspector");
-    return inspectorEl;
   }
 
   // ---------- Helpers: UI / tools ----------
