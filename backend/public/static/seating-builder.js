@@ -1685,13 +1685,105 @@
     return group;
   }
 
-  function nextTableLabel() {
+    function nextTableLabel() {
     const label = String(tableCounter);
     tableCounter += 1;
     return label;
   }
 
-  // (keep createCircularTable / createRectTable etc as they are below)
+  // ----- Table factories -----
+
+  function createCircularTable(x, y, seatCount) {
+    const group = new Konva.Group({
+      x,
+      y,
+      draggable: true,
+      name: "circular-table",
+      shapeType: "circular-table",
+    });
+
+    // Core metadata
+    const mode = globalSeatLabelMode || "numbers";
+    group.setAttr("seatLabelMode", mode);
+    group.setAttr("seatStart", 1);
+
+    // Auto-label tables 1, 2, 3...
+    const tableLabel = nextTableLabel();
+    group.setAttr("tableLabel", tableLabel);
+
+    // Base "table" body – actual radius is set in updateCircularTableGeometry
+    const tableCircle = new Konva.Circle({
+      x: 0,
+      y: 0,
+      radius: CIRC_MIN_TABLE_RADIUS,
+      stroke: "#4b5563",
+      strokeWidth: 1.7,
+      fill: "#ffffff",
+      name: "body-rect",
+    });
+
+    group.add(tableCircle);
+
+    // Build seats + labels around the table
+    updateCircularTableGeometry(group, seatCount);
+    ensureHitRect(group);
+
+    return group;
+  }
+
+  function createRectTable(x, y, opts) {
+    const longSideSeats = Math.max(
+      0,
+      Math.floor((opts && opts.longSideSeats) || 0)
+    );
+    const shortSideSeats = Math.max(
+      0,
+      Math.floor((opts && opts.shortSideSeats) || 0)
+    );
+
+    const group = new Konva.Group({
+      x,
+      y,
+      draggable: true,
+      name: "rect-table",
+      shapeType: "rect-table",
+    });
+
+    const mode = globalSeatLabelMode || "numbers";
+    group.setAttr("seatLabelMode", mode);
+    group.setAttr("seatStart", 1);
+
+    // Auto-label tables 1, 2, 3...
+    const tableLabel = nextTableLabel();
+    group.setAttr("tableLabel", tableLabel);
+
+    group.setAttr("longSideSeats", longSideSeats);
+    group.setAttr("shortSideSeats", shortSideSeats);
+
+    // Base rectangular "table" body – actual size is set in updateRectTableGeometry
+    const baseWidth = 120;
+    const baseHeight = 60;
+
+    const rect = new Konva.Rect({
+      width: baseWidth,
+      height: baseHeight,
+      offsetX: baseWidth / 2,
+      offsetY: baseHeight / 2,
+      stroke: "#4b5563",
+      strokeWidth: 1.7,
+      fill: "#ffffff",
+      name: "body-rect",
+    });
+
+    group.add(rect);
+
+    // Build seats + labels around the table
+    updateRectTableGeometry(group, longSideSeats, shortSideSeats);
+    ensureHitRect(group);
+
+    return group;
+  }
+
 
 
     function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
