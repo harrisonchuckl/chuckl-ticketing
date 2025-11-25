@@ -454,7 +454,43 @@
     isRestoringHistory = false;
   }
 
-  function undo() {
+    function undo() {
+    // While actively drawing a line / curve, undo should remove the last segment,
+    // not revert the whole layout.
+    if (
+      (activeTool === "line" || activeTool === "curve-line") &&
+      currentLineGroup &&
+      currentLine &&
+      currentLinePoints &&
+      currentLinePoints.length >= 4
+    ) {
+      // Pattern while drawing:
+      // For N vertices we store N+1 points, where the last pair is a "placeholder"
+      // at the current end. We want to remove the last vertex + placeholder.
+      if (currentLinePoints.length > 4) {
+        // Remove last 4 numbers (last vertex + placeholder)
+        currentLinePoints.splice(currentLinePoints.length - 4, 4);
+
+        // Re-create a placeholder for the new last vertex
+        const lx = currentLinePoints[currentLinePoints.length - 2];
+        const ly = currentLinePoints[currentLinePoints.length - 1];
+        currentLinePoints.push(lx, ly);
+
+        currentLine.points(currentLinePoints);
+        if (mapLayer) mapLayer.batchDraw();
+      } else {
+        // Only the very first point left – cancel the line entirely
+        currentLineGroup.destroy();
+        currentLineGroup = null;
+        currentLine = null;
+        currentLinePoints = [];
+        currentLineToolType = null;
+        if (mapLayer) mapLayer.batchDraw();
+      }
+      return;
+    }
+
+    // Normal undo for everything else
     if (historyIndex <= 0) return;
     restoreHistory(historyIndex - 1);
   }
@@ -549,8 +585,11 @@
     return Math.round(v / GRID_SIZE) * GRID_SIZE;
   }
 
+   // ---------- Hit-rect + editable line handles ----------
+
   function ensureHitRect(group) {
     if (!(group instanceof Konva.Group)) return;
+
     const existing = group.findOne(".hit-rect");
     if (existing) existing.destroy();
 
@@ -575,7 +614,23 @@
       return;
     }
 
-      // ----- Editable line handles (for line + curved line) -----
+    const padding = GRID_SIZE * 0.4;
+
+    const hitRect = new Konva.Rect({
+      x: bounds.x - padding,
+      y: bounds.y - padding,
+      width: bounds.width + padding * 2,
+      height: bounds.height + padding * 2,
+      fill: "rgba(0,0,0,0)",
+      listening: true,
+      name: "hit-rect",
+    });
+
+    group.add(hitRect);
+    hitRect.moveToBottom();
+  }
+
+  // ----- Editable line handles (for line + curved line) -----
 
   function buildLineHandles(group) {
     if (!(group instanceof Konva.Group)) return;
@@ -645,6 +700,7 @@
         h.visible(!!visible);
       });
   }
+
 
     const padding = GRID_SIZE * 0.4;
 
