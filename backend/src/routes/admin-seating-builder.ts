@@ -943,89 +943,188 @@ router.get("/builder/preview/:showId", (req, res) => {
                   <span class="tool-flyout-chevron">▸</span>
                 </button>
 
-                <div class="tool-flyout">
+                                <div class="tool-flyout">
                   <!-- BAR symbol -->
-<button
-  class="tb-left-item tool-button"
-  data-tool="symbol-bar"
-  data-icon-default="/seatmap-icons/barsymbol-dark.png"
-  data-icon-active="/seatmap-icons/barsymbol-blue.png"
->
-  <img src="/seatmap-icons/barsymbol-dark.png" alt="Bar symbol">
-</button>
+                  <button
+                    class="tb-left-item tool-button"
+                    data-tool="symbol-bar"
+                    data-icon-default="/seatmap-icons/barsymbol-dark.png"
+                    data-icon-active="/seatmap-icons/barsymbol-blue.png"
+                  >
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/barsymbol-dark.png"
+                      alt="Bar symbol"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/barsymbol-blue.png"
+                      alt="Bar symbol (selected)"
+                    />
+                    <span class="tb-left-label">Bar</span>
+                  </button>
 
-<!-- Mixed WC symbol -->
-<button
-  class="tb-left-item tool-button"
-  data-tool="symbol-wc-mixed"
-  data-icon-default="/seatmap-icons/mixedtoilets-dark.png"
-  data-icon-active="/seatmap-icons/mixedtoilets-blue.png"
->
-  <img src="/seatmap-icons/mixedtoilets-dark.png" alt="Mixed toilets symbol">
-</button>
+                  <!-- Mixed WC symbol -->
+                  <button
+                    class="tb-left-item tool-button"
+                    data-tool="symbol-wc-mixed"
+                    data-icon-default="/seatmap-icons/mixedtoilets-dark.png"
+                    data-icon-active="/seatmap-icons/mixedtoilets-blue.png"
+                  >
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/mixedtoilets-dark.png"
+                      alt="Mixed toilets symbol"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/mixedtoilets-blue.png"
+                      alt="Mixed toilets symbol (selected)"
+                    />
+                    <span class="tb-left-label">Mixed WC</span>
+                  </button>
 
-<!-- Male WC symbol -->
-<button
-  class="tb-left-item tool-button"
-  data-tool="symbol-wc-male"
-  data-icon-default="/seatmap-icons/maletoilets-dark.png"
-  data-icon-active="/seatmap-icons/maletoilets-blue.png"
->
-  <img src="/seatmap-icons/maletoilets-dark.png" alt="Male toilets symbol">
-</button>
+                  <!-- Male WC symbol -->
+                  <button
+                    class="tb-left-item tool-button"
+                    data-tool="symbol-wc-male"
+                    data-icon-default="/seatmap-icons/maletoilets-dark.png"
+                    data-icon-active="/seatmap-icons/maletoilets-blue.png"
+                  >
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/maletoilets-dark.png"
+                      alt="Male toilets symbol"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/maletoilets-blue.png"
+                      alt="Male toilets symbol (selected)"
+                    />
+                    <span class="tb-left-label">Male WC</span>
+                  </button>
 
-<!-- Female WC symbol -->
-<button
-  class="tb-left-item tool-button"
-  data-tool="symbol-wc-female"
-  data-icon-default="/seatmap-icons/femaletoilets-dark.png"
-  data-icon-active="/seatmap-icons/femaletoilets-blue.png"
->
-  <img src="/seatmap-icons/femaletoilets-dark.png" alt="Female toilets symbol">
-</button>
+                  <!-- Female WC symbol -->
+                  <button
+                    class="tb-left-item tool-button"
+                    data-tool="symbol-wc-female"
+                    data-icon-default="/seatmap-icons/femaletoilets-dark.png"
+                    data-icon-active="/seatmap-icons/femaletoilets-blue.png"
+                  >
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/femaletoilets-dark.png"
+                      alt="Female toilets symbol"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/femaletoilets-blue.png"
+                      alt="Female toilets symbol (selected)"
+                    />
+                    <span class="tb-left-label">Female WC</span>
+                  </button>
 
-<!-- Disabled WC symbol -->
-<button
-  class="tb-left-item tool-button"
-  data-tool="symbol-disabled"
-  data-icon-default="/seatmap-icons/disabledtoilets-dark.png"
-  data-icon-active="/seatmap-icons/disabledtoilets-blue.png"
->
-  <img src="/seatmap-icons/disabledtoilets-dark.png" alt="Accessible toilets symbol">
-</button>
+                  <!-- Disabled WC symbol -->
+                  <button
+                    class="tb-left-item tool-button"
+                    data-tool="symbol-disabled"
+                    data-icon-default="/seatmap-icons/disabledtoilets-dark.png"
+                    data-icon-active="/seatmap-icons/disabledtoilets-blue.png"
+                  >
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/disabledtoilets-dark.png"
+                      alt="Accessible toilets symbol"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/disabledtoilets-blue.png"
+                      alt="Accessible toilets symbol (selected)"
+                    />
+                    <span class="tb-left-label">Accessible WC</span>
+                  </button>
 
-<!-- Emergency Exit symbol -->
-<button
-  class="tb-left-item tool-button"
-  data-tool="symbol-exit"
-  data-icon-default="/seatmap-icons/emergencyexit-dark.png"
-  data-icon-active="/seatmap-icons/emergencyexit-blue.png"
->
-  <img src="/seatmap-icons/emergencyexit-dark.png" alt="Emergency exit symbol">
-</button>
+                  <!-- Emergency Exit symbol -->
+                  <button
+                    class="tb-left-item tool-button"
+                    data-tool="symbol-exit"
+                    data-icon-default="/seatmap-icons/emergencyexit-dark.png"
+                    data-icon-active="/seatmap-icons/emergencyexit-blue.png"
+                  >
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/emergencyexit-dark.png"
+                      alt="Emergency exit symbol"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/emergencyexit-blue.png"
+                      alt="Emergency exit symbol (selected)"
+                    />
+                    <span class="tb-left-label">Emergency exit</span>
+                  </button>
 
-<!-- First Aid symbol -->
-<button
-  class="tb-left-item tool-button"
-  data-tool="symbol-firstaid"
-  data-icon-default="/seatmap-icons/firstaid-dark.png"
-  data-icon-active="/seatmap-icons/firstaid-blue.png"
->
-  <img src="/seatmap-icons/firstaid-dark.png" alt="First aid symbol">
-</button>
+                  <!-- First Aid symbol -->
+                  <button
+                    class="tb-left-item tool-button"
+                    data-tool="symbol-firstaid"
+                    data-icon-default="/seatmap-icons/firstaid-dark.png"
+                    data-icon-active="/seatmap-icons/firstaid-blue.png"
+                  >
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/firstaid-dark.png"
+                      alt="First aid symbol"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/firstaid-blue.png"
+                      alt="First aid symbol (selected)"
+                    />
+                    <span class="tb-left-label">First aid</span>
+                  </button>
 
-<!-- Information symbol -->
-<button
-  class="tb-left-item tool-button"
-  data-tool="symbol-info"
-  data-icon-default="/seatmap-icons/information-dark.png"
-  data-icon-active="/seatmap-icons/information-blue.png"
->
-  <img src="/seatmap-icons/information-dark.png" alt="Information symbol">
-</button>
+                  <!-- Information symbol -->
+                  <button
+                    class="tb-left-item tool-button"
+                    data-tool="symbol-info"
+                    data-icon-default="/seatmap-icons/information-dark.png"
+                    data-icon-active="/seatmap-icons/information-blue.png"
+                  >
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/information-dark.png"
+                      alt="Information symbol"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/information-blue.png"
+                      alt="Information symbol (selected)"
+                    />
+                    <span class="tb-left-label">Information</span>
+                  </button>
 
+                  <!-- NEW: Stairs symbol -->
+                  <button
+                    class="tb-left-item tool-button"
+                    data-tool="symbol-stairs"
+                    data-icon-default="/seatmap-icons/stairssymbol-dark.png"
+                    data-icon-active="/seatmap-icons/stairssymbol-blue.png"
+                  >
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/stairssymbol-dark.png"
+                      alt="Stairs symbol"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/stairssymbol-blue.png"
+                      alt="Stairs symbol (selected)"
+                    />
+                    <span class="tb-left-label">Stairs</span>
+                  </button>
                 </div>
-              </div>
+
 
               <!-- Text label (standalone tool) -->
               <button class="tb-left-item tool-button" data-tool="text">
