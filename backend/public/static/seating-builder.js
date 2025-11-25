@@ -300,15 +300,26 @@
 
 
     // 🔵 Helper: update left-hand tool button state (black ↔ blue icons)
+  // 🔵 Helper: update left-hand tool button state (black ↔ blue icons)
   function updateToolButtonActiveState(currentTool) {
     try {
       const buttons = document.querySelectorAll(
         ".tb-left-item.tool-button[data-tool]"
       );
 
+      // Treat any symbol sub-tool as the main "symbols" button for highlighting
+      let effectiveTool = currentTool;
+      if (
+        currentTool &&
+        (currentTool.startsWith("symbol-") ||
+          currentTool.startsWith("symbol:"))
+      ) {
+        effectiveTool = "symbols";
+      }
+
       buttons.forEach(function (btn) {
         const btnTool = btn.getAttribute("data-tool");
-        const isActive = currentTool && btnTool === currentTool;
+        const isActive = !!effectiveTool && btnTool === effectiveTool;
 
         if (isActive) {
           btn.classList.add("is-active");
@@ -336,6 +347,7 @@
   }
 
 
+
    // Expose so the preview HTML script can also force a refresh after fly-out changes
   window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
 
@@ -354,7 +366,11 @@
 
   // ---------- Helpers: UI / tools ----------
 
-           function setActiveTool(tool) {
+            // ---------- Helpers: UI / tools ----------
+
+  function setActiveTool(tool, opts = {}) {
+    const forceClear = !!(opts && opts.force);
+
     // If we are leaving a line tool and something is mid-draw, finish it
     if (
       (activeTool === "line" || activeTool === "curve-line") &&
@@ -364,15 +380,17 @@
       if (currentLineToolType === "line") {
         const commit = currentLinePoints && currentLinePoints.length >= 4;
         finishCurrentLine(commit);
-      } else if (
-        currentLineToolType === "curve-line"
-      ) {
+      } else if (currentLineToolType === "curve-line") {
         const commit = curveRawPoints && curveRawPoints.length >= 4;
         finishCurveLine(commit);
       }
     }
 
-    if (activeTool === tool) {
+    // Soft clears (setActiveTool(null) with no force flag) are ignored so tools
+    // stay "sticky" and allow multi-placement after each click on the canvas.
+    if (tool === null && !forceClear) {
+      // no-op: keep current activeTool
+    } else if (activeTool === tool) {
       // Toggling the same tool off
       if (
         tool === "line" &&
@@ -404,15 +422,17 @@
 
     if (!mapLayer || !mapLayer.getStage()) return;
 
+    const stageRef = mapLayer.getStage();
     if (!activeTool) {
-      mapLayer.getStage().container().style.cursor = "grab";
+      stageRef.container().style.cursor = "grab";
     } else {
-      mapLayer.getStage().container().style.cursor = "crosshair";
+      stageRef.container().style.cursor = "crosshair";
     }
 
     // 🔵 Sync left-hand button highlight + icon swap
     updateToolButtonActiveState(activeTool);
   }
+
 
 
 
@@ -1692,6 +1712,7 @@ function createBar(x, y) {
       disabled:     "/seatmap-icons/disabledtoilets-dark.png",
       "first-aid":  "/seatmap-icons/firstaid-dark.png",
       info:         "/seatmap-icons/information-dark.png",
+      stairs:       "/seatmap-icons/stairs-dark.png",
     };
 
     const imageObj = new window.Image();
@@ -2611,7 +2632,7 @@ function createBar(x, y) {
       el.appendChild(h);
     }
 
-    function addNumberField(labelText, value, min, step, onCommit) {
+        function addSelectField(labelText, value, options, onCommit) {
       const wrapper = document.createElement("div");
       wrapper.className = "sb-field-row";
 
@@ -2623,33 +2644,27 @@ function createBar(x, y) {
       span.style.display = "block";
       span.style.marginBottom = "2px";
 
-      const input = document.createElement("input");
-      input.type = "number";
-      input.min = String(min);
-      input.step = String(step || 1);
-      input.value = String(value);
-      input.className = "sb-input";
+      const select = document.createElement("select");
+      select.className = "sb-select";
 
-      function commit() {
-        const parsed = parseInt(input.value, 10);
-        if (!Number.isFinite(parsed) || parsed < min) return;
-        onCommit(parsed);
+      options.forEach((opt) => {
+        const o = document.createElement("option");
+        o.value = opt.value;
+        o.textContent = opt.label;
+        if (opt.value === value) o.selected = true;
+        select.appendChild(o);
+      });
+
+      select.addEventListener("change", () => {
+        onCommit(select.value);
+        setActiveTool(null, { force: true });
         mapLayer.batchDraw();
         updateSeatCount();
         pushHistory();
-      }
-
-      input.addEventListener("change", commit);
-      input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          commit();
-          input.blur();
-        }
       });
 
       label.appendChild(span);
-      label.appendChild(input);
+      label.appendChild(select);
       wrapper.appendChild(label);
       el.appendChild(wrapper);
     }
@@ -2707,7 +2722,7 @@ function createBar(x, y) {
       el.appendChild(wrapper);
     }
 
-    function addTextField(labelText, value, onCommit) {
+        function addTextField(labelText, value, onCommit) {
       const wrapper = document.createElement("div");
       wrapper.className = "sb-field-row";
 
@@ -2726,6 +2741,7 @@ function createBar(x, y) {
 
       function commit() {
         onCommit(input.value || "");
+        setActiveTool(null, { force: true });
         mapLayer.batchDraw();
         updateSeatCount();
         pushHistory();
@@ -2746,7 +2762,8 @@ function createBar(x, y) {
       el.appendChild(wrapper);
     }
 
-    function addRangeField(labelText, value, min, max, step, onCommit) {
+
+        function addRangeField(labelText, value, min, max, step, onCommit) {
       const safeValue = Number.isFinite(Number(value)) ? Number(value) : 0;
 
       const wrapper = document.createElement("div");
@@ -2782,6 +2799,7 @@ function createBar(x, y) {
         if (!Number.isFinite(parsed)) return;
         valueLabel.textContent = String(parsed);
         onCommit(parsed);
+        setActiveTool(null, { force: true });
         mapLayer.batchDraw();
         updateSeatCount();
         pushHistory();
@@ -2822,6 +2840,7 @@ function createBar(x, y) {
 
       input.addEventListener("change", () => {
         onCommit(input.checked);
+        setActiveTool(null, { force: true });
         mapLayer.batchDraw();
         updateSeatCount();
         pushHistory();
@@ -2832,7 +2851,6 @@ function createBar(x, y) {
       wrapper.appendChild(label);
       el.appendChild(wrapper);
     }
-
     function addColorField(labelText, value, onCommit) {
       const wrapper = document.createElement("div");
       wrapper.className = "sb-field-row";
@@ -2868,6 +2886,7 @@ function createBar(x, y) {
 
       function commit(val) {
         onCommit(val);
+        setActiveTool(null, { force: true });
         mapLayer.batchDraw();
         updateSeatCount();
         pushHistory();
@@ -2897,6 +2916,7 @@ function createBar(x, y) {
       wrapper.appendChild(label);
       el.appendChild(wrapper);
     }
+
 
                  function addFlipButton(node) {
   const wrapper = document.createElement("div");
@@ -4449,7 +4469,7 @@ if (
   node.on("dragstart", () => {
     // As soon as we move any element, drop the active creation tool
     // so clicking elsewhere doesn't create another element.
-    setActiveTool(null);
+    setActiveTool(null, { force: true });
     updateDefaultCursor();
 
     const nodes = transformer ? transformer.nodes() : [];
@@ -4521,7 +4541,7 @@ if (
   });
 
   // ---- Transform behaviour ----
-  node.on("transformend", () => {
+   node.on("transformend", () => {
     const tShape = node.getAttr("shapeType") || node.name();
 
     if (
@@ -4530,7 +4550,8 @@ if (
       tShape === "exit" ||
       tShape === "section" ||
       tShape === "square" ||
-      tShape === "circle"
+      tShape === "circle" ||
+      tShape === "symbol"
     ) {
       const scaleX = node.scaleX();
       const scaleY = node.scaleY();
@@ -4548,8 +4569,20 @@ if (
           body.radius(radius * uniformScale);
         } else {
           // Rectangles (stage / bar / exit / section / square)
-          body.width(body.width() * scaleX);
-          body.height(body.height() * scaleY);
+          // and symbols (Image)
+          const origW = body.width();
+          const origH = body.height();
+          const newW = origW * scaleX;
+          const newH = origH * scaleY;
+
+          body.width(newW);
+          body.height(newH);
+
+          // For symbols we keep the icon centred on the group origin
+          if (tShape === "symbol" && body instanceof Konva.Image) {
+            body.offsetX(newW / 2);
+            body.offsetY(newH / 2);
+          }
         }
       }
 
@@ -4580,6 +4613,9 @@ if (
       keepLabelsUpright(node);
     }
 
+    // Resizing counts as "editing" – stop multi-placement afterwards
+    setActiveTool(null, { force: true });
+
     ensureHitRect(node);
     mapLayer.batchDraw();
     pushHistory();
@@ -4587,6 +4623,7 @@ if (
     // keep the inspector in sync (Rotation deg, etc.)
     renderInspector(node);
   });
+
 
   // ---- Inline table-label editing ----
   if (shapeType === "circular-table" || shapeType === "rect-table") {
@@ -4614,14 +4651,26 @@ if (
   // ---------- Node creation based on active tool ----------
 
     function createNodeForTool(tool, pos) {
-    // default to centre if for some reason we don't have a pointer
-    let pointerX = stage ? stage.width() / 2 : 0;
-    let pointerY = stage ? stage.height() / 2 : 0;
+      // default to centre if for some reason we don't have a pointer
+      let pointerX = stage ? stage.width() / 2 : 0;
+      let pointerY = stage ? stage.height() / 2 : 0;
 
-    if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
-      pointerX = pos.x;
-      pointerY = pos.y;
-    }
+      if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
+        pointerX = pos.x;
+        pointerY = pos.y;
+      }
+
+      // Normalise symbol tools...
+      if (
+        tool &&
+        (tool.startsWith("symbol-") || tool.startsWith("symbol:"))
+      ) {
+        const parts = tool.split(/[-:]/);
+        const symbolType = parts[1] || "info";
+        return createSymbolNode(symbolType, pointerX, pointerY);
+      }
+
+      
 
     switch (tool) {
       case "section":
