@@ -5028,6 +5028,9 @@ function handleStageClick(evt) {
     target.getAttr &&
     (target.getAttr("isLineHandle") || target.getAttr("isArrowHandle"));
 
+  const clickedOnEmpty =
+    target === stage || (target.getLayer && target.getLayer() === gridLayer);
+
   // 1) LINE TOOL (click-to-add points)
   // Only fire on normal canvas clicks – NOT when clicking a handle.
   if ((activeTool === "line" || activeTool === "curve-line") && !isHandle) {
@@ -5042,31 +5045,51 @@ function handleStageClick(evt) {
   }
 
   // 2) Placement tools (rows, single seats, tables, shapes, text, etc.)
-  // If a placement tool is active, ALWAYS create at the click position,
-  // even if we clicked on top of another shape (inside a VIP box, etc.).
+  // If a placement tool is active:
+  //   - Click on EMPTY canvas → create a new object
+  //   - Click on EXISTING object → select/drag (NO new object)
   if (
     activeTool &&
     activeTool !== "line" &&
     activeTool !== "curve-line" &&
     activeTool !== "arrow"
   ) {
-    const node = createNodeForTool(activeTool, pointerPos);
-    if (!node) return;
+    if (clickedOnEmpty) {
+      const node = createNodeForTool(activeTool, pointerPos);
+      if (!node) return;
 
-    // NEW: send basic shapes to the back (background layers)
-    const t = node.getAttr("shapeType") || node.name();
-    if (t === "square" || t === "circle") {
-      node.moveToBottom();
-      if (mapLayer) mapLayer.batchDraw();
+      // Background shapes go behind everything
+      const t = node.getAttr("shapeType") || node.name();
+      if (t === "square" || t === "circle") {
+        node.moveToBottom();
+        if (mapLayer) mapLayer.batchDraw();
+      }
+
+      // IMPORTANT: we DO NOT clear activeTool here.
+      // This lets you keep placing multiple objects with the crosshair.
+      return;
     }
 
-    // Drop the tool after placing so next click doesn't create another
-    setActiveTool(null);
-    updateDefaultCursor();
-    return;
+    // Clicked on an existing object while in placement mode → behave like selection
+    let group = null;
+    if (target && typeof target.findAncestor === "function") {
+      group = target.findAncestor("Group", true);
+    }
+
+    if (group && group.getLayer && group.getLayer() === mapLayer) {
+      const e = evt.evt || evt;
+      const additive =
+        isShiftPressed || !!(e && (e.shiftKey || e.metaKey || e.ctrlKey));
+
+      selectNode(group, additive);
+      return;
+    }
+
+    // If we somehow click on something non-interactive while a tool is active,
+    // fall through so that empty-canvas clicks still clear selection when no node is hit.
   }
 
-  // 3) No active placement tool → standard selection behaviour
+  // 3) Standard selection behaviour when no placement tool is active
   let group = null;
   if (target && typeof target.findAncestor === "function") {
     group = target.findAncestor("Group", true);
@@ -5083,13 +5106,12 @@ function handleStageClick(evt) {
   }
 
   // 4) Clicked on empty canvas → clear selection
-  const clickedOnEmpty =
-    target === stage || (target.getLayer && target.getLayer() === gridLayer);
-
   if (clickedOnEmpty) {
     clearSelection();
   }
 }
+
+
 
 
 
@@ -5345,35 +5367,47 @@ function handleStageClick(evt) {
     }
   }
 
-    function handleStageMouseDown(evt) {
-    if (!stage) return;
+    function handleStageMouseMove(evt) {
+  if (!stage || !mapLayer) return;
 
-    // Freehand curve-line drawing
-    if (activeTool === "curve-line") {
-      const pointerPos = stage.getPointerPosition();
-      if (!pointerPos) return;
-      startCurveLine(pointerPos);
-      if (evt.evt) evt.evt.preventDefault();
-      return;
+  const target = evt.target;
+  const container = stage.container();
+
+  let overInteractiveShape = false;
+
+  if (
+    target &&
+    target !== stage &&
+    target.getLayer &&
+    target.getLayer() === mapLayer
+  ) {
+    const group =
+      typeof target.findAncestor === "function"
+        ? target.findAncestor("Group", true)
+        : null;
+
+    if (group && group.getAttr && group.getAttr("shapeType")) {
+      overInteractiveShape = true;
     }
-
-    // Do not pan while another drawing tool is active
-    if (activeTool) return;
-
-    const target = evt.target;
-    const clickedOnEmpty =
-      target === stage ||
-      (target.getLayer && target.getLayer() === gridLayer);
-
-    if (!clickedOnEmpty) return;
-
-    const pointerPos = stage.getPointerPosition();
-    if (!pointerPos) return;
-
-    isPanning = true;
-    lastPanPointerPos = pointerPos;
-    stage.container().style.cursor = "grabbing";
   }
+
+  // If a placement tool is active:
+  //   - over shape  → hand (grab)
+  //   - over empty  → crosshair
+  if (
+    activeTool &&
+    activeTool !== "line" &&
+    activeTool !== "curve-line" &&
+    activeTool !== "arrow"
+  ) {
+    container.style.cursor = overInteractiveShape ? "grab" : "crosshair";
+    return;
+  }
+
+  // No placement tool active: use hand for interactive shapes, default/hand otherwise
+  container.style.cursor = overInteractiveShape ? "grab" : "grab";
+}
+
 
 
     function handleStageMouseMove() {
@@ -5589,19 +5623,16 @@ function handleStageClick(evt) {
     // ---------- Boot ----------
 
  initStage();
+updateDefaultCursor();
+hookToolButtons();
+hookZoomButtons();
+hookClearButton();
+hookUndoRedoButtons();
+hookSaveButton();
 
-  // Default tool: symbols (uses the default symbol type in createNodeForTool).
-  // This makes the master Symbols button highlight in blue from the start.
-  setActiveTool("symbols");
-  updateDefaultCursor();
+stage.on("click", handleStageClick);
+      stage.on("mousemove", handleStageMouseMove);
 
-  hookToolButtons();
-  hookZoomButtons();
-  hookClearButton();
-  hookUndoRedoButtons();
-  hookSaveButton();
-
-  stage.on("click", handleStageClick);
 
 
   // Canvas interactions
