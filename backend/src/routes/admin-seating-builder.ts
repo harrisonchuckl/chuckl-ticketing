@@ -1105,7 +1105,7 @@ router.get("/builder/preview/:showId", (req, res) => {
                   </button>
 
                   <!-- NEW: Stairs symbol -->
-                  <button
+                                    <button
                     class="tb-left-item tool-button"
                     data-tool="symbol-stairs"
                     data-icon-default="/seatmap-icons/stairssymbol-dark.png"
@@ -1124,6 +1124,10 @@ router.get("/builder/preview/:showId", (req, res) => {
                     <span class="tb-left-label">Stairs</span>
                   </button>
                 </div>
+              </div>
+
+              <!-- Text label (standalone tool) -->
+
 
 
               <!-- Text label (standalone tool) -->
@@ -1451,12 +1455,34 @@ router.get("/builder/preview/:showId", (req, res) => {
         });
 
         // Close fly-outs when clicking anywhere else
-        document.addEventListener("click", function (ev) {
+                document.addEventListener("click", function (ev) {
           var target = ev.target;
           if (!target || !(target instanceof HTMLElement)) return;
           if (target.closest(".tool-group")) return;
           closeAllGroups();
         });
+
+        // Expose a helper so seating-builder.js can keep the left-rail
+        // buttons visually in sync with the active tool
+        window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = function (activeToolName) {
+          try {
+            var buttons = Array.prototype.slice.call(
+              document.querySelectorAll(".tb-left-item.tool-button[data-tool]")
+            );
+
+            buttons.forEach(function (btn) {
+              var tool = btn.getAttribute("data-tool");
+
+              if (tool === activeToolName) {
+                btn.classList.add("is-active");
+              } else {
+                btn.classList.remove("is-active");
+              }
+            });
+          } catch (e) {
+            console.error("Failed to update tool button state", e);
+          }
+        };
 
       })();
     </script>
