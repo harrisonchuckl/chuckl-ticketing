@@ -4964,6 +4964,8 @@ function createNodeForTool(tool, pos) {
   return node;
 }
 
+ window.createNodeForTool = createNodeForTool;
+})();
       
 
     switch (tool) {
