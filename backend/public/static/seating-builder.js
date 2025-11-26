@@ -335,63 +335,84 @@ if (window.__TIXALL_SEATMAP_BUILDER_ACTIVE__) {
 
 
    // 🔵 Helper: update left-hand tool button state (black ↔ blue icons)
-  function updateToolButtonActiveState(currentTool) {
-    try {
-      const buttons = document.querySelectorAll(
-        ".tb-left-item.tool-button[data-tool]"
-      );
+function updateToolButtonActiveState(currentTool) {
+  try {
+    const buttons = document.querySelectorAll(
+      ".tb-left-item.tool-button[data-tool]"
+    );
 
-      // Determine which main button to highlight.
-      // Any symbol sub-tool (symbol-*) highlights the main "symbols" button.
-      let effectiveTool = currentTool;
-      const isSymbolSubTool =
-        currentTool &&
-        (currentTool.startsWith("symbol-") ||
-          currentTool.startsWith("symbol:"));
+    // Determine which main button to highlight.
+    // Any symbol sub-tool (symbol-*) highlights the main "symbols" button.
+    let effectiveTool = currentTool;
+    const isSymbolSubTool =
+      currentTool &&
+      (currentTool.startsWith("symbol-") ||
+        currentTool.startsWith("symbol:"));
 
-      if (isSymbolSubTool) {
-        effectiveTool = "symbols";
-        // Also update the symbols toolbar icon to match the current symbol selection
-        if (typeof updateSymbolsToolbarIcon === "function") {
-          updateSymbolsToolbarIcon(currentTool);
+    if (isSymbolSubTool) {
+      effectiveTool = "symbols";
+      // Also update the symbols toolbar icon to match the current symbol selection
+      if (typeof updateSymbolsToolbarIcon === "function") {
+        updateSymbolsToolbarIcon(currentTool);
+      }
+    }
+
+    buttons.forEach(function (btn) {
+      const btnTool = btn.getAttribute("data-tool");
+      const isActive = !!effectiveTool && btnTool === effectiveTool;
+
+      if (isActive) {
+        btn.classList.add("is-active");
+      } else {
+        btn.classList.remove("is-active");
+      }
+
+      const img = btn.querySelector("img");
+      if (!img) return;
+
+      const btnToolName = btnTool;
+
+      // The main "symbols" button's icon is managed separately
+      if (btnToolName === "symbols") {
+        return;
+      }
+
+      // --- figure out default / active icon sources ---
+
+      // Try data attributes on the button *or* on the <img>
+      let defaultSrc =
+        btn.getAttribute("data-icon-default") ||
+        img.getAttribute("data-icon-default") ||
+        img.getAttribute("src") ||
+        "";
+
+      let activeSrc =
+        btn.getAttribute("data-icon-active") ||
+        img.getAttribute("data-icon-active") ||
+        "";
+
+      // If no explicit active src, derive it from filename
+      if (!activeSrc && defaultSrc) {
+        if (defaultSrc.includes("-dark")) {
+          activeSrc = defaultSrc.replace("-dark", "-blue");
+        } else if (defaultSrc.includes("-black")) {
+          activeSrc = defaultSrc.replace("-black", "-blue");
         }
       }
 
-      buttons.forEach(function (btn) {
-        const btnTool = btn.getAttribute("data-tool");
-        const isActive = !!effectiveTool && btnTool === effectiveTool;
-
-        if (isActive) {
-          btn.classList.add("is-active");
-        } else {
-          btn.classList.remove("is-active");
-        }
-
-        const img = btn.querySelector("img");
-        if (img) {
-          const btnToolName = btnTool;
-
-          // The main "symbols" button's icon is managed separately
-          if (btnToolName === "symbols") {
-            return;
-          }
-
-          const defaultSrc = btn.getAttribute("data-icon-default");
-          const activeSrc = btn.getAttribute("data-icon-active");
-
-          if (isActive && activeSrc) {
-            img.src = activeSrc; // blue icon
-          } else if (defaultSrc) {
-            img.src = defaultSrc; // dark icon
-          }
-        }
-      });
-    } catch (e) {
-      // fail-safe – don't crash the builder if the left-hand DOM isn't present
-      // eslint-disable-next-line no-console
-      console.warn("updateToolButtonActiveState error", e);
-    }
+      // Swap the src based on active state
+      if (isActive && activeSrc) {
+        img.src = activeSrc; // blue icon
+      } else if (defaultSrc) {
+        img.src = defaultSrc; // dark/black icon
+      }
+    });
+  } catch (e) {
+    // fail-safe – don't crash the builder if the left-hand DOM isn't present
+    // eslint-disable-next-line no-console
+    console.warn("updateToolButtonActiveState error", e);
   }
+}
 
 
    // Expose so the preview HTML script can also force a refresh after fly-out changes
