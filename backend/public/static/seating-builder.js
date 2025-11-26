@@ -4739,56 +4739,61 @@ function addNumberField(labelText, value, min, step, onCommit) {
     }
 
 
-    // ---- Stage block ----
+        // ---- Stage block ----
     if (shapeType === "stage") {
       const body = getBodyRect(node);
-      const labelNode = node.findOne("Text");
+      const labelNode =
+        node.findOne(".stage-label") || node.findOne("Text");
 
       addTitle("Stage");
 
-      // Initialise attributes from existing visuals if missing (for old layouts)
-      let stageLabel = node.getAttr("stageLabel") || (labelNode && labelNode.text()) || "STAGE";
-      node.setAttr("stageLabel", stageLabel);
+      if (!body) {
+        const p = document.createElement("p");
+        p.className = "sb-inspector-empty";
+        p.textContent =
+          "This stage has no editable body shape.";
+        el.appendChild(p);
+        return;
+      }
 
+      // --- Normalise all stage attributes based on current state ---
       let fillMode = node.getAttr("stageFillMode");
       if (fillMode !== "solid" && fillMode !== "gradient") {
-        // Infer from whether a gradient is present
-        const stops =
-          body && body.fillLinearGradientColorStops
-            ? body.fillLinearGradientColorStops()
-            : null;
-        fillMode = stops && stops.length >= 4 ? "gradient" : "solid";
+        fillMode = "solid";
       }
       node.setAttr("stageFillMode", fillMode);
 
-      // Gradient defaults
-      let startColor =
-        node.getAttr("stageGradientStartColor") || "#1d4ed8";
-      let endColor =
-        node.getAttr("stageGradientEndColor") || "#22c1c3";
-      node.setAttr("stageGradientStartColor", startColor);
-      node.setAttr("stageGradientEndColor", endColor);
-
-      let gradientPreset =
-        node.getAttr("stageGradientPreset") || "brand";
-      node.setAttr("stageGradientPreset", gradientPreset);
-
-      let direction = node.getAttr("stageGradientDirection") || "lr";
-      if (direction !== "lr" && direction !== "tb" && direction !== "diag") {
-        direction = "lr";
-      }
-      node.setAttr("stageGradientDirection", direction);
-
-      // Solid colour default
       let solidColor =
-        node.getAttr("stageSolidColor") ||
-        (body && body.fill && body.fill()) ||
-        "#111827";
+        node.getAttr("stageSolidColor") || body.fill() || "#000000";
       node.setAttr("stageSolidColor", solidColor);
 
-      // Text colour / auto
-      let autoText =
-        node.getAttr("stageTextAutoColor") !== false; // default true
+      let gradStart =
+        node.getAttr("stageGradientStartColor") || "#1d4ed8";
+      let gradEnd =
+        node.getAttr("stageGradientEndColor") || "#22c1c3";
+      node.setAttr("stageGradientStartColor", gradStart);
+      node.setAttr("stageGradientEndColor", gradEnd);
+
+      let gradDirection = node.getAttr("stageGradientDirection");
+      if (
+        gradDirection !== "lr" &&
+        gradDirection !== "tb" &&
+        gradDirection !== "diag"
+      ) {
+        gradDirection = "lr";
+      }
+      node.setAttr("stageGradientDirection", gradDirection);
+
+      let stageLabel =
+        node.getAttr("stageLabel") ||
+        (labelNode ? labelNode.text() : "STAGE");
+      node.setAttr("stageLabel", stageLabel);
+
+      let autoText = node.getAttr("stageTextAutoColor");
+      if (autoText === undefined || autoText === null) {
+        autoText = true;
+      }
+      autoText = !!autoText;
       node.setAttr("stageTextAutoColor", autoText);
 
       let textColor =
@@ -4797,20 +4802,38 @@ function addNumberField(labelText, value, min, step, onCommit) {
         "#ffffff";
       node.setAttr("stageTextColor", textColor);
 
-      // Commit initial styling normalisation
+      // Make sure visuals reflect the normalised attrs
       applyStageStyle(node);
 
-      // --- Label field ---
-      addTextField("Label", stageLabel, (val) => {
-        const value = (val || "").trim() || "STAGE";
-        node.setAttr("stageLabel", value);
-        if (labelNode) {
-          labelNode.text(value);
+      // --- Rotation ---
+      addNumberField(
+        "Rotation (deg)",
+        Math.round(node.rotation() || 0),
+        -360,
+        1,
+        (val) => {
+          const angle = normaliseAngle(val);
+          node.rotation(angle);
+          // keep label upright if you rotate the block
+          keepLabelsUpright(node);
+          if (overlayLayer) overlayLayer.batchDraw();
         }
-        ensureHitRect(node);
+      );
+
+      // Quick flip (mirror rotation)
+      addFlipButton(node);
+
+      // --- Stage label text ---
+      addTextField("Stage label", stageLabel, (val) => {
+        const textVal = val && val.trim() ? val : "STAGE";
+        node.setAttr("stageLabel", textVal);
+        if (labelNode) {
+          labelNode.text(textVal);
+        }
+        applyStageStyle(node);
       });
 
-      // --- Fill mode toggle ---
+      // --- Fill mode: solid vs gradient ---
       addSelectField(
         "Fill mode",
         fillMode,
@@ -4818,74 +4841,82 @@ function addNumberField(labelText, value, min, step, onCommit) {
           { value: "solid", label: "Solid colour" },
           { value: "gradient", label: "Gradient" },
         ],
-        (mode) => {
-          const safeMode = mode === "solid" ? "solid" : "gradient";
-          node.setAttr("stageFillMode", safeMode);
+        (val) => {
+          const mode = val === "gradient" ? "gradient" : "solid";
+          node.setAttr("stageFillMode", mode);
           applyStageStyle(node);
-          renderInspector(node); // refresh visible options
+          // re-render to show/hide gradient controls
+          renderInspector(node);
         }
       );
 
-      if (fillMode === "solid") {
-        // Solid background colour picker
-        addColorField("Background colour", solidColor, (val) => {
-          const v = val || "#111827";
-          node.setAttr("stageSolidColor", v);
-          applyStageStyle(node);
-        });
-      } else {
-        // Gradient options
-        addSelectField(
-          "Gradient preset",
-          gradientPreset,
-          [
-            { value: "brand", label: "Brand blue → teal" },
-            { value: "purple-pink", label: "Purple → pink" },
-            { value: "orange-red", label: "Orange → red" },
-            { value: "custom", label: "Custom" },
-          ],
-          (preset) => {
-            let p = preset;
-            if (
-              p !== "brand" &&
-              p !== "purple-pink" &&
-              p !== "orange-red" &&
-              p !== "custom"
-            ) {
-              p = "brand";
-            }
-            node.setAttr("stageGradientPreset", p);
+      // --- Solid colour (always shown, used when mode = solid) ---
+      addColorField("Solid fill colour", solidColor, (val) => {
+        node.setAttr("stageSolidColor", val || "#000000");
+        applyStageStyle(node);
+      });
 
-            if (p === "brand") {
-              node.setAttr("stageGradientStartColor", "#1d4ed8");
-              node.setAttr("stageGradientEndColor", "#22c1c3");
-            } else if (p === "purple-pink") {
-              node.setAttr("stageGradientStartColor", "#7e22ce");
-              node.setAttr("stageGradientEndColor", "#ec4899");
-            } else if (p === "orange-red") {
-              node.setAttr("stageGradientStartColor", "#fb923c");
-              node.setAttr("stageGradientEndColor", "#ef4444");
-            }
-            applyStageStyle(node);
-            renderInspector(node); // show / hide custom fields
-          }
-        );
-
-        // If custom, show start/end colour pickers
-        if (gradientPreset === "custom") {
-          addColorField("Gradient start colour", startColor, (val) => {
+      // --- Gradient options (only meaningful when in gradient mode) ---
+      if (fillMode === "gradient") {
+        addColorField(
+          "Gradient start colour",
+          gradStart,
+          (val) => {
             node.setAttr(
               "stageGradientStartColor",
               val || "#1d4ed8"
             );
             applyStageStyle(node);
-          });
+          }
+        );
 
-          addColorField("Gradient end colour", endColor, (val) => {
+        addColorField(
+          "Gradient end colour",
+          gradEnd,
+          (val) => {
             node.setAttr("stageGradientEndColor", val || "#22c1c3");
             applyStageStyle(node);
-          });
+          }
+        );
+
+        addSelectField(
+          "Gradient direction",
+          gradDirection,
+          [
+            { value: "lr", label: "Left → Right" },
+            { value: "tb", label: "Top → Bottom" },
+            { value: "diag", label: "Diagonal" },
+          ],
+          (val) => {
+            let dir = "lr";
+            if (val === "tb" || val === "diag") dir = val;
+            node.setAttr("stageGradientDirection", dir);
+            applyStageStyle(node);
+          }
+        );
+      }
+
+      // --- Text colour behaviour ---
+      addCheckboxField(
+        "Automatic text colour",
+        autoText,
+        (checked) => {
+          node.setAttr("stageTextAutoColor", !!checked);
+          applyStageStyle(node);
         }
+      );
+
+      addColorField(
+        "Text colour (when manual)",
+        textColor,
+        (val) => {
+          node.setAttr("stageTextColor", val || "#ffffff");
+          applyStageStyle(node);
+        }
+      );
+
+      return;
+    }
 
         // Gradient direction
         addSelectField(
