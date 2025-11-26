@@ -1793,7 +1793,8 @@ function createBar(x, y) {
   return group;
 }
 
-    // ---- Symbol tool helpers (toolbar <-> internal type + icon paths) ----
+
+  // ---- Symbol tool helpers (toolbar <-> internal type + icon paths) ----
 
   // Map toolbar tool names (symbol-*) to our internal symbolType keys
   const SYMBOL_TOOL_TO_TYPE = {
@@ -1808,6 +1809,7 @@ function createBar(x, y) {
     "symbol-stairs": "stairs",
   };
 
+  // Normalise either a toolbar tool (symbol-foo) or an internal type (bar, wc-mixed, etc.)
   function normaliseSymbolTool(toolNameOrType) {
     if (!toolNameOrType) return "info";
 
@@ -1886,83 +1888,23 @@ function createBar(x, y) {
     }
   }, 0);
 
+  // Create a symbol node on the map (uses DARK icon variant)
+  function createSymbolNode(symbolToolNameOrType, x, y) {
+    // Normalise whatever the caller passes (e.g. "symbol-wc-mixed" or "wc-mixed")
+    const symbolType = normaliseSymbolTool(symbolToolNameOrType);
 
-       function createSymbolNode(symbolToolNameOrType, x, y) {
-      // Normalise whatever the caller passes (e.g. "symbol-wc-mixed" or "wc-mixed")
-      const symbolType = normaliseSymbolTool(symbolToolNameOrType);
-
-      const group = new Konva.Group({
-        x: x - 18,
-        y: y - 18,
-        draggable: true,
-        name: "symbol",
-        shapeType: "symbol",
-      });
-
-      group.setAttr("symbolType", symbolType);
-
-      const imageObj = new window.Image();
-      imageObj.src = SYMBOL_ICON_DARK[symbolType] || SYMBOL_ICON_DARK.info;
-
-      const icon = new Konva.Image({
-        image: imageObj,
-        width: 36,
-        height: 36,
-        offsetX: 18,
-        offsetY: 18,
-        // we still call this "body-rect" so hit-testing & selection work nicely
-        name: "body-rect",
-      });
-
-      imageObj.onload = () => {
-        if (mapLayer) mapLayer.batchDraw();
-      };
-
-      group.add(icon);
-      ensureHitRect(group);
-
-      return group;
-    }
-
-
-        // Map toolbar tool names (symbol-*) to our internal symbolType keys
-  const SYMBOL_TOOL_TO_TYPE = {
-    "symbol-bar": "bar",
-    "symbol-wc-mixed": "wc-mixed",
-    "symbol-wc-male": "wc-male",
-    "symbol-wc-female": "wc-female",
-    "symbol-disabled": "disabled",
-    "symbol-exit": "exit-symbol",
-    "symbol-firstaid": "first-aid",
-    "symbol-info": "info",
-    "symbol-stairs": "stairs",
-  };
-
-  function normaliseSymbolTool(toolName) {
-    if (!toolName) return "info";
-    return SYMBOL_TOOL_TO_TYPE[toolName] || "info";
-  }
-
+    const group = new Konva.Group({
+      x: x - 18,
+      y: y - 18,
+      draggable: true,
+      name: "symbol",
+      shapeType: "symbol",
+    });
 
     group.setAttr("symbolType", symbolType);
 
-    // Map each symbol type to the DARK (map) icon you uploaded.
-    // ⚠️ Update the filenames/paths here to match your GitHub /public/seatmap-icons folder.
-        const ICON_SRC = {
-      bar:          "/seatmap-icons/barsymbol-dark.png",
-      "wc-mixed":   "/seatmap-icons/mixedtoilets-dark.png",
-      "wc-male":    "/seatmap-icons/maletoilets-dark.png",
-      "wc-female":  "/seatmap-icons/femaletoilets-dark.png",
-      "exit-symbol":"/seatmap-icons/emergencyexit-dark.png",
-      disabled:     "/seatmap-icons/disabledtoilets-dark.png",
-      "first-aid":  "/seatmap-icons/firstaid-dark.png",
-      info:         "/seatmap-icons/information-dark.png",
-      stairs:       "/seatmap-icons/stairssymbol-dark.png", // <-- note the filename
-    };
-
-
     const imageObj = new window.Image();
-    imageObj.src = ICON_SRC[symbolType] || ICON_SRC.info;
+    imageObj.src = SYMBOL_ICON_DARK[symbolType] || SYMBOL_ICON_DARK.info;
 
     const icon = new Konva.Image({
       image: imageObj,
@@ -1983,6 +1925,8 @@ function createBar(x, y) {
 
     return group;
   }
+
+   
 
 
   function createSquare(x, y) {
