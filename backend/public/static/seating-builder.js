@@ -1747,7 +1747,7 @@ function createBar(x, y) {
   return group;
 }
 
-    // Map toolbar tool names (symbol-*) to our internal symbolType keys
+  // Map toolbar tool names (symbol-*) to our internal symbolType keys
   const SYMBOL_TOOL_TO_TYPE = {
     "symbol-bar": "bar",
     "symbol-wc-mixed": "wc-mixed",
@@ -1760,13 +1760,26 @@ function createBar(x, y) {
     "symbol-stairs": "stairs",
   };
 
+  // Shared map icon src for each symbol type – used both on first create
+  // and when we paste from JSON (so pasted symbols are not invisible).
+  const SYMBOL_ICON_SRC = {
+    bar:           "/seatmap-icons/barsymbol-dark.png",
+    "wc-mixed":    "/seatmap-icons/mixedtoilets-dark.png",
+    "wc-male":     "/seatmap-icons/maletoilets-dark.png",
+    "wc-female":   "/seatmap-icons/femaletoilets-dark.png",
+    "exit-symbol": "/seatmap-icons/emergencyexit-dark.png",
+    disabled:      "/seatmap-icons/disabledtoilets-dark.png",
+    "first-aid":   "/seatmap-icons/firstaid-dark.png",
+    info:          "/seatmap-icons/information-dark.png",
+    stairs:        "/seatmap-icons/stairssymbol-dark.png",
+  };
+
   function normaliseSymbolTool(toolName) {
     if (!toolName) return "info";
     return SYMBOL_TOOL_TO_TYPE[toolName] || "info";
   }
 
-
-      function createSymbolNode(symbolType, x, y) {
+  function createSymbolNode(symbolType, x, y) {
     const group = new Konva.Group({
       x: x - 18,
       y: y - 18,
@@ -1777,22 +1790,8 @@ function createBar(x, y) {
 
     group.setAttr("symbolType", symbolType);
 
-    // Map each symbol type to the DARK (map) icon you uploaded.
-    // ⚠️ Update the filenames/paths here to match your GitHub /public/seatmap-icons folder.
-    const ICON_SRC = {
-      bar:           "/seatmap-icons/barsymbol-dark.png",
-      "wc-mixed":    "/seatmap-icons/mixedtoilets-dark.png",
-      "wc-male":     "/seatmap-icons/maletoilets-dark.png",
-      "wc-female":   "/seatmap-icons/femaletoilets-dark.png",
-      "exit-symbol": "/seatmap-icons/emergencyexit-dark.png",
-      disabled:      "/seatmap-icons/disabledtoilets-dark.png",
-      "first-aid":   "/seatmap-icons/firstaid-dark.png",
-      info:          "/seatmap-icons/information-dark.png",
-      stairs:        "/seatmap-icons/stairssymbol-dark.png",
-    };
-
     const imageObj = new window.Image();
-    imageObj.src = ICON_SRC[symbolType] || ICON_SRC.info;
+    imageObj.src = SYMBOL_ICON_SRC[symbolType] || SYMBOL_ICON_SRC.info;
 
     const icon = new Konva.Image({
       image: imageObj,
@@ -1813,6 +1812,7 @@ function createBar(x, y) {
 
     return group;
   }
+
 
 
   function createSquare(x, y) {
@@ -5205,7 +5205,7 @@ function handleStageClick(evt) {
       return;
     }
 
-    if (
+        if (
       (e.key === "v" || e.key === "V") &&
       (e.metaKey || e.ctrlKey)
     ) {
@@ -5217,10 +5217,15 @@ function handleStageClick(evt) {
         node.y(node.y() + GRID_SIZE);
 
         const type = node.getAttr("shapeType");
+
+        // Tables: give pasted copies fresh labels + rebuild geometry
         if (type === "circular-table" || type === "rect-table") {
           node.setAttr("tableLabel", nextTableLabel());
           if (type === "circular-table") {
-            updateCircularTableGeometry(node, node.getAttr("seatCount") || 8);
+            updateCircularTableGeometry(
+              node,
+              node.getAttr("seatCount") || 8
+            );
           } else {
             updateRectTableGeometry(
               node,
@@ -5230,16 +5235,35 @@ function handleStageClick(evt) {
           }
         }
 
+        // Symbols: the Konva JSON does not include the HTMLImageElement,
+        // so we must re-attach the image or the pasted symbol is invisible.
+        if (type === "symbol") {
+          const symbolType = node.getAttr("symbolType") || "info";
+          const icon = node.findOne((n) => n instanceof Konva.Image);
+          if (icon) {
+            const img = new window.Image();
+            img.src =
+              SYMBOL_ICON_SRC[symbolType] || SYMBOL_ICON_SRC.info;
+            img.onload = () => {
+              if (mapLayer) mapLayer.batchDraw();
+            };
+            icon.image(img);
+          }
+        }
+
         mapLayer.add(node);
         attachNodeBehaviour(node);
+        sbNormalizeZOrder(node);
         return node;
       });
 
       mapLayer.batchDraw();
       updateSeatCount();
       pushHistory();
+
       transformer.nodes(newNodes);
       overlayLayer.draw();
+
       selectedNode = newNodes.length === 1 ? newNodes[0] : null;
       if (newNodes.length === 1) {
         renderInspector(newNodes[0]);
@@ -5248,9 +5272,10 @@ function handleStageClick(evt) {
       } else {
         renderInspector(null);
       }
+
       e.preventDefault();
     }
-  }
+
 
   function handleKeyUp(e) {
     if (e.key === "Shift") {
@@ -5563,8 +5588,13 @@ function handleStageClick(evt) {
 
     // ---------- Boot ----------
 
-  initStage();
+ initStage();
+
+  // Default tool: symbols (uses the default symbol type in createNodeForTool).
+  // This makes the master Symbols button highlight in blue from the start.
+  setActiveTool("symbols");
   updateDefaultCursor();
+
   hookToolButtons();
   hookZoomButtons();
   hookClearButton();
@@ -5572,6 +5602,7 @@ function handleStageClick(evt) {
   hookSaveButton();
 
   stage.on("click", handleStageClick);
+
 
   // Canvas interactions
   stage.on("mousedown", handleStageMouseDown);
