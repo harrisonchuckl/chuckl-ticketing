@@ -5604,35 +5604,31 @@ function handleStageClick(evt) {
   }
 
 
-   // ---------- Boot ----------
+      // ---------- Boot ----------
 
-initStage();
-updateDefaultCursor();
-hookToolButtons();
-hookZoomButtons();
-hookClearButton();
-hookUndoRedoButtons();
-hookSaveButton();
+  // Initialise stage + UI
+  initStage();
+  hookToolButtons();
+  hookZoomButtons();
+  hookClearButton();
+  hookUndoRedoButtons();
+  hookSaveButton();
 
-// Canvas interactions & global handlers
-stage.on("click", handleStageClick);
-stage.on("mousedown", handleStageMouseDown);
-stage.on("mousemove", handleStageMouseMove);
-stage.on("mouseup", handleStageMouseUp);
-stage.on("mouseleave", handleStageMouseUp);
+  // Canvas interactions & global handlers
+  stage.on("click", handleStageClick);
 
-// Double-click anywhere to finish the current straight line (if any)
-stage.on("dblclick", () => {
-  if (activeTool !== "line" || !currentLineGroup) return;
-  finishCurrentLine(true);
-});
+  // Double-click anywhere to finish the current line (if any)
+  stage.on("dblclick", () => {
+    if (activeTool !== "line" || !currentLineGroup) return;
+    finishCurrentLine(true);
+  });
 
-document.addEventListener("keydown", handleKeyDown);
-document.addEventListener("keyup", handleKeyUp);
-window.addEventListener("resize", resizeStageToContainer);
+  document.addEventListener("keydown", handleKeyDown);
+  document.addEventListener("keyup", handleKeyUp);
+  window.addEventListener("resize", resizeStageToContainer);
 
-resizeStageToContainer();
-loadExistingLayout();
+  resizeStageToContainer();
+  loadExistingLayout();
 
-renderInspector(null);
+  renderInspector(null);
 })();
