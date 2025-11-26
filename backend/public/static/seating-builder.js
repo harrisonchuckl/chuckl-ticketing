@@ -4458,83 +4458,36 @@ if (
   window.renderSeatmapInspector = renderInspector;
 
    function configureTransformerForNode(node) {
-    if (!transformer || !node) return;
+  if (!transformer || !node) return;
 
-    const shapeType = node.getAttr("shapeType") || node.name();
+  const shapeType = node.getAttr("shapeType") || node.name();
 
-    // Seats / tables: rotation only, no resize
-    if (
-      shapeType === "row-seats" ||
-      shapeType === "single-seat" ||
-      shapeType === "circular-table" ||
-      shapeType === "rect-table"
-    ) {
-      transformer.rotateEnabled(true);
-      transformer.enabledAnchors([]);
-      return;
-    }
-
-    // Room objects + basic shapes: resize in all directions (no rotation)
-    if (
-      shapeType === "stage" ||
-      shapeType === "bar" ||
-      shapeType === "exit" ||
-      shapeType === "section" ||
-      shapeType === "square" ||
-      shapeType === "circle" ||
-      shapeType === "symbol" ||
-      shapeType === "text" ||
-      shapeType === "label" ||
-      shapeType === "arc"
-    ) {
-      transformer.rotateEnabled(false);
-      transformer.enabledAnchors([
-        "top-left",
-        "top-center",
-        "top-right",
-        "middle-left",
-        "middle-right",
-        "bottom-left",
-        "bottom-center",
-        "bottom-right",
-      ]);
-      return;
-    }
-
-    // Lines & arrows: rotation only, geometry via handles
-    if (
-      shapeType === "line" ||
-      shapeType === "curve-line" ||
-      shapeType === "arrow"
-    ) {
-      transformer.rotateEnabled(true);
-      transformer.enabledAnchors([]);
-      return;
-    }
-
-    // Fallback: allow full resize + rotation
-    transformer.rotateEnabled(true);
-    transformer.enabledAnchors([
-      "top-left",
-      "top-center",
-      "top-right",
-      "middle-left",
-      "middle-right",
-      "bottom-left",
-      "bottom-center",
-      "bottom-right",
-    ]);
-  }
-
-
-     // Arrow + line drawings: allow rotation and resize in all directions
+  // Seats / tables: rotation only, no resize via transformer
   if (
-    shapeType === "arrow" ||
-    shapeType === "line" ||
-    shapeType === "curve-line" ||
-    shapeType === "arc"
+    shapeType === "row-seats" ||
+    shapeType === "single-seat" ||
+    shapeType === "circular-table" ||
+    shapeType === "rect-table"
   ) {
     transformer.rotateEnabled(true);
+    transformer.enabledAnchors([]);
+    return;
+  }
+
+  // Room objects + basic shapes: resize in all directions (no rotation)
+  if (
+    shapeType === "stage" ||
+    shapeType === "bar" ||
+    shapeType === "exit" ||
+    shapeType === "section" ||
+    shapeType === "square" ||
+    shapeType === "circle" ||
+    shapeType === "symbol" ||
+    shapeType === "text" ||
+    shapeType === "label" ||
+    shapeType === "arc"
+  ) {
+    transformer.rotateEnabled(false);
     transformer.enabledAnchors([
       "top-left",
       "top-center",
@@ -4548,11 +4501,31 @@ if (
     return;
   }
 
-
-    // Default: no resize/rotation
-    transformer.rotateEnabled(false);
+  // Lines & arrows: rotation only, geometry edited via handles
+  if (
+    shapeType === "line" ||
+    shapeType === "curve-line" ||
+    shapeType === "arrow"
+  ) {
+    transformer.rotateEnabled(true);
     transformer.enabledAnchors([]);
+    return;
   }
+
+  // Fallback: allow full resize + rotation
+  transformer.rotateEnabled(true);
+  transformer.enabledAnchors([
+    "top-left",
+    "top-center",
+    "top-right",
+    "middle-left",
+    "middle-right",
+    "bottom-left",
+    "bottom-center",
+    "bottom-right",
+  ]);
+}
+
 
 
       function clearSelection() {
