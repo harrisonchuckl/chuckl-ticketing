@@ -4457,25 +4457,7 @@ if (
   // expose for external callers if needed
   window.renderSeatmapInspector = renderInspector;
 
-  // ---------- Selection / transformer ----------
-
-  function keepLabelsUpright(node) {
-    const angle = node.rotation();
-    const negate = -angle;
-
-    node
-      .find(
-        (child) =>
-          child.getAttr("isSeatLabel") ||
-          child.getAttr("isRowLabel") ||
-          child.name() === "table-label"
-      )
-      .forEach((lbl) => {
-        lbl.rotation(negate);
-      });
-  }
-
-     function configureTransformerForNode(node) {
+   function configureTransformerForNode(node) {
     if (!transformer || !node) return;
 
     const shapeType = node.getAttr("shapeType") || node.name();
@@ -4493,16 +4475,18 @@ if (
     }
 
     // Room objects + basic shapes: resize in all directions (no rotation)
-        if (
+    if (
       shapeType === "stage" ||
       shapeType === "bar" ||
       shapeType === "exit" ||
       shapeType === "section" ||
       shapeType === "square" ||
       shapeType === "circle" ||
-      shapeType === "symbol"
+      shapeType === "symbol" ||
+      shapeType === "text" ||
+      shapeType === "label" ||
+      shapeType === "arc"
     ) {
-
       transformer.rotateEnabled(false);
       transformer.enabledAnchors([
         "top-left",
@@ -4516,6 +4500,32 @@ if (
       ]);
       return;
     }
+
+    // Lines & arrows: rotation only, geometry via handles
+    if (
+      shapeType === "line" ||
+      shapeType === "curve-line" ||
+      shapeType === "arrow"
+    ) {
+      transformer.rotateEnabled(true);
+      transformer.enabledAnchors([]);
+      return;
+    }
+
+    // Fallback: allow full resize + rotation
+    transformer.rotateEnabled(true);
+    transformer.enabledAnchors([
+      "top-left",
+      "top-center",
+      "top-right",
+      "middle-left",
+      "middle-right",
+      "bottom-left",
+      "bottom-center",
+      "bottom-right",
+    ]);
+  }
+
 
      // Arrow + line drawings: allow rotation and resize in all directions
   if (
