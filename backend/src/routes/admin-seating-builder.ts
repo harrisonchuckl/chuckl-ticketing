@@ -932,9 +932,20 @@ router.get("/builder/preview/:showId", (req, res) => {
               <!-- NEW: Symbols submenu -->
               <div class="tool-group" data-group="symbols">
                 <!-- Root "Symbols" button (just opens the fly-out) -->
-                <button class="tb-left-item tool-button tool-root" type="button">
-                  <span class="tb-left-label">Symbols</span>
-                </button>
+                <button class="tb-left-item tool-button tool-root" type="button" data-tool="symbol-wc-mixed">
+  <img
+    class="tb-tool-icon icon-dark"
+    src="/seatmap-icons/mixedtoilets-dark.png"
+    alt="Symbols"
+  />
+  <img
+    class="tb-tool-icon icon-blue"
+    src="/seatmap-icons/mixedtoilets-blue.png"
+    alt="Symbols (selected)"
+  />
+  <span class="tb-left-label">Symbols</span>
+</button>
+
                 <button
                   class="tool-flyout-toggle"
                   type="button"
