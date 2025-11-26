@@ -1225,7 +1225,7 @@
     return String(n);
   }
 
-    // Inline text editing
+  // Inline text editing
   function beginInlineTextEdit(textNode, onCommit) {
     if (!stage || !textNode) return;
 
@@ -1262,27 +1262,7 @@
     input.focus();
     input.select();
 
-    function finish(commit) {
-      if (!input.parentNode) return;
-      const newVal = commit ? input.value : oldText;
-      onCommit(newVal);
-      document.body.removeChild(input);
-    }
-
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        finish(true);
-      } else if (e.key === "Escape") {
-        e.preventDefault();
-        finish(false);
-      }
-    });
-
-    input.addEventListener("blur", () => finish(true));
-  }
-
-    // ----- Seat kind helpers: standard / accessible / carer -----
+      // ----- Seat kind helpers: standard / accessible / carer -----
 
   function applySeatKindVisualToCircle(circle) {
     if (!circle || typeof circle.getAttr !== "function") return;
@@ -1293,8 +1273,7 @@
     // Base styles captured on creation
     const baseFill = circle.getAttr("sbSeatBaseFill") || "#ffffff";
     const baseStroke = circle.getAttr("sbSeatBaseStroke") || "#4b5563";
-    const baseStrokeWidth =
-      Number(circle.getAttr("sbSeatBaseStrokeWidth")) || 1.7;
+    const baseStrokeWidth = Number(circle.getAttr("sbSeatBaseStrokeWidth")) || 1.7;
 
     if (kind === "accessible") {
       circle.fill("#dbeafe");          // light blue
@@ -1339,6 +1318,26 @@
     });
   }
 
+    
+    function finish(commit) {
+      if (!input.parentNode) return;
+      const newVal = commit ? input.value : oldText;
+      onCommit(newVal);
+      document.body.removeChild(input);
+    }
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        finish(true);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        finish(false);
+      }
+    });
+
+    input.addEventListener("blur", () => finish(true));
+  }
 
     // ---------- Shape factories ----------
 
@@ -1747,7 +1746,17 @@ function createBar(x, y) {
   return group;
 }
 
-  // Map toolbar tool names (symbol-*) to our internal symbolType keys
+
+    function createSymbolNode(symbolType, x, y) {
+    const group = new Konva.Group({
+      x: x - 18,
+      y: y - 18,
+      draggable: true,
+      name: "symbol",
+      shapeType: "symbol",
+    });
+
+        // Map toolbar tool names (symbol-*) to our internal symbolType keys
   const SYMBOL_TOOL_TO_TYPE = {
     "symbol-bar": "bar",
     "symbol-wc-mixed": "wc-mixed",
@@ -1760,38 +1769,31 @@ function createBar(x, y) {
     "symbol-stairs": "stairs",
   };
 
-  // Shared map icon src for each symbol type – used both on first create
-  // and when we paste from JSON (so pasted symbols are not invisible).
-  const SYMBOL_ICON_SRC = {
-    bar:           "/seatmap-icons/barsymbol-dark.png",
-    "wc-mixed":    "/seatmap-icons/mixedtoilets-dark.png",
-    "wc-male":     "/seatmap-icons/maletoilets-dark.png",
-    "wc-female":   "/seatmap-icons/femaletoilets-dark.png",
-    "exit-symbol": "/seatmap-icons/emergencyexit-dark.png",
-    disabled:      "/seatmap-icons/disabledtoilets-dark.png",
-    "first-aid":   "/seatmap-icons/firstaid-dark.png",
-    info:          "/seatmap-icons/information-dark.png",
-    stairs:        "/seatmap-icons/stairssymbol-dark.png",
-  };
-
   function normaliseSymbolTool(toolName) {
     if (!toolName) return "info";
     return SYMBOL_TOOL_TO_TYPE[toolName] || "info";
   }
 
-  function createSymbolNode(symbolType, x, y) {
-    const group = new Konva.Group({
-      x: x - 18,
-      y: y - 18,
-      draggable: true,
-      name: "symbol",
-      shapeType: "symbol",
-    });
 
     group.setAttr("symbolType", symbolType);
 
+    // Map each symbol type to the DARK (map) icon you uploaded.
+    // ⚠️ Update the filenames/paths here to match your GitHub /public/seatmap-icons folder.
+        const ICON_SRC = {
+      bar:          "/seatmap-icons/barsymbol-dark.png",
+      "wc-mixed":   "/seatmap-icons/mixedtoilets-dark.png",
+      "wc-male":    "/seatmap-icons/maletoilets-dark.png",
+      "wc-female":  "/seatmap-icons/femaletoilets-dark.png",
+      "exit-symbol":"/seatmap-icons/emergencyexit-dark.png",
+      disabled:     "/seatmap-icons/disabledtoilets-dark.png",
+      "first-aid":  "/seatmap-icons/firstaid-dark.png",
+      info:         "/seatmap-icons/information-dark.png",
+      stairs:       "/seatmap-icons/stairssymbol-dark.png", // <-- note the filename
+    };
+
+
     const imageObj = new window.Image();
-    imageObj.src = SYMBOL_ICON_SRC[symbolType] || SYMBOL_ICON_SRC.info;
+    imageObj.src = ICON_SRC[symbolType] || ICON_SRC.info;
 
     const icon = new Konva.Image({
       image: imageObj,
@@ -1812,7 +1814,6 @@ function createBar(x, y) {
 
     return group;
   }
-
 
 
   function createSquare(x, y) {
@@ -2879,7 +2880,42 @@ function createBar(x, y) {
       el.appendChild(wrapper);
     }
 
-    
+    function addSelectField(labelText, value, options, onCommit) {
+      const wrapper = document.createElement("div");
+      wrapper.className = "sb-field-row";
+
+      const label = document.createElement("label");
+      label.className = "sb-label";
+
+      const span = document.createElement("span");
+      span.textContent = labelText;
+      span.style.display = "block";
+      span.style.marginBottom = "2px";
+
+      const select = document.createElement("select");
+      select.className = "sb-select";
+
+      options.forEach((opt) => {
+        const o = document.createElement("option");
+        o.value = opt.value;
+        o.textContent = opt.label;
+        if (opt.value === value) o.selected = true;
+        select.appendChild(o);
+      });
+
+      select.addEventListener("change", () => {
+        onCommit(select.value);
+        mapLayer.batchDraw();
+        updateSeatCount();
+        pushHistory();
+      });
+
+      label.appendChild(span);
+      label.appendChild(select);
+      wrapper.appendChild(label);
+      el.appendChild(wrapper);
+    }
+
         function addTextField(labelText, value, onCommit) {
       const wrapper = document.createElement("div");
       wrapper.className = "sb-field-row";
@@ -4457,12 +4493,30 @@ if (
   // expose for external callers if needed
   window.renderSeatmapInspector = renderInspector;
 
-  function configureTransformerForNode(node) {
+  // ---------- Selection / transformer ----------
+
+  function keepLabelsUpright(node) {
+    const angle = node.rotation();
+    const negate = -angle;
+
+    node
+      .find(
+        (child) =>
+          child.getAttr("isSeatLabel") ||
+          child.getAttr("isRowLabel") ||
+          child.name() === "table-label"
+      )
+      .forEach((lbl) => {
+        lbl.rotation(negate);
+      });
+  }
+
+     function configureTransformerForNode(node) {
     if (!transformer || !node) return;
 
-    const shapeType = node.getAttr("shapeType") || node.name() || "";
+    const shapeType = node.getAttr("shapeType") || node.name();
 
-    // Seats / tables: rotation only, no resize via transformer
+    // Seats / tables: rotation only, no resize
     if (
       shapeType === "row-seats" ||
       shapeType === "single-seat" ||
@@ -4475,18 +4529,16 @@ if (
     }
 
     // Room objects + basic shapes: resize in all directions (no rotation)
-    if (
+        if (
       shapeType === "stage" ||
       shapeType === "bar" ||
       shapeType === "exit" ||
       shapeType === "section" ||
       shapeType === "square" ||
       shapeType === "circle" ||
-      shapeType === "symbol" ||
-      shapeType === "text" ||
-      shapeType === "label" ||
-      shapeType === "arc"
+      shapeType === "symbol"
     ) {
+
       transformer.rotateEnabled(false);
       transformer.enabledAnchors([
         "top-left",
@@ -4501,33 +4553,32 @@ if (
       return;
     }
 
-   
-
-  // Lines & arrows: rotation only, geometry edited via handles
+     // Arrow + line drawings: allow rotation and resize in all directions
   if (
+    shapeType === "arrow" ||
     shapeType === "line" ||
     shapeType === "curve-line" ||
-    shapeType === "arrow"
+    shapeType === "arc"
   ) {
     transformer.rotateEnabled(true);
-    transformer.enabledAnchors([]);
+    transformer.enabledAnchors([
+      "top-left",
+      "top-center",
+      "top-right",
+      "middle-left",
+      "middle-right",
+      "bottom-left",
+      "bottom-center",
+      "bottom-right",
+    ]);
     return;
   }
 
-  // Fallback: allow full resize + rotation
-  transformer.rotateEnabled(true);
-  transformer.enabledAnchors([
-    "top-left",
-    "top-center",
-    "top-right",
-    "middle-left",
-    "middle-right",
-    "bottom-left",
-    "bottom-center",
-    "bottom-right",
-  ]);
-}
 
+    // Default: no resize/rotation
+    transformer.rotateEnabled(false);
+    transformer.enabledAnchors([]);
+  }
 
 
       function clearSelection() {
@@ -4626,139 +4677,120 @@ if (
     }
   }
 
- // ---------- Behaviour attachment ----------
+  // ---------- Behaviour attachment ----------
 
-function attachNodeBehaviour(node) {
+   function attachNodeBehaviour(node) {
   if (!(node instanceof Konva.Group)) return;
-
-  // Prevent double-binding if we re-run after history restore
-  if (node.getAttr("__sbBehaviourAttached")) return;
-  node.setAttr("__sbBehaviourAttached", true);
 
   // Make sure hit rect is correct for selection / dragging
   ensureHitRect(node);
+
+  // Normalise layer ordering so seats / tables are above,
+  // arcs + symbols below.
   sbNormalizeZOrder(node);
 
-  const shapeType = node.getAttr("shapeType") || node.name() || "";
 
-  // For rows/tables/single seats loaded from history,
-  // reattach the per-seat behaviour
-  if (
-    shapeType === "row-seats" ||
-    shapeType === "circular-table" ||
-    shapeType === "rect-table" ||
-    shapeType === "single-seat"
-  ) {
-    node.find("Circle").forEach((c) => {
-      if (!c || typeof c.getAttr !== "function") return;
-      if (!c.getAttr("isSeat")) return;
+  const shapeType = node.getAttr("shapeType") || node.name();
 
-      // Make sure metadata exists
-      const seatFill =
-        c.getAttr("sbSeatBaseFill") || c.fill() || "#ffffff";
-      const seatStroke =
-        c.getAttr("sbSeatBaseStroke") || c.stroke() || "#4b5563";
-      const seatStrokeWidth =
-        Number(c.getAttr("sbSeatBaseStrokeWidth")) ||
-        Number(c.strokeWidth && c.strokeWidth()) ||
-        1.7;
-
-      c.setAttrs({
-        sbSeatKind: c.getAttr("sbSeatKind") || "standard",
-        sbSeatBaseFill: seatFill,
-        sbSeatBaseStroke: seatStroke,
-        sbSeatBaseStrokeWidth: seatStrokeWidth,
-      });
-
-      attachSeatCircleBehaviour(c);
-      applySeatKindVisualToCircle(c);
-    });
+  // Always keep selection blocks behind other elements
+  if (shapeType === "section" && mapLayer && node.getLayer() === mapLayer) {
+    node.moveToBottom();
+    mapLayer.batchDraw();
   }
 
-  // ----- Selection / multi-selection -----
+  // Hover cursor
+  node.on("mouseover", () => {
+    if (!stage) return;
+    // If any creation / drawing tool is active, show crosshair even when hovering shapes
+    if (activeTool) {
+      stage.container().style.cursor = "crosshair";
+    } else {
+      stage.container().style.cursor = "grab";
+    }
+  });
 
-  node.on("mousedown touchstart", (evt) => {
-    // Don't let this bubble to the stage pan handler
-    evt.cancelBubble = true;
+  node.on("mouseout", () => {
+    // Use the central helper so it stays in sync with tools
+    updateDefaultCursor();
+  });
 
-    // If the user clicked on a line/arrow handle, we still
-    // want the parent group as the selected node.
-    let targetNode = node;
-    const parent =
-      evt.target && evt.target.getParent
-        ? evt.target.getParent()
-        : null;
-    if (parent && parent instanceof Konva.Group && parent !== node) {
-      targetNode = parent;
+  // ---- Drag behaviour (supports multi-drag with SHIFT) ----
+  node.on("dragstart", () => {
+    // As soon as we move any element, drop the active creation tool
+    // so clicking elsewhere doesn't create another element.
+    setActiveTool(null, { force: true });
+    updateDefaultCursor();
+
+    const nodes = transformer ? transformer.nodes() : [];
+
+    // If nothing is selected yet, select this node first
+    if (!nodes.length) {
+      selectNode(node, false);
     }
 
-    const additive = isShiftPressed === true;
-    selectNode(targetNode, additive);
+    const activeNodes = transformer ? transformer.nodes() : [node];
 
-    // If this is a multi-selection drag, snapshot positions
-    if (
-      additive &&
-      transformer &&
-      transformer.nodes &&
-      transformer.nodes().length > 1
-    ) {
-      multiDragState = transformer.nodes().map((n) => ({
-        node: n,
-        x: n.x(),
-        y: n.y(),
-      }));
+    // If we’re dragging multiple nodes, snapshot their starting positions
+    if (activeNodes.length > 1) {
+      multiDragState = {
+        dragger: node,
+        basePositions: new Map(),
+      };
+
+      activeNodes.forEach((n) => {
+        multiDragState.basePositions.set(n, { x: n.x(), y: n.y() });
+      });
     } else {
       multiDragState = null;
     }
   });
 
-  // ----- Multi-drag support -----
-
   node.on("dragmove", () => {
-    if (
-      multiDragState &&
-      transformer &&
-      transformer.nodes &&
-      transformer.nodes().length > 1
-    ) {
-      const primary = node;
-      const start = multiDragState.find((s) => s.node === primary);
-      if (start) {
-        const dx = primary.x() - start.x;
-        const dy = primary.y() - start.y;
-
-        multiDragState.forEach((s) => {
-          if (s.node === primary) return;
-          s.node.position({
-            x: snap(s.x + dx),
-            y: snap(s.y + dy),
-          });
-        });
-      }
+    if (!multiDragState || multiDragState.dragger !== node) {
+      // Single-node drag: just redraw
+      mapLayer.batchDraw();
+      return;
     }
 
-    if (mapLayer) mapLayer.batchDraw();
-    if (overlayLayer) overlayLayer.batchDraw();
+    const activeNodes = transformer ? transformer.nodes() : [node];
+    const base = multiDragState.basePositions.get(node);
+    if (!base) return;
+
+    const dx = node.x() - base.x;
+    const dy = node.y() - base.y;
+
+    // Move all selected nodes by the same delta, preserving their layout
+    activeNodes.forEach((n) => {
+      if (n === node) return; // this one is already being dragged by Konva
+      const orig = multiDragState.basePositions.get(n);
+      if (!orig) return;
+      n.position({
+        x: orig.x + dx,
+        y: orig.y + dy,
+      });
+    });
+
+    mapLayer.batchDraw();
   });
 
   node.on("dragend", () => {
+    const activeNodes = transformer ? transformer.nodes() : [node];
+
+    // IMPORTANT: no snapping here – allow pixel-perfect placement
+    activeNodes.forEach((n) => {
+      n.position({
+        x: n.x(),
+        y: n.y(),
+      });
+    });
+
     multiDragState = null;
-    if (mapLayer) mapLayer.batchDraw();
-    if (overlayLayer) overlayLayer.batchDraw();
+    mapLayer.batchDraw();
     pushHistory();
   });
 
-  // ----- Double-click: force selection (and let type-specific
-  // handlers like stage/exit/table text editing run as well) -----
-
-  node.on("dblclick", (evt) => {
-    // Don't bubble up to stage click handlers
-    evt.cancelBubble = true;
-    selectNode(node, false);
-  });
-
   // ---- Transform behaviour ----
-  node.on("transformend", () => {
+   node.on("transformend", () => {
     const tShape = node.getAttr("shapeType") || node.name();
 
     if (
@@ -4817,15 +4849,15 @@ function attachNodeBehaviour(node) {
 
       // Reset group scale so future transforms are clean
       node.scale({ x: 1, y: 1 });
-    } else if (
+        } else if (
       tShape !== "arrow" &&
       tShape !== "line" &&
       tShape !== "curve-line" &&
       tShape !== "arc"
     ) {
-      // For most other shapes, we still normalise scale back to 1
       node.scale({ x: 1, y: 1 });
     }
+
 
     if (
       tShape === "row-seats" ||
@@ -4839,12 +4871,13 @@ function attachNodeBehaviour(node) {
     setActiveTool(null, { force: true });
 
     ensureHitRect(node);
-    if (mapLayer) mapLayer.batchDraw();
+    mapLayer.batchDraw();
     pushHistory();
 
     // keep the inspector in sync (Rotation deg, etc.)
     renderInspector(node);
   });
+
 
   // ---- Inline table-label editing ----
   if (shapeType === "circular-table" || shapeType === "rect-table") {
@@ -4859,7 +4892,7 @@ function attachNodeBehaviour(node) {
         const val = (newText || "").trim();
         textNode.text(val);
         group.setAttr("tableLabel", val);
-        if (mapLayer) mapLayer.batchDraw();
+        mapLayer.batchDraw();
         pushHistory();
         renderInspector(group);
       });
@@ -4869,90 +4902,229 @@ function attachNodeBehaviour(node) {
 
 
 
+  // ---------- Node creation based on active tool ----------
 
-// ---------- Node creation based on active tool ----------
+    function createNodeForTool(tool, pos) {
+      // default to centre if for some reason we don't have a pointer
+      let pointerX = stage ? stage.width() / 2 : 0;
+      let pointerY = stage ? stage.height() / 2 : 0;
 
-function createNodeForTool(tool, pos) {
-  if (!mapLayer || !stage) return null;
+      if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
+        pointerX = pos.x;
+        pointerY = pos.y;
+      }
 
-  // Default to centre of stage if we don't have an explicit position
-  let pointerX = stage.width() / 2;
-  let pointerY = stage.height() / 2;
+      // Normalise symbol tools...
+      if (
+        tool &&
+        (tool.startsWith("symbol-") || tool.startsWith("symbol:"))
+      ) {
+        const parts = tool.split(/[-:]/);
+        const symbolType = parts[1] || "info";
+        return createSymbolNode(symbolType, pointerX, pointerY);
+      }
 
-  if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
-    pointerX = pos.x;
-    pointerY = pos.y;
+      
+
+    switch (tool) {
+      case "section":
+        return createSectionBlock(pointerX, pointerY);
+
+        case "arc":
+      return createArc(pointerX, pointerY);
+
+      case "row": {
+        const seatsPerRowStr = window.prompt(
+          "How many seats in each row?",
+          "10"
+        );
+        if (seatsPerRowStr == null) return null;
+        const seatsPerRow = parseInt(seatsPerRowStr, 10);
+        if (!Number.isFinite(seatsPerRow) || seatsPerRow <= 0) return null;
+
+        const rowCountStr = window.prompt(
+          "How many rows in this block?",
+          "1"
+        );
+        if (rowCountStr == null) return null;
+        const rowCount = parseInt(rowCountStr, 10);
+        if (!Number.isFinite(rowCount) || rowCount <= 0) return null;
+
+        const node = createRowOfSeats(
+          pointerX,
+          pointerY,
+          seatsPerRow,
+          rowCount
+        );
+        return node;
+      }
+
+      case "single":
+        return createSingleSeat(pointerX, pointerY);
+
+            case "circle-table": {
+        const seatCountStr = window.prompt(
+          "How many seats around this table?",
+          "8"
+        );
+        if (seatCountStr == null) {
+          // eslint-disable-next-line no-console
+          console.log("[seatmap] circular-table: cancelled by user");
+          return null;
+        }
+
+        const seatCount = parseInt(seatCountStr, 10);
+        if (!Number.isFinite(seatCount) || seatCount <= 0) {
+          // eslint-disable-next-line no-console
+          console.warn("[seatmap] circular-table: invalid seat count", {
+            seatCountStr,
+            seatCount,
+          });
+          return null;
+        }
+
+        // eslint-disable-next-line no-console
+        console.log("[seatmap] circular-table: creating", {
+          x: pointerX,
+          y: pointerY,
+          seatCount,
+        });
+
+        try {
+          const node = createCircularTable(pointerX, pointerY, seatCount);
+          if (!node) {
+            // eslint-disable-next-line no-console
+            console.warn("[seatmap] circular-table: createCircularTable returned null");
+          }
+          window.__LAST_TABLE_DEBUG__ = { type: "circular", x: pointerX, y: pointerY, seatCount, node };
+          return node;
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error("[seatmap] circular-table: error creating table", err);
+          window.__LAST_TABLE_ERROR__ = err;
+          return null;
+        }
+      }
+
+
+            case "rect-table": {
+        const input = window.prompt(
+          "Rectangular table – seats per long side, seats per short side (e.g. 4,2)",
+          "4,2"
+        );
+        if (input == null) {
+          // eslint-disable-next-line no-console
+          console.log("[seatmap] rect-table: cancelled by user");
+          return null;
+        }
+
+        const parts = input.split(",");
+        if (parts.length !== 2) {
+          // eslint-disable-next-line no-console
+          console.warn("[seatmap] rect-table: invalid input format", { input });
+          return null;
+        }
+
+        const longSideSeats = parseInt(parts[0].trim(), 10);
+        const shortSideSeats = parseInt(parts[1].trim(), 10);
+
+        if (
+          !Number.isFinite(longSideSeats) ||
+          longSideSeats < 0 ||
+          !Number.isFinite(shortSideSeats) ||
+          shortSideSeats < 0
+        ) {
+          // eslint-disable-next-line no-console
+          console.warn("[seatmap] rect-table: invalid seat counts", {
+            input,
+            longSideSeats,
+            shortSideSeats,
+          });
+          return null;
+        }
+
+        // eslint-disable-next-line no-console
+        console.log("[seatmap] rect-table: creating", {
+          x: pointerX,
+          y: pointerY,
+          longSideSeats,
+          shortSideSeats,
+        });
+
+        try {
+          const node = createRectTable(pointerX, pointerY, {
+            longSideSeats,
+            shortSideSeats,
+          });
+          if (!node) {
+            // eslint-disable-next-line no-console
+            console.warn("[seatmap] rect-table: createRectTable returned null");
+          }
+          window.__LAST_TABLE_DEBUG__ = {
+            type: "rect",
+            x: pointerX,
+            y: pointerY,
+            longSideSeats,
+            shortSideSeats,
+            node,
+          };
+          return node;
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error("[seatmap] rect-table: error creating table", err);
+          window.__LAST_TABLE_ERROR__ = err;
+          return null;
+        }
+      }
+
+
+      case "stage":
+        return createStage(pointerX, pointerY);
+
+      case "bar":
+        return createBar(pointerX, pointerY);
+
+      case "exit":
+        return createExit(pointerX, pointerY);
+
+      case "square":
+        return createSquare(pointerX, pointerY);
+
+      case "circle":
+        return createCircle(pointerX, pointerY);
+
+      case "text":
+        return createTextLabel(pointerX, pointerY);
+
+              case "symbol-bar":
+        return createSymbolNode("bar", pointerX, pointerY);
+
+      case "symbol-wc-mixed":
+        return createSymbolNode("wc-mixed", pointerX, pointerY);
+
+      case "symbol-wc-male":
+        return createSymbolNode("wc-male", pointerX, pointerY);
+
+      case "symbol-wc-female":
+        return createSymbolNode("wc-female", pointerX, pointerY);
+
+      case "symbol-exit":
+        return createSymbolNode("exit-symbol", pointerX, pointerY);
+
+      case "symbol-disabled":
+        return createSymbolNode("disabled", pointerX, pointerY);
+
+      case "symbol-first-aid":
+        return createSymbolNode("first-aid", pointerX, pointerY);
+
+      case "symbol-info":
+        return createSymbolNode("info", pointerX, pointerY);
+
+
+      default:
+        return null;
+    }
   }
-
-  let node = null;
-
-  // --- Symbol tools (toolbar or fly-out) ---
-  if (
-    tool &&
-    (tool === "symbols" ||
-      tool.startsWith("symbol-") ||
-      tool.startsWith("symbol:"))
-  ) {
-    // Normalise things like "symbol-wc-mixed" → "wc-mixed"
-    const symbolType = normaliseSymbolTool(tool);
-    node = createSymbolNode(symbolType, pointerX, pointerY);
-  }
-
-  // --- Room objects / shapes / seats / tables / lines / arrows ---
-  else if (tool === "stage") {
-    node = createStage(pointerX, pointerY);
-  } else if (tool === "bar") {
-    node = createBar(pointerX, pointerY);
-  } else if (tool === "exit") {
-    node = createExit(pointerX, pointerY);
-  } else if (tool === "section") {
-    node = createSectionBlock(pointerX, pointerY);
-  } else if (tool === "square") {
-    node = createSquare(pointerX, pointerY);
-  } else if (tool === "circle") {
-    node = createCircle(pointerX, pointerY);
-  } else if (tool === "arc") {
-    node = createArc(pointerX, pointerY);
-  } else if (tool === "text") {
-    node = createTextLabel(pointerX, pointerY);
-  } else if (tool === "single-seat") {
-    node = createSingleSeat(pointerX, pointerY);
-  } else if (tool === "row-seats") {
-    node = createRowOfSeats(pointerX, pointerY, 10, 1);
-  } else if (tool === "circular-table") {
-    node = createCircularTable(pointerX, pointerY, 8);
-  } else if (tool === "rect-table") {
-    node = createRectTable(pointerX, pointerY, {
-      longSideSeats: 4,
-      shortSideSeats: 2,
-    });
-  } else if (tool === "line" || tool === "curve-line") {
-    // Lines are handled by the click handlers (multi-point),
-    // so we don't create a node here.
-    return null;
-  } else if (tool === "arrow") {
-    // Arrows also use the dedicated 2-click flow
-    return null;
-  }
-
-  if (!node) return null;
-
-  // Add to canvas, wire behaviour, z-order, selection, history
-  mapLayer.add(node);
-  attachNodeBehaviour(node);
-  sbNormalizeZOrder(node);
-  mapLayer.batchDraw();
-  updateSeatCount();
-  pushHistory();
-  selectNode(node);
-
-  return node;
-}
-
-window.createNodeForTool = createNodeForTool;
-
-
-
 
 
 
@@ -4999,68 +5171,75 @@ window.createNodeForTool = createNodeForTool;
     overlayLayer.add(transformer);
   }
 
- // ---------- Canvas interactions: click / selection / placement ----------
+  // ---------- Canvas interactions ----------
 
-function handleStageClick(evt) {
-  if (!stage || !mapLayer) return;
+      // ---------- Canvas interactions: click / selection / placement ----------
 
-  const pointerPos = stage.getPointerPosition();
-  if (!pointerPos) return;
+    function handleStageClick(evt) {
+    if (!stage || !mapLayer) return;
 
-  const target = evt.target;
-  const isHandle =
-    target &&
-    target.getAttr &&
-    (target.getAttr("isLineHandle") || target.getAttr("isArrowHandle"));
+    const pointerPos = stage.getPointerPosition();
+    if (!pointerPos) return;
 
-  const clickedOnEmpty =
-    target === stage || (target.getLayer && target.getLayer() === gridLayer);
+    const target = evt.target;
+    const isHandle =
+      target &&
+      target.getAttr &&
+      (target.getAttr("isLineHandle") || target.getAttr("isArrowHandle"));
 
-  // 1) LINE TOOL (click-to-add points)
-  // Only fire on normal canvas clicks – NOT when clicking a handle.
-  if ((activeTool === "line" || activeTool === "curve-line") && !isHandle) {
-    handleLineClick(pointerPos, activeTool);
-    return;
-  }
-
-  // 1b) ARROW TOOL (click start, click end)
-  if (activeTool === "arrow") {
-    handleArrowClick(pointerPos);
-    return;
-  }
-
-  // 2) Placement tools (rows, single seats, tables, shapes, text, etc.)
-  // If a placement tool is active:
-  //   - Click on EMPTY canvas → create a new object
-  //   - Click on EXISTING object → select/drag (NO new object)
-  if (
-    activeTool &&
-    activeTool !== "line" &&
-    activeTool !== "curve-line" &&
-    activeTool !== "arrow"
-  ) {
-    if (clickedOnEmpty) {
-      const node = createNodeForTool(activeTool, pointerPos);
-      if (!node) return;
-
-      // Background shapes go behind everything
-      const t = node.getAttr("shapeType") || node.name();
-      if (t === "square" || t === "circle") {
-        node.moveToBottom();
-        if (mapLayer) mapLayer.batchDraw();
-      }
-
-      // IMPORTANT: we DO NOT clear activeTool here.
-      // This lets you keep placing multiple objects with the crosshair.
+    // 1) LINE TOOL (click-to-add points)
+    // Only fire on normal canvas clicks – NOT when clicking a handle.
+    if ((activeTool === "line" || activeTool === "curve-line") && !isHandle) {
+      handleLineClick(pointerPos, activeTool);
       return;
     }
 
-    // Clicked on an existing object while in placement mode → behave like selection
+    // 1b) ARROW TOOL (click start, click end)
+    if (activeTool === "arrow") {
+      handleArrowClick(pointerPos);
+      return;
+    }
+
+    // 2) Placement tools (rows, single seats, tables, shapes, text, etc.)
+    // If a placement tool is active, ALWAYS create at the click position,
+    // even if we clicked on top of another shape (inside a VIP box, etc.).
+        if (
+      activeTool &&
+      activeTool !== "line" &&
+      activeTool !== "curve-line" &&
+      activeTool !== "arrow"
+    ) {
+      const node = createNodeForTool(activeTool, pointerPos);
+      if (!node) return;
+
+      mapLayer.add(node);
+
+      // NEW: send basic shapes to the back (background layers)
+      const t = node.getAttr("shapeType") || node.name();
+      if (t === "square" || t === "circle") {
+        node.moveToBottom();
+      }
+
+      attachNodeBehaviour(node);
+      mapLayer.batchDraw();
+      updateSeatCount();
+      selectNode(node);
+      pushHistory();
+
+      // Drop the tool after placing so next click doesn't create another
+      setActiveTool(null);
+      updateDefaultCursor();
+      return;
+    }
+
+
+    // 3) No active placement tool → standard selection behaviour
     let group = null;
     if (target && typeof target.findAncestor === "function") {
       group = target.findAncestor("Group", true);
     }
 
+    // Clicked on an existing object → select it
     if (group && group.getLayer && group.getLayer() === mapLayer) {
       const e = evt.evt || evt;
       const additive =
@@ -5070,34 +5249,14 @@ function handleStageClick(evt) {
       return;
     }
 
-    // If we somehow click on something non-interactive while a tool is active,
-    // fall through so that empty-canvas clicks still clear selection when no node is hit.
+    // 4) Clicked on empty canvas → clear selection
+    const clickedOnEmpty =
+      target === stage || (target.getLayer && target.getLayer() === gridLayer);
+
+    if (clickedOnEmpty) {
+      clearSelection();
+    }
   }
-
-  // 3) Standard selection behaviour when no placement tool is active
-  let group = null;
-  if (target && typeof target.findAncestor === "function") {
-    group = target.findAncestor("Group", true);
-  }
-
-  // Clicked on an existing object → select it
-  if (group && group.getLayer && group.getLayer() === mapLayer) {
-    const e = evt.evt || evt;
-    const additive =
-      isShiftPressed || !!(e && (e.shiftKey || e.metaKey || e.ctrlKey));
-
-    selectNode(group, additive);
-    return;
-  }
-
-  // 4) Clicked on empty canvas → clear selection
-  if (clickedOnEmpty) {
-    clearSelection();
-  }
-}
-
-
-
 
 
 
@@ -5212,7 +5371,7 @@ function handleStageClick(evt) {
       return;
     }
 
-        if (
+    if (
       (e.key === "v" || e.key === "V") &&
       (e.metaKey || e.ctrlKey)
     ) {
@@ -5224,15 +5383,10 @@ function handleStageClick(evt) {
         node.y(node.y() + GRID_SIZE);
 
         const type = node.getAttr("shapeType");
-
-        // Tables: give pasted copies fresh labels + rebuild geometry
         if (type === "circular-table" || type === "rect-table") {
           node.setAttr("tableLabel", nextTableLabel());
           if (type === "circular-table") {
-            updateCircularTableGeometry(
-              node,
-              node.getAttr("seatCount") || 8
-            );
+            updateCircularTableGeometry(node, node.getAttr("seatCount") || 8);
           } else {
             updateRectTableGeometry(
               node,
@@ -5242,35 +5396,16 @@ function handleStageClick(evt) {
           }
         }
 
-        // Symbols: the Konva JSON does not include the HTMLImageElement,
-        // so we must re-attach the image or the pasted symbol is invisible.
-        if (type === "symbol") {
-          const symbolType = node.getAttr("symbolType") || "info";
-          const icon = node.findOne((n) => n instanceof Konva.Image);
-          if (icon) {
-            const img = new window.Image();
-            img.src =
-              SYMBOL_ICON_SRC[symbolType] || SYMBOL_ICON_SRC.info;
-            img.onload = () => {
-              if (mapLayer) mapLayer.batchDraw();
-            };
-            icon.image(img);
-          }
-        }
-
         mapLayer.add(node);
         attachNodeBehaviour(node);
-        sbNormalizeZOrder(node);
         return node;
       });
 
       mapLayer.batchDraw();
       updateSeatCount();
       pushHistory();
-
       transformer.nodes(newNodes);
       overlayLayer.draw();
-
       selectedNode = newNodes.length === 1 ? newNodes[0] : null;
       if (newNodes.length === 1) {
         renderInspector(newNodes[0]);
@@ -5279,10 +5414,9 @@ function handleStageClick(evt) {
       } else {
         renderInspector(null);
       }
-
       e.preventDefault();
     }
-
+  }
 
   function handleKeyUp(e) {
     if (e.key === "Shift") {
@@ -5352,47 +5486,35 @@ function handleStageClick(evt) {
     }
   }
 
-    function handleStageMouseMove(evt) {
-  if (!stage || !mapLayer) return;
+    function handleStageMouseDown(evt) {
+    if (!stage) return;
 
-  const target = evt.target;
-  const container = stage.container();
-
-  let overInteractiveShape = false;
-
-  if (
-    target &&
-    target !== stage &&
-    target.getLayer &&
-    target.getLayer() === mapLayer
-  ) {
-    const group =
-      typeof target.findAncestor === "function"
-        ? target.findAncestor("Group", true)
-        : null;
-
-    if (group && group.getAttr && group.getAttr("shapeType")) {
-      overInteractiveShape = true;
+    // Freehand curve-line drawing
+    if (activeTool === "curve-line") {
+      const pointerPos = stage.getPointerPosition();
+      if (!pointerPos) return;
+      startCurveLine(pointerPos);
+      if (evt.evt) evt.evt.preventDefault();
+      return;
     }
+
+    // Do not pan while another drawing tool is active
+    if (activeTool) return;
+
+    const target = evt.target;
+    const clickedOnEmpty =
+      target === stage ||
+      (target.getLayer && target.getLayer() === gridLayer);
+
+    if (!clickedOnEmpty) return;
+
+    const pointerPos = stage.getPointerPosition();
+    if (!pointerPos) return;
+
+    isPanning = true;
+    lastPanPointerPos = pointerPos;
+    stage.container().style.cursor = "grabbing";
   }
-
-  // If a placement tool is active:
-  //   - over shape  → hand (grab)
-  //   - over empty  → crosshair
-  if (
-    activeTool &&
-    activeTool !== "line" &&
-    activeTool !== "curve-line" &&
-    activeTool !== "arrow"
-  ) {
-    container.style.cursor = overInteractiveShape ? "grab" : "crosshair";
-    return;
-  }
-
-  // No placement tool active: use hand for interactive shapes, default/hand otherwise
-  container.style.cursor = overInteractiveShape ? "grab" : "grab";
-}
-
 
 
     function handleStageMouseMove() {
@@ -5603,23 +5725,31 @@ function handleStageClick(evt) {
     }
   }
 
+    // ---------- Boot ----------
 
-      // ---------- Boot ----------
+    // ---------- Boot ----------
 
-  // Initialise stage + UI
   initStage();
+  updateDefaultCursor();
   hookToolButtons();
   hookZoomButtons();
   hookClearButton();
   hookUndoRedoButtons();
   hookSaveButton();
 
-  // Canvas interactions & global handlers
   stage.on("click", handleStageClick);
 
-  // Double-click anywhere to finish the current line (if any)
+  // Canvas interactions
+  stage.on("mousedown", handleStageMouseDown);
+  stage.on("mousemove", handleStageMouseMove);
+  stage.on("mouseup", handleStageMouseUp);
+  stage.on("mouseleave", handleStageMouseUp);
+
+  // Double-click anywhere to finish the current straight line (if any)
   stage.on("dblclick", () => {
-    if (activeTool !== "line" || !currentLineGroup) return;
+    if (activeTool !== "line" || !currentLineGroup) {
+      return;
+    }
     finishCurrentLine(true);
   });
 
