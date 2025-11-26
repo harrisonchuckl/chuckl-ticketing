@@ -334,15 +334,13 @@ if (window.__TIXALL_SEATMAP_BUILDER_ACTIVE__) {
   let inspectorEl = null;
 
 
-   // 🔵 Helper: update left-hand tool button state (black ↔ blue icons)
+  // 🔵 Helper: update left-hand tool button state (black ↔ blue icons)
 function updateToolButtonActiveState(currentTool) {
   try {
-    const buttons = document.querySelectorAll(
-      ".tb-left-item.tool-button[data-tool]"
-    );
+    // IMPORTANT: look at *all* tool buttons, not only .tb-left-item
+    const buttons = document.querySelectorAll(".tool-button[data-tool]");
 
     // Determine which main button to highlight.
-    // Any symbol sub-tool (symbol-*) highlights the main "symbols" button.
     let effectiveTool = currentTool;
     const isSymbolSubTool =
       currentTool &&
@@ -351,7 +349,6 @@ function updateToolButtonActiveState(currentTool) {
 
     if (isSymbolSubTool) {
       effectiveTool = "symbols";
-      // Also update the symbols toolbar icon to match the current symbol selection
       if (typeof updateSymbolsToolbarIcon === "function") {
         updateSymbolsToolbarIcon(currentTool);
       }
@@ -361,6 +358,7 @@ function updateToolButtonActiveState(currentTool) {
       const btnTool = btn.getAttribute("data-tool");
       const isActive = !!effectiveTool && btnTool === effectiveTool;
 
+      // Toggle the highlight class
       if (isActive) {
         btn.classList.add("is-active");
       } else {
@@ -370,16 +368,11 @@ function updateToolButtonActiveState(currentTool) {
       const img = btn.querySelector("img");
       if (!img) return;
 
-      const btnToolName = btnTool;
-
-      // The main "symbols" button's icon is managed separately
-      if (btnToolName === "symbols") {
-        return;
-      }
+      // The main "symbols" button’s <img> is driven separately
+      if (btnTool === "symbols") return;
 
       // --- figure out default / active icon sources ---
 
-      // Try data attributes on the button *or* on the <img>
       let defaultSrc =
         btn.getAttribute("data-icon-default") ||
         img.getAttribute("data-icon-default") ||
@@ -408,8 +401,6 @@ function updateToolButtonActiveState(currentTool) {
       }
     });
   } catch (e) {
-    // fail-safe – don't crash the builder if the left-hand DOM isn't present
-    // eslint-disable-next-line no-console
     console.warn("updateToolButtonActiveState error", e);
   }
 }
