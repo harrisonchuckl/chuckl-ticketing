@@ -1326,7 +1326,7 @@
     applySeatKindVisualToCircle(circle);
   }
 
-  // Helper: wire up seat behaviour (double-click to cycle through types)
+    // Helper: wire up seat behaviour (double-click to cycle through types)
   function attachSeatCircleBehaviour(circle) {
     if (!circle || typeof circle.on !== "function") return;
     if (!circle.getAttr("isSeat")) return;
@@ -1339,6 +1339,9 @@
       pushHistory();
     });
   }
+
+  // ---------- Shape factories ----------
+
 
     
     function finish(commit) {
@@ -2901,43 +2904,6 @@ function createBar(x, y) {
       wrapper.appendChild(value);
       el.appendChild(wrapper);
     }
-
-    function addSelectField(labelText, value, options, onCommit) {
-      const wrapper = document.createElement("div");
-      wrapper.className = "sb-field-row";
-
-      const label = document.createElement("label");
-      label.className = "sb-label";
-
-      const span = document.createElement("span");
-      span.textContent = labelText;
-      span.style.display = "block";
-      span.style.marginBottom = "2px";
-
-      const select = document.createElement("select");
-      select.className = "sb-select";
-
-      options.forEach((opt) => {
-        const o = document.createElement("option");
-        o.value = opt.value;
-        o.textContent = opt.label;
-        if (opt.value === value) o.selected = true;
-        select.appendChild(o);
-      });
-
-      select.addEventListener("change", () => {
-        onCommit(select.value);
-        mapLayer.batchDraw();
-        updateSeatCount();
-        pushHistory();
-      });
-
-      label.appendChild(span);
-      label.appendChild(select);
-      wrapper.appendChild(label);
-      el.appendChild(wrapper);
-    }
-
         function addTextField(labelText, value, onCommit) {
       const wrapper = document.createElement("div");
       wrapper.className = "sb-field-row";
