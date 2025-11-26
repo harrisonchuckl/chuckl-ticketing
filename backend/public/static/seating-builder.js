@@ -1262,6 +1262,63 @@
     input.focus();
     input.select();
 
+      // ----- Seat kind helpers: standard / accessible / carer -----
+
+  function applySeatKindVisualToCircle(circle) {
+    if (!circle || typeof circle.getAttr !== "function") return;
+    if (!circle.getAttr("isSeat")) return;
+
+    const kind = circle.getAttr("sbSeatKind") || "standard";
+
+    // Base styles captured on creation
+    const baseFill = circle.getAttr("sbSeatBaseFill") || "#ffffff";
+    const baseStroke = circle.getAttr("sbSeatBaseStroke") || "#4b5563";
+    const baseStrokeWidth = Number(circle.getAttr("sbSeatBaseStrokeWidth")) || 1.7;
+
+    if (kind === "accessible") {
+      circle.fill("#dbeafe");          // light blue
+      circle.stroke("#1d4ed8");
+      circle.strokeWidth(2);
+    } else if (kind === "carer") {
+      circle.fill("#dcfce7");          // light green
+      circle.stroke("#16a34a");
+      circle.strokeWidth(2);
+    } else {
+      // standard
+      circle.fill(baseFill);
+      circle.stroke(baseStroke);
+      circle.strokeWidth(baseStrokeWidth);
+    }
+  }
+
+  function cycleSeatKind(circle) {
+    if (!circle || typeof circle.getAttr !== "function") return;
+
+    const current = circle.getAttr("sbSeatKind") || "standard";
+    let next;
+    if (current === "standard") next = "accessible";
+    else if (current === "accessible") next = "carer";
+    else next = "standard";
+
+    circle.setAttr("sbSeatKind", next);
+    applySeatKindVisualToCircle(circle);
+  }
+
+  // Helper: wire up seat behaviour (double-click to cycle through types)
+  function attachSeatCircleBehaviour(circle) {
+    if (!circle || typeof circle.on !== "function") return;
+    if (!circle.getAttr("isSeat")) return;
+
+    circle.on("dblclick", (evt) => {
+      // Don't also trigger group double-clicks
+      evt.cancelBubble = true;
+      cycleSeatKind(circle);
+      if (mapLayer) mapLayer.batchDraw();
+      pushHistory();
+    });
+  }
+
+    
     function finish(commit) {
       if (!input.parentNode) return;
       const newVal = commit ? input.value : oldText;
@@ -1699,11 +1756,30 @@ function createBar(x, y) {
       shapeType: "symbol",
     });
 
+        // Map toolbar tool names (symbol-*) to our internal symbolType keys
+  const SYMBOL_TOOL_TO_TYPE = {
+    "symbol-bar": "bar",
+    "symbol-wc-mixed": "wc-mixed",
+    "symbol-wc-male": "wc-male",
+    "symbol-wc-female": "wc-female",
+    "symbol-disabled": "disabled",
+    "symbol-exit": "exit-symbol",
+    "symbol-firstaid": "first-aid",
+    "symbol-info": "info",
+    "symbol-stairs": "stairs",
+  };
+
+  function normaliseSymbolTool(toolName) {
+    if (!toolName) return "info";
+    return SYMBOL_TOOL_TO_TYPE[toolName] || "info";
+  }
+
+
     group.setAttr("symbolType", symbolType);
 
     // Map each symbol type to the DARK (map) icon you uploaded.
     // ⚠️ Update the filenames/paths here to match your GitHub /public/seatmap-icons folder.
-    const ICON_SRC = {
+        const ICON_SRC = {
       bar:          "/seatmap-icons/barsymbol-dark.png",
       "wc-mixed":   "/seatmap-icons/mixedtoilets-dark.png",
       "wc-male":    "/seatmap-icons/maletoilets-dark.png",
@@ -1712,8 +1788,9 @@ function createBar(x, y) {
       disabled:     "/seatmap-icons/disabledtoilets-dark.png",
       "first-aid":  "/seatmap-icons/firstaid-dark.png",
       info:         "/seatmap-icons/information-dark.png",
-      stairs:       "/seatmap-icons/stairs-dark.png",
+      stairs:       "/seatmap-icons/stairssymbol-dark.png", // <-- note the filename
     };
+
 
     const imageObj = new window.Image();
     imageObj.src = ICON_SRC[symbolType] || ICON_SRC.info;
@@ -1853,7 +1930,7 @@ function createBar(x, y) {
   return group;
 }
 
-  function createSingleSeat(x, y) {
+    function createSingleSeat(x, y) {
     const group = new Konva.Group({
       x: x,
       y: y,
@@ -1876,6 +1953,18 @@ function createBar(x, y) {
       isSeat: true,
     });
 
+    // seat kind metadata (per-seat)
+    circle.setAttrs({
+      sbSeatKind: circle.getAttr("sbSeatKind") || "standard",
+      sbSeatBaseFill: seatFill,
+      sbSeatBaseStroke: seatStroke,
+      sbSeatBaseStrokeWidth: 1.7,
+    });
+
+    // allow per-seat type change on double-click
+    attachSeatCircleBehaviour(circle);
+    applySeatKindVisualToCircle(circle);
+
     group.add(circle);
 
     if (isLabelled) {
@@ -1888,11 +1977,6 @@ function createBar(x, y) {
     return group;
   }
 
-    function nextTableLabel() {
-    const label = String(tableCounter);
-    tableCounter += 1;
-    return label;
-  }
 
   // ----- Table factories -----
 
@@ -2189,7 +2273,7 @@ function createBar(x, y) {
         continue;
       }
 
-      const seat = new Konva.Circle({
+            const seat = new Konva.Circle({
         x: sx,
         y: rowY,
         radius: seatRadius,
@@ -2199,7 +2283,19 @@ function createBar(x, y) {
         isSeat: true,
       });
 
+      // seat type metadata
+      seat.setAttrs({
+        sbSeatKind: seat.getAttr("sbSeatKind") || "standard",
+        sbSeatBaseFill: seatFill,
+        sbSeatBaseStroke: seatStroke,
+        sbSeatBaseStrokeWidth: 1.7,
+      });
+
+      attachSeatCircleBehaviour(seat);
+      applySeatKindVisualToCircle(seat);
+
       group.add(seat);
+
 
       if (seatLabelMode !== "none") {
         const labelText = seatLabelFromIndex(seatLabelMode, i, seatStart);
@@ -2350,7 +2446,7 @@ function createBar(x, y) {
       const sx = Math.cos(angle) * seatRingRadius;
       const sy = Math.sin(angle) * seatRingRadius;
 
-      const seat = new Konva.Circle({
+            const seat = new Konva.Circle({
         x: sx,
         y: sy,
         radius: seatRadius,
@@ -2360,7 +2456,18 @@ function createBar(x, y) {
         isSeat: true,
       });
 
+      seat.setAttrs({
+        sbSeatKind: seat.getAttr("sbSeatKind") || "standard",
+        sbSeatBaseFill: seatFill,
+        sbSeatBaseStroke: seatStroke,
+        sbSeatBaseStrokeWidth: 1.7,
+      });
+
+      attachSeatCircleBehaviour(seat);
+      applySeatKindVisualToCircle(seat);
+
       group.add(seat);
+
 
       if (seatLabelMode !== "none") {
         const labelText = seatLabelFromIndex(
@@ -2454,27 +2561,39 @@ function createBar(x, y) {
       const topY = -height / 2 - 14;
       const bottomY = height / 2 + 14;
 
-      const topSeat = new Konva.Circle({
-        x: sx,
-        y: topY,
-        radius: seatRadius,
-        stroke: seatStroke,
-        strokeWidth: 1.7,
-        fill: seatFill,
-        isSeat: true,
-      });
-      const bottomSeat = new Konva.Circle({
-        x: sx,
-        y: bottomY,
-        radius: seatRadius,
-        stroke: seatStroke,
-        strokeWidth: 1.7,
-        fill: seatFill,
-        isSeat: true,
-      });
+        const topSeat = new Konva.Circle({
+     x: sx,
+     y: topY,
+     radius: seatRadius,
+     stroke: seatStroke,
+     strokeWidth: 1.7,
+     fill: seatFill,
+     isSeat: true,
+   });
+   const bottomSeat = new Konva.Circle({
+     x: sx,
+     y: bottomY,
+     radius: seatRadius,
+     stroke: seatStroke,
+     strokeWidth: 1.7,
+     fill: seatFill,
+     isSeat: true,
+   });
 
-      group.add(topSeat);
-      group.add(bottomSeat);
+   [topSeat, bottomSeat].forEach((seat) => {
+     seat.setAttrs({
+       sbSeatKind: seat.getAttr("sbSeatKind") || "standard",
+       sbSeatBaseFill: seatFill,
+       sbSeatBaseStroke: seatStroke,
+       sbSeatBaseStrokeWidth: 1.7,
+     });
+     attachSeatCircleBehaviour(seat);
+     applySeatKindVisualToCircle(seat);
+   });
+
+   group.add(topSeat);
+   group.add(bottomSeat);
+
 
       if (seatLabelMode !== "none") {
         const topText = seatLabelFromIndex(
@@ -2506,27 +2625,39 @@ function createBar(x, y) {
       const leftX = -width / 2 - 14;
       const rightX = width / 2 + 14;
 
-      const leftSeat = new Konva.Circle({
-        x: leftX,
-        y: sy,
-        radius: seatRadius,
-        stroke: seatStroke,
-        strokeWidth: 1.7,
-        fill: seatFill,
-        isSeat: true,
-      });
-      const rightSeat = new Konva.Circle({
-        x: rightX,
-        y: sy,
-        radius: seatRadius,
-        stroke: seatStroke,
-        strokeWidth: 1.7,
-        fill: seatFill,
-        isSeat: true,
-      });
+         const leftSeat = new Konva.Circle({
+     x: leftX,
+     y: sy,
+     radius: seatRadius,
+     stroke: seatStroke,
+     strokeWidth: 1.7,
+     fill: seatFill,
+     isSeat: true,
+   });
+   const rightSeat = new Konva.Circle({
+     x: rightX,
+     y: sy,
+     radius: seatRadius,
+     stroke: seatStroke,
+     strokeWidth: 1.7,
+     fill: seatFill,
+     isSeat: true,
+   });
 
-      group.add(leftSeat);
-      group.add(rightSeat);
+   [leftSeat, rightSeat].forEach((seat) => {
+     seat.setAttrs({
+       sbSeatKind: seat.getAttr("sbSeatKind") || "standard",
+       sbSeatBaseFill: seatFill,
+       sbSeatBaseStroke: seatStroke,
+       sbSeatBaseStrokeWidth: 1.7,
+     });
+     attachSeatCircleBehaviour(seat);
+     applySeatKindVisualToCircle(seat);
+   });
+
+   group.add(leftSeat);
+   group.add(rightSeat);
+
 
       if (seatLabelMode !== "none") {
         const leftText = seatLabelFromIndex(
@@ -2644,7 +2775,41 @@ function createBar(x, y) {
   }
 
   window.debugDumpRows = debugDumpRows;
+  // ---------- Z-ORDER: seats & tables always above, arcs pushed below ----------
 
+  function sbNormalizeZOrder(node) {
+    if (!node || typeof node.getLayer !== "function") return;
+    const layer = node.getLayer();
+    if (!layer) return;
+
+    const shapeType = node.getAttr("shapeType") || node.name() || "";
+
+    // Anything that *contains seats* or is a table should always float above
+    const isSeatOrTableGroup =
+      shapeType === "row-seats" ||
+      shapeType === "rect-table" ||
+      shapeType === "circular-table" ||
+      shapeType === "single-seat";
+
+    if (isSeatOrTableGroup) {
+      node.moveToTop();
+      layer.batchDraw();
+      return;
+    }
+
+    // Arcs should always sit underneath everything else
+    if (shapeType === "arc") {
+      node.moveToBottom();
+      layer.batchDraw();
+      return;
+    }
+
+    // Everything else (stage, bar, exit, symbols, lines, text, etc)
+    // keeps its natural stacking unless you move it manually.
+  }
+
+
+  
     // ---------- Selection inspector (right-hand panel) ----------
 
   function renderInspector(node) {
@@ -4517,7 +4682,13 @@ if (
    function attachNodeBehaviour(node) {
   if (!(node instanceof Konva.Group)) return;
 
+  // Make sure hit rect is correct for selection / dragging
   ensureHitRect(node);
+
+  // Normalise layer ordering so seats / tables are above,
+  // arcs + symbols below.
+  sbNormalizeZOrder(node);
+
 
   const shapeType = node.getAttr("shapeType") || node.name();
 
