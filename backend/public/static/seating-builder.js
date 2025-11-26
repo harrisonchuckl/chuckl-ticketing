@@ -1476,6 +1476,125 @@ function updateToolButtonActiveState(currentTool) {
     }
   }
 
+    // ---------- Arc style helper (single line vs outline band) ----------
+
+  function applyArcStyle(group) {
+    if (!(group instanceof Konva.Group)) return;
+
+    const type = group.getAttr("shapeType") || group.name();
+    if (type !== "arc") return;
+
+    const arc =
+      group.findOne(".body-arc") ||
+      group.findOne((n) => n instanceof Konva.Arc);
+    if (!arc) return;
+
+    // --- Mode: "single" (one stroked line) vs "outline" (ring/band) ---
+    let mode = group.getAttr("arcMode");
+    if (mode !== "single" && mode !== "outline") {
+      mode = "outline";
+    }
+    group.setAttr("arcMode", mode);
+
+    // --- Geometry: radius + thickness + sweep angle ---
+    let radius = Number(group.getAttr("arcRadius"));
+    let thickness = Number(group.getAttr("arcThickness"));
+    let angle = Number(group.getAttr("arcAngle"));
+
+    const currentInner = Number(arc.innerRadius && arc.innerRadius()) || 60;
+    const currentOuter = Number(arc.outerRadius && arc.outerRadius()) || 80;
+
+    if (!Number.isFinite(radius) || radius <= 0) {
+      radius = mode === "outline" ? currentInner : currentOuter;
+    }
+    if (!Number.isFinite(thickness) || thickness <= 0) {
+      const band = currentOuter - currentInner;
+      thickness =
+        mode === "outline"
+          ? band > 0
+            ? band
+            : 20
+          : Number(arc.strokeWidth && arc.strokeWidth()) || 4;
+    }
+    if (!Number.isFinite(angle) || angle <= 0) {
+      angle = arc.angle ? arc.angle() : 180;
+    }
+
+    // Clamp angle a bit
+    angle = Math.max(1, Math.min(359, angle));
+
+    group.setAttr("arcRadius", radius);
+    group.setAttr("arcThickness", thickness);
+    group.setAttr("arcAngle", angle);
+
+    // --- Stroke colour / style ---
+    let strokeColor =
+      group.getAttr("arcStrokeColor") || arc.stroke() || "#111827";
+    group.setAttr("arcStrokeColor", strokeColor);
+
+    let strokeStyle = group.getAttr("arcStrokeStyle");
+    if (
+      strokeStyle !== "solid" &&
+      strokeStyle !== "dashed" &&
+      strokeStyle !== "dotted"
+    ) {
+      const dashArr = arc.dash && arc.dash();
+      if (dashArr && dashArr.length) {
+        strokeStyle = dashArr[0] <= 3 ? "dotted" : "dashed";
+      } else {
+        strokeStyle = "solid";
+      }
+    }
+    group.setAttr("arcStrokeStyle", strokeStyle);
+
+    // --- Fill for outline mode ---
+    let fillEnabled = group.getAttr("arcFillEnabled");
+    if (fillEnabled === undefined || fillEnabled === null) {
+      const f = arc.fill && arc.fill();
+      fillEnabled = !!f && f !== "rgba(0,0,0,0)";
+    }
+    group.setAttr("arcFillEnabled", !!fillEnabled);
+
+    let fillColor =
+      group.getAttr("arcFillColor") || arc.fill() || "#ffffff";
+    group.setAttr("arcFillColor", fillColor);
+
+    // --------- Apply to Konva.Arc ----------
+    // Geometry
+    if (mode === "outline") {
+      arc.innerRadius(radius);
+      arc.outerRadius(radius + thickness);
+      arc.strokeWidth(2);           // edge line width – kept small
+    } else {
+      // single line
+      arc.innerRadius(radius);
+      arc.outerRadius(radius);
+      arc.strokeWidth(thickness);   // thickness IS the stroke width
+    }
+
+    arc.angle(angle);
+    arc.stroke(strokeColor);
+
+    // Fill only used in outline mode
+    if (mode === "outline" && fillEnabled) {
+      arc.fill(fillColor);
+    } else {
+      arc.fill("rgba(0,0,0,0)");
+    }
+
+    // Stroke style (solid / dashed / dotted)
+    if (strokeStyle === "dashed") {
+      arc.dash([12, 4]);
+    } else if (strokeStyle === "dotted") {
+      arc.dash([2, 4]);
+    } else {
+      arc.dash([]);
+    }
+
+    ensureHitRect(group);
+  }
+
+  
   // ---------- Stage style helpers ----------
 
   function hexToRgb(hex) {
@@ -2081,33 +2200,45 @@ function createBar(x, y) {
 
   }
 
-  function createArc(x, y) {
-  const group = new Konva.Group({
-    x,
-    y,
-    draggable: true,
-    name: "arc",
-    shapeType: "arc",
-  });
+   function createArc(x, y) {
+    const group = new Konva.Group({
+      x,
+      y,
+      draggable: true,
+      name: "arc",
+      shapeType: "arc",
+    });
 
-  // A default 180° arc, sized reasonably so you can see and grab it
-  const arc = new Konva.Arc({
-    x: 0,
-    y: 0,
-    innerRadius: 60,
-    outerRadius: 80,
-    angle: 180,        // sweep in degrees
-    rotation: -90,     // open upwards by default
-    stroke: "#111827",
-    strokeWidth: 2,
-    listening: true,
-    name: "body-arc",
-  });
+    // Base arc – actual styling is driven by applyArcStyle()
+    const arc = new Konva.Arc({
+      x: 0,
+      y: 0,
+      innerRadius: 60,
+      outerRadius: 80,
+      angle: 180,
+      rotation: -90, // opens upwards
+      stroke: "#111827",
+      strokeWidth: 2,
+      listening: true,
+      name: "body-arc",
+    });
 
-  group.add(arc);
-  ensureHitRect(group);
-  return group;
-}
+    group.add(arc);
+
+    // Default attributes for the inspector
+    group.setAttr("arcMode", "outline");         // "outline" | "single"
+    group.setAttr("arcRadius", 60);              // inner radius (px)
+    group.setAttr("arcThickness", 20);           // band thickness (px) or line width
+    group.setAttr("arcAngle", 180);              // sweep angle (deg)
+    group.setAttr("arcStrokeColor", "#111827");
+    group.setAttr("arcStrokeStyle", "solid");    // "solid" | "dashed" | "dotted"
+    group.setAttr("arcFillEnabled", false);
+    group.setAttr("arcFillColor", "#ffffff");
+
+    applyArcStyle(group);
+    ensureHitRect(group);
+    return group;
+  }
 
     function createSingleSeat(x, y) {
     const group = new Konva.Group({
@@ -4165,6 +4296,202 @@ function addNumberField(labelText, value, min, step, onCommit) {
         return;
       }
 
+          // ---- Arc ----
+    if (shapeType === "arc") {
+      const arcShape = node.findOne((n) => n instanceof Konva.Arc);
+
+      addTitle("Arc");
+
+      if (!arcShape) {
+        const p = document.createElement("p");
+        p.className = "sb-inspector-empty";
+        p.textContent = "This arc has no editable geometry.";
+        el.appendChild(p);
+        return;
+      }
+
+      // Normalise attrs
+      let mode = node.getAttr("arcMode");
+      if (mode !== "single" && mode !== "outline") {
+        mode = "outline";
+      }
+      node.setAttr("arcMode", mode);
+
+      const currentInner =
+        Number(arcShape.innerRadius && arcShape.innerRadius()) || 60;
+      const currentOuter =
+        Number(arcShape.outerRadius && arcShape.outerRadius()) || 80;
+
+      let radius = Number(node.getAttr("arcRadius"));
+      let thickness = Number(node.getAttr("arcThickness"));
+      let angle = Number(node.getAttr("arcAngle"));
+
+      if (!Number.isFinite(radius) || radius <= 0) {
+        radius = mode === "outline" ? currentInner : currentOuter;
+      }
+
+      if (!Number.isFinite(thickness) || thickness <= 0) {
+        const band = currentOuter - currentInner;
+        thickness =
+          mode === "outline"
+            ? band > 0
+              ? band
+              : 20
+            : Number(arcShape.strokeWidth && arcShape.strokeWidth()) || 4;
+      }
+
+      if (!Number.isFinite(angle) || angle <= 0) {
+        angle = arcShape.angle ? arcShape.angle() : 180;
+      }
+
+      angle = Math.max(1, Math.min(359, angle));
+
+      node.setAttr("arcRadius", radius);
+      node.setAttr("arcThickness", thickness);
+      node.setAttr("arcAngle", angle);
+
+      let strokeColor =
+        node.getAttr("arcStrokeColor") || arcShape.stroke() || "#111827";
+      node.setAttr("arcStrokeColor", strokeColor);
+
+      let strokeStyle = node.getAttr("arcStrokeStyle");
+      if (
+        strokeStyle !== "solid" &&
+        strokeStyle !== "dashed" &&
+        strokeStyle !== "dotted"
+      ) {
+        const dashArr = arcShape.dash && arcShape.dash();
+        if (dashArr && dashArr.length) {
+          strokeStyle = dashArr[0] <= 3 ? "dotted" : "dashed";
+        } else {
+          strokeStyle = "solid";
+        }
+      }
+      node.setAttr("arcStrokeStyle", strokeStyle);
+
+      let fillEnabled = node.getAttr("arcFillEnabled");
+      if (fillEnabled === undefined || fillEnabled === null) {
+        const f = arcShape.fill && arcShape.fill();
+        fillEnabled = !!f && f !== "rgba(0,0,0,0)";
+      }
+      node.setAttr("arcFillEnabled", !!fillEnabled);
+
+      let fillColor =
+        node.getAttr("arcFillColor") || arcShape.fill() || "#ffffff";
+      node.setAttr("arcFillColor", fillColor);
+
+      // Make sure the visual matches these attrs
+      applyArcStyle(node);
+
+      // --- Controls ---
+
+      // Rotation on the group
+      addNumberField(
+        "Rotation (deg)",
+        Math.round(node.rotation() || 0),
+        -360,
+        1,
+        (val) => {
+          const a = normaliseAngle(val);
+          node.rotation(a);
+          if (overlayLayer) overlayLayer.batchDraw();
+        }
+      );
+
+      // Type: single vs outline
+      addSelectField(
+        "Arc type",
+        mode,
+        [
+          { value: "single", label: "Single line" },
+          { value: "outline", label: "Outline band" },
+        ],
+        (val) => {
+          const safe = val === "single" ? "single" : "outline";
+          node.setAttr("arcMode", safe);
+          applyArcStyle(node);
+          // Refresh to show/hide fill controls & label text
+          renderInspector(node);
+        }
+      );
+
+      // Radius
+      addNumberField(
+        mode === "single" ? "Radius (px)" : "Inner radius (px)",
+        radius,
+        5,
+        1,
+        (val) => {
+          node.setAttr("arcRadius", val);
+          applyArcStyle(node);
+        }
+      );
+
+      // Thickness
+      addNumberField(
+        mode === "single"
+          ? "Line thickness (px)"
+          : "Band thickness (px)",
+        thickness,
+        1,
+        1,
+        (val) => {
+          node.setAttr("arcThickness", val);
+          applyArcStyle(node);
+        }
+      );
+
+      // Sweep angle
+      addNumberField(
+        "Sweep angle (deg)",
+        angle,
+        1,
+        1,
+        (val) => {
+          node.setAttr("arcAngle", val);
+          applyArcStyle(node);
+        }
+      );
+
+      // Stroke colour
+      addColorField("Stroke colour", strokeColor, (val) => {
+        node.setAttr("arcStrokeColor", val || "#111827");
+        applyArcStyle(node);
+      });
+
+      // Fill only makes sense for outline mode
+      if (mode === "outline") {
+        addCheckboxField("Fill band", fillEnabled, (checked) => {
+          node.setAttr("arcFillEnabled", !!checked);
+          applyArcStyle(node);
+        });
+
+        addColorField("Fill colour", fillColor, (val) => {
+          node.setAttr("arcFillColor", val || "#ffffff");
+          applyArcStyle(node);
+        });
+      }
+
+      // Stroke style
+      addSelectField(
+        "Stroke style",
+        strokeStyle,
+        [
+          { value: "solid", label: "Solid" },
+          { value: "dashed", label: "Dashes" },
+          { value: "dotted", label: "Dots" },
+        ],
+        (val) => {
+          const safe =
+            val === "dashed" || val === "dotted" ? val : "solid";
+          node.setAttr("arcStrokeStyle", safe);
+          applyArcStyle(node);
+        }
+      );
+
+      return;
+    }
+
             const strokeColor =
         arrow.stroke && arrow.stroke() ? arrow.stroke() : "#111827";
       const strokeWidth =
@@ -5025,7 +5352,7 @@ if (
       tShape === "exit" ||
       tShape === "section" ||
       tShape === "square" ||
-      tShape === "circle" ||
+      tShape === "circle" ||Shape
       tShape === "symbol"
     ) {
       const scaleX = node.scaleX();
