@@ -4457,37 +4457,63 @@ if (
   // expose for external callers if needed
   window.renderSeatmapInspector = renderInspector;
 
-   function configureTransformerForNode(node) {
-  if (!transformer || !node) return;
+  function configureTransformerForNode(node) {
+    if (!transformer || !node) return;
 
-  const shapeType = node.getAttr("shapeType") || node.name();
+    const shapeType = node.getAttr("shapeType") || node.name() || "";
 
-  // Seats / tables: rotation only, no resize via transformer
-  if (
-    shapeType === "row-seats" ||
-    shapeType === "single-seat" ||
-    shapeType === "circular-table" ||
-    shapeType === "rect-table"
-  ) {
+    // Seats / tables: rotation only, no resize via transformer
+    if (
+      shapeType === "row-seats" ||
+      shapeType === "single-seat" ||
+      shapeType === "circular-table" ||
+      shapeType === "rect-table"
+    ) {
+      transformer.rotateEnabled(true);
+      transformer.enabledAnchors([]);
+      return;
+    }
+
+    // Room objects + basic shapes: resize in all directions (no rotation)
+    if (
+      shapeType === "stage" ||
+      shapeType === "bar" ||
+      shapeType === "exit" ||
+      shapeType === "section" ||
+      shapeType === "square" ||
+      shapeType === "circle" ||
+      shapeType === "symbol" ||
+      shapeType === "text" ||
+      shapeType === "label" ||
+      shapeType === "arc"
+    ) {
+      transformer.rotateEnabled(false);
+      transformer.enabledAnchors([
+        "top-left",
+        "top-center",
+        "top-right",
+        "middle-left",
+        "middle-right",
+        "bottom-left",
+        "bottom-center",
+        "bottom-right",
+      ]);
+      return;
+    }
+
+    // Lines & arrows: rotation only, geometry edited via handles
+    if (
+      shapeType === "line" ||
+      shapeType === "curve-line" ||
+      shapeType === "arrow"
+    ) {
+      transformer.rotateEnabled(true);
+      transformer.enabledAnchors([]);
+      return;
+    }
+
+    // Fallback: allow full resize + rotation
     transformer.rotateEnabled(true);
-    transformer.enabledAnchors([]);
-    return;
-  }
-
-  // Room objects + basic shapes: resize in all directions (no rotation)
-  if (
-    shapeType === "stage" ||
-    shapeType === "bar" ||
-    shapeType === "exit" ||
-    shapeType === "section" ||
-    shapeType === "square" ||
-    shapeType === "circle" ||
-    shapeType === "symbol" ||
-    shapeType === "text" ||
-    shapeType === "label" ||
-    shapeType === "arc"
-  ) {
-    transformer.rotateEnabled(false);
     transformer.enabledAnchors([
       "top-left",
       "top-center",
@@ -4498,7 +4524,6 @@ if (
       "bottom-center",
       "bottom-right",
     ]);
-    return;
   }
 
   // Lines & arrows: rotation only, geometry edited via handles
