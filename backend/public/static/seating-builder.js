@@ -4887,25 +4887,82 @@ function attachNodeBehaviour(node) {
 
   // ---------- Node creation based on active tool ----------
 
-    function createNodeForTool(tool, pos) {
-      // default to centre if for some reason we don't have a pointer
-      let pointerX = stage ? stage.width() / 2 : 0;
-      let pointerY = stage ? stage.height() / 2 : 0;
+function createNodeForTool(tool, pos) {
+  if (!mapLayer || !stage) return null;
 
-      if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
-        pointerX = pos.x;
-        pointerY = pos.y;
-      }
+  // Default to centre of stage if we don't have an explicit position
+  let pointerX = stage.width() / 2;
+  let pointerY = stage.height() / 2;
 
-      // Normalise symbol tools...
-      if (
-        tool &&
-        (tool.startsWith("symbol-") || tool.startsWith("symbol:"))
-      ) {
-        const parts = tool.split(/[-:]/);
-        const symbolType = parts[1] || "info";
-        return createSymbolNode(symbolType, pointerX, pointerY);
-      }
+  if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
+    pointerX = pos.x;
+    pointerY = pos.y;
+  }
+
+  let node = null;
+
+  // --- Symbol tools (toolbar or fly-out) ---
+  if (
+    tool &&
+    (tool === "symbols" ||
+      tool.startsWith("symbol-") ||
+      tool.startsWith("symbol:"))
+  ) {
+    // Normalise things like "symbol-wc-mixed" → "wc-mixed"
+    const symbolType = normaliseSymbolTool(tool);
+    node = createSymbolNode(symbolType, pointerX, pointerY);
+  }
+
+  // --- Room objects / shapes / seats / tables / lines / arrows ---
+  else if (tool === "stage") {
+    node = createStage(pointerX, pointerY);
+  } else if (tool === "bar") {
+    node = createBar(pointerX, pointerY);
+  } else if (tool === "exit") {
+    node = createExit(pointerX, pointerY);
+  } else if (tool === "section") {
+    node = createSectionBlock(pointerX, pointerY);
+  } else if (tool === "square") {
+    node = createSquare(pointerX, pointerY);
+  } else if (tool === "circle") {
+    node = createCircle(pointerX, pointerY);
+  } else if (tool === "arc") {
+    node = createArc(pointerX, pointerY);
+  } else if (tool === "text") {
+    node = createTextLabel(pointerX, pointerY);
+  } else if (tool === "single-seat") {
+    node = createSingleSeat(pointerX, pointerY);
+  } else if (tool === "row-seats") {
+    node = createRowOfSeats(pointerX, pointerY, 10, 1);
+  } else if (tool === "circular-table") {
+    node = createCircularTable(pointerX, pointerY, 8);
+  } else if (tool === "rect-table") {
+    node = createRectTable(pointerX, pointerY, {
+      longSideSeats: 4,
+      shortSideSeats: 2,
+    });
+  } else if (tool === "line" || tool === "curve-line") {
+    // Lines are handled by the click handlers (multi-point),
+    // so we don't create a node here.
+    return null;
+  } else if (tool === "arrow") {
+    // Arrows also use the dedicated 2-click flow
+    return null;
+  }
+
+  if (!node) return null;
+
+  // Add to canvas, wire behaviour, z-order, selection, history
+  mapLayer.add(node);
+  attachNodeBehaviour(node);
+  sbNormalizeZOrder(node);
+  mapLayer.batchDraw();
+  updateSeatCount();
+  pushHistory();
+  selectNode(node);
+
+  return node;
+}
 
       
 
