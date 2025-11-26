@@ -5128,15 +5128,16 @@ if (
         pointerY = pos.y;
       }
 
-      // Normalise symbol tools...
-      if (
-        tool &&
-        (tool.startsWith("symbol-") || tool.startsWith("symbol:"))
-      ) {
-        const parts = tool.split(/[-:]/);
-        const symbolType = parts[1] || "info";
-        return createSymbolNode(symbolType, pointerX, pointerY);
-      }
+     // ---- FIXED: symbol tools ----
+if (
+  tool &&
+  (tool.startsWith("symbol-") || tool.startsWith("symbol:"))
+) {
+  // Just pass the raw tool name through; createSymbolNode() will
+  // call normaliseSymbolTool() and turn things like
+  // "symbol-wc-male" into "wc-male", "symbol-wc-female" into "wc-female", etc.
+  return createSymbolNode(tool, pointerX, pointerY);
+}
 
       
 
