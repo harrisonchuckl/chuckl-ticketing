@@ -5603,11 +5603,10 @@ function handleStageClick(evt) {
     }
   }
 
-    // ---------- Boot ----------
 
-    // ---------- Boot ----------
+   // ---------- Boot ----------
 
- initStage();
+initStage();
 updateDefaultCursor();
 hookToolButtons();
 hookZoomButtons();
@@ -5615,31 +5614,25 @@ hookClearButton();
 hookUndoRedoButtons();
 hookSaveButton();
 
+// Canvas interactions & global handlers
 stage.on("click", handleStageClick);
-      stage.on("mousemove", handleStageMouseMove);
+stage.on("mousedown", handleStageMouseDown);
+stage.on("mousemove", handleStageMouseMove);
+stage.on("mouseup", handleStageMouseUp);
+stage.on("mouseleave", handleStageMouseUp);
 
+// Double-click anywhere to finish the current straight line (if any)
+stage.on("dblclick", () => {
+  if (activeTool !== "line" || !currentLineGroup) return;
+  finishCurrentLine(true);
+});
 
+document.addEventListener("keydown", handleKeyDown);
+document.addEventListener("keyup", handleKeyUp);
+window.addEventListener("resize", resizeStageToContainer);
 
-  // Canvas interactions
-  stage.on("mousedown", handleStageMouseDown);
-  stage.on("mousemove", handleStageMouseMove);
-  stage.on("mouseup", handleStageMouseUp);
-  stage.on("mouseleave", handleStageMouseUp);
+resizeStageToContainer();
+loadExistingLayout();
 
-  // Double-click anywhere to finish the current straight line (if any)
-  stage.on("dblclick", () => {
-    if (activeTool !== "line" || !currentLineGroup) {
-      return;
-    }
-    finishCurrentLine(true);
-  });
-
-  document.addEventListener("keydown", handleKeyDown);
-  document.addEventListener("keyup", handleKeyUp);
-  window.addEventListener("resize", resizeStageToContainer);
-
-  resizeStageToContainer();
-  loadExistingLayout();
-
-  renderInspector(null);
+renderInspector(null);
 })();
