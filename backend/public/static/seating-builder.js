@@ -1226,6 +1226,7 @@
   }
 
   // Inline text editing
+    // Inline text editing
   function beginInlineTextEdit(textNode, onCommit) {
     if (!stage || !textNode) return;
 
@@ -1262,7 +1263,27 @@
     input.focus();
     input.select();
 
-      // ----- Seat kind helpers: standard / accessible / carer -----
+    function finish(commit) {
+      if (!input.parentNode) return;
+      const newVal = commit ? input.value : oldText;
+      onCommit(newVal);
+      document.body.removeChild(input);
+    }
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        finish(true);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        finish(false);
+      }
+    });
+
+    input.addEventListener("blur", () => finish(true));
+  }
+
+     // ----- Seat kind helpers: standard / accessible / carer -----
 
   function applySeatKindVisualToCircle(circle) {
     if (!circle || typeof circle.getAttr !== "function") return;
@@ -1273,7 +1294,8 @@
     // Base styles captured on creation
     const baseFill = circle.getAttr("sbSeatBaseFill") || "#ffffff";
     const baseStroke = circle.getAttr("sbSeatBaseStroke") || "#4b5563";
-    const baseStrokeWidth = Number(circle.getAttr("sbSeatBaseStrokeWidth")) || 1.7;
+    const baseStrokeWidth =
+      Number(circle.getAttr("sbSeatBaseStrokeWidth")) || 1.7;
 
     if (kind === "accessible") {
       circle.fill("#dbeafe");          // light blue
