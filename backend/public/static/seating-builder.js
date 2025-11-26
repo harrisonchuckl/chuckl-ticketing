@@ -4194,7 +4194,7 @@ function addNumberField(labelText, value, min, step, onCommit) {
       return;
     }
 
-    // ---- Line / Curved line ----
+       // ---- Line / Curved line ----
     if (shapeType === "line" || shapeType === "curve-line") {
       const lineShape = node.findOne((n) => n instanceof Konva.Line);
 
@@ -4208,7 +4208,7 @@ function addNumberField(labelText, value, min, step, onCommit) {
         return;
       }
 
-            const strokeColor =
+      const strokeColor =
         lineShape.stroke && lineShape.stroke()
           ? lineShape.stroke()
           : "#111827";
@@ -4224,23 +4224,19 @@ function addNumberField(labelText, value, min, step, onCommit) {
         Math.round(node.rotation() || 0),
         -360,
         1,
-      (val) => {
+        (val) => {
           const angle = normaliseAngle(val);
           node.rotation(angle);
           if (overlayLayer) overlayLayer.batchDraw();
         }
       );
 
-      // Flip helper (180°)
+      // Quick flip (mirror)
       addFlipButton(node);
 
       addColorField("Stroke colour", strokeColor, (val) => {
         const v = val || "#111827";
         lineShape.stroke(v);
-        if (mapLayer) {
-          mapLayer.batchDraw();
-          pushHistory();
-        }
       });
 
       addNumberField(
@@ -4251,10 +4247,6 @@ function addNumberField(labelText, value, min, step, onCommit) {
         (val) => {
           lineShape.strokeWidth(val);
           ensureHitRect(node);
-          if (mapLayer) {
-            mapLayer.batchDraw();
-            pushHistory();
-          }
         }
       );
 
@@ -4271,15 +4263,10 @@ function addNumberField(labelText, value, min, step, onCommit) {
           } else {
             lineShape.dash([]);
           }
-          if (mapLayer) {
-            mapLayer.batchDraw();
-            pushHistory();
-          }
         }
       );
 
       return;
-
     }
 
     // ---- Arrow ----
@@ -4296,7 +4283,74 @@ function addNumberField(labelText, value, min, step, onCommit) {
         return;
       }
 
-          // ---- Arc ----
+      const strokeColor =
+        arrow.stroke && arrow.stroke() ? arrow.stroke() : "#111827";
+      const strokeWidth =
+        Number(arrow.strokeWidth && arrow.strokeWidth()) || 2;
+      const pointerLength =
+        Number(arrow.pointerLength && arrow.pointerLength()) || 14;
+      const pointerWidth =
+        Number(arrow.pointerWidth && arrow.pointerWidth()) || 14;
+      const doubleEnded = !!arrow.pointerAtBeginning();
+
+      // Rotation at group level
+      addNumberField(
+        "Rotation (deg)",
+        Math.round(node.rotation() || 0),
+        -360,
+        1,
+        (val) => {
+          const angle = normaliseAngle(val);
+          node.rotation(angle);
+          if (overlayLayer) overlayLayer.batchDraw();
+        }
+      );
+
+      // Quick flip
+      addFlipButton(node);
+
+      addColorField("Stroke colour", strokeColor, (val) => {
+        const v = val || "#111827";
+        arrow.stroke(v);
+        arrow.fill(v);
+      });
+
+      addNumberField(
+        "Stroke thickness (px)",
+        strokeWidth,
+        0.5,
+        0.5,
+        (val) => {
+          arrow.strokeWidth(val);
+          ensureHitRect(node);
+        }
+      );
+
+      addNumberField(
+        "Arrowhead size (px)",
+        Math.round((pointerLength + pointerWidth) / 2),
+        4,
+        1,
+        (val) => {
+          const size = Math.max(4, val);
+          arrow.pointerLength(size);
+          arrow.pointerWidth(size);
+          ensureHitRect(node);
+        }
+      );
+
+      addCheckboxField(
+        "Arrowheads at both ends",
+        doubleEnded,
+        (checked) => {
+          arrow.pointerAtBeginning(!!checked);
+        }
+      );
+
+      return;
+    }
+
+    // ---- Arc ----
     if (shapeType === "arc") {
       const arcShape = node.findOne((n) => n instanceof Konva.Arc);
 
@@ -4343,7 +4397,6 @@ function addNumberField(labelText, value, min, step, onCommit) {
       if (!Number.isFinite(angle) || angle <= 0) {
         angle = arcShape.angle ? arcShape.angle() : 180;
       }
-
       angle = Math.max(1, Math.min(359, angle));
 
       node.setAttr("arcRadius", radius);
@@ -4380,12 +4433,10 @@ function addNumberField(labelText, value, min, step, onCommit) {
         node.getAttr("arcFillColor") || arcShape.fill() || "#ffffff";
       node.setAttr("arcFillColor", fillColor);
 
-      // Make sure the visual matches these attrs
+      // Make sure visuals match attrs
       applyArcStyle(node);
 
-      // --- Controls ---
-
-      // Rotation on the group
+      // Rotation
       addNumberField(
         "Rotation (deg)",
         Math.round(node.rotation() || 0),
@@ -4398,7 +4449,7 @@ function addNumberField(labelText, value, min, step, onCommit) {
         }
       );
 
-      // Type: single vs outline
+      // Type
       addSelectField(
         "Arc type",
         mode,
@@ -4410,8 +4461,7 @@ function addNumberField(labelText, value, min, step, onCommit) {
           const safe = val === "single" ? "single" : "outline";
           node.setAttr("arcMode", safe);
           applyArcStyle(node);
-          // Refresh to show/hide fill controls & label text
-          renderInspector(node);
+          renderInspector(node); // refresh to show/hide fill controls
         }
       );
 
@@ -4459,7 +4509,7 @@ function addNumberField(labelText, value, min, step, onCommit) {
         applyArcStyle(node);
       });
 
-      // Fill only makes sense for outline mode
+      // Fill (outline mode only)
       if (mode === "outline") {
         addCheckboxField("Fill band", fillEnabled, (checked) => {
           node.setAttr("arcFillEnabled", !!checked);
@@ -4492,91 +4542,7 @@ function addNumberField(labelText, value, min, step, onCommit) {
       return;
     }
 
-            const strokeColor =
-        arrow.stroke && arrow.stroke() ? arrow.stroke() : "#111827";
-      const strokeWidth =
-        Number(arrow.strokeWidth && arrow.strokeWidth()) || 2;
-      const pointerLength =
-        Number(arrow.pointerLength && arrow.pointerLength()) || 14;
-      const pointerWidth =
-        Number(arrow.pointerWidth && arrow.pointerWidth()) || 14;
-      const doubleEnded = !!arrow.pointerAtBeginning();
-
-      // Rotation at group level
-      addNumberField(
-        "Rotation (deg)",
-        Math.round(node.rotation() || 0),
-        -360,
-        1,
-       (val) => {
-          const angle = normaliseAngle(val);
-          node.rotation(angle);
-          if (overlayLayer) overlayLayer.batchDraw();
-        }
-      );
-
-      // Flip helper (180°)
-      addFlipButton(node);
-
-      addColorField("Stroke colour", strokeColor, (val) => {
-        const v = val || "#111827";
-        arrow.stroke(v);
-        arrow.fill(v);
-        if (mapLayer) {
-          mapLayer.batchDraw();
-          pushHistory();
-        }
-      });
-
-      addNumberField(
-        "Stroke thickness (px)",
-        strokeWidth,
-        0.5,
-        0.5,
-        (val) => {
-          arrow.strokeWidth(val);
-          ensureHitRect(node);
-          if (mapLayer) {
-            mapLayer.batchDraw();
-            pushHistory();
-          }
-        }
-      );
-
-      addNumberField(
-        "Arrowhead size (px)",
-        Math.round((pointerLength + pointerWidth) / 2),
-        4,
-        1,
-        (val) => {
-          const size = Math.max(4, val);
-          arrow.pointerLength(size);
-          arrow.pointerWidth(size);
-          ensureHitRect(node);
-          if (mapLayer) {
-            mapLayer.batchDraw();
-            pushHistory();
-          }
-        }
-      );
-
-      addCheckboxField(
-        "Arrowheads at both ends",
-        doubleEnded,
-        (checked) => {
-          arrow.pointerAtBeginning(!!checked);
-          if (mapLayer) {
-            mapLayer.batchDraw();
-            pushHistory();
-          }
-        }
-      );
-
-      return;
-
-    }
-
-       // ---- Text labels ----
+    // ---- Text labels ----
     if (shapeType === "text" || shapeType === "label") {
       const textNode = node.findOne("Text");
       if (!textNode) {
@@ -4603,7 +4569,7 @@ function addNumberField(labelText, value, min, step, onCommit) {
         ensureHitRect(node);
       });
 
-      // Font style toggles – derive initial state from existing style/decoration
+      // Style state
       const style = String(textNode.fontStyle() || "").toLowerCase();
       let bold = style.includes("bold");
       let italic = style.includes("italic");
@@ -4623,13 +4589,10 @@ function addNumberField(labelText, value, min, step, onCommit) {
         if (typeof textNode.textDecoration === "function") {
           textNode.textDecoration(underline ? "underline" : "");
         } else {
-          // Fallback if Konva version only supports underline()
           textNode.underline(underline);
         }
 
         ensureHitRect(node);
-        // NOTE: redraw + history are handled by the shared addCheckboxField /
-        // addNumberField / addTextField helpers, so we DON'T call them here.
       }
 
       addCheckboxField("Bold", bold, (checked) => {
@@ -4647,7 +4610,6 @@ function addNumberField(labelText, value, min, step, onCommit) {
         applyTextStyles();
       });
 
-      // One initial normalisation pass in case styles were partially set
       applyTextStyles();
       if (mapLayer) mapLayer.batchDraw();
       return;
@@ -4655,7 +4617,6 @@ function addNumberField(labelText, value, min, step, onCommit) {
 
     // ---- Symbols ----
     if (shapeType === "symbol") {
-      // Ensure we have a clean internal type
       const currentType = normaliseSymbolTool(
         node.getAttr("symbolType") || "info"
       );
@@ -4697,7 +4658,6 @@ function addNumberField(labelText, value, min, step, onCommit) {
       previewWrapper.appendChild(previewInner);
       el.appendChild(previewWrapper);
 
-      // Dropdown to change symbol type
       const options = SYMBOL_TYPES.map((t) => ({
         value: t,
         label: SYMBOL_LABELS[t] || t,
@@ -4711,7 +4671,6 @@ function addNumberField(labelText, value, min, step, onCommit) {
           const newType = normaliseSymbolTool(val);
           node.setAttr("symbolType", newType);
 
-          // Update the Konva image on the canvas
           const iconNode = node.findOne("Image");
           const srcDark =
             SYMBOL_ICON_DARK[newType] || SYMBOL_ICON_DARK.info;
@@ -4727,10 +4686,7 @@ function addNumberField(labelText, value, min, step, onCommit) {
             mapLayer.batchDraw();
           }
 
-          // Update the left-hand symbols button preview
           updateSymbolsToolbarIcon(newType);
-
-          // Update the inspector preview
           refreshPreview(newType);
         }
       );
@@ -4738,8 +4694,7 @@ function addNumberField(labelText, value, min, step, onCommit) {
       return;
     }
 
-
-        // ---- Stage block ----
+    // ---- Stage block ----
     if (shapeType === "stage") {
       const body = getBodyRect(node);
       const labelNode =
@@ -4747,93 +4702,17 @@ function addNumberField(labelText, value, min, step, onCommit) {
 
       addTitle("Stage");
 
-      if (!body) {
-        const p = document.createElement("p");
-        p.className = "sb-inspector-empty";
-        p.textContent =
-          "This stage has no editable body shape.";
-        el.appendChild(p);
-        return;
-      }
+      const stageLabel = node.getAttr("stageLabel") || (labelNode && labelNode.text()) || "STAGE";
 
-      // --- Normalise all stage attributes based on current state ---
-      let fillMode = node.getAttr("stageFillMode");
-      if (fillMode !== "solid" && fillMode !== "gradient") {
-        fillMode = "solid";
-      }
-      node.setAttr("stageFillMode", fillMode);
-
-      let solidColor =
-        node.getAttr("stageSolidColor") || body.fill() || "#000000";
-      node.setAttr("stageSolidColor", solidColor);
-
-      let gradStart =
-        node.getAttr("stageGradientStartColor") || "#1d4ed8";
-      let gradEnd =
-        node.getAttr("stageGradientEndColor") || "#22c1c3";
-      node.setAttr("stageGradientStartColor", gradStart);
-      node.setAttr("stageGradientEndColor", gradEnd);
-
-      let gradDirection = node.getAttr("stageGradientDirection");
-      if (
-        gradDirection !== "lr" &&
-        gradDirection !== "tb" &&
-        gradDirection !== "diag"
-      ) {
-        gradDirection = "lr";
-      }
-      node.setAttr("stageGradientDirection", gradDirection);
-
-      let stageLabel =
-        node.getAttr("stageLabel") ||
-        (labelNode ? labelNode.text() : "STAGE");
-      node.setAttr("stageLabel", stageLabel);
-
-      let autoText = node.getAttr("stageTextAutoColor");
-      if (autoText === undefined || autoText === null) {
-        autoText = true;
-      }
-      autoText = !!autoText;
-      node.setAttr("stageTextAutoColor", autoText);
-
-      let textColor =
-        node.getAttr("stageTextColor") ||
-        (labelNode && labelNode.fill && labelNode.fill()) ||
-        "#ffffff";
-      node.setAttr("stageTextColor", textColor);
-
-      // Make sure visuals reflect the normalised attrs
-      applyStageStyle(node);
-
-      // --- Rotation ---
-      addNumberField(
-        "Rotation (deg)",
-        Math.round(node.rotation() || 0),
-        -360,
-        1,
-        (val) => {
-          const angle = normaliseAngle(val);
-          node.rotation(angle);
-          // keep label upright if you rotate the block
-          keepLabelsUpright(node);
-          if (overlayLayer) overlayLayer.batchDraw();
-        }
-      );
-
-      // Quick flip (mirror rotation)
-      addFlipButton(node);
-
-      // --- Stage label text ---
-      addTextField("Stage label", stageLabel, (val) => {
-        const textVal = val && val.trim() ? val : "STAGE";
-        node.setAttr("stageLabel", textVal);
-        if (labelNode) {
-          labelNode.text(textVal);
-        }
+      addTextField("Label", stageLabel, (val) => {
+        const t = val && val.trim() ? val : "STAGE";
+        node.setAttr("stageLabel", t);
+        if (labelNode) labelNode.text(t);
         applyStageStyle(node);
+        ensureHitRect(node);
       });
 
-      // --- Fill mode: solid vs gradient ---
+      const fillMode = node.getAttr("stageFillMode") || "solid";
       addSelectField(
         "Fill mode",
         fillMode,
@@ -4841,185 +4720,156 @@ function addNumberField(labelText, value, min, step, onCommit) {
           { value: "solid", label: "Solid colour" },
           { value: "gradient", label: "Gradient" },
         ],
-        (val) => {
-          const mode = val === "gradient" ? "gradient" : "solid";
-          node.setAttr("stageFillMode", mode);
+        (mode) => {
+          node.setAttr("stageFillMode", mode === "gradient" ? "gradient" : "solid");
           applyStageStyle(node);
-          // re-render to show/hide gradient controls
-          renderInspector(node);
+          renderInspector(node); // refresh controls
         }
       );
 
-      // --- Solid colour (always shown, used when mode = solid) ---
-      addColorField("Solid fill colour", solidColor, (val) => {
-        node.setAttr("stageSolidColor", val || "#000000");
-        applyStageStyle(node);
-      });
+      if (fillMode === "solid") {
+        const solidColor =
+          node.getAttr("stageSolidColor") || body.fill() || "#000000";
+        addColorField("Stage colour", solidColor, (val) => {
+          node.setAttr("stageSolidColor", val || "#000000");
+          applyStageStyle(node);
+        });
+      } else {
+        const startColor =
+          node.getAttr("stageGradientStartColor") || "#1d4ed8";
+        const endColor =
+          node.getAttr("stageGradientEndColor") || "#22c1c3";
 
-      // --- Gradient options (only meaningful when in gradient mode) ---
-      if (fillMode === "gradient") {
-        addColorField(
-          "Gradient start colour",
-          gradStart,
-          (val) => {
-            node.setAttr(
-              "stageGradientStartColor",
-              val || "#1d4ed8"
-            );
-            applyStageStyle(node);
-          }
-        );
+        addColorField("Gradient start", startColor, (val) => {
+          node.setAttr("stageGradientStartColor", val || "#1d4ed8");
+          applyStageStyle(node);
+        });
 
-        addColorField(
-          "Gradient end colour",
-          gradEnd,
-          (val) => {
-            node.setAttr("stageGradientEndColor", val || "#22c1c3");
-            applyStageStyle(node);
-          }
-        );
+        addColorField("Gradient end", endColor, (val) => {
+          node.setAttr("stageGradientEndColor", val || "#22c1c3");
+          applyStageStyle(node);
+        });
 
+        const dir = node.getAttr("stageGradientDirection") || "lr";
         addSelectField(
           "Gradient direction",
-          gradDirection,
+          dir,
           [
-            { value: "lr", label: "Left → Right" },
-            { value: "tb", label: "Top → Bottom" },
+            { value: "lr", label: "Left \u2192 Right" },
+            { value: "tb", label: "Top \u2193 Bottom" },
             { value: "diag", label: "Diagonal" },
           ],
           (val) => {
-            let dir = "lr";
-            if (val === "tb" || val === "diag") dir = val;
-            node.setAttr("stageGradientDirection", dir);
-            applyStageStyle(node);
-          }
-        );
-      }
-
-      // --- Text colour behaviour ---
-      addCheckboxField(
-        "Automatic text colour",
-        autoText,
-        (checked) => {
-          node.setAttr("stageTextAutoColor", !!checked);
-          applyStageStyle(node);
-        }
-      );
-
-      addColorField(
-        "Text colour (when manual)",
-        textColor,
-        (val) => {
-          node.setAttr("stageTextColor", val || "#ffffff");
-          applyStageStyle(node);
-        }
-      );
-
-      return;
-    }
-
-        // Gradient direction
-        addSelectField(
-          "Gradient direction",
-          direction,
-          [
-            { value: "lr", label: "Left → Right" },
-            { value: "tb", label: "Top → Bottom" },
-            { value: "diag", label: "Diagonal" },
-          ],
-          (val) => {
-            const safe =
-              val === "tb" || val === "diag" ? val : "lr";
+            const safe = ["lr", "tb", "diag"].includes(val) ? val : "lr";
             node.setAttr("stageGradientDirection", safe);
             applyStageStyle(node);
           }
         );
       }
 
-      // --- Text colour controls ---
+      const autoText =
+        node.getAttr("stageTextAutoColor") !== false;
       addCheckboxField(
-        "Auto text colour for contrast",
+        "Automatic text colour",
         autoText,
         (checked) => {
           node.setAttr("stageTextAutoColor", !!checked);
           applyStageStyle(node);
+          renderInspector(node);
         }
       );
 
-      addColorField("Text colour", textColor, (val) => {
-        const v = val || "#ffffff";
-        node.setAttr("stageTextColor", v);
-        node.setAttr("stageTextAutoColor", false);
-        applyStageStyle(node);
-        renderInspector(node); // sync checkbox state
+      if (!autoText) {
+        const textColor =
+          node.getAttr("stageTextColor") ||
+          (labelNode && labelNode.fill && labelNode.fill()) ||
+          "#ffffff";
+        addColorField("Text colour", textColor, (val) => {
+          node.setAttr("stageTextColor", val || "#ffffff");
+          applyStageStyle(node);
+        });
+      }
+
+      return;
+    }
+
+    // ---- Bar block ----
+    if (shapeType === "bar") {
+      const labelNode =
+        node.findOne(".bar-label") || node.findOne("Text");
+
+      addTitle("Bar");
+
+      const text = labelNode ? labelNode.text() : "BAR";
+
+      addTextField("Label", text, (val) => {
+        const t = val && val.trim() ? val : "BAR";
+        if (labelNode) labelNode.text(t);
+        ensureHitRect(node);
       });
 
       return;
     }
 
-    // ---- Basic shapes: section block / square / circle ----
-// ---- Basic shapes: section block / square / circle ----
-if (
-  shapeType === "section" ||
-  shapeType === "square" ||
-  shapeType === "circle"
-) {
+    // ---- Exit block ----
+    if (shapeType === "exit") {
+      const labelNode =
+        node.findOne(".exit-label") || node.findOne("Text");
 
-      const body = getBodyRect(node);
+      addTitle("Exit");
 
-      addTitle(
-        shapeType === "section" ? "Selection block" : "Shape"
-      );
+      const text = labelNode ? labelNode.text() : "EXIT";
 
-      if (!body) {
-        const p = document.createElement("p");
-        p.className = "sb-inspector-empty";
-        p.textContent = "This shape has no editable geometry.";
-        el.appendChild(p);
-        return;
-      }
+      addTextField("Label", text, (val) => {
+        const t = val && val.trim() ? val : "EXIT";
+        if (labelNode) labelNode.text(t);
+        ensureHitRect(node);
+      });
 
+      return;
+    }
+
+    // ---- Basic blocks (section / square / circle) ----
+    if (
+      shapeType === "section" ||
+      shapeType === "square" ||
+      shapeType === "circle"
+    ) {
+      addTitle("Block");
+
+      const fillEnabledRaw = node.getAttr("shapeFillEnabled");
       const fillEnabled =
-        node.getAttr("shapeFillEnabled") !== false;
+        fillEnabledRaw === undefined || fillEnabledRaw === null
+          ? true
+          : !!fillEnabledRaw;
 
-      const rawFill = node.getAttr("shapeFillColor") || body.fill();
       const fillColor =
-        rawFill && rawFill !== "rgba(0,0,0,0)"
-          ? rawFill
-          : "#ffffff";
+        node.getAttr("shapeFillColor") ||
+        (getBodyRect(node) && getBodyRect(node).fill && getBodyRect(node).fill()) ||
+        "#ffffff";
 
       const strokeColor =
         node.getAttr("shapeStrokeColor") ||
-        body.stroke() ||
+        (getBodyRect(node) && getBodyRect(node).stroke && getBodyRect(node).stroke()) ||
         "#4b5563";
 
-      const strokeWidthRaw = node.getAttr("shapeStrokeWidth");
       const strokeWidth =
-        Number.isFinite(Number(strokeWidthRaw))
-          ? Number(strokeWidthRaw)
-          : body.strokeWidth() || 1.7;
+        Number(node.getAttr("shapeStrokeWidth")) ||
+        (getBodyRect(node) &&
+          Number(getBodyRect(node).strokeWidth && getBodyRect(node).strokeWidth())) ||
+        1.7;
 
-      // Determine current stroke style from attr or dash pattern
-      let strokeStyleAttr = node.getAttr("shapeStrokeStyle");
-      let strokeStyle;
+      let strokeStyle = node.getAttr("shapeStrokeStyle") || "solid";
       if (
-        strokeStyleAttr === "solid" ||
-        strokeStyleAttr === "dashed" ||
-        strokeStyleAttr === "dotted"
+        strokeStyle !== "solid" &&
+        strokeStyle !== "dashed" &&
+        strokeStyle !== "dotted"
       ) {
-        strokeStyle = strokeStyleAttr;
-      } else {
-        const dashArr = body.dash && body.dash();
-        if (dashArr && dashArr.length) {
-          strokeStyle = dashArr[0] <= 3 ? "dotted" : "dashed";
-        } else {
-          strokeStyle = "solid";
-        }
-        node.setAttr("shapeStrokeStyle", strokeStyle);
+        strokeStyle = "solid";
       }
 
-      addCheckboxField("Fill background", fillEnabled, (checked) => {
-        node.setAttr("shapeFillEnabled", checked);
+      addCheckboxField("Fill enabled", fillEnabled, (checked) => {
+        node.setAttr("shapeFillEnabled", !!checked);
         applyBasicShapeStyle(node);
       });
 
@@ -5028,12 +4878,15 @@ if (
         applyBasicShapeStyle(node);
       });
 
-      // Slider 0–10px for outline thickness
-      addRangeField(
-        "Outline thickness (px)",
+      addColorField("Border colour", strokeColor, (val) => {
+        node.setAttr("shapeStrokeColor", val || "#4b5563");
+        applyBasicShapeStyle(node);
+      });
+
+      addNumberField(
+        "Border width (px)",
         strokeWidth,
-        0,
-        10,
+        0.5,
         0.5,
         (val) => {
           node.setAttr("shapeStrokeWidth", val);
@@ -5041,23 +4894,17 @@ if (
         }
       );
 
-      addColorField("Outline colour", strokeColor, (val) => {
-        node.setAttr("shapeStrokeColor", val || "#4b5563");
-        applyBasicShapeStyle(node);
-      });
-
-      // Outline style: solid / dotted / dashed
       addSelectField(
-        "Outline style",
+        "Border style",
         strokeStyle,
         [
           { value: "solid", label: "Solid" },
-          { value: "dotted", label: "Dots" },
-          { value: "dashed", label: "Dashes" },
+          { value: "dashed", label: "Dashed" },
+          { value: "dotted", label: "Dotted" },
         ],
         (val) => {
           const safe =
-            val === "dotted" || val === "dashed" ? val : "solid";
+            val === "dashed" || val === "dotted" ? val : "solid";
           node.setAttr("shapeStrokeStyle", safe);
           applyBasicShapeStyle(node);
         }
@@ -5066,13 +4913,17 @@ if (
       return;
     }
 
-    // Fallback
+    // ---- Fallback for unknown shapes ----
     addTitle("Selection");
-    const p = document.createElement("p");
-    p.className = "sb-inspector-empty";
-    p.textContent = "This element has no editable settings yet.";
-    el.appendChild(p);
-  }
+    addStaticRow("Type", shapeType || "Unknown");
+    {
+      const p = document.createElement("p");
+      p.className = "sb-inspector-empty";
+      p.textContent = "No specific controls for this object type yet.";
+      el.appendChild(p);
+    }
+  } // end of renderInspector
+
 
   // expose for external callers if needed
   window.renderSeatmapInspector = renderInspector;
