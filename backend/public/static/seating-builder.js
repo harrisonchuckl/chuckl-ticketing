@@ -1793,47 +1793,32 @@ function createBar(x, y) {
   return group;
 }
 
-
   // ---- Symbol tool helpers (toolbar <-> internal type + icon paths) ----
 
-  // Map toolbar tool names (symbol-*) to our internal symbolType keys
-  const SYMBOL_TOOL_TO_TYPE = {
-    "symbol-bar": "bar",
-    "symbol-wc-mixed": "wc-mixed",
-    "symbol-wc-male": "wc-male",
-    "symbol-wc-female": "wc-female",
-    "symbol-disabled": "disabled",
-    "symbol-exit": "exit-symbol",
-    "symbol-firstaid": "first-aid",
-    "symbol-info": "info",
-    "symbol-stairs": "stairs",
+  // Canonical internal symbol types (what we store on the Konva group)
+  const SYMBOL_TYPES = [
+    "info",
+    "bar",
+    "wc-mixed",
+    "wc-male",
+    "wc-female",
+    "disabled",
+    "stairs",
+    "first-aid",
+    "exit-symbol",
+  ];
+
+  const SYMBOL_LABELS = {
+    info: "Information",
+    bar: "Bar",
+    "wc-mixed": "Toilets (mixed)",
+    "wc-male": "Toilets (male)",
+    "wc-female": "Toilets (female)",
+    disabled: "Disabled toilet",
+    stairs: "Stairs",
+    "first-aid": "First aid",
+    "exit-symbol": "Emergency exit",
   };
-
-  // Normalise either a toolbar tool (symbol-foo) or an internal type (bar, wc-mixed, etc.)
-  function normaliseSymbolTool(toolNameOrType) {
-    if (!toolNameOrType) return "info";
-
-    const asString = String(toolNameOrType);
-
-    // If it's already one of our internal types, keep it
-    const DIRECT_TYPES = [
-      "bar",
-      "wc-mixed",
-      "wc-male",
-      "wc-female",
-      "disabled",
-      "exit-symbol",
-      "first-aid",
-      "info",
-      "stairs",
-    ];
-    if (DIRECT_TYPES.indexOf(asString) !== -1) {
-      return asString;
-    }
-
-    // Otherwise treat it as a toolbar tool name (symbol-*)
-    return SYMBOL_TOOL_TO_TYPE[asString] || "info";
-  }
 
   // DARK icons used on the canvas itself
   const SYMBOL_ICON_DARK = {
@@ -1861,6 +1846,52 @@ function createBar(x, y) {
     stairs: "/seatmap-icons/stairssymbol-blue.png",
   };
 
+  // Normalise either:
+  // - a toolbar tool name (e.g. "symbol-wc-mixed", "symbol-firstaid")
+  // - or an internal type (e.g. "wc-mixed", "first-aid")
+  // into one of our canonical SYMBOL_TYPES.
+  function normaliseSymbolTool(toolNameOrType) {
+    if (!toolNameOrType) return "info";
+
+    const rawString = String(toolNameOrType).toLowerCase();
+
+    // Already a canonical type?
+    if (SYMBOL_TYPES.indexOf(rawString) !== -1) {
+      return rawString;
+    }
+
+    // Strip "symbol-" prefix if present
+    let raw = rawString;
+    if (raw.startsWith("symbol-")) {
+      raw = raw.slice(7);
+    }
+
+    // Normalise underscores to hyphens
+    raw = raw.replace(/_/g, "-");
+
+    // Direct match after stripping prefix?
+    if (SYMBOL_TYPES.indexOf(raw) !== -1) {
+      return raw;
+    }
+
+    // Heuristics based on substrings, so we cope with different data-tool values
+    if (raw.includes("bar")) return "bar";
+    if (raw.includes("stair")) return "stairs";
+    if (raw.includes("first") || raw.includes("aid") || raw.includes("medical")) return "first-aid";
+    if (raw.includes("exit")) return "exit-symbol";
+    if (raw.includes("disab")) return "disabled";
+
+    if (raw.includes("mix")) return "wc-mixed";
+    if (raw.includes("male") || raw.includes("men")) return "wc-male";
+    if (raw.includes("female") || raw.includes("women") || raw.includes("ladies")) return "wc-female";
+
+    if (raw.includes("wc") || raw.includes("toilet")) return "wc-mixed";
+    if (raw.includes("info")) return "info";
+
+    // Fallback
+    return "info";
+  }
+
   // Update the main symbols button icon to show the currently-selected symbol (blue PNG)
   function updateSymbolsToolbarIcon(symbolToolNameOrType) {
     try {
@@ -1873,7 +1904,9 @@ function createBar(x, y) {
       if (!img) return;
 
       const symbolType = normaliseSymbolTool(symbolToolNameOrType);
-      const src = SYMBOL_ICON_BLUE[symbolType] || SYMBOL_ICON_BLUE.info;
+      const src =
+        SYMBOL_ICON_BLUE[symbolType] || SYMBOL_ICON_BLUE.info;
+
       img.src = src;
     } catch (e) {
       // eslint-disable-next-line no-console
@@ -1881,12 +1914,16 @@ function createBar(x, y) {
     }
   }
 
-  // Ensure there's a sensible default icon shown even before a symbol is picked
-  setTimeout(() => {
-    if (typeof updateSymbolsToolbarIcon === "function") {
+  // Ensure there's a sensible default icon shown even before a symbol is picked.
+  // We delay this so the left-hand DOM has time to mount.
+  window.addEventListener("load", () => {
+    try {
       updateSymbolsToolbarIcon("info");
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn("initial symbols icon error", e);
     }
-  }, 0);
+  });
 
   // Create a symbol node on the map (uses DARK icon variant)
   function createSymbolNode(symbolToolNameOrType, x, y) {
@@ -1904,7 +1941,8 @@ function createBar(x, y) {
     group.setAttr("symbolType", symbolType);
 
     const imageObj = new window.Image();
-    imageObj.src = SYMBOL_ICON_DARK[symbolType] || SYMBOL_ICON_DARK.info;
+    imageObj.src =
+      SYMBOL_ICON_DARK[symbolType] || SYMBOL_ICON_DARK.info;
 
     const icon = new Konva.Image({
       image: imageObj,
@@ -1925,9 +1963,6 @@ function createBar(x, y) {
 
     return group;
   }
-
-   
-
 
   function createSquare(x, y) {
     const size = 100;
@@ -4260,6 +4295,90 @@ function addNumberField(labelText, value, min, step, onCommit) {
       return;
     }
 
+    // ---- Symbols ----
+    if (shapeType === "symbol") {
+      // Ensure we have a clean internal type
+      const currentType = normaliseSymbolTool(
+        node.getAttr("symbolType") || "info"
+      );
+      node.setAttr("symbolType", currentType);
+
+      addTitle("Symbol");
+
+      // Preview bubble
+      const previewWrapper = document.createElement("div");
+      previewWrapper.className = "sb-field-row";
+
+      const previewInner = document.createElement("div");
+      previewInner.style.display = "flex";
+      previewInner.style.alignItems = "center";
+      previewInner.style.gap = "8px";
+
+      const previewImg = document.createElement("img");
+      previewImg.alt = "Selected symbol";
+      previewImg.style.width = "32px";
+      previewImg.style.height = "32px";
+
+      const previewLabel = document.createElement("div");
+      previewLabel.className = "sb-static-value";
+
+      function refreshPreview(type) {
+        const t = normaliseSymbolTool(type);
+        const src =
+          SYMBOL_ICON_BLUE[t] || SYMBOL_ICON_BLUE.info;
+        const label = SYMBOL_LABELS[t] || "Symbol";
+
+        previewImg.src = src;
+        previewLabel.textContent = label;
+      }
+
+      refreshPreview(currentType);
+
+      previewInner.appendChild(previewImg);
+      previewInner.appendChild(previewLabel);
+      previewWrapper.appendChild(previewInner);
+      el.appendChild(previewWrapper);
+
+      // Dropdown to change symbol type
+      const options = SYMBOL_TYPES.map((t) => ({
+        value: t,
+        label: SYMBOL_LABELS[t] || t,
+      }));
+
+      addSelectField(
+        "Symbol type",
+        currentType,
+        options,
+        (val) => {
+          const newType = normaliseSymbolTool(val);
+          node.setAttr("symbolType", newType);
+
+          // Update the Konva image on the canvas
+          const iconNode = node.findOne("Image");
+          const srcDark =
+            SYMBOL_ICON_DARK[newType] || SYMBOL_ICON_DARK.info;
+
+          if (iconNode) {
+            const img = new window.Image();
+            img.src = srcDark;
+            img.onload = () => {
+              iconNode.image(img);
+              if (mapLayer) mapLayer.batchDraw();
+            };
+          } else if (mapLayer) {
+            mapLayer.batchDraw();
+          }
+
+          // Update the left-hand symbols button preview
+          updateSymbolsToolbarIcon(newType);
+
+          // Update the inspector preview
+          refreshPreview(newType);
+        }
+      );
+
+      return;
+    }
 
 
     // ---- Stage block ----
