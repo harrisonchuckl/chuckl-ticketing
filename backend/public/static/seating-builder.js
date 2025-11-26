@@ -285,8 +285,43 @@ if (window.__TIXALL_SEATMAP_BUILDER_ACTIVE__) {
   let historyIndex = -1;
   let isRestoringHistory = false;
 
-  // table numbering counter (for all circular + rectangular tables)
+    // table numbering counter (for all circular + rectangular tables)
   let tableCounter = 1;
+
+  // Helper: generate the next table label ("1", "2", "3", ...)
+  // It also looks at existing tables on the map so we don't accidentally
+  // reuse a number when you add more tables later.
+  function nextTableLabel() {
+    let maxFound = 0;
+
+    try {
+      if (mapLayer && typeof mapLayer.find === "function") {
+        mapLayer.find("Group").forEach((g) => {
+          const t = g.getAttr("shapeType") || g.name();
+          if (t !== "circular-table" && t !== "rect-table") return;
+
+          const raw = g.getAttr("tableLabel");
+          const n = parseInt(raw, 10);
+          if (Number.isFinite(n) && n > maxFound) {
+            maxFound = n;
+          }
+        });
+      }
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn("[seatmap] nextTableLabel: scan error", e);
+    }
+
+    // Ensure our counter is always ahead of anything already on the map
+    if (maxFound >= tableCounter) {
+      tableCounter = maxFound + 1;
+    }
+
+    const label = String(tableCounter);
+    tableCounter += 1;
+    return label;
+  }
+
 
   // global default seat label mode for *new* blocks
   // "numbers" = 1, 2, 3... by default during planning
