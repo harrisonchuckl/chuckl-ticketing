@@ -334,22 +334,27 @@ if (window.__TIXALL_SEATMAP_BUILDER_ACTIVE__) {
   let inspectorEl = null;
 
 
-    // 🔵 Helper: update left-hand tool button state (black ↔ blue icons)
-  // 🔵 Helper: update left-hand tool button state (black ↔ blue icons)
+   // 🔵 Helper: update left-hand tool button state (black ↔ blue icons)
   function updateToolButtonActiveState(currentTool) {
     try {
       const buttons = document.querySelectorAll(
         ".tb-left-item.tool-button[data-tool]"
       );
 
-      // Treat any symbol sub-tool as the main "symbols" button for highlighting
+      // Determine which main button to highlight.
+      // Any symbol sub-tool (symbol-*) highlights the main "symbols" button.
       let effectiveTool = currentTool;
-      if (
+      const isSymbolSubTool =
         currentTool &&
         (currentTool.startsWith("symbol-") ||
-          currentTool.startsWith("symbol:"))
-      ) {
+          currentTool.startsWith("symbol:"));
+
+      if (isSymbolSubTool) {
         effectiveTool = "symbols";
+        // Also update the symbols toolbar icon to match the current symbol selection
+        if (typeof updateSymbolsToolbarIcon === "function") {
+          updateSymbolsToolbarIcon(currentTool);
+        }
       }
 
       buttons.forEach(function (btn) {
@@ -362,11 +367,18 @@ if (window.__TIXALL_SEATMAP_BUILDER_ACTIVE__) {
           btn.classList.remove("is-active");
         }
 
-        // Optional: swap PNGs if the button has icon data attributes
         const img = btn.querySelector("img");
         if (img) {
+          const btnToolName = btnTool;
+
+          // The main "symbols" button's icon is managed separately
+          if (btnToolName === "symbols") {
+            return;
+          }
+
           const defaultSrc = btn.getAttribute("data-icon-default");
           const activeSrc = btn.getAttribute("data-icon-active");
+
           if (isActive && activeSrc) {
             img.src = activeSrc; // blue icon
           } else if (defaultSrc) {
@@ -380,7 +392,6 @@ if (window.__TIXALL_SEATMAP_BUILDER_ACTIVE__) {
       console.warn("updateToolButtonActiveState error", e);
     }
   }
-
 
 
    // Expose so the preview HTML script can also force a refresh after fly-out changes
@@ -1782,15 +1793,137 @@ function createBar(x, y) {
   return group;
 }
 
+    // ---- Symbol tool helpers (toolbar <-> internal type + icon paths) ----
 
-    function createSymbolNode(symbolType, x, y) {
-    const group = new Konva.Group({
-      x: x - 18,
-      y: y - 18,
-      draggable: true,
-      name: "symbol",
-      shapeType: "symbol",
-    });
+  // Map toolbar tool names (symbol-*) to our internal symbolType keys
+  const SYMBOL_TOOL_TO_TYPE = {
+    "symbol-bar": "bar",
+    "symbol-wc-mixed": "wc-mixed",
+    "symbol-wc-male": "wc-male",
+    "symbol-wc-female": "wc-female",
+    "symbol-disabled": "disabled",
+    "symbol-exit": "exit-symbol",
+    "symbol-firstaid": "first-aid",
+    "symbol-info": "info",
+    "symbol-stairs": "stairs",
+  };
+
+  function normaliseSymbolTool(toolNameOrType) {
+    if (!toolNameOrType) return "info";
+
+    const asString = String(toolNameOrType);
+
+    // If it's already one of our internal types, keep it
+    const DIRECT_TYPES = [
+      "bar",
+      "wc-mixed",
+      "wc-male",
+      "wc-female",
+      "disabled",
+      "exit-symbol",
+      "first-aid",
+      "info",
+      "stairs",
+    ];
+    if (DIRECT_TYPES.indexOf(asString) !== -1) {
+      return asString;
+    }
+
+    // Otherwise treat it as a toolbar tool name (symbol-*)
+    return SYMBOL_TOOL_TO_TYPE[asString] || "info";
+  }
+
+  // DARK icons used on the canvas itself
+  const SYMBOL_ICON_DARK = {
+    bar: "/seatmap-icons/barsymbol-dark.png",
+    "wc-mixed": "/seatmap-icons/mixedtoilets-dark.png",
+    "wc-male": "/seatmap-icons/maletoilets-dark.png",
+    "wc-female": "/seatmap-icons/femaletoilets-dark.png",
+    "exit-symbol": "/seatmap-icons/emergencyexit-dark.png",
+    disabled: "/seatmap-icons/disabledtoilets-dark.png",
+    "first-aid": "/seatmap-icons/firstaid-dark.png",
+    info: "/seatmap-icons/information-dark.png",
+    stairs: "/seatmap-icons/stairssymbol-dark.png",
+  };
+
+  // BLUE icons used for the main symbols button in the left-hand toolbar
+  const SYMBOL_ICON_BLUE = {
+    bar: "/seatmap-icons/barsymbol-blue.png",
+    "wc-mixed": "/seatmap-icons/mixedtoilets-blue.png",
+    "wc-male": "/seatmap-icons/maletoilets-blue.png",
+    "wc-female": "/seatmap-icons/femaletoilets-blue.png",
+    "exit-symbol": "/seatmap-icons/emergencyexit-blue.png",
+    disabled: "/seatmap-icons/disabledtoilets-blue.png",
+    "first-aid": "/seatmap-icons/firstaid-blue.png",
+    info: "/seatmap-icons/information-blue.png",
+    stairs: "/seatmap-icons/stairssymbol-blue.png",
+  };
+
+  // Update the main symbols button icon to show the currently-selected symbol (blue PNG)
+  function updateSymbolsToolbarIcon(symbolToolNameOrType) {
+    try {
+      const btn = document.querySelector(
+        '.tb-left-item.tool-button[data-tool="symbols"]'
+      );
+      if (!btn) return;
+
+      const img = btn.querySelector("img");
+      if (!img) return;
+
+      const symbolType = normaliseSymbolTool(symbolToolNameOrType);
+      const src = SYMBOL_ICON_BLUE[symbolType] || SYMBOL_ICON_BLUE.info;
+      img.src = src;
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn("updateSymbolsToolbarIcon error", e);
+    }
+  }
+
+  // Ensure there's a sensible default icon shown even before a symbol is picked
+  setTimeout(() => {
+    if (typeof updateSymbolsToolbarIcon === "function") {
+      updateSymbolsToolbarIcon("info");
+    }
+  }, 0);
+
+
+       function createSymbolNode(symbolToolNameOrType, x, y) {
+      // Normalise whatever the caller passes (e.g. "symbol-wc-mixed" or "wc-mixed")
+      const symbolType = normaliseSymbolTool(symbolToolNameOrType);
+
+      const group = new Konva.Group({
+        x: x - 18,
+        y: y - 18,
+        draggable: true,
+        name: "symbol",
+        shapeType: "symbol",
+      });
+
+      group.setAttr("symbolType", symbolType);
+
+      const imageObj = new window.Image();
+      imageObj.src = SYMBOL_ICON_DARK[symbolType] || SYMBOL_ICON_DARK.info;
+
+      const icon = new Konva.Image({
+        image: imageObj,
+        width: 36,
+        height: 36,
+        offsetX: 18,
+        offsetY: 18,
+        // we still call this "body-rect" so hit-testing & selection work nicely
+        name: "body-rect",
+      });
+
+      imageObj.onload = () => {
+        if (mapLayer) mapLayer.batchDraw();
+      };
+
+      group.add(icon);
+      ensureHitRect(group);
+
+      return group;
+    }
+
 
         // Map toolbar tool names (symbol-*) to our internal symbolType keys
   const SYMBOL_TOOL_TO_TYPE = {
