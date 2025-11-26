@@ -1926,7 +1926,7 @@ function createBar(x, y) {
     }
   }
 
-  /  // Ensure there's a sensible default icon shown even before a symbol is picked.
+  // Ensure there's a sensible default icon shown even before a symbol is picked.
   // We want the mixed WC symbol as the default.
   function initSymbolsToolbarDefaultIcon() {
     try {
