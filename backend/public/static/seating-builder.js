@@ -1846,7 +1846,7 @@ function createBar(x, y) {
     stairs: "/seatmap-icons/stairssymbol-blue.png",
   };
 
-  // Normalise either:
+    // Normalise either:
   // - a toolbar tool name (e.g. "symbol-wc-mixed", "symbol-firstaid")
   // - or an internal type (e.g. "wc-mixed", "first-aid")
   // into one of our canonical SYMBOL_TYPES.
@@ -1874,23 +1874,35 @@ function createBar(x, y) {
       return raw;
     }
 
-    // Heuristics based on substrings, so we cope with different data-tool values
+    // ----- Heuristics -----
+    // Non-WC symbols first
     if (raw.includes("bar")) return "bar";
     if (raw.includes("stair")) return "stairs";
     if (raw.includes("first") || raw.includes("aid") || raw.includes("medical")) return "first-aid";
     if (raw.includes("exit")) return "exit-symbol";
-    if (raw.includes("disab")) return "disabled";
+    if (raw.includes("disab") || raw.includes("wheelchair")) return "disabled";
 
-    if (raw.includes("mix")) return "wc-mixed";
-    if (raw.includes("male") || raw.includes("men")) return "wc-male";
-    if (raw.includes("female") || raw.includes("women") || raw.includes("ladies")) return "wc-female";
+    // *** WC variants – make sure male/female win over generic "mixed" / "wc" ***
+    if (raw.includes("female") || raw.includes("women") || raw.includes("ladies")) {
+      return "wc-female";
+    }
+    if (raw.includes("male") || raw.includes("men") || raw.includes("gents")) {
+      return "wc-male";
+    }
+    if (raw.includes("mix") || raw.includes("unisex")) {
+      return "wc-mixed";
+    }
 
-    if (raw.includes("wc") || raw.includes("toilet")) return "wc-mixed";
-    if (raw.includes("info")) return "info";
+    if (raw.includes("wc") || raw.includes("toilet") || raw.includes("restroom")) {
+      return "wc-mixed";
+    }
+
+    if (raw.includes("info") || raw.includes("help")) return "info";
 
     // Fallback
     return "info";
   }
+
 
   // Update the main symbols button icon to show the currently-selected symbol (blue PNG)
   function updateSymbolsToolbarIcon(symbolToolNameOrType) {
@@ -1914,16 +1926,23 @@ function createBar(x, y) {
     }
   }
 
-  // Ensure there's a sensible default icon shown even before a symbol is picked.
-  // We delay this so the left-hand DOM has time to mount.
-  window.addEventListener("load", () => {
+  /  // Ensure there's a sensible default icon shown even before a symbol is picked.
+  // We want the mixed WC symbol as the default.
+  function initSymbolsToolbarDefaultIcon() {
     try {
-      updateSymbolsToolbarIcon("info");
+      updateSymbolsToolbarIcon("wc-mixed");
     } catch (e) {
       // eslint-disable-next-line no-console
       console.warn("initial symbols icon error", e);
     }
-  });
+  }
+
+  // Try immediately (in case the DOM is already there)...
+  initSymbolsToolbarDefaultIcon();
+
+  // ...and also on load, in case the toolbar is rendered later.
+  window.addEventListener("load", initSymbolsToolbarDefaultIcon);
+
 
   // Create a symbol node on the map (uses DARK icon variant)
   function createSymbolNode(symbolToolNameOrType, x, y) {
