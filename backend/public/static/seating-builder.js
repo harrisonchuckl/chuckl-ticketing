@@ -1746,17 +1746,7 @@ function createBar(x, y) {
   return group;
 }
 
-
-    function createSymbolNode(symbolType, x, y) {
-    const group = new Konva.Group({
-      x: x - 18,
-      y: y - 18,
-      draggable: true,
-      name: "symbol",
-      shapeType: "symbol",
-    });
-
-        // Map toolbar tool names (symbol-*) to our internal symbolType keys
+    // Map toolbar tool names (symbol-*) to our internal symbolType keys
   const SYMBOL_TOOL_TO_TYPE = {
     "symbol-bar": "bar",
     "symbol-wc-mixed": "wc-mixed",
@@ -1775,22 +1765,30 @@ function createBar(x, y) {
   }
 
 
+      function createSymbolNode(symbolType, x, y) {
+    const group = new Konva.Group({
+      x: x - 18,
+      y: y - 18,
+      draggable: true,
+      name: "symbol",
+      shapeType: "symbol",
+    });
+
     group.setAttr("symbolType", symbolType);
 
     // Map each symbol type to the DARK (map) icon you uploaded.
     // ⚠️ Update the filenames/paths here to match your GitHub /public/seatmap-icons folder.
-        const ICON_SRC = {
-      bar:          "/seatmap-icons/barsymbol-dark.png",
-      "wc-mixed":   "/seatmap-icons/mixedtoilets-dark.png",
-      "wc-male":    "/seatmap-icons/maletoilets-dark.png",
-      "wc-female":  "/seatmap-icons/femaletoilets-dark.png",
-      "exit-symbol":"/seatmap-icons/emergencyexit-dark.png",
-      disabled:     "/seatmap-icons/disabledtoilets-dark.png",
-      "first-aid":  "/seatmap-icons/firstaid-dark.png",
-      info:         "/seatmap-icons/information-dark.png",
-      stairs:       "/seatmap-icons/stairssymbol-dark.png", // <-- note the filename
+    const ICON_SRC = {
+      bar:           "/seatmap-icons/barsymbol-dark.png",
+      "wc-mixed":    "/seatmap-icons/mixedtoilets-dark.png",
+      "wc-male":     "/seatmap-icons/maletoilets-dark.png",
+      "wc-female":   "/seatmap-icons/femaletoilets-dark.png",
+      "exit-symbol": "/seatmap-icons/emergencyexit-dark.png",
+      disabled:      "/seatmap-icons/disabledtoilets-dark.png",
+      "first-aid":   "/seatmap-icons/firstaid-dark.png",
+      info:          "/seatmap-icons/information-dark.png",
+      stairs:        "/seatmap-icons/stairssymbol-dark.png",
     };
-
 
     const imageObj = new window.Image();
     imageObj.src = ICON_SRC[symbolType] || ICON_SRC.info;
@@ -4679,115 +4677,134 @@ if (
 
   // ---------- Behaviour attachment ----------
 
-   function attachNodeBehaviour(node) {
+function attachNodeBehaviour(node) {
   if (!(node instanceof Konva.Group)) return;
+
+  // Prevent double-binding if we re-run after history restore
+  if (node.getAttr("__sbBehaviourAttached")) return;
+  node.setAttr("__sbBehaviourAttached", true);
 
   // Make sure hit rect is correct for selection / dragging
   ensureHitRect(node);
-
-  // Normalise layer ordering so seats / tables are above,
-  // arcs + symbols below.
   sbNormalizeZOrder(node);
 
+  const shapeType = node.getAttr("shapeType") || node.name() || "";
 
-  const shapeType = node.getAttr("shapeType") || node.name();
+  // For rows/tables/single seats loaded from history,
+  // reattach the per-seat behaviour
+  if (
+    shapeType === "row-seats" ||
+    shapeType === "circular-table" ||
+    shapeType === "rect-table" ||
+    shapeType === "single-seat"
+  ) {
+    node.find("Circle").forEach((c) => {
+      if (!c || typeof c.getAttr !== "function") return;
+      if (!c.getAttr("isSeat")) return;
 
-  // Always keep selection blocks behind other elements
-  if (shapeType === "section" && mapLayer && node.getLayer() === mapLayer) {
-    node.moveToBottom();
-    mapLayer.batchDraw();
+      // Make sure metadata exists
+      const seatFill =
+        c.getAttr("sbSeatBaseFill") || c.fill() || "#ffffff";
+      const seatStroke =
+        c.getAttr("sbSeatBaseStroke") || c.stroke() || "#4b5563";
+      const seatStrokeWidth =
+        Number(c.getAttr("sbSeatBaseStrokeWidth")) ||
+        Number(c.strokeWidth && c.strokeWidth()) ||
+        1.7;
+
+      c.setAttrs({
+        sbSeatKind: c.getAttr("sbSeatKind") || "standard",
+        sbSeatBaseFill: seatFill,
+        sbSeatBaseStroke: seatStroke,
+        sbSeatBaseStrokeWidth: seatStrokeWidth,
+      });
+
+      attachSeatCircleBehaviour(c);
+      applySeatKindVisualToCircle(c);
+    });
   }
 
-  // Hover cursor
-  node.on("mouseover", () => {
-    if (!stage) return;
-    // If any creation / drawing tool is active, show crosshair even when hovering shapes
-    if (activeTool) {
-      stage.container().style.cursor = "crosshair";
-    } else {
-      stage.container().style.cursor = "grab";
-    }
-  });
+  // ----- Selection / multi-selection -----
 
-  node.on("mouseout", () => {
-    // Use the central helper so it stays in sync with tools
-    updateDefaultCursor();
-  });
+  node.on("mousedown touchstart", (evt) => {
+    // Don't let this bubble to the stage pan handler
+    evt.cancelBubble = true;
 
-  // ---- Drag behaviour (supports multi-drag with SHIFT) ----
-  node.on("dragstart", () => {
-    // As soon as we move any element, drop the active creation tool
-    // so clicking elsewhere doesn't create another element.
-    setActiveTool(null, { force: true });
-    updateDefaultCursor();
-
-    const nodes = transformer ? transformer.nodes() : [];
-
-    // If nothing is selected yet, select this node first
-    if (!nodes.length) {
-      selectNode(node, false);
+    // If the user clicked on a line/arrow handle, we still
+    // want the parent group as the selected node.
+    let targetNode = node;
+    const parent = evt.target && evt.target.getParent
+      ? evt.target.getParent()
+      : null;
+    if (parent && parent instanceof Konva.Group && parent !== node) {
+      targetNode = parent;
     }
 
-    const activeNodes = transformer ? transformer.nodes() : [node];
+    const additive = isShiftPressed === true;
+    selectNode(targetNode, additive);
 
-    // If we’re dragging multiple nodes, snapshot their starting positions
-    if (activeNodes.length > 1) {
-      multiDragState = {
-        dragger: node,
-        basePositions: new Map(),
-      };
-
-      activeNodes.forEach((n) => {
-        multiDragState.basePositions.set(n, { x: n.x(), y: n.y() });
-      });
+    // If this is a multi-selection drag, snapshot positions
+    if (
+      additive &&
+      transformer &&
+      transformer.nodes &&
+      transformer.nodes().length > 1
+    ) {
+      multiDragState = transformer.nodes().map((n) => ({
+        node: n,
+        x: n.x(),
+        y: n.y(),
+      }));
     } else {
       multiDragState = null;
     }
   });
 
+  // ----- Multi-drag support -----
+
   node.on("dragmove", () => {
-    if (!multiDragState || multiDragState.dragger !== node) {
-      // Single-node drag: just redraw
-      mapLayer.batchDraw();
-      return;
+    if (
+      multiDragState &&
+      transformer &&
+      transformer.nodes &&
+      transformer.nodes().length > 1
+    ) {
+      const primary = node;
+      const start = multiDragState.find((s) => s.node === primary);
+      if (start) {
+        const dx = primary.x() - start.x;
+        const dy = primary.y() - start.y;
+
+        multiDragState.forEach((s) => {
+          if (s.node === primary) return;
+          s.node.position({
+            x: snap(s.x + dx),
+            y: snap(s.y + dy),
+          });
+        });
+      }
     }
 
-    const activeNodes = transformer ? transformer.nodes() : [node];
-    const base = multiDragState.basePositions.get(node);
-    if (!base) return;
-
-    const dx = node.x() - base.x;
-    const dy = node.y() - base.y;
-
-    // Move all selected nodes by the same delta, preserving their layout
-    activeNodes.forEach((n) => {
-      if (n === node) return; // this one is already being dragged by Konva
-      const orig = multiDragState.basePositions.get(n);
-      if (!orig) return;
-      n.position({
-        x: orig.x + dx,
-        y: orig.y + dy,
-      });
-    });
-
-    mapLayer.batchDraw();
+    if (mapLayer) mapLayer.batchDraw();
+    if (overlayLayer) overlayLayer.batchDraw();
   });
 
   node.on("dragend", () => {
-    const activeNodes = transformer ? transformer.nodes() : [node];
-
-    // IMPORTANT: no snapping here – allow pixel-perfect placement
-    activeNodes.forEach((n) => {
-      n.position({
-        x: n.x(),
-        y: n.y(),
-      });
-    });
-
     multiDragState = null;
-    mapLayer.batchDraw();
+    if (mapLayer) mapLayer.batchDraw();
+    if (overlayLayer) overlayLayer.batchDraw();
     pushHistory();
   });
+
+  // ----- Double-click: force selection (and let type-specific
+  // handlers like stage/exit text editing run as well) -----
+
+  node.on("dblclick", (evt) => {
+    evt.cancelBubble = true;
+    selectNode(node, false);
+  });
+}
+
 
   // ---- Transform behaviour ----
    node.on("transformend", () => {
