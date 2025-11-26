@@ -3,11 +3,11 @@
 
 (function () {
   // Prevent the builder from initialising twice (which caused double prompts / double elements)
-  if (window.__TIXALL_SEATMAP_BUILDER_ACTIVE__) {
-    // eslint-disable-next-line no-console
-    console.warn("seating-builder: already initialised, skipping second run");
-    return;
-  }
+if (window.__TIXALL_SEATMAP_BUILDER_ACTIVE__) {
+  // eslint-disable-next-line no-console
+  console.warn("seating-builder: already initialised, skipping second run");
+  return;
+}
   window.__TIXALL_SEATMAP_BUILDER_ACTIVE__ = true;
 
   const showId = window.__SEATMAP_SHOW_ID__;
@@ -1340,31 +1340,7 @@
     });
   }
 
-  // ---------- Shape factories ----------
-
-
-    
-    function finish(commit) {
-      if (!input.parentNode) return;
-      const newVal = commit ? input.value : oldText;
-      onCommit(newVal);
-      document.body.removeChild(input);
-    }
-
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        finish(true);
-      } else if (e.key === "Escape") {
-        e.preventDefault();
-        finish(false);
-      }
-    });
-
-    input.addEventListener("blur", () => finish(true));
-  }
-
-    // ---------- Shape factories ----------
+     // ---------- Shape factories ----------
 
   // Shared styling for basic shapes (section / square / circle)
   function applyBasicShapeStyle(node) {
