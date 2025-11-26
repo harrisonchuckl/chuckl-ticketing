@@ -4501,30 +4501,7 @@ if (
       return;
     }
 
-    // Lines & arrows: rotation only, geometry edited via handles
-    if (
-      shapeType === "line" ||
-      shapeType === "curve-line" ||
-      shapeType === "arrow"
-    ) {
-      transformer.rotateEnabled(true);
-      transformer.enabledAnchors([]);
-      return;
-    }
-
-    // Fallback: allow full resize + rotation
-    transformer.rotateEnabled(true);
-    transformer.enabledAnchors([
-      "top-left",
-      "top-center",
-      "top-right",
-      "middle-left",
-      "middle-right",
-      "bottom-left",
-      "bottom-center",
-      "bottom-right",
-    ]);
-  }
+   
 
   // Lines & arrows: rotation only, geometry edited via handles
   if (
