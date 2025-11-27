@@ -366,6 +366,53 @@ function updateSymbolsToolbarIcon(symbolToolNameOrType) {
   }
 }
 
+function initSymbolsToolbarDefaultIcon() {
+  try {
+    // Show the mixed WC icon by default
+    updateSymbolsToolbarIcon("wc-mixed");
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn("initial symbols icon error", e);
+  }
+}
+
+initSymbolsToolbarDefaultIcon();
+window.addEventListener("load", initSymbolsToolbarDefaultIcon);
+
+  
+  // Highlight the active tool button and swap icons based on data attributes
+function updateToolButtonActiveState(activeToolName) {
+  try {
+    const buttons = document.querySelectorAll(".tool-button[data-tool]");
+
+    buttons.forEach((btn) => {
+      const toolName = btn.getAttribute("data-tool");
+      const isActive = !!activeToolName && toolName === activeToolName;
+
+      // Toggle active class
+      btn.classList.toggle("is-active", isActive);
+
+      // Swap icon if this button has icon data
+      const img = btn.querySelector("img");
+      if (!img) return;
+
+      const defaultSrc = img.getAttribute("data-icon-default");
+      const activeSrc =
+        img.getAttribute("data-icon-active") || defaultSrc;
+
+      if (defaultSrc) {
+        img.src = isActive ? (activeSrc || defaultSrc) : defaultSrc;
+      }
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("updateToolButtonActiveState error", err);
+  }
+}
+
+// Expose so the preview HTML script can also force a refresh after fly-out changes
+window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
+
 
 
    // Expose so the preview HTML script can also force a refresh after fly-out changes
@@ -1994,29 +2041,6 @@ function createBar(x, y) {
 
     // Fallback
     return "info";
-  }
-
-
-  // Update the main symbols button icon to show the currently-selected symbol (blue PNG)
-  function updateSymbolsToolbarIcon(symbolToolNameOrType) {
-    try {
-      const btn = document.querySelector(
-        '.tb-left-item.tool-button[data-tool="symbols"]'
-      );
-      if (!btn) return;
-
-      const img = btn.querySelector("img");
-      if (!img) return;
-
-      const symbolType = normaliseSymbolTool(symbolToolNameOrType);
-      const src =
-        SYMBOL_ICON_BLUE[symbolType] || SYMBOL_ICON_BLUE.info;
-
-      img.src = src;
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.warn("updateSymbolsToolbarIcon error", e);
-    }
   }
 
   // Ensure there's a sensible default icon shown even before a symbol is picked.
