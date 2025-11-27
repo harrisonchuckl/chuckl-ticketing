@@ -4672,8 +4672,7 @@ if (shapeType === "row-seats") {
         }
       );
 
-      return;
-    }
+  
 
 
     // ---- Arrow ----
