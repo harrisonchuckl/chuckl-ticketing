@@ -4581,23 +4581,7 @@ if (shapeType === "row-seats") {
 
 
 
-    // ---- Stairs ----
-    if (shapeType === "stairs") {
-      const length =
-        Number(node.getAttr("stairsLength")) || GRID_SIZE * 4;
-      const width =
-        Number(node.getAttr("stairsWidth")) || GRID_SIZE * 1.5;
-      const rawSteps = Number(node.getAttr("stairsStepCount"));
-      const steps =
-        Number.isFinite(rawSteps) && rawSteps >= 2 ? rawSteps : 8;
-      const strokeColor =
-        node.getAttr("stairsStrokeColor") || "#111827";
-      const strokeWidth =
-        Number(node.getAttr("stairsStrokeWidth")) || 1.7;
-      ...
-
-
-        // ---- Stairs ----
+       // ---- Stairs ----
     if (shapeType === "stairs") {
       const length =
         Number(node.getAttr("stairsLength")) || GRID_SIZE * 4;
