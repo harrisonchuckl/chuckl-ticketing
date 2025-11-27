@@ -254,6 +254,10 @@ if (window.__TIXALL_SEATMAP_BUILDER_ACTIVE__) {
   // currently selected tool in the left toolbar
   let activeTool = null;
 
+  // --- stairs drawing state ---
+let stairsDraft = null;
+let stairsStartPos = null;
+
   // current selection + copy buffer
   let selectedNode = null;
   let copiedNodesJson = [];
@@ -435,7 +439,7 @@ window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
 
             // ---------- Helpers: UI / tools ----------
 
-  function setActiveTool(tool, opts = {}) {
+    function setActiveTool(tool, opts = {}) {
     const forceClear = !!(opts && opts.force);
 
     // If we are leaving a line tool and something is mid-draw, finish it
@@ -451,6 +455,11 @@ window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
         const commit = curveRawPoints && curveRawPoints.length >= 4;
         finishCurveLine(commit);
       }
+    }
+
+    // If we are leaving the stairs tool with a draft, cancel it
+    if (activeTool === "stairs" && tool !== "stairs" && stairsDraft) {
+      finishStairsDrawing(false);
     }
 
     // Soft clears (setActiveTool(null) with no force flag) are ignored so tools
@@ -471,6 +480,8 @@ window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
         currentLineToolType === "curve-line"
       ) {
         finishCurveLine(true);
+      } else if (tool === "stairs" && stairsDraft) {
+        finishStairsDrawing(true);
       }
       activeTool = null;
     } else {
@@ -482,7 +493,8 @@ window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
       activeTool &&
       activeTool !== "line" &&
       activeTool !== "curve-line" &&
-      activeTool !== "arrow"
+      activeTool !== "arrow" &&
+      activeTool !== "stairs"
     ) {
       clearSelection();
     }
@@ -499,6 +511,7 @@ window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
     // 🔵 Sync left-hand button highlight + icon swap
     updateToolButtonActiveState(activeTool);
   }
+
 
 
 
@@ -1032,6 +1045,90 @@ window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
     a = a % 360;
     if (a < 0) a += 360;
     return a;
+  }
+
+    // ---------- Stairs drawing helpers (click + drag) ----------
+
+  function startStairsDrawing(pointerPos) {
+    if (!mapLayer) return;
+
+    stairsStartPos = { x: pointerPos.x, y: pointerPos.y };
+
+    stairsDraft = new Konva.Group({
+      x: pointerPos.x,
+      y: pointerPos.y,
+      draggable: false,   // become draggable once committed
+      name: "stairs",
+      shapeType: "stairs",
+    });
+
+    // Initial defaults – will be updated as we drag
+    stairsDraft.setAttr("stairsLength", GRID_SIZE * 4);
+    stairsDraft.setAttr("stairsWidth", GRID_SIZE * 1.5);
+    stairsDraft.setAttr("stairsStepCount", 8);
+    stairsDraft.setAttr("stairsStrokeColor", "#111827");
+    stairsDraft.setAttr("stairsStrokeWidth", 1.7);
+
+    updateStairsGeometry(stairsDraft);
+    stairsDraft.visible(false); // stay hidden until we have some length
+
+    mapLayer.add(stairsDraft);
+    mapLayer.batchDraw();
+  }
+
+  function updateStairsDrawing(pointerPos) {
+    if (!stairsDraft || !stairsStartPos) return;
+
+    const dx = pointerPos.x - stairsStartPos.x;
+    const dy = pointerPos.y - stairsStartPos.y;
+    const length = Math.sqrt(dx * dx + dy * dy);
+
+    if (!Number.isFinite(length) || length < 4) {
+      stairsDraft.visible(false);
+      mapLayer && mapLayer.batchDraw();
+      return;
+    }
+
+    stairsDraft.visible(true);
+
+    // Use existing step count if present, otherwise derive a sensible default
+    let steps = Number(stairsDraft.getAttr("stairsStepCount"));
+    if (!Number.isFinite(steps) || steps < 2) {
+      steps = Math.max(3, Math.round(length / (GRID_SIZE * 0.75)));
+    }
+
+    stairsDraft.setAttr("stairsLength", length);
+    stairsDraft.setAttr("stairsStepCount", steps);
+
+    const angleRad = Math.atan2(dy, dx);
+    const angleDeg = (angleRad * 180) / Math.PI;
+    stairsDraft.rotation(angleDeg);
+
+    updateStairsGeometry(stairsDraft);
+    mapLayer && mapLayer.batchDraw();
+  }
+
+  function finishStairsDrawing(commit) {
+    if (!stairsDraft) return;
+
+    const length = Number(stairsDraft.getAttr("stairsLength")) || 0;
+
+    if (!commit || length < GRID_SIZE) {
+      stairsDraft.destroy();
+    } else {
+      stairsDraft.visible(true);
+      stairsDraft.draggable(true);
+      ensureHitRect(stairsDraft);
+      attachNodeBehaviour(stairsDraft);
+      selectNode(stairsDraft);
+      updateSeatCount();
+      pushHistory();
+    }
+
+    stairsDraft = null;
+    stairsStartPos = null;
+
+    if (mapLayer) mapLayer.batchDraw();
   }
 
 
@@ -1598,6 +1695,71 @@ window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
       arc.dash([2, 4]);
     } else {
       arc.dash([]);
+    }
+
+    ensureHitRect(group);
+  }
+
+    // ---------- Stairs geometry helper (parallel tread lines) ----------
+
+  function updateStairsGeometry(group) {
+    if (!(group instanceof Konva.Group)) return;
+
+    const type = group.getAttr("shapeType") || group.name();
+    if (type !== "stairs") return;
+
+    // ---- Read + normalise attributes ----
+    let length = Number(group.getAttr("stairsLength"));
+    let width = Number(group.getAttr("stairsWidth"));
+    let steps = Number(group.getAttr("stairsStepCount"));
+    let strokeColor =
+      group.getAttr("stairsStrokeColor") || "#111827";
+    let strokeWidth = Number(group.getAttr("stairsStrokeWidth"));
+
+    if (!Number.isFinite(length) || length <= 0) {
+      length = GRID_SIZE * 4; // sensible default
+    }
+    if (!Number.isFinite(width) || width <= GRID_SIZE * 0.75) {
+      width = GRID_SIZE * 1.5;
+    }
+    if (!Number.isFinite(steps) || steps < 2) {
+      // default steps based on length
+      steps = Math.max(3, Math.round(length / (GRID_SIZE * 0.75)));
+    }
+    if (!Number.isFinite(strokeWidth) || strokeWidth <= 0) {
+      strokeWidth = 1.7;
+    }
+
+    group.setAttr("stairsLength", length);
+    group.setAttr("stairsWidth", width);
+    group.setAttr("stairsStepCount", steps);
+    group.setAttr("stairsStrokeColor", strokeColor);
+    group.setAttr("stairsStrokeWidth", strokeWidth);
+
+    // ---- Clear old tread lines ----
+    group
+      .find((n) => n.getAttr && n.getAttr("isStairStep"))
+      .forEach((n) => n.destroy());
+
+    const halfWidth = width / 2;
+    const gapCount = steps - 1;
+    const stepSpacing = gapCount > 0 ? length / gapCount : length;
+
+    // Group origin = start of stairs (x = 0), lines go from 0 → length
+    for (let i = 0; i < steps; i += 1) {
+      const x = i * stepSpacing;
+
+      const line = new Konva.Line({
+        points: [x, -halfWidth, x, halfWidth],
+        stroke: strokeColor,
+        strokeWidth,
+        lineCap: "round",
+        lineJoin: "round",
+        name: "stairs-step",
+      });
+
+      line.setAttr("isStairStep", true);
+      group.add(line);
     }
 
     ensureHitRect(group);
@@ -4180,6 +4342,93 @@ function addNumberField(labelText, value, min, step, onCommit) {
       return;
     }
 
+        // ---- Stairs ----
+    if (shapeType === "stairs") {
+      const length =
+        Number(node.getAttr("stairsLength")) || GRID_SIZE * 4;
+      const width =
+        Number(node.getAttr("stairsWidth")) || GRID_SIZE * 1.5;
+      const rawSteps = Number(node.getAttr("stairsStepCount"));
+      const steps =
+        Number.isFinite(rawSteps) && rawSteps >= 2 ? rawSteps : 8;
+      const strokeColor =
+        node.getAttr("stairsStrokeColor") || "#111827";
+      const strokeWidth =
+        Number(node.getAttr("stairsStrokeWidth")) || 1.7;
+
+      addTitle("Stairs");
+
+      // Rotation
+      addNumberField(
+        "Rotation (deg)",
+        Math.round(node.rotation() || 0),
+        -360,
+        1,
+        (val) => {
+          const angle = normaliseAngle(val);
+          node.rotation(angle);
+          if (overlayLayer) overlayLayer.batchDraw();
+        }
+      );
+
+      // Quick flip (mirror around its centre)
+      addFlipButton(node);
+
+      addNumberField(
+        "Stair length (px)",
+        Math.round(length),
+        10,
+        1,
+        (val) => {
+          const v = Math.max(10, val);
+          node.setAttr("stairsLength", v);
+          updateStairsGeometry(node);
+        }
+      );
+
+      addNumberField(
+        "Stair width (px)",
+        Math.round(width),
+        4,
+        1,
+        (val) => {
+          const v = Math.max(4, val);
+          node.setAttr("stairsWidth", v);
+          updateStairsGeometry(node);
+        }
+      );
+
+      addNumberField(
+        "Number of steps",
+        steps,
+        2,
+        1,
+        (val) => {
+          const s = Math.max(2, Math.round(val));
+          node.setAttr("stairsStepCount", s);
+          updateStairsGeometry(node);
+        }
+      );
+
+      addColorField("Line colour", strokeColor, (val) => {
+        node.setAttr("stairsStrokeColor", val || "#111827");
+        updateStairsGeometry(node);
+      });
+
+      addNumberField(
+        "Line thickness (px)",
+        strokeWidth,
+        0.5,
+        0.5,
+        (val) => {
+          node.setAttr("stairsStrokeWidth", val);
+          updateStairsGeometry(node);
+        }
+      );
+
+      return;
+    }
+
        // ---- Line / Curved line ----
     if (shapeType === "line" || shapeType === "curve-line") {
       const lineShape = node.findOne((n) => n instanceof Konva.Line);
@@ -4945,7 +5194,7 @@ function addNumberField(labelText, value, min, step, onCommit) {
       });
   }
 
-     function configureTransformerForNode(node) {
+       function configureTransformerForNode(node) {
     if (!transformer || !node) return;
 
     const shapeType = node.getAttr("shapeType") || node.name();
@@ -4963,7 +5212,7 @@ function addNumberField(labelText, value, min, step, onCommit) {
     }
 
     // Room objects + basic shapes: resize in all directions (no rotation)
-        if (
+    if (
       shapeType === "stage" ||
       shapeType === "bar" ||
       shapeType === "exit" ||
@@ -4972,7 +5221,6 @@ function addNumberField(labelText, value, min, step, onCommit) {
       shapeType === "circle" ||
       shapeType === "symbol"
     ) {
-
       transformer.rotateEnabled(false);
       transformer.enabledAnchors([
         "top-left",
@@ -4987,32 +5235,33 @@ function addNumberField(labelText, value, min, step, onCommit) {
       return;
     }
 
-     // Arrow + line drawings: allow rotation and resize in all directions
-  if (
-    shapeType === "arrow" ||
-    shapeType === "line" ||
-    shapeType === "curve-line" ||
-    shapeType === "arc"
-  ) {
-    transformer.rotateEnabled(true);
-    transformer.enabledAnchors([
-      "top-left",
-      "top-center",
-      "top-right",
-      "middle-left",
-      "middle-right",
-      "bottom-left",
-      "bottom-center",
-      "bottom-right",
-    ]);
-    return;
-  }
-
+    // Arrow + line drawings + arcs + stairs: allow rotation and resize
+    if (
+      shapeType === "arrow" ||
+      shapeType === "line" ||
+      shapeType === "curve-line" ||
+      shapeType === "arc" ||
+      shapeType === "stairs"
+    ) {
+      transformer.rotateEnabled(true);
+      transformer.enabledAnchors([
+        "top-left",
+        "top-center",
+        "top-right",
+        "middle-left",
+        "middle-right",
+        "bottom-left",
+        "bottom-center",
+        "bottom-right",
+      ]);
+      return;
+    }
 
     // Default: no resize/rotation
     transformer.rotateEnabled(false);
     transformer.enabledAnchors([]);
   }
+
 
 
       function clearSelection() {
@@ -5224,7 +5473,7 @@ function addNumberField(labelText, value, min, step, onCommit) {
   });
 
   // ---- Transform behaviour ----
-   node.on("transformend", () => {
+    node.on("transformend", () => {
     const tShape = node.getAttr("shapeType") || node.name();
 
     if (
@@ -5283,7 +5532,24 @@ function addNumberField(labelText, value, min, step, onCommit) {
 
       // Reset group scale so future transforms are clean
       node.scale({ x: 1, y: 1 });
-        } else if (
+
+    } else if (tShape === "stairs") {
+      // Scale length/width attributes instead of keeping scale on the group
+      const scaleX = Math.abs(node.scaleX() || 1);
+      const scaleY = Math.abs(node.scaleY() || 1);
+
+      const baseLength =
+        Number(node.getAttr("stairsLength")) || GRID_SIZE * 4;
+      const baseWidth =
+        Number(node.getAttr("stairsWidth")) || GRID_SIZE * 1.5;
+
+      node.setAttr("stairsLength", baseLength * scaleX);
+      node.setAttr("stairsWidth", baseWidth * scaleY);
+
+      updateStairsGeometry(node);
+      node.scale({ x: 1, y: 1 });
+
+    } else if (
       tShape !== "arrow" &&
       tShape !== "line" &&
       tShape !== "curve-line" &&
@@ -5291,7 +5557,6 @@ function addNumberField(labelText, value, min, step, onCommit) {
     ) {
       node.scale({ x: 1, y: 1 });
     }
-
 
     if (
       tShape === "row-seats" ||
@@ -5311,6 +5576,7 @@ function addNumberField(labelText, value, min, step, onCommit) {
     // keep the inspector in sync (Rotation deg, etc.)
     renderInspector(node);
   });
+
 
 
   // ---- Inline table-label editing ----
@@ -5610,7 +5876,7 @@ if (
 
       // ---------- Canvas interactions: click / selection / placement ----------
 
-    function handleStageClick(evt) {
+  function handleStageClick(evt) {
     if (!stage || !mapLayer) return;
 
     const pointerPos = stage.getPointerPosition();
@@ -5621,6 +5887,12 @@ if (
       target &&
       target.getAttr &&
       (target.getAttr("isLineHandle") || target.getAttr("isArrowHandle"));
+
+    // Stairs uses click+drag, not click-to-place.
+    // The actual creation is driven by mousedown / mousemove / mouseup.
+    if (activeTool === "stairs") {
+      return;
+    }
 
     // 1) LINE TOOL (click-to-add points)
     // Only fire on normal canvas clicks – NOT when clicking a handle.
@@ -5638,7 +5910,7 @@ if (
     // 2) Placement tools (rows, single seats, tables, shapes, text, etc.)
     // If a placement tool is active, ALWAYS create at the click position,
     // even if we clicked on top of another shape (inside a VIP box, etc.).
-        if (
+    if (
       activeTool &&
       activeTool !== "line" &&
       activeTool !== "curve-line" &&
@@ -5667,7 +5939,6 @@ if (
       return;
     }
 
-
     // 3) No active placement tool → standard selection behaviour
     let group = null;
     if (target && typeof target.findAncestor === "function") {
@@ -5692,6 +5963,7 @@ if (
       clearSelection();
     }
   }
+
 
 
 
@@ -5952,7 +6224,7 @@ if (
   }
 
 
-    function handleStageMouseMove() {
+     function handleStageMouseMove() {
     if (!stage) return;
 
     // While drawing a curve-line, keep extending the path
@@ -5960,6 +6232,14 @@ if (
       const pos = stage.getPointerPosition();
       if (!pos) return;
       updateCurveLine(pos);
+      return;
+    }
+
+    // While drawing stairs, update the preview geometry
+    if (activeTool === "stairs" && stairsDraft && stairsStartPos) {
+      const pos = stage.getPointerPosition();
+      if (!pos) return;
+      updateStairsDrawing(pos);
       return;
     }
 
