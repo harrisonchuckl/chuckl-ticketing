@@ -225,6 +225,59 @@ if (window.__TIXALL_SEATMAP_BUILDER_ACTIVE__) {
 
   ensureSidebarDom();
 
+  // ---------- Stage initialisation ----------
+
+  function initStage() {
+    // Avoid double-creating the stage
+    if (stage) return;
+
+    // Fallback sizes if container hasn't been sized yet
+    const width =
+      container.clientWidth || container.offsetWidth || 1200;
+    const height =
+      container.clientHeight || container.offsetHeight || 800;
+
+    // Store base sizes (used by resizeStageToContainer)
+    baseStageWidth = width;
+    baseStageHeight = height;
+
+    // Main Konva stage
+    stage = new Konva.Stage({
+      container: container,
+      width,
+      height,
+    });
+
+    // Layers: grid at the back, then map, then overlay (transformers, guides)
+    gridLayer = new Konva.Layer({ name: "grid-layer", listening: false });
+    mapLayer = new Konva.Layer({ name: "map-layer" });
+    overlayLayer = new Konva.Layer({ name: "overlay-layer" });
+
+    stage.add(gridLayer);
+    stage.add(mapLayer);
+    stage.add(overlayLayer);
+
+    // Single transformer reused for selections
+    transformer = new Konva.Transformer({
+      rotateEnabled: true,
+      ignoreStroke: true,
+      // keep anchors but we won’t allow stretching seats in other code
+      enabledAnchors: [
+        "top-left",
+        "top-right",
+        "bottom-left",
+        "bottom-right",
+      ],
+    });
+
+    overlayLayer.add(transformer);
+  }
+
+  // ---------- Config ----------
+
+  const GRID_SIZE = 32;
+  const STAGE_PADDING = 0;
+
   // ---------- Config ----------
 
   const GRID_SIZE = 32;
