@@ -768,7 +768,7 @@ router.get("/builder/preview/:showId", (req, res) => {
                     <img
                       class="tb-tool-icon icon-blue"
                       src="/seatmap-icons/multitool-blue.png"
-                      alt="Multi-tool (selected)"
+                      alt="Multi shape"
                     />
                     <span class="tb-left-label">Multi-tool</span>
                   </button>
