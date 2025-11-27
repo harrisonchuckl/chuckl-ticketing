@@ -710,7 +710,20 @@ router.get("/builder/preview/:showId", (req, res) => {
                     <span class="tb-left-label">Arrow</span>
                   </button>
 
-
+                  <!-- NEW: Stairs tool (Line / shapes fly-out) -->
+<button class="tb-left-item tool-button" data-tool="stairs">
+  <img
+    class="tb-tool-icon icon-dark"
+    src="/seatmap-icons/stairssymbol-dark.png"
+    alt="Stairs"
+  />
+  <img
+    class="tb-tool-icon icon-blue"
+    src="/seatmap-icons/stairssymbol-blue.png"
+    alt="Stairs (selected)"
+  />
+  <span class="tb-left-label">Stairs</span>
+</button>
 
                   <button class="tb-left-item tool-button" data-tool="section">
                     <img
