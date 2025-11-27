@@ -4487,6 +4487,65 @@ if (shapeType === "row-seats") {
       return;
     }
 
+        // ---- Lines & curves ----
+    if (shapeType === "line" || shapeType === "curve-line") {
+      const rotation = Math.round(node.rotation() || 0);
+      const fillEnabled = !!node.getAttr("lineFillEnabled");
+      const fillColor = node.getAttr("lineFillColor") || "#e5e7eb";
+
+      addTitle("Line / curve");
+
+      // Rotation
+      addNumberField(
+        "Rotation (deg)",
+        rotation,
+        -360,
+        1,
+        (val) => {
+          const angle = normaliseAngle(val);
+          node.rotation(angle);
+          // keep fill + handles sensible
+          syncLineFillShape(node);
+          if (overlayLayer) overlayLayer.batchDraw();
+        }
+      );
+
+      // NEW: interior fill controls
+      addCheckboxField(
+        "Fill inside shape",
+        fillEnabled,
+        (checked) => {
+          node.setAttr("lineFillEnabled", !!checked);
+          syncLineFillShape(node);
+        }
+      );
+
+      addColorField("Fill colour", fillColor, (val) => {
+        node.setAttr("lineFillColor", val || "#e5e7eb");
+        if (node.getAttr("lineFillEnabled")) {
+          syncLineFillShape(node);
+        }
+      );
+
+      return;
+    }
+
+    // ---- Stairs ----
+    if (shapeType === "stairs") {
+      const length =
+        Number(node.getAttr("stairsLength")) || GRID_SIZE * 4;
+      const width =
+        Number(node.getAttr("stairsWidth")) || GRID_SIZE * 1.5;
+      const rawSteps = Number(node.getAttr("stairsStepCount"));
+      const steps =
+        Number.isFinite(rawSteps) && rawSteps >= 2 ? rawSteps : 8;
+      const strokeColor =
+        node.getAttr("stairsStrokeColor") || "#111827";
+      const strokeWidth =
+        Number(node.getAttr("stairsStrokeWidth")) || 1.7;
+      ...
+
+
         // ---- Stairs ----
     if (shapeType === "stairs") {
       const length =
@@ -4655,22 +4714,7 @@ if (shapeType === "row-seats") {
         }
       );
 
-      // NEW: interior fill controls
-      addCheckboxField(
-        "Fill inside shape",
-        fillEnabled,
-        (checked) => {
-          node.setAttr("lineFillEnabled", !!checked);
-          syncLineFillShape(node);
-        }
-      );
-
-      addColorField("Fill colour", fillColor, (val) => {
-        node.setAttr("lineFillColor", val || "#e5e7eb");
-        if (node.getAttr("lineFillEnabled")) {
-          syncLineFillShape(node);
-        }
-      );
+    
 
   
 
