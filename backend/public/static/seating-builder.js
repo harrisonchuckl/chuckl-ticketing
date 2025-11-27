@@ -3,14 +3,16 @@
 
 (function () {
   // Prevent the builder from initialising twice (which caused double prompts / double elements)
-if (window.__TIXALL_SEATMAP_BUILDER_ACTIVE__) {
-  // eslint-disable-next-line no-console
-  console.warn("seating-builder: already initialised, skipping second run");
-  return;
-}
+  if (window.__TIXALL_SEATMAP_BUILDER_ACTIVE__) {
+    // eslint-disable-next-line no-console
+    console.warn("seating-builder: already initialised, skipping second run");
+    return;
+  }
   window.__TIXALL_SEATMAP_BUILDER_ACTIVE__ = true;
 
   const showId = window.__SEATMAP_SHOW_ID__;
+  const initialLayoutKey = window.__SEATMAP_LAYOUT__ || "blank";
+
   if (!showId) {
     // eslint-disable-next-line no-console
     console.error("seating-builder: missing window.__SEATMAP_SHOW_ID__");
@@ -23,7 +25,6 @@ if (window.__TIXALL_SEATMAP_BUILDER_ACTIVE__) {
     console.error("seating-builder: #app not found");
     return;
   }
-
 
   // ---------- Inject modern styles (Apple / Canva vibes) ----------
 
@@ -224,6 +225,7 @@ if (window.__TIXALL_SEATMAP_BUILDER_ACTIVE__) {
   }
 
   ensureSidebarDom();
+
 
   // ---------- Config ----------
 
