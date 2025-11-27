@@ -439,100 +439,100 @@ window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
 
             // ---------- Helpers: UI / tools ----------
   
-    function setActiveTool(tool, opts = {}) {
-    // Normalise any alias tool names from the UI so they map onto
-    // the real internal tools that the canvas click handler understands.
-    if (typeof tool === "string") {
-      const t = tool.toLowerCase();
+   function setActiveTool(tool, opts = {}) {
+  // Normalise any alias tool names from the UI so they map onto
+  // the real internal tools that the canvas click handler understands.
+  if (typeof tool === "string") {
+    const t = tool.toLowerCase();
 
-      // Treat any "multi" style tool as the standard row-seats tool.
-      // This means clicking the map with Multi selected will drop a
-      // seat block that you can then customise in the inspector.
-      if (
-        t === "multi" ||
-        t === "multi-tool" ||
-        t === "multi-seat" ||
-        t === "multi-block" ||
-        t === "multi-seat-block" ||
-        t === "multirows"
-      ) {
-        tool = "row-seats";
-      }
-    }
-
-    const forceClear = !!(opts && opts.force);
-
-
-
-    // If we are leaving a line tool and something is mid-draw, finish it
+    // 🔁 Any "multi" style tool in the UI should now be the MOLLE shape tool,
+    // NOT a seat row block. This means clicking the map with Multi selected
+    // will drop a multi-shape (polygon / rhombus / parallelogram) that you
+    // can then customise in the inspector.
     if (
-      (activeTool === "line" || activeTool === "curve-line") &&
-      tool !== activeTool &&
-      currentLineGroup
+      t === "multi" ||
+      t === "multi-tool" ||
+      t === "multi-seat" ||          // legacy aliases – kept for safety
+      t === "multi-block" ||
+      t === "multi-seat-block" ||
+      t === "multirows"
     ) {
-      if (currentLineToolType === "line") {
-        const commit = currentLinePoints && currentLinePoints.length >= 4;
-        finishCurrentLine(commit);
-      } else if (currentLineToolType === "curve-line") {
-        const commit = curveRawPoints && curveRawPoints.length >= 4;
-        finishCurveLine(commit);
-      }
+      tool = "multi-shape";
     }
-
-    // If we are leaving the stairs tool with a draft, cancel it
-    if (activeTool === "stairs" && tool !== "stairs" && stairsDraft) {
-      finishStairsDrawing(false);
-    }
-
-    // Soft clears (setActiveTool(null) with no force flag) are ignored so tools
-    // stay "sticky" and allow multi-placement after each click on the canvas.
-    if (tool === null && !forceClear) {
-      // no-op: keep current activeTool
-    } else if (activeTool === tool) {
-      // Toggling the same tool off
-      if (
-        tool === "line" &&
-        currentLineGroup &&
-        currentLineToolType === "line"
-      ) {
-        finishCurrentLine(true);
-      } else if (
-        tool === "curve-line" &&
-        currentLineGroup &&
-        currentLineToolType === "curve-line"
-      ) {
-        finishCurveLine(true);
-      } else if (tool === "stairs" && stairsDraft) {
-        finishStairsDrawing(true);
-      }
-      activeTool = null;
-    } else {
-      activeTool = tool;
-    }
-
-    // When switching to a placement tool, automatically clear any current selection
-    if (
-      activeTool &&
-      activeTool !== "line" &&
-      activeTool !== "curve-line" &&
-      activeTool !== "arrow" &&
-      activeTool !== "stairs"
-    ) {
-      clearSelection();
-    }
-
-    if (!mapLayer || !mapLayer.getStage()) return;
-
-    const stageRef = mapLayer.getStage();
-    if (!activeTool) {
-      stageRef.container().style.cursor = "grab";
-    } else {
-      stageRef.container().style.cursor = "crosshair";
-    }
-
-    // 🔵 Sync left-hand button highlight + icon swap
-    updateToolButtonActiveState(activeTool);
   }
+
+  const forceClear = !!(opts && opts.force);
+
+  // If we are leaving a line tool and something is mid-draw, finish it
+  if (
+    (activeTool === "line" || activeTool === "curve-line") &&
+    tool !== activeTool &&
+    currentLineGroup
+  ) {
+    if (currentLineToolType === "line") {
+      const commit = currentLinePoints && currentLinePoints.length >= 4;
+      finishCurrentLine(commit);
+    } else if (currentLineToolType === "curve-line") {
+      const commit = curveRawPoints && curveRawPoints.length >= 4;
+      finishCurveLine(commit);
+    }
+  }
+
+  // If we are leaving the stairs tool with a draft, cancel it
+  if (activeTool === "stairs" && tool !== "stairs" && stairsDraft) {
+    finishStairsDrawing(false);
+  }
+
+  // Soft clears (setActiveTool(null) with no force flag) are ignored so tools
+  // stay "sticky" and allow multi-placement after each click on the canvas.
+  if (tool === null && !forceClear) {
+    // no-op: keep current activeTool
+  } else if (activeTool === tool) {
+    // Toggling the same tool off
+    if (
+      tool === "line" &&
+      currentLineGroup &&
+      currentLineToolType === "line"
+    ) {
+      finishCurrentLine(true);
+    } else if (
+      tool === "curve-line" &&
+      currentLineGroup &&
+      currentLineToolType === "curve-line"
+    ) {
+      finishCurveLine(true);
+    } else if (tool === "stairs" && stairsDraft) {
+      finishStairsDrawing(true);
+    }
+    activeTool = null;
+  } else {
+    activeTool = tool;
+  }
+
+  // When switching to a placement tool, automatically clear any current selection
+  if (
+    activeTool &&
+    activeTool !== "line" &&
+    activeTool !== "curve-line" &&
+    activeTool !== "arrow" &&
+    activeTool !== "stairs"
+  ) {
+    clearSelection();
+  }
+
+  if (!mapLayer || !mapLayer.getStage()) return;
+
+  const stageRef = mapLayer.getStage();
+  if (!activeTool) {
+    stageRef.container().style.cursor = "grab";
+  } else {
+    stageRef.container().style.cursor = "crosshair";
+  }
+
+  // 🔵 Sync left-hand button highlight + icon swap
+  updateToolButtonActiveState(activeTool);
+}
+
 
 
 
@@ -4575,6 +4575,143 @@ function addNumberField(labelText, value, min, step, onCommit) {
         }
       );
 
+      return;
+    }
+
+        // ---- Multi-shape (MOLLE) blocks ----
+    if (shapeType === "multi-shape") {
+      // Read current attributes with sensible defaults
+      let variant = node.getAttr("multiShapeVariant") || "regular";
+      if (
+        variant !== "regular" &&
+        variant !== "rhombus" &&
+        variant !== "parallelogram"
+      ) {
+        variant = "regular";
+      }
+
+      let sides = Number(node.getAttr("multiShapeSides"));
+      if (!Number.isFinite(sides)) sides = 5;
+      sides = Math.max(3, Math.min(20, Math.round(sides)));
+
+      let width = Number(node.getAttr("multiShapeWidth"));
+      if (!Number.isFinite(width) || width <= 0) width = 120;
+
+      let height = Number(node.getAttr("multiShapeHeight"));
+      if (!Number.isFinite(height) || height <= 0) height = 80;
+
+      let skew = Number(node.getAttr("multiShapeSkew"));
+      if (!Number.isFinite(skew)) skew = 20;
+      skew = Math.max(-80, Math.min(80, skew));
+
+      // Write back normalised values so we're always in a safe state
+      node.setAttr("multiShapeVariant", variant);
+      node.setAttr("multiShapeSides", sides);
+      node.setAttr("multiShapeWidth", width);
+      node.setAttr("multiShapeHeight", height);
+      node.setAttr("multiShapeSkew", skew);
+
+      function rebuild() {
+        updateMultiShapeGeometry(node);
+        if (mapLayer) mapLayer.batchDraw();
+        pushHistory();
+      }
+
+      addTitle("MOLLE shape");
+
+      // Rotation (deg)
+      addNumberField(
+        "Rotation (deg)",
+        Math.round(node.rotation() || 0),
+        -360,
+        1,
+        (val) => {
+          const angle = normaliseAngle(val);
+          node.rotation(angle);
+          // If you ever add labels inside the shape, they'll stay upright
+          keepLabelsUpright && keepLabelsUpright(node);
+          if (overlayLayer) overlayLayer.batchDraw();
+        }
+      );
+
+      // Variant: regular polygon / rhombus / parallelogram
+      addSelectField(
+        "Shape variant",
+        variant,
+        [
+          { value: "regular", label: "Regular polygon" },
+          { value: "rhombus", label: "Rhombus (diamond)" },
+          { value: "parallelogram", label: "Parallelogram" },
+        ],
+        (val) => {
+          let v = val;
+          if (
+            v !== "regular" &&
+            v !== "rhombus" &&
+            v !== "parallelogram"
+          ) {
+            v = "regular";
+          }
+          node.setAttr("multiShapeVariant", v);
+          rebuild();
+          // Refresh inspector to show/hide the "sides" / "skew" controls appropriately
+          renderInspector(node);
+        }
+      );
+
+      // Only relevant for regular polygon
+      if (variant === "regular") {
+        addNumberField(
+          "Number of sides (3–20)",
+          sides,
+          3,
+          1,
+          (val) => {
+            let n = Math.round(val);
+            if (!Number.isFinite(n)) return;
+            n = Math.max(3, Math.min(20, n));
+            node.setAttr("multiShapeSides", n);
+            rebuild();
+          }
+        );
+      }
+
+      // Width / height
+      addNumberField("Width (px)", width, 10, 1, (val) => {
+        let w = Number(val);
+        if (!Number.isFinite(w) || w <= 0) w = 10;
+        node.setAttr("multiShapeWidth", w);
+        rebuild();
+      });
+
+      addNumberField("Height (px)", height, 10, 1, (val) => {
+        let h = Number(val);
+        if (!Number.isFinite(h) || h <= 0) h = 10;
+        node.setAttr("multiShapeHeight", h);
+        rebuild();
+      });
+
+      // Skew only makes sense for rhombus / parallelogram
+      if (variant === "rhombus" || variant === "parallelogram") {
+        addRangeField(
+          "Skew angle (°)",
+          skew,
+          -80,
+          80,
+          1,
+          (val) => {
+            let k = Number(val);
+            if (!Number.isFinite(k)) k = 0;
+            k = Math.max(-80, Math.min(80, k));
+            node.setAttr("multiShapeSkew", k);
+            rebuild();
+          }
+        );
+      }
+
+      // You may already have generic fill / stroke controls further down
+      // that call applyBasicShapeStyle(node). Because "multi-shape" is
+      // whitelisted in applyBasicShapeStyle, those will Just Work.
       return;
     }
 
