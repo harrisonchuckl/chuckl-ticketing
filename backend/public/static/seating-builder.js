@@ -438,9 +438,31 @@ window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
   // ---------- Helpers: UI / tools ----------
 
             // ---------- Helpers: UI / tools ----------
-
+  
     function setActiveTool(tool, opts = {}) {
+    // Normalise any alias tool names from the UI so they map onto
+    // the real internal tools that the canvas click handler understands.
+    if (typeof tool === "string") {
+      const t = tool.toLowerCase();
+
+      // Treat any "multi" style tool as the standard row-seats tool.
+      // This means clicking the map with Multi selected will drop a
+      // seat block that you can then customise in the inspector.
+      if (
+        t === "multi" ||
+        t === "multi-tool" ||
+        t === "multi-seat" ||
+        t === "multi-block" ||
+        t === "multi-seat-block" ||
+        t === "multirows"
+      ) {
+        tool = "row-seats";
+      }
+    }
+
     const forceClear = !!(opts && opts.force);
+
+
 
     // If we are leaving a line tool and something is mid-draw, finish it
     if (
