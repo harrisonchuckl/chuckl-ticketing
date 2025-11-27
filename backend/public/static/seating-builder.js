@@ -6194,87 +6194,102 @@ if (
   }
 
     function handleStageMouseDown(evt) {
-    if (!stage) return;
+  if (!stage) return;
 
-    // Freehand curve-line drawing
-    if (activeTool === "curve-line") {
-      const pointerPos = stage.getPointerPosition();
-      if (!pointerPos) return;
-      startCurveLine(pointerPos);
-      if (evt.evt) evt.evt.preventDefault();
-      return;
-    }
+  const pointerPos = stage.getPointerPosition();
+  if (!pointerPos) return;
 
-    // Do not pan while another drawing tool is active
-    if (activeTool) return;
-
-    const target = evt.target;
-    const clickedOnEmpty =
-      target === stage ||
-      (target.getLayer && target.getLayer() === gridLayer);
-
-    if (!clickedOnEmpty) return;
-
-    const pointerPos = stage.getPointerPosition();
-    if (!pointerPos) return;
-
-    isPanning = true;
-    lastPanPointerPos = pointerPos;
-    stage.container().style.cursor = "grabbing";
+  // ---- Freehand curve-line: start drawing on mousedown ----
+  if (activeTool === "curve-line") {
+    startCurveLine(pointerPos);
+    if (evt.evt) evt.evt.preventDefault();
+    return;
   }
 
+  // ---- STAIRS: click + drag to create a run of steps ----
+  if (activeTool === "stairs") {
+    startStairsDrawing(pointerPos);
+    if (evt.evt) evt.evt.preventDefault();
+    return;
+  }
 
-     function handleStageMouseMove() {
-    if (!stage) return;
+  // ---- No drawing tool: maybe start panning ----
+  // Do not pan while any creation / drawing tool is active
+  if (activeTool) return;
 
-    // While drawing a curve-line, keep extending the path
-    if (activeTool === "curve-line" && isCurveDrawing && currentLine) {
-      const pos = stage.getPointerPosition();
-      if (!pos) return;
-      updateCurveLine(pos);
-      return;
-    }
+  const target = evt.target;
+  const clickedOnEmpty =
+    target === stage ||
+    (target.getLayer && target.getLayer() === gridLayer);
 
-    // While drawing stairs, update the preview geometry
-    if (activeTool === "stairs" && stairsDraft && stairsStartPos) {
-      const pos = stage.getPointerPosition();
-      if (!pos) return;
-      updateStairsDrawing(pos);
-      return;
-    }
+  if (!clickedOnEmpty) return;
 
-    if (!isPanning || !lastPanPointerPos) return;
+  isPanning = true;
+  lastPanPointerPos = pointerPos;
+  stage.container().style.cursor = "grabbing";
+}
 
+
+
+function handleStageMouseMove() {
+  if (!stage) return;
+
+  // While drawing a curve-line, keep extending the path
+  if (activeTool === "curve-line" && isCurveDrawing && currentLine) {
     const pos = stage.getPointerPosition();
     if (!pos) return;
-
-    const dx = pos.x - lastPanPointerPos.x;
-    const dy = pos.y - lastPanPointerPos.y;
-
-    stage.position({
-      x: stage.x() + dx,
-      y: stage.y() + dy,
-    });
-
-    stage.batchDraw();
-    lastPanPointerPos = pos;
+    updateCurveLine(pos);
+    return;
   }
 
-
-   function handleStageMouseUp() {
-    if (!stage) return;
-
-    // Finish freehand curve-line on mouse up
-    if (activeTool === "curve-line" && isCurveDrawing) {
-      finishCurveLine(true);
-      return;
-    }
-
-    if (!isPanning) return;
-    isPanning = false;
-    lastPanPointerPos = null;
-    updateDefaultCursor();
+  // While drawing stairs, update the preview geometry
+  if (activeTool === "stairs" && stairsDraft && stairsStartPos) {
+    const pos = stage.getPointerPosition();
+    if (!pos) return;
+    updateStairsDrawing(pos);
+    return;
   }
+
+  if (!isPanning || !lastPanPointerPos) return;
+
+  const pos = stage.getPointerPosition();
+  if (!pos) return;
+
+  const dx = pos.x - lastPanPointerPos.x;
+  const dy = pos.y - lastPanPointerPos.y;
+
+  stage.position({
+    x: stage.x() + dx,
+    y: stage.y() + dy,
+  });
+
+  stage.batchDraw();
+  lastPanPointerPos = pos;
+}
+
+
+function handleStageMouseUp() {
+  if (!stage) return;
+
+  // ---- Finish freehand curve-line on mouse up ----
+  if (activeTool === "curve-line" && isCurveDrawing) {
+    finishCurveLine(true);
+    return;
+  }
+
+  // ---- Finish stairs on mouse up (commit the run of steps) ----
+  if (activeTool === "stairs" && stairsDraft) {
+    finishStairsDrawing(true);
+    return;
+  }
+
+  // ---- End panning ----
+  if (!isPanning) return;
+  isPanning = false;
+  lastPanPointerPos = null;
+  updateDefaultCursor();
+}
+
 
 
   // ---------- Buttons ----------
