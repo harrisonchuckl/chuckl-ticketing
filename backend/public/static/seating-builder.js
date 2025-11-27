@@ -4569,15 +4569,17 @@ if (shapeType === "row-seats") {
         }
       );
 
-      addColorField("Fill colour", fillColor, (val) => {
+            addColorField("Fill colour", fillColor, (val) => {
         node.setAttr("lineFillColor", val || "#e5e7eb");
         if (node.getAttr("lineFillEnabled")) {
           syncLineFillShape(node);
         }
-      );
+      });
 
       return;
     }
+
+
 
     // ---- Stairs ----
     if (shapeType === "stairs") {
