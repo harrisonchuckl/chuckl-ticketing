@@ -6665,7 +6665,7 @@ stage.on("mouseleave", () => {
       }
     });
   }
-
+}
   // ---------- Load existing layout ----------
 
   function initTableCounterFromExisting() {
