@@ -278,11 +278,6 @@ if (window.__TIXALL_SEATMAP_BUILDER_ACTIVE__) {
   const GRID_SIZE = 32;
   const STAGE_PADDING = 0;
 
-  // ---------- Config ----------
-
-  const GRID_SIZE = 32;
-  const STAGE_PADDING = 0;
-
   // Zoom config – keep things stable (no super extreme zoom-out)
   const MIN_ZOOM = 0.2;   // 20% (still see a lot, but maths stays sane)
   const MAX_ZOOM = 4;     // 400% zoom in
