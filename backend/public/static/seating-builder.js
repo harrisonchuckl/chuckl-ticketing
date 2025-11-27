@@ -5234,7 +5234,7 @@ function addNumberField(labelText, value, min, step, onCommit) {
       tShape === "exit" ||
       tShape === "section" ||
       tShape === "square" ||
-      tShape === "circle" ||Shape
+      tShape === "circle" ||
       tShape === "symbol"
     ) {
       const scaleX = node.scaleX();
