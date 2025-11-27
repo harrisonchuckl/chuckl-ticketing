@@ -225,54 +225,6 @@ if (window.__TIXALL_SEATMAP_BUILDER_ACTIVE__) {
 
   ensureSidebarDom();
 
-  // ---------- Stage initialisation ----------
-
-  function initStage() {
-    // Avoid double-creating the stage
-    if (stage) return;
-
-    // Fallback sizes if container hasn't been sized yet
-    const width =
-      container.clientWidth || container.offsetWidth || 1200;
-    const height =
-      container.clientHeight || container.offsetHeight || 800;
-
-    // Store base sizes (used by resizeStageToContainer)
-    baseStageWidth = width;
-    baseStageHeight = height;
-
-    // Main Konva stage
-    stage = new Konva.Stage({
-      container: container,
-      width,
-      height,
-    });
-
-    // Layers: grid at the back, then map, then overlay (transformers, guides)
-    gridLayer = new Konva.Layer({ name: "grid-layer", listening: false });
-    mapLayer = new Konva.Layer({ name: "map-layer" });
-    overlayLayer = new Konva.Layer({ name: "overlay-layer" });
-
-    stage.add(gridLayer);
-    stage.add(mapLayer);
-    stage.add(overlayLayer);
-
-    // Single transformer reused for selections
-    transformer = new Konva.Transformer({
-      rotateEnabled: true,
-      ignoreStroke: true,
-      // keep anchors but we won’t allow stretching seats in other code
-      enabledAnchors: [
-        "top-left",
-        "top-right",
-        "bottom-left",
-        "bottom-right",
-      ],
-    });
-
-    overlayLayer.add(transformer);
-  }
-
   // ---------- Config ----------
 
   const GRID_SIZE = 32;
@@ -560,22 +512,6 @@ window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
     updateToolButtonActiveState(activeTool);
   }
 
-// Keep cursor consistent when external code calls updateDefaultCursor()
-// (e.g. on mouseleave / blur handlers).
-function updateDefaultCursor() {
-  if (!mapLayer || typeof mapLayer.getStage !== "function") return;
-
-  const stageRef = mapLayer.getStage();
-  if (!stageRef || !stageRef.container) return;
-
-  if (!activeTool) {
-    // No active drawing tool: treat as pan/selection mode
-    stageRef.container().style.cursor = "grab";
-  } else {
-    // Any placement / drawing tool active
-    stageRef.container().style.cursor = "crosshair";
-  }
-}
 
 
 
@@ -781,7 +717,7 @@ function updateDefaultCursor() {
 
   // ---------- Line tool helpers (multi-point line) ----------
 
-       function finishCurrentLine(commit) {
+      function finishCurrentLine(commit) {
     if (!currentLineGroup) return;
 
     if (!commit || currentLinePoints.length < 4) {
@@ -795,8 +731,6 @@ function updateDefaultCursor() {
       }
       ensureHitRect(currentLineGroup);
       buildLineHandles(currentLineGroup);
-      // NEW: keep fill helper in sync with the finalised points
-      syncLineFillShape(currentLineGroup);
       // Auto-select the finished line so you can edit it immediately
       selectNode(currentLineGroup);
     }
@@ -813,7 +747,6 @@ function updateDefaultCursor() {
       pushHistory();
     }
   }
-
 
     // ----- Curve-line freehand helpers -----
 
@@ -950,7 +883,7 @@ function updateDefaultCursor() {
     mapLayer && mapLayer.batchDraw();
   }
 
-    function finishCurveLine(commit) {
+  function finishCurveLine(commit) {
     if (!currentLineGroup) return;
 
     const hasEnoughPoints = curveRawPoints && curveRawPoints.length >= 4;
@@ -963,15 +896,14 @@ function updateDefaultCursor() {
       const smoothed = smoothCurvePoints(curveRawPoints, 10);
       currentLinePoints = smoothed.slice();
 
-      if (currentLine) {
+           if (currentLine) {
         currentLine.points(currentLinePoints);
         currentLine.tension(0.6); // slightly more curve
       }
 
+
       ensureHitRect(currentLineGroup);
       buildLineHandles(currentLineGroup);
-      // NEW: maintain fill for curved lines too
-      syncLineFillShape(currentLineGroup);
       selectNode(currentLineGroup);
     }
 
@@ -987,7 +919,6 @@ function updateDefaultCursor() {
       pushHistory();
     }
   }
-
 
 
   function handleLineClick(pointerPos, toolType) {
@@ -1246,76 +1177,15 @@ function updateDefaultCursor() {
     hitRect.moveToBottom();
   }
 
-    // ----- Helper: maintain a closed fill shape for line / curve-line -----
-  function syncLineFillShape(group) {
-    if (!(group instanceof Konva.Group)) return;
+  // ----- Editable line handles (for line + curved line) -----
 
-    const shapeType = group.getAttr("shapeType") || group.name();
-    if (shapeType !== "line" && shapeType !== "curve-line") return;
-
-    const fillEnabled = !!group.getAttr("lineFillEnabled");
-    let fillColor = group.getAttr("lineFillColor") || "#e5e7eb";
-
-    // Main stroke line (ignore any helper fill line)
-    const strokeLine = group.findOne(
-      (n) => n instanceof Konva.Line && !n.getAttr("isLineFill")
-    );
-    if (!strokeLine) return;
-
-    // Existing fill helper if any
-    let fillLine = group.findOne(
-      (n) => n instanceof Konva.Line && n.getAttr("isLineFill")
-    );
-
-    // If fill is turned off, remove the helper and bail
-    if (!fillEnabled) {
-      if (fillLine) {
-        fillLine.destroy();
-        ensureHitRect(group);
-        if (mapLayer) mapLayer.batchDraw();
-      }
-      return;
-    }
-
-    // Create helper if missing
-    if (!fillLine) {
-      fillLine = new Konva.Line({
-        points: strokeLine.points().slice(),
-        closed: true,
-        fill: fillColor,
-        listening: false,
-        name: "line-fill",
-      });
-      fillLine.setAttr("isLineFill", true);
-
-      group.add(fillLine);
-      // We want the fill underneath handles & hit-rect; hit-rect will be
-      // moved to the bottom by ensureHitRect, so this is fine.
-      fillLine.moveToBottom();
-    }
-
-    const pts = strokeLine.points().slice();
-    fillLine.points(pts);
-    fillLine.closed(true);            // invisible extra edge between first & last
-    fillLine.fill(fillColor);
-    fillLine.strokeEnabled(false);    // no visible outline
-    fillLine.hitStrokeWidth(0);
-    fillLine.listening(false);
-
-    ensureHitRect(group);
-  }
-
-   // ----- Editable line handles (for line + curved line) -----
   function buildLineHandles(group) {
     if (!(group instanceof Konva.Group)) return;
 
     const shapeType = group.getAttr("shapeType") || group.name();
     if (shapeType !== "line" && shapeType !== "curve-line") return;
 
-    // Work on the main stroke line, not the helper fill
-    const line = group.findOne(
-      (n) => n instanceof Konva.Line && !n.getAttr("isLineFill")
-    );
+    const line = group.findOne((n) => n instanceof Konva.Line);
     if (!line) return;
 
     // Remove any existing handles
@@ -1351,14 +1221,11 @@ function updateDefaultCursor() {
         p[idx + 1] = handle.y();
 
         line.points(p);
-        // keep the fill polygon in sync with the edited points
-        syncLineFillShape(group);
         ensureHitRect(group);
         mapLayer && mapLayer.batchDraw();
       });
 
       handle.on("dragend", () => {
-        syncLineFillShape(group);
         ensureHitRect(group);
         mapLayer && mapLayer.batchDraw();
         pushHistory();
@@ -1370,7 +1237,6 @@ function updateDefaultCursor() {
     showLineHandles(group, true);
     group.draw();
   }
-
 
   function showLineHandles(group, visible) {
     if (!(group instanceof Konva.Group)) return;
@@ -1523,35 +1389,6 @@ function updateDefaultCursor() {
     return String(n);
   }
 
-    // Keep seat / row / table labels upright when the group is rotated
-  function keepLabelsUpright(node) {
-    if (!node || typeof node.find !== "function") return;
-
-    const groupRotation = typeof node.rotation === "function"
-      ? node.rotation() || 0
-      : 0;
-
-    node
-      .find((n) => {
-        if (!n.getClassName || !n.getAttr) return false;
-        const isText = n.getClassName() === "Text";
-        if (!isText) return false;
-
-        // seat and row labels are flagged with custom attrs,
-        // table label is named "table-label"
-        return (
-          n.getAttr("isSeatLabel") ||
-          n.getAttr("isRowLabel") ||
-          n.name() === "table-label"
-        );
-      })
-      .forEach((labelNode) => {
-        // Counter–rotate text so it appears upright on screen
-        labelNode.rotation(-groupRotation);
-      });
-  }
-
-
   // Inline text editing
     // Inline text editing
   function beginInlineTextEdit(textNode, onCommit) {
@@ -1668,6 +1505,7 @@ function updateDefaultCursor() {
   }
 
      // ---------- Shape factories ----------
+
   // Shared styling for basic shapes (section / square / circle)
   function applyBasicShapeStyle(node) {
     if (!(node instanceof Konva.Group)) return;
@@ -1683,37 +1521,6 @@ function updateDefaultCursor() {
 
     const body = getBodyRect(node);
     if (!body) return;
-
-    // --- Corner radius (for rectangular shapes like section / square) ---
-    let cornerRadius = node.getAttr("shapeCornerRadius");
-    if (!Number.isFinite(Number(cornerRadius))) {
-      let existing = 0;
-
-      if (typeof body.cornerRadius === "function") {
-        const cr = body.cornerRadius();
-        if (Array.isArray(cr)) {
-          existing = Number(cr[0]) || 0;
-        } else if (Number.isFinite(Number(cr))) {
-          existing = Number(cr);
-        }
-      }
-
-      if (!Number.isFinite(existing)) existing = 0;
-
-      if (!existing) {
-        if (shapeType === "section") existing = 8;
-        else if (shapeType === "square") existing = 4;
-        else existing = 0;
-      }
-
-      cornerRadius = existing;
-    }
-    cornerRadius = Math.max(0, Number(cornerRadius));
-    node.setAttr("shapeCornerRadius", cornerRadius);
-
-    if (body instanceof Konva.Rect) {
-      body.cornerRadius(cornerRadius);
-    }
 
     // --- Fill enabled ---
     let fillEnabled = node.getAttr("shapeFillEnabled");
@@ -1774,7 +1581,6 @@ function updateDefaultCursor() {
       body.dash([]); // solid
     }
   }
-
 
     // ---------- Arc style helper (single line vs outline band) ----------
 
@@ -2117,15 +1923,10 @@ function updateDefaultCursor() {
     });
 
     group.add(rect);
-
-    // default corner radius for sections
-    group.setAttr("shapeCornerRadius", 8);
-
     applyBasicShapeStyle(group);
     ensureHitRect(group);
     return group;
   }
-
 
 
  function createStage(x, y) {
@@ -2483,15 +2284,10 @@ function createBar(x, y) {
     });
 
     group.add(rect);
-
-    // default corner radius for squares
-    group.setAttr("shapeCornerRadius", 4);
-
     applyBasicShapeStyle(group);
     ensureHitRect(group);
     return group;
   }
-
   function createCircle(x, y) {
     const radius = 50;
 
@@ -2735,49 +2531,46 @@ function createBar(x, y) {
 
 
 
-  function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
-  const group = new Konva.Group({
-    x: x,
-    y: y,
-    draggable: true,
-    name: "row-seats",
-    shapeType: "row-seats",
-  });
+    function createRowOfSeats(x, y, seatsPerRow = 10, rowCount = 1) {
+    const group = new Konva.Group({
+      x: x,
+      y: y,
+      draggable: true,
+      name: "row-seats",
+      shapeType: "row-seats",
+    });
 
-  // core config
-  group.setAttr("seatsPerRow", seatsPerRow);
-  group.setAttr("rowCount", rowCount);
+    // core config
+    group.setAttr("seatsPerRow", seatsPerRow);
+    group.setAttr("rowCount", rowCount);
 
-  // NEW: per-row seat counts
-  group.setAttr("everyRowSameSeats", true);
-  group.setAttr("rowSeatCounts", null);
+    // NEW: per-row seat counts
+    group.setAttr("everyRowSameSeats", true);
+    group.setAttr("rowSeatCounts", null);
 
-  const mode = globalSeatLabelMode || "numbers";
-  group.setAttr("seatLabelMode", mode);
-  group.setAttr("seatStart", 1);
-  group.setAttr("rowLabelPrefix", "");
-  group.setAttr("rowLabelStart", 0);
+    const mode = globalSeatLabelMode || "numbers";
+    group.setAttr("seatLabelMode", mode);
+    group.setAttr("seatStart", 1);
+    group.setAttr("rowLabelPrefix", "");
+    group.setAttr("rowLabelStart", 0);
 
-  // New: unified row-label position
-  group.setAttr("rowLabelPosition", "left");
+    // New: unified row-label position
+    group.setAttr("rowLabelPosition", "left");
 
-  // Legacy flag kept for backwards-compatibility with old layouts
-  group.setAttr("rowLabelBothSides", false);
+    // Legacy flag kept for backwards-compatibility with old layouts
+    group.setAttr("rowLabelBothSides", false);
 
-  // NEW: default seat alignment (centre)
-  group.setAttr("alignment", "center");
+    group.setAttr("curve", 0);
+    group.setAttr("rowOrder", "asc");
 
-  group.setAttr("curve", 0);
-  group.setAttr("rowOrder", "asc");
+    updateRowGroupGeometry(group, seatsPerRow, rowCount);
+    ensureHitRect(group);
 
-  updateRowGroupGeometry(group, seatsPerRow, rowCount);
-  ensureHitRect(group);
-
-  return group;
-}
+    return group;
+  }
 
 
-function updateRowGroupGeometry(group, seatsPerRow, rowCount) {
+  function updateRowGroupGeometry(group, seatsPerRow, rowCount) {
   if (!(group instanceof Konva.Group)) return;
 
   // --- Core seatsPerRow / rowCount normalisation ---
@@ -2848,7 +2641,6 @@ function updateRowGroupGeometry(group, seatsPerRow, rowCount) {
   // Keep legacy flag roughly in sync
   group.setAttr("rowLabelBothSides", rowLabelPosition === "both");
 
-  // NEW: seat alignment for the row (left / center / right)
   const alignmentRaw = group.getAttr("alignment") || "center";
   const alignment =
     alignmentRaw === "left" ||
@@ -2856,7 +2648,6 @@ function updateRowGroupGeometry(group, seatsPerRow, rowCount) {
     alignmentRaw === "center"
       ? alignmentRaw
       : "center";
-  group.setAttr("alignment", alignment);
 
   const rowOrderRaw = group.getAttr("rowOrder") || "asc";
   const rowOrder = rowOrderRaw === "desc" ? "desc" : "asc";
@@ -2886,14 +2677,11 @@ function updateRowGroupGeometry(group, seatsPerRow, rowCount) {
 
   function computeSeatX(i, rowSeats) {
     if (alignment === "left") {
-      // all rows left-aligned (left edges in a straight line)
       return i * spacing;
     }
     if (alignment === "right") {
-      // all rows right-aligned (right edges in a straight line)
       return -(rowSeats - 1) * spacing + i * spacing;
     }
-    // centre (default): seats balanced around the block centre
     const centerIndex = (rowSeats - 1) / 2;
     return (i - centerIndex) * spacing;
   }
@@ -2943,7 +2731,7 @@ function updateRowGroupGeometry(group, seatsPerRow, rowCount) {
         continue;
       }
 
-      const seat = new Konva.Circle({
+            const seat = new Konva.Circle({
         x: sx,
         y: rowY,
         radius: seatRadius,
@@ -2965,6 +2753,7 @@ function updateRowGroupGeometry(group, seatsPerRow, rowCount) {
       applySeatKindVisualToCircle(seat);
 
       group.add(seat);
+
 
       if (seatLabelMode !== "none") {
         const labelText = seatLabelFromIndex(seatLabelMode, i, seatStart);
@@ -3044,7 +2833,6 @@ function updateRowGroupGeometry(group, seatsPerRow, rowCount) {
   ensureHitRect(group);
   keepLabelsUpright(group);
 }
-
 
 
   function updateCircularTableGeometry(group, seatCount) {
@@ -4184,27 +3972,18 @@ function addNumberField(labelText, value, min, step, onCommit) {
 
     const shapeType = node.getAttr("shapeType") || node.name();
 
-   // ---- Row blocks ----
-if (shapeType === "row-seats") {
-  const seatsPerRow = Number(node.getAttr("seatsPerRow") ?? 10);
-  const rowCount = Number(node.getAttr("rowCount") ?? 1);
-  const seatLabelMode = node.getAttr("seatLabelMode") || "numbers";
-  const seatStart = Number(node.getAttr("seatStart") ?? 1);
-  const rowLabelPrefix = node.getAttr("rowLabelPrefix") || "";
-  const rowLabelStart = Number(node.getAttr("rowLabelStart") ?? 0);
-  const curve = Number.isFinite(Number(node.getAttr("curve")))
-    ? Number(node.getAttr("curve"))
-    : 0;
-  const rowOrder = node.getAttr("rowOrder") || "asc";
-
-  // NEW: seat alignment (left / centre / right)
-  const alignmentRawInspector = node.getAttr("alignment") || "center";
-  const alignment =
-    alignmentRawInspector === "left" ||
-    alignmentRawInspector === "right" ||
-    alignmentRawInspector === "center"
-      ? alignmentRawInspector
-      : "center";
+    // ---- Row blocks ----
+    if (shapeType === "row-seats") {
+      const seatsPerRow = Number(node.getAttr("seatsPerRow") ?? 10);
+      const rowCount = Number(node.getAttr("rowCount") ?? 1);
+      const seatLabelMode = node.getAttr("seatLabelMode") || "numbers";
+      const seatStart = Number(node.getAttr("seatStart") ?? 1);
+      const rowLabelPrefix = node.getAttr("rowLabelPrefix") || "";
+      const rowLabelStart = Number(node.getAttr("rowLabelStart") ?? 0);
+      const curve = Number.isFinite(Number(node.getAttr("curve")))
+        ? Number(node.getAttr("curve"))
+        : 0;
+      const rowOrder = node.getAttr("rowOrder") || "asc";
 
       // New: unified row-label position
       let rowLabelPosition = node.getAttr("rowLabelPosition");
@@ -4336,23 +4115,6 @@ if (shapeType === "row-seats") {
         }
       );
 
-        addSelectField(
-        "Seat alignment",
-        alignment,
-        [
-          { value: "left", label: "Left (align left edges)" },
-          { value: "center", label: "Centre (balanced)" },
-          { value: "right", label: "Right (align right edges)" },
-        ],
-        (val) => {
-          const allowed = ["left", "center", "right"];
-          const safe = allowed.includes(val) ? val : "center";
-          node.setAttr("alignment", safe);
-          rebuild();
-        }
-      );
-
-
       // NEW: Row label position selector
       addSelectField(
         "Row label position",
@@ -4428,55 +4190,6 @@ if (shapeType === "row-seats") {
 
       return;
     }
-
-        // ---- Sections & squares ----
-    if (shapeType === "section" || shapeType === "square") {
-      addTitle(shapeType === "section" ? "Section" : "Square");
-
-      const bodyRect = getBodyRect(node);
-
-      // Read current corner radius from the group attr first
-      let currentCorner = Number(node.getAttr("shapeCornerRadius"));
-
-      // Fallback to whatever the body rect is using, if needed
-      if (!Number.isFinite(currentCorner) || currentCorner < 0) {
-        currentCorner = 0;
-        if (bodyRect && typeof bodyRect.cornerRadius === "function") {
-          const cr = bodyRect.cornerRadius();
-          if (Array.isArray(cr)) {
-            currentCorner = Number(cr[0]) || 0;
-          } else if (Number.isFinite(Number(cr))) {
-            currentCorner = Number(cr);
-          }
-        }
-      }
-
-      if (!Number.isFinite(currentCorner) || currentCorner < 0) {
-        currentCorner = 0;
-      }
-
-      addNumberField(
-        "Corner radius (px)",
-        currentCorner,
-        0,
-        1,
-        (val) => {
-          const v = Math.max(0, val);
-
-          // Persist on the group
-          node.setAttr("shapeCornerRadius", v);
-
-          // Re-apply unified shape styling (uses shapeCornerRadius)
-          applyBasicShapeStyle(node);
-
-          // Keep hit-rect in sync with new geometry
-          ensureHitRect(node);
-        }
-      );
-
-      return;
-    }
-
 
     // ---- Circular tables ----
     if (shapeType === "circular-table") {
@@ -4573,7 +4286,7 @@ if (shapeType === "row-seats") {
         );
       });
 
-     addNumberField(
+      addNumberField(
         "Seats on long side",
         longSideSeats,
         0,
@@ -4581,7 +4294,6 @@ if (shapeType === "row-seats") {
         (val) => {
           const currentShort =
             node.getAttr("shortSideSeats") ?? shortSideSeats;
-          node.setAttr("longSideSeats", val);
           updateRectTableGeometry(node, val, currentShort);
           mapLayer.batchDraw();
           updateSeatCount();
@@ -4597,7 +4309,6 @@ if (shapeType === "row-seats") {
         (val) => {
           const currentLong =
             node.getAttr("longSideSeats") ?? longSideSeats;
-          node.setAttr("shortSideSeats", val);
           updateRectTableGeometry(node, currentLong, val);
           mapLayer.batchDraw();
           updateSeatCount();
@@ -4631,52 +4342,7 @@ if (shapeType === "row-seats") {
       return;
     }
 
-        // ---- Lines & curves ----
-    if (shapeType === "line" || shapeType === "curve-line") {
-      const rotation = Math.round(node.rotation() || 0);
-      const fillEnabled = !!node.getAttr("lineFillEnabled");
-      const fillColor = node.getAttr("lineFillColor") || "#e5e7eb";
-
-      addTitle("Line / curve");
-
-      // Rotation
-      addNumberField(
-        "Rotation (deg)",
-        rotation,
-        -360,
-        1,
-        (val) => {
-          const angle = normaliseAngle(val);
-          node.rotation(angle);
-          // keep fill + handles sensible
-          syncLineFillShape(node);
-          if (overlayLayer) overlayLayer.batchDraw();
-        }
-      );
-
-      // NEW: interior fill controls
-      addCheckboxField(
-        "Fill inside shape",
-        fillEnabled,
-        (checked) => {
-          node.setAttr("lineFillEnabled", !!checked);
-          syncLineFillShape(node);
-        }
-      );
-
-            addColorField("Fill colour", fillColor, (val) => {
-        node.setAttr("lineFillColor", val || "#e5e7eb");
-        if (node.getAttr("lineFillEnabled")) {
-          syncLineFillShape(node);
-        }
-      });
-
-      return;
-    }
-
-
-
-       // ---- Stairs ----
+        // ---- Stairs ----
     if (shapeType === "stairs") {
       const length =
         Number(node.getAttr("stairsLength")) || GRID_SIZE * 4;
@@ -4763,12 +4429,9 @@ if (shapeType === "row-seats") {
       return;
     }
 
-    // ---- Line / Curved line ----
+       // ---- Line / Curved line ----
     if (shapeType === "line" || shapeType === "curve-line") {
-      // Work on the main stroke line, not the helper fill polygon
-      const lineShape = node.findOne(
-        (n) => n instanceof Konva.Line && !n.getAttr("isLineFill")
-      );
+      const lineShape = node.findOne((n) => n instanceof Konva.Line);
 
       addTitle(shapeType === "curve-line" ? "Curved line" : "Line");
 
@@ -4789,12 +4452,6 @@ if (shapeType === "row-seats") {
       const dashArr = lineShape.dash && lineShape.dash();
       const lineStyle =
         dashArr && dashArr.length ? "dashed" : "solid";
-
-      // NEW: fill settings
-      const fillEnabled =
-        node.getAttr("lineFillEnabled") === true;
-      const fillColor =
-        node.getAttr("lineFillColor") || "#e5e7eb";
 
       // Rotation at group level
       addNumberField(
@@ -4844,10 +4501,8 @@ if (shapeType === "row-seats") {
         }
       );
 
-    
-
-  
-
+      return;
+    }
 
     // ---- Arrow ----
     if (shapeType === "arrow") {
@@ -6217,38 +5872,6 @@ if (
     overlayLayer.add(transformer);
   }
 
-      // --- STAIRS: live preview while dragging ---
-stage.on("mousemove touchmove", () => {
-  if (!mapLayer) return;
-
-  // Only do anything if we're currently drawing stairs
-  if (activeTool !== "stairs" || !stairsDraft || !stairsStartPos) {
-    return;
-  }
-
-  const pos = mapLayer.getRelativePointerPosition();
-  if (!pos) return;
-
-  updateStairsDrawing(pos);
-});
-
-      // --- STAIRS: commit on mouseup / touchend ---
-stage.on("mouseup touchend", () => {
-  if (activeTool === "stairs" && stairsDraft) {
-    // true = commit the stairs group as a real, draggable object
-    finishStairsDrawing(true);
-  }
-});
-
-// --- STAIRS: cancel if pointer leaves the canvas while drawing ---
-stage.on("mouseleave", () => {
-  if (activeTool === "stairs" && stairsDraft) {
-    // false = cancel this draft stairs
-    finishStairsDrawing(false);
-  }
-});
-
-
   // ---------- Canvas interactions ----------
 
       // ---------- Canvas interactions: click / selection / placement ----------
@@ -6729,7 +6352,7 @@ stage.on("mouseleave", () => {
       }
     });
   }
-}
+
   // ---------- Load existing layout ----------
 
   function initTableCounterFromExisting() {
