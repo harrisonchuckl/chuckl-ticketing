@@ -6252,6 +6252,25 @@ if (
       height,
     });
 
+      // --- Multi-shape placement via Multi tool ---
+  stage.on("mousedown.multi-shape", () => {
+    if (activeTool !== "multi-shape") return;
+    if (!mapLayer) return;
+
+    const pointerPos = stage.getPointerPosition();
+    if (!pointerPos) return;
+
+    const g = createMultiShape(pointerPos.x, pointerPos.y);
+    mapLayer.add(g);
+    attachNodeBehaviour(g);
+    sbNormalizeZOrder(g);
+
+    mapLayer.batchDraw();
+    updateSeatCount();
+    pushHistory();
+  });
+
+
     const domContainer = stage.container();
     domContainer.style.backgroundImage = "none";
     domContainer.style.backgroundColor = "#f9fafb";
