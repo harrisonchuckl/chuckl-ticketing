@@ -1459,6 +1459,35 @@ window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
     return String(n);
   }
 
+    // Keep seat / row / table labels upright when the group is rotated
+  function keepLabelsUpright(node) {
+    if (!node || typeof node.find !== "function") return;
+
+    const groupRotation = typeof node.rotation === "function"
+      ? node.rotation() || 0
+      : 0;
+
+    node
+      .find((n) => {
+        if (!n.getClassName || !n.getAttr) return false;
+        const isText = n.getClassName() === "Text";
+        if (!isText) return false;
+
+        // seat and row labels are flagged with custom attrs,
+        // table label is named "table-label"
+        return (
+          n.getAttr("isSeatLabel") ||
+          n.getAttr("isRowLabel") ||
+          n.name() === "table-label"
+        );
+      })
+      .forEach((labelNode) => {
+        // Counter–rotate text so it appears upright on screen
+        labelNode.rotation(-groupRotation);
+      });
+  }
+
+
   // Inline text editing
     // Inline text editing
   function beginInlineTextEdit(textNode, onCommit) {
