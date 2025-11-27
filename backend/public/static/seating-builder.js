@@ -560,6 +560,22 @@ window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
     updateToolButtonActiveState(activeTool);
   }
 
+// Keep cursor consistent when external code calls updateDefaultCursor()
+// (e.g. on mouseleave / blur handlers).
+function updateDefaultCursor() {
+  if (!mapLayer || typeof mapLayer.getStage !== "function") return;
+
+  const stageRef = mapLayer.getStage();
+  if (!stageRef || !stageRef.container) return;
+
+  if (!activeTool) {
+    // No active drawing tool: treat as pan/selection mode
+    stageRef.container().style.cursor = "grab";
+  } else {
+    // Any placement / drawing tool active
+    stageRef.container().style.cursor = "crosshair";
+  }
+}
 
 
 
