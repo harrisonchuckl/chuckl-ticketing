@@ -4509,7 +4509,7 @@ if (shapeType === "row-seats") {
         );
       });
 
-      addNumberField(
+     addNumberField(
         "Seats on long side",
         longSideSeats,
         0,
@@ -4517,6 +4517,7 @@ if (shapeType === "row-seats") {
         (val) => {
           const currentShort =
             node.getAttr("shortSideSeats") ?? shortSideSeats;
+          node.setAttr("longSideSeats", val);
           updateRectTableGeometry(node, val, currentShort);
           mapLayer.batchDraw();
           updateSeatCount();
@@ -4532,6 +4533,7 @@ if (shapeType === "row-seats") {
         (val) => {
           const currentLong =
             node.getAttr("longSideSeats") ?? longSideSeats;
+          node.setAttr("shortSideSeats", val);
           updateRectTableGeometry(node, currentLong, val);
           mapLayer.batchDraw();
           updateSeatCount();
