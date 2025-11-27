@@ -4336,6 +4336,55 @@ if (shapeType === "row-seats") {
       return;
     }
 
+        // ---- Sections & squares ----
+    if (shapeType === "section" || shapeType === "square") {
+      addTitle(shapeType === "section" ? "Section" : "Square");
+
+      const bodyRect = getBodyRect(node);
+
+      // Read current corner radius from the group attr first
+      let currentCorner = Number(node.getAttr("shapeCornerRadius"));
+
+      // Fallback to whatever the body rect is using, if needed
+      if (!Number.isFinite(currentCorner) || currentCorner < 0) {
+        currentCorner = 0;
+        if (bodyRect && typeof bodyRect.cornerRadius === "function") {
+          const cr = bodyRect.cornerRadius();
+          if (Array.isArray(cr)) {
+            currentCorner = Number(cr[0]) || 0;
+          } else if (Number.isFinite(Number(cr))) {
+            currentCorner = Number(cr);
+          }
+        }
+      }
+
+      if (!Number.isFinite(currentCorner) || currentCorner < 0) {
+        currentCorner = 0;
+      }
+
+      addNumberField(
+        "Corner radius (px)",
+        currentCorner,
+        0,
+        1,
+        (val) => {
+          const v = Math.max(0, val);
+
+          // Persist on the group
+          node.setAttr("shapeCornerRadius", v);
+
+          // Re-apply unified shape styling (uses shapeCornerRadius)
+          applyBasicShapeStyle(node);
+
+          // Keep hit-rect in sync with new geometry
+          ensureHitRect(node);
+        }
+      );
+
+      return;
+    }
+
+
     // ---- Circular tables ----
     if (shapeType === "circular-table") {
       const seatCount = node.getAttr("seatCount") || 8;
@@ -6086,6 +6135,38 @@ if (
     });
     overlayLayer.add(transformer);
   }
+
+      // --- STAIRS: live preview while dragging ---
+stage.on("mousemove touchmove", () => {
+  if (!mapLayer) return;
+
+  // Only do anything if we're currently drawing stairs
+  if (activeTool !== "stairs" || !stairsDraft || !stairsStartPos) {
+    return;
+  }
+
+  const pos = mapLayer.getRelativePointerPosition();
+  if (!pos) return;
+
+  updateStairsDrawing(pos);
+});
+
+      // --- STAIRS: commit on mouseup / touchend ---
+stage.on("mouseup touchend", () => {
+  if (activeTool === "stairs" && stairsDraft) {
+    // true = commit the stairs group as a real, draggable object
+    finishStairsDrawing(true);
+  }
+});
+
+// --- STAIRS: cancel if pointer leaves the canvas while drawing ---
+stage.on("mouseleave", () => {
+  if (activeTool === "stairs" && stairsDraft) {
+    // false = cancel this draft stairs
+    finishStairsDrawing(false);
+  }
+});
+
 
   // ---------- Canvas interactions ----------
 
