@@ -740,7 +740,7 @@ router.get("/builder/preview/:showId", (req, res) => {
                   </button>
 
 
-                  <!-- NEW: Square tool -->
+                                    <!-- NEW: Square tool -->
                   <button class="tb-left-item tool-button" data-tool="square">
                     <img
                       class="tb-tool-icon icon-dark"
@@ -753,6 +753,24 @@ router.get("/builder/preview/:showId", (req, res) => {
                       alt="Square (selected)"
                     />
                     <span class="tb-left-label">Square</span>
+                  </button>
+
+                  <!-- NEW: Multi-tool (working tools) -->
+                  <button
+                    class="tb-left-item tool-button"
+                    data-tool="multi"
+                  >
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/multitool-dark.png"
+                      alt="Multi-tool"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/multitool-blue.png"
+                      alt="Multi-tool (selected)"
+                    />
+                    <span class="tb-left-label">Multi-tool</span>
                   </button>
 
                   <!-- NEW: Circle tool -->
