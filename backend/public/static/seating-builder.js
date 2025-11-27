@@ -334,76 +334,38 @@ if (window.__TIXALL_SEATMAP_BUILDER_ACTIVE__) {
   let inspectorEl = null;
 
 
-  // 🔵 Helper: update left-hand tool button state (black ↔ blue icons)
-function updateToolButtonActiveState(currentTool) {
+// Update the main symbols button icon to show the currently-selected symbol
+// (dark when inactive, blue when active – handled by updateToolButtonActiveState)
+function updateSymbolsToolbarIcon(symbolToolNameOrType) {
   try {
-    // IMPORTANT: look at *all* tool buttons, not only .tb-left-item
-    const buttons = document.querySelectorAll(".tool-button[data-tool]");
+    const btn =
+      document.querySelector('.tb-left-item.tool-button[data-tool="symbols"]') ||
+      document.querySelector('.tool-button[data-tool="symbols"]');
+    if (!btn) return;
 
-    // Determine which main button to highlight.
-    let effectiveTool = currentTool;
-    const isSymbolSubTool =
-      currentTool &&
-      (currentTool.startsWith("symbol-") ||
-        currentTool.startsWith("symbol:"));
+    const img = btn.querySelector("img");
+    if (!img) return;
 
-    if (isSymbolSubTool) {
-      effectiveTool = "symbols";
-      if (typeof updateSymbolsToolbarIcon === "function") {
-        updateSymbolsToolbarIcon(currentTool);
-      }
-    }
+    const symbolType = normaliseSymbolTool(symbolToolNameOrType);
 
-    buttons.forEach(function (btn) {
-      const btnTool = btn.getAttribute("data-tool");
-      const isActive = !!effectiveTool && btnTool === effectiveTool;
+    // We control what the "symbols" button uses as its base icons
+    const darkSrc =
+      SYMBOL_ICON_DARK[symbolType] || SYMBOL_ICON_DARK.info;
+    const blueSrc =
+      SYMBOL_ICON_BLUE[symbolType] || SYMBOL_ICON_BLUE.info;
 
-      // Toggle the highlight class
-      if (isActive) {
-        btn.classList.add("is-active");
-      } else {
-        btn.classList.remove("is-active");
-      }
+    img.setAttribute("data-icon-default", darkSrc);
+    img.setAttribute("data-icon-active", blueSrc);
 
-      const img = btn.querySelector("img");
-      if (!img) return;
-
-      // The main "symbols" button’s <img> is driven separately
-      if (btnTool === "symbols") return;
-
-      // --- figure out default / active icon sources ---
-
-      let defaultSrc =
-        btn.getAttribute("data-icon-default") ||
-        img.getAttribute("data-icon-default") ||
-        img.getAttribute("src") ||
-        "";
-
-      let activeSrc =
-        btn.getAttribute("data-icon-active") ||
-        img.getAttribute("data-icon-active") ||
-        "";
-
-      // If no explicit active src, derive it from filename
-      if (!activeSrc && defaultSrc) {
-        if (defaultSrc.includes("-dark")) {
-          activeSrc = defaultSrc.replace("-dark", "-blue");
-        } else if (defaultSrc.includes("-black")) {
-          activeSrc = defaultSrc.replace("-black", "-blue");
-        }
-      }
-
-      // Swap the src based on active state
-      if (isActive && activeSrc) {
-        img.src = activeSrc; // blue icon
-      } else if (defaultSrc) {
-        img.src = defaultSrc; // dark/black icon
-      }
-    });
+    // Respect whether the button is currently active or not
+    const isActive = btn.classList.contains("is-active");
+    img.src = isActive ? blueSrc : darkSrc;
   } catch (e) {
-    console.warn("updateToolButtonActiveState error", e);
+    // eslint-disable-next-line no-console
+    console.warn("updateSymbolsToolbarIcon error", e);
   }
 }
+
 
 
    // Expose so the preview HTML script can also force a refresh after fly-out changes
@@ -4542,7 +4504,7 @@ function addNumberField(labelText, value, min, step, onCommit) {
       return;
     }
 
-    // ---- Text labels ----
+        // ---- Text labels ----
     if (shapeType === "text" || shapeType === "label") {
       const textNode = node.findOne("Text");
       if (!textNode) {
@@ -4566,6 +4528,19 @@ function addNumberField(labelText, value, min, step, onCommit) {
       const initialFontSize = Number(textNode.fontSize()) || 14;
       addNumberField("Font size", initialFontSize, 6, 1, (val) => {
         textNode.fontSize(val);
+        ensureHitRect(node);
+      });
+
+      // 🔵 NEW: text colour (colour picker + hex)
+      const initialColor =
+        (typeof textNode.fill === "function" && textNode.fill()) ||
+        "#111827";
+
+      addColorField("Text colour", initialColor, (val) => {
+        const safe = val || "#111827";
+        if (typeof textNode.fill === "function") {
+          textNode.fill(safe);
+        }
         ensureHitRect(node);
       });
 
