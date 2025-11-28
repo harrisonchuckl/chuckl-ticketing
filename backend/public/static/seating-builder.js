@@ -3368,7 +3368,7 @@ function createBar(x, y) {
   
     // ---------- Selection inspector (right-hand panel) ----------
 
-  function renderInspector(node) {
+  function renderInspector(null) {
     const el = getInspectorElement();
     if (!el) return;
 
