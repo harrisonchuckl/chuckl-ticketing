@@ -5673,7 +5673,7 @@ function addNumberField(labelText, value, min, step, onCommit) {
         }
       );
 
-      addSelectField(
+          addSelectField(
         "Outline style",
         strokeStyle,
         [
@@ -5688,7 +5688,6 @@ function addNumberField(labelText, value, min, step, onCommit) {
       );
 
       return;
-    }
 
     // ---- Fallback for unknown shapes ----
     addTitle("Selection");
@@ -5704,6 +5703,7 @@ function addNumberField(labelText, value, min, step, onCommit) {
 
   // expose for external callers if needed
   window.renderSeatmapInspector = renderInspector;
+
 
   // ---------- Selection / transformer ----------
 
