@@ -439,7 +439,9 @@ window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
 
   // ---------- Helpers: UI / tools ----------
 
-function setActiveTool(tool, opts = {}) {
+            // ---------- Helpers: UI / tools ----------
+  
+   function setActiveTool(tool, opts = {}) {
   // Normalise any alias tool names from the UI so they map onto
   // the real internal tools that the canvas click handler understands.
   if (typeof tool === "string") {
@@ -517,7 +519,7 @@ function setActiveTool(tool, opts = {}) {
     activeTool !== "arrow" &&
     activeTool !== "stairs"
   ) {
-    clearSelectionAndInspector(); // <- make sure this helper exists
+    clearSelection();
   }
 
   if (!mapLayer || !mapLayer.getStage()) return;
@@ -655,7 +657,7 @@ function setActiveTool(tool, opts = {}) {
     mapLayer.draw();
     updateSeatCount();
     updateUndoRedoButtons();
-    ();
+    clearSelection();
 
     isRestoringHistory = false;
   }
@@ -3415,127 +3417,6 @@ function createBar(x, y) {
     // keeps its natural stacking unless you move it manually.
   }
 
-  /**
-   * Create / re-create the global Konva.Transformer used for selection
-   * and resizing.
-   *
-   * - Corner + edge anchors enabled
-   * - Row / table / single-seat groups:
-   *     • rotation allowed
-   *     • scaling (width/height) locked so you can’t stretch seat blocks
-   * - Everything else (stage, bar, exit, square, circle, multi-shape, arc, symbols, text, lines)
-   *     • can be resized via drag handles
-   */
-  function initSeatmapTransformer() {
-    if (!stage || !overlayLayer) return;
-
-    if (transformer && transformer.destroy) {
-      transformer.destroy();
-    }
-
-    let t;
-
-    t = new Konva.Transformer({
-      rotateEnabled: true,
-      ignoreStroke: true,
-      padding: GRID_SIZE * 0.75,
-      enabledAnchors: [
-        "top-left",
-        "top-center",
-        "top-right",
-        "middle-right",
-        "bottom-right",
-        "bottom-center",
-        "bottom-left",
-        "middle-left",
-      ],
-      anchorSize: 8,
-      borderStroke: "#2563eb",
-      borderStrokeWidth: 1.2,
-      anchorStroke: "#2563eb",
-      anchorFill: "#eff6ff",
-      anchorCornerRadius: 4,
-      /**
-       * Control which types are allowed to be scaled.
-       * - row-seats / tables / single-seat: lock width/height but allow rotation
-       * - others: allow scaling but clamp to a sensible minimum size
-       */
-      boundBoxFunc: (oldBox, newBox) => {
-        // If transformer hasn't been attached yet, play safe
-        const nodes = t && t.nodes ? t.nodes() : [];
-        const primary = nodes && nodes.length ? nodes[0] : null;
-        const type =
-          primary && (primary.getAttr("shapeType") || primary.name());
-
-        const isSeatGroup =
-          type === "row-seats" ||
-          type === "rect-table" ||
-          type === "circular-table" ||
-          type === "single-seat";
-
-        const result = {
-          ...newBox,
-        };
-
-        if (isSeatGroup) {
-          // Lock width/height (blocks scaling) but let rotation go through
-          result.width = oldBox.width;
-          result.height = oldBox.height;
-          return result;
-        }
-
-        // For everything else, clamp very small sizes but allow normal scaling
-        const minSize = GRID_SIZE * 2;
-        if (Math.abs(newBox.width) < minSize) {
-          result.width = oldBox.width;
-        }
-        if (Math.abs(newBox.height) < minSize) {
-          result.height = oldBox.height;
-        }
-
-        return result;
-      },
-    });
-
-    transformer = t;
-    overlayLayer.add(transformer);
-
-    // When a transform finishes (resize or rotate), normalise + push history
-    transformer.on("transformend", () => {
-      const nodes = transformer.nodes ? transformer.nodes() : [];
-
-      nodes.forEach((n) => {
-        if (!n) return;
-        // Keep hit rects in sync
-        ensureHitRect(n);
-
-        // Keep labels upright for rows / tables / seats
-        if (typeof keepLabelsUpright === "function") {
-          keepLabelsUpright(n);
-        }
-
-        sbNormalizeZOrder(n);
-      });
-
-      if (mapLayer && mapLayer.batchDraw) {
-        mapLayer.batchDraw();
-      }
-      if (overlayLayer && overlayLayer.batchDraw) {
-        overlayLayer.batchDraw();
-      }
-      pushHistory();
-
-      if (nodes.length === 1) {
-        renderInspector(nodes[0]);
-      } else {
-        renderInspector(null);
-      }
-    });
-
-    if (overlayLayer && overlayLayer.batchDraw) {
-      overlayLayer.batchDraw();
-    }
-  }
 
   
     // ---------- Selection inspector (right-hand panel) ----------
@@ -5701,116 +5582,103 @@ function addNumberField(labelText, value, min, step, onCommit) {
     transformer.enabledAnchors([]);
   }
 
-  // ---------- Selection + Transformer wiring ----------
 
-  function clearSelection() {
-    selectedNode = null;
 
-    // Clear transformer nodes
-    if (transformer && transformer.nodes) {
-      transformer.nodes([]);
-      if (overlayLayer && overlayLayer.batchDraw) {
-        overlayLayer.batchDraw();
+      function clearSelection() {
+    if (selectedNode) {
+      const t =
+        selectedNode.getAttr("shapeType") || selectedNode.name();
+      if (t === "line" || t === "curve-line") {
+        showLineHandles(selectedNode, false);
+      }
+      if (t === "arrow") {
+        showArrowHandles(selectedNode, false);
       }
     }
 
-    // Hide line / arrow edit handles when nothing is selected
-    if (mapLayer && mapLayer.find) {
-      mapLayer.find("Group").forEach((g) => {
-        const t = g.getAttr("shapeType") || g.name();
-        if (t === "line" || t === "curve-line") {
-          showLineHandles(g, false);
-        } else if (t === "arrow") {
-          showArrowHandles(g, false);
-        }
-      });
-      mapLayer.batchDraw();
+    selectedNode = null;
+    if (transformer) {
+      transformer.nodes([]);
+      overlayLayer.draw();
     }
-
-    // Inspector → layout defaults
     renderInspector(null);
   }
 
-  /**
-   * Select a node. If `appendOnShift` is truthy, the node is toggled into/out of
-   * the current transformer selection (for multi-select).
-   *
-   * This is the ONLY place that should be updating the transformer’s nodes.
-   */
-  function selectNode(node, appendOnShift) {
-    if (!node || typeof node.getLayer !== "function") {
+
+
+    function selectNode(node, additive = false) {
+    if (!node) {
       clearSelection();
       return;
     }
 
-    const layer = node.getLayer();
-    if (layer !== mapLayer && layer !== overlayLayer) {
-      clearSelection();
+        // Hide handles on previous selection when changing selection
+    if (!additive && selectedNode) {
+      const prevType =
+        selectedNode.getAttr("shapeType") || selectedNode.name();
+      if (prevType === "line" || prevType === "curve-line") {
+        showLineHandles(selectedNode, false);
+      }
+      if (prevType === "arrow") {
+        showArrowHandles(selectedNode, false);
+      }
+    }
+
+
+        if (!transformer) {
+      selectedNode = node;
+      const t = node.getAttr("shapeType") || node.name();
+      if (t === "line" || t === "curve-line") {
+        buildLineHandles(node);
+        showLineHandles(node, true);
+      }
+      if (t === "arrow") {
+        buildArrowHandles(node);
+        showArrowHandles(node, true);
+      }
+      renderInspector(node);
       return;
     }
 
-    // Lazily initialise transformer if needed
-    if (!transformer || !transformer.getStage || !transformer.getStage()) {
-      initSeatmapTransformer();
-    }
 
-    let current = transformer.nodes ? transformer.nodes() : [];
+    let nodes = transformer.nodes() || [];
 
-    // Toggle multi-selection when Shift is held (or the caller passes true)
-    const append = !!appendOnShift;
-    if (append && current && current.length) {
-      const alreadyIndex = current.indexOf(node);
-      if (alreadyIndex >= 0) {
-        // Toggle off if already selected
-        current.splice(alreadyIndex, 1);
+
+    if (additive) {
+      const already = nodes.includes(node);
+      if (already) {
+        nodes = nodes.filter((n) => n !== node);
       } else {
-        current = current.concat(node);
+        nodes = nodes.concat(node);
       }
     } else {
-      current = [node];
+      nodes = [node];
     }
 
-    // Apply selection to transformer
-    transformer.nodes(current);
-    if (overlayLayer && overlayLayer.batchDraw) {
-      overlayLayer.batchDraw();
-    }
+        transformer.nodes(nodes);
+    overlayLayer.draw();
 
-    selectedNode = node;
+    selectedNode = nodes.length === 1 ? nodes[0] : null;
 
-    // Keep seats/tables above, arcs below, etc.
-    sbNormalizeZOrder(node);
+        if (nodes.length === 1) {
+      const t = nodes[0].getAttr("shapeType") || nodes[0].name();
+      if (t === "line" || t === "curve-line") {
+        buildLineHandles(nodes[0]);
+        showLineHandles(nodes[0], true);
+      }
+      if (t === "arrow") {
+        buildArrowHandles(nodes[0]);
+        showArrowHandles(nodes[0], true);
+      }
+      configureTransformerForNode(nodes[0]);
+      renderInspector(nodes[0]);
 
-    // Line + curve-line handles only visible for selected groups
-    if (mapLayer && mapLayer.find) {
-      mapLayer.find("Group").forEach((g) => {
-        const t = g.getAttr("shapeType") || g.name();
-        const isSelected = current.indexOf(g) !== -1;
-
-        if (t === "line" || t === "curve-line") {
-          showLineHandles(g, isSelected);
-        } else if (t === "arrow") {
-          showArrowHandles(g, isSelected);
-        }
-      });
-      mapLayer.batchDraw();
-    }
-
-    // Inspector:
-    // - If multiple items → multi-selection panel (renderInspector sees transformer.nodes())
-    // - If single item → standard inspector for that node
-    if (current.length === 1) {
-      renderInspector(node);
-    } else if (!current.length) {
-      renderInspector(null);
+    } else if (nodes.length > 1) {
+      renderInspector(nodes[0]);
     } else {
-      // multi-selection: renderInspector will detect >1 via transformer.nodes()
       renderInspector(null);
     }
   }
-
-
-      
 
   // ---------- Behaviour attachment ----------
 
