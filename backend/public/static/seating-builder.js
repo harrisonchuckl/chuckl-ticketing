@@ -435,6 +435,82 @@ window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
   // ---------- Helpers: UI / tools ----------
 
             // ---------- Helpers: UI / tools ----------
+
+    // Tools that place seats / tables onto the map
+  function isPlacementTool(toolName) {
+    if (!toolName) return false;
+    const t = String(toolName);
+    return (
+      t === "row-seats" ||
+      t === "single-seat" ||
+      t === "circular-table" ||
+      t === "rect-table"
+    );
+  }
+
+  // Background shapes: anything structural / decorative that seats/tables sit on top of
+  function isBackgroundShapeType(shapeType) {
+    return (
+      shapeType === "section" ||
+      shapeType === "square" ||
+      shapeType === "circle" ||
+      shapeType === "stage" ||
+      shapeType === "bar" ||
+      shapeType === "exit" ||
+      shapeType === "multi-shape" ||
+      shapeType === "arc" ||
+      shapeType === "line" ||
+      shapeType === "curve-line" ||
+      shapeType === "stairs" ||
+      shapeType === "symbol" ||
+      shapeType === "text" ||
+      shapeType === "label"
+    );
+  }
+
+  // When a placement tool is active, temporarily let clicks "pass through" background shapes
+  // so we can place rows / tables / single seats *inside* them.
+  function updateShapeInteractionForPlacementTool() {
+    if (!mapLayer) return;
+
+    const placing = isPlacementTool(activeTool);
+
+    mapLayer.find("Group").forEach((g) => {
+      const shapeType = g.getAttr("shapeType") || g.name() || "";
+
+      // Never interfere with seat/table groups themselves
+      if (
+        shapeType === "row-seats" ||
+        shapeType === "single-seat" ||
+        shapeType === "circular-table" ||
+        shapeType === "rect-table"
+      ) {
+        return;
+      }
+
+      if (!isBackgroundShapeType(shapeType)) return;
+
+      if (placing) {
+        // Save original listening state once
+        if (!g.getAttr("__sbHadListeningBackup")) {
+          g.setAttr("__sbHadListeningBackup", true);
+          g.setAttr("__sbPrevListening", g.listening());
+        }
+        // Disable hit-testing so the stage/mapLayer click handler receives the event
+        g.listening(false);
+      } else {
+        // Restore listening when we leave placement tools
+        if (g.getAttr("__sbHadListeningBackup")) {
+          const prev = g.getAttr("__sbPrevListening");
+          g.listening(typeof prev === "boolean" ? prev : true);
+          g.setAttr("__sbHadListeningBackup", false);
+        }
+      }
+    });
+
+    mapLayer.batchDraw();
+  }
+
   
    function setActiveTool(tool, opts = {}) {
   // Normalise any alias tool names from the UI so they map onto
@@ -517,7 +593,7 @@ window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
     clearSelection();
   }
 
-  if (!mapLayer || !mapLayer.getStage()) return;
+   if (!mapLayer || !mapLayer.getStage()) return;
 
   const stageRef = mapLayer.getStage();
   if (!activeTool) {
@@ -526,9 +602,13 @@ window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
     stageRef.container().style.cursor = "crosshair";
   }
 
+  // 👇 NEW: while placing seats / tables, let clicks pass through shapes
+  updateShapeInteractionForPlacementTool();
+
   // 🔵 Sync left-hand button highlight + icon swap
   updateToolButtonActiveState(activeTool);
 }
+
 
 
 
@@ -3533,7 +3613,7 @@ function attachMultiShapeTransformBehaviour(group) {
   }
 
   window.debugDumpRows = debugDumpRows;
-  // ---------- Z-ORDER: seats & tables always above, arcs pushed below ----------
+   // ---------- Z-ORDER: seats & tables always above, background shapes below ----------
 
   function sbNormalizeZOrder(node) {
     if (!node || typeof node.getLayer !== "function") return;
@@ -3555,15 +3635,30 @@ function attachMultiShapeTransformBehaviour(group) {
       return;
     }
 
-    // Arcs should always sit underneath everything else
-    if (shapeType === "arc") {
+    // Background shapes: structural / decorative elements that seats live on top of
+    const isBackgroundShape =
+      shapeType === "section" ||
+      shapeType === "square" ||
+      shapeType === "circle" ||
+      shapeType === "stage" ||
+      shapeType === "bar" ||
+      shapeType === "exit" ||
+      shapeType === "multi-shape" ||
+      shapeType === "arc" ||
+      shapeType === "line" ||
+      shapeType === "curve-line" ||
+      shapeType === "stairs" ||
+      shapeType === "symbol" ||
+      shapeType === "text" ||
+      shapeType === "label";
+
+    if (isBackgroundShape) {
       node.moveToBottom();
       layer.batchDraw();
       return;
     }
 
-    // Everything else (stage, bar, exit, symbols, lines, text, etc)
-    // keeps its natural stacking unless you move it manually.
+    // Anything else keeps its natural stacking.
   }
 
 
