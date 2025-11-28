@@ -519,7 +519,7 @@ window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
     activeTool !== "arrow" &&
     activeTool !== "stairs"
   ) {
-    clearSelection();
+    ();
   }
 
   if (!mapLayer || !mapLayer.getStage()) return;
@@ -657,7 +657,7 @@ window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
     mapLayer.draw();
     updateSeatCount();
     updateUndoRedoButtons();
-    clearSelection();
+    ();
 
     isRestoringHistory = false;
   }
@@ -5582,103 +5582,116 @@ function addNumberField(labelText, value, min, step, onCommit) {
     transformer.enabledAnchors([]);
   }
 
+  // ---------- Selection + Transformer wiring ----------
 
-
-      function clearSelection() {
-    if (selectedNode) {
-      const t =
-        selectedNode.getAttr("shapeType") || selectedNode.name();
-      if (t === "line" || t === "curve-line") {
-        showLineHandles(selectedNode, false);
-      }
-      if (t === "arrow") {
-        showArrowHandles(selectedNode, false);
-      }
-    }
-
+  function clearSelection() {
     selectedNode = null;
-    if (transformer) {
+
+    // Clear transformer nodes
+    if (transformer && transformer.nodes) {
       transformer.nodes([]);
-      overlayLayer.draw();
+      if (overlayLayer && overlayLayer.batchDraw) {
+        overlayLayer.batchDraw();
+      }
     }
+
+    // Hide line / arrow edit handles when nothing is selected
+    if (mapLayer && mapLayer.find) {
+      mapLayer.find("Group").forEach((g) => {
+        const t = g.getAttr("shapeType") || g.name();
+        if (t === "line" || t === "curve-line") {
+          showLineHandles(g, false);
+        } else if (t === "arrow") {
+          showArrowHandles(g, false);
+        }
+      });
+      mapLayer.batchDraw();
+    }
+
+    // Inspector → layout defaults
     renderInspector(null);
   }
 
-
-
-    function selectNode(node, additive = false) {
-    if (!node) {
+  /**
+   * Select a node. If `appendOnShift` is truthy, the node is toggled into/out of
+   * the current transformer selection (for multi-select).
+   *
+   * This is the ONLY place that should be updating the transformer’s nodes.
+   */
+  function selectNode(node, appendOnShift) {
+    if (!node || typeof node.getLayer !== "function") {
       clearSelection();
       return;
     }
 
-        // Hide handles on previous selection when changing selection
-    if (!additive && selectedNode) {
-      const prevType =
-        selectedNode.getAttr("shapeType") || selectedNode.name();
-      if (prevType === "line" || prevType === "curve-line") {
-        showLineHandles(selectedNode, false);
-      }
-      if (prevType === "arrow") {
-        showArrowHandles(selectedNode, false);
-      }
-    }
-
-
-        if (!transformer) {
-      selectedNode = node;
-      const t = node.getAttr("shapeType") || node.name();
-      if (t === "line" || t === "curve-line") {
-        buildLineHandles(node);
-        showLineHandles(node, true);
-      }
-      if (t === "arrow") {
-        buildArrowHandles(node);
-        showArrowHandles(node, true);
-      }
-      renderInspector(node);
+    const layer = node.getLayer();
+    if (layer !== mapLayer && layer !== overlayLayer) {
+      clearSelection();
       return;
     }
 
-
-    let nodes = transformer.nodes() || [];
-
-
-    if (additive) {
-      const already = nodes.includes(node);
-      if (already) {
-        nodes = nodes.filter((n) => n !== node);
-      } else {
-        nodes = nodes.concat(node);
-      }
-    } else {
-      nodes = [node];
+    // Lazily initialise transformer if needed
+    if (!transformer || !transformer.getStage || !transformer.getStage()) {
+      initSeatmapTransformer();
     }
 
-        transformer.nodes(nodes);
-    overlayLayer.draw();
+    let current = transformer.nodes ? transformer.nodes() : [];
 
-    selectedNode = nodes.length === 1 ? nodes[0] : null;
-
-        if (nodes.length === 1) {
-      const t = nodes[0].getAttr("shapeType") || nodes[0].name();
-      if (t === "line" || t === "curve-line") {
-        buildLineHandles(nodes[0]);
-        showLineHandles(nodes[0], true);
+    // Toggle multi-selection when Shift is held (or the caller passes true)
+    const append = !!appendOnShift;
+    if (append && current && current.length) {
+      const alreadyIndex = current.indexOf(node);
+      if (alreadyIndex >= 0) {
+        // Toggle off if already selected
+        current.splice(alreadyIndex, 1);
+      } else {
+        current = current.concat(node);
       }
-      if (t === "arrow") {
-        buildArrowHandles(nodes[0]);
-        showArrowHandles(nodes[0], true);
-      }
-      configureTransformerForNode(nodes[0]);
-      renderInspector(nodes[0]);
-
-    } else if (nodes.length > 1) {
-      renderInspector(nodes[0]);
     } else {
+      current = [node];
+    }
+
+    // Apply selection to transformer
+    transformer.nodes(current);
+    if (overlayLayer && overlayLayer.batchDraw) {
+      overlayLayer.batchDraw();
+    }
+
+    selectedNode = node;
+
+    // Keep seats/tables above, arcs below, etc.
+    sbNormalizeZOrder(node);
+
+    // Line + curve-line handles only visible for selected groups
+    if (mapLayer && mapLayer.find) {
+      mapLayer.find("Group").forEach((g) => {
+        const t = g.getAttr("shapeType") || g.name();
+        const isSelected = current.indexOf(g) !== -1;
+
+        if (t === "line" || t === "curve-line") {
+          showLineHandles(g, isSelected);
+        } else if (t === "arrow") {
+          showArrowHandles(g, isSelected);
+        }
+      });
+      mapLayer.batchDraw();
+    }
+
+    // Inspector:
+    // - If multiple items → multi-selection panel (renderInspector sees transformer.nodes())
+    // - If single item → standard inspector for that node
+    if (current.length === 1) {
+      renderInspector(node);
+    } else if (!current.length) {
+      renderInspector(null);
+    } else {
+      // multi-selection: renderInspector will detect >1 via transformer.nodes()
       renderInspector(null);
     }
   }
+
+
+      
 
   // ---------- Behaviour attachment ----------
 
