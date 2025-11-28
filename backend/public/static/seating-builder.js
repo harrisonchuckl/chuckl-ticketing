@@ -7259,4 +7259,185 @@ function handleStageMouseUp() {
   loadExistingLayout();
 
   renderInspector(null);
+
+    // ---------- Saved layout switching (dropdown -> load konvaJson) ----------
+
+  // Helper: extract konva JSON string from a saved layout object
+  function sbExtractKonvaJsonFromLayout(layout) {
+    if (!layout || typeof layout !== "object") return null;
+
+    // Prefer explicit konvaJson first
+    if (layout.konvaJson) return layout.konvaJson;
+    if (layout.konva_json) return layout.konva_json;
+
+    // Common fallbacks just in case the field is named differently
+    if (layout.konva) return layout.konva;
+    if (layout.json) return layout.json;
+
+    return null;
+  }
+
+  // Helper: take a konvaJson string and replace the current mapLayer
+  function sbLoadLayoutFromKonvaJson(konvaJson) {
+    if (!stage || !konvaJson) return;
+
+    let newLayer;
+    try {
+      // konvaJson may represent a Layer or a Stage – handle both
+      const created = Konva.Node.create(konvaJson);
+
+      if (created instanceof Konva.Stage) {
+        // If a full stage was saved, grab the first Layer as the map layer
+        const firstLayer = created.findOne("Layer");
+        if (!firstLayer) {
+          // eslint-disable-next-line no-console
+          console.error(
+            "[seatmap] sbLoadLayoutFromKonvaJson: Stage JSON has no Layer"
+          );
+          return;
+        }
+        newLayer = firstLayer;
+      } else if (created instanceof Konva.Layer) {
+        newLayer = created;
+      } else {
+        // Fallback: treat whatever came back as the map layer node
+        newLayer = created;
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(
+        "[seatmap] sbLoadLayoutFromKonvaJson: failed to parse konvaJson",
+        err
+      );
+      return;
+    }
+
+    if (!newLayer) return;
+
+    // Prevent pushHistory from firing while we swap layers
+    isRestoringHistory = true;
+
+    // Remove old map layer from the stage if it exists
+    if (mapLayer && mapLayer.destroy) {
+      try {
+        mapLayer.destroy();
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          "[seatmap] sbLoadLayoutFromKonvaJson: error destroying old mapLayer",
+          e
+        );
+      }
+    }
+
+    mapLayer = newLayer;
+    mapLayer.position({ x: 0, y: 0 });
+    mapLayer.scale({ x: 1, y: 1 });
+
+    stage.add(mapLayer);
+
+    // Re-attach behaviours to all top-level children
+    if (typeof attachNodeBehaviour === "function") {
+      mapLayer.getChildren().forEach((node) => {
+        attachNodeBehaviour(node);
+      });
+    }
+
+    // Keep background vs seat/table z-order sane
+    if (typeof sbNormalizeZOrder === "function") {
+      mapLayer.find("Group").forEach((g) => sbNormalizeZOrder(g));
+    }
+
+    // Ensure hit-rects etc. are sane after load
+    mapLayer.getChildren().forEach((node) => {
+      if (node instanceof Konva.Group) {
+        ensureHitRect(node);
+      }
+    });
+
+    // Clear any active selection / transformer state
+    if (typeof clearSelection === "function") {
+      clearSelection();
+    }
+
+    // Update seat count + tool hit-testing behaviour
+    updateSeatCount();
+    updateShapeInteractionForPlacementTool();
+
+    // Reset undo/redo history to this new layout as the baseline
+    history = [];
+    historyIndex = -1;
+    isRestoringHistory = false; // allow pushHistory again
+
+    try {
+      const initialJson = mapLayer.toJSON();
+      history.push(initialJson);
+      historyIndex = 0;
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[seatmap] sbLoadLayoutFromKonvaJson: failed to seed history",
+        e
+      );
+    }
+
+    updateUndoRedoButtons();
+
+    mapLayer.draw();
+  }
+
+  // Public hook: called when the saved-layout dropdown changes
+  // HTML side will call: window.__TIXALL_HANDLE_SAVED_LAYOUT_SELECT__(id)
+  window.__TIXALL_HANDLE_SAVED_LAYOUT_SELECT__ =
+    function __TIXALL_HANDLE_SAVED_LAYOUT_SELECT__(layoutId) {
+      try {
+        if (!layoutId && layoutId !== 0) return;
+
+        const layouts = window.__TIXALL_SAVED_LAYOUTS__ || [];
+        if (!Array.isArray(layouts) || layouts.length === 0) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            "[seatmap] __TIXALL_HANDLE_SAVED_LAYOUT_SELECT__: no layouts available"
+          );
+          return;
+        }
+
+        const idStr = String(layoutId);
+
+        // Try a few common id properties: id, layoutId, key, slug
+        const layout =
+          layouts.find((l) => String(l.id) === idStr) ||
+          layouts.find((l) => String(l.layoutId) === idStr) ||
+          layouts.find((l) => String(l.key) === idStr) ||
+          layouts.find((l) => String(l.slug) === idStr);
+
+        if (!layout) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            "[seatmap] __TIXALL_HANDLE_SAVED_LAYOUT_SELECT__: layout not found for id",
+            layoutId
+          );
+          return;
+        }
+
+        const konvaJson = sbExtractKonvaJsonFromLayout(layout);
+        if (!konvaJson) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            "[seatmap] __TIXALL_HANDLE_SAVED_LAYOUT_SELECT__: layout has no konvaJson",
+            layout
+          );
+          return;
+        }
+
+        sbLoadLayoutFromKonvaJson(konvaJson);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(
+          "[seatmap] __TIXALL_HANDLE_SAVED_LAYOUT_SELECT__ error",
+          err
+        );
+      }
+    };
+
 })();
