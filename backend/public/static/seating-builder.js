@@ -439,9 +439,7 @@ window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
 
   // ---------- Helpers: UI / tools ----------
 
-            // ---------- Helpers: UI / tools ----------
-  
-   function setActiveTool(tool, opts = {}) {
+function setActiveTool(tool, opts = {}) {
   // Normalise any alias tool names from the UI so they map onto
   // the real internal tools that the canvas click handler understands.
   if (typeof tool === "string") {
@@ -519,7 +517,7 @@ window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
     activeTool !== "arrow" &&
     activeTool !== "stairs"
   ) {
-    ();
+    clearSelectionAndInspector(); // <- make sure this helper exists
   }
 
   if (!mapLayer || !mapLayer.getStage()) return;
