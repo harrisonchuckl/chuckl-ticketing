@@ -290,19 +290,23 @@ router.get("/builder/preview/:showId", (req, res) => {
         color: #ffffff;
       }
 
-            .tb-topbar-btn.tb-btn-primary {
-        border-radius: 999px;
-        border: 0;
-        background: linear-gradient(135deg, var(--tixall-blue), #08c8f8);
-        color: #ffffff;
-        box-shadow: 0 10px 24px rgba(8, 184, 232, 0.4);
-        font-weight: 600;
-      }
+           .tb-topbar-btn.tb-btn-primary {
+  border-radius: 999px;
+  border: 0;
+  background: linear-gradient(135deg, var(--tixall-blue), #08c8f8);
+  color: #ffffff;
+  font-weight: 600;
+  /* No shadow so it feels flat like the ghost button */
+  box-shadow: none;
+}
 
-      .tb-topbar-btn.tb-btn-primary:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 14px 30px rgba(8, 184, 232, 0.45);
-      }
+.tb-topbar-btn.tb-btn-primary:hover {
+  /* Slightly deeper blue on hover, but still no glow or movement */
+  background: linear-gradient(135deg, #06a6d3, #07b8e7);
+  box-shadow: none;
+  transform: none;
+}
+
 
       .tb-topbar-btn.tb-btn-ghost {
         border-radius: 999px;
