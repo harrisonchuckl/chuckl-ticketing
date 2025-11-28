@@ -290,7 +290,7 @@ router.get("/builder/preview/:showId", (req, res) => {
         color: #ffffff;
       }
 
-      .tb-topbar-btn.tb-btn-primary {
+            .tb-topbar-btn.tb-btn-primary {
         border-radius: 999px;
         border: 0;
         background: linear-gradient(135deg, var(--tixall-blue), #08c8f8);
@@ -310,6 +310,17 @@ router.get("/builder/preview/:showId", (req, res) => {
         background: #ffffff;
         color: var(--tixall-dark);
       }
+
+      .tb-topbar-select {
+        border-radius: 999px;
+        border: 1px solid var(--tixall-border-subtle);
+        background: #ffffff;
+        color: var(--tixall-dark);
+        padding: 6px 10px;
+        font-size: 13px;
+        max-width: 260px;
+      }
+
 
       /* LEFT RAIL */
             /* LEFT RAIL */
@@ -615,7 +626,15 @@ router.get("/builder/preview/:showId", (req, res) => {
             </div>
           </div>
         </div>
-        <div class="tb-topbar-right">
+               <div class="tb-topbar-right">
+          <select
+            id="tb-saved-layout-select"
+            class="tb-topbar-select"
+            aria-label="Saved layouts for this venue"
+          >
+            <option value="" disabled selected>Loading saved layouts…</option>
+          </select>
+
           <button type="button" class="tb-topbar-btn tb-btn-ghost" id="tb-btn-back">
             Back to wizard
           </button>
@@ -623,6 +642,7 @@ router.get("/builder/preview/:showId", (req, res) => {
             Save layout
           </button>
         </div>
+
       </header>
 
       <main class="tickin-builder-main">
@@ -1247,33 +1267,19 @@ router.get("/builder/preview/:showId", (req, res) => {
           </div>
         </section>
 
-        <aside class="tb-side-panel">
+               <aside class="tb-side-panel">
+          <!-- Seats on map summary only -->
           <section class="tb-side-section">
-            <h3 class="tb-side-heading">Layout summary</h3>
+            <h3 class="tb-side-heading">Seats on map</h3>
             <div class="tb-side-meta">
               <div>
-                <dt>Show</dt>
-                <dd id="tb-meta-show-title">
-                  <span id="sb-inspector-show">Loading…</span>
-                </dd>
-              </div>
-              <div>
-                <dt>Venue</dt>
-                <dd id="tb-meta-venue-name">
-                  <span id="sb-inspector-venue">–</span>
-                </dd>
-              </div>
-              <div>
-                <dt>Estimated capacity</dt>
-                <dd id="tb-meta-capacity">Flexible</dd>
-              </div>
-              <div>
-                <dt>Seats on map</dt>
+                <dt>Total seats</dt>
                 <dd id="sb-seat-count">0 seats</dd>
               </div>
             </div>
           </section>
 
+          <!-- Element inspector (selection) -->
           <section class="tb-side-section">
             <h3 class="tb-side-heading">Selection</h3>
             <div id="sb-inspector" class="tb-inspector">
@@ -1282,15 +1288,8 @@ router.get("/builder/preview/:showId", (req, res) => {
               </p>
             </div>
           </section>
-
-          <section class="tb-side-section">
-            <h3 class="tb-side-heading">Saved layouts</h3>
-            <p class="tb-side-help">
-              Re-use layouts across shows at the same venue. Coming soon: click to switch.
-            </p>
-            <div class="tb-saved-list" id="tb-saved-list"></div>
-          </section>
         </aside>
+
       </main>
     </div>
 
@@ -1374,32 +1373,63 @@ router.get("/builder/preview/:showId", (req, res) => {
               metaCapacity.textContent = String(venue.capacity);
             }
 
-            var listEl = document.getElementById("tb-saved-list");
-            if (listEl && Array.isArray(data.previousMaps)) {
-              data.previousMaps.forEach(function (m) {
-                var div = document.createElement("div");
-                div.className = "tb-saved-item";
-                var title = document.createElement("div");
-                title.className = "tb-saved-item-title";
-                title.textContent = m.name || "Layout";
-                var meta = document.createElement("div");
-                meta.className = "tb-saved-item-meta";
-                var ver = document.createElement("span");
-                ver.textContent = "v" + (m.version || 1);
-                var when = document.createElement("span");
-                try {
-                  var d2 = new Date(m.createdAt);
-                  when.textContent = d2.toLocaleDateString("en-GB");
-                } catch (_) {
-                  when.textContent = "";
+                       var savedSelect = document.getElementById("tb-saved-layout-select");
+            var maps = Array.isArray(data.previousMaps) ? data.previousMaps : [];
+
+            // Expose saved layouts globally so seating-builder.js can hook into them if needed
+            // (e.g. to actually load / switch layouts when one is chosen).
+            // @ts-ignore
+            window.__TIXALL_SAVED_LAYOUTS__ = maps;
+
+            if (savedSelect) {
+              // Clear any placeholder options
+              savedSelect.innerHTML = "";
+
+              if (!maps.length) {
+                var optEmpty = document.createElement("option");
+                optEmpty.value = "";
+                optEmpty.textContent = "No saved layouts for this venue";
+                optEmpty.disabled = true;
+                optEmpty.selected = true;
+                savedSelect.appendChild(optEmpty);
+              } else {
+                // Placeholder prompt
+                var optPlaceholder = document.createElement("option");
+                optPlaceholder.value = "";
+                optPlaceholder.textContent = "Choose a saved layout…";
+                optPlaceholder.disabled = true;
+                optPlaceholder.selected = true;
+                savedSelect.appendChild(optPlaceholder);
+
+                maps.forEach(function (m) {
+                  var opt = document.createElement("option");
+                  opt.value = m.id;
+                  opt.textContent = m.name || "Layout";
+                  savedSelect.appendChild(opt);
+                });
+              }
+
+              // When a saved layout is chosen, delegate to seating-builder.js if it provides a handler.
+              savedSelect.addEventListener("change", function () {
+                var selectedId = savedSelect.value;
+                if (!selectedId) return;
+
+                if (window.__TIXALL_HANDLE_SAVED_LAYOUT_SELECT__) {
+                  try {
+                    window.__TIXALL_HANDLE_SAVED_LAYOUT_SELECT__(selectedId);
+                  } catch (e) {
+                    console.error("Error handling saved layout selection", e);
+                  }
+                } else {
+                  console.info(
+                    "Saved layout selected (",
+                    selectedId,
+                    ") – implement __TIXALL_HANDLE_SAVED_LAYOUT_SELECT__ in seating-builder.js to load it."
+                  );
                 }
-                meta.appendChild(ver);
-                meta.appendChild(when);
-                div.appendChild(title);
-                div.appendChild(meta);
-                listEl.appendChild(div);
               });
             }
+
           })
           .catch(function (err) {
             console.error("Failed to load show info for builder", err);
