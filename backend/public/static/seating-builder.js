@@ -4342,6 +4342,175 @@ function addNumberField(labelText, value, min, step, onCommit) {
       return;
     }
 
+        // ---- Multi-shape (multi-tool) ----
+    if (shapeType === "multi-shape") {
+      addTitle("Multi shape");
+
+      // --- Normalise variant (no visible 'rhombus' in the UI) ---
+      let variant = node.getAttr("multiShapeVariant") || "regular";
+      if (variant === "rhombus") {
+        variant = "parallelogram";
+      }
+      if (variant !== "regular" && variant !== "parallelogram") {
+        variant = "regular";
+      }
+      node.setAttr("multiShapeVariant", variant);
+
+      let sides = Number(node.getAttr("multiShapeSides"));
+      if (!Number.isFinite(sides)) sides = 5;
+      sides = Math.max(3, Math.min(20, Math.round(sides)));
+      node.setAttr("multiShapeSides", sides);
+
+      let skew = Number(node.getAttr("multiShapeSkew"));
+      if (!Number.isFinite(skew)) skew = 20;
+      skew = Math.max(-80, Math.min(80, skew));
+      node.setAttr("multiShapeSkew", skew);
+
+      // Style attrs (hook into applyBasicShapeStyle)
+      let strokeColor =
+        node.getAttr("shapeStrokeColor") || "#4b5563";
+      let strokeWidth = Number(node.getAttr("shapeStrokeWidth"));
+      if (!Number.isFinite(strokeWidth) || strokeWidth <= 0) {
+        strokeWidth = 1.7;
+      }
+      let strokeStyle = node.getAttr("shapeStrokeStyle");
+      if (
+        strokeStyle !== "solid" &&
+        strokeStyle !== "dashed" &&
+        strokeStyle !== "dotted"
+      ) {
+        strokeStyle = "solid";
+      }
+
+      let fillColor =
+        node.getAttr("shapeFillColor") || "#ffffff";
+
+      node.setAttr("shapeStrokeColor", strokeColor);
+      node.setAttr("shapeStrokeWidth", strokeWidth);
+      node.setAttr("shapeStrokeStyle", strokeStyle);
+      node.setAttr("shapeFillEnabled", true);
+      node.setAttr("shapeFillColor", fillColor);
+
+      function refreshMultiShape() {
+        updateMultiShapeGeometry(node);
+        applyBasicShapeStyle(node);
+        ensureHitRect(node);
+        if (mapLayer) mapLayer.batchDraw();
+        if (overlayLayer) overlayLayer.batchDraw();
+        pushHistory();
+        // Re-render so controls reflect any clamped values
+        renderInspector(node);
+      }
+
+      // --- Rotation (wrapper handles still do the actual scaling) ---
+      addNumberField(
+        "Rotation (deg)",
+        Math.round(node.rotation() || 0),
+        -360,
+        1,
+        (val) => {
+          const angle = normaliseAngle(val);
+          node.rotation(angle);
+          keepLabelsUpright(node);
+          if (mapLayer) mapLayer.batchDraw();
+          if (overlayLayer) overlayLayer.batchDraw();
+          pushHistory();
+        }
+      );
+
+      // --- Shape type: regular polygon / parallelogram (NO rhombus option) ---
+      addSelectField(
+        "Shape type",
+        variant,
+        [
+          { value: "regular", label: "Regular polygon" },
+          { value: "parallelogram", label: "Parallelogram" },
+        ],
+        (val) => {
+          let v = val === "parallelogram" ? "parallelogram" : "regular";
+          node.setAttr("multiShapeVariant", v);
+          refreshMultiShape();
+        }
+      );
+
+      // --- Regular polygon specific controls ---
+      if (variant === "regular") {
+        addNumberField(
+          "Number of sides",
+          sides,
+          3,
+          1,
+          (val) => {
+            const n = Math.max(3, Math.min(20, Math.round(val)));
+            node.setAttr("multiShapeSides", n);
+            refreshMultiShape();
+          }
+        );
+      }
+
+      // --- Parallelogram specific controls (skew only – width/height via wrapper) ---
+      if (variant === "parallelogram") {
+        addRangeField(
+          "Skew",
+          skew,
+          -80,
+          80,
+          1,
+          (val) => {
+            const clamped = Math.max(-80, Math.min(80, val));
+            node.setAttr("multiShapeSkew", clamped);
+            refreshMultiShape();
+          }
+        );
+      }
+
+      // --- Outline style controls ---
+      addColorField("Outline colour", strokeColor, (val) => {
+        node.setAttr("shapeStrokeColor", val || "#4b5563");
+        refreshMultiShape();
+      });
+
+      addNumberField(
+        "Outline width",
+        strokeWidth,
+        0.5,
+        0.5,
+        (val) => {
+          const w = Math.max(0.5, Number(val) || 1.7);
+          node.setAttr("shapeStrokeWidth", w);
+          refreshMultiShape();
+        }
+      );
+
+      addSelectField(
+        "Outline style",
+        strokeStyle,
+        [
+          { value: "solid", label: "Solid" },
+          { value: "dashed", label: "Dashed" },
+          { value: "dotted", label: "Dotted" },
+        ],
+        (val) => {
+          let style = "solid";
+          if (val === "dashed" || val === "dotted") {
+            style = val;
+          }
+          node.setAttr("shapeStrokeStyle", style);
+          refreshMultiShape();
+        }
+      );
+
+      // --- Fill colour (always enabled for multi-shape) ---
+      addColorField("Fill colour", fillColor, (val) => {
+        node.setAttr("shapeFillEnabled", true);
+        node.setAttr("shapeFillColor", val || "#ffffff");
+        refreshMultiShape();
+      });
+
+      return;
+    }
+
+
     // ---- Circular tables ----
     if (shapeType === "circular-table") {
       const seatCount = node.getAttr("seatCount") || 8;
