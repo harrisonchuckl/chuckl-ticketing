@@ -5605,7 +5605,8 @@ function addNumberField(labelText, value, min, step, onCommit) {
       shapeType === "section" ||
       shapeType === "square" ||
       shapeType === "circle" ||
-      shapeType === "symbol"
+      shapeType === "multi-shape" ||
+      shapeType === "symbol" 
     ) {
       transformer.rotateEnabled(false);
       transformer.enabledAnchors([
@@ -5748,7 +5749,8 @@ function addNumberField(labelText, value, min, step, onCommit) {
 
   // ---------- Behaviour attachment ----------
 
-   function attachNodeBehaviour(node) {
+
+   function baseAttachNodeBehaviour(node) {
   if (!(node instanceof Konva.Group)) return;
 
   // Make sure hit rect is correct for selection / dragging
@@ -5986,7 +5988,61 @@ function addNumberField(labelText, value, min, step, onCommit) {
   }
 }
 
+// Wrapper that extends the original behaviour with multi-shape transform
+// and Shift-based multi-selection.
+function attachNodeBehaviour(node) {
+  if (!node || !(node instanceof Konva.Group)) return;
 
+  // 1) Run all of your existing per-type hooks / drag logic etc.
+  baseAttachNodeBehaviour(node);
+
+  const type = node.getAttr("shapeType") || node.name();
+
+  // 2) Ensure multi-shapes always have resize/rotate transform behaviour
+  if (type === "multi-shape") {
+    attachMultiShapeTransformBehaviour(node);
+  }
+
+  // 3) Selection behaviour (single + Shift multi-select)
+  //    Remove any previous selection handlers so we don't stack listeners.
+  node.off("click.seatmapSelect tap.seatmapSelect");
+
+  node.on("click.seatmapSelect tap.seatmapSelect", (evt) => {
+    evt.cancelBubble = true;
+
+    if (isShiftPressed && transformer) {
+      // Multi-select: add/remove this node from the Transformer selection
+      const existing = transformer.nodes();
+      const idx = existing.indexOf(node);
+
+      if (idx === -1) {
+        // Add node
+        transformer.nodes(existing.concat(node));
+      } else {
+        // Remove node
+        const clone = existing.slice();
+        clone.splice(idx, 1);
+        transformer.nodes(clone);
+      }
+
+      // If exactly one node selected, keep inspector in "single" mode
+      selectedNode =
+        transformer.nodes().length === 1 ? transformer.nodes()[0] : null;
+
+      renderInspector(selectedNode);
+
+      if (mapLayer) mapLayer.batchDraw();
+      if (overlayLayer) overlayLayer.batchDraw();
+    } else {
+      // Normal single selection (clears previous selection)
+      selectNode(node);
+    }
+  });
+
+  // NOTE:
+  // We are *not* touching any of your existing drag / hover handlers,
+  // because those are all still inside baseAttachNodeBehaviour(node).
+}
 
   // ---------- Node creation based on active tool ----------
 
