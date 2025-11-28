@@ -240,7 +240,7 @@ router.get("/builder/preview/:showId", (req, res) => {
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>TickIn Seat Designer</title>
+    <title>TIXALL Seat Designer</title>
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <link rel="stylesheet" href="/static/seating-builder.css" />
 
@@ -615,7 +615,7 @@ router.get("/builder/preview/:showId", (req, res) => {
         <div class="tb-topbar-left">
           <div class="tb-logo-badge">
             <span class="tb-logo-dot"></span>
-            <span class="tb-logo-text">TickIn Builder</span>
+            <span class="tb-logo-text">TIXALL Builder</span>
           </div>
           <div class="tb-show-meta">
             <h1 class="tb-show-title" id="tb-show-title">Seat map designer</h1>
