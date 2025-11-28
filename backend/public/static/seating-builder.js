@@ -419,11 +419,6 @@ function updateToolButtonActiveState(activeToolName) {
 // Expose so the preview HTML script can also force a refresh after fly-out changes
 window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
 
-
-
-   // Expose so the preview HTML script can also force a refresh after fly-out changes
-  window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
-
   function getSeatCountElement() {
     if (!seatCountEl) seatCountEl = document.getElementById("sb-seat-count");
     return seatCountEl;
@@ -2372,8 +2367,58 @@ function createBar(x, y) {
   return group;
 
   }
+
+    // --- Multi-shape transform behaviour (resize + rotate) ---
+  function attachMultiShapeTransformBehaviour(group) {
+    if (!(group instanceof Konva.Group)) return;
+
+    const type = group.getAttr("shapeType") || group.name();
+    if (type !== "multi-shape") return;
+
+    // Namespaced so we don't stack duplicate handlers on re-attach
+    group.off("transform.multiShape");
+    group.off("transformend.multiShape");
+
+    // While user is dragging corners / edges, keep hit-rect in sync
+    group.on("transform.multiShape", () => {
+      ensureHitRect(group);
+      if (mapLayer) mapLayer.batchDraw();
+      if (overlayLayer) overlayLayer.batchDraw();
+    });
+
+    // When user finishes a transform, bake scale into width/height attrs
+    group.on("transformend.multiShape", () => {
+      const scaleX = group.scaleX() || 1;
+      const scaleY = group.scaleY() || 1;
+
+      // Existing logical width/height (NOT the pixel bounding box)
+      const baseWidth =
+        Number(group.getAttr("multiShapeWidth")) || 120;
+      const baseHeight =
+        Number(group.getAttr("multiShapeHeight")) || 80;
+
+      // Apply scale to logical dimensions
+      const newWidth = Math.max(20, baseWidth * scaleX);
+      const newHeight = Math.max(20, baseHeight * scaleY);
+
+      group.setAttr("multiShapeWidth", newWidth);
+      group.setAttr("multiShapeHeight", newHeight);
+
+      // Reset scale so future transforms are clean
+      group.scale({ x: 1, y: 1 });
+
+      // Rebuild geometry based on new logical size
+      updateMultiShapeGeometry(group);
+      ensureHitRect(group);
+
+      if (mapLayer) mapLayer.batchDraw();
+      if (overlayLayer) overlayLayer.batchDraw();
+      pushHistory();
+    });
+  }
+
   
-    function createMultiShape(x, y) {
+        function createMultiShape(x, y) {
     const group = new Konva.Group({
       x: x,
       y: y,
@@ -2400,10 +2445,14 @@ function createBar(x, y) {
     applyBasicShapeStyle(group);
     ensureHitRect(group);
 
+    // Enable drag-corner resize + rotate for this multi-shape
+    attachMultiShapeTransformBehaviour(group);
+
     return group;
   }
 
-    function updateMultiShapeGeometry(group) {
+
+        function updateMultiShapeGeometry(group) {
     if (!(group instanceof Konva.Group)) return;
     const type = group.getAttr("shapeType") || group.name();
     if (type !== "multi-shape") return;
@@ -2497,6 +2546,7 @@ function createBar(x, y) {
     applyBasicShapeStyle(group);
     ensureHitRect(group);
   }
+
 
 
    function createArc(x, y) {
