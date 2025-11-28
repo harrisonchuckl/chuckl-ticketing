@@ -6265,48 +6265,49 @@ if (
 
     drawSquareGrid();
 
-   transformer = new Konva.Transformer({
-  rotateEnabled: true,
-  enabledAnchors: [],
-  anchorSize: 7,
-  borderStroke: "#2563eb",
-  anchorFill: "#ffffff",
-  anchorStrokeWidth: 1.2,
-  borderStrokeWidth: 1.2,
-});
-overlayLayer.add(transformer);
+     transformer = new Konva.Transformer({
+    rotateEnabled: true,
+    enabledAnchors: [],
+    anchorSize: 7,
+    borderStroke: "#2563eb",
+    anchorFill: "#ffffff",
+    anchorStrokeWidth: 1.2,
+    borderStrokeWidth: 1.2,
+  });
+  overlayLayer.add(transformer);
+
+  // Ensure multi-shapes get full resize + rotate handles when selected
+  mapLayer.on("click.multiShapeHandles", (evt) => {
+    if (!transformer) return;
+
+    const target = evt.target;
+    if (!target) return;
+
+    // Find the containing group for whatever we clicked
+    const group = target.findAncestor("Group", true);
+    if (!group) return;
+
+    const type = group.getAttr("shapeType") || group.name();
+    if (type !== "multi-shape") return;
+
+    // Make sure the transformer shows resize anchors + rotation for multi-shapes
+    transformer.rotateEnabled(true);
+    transformer.enabledAnchors([
+      "top-left",
+      "top-center",
+      "top-right",
+      "middle-left",
+      "middle-right",
+      "bottom-left",
+      "bottom-center",
+      "bottom-right",
+    ]);
+
+    // Ensure our transform behaviour is wired (for older shapes / loaded layouts)
+    attachMultiShapeTransformBehaviour(group);
+  });
 }
 
-// Ensure multi-shapes get full resize + rotate handles when selected
-mapLayer.on("click.multiShapeHandles", (evt) => {
-  if (!transformer) return;
-
-  const target = evt.target;
-  if (!target) return;
-
-  // Find the containing group for whatever we clicked
-  const group = target.findAncestor("Group", true);
-  if (!group) return;
-
-  const type = group.getAttr("shapeType") || group.name();
-  if (type !== "multi-shape") return;
-
-  // Make sure the transformer shows resize anchors + rotation for multi-shapes
-  transformer.rotateEnabled(true);
-  transformer.enabledAnchors([
-    "top-left",
-    "top-center",
-    "top-right",
-    "middle-left",
-    "middle-right",
-    "bottom-left",
-    "bottom-center",
-    "bottom-right",
-  ]);
-
-  // Ensure our transform behaviour is wired (for older shapes / loaded layouts)
-  attachMultiShapeTransformBehaviour(group);
-});
 
   // ---------- Canvas interactions ----------
 
