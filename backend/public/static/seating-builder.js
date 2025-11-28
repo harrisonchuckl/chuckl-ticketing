@@ -2368,54 +2368,68 @@ function createBar(x, y) {
 
   }
 
-    // --- Multi-shape transform behaviour (resize + rotate) ---
-  function attachMultiShapeTransformBehaviour(group) {
-    if (!(group instanceof Konva.Group)) return;
+  // --- Multi-shape transform behaviour (resize + rotate) ---
+function attachMultiShapeTransformBehaviour(group) {
+  if (!(group instanceof Konva.Group)) return;
 
-    const type = group.getAttr("shapeType") || group.name();
-    if (type !== "multi-shape") return;
+  const type = group.getAttr("shapeType") || group.name();
+  if (type !== "multi-shape") return;
 
-    // Namespaced so we don't stack duplicate handlers on re-attach
-    group.off("transform.multiShape");
-    group.off("transformend.multiShape");
+  // Avoid wiring the same listeners multiple times
+  if (group.getAttr("__multiShapeTransformHooked")) return;
+  group.setAttr("__multiShapeTransformHooked", true);
 
-    // While user is dragging corners / edges, keep hit-rect in sync
-    group.on("transform.multiShape", () => {
-      ensureHitRect(group);
-      if (mapLayer) mapLayer.batchDraw();
-      if (overlayLayer) overlayLayer.batchDraw();
+  // While the user is dragging corners / edges, keep the hit-rect in sync
+  group.on("transform.multiShape", () => {
+    ensureHitRect(group);
+    if (mapLayer) mapLayer.batchDraw();
+    if (overlayLayer) overlayLayer.batchDraw();
+  });
+
+  // When user finishes a transform, bake scale into width/height attrs
+  group.on("transformend.multiShape", () => {
+    const currentType = group.getAttr("shapeType") || group.name();
+    if (currentType !== "multi-shape") return;
+
+    // Use absolute scale so flips don't give negative sizes
+    const scaleX = Math.abs(group.scaleX() || 1);
+    const scaleY = Math.abs(group.scaleY() || 1);
+
+    // If no effective size change, don't touch geometry
+    if (
+      Math.abs(scaleX - 1) < 0.0001 &&
+      Math.abs(scaleY - 1) < 0.0001
+    ) {
+      return;
+    }
+
+    let width = Number(group.getAttr("multiShapeWidth"));
+    let height = Number(group.getAttr("multiShapeHeight"));
+
+    if (!Number.isFinite(width) || width <= 0) width = 120;
+    if (!Number.isFinite(height) || height <= 0) height = 80;
+
+    const newWidth = Math.max(20, width * scaleX);
+    const newHeight = Math.max(20, height * scaleY);
+
+    // Bake the scale into the logical width/height attributes
+    group.setAttrs({
+      multiShapeWidth: newWidth,
+      multiShapeHeight: newHeight,
+      scaleX: 1,
+      scaleY: 1,
     });
 
-    // When user finishes a transform, bake scale into width/height attrs
-    group.on("transformend.multiShape", () => {
-      const scaleX = group.scaleX() || 1;
-      const scaleY = group.scaleY() || 1;
+    // Rebuild polygon/parallelogram with the new dimensions
+    updateMultiShapeGeometry(group);
+    ensureHitRect(group);
 
-      // Existing logical width/height (NOT the pixel bounding box)
-      const baseWidth =
-        Number(group.getAttr("multiShapeWidth")) || 120;
-      const baseHeight =
-        Number(group.getAttr("multiShapeHeight")) || 80;
+    if (mapLayer) mapLayer.batchDraw();
+    if (overlayLayer) overlayLayer.batchDraw();
+    pushHistory();
+  });
+}
 
-      // Apply scale to logical dimensions
-      const newWidth = Math.max(20, baseWidth * scaleX);
-      const newHeight = Math.max(20, baseHeight * scaleY);
-
-      group.setAttr("multiShapeWidth", newWidth);
-      group.setAttr("multiShapeHeight", newHeight);
-
-      // Reset scale so future transforms are clean
-      group.scale({ x: 1, y: 1 });
-
-      // Rebuild geometry based on new logical size
-      updateMultiShapeGeometry(group);
-      ensureHitRect(group);
-
-      if (mapLayer) mapLayer.batchDraw();
-      if (overlayLayer) overlayLayer.batchDraw();
-      pushHistory();
-    });
-  }
 
   
            function createMultiShape(x, y) {
@@ -2548,60 +2562,7 @@ function createBar(x, y) {
     attachMultiShapeTransformBehaviour(group);
   }
 
-    function attachMultiShapeTransformBehaviour(group) {
-    if (!(group instanceof Konva.Group)) return;
-
-    const type = group.getAttr("shapeType") || group.name();
-    if (type !== "multi-shape") return;
-
-    // Avoid wiring the same listener multiple times
-    if (group.getAttr("__multiShapeTransformHooked")) return;
-    group.setAttr("__multiShapeTransformHooked", true);
-
-    // When the Konva.Transformer finishes a resize/rotate
-    group.on("transformend", () => {
-      const currentType = group.getAttr("shapeType") || group.name();
-      if (currentType !== "multi-shape") return;
-
-      // Use absolute scale so flips don't give negative sizes
-      const scaleX = Math.abs(group.scaleX() || 1);
-      const scaleY = Math.abs(group.scaleY() || 1);
-
-      // If no effective size change, don't touch geometry
-      if (
-        Math.abs(scaleX - 1) < 0.0001 &&
-        Math.abs(scaleY - 1) < 0.0001
-      ) {
-        return;
-      }
-
-      let width = Number(group.getAttr("multiShapeWidth"));
-      let height = Number(group.getAttr("multiShapeHeight"));
-
-      if (!Number.isFinite(width) || width <= 0) width = 120;
-      if (!Number.isFinite(height) || height <= 0) height = 80;
-
-      const newWidth = Math.max(20, width * scaleX);
-      const newHeight = Math.max(20, height * scaleY);
-
-      // Bake the scale into the width/height attributes
-      group.setAttrs({
-        multiShapeWidth: newWidth,
-        multiShapeHeight: newHeight,
-        scaleX: 1,
-        scaleY: 1,
-      });
-
-      // Rebuild polygon/parallelogram with the new dimensions
-      updateMultiShapeGeometry(group);
-      ensureHitRect(group);
-
-      if (mapLayer) {
-        mapLayer.batchDraw();
-      }
-      pushHistory();
-    });
-  }
+  
 
 
 
@@ -6304,17 +6265,48 @@ if (
 
     drawSquareGrid();
 
-    transformer = new Konva.Transformer({
-      rotateEnabled: true,
-      enabledAnchors: [],
-      anchorSize: 7,
-      borderStroke: "#2563eb",
-      anchorFill: "#ffffff",
-      anchorStrokeWidth: 1.2,
-      borderStrokeWidth: 1.2,
-    });
-    overlayLayer.add(transformer);
-  }
+   transformer = new Konva.Transformer({
+  rotateEnabled: true,
+  enabledAnchors: [],
+  anchorSize: 7,
+  borderStroke: "#2563eb",
+  anchorFill: "#ffffff",
+  anchorStrokeWidth: 1.2,
+  borderStrokeWidth: 1.2,
+});
+overlayLayer.add(transformer);
+}
+
+// Ensure multi-shapes get full resize + rotate handles when selected
+mapLayer.on("click.multiShapeHandles", (evt) => {
+  if (!transformer) return;
+
+  const target = evt.target;
+  if (!target) return;
+
+  // Find the containing group for whatever we clicked
+  const group = target.findAncestor("Group", true);
+  if (!group) return;
+
+  const type = group.getAttr("shapeType") || group.name();
+  if (type !== "multi-shape") return;
+
+  // Make sure the transformer shows resize anchors + rotation for multi-shapes
+  transformer.rotateEnabled(true);
+  transformer.enabledAnchors([
+    "top-left",
+    "top-center",
+    "top-right",
+    "middle-left",
+    "middle-right",
+    "bottom-left",
+    "bottom-center",
+    "bottom-right",
+  ]);
+
+  // Ensure our transform behaviour is wired (for older shapes / loaded layouts)
+  attachMultiShapeTransformBehaviour(group);
+});
 
   // ---------- Canvas interactions ----------
 
