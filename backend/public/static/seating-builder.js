@@ -2418,7 +2418,7 @@ function createBar(x, y) {
   }
 
   
-        function createMultiShape(x, y) {
+           function createMultiShape(x, y) {
     const group = new Konva.Group({
       x: x,
       y: y,
@@ -2445,14 +2445,12 @@ function createBar(x, y) {
     applyBasicShapeStyle(group);
     ensureHitRect(group);
 
-    // Enable drag-corner resize + rotate for this multi-shape
-    attachMultiShapeTransformBehaviour(group);
-
     return group;
   }
 
 
-        function updateMultiShapeGeometry(group) {
+
+             function updateMultiShapeGeometry(group) {
     if (!(group instanceof Konva.Group)) return;
     const type = group.getAttr("shapeType") || group.name();
     if (type !== "multi-shape") return;
@@ -2545,7 +2543,66 @@ function createBar(x, y) {
     group.add(bodyShape);
     applyBasicShapeStyle(group);
     ensureHitRect(group);
+
+    // 🔁 Make sure resize via Transformer corners updates width/height attrs
+    attachMultiShapeTransformBehaviour(group);
   }
+
+    function attachMultiShapeTransformBehaviour(group) {
+    if (!(group instanceof Konva.Group)) return;
+
+    const type = group.getAttr("shapeType") || group.name();
+    if (type !== "multi-shape") return;
+
+    // Avoid wiring the same listener multiple times
+    if (group.getAttr("__multiShapeTransformHooked")) return;
+    group.setAttr("__multiShapeTransformHooked", true);
+
+    // When the Konva.Transformer finishes a resize/rotate
+    group.on("transformend", () => {
+      const currentType = group.getAttr("shapeType") || group.name();
+      if (currentType !== "multi-shape") return;
+
+      // Use absolute scale so flips don't give negative sizes
+      const scaleX = Math.abs(group.scaleX() || 1);
+      const scaleY = Math.abs(group.scaleY() || 1);
+
+      // If no effective size change, don't touch geometry
+      if (
+        Math.abs(scaleX - 1) < 0.0001 &&
+        Math.abs(scaleY - 1) < 0.0001
+      ) {
+        return;
+      }
+
+      let width = Number(group.getAttr("multiShapeWidth"));
+      let height = Number(group.getAttr("multiShapeHeight"));
+
+      if (!Number.isFinite(width) || width <= 0) width = 120;
+      if (!Number.isFinite(height) || height <= 0) height = 80;
+
+      const newWidth = Math.max(20, width * scaleX);
+      const newHeight = Math.max(20, height * scaleY);
+
+      // Bake the scale into the width/height attributes
+      group.setAttrs({
+        multiShapeWidth: newWidth,
+        multiShapeHeight: newHeight,
+        scaleX: 1,
+        scaleY: 1,
+      });
+
+      // Rebuild polygon/parallelogram with the new dimensions
+      updateMultiShapeGeometry(group);
+      ensureHitRect(group);
+
+      if (mapLayer) {
+        mapLayer.batchDraw();
+      }
+      pushHistory();
+    });
+  }
+
 
 
 
