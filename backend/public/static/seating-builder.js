@@ -372,18 +372,6 @@ function updateSymbolsToolbarIcon(symbolToolNameOrType) {
   }
 }
 
-function initSymbolsToolbarDefaultIcon() {
-  try {
-    // Show the mixed WC icon by default
-    updateSymbolsToolbarIcon("wc-mixed");
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.warn("initial symbols icon error", e);
-  }
-}
-
-initSymbolsToolbarDefaultIcon();
-window.addEventListener("load", initSymbolsToolbarDefaultIcon);
 
   
   // Highlight the active tool button and swap icons based on data attributes
