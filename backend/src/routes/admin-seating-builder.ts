@@ -1297,7 +1297,7 @@ router.get("/builder/preview/:showId", (req, res) => {
       </main>
     </div>
 
-    <script>
+        <script>
       (function () {
         var showId = ${JSON.stringify(showId)};
         var layout = ${JSON.stringify(layout)};
@@ -1312,7 +1312,102 @@ router.get("/builder/preview/:showId", (req, res) => {
         // @ts-ignore
         window.__TICKIN_BACK_BUTTON__ = document.getElementById("tb-btn-back");
 
+        // ----- TIXALL: layout save name + success handling -----
+        var tixallLayoutName = null;
+        var tixallReloadAfterSave = false;
+
+        var saveBtnEl = document.getElementById("tb-btn-save");
+        if (saveBtnEl) {
+          saveBtnEl.addEventListener(
+            "click",
+            function (ev) {
+              // Run before seating-builder.js save handler
+              if (!tixallLayoutName) {
+                var defaultName = "";
+                var venueText = document.getElementById("tb-show-venue");
+                if (venueText && venueText.textContent) {
+                  defaultName = venueText.textContent.trim() + " layout";
+                } else {
+                  defaultName = "My layout";
+                }
+
+                var entered = window.prompt("Name this layout", defaultName);
+                if (!entered || !entered.trim()) {
+                  // User cancelled / cleared – stop the save entirely
+                  ev.preventDefault();
+                  ev.stopImmediatePropagation();
+                  return;
+                }
+
+                tixallLayoutName = entered.trim();
+                // Optional: expose so later steps in the wizard know a named layout exists
+                // @ts-ignore
+                window.__TIXALL_CURRENT_LAYOUT_NAME__ = tixallLayoutName;
+              }
+
+              // Mark that we should refresh once the save POST succeeds
+              tixallReloadAfterSave = true;
+            },
+            true // capture, so this runs before other click listeners
+          );
+        }
+
+        // Monkey-patch fetch so we can inject the name into the save payload
+        var originalFetch = window.fetch;
+        window.fetch = function (input, init) {
+          var url =
+            typeof input === "string"
+              ? input
+              : (input && input.url) || "";
+
+          var isSeatMapSave =
+            url.indexOf("/admin/seating/builder/api/seatmaps/") !== -1 &&
+            init &&
+            (init.method === "POST" || init.method === "post");
+
+          // Inject the layout name into the POST body if it's missing
+          if (isSeatMapSave && tixallLayoutName && init && init.body) {
+            try {
+              if (typeof init.body === "string") {
+                var parsed = JSON.parse(init.body);
+                if (!parsed.name) {
+                  parsed.name = tixallLayoutName;
+                  init.body = JSON.stringify(parsed);
+                }
+              }
+            } catch (e) {
+              console.error(
+                "TIXALL: failed to inject layout name into save payload",
+                e
+              );
+            }
+          }
+
+          var result = originalFetch(input, init);
+
+          // After a successful save, reload so the dropdown picks up the new layout
+          if (isSeatMapSave && tixallReloadAfterSave) {
+            result
+              .then(function (res) {
+                if (!res || !res.ok) return;
+                // Mark that a layout has been saved
+                // @ts-ignore
+                window.__TIXALL_LAYOUT_SAVED__ = true;
+                window.location.reload();
+              })
+              .catch(function (err) {
+                console.error("TIXALL: error after seatmap save", err);
+              })
+              .finally(function () {
+                tixallReloadAfterSave = false;
+              });
+          }
+
+          return result;
+        };
+
         var tabs = document.querySelectorAll(".tb-tab");
+
         var panels = {
           map: document.getElementById("tb-tab-map"),
           tiers: document.getElementById("tb-tab-tiers"),
