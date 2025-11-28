@@ -2403,18 +2403,20 @@ function createBar(x, y) {
     return group;
   }
 
-  function updateMultiShapeGeometry(group) {
+    function updateMultiShapeGeometry(group) {
     if (!(group instanceof Konva.Group)) return;
     const type = group.getAttr("shapeType") || group.name();
     if (type !== "multi-shape") return;
 
     // ---- Normalise attributes ----
     let variant = group.getAttr("multiShapeVariant") || "regular";
-    if (
-      variant !== "regular" &&
-      variant !== "rhombus" &&
-      variant !== "parallelogram"
-    ) {
+
+    // 🔁 Backwards-compat: treat any old "rhombus" as "parallelogram"
+    if (variant === "rhombus") {
+      variant = "parallelogram";
+    }
+
+    if (variant !== "regular" && variant !== "parallelogram") {
       variant = "regular";
     }
     group.setAttr("multiShapeVariant", variant);
@@ -2431,10 +2433,7 @@ function createBar(x, y) {
 
     // Tweaked defaults per variant (only used if we didn't already have values)
     if (!group.getAttr("multiShapeWidth")) {
-      if (variant === "rhombus") {
-        width = 100;
-        height = 100;
-      } else if (variant === "parallelogram") {
+      if (variant === "parallelogram") {
         width = 140;
         height = 80;
       }
@@ -2469,7 +2468,7 @@ function createBar(x, y) {
         fill: "#ffffff",
       });
     } else {
-      // Rhombus / parallelogram – 4-sided polygon with skew
+      // Parallelogram – 4-sided polygon with skew
       const halfW = width / 2;
       const halfH = height / 2;
       const skewRad = (skew * Math.PI) / 180;
@@ -2498,6 +2497,7 @@ function createBar(x, y) {
     applyBasicShapeStyle(group);
     ensureHitRect(group);
   }
+
 
    function createArc(x, y) {
     const group = new Konva.Group({
@@ -5449,8 +5449,63 @@ function addNumberField(labelText, value, min, step, onCommit) {
       return;
     }
     
-        // ---- Multi-shape (polygons / rhombus / parallelogram) ----
+         // ---- Multi-shape (multi-tool) ----
     if (shapeType === "multi-shape") {
+      // Geometry
+      let variantRaw = node.getAttr("multiShapeVariant") || "regular";
+      if (variantRaw === "rhombus") {
+        variantRaw = "parallelogram"; // legacy → new behaviour
+        node.setAttr("multiShapeVariant", "parallelogram");
+      }
+      let variant =
+        variantRaw === "parallelogram" ? "parallelogram" : "regular";
+
+      let sides = Number(node.getAttr("multiShapeSides"));
+      if (!Number.isFinite(sides)) sides = 5;
+
+      let width = Number(node.getAttr("multiShapeWidth"));
+      if (!Number.isFinite(width) || width <= 0) width = 120;
+
+      let height = Number(node.getAttr("multiShapeHeight"));
+      if (!Number.isFinite(height) || height <= 0) height = 80;
+
+      let skew = Number(node.getAttr("multiShapeSkew"));
+      if (!Number.isFinite(skew)) skew = 20;
+
+      // Styling
+      let fillEnabled = node.getAttr("shapeFillEnabled");
+      if (fillEnabled === undefined || fillEnabled === null) {
+        fillEnabled = true;
+      } else {
+        fillEnabled = !!fillEnabled;
+      }
+
+      let fillColor = node.getAttr("shapeFillColor") || "#ffffff";
+      let strokeColor =
+        node.getAttr("shapeStrokeColor") || "#4b5563";
+
+      let strokeWidth = Number(node.getAttr("shapeStrokeWidth"));
+      if (!Number.isFinite(strokeWidth) || strokeWidth <= 0) {
+        strokeWidth = 1.7;
+      }
+
+      let strokeStyle = node.getAttr("shapeStrokeStyle") || "solid";
+      if (
+        strokeStyle !== "solid" &&
+        strokeStyle !== "dashed" &&
+        strokeStyle !== "dotted"
+      ) {
+        strokeStyle = "solid";
+      }
+
+      // Make sure current attributes are reflected visually
+      node.setAttr("shapeFillEnabled", fillEnabled);
+      node.setAttr("shapeFillColor", fillColor);
+      node.setAttr("shapeStrokeColor", strokeColor);
+      node.setAttr("shapeStrokeWidth", strokeWidth);
+      node.setAttr("shapeStrokeStyle", strokeStyle);
+      applyBasicShapeStyle(node);
+
       addTitle("Multi-shape");
 
       // Rotation
@@ -5462,53 +5517,119 @@ function addNumberField(labelText, value, min, step, onCommit) {
         (val) => {
           const angle = normaliseAngle(val);
           node.rotation(angle);
+          // Just in case anything inside needs to stay upright
+          keepLabelsUpright(node);
           if (overlayLayer) overlayLayer.batchDraw();
         }
       );
 
-      // Variant
-      const variant = node.getAttr("multiShapeVariant") || "regular";
+      // Shape type
       addSelectField(
         "Shape type",
         variant,
         [
           { value: "regular", label: "Regular polygon" },
-          { value: "rhombus", label: "Rhombus" },
           { value: "parallelogram", label: "Parallelogram" },
         ],
         (val) => {
-          node.setAttr("multiShapeVariant", val);
+          const safe =
+            val === "parallelogram" ? "parallelogram" : "regular";
+          node.setAttr("multiShapeVariant", safe);
           updateMultiShapeGeometry(node);
         }
       );
 
-      // Sides – only relevant for regular polygons, but we always store it
-      const sides = Number(node.getAttr("multiShapeSides") ?? 5);
+      // Regular polygon sides
       addNumberField(
-        "Number of sides (3–20)",
+        "Number of sides (regular)",
         sides,
         3,
         1,
         (val) => {
-          const clamped = Math.max(3, Math.min(20, Math.round(val)));
-          node.setAttr("multiShapeSides", clamped);
+          node.setAttr("multiShapeSides", val);
           updateMultiShapeGeometry(node);
         }
       );
 
-      // Skew – useful for rhombus / parallelogram
-      const skew = Number(node.getAttr("multiShapeSkew") ?? 20);
+      // Width / Height (for both variants)
+      addNumberField("Width (px)", width, 10, 1, (val) => {
+        node.setAttr("multiShapeWidth", val);
+        updateMultiShapeGeometry(node);
+      });
+
+      addNumberField("Height (px)", height, 10, 1, (val) => {
+        node.setAttr("multiShapeHeight", val);
+        updateMultiShapeGeometry(node);
+      });
+
+      // Skew only really affects parallelogram, but safe always
       addNumberField(
-        "Skew (°)",
+        "Skew angle (deg)",
         skew,
         -80,
         1,
         (val) => {
-          const clamped = Math.max(-80, Math.min(80, val));
-          node.setAttr("multiShapeSkew", clamped);
+          node.setAttr("multiShapeSkew", val);
           updateMultiShapeGeometry(node);
         }
       );
+
+      // --- Styling controls ---
+
+      addCheckboxField(
+        "Fill enabled",
+        fillEnabled,
+        (checked) => {
+          node.setAttr("shapeFillEnabled", checked);
+          applyBasicShapeStyle(node);
+          ensureHitRect(node);
+        }
+      );
+
+      addColorField("Fill colour", fillColor, (val) => {
+        node.setAttr("shapeFillColor", val);
+        applyBasicShapeStyle(node);
+        ensureHitRect(node);
+      });
+
+      addColorField("Border colour", strokeColor, (val) => {
+        node.setAttr("shapeStrokeColor", val);
+        applyBasicShapeStyle(node);
+        ensureHitRect(node);
+      });
+
+      addNumberField(
+        "Border thickness",
+        strokeWidth,
+        0.5,
+        0.5,
+        (val) => {
+          node.setAttr("shapeStrokeWidth", val);
+          applyBasicShapeStyle(node);
+          ensureHitRect(node);
+        }
+      );
+
+      addSelectField(
+        "Border style",
+        strokeStyle,
+        [
+          { value: "solid", label: "Solid" },
+          { value: "dashed", label: "Dashed" },
+          { value: "dotted", label: "Dotted" },
+        ],
+        (val) => {
+          const allowed = ["solid", "dashed", "dotted"];
+          const safe = allowed.includes(val) ? val : "solid";
+          node.setAttr("shapeStrokeStyle", safe);
+          applyBasicShapeStyle(node);
+          ensureHitRect(node);
+        }
+      );
+
+      return;
+    }
+
 
       // --- Style controls (uses applyBasicShapeStyle) ---
       const fillEnabledRaw = node.getAttr("shapeFillEnabled");
