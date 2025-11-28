@@ -5240,7 +5240,7 @@ function addNumberField(labelText, value, min, step, onCommit) {
       return;
     }
     
-         // ---- Multi-shape (multi-tool) ----
+           // ---- Multi-shape (multi-tool) ----
     if (shapeType === "multi-shape") {
       // Geometry
       let variantRaw = node.getAttr("multiShapeVariant") || "regular";
@@ -5297,9 +5297,65 @@ function addNumberField(labelText, value, min, step, onCommit) {
       node.setAttr("shapeStrokeStyle", strokeStyle);
       applyBasicShapeStyle(node);
 
+      // --- On-map grow / rotate support (drag handles + rotate dot) ---
+      // This relies on your global Konva.Transformer.
+      // We convert scaleX/scaleY from the drag into new width/height attrs
+      // and then reset scale back to 1, so repeated drags don't compound.
+      if (!node._multiShapeTransformHooked) {
+        node._multiShapeTransformHooked = true;
+
+        // While transforming (esp. rotating), keep angle normalised + labels upright
+        node.on("transform.multiShape", () => {
+          const angle = normaliseAngle(node.rotation() || 0);
+          node.rotation(angle);
+          keepLabelsUpright(node);
+          if (overlayLayer) overlayLayer.batchDraw();
+        });
+
+        // When the user releases the mouse after resizing / rotating
+        node.on("transformend.multiShape", () => {
+          const currentType = node.getAttr("shapeType");
+          if (currentType && currentType !== "multi-shape") return;
+
+          // Base logical size from attrs (what inspector works with)
+          let baseWidth = Number(node.getAttr("multiShapeWidth"));
+          if (!Number.isFinite(baseWidth) || baseWidth <= 0) baseWidth = 120;
+
+          let baseHeight = Number(node.getAttr("multiShapeHeight"));
+          if (!Number.isFinite(baseHeight) || baseHeight <= 0)
+            baseHeight = 80;
+
+          const scaleX = node.scaleX();
+          const scaleY = node.scaleY();
+
+          const factorX = Math.max(0.1, Math.abs(scaleX || 1));
+          const factorY = Math.max(0.1, Math.abs(scaleY || 1));
+
+          const newWidth = Math.max(10, baseWidth * factorX);
+          const newHeight = Math.max(10, baseHeight * factorY);
+
+          // Commit new geometry and reset scale
+          node.setAttrs({
+            multiShapeWidth: newWidth,
+            multiShapeHeight: newHeight,
+            scaleX: 1,
+            scaleY: 1,
+          });
+
+          // Make sure the polygon / parallelogram is rebuilt to match
+          updateMultiShapeGeometry(node);
+
+          // Keep hit-area and text in a good state
+          ensureHitRect(node);
+          keepLabelsUpright(node);
+
+          if (overlayLayer) overlayLayer.batchDraw();
+        });
+      }
+
       addTitle("Multi-shape");
 
-      // Rotation
+      // Rotation (numeric field)
       addNumberField(
         "Rotation (deg)",
         Math.round(node.rotation() || 0),
@@ -5421,64 +5477,6 @@ function addNumberField(labelText, value, min, step, onCommit) {
       return;
     }
 
-
-      // --- Style controls (uses applyBasicShapeStyle) ---
-      const fillEnabledRaw = node.getAttr("shapeFillEnabled");
-      const fillEnabled = fillEnabledRaw === undefined ? true : !!fillEnabledRaw;
-      const fillColor =
-        node.getAttr("shapeFillColor") || "#ffffff";
-      const strokeColor =
-        node.getAttr("shapeStrokeColor") || "#4b5563";
-      const strokeWidth =
-        Number(node.getAttr("shapeStrokeWidth")) || 1.7;
-      const strokeStyle =
-        node.getAttr("shapeStrokeStyle") || "solid";
-
-      addCheckboxField(
-        "Fill enabled",
-        fillEnabled,
-        (checked) => {
-          node.setAttr("shapeFillEnabled", checked);
-          applyBasicShapeStyle(node);
-        }
-      );
-
-      addColorField("Fill colour", fillColor, (val) => {
-        node.setAttr("shapeFillColor", val || "#ffffff");
-        applyBasicShapeStyle(node);
-      });
-
-      addColorField("Outline colour", strokeColor, (val) => {
-        node.setAttr("shapeStrokeColor", val || "#4b5563");
-        applyBasicShapeStyle(node);
-      });
-
-      addNumberField(
-        "Outline thickness (px)",
-        strokeWidth,
-        0.5,
-        0.5,
-        (val) => {
-          node.setAttr("shapeStrokeWidth", val);
-          applyBasicShapeStyle(node);
-        }
-      );
-
-          addSelectField(
-        "Outline style",
-        strokeStyle,
-        [
-          { value: "solid", label: "Solid" },
-          { value: "dashed", label: "Dashed" },
-          { value: "dotted", label: "Dotted" },
-        ],
-        (val) => {
-          node.setAttr("shapeStrokeStyle", val);
-          applyBasicShapeStyle(node);
-        }
-      );
-
-      return;
 
     // ---- Fallback for unknown shapes ----
     addTitle("Selection");
