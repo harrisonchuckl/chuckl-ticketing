@@ -7446,3 +7446,5 @@ function handleStageMouseUp() {
         );
       }
     };
+
+ })();
