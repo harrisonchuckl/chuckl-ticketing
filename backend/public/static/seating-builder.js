@@ -7267,18 +7267,100 @@ function handleStageMouseUp() {
 
   // ---------- Saved layout loader ----------
 
-function loadKonvaLayoutIntoStage(konvaJsonObj) {
-  if (!stage) {
+// Load a saved Konva layout JSON into the existing stage/mapLayer.
+// - Supports both old full-Stage JSON and new Layer-only JSON.
+// - Never creates a Stage from JSON, so we avoid "Stage has no container" errors.
+function loadKonvaLayoutIntoStage(konvaJson, options) {
+  const opts = options || {};
+
+  if (!stage || !mapLayer) {
     // eslint-disable-next-line no-console
-    console.warn(
-      "[seatmap] loadKonvaLayoutIntoStage: stage not ready yet"
+    console.warn("[seatmap] loadKonvaLayoutIntoStage: no stage/mapLayer yet");
+    return;
+  }
+
+  if (!konvaJson) {
+    // Nothing to load – just reset history and seat count
+    history = [];
+    historyIndex = -1;
+    updateSeatCount();
+    updateUndoRedoButtons && updateUndoRedoButtons();
+    return;
+  }
+
+  // --- Step 1: get a plain JS object from whatever we were passed ---
+  let jsonObj = null;
+
+  try {
+    if (typeof konvaJson === "string") {
+      jsonObj = JSON.parse(konvaJson);
+    } else {
+      jsonObj = konvaJson;
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(
+      "[seatmap] loadKonvaLayoutIntoStage: invalid JSON",
+      err
     );
     return;
   }
 
-  let createdNode;
+  // --- Step 2: normalise to a Layer JSON blob (handle old Stage JSON too) ---
+  function pickLayerJson(obj) {
+    if (!obj || typeof obj !== "object") return null;
+
+    const cls = obj.className || obj.nodeType;
+
+    // Already a layer
+    if (cls === "Layer") {
+      return obj;
+    }
+
+    // Old full-stage JSON: { className: "Stage", children: [...] }
+    if (cls === "Stage" && Array.isArray(obj.children)) {
+      // Prefer something that looks like the main map layer if we can
+      const children = obj.children;
+
+      let candidate =
+        children.find(
+          (c) =>
+            c.className === "Layer" &&
+            c.attrs &&
+            (c.attrs.id === "mapLayer" ||
+              c.attrs.name === "map-layer" ||
+              c.attrs.name === "seatmap")
+        ) ||
+        children.find((c) => c.className === "Layer");
+
+      return candidate || null;
+    }
+
+    // If it has children but no explicit className, try to dive once
+    if (Array.isArray(obj.children)) {
+      const childLayer = obj.children.find((c) => c.className === "Layer");
+      if (childLayer) return childLayer;
+    }
+
+    // Fallback – treat as layer-like
+    return obj;
+  }
+
+  const layerJson = pickLayerJson(jsonObj);
+
+  if (!layerJson) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[seatmap] loadKonvaLayoutIntoStage: no Layer found in konvaJson",
+      jsonObj
+    );
+    return;
+  }
+
+  // --- Step 3: actually create a Konva.Layer from the JSON (NOT a Stage) ---
+  let newLayer;
   try {
-    createdNode = Konva.Node.create(konvaJsonObj);
+    newLayer = Konva.Node.create(layerJson);
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error(
@@ -7288,145 +7370,54 @@ function loadKonvaLayoutIntoStage(konvaJsonObj) {
     return;
   }
 
-  let newLayer = null;
-
-  // If someone ever saved stage JSON instead of layer JSON, extract a layer
-  if (createdNode instanceof Konva.Stage) {
-    const layers =
-      typeof createdNode.getLayers === "function"
-        ? createdNode.getLayers()
-        : [];
-    if (layers && layers.length) {
-      newLayer = layers[0];
-    }
-  } else if (createdNode instanceof Konva.Layer) {
-    newLayer = createdNode;
-  } else if (createdNode instanceof Konva.Group) {
-    // Fallback: wrap a group in a new layer
-    newLayer = new Konva.Layer();
-    newLayer.add(createdNode);
-  }
-
-  if (!newLayer) {
+  if (!(newLayer instanceof Konva.Layer)) {
     // eslint-disable-next-line no-console
-    console.warn(
-      "[seatmap] loadKonvaLayoutIntoStage: could not derive a layer from konvaJson",
-      createdNode
+    console.error(
+      "[seatmap] loadKonvaLayoutIntoStage: JSON did not produce a Layer, got:",
+      newLayer && newLayer.getClassName
+        ? newLayer.getClassName()
+        : newLayer
     );
     return;
   }
 
-  // Remove old mapLayer, but keep gridLayer / overlayLayer
-  if (mapLayer) {
+  // --- Step 4: swap the mapLayer and re-wire behaviour on all children ---
+  try {
     mapLayer.destroy();
+  } catch (e) {
+    // ignore
   }
 
   mapLayer = newLayer;
-  mapLayer.position({ x: 0, y: 0 });
-  mapLayer.scale({ x: 1, y: 1 });
   stage.add(mapLayer);
 
-  // Re-attach behaviour to all groups (drag, selection, inspector, etc.)
-  mapLayer.find("Group").forEach((g) => {
-    attachNodeBehaviour(g);
-    sbNormalizeZOrder(g);
-  });
+  // Re-attach behaviours to every group loaded from JSON
+  if (typeof attachNodeBehaviour === "function") {
+    mapLayer.find("Group").forEach((g) => {
+      attachNodeBehaviour(g);
+      // normalise z-order so seat blocks / tables sit above background shapes
+      sbNormalizeZOrder && sbNormalizeZOrder(g);
+    });
+  }
 
   mapLayer.draw();
 
-  // Reset selection + history + counts
-  clearSelection();
-  updateSeatCount();
+  // Clear any previous selection / transformer state
+  if (typeof clearSelection === "function") {
+    clearSelection();
+  }
 
+  // Reset history with this loaded state as the first entry
   history = [];
   historyIndex = -1;
-  pushHistory();
-  updateUndoRedoButtons();
+  pushHistory && pushHistory();
 
-  // Make sure background shapes / seat tools interaction is correct
-  updateShapeInteractionForPlacementTool();
+  updateSeatCount && updateSeatCount();
+  updateUndoRedoButtons && updateUndoRedoButtons();
+
+  // eslint-disable-next-line no-console
+  console.log("[seatmap] loadKonvaLayoutIntoStage: layout loaded");
 }
-
-// Exposed for the dropdown in the toolbar
-window.__TIXALL_HANDLE_SAVED_LAYOUT_SELECT__ =
-  function __TIXALL_HANDLE_SAVED_LAYOUT_SELECT__(layoutId) {
-    const layouts = window.__TIXALL_SAVED_LAYOUTS__ || [];
-    const selectedId = String(layoutId || "").trim();
-
-    if (!selectedId) {
-      // eslint-disable-next-line no-console
-      console.warn(
-        "[seatmap] __TIXALL_HANDLE_SAVED_LAYOUT_SELECT__: no layoutId provided"
-      );
-      return;
-    }
-
-    const record =
-      layouts.find((l) => String(l.id) === selectedId) ||
-      layouts.find((l) => String(l.layoutId || l.id) === selectedId);
-
-    if (!record) {
-      // eslint-disable-next-line no-console
-      console.warn(
-        "[seatmap] __TIXALL_HANDLE_SAVED_LAYOUT_SELECT__: no layout record for id",
-        layoutId
-      );
-      return;
-    }
-
-    // Some backends store JSON under record.layout, some directly on the record
-    const layoutPayload = record.layout || record;
-
-    const rawKonva =
-      layoutPayload.konvaJson ||
-      layoutPayload.konvaJSON ||
-      layoutPayload.konva ||
-      null;
-
-    if (!rawKonva) {
-      // eslint-disable-next-line no-console
-      console.warn(
-        "[seatmap] __TIXALL_HANDLE_SAVED_LAYOUT_SELECT__: layout has no konvaJson",
-        record
-      );
-      return;
-    }
-
-    let konvaJsonObj;
-
-    if (typeof rawKonva === "string") {
-      try {
-        konvaJsonObj = JSON.parse(rawKonva);
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error(
-          "[seatmap] __TIXALL_HANDLE_SAVED_LAYOUT_SELECT__: failed to parse konvaJson",
-          err
-        );
-        return;
-      }
-    } else if (typeof rawKonva === "object") {
-      konvaJsonObj = rawKonva;
-    } else {
-      // eslint-disable-next-line no-console
-      console.warn(
-        "[seatmap] __TIXALL_HANDLE_SAVED_LAYOUT_SELECT__: unexpected konvaJson type",
-        typeof rawKonva,
-        record
-      );
-      return;
-    }
-
-    if (!stage) {
-      // eslint-disable-next-line no-console
-      console.warn(
-        "[seatmap] __TIXALL_HANDLE_SAVED_LAYOUT_SELECT__: stage not ready yet"
-      );
-      return;
-    }
-
-    loadKonvaLayoutIntoStage(konvaJsonObj);
-  };
 
       
  })();
