@@ -7260,7 +7260,12 @@ function handleStageMouseUp() {
 
   renderInspector(null);
 
-    // ---------- Saved layout switching (dropdown -> load konvaJson) ----------
+      // ---------- Saved layout switching (dropdown -> load konvaJson) ----------
+  //
+  // IMPORTANT:
+  // - This block does NOT auto-load any saved layout on startup.
+  // - Only call window.__TIXALL_HANDLE_SAVED_LAYOUT_SELECT__(id)
+  //   from the saved-layout dropdown when the user actually chooses one.
 
   // Helper: extract konva JSON string from a saved layout object
   function sbExtractKonvaJsonFromLayout(layout) {
@@ -7387,11 +7392,14 @@ function handleStageMouseUp() {
   }
 
   // Public hook: called when the saved-layout dropdown changes
-  // HTML side will call: window.__TIXALL_HANDLE_SAVED_LAYOUT_SELECT__(id)
+  // HTML side should call: window.__TIXALL_HANDLE_SAVED_LAYOUT_SELECT__(id)
   window.__TIXALL_HANDLE_SAVED_LAYOUT_SELECT__ =
     function __TIXALL_HANDLE_SAVED_LAYOUT_SELECT__(layoutId) {
       try {
-        if (!layoutId && layoutId !== 0) return;
+        // Ignore empty / placeholder values so we don't auto-load on startup
+        if (layoutId === null || layoutId === undefined) return;
+        const idStr = String(layoutId).trim();
+        if (!idStr || idStr === "blank" || idStr === "default") return;
 
         const layouts = window.__TIXALL_SAVED_LAYOUTS__ || [];
         if (!Array.isArray(layouts) || layouts.length === 0) {
@@ -7401,8 +7409,6 @@ function handleStageMouseUp() {
           );
           return;
         }
-
-        const idStr = String(layoutId);
 
         // Try a few common id properties: id, layoutId, key, slug
         const layout =
@@ -7430,6 +7436,7 @@ function handleStageMouseUp() {
           return;
         }
 
+        // At this point we *explicitly* swap the current map with the saved layout
         sbLoadLayoutFromKonvaJson(konvaJson);
       } catch (err) {
         // eslint-disable-next-line no-console
@@ -7439,5 +7446,3 @@ function handleStageMouseUp() {
         );
       }
     };
-
-})();
