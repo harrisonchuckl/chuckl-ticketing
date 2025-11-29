@@ -382,8 +382,13 @@ function initSymbolsToolbarDefaultIcon() {
   }
 }
 
-initSymbolsToolbarDefaultIcon();
-window.addEventListener("load", initSymbolsToolbarDefaultIcon);
+// NOTE:
+// We don't call initSymbolsToolbarDefaultIcon() here because the symbol icon
+// constants are defined further down in the file. The actual init + load
+// listener are wired after SYMBOL_ICON_DARK / SYMBOL_ICON_BLUE are declared.
+// initSymbolsToolbarDefaultIcon();
+// window.addEventListener("load", initSymbolsToolbarDefaultIcon);
+
 
   
   // Highlight the active tool button and swap icons based on data attributes
@@ -7260,191 +7265,168 @@ function handleStageMouseUp() {
 
   renderInspector(null);
 
-      // ---------- Saved layout switching (dropdown -> load konvaJson) ----------
-  //
-  // IMPORTANT:
-  // - This block does NOT auto-load any saved layout on startup.
-  // - Only call window.__TIXALL_HANDLE_SAVED_LAYOUT_SELECT__(id)
-  //   from the saved-layout dropdown when the user actually chooses one.
+  // ---------- Saved layout loader ----------
 
-  // Helper: extract konva JSON string from a saved layout object
-  function sbExtractKonvaJsonFromLayout(layout) {
-    if (!layout || typeof layout !== "object") return null;
-
-    // Prefer explicit konvaJson first
-    if (layout.konvaJson) return layout.konvaJson;
-    if (layout.konva_json) return layout.konva_json;
-
-    // Common fallbacks just in case the field is named differently
-    if (layout.konva) return layout.konva;
-    if (layout.json) return layout.json;
-
-    return null;
+function loadKonvaLayoutIntoStage(konvaJsonObj) {
+  if (!stage) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[seatmap] loadKonvaLayoutIntoStage: stage not ready yet"
+    );
+    return;
   }
 
-  // Helper: take a konvaJson string and replace the current mapLayer
-  function sbLoadLayoutFromKonvaJson(konvaJson) {
-    if (!stage || !konvaJson) return;
+  let createdNode;
+  try {
+    createdNode = Konva.Node.create(konvaJsonObj);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(
+      "[seatmap] loadKonvaLayoutIntoStage: failed to create Konva node from JSON",
+      err
+    );
+    return;
+  }
 
-    let newLayer;
-    try {
-      // konvaJson may represent a Layer or a Stage – handle both
-      const created = Konva.Node.create(konvaJson);
+  let newLayer = null;
 
-      if (created instanceof Konva.Stage) {
-        // If a full stage was saved, grab the first Layer as the map layer
-        const firstLayer = created.findOne("Layer");
-        if (!firstLayer) {
-          // eslint-disable-next-line no-console
-          console.error(
-            "[seatmap] sbLoadLayoutFromKonvaJson: Stage JSON has no Layer"
-          );
-          return;
-        }
-        newLayer = firstLayer;
-      } else if (created instanceof Konva.Layer) {
-        newLayer = created;
-      } else {
-        // Fallback: treat whatever came back as the map layer node
-        newLayer = created;
-      }
-    } catch (err) {
+  // If someone ever saved stage JSON instead of layer JSON, extract a layer
+  if (createdNode instanceof Konva.Stage) {
+    const layers =
+      typeof createdNode.getLayers === "function"
+        ? createdNode.getLayers()
+        : [];
+    if (layers && layers.length) {
+      newLayer = layers[0];
+    }
+  } else if (createdNode instanceof Konva.Layer) {
+    newLayer = createdNode;
+  } else if (createdNode instanceof Konva.Group) {
+    // Fallback: wrap a group in a new layer
+    newLayer = new Konva.Layer();
+    newLayer.add(createdNode);
+  }
+
+  if (!newLayer) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[seatmap] loadKonvaLayoutIntoStage: could not derive a layer from konvaJson",
+      createdNode
+    );
+    return;
+  }
+
+  // Remove old mapLayer, but keep gridLayer / overlayLayer
+  if (mapLayer) {
+    mapLayer.destroy();
+  }
+
+  mapLayer = newLayer;
+  mapLayer.position({ x: 0, y: 0 });
+  mapLayer.scale({ x: 1, y: 1 });
+  stage.add(mapLayer);
+
+  // Re-attach behaviour to all groups (drag, selection, inspector, etc.)
+  mapLayer.find("Group").forEach((g) => {
+    attachNodeBehaviour(g);
+    sbNormalizeZOrder(g);
+  });
+
+  mapLayer.draw();
+
+  // Reset selection + history + counts
+  clearSelection();
+  updateSeatCount();
+
+  history = [];
+  historyIndex = -1;
+  pushHistory();
+  updateUndoRedoButtons();
+
+  // Make sure background shapes / seat tools interaction is correct
+  updateShapeInteractionForPlacementTool();
+}
+
+// Exposed for the dropdown in the toolbar
+window.__TIXALL_HANDLE_SAVED_LAYOUT_SELECT__ =
+  function __TIXALL_HANDLE_SAVED_LAYOUT_SELECT__(layoutId) {
+    const layouts = window.__TIXALL_SAVED_LAYOUTS__ || [];
+    const selectedId = String(layoutId || "").trim();
+
+    if (!selectedId) {
       // eslint-disable-next-line no-console
-      console.error(
-        "[seatmap] sbLoadLayoutFromKonvaJson: failed to parse konvaJson",
-        err
+      console.warn(
+        "[seatmap] __TIXALL_HANDLE_SAVED_LAYOUT_SELECT__: no layoutId provided"
       );
       return;
     }
 
-    if (!newLayer) return;
+    const record =
+      layouts.find((l) => String(l.id) === selectedId) ||
+      layouts.find((l) => String(l.layoutId || l.id) === selectedId);
 
-    // Prevent pushHistory from firing while we swap layers
-    isRestoringHistory = true;
-
-    // Remove old map layer from the stage if it exists
-    if (mapLayer && mapLayer.destroy) {
-      try {
-        mapLayer.destroy();
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.warn(
-          "[seatmap] sbLoadLayoutFromKonvaJson: error destroying old mapLayer",
-          e
-        );
-      }
-    }
-
-    mapLayer = newLayer;
-    mapLayer.position({ x: 0, y: 0 });
-    mapLayer.scale({ x: 1, y: 1 });
-
-    stage.add(mapLayer);
-
-    // Re-attach behaviours to all top-level children
-    if (typeof attachNodeBehaviour === "function") {
-      mapLayer.getChildren().forEach((node) => {
-        attachNodeBehaviour(node);
-      });
-    }
-
-    // Keep background vs seat/table z-order sane
-    if (typeof sbNormalizeZOrder === "function") {
-      mapLayer.find("Group").forEach((g) => sbNormalizeZOrder(g));
-    }
-
-    // Ensure hit-rects etc. are sane after load
-    mapLayer.getChildren().forEach((node) => {
-      if (node instanceof Konva.Group) {
-        ensureHitRect(node);
-      }
-    });
-
-    // Clear any active selection / transformer state
-    if (typeof clearSelection === "function") {
-      clearSelection();
-    }
-
-    // Update seat count + tool hit-testing behaviour
-    updateSeatCount();
-    updateShapeInteractionForPlacementTool();
-
-    // Reset undo/redo history to this new layout as the baseline
-    history = [];
-    historyIndex = -1;
-    isRestoringHistory = false; // allow pushHistory again
-
-    try {
-      const initialJson = mapLayer.toJSON();
-      history.push(initialJson);
-      historyIndex = 0;
-    } catch (e) {
+    if (!record) {
       // eslint-disable-next-line no-console
       console.warn(
-        "[seatmap] sbLoadLayoutFromKonvaJson: failed to seed history",
-        e
+        "[seatmap] __TIXALL_HANDLE_SAVED_LAYOUT_SELECT__: no layout record for id",
+        layoutId
       );
+      return;
     }
 
-    updateUndoRedoButtons();
+    // Some backends store JSON under record.layout, some directly on the record
+    const layoutPayload = record.layout || record;
 
-    mapLayer.draw();
-  }
+    const rawKonva =
+      layoutPayload.konvaJson ||
+      layoutPayload.konvaJSON ||
+      layoutPayload.konva ||
+      null;
 
-  // Public hook: called when the saved-layout dropdown changes
-  // HTML side should call: window.__TIXALL_HANDLE_SAVED_LAYOUT_SELECT__(id)
-  window.__TIXALL_HANDLE_SAVED_LAYOUT_SELECT__ =
-    function __TIXALL_HANDLE_SAVED_LAYOUT_SELECT__(layoutId) {
+    if (!rawKonva) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[seatmap] __TIXALL_HANDLE_SAVED_LAYOUT_SELECT__: layout has no konvaJson",
+        record
+      );
+      return;
+    }
+
+    let konvaJsonObj;
+
+    if (typeof rawKonva === "string") {
       try {
-        // Ignore empty / placeholder values so we don't auto-load on startup
-        if (layoutId === null || layoutId === undefined) return;
-        const idStr = String(layoutId).trim();
-        if (!idStr || idStr === "blank" || idStr === "default") return;
-
-        const layouts = window.__TIXALL_SAVED_LAYOUTS__ || [];
-        if (!Array.isArray(layouts) || layouts.length === 0) {
-          // eslint-disable-next-line no-console
-          console.warn(
-            "[seatmap] __TIXALL_HANDLE_SAVED_LAYOUT_SELECT__: no layouts available"
-          );
-          return;
-        }
-
-        // Try a few common id properties: id, layoutId, key, slug
-        const layout =
-          layouts.find((l) => String(l.id) === idStr) ||
-          layouts.find((l) => String(l.layoutId) === idStr) ||
-          layouts.find((l) => String(l.key) === idStr) ||
-          layouts.find((l) => String(l.slug) === idStr);
-
-        if (!layout) {
-          // eslint-disable-next-line no-console
-          console.warn(
-            "[seatmap] __TIXALL_HANDLE_SAVED_LAYOUT_SELECT__: layout not found for id",
-            layoutId
-          );
-          return;
-        }
-
-        const konvaJson = sbExtractKonvaJsonFromLayout(layout);
-        if (!konvaJson) {
-          // eslint-disable-next-line no-console
-          console.warn(
-            "[seatmap] __TIXALL_HANDLE_SAVED_LAYOUT_SELECT__: layout has no konvaJson",
-            layout
-          );
-          return;
-        }
-
-        // At this point we *explicitly* swap the current map with the saved layout
-        sbLoadLayoutFromKonvaJson(konvaJson);
+        konvaJsonObj = JSON.parse(rawKonva);
       } catch (err) {
         // eslint-disable-next-line no-console
         console.error(
-          "[seatmap] __TIXALL_HANDLE_SAVED_LAYOUT_SELECT__ error",
+          "[seatmap] __TIXALL_HANDLE_SAVED_LAYOUT_SELECT__: failed to parse konvaJson",
           err
         );
+        return;
       }
-    };
+    } else if (typeof rawKonva === "object") {
+      konvaJsonObj = rawKonva;
+    } else {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[seatmap] __TIXALL_HANDLE_SAVED_LAYOUT_SELECT__: unexpected konvaJson type",
+        typeof rawKonva,
+        record
+      );
+      return;
+    }
 
+    if (!stage) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[seatmap] __TIXALL_HANDLE_SAVED_LAYOUT_SELECT__: stage not ready yet"
+      );
+      return;
+    }
+
+    loadKonvaLayoutIntoStage(konvaJsonObj);
+  };
+
+      
  })();
