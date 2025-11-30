@@ -1990,93 +1990,93 @@ window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
   }
 
   function applyStageStyle(group) {
-  if (!(group instanceof Konva.Group)) return;
-  const type = group.getAttr("shapeType") || group.name();
-  if (type !== "stage") return;
+    if (!(group instanceof Konva.Group)) return;
+    const type = group.getAttr("shapeType") || group.name();
+    if (type !== "stage") return;
 
-  const body = getBodyRect(group);
-  if (!body) return;
-  const label = group.findOne("Text");
+    const body = getBodyRect(group);
+    if (!body) return;
+    const label = group.findOne("Text");
 
-  // --- Fill mode: solid vs gradient ---
-  let fillMode = group.getAttr("stageFillMode");
-  if (fillMode !== "solid" && fillMode !== "gradient") {
-    // Default to solid now
-    fillMode = "solid";
-  }
-  group.setAttr("stageFillMode", fillMode);
+    // --- Fill mode: solid vs gradient ---
+    let fillMode = group.getAttr("stageFillMode");
+    if (fillMode !== "solid" && fillMode !== "gradient") {
+      // Default to solid now
+      fillMode = "solid";
+    }
+    group.setAttr("stageFillMode", fillMode);
 
-  // --- Solid colour setup (default: black) ---
-  let solidColor =
-    group.getAttr("stageSolidColor") || body.fill() || "#000000";
-  group.setAttr("stageSolidColor", solidColor);
+    // --- Solid colour setup (default: black) ---
+    let solidColor =
+      group.getAttr("stageSolidColor") || body.fill() || "#000000";
+    group.setAttr("stageSolidColor", solidColor);
 
-  // --- Gradient setup (kept for backwards-compatibility / options) ---
-  let startColor =
-    group.getAttr("stageGradientStartColor") || "#1d4ed8"; // brand blue
-  let endColor =
-    group.getAttr("stageGradientEndColor") || "#22c1c3";   // brand teal
-  group.setAttr("stageGradientStartColor", startColor);
-  group.setAttr("stageGradientEndColor", endColor);
+    // --- Gradient setup (kept for backwards-compatibility / options) ---
+    let startColor =
+      group.getAttr("stageGradientStartColor") || "#1d4ed8"; // brand blue
+    let endColor =
+      group.getAttr("stageGradientEndColor") || "#22c1c3";   // brand teal
+    group.setAttr("stageGradientStartColor", startColor);
+    group.setAttr("stageGradientEndColor", endColor);
 
-  let direction = group.getAttr("stageGradientDirection") || "lr";
-  if (direction !== "lr" && direction !== "tb" && direction !== "diag") {
-    direction = "lr";
-  }
-  group.setAttr("stageGradientDirection", direction);
+    let direction = group.getAttr("stageGradientDirection") || "lr";
+    if (direction !== "lr" && direction !== "tb" && direction !== "diag") {
+      direction = "lr";
+    }
+    group.setAttr("stageGradientDirection", direction);
 
-  const width = body.width();
-  const height = body.height();
+    const width = body.width();
+    const height = body.height();
 
-  if (fillMode === "solid") {
-    // Solid fill
-    body.fill(solidColor);
-    body.fillLinearGradientColorStops([]);
-  } else {
-    // Gradient fill
-    let startPoint = { x: 0, y: 0 };
-    let endPoint = { x: width, y: 0 }; // left → right
+    if (fillMode === "solid") {
+      // Solid fill
+      body.fill(solidColor);
+      body.fillLinearGradientColorStops([]);
+    } else {
+      // Gradient fill
+      let startPoint = { x: 0, y: 0 };
+      let endPoint = { x: width, y: 0 }; // left → right
 
-    if (direction === "tb") {
-      endPoint = { x: 0, y: height };      // top → bottom
-    } else if (direction === "diag") {
-      endPoint = { x: width, y: height };  // diagonal
+      if (direction === "tb") {
+        endPoint = { x: 0, y: height };      // top → bottom
+      } else if (direction === "diag") {
+        endPoint = { x: width, y: height };  // diagonal
+      }
+
+      body.fill("");
+      body.fillLinearGradientStartPoint(startPoint);
+      body.fillLinearGradientEndPoint(endPoint);
+      body.fillLinearGradientColorStops([
+        0,
+        startColor,
+        1,
+        endColor,
+      ]);
     }
 
-    body.fill("");
-    body.fillLinearGradientStartPoint(startPoint);
-    body.fillLinearGradientEndPoint(endPoint);
-    body.fillLinearGradientColorStops([
-      0,
-      startColor,
-      1,
-      endColor,
-    ]);
+    // --- Text colour (auto vs manual) ---
+    let autoText = group.getAttr("stageTextAutoColor") !== false; // default: true
+    group.setAttr("stageTextAutoColor", autoText);
+
+    let manualTextColor =
+      group.getAttr("stageTextColor") ||
+      (label && label.fill && label.fill()) ||
+      "#ffffff";
+    group.setAttr("stageTextColor", manualTextColor);
+
+    const effectiveBg =
+      fillMode === "solid"
+        ? solidColor
+        : blendTwoHex(startColor, endColor);
+
+    const finalTextColor = autoText
+      ? computeContrastTextColor(effectiveBg)
+      : manualTextColor;
+
+    if (label) {
+      label.fill(finalTextColor);
+    }
   }
-
-  // --- Text colour (auto vs manual) ---
-  let autoText = group.getAttr("stageTextAutoColor") !== false; // default: true
-  group.setAttr("stageTextAutoColor", autoText);
-
-  let manualTextColor =
-    group.getAttr("stageTextColor") ||
-    (label && label.fill && label.fill()) ||
-    "#ffffff";
-  group.setAttr("stageTextColor", manualTextColor);
-
-  const effectiveBg =
-    fillMode === "solid"
-      ? solidColor
-      : blendTwoHex(startColor, endColor);
-
-  const finalTextColor = autoText
-    ? computeContrastTextColor(effectiveBg)
-    : manualTextColor;
-
-  if (label) {
-    label.fill(finalTextColor);
-  }
-}
 
 
     function createSectionBlock(x, y) {
@@ -7230,17 +7230,15 @@ function handleStageMouseUp() {
 
     // ---------- Boot ----------
 
-    // ---------- Boot ----------
+    initStage();
+    updateDefaultCursor();
+    hookToolButtons();
+    hookZoomButtons();
+    hookClearButton();
+    hookUndoRedoButtons();
+    hookSaveButton();
 
-  initStage();
-  updateDefaultCursor();
-  hookToolButtons();
-  hookZoomButtons();
-  hookClearButton();
-  hookUndoRedoButtons();
-  hookSaveButton();
-
-  stage.on("click", handleStageClick);
+    stage.on("click", handleStageClick);
 
   // Canvas interactions
   stage.on("mousedown", handleStageMouseDown);
@@ -7265,46 +7263,46 @@ function handleStageMouseUp() {
 
   renderInspector(null);
 
-  // ---------- Saved layout loader ----------
+    // ---------- Saved layout loader ----------
 
-// Load a saved Konva layout JSON into the existing stage/mapLayer.
-// - Supports both old full-Stage JSON and new Layer-only JSON.
-// - Never creates a Stage from JSON, so we avoid "Stage has no container" errors.
-function loadKonvaLayoutIntoStage(konvaJson, options) {
-  const opts = options || {};
+    // Load a saved Konva layout JSON into the existing stage/mapLayer.
+    // - Supports both old full-Stage JSON and new Layer-only JSON.
+    // - Never creates a Stage from JSON, so we avoid "Stage has no container" errors.
+    function loadKonvaLayoutIntoStage(konvaJson, options) {
+      const opts = options || {};
 
-  if (!stage || !mapLayer) {
-    // eslint-disable-next-line no-console
-    console.warn("[seatmap] loadKonvaLayoutIntoStage: no stage/mapLayer yet");
-    return;
-  }
+      if (!stage || !mapLayer) {
+        // eslint-disable-next-line no-console
+        console.warn("[seatmap] loadKonvaLayoutIntoStage: no stage/mapLayer yet");
+        return;
+      }
 
-  if (!konvaJson) {
-    // Nothing to load – just reset history and seat count
-    history = [];
-    historyIndex = -1;
-    updateSeatCount();
-    updateUndoRedoButtons && updateUndoRedoButtons();
-    return;
-  }
+      if (!konvaJson) {
+        // Nothing to load – just reset history and seat count
+        history = [];
+        historyIndex = -1;
+        updateSeatCount();
+        updateUndoRedoButtons && updateUndoRedoButtons();
+        return;
+      }
 
-  // --- Step 1: get a plain JS object from whatever we were passed ---
-  let jsonObj = null;
+      // --- Step 1: get a plain JS object from whatever we were passed ---
+      let jsonObj = null;
 
-  try {
-    if (typeof konvaJson === "string") {
-      jsonObj = JSON.parse(konvaJson);
-    } else {
-      jsonObj = konvaJson;
-    }
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error(
-      "[seatmap] loadKonvaLayoutIntoStage: invalid JSON",
-      err
-    );
-    return;
-  }
+      try {
+        if (typeof konvaJson === "string") {
+          jsonObj = JSON.parse(konvaJson);
+        } else {
+          jsonObj = konvaJson;
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(
+          "[seatmap] loadKonvaLayoutIntoStage: invalid JSON",
+          err
+        );
+        return;
+      }
 
   // --- Step 2: normalise to a Layer JSON blob (handle old Stage JSON too) ---
   function pickLayerJson(obj) {
