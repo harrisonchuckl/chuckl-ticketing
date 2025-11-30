@@ -7174,6 +7174,34 @@ function handleStageMouseUp() {
     saveBtn.addEventListener("click", async () => {
       const selectionBeforeSave = selectedNode;
       const fallbackJson = mapLayer && mapLayer.toJSON ? mapLayer.toJSON() : null;
+      let seatMapIdForSave = currentSeatMapId || null;
+      let nameForSave = currentSeatMapName || null;
+
+      // If a saved layout is loaded, ask whether to overwrite or create a new save.
+      if (seatMapIdForSave) {
+        const overwrite = window.confirm(
+          "You already have a saved layout selected. Click OK to overwrite it, or Cancel to save a new copy instead."
+        );
+
+        if (!overwrite) {
+          seatMapIdForSave = null;
+          const suggested = nameForSave ? `${nameForSave} copy` : "";
+          const newName = window.prompt(
+            "Enter a name for the new saved seating map (Cancel to stop saving):",
+            suggested
+          );
+
+          // User cancelled the prompt – abort the save entirely.
+          if (newName === null) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = "Save layout";
+            return;
+          }
+
+          nameForSave = newName.trim() || nameForSave || null;
+        }
+      }
+
       saveBtn.disabled = true;
       saveBtn.textContent = "Saving…";
 
@@ -7192,6 +7220,8 @@ function handleStageMouseUp() {
         const body = {
           konvaJson,
           layoutType: initialLayoutKey,
+          seatMapId: seatMapIdForSave,
+          name: nameForSave,
         };
 
         const res = await fetch(
@@ -7333,37 +7363,27 @@ function handleStageMouseUp() {
           ? window.__TIXALL_SAVED_LAYOUTS__.filter(Boolean)
           : [];
         const wasCurrent = currentSeatMapId === seatMapId;
+        const wasSelected = select && select.value === seatMapId;
+        const shouldClear = wasCurrent || wasSelected;
 
-        // Clear the canvas immediately when deleting the active layout.
-        if (wasCurrent) {
+        const nextLayout = layouts.find((layout) => layout && layout.id);
+
+        if (shouldClear) {
           resetLayoutToBlank();
           setCurrentSeatMapMeta(null, null);
-        }
 
-        const nextLayout = layouts.find(
-          (layout) => layout && layout.id && layout.id !== seatMapId
-        );
-
-        if (wasCurrent) {
           if (nextLayout) {
             const loaded = await loadSavedLayoutById(nextLayout.id);
-            if (loaded) {
-              if (select) {
-                select.value = nextLayout.id;
-              }
-            } else {
+            if (loaded && select) {
+              select.value = nextLayout.id;
+            }
+            if (!loaded) {
               resetLayoutToBlank();
               setCurrentSeatMapMeta(null, null);
-              if (select) {
-                select.value = "";
-              }
+              if (select) select.value = "";
             }
-          } else {
-            resetLayoutToBlank();
-            setCurrentSeatMapMeta(null, null);
-            if (select) {
-              select.value = "";
-            }
+          } else if (select) {
+            select.value = "";
           }
         } else if (select && select.value === seatMapId) {
           select.value = nextLayout ? nextLayout.id : "";
