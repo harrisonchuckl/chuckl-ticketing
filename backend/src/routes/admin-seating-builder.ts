@@ -230,6 +230,46 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
 });
 
 /* -------------------------------------------------------------
+   ROUTE: DELETE a saved seat map
+-------------------------------------------------------------- */
+router.delete("/builder/api/seatmaps/:showId/:seatMapId", async (req, res) => {
+  try {
+    const showId = req.params.showId;
+    const seatMapId = req.params.seatMapId;
+
+    const showRow = (
+      await prisma.$queryRaw<{ id: string; venueId: string | null }[]>
+        `SELECT "id","venueId" FROM "Show" WHERE "id" = ${showId} LIMIT 1`
+    )[0];
+
+    if (!showRow) {
+      return res.status(404).json({ error: "Show not found" });
+    }
+
+    const scope: any[] = [{ showId }];
+    if (showRow.venueId) {
+      scope.push({ venueId: showRow.venueId });
+    }
+
+    const seatMap = await prisma.seatMap.findFirst({
+      where: { id: seatMapId, OR: scope },
+      select: { id: true },
+    });
+
+    if (!seatMap) {
+      return res.status(404).json({ error: "Seat map not found" });
+    }
+
+    await prisma.seatMap.delete({ where: { id: seatMap.id } });
+
+    return res.json({ ok: true, deletedId: seatMap.id });
+  } catch (err) {
+    console.error("Error in DELETE /builder/api/seatmaps/:showId/:seatMapId", err);
+    return res.status(500).json({ error: "internal_error" });
+  }
+});
+
+/* -------------------------------------------------------------
    ROUTE: GET builder full-page HTML
 -------------------------------------------------------------- */
 router.get("/builder/preview/:showId", (req, res) => {
@@ -631,6 +671,14 @@ router.get("/builder/preview/:showId", (req, res) => {
           </div>
         </div>
                <div class="tb-topbar-right">
+          <button
+            type="button"
+            class="tb-topbar-btn tb-btn-ghost"
+            id="tb-btn-delete"
+            disabled
+          >
+            Delete layout
+          </button>
           <select
             id="tb-saved-layout-select"
             class="tb-topbar-select"
@@ -641,6 +689,13 @@ router.get("/builder/preview/:showId", (req, res) => {
 
           <button type="button" class="tb-topbar-btn tb-btn-ghost" id="tb-btn-back">
             Back to wizard
+          </button>
+          <button
+            type="button"
+            class="tb-topbar-btn tb-btn-ghost"
+            id="tb-btn-load"
+          >
+            Load saved layout
           </button>
           <button type="button" class="tb-topbar-btn tb-btn-primary" id="tb-btn-save">
             Save layout
@@ -1311,10 +1366,13 @@ router.get("/builder/preview/:showId", (req, res) => {
         window.__TICKIN_SAVE_BUTTON__ = document.getElementById("tb-btn-save");
         // @ts-ignore
         window.__TICKIN_BACK_BUTTON__ = document.getElementById("tb-btn-back");
+        // @ts-ignore
+        window.__TICKIN_LOAD_BUTTON__ = document.getElementById("tb-btn-load");
+        // @ts-ignore
+        window.__TICKIN_DELETE_BUTTON__ = document.getElementById("tb-btn-delete");
 
         // ----- TIXALL: layout save name + success handling -----
         var tixallLayoutName = null;
-        var tixallReloadAfterSave = false;
 
         var saveBtnEl = document.getElementById("tb-btn-save");
         if (saveBtnEl) {
@@ -1345,8 +1403,6 @@ router.get("/builder/preview/:showId", (req, res) => {
                 window.__TIXALL_CURRENT_LAYOUT_NAME__ = tixallLayoutName;
               }
 
-              // Mark that we should refresh once the save POST succeeds
-              tixallReloadAfterSave = true;
             },
             true // capture, so this runs before other click listeners
           );
@@ -1385,25 +1441,14 @@ router.get("/builder/preview/:showId", (req, res) => {
 
           var result = originalFetch(input, init);
 
-          // After a successful save, reload so the dropdown picks up the new layout
-          if (isSeatMapSave && tixallReloadAfterSave) {
-            result
-              .then(function (res) {
-                if (!res || !res.ok) return;
-                // Mark that a layout has been saved
-                // @ts-ignore
-                window.__TIXALL_LAYOUT_SAVED__ = true;
-                window.location.reload();
-              })
-              .catch(function (err) {
-                console.error("TIXALL: error after seatmap save", err);
-              })
-              .finally(function () {
-                tixallReloadAfterSave = false;
-              });
-          }
-
-          return result;
+          return result.then(function (res) {
+            if (isSeatMapSave && res && res.ok) {
+              // Mark that a layout has been saved so other flows can respond.
+              // @ts-ignore
+              window.__TIXALL_LAYOUT_SAVED__ = true;
+            }
+            return res;
+          });
         };
 
         var tabs = document.querySelectorAll(".tb-tab");
@@ -1472,8 +1517,21 @@ router.get("/builder/preview/:showId", (req, res) => {
               metaCapacity.textContent = String(venue.capacity);
             }
 
-                       var savedSelect = document.getElementById("tb-saved-layout-select");
-            var maps = Array.isArray(data.previousMaps) ? data.previousMaps : [];
+            var savedSelect = document.getElementById("tb-saved-layout-select");
+            var maps = [];
+
+            if (data.activeSeatMap) {
+              maps.push(data.activeSeatMap);
+            }
+
+            if (Array.isArray(data.previousMaps)) {
+              data.previousMaps.forEach(function (m) {
+                var exists = maps.some(function (existing) {
+                  return existing.id === m.id;
+                });
+                if (!exists) maps.push(m);
+              });
+            }
 
             // Expose saved layouts globally so seating-builder.js can hook into them if needed
             // (e.g. to actually load / switch layouts when one is chosen).
