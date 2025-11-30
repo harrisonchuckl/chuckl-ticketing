@@ -7141,6 +7141,31 @@ function handleStageMouseUp() {
     });
   }
 
+  function hookLoadButton() {
+    const loadBtn = window.__TICKIN_LOAD_BUTTON__;
+    if (!loadBtn) return;
+
+    loadBtn.addEventListener("click", async () => {
+      loadBtn.disabled = true;
+      const originalLabel = loadBtn.textContent;
+      loadBtn.textContent = "Loading…";
+
+      try {
+        const loaded = await loadExistingLayout();
+        if (!loaded) {
+          window.alert("No saved layout found for this show.");
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error("Error loading seat map", err);
+        window.alert("There was a problem loading the saved layout.");
+      } finally {
+        loadBtn.disabled = false;
+        loadBtn.textContent = originalLabel || "Load saved layout";
+      }
+    });
+  }
+
   // ---------- Load existing layout ----------
 
   function initTableCounterFromExisting() {
@@ -7162,21 +7187,13 @@ function handleStageMouseUp() {
       const res = await fetch(
         `/admin/seating/builder/api/seatmaps/${encodeURIComponent(showId)}`
       );
-      if (!res.ok) {
-        pushHistory();
-        updateSeatCount();
-        return;
-      }
+      if (!res.ok) return false;
 
       const data = await res.json();
       const active = data && data.activeSeatMap;
       const konvaJson = active && active.layout && active.layout.konvaJson;
 
-      if (!konvaJson) {
-        pushHistory();
-        updateSeatCount();
-        return;
-      }
+      if (!konvaJson) return false;
 
       let parsed;
       try {
@@ -7186,11 +7203,7 @@ function handleStageMouseUp() {
         parsed = null;
       }
 
-      if (!parsed) {
-        pushHistory();
-        updateSeatCount();
-        return;
-      }
+      if (!parsed) return false;
 
       const tempStage = Konva.Node.create(parsed, container);
       const foundLayers = tempStage.getLayers();
@@ -7200,6 +7213,8 @@ function handleStageMouseUp() {
         const withChildren = foundLayers.find((l) => l.getChildren().length);
         if (withChildren) sourceLayer = withChildren;
       }
+
+      if (!sourceLayer) return false;
 
       const json = sourceLayer.toJSON();
       const restored = Konva.Node.create(json);
@@ -7213,6 +7228,7 @@ function handleStageMouseUp() {
       mapLayer.getChildren().forEach((node) => attachNodeBehaviour(node));
 
       mapLayer.draw();
+      clearSelection();
       updateSeatCount();
 
       history = [mapLayer.toJSON()];
@@ -7220,11 +7236,12 @@ function handleStageMouseUp() {
       updateUndoRedoButtons();
 
       initTableCounterFromExisting();
+      tempStage.destroy();
+      return true;
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error("Error loading existing seat map", err);
-      pushHistory();
-      updateSeatCount();
+      return false;
     }
   }
 
@@ -7237,6 +7254,7 @@ function handleStageMouseUp() {
     hookClearButton();
     hookUndoRedoButtons();
     hookSaveButton();
+    hookLoadButton();
 
     stage.on("click", handleStageClick);
 
@@ -7259,7 +7277,8 @@ function handleStageMouseUp() {
   window.addEventListener("resize", resizeStageToContainer);
 
   resizeStageToContainer();
-  loadExistingLayout();
+  pushHistory();
+  updateSeatCount();
 
   renderInspector(null);
 
