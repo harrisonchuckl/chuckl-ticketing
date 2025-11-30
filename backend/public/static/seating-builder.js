@@ -278,6 +278,8 @@ let stairsStartPos = null;
     onSale: "",
     offSale: "",
     info: "",
+    minPerOrder: "1",
+    maxPerOrder: "15",
   };
   let ticketFormAutoOffSale = true;
   let showMeta = null;
@@ -2428,8 +2430,8 @@ function createBar(x, y) {
     const symbolType = normaliseSymbolTool(symbolToolNameOrType);
 
     const group = new Konva.Group({
-      x: x - 18,
-      y: y - 18,
+      x: x,
+      y: y,
       draggable: true,
       name: "symbol",
       shapeType: "symbol",
@@ -3930,6 +3932,14 @@ function attachMultiShapeTransformBehaviour(group) {
       ticketFormState.offSale = showDateValue || nowValue;
       ticketFormAutoOffSale = true;
     }
+
+    if (!ticketFormState.minPerOrder) {
+      ticketFormState.minPerOrder = "1";
+    }
+
+    if (!ticketFormState.maxPerOrder) {
+      ticketFormState.maxPerOrder = "15";
+    }
   }
 
   function applyShowMeta(data) {
@@ -3994,6 +4004,28 @@ function attachMultiShapeTransformBehaviour(group) {
     return ticketTypes.length ? ticketTypes[0].id : null;
   }
 
+  function countAssignmentsForTicket(ticketId) {
+    if (!ticketId) return 0;
+    let count = 0;
+    ticketAssignments.forEach((tid) => {
+      if (tid === ticketId) count += 1;
+    });
+    return count;
+  }
+
+  function rebuildTicketAssignmentsCache() {
+    const map = new Map();
+    const seats = getAllSeatNodes();
+    seats.forEach((seat) => {
+      const ticketId = seat.getAttr("sbTicketId") || null;
+      const sid = ensureSeatIdAttr(seat);
+      if (ticketId && sid) {
+        map.set(sid, ticketId);
+      }
+    });
+    ticketAssignments = map;
+  }
+
   function toggleSeatTicketAssignment(seat, ticketId) {
     const sid = ensureSeatIdAttr(seat);
     if (!sid) return;
@@ -4039,6 +4071,7 @@ function attachMultiShapeTransformBehaviour(group) {
     ensureTicketFormDefaults();
 
     const duplicates = findDuplicateSeatRefs();
+    rebuildTicketAssignmentsCache();
     el.innerHTML = "";
 
     const title = document.createElement("h4");
@@ -4083,6 +4116,36 @@ function attachMultiShapeTransformBehaviour(group) {
       ticketFormState.price = priceInput.value;
     });
     form.appendChild(priceInput);
+
+    const minLabel = document.createElement("div");
+    minLabel.className = "sb-label";
+    minLabel.textContent = "Min tickets per order";
+    form.appendChild(minLabel);
+
+    const minInput = document.createElement("input");
+    minInput.type = "text";
+    minInput.inputMode = "numeric";
+    minInput.className = "sb-input";
+    minInput.value = ticketFormState.minPerOrder || "1";
+    minInput.addEventListener("input", () => {
+      ticketFormState.minPerOrder = minInput.value || "1";
+    });
+    form.appendChild(minInput);
+
+    const maxLabel = document.createElement("div");
+    maxLabel.className = "sb-label";
+    maxLabel.textContent = "Max tickets per order";
+    form.appendChild(maxLabel);
+
+    const maxInput = document.createElement("input");
+    maxInput.type = "text";
+    maxInput.inputMode = "numeric";
+    maxInput.className = "sb-input";
+    maxInput.value = ticketFormState.maxPerOrder || "15";
+    maxInput.addEventListener("input", () => {
+      ticketFormState.maxPerOrder = maxInput.value || "15";
+    });
+    form.appendChild(maxInput);
 
     const colorInput = document.createElement("input");
     colorInput.type = "color";
@@ -4189,6 +4252,17 @@ function attachMultiShapeTransformBehaviour(group) {
         (priceInput.value || "").replace(/[^0-9.,-]/g, "").replace(/,/g, ".")
       );
       const price = Number.isFinite(parsedPrice) ? parsedPrice : 0;
+      const minPerOrder = Math.max(1, parseInt(minInput.value || "1", 10) || 1);
+      const maxPerOrder = Math.max(
+        minPerOrder,
+        parseInt(maxInput.value || "15", 10) || minPerOrder
+      );
+
+      if (maxPerOrder < minPerOrder) {
+        window.alert("Max tickets per order cannot be less than the minimum.");
+        return;
+      }
+
       const ticket = {
         id: `ticket-${Date.now()}-${ticketTypes.length + 1}`,
         name,
@@ -4198,6 +4272,8 @@ function attachMultiShapeTransformBehaviour(group) {
         onSale: onSaleInput.value || null,
         offSale: offSaleInput.value || null,
         info: infoInput.value || "",
+        minPerOrder,
+        maxPerOrder,
       };
 
       ticketTypes = ticketTypes.concat(ticket);
@@ -4207,6 +4283,8 @@ function attachMultiShapeTransformBehaviour(group) {
         name: "",
         price: "",
         info: "",
+        minPerOrder: String(minPerOrder),
+        maxPerOrder: String(maxPerOrder),
       };
       renderTicketingPanel();
     });
@@ -4233,15 +4311,26 @@ function attachMultiShapeTransformBehaviour(group) {
     ticketTypes.forEach((t) => {
       const opt = document.createElement("option");
       opt.value = t.id;
-      opt.textContent = `${t.name} – ${formatTicketPrice(t.price)}`;
+      const assigned = countAssignmentsForTicket(t.id);
+      opt.textContent = `${t.name} – ${formatTicketPrice(t.price)} (${assigned} assigned)`;
       select.appendChild(opt);
     });
     select.value = activeTicketSelectionId || (ticketTypes[0] ? ticketTypes[0].id : "");
     activeTicketSelectionId = select.value || activeTicketSelectionId;
     select.addEventListener("change", () => {
       activeTicketSelectionId = select.value;
+      renderTicketingPanel();
     });
     el.appendChild(select);
+
+    const assignmentCount = document.createElement("div");
+    assignmentCount.className = "sb-inspector-empty";
+    assignmentCount.style.padding = "6px 0";
+    assignmentCount.style.color = "#111827";
+    const activeTicketId = select.value;
+    const assignedTotal = countAssignmentsForTicket(activeTicketId);
+    assignmentCount.textContent = `${assignedTotal} seat${assignedTotal === 1 ? "" : "s"} assigned to this ticket`;
+    el.appendChild(assignmentCount);
 
     const assignSelectedBtn = document.createElement("button");
     assignSelectedBtn.type = "button";
@@ -7294,6 +7383,7 @@ if (
 
     const pointerPos = stage.getPointerPosition();
     if (!pointerPos) return;
+    const pos = pointerPos;
 
     const target = evt.target;
     const isHandle =
@@ -7301,7 +7391,7 @@ if (
       target.getAttr &&
       (target.getAttr("isLineHandle") || target.getAttr("isArrowHandle"));
 
-    if (activeMainTab === "tickets" && (!activeTool || activeTool === "select")) {
+    if (activeMainTab === "tickets") {
       const group = target && typeof target.findAncestor === "function"
         ? target.findAncestor("Group", true)
         : null;
