@@ -6577,7 +6577,10 @@ if (
     domContainer.style.backgroundColor = "#f9fafb";
 
     gridLayer = new Konva.Layer({ listening: false });
-    mapLayer = new Konva.Layer();
+    mapLayer = new Konva.Layer({
+      id: "mapLayer",
+      name: "map-layer",
+    });
     mapLayer.position({ x: 0, y: 0 });
     mapLayer.scale({ x: 1, y: 1 });
     overlayLayer = new Konva.Layer();
@@ -7112,6 +7115,16 @@ function handleStageMouseUp() {
 
       try {
         const konvaJson = stage.toJSON();
+        // eslint-disable-next-line no-console
+        console.info("[seatmap] save: start", {
+          showId,
+          layoutType: initialLayoutKey,
+          jsonLength: konvaJson ? konvaJson.length : 0,
+          mapChildren: mapLayer ? mapLayer.getChildren().length : null,
+          selectionId: selectionBeforeSave && selectionBeforeSave.id
+            ? selectionBeforeSave.id()
+            : null,
+        });
         const body = {
           konvaJson,
           layoutType: initialLayoutKey,
@@ -7127,6 +7140,24 @@ function handleStageMouseUp() {
             body: JSON.stringify(body),
           }
         );
+
+        let responseBody = null;
+        try {
+          const text = await res.text();
+          responseBody = text ? JSON.parse(text) : null;
+        } catch (parseErr) {
+          // eslint-disable-next-line no-console
+          console.warn("[seatmap] save: could not parse response JSON", parseErr);
+        }
+
+        // eslint-disable-next-line no-console
+        console.info("[seatmap] save: response", {
+          status: res.status,
+          ok: res.ok,
+          seatMapId:
+            responseBody && responseBody.seatMap ? responseBody.seatMap.id : null,
+          bodyKeys: responseBody ? Object.keys(responseBody) : null,
+        });
 
         if (!res.ok) {
           throw new Error(`Save failed (${res.status})`);
@@ -7145,6 +7176,9 @@ function handleStageMouseUp() {
         if (selectionBeforeSave && selectionBeforeSave.getStage()) {
           selectNode(selectionBeforeSave);
         }
+
+        // eslint-disable-next-line no-console
+        console.info("[seatmap] save: finished");
       }
     });
   }
@@ -7192,16 +7226,36 @@ function handleStageMouseUp() {
 
   async function loadExistingLayout() {
     try {
+      // eslint-disable-next-line no-console
+      console.info("[seatmap] load: fetching latest layout", { showId });
+
       const res = await fetch(
         `/admin/seating/builder/api/seatmaps/${encodeURIComponent(showId)}`
       );
       if (!res.ok) return false;
 
       const data = await res.json();
+
+      // eslint-disable-next-line no-console
+      console.info("[seatmap] load: fetched", {
+        status: res.status,
+        ok: res.ok,
+        hasActive: !!(data && data.activeSeatMap),
+        previousCount: Array.isArray(data && data.previousMaps)
+          ? data.previousMaps.length
+          : 0,
+      });
       const active = data && data.activeSeatMap;
       const konvaJson = active && active.layout && active.layout.konvaJson;
 
       if (!konvaJson) return false;
+
+      // eslint-disable-next-line no-console
+      console.info("[seatmap] load: attempting to load active layout", {
+        id: active && active.id,
+        name: active && active.name,
+        jsonLength: konvaJson ? konvaJson.length : 0,
+      });
 
       const loaded = loadKonvaLayoutIntoStage(konvaJson, {
         resetHistory: true,
@@ -7230,6 +7284,15 @@ function handleStageMouseUp() {
       window.alert("Saved layout not found for this venue.");
       return false;
     }
+
+    // eslint-disable-next-line no-console
+    console.info("[seatmap] load: loading from dropdown/button", {
+      seatMapId,
+      name: match.name,
+      jsonLength: match.layout.konvaJson
+        ? match.layout.konvaJson.length
+        : 0,
+    });
 
     const loaded = loadKonvaLayoutIntoStage(match.layout.konvaJson, {
       resetHistory: true,
@@ -7295,6 +7358,12 @@ function handleStageMouseUp() {
         opt.value = layout.id;
         opt.textContent = layout.name || "Layout";
         select.appendChild(opt);
+      });
+
+      // eslint-disable-next-line no-console
+      console.info("[seatmap] saved layouts refreshed", {
+        count: lists.length,
+        ids: lists.map((l) => l.id),
       });
     } catch (err) {
       // eslint-disable-next-line no-console
@@ -7372,6 +7441,8 @@ function handleStageMouseUp() {
         historyIndex = -1;
         updateSeatCount();
         updateUndoRedoButtons && updateUndoRedoButtons();
+        // eslint-disable-next-line no-console
+        console.info("[seatmap] loadKonvaLayoutIntoStage: empty layout reset");
         return;
       }
 
@@ -7393,9 +7464,9 @@ function handleStageMouseUp() {
         return;
       }
 
-  // --- Step 2: normalise to a Layer JSON blob (handle old Stage JSON too) ---
-  function pickLayerJson(obj) {
-    if (!obj || typeof obj !== "object") return null;
+      // --- Step 2: normalise to a Layer JSON blob (handle old Stage JSON too) ---
+      function pickLayerJson(obj) {
+        if (!obj || typeof obj !== "object") return null;
 
     const cls = obj.className || obj.nodeType;
 
@@ -7406,21 +7477,28 @@ function handleStageMouseUp() {
 
     // Old full-stage JSON: { className: "Stage", children: [...] }
     if (cls === "Stage" && Array.isArray(obj.children)) {
-      // Prefer something that looks like the main map layer if we can
       const children = obj.children;
 
-      let candidate =
-        children.find(
-          (c) =>
-            c.className === "Layer" &&
-            c.attrs &&
-            (c.attrs.id === "mapLayer" ||
-              c.attrs.name === "map-layer" ||
-              c.attrs.name === "seatmap")
-        ) ||
-        children.find((c) => c.className === "Layer");
+      // Prefer something clearly marked as the map layer
+      const explicit = children.find(
+        (c) =>
+          c.className === "Layer" &&
+          c.attrs &&
+          (c.attrs.id === "mapLayer" ||
+            c.attrs.name === "map-layer" ||
+            c.attrs.name === "seatmap")
+      );
+      if (explicit) return explicit;
 
-      return candidate || null;
+      // Otherwise, pick a Layer that actually listens (skips non-interactive grid)
+      const interactive = children.find(
+        (c) => c.className === "Layer" && (!c.attrs || c.attrs.listening !== false)
+      );
+      if (interactive) return interactive;
+
+      // As a last resort, return the first Layer child
+      const anyLayer = children.find((c) => c.className === "Layer");
+      if (anyLayer) return anyLayer;
     }
 
     // If it has children but no explicit className, try to dive once
@@ -7434,6 +7512,16 @@ function handleStageMouseUp() {
   }
 
   const layerJson = pickLayerJson(jsonObj);
+
+  // eslint-disable-next-line no-console
+  console.info("[seatmap] loadKonvaLayoutIntoStage: parsed JSON", {
+    hasChildren: Array.isArray(jsonObj && jsonObj.children)
+      ? jsonObj.children.length
+      : null,
+    layerFound: !!layerJson,
+    layerId: layerJson && layerJson.attrs ? layerJson.attrs.id : null,
+    layerName: layerJson && layerJson.attrs ? layerJson.attrs.name : null,
+  });
 
   if (!layerJson) {
     // eslint-disable-next-line no-console
@@ -7468,6 +7556,12 @@ function handleStageMouseUp() {
     return false;
   }
 
+  // Ensure the layer is tagged consistently so future saves/loads can find it.
+  if (!newLayer.id()) {
+    newLayer.id("mapLayer");
+  }
+  newLayer.name((newLayer.name() || "").length ? newLayer.name() : "map-layer");
+
   // --- Step 4: swap the mapLayer and re-wire behaviour on all children ---
   try {
     mapLayer.destroy();
@@ -7477,6 +7571,18 @@ function handleStageMouseUp() {
 
   mapLayer = newLayer;
   stage.add(mapLayer);
+  if (gridLayer && gridLayer.getStage && gridLayer.getStage()) {
+    mapLayer.moveAbove(gridLayer);
+  }
+  if (overlayLayer && overlayLayer.getStage && overlayLayer.getStage()) {
+    overlayLayer.moveToTop();
+  }
+
+  // eslint-disable-next-line no-console
+  console.info("[seatmap] loadKonvaLayoutIntoStage: layer attached", {
+    children: mapLayer.getChildren().length,
+    hasStage: !!mapLayer.getStage(),
+  });
 
   // Re-attach behaviours to every group loaded from JSON
   if (opts.reattachBehaviours !== false && typeof attachNodeBehaviour === "function") {
