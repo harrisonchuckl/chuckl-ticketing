@@ -7131,6 +7131,8 @@ function handleStageMouseUp() {
         if (!res.ok) {
           throw new Error(`Save failed (${res.status})`);
         }
+
+        await refreshSavedLayoutsDropdown();
       } catch (err) {
         // eslint-disable-next-line no-console
         console.error("Error saving seat map", err);
@@ -7239,6 +7241,65 @@ function handleStageMouseUp() {
     }
 
     return !!loaded;
+  }
+
+  async function refreshSavedLayoutsDropdown() {
+    const select = document.getElementById("tb-saved-layout-select");
+
+    try {
+      const res = await fetch(
+        `/admin/seating/builder/api/seatmaps/${encodeURIComponent(showId)}`
+      );
+      if (!res.ok) return;
+
+      const data = await res.json();
+      const lists = [];
+
+      if (data && data.activeSeatMap) {
+        lists.push(data.activeSeatMap);
+      }
+
+      if (Array.isArray(data.previousMaps)) {
+        data.previousMaps.forEach((m) => {
+          const already = lists.some((existing) => existing.id === m.id);
+          if (!already) lists.push(m);
+        });
+      }
+
+      // eslint-disable-next-line no-underscore-dangle
+      window.__TIXALL_SAVED_LAYOUTS__ = lists;
+
+      if (!select) return;
+
+      select.innerHTML = "";
+
+      if (!lists.length) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.disabled = true;
+        opt.selected = true;
+        opt.textContent = "No saved layouts for this venue";
+        select.appendChild(opt);
+        return;
+      }
+
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.disabled = true;
+      placeholder.selected = true;
+      placeholder.textContent = "Choose a saved layout…";
+      select.appendChild(placeholder);
+
+      lists.forEach((layout) => {
+        const opt = document.createElement("option");
+        opt.value = layout.id;
+        opt.textContent = layout.name || "Layout";
+        select.appendChild(opt);
+      });
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("[seatmap] Failed to refresh saved layouts", err);
+    }
   }
 
     // ---------- Boot ----------
