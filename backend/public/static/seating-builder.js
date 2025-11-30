@@ -270,6 +270,19 @@ let stairsStartPos = null;
   let activeMainTab = "map";
   let ticketTypes = [];
   let ticketAssignments = new Map();
+  let activeTicketSelectionId = null;
+  let ticketFormState = {
+    name: "",
+    price: "",
+    color: "#2563eb",
+    onSale: "",
+    offSale: "",
+    info: "",
+  };
+  let ticketFormAutoOffSale = true;
+  let showMeta = null;
+  let venueCurrencyCode = (window.__SEATMAP_VENUE_CURRENCY__ || "GBP").toString().toUpperCase();
+  let isLoadingShowMeta = false;
   let seatIdCounter = 1;
   let duplicateSeatRefs = new Set();
 
@@ -3884,6 +3897,117 @@ function attachMultiShapeTransformBehaviour(group) {
     }
   }
 
+  function formatDateTimeLocal(date) {
+    if (!date) return "";
+    const d = typeof date === "string" ? new Date(date) : date;
+    if (Number.isNaN(d.getTime())) return "";
+
+    const pad = (n) => `${n}`.padStart(2, "0");
+    const year = d.getFullYear();
+    const month = pad(d.getMonth() + 1);
+    const day = pad(d.getDate());
+    const hours = pad(d.getHours());
+    const minutes = pad(d.getMinutes());
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  }
+
+  function deriveVenueCurrency() {
+    const fromWindow = window.__SEATMAP_VENUE_CURRENCY__;
+    const fromMeta =
+      (showMeta && (showMeta.currency || (showMeta.venue && showMeta.venue.currency))) || null;
+    const code = ((fromWindow || fromMeta || venueCurrencyCode || "GBP") + "").toUpperCase();
+    venueCurrencyCode = code || "GBP";
+  }
+
+  function ensureTicketFormDefaults() {
+    const nowValue = formatDateTimeLocal(new Date());
+    if (!ticketFormState.onSale) {
+      ticketFormState.onSale = nowValue;
+    }
+
+    const showDateValue = showMeta && showMeta.date ? formatDateTimeLocal(showMeta.date) : "";
+    if (!ticketFormState.offSale) {
+      ticketFormState.offSale = showDateValue || nowValue;
+      ticketFormAutoOffSale = true;
+    }
+  }
+
+  function applyShowMeta(data) {
+    if (!data || !data.show) return;
+    showMeta = data.show;
+    deriveVenueCurrency();
+    const showDateValue = showMeta && showMeta.date ? formatDateTimeLocal(showMeta.date) : "";
+    if (showDateValue && (ticketFormAutoOffSale || !ticketFormState.offSale)) {
+      ticketFormState.offSale = showDateValue;
+      ticketFormAutoOffSale = true;
+    }
+    ensureTicketFormDefaults();
+
+    if (activeMainTab === "tickets") {
+      renderTicketingPanel();
+    }
+  }
+
+  async function ensureShowMetaLoaded() {
+    if (showMeta || isLoadingShowMeta) return;
+    isLoadingShowMeta = true;
+
+    try {
+      const res = await fetch(
+        `/admin/seating/builder/api/seatmaps/${encodeURIComponent(showId)}`
+      );
+
+      if (!res.ok) return;
+      const data = await res.json();
+      applyShowMeta(data);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn("[seatmap] show meta fetch failed", err);
+    } finally {
+      isLoadingShowMeta = false;
+    }
+  }
+
+  function formatTicketPrice(value) {
+    if (!Number.isFinite(value)) return "Free";
+
+    try {
+      return new Intl.NumberFormat(undefined, {
+        style: "currency",
+        currency: venueCurrencyCode || "GBP",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(value);
+    } catch (err) {
+      return `${venueCurrencyCode || ""} ${value.toFixed(2)}`.trim();
+    }
+  }
+
+  function getShowDateLimit() {
+    if (!showMeta || !showMeta.date) return null;
+    const d = new Date(showMeta.date);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  function getActiveTicketIdForAssignments() {
+    if (activeTicketSelectionId) return activeTicketSelectionId;
+    return ticketTypes.length ? ticketTypes[0].id : null;
+  }
+
+  function toggleSeatTicketAssignment(seat, ticketId) {
+    const sid = ensureSeatIdAttr(seat);
+    if (!sid) return;
+
+    const existing = seat.getAttr("sbTicketId") || null;
+    if (existing === ticketId) {
+      seat.setAttr("sbTicketId", null);
+      ticketAssignments.delete(sid);
+    } else {
+      seat.setAttr("sbTicketId", ticketId);
+      ticketAssignments.set(sid, ticketId);
+    }
+  }
+
   function getSelectedSeatNodes() {
     const nodes =
       transformer && transformer.nodes && transformer.nodes().length
@@ -3911,6 +4035,9 @@ function attachMultiShapeTransformBehaviour(group) {
     const el = getInspectorElement();
     if (!el) return;
 
+    ensureShowMetaLoaded();
+    ensureTicketFormDefaults();
+
     const duplicates = findDuplicateSeatRefs();
     el.innerHTML = "";
 
@@ -3935,36 +4062,85 @@ function attachMultiShapeTransformBehaviour(group) {
     nameInput.type = "text";
     nameInput.placeholder = "Ticket name";
     nameInput.className = "sb-input";
+    nameInput.value = ticketFormState.name;
+    nameInput.addEventListener("input", () => {
+      ticketFormState.name = nameInput.value;
+    });
     form.appendChild(nameInput);
 
+    const priceLabel = document.createElement("div");
+    priceLabel.className = "sb-label";
+    priceLabel.textContent = `Price (${venueCurrencyCode})`;
+    form.appendChild(priceLabel);
+
     const priceInput = document.createElement("input");
-    priceInput.type = "number";
-    priceInput.min = "0";
-    priceInput.step = "0.01";
-    priceInput.placeholder = "Price";
+    priceInput.type = "text";
+    priceInput.inputMode = "decimal";
+    priceInput.placeholder = `Price (${venueCurrencyCode})`;
     priceInput.className = "sb-input";
+    priceInput.value = ticketFormState.price;
+    priceInput.addEventListener("input", () => {
+      ticketFormState.price = priceInput.value;
+    });
     form.appendChild(priceInput);
 
     const colorInput = document.createElement("input");
     colorInput.type = "color";
-    colorInput.value = "#2563eb";
+    colorInput.value = ticketFormState.color || "#2563eb";
     colorInput.className = "sb-input";
+    colorInput.addEventListener("input", () => {
+      ticketFormState.color = colorInput.value || "#2563eb";
+    });
     form.appendChild(colorInput);
+
+    const onSaleLabel = document.createElement("div");
+    onSaleLabel.className = "sb-label";
+    onSaleLabel.textContent = "Tickets on sale date and time";
+    form.appendChild(onSaleLabel);
 
     const onSaleInput = document.createElement("input");
     onSaleInput.type = "datetime-local";
     onSaleInput.className = "sb-input";
+    onSaleInput.value = ticketFormState.onSale || formatDateTimeLocal(new Date());
+    onSaleInput.addEventListener("input", () => {
+      ticketFormState.onSale = onSaleInput.value;
+      updateTimingValidation();
+    });
     form.appendChild(onSaleInput);
+
+    const offSaleLabel = document.createElement("div");
+    offSaleLabel.className = "sb-label";
+    offSaleLabel.textContent = "Tickets off sale date and time (auto-set to event time)";
+    form.appendChild(offSaleLabel);
 
     const offSaleInput = document.createElement("input");
     offSaleInput.type = "datetime-local";
     offSaleInput.className = "sb-input";
+    const offSaleDefault =
+      ticketFormState.offSale || formatDateTimeLocal(getShowDateLimit()) || "";
+    offSaleInput.value = offSaleDefault;
+    offSaleInput.addEventListener("input", () => {
+      ticketFormState.offSale = offSaleInput.value;
+      ticketFormAutoOffSale = false;
+      updateTimingValidation();
+    });
     form.appendChild(offSaleInput);
+
+    const offSaleError = document.createElement("div");
+    offSaleError.className = "sb-inspector-empty";
+    offSaleError.style.color = "#b91c1c";
+    offSaleError.style.display = "none";
+    offSaleError.style.paddingTop = "2px";
+    form.appendChild(offSaleError);
 
     const infoInput = document.createElement("textarea");
     infoInput.placeholder = "Additional information";
     infoInput.className = "sb-input";
     infoInput.style.resize = "vertical";
+    infoInput.value = ticketFormState.info;
+    infoInput.addEventListener("input", () => {
+      ticketFormState.info = infoInput.value;
+    });
     form.appendChild(infoInput);
 
     const createBtn = document.createElement("button");
@@ -3972,10 +4148,33 @@ function attachMultiShapeTransformBehaviour(group) {
     createBtn.className = "tool-button";
     createBtn.textContent = "Create ticket";
     createBtn.disabled = duplicates.size > 0;
+    const updateTimingValidation = () => {
+      const showDateLimit = getShowDateLimit();
+      const offDate = offSaleInput.value ? new Date(offSaleInput.value) : null;
+      const invalid =
+        !!(showDateLimit && offDate && !Number.isNaN(offDate.getTime()) && offDate > showDateLimit);
+
+      offSaleError.style.display = invalid ? "" : "none";
+      offSaleError.textContent = invalid
+        ? "Ticket off-sale date/time must be on or before the event time."
+        : "";
+
+      createBtn.disabled = duplicates.size > 0 || invalid;
+      return invalid;
+    };
+
+    updateTimingValidation();
     createBtn.addEventListener("click", () => {
       if (duplicates.size > 0) {
         window.alert(
           "Please fix duplicate seat references (highlighted in red) before creating tickets."
+        );
+        return;
+      }
+
+      if (updateTimingValidation()) {
+        window.alert(
+          "Tickets must go off sale on or before the event time. Please adjust the off-sale date."
         );
         return;
       }
@@ -3986,11 +4185,15 @@ function attachMultiShapeTransformBehaviour(group) {
         return;
       }
 
-      const price = Number(priceInput.value) || 0;
+      const parsedPrice = parseFloat(
+        (priceInput.value || "").replace(/[^0-9.,-]/g, "").replace(/,/g, ".")
+      );
+      const price = Number.isFinite(parsedPrice) ? parsedPrice : 0;
       const ticket = {
         id: `ticket-${Date.now()}-${ticketTypes.length + 1}`,
         name,
         price,
+        currency: venueCurrencyCode,
         color: colorInput.value || "#2563eb",
         onSale: onSaleInput.value || null,
         offSale: offSaleInput.value || null,
@@ -3998,6 +4201,13 @@ function attachMultiShapeTransformBehaviour(group) {
       };
 
       ticketTypes = ticketTypes.concat(ticket);
+      activeTicketSelectionId = ticket.id;
+      ticketFormState = {
+        ...ticketFormState,
+        name: "",
+        price: "",
+        info: "",
+      };
       renderTicketingPanel();
     });
 
@@ -4023,8 +4233,13 @@ function attachMultiShapeTransformBehaviour(group) {
     ticketTypes.forEach((t) => {
       const opt = document.createElement("option");
       opt.value = t.id;
-      opt.textContent = `${t.name} – ${t.price ? `$${t.price.toFixed(2)}` : "Free"}`;
+      opt.textContent = `${t.name} – ${formatTicketPrice(t.price)}`;
       select.appendChild(opt);
+    });
+    select.value = activeTicketSelectionId || (ticketTypes[0] ? ticketTypes[0].id : "");
+    activeTicketSelectionId = select.value || activeTicketSelectionId;
+    select.addEventListener("change", () => {
+      activeTicketSelectionId = select.value;
     });
     el.appendChild(select);
 
@@ -7086,6 +7301,26 @@ if (
       target.getAttr &&
       (target.getAttr("isLineHandle") || target.getAttr("isArrowHandle"));
 
+    if (activeMainTab === "tickets" && (!activeTool || activeTool === "select")) {
+      const group = target && typeof target.findAncestor === "function"
+        ? target.findAncestor("Group", true)
+        : null;
+      const seatNode =
+        group && group.getAttr && group.getAttr("isSeat")
+          ? group
+          : group && typeof group.find === "function"
+          ? group.find((child) => child.getAttr && child.getAttr("isSeat"))[0]
+          : null;
+
+      const ticketId = getActiveTicketIdForAssignments();
+      if (seatNode && ticketId) {
+        toggleSeatTicketAssignment(seatNode, ticketId);
+        applySeatVisuals();
+        renderTicketingPanel();
+        return;
+      }
+    }
+
     // Stairs uses click+drag, not click-to-place.
     // The actual creation is driven by mousedown / mousemove / mouseup.
     if (activeTool === "stairs") {
@@ -7859,6 +8094,7 @@ function handleStageMouseUp() {
       if (!res.ok) return false;
 
       const data = await res.json();
+      applyShowMeta(data);
 
       // eslint-disable-next-line no-console
       console.info("[seatmap] load: fetched", {
@@ -7946,6 +8182,7 @@ function handleStageMouseUp() {
       if (!res.ok) return;
 
       const data = await res.json();
+      applyShowMeta(data);
       const lists = [];
 
       if (data && data.activeSeatMap) {
