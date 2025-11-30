@@ -7081,12 +7081,17 @@ function handleStageMouseUp() {
       if (!window.confirm("Clear the entire layout? This cannot be undone.")) {
         return;
       }
-      mapLayer.destroyChildren();
-      clearSelection();
-      mapLayer.batchDraw();
-      updateSeatCount();
-      pushHistory();
+      resetLayoutToBlank();
     });
+  }
+
+  function resetLayoutToBlank() {
+    if (!mapLayer) return;
+    mapLayer.destroyChildren();
+    clearSelection();
+    mapLayer.batchDraw();
+    updateSeatCount();
+    pushHistory();
   }
 
   function hookUndoRedoButtons() {
@@ -7140,6 +7145,7 @@ function handleStageMouseUp() {
 
     deleteBtn.disabled = !candidateId;
     deleteBtn.classList.toggle("is-disabled", deleteBtn.disabled);
+    deleteBtn.style.display = candidateId ? "" : "none";
   }
 
   function ensureMapNotCleared(snapshotJson) {
@@ -7323,11 +7329,35 @@ function handleStageMouseUp() {
 
         await refreshSavedLayoutsDropdown();
 
-        if (currentSeatMapId === seatMapId) {
-          setCurrentSeatMapMeta(null, null);
-          if (select) {
-            select.value = "";
+        const layouts = Array.isArray(window.__TIXALL_SAVED_LAYOUTS__)
+          ? window.__TIXALL_SAVED_LAYOUTS__.filter(Boolean)
+          : [];
+        const wasCurrent = currentSeatMapId === seatMapId;
+        const nextLayout = layouts.find((layout) => layout && layout.id);
+
+        if (wasCurrent) {
+          if (nextLayout) {
+            const loaded = await loadSavedLayoutById(nextLayout.id);
+            if (loaded) {
+              if (select) {
+                select.value = nextLayout.id;
+              }
+            } else {
+              resetLayoutToBlank();
+              setCurrentSeatMapMeta(null, null);
+              if (select) {
+                select.value = "";
+              }
+            }
+          } else {
+            resetLayoutToBlank();
+            setCurrentSeatMapMeta(null, null);
+            if (select) {
+              select.value = "";
+            }
           }
+        } else if (select && select.value === seatMapId) {
+          select.value = nextLayout ? nextLayout.id : "";
         }
       } catch (err) {
         // eslint-disable-next-line no-console
