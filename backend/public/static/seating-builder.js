@@ -267,6 +267,12 @@ let stairsStartPos = null;
   let selectedNode = null;
   let copiedNodesJson = [];
 
+  let activeMainTab = "map";
+  let ticketTypes = [];
+  let ticketAssignments = new Map();
+  let seatIdCounter = 1;
+  let duplicateSeatRefs = new Set();
+
   // track shift key for robust multi-select
   let isShiftPressed = false;
 
@@ -3671,11 +3677,437 @@ function attachMultiShapeTransformBehaviour(group) {
 
 
   
+
+  function ensureSeatIdAttr(seat) {
+    if (!seat || typeof seat.getAttr !== "function") return null;
+    const existing = seat.getAttr("sbSeatId");
+    if (existing) return existing;
+
+    const id = `seat-${seatIdCounter}`;
+    seatIdCounter += 1;
+    seat.setAttr("sbSeatId", id);
+    return id;
+  }
+
+  function buildSeatRef(rowLabelText, seatLabelText) {
+    const rowPart = rowLabelText || "";
+    const seatPart = seatLabelText || "";
+    const combined = `${rowPart}${seatPart}`.trim();
+    return combined.length ? combined : null;
+  }
+
+  function setSeatRefAttributes(seat, ref, rowLabelText, seatLabelText) {
+    if (!seat) return;
+    ensureSeatIdAttr(seat);
+
+    if (ref) seat.setAttr("sbSeatRef", ref);
+    seat.setAttr("sbSeatRowLabel", rowLabelText || "");
+    seat.setAttr("sbSeatLabel", seatLabelText || "");
+  }
+
+  function tagRowSeatReferences(group) {
+    if (!(group instanceof Konva.Group)) return;
+
+    const seats = group.find((n) => n.getAttr && n.getAttr("isSeat"));
+    if (!seats || !seats.length) return;
+
+    const seatsPerRow = Math.max(1, parseInt(group.getAttr("seatsPerRow"), 10) || 1);
+    const rowCount = Math.max(1, parseInt(group.getAttr("rowCount"), 10) || 1);
+    const everyRowSame = group.getAttr("everyRowSameSeats") !== false;
+    let rowSeatCounts = group.getAttr("rowSeatCounts");
+    if (!Array.isArray(rowSeatCounts)) rowSeatCounts = [];
+
+    const seatLabelMode = group.getAttr("seatLabelMode") || "numbers";
+    const seatStartRaw = group.getAttr("seatStart");
+    const seatStart = Number.isFinite(Number(seatStartRaw)) ? Number(seatStartRaw) : 1;
+
+    const rowLabelPrefix = group.getAttr("rowLabelPrefix") || "";
+    const rowLabelStartRaw = group.getAttr("rowLabelStart");
+    const rowLabelStart = Number.isFinite(Number(rowLabelStartRaw))
+      ? Number(rowLabelStartRaw)
+      : 0;
+
+    const rowOrder = group.getAttr("rowOrder") === "desc" ? "desc" : "asc";
+
+    let seatIdx = 0;
+    for (let rIdx = 0; rIdx < rowCount; rIdx += 1) {
+      const logicalRowIdx = rowOrder === "desc" ? rowCount - 1 - rIdx : rIdx;
+      const rowLabelText =
+        rowLabelPrefix + rowLabelFromIndex(rowLabelStart + logicalRowIdx);
+
+      const rowSeats = everyRowSame
+        ? seatsPerRow
+        : Math.max(1, parseInt(rowSeatCounts[rIdx], 10) || seatsPerRow);
+
+      for (let i = 0; i < rowSeats; i += 1) {
+        const seat = seats[seatIdx];
+        seatIdx += 1;
+        if (!seat) continue;
+
+        const seatLabelText =
+          seatLabelMode !== "none"
+            ? seatLabelFromIndex(seatLabelMode, i, seatStart)
+            : `${seatStart + i}`;
+        const ref = buildSeatRef(rowLabelText, seatLabelText);
+
+        setSeatRefAttributes(seat, ref, rowLabelText, seatLabelText);
+      }
+    }
+  }
+
+  function tagCircularTableReferences(group) {
+    if (!(group instanceof Konva.Group)) return;
+    const seats = group.find((n) => n.getAttr && n.getAttr("isSeat"));
+    if (!seats || !seats.length) return;
+
+    const seatLabelMode = group.getAttr("seatLabelMode") || "numbers";
+    const seatStartRaw = group.getAttr("seatStart");
+    const seatStart = Number.isFinite(Number(seatStartRaw)) ? Number(seatStartRaw) : 1;
+    const tableLabel = group.getAttr("tableLabel") || "Table";
+
+    seats.forEach((seat, idx) => {
+      const seatLabelText =
+        seatLabelMode !== "none"
+          ? seatLabelFromIndex(seatLabelMode, idx, seatStart)
+          : `${seatStart + idx}`;
+      const ref = buildSeatRef(tableLabel, seatLabelText || `${idx + 1}`);
+      setSeatRefAttributes(seat, ref, tableLabel, seatLabelText);
+    });
+  }
+
+  function tagRectTableReferences(group) {
+    if (!(group instanceof Konva.Group)) return;
+    const seats = group.find((n) => n.getAttr && n.getAttr("isSeat"));
+    if (!seats || !seats.length) return;
+
+    const seatLabelMode = group.getAttr("seatLabelMode") || "numbers";
+    const seatStartRaw = group.getAttr("seatStart");
+    const seatStart = Number.isFinite(Number(seatStartRaw)) ? Number(seatStartRaw) : 1;
+    const tableLabel = group.getAttr("tableLabel") || "Table";
+
+    seats.forEach((seat, idx) => {
+      const seatLabelText =
+        seatLabelMode !== "none"
+          ? seatLabelFromIndex(seatLabelMode, idx, seatStart)
+          : `${seatStart + idx}`;
+      const ref = buildSeatRef(tableLabel, seatLabelText || `${idx + 1}`);
+      setSeatRefAttributes(seat, ref, tableLabel, seatLabelText);
+    });
+  }
+
+  function tagSingleSeatReference(group) {
+    if (!(group instanceof Konva.Group)) return;
+    const seat = group.findOne((n) => n.getAttr && n.getAttr("isSeat"));
+    if (!seat) return;
+
+    const seatLabelMode = group.getAttr("seatLabelMode") || "numbers";
+    const seatLabelText = seatLabelMode === "letters" ? "A" : "1";
+    const ref = buildSeatRef("", seatLabelText);
+    setSeatRefAttributes(seat, ref, "", seatLabelText);
+  }
+
+  function refreshSeatMetadata() {
+    if (!mapLayer || typeof mapLayer.find !== "function") return;
+
+    const groups = mapLayer.find("Group");
+    groups.forEach((g) => {
+      const t = g.getAttr("shapeType") || g.name();
+      if (t === "row-seats") tagRowSeatReferences(g);
+      if (t === "circular-table") tagCircularTableReferences(g);
+      if (t === "rect-table") tagRectTableReferences(g);
+      if (t === "single-seat") tagSingleSeatReference(g);
+    });
+
+    mapLayer.find((n) => n.getAttr && n.getAttr("isSeat")).forEach((seat) => {
+      ensureSeatIdAttr(seat);
+      if (!seat.getAttr("sbSeatRef")) {
+        setSeatRefAttributes(seat, seat.getAttr("sbSeatRef") || null, "", "");
+      }
+    });
+  }
+
+  function getAllSeatNodes() {
+    if (!mapLayer || typeof mapLayer.find !== "function") return [];
+    return mapLayer.find((n) => n.getAttr && n.getAttr("isSeat"));
+  }
+
+  function findDuplicateSeatRefs() {
+    refreshSeatMetadata();
+
+    const counts = new Map();
+    const seats = getAllSeatNodes();
+    seats.forEach((seat) => {
+      const ref = seat.getAttr("sbSeatRef");
+      if (!ref) return;
+      counts.set(ref, (counts.get(ref) || 0) + 1);
+    });
+
+    duplicateSeatRefs = new Set(
+      Array.from(counts.entries())
+        .filter(([, count]) => count > 1)
+        .map(([ref]) => ref)
+    );
+
+    applySeatVisuals();
+    return duplicateSeatRefs;
+  }
+
+  function applySeatVisuals() {
+    const seats = getAllSeatNodes();
+
+    seats.forEach((seat) => {
+      const baseFill = seat.getAttr("sbSeatBaseFill") || "#ffffff";
+      const baseStroke = seat.getAttr("sbSeatBaseStroke") || "#4b5563";
+      const ref = seat.getAttr("sbSeatRef");
+      const ticketId = seat.getAttr("sbTicketId") || null;
+
+      let stroke = baseStroke;
+      let fill = baseFill;
+
+      if (ref && duplicateSeatRefs.has(ref)) {
+        stroke = "#ef4444";
+        fill = "#fee2e2";
+      } else if (ticketId) {
+        const ticket = ticketTypes.find((t) => t.id === ticketId);
+        if (ticket) {
+          stroke = ticket.color || "#2563eb";
+          fill = baseFill;
+        }
+      }
+
+      seat.stroke(stroke);
+      seat.fill(fill);
+    });
+
+    if (mapLayer && typeof mapLayer.draw === "function") {
+      mapLayer.batchDraw();
+    }
+  }
+
+  function getSelectedSeatNodes() {
+    const nodes =
+      transformer && transformer.nodes && transformer.nodes().length
+        ? transformer.nodes()
+        : selectedNode
+        ? [selectedNode]
+        : [];
+
+    const seats = [];
+
+    nodes.forEach((node) => {
+      if (!node) return;
+      if (node.getAttr && node.getAttr("isSeat")) seats.push(node);
+      if (typeof node.find === "function") {
+        node
+          .find((child) => child.getAttr && child.getAttr("isSeat"))
+          .forEach((seat) => seats.push(seat));
+      }
+    });
+
+    return seats;
+  }
+
+  function renderTicketingPanel() {
+    const el = getInspectorElement();
+    if (!el) return;
+
+    const duplicates = findDuplicateSeatRefs();
+    el.innerHTML = "";
+
+    const title = document.createElement("h4");
+    title.className = "sb-inspector-title";
+    title.textContent = "Ticketing creation panel";
+    el.appendChild(title);
+
+    if (duplicates.size) {
+      const warning = document.createElement("div");
+      warning.className = "sb-inspector-empty";
+      warning.style.color = "#b91c1c";
+      warning.textContent =
+        "You have duplicate seat references. Fix the highlighted seats before creating tickets.";
+      el.appendChild(warning);
+    }
+
+    const form = document.createElement("div");
+    form.className = "sb-field-row";
+
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.placeholder = "Ticket name";
+    nameInput.className = "sb-input";
+    form.appendChild(nameInput);
+
+    const priceInput = document.createElement("input");
+    priceInput.type = "number";
+    priceInput.min = "0";
+    priceInput.step = "0.01";
+    priceInput.placeholder = "Price";
+    priceInput.className = "sb-input";
+    form.appendChild(priceInput);
+
+    const colorInput = document.createElement("input");
+    colorInput.type = "color";
+    colorInput.value = "#2563eb";
+    colorInput.className = "sb-input";
+    form.appendChild(colorInput);
+
+    const onSaleInput = document.createElement("input");
+    onSaleInput.type = "datetime-local";
+    onSaleInput.className = "sb-input";
+    form.appendChild(onSaleInput);
+
+    const offSaleInput = document.createElement("input");
+    offSaleInput.type = "datetime-local";
+    offSaleInput.className = "sb-input";
+    form.appendChild(offSaleInput);
+
+    const infoInput = document.createElement("textarea");
+    infoInput.placeholder = "Additional information";
+    infoInput.className = "sb-input";
+    infoInput.style.resize = "vertical";
+    form.appendChild(infoInput);
+
+    const createBtn = document.createElement("button");
+    createBtn.type = "button";
+    createBtn.className = "tool-button";
+    createBtn.textContent = "Create ticket";
+    createBtn.disabled = duplicates.size > 0;
+    createBtn.addEventListener("click", () => {
+      if (duplicates.size > 0) {
+        window.alert(
+          "Please fix duplicate seat references (highlighted in red) before creating tickets."
+        );
+        return;
+      }
+
+      const name = (nameInput.value || "").trim();
+      if (!name) {
+        window.alert("Enter a ticket name first.");
+        return;
+      }
+
+      const price = Number(priceInput.value) || 0;
+      const ticket = {
+        id: `ticket-${Date.now()}-${ticketTypes.length + 1}`,
+        name,
+        price,
+        color: colorInput.value || "#2563eb",
+        onSale: onSaleInput.value || null,
+        offSale: offSaleInput.value || null,
+        info: infoInput.value || "",
+      };
+
+      ticketTypes = ticketTypes.concat(ticket);
+      renderTicketingPanel();
+    });
+
+    el.appendChild(form);
+    el.appendChild(createBtn);
+
+    const listTitle = document.createElement("h4");
+    listTitle.className = "sb-inspector-title";
+    listTitle.textContent = "Ticket types";
+    listTitle.style.marginTop = "10px";
+    el.appendChild(listTitle);
+
+    if (!ticketTypes.length) {
+      const empty = document.createElement("p");
+      empty.className = "sb-inspector-empty";
+      empty.textContent = "No tickets yet. Create one to start assigning seats.";
+      el.appendChild(empty);
+      return;
+    }
+
+    const select = document.createElement("select");
+    select.className = "sb-select";
+    ticketTypes.forEach((t) => {
+      const opt = document.createElement("option");
+      opt.value = t.id;
+      opt.textContent = `${t.name} – ${t.price ? `$${t.price.toFixed(2)}` : "Free"}`;
+      select.appendChild(opt);
+    });
+    el.appendChild(select);
+
+    const assignSelectedBtn = document.createElement("button");
+    assignSelectedBtn.type = "button";
+    assignSelectedBtn.className = "tool-button";
+    assignSelectedBtn.textContent = "Assign selected seats";
+    assignSelectedBtn.disabled = duplicates.size > 0;
+    assignSelectedBtn.addEventListener("click", () => {
+      if (duplicates.size > 0) {
+        window.alert("Resolve duplicate seat references before assigning tickets.");
+        return;
+      }
+
+      const ticketId = select.value;
+      if (!ticketId) {
+        window.alert("Choose a ticket first.");
+        return;
+      }
+
+      const seats = getSelectedSeatNodes();
+      if (!seats.length) {
+        window.alert("Select seats on the map to assign.");
+        return;
+      }
+
+      seats.forEach((seat) => {
+        const sid = ensureSeatIdAttr(seat);
+        if (sid) {
+          seat.setAttr("sbTicketId", ticketId);
+          ticketAssignments.set(sid, ticketId);
+        }
+      });
+
+      applySeatVisuals();
+      renderTicketingPanel();
+    });
+
+    const assignRemainingBtn = document.createElement("button");
+    assignRemainingBtn.type = "button";
+    assignRemainingBtn.className = "tool-button";
+    assignRemainingBtn.textContent = "Assign all remaining seats";
+    assignRemainingBtn.disabled = duplicates.size > 0;
+    assignRemainingBtn.addEventListener("click", () => {
+      if (duplicates.size > 0) {
+        window.alert("Resolve duplicate seat references before assigning tickets.");
+        return;
+      }
+
+      const ticketId = select.value;
+      if (!ticketId) {
+        window.alert("Choose a ticket first.");
+        return;
+      }
+
+      const seats = getAllSeatNodes().filter((seat) => !seat.getAttr("sbTicketId"));
+      seats.forEach((seat) => {
+        const sid = ensureSeatIdAttr(seat);
+        if (sid) {
+          seat.setAttr("sbTicketId", ticketId);
+          ticketAssignments.set(sid, ticketId);
+        }
+      });
+
+      applySeatVisuals();
+      renderTicketingPanel();
+    });
+
+    el.appendChild(assignSelectedBtn);
+    el.appendChild(assignRemainingBtn);
+  }
+
+
     // ---------- Selection inspector (right-hand panel) ----------
 
   function renderInspector(node) {
     const el = getInspectorElement();
     if (!el) return;
+
+    if (activeMainTab === "tickets") {
+      renderTicketingPanel();
+      return;
+    }
 
     el.innerHTML = "";
 
@@ -7602,6 +8034,18 @@ function handleStageMouseUp() {
     setActiveTool("select");
   };
 
+  window.__TIXALL_SET_TAB_MODE__ = function (tab) {
+    activeMainTab = tab || "map";
+
+    if (activeMainTab === "tickets") {
+      findDuplicateSeatRefs();
+      renderTicketingPanel();
+    } else {
+      applySeatVisuals();
+      renderInspector(selectedNode);
+    }
+  };
+
   stage.on("click", handleStageClick);
 
   // Canvas interactions
@@ -7625,6 +8069,9 @@ function handleStageMouseUp() {
   resizeStageToContainer();
   pushHistory();
   updateSeatCount();
+
+  refreshSeatMetadata();
+  applySeatVisuals();
 
   renderInspector(null);
 
@@ -7816,6 +8263,9 @@ function handleStageMouseUp() {
 
   updateSeatCount && updateSeatCount();
   updateUndoRedoButtons && updateUndoRedoButtons();
+
+  refreshSeatMetadata();
+  applySeatVisuals();
 
   // eslint-disable-next-line no-console
   console.log("[seatmap] loadKonvaLayoutIntoStage: layout loaded");
