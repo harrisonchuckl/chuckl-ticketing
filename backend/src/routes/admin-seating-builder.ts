@@ -1297,7 +1297,7 @@ router.get("/builder/preview/:showId", (req, res) => {
           <div class="tb-center-header">
             <div class="tb-tabs">
               <button class="tb-tab is-active" data-tab="map">Map</button>
-              <button class="tb-tab" data-tab="tiers">Tiers</button>
+              <button class="tb-tab" data-tab="tickets">Tickets</button>
               <button class="tb-tab" data-tab="holds">Holds</button>
             </div>
 
@@ -1312,10 +1312,10 @@ router.get("/builder/preview/:showId", (req, res) => {
             <div class="tb-tab-panel is-active" id="tb-tab-map">
               <div id="app"></div>
             </div>
-            <div class="tb-tab-panel" id="tb-tab-tiers">
+            <div class="tb-tab-panel" id="tb-tab-tickets">
               <div class="tb-empty-panel">
-                <h2>Tiers coming soon</h2>
-                <p>Set up pricing tiers and link them to sections and seats.</p>
+                <h2>Tickets</h2>
+                <p>Use the Ticketing panel on the right to create ticket types and assign seats.</p>
               </div>
             </div>
             <div class="tb-tab-panel" id="tb-tab-holds">
@@ -1456,7 +1456,7 @@ router.get("/builder/preview/:showId", (req, res) => {
 
         var panels = {
           map: document.getElementById("tb-tab-map"),
-          tiers: document.getElementById("tb-tab-tiers"),
+          tickets: document.getElementById("tb-tab-tickets"),
           holds: document.getElementById("tb-tab-holds"),
         };
 
@@ -1469,11 +1469,17 @@ router.get("/builder/preview/:showId", (req, res) => {
               t.classList.remove("is-active");
             });
             Object.keys(panels).forEach(function (key) {
+              if (key === "map") return;
               panels[key].classList.remove("is-active");
             });
 
             tab.classList.add("is-active");
             panels[target].classList.add("is-active");
+            panels.map.classList.add("is-active");
+
+            if (window.__TIXALL_SET_TAB_MODE__) {
+              window.__TIXALL_SET_TAB_MODE__(target);
+            }
           });
         });
 
