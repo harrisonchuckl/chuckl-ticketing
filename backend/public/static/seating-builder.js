@@ -13,6 +13,9 @@
   const showId = window.__SEATMAP_SHOW_ID__;
   const initialLayoutKey = window.__SEATMAP_LAYOUT__ || "blank";
 
+  let currentSeatMapId = null;
+  let currentSeatMapName = null;
+
   if (!showId) {
     // eslint-disable-next-line no-console
     console.error("seating-builder: missing window.__SEATMAP_SHOW_ID__");
@@ -7104,12 +7107,67 @@ function handleStageMouseUp() {
     });
   }
 
+  function hookSavedLayoutSelectWatcher() {
+    const select = document.getElementById("tb-saved-layout-select");
+    if (!select) return;
+
+    select.addEventListener("change", () => {
+      syncDeleteButtonState();
+    });
+  }
+
+  function findSavedLayoutMeta(seatMapId) {
+    if (!seatMapId) return null;
+    const maps = Array.isArray(window.__TIXALL_SAVED_LAYOUTS__)
+      ? window.__TIXALL_SAVED_LAYOUTS__
+      : [];
+    return maps.find((m) => m && m.id === seatMapId) || null;
+  }
+
+  function setCurrentSeatMapMeta(seatMapId, seatMapName) {
+    currentSeatMapId = seatMapId || null;
+    currentSeatMapName = seatMapName || null;
+    syncDeleteButtonState();
+  }
+
+  function syncDeleteButtonState() {
+    const deleteBtn = window.__TICKIN_DELETE_BUTTON__;
+    if (!deleteBtn) return;
+
+    const select = document.getElementById("tb-saved-layout-select");
+    const selectedId = select && select.value ? select.value : null;
+    const candidateId = selectedId || currentSeatMapId;
+
+    deleteBtn.disabled = !candidateId;
+    deleteBtn.classList.toggle("is-disabled", deleteBtn.disabled);
+  }
+
+  function ensureMapNotCleared(snapshotJson) {
+    if (!snapshotJson || !mapLayer || mapLayer.getChildren().length > 0) {
+      return;
+    }
+
+    // eslint-disable-next-line no-console
+    console.warn("[seatmap] save: map emptied after save, restoring snapshot");
+
+    const restored = loadKonvaLayoutIntoStage(snapshotJson, {
+      resetHistory: false,
+      reattachBehaviours: true,
+    });
+
+    if (!restored) {
+      // eslint-disable-next-line no-console
+      console.error("[seatmap] save: failed to restore snapshot after save");
+    }
+  }
+
   function hookSaveButton() {
     const saveBtn = window.__TICKIN_SAVE_BUTTON__;
     if (!saveBtn) return;
 
     saveBtn.addEventListener("click", async () => {
       const selectionBeforeSave = selectedNode;
+      const fallbackJson = mapLayer && mapLayer.toJSON ? mapLayer.toJSON() : null;
       saveBtn.disabled = true;
       saveBtn.textContent = "Saving…";
 
@@ -7164,6 +7222,20 @@ function handleStageMouseUp() {
         }
 
         await refreshSavedLayoutsDropdown();
+
+        if (responseBody && responseBody.seatMap) {
+          setCurrentSeatMapMeta(
+            responseBody.seatMap.id,
+            responseBody.seatMap.name || currentSeatMapName
+          );
+
+          const select = document.getElementById("tb-saved-layout-select");
+          if (select && responseBody.seatMap.id) {
+            select.value = responseBody.seatMap.id;
+          }
+        }
+
+        ensureMapNotCleared(fallbackJson);
       } catch (err) {
         // eslint-disable-next-line no-console
         console.error("Error saving seat map", err);
@@ -7176,6 +7248,8 @@ function handleStageMouseUp() {
         if (selectionBeforeSave && selectionBeforeSave.getStage()) {
           selectNode(selectionBeforeSave);
         }
+
+        syncDeleteButtonState();
 
         // eslint-disable-next-line no-console
         console.info("[seatmap] save: finished");
@@ -7204,6 +7278,65 @@ function handleStageMouseUp() {
       } finally {
         loadBtn.disabled = false;
         loadBtn.textContent = originalLabel || "Load saved layout";
+      }
+    });
+  }
+
+  function hookDeleteButton() {
+    const deleteBtn = window.__TICKIN_DELETE_BUTTON__;
+    if (!deleteBtn) return;
+
+    deleteBtn.addEventListener("click", async () => {
+      const select = document.getElementById("tb-saved-layout-select");
+      const seatMapId = select && select.value ? select.value : currentSeatMapId;
+
+      if (!seatMapId) {
+        window.alert("Select a saved layout to delete.");
+        return;
+      }
+
+      const meta = findSavedLayoutMeta(seatMapId);
+      const nameLabel = meta && meta.name ? `"${meta.name}"` : "this layout";
+
+      if (!window.confirm(`Delete ${nameLabel}? This cannot be undone.`)) {
+        return;
+      }
+
+      deleteBtn.disabled = true;
+      const originalLabel = deleteBtn.textContent;
+      deleteBtn.textContent = "Deleting…";
+
+      try {
+        const res = await fetch(
+          `/admin/seating/builder/api/seatmaps/${encodeURIComponent(showId)}/${encodeURIComponent(
+            seatMapId
+          )}`,
+          { method: "DELETE" }
+        );
+
+        if (!res.ok) {
+          throw new Error(`Delete failed (${res.status})`);
+        }
+
+        // eslint-disable-next-line no-console
+        console.info("[seatmap] delete: removed", { seatMapId });
+
+        await refreshSavedLayoutsDropdown();
+
+        if (currentSeatMapId === seatMapId) {
+          setCurrentSeatMapMeta(null, null);
+          if (select) {
+            select.value = "";
+          }
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error("Error deleting seat map", err);
+        window.alert("There was a problem deleting this layout.");
+      } finally {
+        deleteBtn.disabled = false;
+        deleteBtn.textContent = originalLabel || "Delete layout";
+        syncDeleteButtonState();
       }
     });
   }
@@ -7263,6 +7396,7 @@ function handleStageMouseUp() {
       });
 
       if (loaded) {
+        setCurrentSeatMapMeta(active && active.id, active && active.name);
         initTableCounterFromExisting();
       }
 
@@ -7300,7 +7434,12 @@ function handleStageMouseUp() {
     });
 
     if (loaded) {
+      setCurrentSeatMapMeta(match.id, match.name);
       initTableCounterFromExisting();
+      const select = document.getElementById("tb-saved-layout-select");
+      if (select) {
+        select.value = seatMapId;
+      }
     }
 
     return !!loaded;
@@ -7360,27 +7499,36 @@ function handleStageMouseUp() {
         select.appendChild(opt);
       });
 
+      if (currentSeatMapId) {
+        select.value = currentSeatMapId;
+      }
+
       // eslint-disable-next-line no-console
       console.info("[seatmap] saved layouts refreshed", {
         count: lists.length,
         ids: lists.map((l) => l.id),
       });
+
+      syncDeleteButtonState();
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error("[seatmap] Failed to refresh saved layouts", err);
     }
   }
 
-    // ---------- Boot ----------
+  // ---------- Boot ----------
 
-    initStage();
-    updateDefaultCursor();
-    hookToolButtons();
+  initStage();
+  updateDefaultCursor();
+  hookToolButtons();
   hookZoomButtons();
   hookClearButton();
   hookUndoRedoButtons();
+  hookSavedLayoutSelectWatcher();
   hookSaveButton();
   hookLoadButton();
+  hookDeleteButton();
+  syncDeleteButtonState();
 
   // Allow the top-bar dropdown (populated server-side) to trigger a layout load.
   // eslint-disable-next-line no-underscore-dangle
