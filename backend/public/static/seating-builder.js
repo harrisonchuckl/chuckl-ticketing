@@ -7106,6 +7106,7 @@ function handleStageMouseUp() {
     if (!saveBtn) return;
 
     saveBtn.addEventListener("click", async () => {
+      const selectionBeforeSave = selectedNode;
       saveBtn.disabled = true;
       saveBtn.textContent = "Saving…";
 
@@ -7137,6 +7138,11 @@ function handleStageMouseUp() {
       } finally {
         saveBtn.disabled = false;
         saveBtn.textContent = "Save layout";
+
+        // Restore the previous selection if the node still exists on the map.
+        if (selectionBeforeSave && selectionBeforeSave.getStage()) {
+          selectNode(selectionBeforeSave);
+        }
       }
     });
   }
@@ -7195,49 +7201,16 @@ function handleStageMouseUp() {
 
       if (!konvaJson) return false;
 
-      let parsed;
-      try {
-        parsed =
-          typeof konvaJson === "string" ? JSON.parse(konvaJson) : konvaJson;
-      } catch {
-        parsed = null;
+      const loaded = loadKonvaLayoutIntoStage(konvaJson, {
+        resetHistory: true,
+        reattachBehaviours: true,
+      });
+
+      if (loaded) {
+        initTableCounterFromExisting();
       }
 
-      if (!parsed) return false;
-
-      const tempStage = Konva.Node.create(parsed, container);
-      const foundLayers = tempStage.getLayers();
-      let sourceLayer = foundLayers[0];
-
-      if (foundLayers.length > 1) {
-        const withChildren = foundLayers.find((l) => l.getChildren().length);
-        if (withChildren) sourceLayer = withChildren;
-      }
-
-      if (!sourceLayer) return false;
-
-      const json = sourceLayer.toJSON();
-      const restored = Konva.Node.create(json);
-
-      mapLayer.destroy();
-      mapLayer = restored;
-      mapLayer.position({ x: 0, y: 0 });
-      mapLayer.scale({ x: 1, y: 1 });
-      stage.add(mapLayer);
-
-      mapLayer.getChildren().forEach((node) => attachNodeBehaviour(node));
-
-      mapLayer.draw();
-      clearSelection();
-      updateSeatCount();
-
-      history = [mapLayer.toJSON()];
-      historyIndex = 0;
-      updateUndoRedoButtons();
-
-      initTableCounterFromExisting();
-      tempStage.destroy();
-      return true;
+      return !!loaded;
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error("Error loading existing seat map", err);
@@ -7245,18 +7218,54 @@ function handleStageMouseUp() {
     }
   }
 
+  async function loadSavedLayoutById(seatMapId) {
+    const maps = Array.isArray(window.__TIXALL_SAVED_LAYOUTS__)
+      ? window.__TIXALL_SAVED_LAYOUTS__
+      : [];
+
+    const match = maps.find((m) => m && m.id === seatMapId);
+    if (!match || !match.layout || !match.layout.konvaJson) {
+      window.alert("Saved layout not found for this venue.");
+      return false;
+    }
+
+    const loaded = loadKonvaLayoutIntoStage(match.layout.konvaJson, {
+      resetHistory: true,
+      reattachBehaviours: true,
+    });
+
+    if (loaded) {
+      initTableCounterFromExisting();
+    }
+
+    return !!loaded;
+  }
+
     // ---------- Boot ----------
 
     initStage();
     updateDefaultCursor();
     hookToolButtons();
-    hookZoomButtons();
-    hookClearButton();
-    hookUndoRedoButtons();
-    hookSaveButton();
-    hookLoadButton();
+  hookZoomButtons();
+  hookClearButton();
+  hookUndoRedoButtons();
+  hookSaveButton();
+  hookLoadButton();
 
-    stage.on("click", handleStageClick);
+  // Allow the top-bar dropdown (populated server-side) to trigger a layout load.
+  // eslint-disable-next-line no-underscore-dangle
+  window.__TIXALL_HANDLE_SAVED_LAYOUT_SELECT__ = async function (seatMapId) {
+    const ok = await loadSavedLayoutById(seatMapId);
+    if (!ok) {
+      return;
+    }
+
+    // Reset any active tool/selection so the newly loaded layout starts fresh.
+    clearSelection();
+    setActiveTool("select");
+  };
+
+  stage.on("click", handleStageClick);
 
   // Canvas interactions
   stage.on("mousedown", handleStageMouseDown);
@@ -7293,7 +7302,7 @@ function handleStageMouseUp() {
       if (!stage || !mapLayer) {
         // eslint-disable-next-line no-console
         console.warn("[seatmap] loadKonvaLayoutIntoStage: no stage/mapLayer yet");
-        return;
+        return false;
       }
 
       if (!konvaJson) {
@@ -7371,7 +7380,7 @@ function handleStageMouseUp() {
       "[seatmap] loadKonvaLayoutIntoStage: no Layer found in konvaJson",
       jsonObj
     );
-    return;
+    return false;
   }
 
   // --- Step 3: actually create a Konva.Layer from the JSON (NOT a Stage) ---
@@ -7384,7 +7393,7 @@ function handleStageMouseUp() {
       "[seatmap] loadKonvaLayoutIntoStage: failed to create Konva node from JSON",
       err
     );
-    return;
+    return false;
   }
 
   if (!(newLayer instanceof Konva.Layer)) {
@@ -7395,7 +7404,7 @@ function handleStageMouseUp() {
         ? newLayer.getClassName()
         : newLayer
     );
-    return;
+    return false;
   }
 
   // --- Step 4: swap the mapLayer and re-wire behaviour on all children ---
@@ -7409,7 +7418,7 @@ function handleStageMouseUp() {
   stage.add(mapLayer);
 
   // Re-attach behaviours to every group loaded from JSON
-  if (typeof attachNodeBehaviour === "function") {
+  if (opts.reattachBehaviours !== false && typeof attachNodeBehaviour === "function") {
     mapLayer.find("Group").forEach((g) => {
       attachNodeBehaviour(g);
       // normalise z-order so seat blocks / tables sit above background shapes
@@ -7425,15 +7434,19 @@ function handleStageMouseUp() {
   }
 
   // Reset history with this loaded state as the first entry
-  history = [];
-  historyIndex = -1;
-  pushHistory && pushHistory();
+  if (opts.resetHistory !== false) {
+    history = [];
+    historyIndex = -1;
+    pushHistory && pushHistory();
+  }
 
   updateSeatCount && updateSeatCount();
   updateUndoRedoButtons && updateUndoRedoButtons();
 
   // eslint-disable-next-line no-console
   console.log("[seatmap] loadKonvaLayoutIntoStage: layout loaded");
+
+  return true;
 }
 
       
