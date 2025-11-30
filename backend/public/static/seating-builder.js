@@ -7333,7 +7333,16 @@ function handleStageMouseUp() {
           ? window.__TIXALL_SAVED_LAYOUTS__.filter(Boolean)
           : [];
         const wasCurrent = currentSeatMapId === seatMapId;
-        const nextLayout = layouts.find((layout) => layout && layout.id);
+
+        // Clear the canvas immediately when deleting the active layout.
+        if (wasCurrent) {
+          resetLayoutToBlank();
+          setCurrentSeatMapMeta(null, null);
+        }
+
+        const nextLayout = layouts.find(
+          (layout) => layout && layout.id && layout.id !== seatMapId
+        );
 
         if (wasCurrent) {
           if (nextLayout) {
