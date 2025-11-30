@@ -675,6 +675,7 @@ router.get("/builder/preview/:showId", (req, res) => {
             type="button"
             class="tb-topbar-btn tb-btn-ghost"
             id="tb-btn-delete"
+            style="display: none;"
             disabled
           >
             Delete layout
