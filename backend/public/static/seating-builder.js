@@ -4447,6 +4447,9 @@ function attachMultiShapeTransformBehaviour(group) {
     if (ticketSeatDomListener && stage && stage.container && stage.container()) {
       stage.container().removeEventListener("pointerdown", ticketSeatDomListener, true);
     }
+    if (ticketSeatContainerClickListener && stage && stage.container && stage.container()) {
+      stage.container().removeEventListener("click", ticketSeatContainerClickListener, true);
+    }
     if (ticketSeatDocumentListener && document) {
       document.removeEventListener("pointerdown", ticketSeatDocumentListener, true);
     }
@@ -4486,6 +4489,49 @@ function attachMultiShapeTransformBehaviour(group) {
 
     if (stage && stage.container && stage.container()) {
       stage.container().addEventListener("pointerdown", ticketSeatDomListener, true);
+    }
+
+    ticketSeatContainerClickListener = (evt) => {
+      if (!stage || !stage.container) return;
+      if (!ticketSeatSelectionMode) {
+        // eslint-disable-next-line no-console
+        console.debug("[seatmap][tickets] container click (ignored – mode off)", {
+          targetName: evt.target && evt.target.nodeName,
+        });
+        return;
+      }
+
+      stage.setPointersPositions(evt);
+      const pointerPos = stage.getPointerPosition ? stage.getPointerPosition() : null;
+      const hitFromDom = stage.getIntersection ? stage.getIntersection(pointerPos) : null;
+      const seat =
+        findSeatNodeFromTarget(hitFromDom || evt.target) ||
+        (pointerPos ? findSeatNodeAtPosition(pointerPos) : null);
+      const ticketId = getActiveTicketIdForAssignments();
+
+      // eslint-disable-next-line no-console
+      console.log("[seatmap][tickets] container click", {
+        seatFound: Boolean(seat),
+        ticketId,
+        pointer: pointerPos,
+        targetName: hitFromDom && hitFromDom.name ? hitFromDom.name() : evt.target && evt.target.nodeName,
+        selectionModeOn: ticketSeatSelectionMode,
+        reason: ticketSeatSelectionReason,
+      });
+
+      if (!seat || !ticketId) return;
+
+      toggleSeatTicketAssignment(seat, ticketId);
+      applySeatVisuals();
+      renderTicketingPanel();
+      pushHistory();
+
+      evt.preventDefault();
+      evt.stopPropagation();
+    };
+
+    if (stage && stage.container && stage.container()) {
+      stage.container().addEventListener("click", ticketSeatContainerClickListener, true);
     }
 
     ticketSeatDocumentListener = (evt) => {
