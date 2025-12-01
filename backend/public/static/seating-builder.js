@@ -4300,12 +4300,13 @@ function attachMultiShapeTransformBehaviour(group) {
         seat.listening(true);
       }
 
-      seat.on("click.ticketAssign", (evt) => {
+      const seatHandler = (evt) => {
         const ticketId = getActiveTicketIdForAssignments();
         const seatNode = findSeatNodeFromTarget(evt.target) || seat;
 
         // eslint-disable-next-line no-console
-        console.log("[seatmap][tickets] seat click (direct)", {
+        console.log("[seatmap][tickets] seat event (direct)", {
+          eventType: evt.type,
           ticketId,
           seatId: ensureSeatIdAttr(seatNode),
           selectionModeOn: ticketSeatSelectionMode,
@@ -4320,7 +4321,11 @@ function attachMultiShapeTransformBehaviour(group) {
         applySeatVisuals();
         renderTicketingPanel();
         pushHistory();
-      });
+      };
+
+      seat.on("click.ticketAssign", seatHandler);
+      seat.on("mousedown.ticketAssign", seatHandler);
+      seat.on("tap.ticketAssign", seatHandler);
     });
 
     if (mapLayer && typeof mapLayer.off === "function") {
@@ -4361,12 +4366,13 @@ function attachMultiShapeTransformBehaviour(group) {
       if (typeof seat.listening === "function") {
         seat.listening(true);
       }
+      const parent = seat.getParent && seat.getParent();
+      if (parent && typeof parent.listening === "function") {
+        parent.listening(true);
+      }
     });
     if (mapLayer && typeof mapLayer.listening === "function") {
       mapLayer.listening(true);
-    }
-    if (mapLayer && typeof mapLayer.hitGraphEnabled === "function") {
-      mapLayer.hitGraphEnabled(true);
     }
 
     refreshSeatTicketListeners();
@@ -8886,6 +8892,22 @@ function handleStageMouseMove() {
   stage.on("click", handleStageClick);
   stage.on("contentClick", handleStageClick);
   stage.on("tap", handleStageClick);
+  stage.on("mousedown.ticketAssign", (evt) => {
+    if (!ticketSeatSelectionMode || !stage) return;
+
+    const pointerPos = stage.getPointerPosition();
+    // eslint-disable-next-line no-console
+    console.log("[seatmap][tickets] stage mousedown (assign mode)", {
+      ticketId: getActiveTicketIdForAssignments(),
+      pointer: pointerPos,
+      targetName: evt.target && evt.target.name ? evt.target.name() : evt.target && evt.target.className,
+    });
+
+    const handled = handleTicketSeatSelection(pointerPos, evt.target);
+    if (handled) {
+      evt.cancelBubble = true;
+    }
+  });
 
   // Canvas interactions
   stage.on("mousedown", handleStageMouseDown);
