@@ -4294,8 +4294,6 @@ function attachMultiShapeTransformBehaviour(group) {
         seat.off(".ticketAssign");
       }
 
-      if (!ticketSeatSelectionMode) return;
-
       if (typeof seat.listening === "function") {
         seat.listening(true);
       }
@@ -4332,15 +4330,21 @@ function attachMultiShapeTransformBehaviour(group) {
       mapLayer.off(".ticketAssign");
     }
 
-    if (ticketSeatSelectionMode && mapLayer && typeof mapLayer.on === "function") {
+    if (mapLayer && typeof mapLayer.on === "function") {
       mapLayer.on("click.ticketAssign", (evt) => {
         const pointerPos = stage && stage.getPointerPosition ? stage.getPointerPosition() : null;
-        // eslint-disable-next-line no-console
-        console.log("[seatmap][tickets] map-layer click", {
-          targetName: evt.target && evt.target.name ? evt.target.name() : evt.target && evt.target.className,
-          selectionModeOn: ticketSeatSelectionMode,
-          pointer: pointerPos,
-        });
+        if (ticketSeatSelectionMode) {
+          // eslint-disable-next-line no-console
+          console.log("[seatmap][tickets] map-layer click", {
+            targetName: evt.target && evt.target.name ? evt.target.name() : evt.target && evt.target.className,
+            selectionModeOn: ticketSeatSelectionMode,
+            pointer: pointerPos,
+          });
+        }
+
+        if (!ticketSeatSelectionMode) return;
+
+        handleTicketSeatSelection(pointerPos, evt.target);
       });
     }
   }
@@ -4351,11 +4355,13 @@ function attachMultiShapeTransformBehaviour(group) {
     const container = stage && stage.container ? stage.container() : null;
     if (ticketSeatSelectionMode && container && !ticketSeatContainerListenerAttached) {
       container.addEventListener("click", handleTicketSeatContainerClick);
+      container.addEventListener("pointerdown", handleTicketSeatContainerClick);
       ticketSeatContainerListenerAttached = true;
       // eslint-disable-next-line no-console
       console.log("[seatmap][tickets] seat-selection DOM listener attached");
     } else if (!ticketSeatSelectionMode && container && ticketSeatContainerListenerAttached) {
       container.removeEventListener("click", handleTicketSeatContainerClick);
+      container.removeEventListener("pointerdown", handleTicketSeatContainerClick);
       ticketSeatContainerListenerAttached = false;
       // eslint-disable-next-line no-console
       console.log("[seatmap][tickets] seat-selection DOM listener removed");
@@ -4369,6 +4375,14 @@ function attachMultiShapeTransformBehaviour(group) {
       const parent = seat.getParent && seat.getParent();
       if (parent && typeof parent.listening === "function") {
         parent.listening(true);
+      }
+      if (parent && typeof parent.findAncestors === "function") {
+        const ancestors = parent.findAncestors().filter(Boolean);
+        ancestors.forEach((anc) => {
+          if (typeof anc.listening === "function") {
+            anc.listening(true);
+          }
+        });
       }
     });
     if (mapLayer && typeof mapLayer.listening === "function") {
@@ -4443,6 +4457,14 @@ function attachMultiShapeTransformBehaviour(group) {
   function handleTicketSeatSelection(pointerPos, target) {
     const ticketId = getActiveTicketIdForAssignments();
     let seatNode = findSeatNodeFromTarget(target);
+
+    // eslint-disable-next-line no-console
+    console.log("[seatmap][tickets] seat-selection handler", {
+      pointer: pointerPos,
+      ticketId,
+      targetName: target && target.name ? target.name() : target && target.className,
+      selectionModeOn: ticketSeatSelectionMode,
+    });
 
     if (!seatNode && stage && typeof stage.getAllIntersections === "function" && pointerPos) {
       const hits = stage.getAllIntersections(pointerPos) || [];
@@ -8329,7 +8351,10 @@ function handleStageMouseMove() {
     // eslint-disable-next-line no-console
     console.log("[seatmap][tickets] container click", {
       pointer: pointerPos,
+      activeTicketId: getActiveTicketIdForAssignments(),
+      selectionModeOn: ticketSeatSelectionMode,
       hitName: hit && hit.name ? hit.name() : hit && hit.className,
+      seatCount: getAllSeatNodes().length,
     });
 
     handleTicketSeatSelection(pointerPos, hit);
