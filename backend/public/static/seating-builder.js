@@ -4032,6 +4032,10 @@ function attachMultiShapeTransformBehaviour(group) {
         setSeatRefAttributes(seat, seat.getAttr("sbSeatRef") || null, "", "");
       }
     });
+
+    duplicateSeatRefs = computeDuplicateSeatRefsFromSeats(
+      mapLayer.find((n) => n.getAttr && n.getAttr("isSeat"))
+    );
   }
 
   function getAllSeatNodes() {
@@ -4066,22 +4070,25 @@ function attachMultiShapeTransformBehaviour(group) {
     return null;
   }
 
-  function findDuplicateSeatRefs() {
-    refreshSeatMetadata();
-
+  function computeDuplicateSeatRefsFromSeats(seats) {
     const counts = new Map();
-    const seats = getAllSeatNodes();
     seats.forEach((seat) => {
       const ref = seat.getAttr("sbSeatRef");
       if (!ref) return;
       counts.set(ref, (counts.get(ref) || 0) + 1);
     });
 
-    duplicateSeatRefs = new Set(
+    return new Set(
       Array.from(counts.entries())
         .filter(([, count]) => count > 1)
         .map(([ref]) => ref)
     );
+  }
+
+  function findDuplicateSeatRefs() {
+    refreshSeatMetadata();
+
+    duplicateSeatRefs = computeDuplicateSeatRefsFromSeats(getAllSeatNodes());
 
     applySeatVisuals();
     return duplicateSeatRefs;
@@ -4266,6 +4273,13 @@ function attachMultiShapeTransformBehaviour(group) {
     if (!sid) return;
 
     const existing = seat.getAttr("sbTicketId") || null;
+    // eslint-disable-next-line no-console
+    console.debug("[seatmap][tickets] toggleSeatTicketAssignment", {
+      seatId: sid,
+      existing,
+      ticketId,
+    });
+
     if (existing === ticketId) {
       seat.setAttr("sbTicketId", null);
       ticketAssignments.delete(sid);
@@ -4273,6 +4287,12 @@ function attachMultiShapeTransformBehaviour(group) {
       seat.setAttr("sbTicketId", ticketId);
       ticketAssignments.set(sid, ticketId);
     }
+
+    // eslint-disable-next-line no-console
+    console.debug("[seatmap][tickets] seat state", {
+      seatId: sid,
+      nowAssignedTo: seat.getAttr("sbTicketId") || null,
+    });
   }
 
   function getSelectedSeatNodes() {
@@ -5431,6 +5451,11 @@ function addNumberField(labelText, value, min, step, onCommit) {
         updateRowGroupGeometry(node, currentSeatsPerRow, currentRowCount);
         mapLayer.batchDraw();
         updateSeatCount();
+        refreshSeatMetadata();
+        applySeatVisuals();
+        if (activeMainTab === "tickets") {
+          renderTicketingPanel();
+        }
         pushHistory();
       }
 
@@ -7660,8 +7685,22 @@ if (
       (target.getAttr("isLineHandle") || target.getAttr("isArrowHandle"));
 
     if (activeMainTab === "tickets") {
-      const seatNode = findSeatNodeFromTarget(target);
+      let seatNode = findSeatNodeFromTarget(target);
       const ticketId = getActiveTicketIdForAssignments();
+
+      if (!seatNode && mapLayer && typeof mapLayer.getIntersection === "function") {
+        const hit = mapLayer.getIntersection(pointerPos);
+        if (hit) {
+          seatNode = findSeatNodeFromTarget(hit);
+        }
+      }
+
+      // eslint-disable-next-line no-console
+      console.debug("[seatmap][tickets] click", {
+        ticketId,
+        seatFound: Boolean(seatNode),
+        targetName: target && target.name ? target.name() : target && target.className,
+      });
 
       if (seatNode && ticketId) {
         toggleSeatTicketAssignment(seatNode, ticketId);
@@ -7670,6 +7709,10 @@ if (
         pushHistory();
         return;
       }
+      // eslint-disable-next-line no-console
+      console.debug("[seatmap][tickets] click skipped", {
+        reason: seatNode ? "no-ticket-id" : "no-seat-detected",
+      });
     }
 
     // Stairs uses click+drag, not click-to-place.
