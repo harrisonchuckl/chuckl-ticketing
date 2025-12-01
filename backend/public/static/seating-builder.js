@@ -461,6 +461,7 @@ let stairsStartPos = null;
 
   let activeMainTab = "map";
   let ticketSeatSelectionMode = false;
+  let ticketSeatContainerListenerAttached = false;
   let ticketTypes = [];
   let ticketAssignments = new Map();
   let activeTicketSelectionId = null;
@@ -4342,6 +4343,19 @@ function attachMultiShapeTransformBehaviour(group) {
   function setTicketSeatSelectionMode(enabled) {
     ticketSeatSelectionMode = !!enabled;
 
+    const container = stage && stage.container ? stage.container() : null;
+    if (ticketSeatSelectionMode && container && !ticketSeatContainerListenerAttached) {
+      container.addEventListener("click", handleTicketSeatContainerClick);
+      ticketSeatContainerListenerAttached = true;
+      // eslint-disable-next-line no-console
+      console.log("[seatmap][tickets] seat-selection DOM listener attached");
+    } else if (!ticketSeatSelectionMode && container && ticketSeatContainerListenerAttached) {
+      container.removeEventListener("click", handleTicketSeatContainerClick);
+      ticketSeatContainerListenerAttached = false;
+      // eslint-disable-next-line no-console
+      console.log("[seatmap][tickets] seat-selection DOM listener removed");
+    }
+
     const seats = getAllSeatNodes();
     seats.forEach((seat) => {
       if (typeof seat.listening === "function") {
@@ -4350,6 +4364,9 @@ function attachMultiShapeTransformBehaviour(group) {
     });
     if (mapLayer && typeof mapLayer.listening === "function") {
       mapLayer.listening(true);
+    }
+    if (mapLayer && typeof mapLayer.hitGraphEnabled === "function") {
+      mapLayer.hitGraphEnabled(true);
     }
 
     refreshSeatTicketListeners();
@@ -4415,6 +4432,56 @@ function attachMultiShapeTransformBehaviour(group) {
       seatId: sid,
       nowAssignedTo: seat.getAttr("sbTicketId") || null,
     });
+  }
+
+  function handleTicketSeatSelection(pointerPos, target) {
+    const ticketId = getActiveTicketIdForAssignments();
+    let seatNode = findSeatNodeFromTarget(target);
+
+    if (!seatNode && stage && typeof stage.getAllIntersections === "function" && pointerPos) {
+      const hits = stage.getAllIntersections(pointerPos) || [];
+      // eslint-disable-next-line no-console
+      console.debug("[seatmap][tickets] intersections", {
+        hitCount: hits.length,
+        hitNames: hits.map((h) => (h.name ? h.name() : h.className)),
+      });
+      seatNode = hits.map((h) => findSeatNodeFromTarget(h)).find(Boolean) || seatNode;
+    }
+
+    if (!seatNode && mapLayer && typeof mapLayer.getIntersection === "function" && pointerPos) {
+      const hit = mapLayer.getIntersection(pointerPos);
+      if (hit) {
+        seatNode = findSeatNodeFromTarget(hit);
+      }
+    }
+
+    if (!seatNode && pointerPos) {
+      seatNode = findSeatNodeAtPosition(pointerPos) || seatNode;
+    }
+
+    // eslint-disable-next-line no-console
+    console.log("[seatmap][tickets] click", {
+      ticketId,
+      seatFound: Boolean(seatNode),
+      targetName: target && target.name ? target.name() : target && target.className,
+      selectionModeOn: ticketSeatSelectionMode,
+      pointer: pointerPos,
+    });
+
+    if (seatNode && ticketId) {
+      toggleSeatTicketAssignment(seatNode, ticketId);
+      applySeatVisuals();
+      renderTicketingPanel();
+      pushHistory();
+      return true;
+    }
+
+    // eslint-disable-next-line no-console
+    console.warn("[seatmap][tickets] click ignored", {
+      reason: seatNode ? "no-ticket-id" : "no-seat-detected",
+      selectionModeOn: ticketSeatSelectionMode,
+    });
+    return false;
   }
 
   function getSelectedSeatNodes() {
@@ -7822,52 +7889,7 @@ if (
 
     // Ticket seat assignment gets priority regardless of tab when the mode is on
     if (ticketSeatSelectionMode) {
-      let seatNode = findSeatNodeFromTarget(target);
-      const ticketId = getActiveTicketIdForAssignments();
-
-      if (!seatNode && stage && typeof stage.getAllIntersections === "function") {
-        const hits = stage.getAllIntersections(pointerPos) || [];
-        // eslint-disable-next-line no-console
-        console.debug("[seatmap][tickets] intersections", {
-          hitCount: hits.length,
-          hitNames: hits.map((h) => (h.name ? h.name() : h.className)),
-        });
-        seatNode = hits.map((h) => findSeatNodeFromTarget(h)).find(Boolean) || seatNode;
-      }
-
-      if (!seatNode && mapLayer && typeof mapLayer.getIntersection === "function") {
-        const hit = mapLayer.getIntersection(pointerPos);
-        if (hit) {
-          seatNode = findSeatNodeFromTarget(hit);
-        }
-      }
-
-      if (!seatNode && pointerPos) {
-        seatNode = findSeatNodeAtPosition(pointerPos) || seatNode;
-      }
-
-      // eslint-disable-next-line no-console
-      console.log("[seatmap][tickets] click", {
-        ticketId,
-        seatFound: Boolean(seatNode),
-        targetName: target && target.name ? target.name() : target && target.className,
-        selectionModeOn: ticketSeatSelectionMode,
-        pointer: pointerPos,
-      });
-
-      if (seatNode && ticketId) {
-        toggleSeatTicketAssignment(seatNode, ticketId);
-        applySeatVisuals();
-        renderTicketingPanel();
-        pushHistory();
-        return;
-      }
-
-      // eslint-disable-next-line no-console
-      console.warn("[seatmap][tickets] click ignored", {
-        reason: seatNode ? "no-ticket-id" : "no-seat-detected",
-        selectionModeOn: ticketSeatSelectionMode,
-      });
+      if (handleTicketSeatSelection(pointerPos, target)) return;
       return;
     }
 
@@ -8264,8 +8286,8 @@ function handleStageMouseMove() {
 }
 
 
-function handleStageMouseUp() {
-  if (!stage) return;
+  function handleStageMouseUp() {
+    if (!stage) return;
 
   // ---- Finish freehand curve-line on mouse up ----
   if (activeTool === "curve-line" && isCurveDrawing) {
@@ -8281,10 +8303,31 @@ function handleStageMouseUp() {
 
   // ---- End panning ----
   if (!isPanning) return;
-  isPanning = false;
-  lastPanPointerPos = null;
-  updateDefaultCursor();
-}
+    isPanning = false;
+    lastPanPointerPos = null;
+    updateDefaultCursor();
+  }
+
+  function handleTicketSeatContainerClick(e) {
+    if (!ticketSeatSelectionMode || !stage) return;
+
+    stage.setPointersPositions(e);
+    const pointerPos = stage.getPointerPosition();
+    if (!pointerPos) {
+      // eslint-disable-next-line no-console
+      console.warn("[seatmap][tickets] container click with no pointer position");
+      return;
+    }
+
+    const hit = stage.getIntersection ? stage.getIntersection(pointerPos) : null;
+    // eslint-disable-next-line no-console
+    console.log("[seatmap][tickets] container click", {
+      pointer: pointerPos,
+      hitName: hit && hit.name ? hit.name() : hit && hit.className,
+    });
+
+    handleTicketSeatSelection(pointerPos, hit);
+  }
 
 
 
