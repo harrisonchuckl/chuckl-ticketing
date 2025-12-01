@@ -4158,6 +4158,8 @@ function attachMultiShapeTransformBehaviour(group) {
       seat.fill(fill);
     });
 
+    refreshSeatTicketListeners();
+
     if (mapLayer && typeof mapLayer.draw === "function") {
       mapLayer.batchDraw();
     }
@@ -4283,6 +4285,60 @@ function attachMultiShapeTransformBehaviour(group) {
     return ticketTypes.length ? ticketTypes[0].id : null;
   }
 
+  function refreshSeatTicketListeners() {
+    const seats = getAllSeatNodes();
+
+    seats.forEach((seat) => {
+      if (typeof seat.off === "function") {
+        seat.off(".ticketAssign");
+      }
+
+      if (!ticketSeatSelectionMode) return;
+
+      if (typeof seat.listening === "function") {
+        seat.listening(true);
+      }
+
+      seat.on("click.ticketAssign", (evt) => {
+        const ticketId = getActiveTicketIdForAssignments();
+        const seatNode = findSeatNodeFromTarget(evt.target) || seat;
+
+        // eslint-disable-next-line no-console
+        console.log("[seatmap][tickets] seat click (direct)", {
+          ticketId,
+          seatId: ensureSeatIdAttr(seatNode),
+          selectionModeOn: ticketSeatSelectionMode,
+        });
+
+        if (!ticketSeatSelectionMode || !ticketId || !seatNode) {
+          return;
+        }
+
+        evt.cancelBubble = true;
+        toggleSeatTicketAssignment(seatNode, ticketId);
+        applySeatVisuals();
+        renderTicketingPanel();
+        pushHistory();
+      });
+    });
+
+    if (mapLayer && typeof mapLayer.off === "function") {
+      mapLayer.off(".ticketAssign");
+    }
+
+    if (ticketSeatSelectionMode && mapLayer && typeof mapLayer.on === "function") {
+      mapLayer.on("click.ticketAssign", (evt) => {
+        const pointerPos = stage && stage.getPointerPosition ? stage.getPointerPosition() : null;
+        // eslint-disable-next-line no-console
+        console.log("[seatmap][tickets] map-layer click", {
+          targetName: evt.target && evt.target.name ? evt.target.name() : evt.target && evt.target.className,
+          selectionModeOn: ticketSeatSelectionMode,
+          pointer: pointerPos,
+        });
+      });
+    }
+  }
+
   function setTicketSeatSelectionMode(enabled) {
     ticketSeatSelectionMode = !!enabled;
 
@@ -4295,6 +4351,8 @@ function attachMultiShapeTransformBehaviour(group) {
     if (mapLayer && typeof mapLayer.listening === "function") {
       mapLayer.listening(true);
     }
+
+    refreshSeatTicketListeners();
 
     // eslint-disable-next-line no-console
     console.log("[seatmap][tickets] seat-selection-mode", {
@@ -7749,6 +7807,13 @@ if (
     if (!pointerPos) return;
     const pos = pointerPos;
 
+    // eslint-disable-next-line no-console
+    console.log("[seatmap] stage click", {
+      selectionModeOn: ticketSeatSelectionMode,
+      targetName: evt.target && evt.target.name ? evt.target.name() : evt.target && evt.target.className,
+      pointer: pointerPos,
+    });
+
     const target = evt.target;
     const isHandle =
       target &&
@@ -8776,6 +8841,8 @@ function handleStageMouseUp() {
   };
 
   stage.on("click", handleStageClick);
+  stage.on("contentClick", handleStageClick);
+  stage.on("tap", handleStageClick);
 
   // Canvas interactions
   stage.on("mousedown", handleStageMouseDown);
