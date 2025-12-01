@@ -461,6 +461,7 @@ let stairsStartPos = null;
 
   let activeMainTab = "map";
   let ticketSeatSelectionMode = false;
+  let ticketSeatSelectionReason = "init";
   let ticketSeatContainerListenerAttached = false;
   let ticketTypes = [];
   let ticketAssignments = new Map();
@@ -4308,6 +4309,7 @@ function attachMultiShapeTransformBehaviour(group) {
           ticketId,
           seatId: ensureSeatIdAttr(seatNode),
           selectionModeOn: ticketSeatSelectionMode,
+          reason: ticketSeatSelectionReason,
         });
 
         if (!ticketSeatSelectionMode || !ticketId || !seatNode) {
@@ -4324,6 +4326,16 @@ function attachMultiShapeTransformBehaviour(group) {
       seat.on("click.ticketAssign", seatHandler);
       seat.on("mousedown.ticketAssign", seatHandler);
       seat.on("tap.ticketAssign", seatHandler);
+      seat.on("pointerdown.ticketAssignDebug", (evt) => {
+        // eslint-disable-next-line no-console
+        console.debug("[seatmap][tickets] seat pointerdown", {
+          selectionModeOn: ticketSeatSelectionMode,
+          ticketId: getActiveTicketIdForAssignments(),
+          seatId: ensureSeatIdAttr(seat),
+          reason: ticketSeatSelectionReason,
+          targetName: evt.target && evt.target.name ? evt.target.name() : evt.target && evt.target.className,
+        });
+      });
     });
 
     if (mapLayer && typeof mapLayer.off === "function") {
@@ -4373,23 +4385,10 @@ function attachMultiShapeTransformBehaviour(group) {
     }
   }
 
-  function setTicketSeatSelectionMode(enabled) {
+  function setTicketSeatSelectionMode(enabled, reason = "unknown") {
+    const prev = ticketSeatSelectionMode;
     ticketSeatSelectionMode = !!enabled;
-
-    const container = stage && stage.container ? stage.container() : null;
-    if (ticketSeatSelectionMode && container && !ticketSeatContainerListenerAttached) {
-      container.addEventListener("click", handleTicketSeatContainerClick);
-      container.addEventListener("pointerdown", handleTicketSeatContainerClick);
-      ticketSeatContainerListenerAttached = true;
-      // eslint-disable-next-line no-console
-      console.log("[seatmap][tickets] seat-selection DOM listener attached");
-    } else if (!ticketSeatSelectionMode && container && ticketSeatContainerListenerAttached) {
-      container.removeEventListener("click", handleTicketSeatContainerClick);
-      container.removeEventListener("pointerdown", handleTicketSeatContainerClick);
-      ticketSeatContainerListenerAttached = false;
-      // eslint-disable-next-line no-console
-      console.log("[seatmap][tickets] seat-selection DOM listener removed");
-    }
+    ticketSeatSelectionReason = reason || "unknown";
 
     const seats = getAllSeatNodes();
     seats.forEach((seat) => {
@@ -4420,6 +4419,8 @@ function attachMultiShapeTransformBehaviour(group) {
       enabled: ticketSeatSelectionMode,
       activeTicketId: activeTicketSelectionId,
       seatCount: seats.length,
+      reason: ticketSeatSelectionReason,
+      prev,
     });
     if (!ticketSeatSelectionMode) {
       clearSelection();
@@ -4844,10 +4845,10 @@ function attachMultiShapeTransformBehaviour(group) {
           });
 
           if (!ticketSeatSelectionMode) {
-            setTicketSeatSelectionMode(true);
+            setTicketSeatSelectionMode(true, "assign-seats-button");
             window.alert("Click seats to assign or unassign them for this ticket.");
           } else {
-            setTicketSeatSelectionMode(false);
+            setTicketSeatSelectionMode(false, "assign-seats-finish");
           }
 
           applySeatVisuals();
@@ -4871,7 +4872,7 @@ function attachMultiShapeTransformBehaviour(group) {
             return;
           }
 
-          const seats = getAllSeatNodes().filter((seat) => !seat.getAttr("sbTicketId"));
+          const seats = getAllSeatNodes();
           seats.forEach((seat) => {
             const sid = ensureSeatIdAttr(seat);
             if (sid) {
@@ -4880,9 +4881,15 @@ function attachMultiShapeTransformBehaviour(group) {
             }
           });
 
+          // eslint-disable-next-line no-console
+          console.log("[seatmap][tickets] assign remaining", {
+            ticketId: ticket.id,
+            assignedCount: seats.length,
+          });
+
           applySeatVisuals();
           renderTicketingPanel();
-          setTicketSeatSelectionMode(false);
+          setTicketSeatSelectionMode(false, "assign-all-remaining");
         });
 
         actionsRow.appendChild(assignSelectedBtn);
@@ -7853,6 +7860,14 @@ if (
     domContainer.style.backgroundImage = "none";
     domContainer.style.backgroundColor = "#f9fafb";
 
+    if (domContainer && !ticketSeatContainerListenerAttached) {
+      domContainer.addEventListener("click", handleTicketSeatContainerClick);
+      domContainer.addEventListener("pointerdown", handleTicketSeatContainerClick);
+      ticketSeatContainerListenerAttached = true;
+      // eslint-disable-next-line no-console
+      console.log("[seatmap][tickets] seat-selection DOM listener attached (boot)");
+    }
+
     gridLayer = new Konva.Layer({ listening: false });
     mapLayer = new Konva.Layer({
       id: "mapLayer",
@@ -8377,6 +8392,7 @@ function handleStageMouseMove() {
       pointer: pointerPos,
       activeTicketId: getActiveTicketIdForAssignments(),
       selectionModeOn: ticketSeatSelectionMode,
+      selectionReason: ticketSeatSelectionReason,
       hitName: hit && hit.name ? hit.name() : hit && hit.className,
       seatCount: getAllSeatNodes().length,
     });
@@ -8773,7 +8789,7 @@ function handleStageMouseMove() {
       });
 
       if (loaded) {
-        setTicketSeatSelectionMode(false);
+        setTicketSeatSelectionMode(false, "load-active-layout");
         setCurrentSeatMapMeta(active && active.id, active && active.name);
         initTableCounterFromExisting();
       }
@@ -8812,7 +8828,7 @@ function handleStageMouseMove() {
     });
 
     if (loaded) {
-      setTicketSeatSelectionMode(false);
+      setTicketSeatSelectionMode(false, "load-saved-layout");
       setCurrentSeatMapMeta(match.id, match.name);
       initTableCounterFromExisting();
       const select = document.getElementById("tb-saved-layout-select");
@@ -8926,7 +8942,7 @@ function handleStageMouseMove() {
   window.__TIXALL_SET_TAB_MODE__ = function (tab) {
     activeMainTab = tab || "map";
 
-    setTicketSeatSelectionMode(false);
+    setTicketSeatSelectionMode(false, "tab-change");
     clearSelection();
 
     if (activeMainTab === "tickets") {
