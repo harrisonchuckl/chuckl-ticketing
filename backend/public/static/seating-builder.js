@@ -4347,6 +4347,30 @@ function attachMultiShapeTransformBehaviour(group) {
         handleTicketSeatSelection(pointerPos, evt.target);
       });
     }
+
+    if (stage && typeof stage.off === "function") {
+      stage.off("click.ticketAssign");
+    }
+
+    if (stage && typeof stage.on === "function") {
+      stage.on("click.ticketAssign", (evt) => {
+        const pointerPos = stage && stage.getPointerPosition ? stage.getPointerPosition() : null;
+
+        // eslint-disable-next-line no-console
+        console.log("[seatmap][tickets] stage click", {
+          targetName: evt.target && evt.target.name ? evt.target.name() : evt.target && evt.target.className,
+          selectionModeOn: ticketSeatSelectionMode,
+          pointer: pointerPos,
+        });
+
+        if (!ticketSeatSelectionMode) return;
+
+        const handled = handleTicketSeatSelection(pointerPos, evt.target);
+        if (handled) {
+          evt.cancelBubble = true;
+        }
+      });
+    }
   }
 
   function setTicketSeatSelectionMode(enabled) {
