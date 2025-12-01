@@ -4359,68 +4359,131 @@ function attachMultiShapeTransformBehaviour(group) {
       });
     });
 
-    // ---------- Seat click listeners for ticket allocation ----------
-if (mapLayer && typeof mapLayer.off === "function") {
-  mapLayer.off("click.ticketAssign");
-}
-if (mapLayer && typeof mapLayer.on === "function") {
-  mapLayer.on("click.ticketAssign", (evt) => {
-    if (!ticketSeatSelectionMode) return;
-    const pointerPos = stage?.getPointerPosition?.() || null;
+    if (mapLayer && typeof mapLayer.off === "function") {
+      mapLayer.off(".ticketAssign");
+    }
 
-    // eslint-disable-next-line no-console
-    console.log("[seatmap][tickets] map-layer click", {
-      seatSelectionMode: ticketSeatSelectionMode,
-      ticketId: getActiveTicketIdForAssignments(),
-      pointerPos,
-      target: evt.target?.name?.() || evt.target?.className,
-    });
+    if (mapLayer && typeof mapLayer.on === "function") {
+      mapLayer.on("click.ticketAssign", (evt) => {
+        const pointerPos = stage && stage.getPointerPosition ? stage.getPointerPosition() : null;
+        if (ticketSeatSelectionMode) {
+          // eslint-disable-next-line no-console
+          console.log("[seatmap][tickets] map-layer click", {
+            targetName: evt.target && evt.target.name ? evt.target.name() : evt.target && evt.target.className,
+            selectionModeOn: ticketSeatSelectionMode,
+            pointer: pointerPos,
+          });
+        }
 
-    const handled = handleTicketSeatSelection(pointerPos, evt.target);
-    if (handled) evt.cancelBubble = true;
-  });
-}
+        if (!ticketSeatSelectionMode) return;
 
-// Ensure DOM-level pointer handler runs as fallback
-if (ticketSeatDomListener && stage?.container?.()) {
-  stage.container().removeEventListener("pointerdown", ticketSeatDomListener, true);
-}
+        handleTicketSeatSelection(pointerPos, evt.target);
+      });
 
-ticketSeatDomListener = (evt) => {
-  if (!ticketSeatSelectionMode) return;
-  if (!stage?.container) return;
+      mapLayer.on("contentMousedown.ticketAssign", (evt) => {
+        if (!ticketSeatSelectionMode) return;
 
-  stage.setPointersPositions(evt);
-  const pointerPos = stage.getPointerPosition?.() || null;
-  const ticketId = getActiveTicketIdForAssignments();
-  const hit = stage.getIntersection?.(pointerPos) || null;
-  const seat =
-    findSeatNodeFromTarget(hit || evt.target) ||
-    (pointerPos ? findSeatNodeAtPosition(pointerPos) : null);
+        const pointerPos = stage && stage.getPointerPosition ? stage.getPointerPosition() : null;
 
-  // eslint-disable-next-line no-console
-  console.log("[seatmap][tickets] DOM click (allocation)", {
-    seatFound: !!seat,
-    ticketId,
-    pointerPos,
-    seatSelectionMode: ticketSeatSelectionMode,
-  });
+        // eslint-disable-next-line no-console
+        console.log("[seatmap][tickets] map-layer contentMousedown", {
+          targetName: evt.target && evt.target.name ? evt.target.name() : evt.target && evt.target.className,
+          selectionModeOn: ticketSeatSelectionMode,
+          pointer: pointerPos,
+        });
 
-  if (!seat || !ticketId) return;
+        const handled = handleTicketSeatSelection(pointerPos, evt.target);
+        if (handled && evt.evt) {
+          evt.evt.stopPropagation();
+        }
+      });
+    }
 
-  toggleSeatTicketAssignment(seat, ticketId);
-  applySeatVisuals();
-  renderTicketingPanel();
-  pushHistory();
-  evt.preventDefault();
-  evt.stopPropagation();
-};
+    if (stage && typeof stage.off === "function") {
+      stage.off("click.ticketAssign");
+    }
 
-// Only attach listener once
-if (stage?.container?.()) {
-  stage.container().addEventListener("pointerup", ticketSeatDomListener, true);
-}
+    if (stage && typeof stage.on === "function") {
+      stage.on("click.ticketAssign", (evt) => {
+        const pointerPos = stage && stage.getPointerPosition ? stage.getPointerPosition() : null;
 
+        // eslint-disable-next-line no-console
+        console.log("[seatmap][tickets] stage click", {
+          targetName: evt.target && evt.target.name ? evt.target.name() : evt.target && evt.target.className,
+          selectionModeOn: ticketSeatSelectionMode,
+          pointer: pointerPos,
+        });
+
+        if (!ticketSeatSelectionMode) return;
+
+        const handled = handleTicketSeatSelection(pointerPos, evt.target);
+        if (handled) {
+          evt.cancelBubble = true;
+        }
+      });
+
+      stage.on("contentMousedown.ticketAssign", (evt) => {
+        const pointerPos = stage && stage.getPointerPosition ? stage.getPointerPosition() : null;
+        const ticketId = getActiveTicketIdForAssignments();
+
+        // eslint-disable-next-line no-console
+        console.log("[seatmap][tickets] stage contentMousedown", {
+          targetName: evt.target && evt.target.name ? evt.target.name() : evt.target && evt.target.className,
+          selectionModeOn: ticketSeatSelectionMode,
+          pointer: pointerPos,
+          ticketId,
+        });
+
+        if (!ticketSeatSelectionMode || !ticketId) return;
+
+        const handled = handleTicketSeatSelection(pointerPos, evt.target);
+        if (handled) {
+          evt.cancelBubble = true;
+        }
+      });
+    }
+
+    if (ticketSeatDomListener && stage && stage.container && stage.container()) {
+      stage.container().removeEventListener("pointerdown", ticketSeatDomListener, true);
+    }
+
+    ticketSeatDomListener = (evt) => {
+      if (!stage || !stage.container || !ticketSeatSelectionMode) return;
+
+      stage.setPointersPositions(evt);
+      const pointerPos = stage.getPointerPosition ? stage.getPointerPosition() : null;
+      const ticketId = getActiveTicketIdForAssignments();
+
+      const hitFromDom = stage.getIntersection ? stage.getIntersection(pointerPos) : null;
+      const seat =
+        findSeatNodeFromTarget(hitFromDom || evt.target) ||
+        (pointerPos ? findSeatNodeAtPosition(pointerPos) : null);
+
+      // eslint-disable-next-line no-console
+      console.log("[seatmap][tickets] dom pointer", {
+        seatFound: Boolean(seat),
+        ticketId,
+        pointer: pointerPos,
+        targetName: hitFromDom && hitFromDom.name ? hitFromDom.name() : evt.target && evt.target.nodeName,
+        selectionModeOn: ticketSeatSelectionMode,
+        reason: ticketSeatSelectionReason,
+      });
+
+      if (!seat || !ticketId) return;
+
+      toggleSeatTicketAssignment(seat, ticketId);
+      applySeatVisuals();
+      renderTicketingPanel();
+      pushHistory();
+
+      evt.preventDefault();
+      evt.stopPropagation();
+    };
+
+    if (stage && stage.container && stage.container()) {
+      stage.container().addEventListener("pointerdown", ticketSeatDomListener, true);
+    }
+  }
 
   function setTicketSeatSelectionMode(enabled, reason = "unknown") {
     const prev = ticketSeatSelectionMode;
@@ -4919,10 +4982,14 @@ if (stage?.container?.()) {
             }
           });
 
+          rebuildTicketAssignmentsCache();
+          const assignedCount = countAssignmentsForTicket(ticket.id);
+
           // eslint-disable-next-line no-console
           console.log("[seatmap][tickets] assign remaining", {
             ticketId: ticket.id,
-            assignedCount: seats.length,
+            assignedCount,
+            seatTotal: seats.length,
           });
 
           applySeatVisuals();
