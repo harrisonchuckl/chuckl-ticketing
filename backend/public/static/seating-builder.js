@@ -4029,6 +4029,9 @@ function attachMultiShapeTransformBehaviour(group) {
 
     mapLayer.find((n) => n.getAttr && n.getAttr("isSeat")).forEach((seat) => {
       ensureSeatIdAttr(seat);
+      if (typeof seat.listening === "function") {
+        seat.listening(true);
+      }
       if (!seat.getAttr("sbSeatRef")) {
         setSeatRefAttributes(seat, seat.getAttr("sbSeatRef") || null, "", "");
       }
@@ -4066,6 +4069,36 @@ function attachMultiShapeTransformBehaviour(group) {
     if (group && typeof group.find === "function") {
       const childSeat = group.find((child) => isSeatNode(child))[0];
       if (childSeat) return childSeat;
+    }
+
+    return null;
+  }
+
+  function findSeatNodeAtPosition(pos) {
+    if (!pos || !mapLayer) return null;
+
+    const seats = getAllSeatNodes();
+    const orderedSeats = seats
+      .map((seat) => ({ seat, z: typeof seat.getAbsoluteZIndex === "function" ? seat.getAbsoluteZIndex() : 0 }))
+      .sort((a, b) => b.z - a.z)
+      .map((item) => item.seat);
+
+    const pointerRect = { x: pos.x, y: pos.y, width: 1, height: 1 };
+
+    for (let i = 0; i < orderedSeats.length; i += 1) {
+      const seat = orderedSeats[i];
+      if (!seat || typeof seat.getClientRect !== "function") continue;
+
+      const rect = seat.getClientRect({ relativeTo: stage });
+      if (Konva.Util.haveIntersection(rect, pointerRect)) {
+        // eslint-disable-next-line no-console
+        console.log("[seatmap][tickets] seat found via rect hit", {
+          seatId: ensureSeatIdAttr(seat),
+          rect,
+          pointer: pos,
+        });
+        return seat;
+      }
     }
 
     return null;
@@ -4253,7 +4286,7 @@ function attachMultiShapeTransformBehaviour(group) {
   function setTicketSeatSelectionMode(enabled) {
     ticketSeatSelectionMode = !!enabled;
     // eslint-disable-next-line no-console
-    console.debug("[seatmap][tickets] seat-selection-mode", {
+    console.log("[seatmap][tickets] seat-selection-mode", {
       enabled: ticketSeatSelectionMode,
       activeTicketId: activeTicketSelectionId,
     });
@@ -4616,7 +4649,7 @@ function attachMultiShapeTransformBehaviour(group) {
           activeTicketSelectionId = ticket.id;
 
           // eslint-disable-next-line no-console
-          console.debug("[seatmap][tickets] toggle seat selection button", {
+          console.log("[seatmap][tickets] toggle seat selection button", {
             ticketId: ticket.id,
             nowEnabling: !ticketSeatSelectionMode,
           });
@@ -7636,6 +7669,9 @@ if (
       id: "mapLayer",
       name: "map-layer",
     });
+    if (typeof mapLayer.listening === "function") {
+      mapLayer.listening(true);
+    }
     mapLayer.position({ x: 0, y: 0 });
     mapLayer.scale({ x: 1, y: 1 });
     overlayLayer = new Konva.Layer();
@@ -7729,8 +7765,12 @@ if (
         }
       }
 
+      if (!seatNode && pointerPos) {
+        seatNode = findSeatNodeAtPosition(pointerPos) || seatNode;
+      }
+
       // eslint-disable-next-line no-console
-      console.debug("[seatmap][tickets] click", {
+      console.log("[seatmap][tickets] click", {
         ticketId,
         seatFound: Boolean(seatNode),
         targetName: target && target.name ? target.name() : target && target.className,
@@ -7747,7 +7787,7 @@ if (
       }
       if (selectionModeOn) {
         // eslint-disable-next-line no-console
-        console.debug("[seatmap][tickets] click skipped", {
+        console.log("[seatmap][tickets] click skipped", {
           reason: seatNode
             ? selectionModeOn
               ? "no-ticket-id"
@@ -8906,6 +8946,9 @@ function handleStageMouseUp() {
   }
 
   mapLayer = newLayer;
+  if (typeof mapLayer.listening === "function") {
+    mapLayer.listening(true);
+  }
   stage.add(mapLayer);
   if (gridLayer && gridLayer.getStage && gridLayer.getStage()) {
     gridLayer.moveToBottom();
