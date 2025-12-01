@@ -4252,6 +4252,11 @@ function attachMultiShapeTransformBehaviour(group) {
 
   function setTicketSeatSelectionMode(enabled) {
     ticketSeatSelectionMode = !!enabled;
+    // eslint-disable-next-line no-console
+    console.debug("[seatmap][tickets] seat-selection-mode", {
+      enabled: ticketSeatSelectionMode,
+      activeTicketId: activeTicketSelectionId,
+    });
     if (!ticketSeatSelectionMode) {
       clearSelection();
       if (transformer && typeof transformer.nodes === "function") {
@@ -4609,6 +4614,12 @@ function attachMultiShapeTransformBehaviour(group) {
           }
 
           activeTicketSelectionId = ticket.id;
+
+          // eslint-disable-next-line no-console
+          console.debug("[seatmap][tickets] toggle seat selection button", {
+            ticketId: ticket.id,
+            nowEnabling: !ticketSeatSelectionMode,
+          });
 
           if (!ticketSeatSelectionMode) {
             setTicketSeatSelectionMode(true);
@@ -7701,6 +7712,16 @@ if (
       const ticketId = getActiveTicketIdForAssignments();
       const selectionModeOn = ticketSeatSelectionMode;
 
+      if (!seatNode && stage && typeof stage.getAllIntersections === "function") {
+        const hits = stage.getAllIntersections(pointerPos) || [];
+        // eslint-disable-next-line no-console
+        console.debug("[seatmap][tickets] intersections", {
+          hitCount: hits.length,
+          hitNames: hits.map((h) => (h.name ? h.name() : h.className)),
+        });
+        seatNode = hits.map((h) => findSeatNodeFromTarget(h)).find(Boolean) || seatNode;
+      }
+
       if (!seatNode && mapLayer && typeof mapLayer.getIntersection === "function") {
         const hit = mapLayer.getIntersection(pointerPos);
         if (hit) {
@@ -7714,6 +7735,7 @@ if (
         seatFound: Boolean(seatNode),
         targetName: target && target.name ? target.name() : target && target.className,
         selectionModeOn,
+        pointer: pointerPos,
       });
 
       if (seatNode && ticketId && selectionModeOn) {
@@ -7723,15 +7745,18 @@ if (
         pushHistory();
         return;
       }
-      // eslint-disable-next-line no-console
-      console.debug("[seatmap][tickets] click skipped", {
-        reason: seatNode
-          ? selectionModeOn
-            ? "no-ticket-id"
-            : "selection-mode-off"
-          : "no-seat-detected",
-      });
-      return;
+      if (selectionModeOn) {
+        // eslint-disable-next-line no-console
+        console.debug("[seatmap][tickets] click skipped", {
+          reason: seatNode
+            ? selectionModeOn
+              ? "no-ticket-id"
+              : "selection-mode-off"
+            : "no-seat-detected",
+          selectionModeOn,
+        });
+        return;
+      }
     }
 
     // Stairs uses click+drag, not click-to-place.
