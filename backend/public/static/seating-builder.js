@@ -460,6 +460,7 @@ let stairsStartPos = null;
   let copiedNodesJson = [];
 
   let activeMainTab = "map";
+  let ticketSeatSelectionMode = false;
   let ticketTypes = [];
   let ticketAssignments = new Map();
   let activeTicketSelectionId = null;
@@ -4095,7 +4096,10 @@ function attachMultiShapeTransformBehaviour(group) {
   }
 
   function applySeatVisuals() {
+    refreshSeatMetadata();
+
     const seats = getAllSeatNodes();
+    duplicateSeatRefs = computeDuplicateSeatRefsFromSeats(seats);
 
     seats.forEach((seat) => {
       const baseFill = seat.getAttr("sbSeatBaseFill") || "#ffffff";
@@ -4244,6 +4248,16 @@ function attachMultiShapeTransformBehaviour(group) {
     const exists = ticketTypes.some((t) => t.id === activeTicketSelectionId);
     if (activeTicketSelectionId && exists) return activeTicketSelectionId;
     return ticketTypes.length ? ticketTypes[0].id : null;
+  }
+
+  function setTicketSeatSelectionMode(enabled) {
+    ticketSeatSelectionMode = !!enabled;
+    if (!ticketSeatSelectionMode) {
+      clearSelection();
+      if (transformer && typeof transformer.nodes === "function") {
+        transformer.nodes([]);
+      }
+    }
   }
 
   function countAssignmentsForTicket(ticketId) {
@@ -4578,7 +4592,9 @@ function attachMultiShapeTransformBehaviour(group) {
         const assignSelectedBtn = document.createElement("button");
         assignSelectedBtn.type = "button";
         assignSelectedBtn.className = "tool-button sb-ghost-button";
-        assignSelectedBtn.textContent = "Assign selected seats";
+        assignSelectedBtn.textContent = ticketSeatSelectionMode
+          ? "Finish seat selection"
+          : "Select seats for allocation";
         assignSelectedBtn.disabled = duplicates.size > 0 || updateOffSaleValidation();
         assignSelectedBtn.addEventListener("click", () => {
           if (duplicates.size > 0) {
@@ -4592,19 +4608,14 @@ function attachMultiShapeTransformBehaviour(group) {
             return;
           }
 
-          const seats = getSelectedSeatNodes();
-          if (!seats.length) {
-            window.alert("Select seats on the map to assign.");
-            return;
-          }
+          activeTicketSelectionId = ticket.id;
 
-          seats.forEach((seat) => {
-            const sid = ensureSeatIdAttr(seat);
-            if (sid) {
-              seat.setAttr("sbTicketId", ticket.id);
-              ticketAssignments.set(sid, ticket.id);
-            }
-          });
+          if (!ticketSeatSelectionMode) {
+            setTicketSeatSelectionMode(true);
+            window.alert("Click seats to assign or unassign them for this ticket.");
+          } else {
+            setTicketSeatSelectionMode(false);
+          }
 
           applySeatVisuals();
           renderTicketingPanel();
@@ -4638,6 +4649,7 @@ function attachMultiShapeTransformBehaviour(group) {
 
           applySeatVisuals();
           renderTicketingPanel();
+          setTicketSeatSelectionMode(false);
         });
 
         actionsRow.appendChild(assignSelectedBtn);
@@ -7687,6 +7699,7 @@ if (
     if (activeMainTab === "tickets") {
       let seatNode = findSeatNodeFromTarget(target);
       const ticketId = getActiveTicketIdForAssignments();
+      const selectionModeOn = ticketSeatSelectionMode;
 
       if (!seatNode && mapLayer && typeof mapLayer.getIntersection === "function") {
         const hit = mapLayer.getIntersection(pointerPos);
@@ -7700,9 +7713,10 @@ if (
         ticketId,
         seatFound: Boolean(seatNode),
         targetName: target && target.name ? target.name() : target && target.className,
+        selectionModeOn,
       });
 
-      if (seatNode && ticketId) {
+      if (seatNode && ticketId && selectionModeOn) {
         toggleSeatTicketAssignment(seatNode, ticketId);
         applySeatVisuals();
         renderTicketingPanel();
@@ -7711,8 +7725,13 @@ if (
       }
       // eslint-disable-next-line no-console
       console.debug("[seatmap][tickets] click skipped", {
-        reason: seatNode ? "no-ticket-id" : "no-seat-detected",
+        reason: seatNode
+          ? selectionModeOn
+            ? "no-ticket-id"
+            : "selection-mode-off"
+          : "no-seat-detected",
       });
+      return;
     }
 
     // Stairs uses click+drag, not click-to-place.
@@ -8235,7 +8254,9 @@ function handleStageMouseUp() {
     saveBtn.addEventListener("click", async () => {
       const selectionBeforeSave = selectedNode;
       const fallbackJson = mapLayer && mapLayer.toJSON ? mapLayer.toJSON() : null;
-      let seatMapIdForSave = currentSeatMapId || null;
+      const select = document.getElementById("tb-saved-layout-select");
+      const selectedFromDropdown = select && select.value ? select.value : null;
+      let seatMapIdForSave = selectedFromDropdown || currentSeatMapId || null;
       let nameForSave = currentSeatMapName || null;
 
       // If a saved layout is loaded, ask whether to overwrite or create a new save.
@@ -8517,6 +8538,7 @@ function handleStageMouseUp() {
       });
 
       if (loaded) {
+        setTicketSeatSelectionMode(false);
         setCurrentSeatMapMeta(active && active.id, active && active.name);
         initTableCounterFromExisting();
       }
@@ -8555,6 +8577,7 @@ function handleStageMouseUp() {
     });
 
     if (loaded) {
+      setTicketSeatSelectionMode(false);
       setCurrentSeatMapMeta(match.id, match.name);
       initTableCounterFromExisting();
       const select = document.getElementById("tb-saved-layout-select");
@@ -8668,6 +8691,9 @@ function handleStageMouseUp() {
   window.__TIXALL_SET_TAB_MODE__ = function (tab) {
     activeMainTab = tab || "map";
 
+    setTicketSeatSelectionMode(false);
+    clearSelection();
+
     if (activeMainTab === "tickets") {
       findDuplicateSeatRefs();
       renderTicketingPanel();
@@ -8711,7 +8737,7 @@ function handleStageMouseUp() {
     // Load a saved Konva layout JSON into the existing stage/mapLayer.
     // - Supports both old full-Stage JSON and new Layer-only JSON.
     // - Never creates a Stage from JSON, so we avoid "Stage has no container" errors.
-    function loadKonvaLayoutIntoStage(konvaJson, options) {
+  function loadKonvaLayoutIntoStage(konvaJson, options) {
       const opts = options || {};
 
       if (!stage || !mapLayer) {
@@ -8857,7 +8883,10 @@ function handleStageMouseUp() {
   mapLayer = newLayer;
   stage.add(mapLayer);
   if (gridLayer && gridLayer.getStage && gridLayer.getStage()) {
-    mapLayer.moveAbove(gridLayer);
+    gridLayer.moveToBottom();
+  }
+  if (mapLayer && mapLayer.getStage && mapLayer.getStage()) {
+    mapLayer.moveToTop();
   }
   if (overlayLayer && overlayLayer.getStage && overlayLayer.getStage()) {
     overlayLayer.moveToTop();
