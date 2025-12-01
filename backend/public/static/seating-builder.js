@@ -467,6 +467,7 @@ let stairsStartPos = null;
   let ticketAssignments = new Map();
   let activeTicketSelectionId = null;
   let ticketSeatDomListener = null;
+  let ticketSeatDocumentListener = null;
   let ticketAccordionOpenIds = new Set();
   let ticketFormState = {
     name: "",
@@ -4446,6 +4447,9 @@ function attachMultiShapeTransformBehaviour(group) {
     if (ticketSeatDomListener && stage && stage.container && stage.container()) {
       stage.container().removeEventListener("pointerdown", ticketSeatDomListener, true);
     }
+    if (ticketSeatDocumentListener && document) {
+      document.removeEventListener("pointerdown", ticketSeatDocumentListener, true);
+    }
 
     ticketSeatDomListener = (evt) => {
       if (!stage || !stage.container || !ticketSeatSelectionMode) return;
@@ -4482,6 +4486,45 @@ function attachMultiShapeTransformBehaviour(group) {
 
     if (stage && stage.container && stage.container()) {
       stage.container().addEventListener("pointerdown", ticketSeatDomListener, true);
+    }
+
+    ticketSeatDocumentListener = (evt) => {
+      if (!stage || !stage.container || !ticketSeatSelectionMode) return;
+
+      const container = stage.container();
+      if (!container || !container.contains(evt.target)) return;
+
+      stage.setPointersPositions(evt);
+      const pointerPos = stage.getPointerPosition ? stage.getPointerPosition() : null;
+      const hitFromDom = stage.getIntersection ? stage.getIntersection(pointerPos) : null;
+      const seat =
+        findSeatNodeFromTarget(hitFromDom || evt.target) ||
+        (pointerPos ? findSeatNodeAtPosition(pointerPos) : null);
+      const ticketId = getActiveTicketIdForAssignments();
+
+      // eslint-disable-next-line no-console
+      console.log("[seatmap][tickets] document pointer", {
+        seatFound: Boolean(seat),
+        ticketId,
+        pointer: pointerPos,
+        targetName: hitFromDom && hitFromDom.name ? hitFromDom.name() : evt.target && evt.target.nodeName,
+        selectionModeOn: ticketSeatSelectionMode,
+        reason: ticketSeatSelectionReason,
+      });
+
+      if (!seat || !ticketId) return;
+
+      toggleSeatTicketAssignment(seat, ticketId);
+      applySeatVisuals();
+      renderTicketingPanel();
+      pushHistory();
+
+      evt.preventDefault();
+      evt.stopPropagation();
+    };
+
+    if (document) {
+      document.addEventListener("pointerdown", ticketSeatDocumentListener, true);
     }
   }
 
@@ -4532,9 +4575,12 @@ function attachMultiShapeTransformBehaviour(group) {
 
   function countAssignmentsForTicket(ticketId) {
     if (!ticketId) return 0;
+    const seats = getAllSeatNodes();
     let count = 0;
-    ticketAssignments.forEach((tid) => {
-      if (tid === ticketId) count += 1;
+    seats.forEach((seat) => {
+      if (seat && seat.getAttr && seat.getAttr("sbTicketId") === ticketId) {
+        count += 1;
+      }
     });
     return count;
   }
