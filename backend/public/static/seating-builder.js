@@ -466,6 +466,7 @@ let stairsStartPos = null;
   let ticketTypes = [];
   let ticketAssignments = new Map();
   let activeTicketSelectionId = null;
+  let ticketSeatDomListener = null;
   let ticketAccordionOpenIds = new Set();
   let ticketFormState = {
     name: "",
@@ -4039,6 +4040,8 @@ function attachMultiShapeTransformBehaviour(group) {
       }
     });
 
+    enforceUniqueSeatIds(mapLayer.find((n) => n.getAttr && n.getAttr("isSeat")));
+
     duplicateSeatRefs = computeDuplicateSeatRefsFromSeats(
       mapLayer.find((n) => n.getAttr && n.getAttr("isSeat"))
     );
@@ -4047,6 +4050,24 @@ function attachMultiShapeTransformBehaviour(group) {
   function getAllSeatNodes() {
     if (!mapLayer || typeof mapLayer.find !== "function") return [];
     return mapLayer.find((n) => n.getAttr && n.getAttr("isSeat"));
+  }
+
+  function enforceUniqueSeatIds(seats) {
+    const seen = new Set();
+
+    seats.forEach((seat) => {
+      if (!seat) return;
+
+      let sid = seat.getAttr("sbSeatId");
+      if (!sid || seen.has(sid)) {
+        sid = ensureSeatIdAttr(seat);
+      }
+
+      if (sid) {
+        seen.add(sid);
+        seat.setAttr("sbSeatId", sid);
+      }
+    });
   }
 
   function findSeatNodeFromTarget(target) {
@@ -4382,6 +4403,47 @@ function attachMultiShapeTransformBehaviour(group) {
           evt.cancelBubble = true;
         }
       });
+    }
+
+    if (ticketSeatDomListener && stage && stage.container && stage.container()) {
+      stage.container().removeEventListener("pointerdown", ticketSeatDomListener, true);
+    }
+
+    ticketSeatDomListener = (evt) => {
+      if (!stage || !stage.container || !ticketSeatSelectionMode) return;
+
+      stage.setPointersPositions(evt);
+      const pointerPos = stage.getPointerPosition ? stage.getPointerPosition() : null;
+      const ticketId = getActiveTicketIdForAssignments();
+
+      const hitFromDom = stage.getIntersection ? stage.getIntersection(pointerPos) : null;
+      const seat =
+        findSeatNodeFromTarget(hitFromDom || evt.target) ||
+        (pointerPos ? findSeatNodeAtPosition(pointerPos) : null);
+
+      // eslint-disable-next-line no-console
+      console.log("[seatmap][tickets] dom pointer", {
+        seatFound: Boolean(seat),
+        ticketId,
+        pointer: pointerPos,
+        targetName: hitFromDom && hitFromDom.name ? hitFromDom.name() : evt.target && evt.target.nodeName,
+        selectionModeOn: ticketSeatSelectionMode,
+        reason: ticketSeatSelectionReason,
+      });
+
+      if (!seat || !ticketId) return;
+
+      toggleSeatTicketAssignment(seat, ticketId);
+      applySeatVisuals();
+      renderTicketingPanel();
+      pushHistory();
+
+      evt.preventDefault();
+      evt.stopPropagation();
+    };
+
+    if (stage && stage.container && stage.container()) {
+      stage.container().addEventListener("pointerdown", ticketSeatDomListener, true);
     }
   }
 
@@ -4873,6 +4935,7 @@ function attachMultiShapeTransformBehaviour(group) {
           }
 
           const seats = getAllSeatNodes();
+          enforceUniqueSeatIds(seats);
           seats.forEach((seat) => {
             const sid = ensureSeatIdAttr(seat);
             if (sid) {
