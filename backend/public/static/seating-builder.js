@@ -467,6 +467,7 @@ let stairsStartPos = null;
   let ticketAssignments = new Map();
   let activeTicketSelectionId = null;
   let ticketSeatDomListener = null;
+  let ticketSeatContainerClickListener = null;
   let ticketSeatDocumentListener = null;
   let ticketAccordionOpenIds = new Set();
   let ticketFormState = {
