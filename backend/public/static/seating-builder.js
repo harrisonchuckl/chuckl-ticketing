@@ -4285,10 +4285,22 @@ function attachMultiShapeTransformBehaviour(group) {
 
   function setTicketSeatSelectionMode(enabled) {
     ticketSeatSelectionMode = !!enabled;
+
+    const seats = getAllSeatNodes();
+    seats.forEach((seat) => {
+      if (typeof seat.listening === "function") {
+        seat.listening(true);
+      }
+    });
+    if (mapLayer && typeof mapLayer.listening === "function") {
+      mapLayer.listening(true);
+    }
+
     // eslint-disable-next-line no-console
     console.log("[seatmap][tickets] seat-selection-mode", {
       enabled: ticketSeatSelectionMode,
       activeTicketId: activeTicketSelectionId,
+      seatCount: seats.length,
     });
     if (!ticketSeatSelectionMode) {
       clearSelection();
@@ -7743,10 +7755,10 @@ if (
       target.getAttr &&
       (target.getAttr("isLineHandle") || target.getAttr("isArrowHandle"));
 
-    if (activeMainTab === "tickets") {
+    // Ticket seat assignment gets priority regardless of tab when the mode is on
+    if (ticketSeatSelectionMode) {
       let seatNode = findSeatNodeFromTarget(target);
       const ticketId = getActiveTicketIdForAssignments();
-      const selectionModeOn = ticketSeatSelectionMode;
 
       if (!seatNode && stage && typeof stage.getAllIntersections === "function") {
         const hits = stage.getAllIntersections(pointerPos) || [];
@@ -7774,29 +7786,24 @@ if (
         ticketId,
         seatFound: Boolean(seatNode),
         targetName: target && target.name ? target.name() : target && target.className,
-        selectionModeOn,
+        selectionModeOn: ticketSeatSelectionMode,
         pointer: pointerPos,
       });
 
-      if (seatNode && ticketId && selectionModeOn) {
+      if (seatNode && ticketId) {
         toggleSeatTicketAssignment(seatNode, ticketId);
         applySeatVisuals();
         renderTicketingPanel();
         pushHistory();
         return;
       }
-      if (selectionModeOn) {
-        // eslint-disable-next-line no-console
-        console.log("[seatmap][tickets] click skipped", {
-          reason: seatNode
-            ? selectionModeOn
-              ? "no-ticket-id"
-              : "selection-mode-off"
-            : "no-seat-detected",
-          selectionModeOn,
-        });
-        return;
-      }
+
+      // eslint-disable-next-line no-console
+      console.warn("[seatmap][tickets] click ignored", {
+        reason: seatNode ? "no-ticket-id" : "no-seat-detected",
+        selectionModeOn: ticketSeatSelectionMode,
+      });
+      return;
     }
 
     // Stairs uses click+drag, not click-to-place.
