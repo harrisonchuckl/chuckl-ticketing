@@ -468,6 +468,7 @@ let stairsStartPos = null;
   let activeTicketSelectionId = null;
   let ticketSeatDomListener = null;
   let ticketSeatContainerClickListener = null;
+  let ticketSeatStageContentListener = null;
   let ticketSeatDocumentListener = null;
   let ticketAccordionOpenIds = new Set();
   let ticketFormState = {
@@ -4401,6 +4402,38 @@ function attachMultiShapeTransformBehaviour(group) {
       });
     }
 
+    if (ticketSeatStageContentListener && stage && typeof stage.off === "function") {
+      stage.off("contentMousedown.ticketAssignForce", ticketSeatStageContentListener);
+    }
+
+    ticketSeatStageContentListener = (evt) => {
+      if (!ticketSeatSelectionMode) return;
+
+      const pointerPos = stage && stage.getPointerPosition ? stage.getPointerPosition() : null;
+      const target = evt && evt.target ? evt.target : null;
+
+      // eslint-disable-next-line no-console
+      console.log("[seatmap][tickets] stage contentMousedown (force)", {
+        selectionModeOn: ticketSeatSelectionMode,
+        ticketId: getActiveTicketIdForAssignments(),
+        pointer: pointerPos,
+        targetName: target && target.name ? target.name() : target && target.className,
+        reason: ticketSeatSelectionReason,
+      });
+
+      const handled = handleTicketSeatSelection(pointerPos, target);
+      if (handled) {
+        evt.cancelBubble = true;
+        if (evt.evt && typeof evt.evt.stopPropagation === "function") {
+          evt.evt.stopPropagation();
+        }
+      }
+    };
+
+    if (stage && typeof stage.on === "function") {
+      stage.on("contentMousedown.ticketAssignForce", ticketSeatStageContentListener);
+    }
+
     if (stage && typeof stage.off === "function") {
       stage.off("click.ticketAssign");
     }
@@ -4600,6 +4633,9 @@ function attachMultiShapeTransformBehaviour(group) {
     });
     if (mapLayer && typeof mapLayer.listening === "function") {
       mapLayer.listening(true);
+    }
+    if (stage && typeof stage.listening === "function") {
+      stage.listening(true);
     }
 
     refreshSeatTicketListeners();
@@ -5069,20 +5105,21 @@ function attachMultiShapeTransformBehaviour(group) {
           enforceUniqueSeatIds(seats);
           seats.forEach((seat) => {
             const sid = ensureSeatIdAttr(seat);
+            seat.setAttr("sbTicketId", ticket.id);
             if (sid) {
-              seat.setAttr("sbTicketId", ticket.id);
               ticketAssignments.set(sid, ticket.id);
             }
           });
 
           rebuildTicketAssignmentsCache();
           const assignedCount = countAssignmentsForTicket(ticket.id);
+          const seatTotal = seats.length;
 
           // eslint-disable-next-line no-console
           console.log("[seatmap][tickets] assign remaining", {
             ticketId: ticket.id,
             assignedCount,
-            seatTotal: seats.length,
+            seatTotal,
           });
 
           applySeatVisuals();
