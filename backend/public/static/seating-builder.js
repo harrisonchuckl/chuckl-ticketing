@@ -4492,9 +4492,10 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
   }
   
   // Ensure all debug listeners are active
-  addDebugStagePointerListener(); 
+  addDebugStagePointerListener();
   addDebugContainerPointerListener();
   addDebugDocumentPointerListener(); // <--- NEW CALL
+  ensureStageSeatSelectionListener();
 
   // 1. Force the Layer to listen.
   if (mapLayer && typeof mapLayer.listening === "function") {
@@ -4542,6 +4543,29 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
   if (mapLayer) {
     mapLayer.batchDraw();
   }
+}
+
+function ensureStageSeatSelectionListener() {
+  if (!stage || typeof stage.on !== "function") return;
+
+  if (stage._sbTicketSeatStageHandler) {
+    stage.off("pointerdown.ticketAssign", stage._sbTicketSeatStageHandler);
+  }
+
+  const handler = (evt) => {
+    if (!ticketSeatSelectionMode) return;
+
+    if (evt && evt.evt) {
+      if (evt.evt._sbSeatAssignHandled) return;
+      if (lastSeatAssignEventAt && Date.now() - lastSeatAssignEventAt < 100) return;
+    }
+
+    const pointerPos = stage.getPointerPosition();
+    handleTicketSeatSelection(pointerPos, evt && evt.target);
+  };
+
+  stage._sbTicketSeatStageHandler = handler;
+  stage.on("pointerdown.ticketAssign", handler);
 }
 
   function rebuildTicketAssignmentsCache() {
