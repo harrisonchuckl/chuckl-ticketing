@@ -4482,11 +4482,11 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
   const prev = ticketSeatSelectionMode;
   ticketSeatSelectionMode = !!enabled;
   ticketSeatSelectionReason = reason || "unknown";
-  
+
   if (!ticketSeatSelectionMode) {
     ticketSeatSelectionAction = "toggle";
   } else {
-    ticketSeatSelectionAction = "assign"; 
+    ticketSeatSelectionAction = "toggle";
   }
   
   // Ensure all debug listeners are active
@@ -4569,13 +4569,24 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
       action,
     });
 
+    if (existing && existing !== ticketId) {
+      // eslint-disable-next-line no-console
+      console.warn("[seatmap][tickets] seat unchanged (belongs to another ticket)", {
+        seatId: sid,
+        currentOwner: existing,
+        ticketId,
+        action,
+      });
+      return;
+    }
+
     if (action === "unassign") {
-      if (existing) {
+      if (existing === ticketId) {
         seat.setAttr("sbTicketId", null);
         ticketAssignments.delete(sid);
       }
     } else if (action === "assign") {
-      if (existing !== ticketId) {
+      if (!existing) {
         seat.setAttr("sbTicketId", ticketId);
         ticketAssignments.set(sid, ticketId);
       }
@@ -4940,8 +4951,8 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
         assignSelectedBtn.type = "button";
         assignSelectedBtn.className = "tool-button sb-ghost-button";
         assignSelectedBtn.textContent = ticketSeatSelectionMode
-          ? "Finish seat selection"
-          : "Select seats for allocation";
+          ? "Finish manual allocation/unallocation"
+          : "Manually select seats for allocation/unallocation";
         assignSelectedBtn.disabled = duplicates.size > 0 || updateOffSaleValidation();
         assignSelectedBtn.addEventListener("click", () => {
           if (duplicates.size > 0) {
@@ -4956,13 +4967,12 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
           }
 
           activeTicketSelectionId = ticket.id;
-          const prevAction = ticketSeatSelectionAction;
-          ticketSeatSelectionAction = "assign";
+          ticketSeatSelectionAction = "toggle";
 
-          const enabling = !ticketSeatSelectionMode || prevAction !== "assign";
+          const enabling = !ticketSeatSelectionMode;
 
           // eslint-disable-next-line no-console
-          console.log("[seatmap][tickets] toggle seat selection button", {
+          console.log("[seatmap][tickets] toggle manual seat selection", {
             ticketId: ticket.id,
             nowEnabling: enabling,
             action: ticketSeatSelectionAction,
@@ -4970,52 +4980,11 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
 
           if (enabling) {
             setTicketSeatSelectionMode(true, "assign-seats-button");
-            window.alert("Click seats to assign them to this ticket. Click again to finish.");
+            window.alert(
+              "Tap seats to allocate them to this ticket. Tap seats already on this ticket to unallocate them."
+            );
           } else {
             setTicketSeatSelectionMode(false, "assign-seats-finish");
-          }
-
-          applySeatVisuals();
-          renderTicketingPanel();
-        });
-
-        const unassignSelectedBtn = document.createElement("button");
-        unassignSelectedBtn.type = "button";
-        unassignSelectedBtn.className = "tool-button sb-ghost-button";
-        unassignSelectedBtn.textContent = ticketSeatSelectionMode && ticketSeatSelectionAction === "unassign"
-          ? "Finish unallocation"
-          : "Select seats for unallocation";
-        unassignSelectedBtn.disabled = duplicates.size > 0 || updateOffSaleValidation();
-        unassignSelectedBtn.addEventListener("click", () => {
-          if (duplicates.size > 0) {
-            window.alert("Resolve duplicate seat references before unallocating tickets.");
-            return;
-          }
-          if (updateOffSaleValidation()) {
-            window.alert(
-              "Tickets must go off sale on or before the event time. Please adjust the off-sale date."
-            );
-            return;
-          }
-
-          activeTicketSelectionId = ticket.id;
-          const prevAction = ticketSeatSelectionAction;
-          ticketSeatSelectionAction = "unassign";
-
-          const enabling = !ticketSeatSelectionMode || prevAction !== "unassign";
-
-          // eslint-disable-next-line no-console
-          console.log("[seatmap][tickets] toggle seat unallocation", {
-            ticketId: ticket.id,
-            nowEnabling: enabling,
-            action: ticketSeatSelectionAction,
-          });
-
-          if (enabling) {
-            setTicketSeatSelectionMode(true, "unassign-seats-button");
-            window.alert("Click seats to remove them from this ticket. Click again to finish.");
-          } else {
-            setTicketSeatSelectionMode(false, "unassign-seats-finish");
           }
 
           applySeatVisuals();
@@ -5086,7 +5055,6 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
         });
 
         actionsRow.appendChild(assignSelectedBtn);
-        actionsRow.appendChild(unassignSelectedBtn);
         actionsRow.appendChild(assignRemainingBtn);
         body.appendChild(actionsRow);
 
