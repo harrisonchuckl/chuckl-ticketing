@@ -660,10 +660,10 @@ router.get("/builder/preview/:showId", (req, res) => {
           pointer-events: none !important; 
       }
 
-/* Fix 3: Ensures the Konva container (#app) sits above everything */
-  #app {
-      position: relative; 
-      z-index: 5;
+/* Fix 3 (NEW): Ensure the canvas element itself is always above other content.
+     Konva stages create their own div/canvas elements inside the container (#app). */
+  #app > div {
+      z-index: 1 !important; /* Forces the internal Konva div to be the highest layer */
   }
          .tb-side-heading {
         color: var(--tixall-dark);
