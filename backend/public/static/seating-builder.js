@@ -439,7 +439,7 @@
 
    // ---------- State ----------
 
-  let stage;
+    let stage;
   let baseStageWidth = 0;
   let baseStageHeight = 0;
 
@@ -452,37 +452,91 @@
   let activeTool = null;
 
   // --- stairs drawing state ---
-let stairsDraft = null;
-let stairsStartPos = null;
+  let stairsDraft = null;
+  let stairsStartPos = null;
 
   // current selection + copy buffer
   let selectedNode = null;
   let copiedNodesJson = [];
 
   let activeMainTab = "map";
+
+  // --- ticketing / seat selection state ---
   let ticketSeatSelectionMode = false;
   let ticketSeatSelectionReason = "init";
   let ticketSeatContainerListenerAttached = false;
   let ticketSeatSelectionAction = "toggle"; // manual selection always toggles assignment for the active ticket
+  let ticketSeatSelectionStartPos = null;
+  let ticketSeatSelectionEndPos = null;
+  let ticketSeatSelectionRect = null;
   let lastSeatAssignEventAt = 0;
+
   let ticketTypes = [];
   let ticketAssignments = new Map();
   let activeTicketSelectionId = null;
   let ticketSeatStageContentListener = null;
   let ticketAccordionOpenIds = new Set();
+
   let ticketFormState = {
     name: "",
     price: "",
-    color: "#2563eb",
+    color: "#2563EB", // TIXL blue default
     onSale: "",
     offSale: "",
     info: "",
     minPerOrder: "1",
     maxPerOrder: "15",
   };
+
   let ticketFormAutoOffSale = true;
+
+  // -------- Ticket colour palette (editable TIXL defaults) --------
+  // You can change these eight hex values to whatever brand colours you like.
+  // Index 0 is the default for the first ticket.
+  const DEFAULT_TICKET_COLORS = [
+    "#2563EB", // TIXL blue
+    "#10B981", // emerald green
+    "#F97316", // modern orange
+    "#EC4899", // pink
+    "#A855F7", // purple
+    "#FACC15", // amber / gold
+    "#0EA5E9", // sky blue
+    "#64748B", // slate grey
+  ];
+
+  // Helper: pick the next unused colour for a new ticket
+  function getNextTicketColor() {
+    const used = new Set(
+      ticketTypes
+        .map((t) => (t.color || "").toLowerCase())
+        .filter(Boolean)
+    );
+
+    // If the current form colour is a valid hex and not used yet, prefer that.
+    const formColor = (ticketFormState.color || "").toLowerCase();
+    if (/^#([0-9a-f]{3}){1,2}$/.test(formColor) && !used.has(formColor)) {
+      return ticketFormState.color;
+    }
+
+    // Otherwise, pick the first palette colour that isn't in use
+    for (const hex of DEFAULT_TICKET_COLORS) {
+      const low = hex.toLowerCase();
+      if (!used.has(low)) return hex;
+    }
+
+    // If all palette colours are already used (more than 8 tickets),
+    // fall back to cycling through the palette.
+    if (!DEFAULT_TICKET_COLORS.length) {
+      return "#2563EB";
+    }
+    const idx = ticketTypes.length % DEFAULT_TICKET_COLORS.length;
+    return DEFAULT_TICKET_COLORS[idx];
+  }
+
   let showMeta = null;
-  let venueCurrencyCode = (window.__SEATMAP_VENUE_CURRENCY__ || "GBP").toString().toUpperCase();
+  let venueCurrencyCode = (window.__SEATMAP_VENUE_CURRENCY__ || "GBP")
+    .toString()
+    .toUpperCase();
   let isLoadingShowMeta = false;
   let seatIdCounter = 1;
   let duplicateSeatRefs = new Set();
@@ -513,6 +567,7 @@ let stairsStartPos = null;
   let history = [];
   let historyIndex = -1;
   let isRestoringHistory = false;
+
 
     // table numbering counter (for all circular + rectangular tables)
   let tableCounter = 1;
@@ -4236,7 +4291,8 @@ function attachMultiShapeTransformBehaviour(group) {
     if (!ticket.minPerOrder) ticket.minPerOrder = 1;
     if (!ticket.maxPerOrder) ticket.maxPerOrder = Math.max(ticket.minPerOrder, 15);
     if (!ticket.currency) ticket.currency = venueCurrencyCode;
-    if (!ticket.color) ticket.color = "#2563eb";
+    if (!ticket.color) ticket.color = DEFAULT_TICKET_COLORS[0] || "#2563eb";
+
   }
 
   function ensureTicketFormDefaults() {
@@ -4826,17 +4882,68 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
           renderTicketingPanel();
         });
 
+                // --- Ticket colour: preset chips + full colour picker ---
+
+        const colorFieldWrap = document.createElement("div");
+
+        const swatchRow = document.createElement("div");
+        swatchRow.style.display = "flex";
+        swatchRow.style.flexWrap = "wrap";
+        swatchRow.style.gap = "4px";
+        swatchRow.style.marginBottom = "6px";
+
+        const currentColor =
+          (ticket.color ||
+            DEFAULT_TICKET_COLORS[0] ||
+            "#2563eb").toLowerCase();
+
+        DEFAULT_TICKET_COLORS.forEach((hex) => {
+          const chip = document.createElement("button");
+          chip.type = "button";
+          chip.style.width = "22px";
+          chip.style.height = "22px";
+          chip.style.borderRadius = "999px";
+          chip.style.border =
+            hex.toLowerCase() === currentColor
+              ? "2px solid #111827"
+              : "1px solid #e5e7eb";
+          chip.style.padding = "0";
+          chip.style.cursor = "pointer";
+          chip.style.background = hex;
+          chip.style.boxSizing = "border-box";
+          chip.setAttribute("aria-label", `Use colour ${hex}`);
+
+          chip.addEventListener("click", () => {
+            ticket.color = hex;
+            ticketFormState.color = hex;
+            applySeatVisuals();
+            renderTicketingPanel();
+          });
+
+          swatchRow.appendChild(chip);
+        });
+
         const colorInput = document.createElement("input");
         colorInput.type = "color";
         colorInput.className = "sb-input sb-input-color";
-        colorInput.value = ticket.color || "#2563eb";
+        colorInput.value =
+          currentColor || DEFAULT_TICKET_COLORS[0] || "#2563eb";
         colorInput.addEventListener("input", () => {
-          ticket.color = colorInput.value || "#2563eb";
+          const value =
+            colorInput.value ||
+            DEFAULT_TICKET_COLORS[0] ||
+            "#2563eb";
+          ticket.color = value;
+          ticketFormState.color = value;
           applySeatVisuals();
           renderTicketingPanel();
         });
 
+        colorFieldWrap.appendChild(swatchRow);
+        colorFieldWrap.appendChild(colorInput);
+
         const onSaleInput = document.createElement("input");
+
         onSaleInput.type = "datetime-local";
         onSaleInput.className = "sb-input";
         onSaleInput.value = ticket.onSale || ticketFormState.onSale || formatDateTimeLocal(new Date());
@@ -4908,16 +5015,31 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
           ticket.info = infoInput.value;
         });
 
-        formGrid.appendChild(
+                formGrid.appendChild(
           makeField("Ticket name", nameInput, "Shown to buyers")
         );
         formGrid.appendChild(
-          makeField(`Price (${venueCurrencyCode})`, priceInput, "Text input – no arrows")
+          makeField(
+            `Price (${venueCurrencyCode})`,
+            priceInput,
+            "Text input – no arrows"
+          )
         );
-        formGrid.appendChild(makeField("Color", colorInput, "Used to highlight assigned seats"));
         formGrid.appendChild(
-          makeField("Tickets on sale date and time", onSaleInput, "Defaults to now")
+          makeField(
+            "Color",
+            colorFieldWrap,
+            "Used to highlight assigned seats"
+          )
         );
+        formGrid.appendChild(
+          makeField(
+            "Tickets on sale date and time",
+            onSaleInput,
+            "Defaults to now"
+          )
+        );
+
         formGrid.appendChild(
           makeField("Tickets off sale date and time (auto-set to event time)", offSaleInput)
         );
@@ -5068,39 +5190,57 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
     addBtn.type = "button";
     addBtn.className = "tool-button sb-ticket-add";
     addBtn.innerHTML = '<span class="sb-ticket-add-icon">＋</span> Add ticket';
-    addBtn.addEventListener("click", () => {
+       addBtn.addEventListener("click", () => {
       ensureTicketFormDefaults();
+
       const nowValue = formatDateTimeLocal(new Date());
       const showDateValue =
-        (showMeta && showMeta.date && formatDateTimeLocal(showMeta.date)) || nowValue;
+        (showMeta && showMeta.date && formatDateTimeLocal(showMeta.date)) ||
+        nowValue;
+
+      // Pick the next unused colour from the palette
+      const colorForNewTicket = getNextTicketColor();
 
       const ticket = {
         id: `ticket-${Date.now()}-${ticketTypes.length + 1}`,
         name: ticketFormState.name || `Ticket ${ticketTypes.length + 1}`,
         price:
           parseFloat(
-            (ticketFormState.price || "").replace(/[^0-9.,-]/g, "").replace(/,/g, ".")
+            (ticketFormState.price || "")
+              .replace(/[^0-9.,-]/g, "")
+              .replace(/,/g, ".")
           ) || 0,
         currency: venueCurrencyCode,
-        color: ticketFormState.color || "#2563eb",
+        color: colorForNewTicket,
         onSale: ticketFormState.onSale || nowValue,
         offSale: ticketFormState.offSale || showDateValue,
         info: ticketFormState.info || "",
-        minPerOrder: parseInt(ticketFormState.minPerOrder || "1", 10) || 1,
-        maxPerOrder: parseInt(ticketFormState.maxPerOrder || "15", 10) || 15,
+        minPerOrder:
+          parseInt(ticketFormState.minPerOrder || "1", 10) || 1,
+        maxPerOrder:
+          parseInt(ticketFormState.maxPerOrder || "15", 10) || 15,
       };
 
+      // Add the ticket (keep your immutable style)
       ticketTypes = ticketTypes.concat(ticket);
       activeTicketSelectionId = ticket.id;
       ticketAccordionOpenIds.add(ticket.id);
+
+      // Reset form state for the next ticket,
+      // and show the colour we just used in the picker
       ticketFormState = {
         ...ticketFormState,
         name: "",
         price: "",
         info: "",
+        color: colorForNewTicket,
       };
+
+      // Recolour seats (if any are already assigned) and re-render UI
+      applySeatVisuals();
       renderTicketingPanel();
     });
+
 
     el.appendChild(addBtn);
   }
