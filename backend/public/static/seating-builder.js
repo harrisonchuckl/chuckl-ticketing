@@ -4311,7 +4311,8 @@ function attachMultiShapeTransformBehaviour(group) {
 
 function refreshSeatTicketListeners() {
   const seats = getAllSeatNodes();
-  
+  let boundCount = 0;
+
   seats.forEach((seat) => {
     // 1. Clean up old listeners (critical for re-running)
     if (typeof seat.off === "function") {
@@ -4326,12 +4327,11 @@ function refreshSeatTicketListeners() {
     // 3. Define the handler that does the actual assignment
     const seatHandler = (evt) => {
       const ticketId = getActiveTicketIdForAssignments();
-      // Ensure we have the actual seat node (handles grouping issues)
       const seatNode = findSeatNodeFromTarget(evt.target) || seat;
 
-      // START DIAGNOSTICS: This will confirm if the Konva listener is firing at all
+      // START DIAGNOSTICS: This MUST show up if the click hits the seat shape
       // eslint-disable-next-line no-console
-      console.log("[seatmap][tickets] SEAT CLICKED - Checkpoint 1: Konva Handler Fired", {
+      console.log("[seatmap][DEBUG-SEAT] SEAT CLICKED - Checkpoint 2: Konva Handler Fired", {
         seatId: seatNode.attrs.seatId,
         ticketId,
         mode: ticketSeatSelectionMode
@@ -4358,18 +4358,48 @@ function refreshSeatTicketListeners() {
 
     // 6. Bind to the earliest events: pointerdown, click, and tap
     seat.on("pointerdown.ticketAssign click.ticketAssign tap.ticketAssign", seatHandler);
+    boundCount++;
   });
+  
+  // eslint-disable-next-line no-console
+  console.log(`[seatmap][DEBUG-BIND] ${boundCount} seat assignment listeners re-bound.`);
 
   // 7. Clean up any lingering listeners on the layer
   if (mapLayer && typeof mapLayer.off === "function") {
     mapLayer.off(".ticketAssign");
   }
 
-  // 8. Explicitly clean up any old DOM listener reference (just in case)
+  // 8. Clean up old DOM listener (just in case)
   if (window.ticketSeatDomListener && stage && stage.container && stage.container()) {
     stage.container().removeEventListener("pointerdown", window.ticketSeatDomListener, true);
     window.ticketSeatDomListener = null;
   }
+}
+
+  function addDebugStagePointerListener() {
+    // Only bind the debug listener once
+    if (!stage || stage._hasDebugListener) return;
+
+    stage.on("pointerdown.debug", function (evt) {
+        const target = evt.target;
+        const targetName = target.name() || target.className;
+        const targetType = target.getClassName();
+        const seatId = target.getAttr && target.getAttr('seatId');
+
+        // This log will fire on EVERY click on the canvas (Stage).
+        // Check the 'target' and 'isSeat' properties to see what Konva is actually detecting.
+        // eslint-disable-next-line no-console
+        console.log("[seatmap][DEBUG-GLOBAL] STAGE POINTERDOWN: Click Target Found", {
+            targetClass: targetType,
+            targetName: targetName,
+            targetSeatId: seatId,
+            isSeat: !!seatId, // Check if the target has a seat ID
+            isSelectionMode: !!window.ticketSeatSelectionMode,
+            eventPhase: evt.evt ? evt.evt.eventPhase : 'N/A'
+        });
+    });
+
+    stage._hasDebugListener = true;
 }
 
  function setTicketSeatSelectionMode(enabled, reason = "unknown") {
@@ -4382,8 +4412,11 @@ function refreshSeatTicketListeners() {
   } else {
     ticketSeatSelectionAction = "assign"; 
   }
+  
+  // Ensure the global debug listener is active
+  addDebugStagePointerListener(); 
 
-  // 1. Force the Layer to listen. If the layer is not listening, no children will get events.
+  // 1. Force the Layer to listen.
   if (mapLayer && typeof mapLayer.listening === "function") {
     mapLayer.listening(true);
   }
@@ -4395,7 +4428,7 @@ function refreshSeatTicketListeners() {
     if (typeof seat.listening === "function") {
       seat.listening(true);
     }
-    // Walk up the tree and force all parents to listen (Row Groups, Tables, etc.)
+    // Walk up the tree and force all parents to listen
     let parent = seat.getParent && seat.getParent();
     while (parent) {
       if (typeof parent.listening === "function") {
@@ -4425,7 +4458,7 @@ function refreshSeatTicketListeners() {
     }
   }
 
-  // 4. Force a redraw to ensure the Konva Hit Graph (used for hit detection) is updated
+  // 4. Force a redraw to ensure the Konva Hit Graph is updated
   if (mapLayer) {
     mapLayer.batchDraw();
   }
