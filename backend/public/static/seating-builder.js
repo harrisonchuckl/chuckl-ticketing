@@ -463,7 +463,7 @@ let stairsStartPos = null;
   let ticketSeatSelectionMode = false;
   let ticketSeatSelectionReason = "init";
   let ticketSeatContainerListenerAttached = false;
-  let ticketSeatSelectionAction = "toggle"; // toggle | assign | unassign
+  let ticketSeatSelectionAction = "toggle"; // manual selection always toggles assignment for the active ticket
   let ticketTypes = [];
   let ticketAssignments = new Map();
   let activeTicketSelectionId = null;
@@ -4560,13 +4560,12 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
     if (!sid) return;
 
     const existing = seat.getAttr("sbTicketId") || null;
-    const action = ticketSeatSelectionAction || "toggle";
     // eslint-disable-next-line no-console
     console.debug("[seatmap][tickets] toggleSeatTicketAssignment", {
       seatId: sid,
       existing,
       ticketId,
-      action,
+      action: "toggle",
     });
 
     if (existing && existing !== ticketId) {
@@ -4575,22 +4574,12 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
         seatId: sid,
         currentOwner: existing,
         ticketId,
-        action,
+        action: "toggle",
       });
       return;
     }
 
-    if (action === "unassign") {
-      if (existing === ticketId) {
-        seat.setAttr("sbTicketId", null);
-        ticketAssignments.delete(sid);
-      }
-    } else if (action === "assign") {
-      if (!existing) {
-        seat.setAttr("sbTicketId", ticketId);
-        ticketAssignments.set(sid, ticketId);
-      }
-    } else if (existing === ticketId) {
+    if (existing === ticketId) {
       seat.setAttr("sbTicketId", null);
       ticketAssignments.delete(sid);
     } else {
