@@ -4309,7 +4309,7 @@ function attachMultiShapeTransformBehaviour(group) {
     return ticketTypes.length ? ticketTypes[0].id : null;
   }
 
- function refreshSeatTicketListeners() {
+function refreshSeatTicketListeners() {
   const seats = getAllSeatNodes();
   
   seats.forEach((seat) => {
@@ -4318,7 +4318,7 @@ function attachMultiShapeTransformBehaviour(group) {
       seat.off(".ticketAssign");
     }
 
-    // 2. Ensure seat is interactive (already done in setTicketSeatSelectionMode, but safe to repeat)
+    // 2. Ensure seat is interactive
     if (typeof seat.listening === "function") {
       seat.listening(true);
     }
@@ -4339,13 +4339,10 @@ function attachMultiShapeTransformBehaviour(group) {
       // END DIAGNOSTICS
 
       if (!ticketSeatSelectionMode || !ticketId || !seatNode) {
-        // eslint-disable-next-line no-console
-        console.log("[seatmap][tickets] SEAT CLICKED - Checkpoint 2: Mode not enabled, returning");
         return;
       }
 
       // 4. CRITICAL: Stop the event here so it doesn't bubble up to Stage
-      // and trigger any generic Stage click handler.
       if (evt.evt) {
         evt.evt.stopPropagation();
         evt.evt.preventDefault();
@@ -4359,15 +4356,15 @@ function attachMultiShapeTransformBehaviour(group) {
       pushHistory();
     };
 
-    // 6. Bind to click and tap (for mobile)
-    seat.on("click.ticketAssign tap.ticketAssign", seatHandler);
+    // 6. Bind to the earliest events: pointerdown, click, and tap
+    seat.on("pointerdown.ticketAssign click.ticketAssign tap.ticketAssign", seatHandler);
   });
 
-  // 7. Remove any lingering listeners on the layer
+  // 7. Clean up any lingering listeners on the layer
   if (mapLayer && typeof mapLayer.off === "function") {
     mapLayer.off(".ticketAssign");
   }
-  
+
   // 8. Explicitly clean up any old DOM listener reference (just in case)
   if (window.ticketSeatDomListener && stage && stage.container && stage.container()) {
     stage.container().removeEventListener("pointerdown", window.ticketSeatDomListener, true);
@@ -4375,7 +4372,7 @@ function attachMultiShapeTransformBehaviour(group) {
   }
 }
 
-  function setTicketSeatSelectionMode(enabled, reason = "unknown") {
+ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
   const prev = ticketSeatSelectionMode;
   ticketSeatSelectionMode = !!enabled;
   ticketSeatSelectionReason = reason || "unknown";
@@ -4383,7 +4380,6 @@ function attachMultiShapeTransformBehaviour(group) {
   if (!ticketSeatSelectionMode) {
     ticketSeatSelectionAction = "toggle";
   } else {
-    // Reset action if enabling, to avoid confusing logging
     ticketSeatSelectionAction = "assign"; 
   }
 
@@ -4429,11 +4425,12 @@ function attachMultiShapeTransformBehaviour(group) {
     }
   }
 
-  // 4. CRITICAL: Force a redraw to ensure the Konva Hit Graph (used for hit detection) is updated
+  // 4. Force a redraw to ensure the Konva Hit Graph (used for hit detection) is updated
   if (mapLayer) {
     mapLayer.batchDraw();
   }
 }
+  
   function countAssignmentsForTicket(ticketId) {
     if (!ticketId) return 0;
     const seats = getAllSeatNodes();
@@ -8017,8 +8014,17 @@ if (
   // ---------- Canvas interactions ----------
 
       // ---------- Canvas interactions: click / selection / placement ----------
-
-  function handleStageClick(evt) {
+function handleStageClick(evt) {
+    // 🛑 CRITICAL FIX: If we are in seat assignment mode, we must EXIT immediately.
+    // This stops the general stage logic (like selection/deselection or tool placement)
+    // from consuming the click event, allowing it to propagate to the seat's Konva handler.
+    if (window.ticketSeatSelectionMode) {
+        // eslint-disable-next-line no-console
+        console.log("[seatmap][tickets] STAGE CLICK BLOCKED: Ticket assignment mode is active. Allowing seat listener to run.");
+        return;
+    }
+    
+    // --- START ORIGINAL LOGIC ---
     if (!stage || !mapLayer) return;
 
     const pointerPos = stage.getPointerPosition();
@@ -8027,105 +8033,106 @@ if (
 
     // eslint-disable-next-line no-console
     console.log("[seatmap] stage click", {
-      selectionModeOn: ticketSeatSelectionMode,
-      targetName: evt.target && evt.target.name ? evt.target.name() : evt.target && evt.target.className,
-      pointer: pointerPos,
+        selectionModeOn: ticketSeatSelectionMode,
+        targetName: evt.target && evt.target.name ? evt.target.name() : evt.target && evt.target.className,
+        pointer: pointerPos,
     });
 
     const target = evt.target;
     const isHandle =
-      target &&
-      target.getAttr &&
-      (target.getAttr("isLineHandle") || target.getAttr("isArrowHandle"));
+        target &&
+        target.getAttr &&
+        (target.getAttr("isLineHandle") || target.getAttr("isArrowHandle"));
 
     // Stairs uses click+drag, not click-to-place.
     // The actual creation is driven by mousedown / mousemove / mouseup.
     if (activeTool === "stairs") {
-      return;
+        return;
     }
 
     // --- Multi-shape tool (N-sided polygons, rhombus, parallelogram) ---
     if (activeTool === "multi-shape") {
-      const g = createMultiShape(pos.x, pos.y);
-      mapLayer.add(g);
-      attachNodeBehaviour(g);
-      sbNormalizeZOrder(g);
-      selectNode(g);
-      mapLayer.batchDraw();
-      updateSeatCount();
-      pushHistory();
-      return;
+        const g = createMultiShape(pos.x, pos.y);
+        mapLayer.add(g);
+        attachNodeBehaviour(g);
+        sbNormalizeZOrder(g);
+        selectNode(g);
+        mapLayer.batchDraw();
+        updateSeatCount();
+        pushHistory();
+        return;
     }
 
     // 1) LINE TOOL (click-to-add points)
     // Only fire on normal canvas clicks – NOT when clicking a handle.
     if ((activeTool === "line" || activeTool === "curve-line") && !isHandle) {
-      handleLineClick(pointerPos, activeTool);
-      return;
+        handleLineClick(pointerPos, activeTool);
+        return;
     }
 
     // 1b) ARROW TOOL (click start, click end)
     if (activeTool === "arrow") {
-      handleArrowClick(pointerPos);
-      return;
+        handleArrowClick(pointerPos);
+        return;
     }
 
     // 2) Placement tools (rows, single seats, tables, shapes, text, etc.)
     // If a placement tool is active, ALWAYS create at the click position,
     // even if we clicked on top of another shape (inside a VIP box, etc.).
     if (
-      activeTool &&
-      activeTool !== "line" &&
-      activeTool !== "curve-line" &&
-      activeTool !== "arrow"
+        activeTool &&
+        activeTool !== "line" &&
+        activeTool !== "curve-line" &&
+        activeTool !== "arrow"
     ) {
-      const node = createNodeForTool(activeTool, pointerPos);
-      if (!node) return;
+        const node = createNodeForTool(activeTool, pointerPos);
+        if (!node) return;
 
-      mapLayer.add(node);
+        mapLayer.add(node);
 
-      // NEW: send basic shapes to the back (background layers)
-      const t = node.getAttr("shapeType") || node.name();
-      if (t === "square" || t === "circle") {
-        node.moveToBottom();
-      }
+        // NEW: send basic shapes to the back (background layers)
+        const t = node.getAttr("shapeType") || node.name();
+        if (t === "square" || t === "circle") {
+            node.moveToBottom();
+        }
 
-      attachNodeBehaviour(node);
-      mapLayer.batchDraw();
-      updateSeatCount();
-      selectNode(node);
-      pushHistory();
+        attachNodeBehaviour(node);
+        mapLayer.batchDraw();
+        updateSeatCount();
+        selectNode(node);
+        pushHistory();
 
-      // Drop the tool after placing so next click doesn't create another
-      setActiveTool(null);
-      updateDefaultCursor();
-      return;
+        // Drop the tool after placing so next click doesn't create another
+        setActiveTool(null);
+        updateDefaultCursor();
+        return;
     }
 
     // 3) No active placement tool → standard selection behaviour
     let group = null;
     if (target && typeof target.findAncestor === "function") {
-      group = target.findAncestor("Group", true);
+        group = target.findAncestor("Group", true);
     }
 
     // Clicked on an existing object → select it
     if (group && group.getLayer && group.getLayer() === mapLayer) {
-      const e = evt.evt || evt;
-      const additive =
-        isShiftPressed || !!(e && (e.shiftKey || e.metaKey || e.ctrlKey));
+        const e = evt.evt || evt;
+        const additive =
+            isShiftPressed || !!(e && (e.shiftKey || e.metaKey || e.ctrlKey));
 
-      selectNode(group, additive);
-      return;
+        selectNode(group, additive);
+        return;
     }
 
     // 4) Clicked on empty canvas → clear selection
     const clickedOnEmpty =
-      target === stage || (target.getLayer && target.getLayer() === gridLayer);
+        target === stage || (target.getLayer && target.getLayer() === gridLayer);
 
     if (clickedOnEmpty) {
-      clearSelection();
+        clearSelection();
     }
-  }
+    // --- END ORIGINAL LOGIC ---
+}
 
 
 
