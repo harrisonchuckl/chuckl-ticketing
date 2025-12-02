@@ -4309,92 +4309,131 @@ function attachMultiShapeTransformBehaviour(group) {
     return ticketTypes.length ? ticketTypes[0].id : null;
   }
 
-  function refreshSeatTicketListeners() {
-    const seats = getAllSeatNodes();
-    seats.forEach((seat) => {
-      if (typeof seat.off === "function") {
-        seat.off(".ticketAssign");
-      }
-
-      if (typeof seat.listening === "function") {
-        seat.listening(true);
-      }
-
-      const seatHandler = (evt) => {
-        const ticketId = getActiveTicketIdForAssignments();
-        const seatNode = findSeatNodeFromTarget(evt.target) || seat;
-
-        if (!ticketSeatSelectionMode || !ticketId || !seatNode) {
-          return;
-        }
-
-        if (evt.evt) {
-          evt.evt.stopPropagation();
-          evt.evt.preventDefault();
-        }
-        evt.cancelBubble = true;
-
-        toggleSeatTicketAssignment(seatNode, ticketId);
-        applySeatVisuals();
-        renderTicketingPanel();
-        pushHistory();
-      };
-
-      seat.on("click.ticketAssign tap.ticketAssign", seatHandler);
-    });
-
-    if (mapLayer && typeof mapLayer.off === "function") {
-      mapLayer.off(".ticketAssign");
+ function refreshSeatTicketListeners() {
+  const seats = getAllSeatNodes();
+  
+  seats.forEach((seat) => {
+    // 1. Clean up old listeners (critical for re-running)
+    if (typeof seat.off === "function") {
+      seat.off(".ticketAssign");
     }
+
+    // 2. Ensure seat is interactive (already done in setTicketSeatSelectionMode, but safe to repeat)
+    if (typeof seat.listening === "function") {
+      seat.listening(true);
+    }
+
+    // 3. Define the handler that does the actual assignment
+    const seatHandler = (evt) => {
+      const ticketId = getActiveTicketIdForAssignments();
+      // Ensure we have the actual seat node (handles grouping issues)
+      const seatNode = findSeatNodeFromTarget(evt.target) || seat;
+
+      // START DIAGNOSTICS: This will confirm if the Konva listener is firing at all
+      // eslint-disable-next-line no-console
+      console.log("[seatmap][tickets] SEAT CLICKED - Checkpoint 1: Konva Handler Fired", {
+        seatId: seatNode.attrs.seatId,
+        ticketId,
+        mode: ticketSeatSelectionMode
+      });
+      // END DIAGNOSTICS
+
+      if (!ticketSeatSelectionMode || !ticketId || !seatNode) {
+        // eslint-disable-next-line no-console
+        console.log("[seatmap][tickets] SEAT CLICKED - Checkpoint 2: Mode not enabled, returning");
+        return;
+      }
+
+      // 4. CRITICAL: Stop the event here so it doesn't bubble up to Stage
+      // and trigger any generic Stage click handler.
+      if (evt.evt) {
+        evt.evt.stopPropagation();
+        evt.evt.preventDefault();
+      }
+      evt.cancelBubble = true;
+
+      // 5. Execute the toggle logic
+      toggleSeatTicketAssignment(seatNode, ticketId);
+      applySeatVisuals();
+      renderTicketingPanel();
+      pushHistory();
+    };
+
+    // 6. Bind to click and tap (for mobile)
+    seat.on("click.ticketAssign tap.ticketAssign", seatHandler);
+  });
+
+  // 7. Remove any lingering listeners on the layer
+  if (mapLayer && typeof mapLayer.off === "function") {
+    mapLayer.off(".ticketAssign");
   }
+  
+  // 8. Explicitly clean up any old DOM listener reference (just in case)
+  if (window.ticketSeatDomListener && stage && stage.container && stage.container()) {
+    stage.container().removeEventListener("pointerdown", window.ticketSeatDomListener, true);
+    window.ticketSeatDomListener = null;
+  }
+}
 
   function setTicketSeatSelectionMode(enabled, reason = "unknown") {
-    const prev = ticketSeatSelectionMode;
-    ticketSeatSelectionMode = !!enabled;
-    ticketSeatSelectionReason = reason || "unknown";
-    if (!ticketSeatSelectionMode) {
-      ticketSeatSelectionAction = "toggle";
-    }
-
-    if (mapLayer && typeof mapLayer.listening === "function") {
-      mapLayer.listening(true);
-    }
-
-    const seats = getAllSeatNodes();
-    seats.forEach((seat) => {
-      if (typeof seat.listening === "function") {
-        seat.listening(true);
-      }
-      let parent = seat.getParent && seat.getParent();
-      while (parent) {
-        if (typeof parent.listening === "function") {
-          parent.listening(true);
-        }
-        parent = parent.getParent && parent.getParent();
-      }
-    });
-
-    refreshSeatTicketListeners();
-
-    // eslint-disable-next-line no-console
-    console.log("[seatmap][tickets] seat-selection-mode", {
-      enabled: ticketSeatSelectionMode,
-      activeTicketId: activeTicketSelectionId,
-      seatCount: seats.length,
-      reason: ticketSeatSelectionReason,
-      action: ticketSeatSelectionAction,
-      prev,
-    });
-    if (!ticketSeatSelectionMode) {
-      clearSelection();
-      if (transformer && typeof transformer.nodes === "function") {
-        transformer.nodes([]);
-      }
-    }
-
-    if (mapLayer) mapLayer.batchDraw();
+  const prev = ticketSeatSelectionMode;
+  ticketSeatSelectionMode = !!enabled;
+  ticketSeatSelectionReason = reason || "unknown";
+  
+  if (!ticketSeatSelectionMode) {
+    ticketSeatSelectionAction = "toggle";
+  } else {
+    // Reset action if enabling, to avoid confusing logging
+    ticketSeatSelectionAction = "assign"; 
   }
 
+  // 1. Force the Layer to listen. If the layer is not listening, no children will get events.
+  if (mapLayer && typeof mapLayer.listening === "function") {
+    mapLayer.listening(true);
+  }
+
+  // 2. Force all seats and their groups to listen
+  const seats = getAllSeatNodes();
+  seats.forEach((seat) => {
+    // Force seat to listen
+    if (typeof seat.listening === "function") {
+      seat.listening(true);
+    }
+    // Walk up the tree and force all parents to listen (Row Groups, Tables, etc.)
+    let parent = seat.getParent && seat.getParent();
+    while (parent) {
+      if (typeof parent.listening === "function") {
+        parent.listening(true);
+      }
+      parent = parent.getParent && parent.getParent();
+    }
+  });
+
+  // 3. Re-apply the listeners (calling the fixed function above)
+  refreshSeatTicketListeners();
+
+  // eslint-disable-next-line no-console
+  console.log("[seatmap][tickets] seat-selection-mode", {
+    enabled: ticketSeatSelectionMode,
+    activeTicketId: activeTicketSelectionId,
+    seatCount: seats.length,
+    reason: ticketSeatSelectionReason,
+    action: ticketSeatSelectionAction,
+    prev,
+  });
+  
+  if (!ticketSeatSelectionMode) {
+    clearSelection();
+    if (transformer && typeof transformer.nodes === "function") {
+      transformer.nodes([]);
+    }
+  }
+
+  // 4. CRITICAL: Force a redraw to ensure the Konva Hit Graph (used for hit detection) is updated
+  if (mapLayer) {
+    mapLayer.batchDraw();
+  }
+}
   function countAssignmentsForTicket(ticketId) {
     if (!ticketId) return 0;
     const seats = getAllSeatNodes();
