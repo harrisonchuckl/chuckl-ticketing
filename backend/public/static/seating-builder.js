@@ -463,8 +463,7 @@ let stairsStartPos = null;
   let ticketSeatSelectionMode = false;
   let ticketSeatSelectionReason = "init";
   let ticketSeatContainerListenerAttached = false;
-  let ticketSeatSelectionAction = "toggle"; // manual selection always toggles assignment for the active ticket
-  let lastSeatAssignEventAt = 0;
+  let ticketSeatSelectionAction = "toggle"; // toggle | assign | unassign
   let ticketTypes = [];
   let ticketAssignments = new Map();
   let activeTicketSelectionId = null;
@@ -4349,9 +4348,9 @@ function refreshSeatTicketListeners() {
     }
 
     // 3. Define the handler that does the actual assignment
-      const seatHandler = (evt) => {
-        const ticketId = getActiveTicketIdForAssignments();
-        const seatNode = findSeatNodeFromTarget(evt.target) || seat;
+    const seatHandler = (evt) => {
+      const ticketId = getActiveTicketIdForAssignments();
+      const seatNode = findSeatNodeFromTarget(evt.target) || seat;
 
       // START DIAGNOSTICS: This MUST show up if the click hits the seat shape
       // eslint-disable-next-line no-console
@@ -4368,13 +4367,12 @@ if (!ticketSeatSelectionMode || !ticketId || !seatNode) {
     return;
 }
 
-      // 4. Mark the native event so container/stage handlers can skip a second toggle,
-      // but let the event continue to bubble in case Konva misses this handler.
+      // 4. CRITICAL: Stop the event here so it doesn't bubble up to Stage
       if (evt.evt) {
-        evt.evt._sbSeatAssignHandled = true;
+        evt.evt.stopPropagation();
+        evt.evt.preventDefault();
       }
-
-      lastSeatAssignEventAt = Date.now();
+      evt.cancelBubble = true;
 
       // 5. Execute the toggle logic
       toggleSeatTicketAssignment(seatNode, ticketId);
@@ -4492,10 +4490,9 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
   }
   
   // Ensure all debug listeners are active
-  addDebugStagePointerListener();
+  addDebugStagePointerListener(); 
   addDebugContainerPointerListener();
   addDebugDocumentPointerListener(); // <--- NEW CALL
-  ensureStageSeatSelectionListener();
 
   // 1. Force the Layer to listen.
   if (mapLayer && typeof mapLayer.listening === "function") {
@@ -4545,29 +4542,6 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
   }
 }
 
-function ensureStageSeatSelectionListener() {
-  if (!stage || typeof stage.on !== "function") return;
-
-  if (stage._sbTicketSeatStageHandler) {
-    stage.off("pointerdown.ticketAssign", stage._sbTicketSeatStageHandler);
-  }
-
-  const handler = (evt) => {
-    if (!ticketSeatSelectionMode) return;
-
-    if (evt && evt.evt) {
-      if (evt.evt._sbSeatAssignHandled) return;
-      if (lastSeatAssignEventAt && Date.now() - lastSeatAssignEventAt < 100) return;
-    }
-
-    const pointerPos = stage.getPointerPosition();
-    handleTicketSeatSelection(pointerPos, evt && evt.target);
-  };
-
-  stage._sbTicketSeatStageHandler = handler;
-  stage.on("pointerdown.ticketAssign", handler);
-}
-
   function rebuildTicketAssignmentsCache() {
     const map = new Map();
     const seats = getAllSeatNodes();
@@ -4586,12 +4560,13 @@ function ensureStageSeatSelectionListener() {
     if (!sid) return;
 
     const existing = seat.getAttr("sbTicketId") || null;
+    const action = ticketSeatSelectionAction || "toggle";
     // eslint-disable-next-line no-console
     console.debug("[seatmap][tickets] toggleSeatTicketAssignment", {
       seatId: sid,
       existing,
       ticketId,
-      action: "toggle",
+      action,
     });
 
     if (existing && existing !== ticketId) {
@@ -4600,12 +4575,22 @@ function ensureStageSeatSelectionListener() {
         seatId: sid,
         currentOwner: existing,
         ticketId,
-        action: "toggle",
+        action,
       });
       return;
     }
 
-    if (existing === ticketId) {
+    if (action === "unassign") {
+      if (existing === ticketId) {
+        seat.setAttr("sbTicketId", null);
+        ticketAssignments.delete(sid);
+      }
+    } else if (action === "assign") {
+      if (!existing) {
+        seat.setAttr("sbTicketId", ticketId);
+        ticketAssignments.set(sid, ticketId);
+      }
+    } else if (existing === ticketId) {
       seat.setAttr("sbTicketId", null);
       ticketAssignments.delete(sid);
     } else {
@@ -4965,16 +4950,9 @@ function ensureStageSeatSelectionListener() {
         const assignSelectedBtn = document.createElement("button");
         assignSelectedBtn.type = "button";
         assignSelectedBtn.className = "tool-button sb-ghost-button";
-        const manualSelectionLabel =
-          window.__SEATMAP_MANUAL_BUTTON_LABEL__ ||
-          "Manually select seats for allocation/unallocation";
-        const manualSelectionActiveLabel =
-          window.__SEATMAP_MANUAL_BUTTON_ACTIVE_LABEL__ ||
-          "Finish manual allocation/unallocation";
-
         assignSelectedBtn.textContent = ticketSeatSelectionMode
-          ? manualSelectionActiveLabel
-          : manualSelectionLabel;
+          ? "Finish manual allocation/unallocation"
+          : "Manually select seats for allocation/unallocation";
         assignSelectedBtn.disabled = duplicates.size > 0 || updateOffSaleValidation();
         assignSelectedBtn.addEventListener("click", () => {
           if (duplicates.size > 0) {
@@ -8564,12 +8542,6 @@ function handleStageMouseMove() {
   }
 
   function handleTicketSeatContainerClick(e) {
-    if (e && e._sbSeatAssignHandled) {
-      return;
-    }
-    if (lastSeatAssignEventAt && Date.now() - lastSeatAssignEventAt < 100) {
-      return;
-    }
     if (!ticketSeatSelectionMode || !stage) return;
 
     stage.setPointersPositions(e);
@@ -9152,12 +9124,6 @@ function handleStageMouseMove() {
   stage.on("contentClick", handleStageClick);
   stage.on("tap", handleStageClick);
   stage.on("mousedown.ticketAssign", (evt) => {
-    if (evt && evt.evt && evt.evt._sbSeatAssignHandled) {
-      return;
-    }
-    if (lastSeatAssignEventAt && Date.now() - lastSeatAssignEventAt < 100) {
-      return;
-    }
     if (!ticketSeatSelectionMode || !stage) return;
 
     const pointerPos = stage.getPointerPosition();
