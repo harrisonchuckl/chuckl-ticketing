@@ -5041,29 +5041,41 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
 
           const seats = getAllSeatNodes();
           enforceUniqueSeatIds(seats);
+
+          let skippedAssignedSeats = 0;
           seats.forEach((seat) => {
             const sid = ensureSeatIdAttr(seat);
-            seat.setAttr("sbTicketId", ticket.id);
-            if (sid) {
-              ticketAssignments.set(sid, ticket.id);
+            if (!sid) return;
+
+            const currentOwner = seat.getAttr("sbTicketId") || null;
+            if (currentOwner && currentOwner !== ticket.id) {
+              skippedAssignedSeats += 1;
+              return;
             }
+
+            seat.setAttr("sbTicketId", ticket.id);
+            ticketAssignments.set(sid, ticket.id);
           });
 
           rebuildTicketAssignmentsCache();
           const assignedCount = countAssignmentsForTicket(ticket.id);
-          const seatTotal = seats.length;
+          const assignableSeatTotal = seats.filter((seat) => {
+            const owner = seat.getAttr("sbTicketId") || null;
+            return !owner || owner === ticket.id;
+          }).length;
 
           // eslint-disable-next-line no-console
           console.log("[seatmap][tickets] assign remaining", {
             ticketId: ticket.id,
             assignedCount,
-            seatTotal,
+            assignableSeatTotal,
+            skippedAssignedSeats,
           });
 
-          if (assignedCount !== seatTotal) {
+          if (assignedCount !== assignableSeatTotal) {
             // eslint-disable-next-line no-console
             console.warn("[seatmap][tickets] assign remaining mismatch", {
-              expected: seatTotal,
+              expected: assignableSeatTotal,
               actual: assignedCount,
             });
           }
