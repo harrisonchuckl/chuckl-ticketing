@@ -4402,7 +4402,34 @@ function refreshSeatTicketListeners() {
     stage._hasDebugListener = true;
 }
 
- function setTicketSeatSelectionMode(enabled, reason = "unknown") {
+  function addDebugContainerPointerListener() {
+    if (!stage || !stage.container) return;
+    const container = stage.container();
+    if (!container || container._hasAggressiveDebugListener) return;
+
+    const aggressiveDebugHandler = (evt) => {
+        // This will fire first on ANY click inside the Konva canvas container element
+        // regardless of whether Konva finds a shape or not.
+        const isSeatMode = !!window.ticketSeatSelectionMode;
+        
+        // eslint-disable-next-line no-console
+        console.log("[seatmap][DEBUG-DOM-AGGR] DOM POINTERDOWN CAPTURED", {
+            eventTarget: evt.target.className || evt.target.tagName,
+            isSeatMode: isSeatMode,
+            isCancelled: evt.defaultPrevented,
+            currentTarget: evt.currentTarget.tagName
+        });
+        
+        // If seat assignment is active, we must try to force the event to continue down
+        // to Konva's processing layer by *not* cancelling it here.
+    };
+
+    // Bind in the CAPTURE phase (true)
+    container.addEventListener("pointerdown", aggressiveDebugHandler, true);
+    container._hasAggressiveDebugListener = true;
+}
+  
+function setTicketSeatSelectionMode(enabled, reason = "unknown") {
   const prev = ticketSeatSelectionMode;
   ticketSeatSelectionMode = !!enabled;
   ticketSeatSelectionReason = reason || "unknown";
@@ -4413,8 +4440,9 @@ function refreshSeatTicketListeners() {
     ticketSeatSelectionAction = "assign"; 
   }
   
-  // Ensure the global debug listener is active
+  // Ensure the aggressive DOM and Konva debug listeners are active
   addDebugStagePointerListener(); 
+  addDebugContainerPointerListener(); // <--- NEW CALL
 
   // 1. Force the Layer to listen.
   if (mapLayer && typeof mapLayer.listening === "function") {
@@ -4438,7 +4466,7 @@ function refreshSeatTicketListeners() {
     }
   });
 
-  // 3. Re-apply the listeners (calling the fixed function above)
+  // 3. Re-apply the listeners 
   refreshSeatTicketListeners();
 
   // eslint-disable-next-line no-console
