@@ -651,6 +651,13 @@ router.get("/builder/preview/:showId", (req, res) => {
       .tb-side-heading {
         color: var(--tixall-dark);
       }
+
+       /* --- BLOCKER FIX --- */
+      .tb-empty-panel {
+          /* Forces mouse events to pass through this element to the canvas below */
+          pointer-events: none !important; 
+      }
+
     </style>
   </head>
   <body class="tickin-builder-body">
