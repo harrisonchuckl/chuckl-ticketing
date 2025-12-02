@@ -464,6 +464,7 @@ let stairsStartPos = null;
   let ticketSeatSelectionReason = "init";
   let ticketSeatContainerListenerAttached = false;
   let ticketSeatSelectionAction = "toggle"; // manual selection always toggles assignment for the active ticket
+  let lastSeatAssignEventAt = 0;
   let ticketTypes = [];
   let ticketAssignments = new Map();
   let activeTicketSelectionId = null;
@@ -4348,9 +4349,9 @@ function refreshSeatTicketListeners() {
     }
 
     // 3. Define the handler that does the actual assignment
-    const seatHandler = (evt) => {
-      const ticketId = getActiveTicketIdForAssignments();
-      const seatNode = findSeatNodeFromTarget(evt.target) || seat;
+      const seatHandler = (evt) => {
+        const ticketId = getActiveTicketIdForAssignments();
+        const seatNode = findSeatNodeFromTarget(evt.target) || seat;
 
       // START DIAGNOSTICS: This MUST show up if the click hits the seat shape
       // eslint-disable-next-line no-console
@@ -4371,8 +4372,11 @@ if (!ticketSeatSelectionMode || !ticketId || !seatNode) {
       if (evt.evt) {
         evt.evt.stopPropagation();
         evt.evt.preventDefault();
+        evt.evt._sbSeatAssignHandled = true;
       }
       evt.cancelBubble = true;
+
+      lastSeatAssignEventAt = Date.now();
 
       // 5. Execute the toggle logic
       toggleSeatTicketAssignment(seatNode, ticketId);
@@ -4939,9 +4943,16 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
         const assignSelectedBtn = document.createElement("button");
         assignSelectedBtn.type = "button";
         assignSelectedBtn.className = "tool-button sb-ghost-button";
+        const manualSelectionLabel =
+          window.__SEATMAP_MANUAL_BUTTON_LABEL__ ||
+          "Manually select seats for allocation/unallocation";
+        const manualSelectionActiveLabel =
+          window.__SEATMAP_MANUAL_BUTTON_ACTIVE_LABEL__ ||
+          "Finish manual allocation/unallocation";
+
         assignSelectedBtn.textContent = ticketSeatSelectionMode
-          ? "Finish manual allocation/unallocation"
-          : "Manually select seats for allocation/unallocation";
+          ? manualSelectionActiveLabel
+          : manualSelectionLabel;
         assignSelectedBtn.disabled = duplicates.size > 0 || updateOffSaleValidation();
         assignSelectedBtn.addEventListener("click", () => {
           if (duplicates.size > 0) {
@@ -8531,6 +8542,12 @@ function handleStageMouseMove() {
   }
 
   function handleTicketSeatContainerClick(e) {
+    if (e && e._sbSeatAssignHandled) {
+      return;
+    }
+    if (lastSeatAssignEventAt && Date.now() - lastSeatAssignEventAt < 100) {
+      return;
+    }
     if (!ticketSeatSelectionMode || !stage) return;
 
     stage.setPointersPositions(e);
@@ -9113,6 +9130,12 @@ function handleStageMouseMove() {
   stage.on("contentClick", handleStageClick);
   stage.on("tap", handleStageClick);
   stage.on("mousedown.ticketAssign", (evt) => {
+    if (evt && evt.evt && evt.evt._sbSeatAssignHandled) {
+      return;
+    }
+    if (lastSeatAssignEventAt && Date.now() - lastSeatAssignEventAt < 100) {
+      return;
+    }
     if (!ticketSeatSelectionMode || !stage) return;
 
     const pointerPos = stage.getPointerPosition();
