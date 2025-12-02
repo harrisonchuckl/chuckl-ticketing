@@ -8541,35 +8541,24 @@ function handleStageMouseMove() {
     updateDefaultCursor();
   }
 
-  function handleTicketSeatContainerClick(e) {
-    if (e && e._sbSeatAssignHandled) {
-      return;
-    }
-    if (lastSeatAssignEventAt && Date.now() - lastSeatAssignEventAt < 100) {
-      return;
-    }
-    if (!ticketSeatSelectionMode || !stage) return;
+    function handleTicketSeatContainerClick(e) {
+    // In manual ticket seat assignment mode we now rely entirely on the
+    // per-seat Konva listeners (see refreshSeatTicketListeners). The DOM
+    // container listener stays only as a debug hook and must NOT toggle
+    // seats itself, otherwise we get double-toggles and “ghost” clicks.
+    if (!ticketSeatSelectionMode) return;
 
-    stage.setPointersPositions(e);
-    const pointerPos = stage.getPointerPosition();
-    if (!pointerPos) {
-      // eslint-disable-next-line no-console
-      console.warn("[seatmap][tickets] container click with no pointer position");
-      return;
-    }
+    // If a Konva seat handler already processed this DOM event, bail out.
+    if (e && e._sbSeatAssignHandled) return;
 
-    const hit = stage.getIntersection ? stage.getIntersection(pointerPos) : null;
+    // Debug-only logging so we can see stray events if needed.
     // eslint-disable-next-line no-console
-    console.log("[seatmap][tickets] container click", {
-      pointer: pointerPos,
-      activeTicketId: getActiveTicketIdForAssignments(),
-      selectionModeOn: ticketSeatSelectionMode,
-      selectionReason: ticketSeatSelectionReason,
-      hitName: hit && hit.name ? hit.name() : hit && hit.className,
-      seatCount: getAllSeatNodes().length,
+    console.log("[seatmap][tickets] container click (noop in manual assign mode)", {
+      isSeatMode: ticketSeatSelectionMode,
+      eventTarget: e && (e.target.className || e.target.tagName),
     });
 
-    handleTicketSeatSelection(pointerPos, hit);
+    // No call to handleTicketSeatSelection here on purpose.
   }
 
 
@@ -9129,27 +9118,30 @@ function handleStageMouseMove() {
   stage.on("click", handleStageClick);
   stage.on("contentClick", handleStageClick);
   stage.on("tap", handleStageClick);
-  stage.on("mousedown.ticketAssign", (evt) => {
+    stage.on("mousedown.ticketAssign", (evt) => {
+    // In manual ticket seat mode we now let the individual seat nodes handle
+    // assignment themselves (refreshSeatTicketListeners attaches a Konva
+    // listener directly to each seat). The stage-level handler is kept only
+    // as a guard / debug hook and MUST NOT toggle seats.
+    if (!ticketSeatSelectionMode || !stage) return;
+
+    // If a seat handler has already processed this DOM event, bail out.
     if (evt && evt.evt && evt.evt._sbSeatAssignHandled) {
       return;
     }
-    if (lastSeatAssignEventAt && Date.now() - lastSeatAssignEventAt < 100) {
-      return;
-    }
-    if (!ticketSeatSelectionMode || !stage) return;
 
-    const pointerPos = stage.getPointerPosition();
+    // Debug-only logging.
     // eslint-disable-next-line no-console
-    console.log("[seatmap][tickets] stage mousedown (assign mode)", {
+    console.log("[seatmap][tickets] stage mousedown (assign mode – noop)", {
       ticketId: getActiveTicketIdForAssignments(),
-      pointer: pointerPos,
-      targetName: evt.target && evt.target.name ? evt.target.name() : evt.target && evt.target.className,
+      pointer: stage.getPointerPosition(),
+      targetName:
+        evt.target && evt.target.name
+          ? evt.target.name()
+          : evt.target && evt.target.className,
     });
 
-    const handled = handleTicketSeatSelection(pointerPos, evt.target);
-    if (handled) {
-      evt.cancelBubble = true;
-    }
+    // No call to handleTicketSeatSelection here on purpose.
   });
 
   // Canvas interactions
