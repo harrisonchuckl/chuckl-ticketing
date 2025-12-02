@@ -4,7 +4,6 @@ import { verifyJwt } from "../utils/security.js";
 
 const prisma = new PrismaClient();
 const router = Router();
-const ASSET_VERSION = "manual-toggle-v2";
 
 /**
  * LayoutKey is still used for analytics + templates
@@ -283,7 +282,7 @@ router.get("/builder/preview/:showId", (req, res) => {
     <meta charset="utf-8" />
     <title>TIXALL Seat Designer</title>
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <link rel="stylesheet" href="/static/seating-builder.css?v=${ASSET_VERSION}" />
+    <link rel="stylesheet" href="/static/seating-builder.css" />
 
     <!-- Brand + toolbar styling (inline so we can iterate quickly) -->
     <style>
@@ -656,10 +655,10 @@ router.get("/builder/preview/:showId", (req, res) => {
       }
 
 /* Fix 2: Bypasses the main tab content container (the new blocker) */
-      .tb-tab-panel {
-          /* Forces mouse events to pass through this element */
-          pointer-events: none !important; 
-      }
+      .tb-tab-panel {
+          /* Forces mouse events to pass through this element */
+          pointer-events: none !important; 
+      }
 
 /* Fix 3 (NEW): Ensure the canvas element itself is always above other content.
      Konva stages create their own div/canvas elements inside the container (#app). */
@@ -1395,14 +1394,6 @@ router.get("/builder/preview/:showId", (req, res) => {
         // @ts-ignore
         window.__TICKIN_DELETE_BUTTON__ = document.getElementById("tb-btn-delete");
 
-        // Share the manual allocation/unallocation labels with seating-builder.js
-        // @ts-ignore
-        window.__SEATMAP_MANUAL_BUTTON_LABEL__ =
-          "Manually select seats for allocation/unallocation";
-        // @ts-ignore
-        window.__SEATMAP_MANUAL_BUTTON_ACTIVE_LABEL__ =
-          "Finish manual allocation/unallocation";
-
         // ----- TIXALL: layout save name + success handling -----
         var tixallLayoutName = null;
 
@@ -1755,7 +1746,7 @@ router.get("/builder/preview/:showId", (req, res) => {
     </script>
 
     <script src="https://unpkg.com/konva@9.3.3/konva.min.js"></script>
-    <script src="/static/seating-builder.js?v=${ASSET_VERSION}"></script>
+    <script src="/static/seating-builder.js"></script>
   </body>
 </html>`;
 
