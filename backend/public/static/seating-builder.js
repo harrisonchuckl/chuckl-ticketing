@@ -4311,7 +4311,6 @@ function attachMultiShapeTransformBehaviour(group) {
 
   function refreshSeatTicketListeners() {
     const seats = getAllSeatNodes();
-
     seats.forEach((seat) => {
       if (typeof seat.off === "function") {
         seat.off(".ticketAssign");
@@ -4325,183 +4324,28 @@ function attachMultiShapeTransformBehaviour(group) {
         const ticketId = getActiveTicketIdForAssignments();
         const seatNode = findSeatNodeFromTarget(evt.target) || seat;
 
-        // eslint-disable-next-line no-console
-        console.log("[seatmap][tickets] seat event (direct)", {
-          eventType: evt.type,
-          ticketId,
-          seatId: ensureSeatIdAttr(seatNode),
-          selectionModeOn: ticketSeatSelectionMode,
-          reason: ticketSeatSelectionReason,
-        });
-
         if (!ticketSeatSelectionMode || !ticketId || !seatNode) {
           return;
         }
 
+        if (evt.evt) {
+          evt.evt.stopPropagation();
+          evt.evt.preventDefault();
+        }
         evt.cancelBubble = true;
+
         toggleSeatTicketAssignment(seatNode, ticketId);
         applySeatVisuals();
         renderTicketingPanel();
         pushHistory();
       };
 
-      seat.on("click.ticketAssign", seatHandler);
-      seat.on("mousedown.ticketAssign", seatHandler);
-      seat.on("tap.ticketAssign", seatHandler);
-      seat.on("pointerdown.ticketAssignDebug", (evt) => {
-        // eslint-disable-next-line no-console
-        console.debug("[seatmap][tickets] seat pointerdown", {
-          selectionModeOn: ticketSeatSelectionMode,
-          ticketId: getActiveTicketIdForAssignments(),
-          seatId: ensureSeatIdAttr(seat),
-          reason: ticketSeatSelectionReason,
-          targetName: evt.target && evt.target.name ? evt.target.name() : evt.target && evt.target.className,
-        });
-      });
+      seat.on("click.ticketAssign tap.ticketAssign", seatHandler);
     });
 
     if (mapLayer && typeof mapLayer.off === "function") {
       mapLayer.off(".ticketAssign");
     }
-
-    if (mapLayer && typeof mapLayer.on === "function") {
-      mapLayer.on("click.ticketAssign", (evt) => {
-        const pointerPos = stage && stage.getPointerPosition ? stage.getPointerPosition() : null;
-        if (ticketSeatSelectionMode) {
-          // eslint-disable-next-line no-console
-          console.log("[seatmap][tickets] map-layer click", {
-            targetName: evt.target && evt.target.name ? evt.target.name() : evt.target && evt.target.className,
-            selectionModeOn: ticketSeatSelectionMode,
-            action: ticketSeatSelectionAction,
-            pointer: pointerPos,
-          });
-        }
-
-        if (!ticketSeatSelectionMode) return;
-
-        handleTicketSeatSelection(pointerPos, evt.target);
-      });
-
-      mapLayer.on("contentMousedown.ticketAssign", (evt) => {
-        if (!ticketSeatSelectionMode) return;
-
-        const pointerPos = stage && stage.getPointerPosition ? stage.getPointerPosition() : null;
-
-        // eslint-disable-next-line no-console
-        console.log("[seatmap][tickets] map-layer contentMousedown", {
-          targetName: evt.target && evt.target.name ? evt.target.name() : evt.target && evt.target.className,
-          selectionModeOn: ticketSeatSelectionMode,
-          action: ticketSeatSelectionAction,
-          pointer: pointerPos,
-        });
-
-        const handled = handleTicketSeatSelection(pointerPos, evt.target);
-        if (handled && evt.evt) {
-          evt.evt.stopPropagation();
-        }
-      });
-    }
-
-    if (ticketSeatStageContentListener && stage && typeof stage.off === "function") {
-      stage.off("contentMousedown.ticketAssignForce", ticketSeatStageContentListener);
-    }
-    if (stage && typeof stage.off === "function") {
-      stage.off("click.ticketAssignLog");
-    }
-
-    ticketSeatStageContentListener = (evt) => {
-      if (!ticketSeatSelectionMode) return;
-
-      const pointerPos = stage && stage.getPointerPosition ? stage.getPointerPosition() : null;
-      const target = evt && evt.target ? evt.target : null;
-
-      // eslint-disable-next-line no-console
-      console.log("[seatmap][tickets] stage contentMousedown (force)", {
-        selectionModeOn: ticketSeatSelectionMode,
-        ticketId: getActiveTicketIdForAssignments(),
-        pointer: pointerPos,
-        targetName: target && target.name ? target.name() : target && target.className,
-        reason: ticketSeatSelectionReason,
-      });
-
-      const handled = handleTicketSeatSelection(pointerPos, target);
-      if (handled) {
-        evt.cancelBubble = true;
-        if (evt.evt && typeof evt.evt.stopPropagation === "function") {
-          evt.evt.stopPropagation();
-        }
-      }
-    };
-
-    if (stage && typeof stage.on === "function") {
-      stage.on("contentMousedown.ticketAssignForce", ticketSeatStageContentListener);
-      stage.on("click.ticketAssignLog", (evt) => {
-        const pointerPos = stage && stage.getPointerPosition ? stage.getPointerPosition() : null;
-        const ticketId = getActiveTicketIdForAssignments();
-
-        // eslint-disable-next-line no-console
-        console.log("[seatmap][tickets] stage click (ticket mode)", {
-          selectionModeOn: ticketSeatSelectionMode,
-          action: ticketSeatSelectionAction,
-          pointer: pointerPos,
-          ticketId,
-          targetName: evt.target && evt.target.name ? evt.target.name() : evt.target && evt.target.className,
-        });
-
-        if (!ticketSeatSelectionMode || !ticketId) return;
-
-        const handled = handleTicketSeatSelection(pointerPos, evt.target);
-        if (handled && evt.evt) {
-          evt.evt.stopPropagation();
-        }
-      });
-    }
-
-    if (stage && typeof stage.off === "function") {
-      stage.off("click.ticketAssign");
-    }
-
-    if (stage && typeof stage.on === "function") {
-      stage.on("click.ticketAssign", (evt) => {
-        const pointerPos = stage && stage.getPointerPosition ? stage.getPointerPosition() : null;
-
-        // eslint-disable-next-line no-console
-        console.log("[seatmap][tickets] stage click", {
-          targetName: evt.target && evt.target.name ? evt.target.name() : evt.target && evt.target.className,
-          selectionModeOn: ticketSeatSelectionMode,
-          pointer: pointerPos,
-        });
-
-        if (!ticketSeatSelectionMode) return;
-
-        const handled = handleTicketSeatSelection(pointerPos, evt.target);
-        if (handled) {
-          evt.cancelBubble = true;
-        }
-      });
-
-      stage.on("contentMousedown.ticketAssign", (evt) => {
-        const pointerPos = stage && stage.getPointerPosition ? stage.getPointerPosition() : null;
-        const ticketId = getActiveTicketIdForAssignments();
-
-        // eslint-disable-next-line no-console
-        console.log("[seatmap][tickets] stage contentMousedown", {
-          targetName: evt.target && evt.target.name ? evt.target.name() : evt.target && evt.target.className,
-          selectionModeOn: ticketSeatSelectionMode,
-          action: ticketSeatSelectionAction,
-          pointer: pointerPos,
-          ticketId,
-        });
-
-        if (!ticketSeatSelectionMode || !ticketId) return;
-
-        const handled = handleTicketSeatSelection(pointerPos, evt.target);
-        if (handled) {
-          evt.cancelBubble = true;
-        }
-      });
-    }
-
   }
 
   function setTicketSeatSelectionMode(enabled, reason = "unknown") {
@@ -4512,30 +4356,23 @@ function attachMultiShapeTransformBehaviour(group) {
       ticketSeatSelectionAction = "toggle";
     }
 
+    if (mapLayer && typeof mapLayer.listening === "function") {
+      mapLayer.listening(true);
+    }
+
     const seats = getAllSeatNodes();
     seats.forEach((seat) => {
       if (typeof seat.listening === "function") {
         seat.listening(true);
       }
-      const parent = seat.getParent && seat.getParent();
-      if (parent && typeof parent.listening === "function") {
-        parent.listening(true);
-      }
-      if (parent && typeof parent.findAncestors === "function") {
-        const ancestors = parent.findAncestors().filter(Boolean);
-        ancestors.forEach((anc) => {
-          if (typeof anc.listening === "function") {
-            anc.listening(true);
-          }
-        });
+      let parent = seat.getParent && seat.getParent();
+      while (parent) {
+        if (typeof parent.listening === "function") {
+          parent.listening(true);
+        }
+        parent = parent.getParent && parent.getParent();
       }
     });
-    if (mapLayer && typeof mapLayer.listening === "function") {
-      mapLayer.listening(true);
-    }
-    if (stage && typeof stage.listening === "function") {
-      stage.listening(true);
-    }
 
     refreshSeatTicketListeners();
 
@@ -4554,6 +4391,8 @@ function attachMultiShapeTransformBehaviour(group) {
         transformer.nodes([]);
       }
     }
+
+    if (mapLayer) mapLayer.batchDraw();
   }
 
   function countAssignmentsForTicket(ticketId) {
