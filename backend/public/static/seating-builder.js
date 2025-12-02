@@ -4345,16 +4345,15 @@ function refreshSeatTicketListeners() {
 
       // START DIAGNOSTICS: This MUST show up if the click hits the seat shape
       // eslint-disable-next-line no-console
-      console.log("[seatmap][DEBUG-SEAT] SEAT CLICKED - Checkpoint 2: Konva Handler Fired", {
-        seatId: seatNode.attrs.seatId,
-        ticketId,
-        mode: ticketSeatSelectionMode
-      });
-      // END DIAGNOSTICS
+     console.log("[seatmap][DEBUG-SEAT] SEAT CLICKED - Checkpoint 2: Konva Handler Fired", {
+    seatId: seatNode.id(), // <--- USE STANDARD KONVA ID METHOD
+    ticketId,
+    mode: ticketSeatSelectionMode
+});
 
-      if (!ticketSeatSelectionMode || !ticketId || !seatNode) {
-        return;
-      }
+if (!ticketSeatSelectionMode || !ticketId || !seatNode) {
+    return;
+}
 
       // 4. CRITICAL: Stop the event here so it doesn't bubble up to Stage
       if (evt.evt) {
