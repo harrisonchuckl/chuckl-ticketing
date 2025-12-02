@@ -3898,11 +3898,19 @@ function attachMultiShapeTransformBehaviour(group) {
   function ensureSeatIdAttr(seat) {
     if (!seat || typeof seat.getAttr !== "function") return null;
     const existing = seat.getAttr("sbSeatId");
-    if (existing) return existing;
+    if (existing) {
+      if (typeof seat.id === "function" && !seat.id()) {
+        seat.id(existing);
+      }
+      return existing;
+    }
 
     const id = `seat-${seatIdCounter}`;
     seatIdCounter += 1;
     seat.setAttr("sbSeatId", id);
+    if (typeof seat.id === "function") {
+      seat.id(id);
+    }
     return id;
   }
 
@@ -4132,6 +4140,23 @@ function attachMultiShapeTransformBehaviour(group) {
     return null;
   }
 
+  function bringSeatStackToFront(seat) {
+    if (!seat) return;
+
+    let node = seat;
+    while (node) {
+      if (typeof node.moveToTop === "function") {
+        node.moveToTop();
+      }
+
+      node = node.getParent && node.getParent();
+    }
+
+    if (mapLayer && typeof mapLayer.batchDraw === "function") {
+      mapLayer.batchDraw();
+    }
+  }
+
   function computeDuplicateSeatRefsFromSeats(seats) {
     const counts = new Map();
     seats.forEach((seat) => {
@@ -4313,78 +4338,90 @@ function attachMultiShapeTransformBehaviour(group) {
     return ticketTypes.length ? ticketTypes[0].id : null;
   }
 
-function refreshSeatTicketListeners() {
-  const seats = getAllSeatNodes();
-  let boundCount = 0;
+  function refreshSeatTicketListeners() {
+    const seats = getAllSeatNodes();
+    let boundCount = 0;
 
-  // 0. AGGRESSIVE DOM LISTENER CLEANUP
-  // We must ensure the element holding the listener is cleaned up.
-  if (window.ticketSeatDomListener && stage && stage.container && stage.container()) {
-    // Remove the listener in the capture phase (if it was added there)
-    stage.container().removeEventListener("pointerdown", window.ticketSeatDomListener, true);
-    // Also try to remove it in the bubble phase
-    stage.container().removeEventListener("pointerdown", window.ticketSeatDomListener, false);
-    window.ticketSeatDomListener = null;
-  }
-
-  seats.forEach((seat) => {
-    // 1. Clean up old Konva listeners
-    if (typeof seat.off === "function") {
-      seat.off(".ticketAssign");
+    // 0. AGGRESSIVE DOM LISTENER CLEANUP
+    // We must ensure the element holding the listener is cleaned up.
+    if (window.ticketSeatDomListener && stage && stage.container && stage.container()) {
+      // Remove the listener in the capture phase (if it was added there)
+      stage.container().removeEventListener("pointerdown", window.ticketSeatDomListener, true);
+      // Also try to remove it in the bubble phase
+      stage.container().removeEventListener("pointerdown", window.ticketSeatDomListener, false);
+      window.ticketSeatDomListener = null;
     }
 
-    // 2. Ensure seat is interactive
-    if (typeof seat.listening === "function") {
-      seat.listening(true);
-    }
-
-    // 3. Define the handler that does the actual assignment
-    const seatHandler = (evt) => {
-      const ticketId = getActiveTicketIdForAssignments();
-      const seatNode = findSeatNodeFromTarget(evt.target) || seat;
-
-      // START DIAGNOSTICS: This MUST show up if the click hits the seat shape
-      // eslint-disable-next-line no-console
-console.log("[seatmap][DEBUG-SEAT] SEAT CLICKED - Checkpoint 2: Konva Handler Fired", {
-    // Keep the current check for context
-    seatId_CurrentCheck: seatNode.id(), 
-    // ADD THIS NEW LINE: Dumps all attributes
-    ALL_NODE_ATTRIBUTES: seatNode.attrs, 
-    ticketId,
-    mode: ticketSeatSelectionMode
-});
-
-if (!ticketSeatSelectionMode || !ticketId || !seatNode) {
-    return;
-}
-
-      // 4. CRITICAL: Stop the event here so it doesn't bubble up to Stage
-      if (evt.evt) {
-        evt.evt.stopPropagation();
-        evt.evt.preventDefault();
+    seats.forEach((seat) => {
+      // 1. Clean up old Konva listeners
+      if (typeof seat.off === "function") {
+        seat.off(".ticketAssign");
       }
-      evt.cancelBubble = true;
 
-      // 5. Execute the toggle logic
-      toggleSeatTicketAssignment(seatNode, ticketId);
-      applySeatVisuals();
-      renderTicketingPanel(); 
-      pushHistory();
-    };
+      // 2. Ensure seat is interactive
+      if (typeof seat.listening === "function") {
+        seat.listening(true);
+      }
 
-    // 6. Bind to the earliest events: pointerdown, click, and tap
-    seat.on("pointerdown.ticketAssign click.ticketAssign tap.ticketAssign", seatHandler);
-    boundCount++;
-  });
-  
-  // eslint-disable-next-line no-console
-  console.log(`[seatmap][DEBUG-BIND] ${boundCount} seat assignment listeners re-bound.`);
+      // 2b. Ensure the Konva hit graph gives priority to seats over backgrounds
+      bringSeatStackToFront(seat);
 
-  // 7. Clean up any lingering layer listeners
-  if (mapLayer && typeof mapLayer.off === "function") {
-    mapLayer.off(".ticketAssign");
+      // 2c. Normalise seat identifiers so Konva's id() is always set
+      const seatId = ensureSeatIdAttr(seat);
+      if (seatId && typeof seat.id === "function" && seat.id() !== seatId) {
+        seat.id(seatId);
+      }
+
+      // 3. Define the handler that does the actual assignment
+      const seatHandler = (evt) => {
+        const ticketId = getActiveTicketIdForAssignments();
+        const seatNode = findSeatNodeFromTarget(evt.target) || seat;
+        const sid = ensureSeatIdAttr(seatNode);
+        if (sid && typeof seatNode.id === "function" && seatNode.id() !== sid) {
+          seatNode.id(sid);
+        }
+
+        // START DIAGNOSTICS: This MUST show up if the click hits the seat shape
+        // eslint-disable-next-line no-console
+        console.log("[seatmap][DEBUG-SEAT] SEAT CLICKED - Checkpoint 2: Konva Handler Fired", {
+          seatId_CurrentCheck: sid,
+          konvaId: typeof seatNode.id === "function" ? seatNode.id() : undefined,
+          ALL_NODE_ATTRIBUTES: seatNode.attrs,
+          ticketId,
+          mode: ticketSeatSelectionMode,
+        });
+
+        if (!ticketSeatSelectionMode || !ticketId || !seatNode || !sid) {
+          return;
+        }
+
+        // 4. CRITICAL: Stop the event here so it doesn't bubble up to Stage
+        if (evt.evt) {
+          evt.evt.stopPropagation();
+          evt.evt.preventDefault();
+        }
+        evt.cancelBubble = true;
+
+        // 5. Execute the toggle logic
+        toggleSeatTicketAssignment(seatNode, ticketId);
+        applySeatVisuals();
+        renderTicketingPanel();
+        pushHistory();
+      };
+
+      // 6. Bind to the earliest events: pointerdown, click, and tap
+      seat.on("pointerdown.ticketAssign click.ticketAssign tap.ticketAssign", seatHandler);
+      boundCount++;
+    });
+
+    // eslint-disable-next-line no-console
+    console.log(`[seatmap][DEBUG-BIND] ${boundCount} seat assignment listeners re-bound.`);
+
+    // 7. Clean up any lingering layer listeners
+    if (mapLayer && typeof mapLayer.off === "function") {
+      mapLayer.off(".ticketAssign");
+    }
   }
-}
 
   function addDebugStagePointerListener() {
     // Only bind the debug listener once
