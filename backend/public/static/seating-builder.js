@@ -838,7 +838,11 @@ window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
 
 
 
-
+function countAssignmentsForTicket(ticketId) {
+    // This is a temporary placeholder to prevent a crash in renderTicketingPanel.
+    // TODO: Implement actual assignment counting logic later.
+    return 0; 
+}
 
 
 
@@ -4313,8 +4317,18 @@ function refreshSeatTicketListeners() {
   const seats = getAllSeatNodes();
   let boundCount = 0;
 
+  // 0. AGGRESSIVE DOM LISTENER CLEANUP
+  // We must ensure the element holding the listener is cleaned up.
+  if (window.ticketSeatDomListener && stage && stage.container && stage.container()) {
+    // Remove the listener in the capture phase (if it was added there)
+    stage.container().removeEventListener("pointerdown", window.ticketSeatDomListener, true);
+    // Also try to remove it in the bubble phase
+    stage.container().removeEventListener("pointerdown", window.ticketSeatDomListener, false);
+    window.ticketSeatDomListener = null;
+  }
+
   seats.forEach((seat) => {
-    // 1. Clean up old listeners (critical for re-running)
+    // 1. Clean up old Konva listeners
     if (typeof seat.off === "function") {
       seat.off(".ticketAssign");
     }
@@ -4352,7 +4366,7 @@ function refreshSeatTicketListeners() {
       // 5. Execute the toggle logic
       toggleSeatTicketAssignment(seatNode, ticketId);
       applySeatVisuals();
-      renderTicketingPanel();
+      renderTicketingPanel(); 
       pushHistory();
     };
 
@@ -4364,15 +4378,9 @@ function refreshSeatTicketListeners() {
   // eslint-disable-next-line no-console
   console.log(`[seatmap][DEBUG-BIND] ${boundCount} seat assignment listeners re-bound.`);
 
-  // 7. Clean up any lingering listeners on the layer
+  // 7. Clean up any lingering layer listeners
   if (mapLayer && typeof mapLayer.off === "function") {
     mapLayer.off(".ticketAssign");
-  }
-
-  // 8. Clean up old DOM listener (just in case)
-  if (window.ticketSeatDomListener && stage && stage.container && stage.container()) {
-    stage.container().removeEventListener("pointerdown", window.ticketSeatDomListener, true);
-    window.ticketSeatDomListener = null;
   }
 }
 
