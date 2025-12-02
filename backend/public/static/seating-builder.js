@@ -4516,7 +4516,7 @@ function attachMultiShapeTransformBehaviour(group) {
     }
 
     ticketSeatDomListener = (evt) => {
-      if (!stage || !stage.container || !ticketSeatSelectionMode) return;
+      if (!stage || !stage.container) return;
 
       stage.setPointersPositions(evt);
       const pointerPos = stage.getPointerPosition ? stage.getPointerPosition() : null;
@@ -4528,17 +4528,17 @@ function attachMultiShapeTransformBehaviour(group) {
         (pointerPos ? findSeatNodeAtPosition(pointerPos) : null);
 
       // eslint-disable-next-line no-console
-        console.log("[seatmap][tickets] dom pointer", {
-          seatFound: Boolean(seat),
-          ticketId,
-          pointer: pointerPos,
-          targetName: hitFromDom && hitFromDom.name ? hitFromDom.name() : evt.target && evt.target.nodeName,
-          selectionModeOn: ticketSeatSelectionMode,
-          action: ticketSeatSelectionAction,
-          reason: ticketSeatSelectionReason,
-        });
+      console.log("[seatmap][tickets] dom pointer", {
+        seatFound: Boolean(seat),
+        ticketId,
+        pointer: pointerPos,
+        targetName: hitFromDom && hitFromDom.name ? hitFromDom.name() : evt.target && evt.target.nodeName,
+        selectionModeOn: ticketSeatSelectionMode,
+        action: ticketSeatSelectionAction,
+        reason: ticketSeatSelectionReason,
+      });
 
-      if (!seat || !ticketId) return;
+      if (!ticketSeatSelectionMode || !seat || !ticketId) return;
 
       toggleSeatTicketAssignment(seat, ticketId);
       applySeatVisuals();
@@ -4561,9 +4561,6 @@ function attachMultiShapeTransformBehaviour(group) {
         action: ticketSeatSelectionAction,
         targetName: evt.target && evt.target.nodeName,
       });
-      if (!ticketSeatSelectionMode) {
-        return;
-      }
 
       stage.setPointersPositions(evt);
       const pointerPos = stage.getPointerPosition ? stage.getPointerPosition() : null;
@@ -4583,7 +4580,7 @@ function attachMultiShapeTransformBehaviour(group) {
         reason: ticketSeatSelectionReason,
       });
 
-      if (!seat || !ticketId) return;
+      if (!ticketSeatSelectionMode || !seat || !ticketId) return;
 
       toggleSeatTicketAssignment(seat, ticketId);
       applySeatVisuals();
