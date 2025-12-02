@@ -660,6 +660,11 @@ router.get("/builder/preview/:showId", (req, res) => {
           pointer-events: none !important; 
       }
 
+/* Fix 3: Ensures the Konva container (#app) sits above everything */
+  #app {
+      position: relative; 
+      z-index: 5;
+  }
          .tb-side-heading {
         color: var(--tixall-dark);
       }
