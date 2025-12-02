@@ -648,16 +648,22 @@ router.get("/builder/preview/:showId", (req, res) => {
         background: #ffffff;
       }
 
-      .tb-side-heading {
-        color: var(--tixall-dark);
-      }
-
        /* --- BLOCKER FIX --- */
       .tb-empty-panel {
           /* Forces mouse events to pass through this element to the canvas below */
           pointer-events: none !important; 
       }
 
+/* Fix 2: Bypasses the main tab content container (the new blocker) */
+      .tb-tab-panel {
+          /* Forces mouse events to pass through this element */
+          pointer-events: none !important; 
+      }
+
+         .tb-side-heading {
+        color: var(--tixall-dark);
+      }
+      
     </style>
   </head>
   <body class="tickin-builder-body">
