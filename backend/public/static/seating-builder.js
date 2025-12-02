@@ -4368,13 +4368,11 @@ if (!ticketSeatSelectionMode || !ticketId || !seatNode) {
     return;
 }
 
-      // 4. CRITICAL: Stop the event here so it doesn't bubble up to Stage
+      // 4. Mark the native event so container/stage handlers can skip a second toggle,
+      // but let the event continue to bubble in case Konva misses this handler.
       if (evt.evt) {
-        evt.evt.stopPropagation();
-        evt.evt.preventDefault();
         evt.evt._sbSeatAssignHandled = true;
       }
-      evt.cancelBubble = true;
 
       lastSeatAssignEventAt = Date.now();
 
