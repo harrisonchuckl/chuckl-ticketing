@@ -839,9 +839,18 @@ window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
 
 
 function countAssignmentsForTicket(ticketId) {
-    // This is a temporary placeholder to prevent a crash in renderTicketingPanel.
-    // TODO: Implement actual assignment counting logic later.
-    return 0; 
+    if (!ticketId || !ticketAssignments || typeof ticketAssignments.forEach !== "function") {
+      return 0;
+    }
+
+    let count = 0;
+    ticketAssignments.forEach((assignedTicketId) => {
+      if (assignedTicketId === ticketId) {
+        count += 1;
+      }
+    });
+
+    return count;
 }
 
 
