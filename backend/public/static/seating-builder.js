@@ -4732,9 +4732,11 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
       return wrapper;
     };
 
-    if (!ticketTypes.length) {
+   if (!ticketTypes.length) {
       const empty = document.createElement("div");
       empty.className = "sb-inspector-empty";
+      // ADDING POINTER-EVENTS: NONE for this specific element
+      empty.style.pointerEvents = "none"; 
       empty.style.margin = "8px 0 16px";
       empty.textContent = "No tickets yet. Add one to start assigning seats.";
       el.appendChild(empty);
