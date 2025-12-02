@@ -4428,6 +4428,36 @@ function refreshSeatTicketListeners() {
     container.addEventListener("pointerdown", aggressiveDebugHandler, true);
     container._hasAggressiveDebugListener = true;
 }
+
+  function addDebugDocumentPointerListener() {
+    if (window._hasDocumentAggressiveDebugListener) return;
+
+    const aggressiveDocumentHandler = (evt) => {
+        // This will fire first on ANY pointerdown event in the entire browser window
+        const targetClass = evt.target.className || evt.target.tagName;
+        const isCanvasClick = targetClass.includes('konvajs-content');
+
+        // This log WILL FIRE. If it doesn't, your browser console settings are wrong.
+        // eslint-disable-next-line no-console
+        console.log("[seatmap][DEBUG-DOCUMENT-AGGR] DOCUMENT POINTERDOWN CAPTURED", {
+            eventTarget: targetClass,
+            isCanvasClick: isCanvasClick,
+            isCancelled: evt.defaultPrevented,
+            eventPhase: evt.eventPhase
+        });
+        
+        // If the click is on the canvas area and seat selection mode is on,
+        // we can forcibly prevent any document-level defaults that might be running.
+        if (isCanvasClick && window.ticketSeatSelectionMode) {
+            // DO NOT stop propagation here, only prevent default
+            // evt.preventDefault(); // Uncomment only if the log shows the event is stopped by an outer element
+        }
+    };
+
+    // Bind to the document in the CAPTURE phase (true)
+    document.addEventListener("pointerdown", aggressiveDocumentHandler, true);
+    window._hasDocumentAggressiveDebugListener = true;
+}
   
 function setTicketSeatSelectionMode(enabled, reason = "unknown") {
   const prev = ticketSeatSelectionMode;
@@ -4440,9 +4470,10 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
     ticketSeatSelectionAction = "assign"; 
   }
   
-  // Ensure the aggressive DOM and Konva debug listeners are active
+  // Ensure all debug listeners are active
   addDebugStagePointerListener(); 
-  addDebugContainerPointerListener(); // <--- NEW CALL
+  addDebugContainerPointerListener();
+  addDebugDocumentPointerListener(); // <--- NEW CALL
 
   // 1. Force the Layer to listen.
   if (mapLayer && typeof mapLayer.listening === "function") {
@@ -4491,18 +4522,6 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
     mapLayer.batchDraw();
   }
 }
-  
-  function countAssignmentsForTicket(ticketId) {
-    if (!ticketId) return 0;
-    const seats = getAllSeatNodes();
-    let count = 0;
-    seats.forEach((seat) => {
-      if (seat && seat.getAttr && seat.getAttr("sbTicketId") === ticketId) {
-        count += 1;
-      }
-    });
-    return count;
-  }
 
   function rebuildTicketAssignmentsCache() {
     const map = new Map();
