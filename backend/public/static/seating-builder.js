@@ -3459,7 +3459,7 @@ function attachMultiShapeTransformBehaviour(group) {
       const showRight =
         rowLabelPosition === "right" || rowLabelPosition === "both";
 
-      // Left-hand label
+            // Left-hand label
       if (showLeft && firstSeatX != null) {
         const leftLabel = new Konva.Text({
           text: rowLabelText,
@@ -3469,7 +3469,7 @@ function attachMultiShapeTransformBehaviour(group) {
           fill: "#111827",
           align: "right",
           verticalAlign: "middle",
-          listening: false,
+          listening: true,     // ← allow clicks on the row label
           isRowLabel: true,
         });
 
@@ -3482,7 +3482,7 @@ function attachMultiShapeTransformBehaviour(group) {
         group.add(leftLabel);
       }
 
-      // Right-hand label
+                  // Right-hand label
       if (showRight && lastSeatX != null) {
         const rightLabel = new Konva.Text({
           text: rowLabelText,
@@ -3492,7 +3492,7 @@ function attachMultiShapeTransformBehaviour(group) {
           fill: "#111827",
           align: "left",
           verticalAlign: "middle",
-          listening: false,
+          listening: true,     // ← allow clicks on the row label
           isRowLabel: true,
         });
 
@@ -4654,7 +4654,7 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
     });
   }
 
-  function handleTicketSeatSelection(pointerPos, target) {
+    function handleTicketSeatSelection(pointerPos, target) {
     const ticketId = getActiveTicketIdForAssignments();
     let seatNode = findSeatNodeFromTarget(target);
 
@@ -4662,22 +4662,140 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
     console.log("[seatmap][tickets] seat-selection handler", {
       pointer: pointerPos,
       ticketId,
-      targetName: target && target.name ? target.name() : target && target.className,
+      targetName:
+        target && target.name
+          ? target.name()
+          : target && target.className,
       selectionModeOn: ticketSeatSelectionMode,
       action: ticketSeatSelectionAction,
     });
 
-    if (!seatNode && stage && typeof stage.getAllIntersections === "function" && pointerPos) {
+    // -------- FULL-ROW SELECTION VIA ROW LABEL --------
+    if (
+      !seatNode &&
+      target &&
+      typeof target.getAttr === "function" &&
+      target.getAttr("isRowLabel")
+    ) {
+      const rowLabelText =
+        (typeof target.text === "function" && target.text()) ||
+        target.getAttr("text") ||
+        "";
+
+      if (!ticketId) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          "[seatmap][tickets] row-label click ignored (no active ticket)",
+          { rowLabelText }
+        );
+        return false;
+      }
+
+      if (rowLabelText) {
+        const allSeats = getAllSeatNodes().filter(
+          (seat) =>
+            seat &&
+            typeof seat.getAttr === "function" &&
+            (seat.getAttr("sbSeatRowLabel") || "") === rowLabelText
+        );
+
+        if (allSeats.length) {
+          allSeats.forEach((seat) => {
+            toggleSeatTicketAssignment(seat, ticketId);
+          });
+
+          applySeatVisuals();
+          renderTicketingPanel();
+          pushHistory();
+
+          // eslint-disable-next-line no-console
+          console.log("[seatmap][tickets] row-label selection", {
+            rowLabelText,
+            seatCount: allSeats.length,
+            ticketId,
+          });
+
+          return true;
+        }
+      }
+    }
+
+    // -------- FULL-TABLE SELECTION VIA TABLE BODY --------
+    if (
+      !seatNode &&
+      target &&
+      typeof target.findAncestor === "function"
+    ) {
+      const tableGroup = target.findAncestor(
+        (n) =>
+          n &&
+          typeof n.getAttr === "function" &&
+          (n.getAttr("shapeType") === "circular-table" ||
+            n.getAttr("shapeType") === "rect-table"),
+        true
+      );
+
+      if (tableGroup && typeof tableGroup.find === "function") {
+        const tableSeats = tableGroup.find(
+          (n) => n.getAttr && n.getAttr("isSeat")
+        );
+
+        if (tableSeats && tableSeats.length) {
+          if (!ticketId) {
+            // eslint-disable-next-line no-console
+            console.warn(
+              "[seatmap][tickets] table click ignored (no active ticket)"
+            );
+            return false;
+          }
+
+          tableSeats.forEach((seat) => {
+            toggleSeatTicketAssignment(seat, ticketId);
+          });
+
+          applySeatVisuals();
+          renderTicketingPanel();
+          pushHistory();
+
+          // eslint-disable-next-line no-console
+          console.log("[seatmap][tickets] table selection", {
+            tableShapeType: tableGroup.getAttr("shapeType"),
+            seatCount: tableSeats.length,
+            ticketId,
+          });
+
+          return true;
+        }
+      }
+    }
+
+    // -------- FALL BACK TO SINGLE-SEAT DETECTION (existing behaviour) --------
+    if (
+      !seatNode &&
+      stage &&
+      typeof stage.getAllIntersections === "function" &&
+      pointerPos
+    ) {
       const hits = stage.getAllIntersections(pointerPos) || [];
       // eslint-disable-next-line no-console
       console.debug("[seatmap][tickets] intersections", {
         hitCount: hits.length,
-        hitNames: hits.map((h) => (h.name ? h.name() : h.className)),
+        hitNames: hits.map((h) =>
+          h.name ? h.name() : h.className
+        ),
       });
-      seatNode = hits.map((h) => findSeatNodeFromTarget(h)).find(Boolean) || seatNode;
+      seatNode =
+        hits
+          .map((h) => findSeatNodeFromTarget(h))
+          .find(Boolean) || seatNode;
     }
 
-    if (!seatNode && mapLayer && typeof mapLayer.getIntersection === "function" && pointerPos) {
+    if (
+      !seatNode &&
+      mapLayer &&
+      typeof mapLayer.getIntersection === "function" &&
+      pointerPos
+    ) {
       const hit = mapLayer.getIntersection(pointerPos);
       if (hit) {
         seatNode = findSeatNodeFromTarget(hit);
@@ -4692,7 +4810,10 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
     console.log("[seatmap][tickets] click", {
       ticketId,
       seatFound: Boolean(seatNode),
-      targetName: target && target.name ? target.name() : target && target.className,
+      targetName:
+        target && target.name
+          ? target.name()
+          : target && target.className,
       selectionModeOn: ticketSeatSelectionMode,
       action: ticketSeatSelectionAction,
       pointer: pointerPos,
@@ -4882,7 +5003,7 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
           renderTicketingPanel();
         });
 
-                // --- Ticket colour: preset chips + full colour picker ---
+                        // --- Ticket colour: preset chips + colour picker + hex input ---
 
         const colorFieldWrap = document.createElement("div");
 
@@ -4892,14 +5013,29 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
         swatchRow.style.gap = "4px";
         swatchRow.style.marginBottom = "6px";
 
-        const currentColor =
+        const normalisedCurrent =
           (ticket.color ||
+            ticketFormState.color ||
             DEFAULT_TICKET_COLORS[0] ||
-            "#2563eb").toLowerCase();
+            "#2563EB").toString();
+        const currentColor = normalisedCurrent.toLowerCase();
+
+        // Helper to normalise a user-entered hex string
+        const normaliseHexValue = (raw) => {
+          if (!raw) return "";
+          let v = String(raw).trim();
+          if (!v) return "";
+          if (!v.startsWith("#")) v = `#${v}`;
+          v = v.toUpperCase();
+          if (!/^#([0-9A-F]{3}|[0-9A-F]{6})$/.test(v)) return "";
+          return v;
+        };
 
         DEFAULT_TICKET_COLORS.forEach((hex) => {
           const chip = document.createElement("button");
           chip.type = "button";
+          chip.className = "tool-button sb-ghost-button";
+          chip.style.minWidth = "22px";
           chip.style.width = "22px";
           chip.style.height = "22px";
           chip.style.borderRadius = "999px";
@@ -4923,25 +5059,62 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
           swatchRow.appendChild(chip);
         });
 
+        // Hex text input so users can type/paste a colour
+        const hexInput = document.createElement("input");
+        hexInput.type = "text";
+        hexInput.className = "sb-input";
+        hexInput.placeholder = "#2563EB";
+        hexInput.value =
+          normaliseHexValue(currentColor) ||
+          DEFAULT_TICKET_COLORS[0] ||
+          "#2563EB";
+        hexInput.style.marginTop = "4px";
+
+        hexInput.addEventListener("change", () => {
+          const hex = normaliseHexValue(hexInput.value);
+          if (!hex) {
+            // Invalid value – leave things as they are
+            // eslint-disable-next-line no-console
+            console.warn("[seatmap][tickets] invalid hex colour entered", {
+              raw: hexInput.value,
+            });
+            hexInput.value =
+              ticket.color ||
+              ticketFormState.color ||
+              DEFAULT_TICKET_COLORS[0] ||
+              "#2563EB";
+            return;
+          }
+
+          ticket.color = hex;
+          ticketFormState.color = hex;
+          applySeatVisuals();
+          renderTicketingPanel();
+        });
+
         const colorInput = document.createElement("input");
         colorInput.type = "color";
         colorInput.className = "sb-input sb-input-color";
         colorInput.value =
-          currentColor || DEFAULT_TICKET_COLORS[0] || "#2563eb";
+          normaliseHexValue(currentColor) ||
+          DEFAULT_TICKET_COLORS[0] ||
+          "#2563EB";
         colorInput.addEventListener("input", () => {
           const value =
             colorInput.value ||
             DEFAULT_TICKET_COLORS[0] ||
-            "#2563eb";
+            "#2563EB";
           ticket.color = value;
           ticketFormState.color = value;
+          hexInput.value = value.toUpperCase();
           applySeatVisuals();
           renderTicketingPanel();
         });
 
         colorFieldWrap.appendChild(swatchRow);
         colorFieldWrap.appendChild(colorInput);
-
+        colorFieldWrap.appendChild(hexInput);
+        
         const onSaleInput = document.createElement("input");
 
         onSaleInput.type = "datetime-local";
