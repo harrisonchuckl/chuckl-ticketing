@@ -5097,7 +5097,7 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
                 const formGrid = document.createElement("div");
         formGrid.className = "sb-ticket-form-grid";
 
-        // --- Ticket name: editable without killing focus on each keypress ---
+                // --- Ticket name: editable without killing focus on each keypress ---
 
         const nameInput = document.createElement("input");
         nameInput.type = "text";
@@ -5139,23 +5139,9 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
         priceInput.value = ticket.price ?? "";
         priceInput.addEventListener("input", () => {
           const parsed = parseFloat(
-            (priceInput.value || "").replace(/[^0-9.,-]/g, "").replace(/,/g, ".")
-          );
-          ticket.price = Number.isFinite(parsed) ? parsed : 0;
-          renderTicketingPanel();
-        });
-
-
-
-        const priceInput = document.createElement("input");
-        priceInput.type = "text";
-        priceInput.inputMode = "decimal";
-        priceInput.className = "sb-input sb-input-inline";
-        priceInput.placeholder = `Price (${venueCurrencyCode})`;
-        priceInput.value = ticket.price ?? "";
-        priceInput.addEventListener("input", () => {
-          const parsed = parseFloat(
-            (priceInput.value || "").replace(/[^0-9.,-]/g, "").replace(/,/g, ".")
+            (priceInput.value || "")
+              .replace(/[^0-9.,-]/g, "")
+              .replace(/,/g, ".")
           );
           ticket.price = Number.isFinite(parsed) ? parsed : 0;
           renderTicketingPanel();
@@ -5164,6 +5150,7 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
         // --- Ticket colour: preset chips + colour picker + hex input ---
 
         const colorFieldWrap = document.createElement("div");
+
 
         const swatchRow = document.createElement("div");
         swatchRow.style.display = "flex";
