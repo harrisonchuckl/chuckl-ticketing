@@ -4285,22 +4285,23 @@ function updateTicketRings() {
             seatCircle.getAttr("radius") || 8;
 
         // 6) Draw new rings (max 10)
-        const maxRings = Math.min(ticketIds.length, 10);
-        for (let i = 0; i < maxRings; i += 1) {
-            const tId = ticketIds[i];
-            if (!tId) continue;
-            const ticket = ticketById.get(tId);
-            const color = (ticket && ticket.color) || "#2563eb";
-            
-            // Tighter spacing: 2.5px gap per ring
-            const radius = baseRadius + 3 + i * 2.5;
+    const maxRings = Math.min(ticketIds.length, 10);
+    for (let i = 0; i < maxRings; i += 1) {
+        const tId = ticketIds[i];
+        if (!tId) continue;
+        const ticket = ticketById.get(tId);
+        const color = (ticket && ticket.color) || "#2563eb";
+        
+        // --- CRITICAL FIX: Changed the starting point from `+ 3` to `+ 1.5` ---
+        // The base seat has a stroke of 1.5, so the first ring should start there (i=0).
+        const radius = baseRadius + 1.5 + i * 2.5;
 
-            const ring = new Konva.Circle({
-                x: seatCircle.x(),
-                y: seatCircle.y(),
-                radius,
-                stroke: color,
-                strokeWidth: 1.5,
+        const ring = new Konva.Circle({
+            x: seatCircle.x(),
+            y: seatCircle.y(),
+            radius,
+            stroke: color,
+            strokeWidth: 1.5,
                 listening: false,
                 name: "ticket-ring",
             });
