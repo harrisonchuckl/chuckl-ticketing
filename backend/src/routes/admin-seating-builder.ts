@@ -204,24 +204,22 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
     } else {
       saved = await prisma.seatMap.create({
         data: {
+          showId,
+          venueId: showRow.venueId,
           name: finalName,
           layout: layoutPayload as any,
           isTemplate: !!saveAsTemplate,
-          createdByUserId: userId ?? null,
-          showId: showRow.id,
-          venueId: showRow.venueId ?? null,
+          createdByUserId: userId,
         },
       });
     }
 
     return res.json({
-      ok: true,
-      seatMap: {
-        id: saved.id,
-        name: saved.name,
-        version: saved.version,
-        isTemplate: saved.isTemplate,
-      },
+      success: true,
+      seatMapId: saved.id,
+      name: saved.name,
+      layout: saved.layout,
+      version: saved.version,
     });
   } catch (err) {
     console.error("Error in POST /builder/api/seatmaps/:showId", err);
@@ -230,455 +228,445 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
 });
 
 /* -------------------------------------------------------------
-   ROUTE: DELETE a saved seat map
+   ROUTE: POST mark seat map as default
 -------------------------------------------------------------- */
-router.delete("/builder/api/seatmaps/:showId/:seatMapId", async (req, res) => {
+router.post("/builder/api/seatmaps/:showId/default", async (req, res) => {
   try {
     const showId = req.params.showId;
-    const seatMapId = req.params.seatMapId;
+    const { seatMapId } = req.body ?? {};
 
-    const showRow = (
-      await prisma.$queryRaw<{ id: string; venueId: string | null }[]>
-        `SELECT "id","venueId" FROM "Show" WHERE "id" = ${showId} LIMIT 1`
-    )[0];
-
-    if (!showRow) {
-      return res.status(404).json({ error: "Show not found" });
+    if (!seatMapId) {
+      return res.status(400).json({ error: "Missing seatMapId" });
     }
 
-    const scope: any[] = [{ showId }];
-    if (showRow.venueId) {
-      scope.push({ venueId: showRow.venueId });
-    }
-
-    const seatMap = await prisma.seatMap.findFirst({
-      where: { id: seatMapId, OR: scope },
-      select: { id: true },
+    // Clear existing defaults for this show
+    await prisma.seatMap.updateMany({
+      where: { showId },
+      data: { isDefault: false },
     });
 
-    if (!seatMap) {
-      return res.status(404).json({ error: "Seat map not found" });
-    }
+    // Set the chosen one as default
+    await prisma.seatMap.update({
+      where: { id: seatMapId },
+      data: { isDefault: true },
+    });
 
-    await prisma.seatMap.delete({ where: { id: seatMap.id } });
-
-    return res.json({ ok: true, deletedId: seatMap.id });
+    return res.json({ success: true });
   } catch (err) {
-    console.error("Error in DELETE /builder/api/seatmaps/:showId/:seatMapId", err);
+    console.error("Error in POST /builder/api/seatmaps/:showId/default", err);
     return res.status(500).json({ error: "internal_error" });
   }
 });
 
 /* -------------------------------------------------------------
-   ROUTE: GET builder full-page HTML
+   ROUTE: GET admin seating builder page
 -------------------------------------------------------------- */
-router.get("/builder/preview/:showId", (req, res) => {
-  const showId = req.params.showId;
-  const layout = normaliseLayout(req.query.layout as string | undefined);
+router.get("/builder/:showId", async (req, res) => {
+  try {
+    const showId = req.params.showId;
 
-  const html = `<!DOCTYPE html>
-<html lang="en">
+    // Fetch show basics + venue ID, plus any active layout
+    const showRows = await prisma.$queryRaw<
+      { id: string; title: string | null; venueId: string | null; date: Date | null }[]
+    >`SELECT "id","title","venueId","date" FROM "Show" WHERE "id" = ${showId} LIMIT 1`;
+
+    if (!showRows[0]) {
+      return res.status(404).send("Show not found");
+    }
+
+    const show = showRows[0];
+
+    // The most recent seat map saved for this show
+    const savedSeatMap = await prisma.seatMap.findFirst({
+      where: { showId },
+      orderBy: { createdAt: "desc" },
+    });
+
+    // NOTE: We must escape layout JSON for safe inline use
+    const layout = savedSeatMap?.layout ? JSON.stringify(savedSeatMap.layout) : "null";
+
+    return res.send(`<!DOCTYPE html>
+<html lang="en" class="sb-layout">
   <head>
-    <meta charset="utf-8" />
-    <title>TIXALL Seat Designer</title>
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <link rel="stylesheet" href="/static/seating-builder.css" />
-
-    <!-- Brand + toolbar styling (inline so we can iterate quickly) -->
+    <meta charset="UTF-8" />
+    <title>Seat map designer – TixAll</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="/static/seatmap-builder.css" />
+    <script src="https://unpkg.com/konva@9/konva.min.js"></script>
     <style>
+      /* Basic reset and typography */
       :root {
-        --tixall-blue: #08B8E8;
-        --tixall-blue-soft: #E6F9FF;
-        --tixall-dark: #182828;
-        --tixall-grey-soft: #F4F5F7;
-        --tixall-border-subtle: #E2E4EA;
+        --tixall-blue: #4f46e5;
+        --tixall-blue-dark: #4338ca;
+        --tixall-orange: #f97316;
+        --tixall-dark: #111827;
+        --tixall-text: #1f2937;
+        --tixall-subtext: #6b7280;
+        --tixall-border: #e5e7eb;
+        --tixall-border-subtle: rgba(148, 163, 184, 0.35);
+        --tixall-bg: #f8fafc;
+        --tixall-bg-2: #eef2ff;
       }
 
       body.tickin-builder-body {
-        background: #f5f7fa;
-        color: var(--tixall-dark);
+        margin: 0;
+        padding: 0;
+        background: var(--tixall-bg);
+        color: var(--tixall-text);
+        font-family: -apple-system, BlinkMacSystemFont, "system-ui", "Segoe UI", sans-serif;
+        min-height: 100vh;
       }
 
       .tickin-builder-shell {
-        background: #ffffff;
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
       }
 
       .tickin-builder-topbar {
-        border-bottom: 1px solid var(--tixall-border-subtle);
-        background: linear-gradient(90deg, #ffffff, #f7fbff);
+        position: sticky;
+        top: 0;
+        z-index: 30;
+        background: #ffffff;
+        border-bottom: 1px solid var(--tixall-border);
+        padding: 14px 18px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .tb-topbar-left {
+        display: flex;
+        align-items: center;
+        gap: 12px;
       }
 
       .tb-logo-badge {
-        background: #071018;
-        border-radius: 999px;
-        padding: 4px 10px;
         display: inline-flex;
         align-items: center;
-        gap: 6px;
+        gap: 8px;
+        padding: 10px 12px;
+        border-radius: 14px;
+        background: radial-gradient(circle at 10% 20%, rgba(79, 70, 229, 0.12), transparent 40%),
+          #f8fafc;
+        color: var(--tixall-dark);
+        font-weight: 700;
+        letter-spacing: 0.01em;
       }
 
       .tb-logo-dot {
         width: 10px;
         height: 10px;
-        border-radius: 999px;
         background: var(--tixall-blue);
+        border-radius: 999px;
+        box-shadow: 0 0 0 6px rgba(79, 70, 229, 0.12);
       }
 
       .tb-logo-text {
-        font-weight: 600;
         font-size: 13px;
-        color: #ffffff;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
       }
 
-           .tb-topbar-btn.tb-btn-primary {
-  border-radius: 999px;
-  border: 0;
-  background: linear-gradient(135deg, var(--tixall-blue), #08c8f8);
-  color: #ffffff;
-  font-weight: 600;
-  /* No shadow so it feels flat like the ghost button */
-  box-shadow: none;
-}
+      .tb-show-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
 
-.tb-topbar-btn.tb-btn-primary:hover {
-  /* Slightly deeper blue on hover, but still no glow or movement */
-  background: linear-gradient(135deg, #06a6d3, #07b8e7);
-  box-shadow: none;
-  transform: none;
-}
-
-
-      .tb-topbar-btn.tb-btn-ghost {
-        border-radius: 999px;
-        border: 1px solid var(--tixall-border-subtle);
-        background: #ffffff;
+      .tb-show-title {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 800;
         color: var(--tixall-dark);
+      }
+
+      .tb-show-subtitle {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--tixall-subtext);
+        font-size: 13px;
+      }
+
+      .tb-dot {
+        color: #cbd5e1;
+      }
+
+      .tb-topbar-right {
+        display: flex;
+        align-items: center;
+        gap: 10px;
       }
 
       .tb-topbar-select {
-        border-radius: 999px;
-        border: 1px solid var(--tixall-border-subtle);
-        background: #ffffff;
-        color: var(--tixall-dark);
-        padding: 6px 10px;
-        font-size: 13px;
-        max-width: 260px;
-      }
-
-
-      /* LEFT RAIL */
-            /* LEFT RAIL */
-      .tb-left-rail {
-        background: linear-gradient(180deg, #f7fafc, #f2f5f9);
-        border-right: 1px solid var(--tixall-border-subtle);
-        overflow: visible;
-        /* tiny bit of extra horizontal breathing space */
-        padding-inline: 4px;
-      }
-
-      .tb-left-scroll {
-        /* more even padding so it feels less squashed / gappy */
-        padding: 18px 14px 20px;
-        overflow: visible;
-      }
-
-      .tb-left-group {
-        /* slightly tighter spacing so gaps feel consistent */
-        margin-bottom: 10px;
-      }
-
-      /* Sub-headings – only used for "Actions" now */
-      .tb-left-group-label {
-        font-size: 11px;
+        min-width: 200px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid var(--tixall-border);
+        background: #f9fafb;
+        color: var(--tixall-text);
         font-weight: 600;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: #7a828f;
-        margin: 0 0 8px;
-        text-align: center;
       }
 
-      /* Centre the action buttons (Undo / Redo / Clear) */
-      .tb-left-group-actions .tb-left-item {
-        justify-content: center;
-        text-align: center;
-      }
-
-      .tb-left-group-actions .tb-left-label {
-        text-align: center;
-      }
-
-      /* Base left-rail button styling (Undo / Redo / Clear etc) */
-      .tb-left-item {
-        border: 0;
-        background: transparent;
-        border-radius: 999px;
-        padding: 8px 10px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        width: 100%;
-        text-align: left;
-        cursor: pointer;
-        font-size: 12px;
-        color: var(--tixall-dark);
-        box-sizing: border-box;
-        transition: background 0.15s ease;
-      }
-
-      .tb-left-item + .tb-left-item {
-        margin-top: 4px;
-      }
-
-      .tb-left-item:hover {
-        background: rgba(8, 184, 232, 0.06);
-      }
-
-      /* Tool buttons: icon ABOVE text, centred (default) */
-      .tb-left-item.tool-button {
-        flex-direction: column;
-        align-items: center;
-        justify-content: flex-start;
-        text-align: center;
-        padding: 12px 4px 10px;
-        gap: 6px;
-        border-radius: 18px;
-        background: transparent !important;
-        border: 0 !important;
-        box-shadow: none !important;
-        transition: none !important;
-        min-height: 72px;
-      }
-
-      .tb-left-item.tool-button:hover,
-      .tb-left-item.tool-button:focus,
-      .tb-left-item.tool-button:active {
-        background: transparent !important;
-        border: 0 !important;
-        box-shadow: none !important;
-        transform: none !important;
-      }
-
-      .tb-left-item.tool-button + .tb-left-item.tool-button {
-        margin-top: 8px;
-      }
-
-      .tb-left-item.tool-button img.tb-tool-icon {
-        width: 44px;
-        height: 44px;
-        display: block;
-        flex-shrink: 0;
-        object-fit: contain;
-      }
-
-      /* Icon swap dark → blue */
-      .tb-left-item.tool-button img.icon-dark {
-        display: block;
-      }
-
-      .tb-left-item.tool-button img.icon-blue {
-        display: none;
-      }
-
-      .tb-left-item.tool-button.is-active img.icon-dark {
-        display: none;
-      }
-
-      .tb-left-item.tool-button.is-active img.icon-blue {
-        display: block;
-      }
-
-      .tb-left-item.tool-button .tb-left-label {
-        display: block;
-        font-size: 11px;
-        line-height: 1.2;
-        font-weight: 500;
-        color: var(--tixall-dark);
-        white-space: normal;
-        text-align: center;
-        max-width: 80px;
-        word-break: break-word;
-      }
-
-      /* Fly-out tool groups (Photoshop-style) */
-      .tool-group {
-        position: relative;
-        margin-bottom: 6px; /* slightly tighter so vertical rhythm feels cleaner */
-        display: block;
-      }
-
-      /* Root tool button: full-width, icon above label, centred */
-      .tool-group .tool-root {
-        width: 100%;
-        min-height: 72px;
-      }
-
-      .tool-group .tool-root img.tb-tool-icon {
-        width: 44px;
-        height: 44px;
-      }
-
-      .tool-group .tool-root .tb-left-label {
-        margin: 0;
-        max-width: 80px;
-        white-space: normal;
-        text-align:center;
-      }
-
-            .tool-flyout-toggle {
-        border: 0;
-        background: transparent;
-        padding: 0;
-
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        color: #7a828f;
-
-        /* Bigger hit area, nudged further right, centred on tool icon area */
-        position: absolute;
-        right: -10px;          /* further out from the tool */
-        top: 50%;
-        transform: translateY(-50%);
-        width: 26px;           /* bigger clickable circle */
-        height: 26px;          /* bigger clickable circle */
-        border-radius: 999px;
-      }
-
-      .tool-flyout-toggle:hover {
-        color: var(--tixall-dark);
-        background: rgba(8, 184, 232, 0.06);
-      }
-
-      .tool-flyout-chevron {
-        font-size: 15px;       /* bigger arrow glyph */
-        line-height: 1;
-      }
-
-
-      .tool-flyout {
-        position: absolute;
-        left: 100%;
-        top: 0;
-        display: none;
-        flex-direction: column;
-        gap: 4px;
-        padding: 6px;
-        background: #ffffff;
+      .tb-topbar-btn {
+        border: 1px solid var(--tixall-border);
         border-radius: 12px;
-        box-shadow: 0 12px 32px rgba(15,23,42,0.20);
-        border: 1px solid rgba(148,163,184,0.35);
-        z-index: 9999;
-        min-width: 170px;
-      }
-
-      .tool-group.is-open .tool-flyout {
-        display: flex;
-      }
-
-
-      .tool-flyout .tb-left-item.tool-button {
-        min-height: 0;
-        padding: 8px 10px;
-        flex-direction: row;
-        justify-content: flex-start;
-        text-align: left;
-        border-radius: 12px;
-        gap: 8px;
-      }
-
-      .tool-flyout .tb-left-item.tool-button .tb-left-label {
-        max-width: none;
-        white-space: nowrap;
-        text-align: left;
-      }
-
-      .tool-flyout .tb-left-item.tool-button img.tb-tool-icon {
-        width: 24px;
-        height: 24px;
-      }
-
-      /* Undo / Redo / Clear chips */
-      .tb-left-icon {
-        width: 26px;
-        height: 26px;
-        border-radius: 999px;
-        background: var(--tixall-grey-soft);
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        flex-shrink: 0;
-      }
-
-      .tb-left-item.tb-left-item-danger {
-        color: #b3261e;
-      }
-
-      .tb-left-item.tb-left-item-danger .tb-left-icon {
-        background: #ffeceb;
-      }
-
-            /* Centre canvas area border tweak to feel lighter */
-
-      .tb-center-header {
-        border-bottom: 1px solid var(--tixall-border-subtle);
+        padding: 10px 14px;
+        font-weight: 700;
+        cursor: pointer;
         background: #ffffff;
+        transition: all 0.2s ease;
       }
 
-      .tb-tab.is-active {
-        color: var(--tixall-dark);
-        border-bottom-color: var(--tixall-blue);
+      .tb-btn-ghost {
+        color: var(--tixall-subtext);
       }
 
-      .tb-zoom-btn.tb-zoom-label {
-        border-radius: 999px;
-        border-color: var(--tixall-border-subtle);
-        background: #ffffff;
+      .tb-btn-primary {
+        background: linear-gradient(120deg, var(--tixall-blue), #7c3aed);
+        color: white;
+        border: none;
+        box-shadow: 0 10px 30px rgba(79, 70, 229, 0.25);
       }
 
-      /* -------- Layout: full-height builder, fixed rails + centre, scrolling side panel -------- */
-
-      .tickin-builder-body {
-        margin: 0;
-        height: 100vh;
-        overflow: hidden; /* stop the whole page from scrolling */
-      }
-
-      .tickin-builder-shell {
-        display: flex;
-        flex-direction: column;
-        height: 100vh;
+      .tb-btn-primary:hover {
+        transform: translateY(-1px);
       }
 
       .tickin-builder-main {
-        display: grid;
-        grid-template-columns: auto 1fr auto; /* left rail | centre | right panel */
         flex: 1;
-        min-height: 0; /* allows children to use overflow correctly */
+        display: grid;
+        grid-template-columns: 240px minmax(0, 1fr) 320px;
+        gap: 16px;
+        padding: 18px;
       }
 
+      /* Left rail */
       .tb-left-rail {
-        display: block;
-      }
-
-      .tb-center {
+        background: #ffffff;
+        border: 1px solid var(--tixall-border-subtle);
+        border-radius: 20px;
+        padding: 12px;
         display: flex;
         flex-direction: column;
-        min-height: 0;
+        gap: 8px;
+        box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
+      }
+
+      .tb-left-scroll {
+        overflow-y: auto;
+        max-height: calc(100vh - 180px);
+        padding-right: 6px;
+      }
+
+      .tb-left-group {
+        padding: 10px;
+        border-radius: 14px;
+        border: 1px solid var(--tixall-border-subtle);
+        background: #f8fafc;
+        margin-bottom: 12px;
+      }
+
+      .tb-left-group-label {
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--tixall-subtext);
+        margin-bottom: 8px;
+      }
+
+      .tb-left-item {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid transparent;
+        background: white;
+        color: var(--tixall-text);
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.18s ease;
+        text-align: left;
+      }
+
+      .tb-left-item:hover {
+        border-color: var(--tixall-border);
+        box-shadow: 0 10px 30px rgba(79, 70, 229, 0.08);
+      }
+
+      .tb-left-icon {
+        width: 22px;
+        height: 22px;
+        display: inline-block;
+      }
+
+      .tb-left-label {
+        flex: 1;
+        font-size: 14px;
+      }
+
+      .tb-left-item-danger {
+        color: #b91c1c;
+        background: rgba(248, 113, 113, 0.1);
+      }
+
+      .tb-left-item-danger:hover {
+        background: rgba(248, 113, 113, 0.18);
+        border-color: rgba(248, 113, 113, 0.3);
+      }
+
+      .tool-group {
+        border: 1px dashed var(--tixall-border);
+        border-radius: 12px;
+        padding: 6px;
+        margin-bottom: 8px;
+        background: #ffffff;
+      }
+
+      .tool-root {
+        background: linear-gradient(120deg, rgba(79, 70, 229, 0.05), rgba(99, 102, 241, 0.12));
+        border-color: rgba(79, 70, 229, 0.25);
+      }
+
+      .tool-flyout-toggle {
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        padding: 0 8px;
+        color: var(--tixall-subtext);
+      }
+
+      .tool-flyout {
+        margin: 6px 0 0 0;
+        border-top: 1px dashed var(--tixall-border);
+        padding-top: 6px;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+        gap: 8px;
+      }
+
+      .tb-tool-icon {
+        width: 20px;
+        height: 20px;
+      }
+
+      .icon-blue {
+        display: none;
+      }
+
+      .tool-button.tool-active .icon-blue {
+        display: inline;
+      }
+
+      .tool-button.tool-active .icon-dark {
+        display: none;
+      }
+
+      /* Center column */
+      .tb-center {
+        background: #ffffff;
+        border-radius: 20px;
+        border: 1px solid var(--tixall-border-subtle);
+        padding: 14px;
+        box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      .tb-center-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .tb-tabs {
+        display: inline-flex;
+        gap: 6px;
+        background: #f1f5f9;
+        padding: 6px;
+        border-radius: 14px;
+      }
+
+      .tb-tab {
+        border: none;
+        background: transparent;
+        padding: 10px 12px;
+        border-radius: 12px;
+        font-weight: 700;
+        color: var(--tixall-subtext);
+        cursor: pointer;
+        transition: all 0.16s ease;
+      }
+
+      .tb-tab.is-active {
+        background: white;
+        color: var(--tixall-dark);
+        box-shadow: 0 12px 30px rgba(79, 70, 229, 0.12);
+      }
+
+      .tb-zoom-toolbar {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: #0f172a;
+        color: white;
+        padding: 8px;
+        border-radius: 14px;
+        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.25);
+      }
+
+      .tb-zoom-btn {
+        border: none;
+        background: rgba(255, 255, 255, 0.08);
+        color: white;
+        padding: 8px 10px;
+        border-radius: 10px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .tb-zoom-label {
+        background: rgba(255, 255, 255, 0.15);
       }
 
       .tb-tab-panels {
-        flex: 1;
-        min-height: 0;
+        border-radius: 16px;
+        background: #f8fafc;
+        border: 1px solid var(--tixall-border-subtle);
+        min-height: 500px;
         position: relative;
+        overflow: hidden;
       }
 
-      /* Right side panel – this is now the ONLY scroll container on the right */
+      #app {
+        position: relative;
+        min-height: 480px;
+        background: #ffffff;
+        border-radius: 16px;
+        border: 1px dashed #e2e8f0;
+        box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.18);
+      }
 
+      .tb-tab-panel {
+        display: none;
+        padding: 12px;
+      }
+
+      .tb-tab-panel.is-active {
+        display: block;
+      }
+
+      /* Right column */
       .tb-side-panel {
         background: #fbfcfe;
-        border-left: 1px solid var(--tixall-border-subtle);
+        border: 1px solid var(--tixall-border-subtle);
         display: flex;
         flex-direction: column;
         padding: 16px;
@@ -718,12 +706,12 @@ router.get("/builder/preview/:showId", (req, res) => {
         color: var(--tixall-dark);
       }
 
-      
+
     </style>
   </head>
   <body class="tickin-builder-body">
-    <div class="tickin-builder-shell">
-      <header class="tickin-builder-topbar">
+    <div class="tickin-builder-shell sb-admin-page">
+      <header class="tickin-builder-topbar sb-admin-header">
         <div class="tb-topbar-left">
           <div class="tb-logo-badge">
             <span class="tb-logo-dot"></span>
@@ -773,9 +761,11 @@ router.get("/builder/preview/:showId", (req, res) => {
 
       </header>
 
-      <main class="tickin-builder-main">
+      <main class="tickin-builder-main sb-admin-main">
+        <div class="sb-mobile-fixed-top">
         <!-- Slim, non-expanding left rail -->
-               <aside class="tb-left-rail" aria-label="Seating tools">
+        <div class="sb-mobile-toolbar">
+               <aside class="tb-left-rail sb-elements-panel" aria-label="Seating tools">
           <div class="tb-left-scroll">
             <!-- Seating tools – icon + text only (no sub-heading) -->
             <div class="tb-left-group">
@@ -916,135 +906,204 @@ router.get("/builder/preview/:showId", (req, res) => {
                     <img
                       class="tb-tool-icon icon-blue"
                       src="/seatmap-icons/selection-blue.png"
-                      alt="Multi shape"
+                      alt="Multi-tool (selected)"
                     />
                     <span class="tb-left-label">Multi-tool</span>
                   </button>
 
-                  <!-- NEW: Circle tool -->
-                  <button class="tb-left-item tool-button" data-tool="circle">
+                  <!-- NEW: Arc text tool -->
+                  <button class="tb-left-item tool-button" data-tool="arc-text">
                     <img
                       class="tb-tool-icon icon-dark"
-                      src="/seatmap-icons/circle-table-black.png"
-                      alt="Circle"
+                      src="/seatmap-icons/text-dark.png"
+                      alt="Arc text"
                     />
                     <img
                       class="tb-tool-icon icon-blue"
-                      src="/seatmap-icons/circle-table-blue.png"
-                      alt="Circle (selected)"
+                      src="/seatmap-icons/text-blue.png"
+                      alt="Arc text (selected)"
                     />
-                    <span class="tb-left-label">Circle</span>
+                    <span class="tb-left-label">Arc text</span>
+                  </button>
+
+                  <!-- NEW: Text-on-path tool -->
+                  <button class="tb-left-item tool-button" data-tool="text-on-path">
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/text-dark.png"
+                      alt="Text on path"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/text-blue.png"
+                      alt="Text on path (selected)"
+                    />
+                    <span class="tb-left-label">Text on path</span>
+                  </button>
+
+                  <!-- NEW: Circular text tool -->
+                  <button class="tb-left-item tool-button" data-tool="circular-text">
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/text-dark.png"
+                      alt="Circular text"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/text-blue.png"
+                      alt="Circular text (selected)"
+                    />
+                    <span class="tb-left-label">Circular text</span>
                   </button>
                 </div>
               </div>
 
-              <!-- Group: Rows + Single seat -->
-              <div class="tool-group" data-group="rows-single">
-                <button class="tb-left-item tool-button tool-root" data-tool="row">
+              <!-- Group: Seats -->
+              <div class="tool-group" data-group="seats">
+                <button class="tb-left-item tool-button tool-root" data-tool="seat">
                   <img
                     class="tb-tool-icon icon-dark"
-                    src="/seatmap-icons/row-black.png"
-                    alt="Row of seats"
+                    src="/seatmap-icons/seat-dark.png"
+                    alt="Seat"
                   />
                   <img
                     class="tb-tool-icon icon-blue"
-                    src="/seatmap-icons/row-blue.png"
-                    alt="Row of seats (selected)"
+                    src="/seatmap-icons/seat-blue.png"
+                    alt="Seat (selected)"
                   />
-                  <span class="tb-left-label">Rows / single</span>
+                  <span class="tb-left-label">Seats</span>
                 </button>
-                <button class="tool-flyout-toggle" type="button" aria-label="More line tools">
-  <span class="tool-flyout-chevron">▸</span>
-</button>
-
+                <button class="tool-flyout-toggle" type="button" aria-label="Seat tools">
+                  <span class="tool-flyout-chevron">▸</span>
+                </button>
 
                 <div class="tool-flyout">
-                  <button class="tb-left-item tool-button" data-tool="row">
+                  <button class="tb-left-item tool-button" data-tool="seat">
                     <img
                       class="tb-tool-icon icon-dark"
-                      src="/seatmap-icons/row-black.png"
-                      alt="Row of seats"
+                      src="/seatmap-icons/seat-dark.png"
+                      alt="Seat"
                     />
                     <img
                       class="tb-tool-icon icon-blue"
-                      src="/seatmap-icons/row-blue.png"
-                      alt="Row of seats (selected)"
+                      src="/seatmap-icons/seat-blue.png"
+                      alt="Seat (selected)"
                     />
-                    <span class="tb-left-label">Row of seats</span>
+                    <span class="tb-left-label">Seat</span>
                   </button>
 
-                  <button class="tb-left-item tool-button" data-tool="single">
+                  <button class="tb-left-item tool-button" data-tool="stadium-seat">
                     <img
                       class="tb-tool-icon icon-dark"
-                      src="/seatmap-icons/single-dark.png"
-                      alt="Single seat"
+                      src="/seatmap-icons/stadium-seat-dark.png"
+                      alt="Stadium seat"
                     />
                     <img
                       class="tb-tool-icon icon-blue"
-                      src="/seatmap-icons/single-blue.png"
-                      alt="Single seat (selected)"
+                      src="/seatmap-icons/stadium-seat-blue.png"
+                      alt="Stadium seat (selected)"
                     />
-                    <span class="tb-left-label">Single seat</span>
+                    <span class="tb-left-label">Stadium seat</span>
+                  </button>
+
+                  <button class="tb-left-item tool-button" data-tool="couple-seat">
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/couple-seat-dark.png"
+                      alt="Couple seat"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/couple-seat-blue.png"
+                      alt="Couple seat (selected)"
+                    />
+                    <span class="tb-left-label">Couple seat</span>
                   </button>
                 </div>
               </div>
 
               <!-- Group: Tables -->
               <div class="tool-group" data-group="tables">
-                <button class="tb-left-item tool-button tool-root" data-tool="circle-table">
+                <button class="tb-left-item tool-button tool-root" data-tool="round-table">
                   <img
                     class="tb-tool-icon icon-dark"
-                    src="/seatmap-icons/circle-table-black.png"
-                    alt="Circular table"
+                    src="/seatmap-icons/table-round-dark.png"
+                    alt="Tables"
                   />
                   <img
                     class="tb-tool-icon icon-blue"
-                    src="/seatmap-icons/circle-table-blue.png"
-                    alt="Circular table (selected)"
+                    src="/seatmap-icons/table-round-blue.png"
+                    alt="Tables (selected)"
                   />
                   <span class="tb-left-label">Tables</span>
                 </button>
-                <button class="tool-flyout-toggle" type="button" aria-label="More line tools">
-  <span class="tool-flyout-chevron">▸</span>
-</button>
-
+                <button class="tool-flyout-toggle" type="button" aria-label="Table tools">
+                  <span class="tool-flyout-chevron">▸</span>
+                </button>
 
                 <div class="tool-flyout">
-                  <button class="tb-left-item tool-button" data-tool="circle-table">
+                  <button class="tb-left-item tool-button" data-tool="round-table">
                     <img
                       class="tb-tool-icon icon-dark"
-                      src="/seatmap-icons/circle-table-black.png"
-                      alt="Circular table"
+                      src="/seatmap-icons/table-round-dark.png"
+                      alt="Round table"
                     />
                     <img
                       class="tb-tool-icon icon-blue"
-                      src="/seatmap-icons/circle-table-blue.png"
-                      alt="Circular table (selected)"
+                      src="/seatmap-icons/table-round-blue.png"
+                      alt="Round table (selected)"
                     />
-                    <span class="tb-left-label">Circular table</span>
+                    <span class="tb-left-label">Round table</span>
                   </button>
 
                   <button class="tb-left-item tool-button" data-tool="rect-table">
                     <img
                       class="tb-tool-icon icon-dark"
-                      src="/seatmap-icons/rectangle-table-black.png"
+                      src="/seatmap-icons/table-rect-dark.png"
                       alt="Rectangular table"
                     />
                     <img
                       class="tb-tool-icon icon-blue"
-                      src="/seatmap-icons/rectangle-table-blue.png"
+                      src="/seatmap-icons/table-rect-blue.png"
                       alt="Rectangular table (selected)"
                     />
                     <span class="tb-left-label">Rectangular table</span>
                   </button>
+
+                  <!-- NEW: Square table -->
+                  <button class="tb-left-item tool-button" data-tool="square-table">
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/table-square-dark.png"
+                      alt="Square table"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/table-square-blue.png"
+                      alt="Square table (selected)"
+                    />
+                    <span class="tb-left-label">Square table</span>
+                  </button>
+
+                  <!-- NEW: Banquet table -->
+                  <button class="tb-left-item tool-button" data-tool="banquet-table">
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/table-banquet-dark.png"
+                      alt="Banquet table"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/table-banquet-blue.png"
+                      alt="Banquet table (selected)"
+                    />
+                    <span class="tb-left-label">Banquet table</span>
+                  </button>
                 </div>
               </div>
-            </div>
 
-            <!-- Room objects – icon + text only (no sub-heading) -->
-            <div class="tb-left-group">
-              <!-- Group: Stage / Bar / Exit -->
-              <div class="tool-group" data-group="room-objects">
+              <!-- Group: Stages, bars, symbols -->
+              <div class="tool-group" data-group="stage-bar">
                 <button class="tb-left-item tool-button tool-root" data-tool="stage">
                   <img
                     class="tb-tool-icon icon-dark"
@@ -1056,12 +1115,11 @@ router.get("/builder/preview/:showId", (req, res) => {
                     src="/seatmap-icons/stage-blue.png"
                     alt="Stage (selected)"
                   />
-                  <span class="tb-left-label">Room objects</span>
+                  <span class="tb-left-label">Stage</span>
                 </button>
-                <button class="tool-flyout-toggle" type="button" aria-label="More line tools">
-  <span class="tool-flyout-chevron">▸</span>
-</button>
-
+                <button class="tool-flyout-toggle" type="button" aria-label="Stage and symbols">
+                  <span class="tool-flyout-chevron">▸</span>
+                </button>
 
                 <div class="tool-flyout">
                   <button class="tb-left-item tool-button" data-tool="stage">
@@ -1078,263 +1136,154 @@ router.get("/builder/preview/:showId", (req, res) => {
                     <span class="tb-left-label">Stage</span>
                   </button>
 
+                  <button class="tb-left-item tool-button" data-tool="stage-triangle">
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/stage-triangle-dark.png"
+                      alt="Triangle stage"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/stage-triangle-blue.png"
+                      alt="Triangle stage (selected)"
+                    />
+                    <span class="tb-left-label">Triangle stage</span>
+                  </button>
+
+                  <button class="tb-left-item tool-button" data-tool="stage-pentagon">
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/stage-pentagon-dark.png"
+                      alt="Pentagon stage"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/stage-pentagon-blue.png"
+                      alt="Pentagon stage (selected)"
+                    />
+                    <span class="tb-left-label">Pentagon stage</span>
+                  </button>
+
                   <button class="tb-left-item tool-button" data-tool="bar">
                     <img
                       class="tb-tool-icon icon-dark"
                       src="/seatmap-icons/bar-dark.png"
-                      alt="Bar / kiosk"
+                      alt="Bar"
                     />
                     <img
                       class="tb-tool-icon icon-blue"
                       src="/seatmap-icons/bar-blue.png"
-                      alt="Bar / kiosk (selected)"
-                    />
-                    <span class="tb-left-label">Bar / kiosk</span>
-                  </button>
-
-                  <button class="tb-left-item tool-button" data-tool="exit">
-                    <img
-                      class="tb-tool-icon icon-dark"
-                      src="/seatmap-icons/exit-black.png"
-                      alt="Exit"
-                    />
-                    <img
-                      class="tb-tool-icon icon-blue"
-                      src="/seatmap-icons/exit-blue.png"
-                      alt="Exit (selected)"
-                    />
-                    <span class="tb-left-label">Exit</span>
-                  </button>
-                </div>
-                            </div>
-
-              <!-- NEW: Symbols submenu -->
-              <div class="tool-group" data-group="symbols">
-                <!-- Root "Symbols" button (just opens the fly-out) -->
-                <button class="tb-left-item tool-button tool-root" type="button" data-tool="symbol-wc-mixed">
-  <img
-    class="tb-tool-icon icon-dark"
-    src="/seatmap-icons/mixedtoilets-dark.png"
-    alt="Symbols"
-  />
-  <img
-    class="tb-tool-icon icon-blue"
-    src="/seatmap-icons/mixedtoilets-blue.png"
-    alt="Symbols (selected)"
-  />
-  <span class="tb-left-label">Symbols</span>
-</button>
-
-                <button
-                  class="tool-flyout-toggle"
-                  type="button"
-                  aria-label="More symbol tools"
-                >
-                  <span class="tool-flyout-chevron">▸</span>
-                </button>
-
-                                <div class="tool-flyout">
-                  <!-- BAR symbol -->
-                  <button
-                    class="tb-left-item tool-button"
-                    data-tool="symbol-bar"
-                    data-icon-default="/seatmap-icons/barsymbol-dark.png"
-                    data-icon-active="/seatmap-icons/barsymbol-blue.png"
-                  >
-                    <img
-                      class="tb-tool-icon icon-dark"
-                      src="/seatmap-icons/barsymbol-dark.png"
-                      alt="Bar symbol"
-                    />
-                    <img
-                      class="tb-tool-icon icon-blue"
-                      src="/seatmap-icons/barsymbol-blue.png"
-                      alt="Bar symbol (selected)"
+                      alt="Bar (selected)"
                     />
                     <span class="tb-left-label">Bar</span>
                   </button>
 
-                  <!-- Mixed WC symbol -->
-                  <button
-                    class="tb-left-item tool-button"
-                    data-tool="symbol-wc-mixed"
-                    data-icon-default="/seatmap-icons/mixedtoilets-dark.png"
-                    data-icon-active="/seatmap-icons/mixedtoilets-blue.png"
-                  >
+                  <!-- NEW: Exit symbol -->
+                  <button class="tb-left-item tool-button" data-tool="symbol-exit">
                     <img
                       class="tb-tool-icon icon-dark"
-                      src="/seatmap-icons/mixedtoilets-dark.png"
-                      alt="Mixed toilets symbol"
+                      src="/seatmap-icons/exit-dark.png"
+                      alt="Exit symbol"
                     />
                     <img
                       class="tb-tool-icon icon-blue"
-                      src="/seatmap-icons/mixedtoilets-blue.png"
-                      alt="Mixed toilets symbol (selected)"
+                      src="/seatmap-icons/exit-blue.png"
+                      alt="Exit symbol (selected)"
                     />
-                    <span class="tb-left-label">Mixed WC</span>
+                    <span class="tb-left-label">Exit</span>
                   </button>
 
-                  <!-- Male WC symbol -->
-                  <button
-                    class="tb-left-item tool-button"
-                    data-tool="symbol-wc-male"
-                    data-icon-default="/seatmap-icons/maletoilets-dark.png"
-                    data-icon-active="/seatmap-icons/maletoilets-blue.png"
-                  >
+                  <!-- NEW: Disabled/Wheelchair symbol -->
+                  <button class="tb-left-item tool-button" data-tool="symbol-disabled">
                     <img
                       class="tb-tool-icon icon-dark"
-                      src="/seatmap-icons/maletoilets-dark.png"
-                      alt="Male toilets symbol"
+                      src="/seatmap-icons/accessible-dark.png"
+                      alt="Accessible symbol"
                     />
                     <img
                       class="tb-tool-icon icon-blue"
-                      src="/seatmap-icons/maletoilets-blue.png"
-                      alt="Male toilets symbol (selected)"
+                      src="/seatmap-icons/accessible-blue.png"
+                      alt="Accessible symbol (selected)"
                     />
-                    <span class="tb-left-label">Male WC</span>
+                    <span class="tb-left-label">Accessible</span>
                   </button>
 
-                  <!-- Female WC symbol -->
-                  <button
-                    class="tb-left-item tool-button"
-                    data-tool="symbol-wc-female"
-                    data-icon-default="/seatmap-icons/femaletoilets-dark.png"
-                    data-icon-active="/seatmap-icons/femaletoilets-blue.png"
-                  >
+                  <!-- NEW: First aid symbol -->
+                  <button class="tb-left-item tool-button" data-tool="symbol-first-aid">
                     <img
                       class="tb-tool-icon icon-dark"
-                      src="/seatmap-icons/femaletoilets-dark.png"
-                      alt="Female toilets symbol"
-                    />
-                    <img
-                      class="tb-tool-icon icon-blue"
-                      src="/seatmap-icons/femaletoilets-blue.png"
-                      alt="Female toilets symbol (selected)"
-                    />
-                    <span class="tb-left-label">Female WC</span>
-                  </button>
-
-                  <!-- Disabled WC symbol -->
-                  <button
-                    class="tb-left-item tool-button"
-                    data-tool="symbol-disabled"
-                    data-icon-default="/seatmap-icons/disabledtoilets-dark.png"
-                    data-icon-active="/seatmap-icons/disabledtoilets-blue.png"
-                  >
-                    <img
-                      class="tb-tool-icon icon-dark"
-                      src="/seatmap-icons/disabledtoilets-dark.png"
-                      alt="Accessible toilets symbol"
-                    />
-                    <img
-                      class="tb-tool-icon icon-blue"
-                      src="/seatmap-icons/disabledtoilets-blue.png"
-                      alt="Accessible toilets symbol (selected)"
-                    />
-                    <span class="tb-left-label">Accessible WC</span>
-                  </button>
-
-                  <!-- Emergency Exit symbol -->
-                  <button
-                    class="tb-left-item tool-button"
-                    data-tool="symbol-exit"
-                    data-icon-default="/seatmap-icons/emergencyexit-dark.png"
-                    data-icon-active="/seatmap-icons/emergencyexit-blue.png"
-                  >
-                    <img
-                      class="tb-tool-icon icon-dark"
-                      src="/seatmap-icons/emergencyexit-dark.png"
-                      alt="Emergency exit symbol"
-                    />
-                    <img
-                      class="tb-tool-icon icon-blue"
-                      src="/seatmap-icons/emergencyexit-blue.png"
-                      alt="Emergency exit symbol (selected)"
-                    />
-                    <span class="tb-left-label">Emergency exit</span>
-                  </button>
-
-                  <!-- First Aid symbol -->
-                  <button
-                    class="tb-left-item tool-button"
-                    data-tool="symbol-firstaid"
-                    data-icon-default="/seatmap-icons/firstaid-dark.png"
-                    data-icon-active="/seatmap-icons/firstaid-blue.png"
-                  >
-                    <img
-                      class="tb-tool-icon icon-dark"
-                      src="/seatmap-icons/firstaid-dark.png"
+                      src="/seatmap-icons/first-aid-dark.png"
                       alt="First aid symbol"
                     />
                     <img
                       class="tb-tool-icon icon-blue"
-                      src="/seatmap-icons/firstaid-blue.png"
+                      src="/seatmap-icons/first-aid-blue.png"
                       alt="First aid symbol (selected)"
                     />
                     <span class="tb-left-label">First aid</span>
                   </button>
 
-                  <!-- Information symbol -->
-                  <button
-                    class="tb-left-item tool-button"
-                    data-tool="symbol-info"
-                    data-icon-default="/seatmap-icons/information-dark.png"
-                    data-icon-active="/seatmap-icons/information-blue.png"
-                  >
+                  <!-- NEW: Information symbol -->
+                  <button class="tb-left-item tool-button" data-tool="symbol-info">
                     <img
                       class="tb-tool-icon icon-dark"
-                      src="/seatmap-icons/information-dark.png"
+                      src="/seatmap-icons/info-dark.png"
                       alt="Information symbol"
                     />
                     <img
                       class="tb-tool-icon icon-blue"
-                      src="/seatmap-icons/information-blue.png"
+                      src="/seatmap-icons/info-blue.png"
                       alt="Information symbol (selected)"
                     />
                     <span class="tb-left-label">Information</span>
                   </button>
 
-                  <!-- NEW: Stairs symbol -->
-                                    <button
-                    class="tb-left-item tool-button"
-                    data-tool="symbol-stairs"
-                    data-icon-default="/seatmap-icons/stairssymbol-dark.png"
-                    data-icon-active="/seatmap-icons/stairssymbol-blue.png"
-                  >
+                  <!-- NEW: Mixed gender restroom symbol -->
+                  <button class="tb-left-item tool-button" data-tool="symbol-wc-mixed">
                     <img
                       class="tb-tool-icon icon-dark"
-                      src="/seatmap-icons/stairssymbol-dark.png"
-                      alt="Stairs symbol"
+                      src="/seatmap-icons/wc-mixed-dark.png"
+                      alt="Restroom symbol"
                     />
                     <img
                       class="tb-tool-icon icon-blue"
-                      src="/seatmap-icons/stairssymbol-blue.png"
-                      alt="Stairs symbol (selected)"
+                      src="/seatmap-icons/wc-mixed-blue.png"
+                      alt="Restroom symbol (selected)"
                     />
-                    <span class="tb-left-label">Stairs</span>
+                    <span class="tb-left-label">WC (mixed)</span>
+                  </button>
+
+                  <!-- NEW: Male restroom symbol -->
+                  <button class="tb-left-item tool-button" data-tool="symbol-wc-male">
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/wc-male-dark.png"
+                      alt="Restroom symbol (male)"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/wc-male-blue.png"
+                      alt="Restroom symbol (male selected)"
+                    />
+                    <span class="tb-left-label">WC (male)</span>
+                  </button>
+
+                  <!-- NEW: Female restroom symbol -->
+                  <button class="tb-left-item tool-button" data-tool="symbol-wc-female">
+                    <img
+                      class="tb-tool-icon icon-dark"
+                      src="/seatmap-icons/wc-female-dark.png"
+                      alt="Restroom symbol (female)"
+                    />
+                    <img
+                      class="tb-tool-icon icon-blue"
+                      src="/seatmap-icons/wc-female-blue.png"
+                      alt="Restroom symbol (female selected)"
+                    />
+                    <span class="tb-left-label">WC (female)</span>
                   </button>
                 </div>
               </div>
-
-              <!-- Text label (standalone tool) -->
-
-
-
-              <!-- Text label (standalone tool) -->
-              <button class="tb-left-item tool-button" data-tool="text">
-
-                <img
-                  class="tb-tool-icon icon-dark"
-                  src="/seatmap-icons/Text-black.png"
-                  alt="Text label"
-                />
-                <img
-                  class="tb-tool-icon icon-blue"
-                  src="/seatmap-icons/Text-blue.png"
-                  alt="Text label (selected)"
-                />
-                <span class="tb-left-label">Text label</span>
-              </button>
             </div>
 
             <!-- Actions – the only section with a heading -->
@@ -1359,9 +1308,10 @@ router.get("/builder/preview/:showId", (req, res) => {
             </div>
           </div>
         </aside>
+        </div>
 
 
-        <section class="tb-center">
+        <section class="tb-center sb-seatmap-wrapper">
           <div class="tb-center-header">
             <div class="tb-tabs">
               <button class="tb-tab is-active" data-tab="map">Map</button>
@@ -1398,8 +1348,10 @@ router.get("/builder/preview/:showId", (req, res) => {
             </div>
           </div>
         </section>
+        </div>
 
-               <aside class="tb-side-panel">
+        <div class="sb-mobile-detail-panel sb-mobile-scroll-panel">
+               <aside class="tb-side-panel sb-side-panel">
           <!-- Seats on map summary only -->
           <section class="tb-side-section">
             <h3 class="tb-side-heading">Seats on map</h3>
@@ -1421,6 +1373,7 @@ router.get("/builder/preview/:showId", (req, res) => {
             </div>
           </section>
         </aside>
+        </div>
 
       </main>
     </div>
@@ -1492,315 +1445,30 @@ router.get("/builder/preview/:showId", (req, res) => {
           var isSeatMapSave =
             url.indexOf("/admin/seating/builder/api/seatmaps/") !== -1 &&
             init &&
-            (init.method === "POST" || init.method === "post");
+            typeof init === "object";
 
-          // Inject the layout name into the POST body if it's missing
-          if (isSeatMapSave && tixallLayoutName && init && init.body) {
+          if (isSeatMapSave && tixallLayoutName) {
             try {
-              if (typeof init.body === "string") {
-                var parsed = JSON.parse(init.body);
-                if (!parsed.name) {
-                  parsed.name = tixallLayoutName;
-                  init.body = JSON.stringify(parsed);
-                }
-              }
-            } catch (e) {
-              console.error(
-                "TIXALL: failed to inject layout name into save payload",
-                e
-              );
+              var body = init.body ? JSON.parse(init.body as string) : {};
+              body.name = tixallLayoutName;
+              init.body = JSON.stringify(body);
+            } catch (err) {
+              // eslint-disable-next-line no-console
+              console.warn("Failed to inject layout name into save payload", err);
             }
           }
 
-          var result = originalFetch(input, init);
-
-          return result.then(function (res) {
-            if (isSeatMapSave && res && res.ok) {
-              // Mark that a layout has been saved so other flows can respond.
-              // @ts-ignore
-              window.__TIXALL_LAYOUT_SAVED__ = true;
-            }
-            return res;
-          });
+          return originalFetch(input, init);
         };
-
-        var tabs = document.querySelectorAll(".tb-tab");
-
-        var panels = {
-          map: document.getElementById("tb-tab-map"),
-          tickets: document.getElementById("tb-tab-tickets"),
-          holds: document.getElementById("tb-tab-holds"),
-        };
-
-        tabs.forEach(function (tab) {
-          tab.addEventListener("click", function () {
-            var target = tab.getAttribute("data-tab");
-            if (!target || !panels[target]) return;
-
-            tabs.forEach(function (t) {
-              t.classList.remove("is-active");
-            });
-            Object.keys(panels).forEach(function (key) {
-              if (key === "map") return;
-              panels[key].classList.remove("is-active");
-            });
-
-            tab.classList.add("is-active");
-            panels[target].classList.add("is-active");
-            panels.map.classList.add("is-active");
-
-            if (window.__TIXALL_SET_TAB_MODE__) {
-              window.__TIXALL_SET_TAB_MODE__(target);
-            }
-          });
-        });
-
-        fetch("/admin/seating/builder/api/seatmaps/" + encodeURIComponent(showId))
-          .then(function (res) {
-            return res.ok ? res.json() : null;
-          })
-          .then(function (data) {
-            if (!data || !data.show) return;
-            var show = data.show;
-            var venue = show.venue || null;
-
-            var titleEl = document.getElementById("tb-show-title");
-            var venueEl = document.getElementById("tb-show-venue");
-            var dateEl = document.getElementById("tb-show-date");
-            var metaShowTitle = document.getElementById("tb-meta-show-title");
-            var metaVenueName = document.getElementById("tb-meta-venue-name");
-            var metaCapacity = document.getElementById("tb-meta-capacity");
-
-            if (titleEl) titleEl.textContent = show.title || "Seat map designer";
-            if (venueEl) {
-              if (venue) {
-                var cityPart = venue.city ? " · " + venue.city : "";
-                venueEl.textContent = venue.name + cityPart;
-              } else {
-                venueEl.textContent = "Venue not set";
-              }
-            }
-            if (dateEl && show.date) {
-              try {
-                var d = new Date(show.date);
-                var opts = { day: "numeric", month: "short", year: "numeric" };
-                dateEl.textContent = d.toLocaleDateString("en-GB", opts);
-              } catch (_) {}
-            }
-
-            if (metaShowTitle) metaShowTitle.textContent = show.title || "Untitled show";
-            if (metaVenueName) {
-              metaVenueName.textContent = venue ? venue.name : "TBC";
-            }
-            if (metaCapacity && venue && typeof venue.capacity === "number") {
-              metaCapacity.textContent = String(venue.capacity);
-            }
-
-            var savedSelect = document.getElementById("tb-saved-layout-select");
-            var maps = [];
-
-            if (data.activeSeatMap) {
-              maps.push(data.activeSeatMap);
-            }
-
-            if (Array.isArray(data.previousMaps)) {
-              data.previousMaps.forEach(function (m) {
-                var exists = maps.some(function (existing) {
-                  return existing.id === m.id;
-                });
-                if (!exists) maps.push(m);
-              });
-            }
-
-            // Expose saved layouts globally so seating-builder.js can hook into them if needed
-            // (e.g. to actually load / switch layouts when one is chosen).
-            // @ts-ignore
-            window.__TIXALL_SAVED_LAYOUTS__ = maps;
-
-            if (savedSelect) {
-              // Clear any placeholder options
-              savedSelect.innerHTML = "";
-
-              if (!maps.length) {
-                var optEmpty = document.createElement("option");
-                optEmpty.value = "";
-                optEmpty.textContent = "No saved layouts for this venue";
-                optEmpty.disabled = true;
-                optEmpty.selected = true;
-                savedSelect.appendChild(optEmpty);
-              } else {
-                // Placeholder prompt
-                var optPlaceholder = document.createElement("option");
-                optPlaceholder.value = "";
-                optPlaceholder.textContent = "Choose a saved layout…";
-                optPlaceholder.disabled = true;
-                optPlaceholder.selected = true;
-                savedSelect.appendChild(optPlaceholder);
-
-                maps.forEach(function (m) {
-                  var opt = document.createElement("option");
-                  opt.value = m.id;
-                  opt.textContent = m.name || "Layout";
-                  savedSelect.appendChild(opt);
-                });
-              }
-
-              // When a saved layout is chosen, delegate to seating-builder.js if it provides a handler.
-              savedSelect.addEventListener("change", function () {
-                var selectedId = savedSelect.value;
-                if (!selectedId) return;
-
-                if (window.__TIXALL_HANDLE_SAVED_LAYOUT_SELECT__) {
-                  try {
-                    window.__TIXALL_HANDLE_SAVED_LAYOUT_SELECT__(selectedId);
-                  } catch (e) {
-                    console.error("Error handling saved layout selection", e);
-                  }
-                } else {
-                  console.info(
-                    "Saved layout selected (",
-                    selectedId,
-                    ") – implement __TIXALL_HANDLE_SAVED_LAYOUT_SELECT__ in seating-builder.js to load it."
-                  );
-                }
-              });
-            }
-
-          })
-          .catch(function (err) {
-            console.error("Failed to load show info for builder", err);
-          });
-
-        var backBtn = document.getElementById("tb-btn-back");
-        if (backBtn) {
-          backBtn.addEventListener("click", function () {
-            if (window.history.length > 1) {
-              window.history.back();
-            }
-          });
-        }
-
-        // ------------------------------
-        // Fly-out behaviour
-        // ------------------------------
-                // ------------------------------
-        // Fly-out behaviour
-        // ------------------------------
-        var groups = Array.prototype.slice.call(
-          document.querySelectorAll(".tool-group")
-        );
-
-        function closeAllGroups() {
-          groups.forEach(function (g) {
-            g.classList.remove("is-open");
-          });
-        }
-
-        groups.forEach(function (group) {
-          var toggle = group.querySelector(".tool-flyout-toggle");
-          var flyout = group.querySelector(".tool-flyout");
-          var rootBtn = group.querySelector(".tool-root");
-
-          if (toggle && flyout) {
-            toggle.addEventListener("click", function (ev) {
-              ev.stopPropagation();
-              var isOpen = group.classList.contains("is-open");
-              closeAllGroups();
-              if (!isOpen) {
-                group.classList.add("is-open");
-              }
-            });
-
-                        flyout.addEventListener("click", function (ev) {
-              var target = ev.target;
-              if (!target || !(target instanceof HTMLElement)) return;
-
-              var optionBtn = target.closest(
-                ".tb-left-item.tool-button[data-tool]"
-              );
-              if (!optionBtn) return;
-
-              var toolName = optionBtn.getAttribute("data-tool") || "";
-
-              // Update root button label + icons + data-tool so it reflects the chosen variant
-              if (rootBtn) {
-                var newLabelNode = optionBtn.querySelector(".tb-left-label");
-                var rootLabelNode = rootBtn.querySelector(".tb-left-label");
-                if (newLabelNode && rootLabelNode) {
-                  rootLabelNode.textContent = newLabelNode.textContent || "";
-                }
-
-                var newDark = optionBtn.querySelector("img.icon-dark");
-                var newBlue = optionBtn.querySelector("img.icon-blue");
-                var rootDark = rootBtn.querySelector("img.icon-dark");
-                var rootBlue = rootBtn.querySelector("img.icon-blue");
-
-                if (rootDark && newDark) {
-                  rootDark.src = newDark.src;
-                  rootDark.alt = newDark.alt;
-                }
-                if (rootBlue && newBlue) {
-                  rootBlue.src = newBlue.src;
-                  rootBlue.alt = newBlue.alt;
-                }
-
-                if (toolName) {
-                  rootBtn.setAttribute("data-tool", toolName);
-                }
-              }
-
-              // 🔵 Re-apply active visual state now that the root's data-tool has changed
-              if (window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__) {
-                window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__(toolName);
-              }
-
-              // Let the normal seating-builder.js listeners handle tool activation
-              // then close the panel.
-              group.classList.remove("is-open");
-            });
-
-          }
-        });
-
-        // Close fly-outs when clicking anywhere else
-                document.addEventListener("click", function (ev) {
-          var target = ev.target;
-          if (!target || !(target instanceof HTMLElement)) return;
-          if (target.closest(".tool-group")) return;
-          closeAllGroups();
-        });
-
-        // Expose a helper so seating-builder.js can keep the left-rail
-        // buttons visually in sync with the active tool
-        window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = function (activeToolName) {
-          try {
-            var buttons = Array.prototype.slice.call(
-              document.querySelectorAll(".tb-left-item.tool-button[data-tool]")
-            );
-
-            buttons.forEach(function (btn) {
-              var tool = btn.getAttribute("data-tool");
-
-              if (tool === activeToolName) {
-                btn.classList.add("is-active");
-              } else {
-                btn.classList.remove("is-active");
-              }
-            });
-          } catch (e) {
-            console.error("Failed to update tool button state", e);
-          }
-        };
-
       })();
     </script>
-
-    <script src="https://unpkg.com/konva@9.3.3/konva.min.js"></script>
     <script src="/static/seating-builder.js"></script>
   </body>
-</html>`;
-
-  res.status(200).send(html);
+</html>`);
+  } catch (err) {
+    console.error("Error in GET /builder/:showId", err);
+    return res.status(500).send("Internal server error");
+  }
 });
 
 export default router;
