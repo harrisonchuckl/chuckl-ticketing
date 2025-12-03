@@ -355,7 +355,136 @@
 
       .sb-ticket-add-icon {
         font-size: 16px;
-        line-height: 1;
+line-height: 1;
+      }
+
+      /* --- Responsive Builder Layout --- */
+      .sb-admin-page {
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .sb-admin-header {
+        flex-shrink: 0;
+        z-index: 30;
+      }
+      .sb-admin-main {
+        flex: 1;
+        min-height: 0;
+        display: flex; 
+        flex-direction: column; 
+      }
+      
+      /* Desktop Layout (>= 1024px) */
+      @media (min-width: 1024px) {
+        .sb-admin-main {
+          display: grid;
+          grid-template-columns: auto 1fr auto;
+          flex-direction: row;
+        }
+        .sb-elements-panel {
+          width: 80px; 
+          border-right: 1px solid #e5e7eb;
+          overflow-y: auto;
+        }
+        .sb-seatmap-wrapper {
+          position: relative;
+          width: 100%;
+          height: 100%;
+          overflow: hidden;
+        }
+        .sb-side-panel {
+          width: 360px;
+          border-left: 1px solid #e5e7eb;
+          overflow-y: auto;
+        }
+      }
+
+      /* Tablet/Mobile Layout (< 1024px) */
+      @media (max-width: 1023px) {
+        .sb-admin-main {
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+        
+        /* 1. Order: Map (Center) -> Toolbar (Left) -> Details (Right) */
+        .tb-center {
+          order: 1;
+          display: flex;
+          flex-direction: column;
+          flex: 0 0 auto; 
+          z-index: 10;
+        }
+        
+        .sb-elements-panel {
+          order: 2;
+          width: 100%;
+          height: auto;
+          border-right: none;
+          border-bottom: 1px solid #e5e7eb;
+          background: #fff;
+          z-index: 20;
+          flex-shrink: 0;
+        }
+        
+        .sb-side-panel {
+          order: 3;
+          flex: 1;
+          width: 100%;
+          max-width: none;
+          overflow-y: auto;
+          padding-bottom: 40px;
+        }
+
+        /* 2. Horizontal Toolbar */
+        .sb-elements-panel .tb-left-scroll {
+          display: flex;
+          flex-direction: row;
+          padding: 8px;
+          gap: 8px;
+          overflow-x: auto;
+          white-space: nowrap;
+        }
+        .sb-elements-panel .tb-left-group {
+          display: flex;
+          flex-direction: row;
+          gap: 8px;
+          margin-bottom: 0;
+          padding-right: 12px;
+          border-right: 1px solid #e5e7eb;
+        }
+        .sb-elements-panel .tb-left-group:last-child {
+          border-right: none;
+        }
+        .sb-elements-panel .tb-left-item {
+          width: auto;
+          min-width: 60px;
+          flex-direction: column;
+          justify-content: center;
+          text-align: center;
+        }
+        
+        /* 3. Seatmap Sizing */
+        .sb-seatmap-wrapper {
+          height: 50vh;
+          min-height: 250px;
+          max-height: 60vh;
+          background: #f3f4f6;
+        }
+        
+        /* 4. Flyouts on mobile */
+        .tool-flyout {
+           position: fixed;
+           top: 50%;
+           left: 50%;
+           transform: translate(-50%, -50%);
+           border: 1px solid #ccc;
+           box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+           max-height: 80vh;
+           overflow-y: auto;
+        }
       }
     `;
     document.head.appendChild(style);
@@ -953,14 +1082,21 @@ window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
     gridLayer.batchDraw();
   }
 
-  function resizeStageToContainer() {
+    function resizeStageToContainer() {
     if (!stage) return;
+    
+    // Look for the dedicated wrapper first, fall back to parent if needed
+    const wrapper = document.querySelector(".sb-seatmap-wrapper") || container.parentNode; 
+    const target = (wrapper && wrapper.clientWidth) ? wrapper : container;
 
-    const width = container.clientWidth - STAGE_PADDING * 2;
-    const height = container.clientHeight - STAGE_PADDING * 2;
+    const width = target.clientWidth - STAGE_PADDING * 2;
+    const height = target.clientHeight - STAGE_PADDING * 2;
+    
+    if (width <= 0 || height <= 0) return;
 
     baseStageWidth = width;
-    baseStageHeight = height;
+baseStageHeight = height;
+
 
     const currentScale = stage.scaleX() || 1;
 
