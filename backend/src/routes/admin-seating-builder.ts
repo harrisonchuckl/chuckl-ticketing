@@ -721,9 +721,9 @@ router.get("/builder/preview/:showId", (req, res) => {
       
     </style>
   </head>
-  <body class="tickin-builder-body">
-    <div class="tickin-builder-shell">
-      <header class="tickin-builder-topbar">
+    <body class="tickin-builder-body">
+    <div class="tickin-builder-shell sb-admin-page">
+      <header class="tickin-builder-topbar sb-admin-header">
         <div class="tb-topbar-left">
           <div class="tb-logo-badge">
             <span class="tb-logo-dot"></span>
@@ -773,9 +773,9 @@ router.get("/builder/preview/:showId", (req, res) => {
 
       </header>
 
-      <main class="tickin-builder-main">
-        <!-- Slim, non-expanding left rail -->
-               <aside class="tb-left-rail" aria-label="Seating tools">
+      <main class="tickin-builder-main sb-admin-main sb-layout">
+   
+     <aside class="tb-left-rail sb-elements-panel" aria-label="Seating tools">
           <div class="tb-left-scroll">
             <!-- Seating tools – icon + text only (no sub-heading) -->
             <div class="tb-left-group">
@@ -1379,8 +1379,11 @@ router.get("/builder/preview/:showId", (req, res) => {
 
           <div class="tb-tab-panels">
             <div class="tb-tab-panel is-active" id="tb-tab-map">
-              <div id="app"></div>
-            </div>
+              <div class="sb-seatmap-wrapper" style="width: 100%; height: 100%; overflow: hidden; position: relative;">
+                <div id="app"></div>
+              </div>
+  
+          </div>
             <div class="tb-tab-panel" id="tb-tab-tickets">
               <div class="tb-empty-panel"></div>
             </div>
@@ -1399,9 +1402,8 @@ router.get("/builder/preview/:showId", (req, res) => {
           </div>
         </section>
 
-               <aside class="tb-side-panel">
-          <!-- Seats on map summary only -->
-          <section class="tb-side-section">
+                <aside class="tb-side-panel sb-side-panel sb-layout-sidebar">
+              <section class="tb-side-section">
             <h3 class="tb-side-heading">Seats on map</h3>
             <div class="tb-side-meta">
               <div>
