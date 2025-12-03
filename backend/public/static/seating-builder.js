@@ -4323,39 +4323,47 @@ function updateTicketRings() {
 
 
   function applySeatVisuals() {
-refreshSeatMetadata();
-const seats = getAllSeatNodes();
-duplicateSeatRefs = computeDuplicateSeatRefsFromSeats(seats);
-seats.forEach((seat) => {
-const baseFill = seat.getAttr("sbSeatBaseFill") || "#ffffff";
-const baseStroke = seat.getAttr("sbSeatBaseStroke") || "#4b5563";
-const ref = seat.getAttr("sbSeatRef");
-// We purposefully ignore sbTicketId here. 
-// The rings now handle ALL ticket colors. 
-// The base seat must stay neutral to prevent "double coloring".
-let stroke = baseStroke;
-let fill = baseFill;
+    refreshSeatMetadata();
+    const seats = getAllSeatNodes();
+    duplicateSeatRefs = computeDuplicateSeatRefsFromSeats(seats);
 
-if (ref && duplicateSeatRefs.has(ref)) {
-// Keep duplicate warning colors (Red)
-stroke = "#ef4444";
-fill = "#fee2e2";
-} 
+    seats.forEach((seat) => {
+        const baseFill = seat.getAttr("sbSeatBaseFill") || "#ffffff";
+        const baseStroke = seat.getAttr("sbSeatBaseStroke") || "#4b5563";
+        const ref = seat.getAttr("sbSeatRef");
+        
+        // 1. Determine if a ticket is assigned (uses the ID of the first assigned ticket)
+        const ticketId = seat.getAttr("sbTicketId") || null;
 
-// --- CHANGE: We removed the 'else if (ticketId)' block ---
-// This ensures the seat itself is never colored by the ticket, 
-// so the "Ring 1" drawn by updateTicketRings doesn't clash with the seat border.
+        let stroke = baseStroke;
+        let fill = baseFill;
 
-seat.stroke(stroke);
-seat.fill(fill);
-});
-refreshSeatTicketListeners();
+        if (ref && duplicateSeatRefs.has(ref)) {
+            // Keep duplicate warning colors (Red)
+            stroke = "#ef4444";
+            fill = "#fee2e2";
+        } else if (ticketId) {
+            // --- NEW: Apply the first ticket's color to the base seat stroke ---
+            const ticket = ticketTypes.find((t) => t.id === ticketId);
+            if (ticket) {
+                // Change the default black/grey stroke to the ticket color
+                stroke = ticket.color || "#2563eb"; 
+            }
+        }
+        // --- END NEW LOGIC ---
 
-// After base seat styling, refresh multi-ticket rings
-updateTicketRings();
-if (mapLayer && typeof mapLayer.draw === "function") {
-mapLayer.batchDraw();
-}
+        seat.stroke(stroke);
+        seat.fill(fill);
+    });
+
+    refreshSeatTicketListeners();
+
+    // The updateTicketRings function (which we fixed previously) handles the rest of the stacked rings.
+    updateTicketRings();
+
+    if (mapLayer && typeof mapLayer.draw === "function") {
+        mapLayer.batchDraw();
+    }
 }
   
   function formatDateTimeLocal(date) {
