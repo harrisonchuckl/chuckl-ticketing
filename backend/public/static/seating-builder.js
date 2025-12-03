@@ -4117,6 +4117,27 @@ function attachMultiShapeTransformBehaviour(group) {
     return mapLayer.find((n) => n.getAttr && n.getAttr("isSeat"));
   }
 
+   // Helper: generate a truly unique seat ID, avoiding anything already in `seen`
+  function generateUniqueSeatId(seen, baseRef) {
+    // Prefer to base it off the human-readable ref if we have one
+    if (baseRef) {
+      let idx = 1;
+      let candidate = `${baseRef}#${idx}`;
+      while (seen.has(candidate)) {
+        idx += 1;
+        candidate = `${baseRef}#${idx}`;
+      }
+      return candidate;
+    }
+
+    // Fallback: use the global seatIdCounter
+    let candidate;
+    do {
+      candidate = `seat-${seatIdCounter++}`;
+    } while (seen.has(candidate));
+    return candidate;
+  }
+
   function enforceUniqueSeatIds(seats) {
     const seen = new Set();
 
@@ -4124,8 +4145,11 @@ function attachMultiShapeTransformBehaviour(group) {
       if (!seat) return;
 
       let sid = seat.getAttr("sbSeatId");
+      const ref = seat.getAttr("sbSeatRef") || null;
+
+      // If there is no id yet *or* this id is already used, mint a fresh one
       if (!sid || seen.has(sid)) {
-        sid = ensureSeatIdAttr(seat);
+        sid = generateUniqueSeatId(seen, ref);
       }
 
       if (sid) {
@@ -4134,6 +4158,7 @@ function attachMultiShapeTransformBehaviour(group) {
       }
     });
   }
+
 
   function findSeatNodeFromTarget(target) {
     if (!target) return null;
@@ -4162,37 +4187,7 @@ function attachMultiShapeTransformBehaviour(group) {
     return null;
   }
 
-  function findSeatNodeAtPosition(pos) {
-    if (!pos || !mapLayer) return null;
-
-    const seats = getAllSeatNodes();
-    const orderedSeats = seats
-      .map((seat) => ({ seat, z: typeof seat.getAbsoluteZIndex === "function" ? seat.getAbsoluteZIndex() : 0 }))
-      .sort((a, b) => b.z - a.z)
-      .map((item) => item.seat);
-
-    const pointerRect = { x: pos.x, y: pos.y, width: 1, height: 1 };
-
-    for (let i = 0; i < orderedSeats.length; i += 1) {
-      const seat = orderedSeats[i];
-      if (!seat || typeof seat.getClientRect !== "function") continue;
-
-      const rect = seat.getClientRect({ relativeTo: stage });
-      if (Konva.Util.haveIntersection(rect, pointerRect)) {
-        // eslint-disable-next-line no-console
-        console.log("[seatmap][tickets] seat found via rect hit", {
-          seatId: ensureSeatIdAttr(seat),
-          rect,
-          pointer: pos,
-        });
-        return seat;
-      }
-    }
-
-    return null;
-  }
-
-  function computeDuplicateSeatRefsFromSeats(seats) {
+    function computeDuplicateSeatRefsFromSeats(seats) {
     const counts = new Map();
     seats.forEach((seat) => {
       const ref = seat.getAttr("sbSeatRef");
@@ -4208,69 +4203,25 @@ function attachMultiShapeTransformBehaviour(group) {
   }
 
   function findDuplicateSeatRefs() {
+    // --- Refresh and recalc seat data ---
     refreshSeatMetadata();
 
     duplicateSeatRefs = computeDuplicateSeatRefsFromSeats(getAllSeatNodes());
 
+    // --- Apply current visuals (this already calls updateTicketRings internally) ---
     applySeatVisuals();
-    return duplicateSeatRefs;
 
-        // --- Ticket ring overlays for multi-ticket seats ---
-    if (mapLayer && typeof mapLayer.find === "function") {
-      const oldRings = mapLayer.find((n) => n.getAttr && n.getAttr("isTicketRing"));
-      oldRings.forEach((ring) => ring.destroy());
-    }
-
-    const allSeatsForRings = getAllSeatNodes();
-
-    allSeatsForRings.forEach((seat) => {
-      if (!seat || typeof seat.getAttr !== "function") return;
-
-      const ticketIds = seat.getAttr("sbTicketIds");
-      if (!Array.isArray(ticketIds) || ticketIds.length === 0) return;
-
-      if (typeof seat.x !== "function" || typeof seat.y !== "function") return;
-      const x = seat.x();
-      const y = seat.y();
-
-      let baseRadius = 0;
-      if (typeof seat.radius === "function") {
-        baseRadius = seat.radius();
-      } else if (typeof seat.width === "function") {
-        baseRadius = seat.width() / 2;
-      } else {
-        baseRadius = 8;
-      }
-
-      let ringRadius = baseRadius + 2;
-
-      ticketIds.forEach((tId) => {
-        const ticket = ticketTypes.find((t) => t.id === tId);
-        if (!ticket) return;
-
-        const ring = new Konva.Circle({
-          x,
-          y,
-          radius: ringRadius,
-          stroke: ticket.color || "#2563eb",
-          strokeWidth: 1.5,
-          listening: false,
-        });
-        ring.setAttr("isTicketRing", true);
-
-        if (mapLayer && typeof mapLayer.add === "function") {
-          mapLayer.add(ring);
-        }
-
-        ringRadius += 3;
-      });
-    });
+    // We deliberately STOP here.
+    // All ticket-ring overlays are now handled in applySeatVisuals -> updateTicketRings.
+    // The legacy manual ring-drawing below caused the "double ring" issue.
 
     if (mapLayer && typeof mapLayer.batchDraw === "function") {
       mapLayer.batchDraw();
     }
 
+    return duplicateSeatRefs;
   }
+
 
     // ----- Ticket ring overlays for multi-ticket seats -----
 
@@ -5143,18 +5094,58 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
         const body = document.createElement("div");
         body.className = "sb-ticket-card-body";
 
-        const formGrid = document.createElement("div");
+                const formGrid = document.createElement("div");
         formGrid.className = "sb-ticket-form-grid";
+
+        // --- Ticket name: editable without killing focus on each keypress ---
 
         const nameInput = document.createElement("input");
         nameInput.type = "text";
         nameInput.className = "sb-input";
         nameInput.placeholder = "Ticket name";
         nameInput.value = ticket.name || "";
+
+        // As the user types, just keep the in-memory ticket name in sync.
+        // DO NOT re-render here or the input will be destroyed each time.
         nameInput.addEventListener("input", () => {
           ticket.name = nameInput.value;
+        });
+
+        // Commit + re-render when the user finishes editing
+        const commitNameChange = () => {
+          const trimmed = (nameInput.value || "").trim();
+          ticket.name = trimmed || "Untitled ticket";
+          renderTicketingPanel();
+        };
+
+        // Blur = done editing
+        nameInput.addEventListener("blur", commitNameChange);
+
+        // Hitting Enter also commits and exits the field
+        nameInput.addEventListener("keydown", (ev) => {
+          if (ev.key === "Enter") {
+            ev.preventDefault();
+            nameInput.blur();
+          }
+        });
+
+        // --- Ticket price (unchanged behaviour – still re-renders on input) ---
+
+        const priceInput = document.createElement("input");
+        priceInput.type = "text";
+        priceInput.inputMode = "decimal";
+        priceInput.className = "sb-input sb-input-inline";
+        priceInput.placeholder = `Price (${venueCurrencyCode})`;
+        priceInput.value = ticket.price ?? "";
+        priceInput.addEventListener("input", () => {
+          const parsed = parseFloat(
+            (priceInput.value || "").replace(/[^0-9.,-]/g, "").replace(/,/g, ".")
+          );
+          ticket.price = Number.isFinite(parsed) ? parsed : 0;
           renderTicketingPanel();
         });
+
+
 
         const priceInput = document.createElement("input");
         priceInput.type = "text";
