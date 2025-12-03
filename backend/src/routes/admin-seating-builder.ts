@@ -619,7 +619,8 @@ router.get("/builder/preview/:showId", (req, res) => {
         background: #ffeceb;
       }
 
-      /* Centre canvas area border tweak to feel lighter */
+            /* Centre canvas area border tweak to feel lighter */
+
       .tb-center-header {
         border-bottom: 1px solid var(--tixall-border-subtle);
         background: #ffffff;
@@ -636,38 +637,87 @@ router.get("/builder/preview/:showId", (req, res) => {
         background: #ffffff;
       }
 
-      /* Right side panel subtle styling */
+      /* -------- Layout: full-height builder, fixed rails + centre, scrolling side panel -------- */
+
+      .tickin-builder-body {
+        margin: 0;
+        height: 100vh;
+        overflow: hidden; /* stop the whole page from scrolling */
+      }
+
+      .tickin-builder-shell {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+      }
+
+      .tickin-builder-main {
+        display: grid;
+        grid-template-columns: auto 1fr auto; /* left rail | centre | right panel */
+        flex: 1;
+        min-height: 0; /* allows children to use overflow correctly */
+      }
+
+      .tb-left-rail {
+        display: block;
+      }
+
+      .tb-center {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+
+      .tb-tab-panels {
+        flex: 1;
+        min-height: 0;
+        position: relative;
+      }
+
+      /* Right side panel – this is now the ONLY scroll container on the right */
+
       .tb-side-panel {
         background: #fbfcfe;
         border-left: 1px solid var(--tixall-border-subtle);
+        display: flex;
+        flex-direction: column;
+        padding: 16px;
+        min-width: 320px;
+        max-width: 420px;
+        overflow-y: auto;   /* vertical scroll lives here */
       }
 
       .tb-side-section {
         border-radius: 18px;
         border: 1px solid var(--tixall-border-subtle);
         background: #ffffff;
+        padding: 14px 16px;
+        margin-bottom: 12px;
       }
 
-       /* --- BLOCKER FIX --- */
+      /* --- BLOCKER FIX (unchanged) --- */
+
       .tb-empty-panel {
-          /* Forces mouse events to pass through this element to the canvas below */
-          pointer-events: none !important; 
+        /* Forces mouse events to pass through this element to the canvas below */
+        pointer-events: none !important;
       }
 
-/* Fix 2: Bypasses the main tab content container (the new blocker) */
-      .tb-tab-panel {
-          /* Forces mouse events to pass through this element */
-          pointer-events: none !important; 
-      }
+      /* Bypasses the main tab content container (the new blocker) */
+      .tb-tab-panel {
+        /* Forces mouse events to pass through this element */
+        pointer-events: none !important;
+      }
 
-/* Fix 3 (NEW): Ensure the canvas element itself is always above other content.
-     Konva stages create their own div/canvas elements inside the container (#app). */
-  #app > div {
-      z-index: 1 !important; /* Forces the internal Konva div to be the highest layer */
-  }
-         .tb-side-heading {
+      /* Ensure the canvas element itself is always above other content.
+         Konva stages create their own div/canvas elements inside the container (#app). */
+      #app > div {
+        z-index: 1 !important; /* Forces the internal Konva div to be the highest layer */
+      }
+
+      .tb-side-heading {
         color: var(--tixall-dark);
       }
+
       
     </style>
   </head>
