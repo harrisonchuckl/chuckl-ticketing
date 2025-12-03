@@ -4223,9 +4223,7 @@ function attachMultiShapeTransformBehaviour(group) {
   }
 
 
-     // ----- Ticket ring overlays for multi-ticket seats -----
-
-
+       // ----- Ticket ring overlays for multi-ticket seats -----
 
   function updateTicketRings() {
     if (!mapLayer) return;
@@ -4244,10 +4242,14 @@ function attachMultiShapeTransformBehaviour(group) {
       const group = seatCircle.getParent && seatCircle.getParent();
       if (!group || typeof group.getChildren !== "function") return;
 
-      // Remove ANY old ticket ring shapes, including legacy ones
+      // Remove ANY existing ring-style shapes in this seat group, including legacy ones.
       const children = group.getChildren();
       children.forEach((child) => {
-        if (!child) return;
+        if (!child || child === seatCircle) return;
+
+        const isCircle =
+          typeof child.getClassName === "function" &&
+          child.getClassName() === "Circle";
 
         const hasAttr =
           typeof child.getAttr === "function" && child.getAttr("isTicketRing");
@@ -4257,7 +4259,8 @@ function attachMultiShapeTransformBehaviour(group) {
           typeof child.name() === "string" &&
           child.name() === "ticket-ring";
 
-        if (hasAttr || hasName) {
+        // If it looks like a ring (circle) OR it’s marked as a ticket ring, kill it.
+        if (isCircle || hasAttr || hasName) {
           child.destroy();
         }
       });
