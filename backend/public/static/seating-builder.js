@@ -4225,76 +4225,99 @@ function attachMultiShapeTransformBehaviour(group) {
   // ----- Ticket ring overlays for multi-ticket seats -----
 
 function updateTicketRings() {
-if (!mapLayer) return;
-const seats = getAllSeatNodes();
-if (!seats || !seats.length) return;
-// Quick lookup from ticket id -> ticket object (for colours etc.)
-const ticketById = new Map();
-ticketTypes.forEach((t) => {
-if (t && t.id) ticketById.set(t.id, t);
-});
-seats.forEach((seatCircle) => {
-// Only operate on real seat circles
-if (!seatCircle || !seatCircle.getAttr || !seatCircle.getAttr("isSeat")) {
-return;
-}
-const group = seatCircle.getParent && seatCircle.getParent();
-if (!group || typeof group.getChildren !== "function") return;
+    if (!mapLayer) return;
 
-// --- FIX: SAFE CLEANUP ---
-// We explicitly find all ring nodes first, THEN destroy them.
-// Iterating and destroying simultaneously causes index skipping (ghost rings).
-const existingRings = group.getChildren().filter((child) => {
-const hasTicketRingAttr =
-typeof child.getAttr === "function" && child.getAttr("isTicketRing");
-const hasTicketRingName =
-typeof child.name === "function" &&
-typeof child.name() === "string" &&
-child.name() === "ticket-ring";
-return hasTicketRingAttr || hasTicketRingName;
-});
-existingRings.forEach((ring) => ring.destroy());
+    const seats = getAllSeatNodes();
+    if (!seats || !seats.length) return;
 
-// 2) Work out which tickets are assigned to this seat.
-const sid = ensureSeatIdAttr(seatCircle);
-if (!sid) return;
-const set = ticketAssignments.get(sid);
-if (!set || !set.size) return;
-const ticketIds = Array.from(set);
-if (!ticketIds.length) return;
+    // Quick lookup from ticket id -> ticket object (for colours etc.)
+    const ticketById = new Map();
+    ticketTypes.forEach((t) => {
+        if (t && t.id) ticketById.set(t.id, t);
+    });
 
-// 3) Base radius from the core seat circle.
-const baseRadius =
-typeof seatCircle.radius === "function"
-? seatCircle.radius()
-: seatCircle.getAttr("radius") || 8;
+    seats.forEach((seatCircle) => {
+        // 1. Basic Validation
+        if (!seatCircle || !seatCircle.getAttr || !seatCircle.getAttr("isSeat")) {
+            return;
+        }
 
-// --- FIX: Limit increased to 10 as requested ---
-// We tightened the gap slightly (2.5px) so 10 rings don't look massive.
-const maxRings = Math.min(ticketIds.length, 10);
-for (let i = 0; i < maxRings; i += 1) {
-const tId = ticketIds[i];
-if (!tId) continue;
-const ticket = ticketById.get(tId);
-const color = (ticket && ticket.color) || "#2563eb";
-const radius = baseRadius + 3 + i * 2.5; 
-const ring = new Konva.Circle({
-x: seatCircle.x(),
-y: seatCircle.y(),
-radius,
-stroke: color,
-strokeWidth: 1.5, // Slightly thinner line for better stacking
-listening: false,
-name: "ticket-ring",
-});
-// Mark so we can safely remove it on the next refresh
-ring.setAttr("isTicketRing", true);
-group.add(ring);
-}
-});
-if (stage) {
-stage.batchDraw();
-}
+        // 2. Get Parent Group
+        const group = seatCircle.getParent && seatCircle.getParent();
+        if (!group || typeof group.getChildren !== "function") return;
+
+        // 3. Get Seat ID (Needed before cleanup now)
+        const sid = ensureSeatIdAttr(seatCircle);
+        if (!sid) return;
+
+        // --- FIX: TARGETED CLEANUP ---
+        // If seats share a parent group (like in a row), we must ensure
+        // we only destroy rings that belong to THIS specific seat ID.
+        const existingRings = group.getChildren().filter((child) => {
+            // A) Verify it is a ticket ring node
+            const isNode = child && typeof child.getAttr === "function";
+            if (!isNode) return false;
+            
+            const hasAttr = child.getAttr("isTicketRing");
+            const hasName = child.name() === "ticket-ring";
+            if (!hasAttr && !hasName) return false;
+
+            // B) Verify ownership
+            const ownerId = child.getAttr("ringOwnerSeatId");
+            // Destroy if it belongs to this seat ID, OR if it's an old legacy ring marked as undefined/null
+            return ownerId === sid || ownerId === undefined || ownerId === null;
+        });
+        
+        // Safely destroy the filtered list
+        existingRings.forEach((ring) => ring.destroy());
+
+        // 4) Work out which tickets are assigned to this seat.
+        const set = ticketAssignments.get(sid);
+        if (!set || !set.size) return; // No tickets for this seat, we are done.
+
+        const ticketIds = Array.from(set);
+        if (!ticketIds.length) return;
+
+        // 5) Base radius from the core seat circle.
+        const baseRadius =
+            typeof seatCircle.radius === "function" ?
+            seatCircle.radius() :
+            seatCircle.getAttr("radius") || 8;
+
+        // 6) Draw new rings (max 10)
+        const maxRings = Math.min(ticketIds.length, 10);
+        for (let i = 0; i < maxRings; i += 1) {
+            const tId = ticketIds[i];
+            if (!tId) continue;
+            const ticket = ticketById.get(tId);
+            const color = (ticket && ticket.color) || "#2563eb";
+            
+            // Tighter spacing: 2.5px gap per ring
+            const radius = baseRadius + 3 + i * 2.5;
+
+            const ring = new Konva.Circle({
+                x: seatCircle.x(),
+                y: seatCircle.y(),
+                radius,
+                stroke: color,
+                strokeWidth: 1.5,
+                listening: false,
+                name: "ticket-ring",
+            });
+
+            // Mark as a ring
+            ring.setAttr("isTicketRing", true);
+            // --- CRITICAL ADDITION: Tag with owner ID ---
+            // This ensures subsequent cleanups know this ring belongs to this seat.
+            ring.setAttr("ringOwnerSeatId", sid);
+
+            group.add(ring);
+        }
+    });
+
+    if (stage) {
+        stage.batchDraw();
+    }
 }
 
 
