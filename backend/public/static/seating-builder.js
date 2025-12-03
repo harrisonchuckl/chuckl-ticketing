@@ -894,20 +894,25 @@ window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
 
 
 
-function countAssignmentsForTicket(ticketId) {
-    if (!ticketId || !ticketAssignments || typeof ticketAssignments.forEach !== "function") {
-      return 0;
-    }
+  function countAssignmentsForTicket(ticketId) {
+    if (!ticketId) return 0;
 
     let count = 0;
-    ticketAssignments.forEach((assignedTicketId) => {
-      if (assignedTicketId === ticketId) {
+    ticketAssignments.forEach((value) => {
+      if (!value) return;
+
+      if (value instanceof Set) {
+        if (value.has(ticketId)) count += 1;
+      } else if (Array.isArray(value)) {
+        if (value.includes(ticketId)) count += 1;
+      } else if (value === ticketId) {
+        // Backwards compatibility if any legacy single-string slips through
         count += 1;
       }
     });
-
     return count;
-}
+  }
+
 
 
 
@@ -4219,6 +4224,62 @@ function attachMultiShapeTransformBehaviour(group) {
 
     applySeatVisuals();
     return duplicateSeatRefs;
+
+        // --- Ticket ring overlays for multi-ticket seats ---
+    if (mapLayer && typeof mapLayer.find === "function") {
+      const oldRings = mapLayer.find((n) => n.getAttr && n.getAttr("isTicketRing"));
+      oldRings.forEach((ring) => ring.destroy());
+    }
+
+    const allSeatsForRings = getAllSeatNodes();
+
+    allSeatsForRings.forEach((seat) => {
+      if (!seat || typeof seat.getAttr !== "function") return;
+
+      const ticketIds = seat.getAttr("sbTicketIds");
+      if (!Array.isArray(ticketIds) || ticketIds.length === 0) return;
+
+      if (typeof seat.x !== "function" || typeof seat.y !== "function") return;
+      const x = seat.x();
+      const y = seat.y();
+
+      let baseRadius = 0;
+      if (typeof seat.radius === "function") {
+        baseRadius = seat.radius();
+      } else if (typeof seat.width === "function") {
+        baseRadius = seat.width() / 2;
+      } else {
+        baseRadius = 8;
+      }
+
+      let ringRadius = baseRadius + 2;
+
+      ticketIds.forEach((tId) => {
+        const ticket = ticketTypes.find((t) => t.id === tId);
+        if (!ticket) return;
+
+        const ring = new Konva.Circle({
+          x,
+          y,
+          radius: ringRadius,
+          stroke: ticket.color || "#2563eb",
+          strokeWidth: 1.5,
+          listening: false,
+        });
+        ring.setAttr("isTicketRing", true);
+
+        if (mapLayer && typeof mapLayer.add === "function") {
+          mapLayer.add(ring);
+        }
+
+        ringRadius += 3;
+      });
+    });
+
+    if (mapLayer && typeof mapLayer.batchDraw === "function") {
+      mapLayer.batchDraw();
+    }
+
   }
 
   function applySeatVisuals() {
@@ -4602,57 +4663,96 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
   }
 }
 
-  function rebuildTicketAssignmentsCache() {
+    function ensureSeatTicketSet(seat) {
+    if (!seat || typeof seat.getAttr !== "function" || typeof seat.setAttr !== "function") {
+      return { sid: null, set: null };
+    }
+
+    let sid = seat.getAttr("sbSeatId");
+    if (!sid) {
+      sid = ensureSeatIdAttr(seat);
+      if (!sid) return { sid: null, set: null };
+      seat.setAttr("sbSeatId", sid);
+    }
+
+    // Read existing sbTicketIds array from the node (multi-ticket)
+    let arr = seat.getAttr("sbTicketIds");
+    if (!Array.isArray(arr)) {
+      const single = seat.getAttr("sbTicketId") || null;
+      arr = single ? [single] : [];
+    }
+
+    const set = new Set(arr);
+    return { sid, set };
+  }
+
+
+    function rebuildTicketAssignmentsCache() {
     const map = new Map();
     const seats = getAllSeatNodes();
+
     seats.forEach((seat) => {
-      const ticketId = seat.getAttr("sbTicketId") || null;
       const sid = ensureSeatIdAttr(seat);
-      if (ticketId && sid) {
-        map.set(sid, ticketId);
+      if (!sid) return;
+
+      // Prefer multi-ticket array if present
+      let ticketIds = seat.getAttr("sbTicketIds");
+      if (!Array.isArray(ticketIds)) {
+        const single = seat.getAttr("sbTicketId") || null;
+        ticketIds = single ? [single] : [];
+      }
+
+      if (ticketIds.length > 0) {
+        map.set(sid, new Set(ticketIds));
+        // Keep legacy sbTicketId in sync with the "primary" ticket
+        seat.setAttr("sbTicketId", ticketIds[0]);
+      } else {
+        seat.setAttr("sbTicketId", null);
       }
     });
+
+    // ticketAssignments is now Map<seatId, Set<ticketId>>
     ticketAssignments = map;
   }
 
-  function toggleSeatTicketAssignment(seat, ticketId) {
-    const sid = ensureSeatIdAttr(seat);
-    if (!sid) return;
 
-    const existing = seat.getAttr("sbTicketId") || null;
+   function toggleSeatTicketAssignment(seat, ticketId) {
+    const { sid, set } = ensureSeatTicketSet(seat);
+    if (!sid || !set || !ticketId) return;
+
+    const hadTicket = set.has(ticketId);
+
     // eslint-disable-next-line no-console
     console.debug("[seatmap][tickets] toggleSeatTicketAssignment", {
       seatId: sid,
-      existing,
+      existingTickets: Array.from(set),
       ticketId,
       action: "toggle",
     });
 
-    if (existing && existing !== ticketId) {
-      // eslint-disable-next-line no-console
-      console.warn("[seatmap][tickets] seat unchanged (belongs to another ticket)", {
-        seatId: sid,
-        currentOwner: existing,
-        ticketId,
-        action: "toggle",
-      });
-      return;
+    if (hadTicket) {
+      set.delete(ticketId);
+    } else {
+      set.add(ticketId);
     }
 
-    if (existing === ticketId) {
-      seat.setAttr("sbTicketId", null);
-      ticketAssignments.delete(sid);
+    const ids = Array.from(set);
+    seat.setAttr("sbTicketIds", ids);
+    seat.setAttr("sbTicketId", ids[0] || null);
+
+    if (ids.length > 0) {
+      ticketAssignments.set(sid, new Set(ids));
     } else {
-      seat.setAttr("sbTicketId", ticketId);
-      ticketAssignments.set(sid, ticketId);
+      ticketAssignments.delete(sid);
     }
 
     // eslint-disable-next-line no-console
     console.debug("[seatmap][tickets] seat state", {
       seatId: sid,
-      nowAssignedTo: seat.getAttr("sbTicketId") || null,
+      nowAssignedTo: ids,
     });
   }
+
 
     function handleTicketSeatSelection(pointerPos, target) {
     const ticketId = getActiveTicketIdForAssignments();
@@ -5232,9 +5332,10 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
         assignments.textContent = `${assignedTotal} seat${assignedTotal === 1 ? "" : "s"} assigned to this ticket`;
         body.appendChild(assignments);
 
-        const actionsRow = document.createElement("div");
+                const actionsRow = document.createElement("div");
         actionsRow.className = "sb-ticket-actions";
 
+        // --- Button 1: Manual seat selection (unchanged behaviour) ---
         const assignSelectedBtn = document.createElement("button");
         assignSelectedBtn.type = "button";
         assignSelectedBtn.className = "tool-button sb-ghost-button";
@@ -5248,10 +5349,13 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
         assignSelectedBtn.textContent = ticketSeatSelectionMode
           ? manualSelectionActiveLabel
           : manualSelectionLabel;
-        assignSelectedBtn.disabled = duplicates.size > 0 || updateOffSaleValidation();
+        assignSelectedBtn.disabled =
+          duplicates.size > 0 || updateOffSaleValidation();
         assignSelectedBtn.addEventListener("click", () => {
           if (duplicates.size > 0) {
-            window.alert("Resolve duplicate seat references before assigning tickets.");
+            window.alert(
+              "Resolve duplicate seat references before assigning tickets."
+            );
             return;
           }
           if (updateOffSaleValidation()) {
@@ -5276,7 +5380,7 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
           if (enabling) {
             setTicketSeatSelectionMode(true, "assign-seats-button");
             window.alert(
-              "Tap seats to allocate them to this ticket. Tap seats already on this ticket to unallocate them."
+              "Tap seats, tables or row letters to allocate them to this ticket. Tap again to unallocate."
             );
           } else {
             setTicketSeatSelectionMode(false, "assign-seats-finish");
@@ -5286,14 +5390,18 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
           renderTicketingPanel();
         });
 
+        // --- Button 2: Assign all remaining seats (no overlaps with other tickets) ---
         const assignRemainingBtn = document.createElement("button");
         assignRemainingBtn.type = "button";
         assignRemainingBtn.className = "tool-button";
         assignRemainingBtn.textContent = "Assign all remaining seats";
-        assignRemainingBtn.disabled = duplicates.size > 0 || updateOffSaleValidation();
+        assignRemainingBtn.disabled =
+          duplicates.size > 0 || updateOffSaleValidation();
         assignRemainingBtn.addEventListener("click", () => {
           if (duplicates.size > 0) {
-            window.alert("Resolve duplicate seat references before assigning tickets.");
+            window.alert(
+              "Resolve duplicate seat references before assigning tickets."
+            );
             return;
           }
           if (updateOffSaleValidation()) {
@@ -5307,25 +5415,40 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
           enforceUniqueSeatIds(seats);
 
           let skippedAssignedSeats = 0;
-          seats.forEach((seat) => {
-            const sid = ensureSeatIdAttr(seat);
-            if (!sid) return;
 
-            const currentOwner = seat.getAttr("sbTicketId") || null;
-            if (currentOwner && currentOwner !== ticket.id) {
+          seats.forEach((seat) => {
+            const { sid, set } = ensureSeatTicketSet(seat);
+            if (!sid || !set) return;
+
+            // If the seat already has some other ticket(s) (not this one),
+            // skip it for “remaining” logic (preserves original behaviour).
+            const hasOtherTickets = Array.from(set).some(
+              (tId) => tId && tId !== ticket.id
+            );
+
+            if (hasOtherTickets) {
               skippedAssignedSeats += 1;
               return;
             }
 
-            seat.setAttr("sbTicketId", ticket.id);
-            ticketAssignments.set(sid, ticket.id);
+            // At this point the seat is either unassigned or already on this ticket
+            set.add(ticket.id);
+
+            const ids = Array.from(set);
+            seat.setAttr("sbTicketIds", ids);
+            seat.setAttr("sbTicketId", ids[0] || null);
+            ticketAssignments.set(sid, new Set(ids));
           });
 
           rebuildTicketAssignmentsCache();
+
           const assignedCount = countAssignmentsForTicket(ticket.id);
           const assignableSeatTotal = seats.filter((seat) => {
-            const owner = seat.getAttr("sbTicketId") || null;
-            return !owner || owner === ticket.id;
+            const info = ensureSeatTicketSet(seat);
+            const set = info.set;
+            if (!set || set.size === 0) return true;
+            // Seat is assignable if all existing tickets are *this* ticket
+            return !Array.from(set).some((tId) => tId && tId !== ticket.id);
           }).length;
 
           // eslint-disable-next-line no-console
@@ -5349,9 +5472,62 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
           setTicketSeatSelectionMode(false, "assign-all-remaining");
         });
 
+        // --- Button 3: Assign ALL seats (allows overlaps / multi-ticket per seat) ---
+        const assignAllSeatsBtn = document.createElement("button");
+        assignAllSeatsBtn.type = "button";
+        assignAllSeatsBtn.className = "tool-button";
+        assignAllSeatsBtn.textContent = "Assign all seats";
+        assignAllSeatsBtn.disabled =
+          duplicates.size > 0 || updateOffSaleValidation();
+        assignAllSeatsBtn.addEventListener("click", () => {
+          if (duplicates.size > 0) {
+            window.alert(
+              "Resolve duplicate seat references before assigning tickets."
+            );
+            return;
+          }
+          if (updateOffSaleValidation()) {
+            window.alert(
+              "Tickets must go off sale on or before the event time. Please adjust the off-sale date."
+            );
+            return;
+          }
+
+          const seats = getAllSeatNodes();
+          enforceUniqueSeatIds(seats);
+
+          seats.forEach((seat) => {
+            const { sid, set } = ensureSeatTicketSet(seat);
+            if (!sid || !set) return;
+
+            set.add(ticket.id);
+
+            const ids = Array.from(set);
+            seat.setAttr("sbTicketIds", ids);
+            seat.setAttr("sbTicketId", ids[0] || null);
+            ticketAssignments.set(sid, new Set(ids));
+          });
+
+          rebuildTicketAssignmentsCache();
+
+          // eslint-disable-next-line no-console
+          console.log("[seatmap][tickets] assign all seats (multi-ticket allowed)", {
+            ticketId: ticket.id,
+            assignedCount: countAssignmentsForTicket(ticket.id),
+            totalSeats: getAllSeatNodes().length,
+          });
+
+          applySeatVisuals();
+          renderTicketingPanel();
+          setTicketSeatSelectionMode(false, "assign-all-seats");
+          pushHistory();
+        });
+
         actionsRow.appendChild(assignSelectedBtn);
         actionsRow.appendChild(assignRemainingBtn);
-        body.appendChild(actionsRow);
+        actionsRow.appendChild(assignAllSeatsBtn);
+        body.appendChild(actionsRow)
+
 
         card.appendChild(body);
       }
