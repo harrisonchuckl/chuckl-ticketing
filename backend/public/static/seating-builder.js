@@ -4223,7 +4223,9 @@ function attachMultiShapeTransformBehaviour(group) {
   }
 
 
-    // ----- Ticket ring overlays for multi-ticket seats -----
+     // ----- Ticket ring overlays for multi-ticket seats -----
+
+
 
   function updateTicketRings() {
     if (!mapLayer) return;
@@ -4242,10 +4244,20 @@ function attachMultiShapeTransformBehaviour(group) {
       const group = seatCircle.getParent && seatCircle.getParent();
       if (!group || typeof group.getChildren !== "function") return;
 
-      // Remove any old ticket ring shapes
+      // Remove ANY old ticket ring shapes, including legacy ones
       const children = group.getChildren();
       children.forEach((child) => {
-        if (child && child.getAttr && child.getAttr("isTicketRing")) {
+        if (!child) return;
+
+        const hasAttr =
+          typeof child.getAttr === "function" && child.getAttr("isTicketRing");
+
+        const hasName =
+          typeof child.name === "function" &&
+          typeof child.name() === "string" &&
+          child.name() === "ticket-ring";
+
+        if (hasAttr || hasName) {
           child.destroy();
         }
       });
@@ -4295,6 +4307,7 @@ function attachMultiShapeTransformBehaviour(group) {
       stage.batchDraw();
     }
   }
+
 
   function applySeatVisuals() {
     refreshSeatMetadata();
@@ -5099,6 +5112,10 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
 
                 // --- Ticket name: editable without killing focus on each keypress ---
 
+               // --- Ticket name: editable without killing focus on each keypress ---
+
+
+
         const nameInput = document.createElement("input");
         nameInput.type = "text";
         nameInput.className = "sb-input";
@@ -5129,23 +5146,72 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
           }
         });
 
-        // --- Ticket price (unchanged behaviour – still re-renders on input) ---
+
+
+        // --- Ticket price: allow decimals, no re-render on every keypress ---
+
+
 
         const priceInput = document.createElement("input");
         priceInput.type = "text";
         priceInput.inputMode = "decimal";
         priceInput.className = "sb-input sb-input-inline";
         priceInput.placeholder = `Price (${venueCurrencyCode})`;
-        priceInput.value = ticket.price ?? "";
+        priceInput.value =
+          ticket.price === null || ticket.price === undefined
+            ? ""
+            : String(ticket.price);
+
+        // Live update in memory as the user types, but DON'T re-render yet
         priceInput.addEventListener("input", () => {
-          const parsed = parseFloat(
-            (priceInput.value || "")
-              .replace(/[^0-9.,-]/g, "")
-              .replace(/,/g, ".")
-          );
-          ticket.price = Number.isFinite(parsed) ? parsed : 0;
-          renderTicketingPanel();
+          const raw = (priceInput.value || "")
+            .replace(/[^0-9.,-]/g, "")
+            .replace(/,/g, ".");
+
+          if (!raw) {
+            // Allow the user to temporarily clear the field while typing
+            ticket.price = null;
+            return;
+          }
+
+          const parsed = parseFloat(raw);
+          if (Number.isFinite(parsed)) {
+            ticket.price = parsed; // supports decimals, e.g. 22.5 or 2250
+          }
         });
+
+        const commitPriceChange = () => {
+          const raw = (priceInput.value || "").trim();
+
+          if (!raw) {
+            ticket.price = null;
+          } else {
+            const cleaned = raw
+              .replace(/[^0-9.,-]/g, "")
+              .replace(/,/g, ".");
+            const parsed = parseFloat(cleaned);
+            ticket.price = Number.isFinite(parsed) ? parsed : 0;
+          }
+
+          // Now re-render once, after the user has finished editing
+          renderTicketingPanel();
+        };
+
+        // Commit on blur
+        priceInput.addEventListener("blur", commitPriceChange);
+
+        // Commit on Enter key
+        priceInput.addEventListener("keydown", (ev) => {
+          if (ev.key === "Enter") {
+            ev.preventDefault();
+            priceInput.blur();
+          }
+        });
+
+
+
+        // --- Ticket colour: preset chips + colour picker + hex input ---
+
 
         // --- Ticket colour: preset chips + colour picker + hex input ---
 
