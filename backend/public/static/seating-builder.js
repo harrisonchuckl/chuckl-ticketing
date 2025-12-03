@@ -365,61 +365,51 @@
 
   // ---------- Ensure sidebar DOM (seat count + inspector) ----------
 
-  function ensureSidebarDom() {
-    if (document.getElementById("sb-inspector")) return;
-
+    function ensureSidebarDom() {
     const parent = container.parentNode;
     if (!parent) return;
 
-    const wrapper = document.createElement("div");
-    wrapper.className = "sb-layout";
-    wrapper.style.display = "flex";
-    wrapper.style.gap = "16px";
-    wrapper.style.height = "100%";
-    wrapper.style.boxSizing = "border-box";
+    let wrapper = parent.querySelector(".sb-layout");
+    if (!wrapper) {
+      wrapper = document.createElement("div");
+      wrapper.className = "sb-layout";
+      wrapper.style.display = "flex";
+      wrapper.style.alignItems = "stretch";
+      wrapper.style.width = "100%";
+      // 🔒 Lock the whole builder to the viewport height so the left side
+      // (tabs + map) stays fixed while only the right sidebar scrolls.
+      wrapper.style.height = "100vh";
+      wrapper.style.boxSizing = "border-box";
 
-    parent.replaceChild(wrapper, container);
+      parent.insertBefore(wrapper, container);
+      wrapper.appendChild(container);
+    }
 
-    const canvasCol = document.createElement("div");
-    canvasCol.className = "sb-canvas-col";
-    canvasCol.style.flex = "1 1 auto";
-    canvasCol.style.minWidth = "0";
-    canvasCol.appendChild(container);
+    let sidebarCol = wrapper.querySelector(".sb-layout-sidebar");
+    if (!sidebarCol) {
+      sidebarCol = document.createElement("div");
+      sidebarCol.className = "sb-layout-sidebar";
+      sidebarCol.style.flex = "0 0 360px";
+      sidebarCol.style.maxWidth = "360px";
+      sidebarCol.style.borderLeft = "1px solid #e5e7eb";
+      sidebarCol.style.background = "#f9fafb";
+      sidebarCol.style.display = "flex";
+      sidebarCol.style.flexDirection = "column";
+      sidebarCol.style.boxSizing = "border-box";
 
-    const sidebarCol = document.createElement("aside");
-    sidebarCol.className = "sb-sidebar-col";
-    sidebarCol.style.width = "260px";
-    sidebarCol.style.flex = "0 0 260px";
-    sidebarCol.style.padding = "12px 12px 12px 8px";
-    sidebarCol.style.boxSizing = "border-box";
+      const inspectorDiv = document.createElement("div");
+      inspectorDiv.id = "sb-inspector";
+      inspectorDiv.style.flex = "1 1 auto";
+      inspectorDiv.style.overflowY = "auto";
+      inspectorDiv.style.padding = "16px 16px 24px";
+      inspectorDiv.style.boxSizing = "border-box";
 
-    sidebarCol.innerHTML = `
-      <div style="display:flex;flex-direction:column;gap:12px;height:100%;">
-        <div>
-          <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;margin-bottom:4px;">
-            Total seats
-          </div>
-          <div id="sb-seat-count" style="font-size:14px;font-weight:600;color:#111827;">
-            0 seats
-          </div>
-        </div>
+      sidebarCol.appendChild(inspectorDiv);
 
-        <div style="flex:1 1 auto;min-height:0;">
-          <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;margin-bottom:4px;">
-            Selection
-          </div>
-          <div id="sb-inspector"
-               style="overflow:auto;height:100%;">
-          </div>
-        </div>
-      </div>
-    `;
-
-    wrapper.appendChild(canvasCol);
-    wrapper.appendChild(sidebarCol);
+      wrapper.appendChild(sidebarCol);
+    }
   }
 
-  ensureSidebarDom();
 
 
   // ---------- Config ----------
@@ -4282,6 +4272,79 @@ function attachMultiShapeTransformBehaviour(group) {
 
   }
 
+    // ----- Ticket ring overlays for multi-ticket seats -----
+
+  function updateTicketRings() {
+    if (!mapLayer) return;
+
+    const seats = getAllSeatNodes();
+    if (!seats || !seats.length) return;
+
+    const ticketById = new Map();
+    ticketTypes.forEach((t) => {
+      if (t && t.id) ticketById.set(t.id, t);
+    });
+
+    seats.forEach((seatCircle) => {
+      if (!seatCircle || !seatCircle.getAttr || !seatCircle.getAttr("isSeat")) return;
+
+      const group = seatCircle.getParent && seatCircle.getParent();
+      if (!group || typeof group.getChildren !== "function") return;
+
+      // Remove any old ticket ring shapes
+      const children = group.getChildren();
+      children.forEach((child) => {
+        if (child && child.getAttr && child.getAttr("isTicketRing")) {
+          child.destroy();
+        }
+      });
+
+      // Look up ticket set for this seat
+      const sid = ensureSeatIdAttr(seatCircle);
+      if (!sid) return;
+
+      const set = ticketAssignments.get(sid);
+      if (!set || !set.size) return;
+
+      const ticketIds = Array.from(set);
+      if (!ticketIds.length) return;
+
+      const baseRadius =
+        typeof seatCircle.radius === "function"
+          ? seatCircle.radius()
+          : seatCircle.getAttr("radius") || 8;
+
+      // Draw up to 4 rings for clarity – extra tickets still exist logically
+      const maxRings = Math.min(ticketIds.length, 4);
+
+      for (let i = 0; i < maxRings; i += 1) {
+        const tId = ticketIds[i];
+        if (!tId) continue;
+
+        const ticket = ticketById.get(tId);
+        const color = (ticket && ticket.color) || "#2563eb";
+
+        const ring = new Konva.Circle({
+          x: seatCircle.x(),
+          y: seatCircle.y(),
+          radius: baseRadius + 3 + i * 3,
+          stroke: color,
+          strokeWidth: 2,
+          listening: false,
+          name: "ticket-ring",
+        });
+
+        ring.setAttr("isTicketRing", true);
+
+        group.add(ring);
+      }
+    });
+
+    if (stage) {
+      stage.batchDraw();
+    }
+  }
+
   function applySeatVisuals() {
     refreshSeatMetadata();
 
@@ -4313,6 +4376,9 @@ function attachMultiShapeTransformBehaviour(group) {
     });
 
     refreshSeatTicketListeners();
+    
+    // After base seat styling, refresh multi-ticket rings
+    updateTicketRings();
 
     if (mapLayer && typeof mapLayer.draw === "function") {
       mapLayer.batchDraw();
@@ -4958,7 +5024,7 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
     return seats;
   }
 
-  function renderTicketingPanel() {
+    function renderTicketingPanel() {
     const el = getInspectorElement();
     if (!el) return;
 
@@ -5024,11 +5090,11 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
       return wrapper;
     };
 
-   if (!ticketTypes.length) {
+    if (!ticketTypes.length) {
       const empty = document.createElement("div");
       empty.className = "sb-inspector-empty";
-      // ADDING POINTER-EVENTS: NONE for this specific element
-      empty.style.pointerEvents = "none"; 
+      // disable pointer events on the empty state message
+      empty.style.pointerEvents = "none";
       empty.style.margin = "8px 0 16px";
       empty.textContent = "No tickets yet. Add one to start assigning seats.";
       el.appendChild(empty);
@@ -5039,7 +5105,8 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
 
       const assignedTotal = countAssignmentsForTicket(ticket.id);
       const isActive = activeTicketSelectionId === ticket.id;
-      const isOpen = isActive || ticketAccordionOpenIds.has(ticket.id);
+      // 🔽 Only use the accordion set to decide open/closed
+      const isOpen = ticketAccordionOpenIds.has(ticket.id);
 
       const card = document.createElement("div");
       card.className = "sb-ticket-card";
@@ -5058,7 +5125,7 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
         </div>
         <div class="sb-ticket-card-actions">
           <span class="sb-ticket-chip">${ticket.currency || venueCurrencyCode}</span>
-          <span class="sb-ticket-caret">${isOpen ? "▾" : "▸"}</span>
+          <span class="sb-ticket-caret">${isOpen ? "▴" : "▾"}</span>
         </div>
       `;
       header.addEventListener("click", () => {
@@ -5103,7 +5170,7 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
           renderTicketingPanel();
         });
 
-                        // --- Ticket colour: preset chips + colour picker + hex input ---
+        // --- Ticket colour: preset chips + colour picker + hex input ---
 
         const colorFieldWrap = document.createElement("div");
 
@@ -5120,7 +5187,6 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
             "#2563EB").toString();
         const currentColor = normalisedCurrent.toLowerCase();
 
-        // Helper to normalise a user-entered hex string
         const normaliseHexValue = (raw) => {
           if (!raw) return "";
           let v = String(raw).trim();
@@ -5159,7 +5225,6 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
           swatchRow.appendChild(chip);
         });
 
-        // Hex text input so users can type/paste a colour
         const hexInput = document.createElement("input");
         hexInput.type = "text";
         hexInput.className = "sb-input";
@@ -5173,7 +5238,6 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
         hexInput.addEventListener("change", () => {
           const hex = normaliseHexValue(hexInput.value);
           if (!hex) {
-            // Invalid value – leave things as they are
             // eslint-disable-next-line no-console
             console.warn("[seatmap][tickets] invalid hex colour entered", {
               raw: hexInput.value,
@@ -5214,12 +5278,14 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
         colorFieldWrap.appendChild(swatchRow);
         colorFieldWrap.appendChild(colorInput);
         colorFieldWrap.appendChild(hexInput);
-        
-        const onSaleInput = document.createElement("input");
 
+        const onSaleInput = document.createElement("input");
         onSaleInput.type = "datetime-local";
         onSaleInput.className = "sb-input";
-        onSaleInput.value = ticket.onSale || ticketFormState.onSale || formatDateTimeLocal(new Date());
+        onSaleInput.value =
+          ticket.onSale ||
+          ticketFormState.onSale ||
+          formatDateTimeLocal(new Date());
         onSaleInput.addEventListener("input", () => {
           ticket.onSale = onSaleInput.value;
         });
@@ -5227,7 +5293,10 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
         const offSaleInput = document.createElement("input");
         offSaleInput.type = "datetime-local";
         offSaleInput.className = "sb-input";
-        offSaleInput.value = ticket.offSale || ticketFormState.offSale || formatDateTimeLocal(new Date());
+        offSaleInput.value =
+          ticket.offSale ||
+          ticketFormState.offSale ||
+          formatDateTimeLocal(new Date());
         offSaleInput.addEventListener("input", () => {
           ticket.offSale = offSaleInput.value;
           ticketFormAutoOffSale = false;
@@ -5240,7 +5309,12 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
           const showDateLimit = getShowDateLimit();
           const offDate = offSaleInput.value ? new Date(offSaleInput.value) : null;
           const invalid =
-            !!(showDateLimit && offDate && !Number.isNaN(offDate.getTime()) && offDate > showDateLimit);
+            !!(
+              showDateLimit &&
+              offDate &&
+              !Number.isNaN(offDate.getTime()) &&
+              offDate > showDateLimit
+            );
 
           offSaleError.textContent = invalid
             ? "Ticket off-sale date/time must be on or before the event time."
@@ -5274,7 +5348,9 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
         maxInput.addEventListener("input", () => {
           const parsed = Math.max(
             ticket.minPerOrder || 1,
-            parseInt(maxInput.value || "15", 10) || ticket.minPerOrder || 1
+            parseInt(maxInput.value || "15", 10) ||
+              ticket.minPerOrder ||
+              1
           );
           ticket.maxPerOrder = parsed;
           renderTicketingPanel();
@@ -5288,7 +5364,7 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
           ticket.info = infoInput.value;
         });
 
-                formGrid.appendChild(
+        formGrid.appendChild(
           makeField("Ticket name", nameInput, "Shown to buyers")
         );
         formGrid.appendChild(
@@ -5314,7 +5390,10 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
         );
 
         formGrid.appendChild(
-          makeField("Tickets off sale date and time (auto-set to event time)", offSaleInput)
+          makeField(
+            "Tickets off sale date and time (auto-set to event time)",
+            offSaleInput
+          )
         );
         if (offSaleError.textContent) {
           const errWrap = document.createElement("div");
@@ -5329,13 +5408,14 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
 
         const assignments = document.createElement("div");
         assignments.className = "sb-ticket-assignments";
-        assignments.textContent = `${assignedTotal} seat${assignedTotal === 1 ? "" : "s"} assigned to this ticket`;
+        assignments.textContent = `${assignedTotal} seat${
+          assignedTotal === 1 ? "" : "s"
+        } assigned to this ticket`;
         body.appendChild(assignments);
 
-                const actionsRow = document.createElement("div");
+        const actionsRow = document.createElement("div");
         actionsRow.className = "sb-ticket-actions";
 
-        // --- Button 1: Manual seat selection (unchanged behaviour) ---
         const assignSelectedBtn = document.createElement("button");
         assignSelectedBtn.type = "button";
         assignSelectedBtn.className = "tool-button sb-ghost-button";
@@ -5380,7 +5460,7 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
           if (enabling) {
             setTicketSeatSelectionMode(true, "assign-seats-button");
             window.alert(
-              "Tap seats, tables or row letters to allocate them to this ticket. Tap again to unallocate."
+              "Tap seats (or a whole row label / table) to allocate them to this ticket. Tap seats already on this ticket to unallocate them."
             );
           } else {
             setTicketSeatSelectionMode(false, "assign-seats-finish");
@@ -5390,7 +5470,6 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
           renderTicketingPanel();
         });
 
-        // --- Button 2: Assign all remaining seats (no overlaps with other tickets) ---
         const assignRemainingBtn = document.createElement("button");
         assignRemainingBtn.type = "button";
         assignRemainingBtn.className = "tool-button";
@@ -5415,23 +5494,18 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
           enforceUniqueSeatIds(seats);
 
           let skippedAssignedSeats = 0;
-
           seats.forEach((seat) => {
             const { sid, set } = ensureSeatTicketSet(seat);
             if (!sid || !set) return;
 
-            // If the seat already has some other ticket(s) (not this one),
-            // skip it for “remaining” logic (preserves original behaviour).
             const hasOtherTickets = Array.from(set).some(
               (tId) => tId && tId !== ticket.id
             );
-
             if (hasOtherTickets) {
               skippedAssignedSeats += 1;
               return;
             }
 
-            // At this point the seat is either unassigned or already on this ticket
             set.add(ticket.id);
 
             const ids = Array.from(set);
@@ -5441,13 +5515,11 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
           });
 
           rebuildTicketAssignmentsCache();
-
           const assignedCount = countAssignmentsForTicket(ticket.id);
           const assignableSeatTotal = seats.filter((seat) => {
             const info = ensureSeatTicketSet(seat);
             const set = info.set;
             if (!set || set.size === 0) return true;
-            // Seat is assignable if all existing tickets are *this* ticket
             return !Array.from(set).some((tId) => tId && tId !== ticket.id);
           }).length;
 
@@ -5472,7 +5544,7 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
           setTicketSeatSelectionMode(false, "assign-all-remaining");
         });
 
-        // --- Button 3: Assign ALL seats (allows overlaps / multi-ticket per seat) ---
+        // 🔵 NEW: "Assign all seats" – allows overlaps / multi-ticket per seat
         const assignAllSeatsBtn = document.createElement("button");
         assignAllSeatsBtn.type = "button";
         assignAllSeatsBtn.className = "tool-button";
@@ -5519,15 +5591,13 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
 
           applySeatVisuals();
           renderTicketingPanel();
-          setTicketSeatSelectionMode(false, "assign-all-seats");
           pushHistory();
         });
 
         actionsRow.appendChild(assignSelectedBtn);
         actionsRow.appendChild(assignRemainingBtn);
         actionsRow.appendChild(assignAllSeatsBtn);
-        body.appendChild(actionsRow)
-
+        body.appendChild(actionsRow);
 
         card.appendChild(body);
       }
@@ -5539,7 +5609,7 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
     addBtn.type = "button";
     addBtn.className = "tool-button sb-ticket-add";
     addBtn.innerHTML = '<span class="sb-ticket-add-icon">＋</span> Add ticket';
-       addBtn.addEventListener("click", () => {
+    addBtn.addEventListener("click", () => {
       ensureTicketFormDefaults();
 
       const nowValue = formatDateTimeLocal(new Date());
@@ -5547,7 +5617,6 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
         (showMeta && showMeta.date && formatDateTimeLocal(showMeta.date)) ||
         nowValue;
 
-      // Pick the next unused colour from the palette
       const colorForNewTicket = getNextTicketColor();
 
       const ticket = {
@@ -5570,13 +5639,13 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
           parseInt(ticketFormState.maxPerOrder || "15", 10) || 15,
       };
 
-      // Add the ticket (keep your immutable style)
       ticketTypes = ticketTypes.concat(ticket);
       activeTicketSelectionId = ticket.id;
-      ticketAccordionOpenIds.add(ticket.id);
 
-      // Reset form state for the next ticket,
-      // and show the colour we just used in the picker
+      // 🔒 New behaviour: when adding a ticket, keep all tickets collapsed
+      // so the list stays clean. User can expand any ticket via the caret.
+      ticketAccordionOpenIds.clear();
+
       ticketFormState = {
         ...ticketFormState,
         name: "",
@@ -5585,14 +5654,13 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
         color: colorForNewTicket,
       };
 
-      // Recolour seats (if any are already assigned) and re-render UI
       applySeatVisuals();
       renderTicketingPanel();
     });
 
-
     el.appendChild(addBtn);
   }
+
     // ---------- Selection inspector (right-hand panel) ----------
 
   function renderInspector(node) {
