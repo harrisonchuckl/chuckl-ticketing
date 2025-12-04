@@ -4794,7 +4794,7 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
 
   if (mapLayer) mapLayer.batchDraw();
 }
-}
+
     function ensureSeatTicketSet(seat) {
     if (!seat || typeof seat.getAttr !== "function" || typeof seat.setAttr !== "function") {
       return { sid: null, set: null };
