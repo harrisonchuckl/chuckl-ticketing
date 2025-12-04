@@ -651,12 +651,12 @@ router.get("/builder/preview/:showId", (req, res) => {
         height: 100vh;
       }
 
-      .tickin-builder-main {
-        display: grid;
-        grid-template-columns: auto 1fr auto; /* left rail | centre | right panel */
-        flex: 1;
-        min-height: 0; /* allows children to use overflow correctly */
-      }
+    tickin-builder-main {
+  display: grid;
+  grid-template-columns: auto 1fr auto; /* left | center | right */
+  flex: 1;
+  min-height: 0;
+}
 
       .tb-left-rail {
         display: block;
@@ -666,6 +666,7 @@ router.get("/builder/preview/:showId", (req, res) => {
         display: flex;
         flex-direction: column;
         min-height: 0;
+        min-width: 0; /* 👈 ADD THIS LINE: Prevents grid blowout */
       }
 
       .tb-tab-panels {
