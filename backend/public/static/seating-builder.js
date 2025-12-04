@@ -363,6 +363,11 @@
 
   injectSeatmapStyles();
 
+  // Ensure the map container can host overlays (holds hint, etc.)
+  if (container && (!container.style.position || container.style.position === "static")) {
+    container.style.position = "relative";
+  }
+
   // ---------- Ensure sidebar DOM (seat count + inspector) ----------
 
     function ensureSidebarDom() {
@@ -471,6 +476,7 @@
   let holdSeatSelectionMode = false;
   let activeHoldSelectionType = "hold";
   let holdReportSchedule = { day: "", time: "", email: "", saved: false };
+  let holdsHintOverlay = null;
 
   let ticketFormState = {
     name: "",
@@ -484,6 +490,41 @@
   };
 
   let ticketFormAutoOffSale = true;
+
+  function ensureHoldsHintOverlay() {
+    if (holdsHintOverlay || !container) return holdsHintOverlay;
+
+    const overlay = document.createElement("div");
+    overlay.className = "sb-holds-overlay";
+    overlay.textContent =
+      "Use this section to block off seating / put seats on hold or to allocate them to an external event organiser or promoter.";
+    overlay.style.position = "absolute";
+    overlay.style.top = "12px";
+    overlay.style.left = "50%";
+    overlay.style.transform = "translateX(-50%)";
+    overlay.style.padding = "12px 16px";
+    overlay.style.borderRadius = "14px";
+    overlay.style.background = "rgba(24, 40, 40, 0.94)";
+    overlay.style.color = "#ffffff";
+    overlay.style.boxShadow = "0 12px 30px rgba(0,0,0,0.18)";
+    overlay.style.fontSize = "13px";
+    overlay.style.lineHeight = "1.4";
+    overlay.style.maxWidth = "520px";
+    overlay.style.textAlign = "center";
+    overlay.style.zIndex = "20";
+    overlay.style.pointerEvents = "none";
+    overlay.style.display = "none";
+
+    container.appendChild(overlay);
+    holdsHintOverlay = overlay;
+    return overlay;
+  }
+
+  function toggleHoldsHintOverlay(show) {
+    const overlay = ensureHoldsHintOverlay();
+    if (!overlay) return;
+    overlay.style.display = show ? "block" : "none";
+  }
 
   // -------- Ticket colour palette (editable TIXL defaults) --------
   // You can change these eight hex values to whatever brand colours you like.
@@ -10177,6 +10218,8 @@ function handleStageMouseMove() {
     setTicketSeatSelectionMode(false, "tab-change");
     setHoldSeatSelectionMode(false, activeHoldSelectionType);
     clearSelection();
+
+    toggleHoldsHintOverlay(activeMainTab === "holds");
 
     updateInspectorHeadingForTab();
 
