@@ -505,8 +505,7 @@ router.get("/builder/preview/:showId", (req, res) => {
 </body>
 </html>`;
 
-  res.status(200).send(html);
-});
+res.status(200).send(html);
 });
 
 export default router;
