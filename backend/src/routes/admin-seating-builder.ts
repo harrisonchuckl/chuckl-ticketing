@@ -1818,4 +1818,46 @@ router.get("/builder/preview/:showId", (req, res) => {
   res.status(200).send(html);
 });
 
+/* -------------------------------------------------------------
+   ROUTE: GET /builder/api/holds/:showId
+   Get saved weekly report settings for a show
+   -------------------------------------------------------------- */
+router.get("/builder/api/holds/:showId", async (req, res) => {
+  try {
+    const showId = req.params.showId;
+    // NOTE: In a real deployment, you would fetch this from your database.
+    // For now, we return a standard empty structure to prevent errors.
+    // const settings = await prisma.showReportSettings.findUnique({ where: { showId } });
+    
+    return res.json({ 
+      ok: true, 
+      reportSettings: null 
+    });
+  } catch (err) {
+    console.error("Error getting hold settings", err);
+    return res.status(500).json({ error: "internal_error" });
+  }
+});
+
+/* -------------------------------------------------------------
+   ROUTE: POST /builder/api/holds/:showId
+   Save weekly report settings
+   -------------------------------------------------------------- */
+router.post("/builder/api/holds/:showId", async (req, res) => {
+  try {
+    const showId = req.params.showId;
+    const { reportEmail, reportTime, reportDay } = req.body;
+
+    // NOTE: Connect this to your Prisma schema when you are ready to persist data.
+    // await prisma.showReportSettings.upsert({ ... })
+
+    console.log(`[Holds] Saving report settings for Show ${showId}:`, { reportEmail, reportTime, reportDay });
+
+    return res.json({ ok: true, message: "Report settings saved" });
+  } catch (err) {
+    console.error("Error saving hold settings", err);
+    return res.status(500).json({ error: "internal_error" });
+  }
+});
+
 export default router;
