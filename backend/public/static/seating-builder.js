@@ -4533,22 +4533,50 @@ function refreshSeatTicketListeners() {
   // 2. Attach to Individual Seats
   seats.forEach((seat) => attachHandler(seat));
 
-  // 3. Attach to Row Labels and Block Containers (hit-rects)
+  // 3. Attach to Row Labels, Block Containers (hit-rects), and Tables
   if (mapLayer) {
     const groups = mapLayer.find("Group");
     groups.forEach(group => {
       const type = group.getAttr("shapeType") || group.name();
       
-      // For Row Blocks: Attach to Labels and the invisible container (hit-rect)
+      // --- A. ROW BLOCKS ---
       if (type === "row-seats") {
-        // Row Labels
+        // 1. Attach to Row Labels (Text)
         group.find((n) => n.getAttr("isRowLabel")).forEach(label => attachHandler(label));
-        // Container Background (hit-rect)
+        
+        // 2. Attach to Container Background (hit-rect)
         const hitRect = group.findOne(".hit-rect");
-        if (hitRect) attachHandler(hitRect);
+        if (hitRect) {
+           attachHandler(hitRect);
+
+           // --- VISUAL FEEDBACK FOR CONTAINER ---
+           // This makes the invisible container visible when hovered in ticket mode
+           hitRect.off('.ticketAssignHover'); // Clean up old hover listeners
+           
+           hitRect.on('mouseover.ticketAssignHover', () => {
+              if (!ticketSeatSelectionMode) return;
+              stage.container().style.cursor = "copy"; // Show 'copy' icon to indicate bulk add
+              
+              // Make the invisible rect visible with a dashed blue border
+              hitRect.stroke('#2563eb'); 
+              hitRect.strokeWidth(2);
+              hitRect.dash([6, 4]);
+              mapLayer.batchDraw();
+           });
+           
+           hitRect.on('mouseout.ticketAssignHover', () => {
+              if (!ticketSeatSelectionMode) return;
+              stage.container().style.cursor = "default";
+              
+              // Hide it again
+              hitRect.stroke(null);
+              hitRect.strokeWidth(0);
+              mapLayer.batchDraw();
+           });
+        }
       }
 
-      // For Tables: Attach to the body shape (circle/rect) and label
+      // --- B. TABLES ---
       if (type === "circular-table" || type === "rect-table") {
         const body = group.findOne(".body-rect");
         const label = group.findOne(".table-label"); // or name="table-label"
@@ -4562,18 +4590,6 @@ function refreshSeatTicketListeners() {
   if (mapLayer && typeof mapLayer.off === "function") {
     mapLayer.off(".ticketAssign");
   }
-}
-
-  if (hitRect) {
-    attachHandler(hitRect);
-    
-    // Visual cue for container
-    hitRect.on('mouseover.ticketAssign', () => {
-        if(ticketSeatSelectionMode) stage.container().style.cursor = "copy"; // Or a specific icon
-    });
-    hitRect.on('mouseout.ticketAssign', () => {
-        if(ticketSeatSelectionMode) stage.container().style.cursor = "default";
-    });
 }
   
   function addDebugStagePointerListener() {
