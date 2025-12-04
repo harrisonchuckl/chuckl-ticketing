@@ -466,7 +466,7 @@
   let activeTicketSelectionId = null;
   let ticketSeatStageContentListener = null;
   let ticketAccordionOpenIds = new Set();
-let holdSelectionMode = false; // true if we are manually selecting holds/allocations
+let holdSelectionMode = false;
 let activeHoldType = null; // "hold" or "allocation"
 let holdAssignments = new Map(); // seatId -> "hold" | "allocation"
 let allocationDetails = {
@@ -4347,14 +4347,13 @@ function updateTicketRings() {
     const ref = seat.getAttr("sbSeatRef");
     const sid = ensureSeatIdAttr(seat);
 
-    // 1. Determine status (Hold vs Ticket)
     const ticketId = seat.getAttr("sbTicketId") || null;
     const holdStatus = holdAssignments.get(sid); // "hold" or "allocation"
 
     let stroke = baseStroke;
     let fill = baseFill;
 
-    // Priority: Duplicate Error > Hold/Allocation > Ticket > Default
+    // Priority: Duplicate > Hold > Ticket
     if (ref && duplicateSeatRefs.has(ref)) {
       stroke = "#ef4444";
       fill = "#fee2e2";
@@ -4365,7 +4364,6 @@ function updateTicketRings() {
       stroke = "#10B981";
       fill = "#10B981"; // Solid green
     } else if (ticketId) {
-      // Ticket colors only apply to stroke, fill remains white (unless overridden by hold)
       const ticket = ticketTypes.find((t) => t.id === ticketId);
       if (ticket) {
         stroke = ticket.color || "#2563eb";
@@ -4376,10 +4374,9 @@ function updateTicketRings() {
     seat.fill(fill);
   });
 
-  refreshSeatTicketListeners(); // Re-bind listeners (works for both tickets and holds)
+  refreshSeatTicketListeners(); 
 
   // --- TICKET RINGS LOGIC ---
-  // ONLY show rings if we are on the Tickets tab
   if (activeMainTab === "tickets") {
     updateTicketRings();
   } else {
@@ -4919,13 +4916,11 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
 
 
  function handleTicketSeatSelection(pointerPos, target) {
-  // Determine context: Tickets vs Holds
-  const isHoldTab = activeMainTab === "holds";
   const ticketId = getActiveTicketIdForAssignments();
-  
-  // If on Ticket tab and no ticket selected, abort
+  const isHoldTab = activeMainTab === "holds";
+
+  // Validation
   if (!isHoldTab && !ticketId) return false;
-  // If on Hold tab and no type selected (hold/allocation), abort
   if (isHoldTab && !activeHoldType) return false;
 
   // --- HELPER: Toggle a list of seats ---
@@ -4934,15 +4929,12 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
       
       const firstSeat = seats[0];
       const firstSid = ensureSeatIdAttr(firstSeat);
-      
       let shouldAssign = true;
 
       if (isHoldTab) {
-          // Toggle based on hold status
           const currentStatus = holdAssignments.get(firstSid);
           shouldAssign = currentStatus !== activeHoldType;
       } else {
-          // Toggle based on ticket set
           const { set } = ensureSeatTicketSet(firstSeat);
           shouldAssign = !(set && set.has(ticketId));
       }
@@ -4954,16 +4946,12 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
           if (isHoldTab) {
               // --- HOLD LOGIC ---
               if (shouldAssign) {
-                  // Prevent allocation if already held (black), but allow overwriting allocation <-> hold if user clicks specific button?
-                  // Requirement: "Seats already on hold (black) cannot also be allocated"
                   const current = holdAssignments.get(sid);
-                  if (activeHoldType === "allocation" && current === "hold") {
-                      return; // Cannot allocate a held seat
-                  }
+                  // Constraint: Cannot allocate if already held
+                  if (activeHoldType === "allocation" && current === "hold") return;
                   holdAssignments.set(sid, activeHoldType);
                   seat.setAttr("sbHoldStatus", activeHoldType);
               } else {
-                  // Unassign if it matches current type
                   const current = holdAssignments.get(sid);
                   if (current === activeHoldType) {
                       holdAssignments.delete(sid);
@@ -4971,10 +4959,9 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
                   }
               }
           } else {
-              // --- TICKET LOGIC (Existing) ---
+              // --- TICKET LOGIC ---
               const { set: seatSet } = ensureSeatTicketSet(seat);
               if (!seatSet) return;
-              
               if (shouldAssign) seatSet.add(ticketId);
               else seatSet.delete(ticketId);
               
@@ -4988,8 +4975,8 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
       });
       
       if (!isHoldTab) rebuildTicketAssignmentsCache();
-      
       applySeatVisuals();
+      
       if (isHoldTab) renderHoldsPanel(); 
       else renderTicketingPanel();
       
@@ -5043,14 +5030,12 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
   // --- 4. CHECK SINGLE SEAT CLICK ---
   const isDirectSeat = target && target.getAttr && target.getAttr("isSeat");
   if (isDirectSeat) {
-    // Wrap single seat in array to use shared helper
-    toggleList([target]);
+    toggleList([target]); 
     return true;
   }
 
   return false;
 }
-
   
   function getSelectedSeatNodes() {
     const nodes =
@@ -5792,11 +5777,9 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
     el.appendChild(addBtn);
   }
 
-  function renderHoldsPanel() {
+ function renderHoldsPanel() {
   const el = getInspectorElement();
   if (!el) return;
-  
-  // Ensure we have show meta for emails
   ensureShowMetaLoaded();
 
   el.innerHTML = "";
@@ -5815,7 +5798,6 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
   const holdCard = document.createElement("div");
   holdCard.className = `sb-ticket-card ${activeHoldType === "hold" ? "is-active" : ""}`;
   
-  // Calculate hold count
   let holdCount = 0;
   holdAssignments.forEach(val => { if (val === "hold") holdCount++; });
 
@@ -5833,13 +5815,12 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
       </div>
     </button>
   `;
-  // Click handler for Hold
   holdCard.querySelector("#btn-select-hold").addEventListener("click", () => {
       activeHoldType = "hold";
       ticketSeatSelectionMode = true;
       setTicketSeatSelectionMode(true, "hold-tab-activation");
-      applySeatVisuals(); // Refresh colors
-      renderHoldsPanel(); // Refresh UI active state
+      applySeatVisuals(); 
+      renderHoldsPanel(); 
   });
   container.appendChild(holdCard);
 
@@ -5847,13 +5828,11 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
   const allocCard = document.createElement("div");
   allocCard.className = `sb-ticket-card ${activeHoldType === "allocation" ? "is-active" : ""}`;
 
-  // Calculate allocation list and count
   let allocCount = 0;
   const allocatedSeatsList = [];
   holdAssignments.forEach((val, key) => { 
       if (val === "allocation") {
           allocCount++;
-          // Find seat node to get readable name
           const seat = mapLayer.find(node => node.getAttr("sbSeatId") === key)[0];
           if(seat) {
               const row = seat.getAttr("sbSeatRowLabel");
@@ -5878,12 +5857,10 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
     </button>
   `;
   
-  // Allocation Details Body (only if active)
   if (activeHoldType === "allocation") {
       const body = document.createElement("div");
       body.className = "sb-ticket-card-body";
       
-      // Textarea for seats
       const seatsField = document.createElement("div");
       seatsField.className = "sb-field-col";
       seatsField.innerHTML = `
@@ -5892,7 +5869,6 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
       `;
       body.appendChild(seatsField);
 
-      // Email Button
       const emailBtn = document.createElement("button");
       emailBtn.className = "tool-button";
       emailBtn.innerHTML = "✉️ E-mail allocation";
@@ -5903,12 +5879,10 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
       });
       body.appendChild(emailBtn);
 
-      // Report Schedule
       const reportSection = document.createElement("div");
       reportSection.style.marginTop = "16px";
       reportSection.style.paddingTop = "16px";
       reportSection.style.borderTop = "1px solid #eee";
-      
       reportSection.innerHTML = `
         <div class="sb-ticketing-sub" style="margin-bottom:8px; font-weight:600;">Weekly Box Office Reports</div>
         <div class="sb-field-row">
@@ -5921,40 +5895,22 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
              <label class="sb-label">Email Address</label>
              <input type="email" class="sb-input" id="rpt-email" value="${allocationDetails.reportSchedule.email || ""}">
         </div>
-        <div class="sb-field-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-top:8px;">
-             <div class="sb-field-col">
-                <label class="sb-label">Day</label>
-                <select class="sb-select" id="rpt-day">
-                    <option value="Monday">Monday</option>
-                    <option value="Friday">Friday</option>
-                </select>
-             </div>
-             <div class="sb-field-col">
-                <label class="sb-label">Time</label>
-                <input type="time" class="sb-input" id="rpt-time" value="${allocationDetails.reportSchedule.time}">
-             </div>
-        </div>
         <button class="tool-button sb-ghost-button" id="rpt-save" style="margin-top:8px;">Save Report Settings</button>
       `;
-      
       body.appendChild(reportSection);
       
-      // Add listeners for report inputs
       setTimeout(() => {
-          document.getElementById("rpt-save").addEventListener("click", () => {
+          const saveBtn = document.getElementById("rpt-save");
+          if(saveBtn) saveBtn.addEventListener("click", () => {
               allocationDetails.reportEnabled = document.getElementById("rpt-enabled").checked;
               allocationDetails.reportSchedule.email = document.getElementById("rpt-email").value;
-              allocationDetails.reportSchedule.day = document.getElementById("rpt-day").value;
-              allocationDetails.reportSchedule.time = document.getElementById("rpt-time").value;
               alert("Report settings saved.");
-              // In a real app, you would sync this to the backend here via API
           });
       }, 0);
 
       allocCard.appendChild(body);
   }
 
-  // Click handler for Allocation
   allocCard.querySelector("#btn-select-alloc").addEventListener("click", () => {
       activeHoldType = "allocation";
       ticketSeatSelectionMode = true;
@@ -5966,7 +5922,6 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
   container.appendChild(allocCard);
   el.appendChild(container);
 }
-
     // ---------- Selection inspector (right-hand panel) ----------
 
   function renderInspector(node) {
@@ -9983,8 +9938,6 @@ function handleStageMouseMove() {
     document.body.appendChild(overlay);
     setTimeout(() => overlay.remove(), 5000); // Remove after 5s
     
-    // Default to Hold mode initially? Or just render empty.
-    // Let's render the panel.
     renderHoldsPanel();
     
   } else {
