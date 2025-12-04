@@ -31,464 +31,73 @@
 
   // ---------- Inject modern styles (Apple / Canva vibes) ----------
 
-  function injectSeatmapStyles() {
-    if (document.getElementById("sb-seatmap-style")) return;
+ function injectSeatmapStyles() {
+  if (document.getElementById("sb-seatmap-style")) return;
+  const style = document.createElement("style");
+  style.id = "sb-seatmap-style";
+  style.textContent = `
+    .sb-layout { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    
+    /* --- DESKTOP LAYOUT (Default) --- */
+    .sb-admin-page { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+    .sb-admin-header { flex-shrink: 0; z-index: 50; background: #fff; position: relative; }
+    
+    @media (min-width: 1024px) {
+      .sb-admin-main { flex: 1; display: grid; grid-template-columns: 80px 1fr 360px; min-height: 0; }
+      .sb-elements-panel { border-right: 1px solid #e5e7eb; background: #f9fafb; overflow-y: auto; }
+      .sb-seatmap-wrapper { position: relative; width: 100%; height: 100%; overflow: hidden; background: #f3f4f6; }
+      .sb-side-panel { border-left: 1px solid #e5e7eb; background: #ffffff; overflow-y: auto; }
+    }
 
-    const style = document.createElement("style");
-    style.id = "sb-seatmap-style";
-    style.textContent = `
-      .sb-layout {
-        font-family: -apple-system,BlinkMacSystemFont,"system-ui","Segoe UI",sans-serif;
+    /* --- MOBILE LAYOUT (Google Maps Style) --- */
+    @media (max-width: 1023px) {
+      .sb-admin-main { display: block; position: relative; width: 100%; height: 100%; overflow: hidden; }
+
+      /* LAYER 0: Fullscreen Map */
+      .sb-seatmap-wrapper {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0;
+        background: #f3f4f6; padding-bottom: 85px; box-sizing: border-box;
       }
+      #app, #app > div { width: 100% !important; height: 100% !important; }
 
-      .sb-sidebar-col {
-        background: radial-gradient(circle at top left,#eef2ff 0,#f9fafb 42%,#f3f4f6 100%);
-        border-left: 1px solid #e5e7eb;
+      /* LAYER 1: Bottom Toolbar */
+      .sb-elements-panel {
+        position: absolute; bottom: 0; left: 0; width: 100%; height: 85px;
+        background: #fff; z-index: 100; border-top: 1px solid #e5e7eb;
+        display: flex; align-items: center; padding: 0 10px;
+        box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
       }
-
-      #sb-inspector {
-        background: #ffffff;
-        border-radius: 16px;
-        border: 1px solid rgba(148,163,184,0.35);
-        box-shadow: 0 14px 40px rgba(15,23,42,0.12);
-        padding: 10px;
+      /* Horizontal Scroll */
+      .sb-elements-panel .tb-left-scroll {
+        display: flex; flex-direction: row; width: 100%; overflow-x: auto; gap: 12px; align-items: center;
       }
+      .sb-elements-panel .tb-left-group { display: flex; flex-direction: row; margin: 0; gap: 8px; border: none; }
+      .sb-elements-panel .tool-button { width: 60px; min-width: 60px; height: 60px; margin: 0; flex-direction: column; font-size: 10px; }
+      .sb-elements-panel .tool-button img { width: 24px; height: 24px; margin-bottom: 4px; }
 
-      .sb-inspector-title {
-        font-size: 11px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: .12em;
-        color: #6b7280;
-        margin: 2px 0 6px;
+      /* LAYER 2: Inspector (Floating Bottom Sheet) */
+      /* Hidden by default using :has() if empty, pops up on selection */
+      .sb-side-panel {
+        position: absolute; bottom: 95px; left: 10px; right: 10px;
+        max-height: 40vh; background: #fff; border-radius: 16px;
+        box-shadow: 0 8px 30px rgba(0,0,0,0.2); z-index: 90; overflow-y: auto;
+        transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
       }
-
-      .sb-inspector-empty {
-        font-size: 12px;
-        color: #6b7280;
-        padding: 8px 2px;
-      }
-
-      .sb-field-row {
-        margin-bottom: 10px;
-      }
-
-      .sb-label span {
-        font-size: 11px;
-        color: #6b7280;
-        font-weight: 500;
-        text-transform: none;
-      }
-
-      .sb-input,
-      .sb-select {
-        width: 100%;
-        box-sizing: border-box;
-        border-radius: 10px;
-        border: 1px solid #e5e7eb;
-        padding: 6px 9px;
-        font-size: 13px;
-        background: #f9fafb;
-        outline: none;
-        transition: border-color .12s ease, box-shadow .12s ease, background .12s ease;
+      /* Auto-hide if empty */
+      .sb-side-panel:has(.sb-inspector-empty) {
+        transform: translateY(150%); pointer-events: none;
       }
 
-      .sb-input:focus,
-      .sb-select:focus {
-        border-color: #2563eb;
-        box-shadow: 0 0 0 1px rgba(37,99,235,0.25);
-        background: #ffffff;
+      /* Flyout Menus (Centered Modal on Mobile) */
+      .tool-flyout {
+        position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        width: 80%; max-width: 300px; background: #fff; border-radius: 12px;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.4); z-index: 9999;
       }
-
-      .sb-static-label {
-        font-size: 11px;
-        color: #6b7280;
-      }
-
-      .sb-static-value {
-        font-size: 13px;
-        font-weight: 500;
-        color: #111827;
-      }
-
-      .sb-field-row.sb-field-static {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 4px 2px;
-        border-radius: 8px;
-        background: linear-gradient(90deg,#f9fafb, #eef2ff);
-      }
-
-      .tool-button {
-        width: 100%;
-        height: 52px;
-        box-sizing: border-box;
-        border-radius: 14px;
-        border: 1px solid #e5e7eb;
-        background: #ffffff;
-        display: flex !important;
-        align-items: center;
-        justify-content: center;
-        margin-bottom: 6px;
-        box-shadow: 0 6px 18px rgba(15,23,42,0.05);
-        cursor: pointer;
-        transition:
-          transform .09s ease,
-          box-shadow .09s ease,
-          border-color .09s ease,
-          background .09s ease;
-      }
-
-      .tool-button:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 10px 26px rgba(15,23,42,0.12);
-        border-color: rgba(148,163,184,0.7);
-      }
-
-      .tool-button.is-active {
-        border-color: #2563eb;
-        box-shadow: 0 0 0 1px rgba(37,99,235,0.28),0 12px 28px rgba(37,99,235,0.28);
-        background: linear-gradient(135deg,#eff6ff,#e0f2fe);
-      }
-
-      .tool-button > * {
-        pointer-events: none;
-      }
-
-      .tool-button svg,
-      .tool-button img {
-        width: 22px;
-        height: 22px;
-      }
-
-      .tool-button span {
-        font-size: 14px;
-      }
-
-      .sb-ticketing-heading {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        margin-bottom: 8px;
-      }
-
-      .sb-ticketing-title {
-        font-size: 16px;
-        font-weight: 700;
-        color: #0f172a;
-      }
-
-      .sb-ticketing-sub {
-        font-size: 12px;
-        color: #6b7280;
-      }
-
-      .sb-ticketing-alert {
-        background: linear-gradient(135deg, #fef2f2, #fee2e2);
-        border: 1px solid #fecaca;
-        color: #b91c1c;
-        padding: 8px 10px;
-        border-radius: 12px;
-        font-size: 12px;
-        margin: 4px 0 12px;
-      }
-
-      .sb-ticket-stack {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-      }
-
-      .sb-ticket-card {
-        border: 1px solid #e5e7eb;
-        border-radius: 16px;
-        background: linear-gradient(145deg, #ffffff, #f8fafc);
-        box-shadow: 0 10px 26px rgba(15,23,42,0.06);
-        overflow: hidden;
-        transition: border-color .12s ease, box-shadow .12s ease;
-      }
-
-      .sb-ticket-card.is-active {
-        border-color: #2563eb;
-        box-shadow: 0 16px 36px rgba(37,99,235,0.18);
-      }
-
-      .sb-ticket-card-header {
-        width: 100%;
-        background: transparent;
-        border: none;
-        padding: 12px 14px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        cursor: pointer;
-        gap: 8px;
-      }
-
-      .sb-ticket-card-main {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
-
-      .sb-ticket-card-copy {
-        display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-      }
-
-      .sb-ticket-name {
-        font-size: 14px;
-        font-weight: 700;
-        color: #111827;
-      }
-
-      .sb-ticket-meta {
-        font-size: 12px;
-        color: #6b7280;
-      }
-
-      .sb-ticket-card-actions {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-
-      .sb-ticket-swatch {
-        width: 14px;
-        height: 14px;
-        border-radius: 999px;
-        border: 1px solid rgba(0,0,0,0.06);
-        box-shadow: 0 0 0 2px #fff;
-      }
-
-      .sb-ticket-chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 4px 10px;
-        border-radius: 999px;
-        background: #eef2ff;
-        color: #4338ca;
-        font-size: 12px;
-        font-weight: 600;
-      }
-
-      .sb-ticket-caret {
-        font-size: 14px;
-        color: #6b7280;
-      }
-
-      .sb-ticket-card-body {
-        padding: 0 14px 14px;
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-      }
-
-      .sb-ticket-form-grid {
-        display: grid;
-        gap: 10px;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      }
-
-      .sb-field-col .sb-label {
-        display: block;
-        font-size: 12px;
-        color: #6b7280;
-        margin-bottom: 4px;
-        font-weight: 600;
-      }
-
-      .sb-helper {
-        font-size: 11px;
-        color: #9ca3af;
-        margin-top: 2px;
-      }
-
-      .sb-field-error {
-        font-size: 12px;
-        color: #b91c1c;
-        margin-top: -4px;
-      }
-
-      .sb-ticket-assignments {
-        font-size: 13px;
-        font-weight: 600;
-        color: #111827;
-        padding: 4px 2px;
-      }
-
-      .sb-ticket-actions {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        gap: 8px;
-      }
-
-      .sb-input-inline {
-        display: inline-block;
-      }
-
-      .sb-input-color {
-        padding: 0;
-        height: 40px;
-      }
-
-      .sb-textarea {
-        min-height: 70px;
-        resize: vertical;
-      }
-
-      .sb-ghost-button {
-        background: linear-gradient(135deg,#f8fafc,#eef2ff);
-      }
-
-      .sb-ticket-add {
-        margin-top: 12px;
-        font-weight: 700;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
-      }
-
-      .sb-ticket-add-icon {
-        font-size: 16px;
-line-height: 1;
-      }
-
-      /* --- Responsive Builder Layout --- */
-      .sb-admin-page {
-        height: 100vh;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-      }
-      .sb-admin-header {
-        flex-shrink: 0;
-        z-index: 30;
-      }
-      .sb-admin-main {
-        flex: 1;
-        min-height: 0;
-        display: flex; 
-        flex-direction: column; 
-      }
-      
-      /* Desktop Layout (>= 1024px) */
-      @media (min-width: 1024px) {
-        .sb-admin-main {
-          display: grid;
-          grid-template-columns: auto 1fr auto;
-          flex-direction: row;
-        }
-        .sb-elements-panel {
-          width: 80px; 
-          border-right: 1px solid #e5e7eb;
-          overflow-y: auto;
-        }
-        .sb-seatmap-wrapper {
-          position: relative;
-          width: 100%;
-          height: 100%;
-          overflow: hidden;
-        }
-        .sb-side-panel {
-          width: 360px;
-          border-left: 1px solid #e5e7eb;
-          overflow-y: auto;
-        }
-      }
-
-      /* Tablet/Mobile Layout (< 1024px) */
-      @media (max-width: 1023px) {
-        .sb-admin-main {
-          display: flex;
-          flex-direction: column;
-          overflow: hidden;
-        }
-        
-        /* 1. Order: Map (Center) -> Toolbar (Left) -> Details (Right) */
-        .tb-center {
-          order: 1;
-          display: flex;
-          flex-direction: column;
-          flex: 0 0 auto; 
-          z-index: 10;
-        }
-        
-        .sb-elements-panel {
-          order: 2;
-          width: 100%;
-          height: auto;
-          border-right: none;
-          border-bottom: 1px solid #e5e7eb;
-          background: #fff;
-          z-index: 20;
-          flex-shrink: 0;
-        }
-        
-        .sb-side-panel {
-          order: 3;
-          flex: 1;
-          width: 100%;
-          max-width: none;
-          overflow-y: auto;
-          padding-bottom: 40px;
-        }
-
-        /* 2. Horizontal Toolbar */
-        .sb-elements-panel .tb-left-scroll {
-          display: flex;
-          flex-direction: row;
-          padding: 8px;
-          gap: 8px;
-          overflow-x: auto;
-          white-space: nowrap;
-        }
-        .sb-elements-panel .tb-left-group {
-          display: flex;
-          flex-direction: row;
-          gap: 8px;
-          margin-bottom: 0;
-          padding-right: 12px;
-          border-right: 1px solid #e5e7eb;
-        }
-        .sb-elements-panel .tb-left-group:last-child {
-          border-right: none;
-        }
-        .sb-elements-panel .tb-left-item {
-          width: auto;
-          min-width: 60px;
-          flex-direction: column;
-          justify-content: center;
-          text-align: center;
-        }
-        
-        /* 3. Seatmap Sizing */
-        .sb-seatmap-wrapper {
-          height: 50vh;
-          min-height: 250px;
-          max-height: 60vh;
-          background: #f3f4f6;
-        }
-        
-        /* 4. Flyouts on mobile */
-        .tool-flyout {
-           position: fixed;
-           top: 50%;
-           left: 50%;
-           transform: translate(-50%, -50%);
-           border: 1px solid #ccc;
-           box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-           max-height: 80vh;
-           overflow-y: auto;
-        }
-      }
-    `;
-    document.head.appendChild(style);
-  }
+    }
+  `;
+  document.head.appendChild(style);
+}
 
   injectSeatmapStyles();
 
@@ -1083,30 +692,29 @@ window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
   }
 
     function resizeStageToContainer() {
-    if (!stage) return;
-    
-    // Look for the dedicated wrapper first, fall back to parent if needed
-    const wrapper = document.querySelector(".sb-seatmap-wrapper") || container.parentNode; 
-    const target = (wrapper && wrapper.clientWidth) ? wrapper : container;
+  if (!stage) return;
+  
+  // On mobile, we use the .sb-seatmap-wrapper. On desktop, it's the grid cell.
+  // We prioritize finding the wrapper.
+  const wrapper = document.querySelector(".sb-seatmap-wrapper");
+  const target = (wrapper && wrapper.clientHeight > 0) ? wrapper : container;
 
-    const width = target.clientWidth - STAGE_PADDING * 2;
-    const height = target.clientHeight - STAGE_PADDING * 2;
-    
-    if (width <= 0 || height <= 0) return;
+  const width = target.clientWidth;
+  const height = target.clientHeight;
 
-    baseStageWidth = width;
-baseStageHeight = height;
+  if (width <= 0 || height <= 0) return;
 
-
-    const currentScale = stage.scaleX() || 1;
-
-    stage.size({
-      width: baseStageWidth / currentScale,
-      height: baseStageHeight / currentScale,
-    });
-
-    drawSquareGrid();
-  }
+  baseStageWidth = width;
+  baseStageHeight = height;
+  
+  const currentScale = stage.scaleX() || 1;
+  stage.size({
+    width: baseStageWidth / currentScale,
+    height: baseStageHeight / currentScale,
+  });
+  drawSquareGrid();
+  if (typeof stage.batchDraw === 'function') stage.batchDraw();
+}
 
   // ---------- History ----------
 
