@@ -5775,19 +5775,36 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
   let allocCount = 0;
   let allocSeatLabels = []; // For the email generation
 
-  seats.forEach(seat => {
+  // [Source: 4772] - Updated loop
+seats.forEach(seat => {
     const status = seat.getAttr("sbHoldStatus");
     if (status === "hold") holdCount++;
     if (status === "allocation") {
-      allocCount++;
-      // Collect human readable labels for email
-      const row = seat.getAttr("sbSeatRowLabel") || "";
-      const num = seat.getAttr("sbSeatLabel") || "";
-      const label = row ? `${row}${num}` : num;
-      if(label) allocSeatLabels.push(label);
-    }
-  });
+        allocCount++;
+        
+        // --- NEW LOGIC: Detect Table vs Row for Labeling ---
+        const row = seat.getAttr("sbSeatRowLabel") || "";
+        const num = seat.getAttr("sbSeatLabel") || "";
+        
+        // Get parent group to check if it's a table
+        const group = seat.getParent();
+        const type = group ? (group.getAttr("shapeType") || group.name()) : "";
+        
+        let label = "";
+        
+        if (type === "circular-table" || type === "rect-table") {
+            // It is a table: Format as T{TableNumber}-{SeatNumber}
+            // 'row' variable holds the Table Label (e.g. "2")
+            // 'num' variable holds the Seat Number (e.g. "1")
+            label = `T${row}-${num}`;
+        } else {
+            // Standard row logic
+            label = row ? `${row}${num}` : num;
+        }
 
+        if(label) allocSeatLabels.push(label);
+    }
+});
   el.innerHTML = "";
 
   // 2. Title
