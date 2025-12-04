@@ -4710,31 +4710,38 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
   const prev = ticketSeatSelectionMode;
   ticketSeatSelectionMode = !!enabled;
   ticketSeatSelectionReason = reason || "unknown";
-
+  
   if (!ticketSeatSelectionMode) {
     ticketSeatSelectionAction = "toggle";
   } else {
-    ticketSeatSelectionAction = "toggle";
+    ticketSeatSelectionAction = "toggle"; 
   }
   
   // Ensure all debug listeners are active
   addDebugStagePointerListener(); 
   addDebugContainerPointerListener();
-  addDebugDocumentPointerListener(); // <--- NEW CALL
+  addDebugDocumentPointerListener(); 
 
   // 1. Force the Layer to listen.
   if (mapLayer && typeof mapLayer.listening === "function") {
     mapLayer.listening(true);
   }
 
-  // 2. Force all seats and their groups to listen
+  // 2. LOCK/UNLOCK DRAGGING (Fixes the "Whole Block Moving" issue)
+  if (mapLayer) {
+      const allGroups = mapLayer.find('Group');
+      allGroups.forEach(g => {
+          // If enabled=true, draggable becomes false. If enabled=false, draggable becomes true.
+          g.draggable(!enabled); 
+      });
+  }
+
+  // 3. Force all seats and their groups to listen
   const seats = getAllSeatNodes();
   seats.forEach((seat) => {
-    // Force seat to listen
     if (typeof seat.listening === "function") {
       seat.listening(true);
     }
-    // Walk up the tree and force all parents to listen
     let parent = seat.getParent && seat.getParent();
     while (parent) {
       if (typeof parent.listening === "function") {
@@ -4744,7 +4751,7 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
     }
   });
 
-  // 3. Re-apply the listeners 
+  // 4. Re-apply the listeners 
   refreshSeatTicketListeners();
 
   // eslint-disable-next-line no-console
@@ -4764,12 +4771,11 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
     }
   }
 
-  // 4. Force a redraw to ensure the Konva Hit Graph is updated
+  // 5. Force a redraw
   if (mapLayer) {
     mapLayer.batchDraw();
   }
 }
-
     function ensureSeatTicketSet(seat) {
     if (!seat || typeof seat.getAttr !== "function" || typeof seat.setAttr !== "function") {
       return { sid: null, set: null };
@@ -4861,27 +4867,29 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
   }
 
 
-   function handleTicketSeatSelection(pointerPos, target) {
+  function handleTicketSeatSelection(pointerPos, target) {
   const ticketId = getActiveTicketIdForAssignments();
-  let seatNode = findSeatNodeFromTarget(target);
+  
+  // We DO NOT look for a seat node yet. We check specific bulk targets first.
+  
+  // eslint-disable-next-line no-console
+  console.log("[seatmap][tickets] seat-selection handler", {
+    pointer: pointerPos,
+    ticketId,
+    targetName: target && target.name ? target.name() : target && target.className,
+    selectionModeOn: ticketSeatSelectionMode,
+    action: ticketSeatSelectionAction,
+  });
 
   if (!ticketId) return false;
 
-  // 1. SINGLE SEAT
-  if (seatNode) {
-    toggleSeatTicketAssignment(seatNode, ticketId);
-    applySeatVisuals();
-    renderTicketingPanel();
-    pushHistory();
-    return true;
-  }
-
-  // Helper to Toggle a List of Seats
+  // --- HELPER: Toggle a list of seats ---
   const toggleList = (seats) => {
       if (!seats || !seats.length) return;
-      // Determine if we are assigning or unassigning based on the FIRST seat
+      // Logic: If the first seat is already assigned to this ticket, UNASSIGN ALL.
+      // Otherwise, ASSIGN ALL.
       const { set } = ensureSeatTicketSet(seats[0]);
-      const shouldAssign = !(set && set.has(ticketId)); // If first has it, remove. Else add.
+      const shouldAssign = !(set && set.has(ticketId)); 
 
       seats.forEach(seat => {
           const { sid, set: seatSet } = ensureSeatTicketSet(seat);
@@ -4889,7 +4897,6 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
 
           if (shouldAssign) {
               seatSet.add(ticketId);
-              // If in single-ticket mode, clear others? Usually setAttr handles primary
           } else {
               seatSet.delete(ticketId);
           }
@@ -4912,49 +4919,68 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
       pushHistory();
   };
 
-  // 2. ROW LABEL CLICK
-  if (target && typeof target.getAttr === "function" && target.getAttr("isRowLabel")) {
+  // --- 1. CHECK ROW LABEL CLICK ---
+  if (
+    target && 
+    typeof target.getAttr === "function" && 
+    target.getAttr("isRowLabel")
+  ) {
     const rowLabelText = target.text();
     const parentGroup = target.getParent();
+    
     if (parentGroup && rowLabelText) {
       const seatsInRow = parentGroup.find((node) => 
         node.getAttr("isSeat") && node.getAttr("sbSeatRowLabel") === rowLabelText
       );
-      if (seatsInRow.length) {
-          toggleList(seatsInRow);
-          return true;
+      if (seatsInRow.length > 0) {
+        toggleList(seatsInRow);
+        return true;
       }
     }
   }
 
-  // 3. BLOCK CONTAINER CLICK (hit-rect)
+  // --- 2. CHECK CONTAINER CLICK (hit-rect) ---
   if (target && target.name() === "hit-rect") {
     const group = target.getParent();
-    // Row Block
+    // Only for Row Blocks
     if (group && group.getAttr("shapeType") === "row-seats") {
-        const allSeats = group.find(n => n.getAttr("isSeat"));
-        if (allSeats.length) {
-            toggleList(allSeats);
-            return true;
-        }
+      const allSeats = group.find((n) => n.getAttr("isSeat"));
+      if (allSeats.length > 0) {
+        toggleList(allSeats);
+        return true;
+      }
     }
   }
-  
-  // 4. TABLE CLICK (Body or Label)
-  // Check if we clicked inside a table group but NOT a specific seat
-  const group = target.findAncestor("Group", true); // Find closest group
-  if (group) {
-      const type = group.getAttr("shapeType") || group.name();
-      if (type === "circular-table" || type === "rect-table") {
-          // If we clicked the body rect or the label specifically
-          if (target.name() === "body-rect" || target.name() === "table-label") {
-              const tableSeats = group.find(n => n.getAttr("isSeat"));
-              if (tableSeats.length) {
-                  toggleList(tableSeats);
-                  return true;
+
+  // --- 3. CHECK TABLE CLICK (Body or Label) ---
+  // We check if the target is part of a table group
+  if (target) {
+      const group = target.findAncestor("Group", true);
+      if (group) {
+          const type = group.getAttr("shapeType") || group.name();
+          if (type === "circular-table" || type === "rect-table") {
+              // If clicked body OR label
+              if (target.name() === "body-rect" || target.name() === "table-label") {
+                  const tableSeats = group.find((n) => n.getAttr("isSeat"));
+                  if (tableSeats.length > 0) {
+                      toggleList(tableSeats);
+                      return true;
+                  }
               }
           }
       }
+  }
+
+  // --- 4. CHECK SINGLE SEAT CLICK (Fallback) ---
+  // Now that we know it wasn't a bulk action, we check if it's a specific seat.
+  let seatNode = findSeatNodeFromTarget(target);
+  
+  if (seatNode) {
+    toggleSeatTicketAssignment(seatNode, ticketId);
+    applySeatVisuals();
+    renderTicketingPanel();
+    pushHistory();
+    return true;
   }
 
   return false;
