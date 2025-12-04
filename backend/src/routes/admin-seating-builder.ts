@@ -723,6 +723,33 @@ router.get("/builder/preview/:showId", (req, res) => {
   pointer-events: auto !important;
 }
 
+      .tb-holds-tip {
+        position: absolute;
+        top: 14px;
+        left: 14px;
+        max-width: 460px;
+        background: rgba(255, 255, 255, 0.94);
+        border: 1px solid var(--tixall-border-subtle);
+        border-radius: 14px;
+        padding: 12px 14px;
+        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.08);
+        pointer-events: none;
+      }
+
+      .tb-holds-tip h2 {
+        margin: 0 0 6px;
+        font-size: 15px;
+        font-weight: 700;
+        color: #0f172a;
+      }
+
+      .tb-holds-tip p {
+        margin: 0;
+        font-size: 13px;
+        color: #374151;
+        line-height: 1.4;
+      }
+
       /* Ensure the canvas element itself is always above other content.
          Konva stages create their own div/canvas elements inside the container (#app). */
       #app > div {
@@ -1400,9 +1427,12 @@ router.get("/builder/preview/:showId", (req, res) => {
               <div class="tb-empty-panel"></div>
             </div>
             <div class="tb-tab-panel" id="tb-tab-holds">
-              <div class="tb-empty-panel">
-                <h2>Holds coming soon</h2>
-                <p>Reserve blocks of seats for guests, agents, or sponsors.</p>
+              <div class="tb-holds-tip">
+                <h2>Holds &amp; allocations</h2>
+                <p>
+                  Use this section to block off seating, put seats on hold, or allocate them to an
+                  external event organiser or promoter.
+                </p>
               </div>
             </div>
             <div class="tb-tab-panel" id="tb-tab-view">
@@ -1428,7 +1458,7 @@ router.get("/builder/preview/:showId", (req, res) => {
 
           <!-- Element inspector (selection) -->
           <section class="tb-side-section">
-            <h3 class="tb-side-heading">Selection</h3>
+            <h3 class="tb-side-heading" id="sb-side-panel-heading">Selection</h3>
             <div id="sb-inspector" class="tb-inspector">
               <p class="sb-inspector-empty">
                 Click on a seat, table or object to edit its settings.
