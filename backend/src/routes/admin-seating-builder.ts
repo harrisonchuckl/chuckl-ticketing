@@ -275,12 +275,6 @@ router.delete("/builder/api/seatmaps/:showId/:seatMapId", async (req, res) => {
 // FIND THE ENTIRE PREVIEW ROUTE BLOCK
 // It starts around line 20138 in your file
 router.get("/builder/preview/:showId", (req, res) => {
-  // ... (lots of code) ...
-  res.status(200).send(html);
-});
-
-// REPLACE WITH THIS COMPLETE BLOCK:
-router.get("/builder/preview/:showId", (req, res) => {
   const showId = req.params.showId;
   const layout = normaliseLayout(req.query.layout as string | undefined);
   
@@ -306,7 +300,6 @@ router.get("/builder/preview/:showId", (req, res) => {
       height: 100vh;
       overflow: hidden;
     }
-    /* Base button styles */
     .tb-topbar-btn.tb-btn-primary {
       border-radius: 999px; border: 0; background: linear-gradient(135deg, var(--tixall-blue), #08c8f8);
       color: #ffffff; font-weight: 600; box-shadow: none;
@@ -430,7 +423,7 @@ router.get("/builder/preview/:showId", (req, res) => {
                 <div class="tool-flyout">
                    <button class="tb-left-item tool-button" data-tool="symbol-wc-mixed"><span class="tb-left-label">WC</span></button>
                    <button class="tb-left-item tool-button" data-tool="symbol-info"><span class="tb-left-label">Info</span></button>
-                   </div>
+                </div>
              </div>
           </div>
 
@@ -495,9 +488,6 @@ router.get("/builder/preview/:showId", (req, res) => {
        window.__TICKIN_BACK_BUTTON__ = document.getElementById("tb-btn-back");
        window.__TICKIN_LOAD_BUTTON__ = document.getElementById("tb-btn-load");
        window.__TICKIN_DELETE_BUTTON__ = document.getElementById("tb-btn-delete");
-
-       // ... (Keep your existing JS hooks here or rely on seating-builder.js) ...
-       // For brevity, assuming standard hook logic exists in seating-builder.js
     })();
   </script>
   <script src="https://unpkg.com/konva@9.3.3/konva.min.js"></script>
@@ -505,7 +495,7 @@ router.get("/builder/preview/:showId", (req, res) => {
 </body>
 </html>`;
 
-res.status(200).send(html);
+  res.status(200).send(html);
 });
 
 export default router;
