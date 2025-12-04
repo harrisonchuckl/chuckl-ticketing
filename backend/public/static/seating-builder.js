@@ -8693,7 +8693,6 @@ if (
       // ---------- Canvas interactions: click / selection / placement ----------
 function handleStageClick(evt) {
   // 🛑 CRITICAL FIX: If we are in seat assignment mode, we must EXIT immediately.
-  // This stops the general stage logic (like selection/deselection or tool placement)
   if (window.ticketSeatSelectionMode) {
     // Ensure no "standard" selection (Transformer) is active so we don't drag groups
     clearSelection(); 
