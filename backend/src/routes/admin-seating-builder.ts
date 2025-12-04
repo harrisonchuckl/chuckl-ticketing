@@ -732,7 +732,10 @@ router.get("/builder/preview/:showId", (req, res) => {
       .tb-side-heading {
         color: var(--tixall-dark);
       }
-
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
       
     </style>
   </head>
@@ -1399,12 +1402,10 @@ router.get("/builder/preview/:showId", (req, res) => {
             <div class="tb-tab-panel" id="tb-tab-tickets">
               <div class="tb-empty-panel"></div>
             </div>
-            <div class="tb-tab-panel" id="tb-tab-holds">
-              <div class="tb-empty-panel">
-                <h2>Holds coming soon</h2>
-                <p>Reserve blocks of seats for guests, agents, or sponsors.</p>
-              </div>
-            </div>
+           <div class="tb-tab-panel" id="tb-tab-holds">
+  <div class="tb-empty-panel"></div>
+</div>
+</div>
             <div class="tb-tab-panel" id="tb-tab-view">
               <div class="tb-empty-panel">
                 <h2>View from seats</h2>
