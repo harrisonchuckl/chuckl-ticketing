@@ -5924,22 +5924,25 @@ function renderHoldsPanel() {
   
   // ---------- Selection inspector (right-hand panel) ----------
 
-  function renderInspector(node) {
+function renderInspector(node) {
   const el = getInspectorElement();
   if (!el) return;
-  
-  // --- FIX: Panel Routing ---
+
   if (activeMainTab === "tickets") {
     renderTicketingPanel();
     return;
   }
+
+  // 👇 ADD THIS BLOCK 👇
   if (activeMainTab === "holds") {
+    // If we are in holds mode, always keep the holds panel visible
+    // unless we explicitly want to inspect a shape (optional, but usually helpful to stay on task)
     if (typeof renderHoldsPanel === "function") {
         renderHoldsPanel();
     }
-    return;
+    return; 
   }
-  // --------------------------
+  // 👆 END OF ADDED BLOCK 👆
 
   el.innerHTML = "";
     
