@@ -717,13 +717,146 @@ router.get("/builder/preview/:showId", (req, res) => {
       .tb-side-heading {
         color: var(--tixall-dark);
       }
+// FIND THIS BLOCK
+</style>
 
-      
+// REPLACE WITH THIS BLOCK
+      /* --- Responsive Mobile Layout (Google Maps Style) --- */
+      @media (max-width: 1023px) {
+        .sb-admin-page {
+          height: 100vh;
+          overflow: hidden;
+          position: relative;
+        }
+        
+        .sb-admin-header {
+          position: relative;
+          z-index: 50;
+          background: #fff;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        /* Disable the 3-column grid; use a layered stack */
+        .sb-admin-main {
+          display: block; 
+          position: relative;
+          width: 100%;
+          flex: 1;
+          overflow: hidden;
+        }
+
+        /* LAYER 1: The Map (Background) */
+        /* Positions the map to fill the space, with padding at bottom for the toolbar */
+        .sb-seatmap-wrapper {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          z-index: 1;
+          padding-bottom: 90px; /* Space for toolbar */
+          background: #f3f4f6;
+        }
+        #app, #app > div {
+          width: 100% !important;
+          height: 100% !important;
+        }
+
+        /* LAYER 2: The Toolbar (Fixed Bottom) */
+        .sb-elements-panel {
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          width: 100%;
+          height: 85px;
+          background: #ffffff;
+          z-index: 100;
+          border-top: 1px solid #e5e7eb;
+          display: flex;
+          align-items: center;
+          padding: 0;
+          box-shadow: 0 -4px 12px rgba(0,0,0,0.08);
+        }
+        
+        /* Make tools scroll horizontally */
+        .sb-elements-panel .tb-left-scroll {
+          display: flex;
+          flex-direction: row;
+          width: 100%;
+          overflow-x: auto;
+          align-items: center;
+          padding: 0 12px;
+          gap: 8px;
+          white-space: nowrap;
+          -webkit-overflow-scrolling: touch;
+        }
+        
+        /* Flatten the tool groups for horizontal layout */
+        .sb-elements-panel .tb-left-group {
+          display: flex;
+          flex-direction: row;
+          gap: 8px;
+          margin: 0;
+          padding-right: 8px;
+          border-right: 1px solid #f0f0f0;
+        }
+        .sb-elements-panel .tb-left-group:last-child {
+          border: none;
+        }
+        
+        /* Adjust button sizes for horizontal bar */
+        .sb-elements-panel .tb-left-item.tool-button {
+          min-width: 60px;
+          height: 60px;
+          margin: 0 !important;
+          background: transparent !important;
+          border: none !important;
+          box-shadow: none !important;
+          padding: 0 !important;
+          justify-content: center;
+        }
+        .sb-elements-panel .tb-tool-icon {
+          width: 28px !important;
+          height: 28px !important;
+          margin-bottom: 4px;
+        }
+        .sb-elements-panel .tb-left-label {
+          font-size: 10px !important;
+          line-height: 1;
+          text-align: center;
+        }
+
+        /* LAYER 3: The Inspector (Floating Bottom Sheet) */
+        .sb-side-panel {
+          position: absolute;
+          bottom: 95px; /* Sit just above the 85px toolbar */
+          left: 10px;
+          right: 10px;
+          width: auto;
+          max-width: none;
+          min-width: 0;
+          max-height: 45vh; /* Take up to 45% of screen height */
+          background: #ffffff;
+          border-radius: 16px;
+          z-index: 90;
+          box-shadow: 0 4px 25px rgba(0,0,0,0.25);
+          overflow-y: auto;
+          border: 1px solid #e2e8f0;
+          padding: 12px;
+        }
+
+        /* INTELLIGENT AUTO-HIDE:
+           If the inspector contains the "empty" message (nothing selected),
+           hide the entire panel so the user sees the full map. */
+        .sb-side-panel:has(.sb-inspector-empty) {
+          display: none !important;
+        }
+      }
     </style>
   </head>
-    <body class="tickin-builder-body">
-    <div class="tickin-builder-shell sb-admin-page">
-      <header class="tickin-builder-topbar sb-admin-header">
+   <body class="tickin-builder-body">
+<div class="tickin-builder-shell sb-admin-page">
+<header class="tickin-builder-topbar sb-admin-header">
         <div class="tb-topbar-left">
           <div class="tb-logo-badge">
             <span class="tb-logo-dot"></span>
@@ -773,9 +906,8 @@ router.get("/builder/preview/:showId", (req, res) => {
 
       </header>
 
-      <main class="tickin-builder-main sb-admin-main sb-layout">
-   
-     <aside class="tb-left-rail sb-elements-panel" aria-label="Seating tools">
+     <main class="tickin-builder-main sb-admin-main">
+<aside class="tb-left-rail sb-elements-panel" aria-label="Seating tools">
           <div class="tb-left-scroll">
             <!-- Seating tools – icon + text only (no sub-heading) -->
             <div class="tb-left-group">
@@ -1378,9 +1510,9 @@ router.get("/builder/preview/:showId", (req, res) => {
           </div>
 
           <div class="tb-tab-panels">
-            <div class="tb-tab-panel is-active" id="tb-tab-map">
-              <div class="sb-seatmap-wrapper" style="width: 100%; height: 100%; overflow: hidden; position: relative;">
-                <div id="app"></div>
+         <div class="tb-tab-panel is-active" id="tb-tab-map">
+  <div class="sb-seatmap-wrapper">
+    <div id="app"></div>
               </div>
   
           </div>
@@ -1402,8 +1534,8 @@ router.get("/builder/preview/:showId", (req, res) => {
           </div>
         </section>
 
-                <aside class="tb-side-panel sb-side-panel sb-layout-sidebar">
-              <section class="tb-side-section">
+<aside class="tb-side-panel sb-side-panel">
+<section class="tb-side-section">
             <h3 class="tb-side-heading">Seats on map</h3>
             <div class="tb-side-meta">
               <div>
