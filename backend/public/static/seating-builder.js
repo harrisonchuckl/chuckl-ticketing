@@ -4505,11 +4505,10 @@ function refreshSeatTicketListeners() {
   const attachHandler = (node) => {
     if (typeof node.off === "function") {
         node.off(".ticketAssign");
-        node.off(".ticketAssignHover"); // Clear old hover too
+        node.off(".ticketAssignHover");
     }
     if (typeof node.listening === "function") node.listening(true);
 
-    // Click Handler
     node.on("click.ticketAssign tap.ticketAssign", (evt) => {
       const ticketId = getActiveTicketIdForAssignments();
       if (!ticketSeatSelectionMode || !ticketId) return;
@@ -4526,7 +4525,7 @@ function refreshSeatTicketListeners() {
     });
   };
 
-  // 2. Helper for Hover Effects (Letters & Tables)
+  // 2. Helper for Text/Table Hover Effects
   const attachHoverEffect = (node, isText = true) => {
       node.on('mouseover.ticketAssignHover', () => {
           if (!ticketSeatSelectionMode) return;
@@ -4536,9 +4535,8 @@ function refreshSeatTicketListeners() {
           
           if (isText) {
               node.setAttr('__origFill', node.fill());
-              node.fill(color); // Turn text to ticket color
+              node.fill(color); 
           } else {
-              // For shapes like table bodies
               node.setAttr('__origStroke', node.stroke());
               node.stroke(color);
               node.strokeWidth(3);
@@ -4560,7 +4558,6 @@ function refreshSeatTicketListeners() {
       });
   };
 
-
   // 3. Process All Interactive Elements
   const seats = getAllSeatNodes();
   seats.forEach((seat) => attachHandler(seat));
@@ -4575,27 +4572,40 @@ function refreshSeatTicketListeners() {
         // Row Labels
         group.find((n) => n.getAttr("isRowLabel")).forEach(label => {
             attachHandler(label);
-            attachHoverEffect(label, true); // Add color hover
+            attachHoverEffect(label, true);
         });
 
         // Container (hit-rect)
         const hitRect = group.findOne(".hit-rect");
         if (hitRect) {
            attachHandler(hitRect);
-           // Container Hover (Dashed Box)
+
+           // --- HOLLOW CONTAINER LOGIC ---
+           // 1. Remove fill so internal gaps are ignored
+           hitRect.fill(null); 
+           // 2. Set invisible stroke for detection
+           hitRect.stroke("rgba(0,0,0,0)");
+           hitRect.strokeWidth(0); 
+           // 3. Set generous hit area for the border (40px wide invisible band)
+           hitRect.hitStrokeWidth(40); 
+
            hitRect.off('.ticketAssignHover');
            hitRect.on('mouseover.ticketAssignHover', () => {
               if (!ticketSeatSelectionMode) return;
-              stage.container().style.cursor = "copy";
+              stage.container().style.cursor = "copy"; // Copy icon implies "Bulk"
+              
+              // Show visual border
               hitRect.stroke('#2563eb'); 
-              hitRect.strokeWidth(2);
+              hitRect.strokeWidth(2); // Visual width is thin
               hitRect.dash([6, 4]);
               mapLayer.batchDraw();
            });
            hitRect.on('mouseout.ticketAssignHover', () => {
               if (!ticketSeatSelectionMode) return;
               stage.container().style.cursor = "default";
-              hitRect.stroke(null);
+              
+              // Hide visual border
+              hitRect.stroke("rgba(0,0,0,0)");
               hitRect.strokeWidth(0);
               mapLayer.batchDraw();
            });
@@ -4608,11 +4618,11 @@ function refreshSeatTicketListeners() {
         const label = group.findOne(".table-label"); 
         if (body) {
             attachHandler(body);
-            attachHoverEffect(body, false); // Add stroke hover
+            attachHoverEffect(body, false);
         } 
         if (label) {
             attachHandler(label);
-            attachHoverEffect(label, true); // Add text hover
+            attachHoverEffect(label, true);
         }
       }
     });
@@ -4727,12 +4737,38 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
     mapLayer.listening(true);
   }
 
-  // 2. LOCK/UNLOCK DRAGGING (Fixes the "Whole Block Moving" issue)
+  // 2. LOCK/UNLOCK DRAGGING & HANDLE CONTAINER FILL
   if (mapLayer) {
       const allGroups = mapLayer.find('Group');
       allGroups.forEach(g => {
-          // If enabled=true, draggable becomes false. If enabled=false, draggable becomes true.
+          // Lock dragging in ticket mode
           g.draggable(!enabled); 
+          
+          // --- CRITICAL RESTORATION ---
+          // If leaving ticket mode, restore the solid fill so dragging is easy again
+          if (!enabled) {
+              const hr = g.findOne('.hit-rect');
+              if (hr) {
+                  hr.fill("rgba(0,0,0,0)"); // Restore catch-all fill
+                  hr.stroke(null);
+                  hr.strokeWidth(0);
+                  hr.hitStrokeWidth(0); // Reset hit width
+                  hr.off('.ticketAssignHover'); // Clean up hover effects
+              }
+              
+              // Restore original colors for labels/tables if stuck
+              const labels = g.find(n => n.getAttr('isRowLabel') || n.name() === 'table-label');
+              labels.forEach(lbl => {
+                  if (lbl.getAttr('__origFill')) lbl.fill(lbl.getAttr('__origFill'));
+                  lbl.off('.ticketAssignHover');
+              });
+              const bodies = g.find('.body-rect');
+              bodies.forEach(b => {
+                  if (b.getAttr('__origStroke')) b.stroke(b.getAttr('__origStroke'));
+                  if (b.strokeWidth() === 3) b.strokeWidth(1.7); // Reset thickness
+                  b.off('.ticketAssignHover');
+              });
+          }
       });
   }
 
