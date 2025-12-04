@@ -854,10 +854,10 @@ router.get("/builder/preview/:showId", (req, res) => {
       }
     </style>
   </head>
-   <body class="tickin-builder-body">
+<body class="tickin-builder-body">
 <div class="tickin-builder-shell sb-admin-page">
 <header class="tickin-builder-topbar sb-admin-header">
-        <div class="tb-topbar-left">
+<div class="tb-topbar-left">
           <div class="tb-logo-badge">
             <span class="tb-logo-dot"></span>
             <span class="tb-logo-text">TIXALL Builder</span>
@@ -906,9 +906,9 @@ router.get("/builder/preview/:showId", (req, res) => {
 
       </header>
 
-     <main class="tickin-builder-main sb-admin-main">
+<main class="tickin-builder-main sb-admin-main">
 <aside class="tb-left-rail sb-elements-panel" aria-label="Seating tools">
-          <div class="tb-left-scroll">
+<div class="tb-left-scroll">
             <!-- Seating tools – icon + text only (no sub-heading) -->
             <div class="tb-left-group">
               <!-- Group: Line + Section -->
@@ -1509,13 +1509,12 @@ router.get("/builder/preview/:showId", (req, res) => {
             </div>
           </div>
 
-          <div class="tb-tab-panels">
-         <div class="tb-tab-panel is-active" id="tb-tab-map">
-  <div class="sb-seatmap-wrapper">
-    <div id="app"></div>
-              </div>
-  
-          </div>
+        <div class="tb-tab-panels">
+  <div class="tb-tab-panel is-active" id="tb-tab-map">
+    <div class="sb-seatmap-wrapper">
+      <div id="app"></div>
+    </div>
+  </div>
             <div class="tb-tab-panel" id="tb-tab-tickets">
               <div class="tb-empty-panel"></div>
             </div>
