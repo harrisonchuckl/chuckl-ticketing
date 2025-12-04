@@ -1382,8 +1382,8 @@ router.get("/builder/preview/:showId", (req, res) => {
               <button class="tb-tab is-active" data-tab="map">Map</button>
               <button class="tb-tab" data-tab="tickets">Tickets</button>
 <button class="tb-tab" data-tab="holds">Holds & External Allocations</button>
-<button class="tb-tab" data-tab="view">View from Seats</button>
-            </div>
+<button class="tb-tab" data-tab="view">Seating Information and View from Seats</button>
+</div>
 
             <div class="tb-zoom-toolbar" aria-label="Zoom">
               <button class="tb-zoom-btn" id="sb-zoom-out">−</button>
@@ -1403,12 +1403,13 @@ router.get("/builder/preview/:showId", (req, res) => {
     <div class="tb-empty-panel"></div>
 </div>
 <div class="tb-tab-panel" id="tb-tab-view">
-              <div class="tb-empty-panel">
-                <h2>View from seats</h2>
-                <p>Preview sightlines and viewpoints from any selected seat.</p>
-              </div>
-            </div>
+              <div class="tb-tab-panel" id="tb-tab-view">
+          <div class="tb-empty-panel">
+            <h2>Seating Information and View from Seats</h2>
+            <p>Assign sightline photos or information text to specific seats.</p>
           </div>
+        </div>
+        </div>
         </section>
 
                <aside class="tb-side-panel">
@@ -1536,14 +1537,13 @@ router.get("/builder/preview/:showId", (req, res) => {
           });
         };
 
-        var tabs = document.querySelectorAll(".tb-tab");
-
-        var panels = {
-          map: document.getElementById("tb-tab-map"),
-          tickets: document.getElementById("tb-tab-tickets"),
-          holds: document.getElementById("tb-tab-holds"),
-        };
-
+       var tabs = document.querySelectorAll(".tb-tab");
+      var panels = {
+        map: document.getElementById("tb-tab-map"),
+        tickets: document.getElementById("tb-tab-tickets"),
+        holds: document.getElementById("tb-tab-holds"),
+        view: document.getElementById("tb-tab-view"), // <--- THIS LINE WAS MISSING
+      };
         tabs.forEach(function (tab) {
           tab.addEventListener("click", function () {
             var target = tab.getAttribute("data-tab");
