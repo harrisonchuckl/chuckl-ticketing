@@ -702,11 +702,26 @@ router.get("/builder/preview/:showId", (req, res) => {
         pointer-events: none !important;
       }
 
-      /* Bypasses the main tab content container (the new blocker) */
-      .tb-tab-panel {
-        /* Forces mouse events to pass through this element */
-        pointer-events: none !important;
-      }
+ /* --- FIX: Tab Panel Interaction Logic --- */
+
+/* 1. Default: Panels should capture mouse events (like the Map) */
+.tb-tab-panel {
+  pointer-events: auto;
+}
+
+/* 2. OVERLAY TABS: These sit on top of the map. 
+   We must disable pointer events on the wrapper so clicks pass through to the map,
+   but keep events enabled on child elements (like the 'empty panel' messages) if needed. */
+#tb-tab-tickets, 
+#tb-tab-holds, 
+#tb-tab-view {
+  pointer-events: none !important;
+}
+
+/* 3. Explicitly ensure the Map tab accepts clicks */
+#tb-tab-map {
+  pointer-events: auto !important;
+}
 
       /* Ensure the canvas element itself is always above other content.
          Konva stages create their own div/canvas elements inside the container (#app). */
