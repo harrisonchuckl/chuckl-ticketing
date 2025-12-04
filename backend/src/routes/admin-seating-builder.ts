@@ -1381,8 +1381,8 @@ router.get("/builder/preview/:showId", (req, res) => {
             <div class="tb-tabs">
               <button class="tb-tab is-active" data-tab="map">Map</button>
               <button class="tb-tab" data-tab="tickets">Tickets</button>
-              <button class="tb-tab" data-tab="holds">Holds</button>
-              <button class="tb-tab" data-tab="view">View from Seats</button>
+<button class="tb-tab" data-tab="holds">Holds & External Allocations</button>
+<button class="tb-tab" data-tab="view">View from Seats</button>
             </div>
 
             <div class="tb-zoom-toolbar" aria-label="Zoom">
@@ -1400,12 +1400,9 @@ router.get("/builder/preview/:showId", (req, res) => {
               <div class="tb-empty-panel"></div>
             </div>
             <div class="tb-tab-panel" id="tb-tab-holds">
-              <div class="tb-empty-panel">
-                <h2>Holds coming soon</h2>
-                <p>Reserve blocks of seats for guests, agents, or sponsors.</p>
-              </div>
-            </div>
-            <div class="tb-tab-panel" id="tb-tab-view">
+    <div class="tb-empty-panel"></div>
+</div>
+<div class="tb-tab-panel" id="tb-tab-view">
               <div class="tb-empty-panel">
                 <h2>View from seats</h2>
                 <p>Preview sightlines and viewpoints from any selected seat.</p>
