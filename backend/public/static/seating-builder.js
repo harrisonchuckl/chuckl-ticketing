@@ -4353,7 +4353,7 @@ function updateTicketRings() {
     let stroke = baseStroke;
     let fill = baseFill;
 
-    // Priority: Duplicate > Hold > Ticket
+    // Priority: Duplicate > Hold > Allocation > Ticket
     if (ref && duplicateSeatRefs.has(ref)) {
       stroke = "#ef4444";
       fill = "#fee2e2";
@@ -4377,10 +4377,10 @@ function updateTicketRings() {
   refreshSeatTicketListeners(); 
 
   // --- TICKET RINGS LOGIC ---
+  // Only show rings on Tickets tab. Destroy them everywhere else.
   if (activeMainTab === "tickets") {
     updateTicketRings();
   } else {
-    // If not on tickets tab, destroy all existing rings
     seats.forEach((seat) => {
       const group = seat.getParent();
       if (group) {
@@ -4914,11 +4914,10 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
     });
   }
 
-
- function handleTicketSeatSelection(pointerPos, target) {
+function handleTicketSeatSelection(pointerPos, target) {
   const ticketId = getActiveTicketIdForAssignments();
   const isHoldTab = activeMainTab === "holds";
-
+  
   // Validation
   if (!isHoldTab && !ticketId) return false;
   if (isHoldTab && !activeHoldType) return false;
@@ -4977,7 +4976,7 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
       if (!isHoldTab) rebuildTicketAssignmentsCache();
       applySeatVisuals();
       
-      if (isHoldTab) renderHoldsPanel(); 
+      if (isHoldTab && typeof renderHoldsPanel === 'function') renderHoldsPanel(); 
       else renderTicketingPanel();
       
       pushHistory();
@@ -5777,7 +5776,7 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
     el.appendChild(addBtn);
   }
 
- function renderHoldsPanel() {
+function renderHoldsPanel() {
   const el = getInspectorElement();
   if (!el) return;
   ensureShowMetaLoaded();
@@ -5922,19 +5921,28 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
   container.appendChild(allocCard);
   el.appendChild(container);
 }
-    // ---------- Selection inspector (right-hand panel) ----------
+  
+  // ---------- Selection inspector (right-hand panel) ----------
 
   function renderInspector(node) {
-    const el = getInspectorElement();
-    if (!el) return;
-
-    if (activeMainTab === "tickets") {
-      renderTicketingPanel();
-      return;
+  const el = getInspectorElement();
+  if (!el) return;
+  
+  // --- FIX: Panel Routing ---
+  if (activeMainTab === "tickets") {
+    renderTicketingPanel();
+    return;
+  }
+  if (activeMainTab === "holds") {
+    if (typeof renderHoldsPanel === "function") {
+        renderHoldsPanel();
     }
+    return;
+  }
+  // --------------------------
 
-    el.innerHTML = "";
-
+  el.innerHTML = "";
+    
     // ---- Small DOM helpers ----
     function addTitle(text) {
       const h = document.createElement("h4");
@@ -9931,14 +9939,18 @@ function handleStageMouseMove() {
     renderTicketingPanel();
     
   } else if (activeMainTab === "holds") {
+    activeHoldType = null;
+
     // Show Popup
     const overlay = document.createElement('div');
-    overlay.style.cssText = "position:fixed; top:120px; left:50%; transform:translateX(-50%); background:#182828; color:white; padding:12px 20px; border-radius:8px; z-index:9999; font-size:14px; box-shadow:0 10px 30px rgba(0,0,0,0.3); animation: fadeOut 0.5s forwards 4s;";
+    overlay.style.cssText = "position:fixed; top:120px; left:50%; transform:translateX(-50%); background:#182828; color:white; padding:12px 20px; border-radius:8px; z-index:9999; font-size:14px; box-shadow:0 10px 30px rgba(0,0,0,0.3); animation: fadeOut 0.5s forwards 4s; pointer-events: none;";
     overlay.textContent = "Use this section to block off seating / put seats on hold or to allocate them to an external event organiser or promoter.";
     document.body.appendChild(overlay);
-    setTimeout(() => overlay.remove(), 5000); // Remove after 5s
+    setTimeout(() => overlay.remove(), 5000); 
     
-    renderHoldsPanel();
+    if (typeof renderHoldsPanel === "function") {
+        renderHoldsPanel();
+    }
     
   } else {
     // Map / View
@@ -9947,6 +9959,7 @@ function handleStageMouseMove() {
     renderInspector(selectedNode);
   }
 };
+  
   stage.on("click", handleStageClick);
   stage.on("contentClick", handleStageClick);
   stage.on("tap", handleStageClick);
