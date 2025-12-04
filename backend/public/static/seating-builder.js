@@ -4494,27 +4494,26 @@ function updateTicketRings() {
   }
 
 function refreshSeatTicketListeners() {
-  // 0. AGGRESSIVE DOM LISTENER CLEANUP
+  // 0. Cleanup DOM listeners
   if (window.ticketSeatDomListener && stage && stage.container && stage.container()) {
     stage.container().removeEventListener("pointerdown", window.ticketSeatDomListener, true);
     stage.container().removeEventListener("pointerdown", window.ticketSeatDomListener, false);
     window.ticketSeatDomListener = null;
   }
 
-  // 1. Gather all interactive elements (seats, labels, containers)
-  const seats = getAllSeatNodes();
-  
-  // Helper to attach logic to a node
+  // 1. Helper to attach logic to a node
   const attachHandler = (node) => {
-    if (typeof node.off === "function") node.off(".ticketAssign");
+    if (typeof node.off === "function") {
+        node.off(".ticketAssign");
+        node.off(".ticketAssignHover"); // Clear old hover too
+    }
     if (typeof node.listening === "function") node.listening(true);
 
-    const handler = (evt) => {
+    // Click Handler
+    node.on("click.ticketAssign tap.ticketAssign", (evt) => {
       const ticketId = getActiveTicketIdForAssignments();
-      
       if (!ticketSeatSelectionMode || !ticketId) return;
 
-      // Stop propagation immediately so stage click doesn't fire
       if (evt.evt) {
         evt.evt.stopPropagation();
         evt.evt.preventDefault();
@@ -4523,52 +4522,79 @@ function refreshSeatTicketListeners() {
       evt.cancelBubble = true;
       lastSeatAssignEventAt = Date.now();
 
-      // Pass the specific target to our main logic function
       handleTicketSeatSelection(stage.getPointerPosition(), evt.target);
-    };
-
-    node.on("click.ticketAssign tap.ticketAssign", handler);
+    });
   };
 
-  // 2. Attach to Individual Seats
+  // 2. Helper for Hover Effects (Letters & Tables)
+  const attachHoverEffect = (node, isText = true) => {
+      node.on('mouseover.ticketAssignHover', () => {
+          if (!ticketSeatSelectionMode) return;
+          stage.container().style.cursor = "pointer";
+          const ticket = ticketTypes.find(t => t.id === getActiveTicketIdForAssignments());
+          const color = (ticket && ticket.color) || "#2563eb";
+          
+          if (isText) {
+              node.setAttr('__origFill', node.fill());
+              node.fill(color); // Turn text to ticket color
+          } else {
+              // For shapes like table bodies
+              node.setAttr('__origStroke', node.stroke());
+              node.stroke(color);
+              node.strokeWidth(3);
+          }
+          mapLayer.batchDraw();
+      });
+
+      node.on('mouseout.ticketAssignHover', () => {
+          if (!ticketSeatSelectionMode) return;
+          stage.container().style.cursor = "default";
+          
+          if (isText) {
+              node.fill(node.getAttr('__origFill') || "#111827");
+          } else {
+              node.stroke(node.getAttr('__origStroke') || "#4b5563");
+              node.strokeWidth(1.7);
+          }
+          mapLayer.batchDraw();
+      });
+  };
+
+
+  // 3. Process All Interactive Elements
+  const seats = getAllSeatNodes();
   seats.forEach((seat) => attachHandler(seat));
 
-  // 3. Attach to Row Labels, Block Containers (hit-rects), and Tables
   if (mapLayer) {
     const groups = mapLayer.find("Group");
     groups.forEach(group => {
       const type = group.getAttr("shapeType") || group.name();
-      
+
       // --- A. ROW BLOCKS ---
       if (type === "row-seats") {
-        // 1. Attach to Row Labels (Text)
-        group.find((n) => n.getAttr("isRowLabel")).forEach(label => attachHandler(label));
-        
-        // 2. Attach to Container Background (hit-rect)
+        // Row Labels
+        group.find((n) => n.getAttr("isRowLabel")).forEach(label => {
+            attachHandler(label);
+            attachHoverEffect(label, true); // Add color hover
+        });
+
+        // Container (hit-rect)
         const hitRect = group.findOne(".hit-rect");
         if (hitRect) {
            attachHandler(hitRect);
-
-           // --- VISUAL FEEDBACK FOR CONTAINER ---
-           // This makes the invisible container visible when hovered in ticket mode
-           hitRect.off('.ticketAssignHover'); // Clean up old hover listeners
-           
+           // Container Hover (Dashed Box)
+           hitRect.off('.ticketAssignHover');
            hitRect.on('mouseover.ticketAssignHover', () => {
               if (!ticketSeatSelectionMode) return;
-              stage.container().style.cursor = "copy"; // Show 'copy' icon to indicate bulk add
-              
-              // Make the invisible rect visible with a dashed blue border
+              stage.container().style.cursor = "copy";
               hitRect.stroke('#2563eb'); 
               hitRect.strokeWidth(2);
               hitRect.dash([6, 4]);
               mapLayer.batchDraw();
            });
-           
            hitRect.on('mouseout.ticketAssignHover', () => {
               if (!ticketSeatSelectionMode) return;
               stage.container().style.cursor = "default";
-              
-              // Hide it again
               hitRect.stroke(null);
               hitRect.strokeWidth(0);
               mapLayer.batchDraw();
@@ -4579,14 +4605,19 @@ function refreshSeatTicketListeners() {
       // --- B. TABLES ---
       if (type === "circular-table" || type === "rect-table") {
         const body = group.findOne(".body-rect");
-        const label = group.findOne(".table-label"); // or name="table-label"
-        if (body) attachHandler(body);
-        if (label) attachHandler(label);
+        const label = group.findOne(".table-label"); 
+        if (body) {
+            attachHandler(body);
+            attachHoverEffect(body, false); // Add stroke hover
+        } 
+        if (label) {
+            attachHandler(label);
+            attachHoverEffect(label, true); // Add text hover
+        }
       }
     });
   }
 
-  // 4. Clean up mapLayer listeners just in case
   if (mapLayer && typeof mapLayer.off === "function") {
     mapLayer.off(".ticketAssign");
   }
@@ -4830,150 +4861,100 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
   }
 
 
-    function handleTicketSeatSelection(pointerPos, target) {
+   function handleTicketSeatSelection(pointerPos, target) {
   const ticketId = getActiveTicketIdForAssignments();
   let seatNode = findSeatNodeFromTarget(target);
 
-  // eslint-disable-next-line no-console
-  console.log("[seatmap][tickets] seat-selection handler", {
-    pointer: pointerPos,
-    ticketId,
-    targetName: target && target.name ? target.name() : target && target.className,
-    selectionModeOn: ticketSeatSelectionMode,
-    action: ticketSeatSelectionAction,
-  });
-
   if (!ticketId) return false;
 
-  // --- 1. SINGLE SEAT CLICK ---
+  // 1. SINGLE SEAT
   if (seatNode) {
     toggleSeatTicketAssignment(seatNode, ticketId);
     applySeatVisuals();
     renderTicketingPanel();
-    pushHistory(); // Capture change
+    pushHistory();
     return true;
   }
 
-  // --- 2. ROW LABEL CLICK (Select Whole Row) ---
-  if (
-    target &&
-    typeof target.getAttr === "function" &&
-    target.getAttr("isRowLabel")
-  ) {
+  // Helper to Toggle a List of Seats
+  const toggleList = (seats) => {
+      if (!seats || !seats.length) return;
+      // Determine if we are assigning or unassigning based on the FIRST seat
+      const { set } = ensureSeatTicketSet(seats[0]);
+      const shouldAssign = !(set && set.has(ticketId)); // If first has it, remove. Else add.
+
+      seats.forEach(seat => {
+          const { sid, set: seatSet } = ensureSeatTicketSet(seat);
+          if (!sid || !seatSet) return;
+
+          if (shouldAssign) {
+              seatSet.add(ticketId);
+              // If in single-ticket mode, clear others? Usually setAttr handles primary
+          } else {
+              seatSet.delete(ticketId);
+          }
+          
+          // Sync attributes back to node
+          const ids = Array.from(seatSet);
+          seat.setAttr("sbTicketIds", ids);
+          seat.setAttr("sbTicketId", ids[0] || null);
+          
+          if (ids.length > 0) {
+             ticketAssignments.set(sid, new Set(ids));
+          } else {
+             ticketAssignments.delete(sid);
+          }
+      });
+      
+      rebuildTicketAssignmentsCache();
+      applySeatVisuals();
+      renderTicketingPanel();
+      pushHistory();
+  };
+
+  // 2. ROW LABEL CLICK
+  if (target && typeof target.getAttr === "function" && target.getAttr("isRowLabel")) {
     const rowLabelText = target.text();
     const parentGroup = target.getParent();
-    
     if (parentGroup && rowLabelText) {
       const seatsInRow = parentGroup.find((node) => 
         node.getAttr("isSeat") && node.getAttr("sbSeatRowLabel") === rowLabelText
       );
-
-      if (seatsInRow.length > 0) {
-        // Determine action based on first seat state (toggle logic)
-        const firstSeat = seatsInRow[0];
-        const { set } = ensureSeatTicketSet(firstSeat);
-        const isAssigned = set && set.has(ticketId);
-        
-        seatsInRow.forEach(seat => {
-           // Force assign or unassign based on the first seat's state to keep it consistent
-           const { sid, set: seatSet } = ensureSeatTicketSet(seat);
-           if (!sid || !seatSet) return;
-           
-           if (isAssigned) {
-             seatSet.delete(ticketId); // Unassign all
-             ticketAssignments.delete(sid); // Update cache (simplified for single ticket mode)
-           } else {
-             seatSet.add(ticketId); // Assign all
-             ticketAssignments.set(sid, new Set(Array.from(seatSet)));
-           }
-           // Sync attributes
-           const ids = Array.from(seatSet);
-           seat.setAttr("sbTicketIds", ids);
-           seat.setAttr("sbTicketId", ids[0] || null);
-        });
-
-        rebuildTicketAssignmentsCache(); // Ensure global cache is perfect
-        applySeatVisuals();
-        renderTicketingPanel();
-        pushHistory(); // Capture change
-        return true;
+      if (seatsInRow.length) {
+          toggleList(seatsInRow);
+          return true;
       }
     }
   }
 
-  // --- 3. TABLE CLICK (Select Whole Table) ---
-  // Check if we clicked the table body (circle or rect) or a label
-  if (target && typeof target.getParent === "function") {
-    const group = target.getParent();
-    const shapeType = group ? (group.getAttr("shapeType") || group.name()) : "";
-    
-    if (shapeType === "circular-table" || shapeType === "rect-table") {
-      const tableSeats = group.find((n) => n.getAttr("isSeat"));
-      
-      if (tableSeats.length > 0) {
-        // Toggle logic based on first seat
-        const { set } = ensureSeatTicketSet(tableSeats[0]);
-        const isAssigned = set && set.has(ticketId);
-
-        tableSeats.forEach(seat => {
-           const { sid, set: seatSet } = ensureSeatTicketSet(seat);
-           if (!sid || !seatSet) return;
-
-           if (isAssigned) {
-             seatSet.delete(ticketId);
-           } else {
-             seatSet.add(ticketId);
-           }
-           
-           const ids = Array.from(seatSet);
-           seat.setAttr("sbTicketIds", ids);
-           seat.setAttr("sbTicketId", ids[0] || null);
-        });
-
-        rebuildTicketAssignmentsCache();
-        applySeatVisuals();
-        renderTicketingPanel();
-        pushHistory(); // Capture change
-        return true;
-      }
-    }
-  }
-
-  // --- 4. BLOCK CONTAINER CLICK (Select Whole Block) ---
-  // We look for clicks on the 'hit-rect' of a row-seats group
+  // 3. BLOCK CONTAINER CLICK (hit-rect)
   if (target && target.name() === "hit-rect") {
     const group = target.getParent();
-    const shapeType = group ? (group.getAttr("shapeType") || group.name()) : "";
-
-    if (shapeType === "row-seats") {
-      const allSeatsInBlock = group.find((n) => n.getAttr("isSeat"));
-      
-      if (allSeatsInBlock.length > 0) {
-        const { set } = ensureSeatTicketSet(allSeatsInBlock[0]);
-        const isAssigned = set && set.has(ticketId);
-
-        allSeatsInBlock.forEach(seat => {
-           const { sid, set: seatSet } = ensureSeatTicketSet(seat);
-           if (!sid || !seatSet) return;
-
-           if (isAssigned) {
-             seatSet.delete(ticketId);
-           } else {
-             seatSet.add(ticketId);
-           }
-           
-           const ids = Array.from(seatSet);
-           seat.setAttr("sbTicketIds", ids);
-           seat.setAttr("sbTicketId", ids[0] || null);
-        });
-
-        rebuildTicketAssignmentsCache();
-        applySeatVisuals();
-        renderTicketingPanel();
-        pushHistory(); // Capture change
-        return true;
-      }
+    // Row Block
+    if (group && group.getAttr("shapeType") === "row-seats") {
+        const allSeats = group.find(n => n.getAttr("isSeat"));
+        if (allSeats.length) {
+            toggleList(allSeats);
+            return true;
+        }
     }
+  }
+  
+  // 4. TABLE CLICK (Body or Label)
+  // Check if we clicked inside a table group but NOT a specific seat
+  const group = target.findAncestor("Group", true); // Find closest group
+  if (group) {
+      const type = group.getAttr("shapeType") || group.name();
+      if (type === "circular-table" || type === "rect-table") {
+          // If we clicked the body rect or the label specifically
+          if (target.name() === "body-rect" || target.name() === "table-label") {
+              const tableSeats = group.find(n => n.getAttr("isSeat"));
+              if (tableSeats.length) {
+                  toggleList(tableSeats);
+                  return true;
+              }
+          }
+      }
   }
 
   return false;
@@ -8711,14 +8692,15 @@ if (
 
       // ---------- Canvas interactions: click / selection / placement ----------
 function handleStageClick(evt) {
-    // 🛑 CRITICAL FIX: If we are in seat assignment mode, we must EXIT immediately.
-    // This stops the general stage logic (like selection/deselection or tool placement)
-    // from consuming the click event, allowing it to propagate to the seat's Konva handler.
-    if (window.ticketSeatSelectionMode) {
-        // eslint-disable-next-line no-console
-        console.log("[seatmap][tickets] STAGE CLICK BLOCKED: Ticket assignment mode is active. Allowing seat listener to run.");
-        return;
-    }
+  // 🛑 CRITICAL FIX: If we are in seat assignment mode, we must EXIT immediately.
+  // This stops the general stage logic (like selection/deselection or tool placement)
+  if (window.ticketSeatSelectionMode) {
+    // Ensure no "standard" selection (Transformer) is active so we don't drag groups
+    clearSelection(); 
+    // eslint-disable-next-line no-console
+    console.log("[seatmap][tickets] STAGE CLICK BLOCKED: Ticket assignment mode is active.");
+    return;
+  }
     
     // --- START ORIGINAL LOGIC ---
     if (!stage || !mapLayer) return;
