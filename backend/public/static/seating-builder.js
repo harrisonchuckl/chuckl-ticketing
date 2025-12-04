@@ -466,7 +466,15 @@
   let activeTicketSelectionId = null;
   let ticketSeatStageContentListener = null;
   let ticketAccordionOpenIds = new Set();
-
+let holdSelectionMode = false; // true if we are manually selecting holds/allocations
+let activeHoldType = null; // "hold" or "allocation"
+let holdAssignments = new Map(); // seatId -> "hold" | "allocation"
+let allocationDetails = {
+  promoterEmail: "",
+  reportSchedule: { day: "Monday", time: "09:00", email: "" },
+  reportEnabled: false
+};
+  
   let ticketFormState = {
     name: "",
     price: "",
@@ -4329,47 +4337,68 @@ function updateTicketRings() {
 
 
   function applySeatVisuals() {
-    refreshSeatMetadata();
-    const seats = getAllSeatNodes();
-    duplicateSeatRefs = computeDuplicateSeatRefsFromSeats(seats);
+  refreshSeatMetadata();
+  const seats = getAllSeatNodes();
+  duplicateSeatRefs = computeDuplicateSeatRefsFromSeats(seats);
+  
+  seats.forEach((seat) => {
+    const baseFill = seat.getAttr("sbSeatBaseFill") || "#ffffff";
+    const baseStroke = seat.getAttr("sbSeatBaseStroke") || "#4b5563";
+    const ref = seat.getAttr("sbSeatRef");
+    const sid = ensureSeatIdAttr(seat);
 
-    seats.forEach((seat) => {
-        const baseFill = seat.getAttr("sbSeatBaseFill") || "#ffffff";
-        const baseStroke = seat.getAttr("sbSeatBaseStroke") || "#4b5563";
-        const ref = seat.getAttr("sbSeatRef");
-        
-        // 1. Determine if a ticket is assigned (uses the ID of the first assigned ticket)
-        const ticketId = seat.getAttr("sbTicketId") || null;
+    // 1. Determine status (Hold vs Ticket)
+    const ticketId = seat.getAttr("sbTicketId") || null;
+    const holdStatus = holdAssignments.get(sid); // "hold" or "allocation"
 
-        let stroke = baseStroke;
-        let fill = baseFill;
+    let stroke = baseStroke;
+    let fill = baseFill;
 
-        if (ref && duplicateSeatRefs.has(ref)) {
-            // Keep duplicate warning colors (Red)
-            stroke = "#ef4444";
-            fill = "#fee2e2";
-        } else if (ticketId) {
-            // --- NEW: Apply the first ticket's color to the base seat stroke ---
-            const ticket = ticketTypes.find((t) => t.id === ticketId);
-            if (ticket) {
-                // Change the default black/grey stroke to the ticket color
-                stroke = ticket.color || "#2563eb"; 
-            }
-        }
-        // --- END NEW LOGIC ---
-
-        seat.stroke(stroke);
-        seat.fill(fill);
-    });
-
-    refreshSeatTicketListeners();
-
-    // The updateTicketRings function (which we fixed previously) handles the rest of the stacked rings.
-    updateTicketRings();
-
-    if (mapLayer && typeof mapLayer.draw === "function") {
-        mapLayer.batchDraw();
+    // Priority: Duplicate Error > Hold/Allocation > Ticket > Default
+    if (ref && duplicateSeatRefs.has(ref)) {
+      stroke = "#ef4444";
+      fill = "#fee2e2";
+    } else if (holdStatus === "hold") {
+      stroke = "#000000";
+      fill = "#000000"; // Solid black
+    } else if (holdStatus === "allocation") {
+      stroke = "#10B981";
+      fill = "#10B981"; // Solid green
+    } else if (ticketId) {
+      // Ticket colors only apply to stroke, fill remains white (unless overridden by hold)
+      const ticket = ticketTypes.find((t) => t.id === ticketId);
+      if (ticket) {
+        stroke = ticket.color || "#2563eb";
+      }
     }
+
+    seat.stroke(stroke);
+    seat.fill(fill);
+  });
+
+  refreshSeatTicketListeners(); // Re-bind listeners (works for both tickets and holds)
+
+  // --- TICKET RINGS LOGIC ---
+  // ONLY show rings if we are on the Tickets tab
+  if (activeMainTab === "tickets") {
+    updateTicketRings();
+  } else {
+    // If not on tickets tab, destroy all existing rings
+    seats.forEach((seat) => {
+      const group = seat.getParent();
+      if (group) {
+         group.getChildren().forEach(child => {
+             if (child.name() === "ticket-ring" || child.getAttr("isTicketRing")) {
+                 child.destroy();
+             }
+         });
+      }
+    });
+  }
+
+  if (mapLayer && typeof mapLayer.batchDraw === "function") {
+    mapLayer.batchDraw();
+  }
 }
   
   function formatDateTimeLocal(date) {
@@ -4888,40 +4917,81 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
   }
 
 
-  function handleTicketSeatSelection(pointerPos, target) {
+ function handleTicketSeatSelection(pointerPos, target) {
+  // Determine context: Tickets vs Holds
+  const isHoldTab = activeMainTab === "holds";
   const ticketId = getActiveTicketIdForAssignments();
   
-  // eslint-disable-next-line no-console
-  console.log("[seatmap][tickets] selection logic", {
-    ticketId,
-    targetName: target ? target.name() : 'null',
-  });
-
-  if (!ticketId) return false;
+  // If on Ticket tab and no ticket selected, abort
+  if (!isHoldTab && !ticketId) return false;
+  // If on Hold tab and no type selected (hold/allocation), abort
+  if (isHoldTab && !activeHoldType) return false;
 
   // --- HELPER: Toggle a list of seats ---
   const toggleList = (seats) => {
       if (!seats || !seats.length) return;
-      const { set } = ensureSeatTicketSet(seats[0]);
-      const shouldAssign = !(set && set.has(ticketId)); 
+      
+      const firstSeat = seats[0];
+      const firstSid = ensureSeatIdAttr(firstSeat);
+      
+      let shouldAssign = true;
+
+      if (isHoldTab) {
+          // Toggle based on hold status
+          const currentStatus = holdAssignments.get(firstSid);
+          shouldAssign = currentStatus !== activeHoldType;
+      } else {
+          // Toggle based on ticket set
+          const { set } = ensureSeatTicketSet(firstSeat);
+          shouldAssign = !(set && set.has(ticketId));
+      }
 
       seats.forEach(seat => {
-          const { sid, set: seatSet } = ensureSeatTicketSet(seat);
-          if (!sid || !seatSet) return;
-          if (shouldAssign) seatSet.add(ticketId);
-          else seatSet.delete(ticketId);
-          
-          const ids = Array.from(seatSet);
-          seat.setAttr("sbTicketIds", ids);
-          seat.setAttr("sbTicketId", ids[0] || null);
-          
-          if (ids.length > 0) ticketAssignments.set(sid, new Set(ids));
-          else ticketAssignments.delete(sid);
+          const sid = ensureSeatIdAttr(seat);
+          if (!sid) return;
+
+          if (isHoldTab) {
+              // --- HOLD LOGIC ---
+              if (shouldAssign) {
+                  // Prevent allocation if already held (black), but allow overwriting allocation <-> hold if user clicks specific button?
+                  // Requirement: "Seats already on hold (black) cannot also be allocated"
+                  const current = holdAssignments.get(sid);
+                  if (activeHoldType === "allocation" && current === "hold") {
+                      return; // Cannot allocate a held seat
+                  }
+                  holdAssignments.set(sid, activeHoldType);
+                  seat.setAttr("sbHoldStatus", activeHoldType);
+              } else {
+                  // Unassign if it matches current type
+                  const current = holdAssignments.get(sid);
+                  if (current === activeHoldType) {
+                      holdAssignments.delete(sid);
+                      seat.setAttr("sbHoldStatus", null);
+                  }
+              }
+          } else {
+              // --- TICKET LOGIC (Existing) ---
+              const { set: seatSet } = ensureSeatTicketSet(seat);
+              if (!seatSet) return;
+              
+              if (shouldAssign) seatSet.add(ticketId);
+              else seatSet.delete(ticketId);
+              
+              const ids = Array.from(seatSet);
+              seat.setAttr("sbTicketIds", ids);
+              seat.setAttr("sbTicketId", ids[0] || null);
+              
+              if (ids.length > 0) ticketAssignments.set(sid, new Set(ids));
+              else ticketAssignments.delete(sid);
+          }
       });
       
-      rebuildTicketAssignmentsCache();
+      if (!isHoldTab) rebuildTicketAssignmentsCache();
+      
       applySeatVisuals();
-      renderTicketingPanel();
+      if (isHoldTab) renderHoldsPanel(); 
+      else renderTicketingPanel();
+      
       pushHistory();
   };
 
@@ -4958,7 +5028,6 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
       if (group) {
           const type = group.getAttr("shapeType") || group.name();
           if (type === "circular-table" || type === "rect-table") {
-              // Clicked Body or Label?
               if (target.name() === "body-rect" || target.name() === "table-label") {
                   const tableSeats = group.find((n) => n.getAttr("isSeat"));
                   if (tableSeats.length > 0) {
@@ -4970,19 +5039,18 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
       }
   }
 
-  // --- 4. CHECK SINGLE SEAT CLICK (Direct check) ---
+  // --- 4. CHECK SINGLE SEAT CLICK ---
   const isDirectSeat = target && target.getAttr && target.getAttr("isSeat");
   if (isDirectSeat) {
-    toggleSeatTicketAssignment(target, ticketId);
-    applySeatVisuals();
-    renderTicketingPanel();
-    pushHistory();
+    // Wrap single seat in array to use shared helper
+    toggleList([target]);
     return true;
   }
 
   return false;
 }
 
+  
   function getSelectedSeatNodes() {
     const nodes =
       transformer && transformer.nodes && transformer.nodes().length
@@ -5722,6 +5790,181 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
 
     el.appendChild(addBtn);
   }
+
+  function renderHoldsPanel() {
+  const el = getInspectorElement();
+  if (!el) return;
+  
+  // Ensure we have show meta for emails
+  ensureShowMetaLoaded();
+
+  el.innerHTML = "";
+  const titleWrap = document.createElement("div");
+  titleWrap.className = "sb-ticketing-heading";
+  titleWrap.innerHTML = `
+    <div class="sb-ticketing-title">Holds & Allocations</div>
+    <div class="sb-ticketing-sub">Block seats or allocate to promoters.</div>
+  `;
+  el.appendChild(titleWrap);
+
+  const container = document.createElement("div");
+  container.className = "sb-ticket-stack";
+
+  // --- 1. HOLD SECTION ---
+  const holdCard = document.createElement("div");
+  holdCard.className = `sb-ticket-card ${activeHoldType === "hold" ? "is-active" : ""}`;
+  
+  // Calculate hold count
+  let holdCount = 0;
+  holdAssignments.forEach(val => { if (val === "hold") holdCount++; });
+
+  holdCard.innerHTML = `
+    <button type="button" class="sb-ticket-card-header" id="btn-select-hold">
+      <div class="sb-ticket-card-main">
+        <span class="sb-ticket-swatch" style="background:#000000;"></span>
+        <div class="sb-ticket-card-copy">
+          <div class="sb-ticket-name">General Hold</div>
+          <div class="sb-ticket-meta">${holdCount} seats blocked</div>
+        </div>
+      </div>
+      <div class="sb-ticket-card-actions">
+         <span class="sb-ticket-caret">${activeHoldType === "hold" ? "Selected" : ""}</span>
+      </div>
+    </button>
+  `;
+  // Click handler for Hold
+  holdCard.querySelector("#btn-select-hold").addEventListener("click", () => {
+      activeHoldType = "hold";
+      ticketSeatSelectionMode = true;
+      setTicketSeatSelectionMode(true, "hold-tab-activation");
+      applySeatVisuals(); // Refresh colors
+      renderHoldsPanel(); // Refresh UI active state
+  });
+  container.appendChild(holdCard);
+
+  // --- 2. ALLOCATION SECTION ---
+  const allocCard = document.createElement("div");
+  allocCard.className = `sb-ticket-card ${activeHoldType === "allocation" ? "is-active" : ""}`;
+
+  // Calculate allocation list and count
+  let allocCount = 0;
+  const allocatedSeatsList = [];
+  holdAssignments.forEach((val, key) => { 
+      if (val === "allocation") {
+          allocCount++;
+          // Find seat node to get readable name
+          const seat = mapLayer.find(node => node.getAttr("sbSeatId") === key)[0];
+          if(seat) {
+              const row = seat.getAttr("sbSeatRowLabel");
+              const num = seat.getAttr("sbSeatLabel");
+              allocatedSeatsList.push(`${row || ''}${num}`);
+          }
+      }
+  });
+
+  allocCard.innerHTML = `
+    <button type="button" class="sb-ticket-card-header" id="btn-select-alloc">
+      <div class="sb-ticket-card-main">
+        <span class="sb-ticket-swatch" style="background:#10B981;"></span>
+        <div class="sb-ticket-card-copy">
+          <div class="sb-ticket-name">Promoter Allocation</div>
+          <div class="sb-ticket-meta">${allocCount} seats allocated</div>
+        </div>
+      </div>
+      <div class="sb-ticket-card-actions">
+         <span class="sb-ticket-caret">${activeHoldType === "allocation" ? "Selected" : ""}</span>
+      </div>
+    </button>
+  `;
+  
+  // Allocation Details Body (only if active)
+  if (activeHoldType === "allocation") {
+      const body = document.createElement("div");
+      body.className = "sb-ticket-card-body";
+      
+      // Textarea for seats
+      const seatsField = document.createElement("div");
+      seatsField.className = "sb-field-col";
+      seatsField.innerHTML = `
+        <label class="sb-label">Allocated Seats</label>
+        <textarea class="sb-input sb-textarea" readonly>${allocatedSeatsList.join(", ")}</textarea>
+      `;
+      body.appendChild(seatsField);
+
+      // Email Button
+      const emailBtn = document.createElement("button");
+      emailBtn.className = "tool-button";
+      emailBtn.innerHTML = "✉️ E-mail allocation";
+      emailBtn.addEventListener("click", () => {
+          const subject = encodeURIComponent(`Seat Allocation for ${showMeta ? showMeta.title : "Event"}`);
+          const bodyText = `Here is the seat allocation list:\n\n${allocatedSeatsList.join(", ")}\n\nShow: ${showMeta ? showMeta.title : ""}\nDate: ${showMeta ? new Date(showMeta.date).toLocaleString() : ""}`;
+          window.open(`mailto:?subject=${subject}&body=${encodeURIComponent(bodyText)}`);
+      });
+      body.appendChild(emailBtn);
+
+      // Report Schedule
+      const reportSection = document.createElement("div");
+      reportSection.style.marginTop = "16px";
+      reportSection.style.paddingTop = "16px";
+      reportSection.style.borderTop = "1px solid #eee";
+      
+      reportSection.innerHTML = `
+        <div class="sb-ticketing-sub" style="margin-bottom:8px; font-weight:600;">Weekly Box Office Reports</div>
+        <div class="sb-field-row">
+            <label class="sb-label" style="display:flex; gap:8px; align-items:center;">
+                <input type="checkbox" id="rpt-enabled" ${allocationDetails.reportEnabled ? "checked" : ""}>
+                Enable weekly reports
+            </label>
+        </div>
+        <div class="sb-field-col">
+             <label class="sb-label">Email Address</label>
+             <input type="email" class="sb-input" id="rpt-email" value="${allocationDetails.reportSchedule.email || ""}">
+        </div>
+        <div class="sb-field-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-top:8px;">
+             <div class="sb-field-col">
+                <label class="sb-label">Day</label>
+                <select class="sb-select" id="rpt-day">
+                    <option value="Monday">Monday</option>
+                    <option value="Friday">Friday</option>
+                </select>
+             </div>
+             <div class="sb-field-col">
+                <label class="sb-label">Time</label>
+                <input type="time" class="sb-input" id="rpt-time" value="${allocationDetails.reportSchedule.time}">
+             </div>
+        </div>
+        <button class="tool-button sb-ghost-button" id="rpt-save" style="margin-top:8px;">Save Report Settings</button>
+      `;
+      
+      body.appendChild(reportSection);
+      
+      // Add listeners for report inputs
+      setTimeout(() => {
+          document.getElementById("rpt-save").addEventListener("click", () => {
+              allocationDetails.reportEnabled = document.getElementById("rpt-enabled").checked;
+              allocationDetails.reportSchedule.email = document.getElementById("rpt-email").value;
+              allocationDetails.reportSchedule.day = document.getElementById("rpt-day").value;
+              allocationDetails.reportSchedule.time = document.getElementById("rpt-time").value;
+              alert("Report settings saved.");
+              // In a real app, you would sync this to the backend here via API
+          });
+      }, 0);
+
+      allocCard.appendChild(body);
+  }
+
+  // Click handler for Allocation
+  allocCard.querySelector("#btn-select-alloc").addEventListener("click", () => {
+      activeHoldType = "allocation";
+      ticketSeatSelectionMode = true;
+      setTicketSeatSelectionMode(true, "hold-tab-activation");
+      applySeatVisuals();
+      renderHoldsPanel();
+  });
+
+  container.appendChild(allocCard);
+  el.appendChild(container);
+}
 
     // ---------- Selection inspector (right-hand panel) ----------
 
@@ -9719,21 +9962,37 @@ function handleStageMouseMove() {
     setActiveTool("select");
   };
 
-  window.__TIXALL_SET_TAB_MODE__ = function (tab) {
-    activeMainTab = tab || "map";
-
-    setTicketSeatSelectionMode(false, "tab-change");
-    clearSelection();
-
-    if (activeMainTab === "tickets") {
-      findDuplicateSeatRefs();
-      renderTicketingPanel();
-    } else {
-      applySeatVisuals();
-      renderInspector(selectedNode);
-    }
-  };
-
+ window.__TIXALL_SET_TAB_MODE__ = function (tab) {
+  activeMainTab = tab || "map";
+  
+  // Reset modes when switching
+  setTicketSeatSelectionMode(false, "tab-change");
+  clearSelection();
+  
+  if (activeMainTab === "tickets") {
+    activeHoldType = null; // Reset hold selection
+    findDuplicateSeatRefs();
+    renderTicketingPanel();
+    
+  } else if (activeMainTab === "holds") {
+    // Show Popup
+    const overlay = document.createElement('div');
+    overlay.style.cssText = "position:fixed; top:120px; left:50%; transform:translateX(-50%); background:#182828; color:white; padding:12px 20px; border-radius:8px; z-index:9999; font-size:14px; box-shadow:0 10px 30px rgba(0,0,0,0.3); animation: fadeOut 0.5s forwards 4s;";
+    overlay.textContent = "Use this section to block off seating / put seats on hold or to allocate them to an external event organiser or promoter.";
+    document.body.appendChild(overlay);
+    setTimeout(() => overlay.remove(), 5000); // Remove after 5s
+    
+    // Default to Hold mode initially? Or just render empty.
+    // Let's render the panel.
+    renderHoldsPanel();
+    
+  } else {
+    // Map / View
+    activeHoldType = null;
+    applySeatVisuals();
+    renderInspector(selectedNode);
+  }
+};
   stage.on("click", handleStageClick);
   stage.on("contentClick", handleStageClick);
   stage.on("tap", handleStageClick);
