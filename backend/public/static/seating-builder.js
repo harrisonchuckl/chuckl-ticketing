@@ -4521,6 +4521,7 @@ function updateTicketRings() {
     if (activeTicketSelectionId && exists) return activeTicketSelectionId;
     return ticketTypes.length ? ticketTypes[0].id : null;
   }
+   }
 
 function refreshSeatTicketListeners() {
   // 0. Cleanup DOM listeners
