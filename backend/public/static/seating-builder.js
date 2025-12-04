@@ -4525,7 +4525,7 @@ function refreshSeatTicketListeners() {
     });
   };
 
-  // 2. Helper for Text/Table Hover Effects
+  // 2. Helper for Hover Effects
   const attachHoverEffect = (node, isText = true) => {
       node.on('mouseover.ticketAssignHover', () => {
           if (!ticketSeatSelectionMode) return;
@@ -4534,10 +4534,10 @@ function refreshSeatTicketListeners() {
           const color = (ticket && ticket.color) || "#2563eb";
           
           if (isText) {
-              node.setAttr('__origFill', node.fill());
+              if (!node.getAttr('__origFill')) node.setAttr('__origFill', node.fill());
               node.fill(color); 
           } else {
-              node.setAttr('__origStroke', node.stroke());
+              if (!node.getAttr('__origStroke')) node.setAttr('__origStroke', node.stroke());
               node.stroke(color);
               node.strokeWidth(3);
           }
@@ -4581,14 +4581,15 @@ function refreshSeatTicketListeners() {
            attachHandler(hitRect);
 
            // --- HOLLOW CONTAINER LOGIC ---
-           // 1. Remove fill so internal gaps are ignored
+           // Explicitly disable fill hit detection to solve "Gap Selection"
            hitRect.fill(null); 
-           // 2. Set invisible stroke for detection
+           hitRect.fillEnabled(false); 
+           
            hitRect.stroke("rgba(0,0,0,0)");
            hitRect.strokeWidth(0); 
-           // 3. Set thin hit area (15px) to stick to the padding and avoid seat gaps
-           // Padding is ~12px. 15px stroke = 7.5px In/Out. This leaves a safe buffer from seats.
-           hitRect.hitStrokeWidth(15); 
+           // 20px stroke width = 10px inside the rect. 
+           // This covers the padding area but stops before the seats.
+           hitRect.hitStrokeWidth(20); 
 
            hitRect.off('.ticketAssignHover');
            hitRect.on('mouseover.ticketAssignHover', () => {
@@ -4730,17 +4731,18 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
     mapLayer.listening(true);
   }
 
-  // 2. LOCK/UNLOCK DRAGGING & HANDLE CONTAINER FILL
+  // 2. LOCK/UNLOCK DRAGGING & RESTORE STATE
   if (mapLayer) {
       const allGroups = mapLayer.find('Group');
       allGroups.forEach(g => {
-          g.draggable(!enabled); // Lock when enabled
+          g.draggable(!enabled); // Disable drag in ticket mode
           
-          // Restore solid fill when leaving ticket mode
+          // Restore solid fill when leaving ticket mode so dragging works again
           if (!enabled) {
               const hr = g.findOne('.hit-rect');
               if (hr) {
                   hr.fill("rgba(0,0,0,0)"); 
+                  hr.fillEnabled(true); // Re-enable fill hit
                   hr.stroke(null);
                   hr.strokeWidth(0);
                   hr.hitStrokeWidth(0); 
@@ -4763,7 +4765,7 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
       });
   }
 
-  // 3. Force all seats and their groups to listen
+  // 3. Force all seats to listen
   const seats = getAllSeatNodes();
   seats.forEach((seat) => {
     if (typeof seat.listening === "function") seat.listening(true);
@@ -4890,10 +4892,9 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
   const ticketId = getActiveTicketIdForAssignments();
   
   // eslint-disable-next-line no-console
-  console.log("[seatmap][tickets] selection", {
+  console.log("[seatmap][tickets] selection logic", {
     ticketId,
     targetName: target ? target.name() : 'null',
-    isRowLabel: target ? target.getAttr("isRowLabel") : false
   });
 
   if (!ticketId) return false;
@@ -4957,6 +4958,7 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
       if (group) {
           const type = group.getAttr("shapeType") || group.name();
           if (type === "circular-table" || type === "rect-table") {
+              // Clicked Body or Label?
               if (target.name() === "body-rect" || target.name() === "table-label") {
                   const tableSeats = group.find((n) => n.getAttr("isSeat"));
                   if (tableSeats.length > 0) {
@@ -4968,10 +4970,10 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
       }
   }
 
-  // --- 4. CHECK SINGLE SEAT CLICK ---
-  let seatNode = findSeatNodeFromTarget(target);
-  if (seatNode) {
-    toggleSeatTicketAssignment(seatNode, ticketId);
+  // --- 4. CHECK SINGLE SEAT CLICK (Direct check) ---
+  const isDirectSeat = target && target.getAttr && target.getAttr("isSeat");
+  if (isDirectSeat) {
+    toggleSeatTicketAssignment(target, ticketId);
     applySeatVisuals();
     renderTicketingPanel();
     pushHistory();
