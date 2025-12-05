@@ -5207,200 +5207,194 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
 }
   
   function handleTicketSeatSelection(pointerPos, target) {
-
-    console.log(`[seatmap][ACCESS-DEBUG] Handler called. Target Class: ${target.getClassName()}, Target Name: ${target.name()}`);
-    
- // --- INTERCEPT: ACCESSIBILITY MODE (FIXED FOR TABLES/ROWS) ---
-  if (activeAccessibilityMode) {
-    let seat = findSeatNodeFromTarget(target);
-
-    // If direct lookup failed (e.g. we clicked a container/background), try digging deeper
-    if (!seat && stage && pointerPos) {
-      const visibleNodes = [];
-      const nodesToHide = [target];
-
-      // Special handling for Tables: hide the main table circle/rect so we can click the seat on top
-      const parent = target.getParent();
-      if (parent && (parent.name() === 'circular-table' || parent.name() === 'rect-table')) {
-          const body = parent.findOne('.body-rect');
-          if (body) nodesToHide.push(body);
-      }
-
-      // Temporarily hide blocking elements
-      nodesToHide.forEach(n => {
-          if (n.visible()) {
-              n.visible(false);
-              visibleNodes.push(n);
-          }
-      });
-
-      // "X-Ray" check: see what is immediately under the pointer now
-      const shape = stage.getIntersection(pointerPos);
-      
-      // Restore visibility immediately
-      visibleNodes.forEach(n => n.visible(true));
-
-      if (shape) {
-        seat = findSeatNodeFromTarget(shape);
-      }
-    }
-
-    if (!seat) return false; 
-
-    // Apply Logic
-    const current = seat.getAttr("sbAccessibilityType");
-    
-    // Toggle logic
-    if (current === activeAccessibilityMode) {
-      seat.setAttr("sbAccessibilityType", null);
-    } else {
-      seat.setAttr("sbAccessibilityType", activeAccessibilityMode);
-    }
-
-    // Force a visual update immediately for just this node/group to be efficient
-    const group = seat.getParent();
-    if(group) {
-       applyAccessibilityVisualsOverride(seat, group);
-    }
-    
-    // Then run the full visual refresh (without rebuilding listeners)
-    applySeatVisuals(); 
-    pushHistory();
-    
-    if (selectedNode) renderInspector(selectedNode);
-    return true;
-  }    
-    const ticketId = (activeHoldMode || activeViewMode) ? "MODE_ACTIVE" : getActiveTicketIdForAssignments();
-  if (!ticketId) return false;
-
-  // --- Helper to Toggle List (Rows/Tables) ---
-  const toggleList = (seats) => {
-    // 🛑 BLOCK MULTI-SELECTION IN VIEW MODE
-    if (activeViewType === "view") {
-      alert("View from Seats images must be assigned to individual seats only. Please click specific seats.");
-      return;
-    }
-
-    if (!seats || !seats.length) return;
-
-    // A. INFO MODE (New)
-    if (activeViewType === "info") {
-      const lblInput = document.getElementById("sb-info-label");
-      const descInput = document.getElementById("sb-info-desc");
-      const labelVal = lblInput ? lblInput.value : "";
-      const descVal = descInput ? descInput.value : "";
-
-      if (!labelVal && !descVal) {
-        alert("Please enter a Label or Description before selecting rows/blocks.");
-        return;
-      }
-
-      // Determine toggle state based on first seat
-      const firstHasInfo = !!seats[0].getAttr("sbInfoLabel");
-      
-      seats.forEach(seat => {
-        if (firstHasInfo) {
-          // Remove
-          seat.setAttr("sbInfoLabel", null);
-          seat.setAttr("sbInfoDesc", null);
-        } else {
-          // Apply
-          seat.setAttr("sbInfoLabel", labelVal);
-          seat.setAttr("sbInfoDesc", descVal);
+    // ---------------------------------------------------------
+    // 1. ACCESSIBILITY MODE INTERCEPT (Highest Priority)
+    // ---------------------------------------------------------
+    if (activeAccessibilityMode) {
+        let seat = findSeatNodeFromTarget(target);
+        
+        // "X-Ray" logic: If we clicked an overlay/blocker, find the seat underneath
+        if (!seat && stage && pointerPos) {
+            // Temporarily hide the target to see what's under it
+            const wasVisible = target.visible();
+            target.visible(false);
+            const shapeUnderneath = stage.getIntersection(pointerPos);
+            target.visible(wasVisible); // Restore immediately
+            
+            if (shapeUnderneath) {
+                seat = findSeatNodeFromTarget(shapeUnderneath);
+            }
         }
-      });
-      applySeatVisuals();
-      pushHistory();
-      return;
+
+        if (seat) {
+            const current = seat.getAttr("sbAccessibilityType");
+            const next = (current === activeAccessibilityMode) ? null : activeAccessibilityMode;
+            
+            seat.setAttr("sbAccessibilityType", next);
+            
+            // Visual refresh
+            const group = seat.getParent();
+            if (group) applyAccessibilityVisualsOverride(seat, group);
+            
+            applySeatVisuals(); // Update colors
+            pushHistory();
+            if (selectedNode) renderInspector(selectedNode);
+            return true; // Stop here, don't do hold/ticket logic
+        }
+        // If in access mode but didn't click a seat, do nothing
+        return false;
     }
 
-    // B. HOLD MODE (Existing)
-    if (activeHoldMode) {
-      const firstStatus = seats[0].getAttr("sbHoldStatus");
-      const shouldApply = firstStatus !== activeHoldMode;
-      seats.forEach(seat => {
-        seat.setAttr("sbHoldStatus", shouldApply ? activeHoldMode : null);
-      });
-      applySeatVisuals();
-      renderHoldsPanel();
-      pushHistory();
-      return;
-    }
-
-    // C. TICKET MODE (Existing)
-    const { set } = ensureSeatTicketSet(seats[0]);
-    const shouldAssign = !(set && set.has(ticketId));
-    seats.forEach(seat => {
-      const { sid, set: seatSet } = ensureSeatTicketSet(seat);
-      if (!sid || !seatSet) return;
-      if (shouldAssign) seatSet.add(ticketId);
-      else seatSet.delete(ticketId);
-      const ids = Array.from(seatSet);
-      seat.setAttr("sbTicketIds", ids);
-      seat.setAttr("sbTicketId", ids[0] || null);
-      if (ids.length > 0) ticketAssignments.set(sid, new Set(ids));
-      else ticketAssignments.delete(sid);
-    });
-    rebuildTicketAssignmentsCache();
-    applySeatVisuals();
-    renderTicketingPanel();
-    pushHistory();
-  };
-
-  // ... (Keep existing checks for Row Label, Hit Rect, Table) ...
-  // ... Ensure they call the updated toggleList above ...
-  
-  // 1. Row Label
-  if (target && target.getAttr("isRowLabel")) {
-     // ... same lookup logic ...
-     // toggleList(seatsInRow); 
-     // return true;
-     // (Copy logic from previous file or leave as is if toggleList is defined in scope)
-     const rowLabelText = target.text();
-     const parentGroup = target.getParent();
-     if (parentGroup && rowLabelText) {
-       const seatsInRow = parentGroup.find((node) => node.getAttr("isSeat") && node.getAttr("sbSeatRowLabel") === rowLabelText);
-       if (seatsInRow.length > 0) { toggleList(seatsInRow); return true; }
-     }
-  }
-
-  // 2. Container
-  if (target && target.name() === "hit-rect") {
-     const group = target.getParent();
-     if (group && group.getAttr("shapeType") === "row-seats") {
-        const allSeats = group.find((n) => n.getAttr("isSeat"));
-        if (allSeats.length > 0) { toggleList(allSeats); return true; }
-     }
-  }
-
-  // 3. Table
-  if (target) {
-    const group = target.findAncestor("Group", true);
-    if (group && (group.getAttr("shapeType") === "circular-table" || group.getAttr("shapeType") === "rect-table")) {
-       if (target.name() === "body-rect" || target.name() === "table-label") {
-          const tableSeats = group.find((n) => n.getAttr("isSeat"));
-          if (tableSeats.length > 0) { toggleList(tableSeats); return true; }
-       }
-    }
-  }
-
-  // 4. SINGLE SEAT CLICK
-  const isDirectSeat = target && target.getAttr && target.getAttr("isSeat");
-
+    // ---------------------------------------------------------
+    // 2. ASSIGNMENT MODE (Tickets, Holds, View/Info)
+    // ---------------------------------------------------------
     
-    
-  if (isDirectSeat) {
-    toggleSeatTicketAssignment(target, ticketId);
-    applySeatVisuals();
-    // Conditionally re-render panel
-    if (activeHoldMode) renderHoldsPanel();
-    // View panel doesn't need full re-render on seat click, just visuals
-    else if (!activeViewMode) renderTicketingPanel();
-    pushHistory();
-    return true;
-  }
+    // Determine the "Active ID" (Ticket ID, or generic Mode string)
+    let activeId = null;
+    if (activeHoldMode) activeId = activeHoldMode; // "hold" or "allocation"
+    else if (activeViewMode) activeId = activeViewType; // "view" or "info"
+    else activeId = getActiveTicketIdForAssignments(); // Ticket ID
 
-  return false;
+    // If no mode is active, we can't do anything
+    if (!activeId) return false;
+
+    // --- Helper: Toggle a List of Seats (Row/Block) ---
+    const toggleList = (seats) => {
+        if (!seats || !seats.length) return;
+
+        // A. VIEW MODE (Block multi-select)
+        if (activeViewType === "view") {
+            alert("View images must be uploaded to individual seats. Please click a specific seat.");
+            return;
+        }
+
+        // B. INFO MODE
+        if (activeViewType === "info") {
+            const lblInput = document.getElementById("sb-info-label");
+            const descInput = document.getElementById("sb-info-desc");
+            const labelVal = lblInput ? lblInput.value : "";
+            const descVal = descInput ? descInput.value : "";
+            
+            if (!labelVal && !descVal) {
+                alert("Please enter a Label or Description in the sidebar before selecting rows.");
+                return;
+            }
+            
+            // Check first seat to decide if adding or removing
+            const firstHasInfo = !!seats[0].getAttr("sbInfoLabel");
+            seats.forEach(s => {
+                s.setAttr("sbInfoLabel", firstHasInfo ? null : labelVal);
+                s.setAttr("sbInfoDesc", firstHasInfo ? null : descVal);
+            });
+        }
+        // C. HOLD MODE
+        else if (activeHoldMode) {
+            const firstStatus = seats[0].getAttr("sbHoldStatus");
+            const shouldApply = firstStatus !== activeHoldMode;
+            seats.forEach(s => {
+                s.setAttr("sbHoldStatus", shouldApply ? activeHoldMode : null);
+            });
+        }
+        // D. TICKET MODE
+        else {
+            const { set: firstSet } = ensureSeatTicketSet(seats[0]);
+            const shouldAssign = !(firstSet && firstSet.has(activeId));
+            
+            seats.forEach(s => {
+                const { sid, set } = ensureSeatTicketSet(s);
+                if (!sid || !set) return;
+                if (shouldAssign) set.add(activeId);
+                else set.delete(activeId);
+                
+                // Sync back to attributes
+                const ids = Array.from(set);
+                s.setAttr("sbTicketIds", ids);
+                s.setAttr("sbTicketId", ids[0] || null);
+                if (ids.length > 0) ticketAssignments.set(sid, new Set(ids));
+                else ticketAssignments.delete(sid);
+            });
+            rebuildTicketAssignmentsCache();
+        }
+
+        // Global Refresh
+        applySeatVisuals();
+        if (activeHoldMode) renderHoldsPanel();
+        else if (!activeViewMode) renderTicketingPanel(); // Only re-render ticket panel
+        pushHistory();
+    };
+
+    // ---------------------------------------------------------
+    // 3. TARGET DETECTION (Row vs Table vs Seat)
+    // ---------------------------------------------------------
+
+    // A. Row Label Click
+    if (target && target.getAttr("isRowLabel")) {
+        const rowLabelText = target.text();
+        const parentGroup = target.getParent();
+        if (parentGroup && rowLabelText) {
+            // Find all seats in this group that match the row label
+            const seatsInRow = parentGroup.find(node => 
+                node.getAttr("isSeat") && 
+                node.getAttr("sbSeatRowLabel") === rowLabelText
+            );
+            if (seatsInRow.length > 0) {
+                toggleList(seatsInRow);
+                return true;
+            }
+        }
+    }
+
+    // B. Block/Container Click (Dotted line box)
+    if (target && target.name() === "hit-rect") {
+        const group = target.getParent();
+        if (group && group.getAttr("shapeType") === "row-seats") {
+            const allSeats = group.find(n => n.getAttr("isSeat"));
+            if (allSeats.length > 0) {
+                toggleList(allSeats);
+                return true;
+            }
+        }
+    }
+
+    // C. Table Click (Circle/Rect Body or "Table Label")
+    if (target) {
+        const group = target.getParent(); // Usually direct parent
+        // Double check it's a table group
+        if (group && (group.getAttr("shapeType") === "circular-table" || group.getAttr("shapeType") === "rect-table")) {
+            if (target.name() === "body-rect" || target.name() === "table-label") {
+                const tableSeats = group.find(n => n.getAttr("isSeat"));
+                if (tableSeats.length > 0) {
+                    toggleList(tableSeats);
+                    return true;
+                }
+            }
+        }
+    }
+
+    // D. Single Seat Click
+    // We try to find a seat node either directly or via X-Ray if blocked
+    let targetSeat = findSeatNodeFromTarget(target);
+    
+    // If we didn't find a seat directly, try X-Ray (helpful if icons/text overlays are blocking)
+    if (!targetSeat && stage && pointerPos) {
+        const wasVisible = target.visible();
+        target.visible(false);
+        const under = stage.getIntersection(pointerPos);
+        target.visible(wasVisible);
+        if (under) targetSeat = findSeatNodeFromTarget(under);
+    }
+
+    if (targetSeat) {
+        toggleSeatTicketAssignment(targetSeat, activeId);
+        
+        applySeatVisuals();
+        if (activeHoldMode) renderHoldsPanel();
+        else if (!activeViewMode) renderTicketingPanel();
+        pushHistory();
+        return true;
+    }
+
+    return false;
 }
   function getSelectedSeatNodes() {
     const nodes =
