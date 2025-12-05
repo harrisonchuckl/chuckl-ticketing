@@ -4740,40 +4740,39 @@ function applyAccessibilityVisualsOverride(seatCircle, group) {
   }
 
 function refreshSeatTicketListeners() {
-    // 1. Cleanup old DOM listeners if any exist
+    // 1. Cleanup old DOM listeners
     if (window.ticketSeatDomListener && stage && stage.container()) {
         stage.container().removeEventListener("pointerdown", window.ticketSeatDomListener, true);
         window.ticketSeatDomListener = null;
     }
 
-    // 2. Helper: Hover Effects (Visual Feedback)
+    // 2. Helper: Hover Effects
     const attachHoverEffect = (node, isText = true) => {
-        node.off('.ticketAssignHover'); // Clean previous
+        node.off('.ticketAssignHover');
         node.on('mouseover.ticketAssignHover', () => {
             if (!ticketSeatSelectionMode) return;
             stage.container().style.cursor = "pointer";
 
-            // Determine Color based on Mode
-            let color = "#2563eb"; // Default Blue
-            
-            if (activeHoldMode === 'allocation') color = "#10B981"; // Promoter Green
-            else if (activeHoldMode === 'hold') color = "#000000"; // General Hold Black
-            else if (activeViewMode) color = "#000000"; // View/Info Black
+            // Determine Hover Color
+            let color = "#2563eb"; // Blue (Default/Tickets)
+            if (activeHoldMode === 'allocation') color = "#10B981"; // Green (Promo)
+            else if (activeHoldMode === 'hold') color = "#000000"; // Black (Hold)
+            else if (activeViewMode) color = "#000000"; // Black (View)
             else {
-                // Ticket Mode
+                // Specific Ticket Color
                 const tid = getActiveTicketIdForAssignments();
                 const ticket = ticketTypes.find(t => t.id === tid);
-                if (ticket) color = ticket.color;
+                if (ticket && ticket.color) color = ticket.color;
             }
 
-            // Apply Color
+            // Apply Visuals
             if (isText) {
                 if (!node.getAttr('__origFill')) node.setAttr('__origFill', node.fill());
                 node.fill(color);
             } else {
                 if (!node.getAttr('__origStroke')) node.setAttr('__origStroke', node.stroke());
                 node.stroke(color);
-                node.strokeWidth(3); // Thicker stroke on hover
+                node.strokeWidth(3);
             }
             mapLayer.batchDraw();
         });
@@ -4782,7 +4781,7 @@ function refreshSeatTicketListeners() {
             if (!ticketSeatSelectionMode) return;
             stage.container().style.cursor = "default";
             
-            // Restore Original Color
+            // Restore Visuals
             if (isText) {
                 node.fill(node.getAttr('__origFill') || "#111827");
             } else {
@@ -4793,57 +4792,73 @@ function refreshSeatTicketListeners() {
         });
     };
 
-    // 3. Helper: Click Handler (Trigger Selection)
+    // 3. Helper: Click Handler
     const attachHandler = (node) => {
-        node.off('click.ticketAssign tap.ticketAssign'); // Clean previous
+        node.off('click.ticketAssign tap.ticketAssign');
         node.on("click.ticketAssign tap.ticketAssign", (evt) => {
-            // Stop propagation so we don't trigger stage clicks
-            evt.cancelBubble = true; 
+            evt.cancelBubble = true; // IMPORTANT: Stop bubbling
             handleTicketSeatSelection(stage.getPointerPosition(), evt.target);
         });
     };
 
-    // 4. Attach to All Interactive Elements
+    // 4. Attach to Elements
     if (mapLayer) {
         // A. Single Seats
         getAllSeatNodes().forEach(seat => attachHandler(seat));
 
-        // B. Groups (Rows & Tables)
+        // B. Groups (Row Blocks & Tables)
         const groups = mapLayer.find("Group");
         groups.forEach(group => {
             const type = group.getAttr("shapeType") || group.name();
 
-            // Row Labels & Containers
+            // --- ROW BLOCKS ---
             if (type === "row-seats") {
+                // 1. Row Labels (e.g. "A", "B")
                 const labels = group.find(n => n.getAttr("isRowLabel"));
                 labels.forEach(lbl => {
+                    lbl.moveToTop(); // FORCE TOP: Ensure it sits above the container hit-rect
                     attachHandler(lbl);
-                    attachHoverEffect(lbl, true); // Hover for Row Letter
+                    attachHoverEffect(lbl, true);
                 });
 
+                // 2. Container (Hit Rect) - THE FIX FOR GAPS
                 const hitRect = group.findOne(".hit-rect");
                 if (hitRect) {
                     attachHandler(hitRect);
-                    // Custom hover for the dashed container box
+                    
+                    // CRITICAL: Make the box "Hollow" so clicks in gaps pass through
+                    hitRect.fillEnabled(false); 
+                    hitRect.fill(null);
+                    
+                    // Give it a transparent stroke so the BORDER is clickable
+                    hitRect.stroke("rgba(0,0,0,0)");
+                    hitRect.strokeWidth(15); // Invisible click area width around border
+                    hitRect.hitStrokeWidth(15);
+
+                    // Container Hover Effect (Dashed Border)
                     hitRect.off('.ticketAssignHover');
                     hitRect.on('mouseover.ticketAssignHover', () => {
                         if (!ticketSeatSelectionMode || activeViewType === 'view') return;
                         stage.container().style.cursor = "copy";
+                        // Visual Border
                         hitRect.stroke(activeHoldMode || activeViewMode ? '#000000' : '#2563eb');
-                        hitRect.strokeWidth(2);
+                        hitRect.strokeWidth(2); // Visible width
                         hitRect.dash([6, 4]);
                         mapLayer.batchDraw();
                     });
                     hitRect.on('mouseout.ticketAssignHover', () => {
+                        if (!ticketSeatSelectionMode) return;
                         stage.container().style.cursor = "default";
-                        hitRect.stroke(null);
-                        hitRect.strokeWidth(0);
+                        // Reset to invisible clickable border
+                        hitRect.stroke("rgba(0,0,0,0)"); 
+                        hitRect.strokeWidth(15);
+                        hitRect.dash([]);
                         mapLayer.batchDraw();
                     });
                 }
             }
 
-            // Table Bodies & Labels
+            // --- TABLES ---
             if (type === "circular-table" || type === "rect-table") {
                 const body = group.findOne(".body-rect");
                 const label = group.findOne(".table-label");
@@ -4853,6 +4868,7 @@ function refreshSeatTicketListeners() {
                     if (activeViewType !== 'view') attachHoverEffect(body, false);
                 }
                 if (label) {
+                    label.moveToTop();
                     attachHandler(label);
                     if (activeViewType !== 'view') attachHoverEffect(label, true);
                 }
@@ -5184,186 +5200,143 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
 }
   
   function handleTicketSeatSelection(pointerPos, target) {
-    // ---------------------------------------------------------
-    // 1. ACCESSIBILITY MODE INTERCEPT (Highest Priority)
-    // ---------------------------------------------------------
+    // -----------------------------------------------------------
+    // 1. ACCESSIBILITY MODE INTERCEPT
+    // -----------------------------------------------------------
     if (activeAccessibilityMode) {
         let seat = findSeatNodeFromTarget(target);
-        
-        // "X-Ray" logic: If we clicked an overlay/blocker, find the seat underneath
         if (!seat && stage && pointerPos) {
-            // Temporarily hide the target to see what's under it
-            const wasVisible = target.visible();
+            // X-Ray check for overlays
+            const vis = target.visible();
             target.visible(false);
-            const shapeUnderneath = stage.getIntersection(pointerPos);
-            target.visible(wasVisible); // Restore immediately
-            
-            if (shapeUnderneath) {
-                seat = findSeatNodeFromTarget(shapeUnderneath);
-            }
+            const under = stage.getIntersection(pointerPos);
+            target.visible(vis);
+            if (under) seat = findSeatNodeFromTarget(under);
         }
 
         if (seat) {
             const current = seat.getAttr("sbAccessibilityType");
             const next = (current === activeAccessibilityMode) ? null : activeAccessibilityMode;
-            
             seat.setAttr("sbAccessibilityType", next);
             
-            // Visual refresh
             const group = seat.getParent();
             if (group) applyAccessibilityVisualsOverride(seat, group);
             
-            applySeatVisuals(); // Update colors
+            applySeatVisuals();
             pushHistory();
-            if (selectedNode) renderInspector(selectedNode);
-            return true; // Stop here, don't do hold/ticket logic
+            return true;
         }
-        // If in access mode but didn't click a seat, do nothing
         return false;
     }
 
-    // ---------------------------------------------------------
-    // 2. ASSIGNMENT MODE (Tickets, Holds, View/Info)
-    // ---------------------------------------------------------
-    
-    // Determine the "Active ID" (Ticket ID, or generic Mode string)
+    // -----------------------------------------------------------
+    // 2. ASSIGNMENT MODE (Tickets / Holds / View)
+    // -----------------------------------------------------------
     let activeId = null;
-    if (activeHoldMode) activeId = activeHoldMode; // "hold" or "allocation"
-    else if (activeViewMode) activeId = activeViewType; // "view" or "info"
-    else activeId = getActiveTicketIdForAssignments(); // Ticket ID
+    if (activeHoldMode) activeId = activeHoldMode; // "hold" | "allocation"
+    else if (activeViewMode) activeId = activeViewType; // "view" | "info"
+    else activeId = getActiveTicketIdForAssignments();
 
-    // If no mode is active, we can't do anything
     if (!activeId) return false;
 
-    // --- Helper: Toggle a List of Seats (Row/Block) ---
+    // --- Toggle Logic ---
     const toggleList = (seats) => {
         if (!seats || !seats.length) return;
 
-        // A. VIEW MODE (Block multi-select)
+        // Block View Mode on Groups
         if (activeViewType === "view") {
-            alert("View images must be uploaded to individual seats. Please click a specific seat.");
+            alert("View images must be assigned to individual seats.");
             return;
         }
 
-        // B. INFO MODE
+        // A. INFO
         if (activeViewType === "info") {
-            const lblInput = document.getElementById("sb-info-label");
-            const descInput = document.getElementById("sb-info-desc");
-            const labelVal = lblInput ? lblInput.value : "";
-            const descVal = descInput ? descInput.value : "";
-            
-            if (!labelVal && !descVal) {
-                alert("Please enter a Label or Description in the sidebar before selecting rows.");
-                return;
-            }
-            
-            // Check first seat to decide if adding or removing
-            const firstHasInfo = !!seats[0].getAttr("sbInfoLabel");
+            const lbl = document.getElementById("sb-info-label")?.value;
+            const desc = document.getElementById("sb-info-desc")?.value;
+            if (!lbl && !desc) { alert("Enter Label/Description first."); return; }
+            const firstHas = !!seats[0].getAttr("sbInfoLabel");
             seats.forEach(s => {
-                s.setAttr("sbInfoLabel", firstHasInfo ? null : labelVal);
-                s.setAttr("sbInfoDesc", firstHasInfo ? null : descVal);
+                s.setAttr("sbInfoLabel", firstHas ? null : lbl);
+                s.setAttr("sbInfoDesc", firstHas ? null : desc);
             });
         }
-        // C. HOLD MODE
+        // B. HOLDS
         else if (activeHoldMode) {
             const firstStatus = seats[0].getAttr("sbHoldStatus");
-            const shouldApply = firstStatus !== activeHoldMode;
+            const newStatus = (firstStatus === activeHoldMode) ? null : activeHoldMode;
             seats.forEach(s => {
-                s.setAttr("sbHoldStatus", shouldApply ? activeHoldMode : null);
+                s.setAttr("sbHoldStatus", newStatus);
             });
         }
-        // D. TICKET MODE
+        // C. TICKETS
         else {
             const { set: firstSet } = ensureSeatTicketSet(seats[0]);
-            const shouldAssign = !(firstSet && firstSet.has(activeId));
-            
+            const shouldAdd = !(firstSet && firstSet.has(activeId));
             seats.forEach(s => {
                 const { sid, set } = ensureSeatTicketSet(s);
-                if (!sid || !set) return;
-                if (shouldAssign) set.add(activeId);
+                if (shouldAdd) set.add(activeId);
                 else set.delete(activeId);
                 
-                // Sync back to attributes
                 const ids = Array.from(set);
                 s.setAttr("sbTicketIds", ids);
                 s.setAttr("sbTicketId", ids[0] || null);
-                if (ids.length > 0) ticketAssignments.set(sid, new Set(ids));
+                if (ids.length) ticketAssignments.set(sid, new Set(ids));
                 else ticketAssignments.delete(sid);
             });
             rebuildTicketAssignmentsCache();
         }
 
-        // Global Refresh
         applySeatVisuals();
         if (activeHoldMode) renderHoldsPanel();
-        else if (!activeViewMode) renderTicketingPanel(); // Only re-render ticket panel
+        else if (!activeViewMode) renderTicketingPanel();
         pushHistory();
     };
 
-    // ---------------------------------------------------------
-    // 3. TARGET DETECTION (Row vs Table vs Seat)
-    // ---------------------------------------------------------
+    // -----------------------------------------------------------
+    // 3. TARGET IDENTIFICATION
+    // -----------------------------------------------------------
 
-    // A. Row Label Click
+    // A. ROW LETTER CLICK (Select specific row)
     if (target && target.getAttr("isRowLabel")) {
-        const rowLabelText = target.text();
-        const parentGroup = target.getParent();
-        if (parentGroup && rowLabelText) {
-            // Find all seats in this group that match the row label
-            const seatsInRow = parentGroup.find(node => 
-                node.getAttr("isSeat") && 
-                node.getAttr("sbSeatRowLabel") === rowLabelText
-            );
-            if (seatsInRow.length > 0) {
-                toggleList(seatsInRow);
-                return true;
-            }
+        const txt = target.text();
+        const group = target.getParent();
+        if (group && txt) {
+            const seats = group.find(n => n.getAttr("isSeat") && n.getAttr("sbSeatRowLabel") === txt);
+            if (seats.length) { toggleList(seats); return true; }
         }
     }
 
-    // B. Block/Container Click (Dotted line box)
+    // B. BLOCK BORDER CLICK (Select whole block)
+    // Because fillEnabled is false, this ONLY fires on the border!
     if (target && target.name() === "hit-rect") {
         const group = target.getParent();
         if (group && group.getAttr("shapeType") === "row-seats") {
-            const allSeats = group.find(n => n.getAttr("isSeat"));
-            if (allSeats.length > 0) {
-                toggleList(allSeats);
-                return true;
-            }
+            const seats = group.find(n => n.getAttr("isSeat"));
+            if (seats.length) { toggleList(seats); return true; }
         }
     }
 
-    // C. Table Click (Circle/Rect Body or "Table Label")
-    if (target) {
-        const group = target.getParent(); // Usually direct parent
-        // Double check it's a table group
-        if (group && (group.getAttr("shapeType") === "circular-table" || group.getAttr("shapeType") === "rect-table")) {
-            if (target.name() === "body-rect" || target.name() === "table-label") {
-                const tableSeats = group.find(n => n.getAttr("isSeat"));
-                if (tableSeats.length > 0) {
-                    toggleList(tableSeats);
-                    return true;
-                }
-            }
+    // C. TABLE CLICK
+    if (target && (target.name() === "body-rect" || target.name() === "table-label")) {
+        const group = target.getParent();
+        if (group && (group.name() === "circular-table" || group.name() === "rect-table")) {
+            const seats = group.find(n => n.getAttr("isSeat"));
+            if (seats.length) { toggleList(seats); return true; }
         }
     }
 
-    // D. Single Seat Click
-    // We try to find a seat node either directly or via X-Ray if blocked
-    let targetSeat = findSeatNodeFromTarget(target);
-    
-    // If we didn't find a seat directly, try X-Ray (helpful if icons/text overlays are blocking)
-    if (!targetSeat && stage && pointerPos) {
-        const wasVisible = target.visible();
+    // D. SINGLE SEAT CLICK
+    let seat = findSeatNodeFromTarget(target);
+    if (!seat && stage && pointerPos) {
+        const vis = target.visible();
         target.visible(false);
         const under = stage.getIntersection(pointerPos);
-        target.visible(wasVisible);
-        if (under) targetSeat = findSeatNodeFromTarget(under);
+        target.visible(vis);
+        if (under) seat = findSeatNodeFromTarget(under);
     }
 
-    if (targetSeat) {
-        toggleSeatTicketAssignment(targetSeat, activeId);
-        
+    if (seat) {
+        toggleSeatTicketAssignment(seat, activeId);
         applySeatVisuals();
         if (activeHoldMode) renderHoldsPanel();
         else if (!activeViewMode) renderTicketingPanel();
@@ -5373,6 +5346,7 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
 
     return false;
 }
+  
   function getSelectedSeatNodes() {
     const nodes =
       transformer && transformer.nodes && transformer.nodes().length
