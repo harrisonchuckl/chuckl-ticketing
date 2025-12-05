@@ -4578,12 +4578,11 @@ function applyAccessibilityVisualsOverride(seatCircle, group) {
         applyAccessibilityVisualsOverride(seat, groupForAccess);
     }
   });
-
-  refreshSeatTicketListeners();
+  
+  // refreshSeatTicketListeners(); <--- DELETED / COMMENTED OUT
 
   // Always call the ring function here, which handles its own show/hide logic
   updateTicketRings();
-
   if (mapLayer && typeof mapLayer.batchDraw === "function") {
     mapLayer.batchDraw();
   }
@@ -5181,63 +5180,53 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
 
     console.log(`[seatmap][ACCESS-DEBUG] Handler called. Target Class: ${target.getClassName()}, Target Name: ${target.name()}`);
     
-  // --- INTERCEPT: ACCESSIBILITY MODE (FIXED) ---
+ // --- INTERCEPT: ACCESSIBILITY MODE (SAFE VERSION) ---
   if (activeAccessibilityMode) {
-    let seat = null;
+    let seat = findSeatNodeFromTarget(target);
 
-    // 1. Try getting the seat directly (Works for Single Seats sometimes)
-    if (target && target.getAttr && target.getAttr("isSeat")) {
-      seat = target;
-    } 
-    // 2. If target is a Container/Group/Shape, find the specific seat under the mouse
-    else if (stage) {
-      // Hide the container momentarily so we can "see" through it to the seat circle
-      const originalVisible = target.visible();
-      target.visible(false);
+    // If direct lookup failed and we have a pointer position, try intersection
+    if (!seat && stage && pointerPos) {
+      // Only try this "X-Ray" lookup if we clicked a hit-rect (container)
+      const isContainer = target.name() === 'hit-rect' || target.name() === 'body-rect';
       
-      // Get the actual shape under the pointer
-      const shape = stage.getIntersection(pointerPos);
-      
-      // Restore visibility immediately
-      target.visible(originalVisible);
+      if (isContainer) {
+        target.visible(false); // Hide container
+        const shape = stage.getIntersection(pointerPos); // Look underneath
+        target.visible(true);  // Show container immediately
 
-      if (shape) {
-        // Check if this shape is a seat or inside a seat group
-        seat = findSeatNodeFromTarget(shape);
+        if (shape) {
+           seat = findSeatNodeFromTarget(shape);
+        }
       }
     }
 
-    // If we still didn't find a seat (or clicked empty space), exit
     if (!seat) return false; 
 
-    // 3. Apply Logic
+    // Apply Logic
     const current = seat.getAttr("sbAccessibilityType");
-    // Identify the parent group to help finding the text label later
-    const group = seat.getParent();
     
-    // Restore original label visibility if we are turning OFF access mode
+    // Toggle logic
     if (current === activeAccessibilityMode) {
-      seat.setAttr("sbAccessibilityType", null); 
-      // Attempt to show the original text label again
-      if (group) {
-         const originalLabel = group.getChildren().find(n => 
-           n.getClassName() === 'Text' && 
-           Math.abs(n.x() - seat.x()) < 1 && 
-           Math.abs(n.y() - seat.y()) < 1 &&
-           !n.name().startsWith('access-overlay')
-         );
-         if (originalLabel) originalLabel.visible(true);
-      }
+      seat.setAttr("sbAccessibilityType", null);
     } else {
       seat.setAttr("sbAccessibilityType", activeAccessibilityMode);
     }
 
-    applySeatVisuals();
+    // Force a visual update immediately for just this node/group to be efficient
+    const group = seat.getParent();
+    if(group) {
+       applyAccessibilityVisualsOverride(seat, group);
+    }
+    
+    // Then run the full visual refresh (without rebuilding listeners due to Step 1)
+    applySeatVisuals(); 
     pushHistory();
+    
     if (selectedNode) renderInspector(selectedNode);
-    return true; // Stop here
+    return true;
   }
-  const ticketId = (activeHoldMode || activeViewMode) ? "MODE_ACTIVE" : getActiveTicketIdForAssignments();
+    
+    const ticketId = (activeHoldMode || activeViewMode) ? "MODE_ACTIVE" : getActiveTicketIdForAssignments();
   if (!ticketId) return false;
 
   // --- Helper to Toggle List (Rows/Tables) ---
@@ -6699,13 +6688,14 @@ seats.forEach(seat => {
         } else {
           activeAccessibilityMode = mode;
           // We reuse the 'ticket selection mode' to enable clicking on individual seats
-          // The click handler we added in Step 3 will intercept the actual click.
           setTicketSeatSelectionMode(true, "access-on");
+          
+          // ADD THIS LINE HERE:
+          refreshSeatTicketListeners(); 
         }
         // Refresh inspector to show active state
-        renderInspector(node); 
-      };
-      return btn;
+        renderInspector(node);
+      }; return btn;
     };
 
     row.appendChild(makeBtn("disabled", "Disabled", "♿"));
