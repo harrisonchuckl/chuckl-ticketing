@@ -451,6 +451,7 @@ let activeMainTab = "map";
 // --- Holds & Allocations State ---
 let activeHoldMode = null; 
 let activeViewMode = false; 
+  let activeAccessibilityMode = null; // "disabled" | "carer" | null
 // NEW: Track which specific sub-mode we are in ('view' or 'info')
 let activeViewType = null;
 let viewInfoItems = []; // Stores { id, name, type: 'image'|'text', content, filename }
@@ -4423,9 +4424,43 @@ function applySeatVisuals() {
     if (parent) {
       // **CRITICAL CLEANUP**: Always remove old labels when applying visuals
       // We use seat._id to ensure uniqueness if seatId attr isn't set yet
+      // --- CLEANUP OVERLAYS ---
       const oldLabel = parent.findOne(`.view-mode-label-${seat._id}`);
       if (oldLabel) oldLabel.destroy();
+      const oldAccess = parent.findOne(`.access-mode-label-${seat._id}`);
+      if (oldAccess) oldAccess.destroy();
 
+      // --- ACCESSIBILITY VISUALS (Persistent across all tabs) ---
+      const accessType = seat.getAttr("sbAccessibilityType"); // "disabled" | "carer"
+      if (accessType) {
+        // Override color for the base seat to match the type
+        if (accessType === "disabled") {
+          stroke = "#b91c1c"; // Red stroke
+          fill = "#fef2f2";   // Light red fill
+        } else if (accessType === "carer") {
+          stroke = "#7c3aed"; // Purple stroke
+          fill = "#f5f3ff";   // Light purple fill
+        }
+        
+        // Draw the Icon/Character Overlay
+        const accessLabel = new Konva.Text({
+          x: seat.x(),
+          y: seat.y(),
+          text: accessType === "disabled" ? "♿" : "C",
+          fontSize: accessType === "disabled" ? 14 : 12,
+          fontFamily: "system-ui",
+          fontStyle: "bold",
+          fill: accessType === "disabled" ? "#b91c1c" : "#7c3aed",
+          listening: false,
+          name: `access-mode-label-${seat._id}`
+        });
+        accessLabel.offsetX(accessLabel.width() / 2);
+        accessLabel.offsetY(accessLabel.height() / 2);
+        parent.add(accessLabel);
+      }
+
+      // --- VIEW MODE VISUALS (Only in View Tab) ---
+      // Only draw new labels if we are strictly in the View tab
       // Only draw new labels if we are strictly in the View tab
       if (activeMainTab === "view") {
         let char = "";
@@ -5068,6 +5103,26 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
   }
 }
 function handleTicketSeatSelection(pointerPos, target) {
+
+  // --- INTERCEPT: ACCESSIBILITY MODE ---
+  if (activeAccessibilityMode) {
+    if (!target || !target.getAttr || !target.getAttr("isSeat")) return false;
+    
+    // Toggle logic: If clicking a seat that already has this status, remove it.
+    const current = target.getAttr("sbAccessibilityType");
+    if (current === activeAccessibilityMode) {
+      target.setAttr("sbAccessibilityType", null);
+    } else {
+      target.setAttr("sbAccessibilityType", activeAccessibilityMode);
+    }
+    
+    applySeatVisuals();
+    pushHistory();
+    // Re-render inspector to update the "Remove Status" buttons if visible
+    if (selectedNode) renderInspector(selectedNode);
+    return true;
+  }
+  
   const ticketId = (activeHoldMode || activeViewMode) ? "MODE_ACTIVE" : getActiveTicketIdForAssignments();
   if (!ticketId) return false;
 
@@ -6489,6 +6544,71 @@ seats.forEach(seat => {
     el.innerHTML = "";
 
     // ---- Small DOM helpers ----
+
+    // Helper to render Disabled/Carer buttons
+  function addAccessControls() {
+    const wrapper = document.createElement("div");
+    wrapper.className = "sb-field-row";
+    wrapper.style.marginTop = "12px";
+    wrapper.style.borderTop = "1px solid #e5e7eb";
+    wrapper.style.paddingTop = "12px";
+
+    const title = document.createElement("div");
+    title.className = "sb-inspector-title";
+    title.textContent = "Accessibility";
+    title.style.marginBottom = "8px";
+    wrapper.appendChild(title);
+
+    const row = document.createElement("div");
+    row.style.display = "grid";
+    row.style.gridTemplateColumns = "1fr 1fr";
+    row.style.gap = "8px";
+
+    const makeBtn = (mode, label, emoji) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "tool-button";
+      // Highlight if active
+      if (activeAccessibilityMode === mode) {
+        btn.classList.add("is-active");
+        btn.style.borderColor = "#2563eb";
+        btn.style.background = "#eff6ff";
+      }
+      btn.innerHTML = `<span style="margin-right:4px">${emoji}</span> ${label}`;
+      btn.style.fontSize = "12px";
+      btn.style.height = "36px"; // Compact height
+      btn.onclick = () => {
+        // Toggle mode
+        if (activeAccessibilityMode === mode) {
+          activeAccessibilityMode = null;
+          setTicketSeatSelectionMode(false, "access-off");
+        } else {
+          activeAccessibilityMode = mode;
+          // We reuse the 'ticket selection mode' to enable clicking on individual seats
+          // The click handler we added in Step 3 will intercept the actual click.
+          setTicketSeatSelectionMode(true, "access-on");
+        }
+        // Refresh inspector to show active state
+        renderInspector(node); 
+      };
+      return btn;
+    };
+
+    row.appendChild(makeBtn("disabled", "Disabled", "♿"));
+    row.appendChild(makeBtn("carer", "Carer", "C"));
+    
+    wrapper.appendChild(row);
+    
+    const hint = document.createElement("div");
+    hint.className = "sb-helper";
+    hint.style.marginTop = "6px";
+    hint.textContent = activeAccessibilityMode 
+      ? `Click seats on the map to toggle ${activeAccessibilityMode} status.` 
+      : "Select a type, then click seats to assign.";
+    wrapper.appendChild(hint);
+
+    el.appendChild(wrapper);
+  }
     function addTitle(text) {
       const h = document.createElement("h4");
       h.className = "sb-inspector-title";
@@ -7184,6 +7304,47 @@ function addNumberField(labelText, value, min, step, onCommit) {
 
     const shapeType = node.getAttr("shapeType") || node.name();
 
+    // ---- Single Seat ----
+  if (shapeType === "single-seat") {
+    addTitle("Single Seat");
+    const labelMode = node.getAttr("seatLabelMode") || "numbers";
+    
+    // Label Mode Selector
+    addSelectField(
+      "Label Style",
+      labelMode,
+      [
+        { value: "numbers", label: "Number (1)" },
+        { value: "letters", label: "Letter (A)" },
+        { value: "none", label: "None (Dot)" },
+      ],
+      (mode) => {
+        node.setAttr("seatLabelMode", mode);
+        // Re-run creation logic to update text
+        const circle = node.findOne("Circle");
+        const existingLabel = node.findOne("Text");
+        
+        if (mode === "none") {
+           if(existingLabel) existingLabel.destroy();
+           if(circle) { circle.fill("#111827"); circle.stroke("#111827"); }
+        } else {
+           const baseText = mode === "letters" ? "A" : "1";
+           if (!existingLabel) {
+             node.add(makeSeatLabelText(baseText, 0, 0));
+           } else {
+             existingLabel.text(baseText);
+           }
+           if(circle) { circle.fill("#ffffff"); circle.stroke("#4b5563"); }
+        }
+        mapLayer.batchDraw();
+        pushHistory();
+      }
+    );
+
+    addAccessControls(); // <--- The accessibility buttons
+    return;
+  }
+
     // ---- Row blocks ----
     if (shapeType === "row-seats") {
       const seatsPerRow = Number(node.getAttr("seatsPerRow") ?? 10);
@@ -7451,6 +7612,8 @@ function addNumberField(labelText, value, min, step, onCommit) {
         rebuild();
       });
 
+      addAccessControls(); // <--- Add this
+
       return;
     }
 
@@ -7555,6 +7718,7 @@ function addNumberField(labelText, value, min, step, onCommit) {
       mapLayer.batchDraw();
       updateSeatCount();
       pushHistory();
+      addAccessControls(); // <--- Add this
       return;
     }
 
@@ -7642,7 +7806,7 @@ function addNumberField(labelText, value, min, step, onCommit) {
         "Total seats at table",
         `${totalSeats} seat${totalSeats === 1 ? "" : "s"}`
       );
-
+addAccessControls(); // <--- Add this
       return;
     }
 
@@ -9731,7 +9895,7 @@ function handleStageClick(evt) {
       });
 
       mapLayer.batchDraw();
-      updateSeatCount();
+      
       pushHistory();
       transformer.nodes(newNodes);
       overlayLayer.draw();
