@@ -4243,10 +4243,10 @@ function getSeatDisplayName(seat) {
     duplicateSeatRefs = computeDuplicateSeatRefsFromSeats(getAllSeatNodes());
 
     // --- Apply current visuals (this already calls updateTicketRings internally) ---
-    ();
+    applySeatVisuals();
 
     // We deliberately STOP here.
-    // All ticket-ring overlays are now handled in  -> updateTicketRings.
+    // All ticket-ring overlays are now handled in applySeatVisuals -> updateTicketRings.
     // The legacy manual ring-drawing below caused the "double ring" issue.
 
     if (mapLayer && typeof mapLayer.batchDraw === "function") {
@@ -4350,8 +4350,7 @@ function updateTicketRings() {
   if (stage) {
     stage.batchDraw();
   }
-}
-// [Source: 3573] - Fixed: Restored the logic to actually draw the 'V' and 'i' text
+}// [Source: 3573] - Fixed: Restored the logic to actually draw the 'V' and 'i' text
 function applySeatVisuals() {
   refreshSeatMetadata();
   const seats = getAllSeatNodes();
@@ -4472,7 +4471,16 @@ function applySeatVisuals() {
   if (mapLayer && typeof mapLayer.batchDraw === "function") {
     mapLayer.batchDraw();
   }
-}  
+}
+  
+  // Always call the ring function here, which handles its own show/hide logic
+  updateTicketRings();
+
+  if (mapLayer && typeof mapLayer.batchDraw === "function") {
+    mapLayer.batchDraw();
+  }
+}
+  
   function formatDateTimeLocal(date) {
     if (!date) return "";
     const d = typeof date === "string" ? new Date(date) : date;
