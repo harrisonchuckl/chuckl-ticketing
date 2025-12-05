@@ -4258,176 +4258,175 @@ function getSeatDisplayName(seat) {
 
   // ----- Ticket ring overlays for multi-ticket seats -----
 
+// [Source: 3495] - Updated to hide rings when not in Tickets tab
 function updateTicketRings() {
-    if (!mapLayer) return;
+  if (!mapLayer) return;
 
-    const seats = getAllSeatNodes();
-    if (!seats || !seats.length) return;
-
-    // Quick lookup from ticket id -> ticket object (for colours etc.)
-    const ticketById = new Map();
-    ticketTypes.forEach((t) => {
-        if (t && t.id) ticketById.set(t.id, t);
+  // 1. Always Clean up ALL existing rings first
+  // We do this regardless of the tab to ensure rings from the 'Tickets' tab 
+  // disappear immediately when switching to 'Map' or 'Holds'.
+  const allGroups = mapLayer.find("Group");
+  allGroups.forEach((group) => {
+    if (!group.getChildren) return;
+    const existingRings = group.getChildren().filter((child) => {
+      return (
+        child.getAttr("isTicketRing") === true || child.name() === "ticket-ring"
+      );
     });
+    existingRings.forEach((ring) => ring.destroy());
+  });
 
-    seats.forEach((seatCircle) => {
-        // 1. Basic Validation
-        if (!seatCircle || !seatCircle.getAttr || !seatCircle.getAttr("isSeat")) {
-            return;
-        }
+  // 2. If we are NOT in the Tickets tab, stop here. 
+  // This hides the rings effectively.
+  if (activeMainTab !== "tickets") {
+    if (stage) stage.batchDraw();
+    return;
+  }
 
-        // 2. Get Parent Group
-        const group = seatCircle.getParent && seatCircle.getParent();
-        if (!group || typeof group.getChildren !== "function") return;
+  // 3. If we ARE in Tickets tab, draw the rings based on data
+  const seats = getAllSeatNodes();
+  if (!seats || !seats.length) return;
 
-        // 3. Get Seat ID (Needed before cleanup now)
-        const sid = ensureSeatIdAttr(seatCircle);
-        if (!sid) return;
+  const ticketById = new Map();
+  ticketTypes.forEach((t) => {
+    if (t && t.id) ticketById.set(t.id, t);
+  });
 
-        // --- FIX: TARGETED CLEANUP ---
-        // If seats share a parent group (like in a row), we must ensure
-        // we only destroy rings that belong to THIS specific seat ID.
-        const existingRings = group.getChildren().filter((child) => {
-            // A) Verify it is a ticket ring node
-            const isNode = child && typeof child.getAttr === "function";
-            if (!isNode) return false;
-            
-            const hasAttr = child.getAttr("isTicketRing");
-            const hasName = child.name() === "ticket-ring";
-            if (!hasAttr && !hasName) return false;
+  seats.forEach((seatCircle) => {
+    // Basic Validation
+    if (!seatCircle || !seatCircle.getAttr || !seatCircle.getAttr("isSeat")) return;
+    
+    // Get Parent Group
+    const group = seatCircle.getParent && seatCircle.getParent();
+    if (!group) return;
 
-            // B) Verify ownership
-            const ownerId = child.getAttr("ringOwnerSeatId");
-            // Destroy if it belongs to this seat ID, OR if it's an old legacy ring marked as undefined/null
-            return ownerId === sid || ownerId === undefined || ownerId === null;
-        });
-        
-        // Safely destroy the filtered list
-        existingRings.forEach((ring) => ring.destroy());
+    // Get Seat ID
+    const sid = ensureSeatIdAttr(seatCircle);
+    if (!sid) return;
 
-        // 4) Work out which tickets are assigned to this seat.
-        const set = ticketAssignments.get(sid);
-        if (!set || !set.size) return; // No tickets for this seat, we are done.
+    // Work out which tickets are assigned to this seat
+    const set = ticketAssignments.get(sid);
+    if (!set || !set.size) return; 
 
-        const ticketIds = Array.from(set);
-        if (!ticketIds.length) return;
+    const ticketIds = Array.from(set);
+    if (!ticketIds.length) return;
 
-        // 5) Base radius from the core seat circle.
-        const baseRadius =
-            typeof seatCircle.radius === "function" ?
-            seatCircle.radius() :
-            seatCircle.getAttr("radius") || 8;
+    // Base radius from the core seat circle
+    const baseRadius =
+      typeof seatCircle.radius === "function"
+        ? seatCircle.radius()
+        : seatCircle.getAttr("radius") || 8;
 
-        // 6) Draw new rings (max 10)
+    // Draw new rings
     const maxRings = Math.min(ticketIds.length, 10);
     for (let i = 0; i < maxRings; i += 1) {
-        const tId = ticketIds[i];
-        if (!tId) continue;
-        const ticket = ticketById.get(tId);
-        const color = (ticket && ticket.color) || "#2563eb";
-        
-        // --- CRITICAL FIX: Changed the starting point from `+ 3` to `+ 1.5` ---
-        // The base seat has a stroke of 1.5, so the first ring should start there (i=0).
-        const radius = baseRadius + 1.5 + i * 2.5;
+      const tId = ticketIds[i];
+      if (!tId) continue;
+      const ticket = ticketById.get(tId);
+      const color = (ticket && ticket.color) || "#2563eb";
 
-        const ring = new Konva.Circle({
-            x: seatCircle.x(),
-            y: seatCircle.y(),
-            radius,
-            stroke: color,
-            strokeWidth: 1.5,
-                listening: false,
-                name: "ticket-ring",
-            });
-
-            // Mark as a ring
-            ring.setAttr("isTicketRing", true);
-            // --- CRITICAL ADDITION: Tag with owner ID ---
-            // This ensures subsequent cleanups know this ring belongs to this seat.
-            ring.setAttr("ringOwnerSeatId", sid);
-
-            group.add(ring);
-        }
-    });
-
-    if (stage) {
-        stage.batchDraw();
+      const radius = baseRadius + 1.5 + i * 2.5;
+      const ring = new Konva.Circle({
+        x: seatCircle.x(),
+        y: seatCircle.y(),
+        radius,
+        stroke: color,
+        strokeWidth: 1.5,
+        listening: false,
+        name: "ticket-ring",
+      });
+      
+      ring.setAttr("isTicketRing", true);
+      ring.setAttr("ringOwnerSeatId", sid);
+      group.add(ring);
     }
+  });
+
+  if (stage) {
+    stage.batchDraw();
+  }
 }
 
-
-
-  function applySeatVisuals() {
+  // [Source: 3573] - Updated to strictly isolate visuals by Tab
+function applySeatVisuals() {
   refreshSeatMetadata();
   const seats = getAllSeatNodes();
+  
+  // Recalculate duplicates (mainly for the Tickets tab warning)
   duplicateSeatRefs = computeDuplicateSeatRefsFromSeats(seats);
 
   seats.forEach((seat) => {
+    // 1. Reset to Base Styles (The "Map" tab look)
     const baseFill = seat.getAttr("sbSeatBaseFill") || "#ffffff";
     const baseStroke = seat.getAttr("sbSeatBaseStroke") || "#4b5563";
-    const ref = seat.getAttr("sbSeatRef");
-    const ticketId = seat.getAttr("sbTicketId") || null;
-    const holdStatus = seat.getAttr("sbHoldStatus");
     
-    // NEW ATTRIBUTES
-    const hasViewImage = !!seat.getAttr("sbViewImage");
-    const hasInfo = !!seat.getAttr("sbInfoLabel");
-
     let stroke = baseStroke;
     let fill = baseFill;
     let strokeWidth = 1.7;
 
-    // --- PRIORITY LOGIC ---
+    // Data Attributes
+    const ref = seat.getAttr("sbSeatRef");
+    const ticketId = seat.getAttr("sbTicketId") || null;
+    const holdStatus = seat.getAttr("sbHoldStatus");
+    const hasViewImage = !!seat.getAttr("sbViewImage");
+    const hasInfo = !!seat.getAttr("sbInfoLabel");
+
+    // 2. Apply Tab-Specific Visuals
     
-    // 1. Duplicates (Highest Priority)
-    if (ref && duplicateSeatRefs.has(ref)) {
-      stroke = "#ef4444";
-      fill = "#fee2e2";
-    }
-    // 2. View Mode Visuals (Only active when tab is open)
-    else if (activeViewMode) {
-      if (hasViewImage) {
-        stroke = "#000000";
-        fill = "#000000"; // Black background for V
-      } else if (hasInfo) {
-        stroke = "#000000";
-        fill = "#000000"; // Black background for I
-      }
-    }
-    // 3. Holds
-    else if (holdStatus === "hold") {
-      stroke = "#000000";
-      fill = "#000000";
-    }
-    // 4. Allocations
-    else if (holdStatus === "allocation") {
-      stroke = "#10B981";
-      fill = "#10B981";
-    }
-    // 5. Tickets
-    else if (ticketId) {
-      const ticket = ticketTypes.find((t) => t.id === ticketId);
-      if (ticket) {
-        stroke = ticket.color || "#2563eb";
+    // --- TAB: TICKETS ---
+    if (activeMainTab === "tickets") {
+      // Priority A: Duplicates (Critical Error)
+      if (ref && duplicateSeatRefs.has(ref)) {
+        stroke = "#ef4444";
+        fill = "#fee2e2";
+      } 
+      // Priority B: Assigned Ticket (Change stroke color)
+      else if (ticketId) {
+        const ticket = ticketTypes.find((t) => t.id === ticketId);
+        if (ticket) {
+          stroke = ticket.color || "#2563eb";
+        }
       }
     }
 
+    // --- TAB: HOLDS & ALLOCATIONS ---
+    else if (activeMainTab === "holds") {
+      if (holdStatus === "hold") {
+        stroke = "#000000";
+        fill = "#000000"; // Solid Black
+      } else if (holdStatus === "allocation") {
+        stroke = "#10B981";
+        fill = "#10B981"; // Solid Green
+      }
+    }
+
+    // --- TAB: VIEW & INFO ---
+    else if (activeMainTab === "view") {
+      // If seat has info or image, turn it black so the white overlay text pops
+      if (hasViewImage || hasInfo) {
+        stroke = "#000000";
+        fill = "#000000";
+      }
+    }
+
+    // (If activeMainTab === "map", none of the above run, leaving the seat clean)
+
+    // 3. Apply the calculated styles
     seat.stroke(stroke);
     seat.fill(fill);
     seat.strokeWidth(strokeWidth);
 
-  // --- HANDLE OVERLAY TEXT (V or I) ---
+    // 4. Handle Overlay Text (V / i)
     const parent = seat.getParent();
     if (parent) {
-      // Clean up old overlay
+      // Always remove old labels first (cleanup for when leaving View tab)
       const oldLabel = parent.findOne(`.view-mode-label-${seat._id}`);
       if (oldLabel) oldLabel.destroy();
 
-      // Only draw overlays if we are in the View Tab
-      if (activeViewMode) {
+      // Only draw new labels if we are strictly in the View tab
+      if (activeMainTab === "view") {
         let char = "";
-        // Default style for 'V'
-        let fontStyle = "bold"; 
+        let fontStyle = "bold";
         let fontFamily = "system-ui";
         let fontSize = 11;
 
@@ -4435,10 +4434,9 @@ function updateTicketRings() {
           char = "V";
         } else if (hasInfo) {
           char = "i";
-          // Use serif for 'i' as requested
-          fontFamily = '"Times New Roman", serif'; 
+          fontFamily = '"Times New Roman", serif';
           fontStyle = "bold";
-          fontSize = 14; // Slightly larger for serif 'i' visibility
+          fontSize = 14; 
         }
 
         if (char) {
@@ -4453,7 +4451,6 @@ function updateTicketRings() {
             listening: false,
             name: `view-mode-label-${seat._id}`
           });
-          
           text.offsetX(text.width() / 2);
           text.offsetY(text.height() / 2);
           parent.add(text);
@@ -4463,6 +4460,8 @@ function updateTicketRings() {
   });
 
   refreshSeatTicketListeners();
+  
+  // This will now respect the activeMainTab check inside the function
   updateTicketRings();
 
   if (mapLayer && typeof mapLayer.batchDraw === "function") {
