@@ -37,135 +37,73 @@
     const style = document.createElement("style");
     style.id = "sb-seatmap-style";
    style.textContent = `
-  /* RESET & BASE */
+  style.textContent = `
   .sb-layout { font-family: inherit; width: 100%; height: 100%; }
-  
-  /* RIGHT PANEL INSPECTOR STYLING */
-  #sb-inspector {
-    /* Remove old card styling, rely on the main container padding */
-    background: transparent;
-    border: none;
-    box-shadow: none;
-    padding: 0;
-  }
+
+  /* Cleaner Inspector container */
+  #sb-inspector { background: transparent; padding: 0; }
 
   .sb-inspector-title {
-    font-size: 18px;
-    font-weight: 700;
-    color: #0f172a; /* Slate-900 */
-    margin: 0 0 16px 0;
-    letter-spacing: -0.02em;
+    font-size: 16px; font-weight: 700; color: #0f172a; margin: 0 0 12px 0;
   }
 
   .sb-inspector-empty {
     font-size: 13px; color: #64748b; background: #f8fafc;
-    padding: 16px; border-radius: 8px; border: 1px dashed #cbd5e1;
-    text-align: center;
+    padding: 16px; border-radius: 8px; text-align: center;
   }
 
-  /* FORMS */
-  .sb-field-row { margin-bottom: 16px; }
-  .sb-label { display: block; margin-bottom: 6px; }
-  .sb-label span {
-    font-size: 12px; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: 0.03em;
-  }
+  .sb-field-row { margin-bottom: 12px; }
+  .sb-label { display: block; margin-bottom: 4px; font-size: 12px; font-weight: 600; color: #475569; }
 
+  /* Crisp white inputs */
   .sb-input, .sb-select, .sb-textarea {
-    width: 100%;
-    border-radius: 8px;
-    border: 1px solid #cbd5e1;
-    padding: 10px 12px;
-    font-size: 14px;
-    background: #fff;
-    color: #1e293b;
-    outline: none;
-    transition: all 0.2s;
+    width: 100%; box-sizing: border-box;
+    border: 1px solid #cbd5e1; border-radius: 6px;
+    padding: 8px 10px; font-size: 13px; background: #fff;
+    color: #1e293b; outline: none;
   }
   .sb-input:focus, .sb-select:focus, .sb-textarea:focus {
-    border-color: #08B8E8; /* Tixall Blue */
-    box-shadow: 0 0 0 3px rgba(8, 184, 232, 0.15);
+    border-color: #08B8E8; box-shadow: 0 0 0 2px rgba(8, 184, 232, 0.1);
   }
 
-  /* CARDS (Tickets, Holds) */
+  /* Cleaner Cards */
   .sb-ticket-card {
-    background: #fff;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-    margin-bottom: 12px;
-    overflow: hidden;
-    transition: all 0.2s;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
+    margin-bottom: 8px; overflow: hidden;
   }
-  .sb-ticket-card:hover {
-    border-color: #cbd5e1;
-    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.06);
-  }
-  .sb-ticket-card.is-active {
-    border-color: #08B8E8;
-    box-shadow: 0 0 0 2px rgba(8, 184, 232, 0.1);
-  }
+  .sb-ticket-card.is-active { border-color: #08B8E8; background: #f0f9ff; }
   
   .sb-ticket-card-header {
-    width: 100%; padding: 16px;
-    background: transparent; border: none;
-    display: flex; align-items: center; justify-content: space-between;
-    cursor: pointer;
+    width: 100%; padding: 12px; border: none; background: transparent;
+    display: flex; align-items: center; justify-content: space-between; cursor: pointer;
   }
   
-  .sb-ticket-swatch { width: 12px; height: 12px; border-radius: 50%; display: inline-block; margin-right: 12px; }
-  .sb-ticket-name { font-weight: 600; font-size: 14px; color: #1e293b; }
-  .sb-ticket-meta { font-size: 12px; color: #64748b; margin-top: 2px; }
+  .sb-ticket-name { font-weight: 600; font-size: 13px; color: #1e293b; }
+  .sb-ticket-swatch { width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; display: inline-block; }
 
-  .sb-ticket-card-body {
-    padding: 0 16px 16px 16px;
-    border-top: 1px solid #f1f5f9;
-    margin-top: -4px;
-    padding-top: 16px;
-  }
+  .sb-ticket-card-body { padding: 0 12px 12px; border-top: 1px solid rgba(0,0,0,0.05); }
 
-  /* TOOLS BUTTONS (Inside Inspector) */
-  .tool-button {
-    width: 100%; height: 40px;
-    border-radius: 8px;
-    border: 1px solid #e2e8f0;
-    background: #fff;
-    color: #334155;
-    font-weight: 500;
-    font-size: 13px;
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer;
-    transition: all 0.1s;
-  }
-  .tool-button:hover { background: #f8fafc; border-color: #cbd5e1; }
-  .tool-button.sb-ghost-button { background: #f8fafc; border-color: transparent; color: #64748b; }
-  .tool-button.sb-ghost-button:hover { background: #e2e8f0; color: #334155; }
-  
-  /* Special Add Button */
-  .sb-ticket-add {
-    margin-top: 16px; border: 1px dashed #cbd5e1; color: #08B8E8; background: #f0f9ff;
-  }
-  .sb-ticket-add:hover { border-color: #08B8E8; background: #e0f2fe; }
-
-  /* ALERTS */
-  .sb-ticketing-alert {
-    background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c;
-    padding: 12px; border-radius: 8px; font-size: 13px; margin-bottom: 16px;
-  }
-  .sb-ticketing-heading { margin-bottom: 20px; }
-  .sb-ticketing-title { font-size: 20px; font-weight: 800; color: #0f172a; margin-bottom: 4px; }
-  .sb-ticketing-sub { font-size: 13px; color: #64748b; }
-
-  /* NEXT STEP BUTTON (Fallback style if css file fails) */
+  /* Tixall Blue Next Buttons */
   .sb-next-step-btn {
-    background-color: #08B8E8 !important;
-    color: white !important;
-    border-radius: 8px;
-    padding: 14px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    border: none;
-    box-shadow: 0 4px 6px rgba(8, 184, 232, 0.25);
+    width: 100%; margin-top: 20px; padding: 12px;
+    background: #08B8E8; color: white; border: none; border-radius: 6px;
+    font-weight: 700; font-size: 13px; cursor: pointer; text-transform: uppercase;
+    box-shadow: 0 2px 4px rgba(8, 184, 232, 0.2);
+  }
+  .sb-next-step-btn:hover { background: #069ac4; transform: translateY(-1px); }
+
+  /* Tools Buttons inside inspector */
+  .tool-button {
+    width: 100%; height: 36px; border: 1px solid #e2e8f0; border-radius: 6px;
+    background: #fff; color: #334155; font-size: 12px; font-weight: 500;
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+  }
+  .tool-button:hover { background: #f8fafc; }
+  .tool-button.is-active { border-color: #08B8E8; color: #08B8E8; background: #f0f9ff; }
+  
+  .sb-ticketing-alert {
+    background: #fff1f2; border: 1px solid #fecdd3; color: #be123c;
+    padding: 10px; border-radius: 6px; font-size: 12px; margin-bottom: 12px;
   }
 `;
     document.head.appendChild(style);
