@@ -733,6 +733,50 @@ router.get("/builder/preview/:showId", (req, res) => {
         color: var(--tixall-dark);
       }
 
+      tb-tab.is-complete {
+  color: #059669; /* Emerald 600 */
+  border-bottom-color: #059669;
+}
+.tb-tab.is-complete::after {
+  content: ' ✓';
+  font-size: 10px;
+  margin-left: 4px;
+}
+.tb-btn-draft {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+.tb-btn-publish {
+  background: linear-gradient(135deg, #059669, #10b981);
+  color: #ffffff;
+  border: 0;
+  box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.2);
+}
+.tb-btn-publish:disabled {
+  background: #e5e7eb;
+  color: #9ca3af;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+.sb-next-step-btn {
+  width: 100%;
+  margin-top: 20px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  background: linear-gradient(180deg, #ffffff, #f9fafb);
+  color: #111827;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+.sb-next-step-btn:hover {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+}
+
       
     </style>
   </head>
@@ -780,11 +824,15 @@ router.get("/builder/preview/:showId", (req, res) => {
             id="tb-btn-load"
           >
             Load saved layout
-          </button>
-          <button type="button" class="tb-topbar-btn tb-btn-primary" id="tb-btn-save">
-            Save layout
-          </button>
-        </div>
+</button>
+<button type="button" class="tb-topbar-btn tb-btn-draft" id="tb-btn-draft">
+  Save Draft
+</button>
+<button type="button" class="tb-topbar-btn tb-btn-publish" id="tb-btn-publish" disabled>
+  Publish Show
+</button>
+<button type="button" id="tb-btn-save" style="display:none;"></button>
+</div>
 
       </header>
 
