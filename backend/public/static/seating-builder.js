@@ -4416,28 +4416,40 @@ function updateTicketRings() {
     seat.fill(fill);
     seat.strokeWidth(strokeWidth);
 
-    // --- HANDLE OVERLAY TEXT (V or I) ---
+  // --- HANDLE OVERLAY TEXT (V or I) ---
     const parent = seat.getParent();
     if (parent) {
-      // Clean up old
+      // Clean up old overlay
       const oldLabel = parent.findOne(`.view-mode-label-${seat._id}`);
       if (oldLabel) oldLabel.destroy();
 
-      // Only draw overlays if we are in the View Tab and the seat has data
+      // Only draw overlays if we are in the View Tab
       if (activeViewMode) {
         let char = "";
-        if (hasViewImage) char = "V";
-        else if (hasInfo) char = "i";
+        // Default style for 'V'
+        let fontStyle = "bold"; 
+        let fontFamily = "system-ui";
+        let fontSize = 11;
+
+        if (hasViewImage) {
+          char = "V";
+        } else if (hasInfo) {
+          char = "i";
+          // Use serif for 'i' as requested
+          fontFamily = '"Times New Roman", serif'; 
+          fontStyle = "bold";
+          fontSize = 14; // Slightly larger for serif 'i' visibility
+        }
 
         if (char) {
           const text = new Konva.Text({
             x: seat.x(),
             y: seat.y(),
             text: char,
-            fontSize: 11, // Fits inside standard seat radius 10
-            fontFamily: "system-ui",
-            fontStyle: "bold",
-            fill: "#ffffff", // White text
+            fontSize: fontSize,
+            fontFamily: fontFamily,
+            fontStyle: fontStyle,
+            fill: "#ffffff",
             listening: false,
             name: `view-mode-label-${seat._id}`
           });
