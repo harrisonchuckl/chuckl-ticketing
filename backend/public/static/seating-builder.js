@@ -4350,7 +4350,10 @@ function updateTicketRings() {
   if (stage) {
     stage.batchDraw();
   }
-}// [Source: 3573] - Fixed: Restored the logic to actually draw the 'V' and 'i' text
+}
+  
+  // [Source: 3573] - Fixed: Restored the logic to actually draw the 'V' and 'i' text
+// [Source: 3573] - Updated to strictly isolate color/text visuals by Tab
 function applySeatVisuals() {
   refreshSeatMetadata();
   const seats = getAllSeatNodes();
@@ -4440,7 +4443,7 @@ function applySeatVisuals() {
           fontSize = 14; 
         }
 
-        // --- FIXED: This block was previously empty ---
+        // --- FIXED: This block draws the character over the black seat ---
         if (char) {
           const text = new Konva.Text({
             x: seat.x(),
@@ -4471,8 +4474,7 @@ function applySeatVisuals() {
   if (mapLayer && typeof mapLayer.batchDraw === "function") {
     mapLayer.batchDraw();
   }
-}
-  
+}  
   // Always call the ring function here, which handles its own show/hide logic
   updateTicketRings();
 
