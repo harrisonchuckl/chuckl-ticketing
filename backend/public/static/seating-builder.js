@@ -1033,7 +1033,7 @@ function restoreHistory(toIndex) {
 
   // --- NEW: Re-attach Ticket Assignment Listeners if mode is active ---
   if (ticketSeatSelectionMode) {
-    ();
+    refreshSeatTicketListeners();
     rebuildTicketAssignmentsCache(); // Ensure our ID map matches the visual state
     renderTicketingPanel(); // Update the counts in the sidebar
   }
@@ -4462,7 +4462,7 @@ function updateTicketRings() {
     }
   });
 
-  ();
+  refreshSeatTicketListeners();
   updateTicketRings();
 
   if (mapLayer && typeof mapLayer.batchDraw === "function") {
