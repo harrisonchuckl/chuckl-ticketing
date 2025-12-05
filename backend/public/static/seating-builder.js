@@ -9363,78 +9363,68 @@ addAccessControls(); // <--- Add this
 
 // Wrapper that extends the original behaviour with multi-shape transform
 // and Shift-based multi-selection.
-
 function attachNodeBehaviour(node) {
-if (!node || !(node instanceof Konva.Group)) return;
-// 1) Run all of your existing per-type hooks / drag logic etc.
-baseAttachNodeBehaviour(node);
-const type = node.getAttr("shapeType") || node.name();
-// 2) Ensure multi-shapes always have resize/rotate transform behaviour
-if (type === "multi-shape") {
-attachMultiShapeTransformBehaviour(node);
-}
-// 3) Selection behaviour (single + Shift multi-select)
-//    Remove any previous selection handlers so we don't stack listeners.
-//    FIX: Changed from 'click' to 'mousedown/touchstart' for instant response.
-node.off("click.seatmapSelect tap.seatmapSelect mousedown.seatmapSelect touchstart.seatmapSelect");
-node.on("mousedown.seatmapSelect touchstart.seatmapSelect", (evt) => {
-// --- SAFETY GUARD FOR OTHER TABS ---
-// If we are in Ticket, Hold, or View mode, STOP immediately.
-// This ensures we don't select/move objects while trying to allocate seats.
+  if (!node || !(node instanceof Konva.Group)) return;
 
-// --- FIX: Handle Map Tab Accessibility Switching ---
-if (activeMainTab === 'map' && activeAccessibilityMode && window.ticketSeatSelectionMode) {
-    // Check if the node being clicked is part of the CURRENT selection
-    const isCurrentSelection = selectedNode === node || (transformer && transformer.nodes().indexOf(node) > -1);
+  // 1) Run all of your existing per-type hooks / drag logic etc.
+  baseAttachNodeBehaviour(node);
 
-    if (!isCurrentSelection) {
-        // If clicking a DIFFERENT element, force-quit accessibility mode immediately
-        activeAccessibilityMode = null;
-        setTicketSeatSelectionMode(false, "auto-deselect-access");
-        // Do NOT return. Allow the code to proceed below so this new node gets selected.
+  const type = node.getAttr("shapeType") || node.name();
+
+  // 2) Ensure multi-shapes always have resize/rotate transform behaviour
+  if (type === "multi-shape") {
+    attachMultiShapeTransformBehaviour(node);
+  }
+
+  // 3) Selection behaviour (single + Shift multi-select)
+  //    Remove any previous selection handlers so we don't stack listeners.
+  //    FIX: Changed from 'click' to 'mousedown/touchstart' for instant response.
+  node.off("click.seatmapSelect tap.seatmapSelect mousedown.seatmapSelect touchstart.seatmapSelect");
+  node.on("mousedown.seatmapSelect touchstart.seatmapSelect", (evt) => {
+    // --- SAFETY GUARD FOR OTHER TABS ---
+    // If we are in Ticket, Hold, or View mode, STOP immediately. 
+    // This ensures we don't select/move objects while trying to allocate seats.
+    if (window.ticketSeatSelectionMode) return;
+
+    // FIX: Only block selection if we are using a DRAWING tool.
+    // We explicitly allow selection if activeTool is null or "select".
+    if (activeTool && activeTool !== 'select') return;
+    
+    // Only trigger on Left Click (button 0) to avoid conflict with context menus
+    if (evt.evt && typeof evt.evt.button === 'number' && evt.evt.button !== 0) return;
+
+    // Critical: Stop the event bubbling to the stage so we don't trigger panning or clearing
+    evt.cancelBubble = true;
+
+    if (isShiftPressed && transformer) {
+      // Multi-select: add/remove this node from the Transformer selection
+      const existing = transformer.nodes();
+      const idx = existing.indexOf(node);
+
+      if (idx === -1) {
+        // Add node
+        transformer.nodes(existing.concat(node));
+      } else {
+        // Remove node
+        const clone = existing.slice();
+        clone.splice(idx, 1);
+        transformer.nodes(clone);
+      }
+
+      // If exactly one node selected, keep inspector in "single" mode
+      selectedNode =
+        transformer.nodes().length === 1 ? transformer.nodes()[0] : null;
+
+      renderInspector(selectedNode);
+
+      if (mapLayer) mapLayer.batchDraw();
+      if (overlayLayer) overlayLayer.batchDraw();
     } else {
-        // If clicking the SAME element (or a seat inside it), return to let the seat-toggle logic run.
-        return;
+      // Normal single selection (clears previous selection)
+      selectNode(node);
     }
-} 
-// Standard Block for Tickets/Holds/View tabs
-else if (window.ticketSeatSelectionMode) {
-    return;
-}
+  });
 
-// FIX: Only block selection if we are using a DRAWING tool.
-// We explicitly allow selection if activeTool is null or "select".
-if (activeTool && activeTool !== 'select') return;
-
-// Only trigger on Left Click (button 0) to avoid conflict with context menus
-if (evt.evt && typeof evt.evt.button === 'number' && evt.evt.button !== 0) return;
-// Critical: Stop the event bubbling to the stage so we don't trigger panning or clearing
-evt.cancelBubble = true;
-if (isShiftPressed && transformer) {
-// Multi-select: add/remove this node from the Transformer selection
-const existing = transformer.nodes();
-const idx = existing.indexOf(node);
-if (idx === -1) {
-// Add node
-transformer.nodes(existing.concat(node));
-} else {
-// Remove node
-const clone = existing.slice();
-clone.splice(idx, 1);
-transformer.nodes(clone);
-}
-// If exactly one node selected, keep inspector in "single" mode
-selectedNode =
-transformer.nodes().length === 1 ? transformer.nodes()[0] : null;
-renderInspector(selectedNode);
-if (mapLayer) mapLayer.batchDraw();
-if (overlayLayer) overlayLayer.batchDraw();
-} else {
-// Normal single selection (clears previous selection)
-selectNode(node);
-}
-});
-  
   // NOTE:
   // We are *not* touching any of your existing drag / hover handlers,
   // because those are all still inside baseAttachNodeBehaviour(node).
