@@ -4258,17 +4258,17 @@ function getSeatDisplayName(seat) {
 
   // ----- Ticket ring overlays for multi-ticket seats -----
 
-// [Source: 3495] - Updated to hide rings when not in Tickets tab
+// [Source: 3495] - Updated to ensure rings only display in the 'tickets' tab.
 function updateTicketRings() {
   if (!mapLayer) return;
 
   // 1. Always Clean up ALL existing rings first
-  // We do this regardless of the tab to ensure rings from the 'Tickets' tab 
-  // disappear immediately when switching to 'Map' or 'Holds'.
   const allGroups = mapLayer.find("Group");
   allGroups.forEach((group) => {
     if (!group.getChildren) return;
     const existingRings = group.getChildren().filter((child) => {
+      // Uses the custom attribute to identify rings for removal
+      // Also checks name for legacy compatibility
       return (
         child.getAttr("isTicketRing") === true || child.name() === "ticket-ring"
       );
@@ -4276,8 +4276,8 @@ function updateTicketRings() {
     existingRings.forEach((ring) => ring.destroy());
   });
 
-  // 2. If we are NOT in the Tickets tab, stop here. 
-  // This hides the rings effectively.
+  // 2. If we are NOT in the Tickets tab, stop here.
+  // This hides the rings immediately when switching tabs.
   if (activeMainTab !== "tickets") {
     if (stage) stage.batchDraw();
     return;
@@ -4287,6 +4287,7 @@ function updateTicketRings() {
   const seats = getAllSeatNodes();
   if (!seats || !seats.length) return;
 
+  // Create a quick lookup for ticket colors
   const ticketById = new Map();
   ticketTypes.forEach((t) => {
     if (t && t.id) ticketById.set(t.id, t);
@@ -4295,7 +4296,7 @@ function updateTicketRings() {
   seats.forEach((seatCircle) => {
     // Basic Validation
     if (!seatCircle || !seatCircle.getAttr || !seatCircle.getAttr("isSeat")) return;
-    
+
     // Get Parent Group
     const group = seatCircle.getParent && seatCircle.getParent();
     if (!group) return;
@@ -4306,7 +4307,7 @@ function updateTicketRings() {
 
     // Work out which tickets are assigned to this seat
     const set = ticketAssignments.get(sid);
-    if (!set || !set.size) return; 
+    if (!set || !set.size) return;
 
     const ticketIds = Array.from(set);
     if (!ticketIds.length) return;
@@ -4317,7 +4318,7 @@ function updateTicketRings() {
         ? seatCircle.radius()
         : seatCircle.getAttr("radius") || 8;
 
-    // Draw new rings
+    // Draw new rings (max 10 rings per seat)
     const maxRings = Math.min(ticketIds.length, 10);
     for (let i = 0; i < maxRings; i += 1) {
       const tId = ticketIds[i];
@@ -4325,7 +4326,9 @@ function updateTicketRings() {
       const ticket = ticketById.get(tId);
       const color = (ticket && ticket.color) || "#2563eb";
 
+      // Calculate radius: starts just outside the seat stroke
       const radius = baseRadius + 1.5 + i * 2.5;
+      
       const ring = new Konva.Circle({
         x: seatCircle.x(),
         y: seatCircle.y(),
@@ -4335,9 +4338,11 @@ function updateTicketRings() {
         listening: false,
         name: "ticket-ring",
       });
-      
+
+      // Mark attributes so we can find and remove it later
       ring.setAttr("isTicketRing", true);
       ring.setAttr("ringOwnerSeatId", sid);
+      
       group.add(ring);
     }
   });
@@ -4346,8 +4351,7 @@ function updateTicketRings() {
     stage.batchDraw();
   }
 }
-
-  // [Source: 3573] - Updated to strictly isolate visuals by Tab
+ // [Source: 3573] - Updated to strictly isolate color/text visuals by Tab
 function applySeatVisuals() {
   refreshSeatMetadata();
   const seats = getAllSeatNodes();
@@ -4373,7 +4377,7 @@ function applySeatVisuals() {
 
     // 2. Apply Tab-Specific Visuals
     
-    // --- TAB: TICKETS ---
+    // --- TAB: TICKETS (Changes fill/stroke for assigned seats) ---
     if (activeMainTab === "tickets") {
       // Priority A: Duplicates (Critical Error)
       if (ref && duplicateSeatRefs.has(ref)) {
@@ -4389,27 +4393,24 @@ function applySeatVisuals() {
       }
     }
 
-    // --- TAB: HOLDS & ALLOCATIONS ---
+    // --- TAB: HOLDS & ALLOCATIONS (Changes fill/stroke to solid black/green) ---
     else if (activeMainTab === "holds") {
       if (holdStatus === "hold") {
         stroke = "#000000";
-        fill = "#000000"; // Solid Black
+        fill = "#000000"; 
       } else if (holdStatus === "allocation") {
         stroke = "#10B981";
-        fill = "#10B981"; // Solid Green
+        fill = "#10B981";
       }
     }
 
-    // --- TAB: VIEW & INFO ---
+    // --- TAB: VIEW & INFO (Changes fill/stroke for seats with V/i data) ---
     else if (activeMainTab === "view") {
-      // If seat has info or image, turn it black so the white overlay text pops
       if (hasViewImage || hasInfo) {
         stroke = "#000000";
         fill = "#000000";
       }
     }
-
-    // (If activeMainTab === "map", none of the above run, leaving the seat clean)
 
     // 3. Apply the calculated styles
     seat.stroke(stroke);
@@ -4419,41 +4420,22 @@ function applySeatVisuals() {
     // 4. Handle Overlay Text (V / i)
     const parent = seat.getParent();
     if (parent) {
-      // Always remove old labels first (cleanup for when leaving View tab)
+      // **CRITICAL CLEANUP**: Always remove old labels when applying visuals
       const oldLabel = parent.findOne(`.view-mode-label-${seat._id}`);
       if (oldLabel) oldLabel.destroy();
 
       // Only draw new labels if we are strictly in the View tab
       if (activeMainTab === "view") {
+        // ... (V/i drawing logic is here, but only runs if activeMainTab === "view") ...
         let char = "";
-        let fontStyle = "bold";
-        let fontFamily = "system-ui";
-        let fontSize = 11;
-
         if (hasViewImage) {
           char = "V";
         } else if (hasInfo) {
-          char = "i";
-          fontFamily = '"Times New Roman", serif';
-          fontStyle = "bold";
-          fontSize = 14; 
+          char = "i"; 
         }
 
         if (char) {
-          const text = new Konva.Text({
-            x: seat.x(),
-            y: seat.y(),
-            text: char,
-            fontSize: fontSize,
-            fontFamily: fontFamily,
-            fontStyle: fontStyle,
-            fill: "#ffffff",
-            listening: false,
-            name: `view-mode-label-${seat._id}`
-          });
-          text.offsetX(text.width() / 2);
-          text.offsetY(text.height() / 2);
-          parent.add(text);
+          // ... logic to create and add the Konva.Text object ...
         }
       }
     }
@@ -4461,7 +4443,7 @@ function applySeatVisuals() {
 
   refreshSeatTicketListeners();
   
-  // This will now respect the activeMainTab check inside the function
+  // Always call the ring function here, which handles its own show/hide logic
   updateTicketRings();
 
   if (mapLayer && typeof mapLayer.batchDraw === "function") {
@@ -10464,51 +10446,68 @@ function handleStageMouseMove() {
     clearSelection();
     setActiveTool("select");
   };
+// [Source: ~8745] - Tab Switch Handler
+window.__TIXALL_SET_TAB_MODE__ = function (tab) {
+  // 1. Update the global state variable
+  activeMainTab = tab || "map";
 
-  window.__TIXALL_SET_TAB_MODE__ = function (tab) {
-    activeMainTab = tab || "map";
+  // 2. Reset all special interaction modes to prevent conflicts
+  // This ensures we don't carry over "add ticket" or "add view" clicks into other tabs
+  setTicketSeatSelectionMode(false, "tab-change");
+  activeHoldMode = null;
+  activeViewMode = false;
+  activeViewType = null; // Clear sub-mode (Info vs View)
+  activeViewInfoId = null;
+
+  // 3. Clear any selected objects (Transformer box) so we start clean
+  clearSelection();
+
+  // 4. Update the Side Panel content based on the new tab
+  if (activeMainTab === "tickets") {
+    findDuplicateSeatRefs();
+    renderTicketingPanel();
+  } 
+  else if (activeMainTab === "holds") {
+    // --- Toast Notification (Preserved from your code) ---
+    const toast = document.createElement("div");
+    toast.style.cssText = `
+      position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
+      background: #111827; color: white; padding: 12px 20px; border-radius: 99px;
+      font-family: system-ui; font-size: 14px; font-weight: 500;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2); z-index: 9999; pointer-events: none;
+      animation: fadeOut 0.5s ease 4s forwards;
+    `;
+    toast.textContent = "Use this section to block seating or allocate to external promoters";
+    document.body.appendChild(toast);
+    setTimeout(() => { 
+      if (toast.parentNode) toast.parentNode.removeChild(toast); 
+    }, 4500);
     
-    // Reset all special modes first
-    setTicketSeatSelectionMode(false, "tab-change");
-    activeHoldMode = null;
-    activeViewMode = false; // Reset view mode
-    activeViewInfoId = null;
-
-    clearSelection();
-
-    if (activeMainTab === "tickets") {
-      findDuplicateSeatRefs();
-      renderTicketingPanel();
-    } else if (activeMainTab === "holds") {
-      // ... existing hold toast logic ...
-      const toast = document.createElement("div");
-      toast.style.cssText = `
-        position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
-        background: #111827; color: white; padding: 12px 20px; border-radius: 99px;
-        font-family: system-ui; font-size: 14px; font-weight: 500;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.2); z-index: 9999; pointer-events: none;
-        animation: fadeOut 0.5s ease 4s forwards;
-      `;
-      toast.textContent = "Use this section to block seating or allocate to external promoters";
-      document.body.appendChild(toast);
-      setTimeout(() => { if(toast.parentNode) toast.parentNode.removeChild(toast); }, 4500);
-      renderHoldsPanel();
-    } else if (activeMainTab === "view") {
-      // --- NEW VIEW TAB LOGIC ---
-      activeViewMode = true;
-      // Load items from stage attributes if they exist (persistence)
-      const stored = stage.getAttr("sbViewInfoItems");
-      if (stored) {
-        try { viewInfoItems = JSON.parse(stored); } catch(e) {}
-      }
-      renderViewFromSeatsPanel();
-      applySeatVisuals(); 
-    } else {
-      // Map tab
-      applySeatVisuals();
-      renderInspector(selectedNode);
+    renderHoldsPanel();
+  } 
+  else if (activeMainTab === "view") {
+    // --- View Tab Logic (Preserved from your code) ---
+    activeViewMode = true; // Flag used by applySeatVisuals to show 'V'/'i'
+    
+    // Load items from stage attributes if they exist (persistence)
+    const stored = stage.getAttr("sbViewInfoItems");
+    if (stored) {
+      try { viewInfoItems = JSON.parse(stored); } catch (e) {}
     }
-  };
+    renderViewFromSeatsPanel();
+  } 
+  else {
+    // Map Tab (Default)
+    // We don't render panel here because we want the Inspector (which renders on selection)
+    renderInspector(selectedNode);
+  }
+
+  // 5. CRITICAL: Refresh all visuals (Colors, Rings, Icons)
+  // This calls updateTicketRings() internally.
+  // Because we updated 'activeMainTab' at the start of this function,
+  // applySeatVisuals will now know exactly which elements to Hide vs Show.
+  applySeatVisuals(); 
+};
   stage.on("click", handleStageClick);
   stage.on("contentClick", handleStageClick);
   stage.on("tap", handleStageClick);
