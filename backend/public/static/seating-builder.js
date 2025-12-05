@@ -449,9 +449,10 @@ let copiedNodesJson = [];
 let activeMainTab = "map";
 
 // --- Holds & Allocations State ---
-let activeHoldMode = null; // "hold" | "allocation" | null
-let activeViewMode = false; // Is the View tab active?
-let activeViewInfoId = null; // Which View Item ID is currently selected for assignment?
+let activeHoldMode = null; 
+let activeViewMode = false; 
+// NEW: Track which specific sub-mode we are in ('view' or 'info')
+let activeViewType = null;
 let viewInfoItems = []; // Stores { id, name, type: 'image'|'text', content, filename }
 // ------------------------------- 
 let activeHoldToolType = null; // for the specific button active state
@@ -4340,99 +4341,105 @@ function updateTicketRings() {
 
 
   function applySeatVisuals() {
-    refreshSeatMetadata();
-    const seats = getAllSeatNodes();
-    duplicateSeatRefs = computeDuplicateSeatRefsFromSeats(seats);
+  refreshSeatMetadata();
+  const seats = getAllSeatNodes();
+  duplicateSeatRefs = computeDuplicateSeatRefsFromSeats(seats);
+
+  seats.forEach((seat) => {
+    const baseFill = seat.getAttr("sbSeatBaseFill") || "#ffffff";
+    const baseStroke = seat.getAttr("sbSeatBaseStroke") || "#4b5563";
+    const ref = seat.getAttr("sbSeatRef");
+    const ticketId = seat.getAttr("sbTicketId") || null;
+    const holdStatus = seat.getAttr("sbHoldStatus");
     
-    seats.forEach((seat) => {
-      const baseFill = seat.getAttr("sbSeatBaseFill") || "#ffffff";
-      const baseStroke = seat.getAttr("sbSeatBaseStroke") || "#4b5563";
-      const ref = seat.getAttr("sbSeatRef");
-      const ticketId = seat.getAttr("sbTicketId") || null;
-      const holdStatus = seat.getAttr("sbHoldStatus"); 
-      // NEW ATTRIBUTE
-      const viewInfoId = seat.getAttr("sbViewInfoId");
+    // NEW ATTRIBUTES
+    const hasViewImage = !!seat.getAttr("sbViewImage");
+    const hasInfo = !!seat.getAttr("sbInfoLabel");
 
-      let stroke = baseStroke;
-      let fill = baseFill;
-      let strokeWidth = 1.7;
+    let stroke = baseStroke;
+    let fill = baseFill;
+    let strokeWidth = 1.7;
 
-      // --- VISUAL PRIORITY LOGIC ---
-      
-      // 1. Duplicates (Red)
-      if (ref && duplicateSeatRefs.has(ref)) {
-        stroke = "#ef4444";
-        fill = "#fee2e2";
-      } 
-      // 2. View from Seat / Info (Black with Icon) - Only visible in View Tab
-      else if (activeViewMode && viewInfoId) {
+    // --- PRIORITY LOGIC ---
+    
+    // 1. Duplicates (Highest Priority)
+    if (ref && duplicateSeatRefs.has(ref)) {
+      stroke = "#ef4444";
+      fill = "#fee2e2";
+    }
+    // 2. View Mode Visuals (Only active when tab is open)
+    else if (activeViewMode) {
+      if (hasViewImage) {
         stroke = "#000000";
-        fill = "#000000";
-      }
-      // 3. Holds (Black solid)
-      else if (holdStatus === "hold") {
+        fill = "#000000"; // Black background for V
+      } else if (hasInfo) {
         stroke = "#000000";
-        fill = "#000000"; 
-      } 
-      // 4. Allocations (Green solid)
-      else if (holdStatus === "allocation") {
-        stroke = "#10B981"; 
-        fill = "#10B981";
+        fill = "#000000"; // Black background for I
       }
-      // 5. Tickets (Ticket Color)
-      else if (ticketId) {
-        const ticket = ticketTypes.find((t) => t.id === ticketId);
-        if (ticket) {
-          stroke = ticket.color || "#2563eb";
-        }
+    }
+    // 3. Holds
+    else if (holdStatus === "hold") {
+      stroke = "#000000";
+      fill = "#000000";
+    }
+    // 4. Allocations
+    else if (holdStatus === "allocation") {
+      stroke = "#10B981";
+      fill = "#10B981";
+    }
+    // 5. Tickets
+    else if (ticketId) {
+      const ticket = ticketTypes.find((t) => t.id === ticketId);
+      if (ticket) {
+        stroke = ticket.color || "#2563eb";
       }
+    }
 
-      seat.stroke(stroke);
-      seat.fill(fill);
-      seat.strokeWidth(strokeWidth);
+    seat.stroke(stroke);
+    seat.fill(fill);
+    seat.strokeWidth(strokeWidth);
 
-      // --- HANDLE THE 'v' OR 'i' OVERLAY ---
-      // We look for an existing label on this seat or create a temporary one for the view mode
-      const parent = seat.getParent();
-      if (parent) {
-        // Clean up old view labels first
-        const oldViewLabel = parent.findOne(`.view-mode-label-${seat._id}`);
-        if (oldViewLabel) oldViewLabel.destroy();
+    // --- HANDLE OVERLAY TEXT (V or I) ---
+    const parent = seat.getParent();
+    if (parent) {
+      // Clean up old
+      const oldLabel = parent.findOne(`.view-mode-label-${seat._id}`);
+      if (oldLabel) oldLabel.destroy();
 
-        if (activeViewMode && viewInfoId) {
-          // Find the item type to decide 'v' or 'i'
-          const item = viewInfoItems.find(i => i.id === viewInfoId);
-          const letter = (item && item.type === 'image') ? 'v' : 'i';
-          
+      // Only draw overlays if we are in the View Tab and the seat has data
+      if (activeViewMode) {
+        let char = "";
+        if (hasViewImage) char = "V";
+        else if (hasInfo) char = "I";
+
+        if (char) {
           const text = new Konva.Text({
-            x: seat.x() - 5, // Approximate center offset
-            y: seat.y() - 5,
-            text: letter,
-            fontSize: 12,
+            x: seat.x(),
+            y: seat.y(),
+            text: char,
+            fontSize: 11, // Fits inside standard seat radius 10
             fontFamily: "system-ui",
             fontStyle: "bold",
-            fill: "#ffffff", // White text on black seat
+            fill: "#ffffff", // White text
             listening: false,
-            name: `view-mode-label-${seat._id}` // Unique name for cleanup
+            name: `view-mode-label-${seat._id}`
           });
-          // Center the text perfectly
+          
           text.offsetX(text.width() / 2);
           text.offsetY(text.height() / 2);
-          text.x(seat.x());
-          text.y(seat.y());
-          
           parent.add(text);
         }
       }
-    });
-
-    refreshSeatTicketListeners();
-    updateTicketRings(); 
-    
-    if (mapLayer && typeof mapLayer.draw === "function") {
-      mapLayer.batchDraw();
     }
+  });
+
+  refreshSeatTicketListeners();
+  updateTicketRings();
+
+  if (mapLayer && typeof mapLayer.batchDraw === "function") {
+    mapLayer.batchDraw();
   }
+}
   
   function formatDateTimeLocal(date) {
     if (!date) return "";
@@ -4913,180 +4920,239 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
 
 
   function toggleSeatTicketAssignment(seat, ticketId) {
-    // --- INTERCEPT FOR VIEW / INFO MODE ---
-    if (activeViewMode && activeViewInfoId) {
-       const currentId = seat.getAttr("sbViewInfoId");
-       // Toggle: if clicking with same ID, remove it. Otherwise apply it.
-       if (currentId === activeViewInfoId) {
-         seat.setAttr("sbViewInfoId", null);
-       } else {
-         seat.setAttr("sbViewInfoId", activeViewInfoId);
-       }
-       return; // Stop, don't do hold or ticket logic
-    }
-    // --- INTERCEPT FOR HOLDS ---
-    if (activeHoldMode) {
-      // ... existing hold logic ...
-      const currentStatus = seat.getAttr("sbHoldStatus");
-      if (currentStatus === activeHoldMode) {
-        seat.setAttr("sbHoldStatus", null);
-      } else {
-        seat.setAttr("sbHoldStatus", activeHoldMode);
+  // --- INTERCEPT FOR VIEW / INFO TAB ---
+  if (activeViewMode && activeViewType) {
+    
+    // 1. VIEW MODE (Image Upload - Single Seat)
+    if (activeViewType === "view") {
+      // Find the hidden input
+      const fileInput = document.getElementById("sb-hidden-view-upload");
+      if (!fileInput) return;
+
+      // Handle file selection
+      fileInput.onchange = (e) => {
+        if (fileInput.files && fileInput.files[0]) {
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            const result = ev.target.result; // Base64 image
+            // Save to seat attribute
+            seat.setAttr("sbViewImage", result);
+            seat.setAttr("sbViewInfoId", "has-image"); // Legacy/Marker
+            applySeatVisuals();
+            pushHistory();
+          };
+          reader.readAsDataURL(fileInput.files[0]);
+        }
+        // Reset input so change event fires again for same file
+        fileInput.value = ""; 
+      };
+
+      // Check if image exists to toggle off? 
+      // The prompt implies we click to upload. 
+      // If they click an existing one, let's confirm removal or re-upload.
+      const existing = seat.getAttr("sbViewImage");
+      if (existing) {
+        if (confirm("This seat already has a View image. Click OK to Remove it, or Cancel to replace it.")) {
+          seat.setAttr("sbViewImage", null);
+          seat.setAttr("sbViewInfoId", null);
+          applySeatVisuals();
+          pushHistory();
+          return;
+        }
       }
+      
+      // Trigger the file dialog
+      fileInput.click();
       return; 
     }
-    // --- END INTERCEPTS ---
 
-    // ... existing ticket logic remains here ...
-    const { sid, set } = ensureSeatTicketSet(seat);
-    if (!sid || !set || !ticketId) return;
-    const hadTicket = set.has(ticketId);
-    if (hadTicket) {
-      set.delete(ticketId);
-    } else {
-      set.add(ticketId);
-    }
-    const ids = Array.from(set);
-    seat.setAttr("sbTicketIds", ids);
-    seat.setAttr("sbTicketId", ids[0] || null);
-    if (ids.length > 0) {
-      ticketAssignments.set(sid, new Set(ids));
-    } else {
-      ticketAssignments.delete(sid);
+    // 2. INFO MODE (Text - Multi Seat)
+    if (activeViewType === "info") {
+      const lblInput = document.getElementById("sb-info-label");
+      const descInput = document.getElementById("sb-info-desc");
+      const labelVal = lblInput ? lblInput.value : "";
+      const descVal = descInput ? descInput.value : "";
+
+      // Check if seat already has info
+      const currentLabel = seat.getAttr("sbInfoLabel");
+      
+      // Logic: If clicking a seat that HAS info, remove it.
+      // If clicking a seat with NO info, apply inputs.
+      if (currentLabel) {
+        seat.setAttr("sbInfoLabel", null);
+        seat.setAttr("sbInfoDesc", null);
+      } else {
+        if (!labelVal && !descVal) {
+          alert("Please enter a Label or Description in the right-hand panel before selecting seats.");
+          return;
+        }
+        seat.setAttr("sbInfoLabel", labelVal);
+        seat.setAttr("sbInfoDesc", descVal);
+      }
+      applySeatVisuals(); // Redraw
+      return;
     }
   }
- function handleTicketSeatSelection(pointerPos, target) {
-  // If we are in Hold mode, we don't need a valid ticket ID, otherwise get active ticket
-  const ticketId = activeHoldMode ? "HOLD_MODE_ACTIVE" : getActiveTicketIdForAssignments();
 
-  // eslint-disable-next-line no-console
-  console.log("[seatmap][tickets] selection logic", {
-    ticketId,
-    targetName: target ? target.name() : 'null',
-    mode: activeHoldMode || 'ticket'
-  });
+  // --- INTERCEPT FOR HOLDS (Existing) ---
+  if (activeHoldMode) {
+    const currentStatus = seat.getAttr("sbHoldStatus");
+    if (currentStatus === activeHoldMode) {
+      seat.setAttr("sbHoldStatus", null);
+    } else {
+      seat.setAttr("sbHoldStatus", activeHoldMode);
+    }
+    return;
+  }
 
+  // --- STANDARD TICKET LOGIC (Existing) ---
+  const { sid, set } = ensureSeatTicketSet(seat);
+  if (!sid || !set || !ticketId) return;
+  const hadTicket = set.has(ticketId);
+  if (hadTicket) {
+    set.delete(ticketId);
+  } else {
+    set.add(ticketId);
+  }
+  const ids = Array.from(set);
+  seat.setAttr("sbTicketIds", ids);
+  seat.setAttr("sbTicketId", ids[0] || null);
+  if (ids.length > 0) {
+    ticketAssignments.set(sid, new Set(ids));
+  } else {
+    ticketAssignments.delete(sid);
+  }
+}
+function handleTicketSeatSelection(pointerPos, target) {
+  const ticketId = (activeHoldMode || activeViewMode) ? "MODE_ACTIVE" : getActiveTicketIdForAssignments();
   if (!ticketId) return false;
 
-  // --- HELPER: Toggle a list of seats (Rows, Tables, etc) ---
+  // --- Helper to Toggle List (Rows/Tables) ---
   const toggleList = (seats) => {
+    // 🛑 BLOCK MULTI-SELECTION IN VIEW MODE
+    if (activeViewType === "view") {
+      alert("View from Seats images must be assigned to individual seats only. Please click specific seats.");
+      return;
+    }
+
     if (!seats || !seats.length) return;
 
-    // --- BRANCH A: HOLD MODE ---
-    if (activeHoldMode) {
-      // Determine if we are adding or removing based on the first seat in the selection
-      const firstStatus = seats[0].getAttr("sbHoldStatus");
-      const shouldApply = firstStatus !== activeHoldMode;
+    // A. INFO MODE (New)
+    if (activeViewType === "info") {
+      const lblInput = document.getElementById("sb-info-label");
+      const descInput = document.getElementById("sb-info-desc");
+      const labelVal = lblInput ? lblInput.value : "";
+      const descVal = descInput ? descInput.value : "";
 
+      if (!labelVal && !descVal) {
+        alert("Please enter a Label or Description before selecting rows/blocks.");
+        return;
+      }
+
+      // Determine toggle state based on first seat
+      const firstHasInfo = !!seats[0].getAttr("sbInfoLabel");
+      
       seats.forEach(seat => {
-        // Apply the hold status (or null to clear)
-        seat.setAttr("sbHoldStatus", shouldApply ? activeHoldMode : null);
+        if (firstHasInfo) {
+          // Remove
+          seat.setAttr("sbInfoLabel", null);
+          seat.setAttr("sbInfoDesc", null);
+        } else {
+          // Apply
+          seat.setAttr("sbInfoLabel", labelVal);
+          seat.setAttr("sbInfoDesc", descVal);
+        }
       });
-
       applySeatVisuals();
-      if (activeViewMode) {
-        renderViewFromSeatsPanel();
-    } else if (activeHoldMode) {
-        renderHoldsPanel();
-    } else {
-        renderTicketingPanel();
-    }
-      renderHoldsPanel(); // Update the specific Holds panel
       pushHistory();
       return;
     }
 
-    // --- BRANCH B: TICKET MODE (Existing Logic) ---
+    // B. HOLD MODE (Existing)
+    if (activeHoldMode) {
+      const firstStatus = seats[0].getAttr("sbHoldStatus");
+      const shouldApply = firstStatus !== activeHoldMode;
+      seats.forEach(seat => {
+        seat.setAttr("sbHoldStatus", shouldApply ? activeHoldMode : null);
+      });
+      applySeatVisuals();
+      renderHoldsPanel();
+      pushHistory();
+      return;
+    }
+
+    // C. TICKET MODE (Existing)
     const { set } = ensureSeatTicketSet(seats[0]);
     const shouldAssign = !(set && set.has(ticketId));
-
     seats.forEach(seat => {
       const { sid, set: seatSet } = ensureSeatTicketSet(seat);
       if (!sid || !seatSet) return;
-
       if (shouldAssign) seatSet.add(ticketId);
       else seatSet.delete(ticketId);
-
       const ids = Array.from(seatSet);
       seat.setAttr("sbTicketIds", ids);
       seat.setAttr("sbTicketId", ids[0] || null);
-
       if (ids.length > 0) ticketAssignments.set(sid, new Set(ids));
       else ticketAssignments.delete(sid);
     });
-
     rebuildTicketAssignmentsCache();
     applySeatVisuals();
-    renderTicketingPanel(); // Update the Tickets panel
+    renderTicketingPanel();
     pushHistory();
   };
 
-  // --- 1. CHECK ROW LABEL CLICK ---
+  // ... (Keep existing checks for Row Label, Hit Rect, Table) ...
+  // ... Ensure they call the updated toggleList above ...
+  
+  // 1. Row Label
   if (target && target.getAttr("isRowLabel")) {
-    const rowLabelText = target.text();
-    const parentGroup = target.getParent();
-    if (parentGroup && rowLabelText) {
-      const seatsInRow = parentGroup.find((node) =>
-        node.getAttr("isSeat") && node.getAttr("sbSeatRowLabel") === rowLabelText
-      );
-      if (seatsInRow.length > 0) {
-        toggleList(seatsInRow);
-        return true;
-      }
-    }
+     // ... same lookup logic ...
+     // toggleList(seatsInRow); 
+     // return true;
+     // (Copy logic from previous file or leave as is if toggleList is defined in scope)
+     const rowLabelText = target.text();
+     const parentGroup = target.getParent();
+     if (parentGroup && rowLabelText) {
+       const seatsInRow = parentGroup.find((node) => node.getAttr("isSeat") && node.getAttr("sbSeatRowLabel") === rowLabelText);
+       if (seatsInRow.length > 0) { toggleList(seatsInRow); return true; }
+     }
   }
 
-  // --- 2. CHECK CONTAINER CLICK (hit-rect) ---
+  // 2. Container
   if (target && target.name() === "hit-rect") {
-    const group = target.getParent();
-    if (group && group.getAttr("shapeType") === "row-seats") {
-      const allSeats = group.find((n) => n.getAttr("isSeat"));
-      if (allSeats.length > 0) {
-        toggleList(allSeats);
-        return true;
-      }
-    }
+     const group = target.getParent();
+     if (group && group.getAttr("shapeType") === "row-seats") {
+        const allSeats = group.find((n) => n.getAttr("isSeat"));
+        if (allSeats.length > 0) { toggleList(allSeats); return true; }
+     }
   }
 
-  // --- 3. CHECK TABLE CLICK ---
+  // 3. Table
   if (target) {
     const group = target.findAncestor("Group", true);
-    if (group) {
-      const type = group.getAttr("shapeType") || group.name();
-      if (type === "circular-table" || type === "rect-table") {
-        // Clicked Body or Label?
-        if (target.name() === "body-rect" || target.name() === "table-label") {
+    if (group && (group.getAttr("shapeType") === "circular-table" || group.getAttr("shapeType") === "rect-table")) {
+       if (target.name() === "body-rect" || target.name() === "table-label") {
           const tableSeats = group.find((n) => n.getAttr("isSeat"));
-          if (tableSeats.length > 0) {
-            toggleList(tableSeats);
-            return true;
-          }
-        }
-      }
+          if (tableSeats.length > 0) { toggleList(tableSeats); return true; }
+       }
     }
   }
 
-  // --- 4. CHECK SINGLE SEAT CLICK (Direct check) ---
+  // 4. SINGLE SEAT CLICK
   const isDirectSeat = target && target.getAttr && target.getAttr("isSeat");
   if (isDirectSeat) {
-    // This calls the updated toggleSeatTicketAssignment which handles the Hold logic check internally
     toggleSeatTicketAssignment(target, ticketId);
     applySeatVisuals();
-    
-    // Conditionally update the correct panel based on mode
-    if (activeHoldMode) {
-        renderHoldsPanel();
-    } else {
-        renderTicketingPanel();
-    }
-    
+    // Conditionally re-render panel
+    if (activeHoldMode) renderHoldsPanel();
+    // View panel doesn't need full re-render on seat click, just visuals
+    else if (!activeViewMode) renderTicketingPanel();
     pushHistory();
     return true;
   }
 
   return false;
 }
-
   function getSelectedSeatNodes() {
     const nodes =
       transformer && transformer.nodes && transformer.nodes().length
@@ -6031,199 +6097,127 @@ seats.forEach(seat => {
     };
   }, 0);
 }
-  // [INSERT THIS FUNCTION AFTER renderHoldsPanel]
-function renderViewFromSeatsPanel() {
-    const el = getInspectorElement();
-    if (!el) return;
-    el.innerHTML = "";
+ function renderViewFromSeatsPanel() {
+  const el = getInspectorElement();
+  if (!el) return;
+  el.innerHTML = "";
 
-    // 1. Calculate stats & Persist Data
-    const seats = getAllSeatNodes();
-    viewInfoItems.forEach(item => {
-        let count = 0;
-        seats.forEach(s => { if (s.getAttr("sbViewInfoId") === item.id) count++; });
-        item.assignedCount = count;
-    });
-    // Save to stage so it gets stored in JSON
-    if(stage) stage.setAttr("sbViewInfoItems", JSON.stringify(viewInfoItems));
+  // 1. Header
+  const titleWrap = document.createElement("div");
+  titleWrap.className = "sb-ticketing-heading";
+  titleWrap.innerHTML = `
+    <div class="sb-ticketing-title">Seating Information</div>
+    <div class="sb-ticketing-sub">Manage sightlines and seat restrictions.</div>
+  `;
+  el.appendChild(titleWrap);
 
-    // 2. Header
-    const titleWrap = document.createElement("div");
-    titleWrap.className = "sb-ticketing-heading";
-    titleWrap.innerHTML = `
-        <div class="sb-ticketing-title">View from Seats</div>
-        <div class="sb-ticketing-sub">Assign images or info text to seats.</div>
+  // Hidden File Input for the "View" logic
+  const hiddenFileInput = document.createElement("input");
+  hiddenFileInput.type = "file";
+  hiddenFileInput.accept = "image/*";
+  hiddenFileInput.style.display = "none";
+  hiddenFileInput.id = "sb-hidden-view-upload";
+  el.appendChild(hiddenFileInput);
+
+  // Helper to create a card
+  const createCard = (type, title, symbolChar, desc, isActive) => {
+    const card = document.createElement("div");
+    card.className = "sb-ticket-card";
+    if (isActive) card.classList.add("is-active");
+    card.style.marginBottom = "10px";
+    card.style.cursor = "pointer";
+
+    card.innerHTML = `
+      <div class="sb-ticket-card-header">
+        <div class="sb-ticket-card-main">
+          <span style="width:24px; height:24px; background:#000; color:#fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:12px;">
+            ${symbolChar}
+          </span>
+          <div class="sb-ticket-card-copy">
+            <div class="sb-ticket-name">${title}</div>
+          </div>
+        </div>
+        ${isActive ? '<span class="sb-ticket-chip">Active</span>' : '<span class="sb-ticket-caret">▸</span>'}
+      </div>
+      <div style="padding: 0 14px 14px; font-size:12px; color:#6b7280; display:${isActive ? 'block' : 'none'}">
+        ${desc}
+      </div>
     `;
-    el.appendChild(titleWrap);
+    
+    // Toggle Mode Logic
+    card.addEventListener("click", (e) => {
+      // Don't trigger if clicking inside inputs
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.tagName === "BUTTON") return;
 
-    // 3. List Existing Items
-    const stack = document.createElement("div");
-    stack.className = "sb-ticket-stack";
-
-    if (viewInfoItems.length === 0) {
-        const empty = document.createElement("div");
-        empty.className = "sb-inspector-empty";
-        empty.textContent = "No views created yet.";
-        el.appendChild(empty);
-    }
-
-    viewInfoItems.forEach(item => {
-        const isActive = activeViewInfoId === item.id;
-        const card = document.createElement("div");
-        card.className = "sb-ticket-card";
-        if (isActive && ticketSeatSelectionMode) card.classList.add("is-active");
-
-        const iconChar = item.type === 'image' ? 'v' : 'i';
-        const typeLabel = item.type === 'image' ? 'Image View' : 'Info Text';
-
-        // Preview Content
-        let previewHtml = '';
-        if (item.type === 'image' && item.content) {
-            previewHtml = `<img src="${item.content}" style="width:100%; height:100px; object-fit:cover; border-radius:8px; margin-bottom:8px; border:1px solid #e5e7eb;">`;
-        } else {
-            previewHtml = `<div style="background:#f3f4f6; padding:8px; border-radius:6px; font-size:12px; color:#374151; margin-bottom:8px;">"${item.content}"</div>`;
-        }
-
-        card.innerHTML = `
-            <div class="sb-ticket-card-header">
-                <div class="sb-ticket-card-main">
-                    <span style="width:24px; height:24px; background:#000; color:#fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:12px;">${iconChar}</span>
-                    <div class="sb-ticket-card-copy">
-                        <div class="sb-ticket-name">${item.name}</div>
-                        <div class="sb-ticket-meta">${typeLabel} • ${item.assignedCount} seats</div>
-                    </div>
-                </div>
-                <div class="sb-ticket-card-actions">
-                    <button class="tool-button sb-ghost-button" id="btn-del-${item.id}" style="padding:4px 8px; font-size:11px;">Delete</button>
-                </div>
-            </div>
-            <div style="padding:0 14px 14px;">
-                ${previewHtml}
-                <button class="tool-button ${isActive && ticketSeatSelectionMode ? 'is-active' : ''}" id="btn-assign-${item.id}">
-                    ${isActive && ticketSeatSelectionMode ? 'Done Selecting' : 'Assign to Seats'}
-                </button>
-            </div>
-        `;
-        stack.appendChild(card);
-
-        // Event Listeners (Use timeout to ensure DOM is ready)
-        setTimeout(() => {
-            const btnDel = document.getElementById(`btn-del-${item.id}`);
-            if(btnDel) btnDel.onclick = (e) => {
-                e.stopPropagation();
-                if(confirm("Delete this view item?")) {
-                    viewInfoItems = viewInfoItems.filter(x => x.id !== item.id);
-                    // Clear assignments
-                    seats.forEach(s => {
-                        if(s.getAttr("sbViewInfoId") === item.id) s.setAttr("sbViewInfoId", null);
-                    });
-                    renderViewFromSeatsPanel();
-                    applySeatVisuals();
-                }
-            };
-
-            const btnAssign = document.getElementById(`btn-assign-${item.id}`);
-            if(btnAssign) btnAssign.onclick = () => {
-                if (isActive && ticketSeatSelectionMode) {
-                    // Turn off
-                    activeViewInfoId = null;
-                    setTicketSeatSelectionMode(false, "view-off");
-                } else {
-                    // Turn on
-                    activeViewInfoId = item.id;
-                    setTicketSeatSelectionMode(true, "view-on");
-                }
-                renderViewFromSeatsPanel();
-                applySeatVisuals();
-            };
-        }, 0);
+      if (activeViewType === type) {
+        // Toggle Off
+        activeViewType = null;
+        setTicketSeatSelectionMode(false, "view-off");
+      } else {
+        // Toggle On
+        activeViewType = type;
+        setTicketSeatSelectionMode(true, "view-on");
+      }
+      renderViewFromSeatsPanel();
+      applySeatVisuals();
     });
-    el.appendChild(stack);
 
-    // 4. Create New Section
-    const createWrap = document.createElement("div");
-    createWrap.className = "sb-side-section";
-    createWrap.style.marginTop = "16px";
-    createWrap.innerHTML = `
-        <h4 class="sb-inspector-title">Create New View/Info</h4>
-        <div class="sb-field-col">
-            <label class="sb-label">Label</label>
-            <input type="text" class="sb-input" id="new-view-name" placeholder="e.g. Restricted View">
-        </div>
-        <div class="sb-field-col" style="margin-top:10px;">
-            <label class="sb-label">Type</label>
-            <select class="sb-select" id="new-view-type">
-                <option value="image">Image Upload</option>
-                <option value="text">Information Text</option>
-            </select>
-        </div>
-        
-        <div class="sb-field-col" id="grp-view-file" style="margin-top:10px;">
-            <label class="sb-label">Upload Image</label>
-            <input type="file" accept="image/*" class="sb-input" id="new-view-file">
-        </div>
+    return card;
+  };
 
-        <div class="sb-field-col" id="grp-view-text" style="margin-top:10px; display:none;">
-            <label class="sb-label">Information Message</label>
-            <textarea class="sb-input sb-textarea" id="new-view-text-val" placeholder="e.g. No back support"></textarea>
-        </div>
+  // --- CARD 1: View from Seats ('V') ---
+  const viewDescHtml = `
+    <p style="margin-bottom:8px;">
+      <strong>Instruction:</strong> Click an individual seat on the map. You will be prompted to upload an image for that specific seat.
+    </p>
+    <div class="sb-ticketing-alert" style="font-size:11px;">
+      Note: Views are assigned to single seats only. Rows/Tables cannot be selected.
+    </div>
+  `;
+  
+  const viewCard = createCard(
+    "view", 
+    "View from Seats", 
+    "V", 
+    viewDescHtml, 
+    activeViewType === "view"
+  );
+  el.appendChild(viewCard);
 
-        <button class="tool-button sb-ticket-add" id="btn-create-view" style="margin-top:12px;">
-            <span class="sb-ticket-add-icon">＋</span> Add Item
-        </button>
-    `;
-    el.appendChild(createWrap);
+  // --- CARD 2: Information ('I') ---
+  // We need to preserve input state if the user clicks around, 
+  // so we read from a temporary global or attributes, 
+  // but for simplicity, we'll read from DOM or init blank.
+  const infoDescContainer = document.createElement("div");
+  infoDescContainer.innerHTML = `
+    <div class="sb-field-col" style="margin-top:8px;">
+      <label class="sb-label">Label (e.g. Restricted View)</label>
+      <input type="text" class="sb-input" id="sb-info-label" placeholder="Short label">
+    </div>
+    <div class="sb-field-col" style="margin-top:8px;">
+      <label class="sb-label">Description (e.g. Limited Legroom)</label>
+      <textarea class="sb-input sb-textarea" id="sb-info-desc" placeholder="Detailed description..."></textarea>
+    </div>
+    <div style="margin-top:12px; font-size:11px; color:#6b7280;">
+      Select seats, rows, or blocks to apply this information. Click assigned seats to remove.
+    </div>
+  `;
 
-    // 5. Create Logic
-    setTimeout(() => {
-        const typeSel = document.getElementById("new-view-type");
-        const grpFile = document.getElementById("grp-view-file");
-        const grpText = document.getElementById("grp-view-text");
-
-        typeSel.onchange = () => {
-            if(typeSel.value === 'image') {
-                grpFile.style.display = 'block';
-                grpText.style.display = 'none';
-            } else {
-                grpFile.style.display = 'none';
-                grpText.style.display = 'block';
-            }
-        };
-
-        document.getElementById("btn-create-view").onclick = () => {
-            const name = document.getElementById("new-view-name").value;
-            const type = typeSel.value;
-            if(!name) return alert("Enter a label");
-
-            const newItem = {
-                id: `view-${Date.now()}`,
-                name: name,
-                type: type,
-                content: "",
-                assignedCount: 0
-            };
-
-            if (type === 'text') {
-                newItem.content = document.getElementById("new-view-text-val").value;
-                viewInfoItems.push(newItem);
-                renderViewFromSeatsPanel();
-            } else {
-                // Image
-                const fileInput = document.getElementById("new-view-file");
-                if(fileInput.files && fileInput.files[0]) {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        newItem.content = e.target.result; // Base64
-                        viewInfoItems.push(newItem);
-                        renderViewFromSeatsPanel();
-                    };
-                    reader.readAsDataURL(fileInput.files[0]);
-                } else {
-                    alert("Select an image");
-                }
-            }
-        };
-    }, 0);
+  const infoCard = createCard(
+    "info", 
+    "Information", 
+    "I", 
+    "", // We inject the complex DOM below
+    activeViewType === "info"
+  );
+  
+  // Inject the form into the card body if active
+  if (activeViewType === "info") {
+    const body = infoCard.querySelector("div:last-child");
+    body.innerHTML = "";
+    body.appendChild(infoDescContainer);
+  }
+  el.appendChild(infoCard);
 }
     // ---------- Selection inspector (right-hand panel) ----------
 
