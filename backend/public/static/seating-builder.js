@@ -5967,13 +5967,14 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
           setTicketSeatSelectionMode(false, "assign-all-remaining");
         });
 
-        // 🔵 NEW: "Assign all seats" – allows overlaps / multi-ticket per seat
+        // 🔵 NEW: "Assign all seats" – Stacks tickets (allows multi-ticket per seat up to 10)
         const assignAllSeatsBtn = document.createElement("button");
         assignAllSeatsBtn.type = "button";
         assignAllSeatsBtn.className = "tool-button";
         assignAllSeatsBtn.textContent = "Assign all seats";
         assignAllSeatsBtn.disabled =
           duplicates.size > 0 || updateOffSaleValidation();
+
         assignAllSeatsBtn.addEventListener("click", () => {
           if (duplicates.size > 0) {
             window.alert(
@@ -5992,23 +5993,32 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
           enforceUniqueSeatIds(seats);
 
           seats.forEach((seat) => {
+            // 1. Get existing tickets for this seat
             const { sid, set } = ensureSeatTicketSet(seat);
             if (!sid || !set) return;
 
+            // 2. CHECK LIMIT: If seat already has 10 or more tickets, skip adding a new one
+            // (Unless it already has *this* ticket, in which case adding it again does nothing)
+            if (set.size >= 10 && !set.has(ticket.id)) {
+              return;
+            }
+
+            // 3. Stack the ticket (Add to set instead of overwriting)
             set.add(ticket.id);
 
             const ids = Array.from(set);
             seat.setAttr("sbTicketIds", ids);
-            seat.setAttr("sbTicketId", ids[0] || null);
+            // Ensure specific ticket ID attr is consistent with the primary ticket
+            seat.setAttr("sbTicketId", ids[0] || null); 
+            
             ticketAssignments.set(sid, new Set(ids));
           });
 
           rebuildTicketAssignmentsCache();
 
           // eslint-disable-next-line no-console
-          console.log("[seatmap][tickets] assign all seats (multi-ticket allowed)", {
+          console.log("[seatmap][tickets] assign all seats (stacked)", {
             ticketId: ticket.id,
-            assignedCount: countAssignmentsForTicket(ticket.id),
             totalSeats: getAllSeatNodes().length,
           });
 
@@ -6082,8 +6092,6 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
     });
 
     el.appendChild(addBtn);
-  }
-
   function renderHoldsPanel() {
   const el = getInspectorElement();
   if (!el) return;
