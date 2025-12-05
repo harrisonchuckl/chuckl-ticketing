@@ -10815,6 +10815,9 @@ window.__TIXALL_SET_TAB_MODE__ = function (tab) {
   // 2. Reset all special interaction modes to prevent conflicts
   // This ensures we don't carry over "add ticket" or "add view" clicks into other tabs
   setTicketSeatSelectionMode(false, "tab-change");
+
+  activeAccessibilityMode = null; // <--- Critical Fix for Holds & Glitches
+  
   activeHoldMode = null;
   activeViewMode = false;
   activeViewType = null; // Clear sub-mode (Info vs View)
