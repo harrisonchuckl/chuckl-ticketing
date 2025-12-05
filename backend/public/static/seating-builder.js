@@ -4243,10 +4243,10 @@ function getSeatDisplayName(seat) {
     duplicateSeatRefs = computeDuplicateSeatRefsFromSeats(getAllSeatNodes());
 
     // --- Apply current visuals (this already calls updateTicketRings internally) ---
-    applySeatVisuals();
+    ();
 
     // We deliberately STOP here.
-    // All ticket-ring overlays are now handled in applySeatVisuals -> updateTicketRings.
+    // All ticket-ring overlays are now handled in  -> updateTicketRings.
     // The legacy manual ring-drawing below caused the "double ring" issue.
 
     if (mapLayer && typeof mapLayer.batchDraw === "function") {
@@ -4351,11 +4351,11 @@ function updateTicketRings() {
     stage.batchDraw();
   }
 }
- // [Source: 3573] - Updated to strictly isolate color/text visuals by Tab
+// [Source: 3573] - Fixed: Restored the logic to actually draw the 'V' and 'i' text
 function applySeatVisuals() {
   refreshSeatMetadata();
   const seats = getAllSeatNodes();
-  
+
   // Recalculate duplicates (mainly for the Tickets tab warning)
   duplicateSeatRefs = computeDuplicateSeatRefsFromSeats(seats);
 
@@ -4363,7 +4363,7 @@ function applySeatVisuals() {
     // 1. Reset to Base Styles (The "Map" tab look)
     const baseFill = seat.getAttr("sbSeatBaseFill") || "#ffffff";
     const baseStroke = seat.getAttr("sbSeatBaseStroke") || "#4b5563";
-    
+
     let stroke = baseStroke;
     let fill = baseFill;
     let strokeWidth = 1.7;
@@ -4376,14 +4376,14 @@ function applySeatVisuals() {
     const hasInfo = !!seat.getAttr("sbInfoLabel");
 
     // 2. Apply Tab-Specific Visuals
-    
+
     // --- TAB: TICKETS (Changes fill/stroke for assigned seats) ---
     if (activeMainTab === "tickets") {
       // Priority A: Duplicates (Critical Error)
       if (ref && duplicateSeatRefs.has(ref)) {
         stroke = "#ef4444";
         fill = "#fee2e2";
-      } 
+      }
       // Priority B: Assigned Ticket (Change stroke color)
       else if (ticketId) {
         const ticket = ticketTypes.find((t) => t.id === ticketId);
@@ -4397,7 +4397,7 @@ function applySeatVisuals() {
     else if (activeMainTab === "holds") {
       if (holdStatus === "hold") {
         stroke = "#000000";
-        fill = "#000000"; 
+        fill = "#000000";
       } else if (holdStatus === "allocation") {
         stroke = "#10B981";
         fill = "#10B981";
@@ -4421,36 +4421,58 @@ function applySeatVisuals() {
     const parent = seat.getParent();
     if (parent) {
       // **CRITICAL CLEANUP**: Always remove old labels when applying visuals
+      // We use seat._id to ensure uniqueness if seatId attr isn't set yet
       const oldLabel = parent.findOne(`.view-mode-label-${seat._id}`);
       if (oldLabel) oldLabel.destroy();
 
       // Only draw new labels if we are strictly in the View tab
       if (activeMainTab === "view") {
-        // ... (V/i drawing logic is here, but only runs if activeMainTab === "view") ...
         let char = "";
+        let fontStyle = "bold";
+        let fontFamily = "system-ui";
+        let fontSize = 11;
+
         if (hasViewImage) {
           char = "V";
         } else if (hasInfo) {
-          char = "i"; 
+          char = "i";
+          fontFamily = '"Times New Roman", serif';
+          fontStyle = "bold";
+          fontSize = 14; 
         }
 
+        // --- FIXED: This block was previously empty ---
         if (char) {
-          // ... logic to create and add the Konva.Text object ...
+          const text = new Konva.Text({
+            x: seat.x(),
+            y: seat.y(),
+            text: char,
+            fontSize: fontSize,
+            fontFamily: fontFamily,
+            fontStyle: fontStyle,
+            fill: "#ffffff",
+            listening: false,
+            name: `view-mode-label-${seat._id}`
+          });
+          // Center the text over the seat
+          text.offsetX(text.width() / 2);
+          text.offsetY(text.height() / 2);
+          parent.add(text);
         }
+        // ----------------------------------------------
       }
     }
   });
 
   refreshSeatTicketListeners();
-  
+
   // Always call the ring function here, which handles its own show/hide logic
   updateTicketRings();
 
   if (mapLayer && typeof mapLayer.batchDraw === "function") {
     mapLayer.batchDraw();
   }
-}
-  
+}  
   function formatDateTimeLocal(date) {
     if (!date) return "";
     const d = typeof date === "string" ? new Date(date) : date;
