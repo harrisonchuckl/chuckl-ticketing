@@ -493,6 +493,46 @@ let holdReportSettings = {
 
   let ticketFormAutoOffSale = true;
 
+  window.__TIXALL_COMPLETION_STATUS__ = {
+  map: false,
+  tickets: false,
+  holds: false,
+  view: false
+};
+
+function updateCompletionUI() {
+  const s = window.__TIXALL_COMPLETION_STATUS__;
+  
+  // 1. Update Tabs
+  const tabs = document.querySelectorAll('.tb-tab');
+  tabs.forEach(t => {
+    const key = t.getAttribute('data-tab');
+    if (s[key] || (key === 'map' && s.map) || (key === 'tickets' && s.tickets) || (key === 'holds' && s.holds) || (key === 'view' && s.view)) {
+      t.classList.toggle('is-complete', !!s[key]);
+    }
+  });
+
+  // 2. Update Header Buttons
+  const btnPublish = document.getElementById('tb-btn-publish');
+  const btnDraft = document.getElementById('tb-btn-draft');
+  const allComplete = s.map && s.tickets && s.holds && s.view;
+
+  if (btnPublish) {
+    btnPublish.disabled = !allComplete;
+    btnPublish.title = allComplete ? "Ready to go live" : "Complete all tabs to publish";
+  }
+  if (btnDraft) {
+    btnDraft.style.display = allComplete ? "none" : "inline-block";
+    btnPublish.style.display = allComplete ? "inline-block" : "inline-block"; // Keep publish visible but disabled if not ready
+  }
+}
+
+// Logic to navigate to a specific tab by name
+function switchBuilderTab(tabName) {
+  const tabBtn = document.querySelector(`.tb-tab[data-tab="${tabName}"]`);
+  if(tabBtn) tabBtn.click();
+}
+
   // -------- Ticket colour palette (editable TIXL defaults) --------
   // You can change these eight hex values to whatever brand colours you like.
   // Index 0 is the default for the first ticket.
@@ -6083,10 +6123,34 @@ if (mapLayer) mapLayer.batchDraw();
 
       applySeatVisuals();
       renderTicketingPanel();
-    });
+   });
+  el.appendChild(addBtn);
 
-    el.appendChild(addBtn);
-  }
+  // --- PHASE 1: TICKETS NEXT STEP ---
+  const nextBtn = document.createElement("button");
+  nextBtn.className = "sb-next-step-btn";
+  nextBtn.textContent = "Add holds / Allocations →";
+  nextBtn.onclick = () => {
+    if (ticketTypes.length === 0) {
+      alert("Please create at least one ticket type.");
+      return;
+    }
+    // Simple validation: check if seats are assigned
+    const seats = getAllSeatNodes();
+    const assignedCount = seats.filter(s => s.getAttr('sbTicketIds')?.length > 0 || s.getAttr('sbTicketId')).length;
+    
+    if (assignedCount === 0) {
+      if (!confirm("You created tickets but haven't assigned them to any seats yet. Continue anyway?")) return;
+    }
+
+    if (confirm("Are you happy with your ticket setup?")) {
+      window.__TIXALL_COMPLETION_STATUS__.tickets = true;
+      updateCompletionUI();
+      switchBuilderTab("holds");
+    }
+  };
+  el.appendChild(nextBtn);
+}
 
   function renderHoldsPanel() {
   const el = getInspectorElement();
@@ -6229,8 +6293,21 @@ seats.forEach(seat => {
         );
         window.open(`mailto:?subject=${subject}&body=${body}`);
       };
-    }, 0);
-  }
+   }, 0);
+  
+  // --- PHASE 1: HOLDS NEXT STEP ---
+  const nextBtn = document.createElement("button");
+  nextBtn.className = "sb-next-step-btn";
+  nextBtn.textContent = "Set view & seat restrictions →";
+  nextBtn.onclick = () => {
+    if (confirm("Finished assigning holds and allocations? You can return later if needed.")) {
+      window.__TIXALL_COMPLETION_STATUS__.holds = true;
+      updateCompletionUI();
+      switchBuilderTab("view");
+    }
+  };
+  el.appendChild(nextBtn);
+}
 
   // 6. Weekly Box Office Reports (Only visible in Allocation section or generally at bottom)
   const reportSection = document.createElement("div");
@@ -6623,8 +6700,27 @@ seats.forEach(seat => {
         }, 0);
       });
     });
-    el.appendChild(listContainer);
+  el.appendChild(listContainer);
   }
+
+  // --- PHASE 1: VIEW NEXT STEP ---
+  const nextBtn = document.createElement("button");
+  nextBtn.className = "sb-next-step-btn";
+  nextBtn.textContent = "Ready to publish";
+  nextBtn.onclick = () => {
+    // Basic validation of view mode (optional, mostly manual confirmation)
+    window.__TIXALL_COMPLETION_STATUS__.view = true;
+    updateCompletionUI();
+    
+    // Check global status
+    const s = window.__TIXALL_COMPLETION_STATUS__;
+    if (s.map && s.tickets && s.holds && s.view) {
+      alert("All steps complete! You can now Publish the show from the top bar.");
+    } else {
+      alert("View step marked complete. Please finish any remaining red tabs before publishing.");
+    }
+  };
+  el.appendChild(nextBtn);
 }
     // ---------- Selection inspector (right-hand panel) ----------
 
@@ -7421,6 +7517,25 @@ function addNumberField(labelText, value, min, step, onCommit) {
       return;
     }
 
+    // --- PHASE 1: MAP NEXT STEP ---
+const nextBtn = document.createElement("button");
+nextBtn.className = "sb-next-step-btn";
+nextBtn.textContent = "Add tickets →";
+nextBtn.onclick = () => {
+  // Validation
+  const seats = getAllSeatNodes();
+  if (seats.length === 0) {
+    alert("Your map is empty. Please add seats before proceeding.");
+    return;
+  }
+  if (confirm("Have you finished the seating map?\n\nOnce tickets are added, editing the map structure becomes restricted.")) {
+    window.__TIXALL_COMPLETION_STATUS__.map = true;
+    updateCompletionUI();
+    switchBuilderTab("tickets");
+  }
+};
+el.appendChild(nextBtn);
+    
     const shapeType = node.getAttr("shapeType") || node.name();
 
     // ---- Single Seat ----
@@ -10414,10 +10529,78 @@ function handleStageMouseMove() {
         syncDeleteButtonState();
 
         // eslint-disable-next-line no-console
-        console.info("[seatmap] save: finished");
+      // eslint-disable-next-line no-console
+    console.info("[seatmap] save: finished");
+  }
+});
+}
+
+// --- PHASE 1: DRAFT & PUBLISH HANDLERS ---
+function saveShowWithStatus(status, redirectUrl) {
+  const saveBtn = window.__TICKIN_SAVE_BUTTON__; // The hidden one, logic reused logic manually below
+  // We manually construct the payload similar to hookSaveButton
+  const konvaJson = stage.toJSON();
+  const body = {
+    konvaJson,
+    layoutType: window.__SEATMAP_LAYOUT__ || "tables",
+    seatMapId: currentSeatMapId, // Update existing map
+    name: currentSeatMapName || "Draft Layout",
+    // New fields for Phase 1:
+    showStatus: status, // "DRAFT" or "LIVE"
+    completionStatus: window.__TIXALL_COMPLETION_STATUS__
+  };
+
+  // UI Feedback
+  const btnId = status === 'LIVE' ? 'tb-btn-publish' : 'tb-btn-draft';
+  const btn = document.getElementById(btnId);
+  const originalText = btn ? btn.textContent : '';
+  if(btn) { btn.disabled = true; btn.textContent = "Processing..."; }
+
+  fetch(`/admin/seating/builder/api/seatmaps/${encodeURIComponent(showId)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  })
+  .then(res => {
+    if (!res.ok) throw new Error("Save failed");
+    return res.json();
+  })
+  .then(data => {
+    if (redirectUrl) {
+      window.location.href = redirectUrl;
+    } else {
+      alert("Saved successfully!");
+      if(btn) { btn.disabled = false; btn.textContent = originalText; }
+    }
+  })
+  .catch(err => {
+    console.error(err);
+    alert("Error saving show.");
+    if(btn) { btn.disabled = false; btn.textContent = originalText; }
+  });
+}
+
+function hookPhase1Buttons() {
+  const btnDraft = document.getElementById('tb-btn-draft');
+  const btnPublish = document.getElementById('tb-btn-publish');
+
+  if (btnDraft) {
+    btnDraft.addEventListener('click', () => {
+      // Save as Draft -> Redirect to My Shows
+      saveShowWithStatus('DRAFT', '/admin/shows'); 
+    });
+  }
+
+  if (btnPublish) {
+    btnPublish.addEventListener('click', () => {
+      if (confirm("Are you sure you want to go LIVE? This will generate a public link.")) {
+        // Save as Live -> Redirect to Summary
+        // Assuming /admin/shows/summary/:id exists or falls back to dashboard
+        saveShowWithStatus('LIVE', `/admin/shows/${showId}/summary`); 
       }
     });
   }
+}
 
   function hookLoadButton() {
     const loadBtn = window.__TICKIN_LOAD_BUTTON__;
@@ -10716,6 +10899,7 @@ function handleStageMouseMove() {
   hookSavedLayoutSelectWatcher();
   hookSaveButton();
   hookLoadButton();
+  hookPhase1Buttons(); // Phase 1 Draft/Publish
   hookDeleteButton();
   syncDeleteButtonState();
 
