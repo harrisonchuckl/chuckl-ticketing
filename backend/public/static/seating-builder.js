@@ -4352,8 +4352,7 @@ function updateTicketRings() {
   }
 }
   
-  // [Source: 3573] - Fixed: Restored the logic to actually draw the 'V' and 'i' text
-// [Source: 3573] - Updated to strictly isolate color/text visuals by Tab
+  // [Source: 3573] - Updated to strictly isolate color/text visuals by Tab
 function applySeatVisuals() {
   refreshSeatMetadata();
   const seats = getAllSeatNodes();
@@ -4468,13 +4467,6 @@ function applySeatVisuals() {
 
   refreshSeatTicketListeners();
 
-  // Always call the ring function here, which handles its own show/hide logic
-  updateTicketRings();
-
-  if (mapLayer && typeof mapLayer.batchDraw === "function") {
-    mapLayer.batchDraw();
-  }
-}  
   // Always call the ring function here, which handles its own show/hide logic
   updateTicketRings();
 
