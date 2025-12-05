@@ -4718,33 +4718,28 @@ function refreshSeatTicketListeners() {
     window.ticketSeatDomListener = null;
   }
 
-  // 1. Helper to attach logic to a node
-  const attachHandler = (node) => {
-    if (typeof node.off === "function") {
-      node.off(".ticketAssign");
-      node.off(".ticketAssignHover");
-    }
-    if (typeof node.listening === "function") node.listening(true);
-
+ // Helper to attach event handlers to nodes
+  function attachHandler(node) {
+    // We attach both click (for mouse) and tap (for touch)
     node.on("click.ticketAssign tap.ticketAssign", (evt) => {
-      // FIX: Check for Ticket OR Special Modes (View/Hold/Info)
-      const ticketId = getActiveTicketIdForAssignments();
-      const isSpecialMode = !!(activeHoldMode || activeViewMode || activeViewType);
+      // ** 🛑 DEBUG INSERTION POINT 1: SEAT CLICK RECEIVED 🛑 **
+      // This confirms the specific seat node's listener was triggered.
+      console.log(`[seatmap][ACCESS-DEBUG] Click received by node:`, {
+        name: node.name(),
+        id: node.id(),
+        className: node.getClassName(),
+        type: node.getAttr("isSeat") ? "SEAT_NODE" : "CONTAINER_NODE",
+      });
 
-      // If we aren't in selection mode, OR (we have no ticket AND no special mode), stop.
-      if (!ticketSeatSelectionMode || (!ticketId && !isSpecialMode)) return;
+      const handled = handleTicketSeatSelection(stage.getPointerPosition(), evt.target);
 
-      if (evt.evt) {
-        evt.evt.stopPropagation();
-        evt.evt.preventDefault();
-        evt.evt._sbSeatAssignHandled = true;
+      if (handled) {
+        // Stop propagation if the selection was successfully handled
+        evt.cancelBubble = true;
       }
-      evt.cancelBubble = true;
-      lastSeatAssignEventAt = Date.now();
-      handleTicketSeatSelection(stage.getPointerPosition(), evt.target);
     });
-  };
-
+  }
+  
   // 2. Helper for Hover Effects
   const attachHoverEffect = (node, isText = true) => {
     node.on('mouseover.ticketAssignHover', () => {
@@ -5180,7 +5175,12 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
   } else {
     ticketAssignments.delete(sid);
   }
-}function handleTicketSeatSelection(pointerPos, target) {
+}
+  
+  function handleTicketSeatSelection(pointerPos, target) {
+
+    console.log(`[seatmap][ACCESS-DEBUG] Handler called. Target Class: ${target.getClassName()}, Target Name: ${target.name()}`);
+    
   // --- INTERCEPT: ACCESSIBILITY MODE (FIXED) ---
   if (activeAccessibilityMode) {
     let seat = null;
