@@ -5205,6 +5205,23 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
     // 1. ACCESSIBILITY MODE INTERCEPT
     // -----------------------------------------------------------
     if (activeAccessibilityMode) {
+        // --- FIX: Strict Group Check for Map Tab ---
+        // If we are in the Map tab, we only want to toggle seats if they belong
+        // to the currently selected node (the one open in the Inspector).
+        // If the user clicks a seat in a DIFFERENT group, we return false here,
+        // which allows the click to pass through to the selection handler instead.
+        if (activeMainTab === "map") {
+            const targetSeat = findSeatNodeFromTarget(target);
+            if (targetSeat) {
+                const parentGroup = targetSeat.getParent();
+                // If there is a selection, and we clicked a different group, STOP.
+                if (selectedNode && parentGroup !== selectedNode) {
+                    return false;
+                }
+            }
+        }
+        // -------------------------------------------
+
         let seat = findSeatNodeFromTarget(target);
         if (!seat && stage && pointerPos) {
             const vis = target.visible();
@@ -5213,45 +5230,42 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
             target.visible(vis);
             if (under) seat = findSeatNodeFromTarget(under);
         }
-
         if (seat) {
             const current = seat.getAttr("sbAccessibilityType");
             const next = (current === activeAccessibilityMode) ? null : activeAccessibilityMode;
             seat.setAttr("sbAccessibilityType", next);
-            
+
             const group = seat.getParent();
             if (group) applyAccessibilityVisualsOverride(seat, group);
-            
+
             applySeatVisuals();
             pushHistory();
             return true;
         }
         return false;
     }
-
     // -----------------------------------------------------------
     // 2. ASSIGNMENT MODE
     // -----------------------------------------------------------
     let activeId = null;
-    if (activeHoldMode) activeId = activeHoldMode; 
+    if (activeHoldMode) activeId = activeHoldMode;
     else if (activeViewMode) activeId = activeViewType;
     else activeId = getActiveTicketIdForAssignments();
-
     if (!activeId) return false;
-
     const toggleList = (seats) => {
         if (!seats || !seats.length) return;
-
         if (activeViewType === "view") {
             alert("View images must be assigned to individual seats.");
             return;
         }
-
         // A. INFO
         if (activeViewType === "info") {
             const lbl = document.getElementById("sb-info-label")?.value;
             const desc = document.getElementById("sb-info-desc")?.value;
-            if (!lbl && !desc) { alert("Enter Label/Description first."); return; }
+            if (!lbl && !desc) {
+                alert("Enter Label/Description first.");
+                return;
+            }
             const firstHas = !!seats[0].getAttr("sbInfoLabel");
             seats.forEach(s => {
                 s.setAttr("sbInfoLabel", firstHas ? null : lbl);
@@ -5268,13 +5282,18 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
         }
         // C. TICKETS
         else {
-            const { set: firstSet } = ensureSeatTicketSet(seats[0]);
+            const {
+                set: firstSet
+            } = ensureSeatTicketSet(seats[0]);
             const shouldAdd = !(firstSet && firstSet.has(activeId));
             seats.forEach(s => {
-                const { sid, set } = ensureSeatTicketSet(s);
+                const {
+                    sid,
+                    set
+                } = ensureSeatTicketSet(s);
                 if (shouldAdd) set.add(activeId);
                 else set.delete(activeId);
-                
+
                 const ids = Array.from(set);
                 s.setAttr("sbTicketIds", ids);
                 s.setAttr("sbTicketId", ids[0] || null);
@@ -5283,45 +5302,48 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
             });
             rebuildTicketAssignmentsCache();
         }
-
         applySeatVisuals();
         if (activeHoldMode) renderHoldsPanel();
         else if (!activeViewMode) renderTicketingPanel();
         pushHistory();
     };
-
     // -----------------------------------------------------------
     // 3. TARGET IDENTIFICATION
     // -----------------------------------------------------------
-
     // A. ROW LETTER CLICK
     if (target && target.getAttr("isRowLabel")) {
         const txt = target.text().trim(); // Use trim() to ensure matches
         const group = target.getParent();
         if (group && txt) {
             const seats = group.find(n => n.getAttr("isSeat") && n.getAttr("sbSeatRowLabel") === txt);
-            if (seats.length) { toggleList(seats); return true; }
+            if (seats.length) {
+                toggleList(seats);
+                return true;
+            }
         }
     }
-
     // B. BLOCK BORDER CLICK
     if (target && target.name() === "hit-rect") {
         const group = target.getParent();
         if (group && group.getAttr("shapeType") === "row-seats") {
             const seats = group.find(n => n.getAttr("isSeat"));
-            if (seats.length) { toggleList(seats); return true; }
+            if (seats.length) {
+                toggleList(seats);
+                return true;
+            }
         }
     }
-
     // C. TABLE CLICK
     if (target && (target.name() === "body-rect" || target.name() === "table-label")) {
         const group = target.getParent();
         if (group && (group.name() === "circular-table" || group.name() === "rect-table")) {
             const seats = group.find(n => n.getAttr("isSeat"));
-            if (seats.length) { toggleList(seats); return true; }
+            if (seats.length) {
+                toggleList(seats);
+                return true;
+            }
         }
     }
-
     // D. SINGLE SEAT CLICK
     let seat = findSeatNodeFromTarget(target);
     if (!seat && stage && pointerPos) {
@@ -5331,7 +5353,6 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
         target.visible(vis);
         if (under) seat = findSeatNodeFromTarget(under);
     }
-
     if (seat) {
         toggleSeatTicketAssignment(seat, activeId);
         applySeatVisuals();
@@ -5340,7 +5361,6 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
         pushHistory();
         return true;
     }
-
     return false;
 }
   
@@ -9364,72 +9384,81 @@ addAccessControls(); // <--- Add this
 // Wrapper that extends the original behaviour with multi-shape transform
 // and Shift-based multi-selection.
 function attachNodeBehaviour(node) {
-  if (!node || !(node instanceof Konva.Group)) return;
-
-  // 1) Run all of your existing per-type hooks / drag logic etc.
-  baseAttachNodeBehaviour(node);
-
-  const type = node.getAttr("shapeType") || node.name();
-
-  // 2) Ensure multi-shapes always have resize/rotate transform behaviour
-  if (type === "multi-shape") {
-    attachMultiShapeTransformBehaviour(node);
-  }
-
-  // 3) Selection behaviour (single + Shift multi-select)
-  //    Remove any previous selection handlers so we don't stack listeners.
-  //    FIX: Changed from 'click' to 'mousedown/touchstart' for instant response.
-  node.off("click.seatmapSelect tap.seatmapSelect mousedown.seatmapSelect touchstart.seatmapSelect");
-  node.on("mousedown.seatmapSelect touchstart.seatmapSelect", (evt) => {
-    // --- SAFETY GUARD FOR OTHER TABS ---
-    // If we are in Ticket, Hold, or View mode, STOP immediately. 
-    // This ensures we don't select/move objects while trying to allocate seats.
-    if (window.ticketSeatSelectionMode) return;
-
-    // FIX: Only block selection if we are using a DRAWING tool.
-    // We explicitly allow selection if activeTool is null or "select".
-    if (activeTool && activeTool !== 'select') return;
-    
-    // Only trigger on Left Click (button 0) to avoid conflict with context menus
-    if (evt.evt && typeof evt.evt.button === 'number' && evt.evt.button !== 0) return;
-
-    // Critical: Stop the event bubbling to the stage so we don't trigger panning or clearing
-    evt.cancelBubble = true;
-
-    if (isShiftPressed && transformer) {
-      // Multi-select: add/remove this node from the Transformer selection
-      const existing = transformer.nodes();
-      const idx = existing.indexOf(node);
-
-      if (idx === -1) {
-        // Add node
-        transformer.nodes(existing.concat(node));
-      } else {
-        // Remove node
-        const clone = existing.slice();
-        clone.splice(idx, 1);
-        transformer.nodes(clone);
-      }
-
-      // If exactly one node selected, keep inspector in "single" mode
-      selectedNode =
-        transformer.nodes().length === 1 ? transformer.nodes()[0] : null;
-
-      renderInspector(selectedNode);
-
-      if (mapLayer) mapLayer.batchDraw();
-      if (overlayLayer) overlayLayer.batchDraw();
-    } else {
-      // Normal single selection (clears previous selection)
-      selectNode(node);
+    if (!node || !(node instanceof Konva.Group)) return;
+    // 1) Run all of your existing per-type hooks / drag logic etc.
+    baseAttachNodeBehaviour(node);
+    const type = node.getAttr("shapeType") || node.name();
+    // 2) Ensure multi-shapes always have resize/rotate transform behaviour
+    if (type === "multi-shape") {
+        attachMultiShapeTransformBehaviour(node);
     }
-  });
+    // 3) Selection behaviour (single + Shift multi-select)
+    //    Remove any previous selection handlers so we don't stack listeners.
+    node.off("click.seatmapSelect tap.seatmapSelect mousedown.seatmapSelect touchstart.seatmapSelect");
+    node.on("mousedown.seatmapSelect touchstart.seatmapSelect", (evt) => {
+        
+        // --- FIX START: Smart Selection Handling ---
+        // Normally, we block selection if we are in Ticket/Hold/View/Access mode.
+        // HOWEVER, if we are in "Map" tab + Accessibility Mode, and the user clicks
+        // a DIFFERENT element, we want to implicitly exit Access mode and select the new element.
+        
+        let shouldBlockSelection = false;
 
-  // NOTE:
-  // We are *not* touching any of your existing drag / hover handlers,
-  // because those are all still inside baseAttachNodeBehaviour(node).
+        if (window.ticketSeatSelectionMode) {
+            shouldBlockSelection = true; // Default to blocking
+
+            // Exception for Map Tab + Accessibility
+            if (activeMainTab === "map" && activeAccessibilityMode) {
+                // If clicking a node that is NOT the currently selected one...
+                if (selectedNode && selectedNode !== node) {
+                    // 1. Allow selection
+                    shouldBlockSelection = false;
+                    // 2. Exit accessibility mode
+                    activeAccessibilityMode = null;
+                    // 3. Disable the special click-interceptor mode
+                    setTicketSeatSelectionMode(false, "auto-switch-selection");
+                    // 4. Refresh inspector (which will clear the active blue button)
+                    renderInspector(selectedNode); 
+                }
+            }
+        }
+
+        if (shouldBlockSelection) return;
+        // --- FIX END ---
+
+        // FIX: Only block selection if we are using a DRAWING tool.
+        // We explicitly allow selection if activeTool is null or "select".
+        if (activeTool && activeTool !== 'select') return;
+
+        // Only trigger on Left Click (button 0) to avoid conflict with context menus
+        if (evt.evt && typeof evt.evt.button === 'number' && evt.evt.button !== 0) return;
+        // Critical: Stop the event bubbling to the stage so we don't trigger panning or clearing
+        evt.cancelBubble = true;
+        if (isShiftPressed && transformer) {
+            // Multi-select: add/remove this node from the Transformer selection
+            const existing = transformer.nodes();
+            const idx = existing.indexOf(node);
+            if (idx === -1) {
+                // Add node
+                transformer.nodes(existing.concat(node));
+            } else {
+                // Remove node
+                const clone = existing.slice();
+                clone.splice(idx, 1);
+                transformer.nodes(clone);
+            }
+            // If exactly one node selected, keep inspector in "single" mode
+            selectedNode =
+                transformer.nodes().length === 1 ? transformer.nodes()[0] : null;
+            renderInspector(selectedNode);
+            if (mapLayer) mapLayer.batchDraw();
+            if (overlayLayer) overlayLayer.batchDraw();
+        } else {
+            // Normal single selection (clears previous selection)
+            selectNode(node);
+        }
+    });
 }
-
   // ---------- Node creation based on active tool ----------
 
     function createNodeForTool(tool, pos) {
