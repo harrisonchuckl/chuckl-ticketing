@@ -4358,16 +4358,25 @@ function updateTicketRings() {
  * @param {Konva.Circle} seatCircle The Konva shape node for the seat circle.
  * @param {Konva.Group} group The parent group node containing the seat label.
  */
+/**
+ * Applies the final visual overrides for Accessibility seats (Icon/C and color).
+ * @param {Konva.Circle} seatCircle The Konva shape node for the seat circle.
+ * @param {Konva.Group} group The parent group node containing the seat label.
+ */
 function applyAccessibilityVisualsOverride(seatCircle, group) {
   const accessType = seatCircle.getAttr("sbAccessibilityType"); // "disabled" | "carer"
-
-  // 1. Cleanup ALL old overlays (Text, Rects, Images from previous versions)
+  const holdStatus = seatCircle.getAttr("sbHoldStatus");
+  const activeTab = activeMainTab; // Global variable
+  
+  // 1. Cleanup ALL old overlays (Text, Rects, Images, Rings)
   const children = group.getChildren().slice(); // copy to avoid mutation issues while iterating
   children.forEach(node => {
     const name = node.name() || "";
     if (name.startsWith(`access-overlay-${seatCircle._id}`) || 
         name.startsWith(`access-image-${seatCircle._id}`) || 
-        name.startsWith(`access-bg-${seatCircle._id}`)) {
+        name.startsWith(`access-bg-${seatCircle._id}`) ||
+        name.startsWith(`access-ring-${seatCircle._id}`) ||
+        name.startsWith(`access-mode-label-${seatCircle._id}`)) {
       node.destroy();
     }
   });
@@ -4377,21 +4386,20 @@ function applyAccessibilityVisualsOverride(seatCircle, group) {
      n.getClassName() === 'Text' && 
      Math.abs(n.x() - seatCircle.x()) < 1 && 
      Math.abs(n.y() - seatCircle.y()) < 1 &&
-     !n.name().startsWith('access-')
+     !n.name().startsWith('access-') && 
+     !n.name().startsWith('view-mode-')
   );
 
   if (accessType) {
     // Hide original label (A1)
     if (originalLabel) originalLabel.visible(false);
 
-    // --- DISABLED SEAT (Custom Image) ---
+    // --- DISABLED SEAT (Custom Image + Status Ring) ---
     if (accessType === "disabled") {
       // Make the circle invisible but KEEP it technically 'visible' for hit detection
-      // We set opacity to 0 so you can't see it, but clicking it still works.
       seatCircle.opacity(0); 
-
       const size = (seatCircle.radius() * 2) || 20; 
-
+      
       // Create Image Node
       const imageNode = new Konva.Image({
         x: seatCircle.x(),
@@ -4405,9 +4413,8 @@ function applyAccessibilityVisualsOverride(seatCircle, group) {
       // Center the image perfectly
       imageNode.offsetX(size / 2);
       imageNode.offsetY(size / 2);
-
       group.add(imageNode);
-
+      
       // Load the specific PNG
       const imgObj = new Image();
       imgObj.onload = function() {
@@ -4415,20 +4422,56 @@ function applyAccessibilityVisualsOverride(seatCircle, group) {
          const layer = group.getLayer();
          if (layer) layer.batchDraw();
       };
-      // Using the path you provided
       imgObj.src = "/seatmap-icons/disabledtoilets-dark.png";
+
+      // ** NEW: Rings for Holds/Allocation on Disabled Seats **
+      if (activeTab === "holds" && holdStatus) {
+         let ringColor = null;
+         if (holdStatus === "hold") ringColor = "#000000"; // Black Ring for Hold
+         else if (holdStatus === "allocation") ringColor = "#10B981"; // Green Ring for Promoter
+         
+         if (ringColor) {
+             const ring = new Konva.Circle({
+                 x: seatCircle.x(),
+                 y: seatCircle.y(),
+                 radius: seatCircle.radius() + 4, // Slightly larger than the seat/icon
+                 stroke: ringColor,
+                 strokeWidth: 3,
+                 listening: false,
+                 name: `access-ring-${seatCircle._id}`
+             });
+             group.add(ring);
+         }
+      }
     } 
     
     // --- CARER SEAT (Standard Style with 'C') ---
     else if (accessType === "carer") {
-      // Restore circle visibility and apply Standard Seat styling
       seatCircle.opacity(1);
       seatCircle.visible(true);
-      seatCircle.fill("#ffffff");   // White background
-      seatCircle.stroke("#4b5563"); // Standard Grey Stroke
+      
+      let textColor = "#111827"; // Default Black Text
+      
+      // Logic for visuals based on tab/status
+      if (activeTab === "holds" && holdStatus === "hold") {
+          // Held: Black Body, White 'C'
+          seatCircle.fill("#000000");
+          seatCircle.stroke("#000000");
+          textColor = "#ffffff";
+      } else if (activeTab === "holds" && holdStatus === "allocation") {
+          // Allocation: Green Body, Black 'C'
+          seatCircle.fill("#10B981");
+          seatCircle.stroke("#10B981");
+          textColor = "#000000";
+      } else {
+          // Default Carer Style (White body, standard stroke)
+          seatCircle.fill("#ffffff");
+          seatCircle.stroke("#4b5563");
+      }
+      
       seatCircle.strokeWidth(1.7);
 
-      // Draw Black 'C'
+      // Draw 'C'
       const text = new Konva.Text({
         x: seatCircle.x(),
         y: seatCircle.y(),
@@ -4436,7 +4479,7 @@ function applyAccessibilityVisualsOverride(seatCircle, group) {
         fontSize: 14, 
         fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
         fontStyle: "bold",
-        fill: "#111827", // Standard Black text
+        fill: textColor, 
         align: 'center',
         verticalAlign: 'middle',
         listening: false,
@@ -4456,32 +4499,25 @@ function applyAccessibilityVisualsOverride(seatCircle, group) {
     if (originalLabel) originalLabel.visible(true);
   }
 }
-  
-  function applySeatVisuals() {
+ function applySeatVisuals() {
   refreshSeatMetadata();
   const seats = getAllSeatNodes();
-
   // Recalculate duplicates (mainly for the Tickets tab warning)
   duplicateSeatRefs = computeDuplicateSeatRefsFromSeats(seats);
-
   seats.forEach((seat) => {
     // 1. Reset to Base Styles (The "Map" tab look)
     const baseFill = seat.getAttr("sbSeatBaseFill") || "#ffffff";
     const baseStroke = seat.getAttr("sbSeatBaseStroke") || "#4b5563";
-
     let stroke = baseStroke;
     let fill = baseFill;
     let strokeWidth = 1.7;
-
     // Data Attributes
     const ref = seat.getAttr("sbSeatRef");
     const ticketId = seat.getAttr("sbTicketId") || null;
     const holdStatus = seat.getAttr("sbHoldStatus");
     const hasViewImage = !!seat.getAttr("sbViewImage");
     const hasInfo = !!seat.getAttr("sbInfoLabel");
-
     // 2. Apply Tab-Specific Visuals
-
     // --- TAB: TICKETS (Changes fill/stroke for assigned seats) ---
     if (activeMainTab === "tickets") {
       // Priority A: Duplicates (Critical Error)
@@ -4497,7 +4533,6 @@ function applyAccessibilityVisualsOverride(seatCircle, group) {
         }
       }
     }
-
     // --- TAB: HOLDS & ALLOCATIONS (Changes fill/stroke to solid black/green) ---
     else if (activeMainTab === "holds") {
       if (holdStatus === "hold") {
@@ -4508,7 +4543,6 @@ function applyAccessibilityVisualsOverride(seatCircle, group) {
         fill = "#10B981";
       }
     }
-
     // --- TAB: VIEW & INFO (Changes fill/stroke for seats with V/i data) ---
     else if (activeMainTab === "view") {
       if (hasViewImage || hasInfo) {
@@ -4516,12 +4550,10 @@ function applyAccessibilityVisualsOverride(seatCircle, group) {
         fill = "#000000";
       }
     }
-
     // 3. Apply the calculated styles
     seat.stroke(stroke);
     seat.fill(fill);
     seat.strokeWidth(strokeWidth);
-
     // 4. Handle Overlay Text (V / i)
     const parent = seat.getParent();
     if (parent) {
@@ -4532,45 +4564,14 @@ function applyAccessibilityVisualsOverride(seatCircle, group) {
       if (oldLabel) oldLabel.destroy();
       const oldAccess = parent.findOne(`.access-mode-label-${seat._id}`);
       if (oldAccess) oldAccess.destroy();
-
-      // --- ACCESSIBILITY VISUALS (Persistent across all tabs) ---
-      const accessType = seat.getAttr("sbAccessibilityType"); // "disabled" | "carer"
-      if (accessType) {
-        // Override color for the base seat to match the type
-        if (accessType === "disabled") {
-          stroke = "#b91c1c"; // Red stroke
-          fill = "#fef2f2";   // Light red fill
-        } else if (accessType === "carer") {
-          stroke = "#7c3aed"; // Purple stroke
-          fill = "#f5f3ff";   // Light purple fill
-        }
-        
-        // Draw the Icon/Character Overlay
-        const accessLabel = new Konva.Text({
-          x: seat.x(),
-          y: seat.y(),
-          text: accessType === "disabled" ? "♿" : "C",
-          fontSize: accessType === "disabled" ? 14 : 12,
-          fontFamily: "system-ui",
-          fontStyle: "bold",
-          fill: accessType === "disabled" ? "#b91c1c" : "#7c3aed",
-          listening: false,
-          name: `access-mode-label-${seat._id}`
-        });
-        accessLabel.offsetX(accessLabel.width() / 2);
-        accessLabel.offsetY(accessLabel.height() / 2);
-        parent.add(accessLabel);
-      }
-
+      
       // --- VIEW MODE VISUALS (Only in View Tab) ---
-      // Only draw new labels if we are strictly in the View tab
       // Only draw new labels if we are strictly in the View tab
       if (activeMainTab === "view") {
         let char = "";
         let fontStyle = "bold";
         let fontFamily = "system-ui";
         let fontSize = 11;
-
         if (hasViewImage) {
           char = "V";
         } else if (hasInfo) {
@@ -4579,8 +4580,7 @@ function applyAccessibilityVisualsOverride(seatCircle, group) {
           fontStyle = "bold";
           fontSize = 14; 
         }
-
-        // --- FIXED: This block draws the character over the black seat ---
+        // Draw the character over the black seat
         if (char) {
           const text = new Konva.Text({
             x: seat.x(),
@@ -4598,19 +4598,16 @@ function applyAccessibilityVisualsOverride(seatCircle, group) {
           text.offsetY(text.height() / 2);
           parent.add(text);
         }
-        // ----------------------------------------------
       }
     }
     // --- ACCESSIBILITY VISUAL OVERRIDE (Must be the final step) ---
-    // We use 'seat' here because that is the variable name in your loop at line 3579
+    // This delegates the final look (Icons, Rings, Colors for Carers) to the specific function
     const groupForAccess = seat.getParent();
     if (groupForAccess) {
         applyAccessibilityVisualsOverride(seat, groupForAccess);
     }
   });
   
-  // refreshSeatTicketListeners(); <--- DELETED / COMMENTED OUT
-
   // Always call the ring function here, which handles its own show/hide logic
   updateTicketRings();
   if (mapLayer && typeof mapLayer.batchDraw === "function") {
