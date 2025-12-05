@@ -4746,7 +4746,7 @@ function refreshSeatTicketListeners() {
         window.ticketSeatDomListener = null;
     }
 
-    // 2. Helper: Hover Effects
+    // 2. Helper: Hover Effects (Visual Feedback)
     const attachHoverEffect = (node, isText = true) => {
         node.off('.ticketAssignHover');
         node.on('mouseover.ticketAssignHover', () => {
@@ -4755,9 +4755,10 @@ function refreshSeatTicketListeners() {
 
             // Determine Hover Color
             let color = "#2563eb"; // Blue (Default/Tickets)
-            if (activeHoldMode === 'allocation') color = "#10B981"; // Green (Promo)
+            
+            if (activeHoldMode === 'allocation') color = "#10B981"; // Green (Promoter)
             else if (activeHoldMode === 'hold') color = "#000000"; // Black (Hold)
-            else if (activeViewMode) color = "#000000"; // Black (View)
+            else if (activeViewMode) color = "#000000"; // Black (View/Info)
             else {
                 // Specific Ticket Color
                 const tid = getActiveTicketIdForAssignments();
@@ -4813,49 +4814,49 @@ function refreshSeatTicketListeners() {
 
             // --- ROW BLOCKS ---
             if (type === "row-seats") {
-                // 1. Row Labels (e.g. "A", "B")
-                const labels = group.find(n => n.getAttr("isRowLabel"));
-                labels.forEach(lbl => {
-                    lbl.moveToTop(); // FORCE TOP: Ensure it sits above the container hit-rect
-                    attachHandler(lbl);
-                    attachHoverEffect(lbl, true);
-                });
-
-                // 2. Container (Hit Rect) - THE FIX FOR GAPS
+                // 1. Container (Hit Rect) - Send to BOTTOM
                 const hitRect = group.findOne(".hit-rect");
                 if (hitRect) {
+                    hitRect.moveToBottom(); // <--- FIX: Ensure container is BEHIND labels
                     attachHandler(hitRect);
                     
-                    // CRITICAL: Make the box "Hollow" so clicks in gaps pass through
+                    // Make hollow so gaps are ignored
                     hitRect.fillEnabled(false); 
                     hitRect.fill(null);
                     
-                    // Give it a transparent stroke so the BORDER is clickable
+                    // Border click area
                     hitRect.stroke("rgba(0,0,0,0)");
-                    hitRect.strokeWidth(15); // Invisible click area width around border
+                    hitRect.strokeWidth(15); 
                     hitRect.hitStrokeWidth(15);
 
-                    // Container Hover Effect (Dashed Border)
+                    // Container Hover
                     hitRect.off('.ticketAssignHover');
                     hitRect.on('mouseover.ticketAssignHover', () => {
                         if (!ticketSeatSelectionMode || activeViewType === 'view') return;
                         stage.container().style.cursor = "copy";
-                        // Visual Border
                         hitRect.stroke(activeHoldMode || activeViewMode ? '#000000' : '#2563eb');
-                        hitRect.strokeWidth(2); // Visible width
+                        hitRect.strokeWidth(2); 
                         hitRect.dash([6, 4]);
                         mapLayer.batchDraw();
                     });
                     hitRect.on('mouseout.ticketAssignHover', () => {
                         if (!ticketSeatSelectionMode) return;
                         stage.container().style.cursor = "default";
-                        // Reset to invisible clickable border
                         hitRect.stroke("rgba(0,0,0,0)"); 
                         hitRect.strokeWidth(15);
                         hitRect.dash([]);
                         mapLayer.batchDraw();
                     });
                 }
+
+                // 2. Row Labels - Bring to TOP
+                const labels = group.find(n => n.getAttr("isRowLabel"));
+                labels.forEach(lbl => {
+                    lbl.moveToTop(); // <--- FIX: Ensure label sits ON TOP of container border
+                    lbl.listening(true); // Explicitly enable listening
+                    attachHandler(lbl);
+                    attachHoverEffect(lbl, true);
+                });
             }
 
             // --- TABLES ---
@@ -4868,7 +4869,7 @@ function refreshSeatTicketListeners() {
                     if (activeViewType !== 'view') attachHoverEffect(body, false);
                 }
                 if (label) {
-                    label.moveToTop();
+                    label.moveToTop(); // Ensure label isn't buried
                     attachHandler(label);
                     if (activeViewType !== 'view') attachHoverEffect(label, true);
                 }
@@ -5199,14 +5200,13 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
   }
 }
   
-  function handleTicketSeatSelection(pointerPos, target) {
+ function handleTicketSeatSelection(pointerPos, target) {
     // -----------------------------------------------------------
     // 1. ACCESSIBILITY MODE INTERCEPT
     // -----------------------------------------------------------
     if (activeAccessibilityMode) {
         let seat = findSeatNodeFromTarget(target);
         if (!seat && stage && pointerPos) {
-            // X-Ray check for overlays
             const vis = target.visible();
             target.visible(false);
             const under = stage.getIntersection(pointerPos);
@@ -5230,20 +5230,18 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
     }
 
     // -----------------------------------------------------------
-    // 2. ASSIGNMENT MODE (Tickets / Holds / View)
+    // 2. ASSIGNMENT MODE
     // -----------------------------------------------------------
     let activeId = null;
-    if (activeHoldMode) activeId = activeHoldMode; // "hold" | "allocation"
-    else if (activeViewMode) activeId = activeViewType; // "view" | "info"
+    if (activeHoldMode) activeId = activeHoldMode; 
+    else if (activeViewMode) activeId = activeViewType;
     else activeId = getActiveTicketIdForAssignments();
 
     if (!activeId) return false;
 
-    // --- Toggle Logic ---
     const toggleList = (seats) => {
         if (!seats || !seats.length) return;
 
-        // Block View Mode on Groups
         if (activeViewType === "view") {
             alert("View images must be assigned to individual seats.");
             return;
@@ -5296,9 +5294,9 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
     // 3. TARGET IDENTIFICATION
     // -----------------------------------------------------------
 
-    // A. ROW LETTER CLICK (Select specific row)
+    // A. ROW LETTER CLICK
     if (target && target.getAttr("isRowLabel")) {
-        const txt = target.text();
+        const txt = target.text().trim(); // Use trim() to ensure matches
         const group = target.getParent();
         if (group && txt) {
             const seats = group.find(n => n.getAttr("isSeat") && n.getAttr("sbSeatRowLabel") === txt);
@@ -5306,8 +5304,7 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
         }
     }
 
-    // B. BLOCK BORDER CLICK (Select whole block)
-    // Because fillEnabled is false, this ONLY fires on the border!
+    // B. BLOCK BORDER CLICK
     if (target && target.name() === "hit-rect") {
         const group = target.getParent();
         if (group && group.getAttr("shapeType") === "row-seats") {
