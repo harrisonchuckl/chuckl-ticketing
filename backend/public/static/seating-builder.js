@@ -5967,56 +5967,66 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
           setTicketSeatSelectionMode(false, "assign-all-remaining");
         });
 
-        // 🔵 NEW: "Assign all seats" – allows overlaps / multi-ticket per seat
         const assignAllSeatsBtn = document.createElement("button");
-        assignAllSeatsBtn.type = "button";
-        assignAllSeatsBtn.className = "tool-button";
-        assignAllSeatsBtn.textContent = "Assign all seats";
-        assignAllSeatsBtn.disabled =
-          duplicates.size > 0 || updateOffSaleValidation();
-        assignAllSeatsBtn.addEventListener("click", () => {
-          if (duplicates.size > 0) {
-            window.alert(
-              "Resolve duplicate seat references before assigning tickets."
-            );
-            return;
-          }
-          if (updateOffSaleValidation()) {
-            window.alert(
-              "Tickets must go off sale on or before the event time. Please adjust the off-sale date."
-            );
-            return;
-          }
+  assignAllSeatsBtn.type = "button";
+  assignAllSeatsBtn.className = "tool-button";
+  assignAllSeatsBtn.textContent = "Assign all seats";
+  assignAllSeatsBtn.disabled =
+    duplicates.size > 0 || updateOffSaleValidation();
 
-          const seats = getAllSeatNodes();
-          enforceUniqueSeatIds(seats);
+  assignAllSeatsBtn.addEventListener("click", () => {
+    if (duplicates.size > 0) {
+      window.alert(
+        "Resolve duplicate seat references before assigning tickets."
+      );
+      return;
+    }
+    if (updateOffSaleValidation()) {
+      window.alert(
+        "Tickets must go off sale on or before the event time. Please adjust the off-sale date."
+      );
+      return;
+    }
 
-          seats.forEach((seat) => {
-            const { sid, set } = ensureSeatTicketSet(seat);
-            if (!sid || !set) return;
+    const seats = getAllSeatNodes();
+    enforceUniqueSeatIds(seats);
 
-            set.add(ticket.id);
+    let modifiedCount = 0;
 
-            const ids = Array.from(set);
-            seat.setAttr("sbTicketIds", ids);
-            seat.setAttr("sbTicketId", ids[0] || null);
-            ticketAssignments.set(sid, new Set(ids));
-          });
+    seats.forEach((seat) => {
+      const { sid, set } = ensureSeatTicketSet(seat);
+      if (!sid || !set) return;
 
-          rebuildTicketAssignmentsCache();
+      // 1. If seat already has this specific ticket, skip (already assigned)
+      if (set.has(ticket.id)) return;
 
-          // eslint-disable-next-line no-console
-          console.log("[seatmap][tickets] assign all seats (multi-ticket allowed)", {
-            ticketId: ticket.id,
-            assignedCount: countAssignmentsForTicket(ticket.id),
-            totalSeats: getAllSeatNodes().length,
-          });
+      // 2. Enforce limit: Max 10 tickets per seat
+      if (set.size >= 10) return;
 
-          applySeatVisuals();
-          renderTicketingPanel();
-          pushHistory();
-        });
+      // 3. Append the new ticket
+      set.add(ticket.id);
+      modifiedCount++;
 
+      // 4. Save attributes back to the node and cache
+      const ids = Array.from(set);
+      seat.setAttr("sbTicketIds", ids);
+      seat.setAttr("sbTicketId", ids[0] || null); // Update primary legacy ID
+      ticketAssignments.set(sid, new Set(ids));
+    });
+
+    rebuildTicketAssignmentsCache();
+
+    // eslint-disable-next-line no-console
+    console.log("[seatmap][tickets] assign all seats (append/multi-ticket)", {
+      ticketId: ticket.id,
+      seatsModified: modifiedCount,
+      totalSeats: seats.length,
+    });
+
+    applySeatVisuals();
+    renderTicketingPanel();
+    pushHistory();
+  });
         actionsRow.appendChild(assignSelectedBtn);
         actionsRow.appendChild(assignRemainingBtn);
         actionsRow.appendChild(assignAllSeatsBtn);
