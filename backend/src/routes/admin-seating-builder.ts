@@ -287,294 +287,260 @@ router.get("/builder/preview/:showId", (req, res) => {
     <!-- Brand + toolbar styling (inline so we can iterate quickly) -->
    <style>
     :root {
-        /* BRANDING */
+        /* BRANDING - TIXALL */
         --tixall-blue: #08B8E8;
         --tixall-blue-hover: #069ac4;
-        --tixall-dark: #0f172a;
-        --tixall-text: #334155;
-        --tixall-text-light: #64748b;
+        --tixall-dark: #182828;
         
-        /* UI SURFACES */
-        --bg-app: #F1F5F9;         /* Slate-100 - Main app background */
-        --bg-panel: #FFFFFF;       /* Pure white panels */
-        --border-color: #E2E8F0;   /* Slate-200 */
+        /* STRUCTURE */
+        --bg-main: #ffffff;
+        --bg-contrast: #f8fafc;
+        --border-subtle: #e2e8f0;
+        --text-main: #0f172a;
+        --text-muted: #64748b;
         
         /* STATUS */
         --status-success: #10B981;
     }
 
     body.tickin-builder-body {
-        background: var(--bg-app);
-        color: var(--tixall-text);
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        -webkit-font-smoothing: antialiased;
         margin: 0;
         height: 100vh;
         overflow: hidden;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        color: var(--text-main);
+        background: var(--bg-main);
+        -webkit-font-smoothing: antialiased;
     }
 
     .tickin-builder-shell {
         display: flex;
         flex-direction: column;
         height: 100vh;
-        background: var(--bg-app);
     }
 
-    /* --- HEADER --- */
+    /* --- TOP HEADER --- */
     .tickin-builder-topbar {
-        background: var(--bg-panel);
-        border-bottom: 1px solid var(--border-color);
-        height: 64px;
+        height: 60px;
+        flex-shrink: 0;
+        background: #ffffff;
+        border-bottom: 1px solid var(--border-subtle);
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 0 24px;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+        padding: 0 20px;
         z-index: 20;
     }
 
+    .tb-topbar-left { display: flex; align-items: center; gap: 16px; }
+    
     .tb-logo-badge {
-        background: var(--tixall-dark);
-        border-radius: 6px;
-        padding: 6px 12px;
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
+        background: var(--tixall-dark); color: #fff;
+        padding: 6px 10px; border-radius: 6px; font-weight: 700; font-size: 13px;
+        display: flex; gap: 8px; align-items: center;
     }
-    .tb-logo-dot {
-        width: 8px; height: 8px; border-radius: 50%;
-        background: var(--tixall-blue);
-        box-shadow: 0 0 8px var(--tixall-blue);
-    }
-    .tb-logo-text {
-        font-weight: 700; font-size: 14px; color: #fff; letter-spacing: 0.5px;
-    }
+    .tb-logo-dot { width: 8px; height: 8px; background: var(--tixall-blue); border-radius: 50%; }
+    
+    .tb-show-meta { display: flex; flex-direction: column; justify-content: center; }
+    .tb-show-title { font-size: 15px; font-weight: 700; margin: 0; line-height: 1.2; }
+    .tb-show-subtitle { font-size: 12px; color: var(--text-muted); }
 
-    .tb-show-title { font-size: 16px; font-weight: 700; color: var(--tixall-dark); margin: 0; }
-    .tb-show-subtitle { font-size: 13px; color: var(--tixall-text-light); display: flex; gap: 6px; align-items: center; }
+    .tb-topbar-right { display: flex; gap: 10px; align-items: center; }
 
-    /* --- HEADER BUTTONS --- */
+    /* Header Buttons */
     .tb-topbar-btn {
-        height: 36px;
-        padding: 0 16px;
-        border-radius: 8px;
-        font-size: 13px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s ease;
+        height: 36px; padding: 0 14px;
+        border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;
         display: inline-flex; align-items: center; justify-content: center;
+        transition: all 0.2s;
     }
-
-    .tb-btn-ghost {
-        background: transparent;
-        border: 1px solid var(--border-color);
-        color: var(--tixall-text);
-    }
-    .tb-btn-ghost:hover { background: #f8fafc; border-color: #cbd5e1; }
-
-    /* Draft Button */
-    .tb-btn-draft {
-        background: #fff;
-        border: 1px solid var(--border-color);
-        color: var(--tixall-text);
-        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-    }
+    .tb-btn-ghost { background: transparent; border: 1px solid var(--border-subtle); color: var(--text-main); }
+    .tb-btn-ghost:hover { background: var(--bg-contrast); border-color: #cbd5e1; }
+    
+    .tb-btn-draft { background: #fff; border: 1px solid var(--border-subtle); color: var(--text-main); }
     .tb-btn-draft:hover { background: #f1f5f9; }
 
-    /* Publish Button */
-    .tb-btn-publish {
-        background: var(--status-success);
-        border: 1px solid var(--status-success);
-        color: #fff;
-        box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);
-    }
-    .tb-btn-publish:hover:not(:disabled) { background: #059669; transform: translateY(-1px); }
-    .tb-btn-publish:disabled { background: #e2e8f0; border-color: #e2e8f0; color: #94a3b8; cursor: not-allowed; box-shadow: none; }
+    .tb-btn-publish { background: var(--status-success); border: 1px solid var(--status-success); color: #fff; }
+    .tb-btn-publish:hover:not(:disabled) { background: #059669; }
+    .tb-btn-publish:disabled { background: #e2e8f0; border-color: #e2e8f0; color: #94a3b8; cursor: not-allowed; }
 
     .tb-topbar-select {
-        height: 36px;
-        border-radius: 8px;
-        border: 1px solid var(--border-color);
-        padding: 0 32px 0 12px;
-        font-size: 13px;
-        color: var(--tixall-text);
-        background-color: #fff;
-        cursor: pointer;
+        height: 36px; padding: 0 30px 0 10px; border-radius: 6px;
+        border: 1px solid var(--border-subtle); font-size: 13px; cursor: pointer;
     }
 
-    /* --- MAIN GRID --- */
+    /* --- MAIN LAYOUT (Fixed Grid) --- */
     .tickin-builder-main {
-        display: grid;
-        grid-template-columns: 80px 1fr 380px; /* Slim left, Wide canvas, Fixed Right */
+        display: flex; /* Flex is safer than Grid for this specific layout */
         flex: 1;
         overflow: hidden;
     }
 
-    /* --- LEFT RAIL (Tools) --- */
+    /* --- LEFT RAIL (Fixed Width) --- */
     .tb-left-rail {
-        background: var(--bg-panel);
-        border-right: 1px solid var(--border-color);
-        padding: 16px 0;
+        width: 72px; /* Fixed narrow width */
+        flex-shrink: 0;
+        background: #ffffff;
+        border-right: 1px solid var(--border-subtle);
         display: flex; flex-direction: column; align-items: center;
+        padding-top: 16px;
+        overflow-y: auto;
         z-index: 10;
     }
-    .tb-left-scroll { width: 100%; display: flex; flex-direction: column; align-items: center; }
-    
+
+    /* Tool Buttons */
     .tb-left-item.tool-button {
-        width: 56px; height: 56px;
-        border-radius: 12px;
+        width: 56px; min-height: 56px;
+        border: 1px solid transparent; background: transparent;
         display: flex; flex-direction: column; align-items: center; justify-content: center;
-        margin-bottom: 8px;
-        border: 1px solid transparent;
-        background: transparent;
-        color: var(--tixall-text-light);
-        transition: all 0.2s;
+        margin-bottom: 8px; border-radius: 8px; cursor: pointer;
+        color: var(--text-muted);
     }
-    .tb-left-item.tool-button:hover { background: #f1f5f9; color: var(--tixall-blue); }
+    .tb-left-item.tool-button:hover { background: var(--bg-contrast); color: var(--tixall-blue); }
     .tb-left-item.tool-button.is-active {
-        background: #f0f9ff;
-        border-color: #bae6fd;
-        color: var(--tixall-blue);
-        box-shadow: 0 4px 12px rgba(8, 184, 232, 0.15);
+        background: #eff6ff; border-color: #dbeafe; color: var(--tixall-blue);
     }
     .tb-tool-icon { width: 24px; height: 24px; object-fit: contain; margin-bottom: 4px; }
     .tb-left-label { font-size: 10px; font-weight: 600; text-align: center; line-height: 1.1; }
 
-    /* Flyouts */
+    /* Flyouts (Popups for tools) */
     .tool-group { position: relative; width: 100%; display: flex; justify-content: center; }
     .tool-flyout-toggle {
-        position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
-        width: 16px; height: 16px; font-size: 10px; color: #94a3b8;
+        position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+        font-size: 10px; color: #94a3b8; cursor: pointer; width: 16px; text-align: center;
     }
     .tool-flyout {
-        position: absolute; left: 70px; top: 0;
-        background: white; border: 1px solid var(--border-color);
-        border-radius: 12px; padding: 8px;
-        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
-        display: none; flex-direction: column; gap: 4px; min-width: 160px; z-index: 100;
+        position: absolute; left: 65px; top: 0;
+        background: #fff; border: 1px solid var(--border-subtle);
+        border-radius: 8px; padding: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        display: none; flex-direction: column; gap: 4px; min-width: 150px; z-index: 999;
     }
     .tool-group.is-open .tool-flyout { display: flex; }
     .tool-flyout .tb-left-item.tool-button {
-        width: 100%; height: auto; flex-direction: row; padding: 8px; justify-content: flex-start;
-        border-radius: 8px; margin: 0;
+        width: 100%; min-height: 40px; flex-direction: row; justify-content: flex-start; padding: 0 8px;
     }
     .tool-flyout .tb-left-item.tool-button .tb-left-label { margin-left: 10px; font-size: 13px; }
+    .tool-flyout .tb-left-item.tool-button img { width: 20px; height: 20px; margin: 0; }
 
-    /* --- CENTER (Canvas) --- */
+    /* --- CENTER CANVAS AREA --- */
     .tb-center {
-        background: var(--bg-app); /* Gray background for contrast */
+        flex: 1;
         position: relative;
-        display: flex; flex-direction: column;
+        background: #f1f5f9; /* Subtle gray contrast for map area */
         overflow: hidden;
-    }
-    .tb-center-header {
-        height: 48px;
-        display: flex; align-items: center; justify-content: center;
-        background: transparent; /* Transparent to show gray bg */
-        padding: 0 20px;
-        position: absolute; top: 16px; left: 0; right: 0; z-index: 10;
-        pointer-events: none; /* Let clicks pass through */
+        display: flex; flex-direction: column;
     }
     
-    /* Tabs as Pill Segments */
+    /* FLOATING TABS (The feature you liked) */
+    .tb-center-header {
+        position: absolute;
+        top: 20px; left: 50%; transform: translateX(-50%);
+        z-index: 100;
+        display: flex; align-items: center; justify-content: center;
+        pointer-events: none; /* Allow clicks to pass through around tabs */
+    }
+    
     .tb-tabs {
         pointer-events: auto;
-        background: #fff;
-        border-radius: 99px;
+        background: #ffffff;
         padding: 4px;
+        border-radius: 99px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        border: 1px solid rgba(0,0,0,0.05);
         display: flex; gap: 4px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-        border: 1px solid var(--border-color);
     }
+    
     .tb-tab {
-        padding: 6px 16px;
+        padding: 8px 20px;
         border-radius: 99px;
         border: none;
         background: transparent;
-        font-size: 13px; font-weight: 600; color: var(--tixall-text-light);
+        font-size: 13px; font-weight: 600; color: var(--text-muted);
         cursor: pointer;
         transition: all 0.2s;
     }
-    .tb-tab:hover { color: var(--tixall-dark); background: #f8fafc; }
+    
+    .tb-tab:hover { color: var(--text-main); background: #f8fafc; }
+    
+    /* ACTIVE TAB - TIXALL BLUE (Your Request) */
     .tb-tab.is-active {
-        background: var(--tixall-dark);
-        color: #fff;
-        box-shadow: 0 2px 4px rgba(15, 23, 42, 0.1);
+        background: var(--tixall-blue);
+        color: #ffffff;
+        box-shadow: 0 2px 4px rgba(8, 184, 232, 0.3);
     }
-    /* Completed State */
-    .tb-tab.is-complete { color: var(--status-success); }
-    .tb-tab.is-complete.is-active { background: var(--status-success); color: #fff; }
-    .tb-tab.is-complete::after { content: ' ✓'; font-size: 10px; margin-left: 4px; opacity: 0.8; }
+    
+    /* COMPLETED TAB - Green Tick */
+    .tb-tab.is-complete {
+        /* We keep text dark if not active, or white if active */
+    }
+    .tb-tab.is-complete::after { 
+        content: ' ✓'; font-size: 11px; margin-left: 4px; font-weight: 800;
+        color: var(--status-success); 
+    }
+    /* If active and complete, tick is white */
+    .tb-tab.is-active.is-complete::after { color: #ffffff; }
 
-    /* Zoom Toolbar */
+    /* Zoom Controls (Floating Top Right) */
     .tb-zoom-toolbar {
-        pointer-events: auto;
-        position: absolute; right: 20px;
-        background: #fff; border-radius: 8px;
-        border: 1px solid var(--border-color);
-        display: flex; overflow: hidden;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+        position: absolute; top: 20px; right: 20px;
+        background: #fff; border-radius: 8px; border: 1px solid var(--border-subtle);
+        display: flex; box-shadow: 0 2px 8px rgba(0,0,0,0.05); z-index: 100; pointer-events: auto;
     }
-    .tb-zoom-btn {
-        width: 32px; height: 32px; border: none; background: #fff;
-        font-size: 16px; color: var(--tixall-text); cursor: pointer;
-        display: flex; align-items: center; justify-content: center;
-    }
+    .tb-zoom-btn { width: 32px; height: 32px; border: none; background: #fff; cursor: pointer; color: var(--text-main); }
     .tb-zoom-btn:hover { background: #f8fafc; }
-    .tb-zoom-label { width: 48px; font-size: 12px; font-weight: 600; border-left: 1px solid var(--border-color); border-right: 1px solid var(--border-color); }
+    .tb-zoom-label { width: 48px; font-size: 12px; font-weight: 600; border-left: 1px solid #eee; border-right: 1px solid #eee; }
 
-    .tb-tab-panels { flex: 1; position: relative; }
+    /* Canvas Containers */
+    .tb-tab-panels { flex: 1; position: relative; width: 100%; height: 100%; }
     .tb-tab-panel { display: none; width: 100%; height: 100%; }
     .tb-tab-panel.is-active { display: block; }
     
-    /* Ensure Canvas is visible */
+    /* Ensure Konva is Visible */
     #app { width: 100%; height: 100%; }
     #app > div { z-index: 1 !important; }
 
-    /* --- RIGHT RAIL (Inspector) --- */
+    /* --- RIGHT PANEL (Inspector) --- */
     .tb-side-panel {
-        background: var(--bg-panel);
-        border-left: 1px solid var(--border-color);
-        width: 380px; min-width: 380px;
-        padding: 24px;
+        width: 360px; /* Fixed width */
+        flex-shrink: 0;
+        background: #ffffff;
+        border-left: 1px solid var(--border-subtle);
+        display: flex; flex-direction: column;
+        padding: 20px;
         overflow-y: auto;
-        box-shadow: -4px 0 24px rgba(0,0,0,0.02);
         z-index: 15;
     }
     
+    .tb-side-section { margin-bottom: 24px; }
+    
     .tb-side-heading {
-        font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
-        color: var(--tixall-text-light); margin-bottom: 12px;
-        display: flex; justify-content: space-between; align-items: center;
+        font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;
+        font-weight: 700; color: var(--text-muted); margin-bottom: 12px;
+        border-bottom: 1px solid #f1f5f9; padding-bottom: 8px;
     }
-
-    /* Inspector Card Container */
-    #sb-inspector {
-        display: flex; flex-direction: column; gap: 16px;
-    }
-
-    /* "Next Step" Button */
+    
+    /* Next Step Button (Tixall Blue) */
     .sb-next-step-btn {
         width: 100%;
         margin-top: 24px;
         padding: 14px;
-        background: var(--tixall-blue);
-        color: #fff;
+        border-radius: 8px;
         border: none;
-        border-radius: 10px;
-        font-size: 14px; font-weight: 600;
+        background: var(--tixall-blue);
+        color: #ffffff;
+        font-weight: 700; font-size: 14px;
         cursor: pointer;
-        transition: all 0.2s;
-        box-shadow: 0 4px 6px -1px rgba(8, 184, 232, 0.3);
-        display: flex; align-items: center; justify-content: center; gap: 8px;
+        box-shadow: 0 4px 6px rgba(8, 184, 232, 0.2);
+        transition: transform 0.1s, box-shadow 0.1s;
     }
     .sb-next-step-btn:hover {
         background: var(--tixall-blue-hover);
-        box-shadow: 0 6px 12px -2px rgba(8, 184, 232, 0.4);
         transform: translateY(-1px);
+        box-shadow: 0 6px 12px rgba(8, 184, 232, 0.3);
     }
-    
-    /* Fix click-through issues */
+
+    /* Interaction Fixes */
     .tb-empty-panel { pointer-events: none !important; }
     #tb-tab-tickets, #tb-tab-holds, #tb-tab-view { pointer-events: none !important; }
     #tb-tab-map { pointer-events: auto !important; }
