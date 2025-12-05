@@ -9376,8 +9376,9 @@ function attachNodeBehaviour(node) {
     // This ensures we don't select/move objects while trying to allocate seats.
     if (window.ticketSeatSelectionMode) return;
 
-    // If we are currently using a creation tool (like drawing a line), ignore selection
-    if (activeTool) return;
+    // FIX: Only block selection if we are using a DRAWING tool.
+    // We explicitly allow selection if activeTool is null or "select".
+    if (activeTool && activeTool !== 'select') return;
     
     // Only trigger on Left Click (button 0) to avoid conflict with context menus
     if (evt.evt && typeof evt.evt.button === 'number' && evt.evt.button !== 0) return;
