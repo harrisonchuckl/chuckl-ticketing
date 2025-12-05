@@ -4740,149 +4740,126 @@ function applyAccessibilityVisualsOverride(seatCircle, group) {
   }
 
 function refreshSeatTicketListeners() {
-  // 0. Cleanup DOM listeners
-  if (window.ticketSeatDomListener && stage && stage.container && stage.container()) {
-    stage.container().removeEventListener("pointerdown", window.ticketSeatDomListener, true);
-    stage.container().removeEventListener("pointerdown", window.ticketSeatDomListener, false);
-    window.ticketSeatDomListener = null;
-  }
+    // 1. Cleanup old DOM listeners if any exist
+    if (window.ticketSeatDomListener && stage && stage.container()) {
+        stage.container().removeEventListener("pointerdown", window.ticketSeatDomListener, true);
+        window.ticketSeatDomListener = null;
+    }
 
- // Helper to attach event handlers to nodes
-  function attachHandler(node) {
-    // We attach both click (for mouse) and tap (for touch)
-    node.on("click.ticketAssign tap.ticketAssign", (evt) => {
-      // ** 🛑 DEBUG INSERTION POINT 1: SEAT CLICK RECEIVED 🛑 **
-      // This confirms the specific seat node's listener was triggered.
-      console.log(`[seatmap][ACCESS-DEBUG] Click received by node:`, {
-        name: node.name(),
-        id: node.id(),
-        className: node.getClassName(),
-        type: node.getAttr("isSeat") ? "SEAT_NODE" : "CONTAINER_NODE",
-      });
+    // 2. Helper: Hover Effects (Visual Feedback)
+    const attachHoverEffect = (node, isText = true) => {
+        node.off('.ticketAssignHover'); // Clean previous
+        node.on('mouseover.ticketAssignHover', () => {
+            if (!ticketSeatSelectionMode) return;
+            stage.container().style.cursor = "pointer";
 
-      const handled = handleTicketSeatSelection(stage.getPointerPosition(), evt.target);
+            // Determine Color based on Mode
+            let color = "#2563eb"; // Default Blue
+            
+            if (activeHoldMode === 'allocation') color = "#10B981"; // Promoter Green
+            else if (activeHoldMode === 'hold') color = "#000000"; // General Hold Black
+            else if (activeViewMode) color = "#000000"; // View/Info Black
+            else {
+                // Ticket Mode
+                const tid = getActiveTicketIdForAssignments();
+                const ticket = ticketTypes.find(t => t.id === tid);
+                if (ticket) color = ticket.color;
+            }
 
-      if (handled) {
-        // Stop propagation if the selection was successfully handled
-        evt.cancelBubble = true;
-      }
-    });
-  }
-  
-  // 2. Helper for Hover Effects
-  const attachHoverEffect = (node, isText = true) => {
-    node.on('mouseover.ticketAssignHover', () => {
-      if (!ticketSeatSelectionMode) return;
-      stage.container().style.cursor = "pointer";
-
-      // Determine Hover Color
-      let color = "#2563eb"; // Default Blue
-      const ticket = ticketTypes.find(t => t.id === getActiveTicketIdForAssignments());
-      
-      if (activeViewMode || activeHoldMode) {
-        color = "#000000"; // Black for View/Hold modes
-      } else if (ticket) {
-        color = ticket.color || "#2563eb";
-      }
-
-      if (isText) {
-        if (!node.getAttr('__origFill')) node.setAttr('__origFill', node.fill());
-        node.fill(color);
-      } else {
-        if (!node.getAttr('__origStroke')) node.setAttr('__origStroke', node.stroke());
-        node.stroke(color);
-        node.strokeWidth(3);
-      }
-      mapLayer.batchDraw();
-    });
-
-    node.on('mouseout.ticketAssignHover', () => {
-      if (!ticketSeatSelectionMode) return;
-      stage.container().style.cursor = "default";
-
-      if (isText) {
-        node.fill(node.getAttr('__origFill') || "#111827");
-      } else {
-        node.stroke(node.getAttr('__origStroke') || "#4b5563");
-        node.strokeWidth(1.7);
-      }
-      mapLayer.batchDraw();
-    });
-  };
-
-  // 3. Process All Interactive Elements
-  const seats = getAllSeatNodes();
-  seats.forEach((seat) => attachHandler(seat));
-
-  if (mapLayer) {
-    const groups = mapLayer.find("Group");
-    groups.forEach(group => {
-      const type = group.getAttr("shapeType") || group.name();
-      
-      // --- A. ROW BLOCKS ---
-      if (type === "row-seats") {
-        // Row Labels
-        group.find((n) => n.getAttr("isRowLabel")).forEach(label => {
-          attachHandler(label);
-          attachHoverEffect(label, true);
+            // Apply Color
+            if (isText) {
+                if (!node.getAttr('__origFill')) node.setAttr('__origFill', node.fill());
+                node.fill(color);
+            } else {
+                if (!node.getAttr('__origStroke')) node.setAttr('__origStroke', node.stroke());
+                node.stroke(color);
+                node.strokeWidth(3); // Thicker stroke on hover
+            }
+            mapLayer.batchDraw();
         });
 
-        // Container (hit-rect)
-        const hitRect = group.findOne(".hit-rect");
-        if (hitRect) {
-          attachHandler(hitRect);
-          
-          // --- HOLLOW CONTAINER LOGIC ---
-          hitRect.fill(null);
-          hitRect.fillEnabled(false);
-          hitRect.stroke("rgba(0,0,0,0)");
-          hitRect.strokeWidth(0);
-          hitRect.hitStrokeWidth(20);
-          
-          hitRect.off('.ticketAssignHover');
-          hitRect.on('mouseover.ticketAssignHover', () => {
-            if (!ticketSeatSelectionMode) return;
-            // Don't show container hover in View Mode (single seat only)
-            if (activeViewType === 'view') return; 
-
-            stage.container().style.cursor = "copy";
-            hitRect.stroke(activeViewMode || activeHoldMode ? '#000000' : '#2563eb');
-            hitRect.strokeWidth(2);
-            hitRect.dash([6, 4]);
-            mapLayer.batchDraw();
-          });
-          
-          hitRect.on('mouseout.ticketAssignHover', () => {
+        node.on('mouseout.ticketAssignHover', () => {
             if (!ticketSeatSelectionMode) return;
             stage.container().style.cursor = "default";
-            hitRect.stroke("rgba(0,0,0,0)");
-            hitRect.strokeWidth(0);
+            
+            // Restore Original Color
+            if (isText) {
+                node.fill(node.getAttr('__origFill') || "#111827");
+            } else {
+                node.stroke(node.getAttr('__origStroke') || "#4b5563");
+                node.strokeWidth(1.7);
+            }
             mapLayer.batchDraw();
-          });
-        }
-      }
+        });
+    };
 
-      // --- B. TABLES ---
-      if (type === "circular-table" || type === "rect-table") {
-        const body = group.findOne(".body-rect");
-        const label = group.findOne(".table-label");
-        if (body) {
-          attachHandler(body);
-          // Don't show table body hover in View Mode (single seat only)
-          if (activeViewType !== 'view') attachHoverEffect(body, false);
-        }
-        if (label) {
-          attachHandler(label);
-          if (activeViewType !== 'view') attachHoverEffect(label, true);
-        }
-      }
-    });
-  }
+    // 3. Helper: Click Handler (Trigger Selection)
+    const attachHandler = (node) => {
+        node.off('click.ticketAssign tap.ticketAssign'); // Clean previous
+        node.on("click.ticketAssign tap.ticketAssign", (evt) => {
+            // Stop propagation so we don't trigger stage clicks
+            evt.cancelBubble = true; 
+            handleTicketSeatSelection(stage.getPointerPosition(), evt.target);
+        });
+    };
 
-  if (mapLayer && typeof mapLayer.off === "function") {
-    mapLayer.off(".ticketAssign");
-  }
-}  
+    // 4. Attach to All Interactive Elements
+    if (mapLayer) {
+        // A. Single Seats
+        getAllSeatNodes().forEach(seat => attachHandler(seat));
+
+        // B. Groups (Rows & Tables)
+        const groups = mapLayer.find("Group");
+        groups.forEach(group => {
+            const type = group.getAttr("shapeType") || group.name();
+
+            // Row Labels & Containers
+            if (type === "row-seats") {
+                const labels = group.find(n => n.getAttr("isRowLabel"));
+                labels.forEach(lbl => {
+                    attachHandler(lbl);
+                    attachHoverEffect(lbl, true); // Hover for Row Letter
+                });
+
+                const hitRect = group.findOne(".hit-rect");
+                if (hitRect) {
+                    attachHandler(hitRect);
+                    // Custom hover for the dashed container box
+                    hitRect.off('.ticketAssignHover');
+                    hitRect.on('mouseover.ticketAssignHover', () => {
+                        if (!ticketSeatSelectionMode || activeViewType === 'view') return;
+                        stage.container().style.cursor = "copy";
+                        hitRect.stroke(activeHoldMode || activeViewMode ? '#000000' : '#2563eb');
+                        hitRect.strokeWidth(2);
+                        hitRect.dash([6, 4]);
+                        mapLayer.batchDraw();
+                    });
+                    hitRect.on('mouseout.ticketAssignHover', () => {
+                        stage.container().style.cursor = "default";
+                        hitRect.stroke(null);
+                        hitRect.strokeWidth(0);
+                        mapLayer.batchDraw();
+                    });
+                }
+            }
+
+            // Table Bodies & Labels
+            if (type === "circular-table" || type === "rect-table") {
+                const body = group.findOne(".body-rect");
+                const label = group.findOne(".table-label");
+                
+                if (body) {
+                    attachHandler(body);
+                    if (activeViewType !== 'view') attachHoverEffect(body, false);
+                }
+                if (label) {
+                    attachHandler(label);
+                    if (activeViewType !== 'view') attachHoverEffect(label, true);
+                }
+            }
+        });
+    }
+}
   function addDebugStagePointerListener() {
     // Only bind the debug listener once
     if (!stage || stage._hasDebugListener) return;
