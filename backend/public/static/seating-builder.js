@@ -4361,17 +4361,18 @@ function updateTicketRings() {
 function applyAccessibilityVisualsOverride(seatCircle, group) {
   const accessType = seatCircle.getAttr("sbAccessibilityType"); // "disabled" | "carer"
 
-  // 1. Cleanup OLD overlays (Text and Rects)
-  const overlayName = `access-overlay-${seatCircle._id}`;
-  const bgName = `access-bg-${seatCircle._id}`;
-  
-  const existingOverlay = group.getChildren().find(node => node.name() === overlayName);
-  if (existingOverlay) existingOverlay.destroy();
-  
-  const existingBg = group.getChildren().find(node => node.name() === bgName);
-  if (existingBg) existingBg.destroy();
+  // 1. Cleanup ALL old overlays (Text, Rects, Images from previous versions)
+  const children = group.getChildren().slice(); // copy to avoid mutation issues while iterating
+  children.forEach(node => {
+    const name = node.name() || "";
+    if (name.startsWith(`access-overlay-${seatCircle._id}`) || 
+        name.startsWith(`access-image-${seatCircle._id}`) || 
+        name.startsWith(`access-bg-${seatCircle._id}`)) {
+      node.destroy();
+    }
+  });
 
-  // 2. Manage Original Label Visibility
+  // 2. Find the original text label (e.g. "A1") to toggle its visibility
   const originalLabel = group.getChildren().find(n => 
      n.getClassName() === 'Text' && 
      Math.abs(n.x() - seatCircle.x()) < 1 && 
@@ -4383,84 +4384,79 @@ function applyAccessibilityVisualsOverride(seatCircle, group) {
     // Hide original label (A1)
     if (originalLabel) originalLabel.visible(false);
 
-    // --- DISABLED SEAT (Black Square, White Icon) ---
+    // --- DISABLED SEAT (Custom Image) ---
     if (accessType === "disabled") {
-      // Hide the original circle shape completely
-      seatCircle.visible(false);
+      // Make the circle invisible but KEEP it technically 'visible' for hit detection
+      // We set opacity to 0 so you can't see it, but clicking it still works.
+      seatCircle.opacity(0); 
 
-      const size = (seatCircle.radius() * 2); // Match diameter
-      
-      // Draw Black Square
-      const sq = new Konva.Rect({
+      const size = (seatCircle.radius() * 2) || 20; 
+
+      // Create Image Node
+      const imageNode = new Konva.Image({
         x: seatCircle.x(),
         y: seatCircle.y(),
         width: size,
         height: size,
-        fill: "#000000",
-        stroke: "#000000",
-        strokeWidth: 0,
-        cornerRadius: 4, // Slight rounding for modern look
-        listening: false,
-        name: bgName
+        listening: false, // Let clicks pass through to the (invisible) seat circle
+        name: `access-image-${seatCircle._id}`
       });
-      // Center the square (Rect draws from top-left by default)
-      sq.offsetX(size / 2);
-      sq.offsetY(size / 2);
-      group.add(sq);
+      
+      // Center the image perfectly
+      imageNode.offsetX(size / 2);
+      imageNode.offsetY(size / 2);
 
-      // Draw White Icon
-      const text = new Konva.Text({
-        x: seatCircle.x(),
-        y: seatCircle.y(),
-        text: "♿",
-        fontSize: 14,
-        fontFamily: "Arial, sans-serif",
-        fontStyle: "bold",
-        fill: "#ffffff",
-        align: 'center',
-        verticalAlign: 'middle',
-        listening: false,
-        name: overlayName
-      });
-      text.offsetX(text.width() / 2);
-      text.offsetY(text.height() / 2);
-      group.add(text);
+      group.add(imageNode);
+
+      // Load the specific PNG
+      const imgObj = new Image();
+      imgObj.onload = function() {
+         imageNode.image(imgObj);
+         const layer = group.getLayer();
+         if (layer) layer.batchDraw();
+      };
+      // Using the path you provided
+      imgObj.src = "/seatmap-icons/disabledtoilets-dark.png";
     } 
     
-    // --- CARER SEAT (Standard Look, Black 'C') ---
+    // --- CARER SEAT (Standard Style with 'C') ---
     else if (accessType === "carer") {
-      // Ensure circle is visible and styled like a standard seat
+      // Restore circle visibility and apply Standard Seat styling
+      seatCircle.opacity(1);
       seatCircle.visible(true);
-      seatCircle.fill("#ffffff");  // White background
+      seatCircle.fill("#ffffff");   // White background
       seatCircle.stroke("#4b5563"); // Standard Grey Stroke
       seatCircle.strokeWidth(1.7);
-      seatCircle.opacity(1);
 
       // Draw Black 'C'
       const text = new Konva.Text({
         x: seatCircle.x(),
         y: seatCircle.y(),
         text: "C",
-        fontSize: 11, // Match standard label size
-        fontFamily: "system-ui",
+        fontSize: 14, 
+        fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
         fontStyle: "bold",
         fill: "#111827", // Standard Black text
         align: 'center',
         verticalAlign: 'middle',
         listening: false,
-        name: overlayName
+        name: `access-overlay-${seatCircle._id}`
       });
+      
+      // Center text
       text.offsetX(text.width() / 2);
       text.offsetY(text.height() / 2);
       group.add(text);
     }
   } else {
     // --- RESTORE STANDARD STATE ---
-    seatCircle.visible(true); // Make sure circle is back
+    seatCircle.opacity(1);
+    seatCircle.visible(true);
     // The main applySeatVisuals loop will handle resetting color/stroke
     if (originalLabel) originalLabel.visible(true);
   }
 }
+  
   function applySeatVisuals() {
   refreshSeatMetadata();
   const seats = getAllSeatNodes();
