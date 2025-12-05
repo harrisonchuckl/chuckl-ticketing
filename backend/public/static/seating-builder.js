@@ -4361,72 +4361,106 @@ function updateTicketRings() {
 function applyAccessibilityVisualsOverride(seatCircle, group) {
   const accessType = seatCircle.getAttr("sbAccessibilityType"); // "disabled" | "carer"
 
-  // 1. Clean up OLD overlay
-  const existingOverlay = group.getChildren().find(node =>
-    node.name() === `access-overlay-${seatCircle._id}`
-  );
+  // 1. Cleanup OLD overlays (Text and Rects)
+  const overlayName = `access-overlay-${seatCircle._id}`;
+  const bgName = `access-bg-${seatCircle._id}`;
+  
+  const existingOverlay = group.getChildren().find(node => node.name() === overlayName);
   if (existingOverlay) existingOverlay.destroy();
+  
+  const existingBg = group.getChildren().find(node => node.name() === bgName);
+  if (existingBg) existingBg.destroy();
 
-  // 2. Find the original text label (e.g. "A1") at this seat's position
-  // We need to hide it if we are adding an icon, or show it if we are removing one.
+  // 2. Manage Original Label Visibility
   const originalLabel = group.getChildren().find(n => 
      n.getClassName() === 'Text' && 
      Math.abs(n.x() - seatCircle.x()) < 1 && 
      Math.abs(n.y() - seatCircle.y()) < 1 &&
-     !n.name().startsWith('access-overlay')
+     !n.name().startsWith('access-')
   );
 
-  // 3. Apply NEW visuals
   if (accessType) {
-    // Hide the original "A1" text so it doesn't clash
+    // Hide original label (A1)
     if (originalLabel) originalLabel.visible(false);
 
-    let textStr, circleFill, circleStroke, textFill, fontSize;
-
+    // --- DISABLED SEAT (Black Square, White Icon) ---
     if (accessType === "disabled") {
-      textStr = "♿";        // Icon
-      circleFill = "#dbeafe";  // Light Blue
-      circleStroke = "#2563eb"; 
-      textFill = "#2563eb";    
-      fontSize = 14;
-    } else if (accessType === "carer") {
-      textStr = "C";         // Letter
-      circleFill = "#dcfce7";  // Light Green
-      circleStroke = "#16a34a"; 
-      textFill = "#15803d";    
-      fontSize = 13;
+      // Hide the original circle shape completely
+      seatCircle.visible(false);
+
+      const size = (seatCircle.radius() * 2); // Match diameter
+      
+      // Draw Black Square
+      const sq = new Konva.Rect({
+        x: seatCircle.x(),
+        y: seatCircle.y(),
+        width: size,
+        height: size,
+        fill: "#000000",
+        stroke: "#000000",
+        strokeWidth: 0,
+        cornerRadius: 4, // Slight rounding for modern look
+        listening: false,
+        name: bgName
+      });
+      // Center the square (Rect draws from top-left by default)
+      sq.offsetX(size / 2);
+      sq.offsetY(size / 2);
+      group.add(sq);
+
+      // Draw White Icon
+      const text = new Konva.Text({
+        x: seatCircle.x(),
+        y: seatCircle.y(),
+        text: "♿",
+        fontSize: 14,
+        fontFamily: "Arial, sans-serif",
+        fontStyle: "bold",
+        fill: "#ffffff",
+        align: 'center',
+        verticalAlign: 'middle',
+        listening: false,
+        name: overlayName
+      });
+      text.offsetX(text.width() / 2);
+      text.offsetY(text.height() / 2);
+      group.add(text);
+    } 
+    
+    // --- CARER SEAT (Standard Look, Black 'C') ---
+    else if (accessType === "carer") {
+      // Ensure circle is visible and styled like a standard seat
+      seatCircle.visible(true);
+      seatCircle.fill("#ffffff");  // White background
+      seatCircle.stroke("#4b5563"); // Standard Grey Stroke
+      seatCircle.strokeWidth(1.7);
+      seatCircle.opacity(1);
+
+      // Draw Black 'C'
+      const text = new Konva.Text({
+        x: seatCircle.x(),
+        y: seatCircle.y(),
+        text: "C",
+        fontSize: 11, // Match standard label size
+        fontFamily: "system-ui",
+        fontStyle: "bold",
+        fill: "#111827", // Standard Black text
+        align: 'center',
+        verticalAlign: 'middle',
+        listening: false,
+        name: overlayName
+      });
+      text.offsetX(text.width() / 2);
+      text.offsetY(text.height() / 2);
+      group.add(text);
     }
-
-    // Change Seat Color
-    seatCircle.fill(circleFill);
-    seatCircle.stroke(circleStroke);
-    seatCircle.strokeWidth(2);
-    seatCircle.opacity(1);
-
-    // Add the Icon Overlay
-    const overlay = new Konva.Text({
-      x: seatCircle.x(),
-      y: seatCircle.y(),
-      text: textStr,
-      fontSize: fontSize,
-      fontFamily: "Arial, sans-serif",
-      fontStyle: "bold",
-      fill: textFill,
-      align: 'center',
-      verticalAlign: 'middle',
-      listening: false,
-      name: `access-overlay-${seatCircle._id}`
-    });
-
-    overlay.offsetX(overlay.width() / 2);
-    overlay.offsetY(overlay.height() / 2);
-    group.add(overlay);
-    overlay.moveToTop(); // Ensure icon is on top of the seat
   } else {
-    // If status removed, ensure original "A1" text is visible again
+    // --- RESTORE STANDARD STATE ---
+    seatCircle.visible(true); // Make sure circle is back
+    // The main applySeatVisuals loop will handle resetting color/stroke
     if (originalLabel) originalLabel.visible(true);
   }
-}  
+}
   function applySeatVisuals() {
   refreshSeatMetadata();
   const seats = getAllSeatNodes();
@@ -5180,23 +5214,38 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
 
     console.log(`[seatmap][ACCESS-DEBUG] Handler called. Target Class: ${target.getClassName()}, Target Name: ${target.name()}`);
     
- // --- INTERCEPT: ACCESSIBILITY MODE (SAFE VERSION) ---
+ // --- INTERCEPT: ACCESSIBILITY MODE (FIXED FOR TABLES/ROWS) ---
   if (activeAccessibilityMode) {
     let seat = findSeatNodeFromTarget(target);
 
-    // If direct lookup failed and we have a pointer position, try intersection
+    // If direct lookup failed (e.g. we clicked a container/background), try digging deeper
     if (!seat && stage && pointerPos) {
-      // Only try this "X-Ray" lookup if we clicked a hit-rect (container)
-      const isContainer = target.name() === 'hit-rect' || target.name() === 'body-rect';
-      
-      if (isContainer) {
-        target.visible(false); // Hide container
-        const shape = stage.getIntersection(pointerPos); // Look underneath
-        target.visible(true);  // Show container immediately
+      const visibleNodes = [];
+      const nodesToHide = [target];
 
-        if (shape) {
-           seat = findSeatNodeFromTarget(shape);
-        }
+      // Special handling for Tables: hide the main table circle/rect so we can click the seat on top
+      const parent = target.getParent();
+      if (parent && (parent.name() === 'circular-table' || parent.name() === 'rect-table')) {
+          const body = parent.findOne('.body-rect');
+          if (body) nodesToHide.push(body);
+      }
+
+      // Temporarily hide blocking elements
+      nodesToHide.forEach(n => {
+          if (n.visible()) {
+              n.visible(false);
+              visibleNodes.push(n);
+          }
+      });
+
+      // "X-Ray" check: see what is immediately under the pointer now
+      const shape = stage.getIntersection(pointerPos);
+      
+      // Restore visibility immediately
+      visibleNodes.forEach(n => n.visible(true));
+
+      if (shape) {
+        seat = findSeatNodeFromTarget(shape);
       }
     }
 
@@ -5218,14 +5267,13 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
        applyAccessibilityVisualsOverride(seat, group);
     }
     
-    // Then run the full visual refresh (without rebuilding listeners due to Step 1)
+    // Then run the full visual refresh (without rebuilding listeners)
     applySeatVisuals(); 
     pushHistory();
     
     if (selectedNode) renderInspector(selectedNode);
     return true;
-  }
-    
+  }    
     const ticketId = (activeHoldMode || activeViewMode) ? "MODE_ACTIVE" : getActiveTicketIdForAssignments();
   if (!ticketId) return false;
 
@@ -5342,6 +5390,9 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
 
   // 4. SINGLE SEAT CLICK
   const isDirectSeat = target && target.getAttr && target.getAttr("isSeat");
+
+    
+    
   if (isDirectSeat) {
     toggleSeatTicketAssignment(target, ticketId);
     applySeatVisuals();
@@ -6667,37 +6718,59 @@ seats.forEach(seat => {
     row.style.gridTemplateColumns = "1fr 1fr";
     row.style.gap = "8px";
 
-    const makeBtn = (mode, label, emoji) => {
+   const makeBtn = (mode, label, emoji) => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "tool-button";
-      // Highlight if active
+      
+      // Highlight if active (only relevant for multi-select modes)
       if (activeAccessibilityMode === mode) {
         btn.classList.add("is-active");
         btn.style.borderColor = "#2563eb";
         btn.style.background = "#eff6ff";
       }
+      
       btn.innerHTML = `<span style="margin-right:4px">${emoji}</span> ${label}`;
       btn.style.fontSize = "12px";
-      btn.style.height = "36px"; // Compact height
+      btn.style.height = "36px"; 
+
       btn.onclick = () => {
-        // Toggle mode
+        // --- 1. SINGLE SEAT IMMEDIATE ACTION ---
+        // Check if the current selection is a single seat group
+        const shapeType = node.getAttr("shapeType") || node.name();
+        
+        if (shapeType === "single-seat") {
+           // Find the actual seat circle inside the group
+           const seat = node.findOne("Circle");
+           if (seat) {
+             const current = seat.getAttr("sbAccessibilityType");
+             // Toggle logic
+             if (current === mode) {
+               seat.setAttr("sbAccessibilityType", null);
+             } else {
+               seat.setAttr("sbAccessibilityType", mode);
+             }
+             // Apply and save
+             applySeatVisuals();
+             pushHistory();
+             renderInspector(node); // Update panel to show "Active" state if needed
+           }
+           return; // EXIT - Do not enter global selection mode
+        }
+
+        // --- 2. ROWS / TABLES / MULTI SELECTION MODE ---
         if (activeAccessibilityMode === mode) {
           activeAccessibilityMode = null;
           setTicketSeatSelectionMode(false, "access-off");
         } else {
           activeAccessibilityMode = mode;
-          // We reuse the 'ticket selection mode' to enable clicking on individual seats
           setTicketSeatSelectionMode(true, "access-on");
-          
-          // ADD THIS LINE HERE:
           refreshSeatTicketListeners(); 
         }
-        // Refresh inspector to show active state
         renderInspector(node);
-      }; return btn;
+      };
+      return btn;
     };
-
     row.appendChild(makeBtn("disabled", "Disabled", "♿"));
     row.appendChild(makeBtn("carer", "Carer", "C"));
     
