@@ -285,500 +285,301 @@ router.get("/builder/preview/:showId", (req, res) => {
     <link rel="stylesheet" href="/static/seating-builder.css" />
 
     <!-- Brand + toolbar styling (inline so we can iterate quickly) -->
-    <style>
-      :root {
+   <style>
+    :root {
+        /* BRANDING */
         --tixall-blue: #08B8E8;
-        --tixall-blue-soft: #E6F9FF;
-        --tixall-dark: #182828;
-        --tixall-grey-soft: #F4F5F7;
-        --tixall-border-subtle: #E2E4EA;
-      }
+        --tixall-blue-hover: #069ac4;
+        --tixall-dark: #0f172a;
+        --tixall-text: #334155;
+        --tixall-text-light: #64748b;
+        
+        /* UI SURFACES */
+        --bg-app: #F1F5F9;         /* Slate-100 - Main app background */
+        --bg-panel: #FFFFFF;       /* Pure white panels */
+        --border-color: #E2E8F0;   /* Slate-200 */
+        
+        /* STATUS */
+        --status-success: #10B981;
+    }
 
-      body.tickin-builder-body {
-        background: #f5f7fa;
-        color: var(--tixall-dark);
-      }
+    body.tickin-builder-body {
+        background: var(--bg-app);
+        color: var(--tixall-text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        margin: 0;
+        height: 100vh;
+        overflow: hidden;
+    }
 
-      .tickin-builder-shell {
-        background: #ffffff;
-      }
+    .tickin-builder-shell {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        background: var(--bg-app);
+    }
 
-      .tickin-builder-topbar {
-        border-bottom: 1px solid var(--tixall-border-subtle);
-        background: linear-gradient(90deg, #ffffff, #f7fbff);
-      }
+    /* --- HEADER --- */
+    .tickin-builder-topbar {
+        background: var(--bg-panel);
+        border-bottom: 1px solid var(--border-color);
+        height: 64px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 24px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+        z-index: 20;
+    }
 
-      .tb-logo-badge {
-        background: #071018;
-        border-radius: 999px;
-        padding: 4px 10px;
+    .tb-logo-badge {
+        background: var(--tixall-dark);
+        border-radius: 6px;
+        padding: 6px 12px;
         display: inline-flex;
         align-items: center;
-        gap: 6px;
-      }
-
-      .tb-logo-dot {
-        width: 10px;
-        height: 10px;
-        border-radius: 999px;
+        gap: 8px;
+    }
+    .tb-logo-dot {
+        width: 8px; height: 8px; border-radius: 50%;
         background: var(--tixall-blue);
-      }
+        box-shadow: 0 0 8px var(--tixall-blue);
+    }
+    .tb-logo-text {
+        font-weight: 700; font-size: 14px; color: #fff; letter-spacing: 0.5px;
+    }
 
-      .tb-logo-text {
-        font-weight: 600;
+    .tb-show-title { font-size: 16px; font-weight: 700; color: var(--tixall-dark); margin: 0; }
+    .tb-show-subtitle { font-size: 13px; color: var(--tixall-text-light); display: flex; gap: 6px; align-items: center; }
+
+    /* --- HEADER BUTTONS --- */
+    .tb-topbar-btn {
+        height: 36px;
+        padding: 0 16px;
+        border-radius: 8px;
         font-size: 13px;
-        color: #ffffff;
-      }
-
-           .tb-topbar-btn.tb-btn-primary {
-  border-radius: 999px;
-  border: 0;
-  background: linear-gradient(135deg, var(--tixall-blue), #08c8f8);
-  color: #ffffff;
-  font-weight: 600;
-  /* No shadow so it feels flat like the ghost button */
-  box-shadow: none;
-}
-
-.tb-topbar-btn.tb-btn-primary:hover {
-  /* Slightly deeper blue on hover, but still no glow or movement */
-  background: linear-gradient(135deg, #06a6d3, #07b8e7);
-  box-shadow: none;
-  transform: none;
-}
-
-
-      .tb-topbar-btn.tb-btn-ghost {
-        border-radius: 999px;
-        border: 1px solid var(--tixall-border-subtle);
-        background: #ffffff;
-        color: var(--tixall-dark);
-      }
-
-      .tb-topbar-select {
-        border-radius: 999px;
-        border: 1px solid var(--tixall-border-subtle);
-        background: #ffffff;
-        color: var(--tixall-dark);
-        padding: 6px 10px;
-        font-size: 13px;
-        max-width: 260px;
-      }
-
-
-      /* LEFT RAIL */
-            /* LEFT RAIL */
-      .tb-left-rail {
-        background: linear-gradient(180deg, #f7fafc, #f2f5f9);
-        border-right: 1px solid var(--tixall-border-subtle);
-        overflow: visible;
-        /* tiny bit of extra horizontal breathing space */
-        padding-inline: 4px;
-      }
-
-      .tb-left-scroll {
-        /* more even padding so it feels less squashed / gappy */
-        padding: 18px 14px 20px;
-        overflow: visible;
-      }
-
-      .tb-left-group {
-        /* slightly tighter spacing so gaps feel consistent */
-        margin-bottom: 10px;
-      }
-
-      /* Sub-headings – only used for "Actions" now */
-      .tb-left-group-label {
-        font-size: 11px;
         font-weight: 600;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: #7a828f;
-        margin: 0 0 8px;
-        text-align: center;
-      }
-
-      /* Centre the action buttons (Undo / Redo / Clear) */
-      .tb-left-group-actions .tb-left-item {
-        justify-content: center;
-        text-align: center;
-      }
-
-      .tb-left-group-actions .tb-left-label {
-        text-align: center;
-      }
-
-      /* Base left-rail button styling (Undo / Redo / Clear etc) */
-      .tb-left-item {
-        border: 0;
-        background: transparent;
-        border-radius: 999px;
-        padding: 8px 10px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        width: 100%;
-        text-align: left;
         cursor: pointer;
-        font-size: 12px;
-        color: var(--tixall-dark);
-        box-sizing: border-box;
-        transition: background 0.15s ease;
-      }
+        transition: all 0.2s ease;
+        display: inline-flex; align-items: center; justify-content: center;
+    }
 
-      .tb-left-item + .tb-left-item {
-        margin-top: 4px;
-      }
-
-      .tb-left-item:hover {
-        background: rgba(8, 184, 232, 0.06);
-      }
-
-      /* Tool buttons: icon ABOVE text, centred (default) */
-      .tb-left-item.tool-button {
-        flex-direction: column;
-        align-items: center;
-        justify-content: flex-start;
-        text-align: center;
-        padding: 12px 4px 10px;
-        gap: 6px;
-        border-radius: 18px;
-        background: transparent !important;
-        border: 0 !important;
-        box-shadow: none !important;
-        transition: none !important;
-        min-height: 72px;
-      }
-
-      .tb-left-item.tool-button:hover,
-      .tb-left-item.tool-button:focus,
-      .tb-left-item.tool-button:active {
-        background: transparent !important;
-        border: 0 !important;
-        box-shadow: none !important;
-        transform: none !important;
-      }
-
-      .tb-left-item.tool-button + .tb-left-item.tool-button {
-        margin-top: 8px;
-      }
-
-      .tb-left-item.tool-button img.tb-tool-icon {
-        width: 44px;
-        height: 44px;
-        display: block;
-        flex-shrink: 0;
-        object-fit: contain;
-      }
-
-      /* Icon swap dark → blue */
-      .tb-left-item.tool-button img.icon-dark {
-        display: block;
-      }
-
-      .tb-left-item.tool-button img.icon-blue {
-        display: none;
-      }
-
-      .tb-left-item.tool-button.is-active img.icon-dark {
-        display: none;
-      }
-
-      .tb-left-item.tool-button.is-active img.icon-blue {
-        display: block;
-      }
-
-      .tb-left-item.tool-button .tb-left-label {
-        display: block;
-        font-size: 11px;
-        line-height: 1.2;
-        font-weight: 500;
-        color: var(--tixall-dark);
-        white-space: normal;
-        text-align: center;
-        max-width: 80px;
-        word-break: break-word;
-      }
-
-      /* Fly-out tool groups (Photoshop-style) */
-      .tool-group {
-        position: relative;
-        margin-bottom: 6px; /* slightly tighter so vertical rhythm feels cleaner */
-        display: block;
-      }
-
-      /* Root tool button: full-width, icon above label, centred */
-      .tool-group .tool-root {
-        width: 100%;
-        min-height: 72px;
-      }
-
-      .tool-group .tool-root img.tb-tool-icon {
-        width: 44px;
-        height: 44px;
-      }
-
-      .tool-group .tool-root .tb-left-label {
-        margin: 0;
-        max-width: 80px;
-        white-space: normal;
-        text-align:center;
-      }
-
-            .tool-flyout-toggle {
-        border: 0;
+    .tb-btn-ghost {
         background: transparent;
-        padding: 0;
+        border: 1px solid var(--border-color);
+        color: var(--tixall-text);
+    }
+    .tb-btn-ghost:hover { background: #f8fafc; border-color: #cbd5e1; }
 
-        display: flex;
-        align-items: center;
-        justify-content: center;
+    /* Draft Button */
+    .tb-btn-draft {
+        background: #fff;
+        border: 1px solid var(--border-color);
+        color: var(--tixall-text);
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+    .tb-btn-draft:hover { background: #f1f5f9; }
+
+    /* Publish Button */
+    .tb-btn-publish {
+        background: var(--status-success);
+        border: 1px solid var(--status-success);
+        color: #fff;
+        box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);
+    }
+    .tb-btn-publish:hover:not(:disabled) { background: #059669; transform: translateY(-1px); }
+    .tb-btn-publish:disabled { background: #e2e8f0; border-color: #e2e8f0; color: #94a3b8; cursor: not-allowed; box-shadow: none; }
+
+    .tb-topbar-select {
+        height: 36px;
+        border-radius: 8px;
+        border: 1px solid var(--border-color);
+        padding: 0 32px 0 12px;
+        font-size: 13px;
+        color: var(--tixall-text);
+        background-color: #fff;
         cursor: pointer;
-        color: #7a828f;
+    }
 
-        /* Bigger hit area, nudged further right, centred on tool icon area */
-        position: absolute;
-        right: -10px;          /* further out from the tool */
-        top: 50%;
-        transform: translateY(-50%);
-        width: 26px;           /* bigger clickable circle */
-        height: 26px;          /* bigger clickable circle */
-        border-radius: 999px;
-      }
-
-      .tool-flyout-toggle:hover {
-        color: var(--tixall-dark);
-        background: rgba(8, 184, 232, 0.06);
-      }
-
-      .tool-flyout-chevron {
-        font-size: 15px;       /* bigger arrow glyph */
-        line-height: 1;
-      }
-
-
-      .tool-flyout {
-        position: absolute;
-        left: 100%;
-        top: 0;
-        display: none;
-        flex-direction: column;
-        gap: 4px;
-        padding: 6px;
-        background: #ffffff;
-        border-radius: 12px;
-        box-shadow: 0 12px 32px rgba(15,23,42,0.20);
-        border: 1px solid rgba(148,163,184,0.35);
-        z-index: 9999;
-        min-width: 170px;
-      }
-
-      .tool-group.is-open .tool-flyout {
-        display: flex;
-      }
-
-
-      .tool-flyout .tb-left-item.tool-button {
-        min-height: 0;
-        padding: 8px 10px;
-        flex-direction: row;
-        justify-content: flex-start;
-        text-align: left;
-        border-radius: 12px;
-        gap: 8px;
-      }
-
-      .tool-flyout .tb-left-item.tool-button .tb-left-label {
-        max-width: none;
-        white-space: nowrap;
-        text-align: left;
-      }
-
-      .tool-flyout .tb-left-item.tool-button img.tb-tool-icon {
-        width: 24px;
-        height: 24px;
-      }
-
-      /* Undo / Redo / Clear chips */
-      .tb-left-icon {
-        width: 26px;
-        height: 26px;
-        border-radius: 999px;
-        background: var(--tixall-grey-soft);
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        flex-shrink: 0;
-      }
-
-      .tb-left-item.tb-left-item-danger {
-        color: #b3261e;
-      }
-
-      .tb-left-item.tb-left-item-danger .tb-left-icon {
-        background: #ffeceb;
-      }
-
-            /* Centre canvas area border tweak to feel lighter */
-
-      .tb-center-header {
-        border-bottom: 1px solid var(--tixall-border-subtle);
-        background: #ffffff;
-      }
-
-      .tb-tab.is-active {
-        color: var(--tixall-dark);
-        border-bottom-color: var(--tixall-blue);
-      }
-
-      .tb-zoom-btn.tb-zoom-label {
-        border-radius: 999px;
-        border-color: var(--tixall-border-subtle);
-        background: #ffffff;
-      }
-
-      /* -------- Layout: full-height builder, fixed rails + centre, scrolling side panel -------- */
-
-      .tickin-builder-body {
-        margin: 0;
-        height: 100vh;
-        overflow: hidden; /* stop the whole page from scrolling */
-      }
-
-      .tickin-builder-shell {
-        display: flex;
-        flex-direction: column;
-        height: 100vh;
-      }
-
-      .tickin-builder-main {
+    /* --- MAIN GRID --- */
+    .tickin-builder-main {
         display: grid;
-        grid-template-columns: auto 1fr auto; /* left rail | centre | right panel */
+        grid-template-columns: 80px 1fr 380px; /* Slim left, Wide canvas, Fixed Right */
         flex: 1;
-        min-height: 0; /* allows children to use overflow correctly */
-      }
+        overflow: hidden;
+    }
 
-      .tb-left-rail {
-        display: block;
-      }
+    /* --- LEFT RAIL (Tools) --- */
+    .tb-left-rail {
+        background: var(--bg-panel);
+        border-right: 1px solid var(--border-color);
+        padding: 16px 0;
+        display: flex; flex-direction: column; align-items: center;
+        z-index: 10;
+    }
+    .tb-left-scroll { width: 100%; display: flex; flex-direction: column; align-items: center; }
+    
+    .tb-left-item.tool-button {
+        width: 56px; height: 56px;
+        border-radius: 12px;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        margin-bottom: 8px;
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--tixall-text-light);
+        transition: all 0.2s;
+    }
+    .tb-left-item.tool-button:hover { background: #f1f5f9; color: var(--tixall-blue); }
+    .tb-left-item.tool-button.is-active {
+        background: #f0f9ff;
+        border-color: #bae6fd;
+        color: var(--tixall-blue);
+        box-shadow: 0 4px 12px rgba(8, 184, 232, 0.15);
+    }
+    .tb-tool-icon { width: 24px; height: 24px; object-fit: contain; margin-bottom: 4px; }
+    .tb-left-label { font-size: 10px; font-weight: 600; text-align: center; line-height: 1.1; }
 
-      .tb-center {
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
-      }
+    /* Flyouts */
+    .tool-group { position: relative; width: 100%; display: flex; justify-content: center; }
+    .tool-flyout-toggle {
+        position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
+        width: 16px; height: 16px; font-size: 10px; color: #94a3b8;
+    }
+    .tool-flyout {
+        position: absolute; left: 70px; top: 0;
+        background: white; border: 1px solid var(--border-color);
+        border-radius: 12px; padding: 8px;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+        display: none; flex-direction: column; gap: 4px; min-width: 160px; z-index: 100;
+    }
+    .tool-group.is-open .tool-flyout { display: flex; }
+    .tool-flyout .tb-left-item.tool-button {
+        width: 100%; height: auto; flex-direction: row; padding: 8px; justify-content: flex-start;
+        border-radius: 8px; margin: 0;
+    }
+    .tool-flyout .tb-left-item.tool-button .tb-left-label { margin-left: 10px; font-size: 13px; }
 
-      .tb-tab-panels {
-        flex: 1;
-        min-height: 0;
+    /* --- CENTER (Canvas) --- */
+    .tb-center {
+        background: var(--bg-app); /* Gray background for contrast */
         position: relative;
-      }
+        display: flex; flex-direction: column;
+        overflow: hidden;
+    }
+    .tb-center-header {
+        height: 48px;
+        display: flex; align-items: center; justify-content: center;
+        background: transparent; /* Transparent to show gray bg */
+        padding: 0 20px;
+        position: absolute; top: 16px; left: 0; right: 0; z-index: 10;
+        pointer-events: none; /* Let clicks pass through */
+    }
+    
+    /* Tabs as Pill Segments */
+    .tb-tabs {
+        pointer-events: auto;
+        background: #fff;
+        border-radius: 99px;
+        padding: 4px;
+        display: flex; gap: 4px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        border: 1px solid var(--border-color);
+    }
+    .tb-tab {
+        padding: 6px 16px;
+        border-radius: 99px;
+        border: none;
+        background: transparent;
+        font-size: 13px; font-weight: 600; color: var(--tixall-text-light);
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .tb-tab:hover { color: var(--tixall-dark); background: #f8fafc; }
+    .tb-tab.is-active {
+        background: var(--tixall-dark);
+        color: #fff;
+        box-shadow: 0 2px 4px rgba(15, 23, 42, 0.1);
+    }
+    /* Completed State */
+    .tb-tab.is-complete { color: var(--status-success); }
+    .tb-tab.is-complete.is-active { background: var(--status-success); color: #fff; }
+    .tb-tab.is-complete::after { content: ' ✓'; font-size: 10px; margin-left: 4px; opacity: 0.8; }
 
-      /* Right side panel – this is now the ONLY scroll container on the right */
+    /* Zoom Toolbar */
+    .tb-zoom-toolbar {
+        pointer-events: auto;
+        position: absolute; right: 20px;
+        background: #fff; border-radius: 8px;
+        border: 1px solid var(--border-color);
+        display: flex; overflow: hidden;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+    }
+    .tb-zoom-btn {
+        width: 32px; height: 32px; border: none; background: #fff;
+        font-size: 16px; color: var(--tixall-text); cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+    }
+    .tb-zoom-btn:hover { background: #f8fafc; }
+    .tb-zoom-label { width: 48px; font-size: 12px; font-weight: 600; border-left: 1px solid var(--border-color); border-right: 1px solid var(--border-color); }
 
-      .tb-side-panel {
-        background: #fbfcfe;
-        border-left: 1px solid var(--tixall-border-subtle);
-        display: flex;
-        flex-direction: column;
-        padding: 16px;
-        min-width: 320px;
-        max-width: 420px;
-        overflow-y: auto;   /* vertical scroll lives here */
-      }
+    .tb-tab-panels { flex: 1; position: relative; }
+    .tb-tab-panel { display: none; width: 100%; height: 100%; }
+    .tb-tab-panel.is-active { display: block; }
+    
+    /* Ensure Canvas is visible */
+    #app { width: 100%; height: 100%; }
+    #app > div { z-index: 1 !important; }
 
-      .tb-side-section {
-        border-radius: 18px;
-        border: 1px solid var(--tixall-border-subtle);
-        background: #ffffff;
-        padding: 14px 16px;
-        margin-bottom: 12px;
-      }
+    /* --- RIGHT RAIL (Inspector) --- */
+    .tb-side-panel {
+        background: var(--bg-panel);
+        border-left: 1px solid var(--border-color);
+        width: 380px; min-width: 380px;
+        padding: 24px;
+        overflow-y: auto;
+        box-shadow: -4px 0 24px rgba(0,0,0,0.02);
+        z-index: 15;
+    }
+    
+    .tb-side-heading {
+        font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+        color: var(--tixall-text-light); margin-bottom: 12px;
+        display: flex; justify-content: space-between; align-items: center;
+    }
 
-      /* --- BLOCKER FIX (unchanged) --- */
+    /* Inspector Card Container */
+    #sb-inspector {
+        display: flex; flex-direction: column; gap: 16px;
+    }
 
-      .tb-empty-panel {
-        /* Forces mouse events to pass through this element to the canvas below */
-        pointer-events: none !important;
-      }
+    /* "Next Step" Button */
+    .sb-next-step-btn {
+        width: 100%;
+        margin-top: 24px;
+        padding: 14px;
+        background: var(--tixall-blue);
+        color: #fff;
+        border: none;
+        border-radius: 10px;
+        font-size: 14px; font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        box-shadow: 0 4px 6px -1px rgba(8, 184, 232, 0.3);
+        display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .sb-next-step-btn:hover {
+        background: var(--tixall-blue-hover);
+        box-shadow: 0 6px 12px -2px rgba(8, 184, 232, 0.4);
+        transform: translateY(-1px);
+    }
+    
+    /* Fix click-through issues */
+    .tb-empty-panel { pointer-events: none !important; }
+    #tb-tab-tickets, #tb-tab-holds, #tb-tab-view { pointer-events: none !important; }
+    #tb-tab-map { pointer-events: auto !important; }
 
- /* --- FIX: Tab Panel Interaction Logic --- */
-
-/* 1. Default: Panels should capture mouse events (like the Map) */
-.tb-tab-panel {
-  pointer-events: auto;
-}
-
-/* 2. OVERLAY TABS: These sit on top of the map. 
-   We must disable pointer events on the wrapper so clicks pass through to the map,
-   but keep events enabled on child elements (like the 'empty panel' messages) if needed. */
-#tb-tab-tickets, 
-#tb-tab-holds, 
-#tb-tab-view {
-  pointer-events: none !important;
-}
-
-/* 3. Explicitly ensure the Map tab accepts clicks */
-#tb-tab-map {
-  pointer-events: auto !important;
-}
-
-      /* Ensure the canvas element itself is always above other content.
-         Konva stages create their own div/canvas elements inside the container (#app). */
-      #app > div {
-        z-index: 1 !important; /* Forces the internal Konva div to be the highest layer */
-      }
-
-      .tb-side-heading {
-        color: var(--tixall-dark);
-      }
-
-      tb-tab.is-complete {
-  color: #059669; /* Emerald 600 */
-  border-bottom-color: #059669;
-}
-.tb-tab.is-complete::after {
-  content: ' ✓';
-  font-size: 10px;
-  margin-left: 4px;
-}
-.tb-btn-draft {
-  background: #f3f4f6;
-  color: #374151;
-  border: 1px solid #d1d5db;
-}
-.tb-btn-publish {
-  background: linear-gradient(135deg, #059669, #10b981);
-  color: #ffffff;
-  border: 0;
-  box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.2);
-}
-.tb-btn-publish:disabled {
-  background: #e5e7eb;
-  color: #9ca3af;
-  box-shadow: none;
-  cursor: not-allowed;
-}
-.sb-next-step-btn {
-  width: 100%;
-  margin-top: 20px;
-  padding: 12px;
-  border-radius: 12px;
-  border: 1px solid #e5e7eb;
-  background: linear-gradient(180deg, #ffffff, #f9fafb);
-  color: #111827;
-  font-weight: 600;
-  font-size: 13px;
-  cursor: pointer;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-}
-.sb-next-step-btn:hover {
-  background: #f3f4f6;
-  border-color: #d1d5db;
-}
-
-      
-    </style>
+</style>
   </head>
   <body class="tickin-builder-body">
     <div class="tickin-builder-shell">
