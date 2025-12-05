@@ -9368,9 +9368,21 @@ function attachNodeBehaviour(node) {
 
   // 3) Selection behaviour (single + Shift multi-select)
   //    Remove any previous selection handlers so we don't stack listeners.
-  node.off("click.seatmapSelect tap.seatmapSelect");
+  //    FIX: Changed from 'click' to 'mousedown/touchstart' for instant response.
+  node.off("click.seatmapSelect tap.seatmapSelect mousedown.seatmapSelect touchstart.seatmapSelect");
+  node.on("mousedown.seatmapSelect touchstart.seatmapSelect", (evt) => {
+    // --- SAFETY GUARD FOR OTHER TABS ---
+    // If we are in Ticket, Hold, or View mode, STOP immediately. 
+    // This ensures we don't select/move objects while trying to allocate seats.
+    if (window.ticketSeatSelectionMode) return;
 
-  node.on("click.seatmapSelect tap.seatmapSelect", (evt) => {
+    // If we are currently using a creation tool (like drawing a line), ignore selection
+    if (activeTool) return;
+    
+    // Only trigger on Left Click (button 0) to avoid conflict with context menus
+    if (evt.evt && typeof evt.evt.button === 'number' && evt.evt.button !== 0) return;
+
+    // Critical: Stop the event bubbling to the stage so we don't trigger panning or clearing
     evt.cancelBubble = true;
 
     if (isShiftPressed && transformer) {
