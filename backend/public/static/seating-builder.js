@@ -1033,7 +1033,7 @@ function restoreHistory(toIndex) {
 
   // --- NEW: Re-attach Ticket Assignment Listeners if mode is active ---
   if (ticketSeatSelectionMode) {
-    refreshSeatTicketListeners();
+    ();
     rebuildTicketAssignmentsCache(); // Ensure our ID map matches the visual state
     renderTicketingPanel(); // Update the counts in the sidebar
   }
@@ -4462,7 +4462,7 @@ function updateTicketRings() {
     }
   });
 
-  refreshSeatTicketListeners();
+  ();
   updateTicketRings();
 
   if (mapLayer && typeof mapLayer.batchDraw === "function") {
@@ -4602,14 +4602,18 @@ function refreshSeatTicketListeners() {
   // 1. Helper to attach logic to a node
   const attachHandler = (node) => {
     if (typeof node.off === "function") {
-        node.off(".ticketAssign");
-        node.off(".ticketAssignHover");
+      node.off(".ticketAssign");
+      node.off(".ticketAssignHover");
     }
     if (typeof node.listening === "function") node.listening(true);
 
     node.on("click.ticketAssign tap.ticketAssign", (evt) => {
+      // FIX: Check for Ticket OR Special Modes (View/Hold/Info)
       const ticketId = getActiveTicketIdForAssignments();
-      if (!ticketSeatSelectionMode || !ticketId) return;
+      const isSpecialMode = !!(activeHoldMode || activeViewMode || activeViewType);
+
+      // If we aren't in selection mode, OR (we have no ticket AND no special mode), stop.
+      if (!ticketSeatSelectionMode || (!ticketId && !isSpecialMode)) return;
 
       if (evt.evt) {
         evt.evt.stopPropagation();
@@ -4618,42 +4622,49 @@ function refreshSeatTicketListeners() {
       }
       evt.cancelBubble = true;
       lastSeatAssignEventAt = Date.now();
-
       handleTicketSeatSelection(stage.getPointerPosition(), evt.target);
     });
   };
 
   // 2. Helper for Hover Effects
   const attachHoverEffect = (node, isText = true) => {
-      node.on('mouseover.ticketAssignHover', () => {
-          if (!ticketSeatSelectionMode) return;
-          stage.container().style.cursor = "pointer";
-          const ticket = ticketTypes.find(t => t.id === getActiveTicketIdForAssignments());
-          const color = (ticket && ticket.color) || "#2563eb";
-          
-          if (isText) {
-              if (!node.getAttr('__origFill')) node.setAttr('__origFill', node.fill());
-              node.fill(color); 
-          } else {
-              if (!node.getAttr('__origStroke')) node.setAttr('__origStroke', node.stroke());
-              node.stroke(color);
-              node.strokeWidth(3);
-          }
-          mapLayer.batchDraw();
-      });
+    node.on('mouseover.ticketAssignHover', () => {
+      if (!ticketSeatSelectionMode) return;
+      stage.container().style.cursor = "pointer";
 
-      node.on('mouseout.ticketAssignHover', () => {
-          if (!ticketSeatSelectionMode) return;
-          stage.container().style.cursor = "default";
-          
-          if (isText) {
-              node.fill(node.getAttr('__origFill') || "#111827");
-          } else {
-              node.stroke(node.getAttr('__origStroke') || "#4b5563");
-              node.strokeWidth(1.7);
-          }
-          mapLayer.batchDraw();
-      });
+      // Determine Hover Color
+      let color = "#2563eb"; // Default Blue
+      const ticket = ticketTypes.find(t => t.id === getActiveTicketIdForAssignments());
+      
+      if (activeViewMode || activeHoldMode) {
+        color = "#000000"; // Black for View/Hold modes
+      } else if (ticket) {
+        color = ticket.color || "#2563eb";
+      }
+
+      if (isText) {
+        if (!node.getAttr('__origFill')) node.setAttr('__origFill', node.fill());
+        node.fill(color);
+      } else {
+        if (!node.getAttr('__origStroke')) node.setAttr('__origStroke', node.stroke());
+        node.stroke(color);
+        node.strokeWidth(3);
+      }
+      mapLayer.batchDraw();
+    });
+
+    node.on('mouseout.ticketAssignHover', () => {
+      if (!ticketSeatSelectionMode) return;
+      stage.container().style.cursor = "default";
+
+      if (isText) {
+        node.fill(node.getAttr('__origFill') || "#111827");
+      } else {
+        node.stroke(node.getAttr('__origStroke') || "#4b5563");
+        node.strokeWidth(1.7);
+      }
+      mapLayer.batchDraw();
+    });
   };
 
   // 3. Process All Interactive Elements
@@ -4664,62 +4675,62 @@ function refreshSeatTicketListeners() {
     const groups = mapLayer.find("Group");
     groups.forEach(group => {
       const type = group.getAttr("shapeType") || group.name();
-
+      
       // --- A. ROW BLOCKS ---
       if (type === "row-seats") {
         // Row Labels
         group.find((n) => n.getAttr("isRowLabel")).forEach(label => {
-            attachHandler(label);
-            attachHoverEffect(label, true);
+          attachHandler(label);
+          attachHoverEffect(label, true);
         });
 
         // Container (hit-rect)
         const hitRect = group.findOne(".hit-rect");
         if (hitRect) {
-           attachHandler(hitRect);
+          attachHandler(hitRect);
+          
+          // --- HOLLOW CONTAINER LOGIC ---
+          hitRect.fill(null);
+          hitRect.fillEnabled(false);
+          hitRect.stroke("rgba(0,0,0,0)");
+          hitRect.strokeWidth(0);
+          hitRect.hitStrokeWidth(20);
+          
+          hitRect.off('.ticketAssignHover');
+          hitRect.on('mouseover.ticketAssignHover', () => {
+            if (!ticketSeatSelectionMode) return;
+            // Don't show container hover in View Mode (single seat only)
+            if (activeViewType === 'view') return; 
 
-           // --- HOLLOW CONTAINER LOGIC ---
-           // Explicitly disable fill hit detection to solve "Gap Selection"
-           hitRect.fill(null); 
-           hitRect.fillEnabled(false); 
-           
-           hitRect.stroke("rgba(0,0,0,0)");
-           hitRect.strokeWidth(0); 
-           // 20px stroke width = 10px inside the rect. 
-           // This covers the padding area but stops before the seats.
-           hitRect.hitStrokeWidth(20); 
-
-           hitRect.off('.ticketAssignHover');
-           hitRect.on('mouseover.ticketAssignHover', () => {
-              if (!ticketSeatSelectionMode) return;
-              stage.container().style.cursor = "copy"; 
-              // Show visual border
-              hitRect.stroke('#2563eb'); 
-              hitRect.strokeWidth(2);
-              hitRect.dash([6, 4]);
-              mapLayer.batchDraw();
-           });
-           hitRect.on('mouseout.ticketAssignHover', () => {
-              if (!ticketSeatSelectionMode) return;
-              stage.container().style.cursor = "default";
-              hitRect.stroke("rgba(0,0,0,0)");
-              hitRect.strokeWidth(0);
-              mapLayer.batchDraw();
-           });
+            stage.container().style.cursor = "copy";
+            hitRect.stroke(activeViewMode || activeHoldMode ? '#000000' : '#2563eb');
+            hitRect.strokeWidth(2);
+            hitRect.dash([6, 4]);
+            mapLayer.batchDraw();
+          });
+          
+          hitRect.on('mouseout.ticketAssignHover', () => {
+            if (!ticketSeatSelectionMode) return;
+            stage.container().style.cursor = "default";
+            hitRect.stroke("rgba(0,0,0,0)");
+            hitRect.strokeWidth(0);
+            mapLayer.batchDraw();
+          });
         }
       }
 
       // --- B. TABLES ---
       if (type === "circular-table" || type === "rect-table") {
         const body = group.findOne(".body-rect");
-        const label = group.findOne(".table-label"); 
+        const label = group.findOne(".table-label");
         if (body) {
-            attachHandler(body);
-            attachHoverEffect(body, false);
-        } 
+          attachHandler(body);
+          // Don't show table body hover in View Mode (single seat only)
+          if (activeViewType !== 'view') attachHoverEffect(body, false);
+        }
         if (label) {
-            attachHandler(label);
-            attachHoverEffect(label, true);
+          attachHandler(label);
+          if (activeViewType !== 'view') attachHoverEffect(label, true);
         }
       }
     });
@@ -4728,8 +4739,7 @@ function refreshSeatTicketListeners() {
   if (mapLayer && typeof mapLayer.off === "function") {
     mapLayer.off(".ticketAssign");
   }
-}
-  
+}  
   function addDebugStagePointerListener() {
     // Only bind the debug listener once
     if (!stage || stage._hasDebugListener) return;
