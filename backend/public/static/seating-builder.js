@@ -4361,65 +4361,72 @@ function updateTicketRings() {
 function applyAccessibilityVisualsOverride(seatCircle, group) {
   const accessType = seatCircle.getAttr("sbAccessibilityType"); // "disabled" | "carer"
 
-  // 1. Cleanup OLD overlay if it exists
-  // We search by name to ensure we catch it
-  const existingOverlay = group.getChildren().find(node => 
+  // 1. Clean up OLD overlay
+  const existingOverlay = group.getChildren().find(node =>
     node.name() === `access-overlay-${seatCircle._id}`
   );
-  if (existingOverlay) {
-    existingOverlay.destroy();
-  }
+  if (existingOverlay) existingOverlay.destroy();
 
-  // 2. Apply NEW visuals if active
+  // 2. Find the original text label (e.g. "A1") at this seat's position
+  // We need to hide it if we are adding an icon, or show it if we are removing one.
+  const originalLabel = group.getChildren().find(n => 
+     n.getClassName() === 'Text' && 
+     Math.abs(n.x() - seatCircle.x()) < 1 && 
+     Math.abs(n.y() - seatCircle.y()) < 1 &&
+     !n.name().startsWith('access-overlay')
+  );
+
+  // 3. Apply NEW visuals
   if (accessType) {
+    // Hide the original "A1" text so it doesn't clash
+    if (originalLabel) originalLabel.visible(false);
+
     let textStr, circleFill, circleStroke, textFill, fontSize;
 
     if (accessType === "disabled") {
-      textStr = "♿";      // Disabled Icon
-      circleFill = "#dbeafe";  // Light Blue background
-      circleStroke = "#2563eb"; // Blue border
-      textFill = "#2563eb";    // Blue text
+      textStr = "♿";        // Icon
+      circleFill = "#dbeafe";  // Light Blue
+      circleStroke = "#2563eb"; 
+      textFill = "#2563eb";    
       fontSize = 14;
     } else if (accessType === "carer") {
-      textStr = "C";       // Carer Letter
-      circleFill = "#dcfce7";  // Light Green background
-      circleStroke = "#16a34a"; // Green border
-      textFill = "#15803d";    // Dark Green text
-      fontSize = 12;
+      textStr = "C";         // Letter
+      circleFill = "#dcfce7";  // Light Green
+      circleStroke = "#16a34a"; 
+      textFill = "#15803d";    
+      fontSize = 13;
     }
 
-    // A. Override the Seat Circle visual
+    // Change Seat Color
     seatCircle.fill(circleFill);
     seatCircle.stroke(circleStroke);
     seatCircle.strokeWidth(2);
-    seatCircle.opacity(1); 
+    seatCircle.opacity(1);
 
-    // B. Create the Text Overlay
+    // Add the Icon Overlay
     const overlay = new Konva.Text({
       x: seatCircle.x(),
       y: seatCircle.y(),
       text: textStr,
       fontSize: fontSize,
-      fontFamily: "Arial, sans-serif", // System UI can be fickle with emojis on canvas
+      fontFamily: "Arial, sans-serif",
       fontStyle: "bold",
       fill: textFill,
       align: 'center',
       verticalAlign: 'middle',
-      listening: false, // Ensure clicks pass through to the seat
+      listening: false,
       name: `access-overlay-${seatCircle._id}`
     });
 
-    // Center the text exactly
     overlay.offsetX(overlay.width() / 2);
     overlay.offsetY(overlay.height() / 2);
-
     group.add(overlay);
-    
-    // C. Important: Move overlay to top so it isn't covered by seat or hit-rect
-    overlay.moveToTop(); 
+    overlay.moveToTop(); // Ensure icon is on top of the seat
+  } else {
+    // If status removed, ensure original "A1" text is visible again
+    if (originalLabel) originalLabel.visible(true);
   }
-}
-  
+}  
   function applySeatVisuals() {
   refreshSeatMetadata();
   const seats = getAllSeatNodes();
@@ -5173,54 +5180,63 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
   } else {
     ticketAssignments.delete(sid);
   }
-}
-function handleTicketSeatSelection(pointerPos, target) {
-
-// --- INTERCEPT: ACCESSIBILITY MODE (FIXED) ---
+}function handleTicketSeatSelection(pointerPos, target) {
+  // --- INTERCEPT: ACCESSIBILITY MODE (FIXED) ---
   if (activeAccessibilityMode) {
-    // 1. Attempt to find seat from the clicked target (works for Single Seats)
-    let seat = findSeatNodeFromTarget(target);
+    let seat = null;
 
-    // 2. If target was a Container (Row/Table hit-rect), drill down to find the specific seat
-    if (!seat && stage) {
-      // Temporarily hide the hit-rect if that's what we clicked, so we can "see" the seat below it
-      const wasVisible = target.visible();
-      if (target.name() === 'hit-rect' || target.name() === 'body-rect') {
-         target.visible(false);
-      }
+    // 1. Try getting the seat directly (Works for Single Seats sometimes)
+    if (target && target.getAttr && target.getAttr("isSeat")) {
+      seat = target;
+    } 
+    // 2. If target is a Container/Group/Shape, find the specific seat under the mouse
+    else if (stage) {
+      // Hide the container momentarily so we can "see" through it to the seat circle
+      const originalVisible = target.visible();
+      target.visible(false);
       
-      // Check exactly what is under the mouse pointer now
-      const shapeUnderMouse = stage.getIntersection(pointerPos);
+      // Get the actual shape under the pointer
+      const shape = stage.getIntersection(pointerPos);
       
       // Restore visibility immediately
-      if (target.name() === 'hit-rect' || target.name() === 'body-rect') {
-         target.visible(wasVisible);
-      }
+      target.visible(originalVisible);
 
-      // Try to find the seat from the specific shape found
-      if (shapeUnderMouse) {
-        seat = findSeatNodeFromTarget(shapeUnderMouse);
+      if (shape) {
+        // Check if this shape is a seat or inside a seat group
+        seat = findSeatNodeFromTarget(shape);
       }
     }
 
-    if (!seat) return false; // Clicked empty space or non-seat
+    // If we still didn't find a seat (or clicked empty space), exit
+    if (!seat) return false; 
 
-    // 3. Toggle Status
+    // 3. Apply Logic
     const current = seat.getAttr("sbAccessibilityType");
+    // Identify the parent group to help finding the text label later
+    const group = seat.getParent();
+    
+    // Restore original label visibility if we are turning OFF access mode
     if (current === activeAccessibilityMode) {
-      seat.setAttr("sbAccessibilityType", null); // Toggle Off
+      seat.setAttr("sbAccessibilityType", null); 
+      // Attempt to show the original text label again
+      if (group) {
+         const originalLabel = group.getChildren().find(n => 
+           n.getClassName() === 'Text' && 
+           Math.abs(n.x() - seat.x()) < 1 && 
+           Math.abs(n.y() - seat.y()) < 1 &&
+           !n.name().startsWith('access-overlay')
+         );
+         if (originalLabel) originalLabel.visible(true);
+      }
     } else {
-      seat.setAttr("sbAccessibilityType", activeAccessibilityMode); // Toggle On
+      seat.setAttr("sbAccessibilityType", activeAccessibilityMode);
     }
 
     applySeatVisuals();
     pushHistory();
-    
-    // Update inspector buttons
     if (selectedNode) renderInspector(selectedNode);
-    
-    return true; // Stop execution here
-  }  
+    return true; // Stop here
+  }
   const ticketId = (activeHoldMode || activeViewMode) ? "MODE_ACTIVE" : getActiveTicketIdForAssignments();
   if (!ticketId) return false;
 
