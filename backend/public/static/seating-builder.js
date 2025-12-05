@@ -4352,6 +4352,63 @@ function updateTicketRings() {
     stage.batchDraw();
   }
 }
+
+/**
+ * Applies the final visual overrides for Accessibility seats (Icon/C and color).
+ * @param {Konva.Circle} seatCircle The Konva shape node for the seat circle.
+ * @param {Konva.Group} group The parent group node containing the seat label.
+ */
+function applyAccessibilityVisualsOverride(seatCircle, group) {
+  const accessType = seatCircle.getAttr("sbAccessibilityType"); // "disabled" | "carer"
+
+  // We will just overlay the icon/text on top of the seat to avoid breaking original labels.
+  
+  if (accessType) {
+    let text, fill, stroke, labelFill, labelFontSize;
+
+    if (accessType === "disabled") {
+      text = "♿"; // Disabled Icon
+      fill = "#fef2f2";   // Light red fill
+      stroke = "#b91c1c"; // Red stroke
+      labelFill = "#b91c1c"; // Red icon color
+      labelFontSize = 14;
+    } else if (accessType === "carer") {
+      text = "C"; // Carer C
+      fill = "#f5f3ff";   // Light purple fill
+      stroke = "#7c3aed"; // Purple stroke
+      labelFill = "#7c3aed"; // Purple C color
+      labelFontSize = 12;
+    }
+
+    // Override Seat Circle Color
+    seatCircle.fill(fill);
+    seatCircle.stroke(stroke);
+    
+    // Remove any previous access label on this group for this seat
+    const oldAccess = group.findOne(`.access-overlay-${seatCircle._id}`);
+    if (oldAccess) oldAccess.destroy();
+
+    // Add new overlay label
+    const overlay = new Konva.Text({
+        x: seatCircle.x(),
+        y: seatCircle.y(),
+        text: text,
+        fontSize: labelFontSize,
+        fontFamily: "system-ui",
+        fontStyle: "bold",
+        fill: labelFill,
+        listening: false,
+        name: `access-overlay-${seatCircle._id}`
+    });
+    overlay.offsetX(overlay.width() / 2);
+    overlay.offsetY(overlay.height() / 2);
+    group.add(overlay);
+  } else {
+    // If NO access type, ensure we remove any stale overlay
+    const oldAccess = group.findOne(`.access-overlay-${seatCircle._id}`);
+    if (oldAccess) oldAccess.destroy();
+  }
+}
   
   // [Source: 3573] - Updated to strictly isolate color/text visuals by Tab
 function applySeatVisuals() {
@@ -4497,6 +4554,12 @@ function applySeatVisuals() {
         }
         // ----------------------------------------------
       }
+    }
+    // --- ACCESSIBILITY VISUAL OVERRIDE (Must be the final step) ---
+    // We use 'seat' here because that is the variable name in your loop at line 3579
+    const groupForAccess = seat.getParent();
+    if (groupForAccess) {
+        applyAccessibilityVisualsOverride(seat, groupForAccess);
     }
   });
 
@@ -5104,23 +5167,26 @@ function setTicketSeatSelectionMode(enabled, reason = "unknown") {
 }
 function handleTicketSeatSelection(pointerPos, target) {
 
-  // --- INTERCEPT: ACCESSIBILITY MODE ---
+// --- INTERCEPT: ACCESSIBILITY MODE (FIXED for Rows/Tables) ---
   if (activeAccessibilityMode) {
-    if (!target || !target.getAttr || !target.getAttr("isSeat")) return false;
+    // Crucial fix: Use the helper to find the seat node, even if the target is a parent group
+    const seat = findSeatNodeFromTarget(target); 
+    
+    if (!seat) return false; // Not a seat, or not found
     
     // Toggle logic: If clicking a seat that already has this status, remove it.
-    const current = target.getAttr("sbAccessibilityType");
+    const current = seat.getAttr("sbAccessibilityType");
     if (current === activeAccessibilityMode) {
-      target.setAttr("sbAccessibilityType", null);
+      seat.setAttr("sbAccessibilityType", null); // Remove status
     } else {
-      target.setAttr("sbAccessibilityType", activeAccessibilityMode);
+      seat.setAttr("sbAccessibilityType", activeAccessibilityMode); // Apply status
     }
     
     applySeatVisuals();
     pushHistory();
     // Re-render inspector to update the "Remove Status" buttons if visible
     if (selectedNode) renderInspector(selectedNode);
-    return true;
+    return true; // Stop processing and prevent falling through to ticket/hold logic
   }
   
   const ticketId = (activeHoldMode || activeViewMode) ? "MODE_ACTIVE" : getActiveTicketIdForAssignments();
