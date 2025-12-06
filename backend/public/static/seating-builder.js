@@ -6083,10 +6083,10 @@ seats.forEach(seat => {
     }
   };
 const wrapper = document.createElement("div");
-wrapper.className = "sb-next-step-wrapper";
-wrapper.innerHTML = '<span class="sb-next-step-label">Next steps</span>';
-wrapper.appendChild(nextBtn);
-el.appendChild(wrapper);
+  wrapper.className = "sb-next-step-wrapper";
+  wrapper.innerHTML = '<span class="sb-next-step-label">Next steps</span>';
+  wrapper.appendChild(nextBtn); // Re-use existing nextBtn logic if it wasn't duplicated, otherwise rewrite it like above
+  el.appendChild(wrapper);
 }
 
   // 6. Weekly Box Office Reports (Only visible in Allocation section or generally at bottom)
@@ -6500,11 +6500,11 @@ el.appendChild(wrapper);
       alert("View step marked complete. Please finish any remaining red tabs before publishing.");
     }
   };
-  const wrapper = document.createElement("div");
-wrapper.className = "sb-next-step-wrapper";
-wrapper.innerHTML = '<span class="sb-next-step-label">Next steps</span>';
-wrapper.appendChild(nextBtn);
-el.appendChild(wrapper);
+ const wrapper = document.createElement("div");
+  wrapper.className = "sb-next-step-wrapper";
+  wrapper.innerHTML = '<span class="sb-next-step-label">Next steps</span>';
+  wrapper.appendChild(nextBtn);
+  el.appendChild(wrapper);
 }
     // ---------- Selection inspector (right-hand panel) ----------
 
@@ -7319,10 +7319,10 @@ nextBtn.onclick = () => {
   }
 };
 const wrapper = document.createElement("div");
-wrapper.className = "sb-next-step-wrapper";
-wrapper.innerHTML = '<span class="sb-next-step-label">Next steps</span>';
-wrapper.appendChild(nextBtn);
-el.appendChild(wrapper);
+  wrapper.className = "sb-next-step-wrapper";
+  wrapper.innerHTML = '<span class="sb-next-step-label">Next steps</span>';
+  wrapper.appendChild(nextBtn);
+  el.appendChild(wrapper);
     
     const shapeType = node.getAttr("shapeType") || node.name();
 
