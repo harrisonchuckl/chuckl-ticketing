@@ -5900,32 +5900,7 @@ if (mapLayer) mapLayer.batchDraw();
       switchBuilderTab("holds");
     }
   };
-  const wrapper = document.createElement("div");
-wrapper.className = "sb-next-step-wrapper";
-wrapper.innerHTML = '<span class="sb-next-step-label">Next steps</span>';
-
-const nextBtn = document.createElement("button");
-nextBtn.className = "sb-next-step-btn";
-nextBtn.textContent = "Add holds / Allocations  → ";
-nextBtn.onclick = () => {
-  if (ticketTypes.length === 0) {
-    alert("Please create at least one ticket type.");
-    return;
-  }
-  const seats = getAllSeatNodes();
-  const assignedCount = seats.filter(s => s.getAttr('sbTicketIds')?.length > 0 || s.getAttr('sbTicketId')).length;
-
-  if (assignedCount === 0) {
-    if (!confirm("You created tickets but haven't assigned them to any seats yet. Continue anyway?")) return;
-  }
-  if (confirm("Are you happy with your ticket setup?")) {
-    window.__TIXALL_COMPLETION_STATUS__.tickets = true;
-    updateCompletionUI();
-    switchBuilderTab("holds");
-  }
-};
-wrapper.appendChild(nextBtn);
-el.appendChild(wrapper);
+  el.appendChild(nextBtn);
 }
 
   function renderHoldsPanel() {
@@ -6082,11 +6057,7 @@ seats.forEach(seat => {
       switchBuilderTab("view");
     }
   };
-const wrapper = document.createElement("div");
-  wrapper.className = "sb-next-step-wrapper";
-  wrapper.innerHTML = '<span class="sb-next-step-label">Next steps</span>';
-  wrapper.appendChild(nextBtn); // Re-use existing nextBtn logic if it wasn't duplicated, otherwise rewrite it like above
-  el.appendChild(wrapper);
+  el.appendChild(nextBtn);
 }
 
   // 6. Weekly Box Office Reports (Only visible in Allocation section or generally at bottom)
@@ -6500,11 +6471,7 @@ const wrapper = document.createElement("div");
       alert("View step marked complete. Please finish any remaining red tabs before publishing.");
     }
   };
- const wrapper = document.createElement("div");
-  wrapper.className = "sb-next-step-wrapper";
-  wrapper.innerHTML = '<span class="sb-next-step-label">Next steps</span>';
-  wrapper.appendChild(nextBtn);
-  el.appendChild(wrapper);
+  el.appendChild(nextBtn);
 }
     // ---------- Selection inspector (right-hand panel) ----------
 
@@ -7318,11 +7285,7 @@ nextBtn.onclick = () => {
     switchBuilderTab("tickets");
   }
 };
-const wrapper = document.createElement("div");
-  wrapper.className = "sb-next-step-wrapper";
-  wrapper.innerHTML = '<span class="sb-next-step-label">Next steps</span>';
-  wrapper.appendChild(nextBtn);
-  el.appendChild(wrapper);
+el.appendChild(nextBtn);
     
     const shapeType = node.getAttr("shapeType") || node.name();
 
