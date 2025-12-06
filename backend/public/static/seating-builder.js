@@ -5900,7 +5900,32 @@ if (mapLayer) mapLayer.batchDraw();
       switchBuilderTab("holds");
     }
   };
-  el.appendChild(nextBtn);
+  const wrapper = document.createElement("div");
+wrapper.className = "sb-next-step-wrapper";
+wrapper.innerHTML = '<span class="sb-next-step-label">Next steps</span>';
+
+const nextBtn = document.createElement("button");
+nextBtn.className = "sb-next-step-btn";
+nextBtn.textContent = "Add holds / Allocations  → ";
+nextBtn.onclick = () => {
+  if (ticketTypes.length === 0) {
+    alert("Please create at least one ticket type.");
+    return;
+  }
+  const seats = getAllSeatNodes();
+  const assignedCount = seats.filter(s => s.getAttr('sbTicketIds')?.length > 0 || s.getAttr('sbTicketId')).length;
+
+  if (assignedCount === 0) {
+    if (!confirm("You created tickets but haven't assigned them to any seats yet. Continue anyway?")) return;
+  }
+  if (confirm("Are you happy with your ticket setup?")) {
+    window.__TIXALL_COMPLETION_STATUS__.tickets = true;
+    updateCompletionUI();
+    switchBuilderTab("holds");
+  }
+};
+wrapper.appendChild(nextBtn);
+el.appendChild(wrapper);
 }
 
   function renderHoldsPanel() {
@@ -6057,7 +6082,11 @@ seats.forEach(seat => {
       switchBuilderTab("view");
     }
   };
-  el.appendChild(nextBtn);
+const wrapper = document.createElement("div");
+wrapper.className = "sb-next-step-wrapper";
+wrapper.innerHTML = '<span class="sb-next-step-label">Next steps</span>';
+wrapper.appendChild(nextBtn);
+el.appendChild(wrapper);
 }
 
   // 6. Weekly Box Office Reports (Only visible in Allocation section or generally at bottom)
@@ -6471,7 +6500,11 @@ seats.forEach(seat => {
       alert("View step marked complete. Please finish any remaining red tabs before publishing.");
     }
   };
-  el.appendChild(nextBtn);
+  const wrapper = document.createElement("div");
+wrapper.className = "sb-next-step-wrapper";
+wrapper.innerHTML = '<span class="sb-next-step-label">Next steps</span>';
+wrapper.appendChild(nextBtn);
+el.appendChild(wrapper);
 }
     // ---------- Selection inspector (right-hand panel) ----------
 
@@ -7285,7 +7318,11 @@ nextBtn.onclick = () => {
     switchBuilderTab("tickets");
   }
 };
-el.appendChild(nextBtn);
+const wrapper = document.createElement("div");
+wrapper.className = "sb-next-step-wrapper";
+wrapper.innerHTML = '<span class="sb-next-step-label">Next steps</span>';
+wrapper.appendChild(nextBtn);
+el.appendChild(wrapper);
     
     const shapeType = node.getAttr("shapeType") || node.name();
 
