@@ -287,17 +287,18 @@ router.get("/builder/preview/:showId", (req, res) => {
     <!-- Brand + toolbar styling (inline so we can iterate quickly) -->
    <style>
     :root {
-        /* BRANDING - TIXALL */
+        /* BRANDING */
         --tixall-blue: #08B8E8;
         --tixall-blue-hover: #069ac4;
         --tixall-dark: #182828;
         
-        /* STRUCTURE */
-        --bg-main: #ffffff;
-        --bg-contrast: #f8fafc;
-        --border-subtle: #e2e8f0;
-        --text-main: #0f172a;
-        --text-muted: #64748b;
+        /* UI SURFACES */
+        --bg-app: #F8FAFC;
+        --bg-panel: #FFFFFF;
+        --border-color: #E2E8F0;
+        --text-main: #334155;
+        --text-light: #64748b;
+        --tixall-grey-soft: #F4F5F7;
         
         /* STATUS */
         --status-success: #10B981;
@@ -309,7 +310,7 @@ router.get("/builder/preview/:showId", (req, res) => {
         overflow: hidden;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         color: var(--text-main);
-        background: var(--bg-main);
+        background: var(--bg-app);
         -webkit-font-smoothing: antialiased;
     }
 
@@ -319,232 +320,214 @@ router.get("/builder/preview/:showId", (req, res) => {
         height: 100vh;
     }
 
-    /* --- TOP HEADER --- */
+    /* --- TOP HEADER (New Style) --- */
     .tickin-builder-topbar {
-        height: 60px;
+        height: 64px;
         flex-shrink: 0;
-        background: #ffffff;
-        border-bottom: 1px solid var(--border-subtle);
+        background: var(--bg-panel);
+        border-bottom: 1px solid var(--border-color);
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 0 20px;
+        padding: 0 24px;
         z-index: 20;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.03);
     }
-
-    .tb-topbar-left { display: flex; align-items: center; gap: 16px; }
-    
     .tb-logo-badge {
         background: var(--tixall-dark); color: #fff;
-        padding: 6px 10px; border-radius: 6px; font-weight: 700; font-size: 13px;
+        padding: 6px 12px; border-radius: 99px; font-weight: 700; font-size: 13px;
         display: flex; gap: 8px; align-items: center;
     }
     .tb-logo-dot { width: 8px; height: 8px; background: var(--tixall-blue); border-radius: 50%; }
-    
-    .tb-show-meta { display: flex; flex-direction: column; justify-content: center; }
-    .tb-show-title { font-size: 15px; font-weight: 700; margin: 0; line-height: 1.2; }
-    .tb-show-subtitle { font-size: 12px; color: var(--text-muted); }
+    .tb-show-title { font-size: 16px; font-weight: 700; color: #0f172a; margin: 0; }
+    .tb-show-subtitle { font-size: 13px; color: #64748b; margin-left: 12px; }
 
-    .tb-topbar-right { display: flex; gap: 10px; align-items: center; }
-
-    /* Header Buttons */
     .tb-topbar-btn {
-        height: 36px; padding: 0 14px;
-        border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;
+        height: 36px; padding: 0 16px; border-radius: 8px;
+        font-size: 13px; font-weight: 600; cursor: pointer;
         display: inline-flex; align-items: center; justify-content: center;
         transition: all 0.2s;
     }
-    .tb-btn-ghost { background: transparent; border: 1px solid var(--border-subtle); color: var(--text-main); }
-    .tb-btn-ghost:hover { background: var(--bg-contrast); border-color: #cbd5e1; }
+    .tb-btn-ghost { background: transparent; border: 1px solid var(--border-color); color: var(--text-main); }
+    .tb-btn-ghost:hover { background: #f1f5f9; }
     
-    .tb-btn-draft { background: #fff; border: 1px solid var(--border-subtle); color: var(--text-main); }
-    .tb-btn-draft:hover { background: #f1f5f9; }
+    .tb-btn-draft { background: #fff; border: 1px solid var(--border-color); color: var(--text-main); margin-right: 8px; }
+    .tb-btn-draft:hover { background: #f8fafc; border-color: #cbd5e1; }
 
     .tb-btn-publish { background: var(--status-success); border: 1px solid var(--status-success); color: #fff; }
     .tb-btn-publish:hover:not(:disabled) { background: #059669; }
     .tb-btn-publish:disabled { background: #e2e8f0; border-color: #e2e8f0; color: #94a3b8; cursor: not-allowed; }
+    
+    .tb-topbar-select { height: 36px; padding: 0 12px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 13px; }
 
-    .tb-topbar-select {
-        height: 36px; padding: 0 30px 0 10px; border-radius: 6px;
-        border: 1px solid var(--border-subtle); font-size: 13px; cursor: pointer;
-    }
-
-    /* --- MAIN LAYOUT (Fixed Grid) --- */
+    /* --- MAIN LAYOUT (Restored Grid to support Left Panel) --- */
     .tickin-builder-main {
-        display: flex; /* Flex is safer than Grid for this specific layout */
+        display: grid;
+        grid-template-columns: auto 1fr auto; /* Auto width for left rail */
         flex: 1;
         overflow: hidden;
+        min-height: 0;
     }
 
-    /* --- LEFT RAIL (Fixed Width) --- */
+    /* --- LEFT RAIL (RESTORED TO ORIGINAL) --- */
     .tb-left-rail {
-        width: 72px; /* Fixed narrow width */
-        flex-shrink: 0;
-        background: #ffffff;
-        border-right: 1px solid var(--border-subtle);
-        display: flex; flex-direction: column; align-items: center;
-        padding-top: 16px;
-        overflow-y: auto;
-        z-index: 10;
+        background: linear-gradient(180deg, #f7fafc, #f2f5f9);
+        border-right: 1px solid var(--border-color);
+        overflow: visible;
+        padding-inline: 4px;
+        display: block;
+        width: auto;
+    }
+    .tb-left-scroll { padding: 18px 14px 20px; overflow: visible; }
+    .tb-left-group { margin-bottom: 10px; }
+    
+    .tb-left-group-label {
+        font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+        color: #7a828f; margin: 0 0 8px; text-align: center;
     }
 
-    /* Tool Buttons */
+    /* Original Tool Button Style (Big Icon Top, Text Bottom) */
     .tb-left-item.tool-button {
-        width: 56px; min-height: 56px;
-        border: 1px solid transparent; background: transparent;
-        display: flex; flex-direction: column; align-items: center; justify-content: center;
-        margin-bottom: 8px; border-radius: 8px; cursor: pointer;
-        color: var(--text-muted);
+        flex-direction: column;
+        align-items: center; justify-content: flex-start; text-align: center;
+        padding: 12px 4px 10px; gap: 6px;
+        border-radius: 18px;
+        background: transparent !important; border: 0 !important; box-shadow: none !important;
+        min-height: 72px; width: 100%;
+        cursor: pointer;
+        color: var(--text-main);
     }
-    .tb-left-item.tool-button:hover { background: var(--bg-contrast); color: var(--tixall-blue); }
-    .tb-left-item.tool-button.is-active {
-        background: #eff6ff; border-color: #dbeafe; color: var(--tixall-blue);
-    }
-    .tb-tool-icon { width: 24px; height: 24px; object-fit: contain; margin-bottom: 4px; }
-    .tb-left-label { font-size: 10px; font-weight: 600; text-align: center; line-height: 1.1; }
+    /* Hover/Active States */
+    .tb-left-item.tool-button:hover { background: transparent !important; opacity: 0.8; }
+    .tb-left-item.tool-button img.tb-tool-icon { width: 44px; height: 44px; display: block; flex-shrink: 0; object-fit: contain; }
 
-    /* Flyouts (Popups for tools) */
-    .tool-group { position: relative; width: 100%; display: flex; justify-content: center; }
-    .tool-flyout-toggle {
-        position: absolute; right: 0; top: 50%; transform: translateY(-50%);
-        font-size: 10px; color: #94a3b8; cursor: pointer; width: 16px; text-align: center;
+    /* Icon Swapping Logic */
+    .tb-left-item.tool-button img.icon-dark { display: block; }
+    .tb-left-item.tool-button img.icon-blue { display: none; }
+    .tb-left-item.tool-button.is-active img.icon-dark { display: none; }
+    .tb-left-item.tool-button.is-active img.icon-blue { display: block; }
+
+    .tb-left-item.tool-button .tb-left-label {
+        display: block; font-size: 11px; line-height: 1.2; font-weight: 500;
+        color: var(--text-main); white-space: normal; text-align: center;
+        max-width: 80px; word-break: break-word;
     }
+
+    /* Flyouts (Original Positioning) */
+    .tool-group { position: relative; margin-bottom: 6px; display: block; }
+    .tool-group .tool-root { width: 100%; min-height: 72px; }
+    .tool-flyout-toggle {
+        border: 0; background: transparent; padding: 0; cursor: pointer; color: #7a828f;
+        position: absolute; right: -10px; top: 50%; transform: translateY(-50%);
+        width: 26px; height: 26px; border-radius: 999px; display: flex; align-items: center; justify-content: center;
+    }
+    .tool-flyout-toggle:hover { background: rgba(8, 184, 232, 0.06); color: var(--text-main); }
     .tool-flyout {
-        position: absolute; left: 65px; top: 0;
-        background: #fff; border: 1px solid var(--border-subtle);
-        border-radius: 8px; padding: 8px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        display: none; flex-direction: column; gap: 4px; min-width: 150px; z-index: 999;
+        position: absolute; left: 100%; top: 0; display: none;
+        flex-direction: column; gap: 4px; padding: 6px;
+        background: #ffffff; border-radius: 12px;
+        box-shadow: 0 12px 32px rgba(15,23,42,0.20); border: 1px solid rgba(148,163,184,0.35);
+        z-index: 9999; min-width: 170px;
     }
     .tool-group.is-open .tool-flyout { display: flex; }
+    
+    /* List items inside flyout (Horizontal layout) */
     .tool-flyout .tb-left-item.tool-button {
-        width: 100%; min-height: 40px; flex-direction: row; justify-content: flex-start; padding: 0 8px;
+        min-height: 0; padding: 8px 10px; flex-direction: row;
+        justify-content: flex-start; text-align: left; border-radius: 12px; gap: 8px;
     }
-    .tool-flyout .tb-left-item.tool-button .tb-left-label { margin-left: 10px; font-size: 13px; }
-    .tool-flyout .tb-left-item.tool-button img { width: 20px; height: 20px; margin: 0; }
+    .tool-flyout .tb-left-item.tool-button img.tb-tool-icon { width: 24px; height: 24px; }
+    .tool-flyout .tb-left-item.tool-button .tb-left-label { max-width: none; white-space: nowrap; }
 
-    /* --- CENTER CANVAS AREA --- */
+    /* Action Buttons (Undo/Redo) */
+    .tb-left-item {
+        border: 0; background: transparent; border-radius: 999px; padding: 8px 10px;
+        display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+        cursor: pointer; font-size: 12px; color: var(--text-main); transition: background 0.15s ease;
+    }
+    .tb-left-item:hover { background: rgba(8, 184, 232, 0.06); }
+    .tb-left-icon {
+        width: 26px; height: 26px; border-radius: 999px; background: var(--tixall-grey-soft);
+        display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .tb-left-item.tb-left-item-danger { color: #b3261e; }
+    .tb-left-item.tb-left-item-danger .tb-left-icon { background: #ffeceb; }
+
+
+    /* --- CENTER CANVAS (Floating Tabs) --- */
     .tb-center {
-        flex: 1;
-        position: relative;
-        background: #f1f5f9; /* Subtle gray contrast for map area */
-        overflow: hidden;
-        display: flex; flex-direction: column;
+        display: flex; flex-direction: column; min-height: 0; position: relative;
+        background: var(--bg-app);
     }
-    
-    /* FLOATING TABS (The feature you liked) */
     .tb-center-header {
-        position: absolute;
-        top: 20px; left: 50%; transform: translateX(-50%);
-        z-index: 100;
-        display: flex; align-items: center; justify-content: center;
-        pointer-events: none; /* Allow clicks to pass through around tabs */
+        position: absolute; top: 24px; left: 0; right: 0;
+        height: 40px; display: flex; justify-content: center; align-items: center;
+        pointer-events: none; z-index: 50;
     }
-    
     .tb-tabs {
-        pointer-events: auto;
-        background: #ffffff;
-        padding: 4px;
-        border-radius: 99px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-        border: 1px solid rgba(0,0,0,0.05);
-        display: flex; gap: 4px;
+        pointer-events: auto; background: #ffffff; padding: 5px; border-radius: 99px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); display: flex; gap: 4px;
+        border: 1px solid var(--border-color);
     }
-    
     .tb-tab {
-        padding: 8px 20px;
-        border-radius: 99px;
-        border: none;
-        background: transparent;
-        font-size: 13px; font-weight: 600; color: var(--text-muted);
-        cursor: pointer;
-        transition: all 0.2s;
+        padding: 8px 24px; border-radius: 99px; border: none; background: transparent;
+        font-size: 13px; font-weight: 600; color: var(--text-light); cursor: pointer; transition: all 0.2s;
     }
-    
-    .tb-tab:hover { color: var(--text-main); background: #f8fafc; }
-    
-    /* ACTIVE TAB - TIXALL BLUE (Your Request) */
-    .tb-tab.is-active {
-        background: var(--tixall-blue);
-        color: #ffffff;
-        box-shadow: 0 2px 4px rgba(8, 184, 232, 0.3);
-    }
-    
-    /* COMPLETED TAB - Green Tick */
-    .tb-tab.is-complete {
-        /* We keep text dark if not active, or white if active */
-    }
-    .tb-tab.is-complete::after { 
-        content: ' ✓'; font-size: 11px; margin-left: 4px; font-weight: 800;
-        color: var(--status-success); 
-    }
-    /* If active and complete, tick is white */
-    .tb-tab.is-active.is-complete::after { color: #ffffff; }
+    .tb-tab:hover { color: var(--tixall-dark); background: #f8fafc; }
 
-    /* Zoom Controls (Floating Top Right) */
+    /* ACTIVE TAB = TIXALL BLUE BACKGROUND */
+    .tb-tab.is-active {
+        background: var(--tixall-blue); color: #ffffff;
+        box-shadow: 0 2px 4px rgba(8, 184, 232, 0.25);
+    }
+    
+    /* Completed Tabs */
+    .tb-tab.is-complete::after { content: ' ✓'; font-size: 11px; margin-left: 6px; color: var(--status-success); font-weight: 800; }
+    .tb-tab.is-active.is-complete::after { color: #fff; }
+
+    /* Zoom Controls */
     .tb-zoom-toolbar {
-        position: absolute; top: 20px; right: 20px;
-        background: #fff; border-radius: 8px; border: 1px solid var(--border-subtle);
-        display: flex; box-shadow: 0 2px 8px rgba(0,0,0,0.05); z-index: 100; pointer-events: auto;
+        position: absolute; top: 24px; right: 24px;
+        background: #fff; border-radius: 8px; border: 1px solid var(--border-color);
+        display: flex; box-shadow: 0 2px 8px rgba(0,0,0,0.05); z-index: 50; pointer-events: auto;
     }
     .tb-zoom-btn { width: 32px; height: 32px; border: none; background: #fff; cursor: pointer; color: var(--text-main); }
     .tb-zoom-btn:hover { background: #f8fafc; }
-    .tb-zoom-label { width: 48px; font-size: 12px; font-weight: 600; border-left: 1px solid #eee; border-right: 1px solid #eee; }
+    .tb-zoom-label { width: 44px; font-size: 12px; font-weight: 600; border-left: 1px solid #f1f5f9; border-right: 1px solid #f1f5f9; }
 
-    /* Canvas Containers */
-    .tb-tab-panels { flex: 1; position: relative; width: 100%; height: 100%; }
+    .tb-tab-panels { flex: 1; position: relative; }
     .tb-tab-panel { display: none; width: 100%; height: 100%; }
     .tb-tab-panel.is-active { display: block; }
-    
-    /* Ensure Konva is Visible */
     #app { width: 100%; height: 100%; }
     #app > div { z-index: 1 !important; }
 
-    /* --- RIGHT PANEL (Inspector) --- */
+    /* --- RIGHT PANEL (New Clean Style) --- */
     .tb-side-panel {
-        width: 360px; /* Fixed width */
-        flex-shrink: 0;
-        background: #ffffff;
-        border-left: 1px solid var(--border-subtle);
-        display: flex; flex-direction: column;
-        padding: 20px;
-        overflow-y: auto;
+        background: var(--bg-panel);
+        border-left: 1px solid var(--border-color);
+        width: 360px; min-width: 360px;
+        padding: 24px; overflow-y: auto;
         z-index: 15;
     }
-    
-    .tb-side-section { margin-bottom: 24px; }
-    
+    .tb-side-section { margin-bottom: 12px; }
     .tb-side-heading {
-        font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;
-        font-weight: 700; color: var(--text-muted); margin-bottom: 12px;
-        border-bottom: 1px solid #f1f5f9; padding-bottom: 8px;
-    }
-    
-    /* Next Step Button (Tixall Blue) */
-    .sb-next-step-btn {
-        width: 100%;
-        margin-top: 24px;
-        padding: 14px;
-        border-radius: 8px;
-        border: none;
-        background: var(--tixall-blue);
-        color: #ffffff;
-        font-weight: 700; font-size: 14px;
-        cursor: pointer;
-        box-shadow: 0 4px 6px rgba(8, 184, 232, 0.2);
-        transition: transform 0.1s, box-shadow 0.1s;
-    }
-    .sb-next-step-btn:hover {
-        background: var(--tixall-blue-hover);
-        transform: translateY(-1px);
-        box-shadow: 0 6px 12px rgba(8, 184, 232, 0.3);
+        font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+        color: #64748b; margin-bottom: 12px; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px;
     }
 
     /* Interaction Fixes */
     .tb-empty-panel { pointer-events: none !important; }
     #tb-tab-tickets, #tb-tab-holds, #tb-tab-view { pointer-events: none !important; }
     #tb-tab-map { pointer-events: auto !important; }
-
+    
+    /* Next Step Button */
+    .sb-next-step-btn {
+        width: 100%; margin-top: 24px; padding: 12px;
+        background: var(--tixall-blue); color: white; border: none; border-radius: 8px;
+        font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+        cursor: pointer; box-shadow: 0 4px 6px -1px rgba(8, 184, 232, 0.2); transition: all 0.2s;
+    }
+    .sb-next-step-btn:hover { background: var(--tixall-blue-hover); transform: translateY(-1px); }
 </style>
   </head>
   <body class="tickin-builder-body">
