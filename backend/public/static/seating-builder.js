@@ -30,14 +30,63 @@
   }
 
 function injectSeatmapStyles() {
-  if (document.getElementById("sb-seatmap-style")) return;
-  const style = document.createElement("style");
-  style.id = "sb-seatmap-style";
-  style.textContent = `
-    .sb-layout { font-family: inherit; width: 100%; height: 100%; }
-    
+    if (document.getElementById("sb-seatmap-style")) return;
+    const style = document.createElement("style");
+    style.id = "sb-seatmap-style";
+    style.textContent = `
+    .sb-layout { font-family: inherit; width: 100%; height: 100%; overflow: hidden; }
+
+/* Add to injectSeatmapStyles string */
+    .tb-tab.is-error::after {
+    content: " ✕"; /* or use an SVG icon */
+    color: #ef4444;
+    font-weight: bold;
+    margin-left: 6px;
+}
+.tb-tab.is-complete::after {
+    content: " ✓";
+    color: #10b981;
+    font-weight: bold;
+    margin-left: 6px;
+}
+
     /* INSPECTOR / SELECTION PANEL */
-    #sb-inspector { background: transparent; padding: 0; }
+    /* Updated to allow scrolling content behind fixed footer */
+    #sb-inspector { 
+        background: transparent; 
+        padding: 16px 16px 24px; 
+        flex: 1 1 auto; 
+        overflow-y: auto; 
+        min-height: 0; /* Important for flex scroll */
+    }
+    
+    /* NEW: FIXED FOOTER */
+    #sb-sidebar-footer {
+        flex: 0 0 auto;
+        padding: 16px;
+        background: #fff;
+        border-top: 1px solid #e2e8f0;
+        z-index: 20;
+        box-shadow: 0 -4px 6px -1px rgba(0,0,0,0.05);
+    }
+
+    .sb-validation-list {
+        margin-bottom: 12px;
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        border-radius: 6px;
+        padding: 10px;
+    }
+    .sb-validation-error {
+        color: #b91c1c;
+        font-size: 12px;
+        line-height: 1.4;
+        margin-bottom: 4px;
+        display: flex;
+        align-items: start;
+        gap: 6px;
+    }
+    .sb-validation-error:last-child { margin-bottom: 0; }
     .sb-inspector-title {
         font-size: 14px; font-weight: 700; color: #0f172a; 
         text-transform: uppercase; letter-spacing: 0.05em;
@@ -170,52 +219,51 @@ function injectSeatmapStyles() {
 
   // ---------- Ensure sidebar DOM (seat count + inspector) ----------
 
-    function ensureSidebarDom() {
+    // ---------- Ensure sidebar DOM (seat count + inspector + footer) ----------
+function ensureSidebarDom() {
     const parent = container.parentNode;
     if (!parent) return;
-
     let wrapper = parent.querySelector(".sb-layout");
     if (!wrapper) {
-      wrapper = document.createElement("div");
-      wrapper.className = "sb-layout";
-      wrapper.style.display = "flex";
-      wrapper.style.alignItems = "stretch";
-      wrapper.style.width = "100%";
-      // 🔒 Lock the whole builder to the viewport height so the left side
-      // (tabs + map) stays fixed while only the right sidebar scrolls.
-      wrapper.style.height = "100vh";
-      wrapper.style.boxSizing = "border-box";
-
-      parent.insertBefore(wrapper, container);
-      wrapper.appendChild(container);
+        wrapper = document.createElement("div");
+        wrapper.className = "sb-layout";
+        wrapper.style.display = "flex";
+        wrapper.style.alignItems = "stretch";
+        wrapper.style.width = "100%";
+        wrapper.style.height = "100vh"; // Fixed height
+        wrapper.style.boxSizing = "border-box";
+        parent.insertBefore(wrapper, container);
+        wrapper.appendChild(container);
     }
-
+    
     let sidebarCol = wrapper.querySelector(".sb-layout-sidebar");
     if (!sidebarCol) {
-      sidebarCol = document.createElement("div");
-      sidebarCol.className = "sb-layout-sidebar";
-      sidebarCol.style.flex = "0 0 360px";
-      sidebarCol.style.maxWidth = "360px";
-      sidebarCol.style.borderLeft = "1px solid #e5e7eb";
-      sidebarCol.style.background = "#f9fafb";
-      sidebarCol.style.display = "flex";
-      sidebarCol.style.flexDirection = "column";
-      sidebarCol.style.boxSizing = "border-box";
+        sidebarCol = document.createElement("div");
+        sidebarCol.className = "sb-layout-sidebar";
+        // Fixed width, Flex column
+        sidebarCol.style.flex = "0 0 360px";
+        sidebarCol.style.maxWidth = "360px";
+        sidebarCol.style.borderLeft = "1px solid #e5e7eb";
+        sidebarCol.style.background = "#f9fafb";
+        sidebarCol.style.display = "flex";
+        sidebarCol.style.flexDirection = "column"; 
+        sidebarCol.style.height = "100%"; // Full height
+        sidebarCol.style.boxSizing = "border-box";
 
-      const inspectorDiv = document.createElement("div");
-      inspectorDiv.id = "sb-inspector";
-      inspectorDiv.style.flex = "1 1 auto";
-      inspectorDiv.style.overflowY = "auto";
-      inspectorDiv.style.padding = "16px 16px 24px";
-      inspectorDiv.style.boxSizing = "border-box";
+        // 1. Scrollable Content Area
+        const inspectorDiv = document.createElement("div");
+        inspectorDiv.id = "sb-inspector";
+        // Styling moved to CSS class above for cleanliness
+        sidebarCol.appendChild(inspectorDiv);
 
-      sidebarCol.appendChild(inspectorDiv);
+        // 2. Fixed Footer Area
+        const footerDiv = document.createElement("div");
+        footerDiv.id = "sb-sidebar-footer";
+        sidebarCol.appendChild(footerDiv);
 
-      wrapper.appendChild(sidebarCol);
+        wrapper.appendChild(sidebarCol);
     }
-  }
-
-
+}
 
   // ---------- Config ----------
 
@@ -304,6 +352,160 @@ let holdReportSettings = {
   holds: false,
   view: false
 };
+
+  // --- Validation State ---
+window.__TIXALL_TAB_VALIDATION__ = {
+    map: { valid: false, errors: [] },
+    tickets: { valid: false, errors: [] },
+    holds: { valid: true, errors: [] }, // Usually permissive
+    view: { valid: true, errors: [] }   // Usually permissive
+};
+
+function validateCurrentTabLogic(tab) {
+    const errors = [];
+    
+    // 1. MAP VALIDATION
+    if (tab === 'map') {
+        const stageNode = mapLayer ? mapLayer.findOne('Group[shapeType="stage"]') : null;
+        if (!stageNode) {
+            errors.push("There is no STAGE. Please add a stage from the left toolbar.");
+        }
+        
+        // Check for duplicates
+        refreshSeatMetadata(); // Update duplicate set
+        if (duplicateSeatRefs && duplicateSeatRefs.size > 0) {
+            errors.push(`Duplicate seat numbers detected (${duplicateSeatRefs.size}). Identifiers must be unique.`);
+        }
+
+        const seats = getAllSeatNodes();
+        if (seats.length === 0) {
+            errors.push("The map has no seats.");
+        }
+    }
+
+    // 2. TICKETS VALIDATION
+    if (tab === 'tickets') {
+        const seats = getAllSeatNodes();
+        let unassignedCount = 0;
+        seats.forEach(s => {
+            const tIds = s.getAttr("sbTicketIds");
+            if (!tIds || tIds.length === 0) unassignedCount++;
+        });
+
+        if (unassignedCount > 0) {
+            errors.push(`${unassignedCount} seats have not been allocated to a ticket type.`);
+        }
+        
+        if (ticketTypes.length === 0) {
+            errors.push("No ticket types created.");
+        }
+    }
+
+    // 3. HOLDS (Permissive, but good to check)
+    // 4. VIEW (Permissive)
+
+    return { valid: errors.length === 0, errors };
+}
+
+// Update the Top Bar visuals (Ticks vs Crosses)
+function updateCompletionUI() {
+    const s = window.__TIXALL_COMPLETION_STATUS__;
+    const v = window.__TIXALL_TAB_VALIDATION__;
+
+    const tabs = document.querySelectorAll('.tb-tab');
+    tabs.forEach(t => {
+        const key = t.getAttribute('data-tab');
+        
+        // Remove old classes
+        t.classList.remove('is-complete', 'is-error');
+        
+        // Logic: 
+        // If status is TRUE -> Check Valid. 
+        // If Valid -> Green Tick. If Invalid -> Red Cross.
+        if (s[key]) {
+            if (v[key].valid) {
+                t.classList.add('is-complete'); // Green Tick CSS
+            } else {
+                t.classList.add('is-error'); // You'll need CSS for this (Red X)
+            }
+        }
+    });
+
+    // Update Publish Button
+    const btnPublish = document.getElementById('tb-btn-publish');
+    // Allow publish if Map is valid AND Tickets are valid (holds/view optional usually)
+    const canPublish = s.map && v.map.valid && s.tickets && v.tickets.valid;
+    
+    if (btnPublish) {
+        btnPublish.disabled = !canPublish;
+        btnPublish.title = canPublish ? "Ready to go live" : "Fix errors in Map/Tickets to publish";
+    }
+}
+
+// Renders the Fixed Footer with the Blue Button
+function renderSidebarFooter() {
+    const footer = document.getElementById("sb-sidebar-footer");
+    if (!footer) return;
+    
+    footer.innerHTML = ""; // Clear previous
+
+    const tab = activeMainTab;
+    const validation = window.__TIXALL_TAB_VALIDATION__[tab];
+    
+    // 1. Render Errors (if marked complete but invalid)
+    if (window.__TIXALL_COMPLETION_STATUS__[tab] && !validation.valid && validation.errors.length > 0) {
+        const errBox = document.createElement("div");
+        errBox.className = "sb-validation-list";
+        validation.errors.forEach(err => {
+            const row = document.createElement("div");
+            row.className = "sb-validation-error";
+            row.innerHTML = `<span>⚠️</span> <span>${err}</span>`;
+            errBox.appendChild(row);
+        });
+        footer.appendChild(errBox);
+    }
+
+    // 2. Render Button
+    const btn = document.createElement("button");
+    btn.className = "sb-btn-primary-large";
+    btn.style.marginTop = "0"; // Override class margin
+    btn.textContent = "Mark This Section Complete";
+    
+    btn.onclick = () => {
+        // Run Validation
+        const res = validateCurrentTabLogic(tab);
+        
+        // Save Validation State
+        window.__TIXALL_TAB_VALIDATION__[tab] = res;
+        
+        // Mark as "Visited/Complete" regardless of errors (as requested)
+        window.__TIXALL_COMPLETION_STATUS__[tab] = true;
+        
+        // Update UI (Top Bar Ticks/Crosses)
+        updateCompletionUI();
+        
+        // Re-render footer to show errors if they exist now
+        renderSidebarFooter();
+
+        // Move to Next Tab
+        const tabOrder = ['map', 'tickets', 'holds', 'view'];
+        const idx = tabOrder.indexOf(tab);
+        if (idx > -1 && idx < tabOrder.length - 1) {
+            const nextTab = tabOrder[idx + 1];
+            // Simulate click on top bar
+            switchBuilderTab(nextTab); 
+        } else if (idx === tabOrder.length - 1) {
+            // Last tab (View)
+            if (res.valid) {
+               alert("All sections complete. You can now Publish.");
+            } else {
+               alert("Section marked complete, but please check the errors listed.");
+            }
+        }
+    };
+
+    footer.appendChild(btn);
+}
 
 function updateCompletionUI() {
   const s = window.__TIXALL_COMPLETION_STATUS__;
@@ -5661,6 +5863,14 @@ function renderTicketingPanel() {
   });
 
   el.appendChild(addBtn);
+
+  // Add spacer so content doesn't sit flush against footer
+    const spacer = document.createElement("div");
+    spacer.style.height = "40px";
+    el.appendChild(spacer);
+
+    // CALL THE FOOTER RENDERER
+    renderSidebarFooter(); 
 }
   
 function renderHoldsPanel() {
@@ -5878,6 +6088,11 @@ function renderHoldsPanel() {
     allocCount,
     "External partners"
   ));
+  const spacer = document.createElement("div");
+    spacer.style.height = "40px";
+    el.appendChild(spacer);
+
+    renderSidebarFooter();
 }
   
 function renderViewFromSeatsPanel() {
@@ -6180,6 +6395,12 @@ function renderViewFromSeatsPanel() {
     }
   };
   el.appendChild(nextBtn);
+const spacer = document.createElement("div");
+    spacer.style.height = "40px";
+    el.appendChild(spacer);
+
+    renderSidebarFooter();
+  
 }
 function clearAssignmentsFromGroup(group) {
   if (!group || typeof group.find !== 'function') return;
@@ -6504,6 +6725,13 @@ function renderInspector(node) {
     lockPanel.appendChild(btnUnlock);
     lockPanel.appendChild(btnUnlockAll);
     el.appendChild(lockPanel);
+
+    const spacer = document.createElement("div");
+    spacer.style.height = "40px";
+    el.appendChild(spacer);
+
+    renderSidebarFooter();
+    
   }
 
   // =========================================================
