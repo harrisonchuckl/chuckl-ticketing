@@ -406,13 +406,11 @@ function validateCurrentTabLogic(tab) {
     return { valid: errors.length === 0, errors };
 }
 
-// Update the Top Bar visuals (Ticks vs Crosses)
-// Update the Top Bar visuals (Ticks vs Crosses)
 function updateCompletionUI() {
     const s = window.__TIXALL_COMPLETION_STATUS__;
     const v = window.__TIXALL_TAB_VALIDATION__;
-
     const tabs = document.querySelectorAll('.tb-tab');
+    
     tabs.forEach(t => {
         const key = t.getAttribute('data-tab');
         
@@ -420,13 +418,12 @@ function updateCompletionUI() {
         t.classList.remove('is-complete', 'is-error');
         
         // 2. Logic: 
-        // Only apply icons if the section has been visited/marked done (s[key] is true)
         if (s[key]) {
-            // Check if the validation object exists AND implies valid is true
+            // Check validation status
             if (v[key] && v[key].valid) {
-                t.classList.add('is-complete'); // Green Tick CSS
+                t.classList.add('is-complete'); // Green Tick
             } else {
-                t.classList.add('is-error');    // Red Cross CSS
+                t.classList.add('is-error');    // Red Cross
             }
         }
     });
@@ -436,7 +433,6 @@ function updateCompletionUI() {
     const btnDraft = document.getElementById('tb-btn-draft');
     
     // Allow publish ONLY if Map and Tickets are marked complete AND valid
-    // (Holds and View are often optional, but we check map/tickets strictly)
     const mapOk = s.map && v.map && v.map.valid;
     const tixOk = s.tickets && v.tickets && v.tickets.valid;
     const canPublish = mapOk && tixOk; 
@@ -444,95 +440,14 @@ function updateCompletionUI() {
     if (btnPublish) {
         btnPublish.disabled = !canPublish;
         btnPublish.title = canPublish ? "Ready to go live" : "Fix errors in Map/Tickets to publish";
-        // Toggle visual disabled state
         if (!canPublish) btnPublish.classList.add('is-disabled');
         else btnPublish.classList.remove('is-disabled');
     }
     
     if (btnDraft) {
-        // Draft is always available
         btnDraft.style.display = "inline-block";
     }
-}
-// Renders the Fixed Footer with the Blue Button
-function renderSidebarFooter() {
-    const footer = document.getElementById("sb-sidebar-footer");
-    if (!footer) return;
-
-    footer.innerHTML = "";
-    const tab = activeMainTab;
-    const validation = window.__TIXALL_TAB_VALIDATION__[tab];
-
-    // 1. Render Errors
-    if (window.__TIXALL_COMPLETION_STATUS__[tab] && !validation.valid && validation.errors.length > 0) {
-        const errBox = document.createElement("div");
-        errBox.className = "sb-validation-list";
-        validation.errors.forEach(err => {
-            const row = document.createElement("div");
-            row.className = "sb-validation-error";
-            row.innerHTML = `<span> ⚠️ </span> <span>${err}</span>`;
-            errBox.appendChild(row);
-        });
-        footer.appendChild(errBox);
-    }
-
-    // 2. Render Button
-    const btn = document.createElement("button");
-    btn.className = "sb-btn-primary-large";
-    btn.style.width = "100%";
-    btn.textContent = "Mark This Section Complete";
-
-    btn.onclick = () => {
-        const res = validateCurrentTabLogic(tab);
-        window.__TIXALL_TAB_VALIDATION__[tab] = res;
-        window.__TIXALL_COMPLETION_STATUS__[tab] = true;
-        
-        updateCompletionUI();
-        renderSidebarFooter();
-
-        const tabOrder = ['map', 'tickets', 'holds', 'view'];
-        const idx = tabOrder.indexOf(tab);
-        if (idx > -1 && idx < tabOrder.length - 1) {
-            switchBuilderTab(tabOrder[idx + 1]); 
-        } else if (idx === tabOrder.length - 1) {
-            if (res.valid) {
-               alert("All sections complete. You can now Publish.");
-            } else {
-               alert("Section marked complete, but please check the errors listed.");
-            }
-        }
-    };
-
-    footer.appendChild(btn);
-}
-  
-  function updateCompletionUI() {
-  const s = window.__TIXALL_COMPLETION_STATUS__;
-  
-  // 1. Update Tabs
-  const tabs = document.querySelectorAll('.tb-tab');
-  tabs.forEach(t => {
-    const key = t.getAttribute('data-tab');
-    if (s[key] || (key === 'map' && s.map) || (key === 'tickets' && s.tickets) || (key === 'holds' && s.holds) || (key === 'view' && s.view)) {
-      t.classList.toggle('is-complete', !!s[key]);
-    }
-  });
-
-  // 2. Update Header Buttons
-  const btnPublish = document.getElementById('tb-btn-publish');
-  const btnDraft = document.getElementById('tb-btn-draft');
-  const allComplete = s.map && s.tickets && s.holds && s.view;
-
-  if (btnPublish) {
-    btnPublish.disabled = !allComplete;
-    btnPublish.title = allComplete ? "Ready to go live" : "Complete all tabs to publish";
-  }
-  if (btnDraft) {
-    btnDraft.style.display = allComplete ? "none" : "inline-block";
-    btnPublish.style.display = allComplete ? "inline-block" : "inline-block"; // Keep publish visible but disabled if not ready
-  }
-}
-
+} 
 // Logic to navigate to a specific tab by name
 function switchBuilderTab(tabName) {
   const tabBtn = document.querySelector(`.tb-tab[data-tab="${tabName}"]`);
