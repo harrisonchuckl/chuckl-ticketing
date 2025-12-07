@@ -6007,7 +6007,7 @@ function renderViewFromSeatsPanel() {
     intro.innerHTML = `Click any seat on the map to upload a view image.`;
     body.appendChild(intro);
 
-    // B. List of Existing Views
+    // B. List of Existing Views (INSIDE CARD BODY)
     if (viewSeats.length > 0) {
       const listDiv = document.createElement("div");
       listDiv.style.display = "flex";
@@ -6039,7 +6039,7 @@ function renderViewFromSeatsPanel() {
         const btnEdit = document.createElement("button");
         btnEdit.className = "tool-button";
         btnEdit.style.cssText = "width:28px; height:28px; padding:0;";
-        btnEdit.innerHTML = "✎"; // Simple pencil icon or SVG
+        btnEdit.innerHTML = "✎"; // Simple pencil icon
         btnEdit.title = "Change Image";
         btnEdit.onclick = (e) => {
           e.stopPropagation();
@@ -6116,7 +6116,7 @@ function renderViewFromSeatsPanel() {
     formDiv.querySelectorAll("input, textarea").forEach(i => i.addEventListener("click", e => e.stopPropagation()));
     body.appendChild(formDiv);
 
-    // B. List of Existing Info (Grouped)
+    // B. List of Existing Info (INSIDE CARD BODY)
     const labels = Object.keys(infoGroups).sort();
     if (labels.length > 0) {
       const listDiv = document.createElement("div");
@@ -6166,7 +6166,7 @@ function renderViewFromSeatsPanel() {
 
   // 4. Next Step Button
   const nextBtn = document.createElement("button");
-  nextBtn.className = "sb-next-step-btn"; // Assuming you have this CSS class or similar
+  nextBtn.className = "sb-next-step-btn";
   nextBtn.style.cssText = "width:100%; margin-top:16px; padding:12px; background:#10b981; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer;";
   nextBtn.textContent = "Mark View Step Complete";
   nextBtn.onclick = () => {
