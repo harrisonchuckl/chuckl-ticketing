@@ -10952,13 +10952,12 @@ window.__TIXALL_SET_TAB_MODE__ = function (tab) {
   updateUndoRedoButtons && updateUndoRedoButtons();
 
   refreshSeatMetadata();
-  applySeatVisuals();
-
-  // eslint-disable-next-line no-console
-  console.log("[seatmap] loadKonvaLayoutIntoStage: layout loaded");
-
-  return true;
+    applySeatVisuals();
+// eslint-disable-next-line no-console
+console.log("[seatmap] loadKonvaLayoutIntoStage: layout loaded");
+return true;
 }
 
-      
- })();
+})();
+ 
+ 
