@@ -222,9 +222,12 @@ function injectSeatmapStyles() {
   // ---------- Ensure sidebar DOM (seat count + inspector) ----------
 
     // ---------- Ensure sidebar DOM (seat count + inspector + footer) ----------
+// ---------- Ensure sidebar DOM (seat count + inspector + footer) ----------
 function ensureSidebarDom() {
     const parent = container.parentNode;
     if (!parent) return;
+
+    // 1. Ensure Main Wrapper
     let wrapper = parent.querySelector(".sb-layout");
     if (!wrapper) {
         wrapper = document.createElement("div");
@@ -232,41 +235,52 @@ function ensureSidebarDom() {
         wrapper.style.display = "flex";
         wrapper.style.alignItems = "stretch";
         wrapper.style.width = "100%";
-        wrapper.style.height = "100vh"; // Fixed height
+        wrapper.style.height = "100vh"; 
         wrapper.style.boxSizing = "border-box";
         parent.insertBefore(wrapper, container);
         wrapper.appendChild(container);
     }
-    
+
+    // 2. Ensure Sidebar Column
     let sidebarCol = wrapper.querySelector(".sb-layout-sidebar");
     if (!sidebarCol) {
         sidebarCol = document.createElement("div");
         sidebarCol.className = "sb-layout-sidebar";
-        // Fixed width, Flex column
-        sidebarCol.style.flex = "0 0 360px";
-        sidebarCol.style.maxWidth = "360px";
         sidebarCol.style.borderLeft = "1px solid #e5e7eb";
         sidebarCol.style.background = "#f9fafb";
-        sidebarCol.style.display = "flex";
-        sidebarCol.style.flexDirection = "column"; 
-        sidebarCol.style.height = "100%"; // Full height
-        sidebarCol.style.boxSizing = "border-box";
-
-        // 1. Scrollable Content Area
-        const inspectorDiv = document.createElement("div");
-        inspectorDiv.id = "sb-inspector";
-        // Styling moved to CSS class above for cleanliness
-        sidebarCol.appendChild(inspectorDiv);
-
-        // 2. Fixed Footer Area
-        const footerDiv = document.createElement("div");
-        footerDiv.id = "sb-sidebar-footer";
-        sidebarCol.appendChild(footerDiv);
-
         wrapper.appendChild(sidebarCol);
     }
-}
 
+    // 3. FORCE Styles on Sidebar (Crucial for footer positioning)
+    // We apply these even if the sidebar already exists to ensure flex works
+    sidebarCol.style.flex = "0 0 360px";
+    sidebarCol.style.maxWidth = "360px";
+    sidebarCol.style.display = "flex";
+    sidebarCol.style.flexDirection = "column"; // Stack children vertically
+    sidebarCol.style.height = "100%"; 
+    sidebarCol.style.boxSizing = "border-box";
+
+    // 4. Ensure Inspector (Scrollable Content) exists
+    let inspectorDiv = document.getElementById("sb-inspector");
+    if (!inspectorDiv) {
+        inspectorDiv = document.createElement("div");
+        inspectorDiv.id = "sb-inspector";
+        // Styling handled by CSS (.sb-inspector), but ensure it grows
+        inspectorDiv.style.flex = "1 1 auto"; 
+        inspectorDiv.style.overflowY = "auto";
+        sidebarCol.appendChild(inspectorDiv);
+    }
+
+    // 5. Ensure Footer exists (THE MISSING PIECE)
+    let footerDiv = document.getElementById("sb-sidebar-footer");
+    if (!footerDiv) {
+        footerDiv = document.createElement("div");
+        footerDiv.id = "sb-sidebar-footer";
+        // Ensure it stays at the bottom
+        footerDiv.style.flex = "0 0 auto";
+        sidebarCol.appendChild(footerDiv);
+    }
+}
   // ---------- Config ----------
 
   const GRID_SIZE = 32;
@@ -447,21 +461,20 @@ function updateCompletionUI() {
 // Renders the Fixed Footer with the Blue Button
 function renderSidebarFooter() {
     const footer = document.getElementById("sb-sidebar-footer");
-    if (!footer) return;
-    
-    footer.innerHTML = ""; // Clear previous
+    if (!footer) return; // If ensureSidebarDom worked, this will now find the element
 
+    footer.innerHTML = ""; 
     const tab = activeMainTab;
     const validation = window.__TIXALL_TAB_VALIDATION__[tab];
-    
-    // 1. Render Errors (if marked complete but invalid)
+
+    // 1. Render Errors
     if (window.__TIXALL_COMPLETION_STATUS__[tab] && !validation.valid && validation.errors.length > 0) {
         const errBox = document.createElement("div");
         errBox.className = "sb-validation-list";
         validation.errors.forEach(err => {
             const row = document.createElement("div");
             row.className = "sb-validation-error";
-            row.innerHTML = `<span>⚠️</span> <span>${err}</span>`;
+            row.innerHTML = `<span> ⚠️ </span> <span>${err}</span>`;
             errBox.appendChild(row);
         });
         footer.appendChild(errBox);
@@ -470,34 +483,24 @@ function renderSidebarFooter() {
     // 2. Render Button
     const btn = document.createElement("button");
     btn.className = "sb-btn-primary-large";
-    btn.style.marginTop = "0"; // Override class margin
+    btn.style.marginTop = "0"; // Override default margin
+    btn.style.width = "100%";
     btn.textContent = "Mark This Section Complete";
-    
+
     btn.onclick = () => {
-        // Run Validation
         const res = validateCurrentTabLogic(tab);
-        
-        // Save Validation State
         window.__TIXALL_TAB_VALIDATION__[tab] = res;
-        
-        // Mark as "Visited/Complete" regardless of errors (as requested)
         window.__TIXALL_COMPLETION_STATUS__[tab] = true;
         
-        // Update UI (Top Bar Ticks/Crosses)
         updateCompletionUI();
-        
-        // Re-render footer to show errors if they exist now
-        renderSidebarFooter();
+        renderSidebarFooter(); // Re-render to show errors if any
 
-        // Move to Next Tab
+        // Auto-advance logic
         const tabOrder = ['map', 'tickets', 'holds', 'view'];
         const idx = tabOrder.indexOf(tab);
         if (idx > -1 && idx < tabOrder.length - 1) {
-            const nextTab = tabOrder[idx + 1];
-            // Simulate click on top bar
-            switchBuilderTab(nextTab); 
+            switchBuilderTab(tabOrder[idx + 1]); 
         } else if (idx === tabOrder.length - 1) {
-            // Last tab (View)
             if (res.valid) {
                alert("All sections complete. You can now Publish.");
             } else {
@@ -508,7 +511,6 @@ function renderSidebarFooter() {
 
     footer.appendChild(btn);
 }
-
 function updateCompletionUI() {
   const s = window.__TIXALL_COMPLETION_STATUS__;
   
