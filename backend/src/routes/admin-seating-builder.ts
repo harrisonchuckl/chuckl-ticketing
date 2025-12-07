@@ -460,10 +460,23 @@ router.get("/builder/preview/:showId", (req, res) => {
         background: var(--bg-app);
     }
     .tb-center-header {
-        position: absolute; top: 24px; left: 0; right: 0;
-        height: 40px; display: flex; justify-content: center; align-items: center;
-        pointer-events: none; z-index: 50;
-    }
+  position: absolute; 
+  top: 24px; 
+  left: 0; 
+  right: 0;
+  height: 40px; 
+  display: flex; 
+  justify-content: center; 
+  align-items: center;
+  pointer-events: none; 
+  z-index: 50;
+  
+  /* --- FIX: Remove the background strip --- */
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
     .tb-tabs {
         pointer-events: auto; background: #ffffff; padding: 5px; border-radius: 99px;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); display: flex; gap: 4px;
@@ -1341,29 +1354,45 @@ router.get("/builder/preview/:showId", (req, res) => {
         holds: document.getElementById("tb-tab-holds"),
         view: document.getElementById("tb-tab-view"), // <--- THIS LINE WAS MISSING
       };
-        tabs.forEach(function (tab) {
-          tab.addEventListener("click", function () {
-            var target = tab.getAttribute("data-tab");
-            if (!target || !panels[target]) return;
+        // [Source: 10430] - Updated Tab Switch Logic
+tabs.forEach(function (tab) {
+  tab.addEventListener("click", function () {
+    var target = tab.getAttribute("data-tab");
+    if (!target || !panels[target]) return;
 
-            tabs.forEach(function (t) {
-              t.classList.remove("is-active");
-            });
-            Object.keys(panels).forEach(function (key) {
-              if (key === "map") return;
-              panels[key].classList.remove("is-active");
-            });
+    // --- NEW: First-time Guardrail Warning ---
+    // If moving AWAY from map for the first time, show warning
+    if (target !== "map") {
+      // @ts-ignore
+      if (!window.__TIXALL_HAS_SEEN_LOCK_WARNING__) {
+        var msg = "Once tickets, holds or information have been assigned to seats, " +
+                  "you can no longer change the configuration of any rows of seats or tables " +
+                  "without first unallocating the items added.";
+        
+        if (!confirm(msg)) {
+          return; // User cancelled, stay on Map tab
+        }
+        // @ts-ignore
+        window.__TIXALL_HAS_SEEN_LOCK_WARNING__ = true;
+      }
+    }
+    // -----------------------------------------
 
-            tab.classList.add("is-active");
-            panels[target].classList.add("is-active");
-            panels.map.classList.add("is-active");
-
-            if (window.__TIXALL_SET_TAB_MODE__) {
-              window.__TIXALL_SET_TAB_MODE__(target);
-            }
-          });
-        });
-
+    tabs.forEach(function (t) {
+      t.classList.remove("is-active");
+    });
+    Object.keys(panels).forEach(function (key) {
+      if (key === "map") return;
+      panels[key].classList.remove("is-active");
+    });
+    tab.classList.add("is-active");
+    panels[target].classList.add("is-active");
+    panels.map.classList.add("is-active");
+    if (window.__TIXALL_SET_TAB_MODE__) {
+      window.__TIXALL_SET_TAB_MODE__(target);
+    }
+  });
+});
         fetch("/admin/seating/builder/api/seatmaps/" + encodeURIComponent(showId))
           .then(function (res) {
             return res.ok ? res.json() : null;
