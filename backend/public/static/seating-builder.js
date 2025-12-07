@@ -6349,6 +6349,72 @@ function clearAssignmentsFromGroup(group) {
   updateTicketRings();
   pushHistory();
 }
+
+  // Renders the Fixed Footer with the Blue Button
+function renderSidebarFooter() {
+    const footer = document.getElementById("sb-sidebar-footer");
+    if (!footer) return;
+
+    footer.innerHTML = ""; // Clear previous
+    const tab = activeMainTab;
+    const validation = window.__TIXALL_TAB_VALIDATION__[tab];
+
+    // 1. Render Errors (if marked complete but invalid)
+    // We check if the tab has been visited/marked done (s[tab]) AND has errors
+    if (window.__TIXALL_COMPLETION_STATUS__[tab] && !validation.valid && validation.errors.length > 0) {
+        const errBox = document.createElement("div");
+        errBox.className = "sb-validation-list";
+        validation.errors.forEach(err => {
+            const row = document.createElement("div");
+            row.className = "sb-validation-error";
+            row.innerHTML = `<span> ⚠️ </span> <span>${err}</span>`;
+            errBox.appendChild(row);
+        });
+        footer.appendChild(errBox);
+    }
+
+    // 2. Render Button
+    const btn = document.createElement("button");
+    btn.className = "sb-btn-primary-large";
+    btn.style.width = "100%";
+    btn.style.marginTop = "0"; // Override class margin as container handles padding
+    btn.textContent = "Mark This Section Complete";
+
+    btn.onclick = () => {
+        // Run Validation
+        const res = validateCurrentTabLogic(tab);
+        
+        // Save Validation State
+        window.__TIXALL_TAB_VALIDATION__[tab] = res;
+        
+        // Mark as "Visited/Complete" regardless of errors
+        window.__TIXALL_COMPLETION_STATUS__[tab] = true;
+        
+        // Update UI (Top Bar Ticks/Crosses)
+        updateCompletionUI();
+        
+        // Re-render footer to show errors if they exist now
+        renderSidebarFooter();
+
+        // Move to Next Tab Logic
+        const tabOrder = ['map', 'tickets', 'holds', 'view'];
+        const idx = tabOrder.indexOf(tab);
+        if (idx > -1 && idx < tabOrder.length - 1) {
+            const nextTab = tabOrder[idx + 1];
+            // Simulate click on top bar to switch
+            switchBuilderTab(nextTab); 
+        } else if (idx === tabOrder.length - 1) {
+            // Last tab (View)
+            if (res.valid) {
+               alert("All sections complete. You can now Publish.");
+            } else {
+               alert("Section marked complete, but please check the errors listed.");
+            }
+        }
+    };
+
+    footer.appendChild(btn);
+}
   
 function renderInspector(node) {
   const el = getInspectorElement();
