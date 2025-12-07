@@ -6191,11 +6191,11 @@ seats.forEach(seat => {
 function clearAssignmentsFromGroup(group) {
   if (!group || typeof group.find !== 'function') return;
 
-  // FIX: Use "Circle" string selector first. Konva.find(function) is not reliable.
+  [cite_start]// FIX: We must search for "Circle" string first to ensure we find the nodes [cite: 5213]
   const seats = group.find("Circle").filter(n => n.getAttr("isSeat"));
 
   seats.forEach(seat => {
-    // Atomically clear all assignment attributes
+    [cite_start]// Atomically clear all assignment attributes [cite: 5217]
     seat.setAttrs({
       sbTicketId: null,
       sbTicketIds: [],
@@ -6203,7 +6203,7 @@ function clearAssignmentsFromGroup(group) {
       sbAccessibilityType: null,
       sbViewImage: null,
       sbInfoLabel: null,
-      sbInfoDesc: null, // Clear description too
+      sbInfoDesc: null, 
       sbViewInfoId: null
     });
     
@@ -6222,7 +6222,7 @@ function clearAssignmentsFromGroup(group) {
   pushHistory();
 }
   
- function renderInspector(node) {
+function renderInspector(node) {
   const el = getInspectorElement();
   if (!el) return;
 
@@ -6234,13 +6234,16 @@ function clearAssignmentsFromGroup(group) {
 
   el.innerHTML = "";
 
-  // --- HELPERS ---
+  // =========================================================
+  // 1. UI HELPER FUNCTIONS (Restoring missing functions)
+  // =========================================================
   const addTitle = (text) => {
     const h = document.createElement("h4");
     h.className = "sb-inspector-title";
     h.textContent = text;
     el.appendChild(h);
   };
+
   const addStaticRow = (lbl, val) => {
     const d = document.createElement("div");
     d.className = "sb-field-row sb-field-static";
@@ -6248,13 +6251,160 @@ function clearAssignmentsFromGroup(group) {
     el.appendChild(d);
   };
 
-  // ----- Global layout defaults (no selection) -----
-  if (!node) {
-    return;
-  }
+  const addTextField = (label, value, onChange) => {
+    const d = document.createElement("div");
+    d.className = "sb-field-row";
+    d.innerHTML = `<label class="sb-label">${label}</label>`;
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "sb-input";
+    input.value = value || "";
+    input.onchange = (e) => onChange(e.target.value);
+    d.appendChild(input);
+    el.appendChild(d);
+  };
+
+  const addNumberField = (label, value, min, max, step, onChange) => {
+    const d = document.createElement("div");
+    d.className = "sb-field-row";
+    d.innerHTML = `<label class="sb-label">${label}</label>`;
+    const input = document.createElement("input");
+    input.type = "number";
+    input.className = "sb-input";
+    input.value = value;
+    if (min !== undefined) input.min = min;
+    if (max !== undefined) input.max = max;
+    if (step !== undefined) input.step = step;
+    input.onchange = (e) => onChange(Number(e.target.value));
+    d.appendChild(input);
+    el.appendChild(d);
+  };
+
+  const addSelectField = (label, value, options, onChange) => {
+    const d = document.createElement("div");
+    d.className = "sb-field-row";
+    d.innerHTML = `<label class="sb-label">${label}</label>`;
+    const sel = document.createElement("select");
+    sel.className = "sb-select";
+    options.forEach(opt => {
+      const o = document.createElement("option");
+      o.value = opt.value;
+      o.textContent = opt.label;
+      if (opt.value === value) o.selected = true;
+      sel.appendChild(o);
+    });
+    sel.onchange = (e) => onChange(e.target.value);
+    d.appendChild(sel);
+    el.appendChild(d);
+  };
+
+  const addCheckboxField = (label, checked, onChange) => {
+    const d = document.createElement("div");
+    d.className = "sb-field-row";
+    d.style.display = "flex";
+    d.style.alignItems = "center";
+    d.style.justifyContent = "space-between";
+    const lbl = document.createElement("label");
+    lbl.className = "sb-label";
+    lbl.style.marginBottom = "0";
+    lbl.textContent = label;
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = !!checked;
+    input.onchange = (e) => onChange(e.target.checked);
+    d.appendChild(lbl);
+    d.appendChild(input);
+    el.appendChild(d);
+  };
+
+  const addColorField = (label, value, onChange) => {
+    const d = document.createElement("div");
+    d.className = "sb-field-row";
+    d.innerHTML = `<label class="sb-label">${label}</label>`;
+    const wrap = document.createElement("div");
+    wrap.style.display = "flex";
+    wrap.style.gap = "8px";
+    const input = document.createElement("input");
+    input.type = "color";
+    input.className = "sb-input";
+    input.style.width = "40px";
+    input.style.padding = "2px";
+    input.value = value;
+    input.oninput = (e) => onChange(e.target.value);
+    const text = document.createElement("input");
+    text.type = "text";
+    text.className = "sb-input";
+    text.value = value;
+    text.onchange = (e) => onChange(e.target.value);
+    wrap.appendChild(input);
+    wrap.appendChild(text);
+    d.appendChild(wrap);
+    el.appendChild(d);
+  };
+
+  const addRangeField = (label, value, min, max, step, onChange) => {
+    const d = document.createElement("div");
+    d.className = "sb-field-row";
+    d.innerHTML = `<label class="sb-label">${label}</label>`;
+    const input = document.createElement("input");
+    input.type = "range";
+    input.style.width = "100%";
+    input.min = min;
+    input.max = max;
+    input.step = step;
+    input.value = value;
+    input.oninput = (e) => onChange(Number(e.target.value));
+    d.appendChild(input);
+    el.appendChild(d);
+  };
+
+  const addFlipButton = (node) => {
+    const btn = document.createElement("button");
+    btn.className = "tool-button";
+    btn.textContent = "Flip Horizontally";
+    btn.style.marginTop = "8px";
+    btn.onclick = () => {
+      const currentScaleX = node.scaleX();
+      node.scaleX(-currentScaleX);
+      if (typeof keepLabelsUpright === "function") keepLabelsUpright(node);
+      if (overlayLayer) overlayLayer.batchDraw();
+      if (mapLayer) mapLayer.batchDraw();
+      pushHistory();
+    };
+    el.appendChild(btn);
+  };
+
+  const addAccessControls = () => {
+    const d = document.createElement("div");
+    d.style.marginTop = "12px";
+    d.innerHTML = `<div class="sb-label">Accessibility</div>`;
+    const btn = document.createElement("button");
+    btn.className = "tool-button";
+    btn.textContent = "Toggle Accessible Seat";
+    btn.onclick = () => {
+      const seats = node.find ? node.find("Circle").filter(n=>n.getAttr("isSeat")) : [];
+      if(seats.length && typeof cycleSeatKind === 'function') {
+         seats.forEach(s => cycleSeatKind(s));
+         if(mapLayer) mapLayer.batchDraw();
+      }
+    };
+    d.appendChild(btn);
+    el.appendChild(d);
+  };
+
+  const addAlignButtonsPanel = (count) => {
+    const d = document.createElement("div");
+    d.className = "sb-inspector-empty";
+    d.textContent = `${count} items selected.`;
+    el.appendChild(d);
+  };
+
+  // =========================================================
+  // 2. SELECTION CHECKS
+  // =========================================================
+  if (!node) return;
 
   const nodes = transformer ? transformer.nodes() : [];
-  // ----- Multiple selection panel -----
   if (nodes && nodes.length > 1) {
     addAlignButtonsPanel(nodes.length);
     return;
@@ -6263,12 +6413,11 @@ function clearAssignmentsFromGroup(group) {
   const shapeType = node.getAttr("shapeType") || node.name();
 
   // =========================================================
-  // LOCK LOGIC: Check if node has tickets/holds
+  // 3. LOCK LOGIC
   // =========================================================
   const locked = isNodeLocked(node);
 
   if (locked) {
-    // 1. Render the "Locked" UI Panel
     const lockPanel = document.createElement("div");
     lockPanel.className = "sb-locked-state";
     lockPanel.innerHTML = `
@@ -6279,19 +6428,17 @@ function clearAssignmentsFromGroup(group) {
       </div>
     `;
 
-    // Button: Unlock THIS block
     const btnUnlock = document.createElement("button");
     btnUnlock.className = "sb-btn-unlock";
     btnUnlock.textContent = "Remove assignments from this element";
     btnUnlock.onclick = () => {
       if(confirm("Are you sure? This will remove ALL tickets, holds, and info from seats in this element.")) {
         clearAssignmentsFromGroup(node);
-        // FIX: Use selectNode() to force re-evaluation of locked state and refresh panel immediately
+        // FORCE REFRESH: This line is critical to re-render the panel
         selectNode(node); 
       }
     };
 
-    // Button: Unlock EVERYTHING (Global)
     const btnUnlockAll = document.createElement("button");
     btnUnlockAll.className = "sb-btn-unlock-all";
     btnUnlockAll.textContent = "Remove assignments from ENTIRE map";
@@ -6299,7 +6446,6 @@ function clearAssignmentsFromGroup(group) {
       if(prompt("Type 'DELETE' to confirm removing ALL ticket assignments and holds from the entire map.") === "DELETE") {
         const allGroups = mapLayer.find("Group");
         allGroups.forEach(g => clearAssignmentsFromGroup(g));
-        // FIX: Refresh selection
         selectNode(node);
       }
     };
@@ -6310,7 +6456,7 @@ function clearAssignmentsFromGroup(group) {
   }
 
   // =========================================================
-  // NODE SPECIFIC CONTROLS
+  // 4. SHAPE SPECIFIC CONTROLS
   // =========================================================
 
   // ---- Single Seat ----
@@ -6359,19 +6505,21 @@ function clearAssignmentsFromGroup(group) {
     const everyRowSame = node.getAttr("everyRowSameSeats") !== false;
 
     const rebuild = () => {
-      updateRowGroupGeometry(node, node.getAttr("seatsPerRow") || seatsPerRow, node.getAttr("rowCount") || rowCount);
-      mapLayer.batchDraw();
-      updateSeatCount();
-      refreshSeatMetadata();
-      applySeatVisuals();
-      pushHistory();
+      if(typeof updateRowGroupGeometry === 'function') {
+        updateRowGroupGeometry(node, node.getAttr("seatsPerRow") || seatsPerRow, node.getAttr("rowCount") || rowCount);
+        mapLayer.batchDraw();
+        updateSeatCount();
+        refreshSeatMetadata();
+        applySeatVisuals();
+        pushHistory();
+      }
     };
 
     addTitle("Seat block");
-    // Rotation is allowed even if locked
+    
     addNumberField("Rotation (deg)", Math.round(node.rotation() || 0), -360, 360, 1, (val) => {
       node.rotation(normaliseAngle(val));
-      keepLabelsUpright(node);
+      if(typeof keepLabelsUpright === 'function') keepLabelsUpright(node);
       if (overlayLayer) overlayLayer.batchDraw();
     });
     addFlipButton(node);
@@ -6381,20 +6529,27 @@ function clearAssignmentsFromGroup(group) {
       addStaticRow("Number of rows", rowCount);
       addStaticRow("Total seats", totalSeats);
     } else {
-      addNumberField("Seats per row", seatsPerRow, 1, 1, (val) => { node.setAttr("seatsPerRow", val); rebuild(); });
-      addNumberField("Number of rows", rowCount, 1, 1, (val) => { node.setAttr("rowCount", val); rebuild(); });
+      addNumberField("Seats per row", seatsPerRow, 1, 100, 1, (val) => { node.setAttr("seatsPerRow", val); rebuild(); });
+      addNumberField("Number of rows", rowCount, 1, 100, 1, (val) => { node.setAttr("rowCount", val); rebuild(); });
       addStaticRow("Total seats", totalSeats);
-      addNumberField("Seat numbers start at", seatStart, 1, 1, (val) => { node.setAttr("seatStart", val); rebuild(); });
+      
+      addNumberField("Seat numbers start at", seatStart, 1, 10000, 1, (val) => { node.setAttr("seatStart", val); rebuild(); });
+      
       addSelectField("Seat labels", node.getAttr("seatLabelMode") || "numbers",
         [{ value: "numbers", label: "1, 2, 3..." }, { value: "letters", label: "A, B, C..." }, { value: "none", label: "None" }],
         (mode) => { node.setAttr("seatLabelMode", mode); rebuild(); }
       );
+      
       addTextField("Row label prefix", rowLabelPrefix, (val) => { node.setAttr("rowLabelPrefix", val); rebuild(); });
-      addTextField("First row label", rowLabelFromIndex(rowLabelStart), (val) => {
-        node.setAttr("rowLabelStart", rowIndexFromLabel(val)); rebuild();
+      
+      addTextField("First row label", typeof rowLabelFromIndex === 'function' ? rowLabelFromIndex(rowLabelStart) : "A", (val) => {
+        if(typeof rowIndexFromLabel === 'function') node.setAttr("rowLabelStart", rowIndexFromLabel(val)); 
+        rebuild();
       });
+      
       addSelectField("Row order", rowOrder, [{ value: "asc", label: "Ascending" }, { value: "desc", label: "Descending" }], (v) => { node.setAttr("rowOrder", v); rebuild(); });
       addSelectField("Row labels", rowLabelPosition, [{ value: "left", label: "Left" }, { value: "right", label: "Right" }, { value: "both", label: "Both" }, { value: "none", label: "None" }], (v) => { node.setAttr("rowLabelPosition", v); rebuild(); });
+      
       addCheckboxField("Every row same size", everyRowSame, (c) => { node.setAttr("everyRowSameSeats", c); rebuild(); renderInspector(node); });
 
       if (!everyRowSame) {
@@ -6419,7 +6574,9 @@ function clearAssignmentsFromGroup(group) {
 
     addTitle("Round table");
     addNumberField("Rotation (deg)", Math.round(node.rotation() || 0), -360, 360, 1, (val) => {
-      node.rotation(val); keepLabelsUpright(node); overlayLayer.batchDraw();
+      node.rotation(val); 
+      if(typeof keepLabelsUpright === 'function') keepLabelsUpright(node);
+      overlayLayer.batchDraw();
     });
 
     if (locked) {
@@ -6428,13 +6585,19 @@ function clearAssignmentsFromGroup(group) {
     } else {
       addTextField("Table label", tableLabel, (val) => {
         node.setAttr("tableLabel", val || "");
-        updateCircularTableGeometry(node, seatCount);
+        if(typeof updateCircularTableGeometry === 'function') updateCircularTableGeometry(node, seatCount);
       });
-      addNumberField("Seats around table", seatCount, 1, 1, (val) => {
-        updateCircularTableGeometry(node, val); mapLayer.batchDraw(); updateSeatCount(); pushHistory();
+      addNumberField("Seats around table", seatCount, 1, 50, 1, (val) => {
+        if(typeof updateCircularTableGeometry === 'function') {
+            updateCircularTableGeometry(node, val); 
+            mapLayer.batchDraw(); 
+            updateSeatCount(); 
+            pushHistory();
+        }
       });
       addSelectField("Seat labels", node.getAttr("seatLabelMode") || "numbers", [{ value: "numbers", label: "1,2..." }, { value: "letters", label: "A,B..." }], (m) => {
-        node.setAttr("seatLabelMode", m); updateCircularTableGeometry(node, seatCount);
+        node.setAttr("seatLabelMode", m); 
+        if(typeof updateCircularTableGeometry === 'function') updateCircularTableGeometry(node, seatCount);
       });
       addAccessControls();
     }
@@ -6448,7 +6611,11 @@ function clearAssignmentsFromGroup(group) {
     const tableLabel = node.getAttr("tableLabel") || "";
 
     addTitle("Rectangular table");
-    addNumberField("Rotation", Math.round(node.rotation() || 0), -360, 360, 1, (v) => { node.rotation(v); keepLabelsUpright(node); overlayLayer.batchDraw(); });
+    addNumberField("Rotation", Math.round(node.rotation() || 0), -360, 360, 1, (v) => { 
+        node.rotation(v); 
+        if(typeof keepLabelsUpright === 'function') keepLabelsUpright(node); 
+        overlayLayer.batchDraw(); 
+    });
 
     if (locked) {
       addStaticRow("Table label", tableLabel);
@@ -6456,16 +6623,14 @@ function clearAssignmentsFromGroup(group) {
       addStaticRow("Short side seats", shortSide);
     } else {
       addTextField("Table label", tableLabel, (val) => { node.setAttr("tableLabel", val); updateRectTableGeometry(node, longSide, shortSide); });
-      addNumberField("Seats long side", longSide, 0, 1, (v) => { updateRectTableGeometry(node, v, shortSide); mapLayer.batchDraw(); updateSeatCount(); pushHistory(); });
-      addNumberField("Seats short side", shortSide, 0, 1, (v) => { updateRectTableGeometry(node, longSide, v); mapLayer.batchDraw(); updateSeatCount(); pushHistory(); });
+      addNumberField("Seats long side", longSide, 0, 50, 1, (v) => { updateRectTableGeometry(node, v, shortSide); mapLayer.batchDraw(); updateSeatCount(); pushHistory(); });
+      addNumberField("Seats short side", shortSide, 0, 50, 1, (v) => { updateRectTableGeometry(node, longSide, v); mapLayer.batchDraw(); updateSeatCount(); pushHistory(); });
       addAccessControls();
     }
     return;
   }
 
-  // ---- Fallback for standard shapes (Line, Text, etc) ----
-  // These usually don't have seats attached directly, so we keep standard controls.
-
+  // ---- Stage ----
   if (shapeType === "stage") {
     addTitle("Stage");
     const labelNode = node.findOne(".stage-label") || node.findOne("Text");
@@ -6488,33 +6653,34 @@ function clearAssignmentsFromGroup(group) {
     return;
   }
 
+  // ---- Bar ----
   if (shapeType === "bar") {
     addTitle("Bar");
     const labelNode = node.findOne(".bar-label") || node.findOne("Text");
-    const barLabel = (labelNode && labelNode.text()) || "BAR";
-    addTextField("Label", barLabel, (v) => { if (labelNode) labelNode.text(v); });
+    addTextField("Label", (labelNode && labelNode.text()) || "BAR", (v) => { if (labelNode) labelNode.text(v); });
     return;
   }
 
+  // ---- Exit ----
   if (shapeType === "exit") {
     addTitle("Exit");
     const labelNode = node.findOne(".exit-label") || node.findOne("Text");
-    const exitLabel = (labelNode && labelNode.text()) || "EXIT";
-    addTextField("Label", exitLabel, (v) => { if (labelNode) labelNode.text(v); });
+    addTextField("Label", (labelNode && labelNode.text()) || "EXIT", (v) => { if (labelNode) labelNode.text(v); });
     return;
   }
 
+  // ---- Text Label ----
   if (shapeType === "text" || shapeType === "label") {
     addTitle("Text Label");
     const labelNode = node.findOne("Text");
-    const val = (labelNode && labelNode.text()) || "Label";
-    addTextField("Text", val, (v) => { if (labelNode) labelNode.text(v); ensureHitRect(node); mapLayer.batchDraw(); });
+    addTextField("Text", (labelNode && labelNode.text()) || "Label", (v) => { if (labelNode) labelNode.text(v); ensureHitRect(node); mapLayer.batchDraw(); });
     addNumberField("Font Size", (labelNode && labelNode.fontSize()) || 14, 8, 72, 1, (v) => {
       if (labelNode) labelNode.fontSize(v); ensureHitRect(node); mapLayer.batchDraw();
     });
     return;
   }
 
+  // ---- Other Shapes & Symbols ----
   if (["section", "square", "circle", "multi-shape", "symbol"].includes(shapeType)) {
     addTitle(shapeType.toUpperCase());
     if (shapeType === "symbol") {
@@ -6531,7 +6697,6 @@ function clearAssignmentsFromGroup(group) {
   }
 
   // ---- Line / Curve / Arrow / Stairs ----
-  // These usually don't carry tickets, but we retain their controls
   if (shapeType === "line" || shapeType === "curve-line") {
     addTitle("Line");
     addColorField("Color", (node.findOne("Line") && node.findOne("Line").stroke()) || "#111827", (v) => {
@@ -6540,7 +6705,6 @@ function clearAssignmentsFromGroup(group) {
     addNumberField("Width", (node.findOne("Line") && node.findOne("Line").strokeWidth()) || 2, 1, 20, 1, (v) => {
       node.findOne("Line").strokeWidth(v); mapLayer.batchDraw();
     });
-    // Fill support for lines
     const fillEnabled = node.getAttr("lineFillEnabled");
     addCheckboxField("Fill Shape", !!fillEnabled, (c) => {
       node.setAttr("lineFillEnabled", c); updateLineFillShape(node); mapLayer.batchDraw(); renderInspector(node);
@@ -6569,7 +6733,6 @@ function clearAssignmentsFromGroup(group) {
     return;
   }
 }
-  
 
   function keepLabelsUpright(node) {
     const angle = node.rotation();
