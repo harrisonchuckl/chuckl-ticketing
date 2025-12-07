@@ -1205,20 +1205,20 @@ router.get("/builder/preview/:showId", (req, res) => {
 
 
         <section class="tb-center">
-          <div class="tb-center-header">
-           <div class="tb-tabs">
-  <button class="tb-tab is-active" data-tab="map">1. Map</button>
-  <button class="tb-tab" data-tab="tickets">2. Tickets</button>
-  <button class="tb-tab" data-tab="holds">3. Holds & External Allocations</button>
-  <button class="tb-tab" data-tab="view">4. Seating Information and View from Seats</button>
+         <div class="tb-center-header">
+  <div class="tb-tabs">
+    <button class="tb-tab is-active" data-tab="map">1. Map</button>
+    <button class="tb-tab" data-tab="tickets">2. Tickets</button>
+    <button class="tb-tab" data-tab="holds">3. Holds & External Allocations</button>
+    <button class="tb-tab" data-tab="view">4. Seating Information and View from Seats</button>
+  </div>
 </div>
-            <div class="tb-zoom-toolbar" aria-label="Zoom">
-              <button class="tb-zoom-btn" id="sb-zoom-out">−</button>
-              <button class="tb-zoom-btn tb-zoom-label" id="sb-zoom-reset">100%</button>
-              <button class="tb-zoom-btn" id="sb-zoom-in">+</button>
-            </div>
-          </div>
 
+<div class="tb-zoom-toolbar" aria-label="Zoom">
+  <button class="tb-zoom-btn" id="sb-zoom-out">−</button>
+  <button class="tb-zoom-btn tb-zoom-label" id="sb-zoom-reset">100%</button>
+  <button class="tb-zoom-btn" id="sb-zoom-in">+</button>
+</div>
           <div class="tb-tab-panels">
             <div class="tb-tab-panel is-active" id="tb-tab-map">
               <div id="app"></div>
