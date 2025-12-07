@@ -30,34 +30,36 @@
   }
 
 function injectSeatmapStyles() {
-    if (document.getElementById("sb-seatmap-style")) return;
-    const style = document.createElement("style");
-    style.id = "sb-seatmap-style";
+    // FIX: Always fetch the element, but update textContent even if it exists to ensure new CSS applies
+    let style = document.getElementById("sb-seatmap-style");
+    if (!style) {
+        style = document.createElement("style");
+        style.id = "sb-seatmap-style";
+        document.head.appendChild(style);
+    }
     style.textContent = `
     .sb-layout { font-family: inherit; width: 100%; height: 100%; overflow: hidden; }
-
-/* Add to injectSeatmapStyles string */
+    
     .tb-tab.is-error::after {
-    content: " ✕"; /* or use an SVG icon */
-    color: #ef4444;
-    font-weight: bold;
-    margin-left: 6px;
-}
-.tb-tab.is-complete::after {
-    content: " ✓";
-    color: #10b981;
-    font-weight: bold;
-    margin-left: 6px;
-}
+        content: "  ✕ ";
+        color: #ef4444;
+        font-weight: bold;
+        margin-left: 6px;
+    }
+    .tb-tab.is-complete::after {
+        content: "  ✓ ";
+        color: #10b981;
+        font-weight: bold;
+        margin-left: 6px;
+    }
 
     /* INSPECTOR / SELECTION PANEL */
-    /* Updated to allow scrolling content behind fixed footer */
     #sb-inspector { 
         background: transparent; 
         padding: 16px 16px 24px; 
         flex: 1 1 auto; 
         overflow-y: auto; 
-        min-height: 0; /* Important for flex scroll */
+        min-height: 0; 
     }
     
     /* NEW: FIXED FOOTER */
@@ -87,8 +89,9 @@ function injectSeatmapStyles() {
         gap: 6px;
     }
     .sb-validation-error:last-child { margin-bottom: 0; }
+
     .sb-inspector-title {
-        font-size: 14px; font-weight: 700; color: #0f172a; 
+        font-size: 14px; font-weight: 700; color: #0f172a;
         text-transform: uppercase; letter-spacing: 0.05em;
         margin: 24px 0 12px 0; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;
     }
@@ -107,32 +110,31 @@ function injectSeatmapStyles() {
         color: #1e293b; outline: none; transition: border-color 0.2s, box-shadow 0.2s;
     }
     .sb-input:focus, .sb-select:focus, .sb-textarea:focus {
-        border-color: #08B8E8; 
+        border-color: #08B8E8;
         box-shadow: 0 0 0 3px rgba(8, 184, 232, 0.1);
     }
 
     /* MODERN TICKET CARD */
     .sb-ticket-stack { display: flex; flex-direction: column; gap: 12px; }
     .sb-ticket-card {
-        background: #fff; 
-        border: 1px solid #e2e8f0; 
+        background: #fff;
+        border: 1px solid #e2e8f0;
         border-radius: 12px;
         overflow: hidden;
         transition: all 0.2s ease;
         box-shadow: 0 1px 3px rgba(0,0,0,0.02);
     }
-    .sb-ticket-card.is-active { 
-        border-color: #08B8E8; 
+    .sb-ticket-card.is-active {
+        border-color: #08B8E8;
         box-shadow: 0 0 0 1px #08B8E8;
     }
     
     .sb-ticket-card-header {
         width: 100%; padding: 16px; border: none; background: #fff;
-        display: flex; align-items: center; justify-content: space-between; 
+        display: flex; align-items: center; justify-content: space-between;
         cursor: pointer; text-align: left;
     }
     .sb-ticket-card-header:hover { background: #f8fafc; }
-
     .sb-ticket-main-info { display: flex; align-items: center; gap: 12px; }
     .sb-ticket-color-dot { 
         width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0; 
@@ -143,12 +145,12 @@ function injectSeatmapStyles() {
     .sb-ticket-meta { 
         font-size: 12px; color: #64748b; margin-top: 2px; 
     }
-    .sb-ticket-card-body { 
-        padding: 0 16px 16px; 
+    .sb-ticket-card-body {
+        padding: 0 16px 16px;
         background: #fff;
         border-top: 1px solid #f1f5f9;
     }
-    
+
     /* BIG TIXALL BLUE BUTTON */
     .sb-btn-primary-large {
         width: 100%;
@@ -191,7 +193,7 @@ function injectSeatmapStyles() {
     .sb-btn-unlock:hover { background: #fef2f2; }
     
     .sb-btn-unlock-all {
-        display: block; width: 100%; margin-top: 12px; 
+        display: block; width: 100%; margin-top: 12px;
         color: #94a3b8; text-decoration: underline; font-size: 11px;
         background: none; border: none; cursor: pointer;
     }
@@ -204,6 +206,7 @@ function injectSeatmapStyles() {
         display: flex; align-items: center; justify-content: center; cursor: pointer;
     }
     .tool-button:hover { background: #f8fafc; border-color: #cbd5e1; }
+
     .sb-ticketing-heading { margin-bottom: 24px; }
     .sb-ticketing-title { font-size: 20px; font-weight: 700; color: #0f172a; margin-bottom: 4px; }
     .sb-ticketing-sub { font-size: 13px; color: #64748b; }
@@ -212,7 +215,8 @@ function injectSeatmapStyles() {
         padding: 12px; border-radius: 8px; font-size: 13px; margin-bottom: 16px;
     }
     .sb-form-grid { display: grid; gap: 12px; margin-top: 16px; }
-  `;
+    `;
+}
   document.head.appendChild(style);
 }  
   injectSeatmapStyles();
@@ -6595,7 +6599,7 @@ function renderInspector(node) {
     wrapper.style.marginTop = "12px";
     wrapper.style.borderTop = "1px solid #e5e7eb";
     wrapper.style.paddingTop = "12px";
-    
+
     const title = document.createElement("div");
     title.className = "sb-inspector-title";
     title.textContent = "Accessibility";
@@ -6608,46 +6612,46 @@ function renderInspector(node) {
     row.style.gap = "8px";
 
     const makeBtn = (mode, label, emoji) => {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "tool-button";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "tool-button";
 
-        // Highlight if active
-        if (activeAccessibilityMode === mode) {
-            btn.classList.add("is-active");
-            btn.style.borderColor = "#2563eb";
-            btn.style.background = "#eff6ff";
+      // Highlight if active
+      if (activeAccessibilityMode === mode) {
+        btn.classList.add("is-active");
+        btn.style.borderColor = "#2563eb";
+        btn.style.background = "#eff6ff";
+      }
+
+      btn.innerHTML = `<span style="margin-right:4px">${emoji}</span> ${label}`;
+      btn.style.fontSize = "12px";
+      btn.style.height = "36px";
+      btn.onclick = () => {
+        // Check if single seat group (Direct action)
+        const shapeType = node.getAttr("shapeType") || node.name();
+        if (shapeType === "single-seat") {
+          const seat = node.findOne("Circle");
+          if (seat) {
+            const current = seat.getAttr("sbAccessibilityType");
+            seat.setAttr("sbAccessibilityType", current === mode ? null : mode);
+            applySeatVisuals();
+            pushHistory();
+            renderInspector(node); // Refresh button state
+          }
+          return;
         }
-
-        btn.innerHTML = `<span style="margin-right:4px">${emoji}</span> ${label}`;
-        btn.style.fontSize = "12px";
-        btn.style.height = "36px";
-        btn.onclick = () => {
-            // Check if single seat group (Direct action)
-            const shapeType = node.getAttr("shapeType") || node.name();
-            if (shapeType === "single-seat") {
-                const seat = node.findOne("Circle");
-                if (seat) {
-                    const current = seat.getAttr("sbAccessibilityType");
-                    seat.setAttr("sbAccessibilityType", current === mode ? null : mode);
-                    applySeatVisuals();
-                    pushHistory();
-                    renderInspector(node); // Refresh button state
-                }
-                return;
-            }
-            // Multi-mode toggle
-            if (activeAccessibilityMode === mode) {
-                activeAccessibilityMode = null;
-                setTicketSeatSelectionMode(false, "access-off");
-            } else {
-                activeAccessibilityMode = mode;
-                setTicketSeatSelectionMode(true, "access-on");
-                refreshSeatTicketListeners();
-            }
-            renderInspector(node);
-        };
-        return btn;
+        // Multi-mode toggle
+        if (activeAccessibilityMode === mode) {
+          activeAccessibilityMode = null;
+          setTicketSeatSelectionMode(false, "access-off");
+        } else {
+          activeAccessibilityMode = mode;
+          setTicketSeatSelectionMode(true, "access-on");
+          refreshSeatTicketListeners();
+        }
+        renderInspector(node);
+      };
+      return btn;
     };
 
     row.appendChild(makeBtn("disabled", "Disabled", "♿"));
@@ -6658,8 +6662,8 @@ function renderInspector(node) {
     hint.className = "sb-helper";
     hint.style.marginTop = "6px";
     hint.textContent = activeAccessibilityMode
-        ? `Click seats on the map to toggle ${activeAccessibilityMode} status.`
-        : "Select a type, then click seats to assign.";
+      ? `Click seats on the map to toggle ${activeAccessibilityMode} status.`
+      : "Select a type, then click seats to assign.";
     wrapper.appendChild(hint);
     el.appendChild(wrapper);
   };
@@ -6672,13 +6676,33 @@ function renderInspector(node) {
   };
 
   // =========================================================
-  // 2. SELECTION CHECKS
+  // 2. SELECTION CHECKS & EMPTY STATE HANDLING
   // =========================================================
-  if (!node) return;
+  // FIX: If no node is selected, render placeholder AND footer
+  if (!node) {
+    const empty = document.createElement("div");
+    empty.className = "sb-inspector-empty";
+    empty.textContent = "Select an element on the map to edit its properties.";
+    empty.style.marginTop = "20px";
+    el.appendChild(empty);
+
+    const spacer = document.createElement("div");
+    spacer.style.height = "40px";
+    el.appendChild(spacer);
+
+    // CRITICAL: Always render the footer here so it appears on the Map tab
+    if (typeof renderSidebarFooter === 'function') renderSidebarFooter();
+    return;
+  }
 
   const nodes = transformer ? transformer.nodes() : [];
   if (nodes && nodes.length > 1) {
     addAlignButtonsPanel(nodes.length);
+    // Ensure footer shows even for multi-selection
+    const spacer = document.createElement("div");
+    spacer.style.height = "40px";
+    el.appendChild(spacer);
+    if (typeof renderSidebarFooter === 'function') renderSidebarFooter();
     return;
   }
 
@@ -6704,10 +6728,10 @@ function renderInspector(node) {
     btnUnlock.className = "sb-btn-unlock";
     btnUnlock.textContent = "Remove assignments from this element";
     btnUnlock.onclick = () => {
-      if(confirm("Are you sure? This will remove ALL tickets, holds, and info from seats in this element.")) {
+      if (confirm("Are you sure? This will remove ALL tickets, holds, and info from seats in this element.")) {
         clearAssignmentsFromGroup(node);
         // FORCE REFRESH: This line is critical to re-render the panel
-        selectNode(node); 
+        selectNode(node);
       }
     };
 
@@ -6715,7 +6739,7 @@ function renderInspector(node) {
     btnUnlockAll.className = "sb-btn-unlock-all";
     btnUnlockAll.textContent = "Remove assignments from ENTIRE map";
     btnUnlockAll.onclick = () => {
-      if(prompt("Type 'DELETE' to confirm removing ALL ticket assignments and holds from the entire map.") === "DELETE") {
+      if (prompt("Type 'DELETE' to confirm removing ALL ticket assignments and holds from the entire map.") === "DELETE") {
         const allGroups = mapLayer.find("Group");
         allGroups.forEach(g => clearAssignmentsFromGroup(g));
         selectNode(node);
@@ -6731,7 +6755,6 @@ function renderInspector(node) {
     el.appendChild(spacer);
 
     renderSidebarFooter();
-    
   }
 
   // =========================================================
@@ -6767,6 +6790,11 @@ function renderInspector(node) {
       });
       addAccessControls(); // <--- Restored Detailed Controls
     }
+    // ADD FOOTER FOR SINGLE SEAT
+    const spacer = document.createElement("div");
+    spacer.style.height = "40px";
+    el.appendChild(spacer);
+    renderSidebarFooter();
     return;
   }
 
@@ -6784,7 +6812,7 @@ function renderInspector(node) {
     const everyRowSame = node.getAttr("everyRowSameSeats") !== false;
 
     const rebuild = () => {
-      if(typeof updateRowGroupGeometry === 'function') {
+      if (typeof updateRowGroupGeometry === 'function') {
         updateRowGroupGeometry(node, node.getAttr("seatsPerRow") || seatsPerRow, node.getAttr("rowCount") || rowCount);
         mapLayer.batchDraw();
         updateSeatCount();
@@ -6795,10 +6823,10 @@ function renderInspector(node) {
     };
 
     addTitle("Seat block");
-    
+
     addNumberField("Rotation (deg)", Math.round(node.rotation() || 0), -360, 360, 1, (val) => {
       node.rotation(normaliseAngle(val));
-      if(typeof keepLabelsUpright === 'function') keepLabelsUpright(node);
+      if (typeof keepLabelsUpright === 'function') keepLabelsUpright(node);
       if (overlayLayer) overlayLayer.batchDraw();
     });
     addFlipButton(node);
@@ -6811,24 +6839,24 @@ function renderInspector(node) {
       addNumberField("Seats per row", seatsPerRow, 1, 100, 1, (val) => { node.setAttr("seatsPerRow", val); rebuild(); });
       addNumberField("Number of rows", rowCount, 1, 100, 1, (val) => { node.setAttr("rowCount", val); rebuild(); });
       addStaticRow("Total seats", totalSeats);
-      
+
       addNumberField("Seat numbers start at", seatStart, 1, 10000, 1, (val) => { node.setAttr("seatStart", val); rebuild(); });
-      
+
       addSelectField("Seat labels", node.getAttr("seatLabelMode") || "numbers",
         [{ value: "numbers", label: "1, 2, 3..." }, { value: "letters", label: "A, B, C..." }, { value: "none", label: "None" }],
         (mode) => { node.setAttr("seatLabelMode", mode); rebuild(); }
       );
-      
+
       addTextField("Row label prefix", rowLabelPrefix, (val) => { node.setAttr("rowLabelPrefix", val); rebuild(); });
-      
+
       addTextField("First row label", typeof rowLabelFromIndex === 'function' ? rowLabelFromIndex(rowLabelStart) : "A", (val) => {
-        if(typeof rowIndexFromLabel === 'function') node.setAttr("rowLabelStart", rowIndexFromLabel(val)); 
+        if (typeof rowIndexFromLabel === 'function') node.setAttr("rowLabelStart", rowIndexFromLabel(val));
         rebuild();
       });
-      
+
       addSelectField("Row order", rowOrder, [{ value: "asc", label: "Ascending" }, { value: "desc", label: "Descending" }], (v) => { node.setAttr("rowOrder", v); rebuild(); });
       addSelectField("Row labels", rowLabelPosition, [{ value: "left", label: "Left" }, { value: "right", label: "Right" }, { value: "both", label: "Both" }, { value: "none", label: "None" }], (v) => { node.setAttr("rowLabelPosition", v); rebuild(); });
-      
+
       addCheckboxField("Every row same size", everyRowSame, (c) => { node.setAttr("everyRowSameSeats", c); rebuild(); renderInspector(node); });
 
       if (!everyRowSame) {
@@ -6843,6 +6871,11 @@ function renderInspector(node) {
       addRangeField("Curve rows", curve, -15, 15, 1, (val) => { node.setAttr("curve", val); rebuild(); });
       addAccessControls(); // <--- Restored Detailed Controls
     }
+    // ADD FOOTER
+    const spacer = document.createElement("div");
+    spacer.style.height = "40px";
+    el.appendChild(spacer);
+    renderSidebarFooter();
     return;
   }
 
@@ -6853,8 +6886,8 @@ function renderInspector(node) {
 
     addTitle("Round table");
     addNumberField("Rotation (deg)", Math.round(node.rotation() || 0), -360, 360, 1, (val) => {
-      node.rotation(val); 
-      if(typeof keepLabelsUpright === 'function') keepLabelsUpright(node);
+      node.rotation(val);
+      if (typeof keepLabelsUpright === 'function') keepLabelsUpright(node);
       overlayLayer.batchDraw();
     });
 
@@ -6864,22 +6897,27 @@ function renderInspector(node) {
     } else {
       addTextField("Table label", tableLabel, (val) => {
         node.setAttr("tableLabel", val || "");
-        if(typeof updateCircularTableGeometry === 'function') updateCircularTableGeometry(node, seatCount);
+        if (typeof updateCircularTableGeometry === 'function') updateCircularTableGeometry(node, seatCount);
       });
       addNumberField("Seats around table", seatCount, 1, 50, 1, (val) => {
-        if(typeof updateCircularTableGeometry === 'function') {
-            updateCircularTableGeometry(node, val); 
-            mapLayer.batchDraw(); 
-            updateSeatCount(); 
-            pushHistory();
+        if (typeof updateCircularTableGeometry === 'function') {
+          updateCircularTableGeometry(node, val);
+          mapLayer.batchDraw();
+          updateSeatCount();
+          pushHistory();
         }
       });
       addSelectField("Seat labels", node.getAttr("seatLabelMode") || "numbers", [{ value: "numbers", label: "1,2..." }, { value: "letters", label: "A,B..." }], (m) => {
-        node.setAttr("seatLabelMode", m); 
-        if(typeof updateCircularTableGeometry === 'function') updateCircularTableGeometry(node, seatCount);
+        node.setAttr("seatLabelMode", m);
+        if (typeof updateCircularTableGeometry === 'function') updateCircularTableGeometry(node, seatCount);
       });
       addAccessControls(); // <--- Restored Detailed Controls
     }
+    // ADD FOOTER
+    const spacer = document.createElement("div");
+    spacer.style.height = "40px";
+    el.appendChild(spacer);
+    renderSidebarFooter();
     return;
   }
 
@@ -6890,10 +6928,10 @@ function renderInspector(node) {
     const tableLabel = node.getAttr("tableLabel") || "";
 
     addTitle("Rectangular table");
-    addNumberField("Rotation", Math.round(node.rotation() || 0), -360, 360, 1, (v) => { 
-        node.rotation(v); 
-        if(typeof keepLabelsUpright === 'function') keepLabelsUpright(node); 
-        overlayLayer.batchDraw(); 
+    addNumberField("Rotation", Math.round(node.rotation() || 0), -360, 360, 1, (v) => {
+      node.rotation(v);
+      if (typeof keepLabelsUpright === 'function') keepLabelsUpright(node);
+      overlayLayer.batchDraw();
     });
 
     if (locked) {
@@ -6906,6 +6944,11 @@ function renderInspector(node) {
       addNumberField("Seats short side", shortSide, 0, 50, 1, (v) => { updateRectTableGeometry(node, longSide, v); mapLayer.batchDraw(); updateSeatCount(); pushHistory(); });
       addAccessControls(); // <--- Restored Detailed Controls
     }
+    // ADD FOOTER
+    const spacer = document.createElement("div");
+    spacer.style.height = "40px";
+    el.appendChild(spacer);
+    renderSidebarFooter();
     return;
   }
 
@@ -6929,6 +6972,11 @@ function renderInspector(node) {
     if (node.getAttr("stageTextAutoColor") === false) {
       addColorField("Text color", node.getAttr("stageTextColor") || "#ffffff", (v) => { node.setAttr("stageTextColor", v); applyStageStyle(node); });
     }
+    // ADD FOOTER
+    const spacer = document.createElement("div");
+    spacer.style.height = "40px";
+    el.appendChild(spacer);
+    renderSidebarFooter();
     return;
   }
 
@@ -6937,6 +6985,11 @@ function renderInspector(node) {
     addTitle("Bar");
     const labelNode = node.findOne(".bar-label") || node.findOne("Text");
     addTextField("Label", (labelNode && labelNode.text()) || "BAR", (v) => { if (labelNode) labelNode.text(v); });
+    // ADD FOOTER
+    const spacer = document.createElement("div");
+    spacer.style.height = "40px";
+    el.appendChild(spacer);
+    renderSidebarFooter();
     return;
   }
 
@@ -6945,6 +6998,11 @@ function renderInspector(node) {
     addTitle("Exit");
     const labelNode = node.findOne(".exit-label") || node.findOne("Text");
     addTextField("Label", (labelNode && labelNode.text()) || "EXIT", (v) => { if (labelNode) labelNode.text(v); });
+    // ADD FOOTER
+    const spacer = document.createElement("div");
+    spacer.style.height = "40px";
+    el.appendChild(spacer);
+    renderSidebarFooter();
     return;
   }
 
@@ -6956,6 +7014,11 @@ function renderInspector(node) {
     addNumberField("Font Size", (labelNode && labelNode.fontSize()) || 14, 8, 72, 1, (v) => {
       if (labelNode) labelNode.fontSize(v); ensureHitRect(node); mapLayer.batchDraw();
     });
+    // ADD FOOTER
+    const spacer = document.createElement("div");
+    spacer.style.height = "40px";
+    el.appendChild(spacer);
+    renderSidebarFooter();
     return;
   }
 
@@ -6972,6 +7035,11 @@ function renderInspector(node) {
     }
     addColorField("Stroke Color", node.getAttr("shapeStrokeColor") || "#4b5563", (v) => { node.setAttr("shapeStrokeColor", v); applyBasicShapeStyle(node); });
     addNumberField("Stroke Width", node.getAttr("shapeStrokeWidth") || 1.7, 0, 20, 0.5, (v) => { node.setAttr("shapeStrokeWidth", v); applyBasicShapeStyle(node); });
+    // ADD FOOTER
+    const spacer = document.createElement("div");
+    spacer.style.height = "40px";
+    el.appendChild(spacer);
+    renderSidebarFooter();
     return;
   }
 
@@ -6993,6 +7061,11 @@ function renderInspector(node) {
         node.setAttr("lineFillColor", v); updateLineFillShape(node); mapLayer.batchDraw();
       });
     }
+    // ADD FOOTER
+    const spacer = document.createElement("div");
+    spacer.style.height = "40px";
+    el.appendChild(spacer);
+    renderSidebarFooter();
     return;
   }
 
@@ -7001,6 +7074,11 @@ function renderInspector(node) {
     addColorField("Color", (node.findOne("Arrow") && node.findOne("Arrow").stroke()) || "#111827", (v) => {
       const arr = node.findOne("Arrow"); if (arr) { arr.stroke(v); arr.fill(v); mapLayer.batchDraw(); }
     });
+    // ADD FOOTER
+    const spacer = document.createElement("div");
+    spacer.style.height = "40px";
+    el.appendChild(spacer);
+    renderSidebarFooter();
     return;
   }
 
@@ -7009,10 +7087,20 @@ function renderInspector(node) {
     addNumberField("Steps", node.getAttr("stairsStepCount") || 8, 2, 50, 1, (v) => {
       node.setAttr("stairsStepCount", v); updateStairsGeometry(node); mapLayer.batchDraw();
     });
+    // ADD FOOTER
+    const spacer = document.createElement("div");
+    spacer.style.height = "40px";
+    el.appendChild(spacer);
+    renderSidebarFooter();
     return;
   }
-}
 
+  // Fallback for any other node types
+  const spacer = document.createElement("div");
+  spacer.style.height = "40px";
+  el.appendChild(spacer);
+  renderSidebarFooter();
+}
   function keepLabelsUpright(node) {
     const angle = node.rotation();
     const negate = -angle;
