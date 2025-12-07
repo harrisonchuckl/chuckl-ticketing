@@ -7266,27 +7266,7 @@ function addNumberField(labelText, value, min, step, onCommit) {
     if (nodes && nodes.length > 1) {
       addAlignButtonsPanel(nodes.length);
       return;
-    }
-
-    // --- PHASE 1: MAP NEXT STEP ---
-const nextBtn = document.createElement("button");
-nextBtn.className = "sb-next-step-btn";
-nextBtn.textContent = "Add tickets →";
-nextBtn.onclick = () => {
-  // Validation
-  const seats = getAllSeatNodes();
-  if (seats.length === 0) {
-    alert("Your map is empty. Please add seats before proceeding.");
-    return;
-  }
-  if (confirm("Have you finished the seating map?\n\nOnce tickets are added, editing the map structure becomes restricted.")) {
-    window.__TIXALL_COMPLETION_STATUS__.map = true;
-    updateCompletionUI();
-    switchBuilderTab("tickets");
-  }
-};
-el.appendChild(nextBtn);
-    
+    }    
     const shapeType = node.getAttr("shapeType") || node.name();
 
     // ---- Single Seat ----
