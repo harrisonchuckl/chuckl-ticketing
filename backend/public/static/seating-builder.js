@@ -5081,7 +5081,11 @@ if (mapLayer) mapLayer.batchDraw();
   }
 }
   
- function handleTicketSeatSelection(pointerPos, target) {
+function handleTicketSeatSelection(pointerPos, target) {
+    // --- FIX: Prevent Ticket Actions in Map Tab ---
+    // If we are in the MAP tab, ignore this click so we don't overwrite the Inspector.
+    if (activeMainTab === "map") return false;
+
     // -----------------------------------------------------------
     // 1. ACCESSIBILITY MODE INTERCEPT
     // -----------------------------------------------------------
@@ -5099,10 +5103,10 @@ if (mapLayer) mapLayer.batchDraw();
             const current = seat.getAttr("sbAccessibilityType");
             const next = (current === activeAccessibilityMode) ? null : activeAccessibilityMode;
             seat.setAttr("sbAccessibilityType", next);
-            
+
             const group = seat.getParent();
             if (group) applyAccessibilityVisualsOverride(seat, group);
-            
+
             applySeatVisuals();
             pushHistory();
             return true;
@@ -6212,11 +6216,11 @@ function clearAssignmentsFromGroup(group) {
   updateTicketRings();
   pushHistory();
 }
-  function renderInspector(node) {
+ function renderInspector(node) {
   const el = getInspectorElement();
   if (!el) return;
 
-  // If we are actually in the TICKETS tab, defer to the ticketing panel
+  // If we are actually in the TICKETS tab, use that panel instead
   if (activeMainTab === "tickets") {
     renderTicketingPanel();
     return;
@@ -6265,19 +6269,18 @@ function clearAssignmentsFromGroup(group) {
       <span class="sb-lock-icon"> 🔒 </span>
       <div class="sb-locked-title">Structure Locked</div>
       <div class="sb-locked-desc">
-        This element has tickets or holds assigned. You must remove them to edit the shape.
+        This element has tickets, holds, or view info assigned. You must remove them to edit the geometry.
       </div>
     `;
 
     // Button: Unlock THIS block
     const btnUnlock = document.createElement("button");
     btnUnlock.className = "sb-btn-unlock";
-    btnUnlock.textContent = "Remove tickets from this element";
+    btnUnlock.textContent = "Remove assignments from this element";
     btnUnlock.onclick = () => {
-      if(confirm("Are you sure? This will remove ALL tickets and holds from seats in this element, making it editable.")) {
+      if(confirm("Are you sure? This will remove ALL tickets, holds, and info from seats in this element.")) {
         clearAssignmentsFromGroup(node);
-        // Rerender inspector (it should now be unlocked)
-        renderInspector(node);
+        renderInspector(node); // Refresh panel
       }
     };
 
@@ -6300,19 +6303,9 @@ function clearAssignmentsFromGroup(group) {
 
   // =========================================================
   // NODE SPECIFIC CONTROLS
-  // (We now check 'if (locked)' inside each block to show read-only data)
   // =========================================================
-
-  // ... (Rest of your specific shape handlers: Single Seat, Row seats, etc.)
-  // Ensure that inside your shape handlers (e.g., Row seats), you keep the 'if (locked)' checks
-  // to show 'addStaticRow' instead of 'addNumberField'.
-
-  // =========================================================
-  // NODE SPECIFIC CONTROLS
-  // (We still show read-only stats if locked)
-  // =========================================================
-
-  // ---- Single Seat ----
+   
+   // ---- Single Seat ----
   if (shapeType === "single-seat") {
     addTitle("Single Seat");
     if(locked) {
