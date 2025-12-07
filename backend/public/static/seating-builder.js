@@ -30,7 +30,6 @@
   }
 
 function injectSeatmapStyles() {
-    // FIX: Always fetch the element, but update textContent even if it exists to ensure new CSS applies
     let style = document.getElementById("sb-seatmap-style");
     if (!style) {
         style = document.createElement("style");
@@ -38,40 +37,33 @@ function injectSeatmapStyles() {
         document.head.appendChild(style);
     }
     style.textContent = `
-    .sb-layout { font-family: inherit; width: 100%; height: 100%; overflow: hidden; }
-    
-    .tb-tab.is-error::after {
-        content: "  ✕ ";
-        color: #ef4444;
-        font-weight: bold;
-        margin-left: 6px;
-    }
-    .tb-tab.is-complete::after {
-        content: "  ✓ ";
-        color: #10b981;
-        font-weight: bold;
-        margin-left: 6px;
+    /* Force the existing Right Panel to use Flexbox so we can pin the footer */
+    .tb-side-panel {
+        display: flex !important;
+        flex-direction: column !important;
+        padding: 0 !important; /* We move padding to inner containers so footer hits edges */
+        overflow: hidden !important; /* Stop the whole panel scrolling, only inner content scrolls */
     }
 
-    /* INSPECTOR / SELECTION PANEL */
-    #sb-inspector { 
-        background: transparent; 
-        padding: 16px 16px 24px; 
-        flex: 1 1 auto; 
-        overflow-y: auto; 
-        min-height: 0; 
+    /* New container for the existing content (Seat Count + Inspector) */
+    #sb-sidebar-scroll-container {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        padding: 24px; /* Restore the original padding here */
+        min-height: 0;
     }
-    
-    /* NEW: FIXED FOOTER */
+
+    /* Fixed Footer at the bottom */
     #sb-sidebar-footer {
         flex: 0 0 auto;
-        padding: 16px;
+        padding: 16px 24px;
         background: #fff;
         border-top: 1px solid #e2e8f0;
         z-index: 20;
         box-shadow: 0 -4px 6px -1px rgba(0,0,0,0.05);
     }
 
+    /* EXISTING STYLES... */
     .sb-validation-list {
         margin-bottom: 12px;
         background: #fef2f2;
@@ -102,7 +94,6 @@ function injectSeatmapStyles() {
     .sb-field-row { margin-bottom: 12px; }
     .sb-label { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 600; color: #475569; }
     
-    /* INPUTS - Modern & Crisp */
     .sb-input, .sb-select, .sb-textarea {
         width: 100%; box-sizing: border-box;
         border: 1px solid #cbd5e1; border-radius: 6px;
@@ -128,7 +119,6 @@ function injectSeatmapStyles() {
         border-color: #08B8E8;
         box-shadow: 0 0 0 1px #08B8E8;
     }
-    
     .sb-ticket-card-header {
         width: 100%; padding: 16px; border: none; background: #fff;
         display: flex; align-items: center; justify-content: space-between;
@@ -136,20 +126,10 @@ function injectSeatmapStyles() {
     }
     .sb-ticket-card-header:hover { background: #f8fafc; }
     .sb-ticket-main-info { display: flex; align-items: center; gap: 12px; }
-    .sb-ticket-color-dot { 
-        width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0; 
-    }
-    .sb-ticket-name { 
-        font-weight: 600; font-size: 14px; color: #0f172a; line-height: 1.3; 
-    }
-    .sb-ticket-meta { 
-        font-size: 12px; color: #64748b; margin-top: 2px; 
-    }
-    .sb-ticket-card-body {
-        padding: 0 16px 16px;
-        background: #fff;
-        border-top: 1px solid #f1f5f9;
-    }
+    .sb-ticket-color-dot { width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0; }
+    .sb-ticket-name { font-weight: 600; font-size: 14px; color: #0f172a; line-height: 1.3; }
+    .sb-ticket-meta { font-size: 12px; color: #64748b; margin-top: 2px; }
+    .sb-ticket-card-body { padding: 0 16px 16px; background: #fff; border-top: 1px solid #f1f5f9; }
 
     /* BIG TIXALL BLUE BUTTON */
     .sb-btn-primary-large {
@@ -169,7 +149,7 @@ function injectSeatmapStyles() {
         justify-content: center;
         gap: 8px;
         transition: background 0.2s, transform 0.1s;
-        margin-top: 12px;
+        margin-top: 0; /* Handled by container padding */
         box-shadow: 0 4px 6px -1px rgba(8, 184, 232, 0.25);
     }
     .sb-btn-primary-large:hover { background-color: #069ac4; }
@@ -191,7 +171,6 @@ function injectSeatmapStyles() {
         transition: all 0.2s;
     }
     .sb-btn-unlock:hover { background: #fef2f2; }
-    
     .sb-btn-unlock-all {
         display: block; width: 100%; margin-top: 12px;
         color: #94a3b8; text-decoration: underline; font-size: 11px;
@@ -206,7 +185,6 @@ function injectSeatmapStyles() {
         display: flex; align-items: center; justify-content: center; cursor: pointer;
     }
     .tool-button:hover { background: #f8fafc; border-color: #cbd5e1; }
-
     .sb-ticketing-heading { margin-bottom: 24px; }
     .sb-ticketing-title { font-size: 20px; font-weight: 700; color: #0f172a; margin-bottom: 4px; }
     .sb-ticketing-sub { font-size: 13px; color: #64748b; }
@@ -215,6 +193,19 @@ function injectSeatmapStyles() {
         padding: 12px; border-radius: 8px; font-size: 13px; margin-bottom: 16px;
     }
     .sb-form-grid { display: grid; gap: 12px; margin-top: 16px; }
+    
+    .tb-tab.is-error::after {
+        content: "  ✕ ";
+        color: #ef4444;
+        font-weight: bold;
+        margin-left: 6px;
+    }
+    .tb-tab.is-complete::after {
+        content: "  ✓ ";
+        color: #10b981;
+        font-weight: bold;
+        margin-left: 6px;
+    }
     `;
 }
   injectSeatmapStyles();
@@ -224,65 +215,55 @@ function injectSeatmapStyles() {
     // ---------- Ensure sidebar DOM (seat count + inspector + footer) ----------
 // ---------- Ensure sidebar DOM (seat count + inspector + footer) ----------
 function ensureSidebarDom() {
-    const parent = container.parentNode;
-    if (!parent) return;
-
-    // 1. Ensure Main Wrapper
-    let wrapper = parent.querySelector(".sb-layout");
-    if (!wrapper) {
-        wrapper = document.createElement("div");
-        wrapper.className = "sb-layout";
-        wrapper.style.display = "flex";
-        wrapper.style.alignItems = "stretch";
-        wrapper.style.width = "100%";
-        wrapper.style.height = "100vh"; 
-        wrapper.style.boxSizing = "border-box";
-        parent.insertBefore(wrapper, container);
-        wrapper.appendChild(container);
+    // 1. Find the EXISTING right sidebar from the HTML template
+    // We look for the class '.tb-side-panel' which is defined in your HTML/CSS
+    const sidebar = document.querySelector('.tb-side-panel');
+    
+    // Safety check: if the HTML template hasn't rendered yet, stop.
+    if (!sidebar) {
+        console.warn("Right sidebar .tb-side-panel not found yet. Waiting for DOM...");
+        return;
     }
 
-    // 2. Ensure Sidebar Column
-    let sidebarCol = wrapper.querySelector(".sb-layout-sidebar");
-    if (!sidebarCol) {
-        sidebarCol = document.createElement("div");
-        sidebarCol.className = "sb-layout-sidebar";
-        sidebarCol.style.borderLeft = "1px solid #e5e7eb";
-        sidebarCol.style.background = "#f9fafb";
-        wrapper.appendChild(sidebarCol);
+    // 2. Check if we have already restructured it
+    // If the scroll container exists, we have already run this logic.
+    if (document.getElementById("sb-sidebar-scroll-container")) {
+        return; 
     }
 
-    // 3. FORCE Styles on Sidebar (Crucial for footer positioning)
-    // We apply these even if the sidebar already exists to ensure flex works
-    sidebarCol.style.flex = "0 0 360px";
-    sidebarCol.style.maxWidth = "360px";
-    sidebarCol.style.display = "flex";
-    sidebarCol.style.flexDirection = "column"; // Stack children vertically
-    sidebarCol.style.height = "100%"; 
-    sidebarCol.style.boxSizing = "border-box";
+    // 3. Create the Scroll Container 
+    // This will hold the "Seats on map" and "Selection/Inspector" sections
+    const scrollContainer = document.createElement("div");
+    scrollContainer.id = "sb-sidebar-scroll-container";
+    
+    // Apply styles directly (or via CSS) to ensure it fills the space but scrolls
+    scrollContainer.style.flex = "1 1 auto";
+    scrollContainer.style.overflowY = "auto";
+    scrollContainer.style.minHeight = "0";
+    scrollContainer.style.padding = "24px"; // Match original panel padding
 
-    // 4. Ensure Inspector (Scrollable Content) exists
-    let inspectorDiv = document.getElementById("sb-inspector");
-    if (!inspectorDiv) {
-        inspectorDiv = document.createElement("div");
-        inspectorDiv.id = "sb-inspector";
-        // Styling handled by CSS (.sb-inspector), but ensure it grows
-        inspectorDiv.style.flex = "1 1 auto"; 
-        inspectorDiv.style.overflowY = "auto";
-        sidebarCol.appendChild(inspectorDiv);
+    // 4. Move ALL existing children of the sidebar into this scroll container
+    // This loops through every element currently in the sidebar and moves it inside our new wrapper
+    while (sidebar.firstChild) {
+        scrollContainer.appendChild(sidebar.firstChild);
     }
 
-    // 5. Ensure Footer exists (THE MISSING PIECE)
-    let footerDiv = document.getElementById("sb-sidebar-footer");
-    if (!footerDiv) {
-        footerDiv = document.createElement("div");
-        footerDiv.id = "sb-sidebar-footer";
-        // Ensure it stays at the bottom
-        footerDiv.style.flex = "0 0 auto";
-        sidebarCol.appendChild(footerDiv);
-    }
+    // 5. Append the scroll container back to the sidebar
+    sidebar.appendChild(scrollContainer);
+
+    // 6. Create and Append the Fixed Footer
+    const footerDiv = document.createElement("div");
+    footerDiv.id = "sb-sidebar-footer";
+    // Footer styles are handled in injectSeatmapStyles, but we set structure here too
+    footerDiv.style.flex = "0 0 auto"; 
+    sidebar.appendChild(footerDiv);
+    
+    console.log("Sidebar structure updated: Scroll Container + Fixed Footer created.");
 }
 
-  ensureSidebarDom();
+// CRITICAL: Run this immediately so the footer container is ready
+ensureSidebarDom();
+  
   // ---------- Config ----------
 
   const GRID_SIZE = 32;
@@ -463,9 +444,9 @@ function updateCompletionUI() {
 // Renders the Fixed Footer with the Blue Button
 function renderSidebarFooter() {
     const footer = document.getElementById("sb-sidebar-footer");
-    if (!footer) return; // If ensureSidebarDom worked, this will now find the element
+    if (!footer) return;
 
-    footer.innerHTML = ""; 
+    footer.innerHTML = "";
     const tab = activeMainTab;
     const validation = window.__TIXALL_TAB_VALIDATION__[tab];
 
@@ -485,7 +466,6 @@ function renderSidebarFooter() {
     // 2. Render Button
     const btn = document.createElement("button");
     btn.className = "sb-btn-primary-large";
-    btn.style.marginTop = "0"; // Override default margin
     btn.style.width = "100%";
     btn.textContent = "Mark This Section Complete";
 
@@ -495,9 +475,8 @@ function renderSidebarFooter() {
         window.__TIXALL_COMPLETION_STATUS__[tab] = true;
         
         updateCompletionUI();
-        renderSidebarFooter(); // Re-render to show errors if any
+        renderSidebarFooter();
 
-        // Auto-advance logic
         const tabOrder = ['map', 'tickets', 'holds', 'view'];
         const idx = tabOrder.indexOf(tab);
         if (idx > -1 && idx < tabOrder.length - 1) {
@@ -513,7 +492,8 @@ function renderSidebarFooter() {
 
     footer.appendChild(btn);
 }
-function updateCompletionUI() {
+  
+  function updateCompletionUI() {
   const s = window.__TIXALL_COMPLETION_STATUS__;
   
   // 1. Update Tabs
