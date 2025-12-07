@@ -525,6 +525,27 @@ window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
     );
   }
 
+  // Check if a group (row/table) has any assignments that should lock its geometry
+function isNodeLocked(node) {
+  if (!node) return false;
+  // Find all seat circles within this group
+  const seats = node.find ? node.find("Circle").filter(n => n.getAttr("isSeat")) : [];
+  
+  for (const seat of seats) {
+    // Check Tickets
+    if (seat.getAttr("sbTicketId")) return true;
+    const tIds = seat.getAttr("sbTicketIds");
+    if (Array.isArray(tIds) && tIds.length > 0) return true;
+    
+    // Check Holds / Allocations
+    if (seat.getAttr("sbHoldStatus")) return true;
+    
+    // Check View / Info
+    if (seat.getAttr("sbViewImage") || seat.getAttr("sbInfoLabel")) return true;
+  }
+  return false;
+}
+
   // Background shapes: anything structural / decorative that seats/tables sit on top of
   function isBackgroundShapeType(shapeType) {
     return (
@@ -5877,32 +5898,6 @@ if (mapLayer) mapLayer.batchDraw();
    });
   el.appendChild(addBtn);
 
-  // --- PHASE 1: TICKETS NEXT STEP ---
-  const nextBtn = document.createElement("button");
-  nextBtn.className = "sb-next-step-btn";
-  nextBtn.textContent = "Add holds / Allocations →";
-  nextBtn.onclick = () => {
-    if (ticketTypes.length === 0) {
-      alert("Please create at least one ticket type.");
-      return;
-    }
-    // Simple validation: check if seats are assigned
-    const seats = getAllSeatNodes();
-    const assignedCount = seats.filter(s => s.getAttr('sbTicketIds')?.length > 0 || s.getAttr('sbTicketId')).length;
-    
-    if (assignedCount === 0) {
-      if (!confirm("You created tickets but haven't assigned them to any seats yet. Continue anyway?")) return;
-    }
-
-    if (confirm("Are you happy with your ticket setup?")) {
-      window.__TIXALL_COMPLETION_STATUS__.tickets = true;
-      updateCompletionUI();
-      switchBuilderTab("holds");
-    }
-  };
-  el.appendChild(nextBtn);
-}
-
   function renderHoldsPanel() {
   const el = getInspectorElement();
   if (!el) return;
@@ -7187,29 +7182,10 @@ function addNumberField(labelText, value, min, step, onCommit) {
 
 // ----- Global layout defaults (no selection) -----
 if (!node) {
-    // Dropdown removed. Default remains "numbers" (1, 2, 3...) based on globalSeatLabelMode init.
-
-    // Show "Next Step" button immediately when nothing is selected
-    const nextBtn = document.createElement("button");
-    nextBtn.className = "sb-next-step-btn";
-    nextBtn.textContent = "Add tickets  → ";
-    nextBtn.onclick = () => {
-        // Validation
-        const seats = getAllSeatNodes();
-        if (seats.length === 0) {
-            alert("Your map is empty. Please add seats before proceeding.");
-            return;
-        }
-        if (confirm("Have you finished the seating map?\n\nOnce tickets are added, editing the map structure becomes restricted.")) {
-            window.__TIXALL_COMPLETION_STATUS__.map = true;
-            updateCompletionUI();
-            switchBuilderTab("tickets");
-        }
-    };
-    el.appendChild(nextBtn);
-    return;
-}
-    
+  // Logic removed to hide the "Add tickets ->" button on load.
+  // The panel will remain empty until an object is selected.
+  return;
+}    
     const nodes = transformer ? transformer.nodes() : [];
 
     // ----- Multiple selection panel -----
@@ -7262,6 +7238,34 @@ if (!node) {
 
     // ---- Row blocks ----
     if (shapeType === "row-seats") {
+      // Inside renderInspector(node)... if (shapeType === "row-seats") { ...
+
+// [INSERT THIS CHECK]
+const locked = isNodeLocked(node);
+if (locked) {
+  const alertBox = document.createElement("div");
+  alertBox.className = "sb-ticketing-alert"; // Re-using your alert style
+  alertBox.textContent = "Configuration locked. Remove tickets/holds to edit structure.";
+  el.appendChild(alertBox);
+}
+
+// [UPDATE FIELDS TO BE STATIC IF LOCKED]
+if (locked) {
+  addStaticRow("Seats per row", seatsPerRow);
+  addStaticRow("Number of rows", rowCount);
+} else {
+  addNumberField("Seats per row", seatsPerRow, 1, 1, (val) => {
+    node.setAttr("seatsPerRow", val);
+    rebuild();
+  });
+  addNumberField("Number of rows", rowCount, 1, 1, (val) => {
+    node.setAttr("rowCount", val);
+    rebuild();
+  });
+}
+
+// ... rest of the row settings (Total seats, Labels) can remain as is, or lock similarly if desired.
+// Usually, changing labels is safe, but changing seat counts is dangerous.
       const seatsPerRow = Number(node.getAttr("seatsPerRow") ?? 10);
       const rowCount = Number(node.getAttr("rowCount") ?? 1);
       const seatLabelMode = node.getAttr("seatLabelMode") || "numbers";
@@ -7575,6 +7579,30 @@ if (!node) {
 
     // ---- Circular tables ----
     if (shapeType === "circular-table") {
+      // if (shapeType === "circular-table") { ...
+
+const locked = isNodeLocked(node);
+if (locked) {
+  const alertBox = document.createElement("div");
+  alertBox.className = "sb-ticketing-alert";
+  alertBox.textContent = "Structure locked due to assigned seats.";
+  el.appendChild(alertBox);
+}
+
+addNumberField("Rotation (deg)", ...); // Rotation is usually safe to keep unlocked
+
+addTextField("Table label", tableLabel, (val) => { ... });
+
+if (locked) {
+  addStaticRow("Seats around table", seatCount);
+} else {
+  addNumberField("Seats around table", seatCount, 1, 1, (val) => {
+    updateCircularTableGeometry(node, val);
+    mapLayer.batchDraw();
+    updateSeatCount();
+    pushHistory();
+  });
+}
       const seatCount = node.getAttr("seatCount") || 8;
       const seatLabelMode = node.getAttr("seatLabelMode") || "numbers";
       const tableLabel = node.getAttr("tableLabel") || "";
@@ -7639,6 +7667,25 @@ if (!node) {
 
     // ---- Rectangular tables ----
     if (shapeType === "rect-table") {
+      // if (shapeType === "rect-table") { ...
+
+const locked = isNodeLocked(node);
+if (locked) {
+  const alertBox = document.createElement("div");
+  alertBox.className = "sb-ticketing-alert";
+  alertBox.textContent = "Structure locked due to assigned seats.";
+  el.appendChild(alertBox);
+}
+
+// ... Rotation and Label fields ...
+
+if (locked) {
+  addStaticRow("Seats on long side", longSideSeats);
+  addStaticRow("Seats on short side", shortSideSeats);
+} else {
+  addNumberField("Seats on long side", longSideSeats, 0, 1, (val) => { ... });
+  addNumberField("Seats on short side", shortSideSeats, 0, 1, (val) => { ... });
+}
       const longSideSeats = node.getAttr("longSideSeats") ?? 4;
       const shortSideSeats = node.getAttr("shortSideSeats") ?? 2;
       const seatLabelMode = node.getAttr("seatLabelMode") || "numbers";
