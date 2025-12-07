@@ -5490,7 +5490,7 @@ function renderTicketingPanel() {
       actionsDiv.style.marginTop = "16px";
       actionsDiv.style.borderTop = "1px solid #f1f5f9";
       actionsDiv.style.paddingTop = "16px";
-      // Use flex column to stack the 3 buttons nicely
+      // Use flex column to stack the buttons nicely
       actionsDiv.style.display = "flex";
       actionsDiv.style.flexDirection = "column";
       actionsDiv.style.gap = "8px";
@@ -5539,7 +5539,7 @@ function renderTicketingPanel() {
           }
       };
 
-      // 3. Assign ALL Seats (Append logic - restores your missing functionality)
+      // 3. Assign ALL Seats
       const assignAllBtn = document.createElement("button");
       assignAllBtn.type = "button";
       assignAllBtn.className = "tool-button";
@@ -5570,9 +5570,54 @@ function renderTicketingPanel() {
           }
       };
 
+      // 4. Delete Ticket Button (NEW)
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "tool-button sb-ghost-button";
+      deleteBtn.textContent = "Delete Ticket";
+      deleteBtn.style.marginTop = "8px";
+      deleteBtn.style.color = "#ef4444"; // Red text
+      deleteBtn.style.borderColor = "#fee2e2"; // Light red border
+      
+      deleteBtn.onclick = () => {
+          if(!confirm(`Are you sure you want to delete "${ticket.name}"?\nThis will remove it from all assigned seats.`)) return;
+          
+          // 1. Remove this ticket from all seats
+          const seats = getAllSeatNodes();
+          seats.forEach(s => {
+             const { sid, set } = ensureSeatTicketSet(s);
+             if (set && set.has(ticket.id)) {
+                 set.delete(ticket.id);
+                 const ids = Array.from(set);
+                 s.setAttr("sbTicketIds", ids);
+                 s.setAttr("sbTicketId", ids[0] || null);
+                 if (ids.length === 0) {
+                    ticketAssignments.delete(sid);
+                 } else {
+                    ticketAssignments.set(sid, set);
+                 }
+             }
+          });
+          
+          // 2. Remove from global array
+          ticketTypes = ticketTypes.filter(t => t.id !== ticket.id);
+          
+          // 3. Reset active state if needed
+          if (activeTicketSelectionId === ticket.id) {
+             activeTicketSelectionId = ticketTypes.length > 0 ? ticketTypes[0].id : null;
+          }
+
+          // 4. Refresh
+          rebuildTicketAssignmentsCache();
+          applySeatVisuals();
+          renderTicketingPanel();
+          pushHistory();
+      };
+
       actionsDiv.appendChild(assignBtn);
       actionsDiv.appendChild(assignRemBtn);
-      actionsDiv.appendChild(assignAllBtn); // Added back!
+      actionsDiv.appendChild(assignAllBtn);
+      actionsDiv.appendChild(deleteBtn); // Added to end of list
       
       body.appendChild(actionsDiv);
       card.appendChild(body);
@@ -5617,6 +5662,7 @@ function renderTicketingPanel() {
 
   el.appendChild(addBtn);
 }
+  
   function renderHoldsPanel() {
   const el = getInspectorElement();
   if (!el) return;
