@@ -5663,46 +5663,37 @@ function renderTicketingPanel() {
   el.appendChild(addBtn);
 }
   
-  function renderHoldsPanel() {
+function renderHoldsPanel() {
   const el = getInspectorElement();
   if (!el) return;
-  
+
   // 1. Calculate Stats
   const seats = getAllSeatNodes();
   let holdCount = 0;
   let allocCount = 0;
   let allocSeatLabels = []; // For the email generation
 
-  // [Source: 4772] - Updated loop
-seats.forEach(seat => {
+  seats.forEach(seat => {
     const status = seat.getAttr("sbHoldStatus");
     if (status === "hold") holdCount++;
     if (status === "allocation") {
-        allocCount++;
-        
-        // --- NEW LOGIC: Detect Table vs Row for Labeling ---
-        const row = seat.getAttr("sbSeatRowLabel") || "";
-        const num = seat.getAttr("sbSeatLabel") || "";
-        
-        // Get parent group to check if it's a table
-        const group = seat.getParent();
-        const type = group ? (group.getAttr("shapeType") || group.name()) : "";
-        
-        let label = "";
-        
-        if (type === "circular-table" || type === "rect-table") {
-            // It is a table: Format as T{TableNumber}-{SeatNumber}
-            // 'row' variable holds the Table Label (e.g. "2")
-            // 'num' variable holds the Seat Number (e.g. "1")
-            label = `T${row}-${num}`;
-        } else {
-            // Standard row logic
-            label = row ? `${row}${num}` : num;
-        }
-
-        if(label) allocSeatLabels.push(label);
+      allocCount++;
+      // --- NEW LOGIC: Detect Table vs Row for Labeling ---
+      const row = seat.getAttr("sbSeatRowLabel") || "";
+      const num = seat.getAttr("sbSeatLabel") || "";
+      // Get parent group to check if it's a table
+      const group = seat.getParent();
+      const type = group ? (group.getAttr("shapeType") || group.name()) : "";
+      let label = "";
+      if (type === "circular-table" || type === "rect-table") {
+        label = `T${row}-${num}`;
+      } else {
+        label = row ? `${row}${num}` : num;
+      }
+      if (label) allocSeatLabels.push(label);
     }
-});
+  });
+
   el.innerHTML = "";
 
   // 2. Title
@@ -5714,172 +5705,174 @@ seats.forEach(seat => {
   `;
   el.appendChild(titleWrap);
 
-  // 3. Helper to create the "Card" for Hold/Allocation
-  const createStatusCard = (type, label, iconColor, count, description) => {
-    const card = document.createElement("div");
-    card.className = "sb-ticket-card"; // Reuse ticket styling
-    if (activeHoldMode === type) card.classList.add("is-active");
-    card.style.marginBottom = "10px";
-    card.style.cursor = "pointer";
+  // --- STACK CONTAINER ---
+  const stack = document.createElement("div");
+  stack.className = "sb-ticket-stack";
+  el.appendChild(stack);
 
-    card.innerHTML = `
-      <div class="sb-ticket-card-header">
-        <div class="sb-ticket-card-main">
-          <span class="sb-ticket-swatch" style="background: ${iconColor}; border-radius:50%;"></span>
-          <div class="sb-ticket-card-copy">
-            <div class="sb-ticket-name">${label}</div>
-            <div class="sb-ticket-meta">${count} seats assigned</div>
-          </div>
+  // 3. Helper to create the Modern "Card" (Identical to Tickets Tab)
+  const createStatusCard = (type, label, color, count, description) => {
+    const isActive = activeHoldMode === type;
+    const card = document.createElement("div");
+    card.className = "sb-ticket-card";
+    if (isActive) card.classList.add("is-active");
+
+    // --- HEADER ---
+    const header = document.createElement("div");
+    header.className = "sb-ticket-card-header";
+    header.innerHTML = `
+      <div class="sb-ticket-main-info">
+        <div class="sb-ticket-color-dot" style="background:${color};"></div>
+        <div>
+          <div class="sb-ticket-name">${label}</div>
+          <div class="sb-ticket-meta">${count} seats assigned · ${description}</div>
         </div>
-        ${activeHoldMode === type ? '<span class="sb-ticket-chip">Active</span>' : ''}
       </div>
-      <div style="padding: 0 14px 14px; font-size:12px; color:#6b7280;">
-        ${description}
+      <div style="color: #cbd5e1; transform: ${isActive ? 'rotate(180deg)' : 'rotate(0)'}; transition: transform 0.2s;">
+        ▼
       </div>
     `;
 
-    card.addEventListener("click", () => {
-      // Toggle mode
-      if (activeHoldMode === type) {
+    // Header Click: Toggle Mode
+    header.addEventListener("click", () => {
+      if (isActive) {
         activeHoldMode = null; // Toggle off
-        setTicketSeatSelectionMode(false, "holds-off"); // Turn off selection mode
+        setTicketSeatSelectionMode(false, "holds-off");
       } else {
         activeHoldMode = type;
-        // Reuse the ticket selection mode logic, but we will intercept the clicks
-        // to apply holds instead of tickets in the click handler
-        setTicketSeatSelectionMode(true, "holds-on"); 
+        setTicketSeatSelectionMode(true, "holds-on");
       }
       renderHoldsPanel();
     });
+    card.appendChild(header);
+
+    // --- BODY (Specific Logic for Allocation) ---
+    if (isActive && type === "allocation") {
+      const body = document.createElement("div");
+      body.className = "sb-ticket-card-body";
+
+      // A. Allocation Summary
+      const summaryText = allocSeatLabels.length > 0 ? allocSeatLabels.join(", ") : "No seats allocated yet.";
+      const summaryHtml = `
+        <div class="sb-field-col" style="margin-bottom:12px;">
+          <label class="sb-label">Allocated Seats</label>
+          <textarea class="sb-input sb-textarea" readonly style="height:60px;">${summaryText}</textarea>
+        </div>
+        <button class="tool-button" id="btn-email-promoter" style="margin-bottom:16px;">
+          Email Allocation to Promoter
+        </button>
+        <div style="border-top:1px solid #f1f5f9; margin-bottom:16px;"></div>
+      `;
+      const summaryDiv = document.createElement("div");
+      summaryDiv.innerHTML = summaryHtml;
+      body.appendChild(summaryDiv);
+
+      // B. Weekly Reports Form
+      const reportsHtml = `
+        <div class="sb-ticketing-title" style="font-size:13px; margin-bottom:8px;">Weekly Box Office Reports</div>
+        <div class="sb-field-col" style="margin-bottom:8px;">
+          <label class="sb-label">Recipient Email</label>
+          <input type="email" class="sb-input" id="rpt-email" value="${holdReportSettings.email}" placeholder="promoter@example.com">
+        </div>
+        <div style="display:flex; gap:8px; margin-bottom:8px;">
+          <div class="sb-field-col" style="flex:1;">
+            <label class="sb-label">Day</label>
+            <select class="sb-select" id="rpt-day">
+              <option value="Monday">Monday</option>
+              <option value="Friday">Friday</option>
+            </select>
+          </div>
+          <div class="sb-field-col" style="flex:1;">
+            <label class="sb-label">Time</label>
+            <input type="time" class="sb-input" id="rpt-time" value="${holdReportSettings.time}">
+          </div>
+        </div>
+        <button class="tool-button sb-ghost-button" id="btn-save-report">
+          Save Report Settings
+        </button>
+      `;
+      const reportsDiv = document.createElement("div");
+      reportsDiv.innerHTML = reportsHtml;
+      body.appendChild(reportsDiv);
+
+      card.appendChild(body);
+
+      // Wire up Buttons inside the body (Timeout ensures DOM is ready)
+      setTimeout(() => {
+        // 1. Email Promoter
+        const btnEmail = document.getElementById("btn-email-promoter");
+        if(btnEmail) btnEmail.onclick = (e) => {
+          e.stopPropagation(); // Prevent card toggle
+          const subject = encodeURIComponent(`Ticket Allocation: ${showMeta ? showMeta.title : 'Event'}`);
+          const b = encodeURIComponent(
+            `Hi,\n\nHere are the seats allocated for ${showMeta ? showMeta.title : 'the event'} on ${showMeta ?
+            new Date(showMeta.date).toLocaleDateString() : 'TBC'}.\n\nTotal Seats: ${allocCount}\nSeat Numbers: ${summaryText}\n\nVenue: ${showMeta && showMeta.venue ? showMeta.venue.name : ''}\n`
+          );
+          window.open(`mailto:?subject=${subject}&body=${b}`);
+        };
+
+        // 2. Save Reports
+        const btnSave = document.getElementById("btn-save-report");
+        const selDay = document.getElementById("rpt-day");
+        if(selDay) selDay.value = holdReportSettings.day;
+
+        if(btnSave) btnSave.onclick = async (e) => {
+          e.stopPropagation(); // Prevent card toggle
+          const email = document.getElementById("rpt-email").value;
+          const day = document.getElementById("rpt-day").value;
+          const time = document.getElementById("rpt-time").value;
+          holdReportSettings = { email, day, time };
+
+          try {
+            await fetch(`/admin/seating/builder/api/holds/${encodeURIComponent(showId)}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ reportEmail: email, reportDay: day, reportTime: time })
+            });
+            alert("Weekly report settings saved.");
+          } catch(err) {
+            console.error(err);
+            alert("Failed to save settings.");
+          }
+        };
+        // Stop propagation on inputs so typing doesn't close the card
+        const inputs = body.querySelectorAll("input, select, textarea");
+        inputs.forEach(i => i.addEventListener("click", e => e.stopPropagation()));
+      }, 0);
+    }
+
+    // --- BODY (Specific Logic for General Hold - Instructions only) ---
+    if (isActive && type === "hold") {
+       const body = document.createElement("div");
+       body.className = "sb-ticket-card-body";
+       body.innerHTML = `
+         <div style="font-size:12px; color:#6b7280; padding-top:4px;">
+           Click seats on the map to mark them as <b>General Holds</b>. These seats will be blocked from sale but not assigned to a specific promoter.
+         </div>
+       `;
+       card.appendChild(body);
+    }
 
     return card;
   };
 
   // 4. Append Cards
-  el.appendChild(createStatusCard(
-    "hold", 
-    "General Hold", 
-    "#000000", 
-    holdCount, 
-    "Seats blocked from sale (Internal)"
+  stack.appendChild(createStatusCard(
+    "hold",
+    "General Hold",
+    "#000000",
+    holdCount,
+    "Blocked from sale"
   ));
-
-  el.appendChild(createStatusCard(
-    "allocation", 
-    "Promoter Allocation", 
-    "#10B981", 
-    allocCount, 
-    "Seats allocated to external partners"
+  stack.appendChild(createStatusCard(
+    "allocation",
+    "Promoter Allocation",
+    "#10B981",
+    allocCount,
+    "External partners"
   ));
-
-  // 5. Allocation Specifics (Email Generator)
-  if (activeHoldMode === "allocation" || allocCount > 0) {
-    const emailSection = document.createElement("div");
-    emailSection.className = "sb-side-section";
-    emailSection.style.marginTop = "12px";
-    
-    const summaryText = allocSeatLabels.length > 0 
-      ? allocSeatLabels.join(", ") 
-      : "No seats allocated yet.";
-
-    emailSection.innerHTML = `
-      <h4 class="sb-inspector-title">External Promoter Details</h4>
-      <div class="sb-field-col">
-        <label class="sb-label">Allocated Seats</label>
-        <textarea class="sb-input sb-textarea" readonly>${summaryText}</textarea>
-      </div>
-      <button class="tool-button" id="btn-email-promoter" style="margin-top:8px;">
-        Email Allocation to Promoter
-      </button>
-    `;
-    el.appendChild(emailSection);
-
-    // Wire up Email Button
-    setTimeout(() => {
-      const btn = document.getElementById("btn-email-promoter");
-      if(btn) btn.onclick = () => {
-        const subject = encodeURIComponent(`Ticket Allocation: ${showMeta ? showMeta.title : 'Event'}`);
-        const body = encodeURIComponent(
-          `Hi,\n\nHere are the seats allocated for ${showMeta ? showMeta.title : 'the event'} on ${showMeta ? new Date(showMeta.date).toLocaleDateString() : 'TBC'}.\n\nTotal Seats: ${allocCount}\nSeat Numbers: ${summaryText}\n\nVenue: ${showMeta && showMeta.venue ? showMeta.venue.name : ''}\n`
-        );
-        window.open(`mailto:?subject=${subject}&body=${body}`);
-      };
-   }, 0);
+}
   
-  // --- PHASE 1: HOLDS NEXT STEP ---
-  const nextBtn = document.createElement("button");
-  nextBtn.className = "sb-next-step-btn";
-  nextBtn.textContent = "Set view & seat restrictions →";
-  nextBtn.onclick = () => {
-    if (confirm("Finished assigning holds and allocations? You can return later if needed.")) {
-      window.__TIXALL_COMPLETION_STATUS__.holds = true;
-      updateCompletionUI();
-      switchBuilderTab("view");
-    }
-  };
-  el.appendChild(nextBtn);
-}
-
-  // 6. Weekly Box Office Reports (Only visible in Allocation section or generally at bottom)
-  const reportSection = document.createElement("div");
-  reportSection.className = "sb-side-section";
-  reportSection.style.marginTop = "12px";
-  reportSection.innerHTML = `
-    <h4 class="sb-inspector-title">Weekly Box Office Reports</h4>
-    <div class="sb-field-row">
-      <div class="sb-field-col">
-        <label class="sb-label">Recipient Email</label>
-        <input type="email" class="sb-input" id="rpt-email" value="${holdReportSettings.email}" placeholder="promoter@example.com">
-      </div>
-    </div>
-    <div class="sb-field-row" style="display:flex; gap:8px;">
-      <div class="sb-field-col" style="flex:1;">
-        <label class="sb-label">Day</label>
-        <select class="sb-select" id="rpt-day">
-          <option value="Monday">Monday</option>
-          <option value="Friday">Friday</option>
-        </select>
-      </div>
-      <div class="sb-field-col" style="flex:1;">
-        <label class="sb-label">Time</label>
-        <input type="time" class="sb-input" id="rpt-time" value="${holdReportSettings.time}">
-      </div>
-    </div>
-    <button class="tool-button sb-ghost-button" id="btn-save-report" style="margin-top:8px;">
-      Save Report Settings
-    </button>
-  `;
-  el.appendChild(reportSection);
-
-  // Wire up Report Save
-  setTimeout(() => {
-    document.getElementById("rpt-day").value = holdReportSettings.day;
-    document.getElementById("btn-save-report").onclick = async () => {
-      const email = document.getElementById("rpt-email").value;
-      const day = document.getElementById("rpt-day").value;
-      const time = document.getElementById("rpt-time").value;
-      
-      holdReportSettings = { email, day, time };
-      
-      // Save to server
-      try {
-        await fetch(`/admin/seating/builder/api/holds/${encodeURIComponent(showId)}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            reportEmail: email,
-            reportDay: day,
-            reportTime: time
-          })
-        });
-        alert("Weekly report settings saved.");
-      } catch(e) {
-        console.error(e);
-        alert("Failed to save settings.");
-      }
-    };
-  }, 0);
-}
  function renderViewFromSeatsPanel() {
   const el = getInspectorElement();
   if (!el) return;
