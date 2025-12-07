@@ -580,20 +580,21 @@ window.__TIXALL_UPDATE_TOOL_BUTTON_STATE__ = updateToolButtonActiveState;
   }
 
   // Check if a group (row/table) has any assignments that should lock its geometry
+// Check if a group (row/table) has any assignments that should lock its geometry
 function isNodeLocked(node) {
   if (!node) return false;
   // Find all seat circles within this group
   const seats = node.find ? node.find("Circle").filter(n => n.getAttr("isSeat")) : [];
-  
+
   for (const seat of seats) {
-    // Check Tickets
+    // Check Tickets (Legacy & Multi)
     if (seat.getAttr("sbTicketId")) return true;
     const tIds = seat.getAttr("sbTicketIds");
     if (Array.isArray(tIds) && tIds.length > 0) return true;
-    
+
     // Check Holds / Allocations
     if (seat.getAttr("sbHoldStatus")) return true;
-    
+
     // Check View / Info
     if (seat.getAttr("sbViewImage") || seat.getAttr("sbInfoLabel")) return true;
   }
@@ -6183,10 +6184,11 @@ seats.forEach(seat => {
 // ---------- Selection inspector (right-hand panel) ----------
 
 // Helper to strip tickets/holds from a node so it can be edited
+// Helper to strip tickets/holds from a node so it can be edited
 function clearAssignmentsFromGroup(group) {
   if (!group || typeof group.find !== 'function') return;
   const seats = group.find((n) => n.getAttr("isSeat"));
-  
+
   seats.forEach(seat => {
     // Clear Tickets
     seat.setAttr("sbTicketId", null);
@@ -6195,13 +6197,14 @@ function clearAssignmentsFromGroup(group) {
     seat.setAttr("sbHoldStatus", null);
     // Clear Accessibility
     seat.setAttr("sbAccessibilityType", null);
-    // Remove from assignment cache
+    
+    // Remove from global assignment cache
     const sid = seat.getAttr("sbSeatId");
     if(sid && ticketAssignments.has(sid)) {
-        ticketAssignments.delete(sid);
+      ticketAssignments.delete(sid);
     }
   });
-  
+
   // Re-run standard updates
   rebuildTicketAssignmentsCache();
   refreshSeatMetadata();
@@ -6209,38 +6212,37 @@ function clearAssignmentsFromGroup(group) {
   updateTicketRings();
   pushHistory();
 }
-
-function renderInspector(node) {
+  function renderInspector(node) {
   const el = getInspectorElement();
   if (!el) return;
+
+  // If we are actually in the TICKETS tab, defer to the ticketing panel
   if (activeMainTab === "tickets") {
     renderTicketingPanel();
     return;
   }
+
   el.innerHTML = "";
 
-  // --- HELPERS (Copied/Restored from previous context to ensure scope availability) ---
+  // --- HELPERS ---
   const addTitle = (text) => {
-      const h = document.createElement("h4");
-      h.className = "sb-inspector-title";
-      h.textContent = text;
-      el.appendChild(h);
+    const h = document.createElement("h4");
+    h.className = "sb-inspector-title";
+    h.textContent = text;
+    el.appendChild(h);
   };
   const addStaticRow = (lbl, val) => {
-      const d = document.createElement("div");
-      d.className = "sb-field-row sb-field-static";
-      d.innerHTML = `<div class="sb-static-label">${lbl}</div><div class="sb-static-value">${val}</div>`;
-      el.appendChild(d);
+    const d = document.createElement("div");
+    d.className = "sb-field-row sb-field-static";
+    d.innerHTML = `<div class="sb-static-label">${lbl}</div><div class="sb-static-value">${val}</div>`;
+    el.appendChild(d);
   };
-  
-  // Re-define field helpers locally if they aren't available in scope, 
-  // OR rely on the global ones defined earlier in your file (addNumberField, addSelectField, etc).
-  // Assuming they ARE defined in the file scope (lines 7065+ in your original doc), we just use them.
 
   // ----- Global layout defaults (no selection) -----
   if (!node) {
     return;
   }
+
   const nodes = transformer ? transformer.nodes() : [];
   // ----- Multiple selection panel -----
   if (nodes && nodes.length > 1) {
@@ -6254,47 +6256,56 @@ function renderInspector(node) {
   // LOCK LOGIC: Check if node has tickets/holds
   // =========================================================
   const locked = isNodeLocked(node);
-  
-  if (locked) {
-      // 1. Render the "Locked" UI Panel
-      const lockPanel = document.createElement("div");
-      lockPanel.className = "sb-locked-state";
-      lockPanel.innerHTML = `
-        <span class="sb-lock-icon">🔒</span>
-        <div class="sb-locked-title">Structure Locked</div>
-        <div class="sb-locked-desc">
-            This block has tickets or holds assigned. You cannot change its rows or shape until they are removed.
-        </div>
-      `;
-      
-      // Button: Unlock THIS block
-      const btnUnlock = document.createElement("button");
-      btnUnlock.className = "sb-btn-unlock";
-      btnUnlock.textContent = "Remove assignments from this block";
-      btnUnlock.onclick = () => {
-          if(confirm("Are you sure? This will remove ALL tickets, holds, and accessibility statuses from seats in this block.")) {
-              clearAssignmentsFromGroup(node);
-              // Rerender inspector (it should now be unlocked)
-              renderInspector(node); 
-          }
-      };
-      
-      // Button: Unlock EVERYTHING (Global)
-      const btnUnlockAll = document.createElement("button");
-      btnUnlockAll.className = "sb-btn-unlock-all";
-      btnUnlockAll.textContent = "Remove assignments from ENTIRE map";
-      btnUnlockAll.onclick = () => {
-          if(prompt("Type 'DELETE' to confirm removing ALL ticket assignments and holds from the entire map.") === "DELETE") {
-              const allGroups = mapLayer.find("Group");
-              allGroups.forEach(g => clearAssignmentsFromGroup(g));
-              renderInspector(node);
-          }
-      };
 
-      lockPanel.appendChild(btnUnlock);
-      lockPanel.appendChild(btnUnlockAll);
-      el.appendChild(lockPanel);
+  if (locked) {
+    // 1. Render the "Locked" UI Panel
+    const lockPanel = document.createElement("div");
+    lockPanel.className = "sb-locked-state";
+    lockPanel.innerHTML = `
+      <span class="sb-lock-icon"> 🔒 </span>
+      <div class="sb-locked-title">Structure Locked</div>
+      <div class="sb-locked-desc">
+        This element has tickets or holds assigned. You must remove them to edit the shape.
+      </div>
+    `;
+
+    // Button: Unlock THIS block
+    const btnUnlock = document.createElement("button");
+    btnUnlock.className = "sb-btn-unlock";
+    btnUnlock.textContent = "Remove tickets from this element";
+    btnUnlock.onclick = () => {
+      if(confirm("Are you sure? This will remove ALL tickets and holds from seats in this element, making it editable.")) {
+        clearAssignmentsFromGroup(node);
+        // Rerender inspector (it should now be unlocked)
+        renderInspector(node);
+      }
+    };
+
+    // Button: Unlock EVERYTHING (Global)
+    const btnUnlockAll = document.createElement("button");
+    btnUnlockAll.className = "sb-btn-unlock-all";
+    btnUnlockAll.textContent = "Remove assignments from ENTIRE map";
+    btnUnlockAll.onclick = () => {
+      if(prompt("Type 'DELETE' to confirm removing ALL ticket assignments and holds from the entire map.") === "DELETE") {
+        const allGroups = mapLayer.find("Group");
+        allGroups.forEach(g => clearAssignmentsFromGroup(g));
+        renderInspector(node);
+      }
+    };
+
+    lockPanel.appendChild(btnUnlock);
+    lockPanel.appendChild(btnUnlockAll);
+    el.appendChild(lockPanel);
   }
+
+  // =========================================================
+  // NODE SPECIFIC CONTROLS
+  // (We now check 'if (locked)' inside each block to show read-only data)
+  // =========================================================
+
+  // ... (Rest of your specific shape handlers: Single Seat, Row seats, etc.)
+  // Ensure that inside your shape handlers (e.g., Row seats), you keep the 'if (locked)' checks
+  // to show 'addStaticRow' instead of 'addNumberField'.
 
   // =========================================================
   // NODE SPECIFIC CONTROLS
