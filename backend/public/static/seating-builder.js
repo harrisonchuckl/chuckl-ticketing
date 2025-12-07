@@ -7577,94 +7577,87 @@ if (locked) {
 
 
 
-    // ---- Circular tables ----
-    if (shapeType === "circular-table") {
-      // if (shapeType === "circular-table") { ...
+   // ---- Circular tables ----
+if (shapeType === "circular-table") {
+  // 1. Define variables FIRST
+  const seatCount = node.getAttr("seatCount") || 8;
+  const seatLabelMode = node.getAttr("seatLabelMode") || "numbers";
+  const tableLabel = node.getAttr("tableLabel") || "";
 
-const locked = isNodeLocked(node);
-if (locked) {
-  const alertBox = document.createElement("div");
-  alertBox.className = "sb-ticketing-alert";
-  alertBox.textContent = "Structure locked due to assigned seats.";
-  el.appendChild(alertBox);
-}
+  addTitle("Round table");
 
-addNumberField("Rotation (deg)", ...); // Rotation is usually safe to keep unlocked
+  // 2. Check for locks
+  const locked = isNodeLocked(node);
+  if (locked) {
+    const alertBox = document.createElement("div");
+    alertBox.className = "sb-ticketing-alert";
+    alertBox.textContent = "Structure locked due to assigned seats.";
+    el.appendChild(alertBox);
+  }
 
-addTextField("Table label", tableLabel, (val) => { ... });
+  // 3. Rotation Field (Original code restored)
+  addNumberField(
+    "Rotation (deg)",
+    Math.round(node.rotation() || 0),
+    -360,
+    1,
+    (val) => {
+      node.rotation(val);
+      keepLabelsUpright(node);
+      if (overlayLayer) overlayLayer.batchDraw();
+    }
+  );
 
-if (locked) {
-  addStaticRow("Seats around table", seatCount);
-} else {
-  addNumberField("Seats around table", seatCount, 1, 1, (val) => {
-    updateCircularTableGeometry(node, val);
-    mapLayer.batchDraw();
-    updateSeatCount();
-    pushHistory();
+  // 4. Label Field (Original code restored)
+  addTextField("Table label", tableLabel, (val) => {
+    node.setAttr("tableLabel", val || "");
+    updateCircularTableGeometry(
+      node,
+      node.getAttr("seatCount") || seatCount
+    );
   });
-}
-      const seatCount = node.getAttr("seatCount") || 8;
-      const seatLabelMode = node.getAttr("seatLabelMode") || "numbers";
-      const tableLabel = node.getAttr("tableLabel") || "";
 
-      addTitle("Round table");
-
-      addNumberField(
-        "Rotation (deg)",
-        Math.round(node.rotation() || 0),
-        -360,
-        1,
-        (val) => {
-          node.rotation(val);
-          keepLabelsUpright(node);
-          if (overlayLayer) overlayLayer.batchDraw();
-        }
-      );
-
-      addTextField("Table label", tableLabel, (val) => {
-        node.setAttr("tableLabel", val || "");
-        updateCircularTableGeometry(
-          node,
-          node.getAttr("seatCount") || seatCount
-        );
-      });
-
-      addNumberField("Seats around table", seatCount, 1, 1, (val) => {
-        updateCircularTableGeometry(node, val);
-        mapLayer.batchDraw();
-        updateSeatCount();
-        pushHistory();
-      });
-
-      addSelectField(
-        "Seat labels",
-        seatLabelMode,
-        [
-          { value: "numbers", label: "1, 2, 3..." },
-          { value: "letters", label: "A, B, C..." },
-          { value: "none", label: "No seat labels" },
-        ],
-        (mode) => {
-          node.setAttr("seatLabelMode", mode);
-          updateCircularTableGeometry(
-            node,
-            node.getAttr("seatCount") || seatCount
-          );
-        }
-      );
-
-      addStaticRow(
-        "Total seats at table",
-        `${seatCount} seat${seatCount === 1 ? "" : "s"}`
-      );
-
+  // 5. Seat Count (Locked vs Unlocked Logic)
+  if (locked) {
+    addStaticRow("Seats around table", seatCount);
+  } else {
+    addNumberField("Seats around table", seatCount, 1, 1, (val) => {
+      updateCircularTableGeometry(node, val);
       mapLayer.batchDraw();
       updateSeatCount();
       pushHistory();
-      addAccessControls(); // <--- Add this
-      return;
-    }
+    });
+  }
 
+  // 6. Label Mode Selector (Original code restored)
+  addSelectField(
+    "Seat labels",
+    seatLabelMode,
+    [
+      { value: "numbers", label: "1, 2, 3..." },
+      { value: "letters", label: "A, B, C..." },
+      { value: "none", label: "No seat labels" },
+    ],
+    (mode) => {
+      node.setAttr("seatLabelMode", mode);
+      updateCircularTableGeometry(
+        node,
+        node.getAttr("seatCount") || seatCount
+      );
+    }
+  );
+
+  addStaticRow(
+    "Total seats at table",
+    `${seatCount} seat${seatCount === 1 ? "" : "s"}`
+  );
+
+  mapLayer.batchDraw();
+  updateSeatCount();
+  pushHistory();
+  addAccessControls(); 
+  return;
+}
     // ---- Rectangular tables ----
     if (shapeType === "rect-table") {
       // if (shapeType === "rect-table") { ...
