@@ -747,37 +747,60 @@ function isNodeLocked(node) {
     if (el) el.textContent = seats === 1 ? "1 seat" : `${seats} seats`;
   }
 
-  // ---------- Grid ----------
+ // [Source: 616] - Updated to draw "Infinite" Grid based on visibility
+function drawSquareGrid() {
+  if (!gridLayer || !stage) return;
+  gridLayer.destroyChildren();
 
-  function drawSquareGrid() {
-    if (!gridLayer || !stage) return;
+  // 1. Get Viewport Info (Physical Container Dimensions)
+  const w = baseStageWidth; 
+  const h = baseStageHeight;
 
-    gridLayer.destroyChildren();
+  // 2. Get Transform Info
+  const scale = stage.scaleX() || 1;
+  const stageX = stage.x();
+  const stageY = stage.y();
 
-    const width = stage.width();
-    const height = stage.height();
+  // 3. Calculate Visible "World" Bounds (Inverse Transform)
+  //    Screen (0,0)  mapped to World: -stageX / scale
+  //    Screen (w,h)  mapped to World: (w - stageX) / scale
+  const startX = -stageX / scale;
+  const startY = -stageY / scale;
+  const endX = (w - stageX) / scale;
+  const endY = (h - stageY) / scale;
 
-    for (let x = 0; x <= width; x += GRID_SIZE) {
-      const line = new Konva.Line({
-        points: [x, 0, x, height],
-        stroke: "rgba(148,163,184,0.25)",
-        strokeWidth: x % (GRID_SIZE * 4) === 0 ? 1.1 : 0.6,
-      });
-      gridLayer.add(line);
-    }
+  // 4. Add a Buffer (Draw extra grid around edges so panning feels smooth)
+  //    We add 1 full screen width/height as buffer
+  const bufferX = (w / scale);
+  const bufferY = (h / scale);
 
-    for (let y = 0; y <= height; y += GRID_SIZE) {
-      const line = new Konva.Line({
-        points: [0, y, width, y],
-        stroke: "rgba(148,163,184,0.25)",
-        strokeWidth: y % (GRID_SIZE * 4) === 0 ? 1.1 : 0.6,
-      });
-      gridLayer.add(line);
-    }
+  const gridMinX = Math.floor((startX - bufferX) / GRID_SIZE) * GRID_SIZE;
+  const gridMaxX = Math.ceil((endX + bufferX) / GRID_SIZE) * GRID_SIZE;
+  const gridMinY = Math.floor((startY - bufferY) / GRID_SIZE) * GRID_SIZE;
+  const gridMaxY = Math.ceil((endY + bufferY) / GRID_SIZE) * GRID_SIZE;
 
-    gridLayer.batchDraw();
+  // 5. Draw Vertical Lines
+  for (let x = gridMinX; x <= gridMaxX; x += GRID_SIZE) {
+    gridLayer.add(new Konva.Line({
+      points: [x, gridMinY, x, gridMaxY],
+      stroke: "rgba(148,163,184,0.25)",
+      strokeWidth: x % (GRID_SIZE * 4) === 0 ? 1.1 : 0.6,
+      listening: false // Optimization: ignore clicks on grid
+    }));
   }
 
+  // 6. Draw Horizontal Lines
+  for (let y = gridMinY; y <= gridMaxY; y += GRID_SIZE) {
+    gridLayer.add(new Konva.Line({
+      points: [gridMinX, y, gridMaxX, y],
+      stroke: "rgba(148,163,184,0.25)",
+      strokeWidth: y % (GRID_SIZE * 4) === 0 ? 1.1 : 0.6,
+      listening: false
+    }));
+  }
+
+  gridLayer.batchDraw();
+}
   function resizeStageToContainer() {
     if (!stage) return;
 
