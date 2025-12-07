@@ -406,6 +406,25 @@ function validateCurrentTabLogic(tab) {
     return { valid: errors.length === 0, errors };
 }
 
+  // [NEW] Automatically re-check for errors and update the UI immediately
+function revalidateCurrentTab() {
+    const tab = activeMainTab;
+    
+    // Only run if we have previously marked this tab as "visited/complete"
+    // (i.e. if the user has already seen the Red X or Green Tick)
+    if (window.__TIXALL_COMPLETION_STATUS__ && window.__TIXALL_COMPLETION_STATUS__[tab]) {
+        // Run the validation logic
+        const res = validateCurrentTabLogic(tab);
+        
+        // Update the global validation state
+        window.__TIXALL_TAB_VALIDATION__[tab] = res;
+        
+        // Update the visual indicators (Tabs + Footer)
+        updateCompletionUI();
+        renderSidebarFooter();
+    }
+}
+  
 function updateCompletionUI() {
     const s = window.__TIXALL_COMPLETION_STATUS__;
     const v = window.__TIXALL_TAB_VALIDATION__;
@@ -1006,49 +1025,49 @@ function resizeStageToContainer() {
 
   function pushHistory() {
     if (isRestoringHistory || !mapLayer) return;
-
     const json = mapLayer.toJSON();
-
     if (historyIndex < history.length - 1) {
-      history = history.slice(0, historyIndex + 1);
+        history = history.slice(0, historyIndex + 1);
     }
-
     history.push(json);
     historyIndex = history.length - 1;
     updateUndoRedoButtons();
-  }
-
-function restoreHistory(toIndex) {
-  if (toIndex < 0 || toIndex >= history.length) return;
-  isRestoringHistory = true;
-  historyIndex = toIndex;
-  const json = history[historyIndex];
-  const newLayer = Konva.Node.create(json);
-  mapLayer.destroy();
-  mapLayer = newLayer;
-  mapLayer.position({ x: 0, y: 0 });
-  mapLayer.scale({ x: 1, y: 1 });
-  stage.add(mapLayer);
-  
-  // Re-attach standard behaviours (drag, hover)
-  mapLayer.getChildren().forEach((node) => {
-    attachNodeBehaviour(node);
-  });
-
-  // --- NEW: Re-attach Ticket Assignment Listeners if mode is active ---
-  if (ticketSeatSelectionMode) {
-    refreshSeatTicketListeners();
-    rebuildTicketAssignmentsCache(); // Ensure our ID map matches the visual state
-    renderTicketingPanel(); // Update the counts in the sidebar
-  }
-
-  mapLayer.draw();
-  updateSeatCount();
-  updateUndoRedoButtons();
-  clearSelection();
-  isRestoringHistory = false;
+    
+    // [NEW] Re-validate immediately after any change (e.g. adding a stage)
+    revalidateCurrentTab(); 
 }
+  
+function restoreHistory(toIndex) {
+    if (toIndex < 0 || toIndex >= history.length) return;
+    isRestoringHistory = true;
+    historyIndex = toIndex;
+    const json = history[historyIndex];
+    const newLayer = Konva.Node.create(json);
+    mapLayer.destroy();
+    mapLayer = newLayer;
+    mapLayer.position({ x: 0, y: 0 });
+    mapLayer.scale({ x: 1, y: 1 });
+    stage.add(mapLayer);
 
+    // Re-attach standard behaviours (drag, hover)
+    mapLayer.getChildren().forEach((node) => {
+        attachNodeBehaviour(node);
+    });
+    // --- NEW: Re-attach Ticket Assignment Listeners if mode is active ---
+    if (ticketSeatSelectionMode) {
+        refreshSeatTicketListeners();
+        rebuildTicketAssignmentsCache(); 
+        renderTicketingPanel(); 
+    }
+    mapLayer.draw();
+    updateSeatCount();
+    updateUndoRedoButtons();
+    clearSelection();
+    isRestoringHistory = false;
+
+    // [NEW] Re-validate after undoing/redoing actions
+    revalidateCurrentTab(); 
+}
       function undo() {
     // While actively drawing a straight line, undo removes the last segment.
     if (
@@ -8346,9 +8365,8 @@ function handleStageMouseMove() {
     clearSelection();
     mapLayer.batchDraw();
     updateSeatCount();
-    pushHistory();
-  }
-
+    pushHistory(); // pushHistory will now call revalidateCurrentTab() automatically!
+}
   function hookUndoRedoButtons() {
     const undoBtn = document.getElementById("sb-undo");
     const redoBtn = document.getElementById("sb-redo");
