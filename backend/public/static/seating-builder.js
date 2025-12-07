@@ -407,6 +407,7 @@ function validateCurrentTabLogic(tab) {
 }
 
 // Update the Top Bar visuals (Ticks vs Crosses)
+// Update the Top Bar visuals (Ticks vs Crosses)
 function updateCompletionUI() {
     const s = window.__TIXALL_COMPLETION_STATUS__;
     const v = window.__TIXALL_TAB_VALIDATION__;
@@ -415,32 +416,44 @@ function updateCompletionUI() {
     tabs.forEach(t => {
         const key = t.getAttribute('data-tab');
         
-        // Remove old classes
+        // 1. Reset classes first
         t.classList.remove('is-complete', 'is-error');
         
-        // Logic: 
-        // If status is TRUE -> Check Valid. 
-        // If Valid -> Green Tick. If Invalid -> Red Cross.
+        // 2. Logic: 
+        // Only apply icons if the section has been visited/marked done (s[key] is true)
         if (s[key]) {
-            if (v[key].valid) {
+            // Check if the validation object exists AND implies valid is true
+            if (v[key] && v[key].valid) {
                 t.classList.add('is-complete'); // Green Tick CSS
             } else {
-                t.classList.add('is-error'); // You'll need CSS for this (Red X)
+                t.classList.add('is-error');    // Red Cross CSS
             }
         }
     });
 
-    // Update Publish Button
+    // Update Header Buttons
     const btnPublish = document.getElementById('tb-btn-publish');
-    // Allow publish if Map is valid AND Tickets are valid (holds/view optional usually)
-    const canPublish = s.map && v.map.valid && s.tickets && v.tickets.valid;
+    const btnDraft = document.getElementById('tb-btn-draft');
+    
+    // Allow publish ONLY if Map and Tickets are marked complete AND valid
+    // (Holds and View are often optional, but we check map/tickets strictly)
+    const mapOk = s.map && v.map && v.map.valid;
+    const tixOk = s.tickets && v.tickets && v.tickets.valid;
+    const canPublish = mapOk && tixOk; 
     
     if (btnPublish) {
         btnPublish.disabled = !canPublish;
         btnPublish.title = canPublish ? "Ready to go live" : "Fix errors in Map/Tickets to publish";
+        // Toggle visual disabled state
+        if (!canPublish) btnPublish.classList.add('is-disabled');
+        else btnPublish.classList.remove('is-disabled');
+    }
+    
+    if (btnDraft) {
+        // Draft is always available
+        btnDraft.style.display = "inline-block";
     }
 }
-
 // Renders the Fixed Footer with the Blue Button
 function renderSidebarFooter() {
     const footer = document.getElementById("sb-sidebar-footer");
