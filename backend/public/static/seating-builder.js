@@ -7185,81 +7185,31 @@ function addNumberField(labelText, value, min, step, onCommit) {
       el.appendChild(distRow);
     }
 
-    // ----- Global layout defaults (no selection) -----
-    if (!node) {
-      addTitle("Layout defaults");
+// ----- Global layout defaults (no selection) -----
+if (!node) {
+    // Dropdown removed. Default remains "numbers" (1, 2, 3...) based on globalSeatLabelMode init.
 
-      addSelectField(
-        "Default seat labels for new blocks",
-        globalSeatLabelMode,
-        [
-          { value: "none", label: "No seat labels (dots)" },
-          { value: "numbers", label: "1, 2, 3..." },
-          { value: "letters", label: "A, B, C..." },
-        ],
-        (mode) => {
-          globalSeatLabelMode = mode;
-
-          if (mapLayer) {
-            mapLayer.find("Group").forEach((g) => {
-              const type = g.getAttr("shapeType") || g.name();
-
-              if (
-                type === "row-seats" ||
-                type === "single-seat" ||
-                type === "circular-table" ||
-                type === "rect-table"
-              ) {
-                g.setAttr("seatLabelMode", mode);
-
-                if (type === "row-seats") {
-                  const spr = g.getAttr("seatsPerRow") || 10;
-                  const rc = g.getAttr("rowCount") || 1;
-                  updateRowGroupGeometry(g, spr, rc);
-                } else if (type === "circular-table") {
-                  const sc = g.getAttr("seatCount") || 8;
-                  updateCircularTableGeometry(g, sc);
-                } else if (type === "rect-table") {
-                  const ls = g.getAttr("longSideSeats") ?? 4;
-                  const ss = g.getAttr("shortSideSeats") ?? 2;
-                  updateRectTableGeometry(g, ls, ss);
-                } else if (type === "single-seat") {
-                  const circle = g.findOne("Circle");
-                  const existingLabel = g.findOne((n) =>
-                    n.getAttr && n.getAttr("isSeatLabel")
-                  );
-                  if (circle) {
-                    if (mode === "none") {
-                      circle.fill("#111827");
-                      circle.stroke("#111827");
-                      if (existingLabel) existingLabel.destroy();
-                    } else {
-                      circle.fill("#ffffff");
-                      circle.stroke("#4b5563");
-                      let labelNode = existingLabel;
-                      const baseText = mode === "letters" ? "A" : "1";
-                      if (!labelNode) {
-                        labelNode = makeSeatLabelText(baseText, 0, 0);
-                        g.add(labelNode);
-                      }
-                      labelNode.text(baseText);
-                    }
-                  }
-                }
-              }
-            });
-          }
+    // Show "Next Step" button immediately when nothing is selected
+    const nextBtn = document.createElement("button");
+    nextBtn.className = "sb-next-step-btn";
+    nextBtn.textContent = "Add tickets  → ";
+    nextBtn.onclick = () => {
+        // Validation
+        const seats = getAllSeatNodes();
+        if (seats.length === 0) {
+            alert("Your map is empty. Please add seats before proceeding.");
+            return;
         }
-      );
-
-      addStaticRow(
-        "Tip",
-        "These defaults also update existing rows/tables and apply to new blocks."
-      );
-
-      return;
-    }
-
+        if (confirm("Have you finished the seating map?\n\nOnce tickets are added, editing the map structure becomes restricted.")) {
+            window.__TIXALL_COMPLETION_STATUS__.map = true;
+            updateCompletionUI();
+            switchBuilderTab("tickets");
+        }
+    };
+    el.appendChild(nextBtn);
+    return;
+}
+    
     const nodes = transformer ? transformer.nodes() : [];
 
     // ----- Multiple selection panel -----
