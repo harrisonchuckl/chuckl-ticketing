@@ -6188,14 +6188,14 @@ seats.forEach(seat => {
 // ---------- Selection inspector (right-hand panel) ----------
 
 // Helper to strip tickets/holds from a node so it can be edited
-// Helper to strip tickets/holds from a node so it can be edited
-// Helper to strip tickets/holds from a node so it can be edited
 function clearAssignmentsFromGroup(group) {
   if (!group || typeof group.find !== 'function') return;
-  const seats = group.find((n) => n.getAttr("isSeat"));
+
+  // FIX: Use "Circle" string selector first. Konva.find(function) is not reliable.
+  const seats = group.find("Circle").filter(n => n.getAttr("isSeat"));
 
   seats.forEach(seat => {
-    [cite_start]// Atomically clear all assignment attributes [cite: 5210]
+    // Atomically clear all assignment attributes
     seat.setAttrs({
       sbTicketId: null,
       sbTicketIds: [],
@@ -6203,6 +6203,7 @@ function clearAssignmentsFromGroup(group) {
       sbAccessibilityType: null,
       sbViewImage: null,
       sbInfoLabel: null,
+      sbInfoDesc: null, // Clear description too
       sbViewInfoId: null
     });
     
@@ -6220,7 +6221,8 @@ function clearAssignmentsFromGroup(group) {
   updateTicketRings();
   pushHistory();
 }
-function renderInspector(node) {
+  
+ function renderInspector(node) {
   const el = getInspectorElement();
   if (!el) return;
 
@@ -6461,7 +6463,9 @@ function renderInspector(node) {
     return;
   }
 
-  // ---- Stage ----
+  // ---- Fallback for standard shapes (Line, Text, etc) ----
+  // These usually don't have seats attached directly, so we keep standard controls.
+
   if (shapeType === "stage") {
     addTitle("Stage");
     const labelNode = node.findOne(".stage-label") || node.findOne("Text");
@@ -6484,7 +6488,6 @@ function renderInspector(node) {
     return;
   }
 
-  // ---- Bar ----
   if (shapeType === "bar") {
     addTitle("Bar");
     const labelNode = node.findOne(".bar-label") || node.findOne("Text");
@@ -6493,7 +6496,6 @@ function renderInspector(node) {
     return;
   }
 
-  // ---- Exit ----
   if (shapeType === "exit") {
     addTitle("Exit");
     const labelNode = node.findOne(".exit-label") || node.findOne("Text");
@@ -6502,7 +6504,6 @@ function renderInspector(node) {
     return;
   }
 
-  // ---- Text Label ----
   if (shapeType === "text" || shapeType === "label") {
     addTitle("Text Label");
     const labelNode = node.findOne("Text");
@@ -6514,7 +6515,6 @@ function renderInspector(node) {
     return;
   }
 
-  // ---- Other Shapes & Symbols ----
   if (["section", "square", "circle", "multi-shape", "symbol"].includes(shapeType)) {
     addTitle(shapeType.toUpperCase());
     if (shapeType === "symbol") {
