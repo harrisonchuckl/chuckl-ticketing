@@ -5880,12 +5880,12 @@ function renderHoldsPanel() {
   ));
 }
   
- function renderViewFromSeatsPanel() {
+function renderViewFromSeatsPanel() {
   const el = getInspectorElement();
   if (!el) return;
   el.innerHTML = "";
 
-  // 1. Collect Data
+  // 1. Collect Data (Keep existing logic)
   const seats = getAllSeatNodes();
   const viewSeats = [];
   const infoGroups = {}; // Map<Label, Array<Seat>>
@@ -5895,23 +5895,31 @@ function renderHoldsPanel() {
     // View Data
     const img = seat.getAttr("sbViewImage");
     if (img) {
-      viewSeats.push({ id: sid, node: seat, image: img, label: getSeatDisplayName(seat) });
+      viewSeats.push({
+        id: sid,
+        node: seat,
+        image: img,
+        label: getSeatDisplayName(seat)
+      });
     }
     // Info Data
     const infoLabel = seat.getAttr("sbInfoLabel");
     if (infoLabel) {
       if (!infoGroups[infoLabel]) infoGroups[infoLabel] = [];
-      infoGroups[infoLabel].push({ 
-        id: sid, 
-        node: seat, 
-        desc: seat.getAttr("sbInfoDesc"), 
-        label: getSeatDisplayName(seat) 
+      infoGroups[infoLabel].push({
+        id: sid,
+        node: seat,
+        desc: seat.getAttr("sbInfoDesc"),
+        label: getSeatDisplayName(seat)
       });
     }
   });
 
-  // Sort seats naturally (optional, but good for UI)
-  const sortFn = (a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' });
+  // Sort seats naturally
+  const sortFn = (a, b) => a.label.localeCompare(b.label, undefined, {
+    numeric: true,
+    sensitivity: 'base'
+  });
   viewSeats.sort(sortFn);
 
   // 2. Header
@@ -5923,7 +5931,7 @@ function renderHoldsPanel() {
   `;
   el.appendChild(titleWrap);
 
-  // Hidden File Input for "Active Mode" clicks
+  // Hidden File Input for "Active Mode" clicks (Preserve ID for toggleSeatTicketAssignment)
   const globalFileInput = document.createElement("input");
   globalFileInput.type = "file";
   globalFileInput.accept = "image/*";
@@ -5931,42 +5939,37 @@ function renderHoldsPanel() {
   globalFileInput.id = "sb-hidden-view-upload";
   el.appendChild(globalFileInput);
 
-  // --- CARD GENERATOR ---
-  const createMainCard = (type, title, symbolChar, isActive, bodyContent) => {
+  // 3. Stack Container
+  const stack = document.createElement("div");
+  stack.className = "sb-ticket-stack";
+  el.appendChild(stack);
+
+  // --- HELPER: Create Modern Card ---
+  const createCard = (type, title, meta, iconContent, isActive, renderBodyContent) => {
     const card = document.createElement("div");
     card.className = "sb-ticket-card";
     if (isActive) card.classList.add("is-active");
-    card.style.marginBottom = "6px"; // Tighter spacing
-    card.style.cursor = "pointer";
 
-    card.innerHTML = `
-      <div class="sb-ticket-card-header">
-        <div class="sb-ticket-card-main">
-          <span style="width:24px; height:24px; background:#000; color:#fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:${symbolChar === 'i' ? '14px' : '12px'}; font-family:serif;">
-            ${symbolChar}
-          </span>
-          <div class="sb-ticket-card-copy">
-            <div class="sb-ticket-name">${title}</div>
-          </div>
+    // Header
+    const header = document.createElement("div");
+    header.className = "sb-ticket-card-header";
+    header.innerHTML = `
+      <div class="sb-ticket-main-info">
+        <div class="sb-ticket-color-dot" style="background:#111827; display:flex; align-items:center; justify-content:center; color:white; font-size:10px; font-weight:bold;">
+          ${iconContent}
         </div>
-        ${isActive ? '<span class="sb-ticket-chip">Active</span>' : '<span class="sb-ticket-caret">▸</span>'}
+        <div>
+          <div class="sb-ticket-name">${title}</div>
+          <div class="sb-ticket-meta">${meta}</div>
+        </div>
+      </div>
+      <div style="color: #cbd5e1; transform: ${isActive ? 'rotate(180deg)' : 'rotate(0)'}; transition: transform 0.2s;">
+        ▼
       </div>
     `;
 
-    // Append Body if active
-    if (isActive && bodyContent) {
-      const body = document.createElement("div");
-      body.style.padding = "0 14px 14px";
-      body.style.cursor = "default"; // Don't toggle card when clicking body
-      body.appendChild(bodyContent);
-      
-      // Stop clicks in body from toggling the card
-      body.addEventListener("click", (e) => e.stopPropagation());
-      card.appendChild(body);
-    }
-
-    // Toggle Mode
-    card.addEventListener("click", () => {
+    // Toggle Logic
+    header.addEventListener("click", () => {
       if (activeViewType === type) {
         activeViewType = null;
         setTicketSeatSelectionMode(false, "view-off");
@@ -5978,267 +5981,206 @@ function renderHoldsPanel() {
       applySeatVisuals();
     });
 
+    card.appendChild(header);
+
+    // Body (only if active)
+    if (isActive) {
+      const body = document.createElement("div");
+      body.className = "sb-ticket-card-body";
+      renderBodyContent(body);
+      card.appendChild(body);
+    }
+
     return card;
   };
 
-  // --- 1. VIEW FROM SEATS SECTION ---
-  
-  // Body Content for View Card
-  const viewBody = document.createElement("div");
-  viewBody.innerHTML = `
-    <p style="font-size:12px; color:#6b7280; margin-bottom:8px;">
-      Click a seat to upload a view.
-    </p>
-  `;
+  // ==========================================
+  // CARD 1: VIEW FROM SEATS
+  // ==========================================
+  const viewCount = viewSeats.length;
+  const viewMeta = `${viewCount} view${viewCount !== 1 ? 's' : ''} added`;
 
-  // Create Card
-  el.appendChild(createMainCard(
-    "view", 
-    "View from Seats", 
-    "V", 
-    activeViewType === "view", 
-    viewBody
-  ));
+  stack.appendChild(createCard("view", "View from Seats", viewMeta, "V", activeViewType === "view", (body) => {
+    // A. Instructions
+    const intro = document.createElement("div");
+    intro.style.cssText = "font-size:13px; color:#64748b; margin-bottom:16px; line-height:1.4; background:#f8fafc; padding:12px; border-radius:8px; border:1px dashed #cbd5e1;";
+    intro.innerHTML = `Click any seat on the map to upload a view image.`;
+    body.appendChild(intro);
 
-  // ** VIEW LIST (Underneath Card) **
-  if (viewSeats.length > 0) {
-    const listContainer = document.createElement("div");
-    listContainer.style.marginBottom = "16px";
-    listContainer.style.paddingLeft = "10px";
+    // B. List of Existing Views
+    if (viewSeats.length > 0) {
+      const listDiv = document.createElement("div");
+      listDiv.style.display = "flex";
+      listDiv.style.flexDirection = "column";
+      listDiv.style.gap = "8px";
 
-    viewSeats.forEach(item => {
-      // Row Wrapper
-      const row = document.createElement("div");
-      row.style.borderBottom = "1px solid #f3f4f6";
-      
-      // Header
-      const head = document.createElement("div");
-      head.style.padding = "8px 4px";
-      head.style.display = "flex";
-      head.style.justifyContent = "space-between";
-      head.style.alignItems = "center";
-      head.style.cursor = "pointer";
-      head.style.fontSize = "13px";
-      head.innerHTML = `
-        <div style="display:flex; align-items:center; gap:8px;">
-          <span style="font-weight:600; color:#374151;">${item.label}</span>
-        </div>
-        <span class="sb-ticket-caret" style="font-size:10px;">▼</span>
-      `;
+      viewSeats.forEach(item => {
+        const row = document.createElement("div");
+        row.style.cssText = "display:flex; align-items:center; gap:10px; padding:8px; border:1px solid #e2e8f0; border-radius:8px; background:white;";
 
-      // Expanded Content
-      const body = document.createElement("div");
-      body.style.display = "none";
-      body.style.padding = "0 4px 10px";
-      
-      body.innerHTML = `
-        <img src="${item.image}" style="width:100%; height:120px; object-fit:cover; border-radius:6px; border:1px solid #e5e7eb; margin-bottom:8px;">
-        <div style="display:flex; gap:6px;">
-          <button class="tool-button sb-ghost-button" style="height:32px; font-size:11px;" id="btn-edit-${item.id}">Change Image</button>
-          <button class="tool-button sb-ghost-button" style="height:32px; font-size:11px; color:#ef4444;" id="btn-del-${item.id}">Remove</button>
-        </div>
-      `;
+        // Thumbnail
+        const thumb = document.createElement("img");
+        thumb.src = item.image;
+        thumb.style.cssText = "width:40px; height:40px; border-radius:6px; object-fit:cover; border:1px solid #f1f5f9; background:#f8fafc;";
+        row.appendChild(thumb);
 
-      // Toggle Logic
-      head.onclick = () => {
-        const isClosed = body.style.display === "none";
-        body.style.display = isClosed ? "block" : "none";
-        head.querySelector(".sb-ticket-caret").style.transform = isClosed ? "rotate(180deg)" : "rotate(0)";
-      };
+        // Label
+        const info = document.createElement("div");
+        info.style.flex = "1";
+        info.innerHTML = `<div style="font-weight:600; font-size:13px; color:#334155;">${item.label}</div>`;
+        row.appendChild(info);
 
-      row.appendChild(head);
-      row.appendChild(body);
-      listContainer.appendChild(row);
+        // Actions
+        const actions = document.createElement("div");
+        actions.style.display = "flex";
+        actions.style.gap = "4px";
 
-      // Event Listeners for buttons inside the expanded row
-      setTimeout(() => {
-        // Change Image
-        const editBtn = document.getElementById(`btn-edit-${item.id}`);
-        if(editBtn) editBtn.onclick = () => {
-          // Create temp input
+        // Edit Button
+        const btnEdit = document.createElement("button");
+        btnEdit.className = "tool-button";
+        btnEdit.style.cssText = "width:28px; height:28px; padding:0;";
+        btnEdit.innerHTML = "✎"; // Simple pencil icon or SVG
+        btnEdit.title = "Change Image";
+        btnEdit.onclick = (e) => {
+          e.stopPropagation();
           const tempInput = document.createElement("input");
           tempInput.type = "file";
           tempInput.accept = "image/*";
-          tempInput.onchange = (e) => {
+          tempInput.onchange = (ev) => {
             if (tempInput.files[0]) {
               const reader = new FileReader();
-              reader.onload = (ev) => {
-                item.node.setAttr("sbViewImage", ev.target.result);
-                renderViewFromSeatsPanel(); // Refresh list
+              reader.onload = (readEv) => {
+                item.node.setAttr("sbViewImage", readEv.target.result);
+                renderViewFromSeatsPanel();
+                applySeatVisuals();
+                pushHistory();
               };
               reader.readAsDataURL(tempInput.files[0]);
             }
           };
           tempInput.click();
         };
+        actions.appendChild(btnEdit);
 
-        // Remove
-        const delBtn = document.getElementById(`btn-del-${item.id}`);
-        if(delBtn) delBtn.onclick = () => {
-          if(confirm(`Remove view from seat ${item.label}?`)) {
+        // Delete Button
+        const btnDel = document.createElement("button");
+        btnDel.className = "tool-button";
+        btnDel.style.cssText = "width:28px; height:28px; padding:0; color:#ef4444; border-color:#fee2e2;";
+        btnDel.innerHTML = "×";
+        btnDel.title = "Remove View";
+        btnDel.onclick = (e) => {
+          e.stopPropagation();
+          if (confirm(`Remove view from ${item.label}?`)) {
             item.node.setAttr("sbViewImage", null);
             item.node.setAttr("sbViewInfoId", null);
             applySeatVisuals();
             renderViewFromSeatsPanel();
+            pushHistory();
           }
         };
-      }, 0);
-    });
-    el.appendChild(listContainer);
-  }
+        actions.appendChild(btnDel);
 
-  // --- 2. INFORMATION SECTION ---
+        row.appendChild(actions);
+        listDiv.appendChild(row);
+      });
+      body.appendChild(listDiv);
+    }
+  }));
 
-  // Body Content for Info Card (Inputs only, NO SYMBOL)
-  const infoBody = document.createElement("div");
-  // We need to sync these inputs with the global logic for "handleTicketSeatSelection"
-  // so we assign IDs that the selection logic can read.
-  infoBody.innerHTML = `
-    <div class="sb-field-col" style="margin-top:8px;">
-      <label class="sb-label">Label</label>
-      <input type="text" class="sb-input" id="sb-info-label" placeholder="e.g. Restricted View">
-    </div>
-    <div class="sb-field-col" style="margin-top:8px;">
-      <label class="sb-label">Description</label>
-      <textarea class="sb-input sb-textarea" id="sb-info-desc" placeholder="e.g. Limited legroom..."></textarea>
-    </div>
-    <div style="margin-top:8px; font-size:11px; color:#9ca3af;">
-      Select rows, blocks, or seats to apply.
-    </div>
-  `;
+  // ==========================================
+  // CARD 2: INFORMATION
+  // ==========================================
+  const infoGroupCount = Object.keys(infoGroups).length;
+  const infoMeta = `${infoGroupCount} active group${infoGroupCount !== 1 ? 's' : ''}`;
 
-  // Create Card (using lowercase 'i' serif font)
-  el.appendChild(createMainCard(
-    "info", 
-    "Information", 
-    "i", 
-    activeViewType === "info", 
-    infoBody
-  ));
+  stack.appendChild(createCard("info", "Information", infoMeta, "i", activeViewType === "info", (body) => {
+    // A. Inputs Section (Must preserve IDs for global click handlers)
+    const formHtml = `
+      <div style="background:#f8fafc; padding:12px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:16px;">
+        <div class="sb-field-col" style="margin-bottom:8px;">
+          <label class="sb-label">Label</label>
+          <input type="text" class="sb-input" id="sb-info-label" placeholder="e.g. Restricted View">
+        </div>
+        <div class="sb-field-col" style="margin-bottom:8px;">
+          <label class="sb-label">Description</label>
+          <textarea class="sb-input sb-textarea" id="sb-info-desc" placeholder="e.g. Limited legroom..."></textarea>
+        </div>
+        <div style="font-size:11px; color:#64748b;">
+          Select seats on the map to apply this info.
+        </div>
+      </div>
+    `;
+    const formDiv = document.createElement("div");
+    formDiv.innerHTML = formHtml;
+    // Stop propagation on inputs so typing doesn't close card
+    formDiv.querySelectorAll("input, textarea").forEach(i => i.addEventListener("click", e => e.stopPropagation()));
+    body.appendChild(formDiv);
 
-  // ** INFO LIST (Grouped by Label) **
-  const infoLabels = Object.keys(infoGroups).sort();
-  if (infoLabels.length > 0) {
-    const listContainer = document.createElement("div");
-    listContainer.style.marginBottom = "20px";
-    listContainer.style.paddingLeft = "10px";
+    // B. List of Existing Info (Grouped)
+    const labels = Object.keys(infoGroups).sort();
+    if (labels.length > 0) {
+      const listDiv = document.createElement("div");
+      listDiv.style.display = "flex";
+      listDiv.style.flexDirection = "column";
+      listDiv.style.gap = "12px";
 
-    infoLabels.forEach(label => {
-      // 1. Category Header
-      const catHeader = document.createElement("div");
-      catHeader.style.fontSize = "11px";
-      catHeader.style.fontWeight = "700";
-      catHeader.style.textTransform = "uppercase";
-      catHeader.style.color = "#6b7280";
-      catHeader.style.marginTop = "12px";
-      catHeader.style.marginBottom = "4px";
-      catHeader.textContent = label;
-      listContainer.appendChild(catHeader);
+      labels.forEach(lbl => {
+        // Group Header
+        const grpHead = document.createElement("div");
+        grpHead.style.cssText = "font-size:11px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid #f1f5f9; padding-bottom:4px; margin-bottom:4px;";
+        grpHead.textContent = lbl;
+        listDiv.appendChild(grpHead);
 
-      // 2. Sort seats in this group
-      const grpSeats = infoGroups[label].sort(sortFn);
+        // Seats in this group
+        infoGroups[lbl].forEach(item => {
+          const row = document.createElement("div");
+          row.style.cssText = "display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #f8fafc;";
 
-      // 3. Render Items
-      grpSeats.forEach(item => {
-        const row = document.createElement("div");
-        row.style.borderBottom = "1px solid #f3f4f6";
+          const left = document.createElement("div");
+          left.innerHTML = `
+            <div style="font-size:13px; font-weight:500; color:#334155;">${item.label}</div>
+            <div style="font-size:11px; color:#94a3b8;">${(item.desc || "").slice(0, 30)}${item.desc && item.desc.length > 30 ? '...' : ''}</div>
+          `;
 
-        // Item Header (Seat Label)
-        const head = document.createElement("div");
-        head.style.padding = "8px 4px";
-        head.style.display = "flex";
-        head.style.justifyContent = "space-between";
-        head.style.alignItems = "center";
-        head.style.cursor = "pointer";
-        head.style.fontSize = "13px";
-        head.innerHTML = `
-          <span style="font-weight:500; color:#374151;">${item.label}</span>
-          <span class="sb-ticket-caret" style="font-size:10px;">▼</span>
-        `;
-
-        // Item Body (Edit inputs)
-        const body = document.createElement("div");
-        body.style.display = "none";
-        body.style.padding = "4px 4px 10px";
-        // Inputs pre-filled with this seat's specific data
-        body.innerHTML = `
-          <div class="sb-field-col" style="margin-bottom:6px;">
-            <label class="sb-label" style="font-size:10px;">Edit Label</label>
-            <input type="text" class="sb-input" style="font-size:12px; padding:4px;" value="${label}" id="edit-lbl-${item.id}">
-          </div>
-          <div class="sb-field-col" style="margin-bottom:8px;">
-            <label class="sb-label" style="font-size:10px;">Edit Description</label>
-            <input type="text" class="sb-input" style="font-size:12px; padding:4px;" value="${item.desc || ''}" id="edit-desc-${item.id}">
-          </div>
-          <div style="display:flex; gap:6px;">
-            <button class="tool-button sb-ghost-button" style="height:28px; font-size:11px;" id="btn-save-${item.id}">Update</button>
-            <button class="tool-button sb-ghost-button" style="height:28px; font-size:11px; color:#ef4444;" id="btn-rem-${item.id}">Remove</button>
-          </div>
-        `;
-
-        // Toggle
-        head.onclick = () => {
-          const isClosed = body.style.display === "none";
-          body.style.display = isClosed ? "block" : "none";
-          head.querySelector(".sb-ticket-caret").style.transform = isClosed ? "rotate(180deg)" : "rotate(0)";
-        };
-
-        row.appendChild(head);
-        row.appendChild(body);
-        listContainer.appendChild(row);
-
-        // Bind Buttons
-        setTimeout(() => {
-          const btnSave = document.getElementById(`btn-save-${item.id}`);
-          if (btnSave) btnSave.onclick = () => {
-            const newLbl = document.getElementById(`edit-lbl-${item.id}`).value;
-            const newDesc = document.getElementById(`edit-desc-${item.id}`).value;
-            if (newLbl) {
-              item.node.setAttr("sbInfoLabel", newLbl);
-              item.node.setAttr("sbInfoDesc", newDesc);
-              renderViewFromSeatsPanel(); // Re-render to move category if label changed
-              applySeatVisuals();
-            }
-          };
-
-          const btnRem = document.getElementById(`btn-rem-${item.id}`);
-          if (btnRem) btnRem.onclick = () => {
+          const btnRem = document.createElement("button");
+          btnRem.className = "sb-btn-unlock-all"; // Reuse link style button
+          btnRem.style.cssText = "width:auto; margin:0; color:#ef4444; text-decoration:none; font-size:11px;";
+          btnRem.textContent = "Remove";
+          btnRem.onclick = (e) => {
+            e.stopPropagation();
             item.node.setAttr("sbInfoLabel", null);
             item.node.setAttr("sbInfoDesc", null);
             renderViewFromSeatsPanel();
             applySeatVisuals();
+            pushHistory();
           };
-        }, 0);
-      });
-    });
-  el.appendChild(listContainer);
-  }
 
-  // --- PHASE 1: VIEW NEXT STEP ---
+          row.appendChild(left);
+          row.appendChild(btnRem);
+          listDiv.appendChild(row);
+        });
+      });
+      body.appendChild(listDiv);
+    }
+  }));
+
+  // 4. Next Step Button
   const nextBtn = document.createElement("button");
-  nextBtn.className = "sb-next-step-btn";
-  nextBtn.textContent = "Ready to publish";
+  nextBtn.className = "sb-next-step-btn"; // Assuming you have this CSS class or similar
+  nextBtn.style.cssText = "width:100%; margin-top:16px; padding:12px; background:#10b981; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer;";
+  nextBtn.textContent = "Mark View Step Complete";
   nextBtn.onclick = () => {
-    // Basic validation of view mode (optional, mostly manual confirmation)
     window.__TIXALL_COMPLETION_STATUS__.view = true;
     updateCompletionUI();
-    
-    // Check global status
     const s = window.__TIXALL_COMPLETION_STATUS__;
     if (s.map && s.tickets && s.holds && s.view) {
       alert("All steps complete! You can now Publish the show from the top bar.");
     } else {
-      alert("View step marked complete. Please finish any remaining red tabs before publishing.");
+      alert("View step marked complete.");
     }
   };
   el.appendChild(nextBtn);
 }
-    // ---------- Selection inspector (right-hand panel) ----------
-// ---------- Selection inspector (right-hand panel) ----------
-
-// ---------- Selection inspector (right-hand panel) ----------
-
-// Helper to strip tickets/holds from a node so it can be edited
 function clearAssignmentsFromGroup(group) {
   if (!group || typeof group.find !== 'function') return;
 
