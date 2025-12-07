@@ -5398,7 +5398,7 @@ function renderTicketingPanel() {
         ticket.color = val;
         ticketFormState.color = val;
         applySeatVisuals();
-        renderTicketingPanel(); // Update header dot
+        renderTicketingPanel();
       };
       
       colorInput.addEventListener("input", () => { syncColor(colorInput.value); });
@@ -5457,12 +5457,15 @@ function renderTicketingPanel() {
       actionsDiv.style.marginTop = "16px";
       actionsDiv.style.borderTop = "1px solid #f1f5f9";
       actionsDiv.style.paddingTop = "16px";
+      // Use flex column to stack the 3 buttons nicely
+      actionsDiv.style.display = "flex";
+      actionsDiv.style.flexDirection = "column";
+      actionsDiv.style.gap = "8px";
       
-      // Manual Assign Button
+      // 1. Manual Assign Button
       const assignBtn = document.createElement("button");
       assignBtn.type = "button";
       assignBtn.className = "tool-button";
-      assignBtn.style.marginBottom = "8px";
       
       const isSelectMode = ticketSeatSelectionMode && activeTicketSelectionId === ticket.id;
       assignBtn.textContent = isSelectMode ? "Done Selecting" : "Select Seats on Map";
@@ -5479,12 +5482,12 @@ function renderTicketingPanel() {
           renderTicketingPanel();
       };
 
-      // Assign All Remaining
-      const assignAllBtn = document.createElement("button");
-      assignAllBtn.type = "button";
-      assignAllBtn.className = "tool-button";
-      assignAllBtn.textContent = "Assign Remaining Empty Seats";
-      assignAllBtn.onclick = () => {
+      // 2. Assign Remaining (only empty seats)
+      const assignRemBtn = document.createElement("button");
+      assignRemBtn.type = "button";
+      assignRemBtn.className = "tool-button";
+      assignRemBtn.textContent = "Assign Remaining Empty Seats";
+      assignRemBtn.onclick = () => {
           if (confirm(`Assign all currently unassigned seats to ${ticket.name}?`)) {
              const seats = getAllSeatNodes();
              seats.forEach(s => {
@@ -5503,10 +5506,42 @@ function renderTicketingPanel() {
           }
       };
 
-      actionsDiv.appendChild(assignBtn);
-      actionsDiv.appendChild(assignAllBtn);
-      body.appendChild(actionsDiv);
+      // 3. Assign ALL Seats (Append logic - restores your missing functionality)
+      const assignAllBtn = document.createElement("button");
+      assignAllBtn.type = "button";
+      assignAllBtn.className = "tool-button";
+      assignAllBtn.textContent = "Assign All Seats";
+      assignAllBtn.onclick = () => {
+          if (confirm(`Assign EVERY seat on the map to ${ticket.name}? This will add this ticket to seats that already have others assigned.`)) {
+             const seats = getAllSeatNodes();
+             enforceUniqueSeatIds(seats);
+             
+             seats.forEach(s => {
+                 const { sid, set } = ensureSeatTicketSet(s);
+                 if (!set) return;
+                 // Add this ticket if not already there
+                 if (!set.has(ticket.id)) {
+                     // Check max limit just in case
+                     if (set.size >= 10) return;
+                     set.add(ticket.id);
+                     const ids = Array.from(set);
+                     s.setAttr("sbTicketIds", ids);
+                     s.setAttr("sbTicketId", ids[0] || null); // Sync legacy ID
+                     ticketAssignments.set(sid, set);
+                 }
+             });
+             rebuildTicketAssignmentsCache();
+             applySeatVisuals();
+             renderTicketingPanel();
+             pushHistory();
+          }
+      };
 
+      actionsDiv.appendChild(assignBtn);
+      actionsDiv.appendChild(assignRemBtn);
+      actionsDiv.appendChild(assignAllBtn); // Added back!
+      
+      body.appendChild(actionsDiv);
       card.appendChild(body);
     }
     
@@ -5527,7 +5562,7 @@ function renderTicketingPanel() {
     
     const newTicket = {
       id: `ticket-${Date.now()}-${ticketTypes.length + 1}`,
-      name: "", // Start blank so user types immediately
+      name: "", // Start blank
       price: 0,
       currency: venueCurrencyCode,
       color: colorForNewTicket,
