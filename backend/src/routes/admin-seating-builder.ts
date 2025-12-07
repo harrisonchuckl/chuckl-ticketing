@@ -499,11 +499,11 @@ router.get("/builder/preview/:showId", (req, res) => {
     .tb-tab.is-active.is-complete::after { color: #fff; }
 
     /* Zoom Controls */
-    .tb-zoom-toolbar {
+.tb-zoom-toolbar {
   position: absolute;
-  bottom: 24px;      /* Move to bottom */
-  right: 24px;       /* Keep on right */
-  top: auto;         /* Unset top */
+  top: auto !important;    /* Force unset the top position */
+  bottom: 24px !important; /* Force set the bottom position */
+  right: 24px;
   background: #fff;
   border-radius: 8px;
   border: 1px solid var(--border-color);
