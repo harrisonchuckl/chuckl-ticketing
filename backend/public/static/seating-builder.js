@@ -5082,15 +5082,13 @@ if (mapLayer) mapLayer.batchDraw();
 }
   
 function handleTicketSeatSelection(pointerPos, target) {
-    // --- FIX: Prevent Ticket Actions in Map Tab ---
-    // If we are in the MAP tab, ignore this click so we don't overwrite the Inspector.
-    if (activeMainTab === "map") return false;
-
     // -----------------------------------------------------------
-    // 1. ACCESSIBILITY MODE INTERCEPT
+    // 1. ACCESSIBILITY MODE INTERCEPT (High Priority)
     // -----------------------------------------------------------
+    // This allows clicks to work on the Map tab ONLY if we are in Disabled/Carer mode
     if (activeAccessibilityMode) {
         let seat = findSeatNodeFromTarget(target);
+        // Try to find seat under pointer if target wasn't direct hit
         if (!seat && stage && pointerPos) {
             const vis = target.visible();
             target.visible(false);
@@ -5115,7 +5113,14 @@ function handleTicketSeatSelection(pointerPos, target) {
     }
 
     // -----------------------------------------------------------
-    // 2. ASSIGNMENT MODE
+    // 2. TAB SAFETY GUARD
+    // -----------------------------------------------------------
+    // If we are NOT in accessibility mode, and we are on the MAP tab,
+    // we block ticket assignments so we don't accidentally assign tickets/holds while editing.
+    if (activeMainTab === "map") return false;
+
+    // -----------------------------------------------------------
+    // 3. ASSIGNMENT MODE (Tickets / Holds / Info)
     // -----------------------------------------------------------
     let activeId = null;
     if (activeHoldMode) activeId = activeHoldMode; 
@@ -5176,12 +5181,12 @@ function handleTicketSeatSelection(pointerPos, target) {
     };
 
     // -----------------------------------------------------------
-    // 3. TARGET IDENTIFICATION
+    // 4. TARGET IDENTIFICATION (Group Clicks)
     // -----------------------------------------------------------
 
     // A. ROW LETTER CLICK
     if (target && target.getAttr("isRowLabel")) {
-        const txt = target.text().trim(); // Use trim() to ensure matches
+        const txt = target.text().trim(); 
         const group = target.getParent();
         if (group && txt) {
             const seats = group.find(n => n.getAttr("isSeat") && n.getAttr("sbSeatRowLabel") === txt);
