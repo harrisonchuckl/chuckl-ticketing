@@ -9193,59 +9193,63 @@ if (shapeType === "rect-table") {
 
 function attachNodeBehaviour(node) {
     if (!node || !(node instanceof Konva.Group)) return;
-    
-    // 1) Run all existing per-type hooks / drag logic etc.
+
+    // 1) Run existing per-type hooks (styling, etc.)
     baseAttachNodeBehaviour(node);
-    
+
     const type = node.getAttr("shapeType") || node.name();
-    
-    // 2) Ensure multi-shapes always have resize/rotate transform behaviour
+
+    // 2) Ensure multi-shapes always have resize/rotate behaviour
     if (type === "multi-shape") {
-      attachMultiShapeTransformBehaviour(node);
+        attachMultiShapeTransformBehaviour(node);
     }
-    
-    // 3) Selection behaviour (single + Shift multi-select)
-    // Using click/tap is safer than mousedown to avoid conflict with dragging start
-    node.off("click.seatmapSelect tap.seatmapSelect");
-    node.on("click.seatmapSelect tap.seatmapSelect", (evt) => {
-      // --- SAFETY GUARD FOR OTHER TABS ---
-      // If we are in tickets/holds/view mode, DO NOT trigger standard selection inspector
-      if (ticketSeatSelectionMode || window.ticketSeatSelectionMode) return;
-      
-      // Only block selection if we are using a specific DRAWING tool (not select)
-      if (activeTool && activeTool !== 'select') return;
-      
-      // Only trigger on Left Click
-      if (evt.evt && typeof evt.evt.button === 'number' && evt.evt.button !== 0) return;
-      
-      // Critical: Stop event from hitting the stage (which would deselect this node)
-      evt.cancelBubble = true;
-      
-      if (isShiftPressed && transformer) {
-        // Multi-select: add/remove this node from the Transformer selection
-        const existing = transformer.nodes();
-        const idx = existing.indexOf(node);
-        if (idx === -1) {
-          transformer.nodes(existing.concat(node));
+
+    // 3) SELECTION BEHAVIOUR
+    // Remove old listeners to avoid duplicates
+    node.off("mousedown.seatmapSelect touchstart.seatmapSelect click.seatmapSelect tap.seatmapSelect");
+
+    // A. SELECT ON MOUSE DOWN (Instant response)
+    node.on("mousedown.seatmapSelect touchstart.seatmapSelect", (evt) => {
+        // Safety: Don't select if we are in Ticket/View/Hold modes
+        if (ticketSeatSelectionMode || window.ticketSeatSelectionMode) return;
+        // Safety: Don't select if drawing a line/shape
+        if (activeTool && activeTool !== 'select') return;
+        // Safety: Only Left Click
+        if (evt.evt && typeof evt.evt.button === 'number' && evt.evt.button !== 0) return;
+
+        // CRITICAL: Stop event from reaching the Stage (which would Deselect this node)
+        evt.cancelBubble = true;
+
+        if (isShiftPressed && transformer) {
+            // Multi-select logic
+            const existing = transformer.nodes();
+            const idx = existing.indexOf(node);
+            if (idx === -1) {
+                transformer.nodes(existing.concat(node));
+            } else {
+                const clone = existing.slice();
+                clone.splice(idx, 1);
+                transformer.nodes(clone);
+            }
+            // Update Inspector for multi-select
+            selectedNode = transformer.nodes().length === 1 ? transformer.nodes()[0] : null;
+            renderInspector(selectedNode);
         } else {
-          const clone = existing.slice();
-          clone.splice(idx, 1);
-          transformer.nodes(clone);
+            // Standard Single Selection
+            selectNode(node);
         }
         
-        // If exactly one node selected, keep inspector in "single" mode
-        selectedNode = transformer.nodes().length === 1 ? transformer.nodes()[0] : null;
-        
-        renderInspector(selectedNode);
-        if (mapLayer) mapLayer.batchDraw();
+        // Force a redraw so the selection box appears instantly
         if (overlayLayer) overlayLayer.batchDraw();
-      } else {
-        // Normal single selection (clears previous selection automatically)
-        selectNode(node);
-      }
     });
-}
-  
+
+    // B. BLOCK CLICK BUBBLING (Prevents "Double Fire" issues)
+    // If we don't catch this, the 'click' event will bubble to the Stage 
+    // immediately after 'mousedown', causing the Stage to clear the selection we just made.
+    node.on("click.seatmapSelect tap.seatmapSelect", (evt) => {
+        evt.cancelBubble = true;
+    });
+}  
     function createNodeForTool(tool, pos) {
       // default to centre if for some reason we don't have a pointer
       let pointerX = stage ? stage.width() / 2 : 0;
@@ -9581,109 +9585,74 @@ if (
 
   // ---------- Canvas interactions ----------
 
-      // ---------- Canvas interactions: click / selection / placement ----------
-function handleStageClick(evt) {
-//  🛑  CRITICAL FIX: If we are in seat assignment mode (View/Tickets/Holds), we must EXIT immediately.
-//  Check both local and global state to be safe.
-if (ticketSeatSelectionMode || window.ticketSeatSelectionMode) {
-// Ensure no "standard" selection (Transformer) is active so we don't drag groups
-clearSelection();
-// eslint-disable-next-line no-console
-console.log("[seatmap][tickets] STAGE CLICK BLOCKED: Ticket/View assignment mode is active.");
-return;
-}
+  function handleStageClick(evt) {
+    // 1. If in specific modes (Tickets/Holds/View), ignore standard clicks entirely.
+    if (ticketSeatSelectionMode || window.ticketSeatSelectionMode) {
+        clearSelection();
+        return;
+    }
 
-// --- START ORIGINAL LOGIC ---
-if (!stage || !mapLayer) return;
-const pointerPos = stage.getPointerPosition();
-if (!pointerPos) return;
-const pos = pointerPos;
-// eslint-disable-next-line no-console
-console.log("[seatmap] stage click", {
-selectionModeOn: ticketSeatSelectionMode,
-targetName: evt.target && evt.target.name ? evt.target.name() : evt.target && evt.target.className,
-pointer: pointerPos,
-});
-const target = evt.target;
-const isHandle =
-target &&
-target.getAttr &&
-(target.getAttr("isLineHandle") || target.getAttr("isArrowHandle"));
-// Stairs uses click+drag, not click-to-place.
-// The actual creation is driven by mousedown / mousemove / mouseup.
-if (activeTool === "stairs") {
-return;
-}
-// --- Multi-shape tool (N-sided polygons, rhombus, parallelogram) ---
-if (activeTool === "multi-shape") {
-const g = createMultiShape(pos.x, pos.y);
-mapLayer.add(g);
-attachNodeBehaviour(g);
-sbNormalizeZOrder(g);
-selectNode(g);
-mapLayer.batchDraw();
-updateSeatCount();
-pushHistory();
-return;
-}
-// 1) LINE TOOL (click-to-add points)
-// Only fire on normal canvas clicks – NOT when clicking a handle.
-if ((activeTool === "line" || activeTool === "curve-line") && !isHandle) {
-handleLineClick(pointerPos, activeTool);
-return;
-}
-// 1b) ARROW TOOL (click start, click end)
-if (activeTool === "arrow") {
-handleArrowClick(pointerPos);
-return;
-}
-// 2) Placement tools (rows, single seats, tables, shapes, text, etc.)
-// If a placement tool is active, ALWAYS create at the click position,
-// even if we clicked on top of another shape (inside a VIP box, etc.).
-if (
-activeTool &&
-activeTool !== "line" &&
-activeTool !== "curve-line" &&
-activeTool !== "arrow"
-) {
-const node = createNodeForTool(activeTool, pointerPos);
-if (!node) return;
-mapLayer.add(node);
-// NEW: send basic shapes to the back (background layers)
-const t = node.getAttr("shapeType") || node.name();
-if (t === "square" || t === "circle") {
-node.moveToBottom();
-}
-attachNodeBehaviour(node);
-mapLayer.batchDraw();
-updateSeatCount();
-selectNode(node);
-pushHistory();
-// Drop the tool after placing so next click doesn't create another
-setActiveTool(null);
-updateDefaultCursor();
-return;
-}
-// 3) No active placement tool -> standard selection behaviour
-let group = null;
-if (target && typeof target.findAncestor === "function") {
-group = target.findAncestor("Group", true);
-}
-// Clicked on an existing object -> select it
-if (group && group.getLayer && group.getLayer() === mapLayer) {
-const e = evt.evt || evt;
-const additive =
-isShiftPressed || !!(e && (e.shiftKey || e.metaKey || e.ctrlKey));
-selectNode(group, additive);
-return;
-}
-// 4) Clicked on empty canvas -> clear selection
-const clickedOnEmpty =
-target === stage || (target.getLayer && target.getLayer() === gridLayer);
-if (clickedOnEmpty) {
-clearSelection();
-}
-// --- END ORIGINAL LOGIC ---
+    if (!stage || !mapLayer) return;
+
+    // 2. Identify what was clicked
+    const target = evt.target;
+    
+    // 3. Drawing Tools Handlers
+    // If drawing a line or arrow, pass control to those specific functions
+    const isHandle = target && target.getAttr && (target.getAttr("isLineHandle") || target.getAttr("isArrowHandle"));
+    
+    if (activeTool === "multi-shape") {
+        const pos = stage.getPointerPosition();
+        if (pos) {
+            const g = createMultiShape(pos.x, pos.y);
+            mapLayer.add(g);
+            attachNodeBehaviour(g);
+            sbNormalizeZOrder(g);
+            selectNode(g);
+            mapLayer.batchDraw();
+            updateSeatCount();
+            pushHistory();
+        }
+        return;
+    }
+    
+    if ((activeTool === "line" || activeTool === "curve-line") && !isHandle) {
+        handleLineClick(stage.getPointerPosition(), activeTool);
+        return;
+    }
+    if (activeTool === "arrow") {
+        handleArrowClick(stage.getPointerPosition());
+        return;
+    }
+
+    // 4. Creation Tools (Rows, Tables, etc.)
+    if (activeTool && activeTool !== 'select' && activeTool !== 'line' && activeTool !== 'curve-line' && activeTool !== 'arrow') {
+        const pos = stage.getPointerPosition();
+        const node = createNodeForTool(activeTool, pos);
+        if (node) {
+            mapLayer.add(node);
+            const t = node.getAttr("shapeType") || node.name();
+            if (t === "square" || t === "circle") node.moveToBottom();
+            attachNodeBehaviour(node);
+            mapLayer.batchDraw();
+            updateSeatCount();
+            selectNode(node);
+            pushHistory();
+            setActiveTool(null); // Stop tool after placement
+            updateDefaultCursor();
+        }
+        return;
+    }
+
+    // 5. BACKGROUND DESELECTION LOGIC
+    // Only clear selection if we explicitly clicked the Stage or GridLayer.
+    // If we clicked a Group/Shape, that event should have been caught by attachNodeBehaviour.
+    const isStage = target === stage;
+    const isGrid = target.getLayer && target.getLayer() === gridLayer;
+    
+    if (isStage || isGrid) {
+        clearSelection();
+    }
 }
     function handleKeyDown(e) {
     // track shift for robust multi-select
