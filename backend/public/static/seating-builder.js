@@ -801,25 +801,22 @@ function drawSquareGrid() {
 
   gridLayer.batchDraw();
 }
-  function resizeStageToContainer() {
-    if (!stage) return;
+function resizeStageToContainer() {
+  if (!stage) return;
+  const width = container.clientWidth - STAGE_PADDING * 2;
+  const height = container.clientHeight - STAGE_PADDING * 2;
+  
+  // Store the true physical dimensions
+  baseStageWidth = width;
+  baseStageHeight = height;
 
-    const width = container.clientWidth - STAGE_PADDING * 2;
-    const height = container.clientHeight - STAGE_PADDING * 2;
+  // FIX: Set stage size to full container size. Do NOT divide by scale.
+  stage.width(baseStageWidth);
+  stage.height(baseStageHeight);
 
-    baseStageWidth = width;
-    baseStageHeight = height;
-
-    const currentScale = stage.scaleX() || 1;
-
-    stage.size({
-      width: baseStageWidth / currentScale,
-      height: baseStageHeight / currentScale,
-    });
-
-    drawSquareGrid();
-  }
-
+  drawSquareGrid();
+}
+  
   // ---------- History ----------
 
   function updateUndoRedoButtons() {
@@ -9881,35 +9878,30 @@ function setZoom(scale) {
   const oldScale = stage.scaleX() || 1;
   if (Math.abs(clamped - oldScale) < 0.0001) return;
 
-  // 1. Get the center point of the viewport (the visible container)
+  // 1. Get viewport center
   const center = {
     x: baseStageWidth / 2,
     y: baseStageHeight / 2,
   };
 
-  // 2. Calculate the "World" point that is currently under the center
-  //    (subtract stage position, divide by old scale)
+  // 2. Get world point under center
   const relatedTo = {
     x: (center.x - stage.x()) / oldScale,
     y: (center.y - stage.y()) / oldScale,
   };
 
-  // 3. Apply the new scale
+  // 3. Apply New Scale
   stage.scale({ x: clamped, y: clamped });
 
-  // 4. Calculate the new Position required to keep that point central
-  //    (center - (worldPoint * newScale))
+  // 4. Calculate New Position to keep focus
   const newPos = {
     x: center.x - relatedTo.x * clamped,
     y: center.y - relatedTo.y * clamped,
   };
   stage.position(newPos);
 
-  // 5. Update stage size logic (Maintains your existing grid system)
-  stage.size({
-    width: baseStageWidth / clamped,
-    height: baseStageHeight / clamped,
-  });
+  // FIX: REMOVED stage.size() call. 
+  // The stage should always remain the full width/height of the container.
 
   drawSquareGrid();
   stage.batchDraw();
