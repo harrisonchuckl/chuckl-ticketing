@@ -5751,9 +5751,13 @@ function renderHoldsPanel() {
       const body = document.createElement("div");
       body.className = "sb-ticket-card-body";
 
-      // A. Allocation Summary
+      // A. Allocation Summary with Explainer
       const summaryText = allocSeatLabels.length > 0 ? allocSeatLabels.join(", ") : "No seats allocated yet.";
       const summaryHtml = `
+        <p style="font-size:12px; color:#6b7280; margin-bottom:12px; line-height:1.4;">
+          These tickets will be assigned to an external promoter. 
+          <span style="color:#ef4444; font-weight:600;">Note: They are NOT blocked from sale on Tixall.</span>
+        </p>
         <div class="sb-field-col" style="margin-bottom:12px;">
           <label class="sb-label">Allocated Seats</label>
           <textarea class="sb-input sb-textarea" readonly style="height:60px;">${summaryText}</textarea>
@@ -5767,9 +5771,12 @@ function renderHoldsPanel() {
       summaryDiv.innerHTML = summaryHtml;
       body.appendChild(summaryDiv);
 
-      // B. Weekly Reports Form
+      // B. Weekly Reports Form with Explainer
       const reportsHtml = `
-        <div class="sb-ticketing-title" style="font-size:13px; margin-bottom:8px;">Weekly Box Office Reports</div>
+        <div class="sb-ticketing-title" style="font-size:13px; margin-bottom:4px;">Weekly Box Office Reports</div>
+        <p style="font-size:12px; color:#6b7280; margin-bottom:12px; line-height:1.4;">
+          Automatically send a summary of sales and remaining inventory to the promoter at a scheduled time.
+        </p>
         <div class="sb-field-col" style="margin-bottom:8px;">
           <label class="sb-label">Recipient Email</label>
           <input type="email" class="sb-input" id="rpt-email" value="${holdReportSettings.email}" placeholder="promoter@example.com">
