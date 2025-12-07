@@ -5756,7 +5756,7 @@ function renderHoldsPanel() {
       const summaryHtml = `
         <p style="font-size:12px; color:#6b7280; margin-bottom:12px; line-height:1.4;">
           These tickets will be assigned to an external promoter. 
-          <span style="color:#ef4444; font-weight:600;">Note: They are NOT blocked from sale on Tixall.</span>
+          <span style="color:#ef4444; font-weight:600;">Note: These tickets will be marked as OFF SALE on Tixall.</span>
         </p>
         <div class="sb-field-col" style="margin-bottom:12px;">
           <label class="sb-label">Allocated Seats</label>
