@@ -29,89 +29,120 @@
     return;
   }
 
-  // ---------- Inject modern styles (Apple / Canva vibes) ----------
-
- function injectSeatmapStyles() {
-    if (document.getElementById("sb-seatmap-style")) return;
-    const style = document.createElement("style");
-    style.id = "sb-seatmap-style";
-    style.textContent = `
-      .sb-layout { font-family: inherit; width: 100%; height: 100%; }
-
-      /* CLEAN INSPECTOR STYLING */
-      #sb-inspector { background: transparent; padding: 0; }
-
-      .sb-inspector-title {
-        font-size: 16px; font-weight: 700; color: #0f172a; margin: 0 0 12px 0;
-      }
-
-      .sb-inspector-empty {
+function injectSeatmapStyles() {
+  if (document.getElementById("sb-seatmap-style")) return;
+  const style = document.createElement("style");
+  style.id = "sb-seatmap-style";
+  style.textContent = `
+    .sb-layout { font-family: inherit; width: 100%; height: 100%; }
+    
+    /* INSPECTOR / SELECTION PANEL */
+    #sb-inspector { background: transparent; padding: 0; }
+    .sb-inspector-title {
+        font-size: 14px; font-weight: 700; color: #0f172a; 
+        text-transform: uppercase; letter-spacing: 0.05em;
+        margin: 24px 0 12px 0; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;
+    }
+    .sb-inspector-empty {
         font-size: 13px; color: #64748b; background: #f8fafc;
         padding: 16px; border-radius: 8px; border: 1px dashed #cbd5e1; text-align: center;
-      }
-
-      .sb-field-row { margin-bottom: 12px; }
-      .sb-label { display: block; margin-bottom: 4px; font-size: 12px; font-weight: 600; color: #475569; }
-
-      /* Inputs - White & Crisp */
-      .sb-input, .sb-select, .sb-textarea {
+    }
+    .sb-field-row { margin-bottom: 12px; }
+    .sb-label { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 600; color: #475569; }
+    
+    /* INPUTS - Modern & Crisp */
+    .sb-input, .sb-select, .sb-textarea {
         width: 100%; box-sizing: border-box;
         border: 1px solid #cbd5e1; border-radius: 6px;
-        padding: 8px 10px; font-size: 13px; background: #fff;
-        color: #1e293b; outline: none; transition: border-color 0.2s;
-      }
-      .sb-input:focus, .sb-select:focus, .sb-textarea:focus {
-        border-color: #08B8E8; /* Tixall Blue Focus */
-        box-shadow: 0 0 0 2px rgba(8, 184, 232, 0.1);
-      }
+        padding: 10px; font-size: 13px; background: #fff;
+        color: #1e293b; outline: none; transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .sb-input:focus, .sb-select:focus, .sb-textarea:focus {
+        border-color: #08B8E8; 
+        box-shadow: 0 0 0 3px rgba(8, 184, 232, 0.1);
+    }
 
-      /* Inspector Cards */
-      .sb-ticket-card {
-        background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
-        margin-bottom: 8px; overflow: hidden;
-      }
-      .sb-ticket-card.is-active { border-color: #08B8E8; background: #f0f9ff; }
-      
-      .sb-ticket-card-header {
-        width: 100%; padding: 12px; border: none; background: transparent;
-        display: flex; align-items: center; justify-content: space-between; cursor: pointer;
-      }
-      
-      .sb-ticket-name { font-weight: 600; font-size: 13px; color: #1e293b; }
-      .sb-ticket-meta { font-size: 12px; color: #64748b; margin-top: 2px; }
-      .sb-ticket-swatch { width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; display: inline-block; }
+    /* MODERN TICKET CARD */
+    .sb-ticket-stack { display: flex; flex-direction: column; gap: 12px; }
+    .sb-ticket-card {
+        background: #fff; 
+        border: 1px solid #e2e8f0; 
+        border-radius: 12px;
+        overflow: hidden;
+        transition: all 0.2s ease;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+    }
+    .sb-ticket-card.is-active { 
+        border-color: #08B8E8; 
+        box-shadow: 0 0 0 1px #08B8E8;
+    }
+    
+    .sb-ticket-card-header {
+        width: 100%; padding: 16px; border: none; background: #fff;
+        display: flex; align-items: center; justify-content: space-between; 
+        cursor: pointer; text-align: left;
+    }
+    .sb-ticket-card-header:hover { background: #f8fafc; }
 
-      .sb-ticket-card-body { padding: 0 12px 12px; border-top: 1px solid rgba(0,0,0,0.05); }
-
-      /* Internal Buttons */
-      .tool-button {
-        width: 100%; height: 36px; border: 1px solid #e2e8f0; border-radius: 6px;
-        background: #fff; color: #334155; font-size: 12px; font-weight: 500;
-        display: flex; align-items: center; justify-content: center; cursor: pointer;
-      }
-      .tool-button:hover { background: #f8fafc; border-color: #cbd5e1; }
-      .tool-button.is-active { border-color: #08B8E8; color: #08B8E8; background: #f0f9ff; }
-      
-      .sb-ticketing-alert {
-        background: #fff1f2; border: 1px solid #fecdd3; color: #be123c;
-        padding: 10px; border-radius: 6px; font-size: 12px; margin-bottom: 12px;
-      }
-      
-      /* Next Step Button Fallback */
-      .sb-next-step-btn {
-        background-color: #08B8E8 !important;
-        color: white !important;
+    .sb-ticket-main-info { display: flex; align-items: center; gap: 12px; }
+    .sb-ticket-color-dot { 
+        width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0; 
+    }
+    .sb-ticket-name { 
+        font-weight: 600; font-size: 14px; color: #0f172a; line-height: 1.3; 
+    }
+    .sb-ticket-meta { 
+        font-size: 12px; color: #64748b; margin-top: 2px; 
+    }
+    .sb-ticket-card-body { 
+        padding: 0 16px 16px; 
+        background: #fff;
+        border-top: 1px solid #f1f5f9;
+    }
+    
+    /* BIG TIXALL BLUE BUTTON */
+    .sb-btn-primary-large {
+        width: 100%;
+        background-color: #08B8E8;
+        color: white;
+        border: none;
         border-radius: 8px;
         padding: 14px;
+        font-size: 14px;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.5px;
-        border: none;
-        box-shadow: 0 4px 6px rgba(8, 184, 232, 0.25);
-      }
-    `;
-    document.head.appendChild(style);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        transition: background 0.2s, transform 0.1s;
+        margin-top: 12px;
+        box-shadow: 0 4px 6px -1px rgba(8, 184, 232, 0.25);
+    }
+    .sb-btn-primary-large:hover { background-color: #069ac4; }
+    .sb-btn-primary-large:active { transform: translateY(1px); }
+
+    /* Internal Tools */
+    .tool-button {
+        width: 100%; height: 36px; border: 1px solid #e2e8f0; border-radius: 6px;
+        background: #fff; color: #334155; font-size: 12px; font-weight: 500;
+        display: flex; align-items: center; justify-content: center; cursor: pointer;
+    }
+    .tool-button:hover { background: #f8fafc; border-color: #cbd5e1; }
+    .sb-ticketing-heading { margin-bottom: 24px; }
+    .sb-ticketing-title { font-size: 20px; font-weight: 700; color: #0f172a; margin-bottom: 4px; }
+    .sb-ticketing-sub { font-size: 13px; color: #64748b; }
+    .sb-ticketing-alert {
+        background: #fff1f2; border: 1px solid #fecdd3; color: #be123c;
+        padding: 12px; border-radius: 8px; font-size: 13px; margin-bottom: 16px;
+    }
+    .sb-form-grid { display: grid; gap: 12px; margin-top: 16px; }
+  `;
+  document.head.appendChild(style);
 }
+  
   injectSeatmapStyles();
 
   // ---------- Ensure sidebar DOM (seat count + inspector) ----------
@@ -5192,730 +5223,330 @@ if (mapLayer) mapLayer.batchDraw();
 
     return seats;
   }
+function renderTicketingPanel() {
+  const el = getInspectorElement();
+  if (!el) return;
 
-    function renderTicketingPanel() {
-    const el = getInspectorElement();
-    if (!el) return;
+  ensureShowMetaLoaded();
+  ensureTicketFormDefaults();
+  const duplicates = findDuplicateSeatRefs();
+  rebuildTicketAssignmentsCache();
 
-    ensureShowMetaLoaded();
-    ensureTicketFormDefaults();
+  el.innerHTML = "";
 
-    const duplicates = findDuplicateSeatRefs();
-    rebuildTicketAssignmentsCache();
-    el.innerHTML = "";
+  // --- Header ---
+  const titleWrap = document.createElement("div");
+  titleWrap.className = "sb-ticketing-heading";
+  titleWrap.innerHTML = `
+    <div class="sb-ticketing-title">Tickets</div>
+    <div class="sb-ticketing-sub">Create ticket types and assign them to seats.</div>
+  `;
+  el.appendChild(titleWrap);
 
-    const titleWrap = document.createElement("div");
-    titleWrap.className = "sb-ticketing-heading";
-    titleWrap.innerHTML = `
-      <div class="sb-ticketing-title">Tickets</div>
-      <div class="sb-ticketing-sub">Create ticket types, configure rules, and assign seats.</div>
-    `;
-    el.appendChild(titleWrap);
+  // --- Warning Box ---
+  if (duplicates.size) {
+    const warning = document.createElement("div");
+    warning.className = "sb-ticketing-alert";
+    warning.innerHTML = `<strong>Attention Needed:</strong><br/>You have duplicate seat references. Fix the highlighted seats before creating tickets.`;
+    el.appendChild(warning);
+  }
 
-    if (duplicates.size) {
-      const warning = document.createElement("div");
-      warning.className = "sb-ticketing-alert";
-      warning.textContent =
-        "You have duplicate seat references. Fix the highlighted seats before creating tickets.";
-      el.appendChild(warning);
-    }
-
-    const ensureActiveTicket = () => {
-      if (!ticketTypes.length) {
-        activeTicketSelectionId = null;
-        return;
-      }
-
-      const hasActive = ticketTypes.some((t) => t.id === activeTicketSelectionId);
-      if (!hasActive) {
-        activeTicketSelectionId = ticketTypes[0].id;
-      }
-    };
-
-    ensureActiveTicket();
-
-    const ticketsContainer = document.createElement("div");
-    ticketsContainer.className = "sb-ticket-stack";
-    el.appendChild(ticketsContainer);
-
-    const makeField = (labelText, inputEl, helperText) => {
-      const wrapper = document.createElement("div");
-      wrapper.className = "sb-field-col";
-
-      const label = document.createElement("label");
-      label.className = "sb-label";
-      label.textContent = labelText;
-      wrapper.appendChild(label);
-
-      wrapper.appendChild(inputEl);
-
-      if (helperText) {
-        const helper = document.createElement("div");
-        helper.className = "sb-helper";
-        helper.textContent = helperText;
-        wrapper.appendChild(helper);
-      }
-
-      return wrapper;
-    };
-
+  // --- Setup Active Ticket State ---
+  const ensureActiveTicket = () => {
     if (!ticketTypes.length) {
-      const empty = document.createElement("div");
-      empty.className = "sb-inspector-empty";
-      // disable pointer events on the empty state message
-      empty.style.pointerEvents = "none";
-      empty.style.margin = "8px 0 16px";
-      empty.textContent = "No tickets yet. Add one to start assigning seats.";
-      el.appendChild(empty);
+      activeTicketSelectionId = null;
+      return;
     }
+    const hasActive = ticketTypes.some((t) => t.id === activeTicketSelectionId);
+    if (!hasActive) {
+      activeTicketSelectionId = ticketTypes[0].id;
+    }
+  };
+  ensureActiveTicket();
 
-    ticketTypes.forEach((ticket) => {
-      ensureTicketDefaults(ticket);
+  // --- Ticket List Container ---
+  const ticketsContainer = document.createElement("div");
+  ticketsContainer.className = "sb-ticket-stack";
+  el.appendChild(ticketsContainer);
 
-      const assignedTotal = countAssignmentsForTicket(ticket.id);
-      const isActive = activeTicketSelectionId === ticket.id;
-      // 🔽 Only use the accordion set to decide open/closed
-      const isOpen = ticketAccordionOpenIds.has(ticket.id);
+  // --- Empty State ---
+  if (!ticketTypes.length) {
+    const empty = document.createElement("div");
+    empty.className = "sb-inspector-empty";
+    empty.textContent = "No tickets created yet.";
+    ticketsContainer.appendChild(empty);
+  }
 
-      const card = document.createElement("div");
-      card.className = "sb-ticket-card";
-      if (isActive) card.classList.add("is-active");
+  // --- Helper to make input fields ---
+  const makeField = (labelText, inputEl, helperText) => {
+    const wrapper = document.createElement("div");
+    wrapper.className = "sb-field-col";
+    const label = document.createElement("label");
+    label.className = "sb-label";
+    label.textContent = labelText;
+    wrapper.appendChild(label);
+    wrapper.appendChild(inputEl);
+    if (helperText) {
+      const helper = document.createElement("div");
+      helper.className = "sb-helper";
+      helper.style.fontSize = "11px";
+      helper.style.color = "#94a3b8";
+      helper.style.marginTop = "4px";
+      helper.textContent = helperText;
+      wrapper.appendChild(helper);
+    }
+    return wrapper;
+  };
 
-      const header = document.createElement("button");
-      header.type = "button";
-      header.className = "sb-ticket-card-header";
-      header.innerHTML = `
-        <div class="sb-ticket-card-main">
-          <span class="sb-ticket-swatch" style="background:${ticket.color || "#2563eb"};"></span>
-          <div class="sb-ticket-card-copy">
-            <div class="sb-ticket-name">${(ticket.name || "Untitled ticket").slice(0, 60)}</div>
-            <div class="sb-ticket-meta">${formatTicketPrice(ticket.price)} • ${assignedTotal} assigned</div>
-          </div>
+  // --- Render Each Ticket Card ---
+  ticketTypes.forEach((ticket) => {
+    ensureTicketDefaults(ticket);
+    const assignedTotal = countAssignmentsForTicket(ticket.id);
+    const isActive = activeTicketSelectionId === ticket.id;
+    const isOpen = ticketAccordionOpenIds.has(ticket.id);
+
+    const card = document.createElement("div");
+    card.className = "sb-ticket-card";
+    if (isActive) card.classList.add("is-active");
+
+    // Modern Header
+    const header = document.createElement("button");
+    header.type = "button";
+    header.className = "sb-ticket-card-header";
+    header.innerHTML = `
+      <div class="sb-ticket-main-info">
+        <div class="sb-ticket-color-dot" style="background:${ticket.color || "#2563eb"};"></div>
+        <div>
+          <div class="sb-ticket-name">${(ticket.name || "Untitled ticket").slice(0, 30)}</div>
+          <div class="sb-ticket-meta">${formatTicketPrice(ticket.price)} · ${assignedTotal} assigned</div>
         </div>
-        <div class="sb-ticket-card-actions">
-          <span class="sb-ticket-chip">${ticket.currency || venueCurrencyCode}</span>
-          <span class="sb-ticket-caret">${isOpen ? "▴" : "▾"}</span>
-        </div>
-      `;
-      header.addEventListener("click", () => {
-        activeTicketSelectionId = ticket.id;
-        if (ticketAccordionOpenIds.has(ticket.id)) {
-          ticketAccordionOpenIds.delete(ticket.id);
-        } else {
-          ticketAccordionOpenIds.add(ticket.id);
+      </div>
+      <div style="color: #cbd5e1; transform: ${isOpen ? 'rotate(180deg)' : 'rotate(0)'}; transition: transform 0.2s;">
+        ▼
+      </div>
+    `;
+
+    header.addEventListener("click", () => {
+      activeTicketSelectionId = ticket.id;
+      if (ticketAccordionOpenIds.has(ticket.id)) {
+        ticketAccordionOpenIds.delete(ticket.id);
+      } else {
+        ticketAccordionOpenIds.add(ticket.id);
+      }
+      renderTicketingPanel();
+    });
+    card.appendChild(header);
+
+    // Card Body (Form)
+    if (isOpen) {
+      const body = document.createElement("div");
+      body.className = "sb-ticket-card-body";
+      
+      const formGrid = document.createElement("div");
+      formGrid.className = "sb-form-grid";
+
+      // 1. Name Input
+      const nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.className = "sb-input";
+      nameInput.placeholder = "E.g. Standard Admission";
+      nameInput.value = ticket.name || "";
+      nameInput.addEventListener("input", () => { ticket.name = nameInput.value; });
+      nameInput.addEventListener("blur", () => { renderTicketingPanel(); });
+      nameInput.addEventListener("keydown", (ev) => { if (ev.key === "Enter") nameInput.blur(); });
+
+      // 2. Price Input
+      const priceInput = document.createElement("input");
+      priceInput.type = "text";
+      priceInput.inputMode = "decimal";
+      priceInput.className = "sb-input";
+      priceInput.placeholder = "0.00";
+      priceInput.value = ticket.price === null || ticket.price === undefined ? "" : String(ticket.price);
+      
+      const commitPrice = () => {
+        const raw = (priceInput.value || "").replace(/[^0-9.,-]/g, "").replace(/,/g, ".");
+        if (!raw) ticket.price = null;
+        else {
+            const p = parseFloat(raw);
+            ticket.price = Number.isFinite(p) ? p : 0;
         }
         renderTicketingPanel();
+      };
+      priceInput.addEventListener("blur", commitPrice);
+      priceInput.addEventListener("keydown", (ev) => { if(ev.key === "Enter") { ev.preventDefault(); priceInput.blur(); }});
+
+      // 3. Color Selection
+      const colorWrap = document.createElement("div");
+      colorWrap.style.display = "flex";
+      colorWrap.style.gap = "8px";
+      colorWrap.style.alignItems = "center";
+      
+      const colorInput = document.createElement("input");
+      colorInput.type = "color";
+      colorInput.className = "sb-input";
+      colorInput.style.width = "40px"; 
+      colorInput.style.padding = "2px";
+      colorInput.style.height = "38px";
+      colorInput.value = ticket.color || "#2563EB";
+      
+      const hexDisplay = document.createElement("input");
+      hexDisplay.type="text";
+      hexDisplay.className="sb-input";
+      hexDisplay.value = ticket.color || "#2563EB";
+      
+      const syncColor = (val) => {
+        ticket.color = val;
+        ticketFormState.color = val;
+        applySeatVisuals();
+        renderTicketingPanel(); // Update header dot
+      };
+      
+      colorInput.addEventListener("input", () => { syncColor(colorInput.value); });
+      hexDisplay.addEventListener("change", () => { syncColor(hexDisplay.value); });
+      
+      colorWrap.appendChild(colorInput);
+      colorWrap.appendChild(hexDisplay);
+
+      // 4. Dates
+      const onSaleInput = document.createElement("input");
+      onSaleInput.type = "datetime-local";
+      onSaleInput.className = "sb-input";
+      onSaleInput.value = ticket.onSale || ticketFormState.onSale || formatDateTimeLocal(new Date());
+      onSaleInput.addEventListener("input", () => { ticket.onSale = onSaleInput.value; });
+
+      const offSaleInput = document.createElement("input");
+      offSaleInput.type = "datetime-local";
+      offSaleInput.className = "sb-input";
+      offSaleInput.value = ticket.offSale || ticketFormState.offSale || formatDateTimeLocal(new Date());
+      offSaleInput.addEventListener("input", () => { 
+          ticket.offSale = offSaleInput.value; 
+          ticketFormAutoOffSale = false; 
       });
-      card.appendChild(header);
 
-      if (isOpen) {
-        const body = document.createElement("div");
-        body.className = "sb-ticket-card-body";
-
-                const formGrid = document.createElement("div");
-        formGrid.className = "sb-ticket-form-grid";
-
-                // --- Ticket name: editable without killing focus on each keypress ---
-
-               // --- Ticket name: editable without killing focus on each keypress ---
-
-
-
-        const nameInput = document.createElement("input");
-        nameInput.type = "text";
-        nameInput.className = "sb-input";
-        nameInput.placeholder = "Ticket name";
-        nameInput.value = ticket.name || "";
-
-        // As the user types, just keep the in-memory ticket name in sync.
-        // DO NOT re-render here or the input will be destroyed each time.
-        nameInput.addEventListener("input", () => {
-          ticket.name = nameInput.value;
-        });
-
-        // Commit + re-render when the user finishes editing
-        const commitNameChange = () => {
-          const trimmed = (nameInput.value || "").trim();
-          ticket.name = trimmed || "Untitled ticket";
-          renderTicketingPanel();
-        };
-
-        // Blur = done editing
-        nameInput.addEventListener("blur", commitNameChange);
-
-        // Hitting Enter also commits and exits the field
-        nameInput.addEventListener("keydown", (ev) => {
-          if (ev.key === "Enter") {
-            ev.preventDefault();
-            nameInput.blur();
-          }
-        });
-
-
-
-        // --- Ticket price: allow decimals, no re-render on every keypress ---
-
-
-
-        const priceInput = document.createElement("input");
-        priceInput.type = "text";
-        priceInput.inputMode = "decimal";
-        priceInput.className = "sb-input sb-input-inline";
-        priceInput.placeholder = `Price (${venueCurrencyCode})`;
-        priceInput.value =
-          ticket.price === null || ticket.price === undefined
-            ? ""
-            : String(ticket.price);
-
-        // Live update in memory as the user types, but DON'T re-render yet
-        priceInput.addEventListener("input", () => {
-          const raw = (priceInput.value || "")
-            .replace(/[^0-9.,-]/g, "")
-            .replace(/,/g, ".");
-
-          if (!raw) {
-            // Allow the user to temporarily clear the field while typing
-            ticket.price = null;
-            return;
-          }
-
-          const parsed = parseFloat(raw);
-          if (Number.isFinite(parsed)) {
-            ticket.price = parsed; // supports decimals, e.g. 22.5 or 2250
-          }
-        });
-
-        const commitPriceChange = () => {
-          const raw = (priceInput.value || "").trim();
-
-          if (!raw) {
-            ticket.price = null;
-          } else {
-            const cleaned = raw
-              .replace(/[^0-9.,-]/g, "")
-              .replace(/,/g, ".");
-            const parsed = parseFloat(cleaned);
-            ticket.price = Number.isFinite(parsed) ? parsed : 0;
-          }
-
-          // Now re-render once, after the user has finished editing
-          renderTicketingPanel();
-        };
-
-        // Commit on blur
-        priceInput.addEventListener("blur", commitPriceChange);
-
-        // Commit on Enter key
-        priceInput.addEventListener("keydown", (ev) => {
-          if (ev.key === "Enter") {
-            ev.preventDefault();
-            priceInput.blur();
-          }
-        });
-
-
-
-        // --- Ticket colour: preset chips + colour picker + hex input ---
-
-
-        // --- Ticket colour: preset chips + colour picker + hex input ---
-
-        const colorFieldWrap = document.createElement("div");
-
-
-        const swatchRow = document.createElement("div");
-        swatchRow.style.display = "flex";
-        swatchRow.style.flexWrap = "wrap";
-        swatchRow.style.gap = "4px";
-        swatchRow.style.marginBottom = "6px";
-
-        const normalisedCurrent =
-          (ticket.color ||
-            ticketFormState.color ||
-            DEFAULT_TICKET_COLORS[0] ||
-            "#2563EB").toString();
-        const currentColor = normalisedCurrent.toLowerCase();
-
-        const normaliseHexValue = (raw) => {
-          if (!raw) return "";
-          let v = String(raw).trim();
-          if (!v) return "";
-          if (!v.startsWith("#")) v = `#${v}`;
-          v = v.toUpperCase();
-          if (!/^#([0-9A-F]{3}|[0-9A-F]{6})$/.test(v)) return "";
-          return v;
-        };
-
-        DEFAULT_TICKET_COLORS.forEach((hex) => {
-          const chip = document.createElement("button");
-          chip.type = "button";
-          chip.className = "tool-button sb-ghost-button";
-          chip.style.minWidth = "22px";
-          chip.style.width = "22px";
-          chip.style.height = "22px";
-          chip.style.borderRadius = "999px";
-          chip.style.border =
-            hex.toLowerCase() === currentColor
-              ? "2px solid #111827"
-              : "1px solid #e5e7eb";
-          chip.style.padding = "0";
-          chip.style.cursor = "pointer";
-          chip.style.background = hex;
-          chip.style.boxSizing = "border-box";
-          chip.setAttribute("aria-label", `Use colour ${hex}`);
-
-          chip.addEventListener("click", () => {
-            ticket.color = hex;
-            ticketFormState.color = hex;
-            applySeatVisuals();
-            renderTicketingPanel();
-          });
-
-          swatchRow.appendChild(chip);
-        });
-
-        const hexInput = document.createElement("input");
-        hexInput.type = "text";
-        hexInput.className = "sb-input";
-        hexInput.placeholder = "#2563EB";
-        hexInput.value =
-          normaliseHexValue(currentColor) ||
-          DEFAULT_TICKET_COLORS[0] ||
-          "#2563EB";
-        hexInput.style.marginTop = "4px";
-
-        hexInput.addEventListener("change", () => {
-          const hex = normaliseHexValue(hexInput.value);
-          if (!hex) {
-            // eslint-disable-next-line no-console
-            console.warn("[seatmap][tickets] invalid hex colour entered", {
-              raw: hexInput.value,
-            });
-            hexInput.value =
-              ticket.color ||
-              ticketFormState.color ||
-              DEFAULT_TICKET_COLORS[0] ||
-              "#2563EB";
-            return;
-          }
-
-          ticket.color = hex;
-          ticketFormState.color = hex;
-          applySeatVisuals();
-          renderTicketingPanel();
-        });
-
-        const colorInput = document.createElement("input");
-        colorInput.type = "color";
-        colorInput.className = "sb-input sb-input-color";
-        colorInput.value =
-          normaliseHexValue(currentColor) ||
-          DEFAULT_TICKET_COLORS[0] ||
-          "#2563EB";
-        colorInput.addEventListener("input", () => {
-          const value =
-            colorInput.value ||
-            DEFAULT_TICKET_COLORS[0] ||
-            "#2563EB";
-          ticket.color = value;
-          ticketFormState.color = value;
-          hexInput.value = value.toUpperCase();
-          applySeatVisuals();
-          renderTicketingPanel();
-        });
-
-        colorFieldWrap.appendChild(swatchRow);
-        colorFieldWrap.appendChild(colorInput);
-        colorFieldWrap.appendChild(hexInput);
-
-        const onSaleInput = document.createElement("input");
-        onSaleInput.type = "datetime-local";
-        onSaleInput.className = "sb-input";
-        onSaleInput.value =
-          ticket.onSale ||
-          ticketFormState.onSale ||
-          formatDateTimeLocal(new Date());
-        onSaleInput.addEventListener("input", () => {
-          ticket.onSale = onSaleInput.value;
-        });
-
-        const offSaleInput = document.createElement("input");
-        offSaleInput.type = "datetime-local";
-        offSaleInput.className = "sb-input";
-        offSaleInput.value =
-          ticket.offSale ||
-          ticketFormState.offSale ||
-          formatDateTimeLocal(new Date());
-        offSaleInput.addEventListener("input", () => {
-          ticket.offSale = offSaleInput.value;
-          ticketFormAutoOffSale = false;
-          renderTicketingPanel();
-        });
-
-        const offSaleError = document.createElement("div");
-        offSaleError.className = "sb-field-error";
-        const updateOffSaleValidation = () => {
-          const showDateLimit = getShowDateLimit();
-          const offDate = offSaleInput.value ? new Date(offSaleInput.value) : null;
-          const invalid =
-            !!(
-              showDateLimit &&
-              offDate &&
-              !Number.isNaN(offDate.getTime()) &&
-              offDate > showDateLimit
-            );
-
-          offSaleError.textContent = invalid
-            ? "Ticket off-sale date/time must be on or before the event time."
-            : "";
-          return invalid;
-        };
-
-        updateOffSaleValidation();
-
-        const minInput = document.createElement("input");
-        minInput.type = "number";
-        minInput.min = "1";
-        minInput.step = "1";
-        minInput.className = "sb-input";
-        minInput.value = ticket.minPerOrder || 1;
-        minInput.addEventListener("input", () => {
-          const parsed = Math.max(1, parseInt(minInput.value || "1", 10) || 1);
-          ticket.minPerOrder = parsed;
-          if ((ticket.maxPerOrder || parsed) < parsed) {
-            ticket.maxPerOrder = parsed;
-          }
-          renderTicketingPanel();
-        });
-
-        const maxInput = document.createElement("input");
-        maxInput.type = "number";
-        maxInput.min = "1";
-        maxInput.step = "1";
-        maxInput.className = "sb-input";
-        maxInput.value = ticket.maxPerOrder || 15;
-        maxInput.addEventListener("input", () => {
-          const parsed = Math.max(
-            ticket.minPerOrder || 1,
-            parseInt(maxInput.value || "15", 10) ||
-              ticket.minPerOrder ||
-              1
-          );
-          ticket.maxPerOrder = parsed;
-          renderTicketingPanel();
-        });
-
-        const infoInput = document.createElement("textarea");
-        infoInput.placeholder = "Additional information";
-        infoInput.className = "sb-input sb-textarea";
-        infoInput.value = ticket.info || "";
-        infoInput.addEventListener("input", () => {
-          ticket.info = infoInput.value;
-        });
-
-        formGrid.appendChild(
-          makeField("Ticket name", nameInput, "Shown to buyers")
-        );
-        formGrid.appendChild(
-          makeField(
-            `Price (${venueCurrencyCode})`,
-            priceInput,
-            "Text input – no arrows"
-          )
-        );
-        formGrid.appendChild(
-          makeField(
-            "Color",
-            colorFieldWrap,
-            "Used to highlight assigned seats"
-          )
-        );
-        formGrid.appendChild(
-          makeField(
-            "Tickets on sale date and time",
-            onSaleInput,
-            "Defaults to now"
-          )
-        );
-
-        formGrid.appendChild(
-          makeField(
-            "Tickets off sale date and time (auto-set to event time)",
-            offSaleInput
-          )
-        );
-        if (offSaleError.textContent) {
-          const errWrap = document.createElement("div");
-          errWrap.appendChild(offSaleError);
-          formGrid.appendChild(errWrap);
-        }
-        formGrid.appendChild(makeField("Min tickets per order", minInput));
-        formGrid.appendChild(makeField("Max tickets per order", maxInput));
-        formGrid.appendChild(makeField("Additional information", infoInput));
-
-        body.appendChild(formGrid);
-
-        const assignments = document.createElement("div");
-        assignments.className = "sb-ticket-assignments";
-        assignments.textContent = `${assignedTotal} seat${
-          assignedTotal === 1 ? "" : "s"
-        } assigned to this ticket`;
-        body.appendChild(assignments);
-
-        const actionsRow = document.createElement("div");
-        actionsRow.className = "sb-ticket-actions";
-
-        const assignSelectedBtn = document.createElement("button");
-        assignSelectedBtn.type = "button";
-        assignSelectedBtn.className = "tool-button sb-ghost-button";
-        const manualSelectionLabel =
-          window.__SEATMAP_MANUAL_BUTTON_LABEL__ ||
-          "Manually select seats for allocation/unallocation";
-        const manualSelectionActiveLabel =
-          window.__SEATMAP_MANUAL_BUTTON_ACTIVE_LABEL__ ||
-          "Finish manual allocation/unallocation";
-
-        assignSelectedBtn.textContent = ticketSeatSelectionMode
-          ? manualSelectionActiveLabel
-          : manualSelectionLabel;
-        assignSelectedBtn.disabled =
-          duplicates.size > 0 || updateOffSaleValidation();
-        assignSelectedBtn.addEventListener("click", () => {
-          if (duplicates.size > 0) {
-            window.alert(
-              "Resolve duplicate seat references before assigning tickets."
-            );
-            return;
-          }
-          if (updateOffSaleValidation()) {
-            window.alert(
-              "Tickets must go off sale on or before the event time. Please adjust the off-sale date."
-            );
-            return;
-          }
-
-          activeTicketSelectionId = ticket.id;
-          ticketSeatSelectionAction = "toggle";
-
-          const enabling = !ticketSeatSelectionMode;
-
-          // eslint-disable-next-line no-console
-          console.log("[seatmap][tickets] toggle manual seat selection", {
-            ticketId: ticket.id,
-            nowEnabling: enabling,
-            action: ticketSeatSelectionAction,
-          });
-
-          if (enabling) {
-            setTicketSeatSelectionMode(true, "assign-seats-button");
-            window.alert(
-              "Tap seats (or a whole row label / table) to allocate them to this ticket. Tap seats already on this ticket to unallocate them."
-            );
-          } else {
-            setTicketSeatSelectionMode(false, "assign-seats-finish");
-          }
-
-          applySeatVisuals();
-          renderTicketingPanel();
-        });
-
-        const assignRemainingBtn = document.createElement("button");
-        assignRemainingBtn.type = "button";
-        assignRemainingBtn.className = "tool-button";
-        assignRemainingBtn.textContent = "Assign all remaining seats";
-        assignRemainingBtn.disabled =
-          duplicates.size > 0 || updateOffSaleValidation();
-        assignRemainingBtn.addEventListener("click", () => {
-          if (duplicates.size > 0) {
-            window.alert(
-              "Resolve duplicate seat references before assigning tickets."
-            );
-            return;
-          }
-          if (updateOffSaleValidation()) {
-            window.alert(
-              "Tickets must go off sale on or before the event time. Please adjust the off-sale date."
-            );
-            return;
-          }
-
-          const seats = getAllSeatNodes();
-          enforceUniqueSeatIds(seats);
-
-          let skippedAssignedSeats = 0;
-          seats.forEach((seat) => {
-            const { sid, set } = ensureSeatTicketSet(seat);
-            if (!sid || !set) return;
-
-            const hasOtherTickets = Array.from(set).some(
-              (tId) => tId && tId !== ticket.id
-            );
-            if (hasOtherTickets) {
-              skippedAssignedSeats += 1;
-              return;
-            }
-
-            set.add(ticket.id);
-
-            const ids = Array.from(set);
-            seat.setAttr("sbTicketIds", ids);
-            seat.setAttr("sbTicketId", ids[0] || null);
-            ticketAssignments.set(sid, new Set(ids));
-          });
-
-          rebuildTicketAssignmentsCache();
-          const assignedCount = countAssignmentsForTicket(ticket.id);
-          const assignableSeatTotal = seats.filter((seat) => {
-            const info = ensureSeatTicketSet(seat);
-            const set = info.set;
-            if (!set || set.size === 0) return true;
-            return !Array.from(set).some((tId) => tId && tId !== ticket.id);
-          }).length;
-
-          // eslint-disable-next-line no-console
-          console.log("[seatmap][tickets] assign remaining", {
-            ticketId: ticket.id,
-            assignedCount,
-            assignableSeatTotal,
-            skippedAssignedSeats,
-          });
-
-          if (assignedCount !== assignableSeatTotal) {
-            // eslint-disable-next-line no-console
-            console.warn("[seatmap][tickets] assign remaining mismatch", {
-              expected: assignableSeatTotal,
-              actual: assignedCount,
-            });
-          }
-
-          applySeatVisuals();
-          renderTicketingPanel();
-          setTicketSeatSelectionMode(false, "assign-all-remaining");
-        });
-
-        const assignAllSeatsBtn = document.createElement("button");
-  assignAllSeatsBtn.type = "button";
-  assignAllSeatsBtn.className = "tool-button";
-  assignAllSeatsBtn.textContent = "Assign all seats";
-  assignAllSeatsBtn.disabled =
-    duplicates.size > 0 || updateOffSaleValidation();
-
-  assignAllSeatsBtn.addEventListener("click", () => {
-    if (duplicates.size > 0) {
-      window.alert(
-        "Resolve duplicate seat references before assigning tickets."
-      );
-      return;
-    }
-    if (updateOffSaleValidation()) {
-      window.alert(
-        "Tickets must go off sale on or before the event time. Please adjust the off-sale date."
-      );
-      return;
-    }
-
-    const seats = getAllSeatNodes();
-    enforceUniqueSeatIds(seats);
-
-    let modifiedCount = 0;
-
-    seats.forEach((seat) => {
-      const { sid, set } = ensureSeatTicketSet(seat);
-      if (!sid || !set) return;
-
-      // 1. If seat already has this specific ticket, skip (already assigned)
-      if (set.has(ticket.id)) return;
-
-      // 2. Enforce limit: Max 10 tickets per seat
-      if (set.size >= 10) return;
-
-      // 3. Append the new ticket
-      set.add(ticket.id);
-      modifiedCount++;
-
-      // 4. Save attributes back to the node and cache
-      const ids = Array.from(set);
-      seat.setAttr("sbTicketIds", ids);
-      seat.setAttr("sbTicketId", ids[0] || null); // Update primary legacy ID
-      ticketAssignments.set(sid, new Set(ids));
-    });
-
-    rebuildTicketAssignmentsCache();
-
-    // eslint-disable-next-line no-console
-    console.log("[seatmap][tickets] assign all seats (append/multi-ticket)", {
-      ticketId: ticket.id,
-      seatsModified: modifiedCount,
-      totalSeats: seats.length,
-    });
-
-    applySeatVisuals();
-    renderTicketingPanel();
-    pushHistory();
-  });
-        actionsRow.appendChild(assignSelectedBtn);
-        actionsRow.appendChild(assignRemainingBtn);
-        actionsRow.appendChild(assignAllSeatsBtn);
-        body.appendChild(actionsRow);
-
-        card.appendChild(body);
+      // 5. Min/Max
+      const minInput = document.createElement("input");
+      minInput.type = "number"; minInput.className = "sb-input"; minInput.value = ticket.minPerOrder || 1;
+      minInput.addEventListener("change", () => { ticket.minPerOrder = parseInt(minInput.value) || 1; });
+
+      const maxInput = document.createElement("input");
+      maxInput.type = "number"; maxInput.className = "sb-input"; maxInput.value = ticket.maxPerOrder || 15;
+      maxInput.addEventListener("change", () => { ticket.maxPerOrder = parseInt(maxInput.value) || 15; });
+
+      // Append Fields to Grid
+      formGrid.appendChild(makeField("Ticket Name", nameInput));
+      formGrid.appendChild(makeField(`Price (${venueCurrencyCode})`, priceInput));
+      formGrid.appendChild(makeField("Seat Color", colorWrap, "Color used on the map"));
+      formGrid.appendChild(makeField("On Sale Time", onSaleInput));
+      formGrid.appendChild(makeField("Off Sale Time", offSaleInput));
+      
+      const limitsRow = document.createElement("div");
+      limitsRow.style.display="grid";
+      limitsRow.style.gridTemplateColumns="1fr 1fr";
+      limitsRow.style.gap="12px";
+      
+      const minWrap = makeField("Min per Order", minInput);
+      const maxWrap = makeField("Max per Order", maxInput);
+      limitsRow.appendChild(minWrap);
+      limitsRow.appendChild(maxWrap);
+      formGrid.appendChild(limitsRow);
+
+      body.appendChild(formGrid);
+
+      // --- Actions Section ---
+      const actionsDiv = document.createElement("div");
+      actionsDiv.style.marginTop = "16px";
+      actionsDiv.style.borderTop = "1px solid #f1f5f9";
+      actionsDiv.style.paddingTop = "16px";
+      
+      // Manual Assign Button
+      const assignBtn = document.createElement("button");
+      assignBtn.type = "button";
+      assignBtn.className = "tool-button";
+      assignBtn.style.marginBottom = "8px";
+      
+      const isSelectMode = ticketSeatSelectionMode && activeTicketSelectionId === ticket.id;
+      assignBtn.textContent = isSelectMode ? "Done Selecting" : "Select Seats on Map";
+      if(isSelectMode) {
+          assignBtn.style.background = "#eff6ff"; 
+          assignBtn.style.borderColor="#08B8E8"; 
+          assignBtn.style.color="#08B8E8";
       }
 
-      ticketsContainer.appendChild(card);
-    });
-
-    const addBtn = document.createElement("button");
-    addBtn.type = "button";
-    addBtn.className = "tool-button sb-ticket-add";
-    addBtn.innerHTML = '<span class="sb-ticket-add-icon">＋</span> Add ticket';
-    addBtn.addEventListener("click", () => {
-      ensureTicketFormDefaults();
-
-      const nowValue = formatDateTimeLocal(new Date());
-      const showDateValue =
-        (showMeta && showMeta.date && formatDateTimeLocal(showMeta.date)) ||
-        nowValue;
-
-      const colorForNewTicket = getNextTicketColor();
-
-      const ticket = {
-        id: `ticket-${Date.now()}-${ticketTypes.length + 1}`,
-        name: ticketFormState.name || `Ticket ${ticketTypes.length + 1}`,
-        price:
-          parseFloat(
-            (ticketFormState.price || "")
-              .replace(/[^0-9.,-]/g, "")
-              .replace(/,/g, ".")
-          ) || 0,
-        currency: venueCurrencyCode,
-        color: colorForNewTicket,
-        onSale: ticketFormState.onSale || nowValue,
-        offSale: ticketFormState.offSale || showDateValue,
-        info: ticketFormState.info || "",
-        minPerOrder:
-          parseInt(ticketFormState.minPerOrder || "1", 10) || 1,
-        maxPerOrder:
-          parseInt(ticketFormState.maxPerOrder || "15", 10) || 15,
+      assignBtn.onclick = () => {
+          activeTicketSelectionId = ticket.id;
+          const enabling = !ticketSeatSelectionMode;
+          setTicketSeatSelectionMode(enabling, "ticket-panel");
+          renderTicketingPanel();
       };
 
-      ticketTypes = ticketTypes.concat(ticket);
-      activeTicketSelectionId = ticket.id;
-
-      // 🔒 New behaviour: when adding a ticket, keep all tickets collapsed
-      // so the list stays clean. User can expand any ticket via the caret.
-      ticketAccordionOpenIds.clear();
-
-      ticketFormState = {
-        ...ticketFormState,
-        name: "",
-        price: "",
-        info: "",
-        color: colorForNewTicket,
+      // Assign All Remaining
+      const assignAllBtn = document.createElement("button");
+      assignAllBtn.type = "button";
+      assignAllBtn.className = "tool-button";
+      assignAllBtn.textContent = "Assign Remaining Empty Seats";
+      assignAllBtn.onclick = () => {
+          if (confirm(`Assign all currently unassigned seats to ${ticket.name}?`)) {
+             const seats = getAllSeatNodes();
+             seats.forEach(s => {
+                 const { sid, set } = ensureSeatTicketSet(s);
+                 // Only add if no other tickets exist
+                 if (set.size === 0) {
+                     set.add(ticket.id);
+                     s.setAttr("sbTicketIds", Array.from(set));
+                     s.setAttr("sbTicketId", ticket.id);
+                     ticketAssignments.set(sid, set);
+                 }
+             });
+             rebuildTicketAssignmentsCache();
+             applySeatVisuals();
+             renderTicketingPanel();
+          }
       };
 
-      applySeatVisuals();
-      renderTicketingPanel();
-   });
+      actionsDiv.appendChild(assignBtn);
+      actionsDiv.appendChild(assignAllBtn);
+      body.appendChild(actionsDiv);
+
+      card.appendChild(body);
+    }
+    
+    ticketsContainer.appendChild(card);
+  });
+
+  // --- BIG BLUE ADD BUTTON ---
+  const addBtn = document.createElement("button");
+  addBtn.type = "button";
+  addBtn.className = "sb-btn-primary-large";
+  addBtn.innerHTML = `<span>＋</span> Add New Ticket`;
+  
+  addBtn.addEventListener("click", () => {
+    ensureTicketFormDefaults();
+    const nowValue = formatDateTimeLocal(new Date());
+    const showDateValue = (showMeta && showMeta.date && formatDateTimeLocal(showMeta.date)) || nowValue;
+    const colorForNewTicket = getNextTicketColor();
+    
+    const newTicket = {
+      id: `ticket-${Date.now()}-${ticketTypes.length + 1}`,
+      name: "", // Start blank so user types immediately
+      price: 0,
+      currency: venueCurrencyCode,
+      color: colorForNewTicket,
+      onSale: nowValue,
+      offSale: showDateValue,
+      minPerOrder: 1,
+      maxPerOrder: 15,
+    };
+    
+    ticketTypes.push(newTicket);
+    activeTicketSelectionId = newTicket.id;
+    // Auto-open the new ticket
+    ticketAccordionOpenIds.clear();
+    ticketAccordionOpenIds.add(newTicket.id);
+    
+    applySeatVisuals();
+    renderTicketingPanel();
+  });
+
   el.appendChild(addBtn);
 }
   function renderHoldsPanel() {
