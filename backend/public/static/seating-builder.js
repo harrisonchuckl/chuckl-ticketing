@@ -7658,112 +7658,111 @@ if (shapeType === "circular-table") {
   addAccessControls(); 
   return;
 }
+
     // ---- Rectangular tables ----
-    if (shapeType === "rect-table") {
-      // if (shapeType === "rect-table") { ...
+if (shapeType === "rect-table") {
+  // 1. Define variables FIRST so they are available for the logic below
+  const longSideSeats = node.getAttr("longSideSeats") ?? 4;
+  const shortSideSeats = node.getAttr("shortSideSeats") ?? 2;
+  const seatLabelMode = node.getAttr("seatLabelMode") || "numbers";
+  const tableLabel = node.getAttr("tableLabel") || "";
+  const totalSeats = 2 * longSideSeats + 2 * shortSideSeats;
 
-const locked = isNodeLocked(node);
-if (locked) {
-  const alertBox = document.createElement("div");
-  alertBox.className = "sb-ticketing-alert";
-  alertBox.textContent = "Structure locked due to assigned seats.";
-  el.appendChild(alertBox);
-}
+  addTitle("Rectangular table");
 
-// ... Rotation and Label fields ...
+  // 2. Check Lock Status
+  const locked = isNodeLocked(node);
+  if (locked) {
+    const alertBox = document.createElement("div");
+    alertBox.className = "sb-ticketing-alert";
+    alertBox.textContent = "Structure locked due to assigned seats.";
+    el.appendChild(alertBox);
+  }
 
-if (locked) {
-  addStaticRow("Seats on long side", longSideSeats);
-  addStaticRow("Seats on short side", shortSideSeats);
-} else {
-  addNumberField("Seats on long side", longSideSeats, 0, 1, (val) => { ... });
-  addNumberField("Seats on short side", shortSideSeats, 0, 1, (val) => { ... });
-}
-      const longSideSeats = node.getAttr("longSideSeats") ?? 4;
-      const shortSideSeats = node.getAttr("shortSideSeats") ?? 2;
-      const seatLabelMode = node.getAttr("seatLabelMode") || "numbers";
-      const tableLabel = node.getAttr("tableLabel") || "";
-
-      const totalSeats = 2 * longSideSeats + 2 * shortSideSeats;
-
-      addTitle("Rectangular table");
-
-      addNumberField(
-        "Rotation (deg)",
-        Math.round(node.rotation() || 0),
-        -360,
-        1,
-        (val) => {
-          node.rotation(val);
-          keepLabelsUpright(node);
-          if (overlayLayer) overlayLayer.batchDraw();
-        }
-      );
-
-      addTextField("Table label", tableLabel, (val) => {
-        node.setAttr("tableLabel", val || "");
-        updateRectTableGeometry(
-          node,
-          node.getAttr("longSideSeats") ?? longSideSeats,
-          node.getAttr("shortSideSeats") ?? shortSideSeats
-        );
-      });
-
-      addNumberField(
-        "Seats on long side",
-        longSideSeats,
-        0,
-        1,
-        (val) => {
-          const currentShort =
-            node.getAttr("shortSideSeats") ?? shortSideSeats;
-          updateRectTableGeometry(node, val, currentShort);
-          mapLayer.batchDraw();
-          updateSeatCount();
-          pushHistory();
-        }
-      );
-
-      addNumberField(
-        "Seats on short side",
-        shortSideSeats,
-        0,
-        1,
-        (val) => {
-          const currentLong =
-            node.getAttr("longSideSeats") ?? longSideSeats;
-          updateRectTableGeometry(node, currentLong, val);
-          mapLayer.batchDraw();
-          updateSeatCount();
-          pushHistory();
-        }
-      );
-
-      addSelectField(
-        "Seat labels",
-        seatLabelMode,
-        [
-          { value: "numbers", label: "1, 2, 3..." },
-          { value: "letters", label: "A, B, C..." },
-          { value: "none", label: "No seat labels" },
-        ],
-        (mode) => {
-          node.setAttr("seatLabelMode", mode);
-          updateRectTableGeometry(
-            node,
-            node.getAttr("longSideSeats") ?? longSideSeats,
-            node.getAttr("shortSideSeats") ?? shortSideSeats
-          );
-        }
-      );
-
-      addStaticRow(
-        "Total seats at table",
-        `${totalSeats} seat${totalSeats === 1 ? "" : "s"}`
-      );
-addAccessControls(); // <--- Add this
-      return;
+  // 3. Rotation (Safe to edit)
+  addNumberField(
+    "Rotation (deg)",
+    Math.round(node.rotation() || 0),
+    -360,
+    1,
+    (val) => {
+      node.rotation(val);
+      keepLabelsUpright(node);
+      if (overlayLayer) overlayLayer.batchDraw();
     }
+  );
+
+  // 4. Label (Safe to edit)
+  addTextField("Table label", tableLabel, (val) => {
+    node.setAttr("tableLabel", val || "");
+    updateRectTableGeometry(
+      node,
+      node.getAttr("longSideSeats") ?? longSideSeats,
+      node.getAttr("shortSideSeats") ?? shortSideSeats
+    );
+  });
+
+  // 5. Seat Counts (Locked vs Unlocked)
+  if (locked) {
+    addStaticRow("Seats on long side", longSideSeats);
+    addStaticRow("Seats on short side", shortSideSeats);
+  } else {
+    addNumberField(
+      "Seats on long side",
+      longSideSeats,
+      0,
+      1,
+      (val) => {
+        const currentShort = node.getAttr("shortSideSeats") ?? shortSideSeats;
+        updateRectTableGeometry(node, val, currentShort);
+        mapLayer.batchDraw();
+        updateSeatCount();
+        pushHistory();
+      }
+    );
+
+    addNumberField(
+      "Seats on short side",
+      shortSideSeats,
+      0,
+      1,
+      (val) => {
+        const currentLong = node.getAttr("longSideSeats") ?? longSideSeats;
+        updateRectTableGeometry(node, currentLong, val);
+        mapLayer.batchDraw();
+        updateSeatCount();
+        pushHistory();
+      }
+    );
+  }
+
+  // 6. Seat Labels
+  addSelectField(
+    "Seat labels",
+    seatLabelMode,
+    [
+      { value: "numbers", label: "1, 2, 3..." },
+      { value: "letters", label: "A, B, C..." },
+      { value: "none", label: "No seat labels" },
+    ],
+    (mode) => {
+      node.setAttr("seatLabelMode", mode);
+      updateRectTableGeometry(
+        node,
+        node.getAttr("longSideSeats") ?? longSideSeats,
+        node.getAttr("shortSideSeats") ?? shortSideSeats
+      );
+    }
+  );
+
+  addStaticRow(
+    "Total seats at table",
+    `${totalSeats} seat${totalSeats === 1 ? "" : "s"}`
+  );
+
+  addAccessControls(); 
+  return;
+}
 
         // ---- Stairs ----
     if (shapeType === "stairs") {
