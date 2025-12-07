@@ -281,6 +281,8 @@ function ensureSidebarDom() {
         sidebarCol.appendChild(footerDiv);
     }
 }
+
+  ensureSidebarDom();
   // ---------- Config ----------
 
   const GRID_SIZE = 32;
