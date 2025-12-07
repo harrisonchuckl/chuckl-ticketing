@@ -7256,137 +7256,118 @@ if (!node) {
     return;
   }
 
-    // ---- Row blocks ----
-    if (shapeType === "row-seats") {
-      // Inside renderInspector(node)... if (shapeType === "row-seats") { ...
-
-// [INSERT THIS CHECK]
-const locked = isNodeLocked(node);
-if (locked) {
-  const alertBox = document.createElement("div");
-  alertBox.className = "sb-ticketing-alert"; // Re-using your alert style
-  alertBox.textContent = "Configuration locked. Remove tickets/holds to edit structure.";
-  el.appendChild(alertBox);
-}
-
-// [UPDATE FIELDS TO BE STATIC IF LOCKED]
-if (locked) {
-  addStaticRow("Seats per row", seatsPerRow);
-  addStaticRow("Number of rows", rowCount);
-} else {
-  addNumberField("Seats per row", seatsPerRow, 1, 1, (val) => {
-    node.setAttr("seatsPerRow", val);
-    rebuild();
-  });
-  addNumberField("Number of rows", rowCount, 1, 1, (val) => {
-    node.setAttr("rowCount", val);
-    rebuild();
-  });
-}
-
-// ... rest of the row settings (Total seats, Labels) can remain as is, or lock similarly if desired.
-// Usually, changing labels is safe, but changing seat counts is dangerous.
-      const seatsPerRow = Number(node.getAttr("seatsPerRow") ?? 10);
-      const rowCount = Number(node.getAttr("rowCount") ?? 1);
-      const seatLabelMode = node.getAttr("seatLabelMode") || "numbers";
-      const seatStart = Number(node.getAttr("seatStart") ?? 1);
-      const rowLabelPrefix = node.getAttr("rowLabelPrefix") || "";
-      const rowLabelStart = Number(node.getAttr("rowLabelStart") ?? 0);
-      const curve = Number.isFinite(Number(node.getAttr("curve")))
-        ? Number(node.getAttr("curve"))
-        : 0;
-      const rowOrder = node.getAttr("rowOrder") || "asc";
-
-      // New: unified row-label position
-      let rowLabelPosition = node.getAttr("rowLabelPosition");
-      const legacyBothSidesInspector = !!node.getAttr("rowLabelBothSides");
-      if (
-        rowLabelPosition !== "left" &&
-        rowLabelPosition !== "right" &&
-        rowLabelPosition !== "both" &&
-        rowLabelPosition !== "none"
-      ) {
-        rowLabelPosition = legacyBothSidesInspector ? "both" : "left";
+// ---- Row blocks ----
+  if (shapeType === "row-seats") {
+    // 1. DEFINE VARIABLES FIRST (Fixes ReferenceError)
+    const seatsPerRow = Number(node.getAttr("seatsPerRow") ?? 10);
+    const rowCount = Number(node.getAttr("rowCount") ?? 1);
+    const seatLabelMode = node.getAttr("seatLabelMode") || "numbers";
+    const seatStart = Number(node.getAttr("seatStart") ?? 1);
+    const rowLabelPrefix = node.getAttr("rowLabelPrefix") || "";
+    const rowLabelStart = Number(node.getAttr("rowLabelStart") ?? 0);
+    const curve = Number.isFinite(Number(node.getAttr("curve")))
+      ? Number(node.getAttr("curve"))
+      : 0;
+    const rowOrder = node.getAttr("rowOrder") || "asc";
+    // New: unified row-label position
+    let rowLabelPosition = node.getAttr("rowLabelPosition");
+    const legacyBothSidesInspector = !!node.getAttr("rowLabelBothSides");
+    if (
+      rowLabelPosition !== "left" &&
+      rowLabelPosition !== "right" &&
+      rowLabelPosition !== "both" &&
+      rowLabelPosition !== "none"
+    ) {
+      rowLabelPosition = legacyBothSidesInspector ? "both" : "left";
+    }
+    const everyRowSameRaw = node.getAttr("everyRowSameSeats");
+    const everyRowSame = everyRowSameRaw !== false; // default true
+    let rowSeatCounts = node.getAttr("rowSeatCounts");
+    if (!Array.isArray(rowSeatCounts)) {
+      rowSeatCounts = [];
+    }
+    // Total seats depends on mode
+    let totalSeats;
+    if (everyRowSame) {
+      totalSeats = seatsPerRow * rowCount;
+    } else {
+      totalSeats = 0;
+      for (let i = 0; i < rowCount; i += 1) {
+        const raw = parseInt(rowSeatCounts[i], 10);
+        totalSeats += Number.isFinite(raw) && raw > 0 ? raw : seatsPerRow;
       }
+    }
 
-      const everyRowSameRaw = node.getAttr("everyRowSameSeats");
-      const everyRowSame = everyRowSameRaw !== false; // default true
-      let rowSeatCounts = node.getAttr("rowSeatCounts");
-      if (!Array.isArray(rowSeatCounts)) {
-        rowSeatCounts = [];
+    // 2. Helper to rebuild geometry
+    function rebuild() {
+      const currentSeatsPerRow =
+        node.getAttr("seatsPerRow") || seatsPerRow;
+      const currentRowCount =
+        node.getAttr("rowCount") || rowCount;
+      updateRowGroupGeometry(node, currentSeatsPerRow, currentRowCount);
+      mapLayer.batchDraw();
+      updateSeatCount();
+      refreshSeatMetadata();
+      applySeatVisuals();
+      if (activeMainTab === "tickets") {
+        renderTicketingPanel();
       }
+      pushHistory();
+    }
 
-      // Total seats depends on mode
-      let totalSeats;
-      if (everyRowSame) {
-        totalSeats = seatsPerRow * rowCount;
-      } else {
-        totalSeats = 0;
-        for (let i = 0; i < rowCount; i += 1) {
-          const raw = parseInt(rowSeatCounts[i], 10);
-          totalSeats += Number.isFinite(raw) && raw > 0 ? raw : seatsPerRow;
-        }
+    addTitle("Seat block");
+
+    // 3. LOCK CHECK
+    const locked = isNodeLocked(node);
+    if (locked) {
+      const alertBox = document.createElement("div");
+      alertBox.className = "sb-ticketing-alert";
+      alertBox.textContent = "Configuration locked. Remove tickets/holds to edit structure.";
+      el.appendChild(alertBox);
+    }
+
+    // Rotation
+    addNumberField(
+      "Rotation (deg)",
+      Math.round(node.rotation() || 0),
+      -360,
+      360,
+      1,
+      (val) => {
+        const angle = normaliseAngle(val);
+        node.rotation(angle);
+        keepLabelsUpright(node);
+        if (overlayLayer) overlayLayer.batchDraw();
       }
+    );
+    // Quick flip (180° rotation shortcut)
+    addFlipButton(node);
 
-      function rebuild() {
-        const currentSeatsPerRow =
-          node.getAttr("seatsPerRow") || seatsPerRow;
-        const currentRowCount =
-          node.getAttr("rowCount") || rowCount;
-        updateRowGroupGeometry(node, currentSeatsPerRow, currentRowCount);
-        mapLayer.batchDraw();
-        updateSeatCount();
-        refreshSeatMetadata();
-        applySeatVisuals();
-        if (activeMainTab === "tickets") {
-          renderTicketingPanel();
-        }
-        pushHistory();
-      }
-
-      addTitle("Seat block");
-
-      // Rotation
-      addNumberField(
-        "Rotation (deg)",
-        Math.round(node.rotation() || 0),
-        -360,
-        1,
-        (val) => {
-          const angle = normaliseAngle(val);
-          node.rotation(angle);
-          keepLabelsUpright(node);
-          if (overlayLayer) overlayLayer.batchDraw();
-        }
-      );
-
-
-            // Quick flip (180° rotation shortcut)
-      addFlipButton(node);
-
-
-      // Seats per row (default)
+    // 4. RENDER FIELDS (Static if locked, Editable if not)
+    if (locked) {
+      addStaticRow("Seats per row", seatsPerRow);
+      addStaticRow("Number of rows", rowCount);
+    } else {
       addNumberField("Seats per row", seatsPerRow, 1, 1, (val) => {
         node.setAttr("seatsPerRow", val);
         rebuild();
       });
-
       addNumberField("Number of rows", rowCount, 1, 1, (val) => {
         node.setAttr("rowCount", val);
         rebuild();
       });
+    }
 
-      addStaticRow(
-        "Total seats in block",
-        `${totalSeats} seat${totalSeats === 1 ? "" : "s"}`
-      );
+    addStaticRow(
+      "Total seats in block",
+      `${totalSeats} seat${totalSeats === 1 ? "" : "s"}`
+    );
 
-      addNumberField("Seat numbers start at", seatStart, 1, 1, (val) => {
+    // ... (The rest of the fields follow below, starting with seatStart)
+    addNumberField("Seat numbers start at", seatStart, 1, 1, (val) => {
         node.setAttr("seatStart", val);
         rebuild();
-      });
-
-      addSelectField(
+    });      addSelectField(
         "Seat labels",
         seatLabelMode,
         [
@@ -9210,60 +9191,59 @@ if (shapeType === "rect-table") {
   }
 }
 
-// Wrapper that extends the original behaviour with multi-shape transform
-// and Shift-based multi-selection.
 function attachNodeBehaviour(node) {
-if (!node || !(node instanceof Konva.Group)) return;
-// 1) Run all of your existing per-type hooks / drag logic etc.
-baseAttachNodeBehaviour(node);
-const type = node.getAttr("shapeType") || node.name();
-// 2) Ensure multi-shapes always have resize/rotate transform behaviour
-if (type === "multi-shape") {
-attachMultiShapeTransformBehaviour(node);
-}
-// 3) Selection behaviour (single + Shift multi-select)
-//    Remove any previous selection handlers so we don't stack listeners.
-//    FIX: Changed from 'click' to 'mousedown/touchstart' for instant response.
-node.off("click.seatmapSelect tap.seatmapSelect mousedown.seatmapSelect touchstart.seatmapSelect");
-node.on("mousedown.seatmapSelect touchstart.seatmapSelect", (evt) => {
-// --- SAFETY GUARD FOR OTHER TABS ---
-// FIX: Check BOTH local variable and window property to ensure we block selection in View/Ticket modes
-if (ticketSeatSelectionMode || window.ticketSeatSelectionMode) return;
-// FIX: Only block selection if we are using a DRAWING tool.
-// We explicitly allow selection if activeTool is null or "select".
-if (activeTool && activeTool !== 'select') return;
-
-// Only trigger on Left Click (button 0) to avoid conflict with context menus
-if (evt.evt && typeof evt.evt.button === 'number' && evt.evt.button !== 0) return;
-// Critical: Stop the event bubbling to the stage so we don't trigger panning or clearing
-evt.cancelBubble = true;
-if (isShiftPressed && transformer) {
-// Multi-select: add/remove this node from the Transformer selection
-const existing = transformer.nodes();
-const idx = existing.indexOf(node);
-if (idx === -1) {
-// Add node
-transformer.nodes(existing.concat(node));
-} else {
-// Remove node
-const clone = existing.slice();
-clone.splice(idx, 1);
-transformer.nodes(clone);
-}
-// If exactly one node selected, keep inspector in "single" mode
-selectedNode =
-transformer.nodes().length === 1 ? transformer.nodes()[0] : null;
-renderInspector(selectedNode);
-if (mapLayer) mapLayer.batchDraw();
-if (overlayLayer) overlayLayer.batchDraw();
-} else {
-// Normal single selection (clears previous selection)
-selectNode(node);
-}
-});
-// NOTE:
-// We are *not* touching any of your existing drag / hover handlers,
-// because those are all still inside baseAttachNodeBehaviour(node).
+    if (!node || !(node instanceof Konva.Group)) return;
+    
+    // 1) Run all existing per-type hooks / drag logic etc.
+    baseAttachNodeBehaviour(node);
+    
+    const type = node.getAttr("shapeType") || node.name();
+    
+    // 2) Ensure multi-shapes always have resize/rotate transform behaviour
+    if (type === "multi-shape") {
+      attachMultiShapeTransformBehaviour(node);
+    }
+    
+    // 3) Selection behaviour (single + Shift multi-select)
+    // Using click/tap is safer than mousedown to avoid conflict with dragging start
+    node.off("click.seatmapSelect tap.seatmapSelect");
+    node.on("click.seatmapSelect tap.seatmapSelect", (evt) => {
+      // --- SAFETY GUARD FOR OTHER TABS ---
+      // If we are in tickets/holds/view mode, DO NOT trigger standard selection inspector
+      if (ticketSeatSelectionMode || window.ticketSeatSelectionMode) return;
+      
+      // Only block selection if we are using a specific DRAWING tool (not select)
+      if (activeTool && activeTool !== 'select') return;
+      
+      // Only trigger on Left Click
+      if (evt.evt && typeof evt.evt.button === 'number' && evt.evt.button !== 0) return;
+      
+      // Critical: Stop event from hitting the stage (which would deselect this node)
+      evt.cancelBubble = true;
+      
+      if (isShiftPressed && transformer) {
+        // Multi-select: add/remove this node from the Transformer selection
+        const existing = transformer.nodes();
+        const idx = existing.indexOf(node);
+        if (idx === -1) {
+          transformer.nodes(existing.concat(node));
+        } else {
+          const clone = existing.slice();
+          clone.splice(idx, 1);
+          transformer.nodes(clone);
+        }
+        
+        // If exactly one node selected, keep inspector in "single" mode
+        selectedNode = transformer.nodes().length === 1 ? transformer.nodes()[0] : null;
+        
+        renderInspector(selectedNode);
+        if (mapLayer) mapLayer.batchDraw();
+        if (overlayLayer) overlayLayer.batchDraw();
+      } else {
+        // Normal single selection (clears previous selection automatically)
+        selectNode(node);
+      }
+    });
 }
   
     function createNodeForTool(tool, pos) {
