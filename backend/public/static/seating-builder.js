@@ -9851,29 +9851,51 @@ clearSelection();
 
   // ---------- Zoom ----------
 
-  function setZoom(scale) {
-    if (!stage) return;
+  // [Source: 8303] - Updated setZoom to center on viewport
+function setZoom(scale) {
+  if (!stage) return;
+  const clamped = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, scale));
+  const oldScale = stage.scaleX() || 1;
+  if (Math.abs(clamped - oldScale) < 0.0001) return;
 
-    const clamped = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, scale));
-    const oldScale = stage.scaleX() || 1;
-    if (Math.abs(clamped - oldScale) < 0.0001) return;
+  // 1. Get the center point of the viewport (the visible container)
+  const center = {
+    x: baseStageWidth / 2,
+    y: baseStageHeight / 2,
+  };
 
-    stage.scale({ x: clamped, y: clamped });
+  // 2. Calculate the "World" point that is currently under the center
+  //    (subtract stage position, divide by old scale)
+  const relatedTo = {
+    x: (center.x - stage.x()) / oldScale,
+    y: (center.y - stage.y()) / oldScale,
+  };
 
-    stage.size({
-      width: baseStageWidth / clamped,
-      height: baseStageHeight / clamped,
-    });
+  // 3. Apply the new scale
+  stage.scale({ x: clamped, y: clamped });
 
-    drawSquareGrid();
-    stage.batchDraw();
+  // 4. Calculate the new Position required to keep that point central
+  //    (center - (worldPoint * newScale))
+  const newPos = {
+    x: center.x - relatedTo.x * clamped,
+    y: center.y - relatedTo.y * clamped,
+  };
+  stage.position(newPos);
 
-    const label = document.getElementById("sb-zoom-reset");
-    if (label) {
-      label.textContent = `${Math.round(clamped * 100)}%`;
-    }
+  // 5. Update stage size logic (Maintains your existing grid system)
+  stage.size({
+    width: baseStageWidth / clamped,
+    height: baseStageHeight / clamped,
+  });
+
+  drawSquareGrid();
+  stage.batchDraw();
+
+  const label = document.getElementById("sb-zoom-reset");
+  if (label) {
+    label.textContent = `${Math.round(clamped * 100)}%`;
   }
-
+}
   function hookZoomButtons() {
     const btnIn = document.getElementById("sb-zoom-in");
     const btnOut = document.getElementById("sb-zoom-out");
