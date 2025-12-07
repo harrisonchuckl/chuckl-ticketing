@@ -5877,31 +5877,6 @@ if (mapLayer) mapLayer.batchDraw();
    });
   el.appendChild(addBtn);
 
-  // --- PHASE 1: TICKETS NEXT STEP ---
-  const nextBtn = document.createElement("button");
-  nextBtn.className = "sb-next-step-btn";
-  nextBtn.textContent = "Add holds / Allocations →";
-  nextBtn.onclick = () => {
-    if (ticketTypes.length === 0) {
-      alert("Please create at least one ticket type.");
-      return;
-    }
-    // Simple validation: check if seats are assigned
-    const seats = getAllSeatNodes();
-    const assignedCount = seats.filter(s => s.getAttr('sbTicketIds')?.length > 0 || s.getAttr('sbTicketId')).length;
-    
-    if (assignedCount === 0) {
-      if (!confirm("You created tickets but haven't assigned them to any seats yet. Continue anyway?")) return;
-    }
-
-    if (confirm("Are you happy with your ticket setup?")) {
-      window.__TIXALL_COMPLETION_STATUS__.tickets = true;
-      updateCompletionUI();
-      switchBuilderTab("holds");
-    }
-  };
-  el.appendChild(nextBtn);
-}
 
   function renderHoldsPanel() {
   const el = getInspectorElement();
@@ -7187,29 +7162,10 @@ function addNumberField(labelText, value, min, step, onCommit) {
 
 // ----- Global layout defaults (no selection) -----
 if (!node) {
-    // Dropdown removed. Default remains "numbers" (1, 2, 3...) based on globalSeatLabelMode init.
-
-    // Show "Next Step" button immediately when nothing is selected
-    const nextBtn = document.createElement("button");
-    nextBtn.className = "sb-next-step-btn";
-    nextBtn.textContent = "Add tickets  → ";
-    nextBtn.onclick = () => {
-        // Validation
-        const seats = getAllSeatNodes();
-        if (seats.length === 0) {
-            alert("Your map is empty. Please add seats before proceeding.");
-            return;
-        }
-        if (confirm("Have you finished the seating map?\n\nOnce tickets are added, editing the map structure becomes restricted.")) {
-            window.__TIXALL_COMPLETION_STATUS__.map = true;
-            updateCompletionUI();
-            switchBuilderTab("tickets");
-        }
-    };
-    el.appendChild(nextBtn);
-    return;
+  // Logic removed to hide the "Add tickets ->" button on load.
+  // The panel will remain empty until an object is selected.
+  return;
 }
-    
     const nodes = transformer ? transformer.nodes() : [];
 
     // ----- Multiple selection panel -----
