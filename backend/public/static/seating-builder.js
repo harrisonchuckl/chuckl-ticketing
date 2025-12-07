@@ -5897,7 +5897,7 @@ if (mapLayer) mapLayer.batchDraw();
       renderTicketingPanel();
    });
   el.appendChild(addBtn);
-
+}
   function renderHoldsPanel() {
   const el = getInspectorElement();
   if (!el) return;
