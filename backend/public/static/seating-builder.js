@@ -217,8 +217,6 @@ function injectSeatmapStyles() {
     .sb-form-grid { display: grid; gap: 12px; margin-top: 16px; }
     `;
 }
-  document.head.appendChild(style);
-}  
   injectSeatmapStyles();
 
   // ---------- Ensure sidebar DOM (seat count + inspector) ----------
