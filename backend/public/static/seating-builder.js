@@ -6189,20 +6189,24 @@ seats.forEach(seat => {
 
 // Helper to strip tickets/holds from a node so it can be edited
 // Helper to strip tickets/holds from a node so it can be edited
+// Helper to strip tickets/holds from a node so it can be edited
 function clearAssignmentsFromGroup(group) {
   if (!group || typeof group.find !== 'function') return;
   const seats = group.find((n) => n.getAttr("isSeat"));
 
   seats.forEach(seat => {
-    // Clear Tickets
-    seat.setAttr("sbTicketId", null);
-    seat.setAttr("sbTicketIds", []);
-    // Clear Holds
-    seat.setAttr("sbHoldStatus", null);
-    // Clear Accessibility
-    seat.setAttr("sbAccessibilityType", null);
+    [cite_start]// Atomically clear all assignment attributes [cite: 5210]
+    seat.setAttrs({
+      sbTicketId: null,
+      sbTicketIds: [],
+      sbHoldStatus: null,
+      sbAccessibilityType: null,
+      sbViewImage: null,
+      sbInfoLabel: null,
+      sbViewInfoId: null
+    });
     
-    // Remove from global assignment cache
+    // Remove from assignment cache
     const sid = seat.getAttr("sbSeatId");
     if(sid && ticketAssignments.has(sid)) {
       ticketAssignments.delete(sid);
@@ -6216,7 +6220,7 @@ function clearAssignmentsFromGroup(group) {
   updateTicketRings();
   pushHistory();
 }
- function renderInspector(node) {
+function renderInspector(node) {
   const el = getInspectorElement();
   if (!el) return;
 
@@ -6280,7 +6284,8 @@ function clearAssignmentsFromGroup(group) {
     btnUnlock.onclick = () => {
       if(confirm("Are you sure? This will remove ALL tickets, holds, and info from seats in this element.")) {
         clearAssignmentsFromGroup(node);
-        renderInspector(node); // Refresh panel
+        // FIX: Use selectNode() to force re-evaluation of locked state and refresh panel immediately
+        selectNode(node); 
       }
     };
 
@@ -6292,7 +6297,8 @@ function clearAssignmentsFromGroup(group) {
       if(prompt("Type 'DELETE' to confirm removing ALL ticket assignments and holds from the entire map.") === "DELETE") {
         const allGroups = mapLayer.find("Group");
         allGroups.forEach(g => clearAssignmentsFromGroup(g));
-        renderInspector(node);
+        // FIX: Refresh selection
+        selectNode(node);
       }
     };
 
@@ -6304,46 +6310,44 @@ function clearAssignmentsFromGroup(group) {
   // =========================================================
   // NODE SPECIFIC CONTROLS
   // =========================================================
-   
-   // ---- Single Seat ----
+
+  // ---- Single Seat ----
   if (shapeType === "single-seat") {
     addTitle("Single Seat");
-    if(locked) {
-       // Minimal info if locked
-       addStaticRow("Status", "Assigned");
+    if (locked) {
+      addStaticRow("Status", "Assigned / Locked");
     } else {
-        const labelMode = node.getAttr("seatLabelMode") || "numbers";
-        addSelectField("Label Style", labelMode, [
-            { value: "numbers", label: "Number (1)" },
-            { value: "letters", label: "Letter (A)" },
-            { value: "none", label: "None (Dot)" },
-        ], (mode) => {
-            node.setAttr("seatLabelMode", mode);
-            const circle = node.findOne("Circle");
-            const existingLabel = node.findOne("Text");
-            if (mode === "none") {
-                if(existingLabel) existingLabel.destroy();
-                if(circle) { circle.fill("#111827"); circle.stroke("#111827"); }
-            } else {
-                const baseText = mode === "letters" ? "A" : "1";
-                if (!existingLabel) node.add(makeSeatLabelText(baseText, 0, 0));
-                else existingLabel.text(baseText);
-                if(circle) { circle.fill("#ffffff"); circle.stroke("#4b5563"); }
-            }
-            mapLayer.batchDraw();
-            pushHistory();
-        });
-        addAccessControls(); 
+      const labelMode = node.getAttr("seatLabelMode") || "numbers";
+      addSelectField("Label Style", labelMode, [
+        { value: "numbers", label: "Number (1)" },
+        { value: "letters", label: "Letter (A)" },
+        { value: "none", label: "None (Dot)" },
+      ], (mode) => {
+        node.setAttr("seatLabelMode", mode);
+        const circle = node.findOne("Circle");
+        const existingLabel = node.findOne("Text");
+        if (mode === "none") {
+          if (existingLabel) existingLabel.destroy();
+          if (circle) { circle.fill("#111827"); circle.stroke("#111827"); }
+        } else {
+          const baseText = mode === "letters" ? "A" : "1";
+          if (!existingLabel) node.add(makeSeatLabelText(baseText, 0, 0));
+          else existingLabel.text(baseText);
+          if (circle) { circle.fill("#ffffff"); circle.stroke("#4b5563"); }
+        }
+        mapLayer.batchDraw();
+        pushHistory();
+      });
+      addAccessControls();
     }
     return;
   }
 
   // ---- Row blocks ----
   if (shapeType === "row-seats") {
-    // Variable Defs
     const seatsPerRow = Number(node.getAttr("seatsPerRow") ?? 10);
     const rowCount = Number(node.getAttr("rowCount") ?? 1);
-    const totalSeats = node.find('Circle').filter(c => c.getAttr('isSeat')).length; // dynamic count
+    const totalSeats = node.find('Circle').filter(c => c.getAttr('isSeat')).length;
     const seatStart = Number(node.getAttr("seatStart") ?? 1);
     const rowLabelPrefix = node.getAttr("rowLabelPrefix") || "";
     const rowLabelStart = Number(node.getAttr("rowLabelStart") ?? 0);
@@ -6352,65 +6356,56 @@ function clearAssignmentsFromGroup(group) {
     const rowLabelPosition = node.getAttr("rowLabelPosition") || "left";
     const everyRowSame = node.getAttr("everyRowSameSeats") !== false;
 
-    // Helper
     const rebuild = () => {
-        updateRowGroupGeometry(node, node.getAttr("seatsPerRow") || seatsPerRow, node.getAttr("rowCount") || rowCount);
-        mapLayer.batchDraw();
-        updateSeatCount();
-        refreshSeatMetadata();
-        applySeatVisuals();
-        pushHistory();
+      updateRowGroupGeometry(node, node.getAttr("seatsPerRow") || seatsPerRow, node.getAttr("rowCount") || rowCount);
+      mapLayer.batchDraw();
+      updateSeatCount();
+      refreshSeatMetadata();
+      applySeatVisuals();
+      pushHistory();
     };
 
     addTitle("Seat block");
-
-    // Rotation is always allowed (doesn't break assignments)
+    // Rotation is allowed even if locked
     addNumberField("Rotation (deg)", Math.round(node.rotation() || 0), -360, 360, 1, (val) => {
-        node.rotation(normaliseAngle(val));
-        keepLabelsUpright(node);
-        if (overlayLayer) overlayLayer.batchDraw();
+      node.rotation(normaliseAngle(val));
+      keepLabelsUpright(node);
+      if (overlayLayer) overlayLayer.batchDraw();
     });
     addFlipButton(node);
 
     if (locked) {
-        // Read-only view
-        addStaticRow("Seats per row", seatsPerRow);
-        addStaticRow("Number of rows", rowCount);
-        addStaticRow("Total seats", totalSeats);
+      addStaticRow("Seats per row", seatsPerRow);
+      addStaticRow("Number of rows", rowCount);
+      addStaticRow("Total seats", totalSeats);
     } else {
-        // Editable view
-        addNumberField("Seats per row", seatsPerRow, 1, 1, (val) => { node.setAttr("seatsPerRow", val); rebuild(); });
-        addNumberField("Number of rows", rowCount, 1, 1, (val) => { node.setAttr("rowCount", val); rebuild(); });
-        
-        addStaticRow("Total seats", totalSeats);
+      addNumberField("Seats per row", seatsPerRow, 1, 1, (val) => { node.setAttr("seatsPerRow", val); rebuild(); });
+      addNumberField("Number of rows", rowCount, 1, 1, (val) => { node.setAttr("rowCount", val); rebuild(); });
+      addStaticRow("Total seats", totalSeats);
+      addNumberField("Seat numbers start at", seatStart, 1, 1, (val) => { node.setAttr("seatStart", val); rebuild(); });
+      addSelectField("Seat labels", node.getAttr("seatLabelMode") || "numbers",
+        [{ value: "numbers", label: "1, 2, 3..." }, { value: "letters", label: "A, B, C..." }, { value: "none", label: "None" }],
+        (mode) => { node.setAttr("seatLabelMode", mode); rebuild(); }
+      );
+      addTextField("Row label prefix", rowLabelPrefix, (val) => { node.setAttr("rowLabelPrefix", val); rebuild(); });
+      addTextField("First row label", rowLabelFromIndex(rowLabelStart), (val) => {
+        node.setAttr("rowLabelStart", rowIndexFromLabel(val)); rebuild();
+      });
+      addSelectField("Row order", rowOrder, [{ value: "asc", label: "Ascending" }, { value: "desc", label: "Descending" }], (v) => { node.setAttr("rowOrder", v); rebuild(); });
+      addSelectField("Row labels", rowLabelPosition, [{ value: "left", label: "Left" }, { value: "right", label: "Right" }, { value: "both", label: "Both" }, { value: "none", label: "None" }], (v) => { node.setAttr("rowLabelPosition", v); rebuild(); });
+      addCheckboxField("Every row same size", everyRowSame, (c) => { node.setAttr("everyRowSameSeats", c); rebuild(); renderInspector(node); });
 
-        addNumberField("Seat numbers start at", seatStart, 1, 1, (val) => { node.setAttr("seatStart", val); rebuild(); });
-        addSelectField("Seat labels", node.getAttr("seatLabelMode")||"numbers", 
-            [{ value: "numbers", label: "1, 2, 3..." }, { value: "letters", label: "A, B, C..." }, { value: "none", label: "None" }],
-            (mode) => { node.setAttr("seatLabelMode", mode); rebuild(); }
-        );
-        addTextField("Row label prefix", rowLabelPrefix, (val) => { node.setAttr("rowLabelPrefix", val); rebuild(); });
-        addTextField("First row label", rowLabelFromIndex(rowLabelStart), (val) => { 
-            node.setAttr("rowLabelStart", rowIndexFromLabel(val)); rebuild(); 
+      if (!everyRowSame) {
+        const counts = node.getAttr("rowSeatCounts") || [];
+        const displayStr = Array.from({ length: rowCount }).map((_, i) => counts[i] || seatsPerRow).join(", ");
+        addTextField("Seats per row (csv)", displayStr, (val) => {
+          const arr = val.split(',').map(n => parseInt(n) || seatsPerRow);
+          node.setAttr("rowSeatCounts", arr);
+          rebuild();
         });
-        
-        addSelectField("Row order", rowOrder, [{value:"asc", label:"Ascending"}, {value:"desc", label:"Descending"}], (v) => { node.setAttr("rowOrder", v); rebuild(); });
-        addSelectField("Row labels", rowLabelPosition, [{value:"left", label:"Left"}, {value:"right", label:"Right"}, {value:"both", label:"Both"}, {value:"none", label:"None"}], (v) => { node.setAttr("rowLabelPosition", v); rebuild(); });
-        
-        addCheckboxField("Every row same size", everyRowSame, (c) => { node.setAttr("everyRowSameSeats", c); rebuild(); renderInspector(node); });
-        
-        if(!everyRowSame) {
-             const counts = node.getAttr("rowSeatCounts") || [];
-             const displayStr = Array.from({length: rowCount}).map((_,i) => counts[i] || seatsPerRow).join(", ");
-             addTextField("Seats per row (csv)", displayStr, (val) => {
-                 const arr = val.split(',').map(n => parseInt(n)||seatsPerRow);
-                 node.setAttr("rowSeatCounts", arr);
-                 rebuild();
-             });
-        }
-
-        addRangeField("Curve rows", curve, -15, 15, 1, (val) => { node.setAttr("curve", val); rebuild(); });
-        addAccessControls();
+      }
+      addRangeField("Curve rows", curve, -15, 15, 1, (val) => { node.setAttr("curve", val); rebuild(); });
+      addAccessControls();
     }
     return;
   }
@@ -6419,28 +6414,27 @@ function clearAssignmentsFromGroup(group) {
   if (shapeType === "circular-table") {
     const seatCount = node.getAttr("seatCount") || 8;
     const tableLabel = node.getAttr("tableLabel") || "";
-    
+
     addTitle("Round table");
-    addNumberField("Rotation (deg)", Math.round(node.rotation() || 0), -360, 1, (val) => {
-        node.rotation(val); keepLabelsUpright(node); overlayLayer.batchDraw();
-    });
-    
-    // Label is editable even if locked (usually safe)
-    addTextField("Table label", tableLabel, (val) => {
-        node.setAttr("tableLabel", val || "");
-        updateCircularTableGeometry(node, seatCount);
+    addNumberField("Rotation (deg)", Math.round(node.rotation() || 0), -360, 360, 1, (val) => {
+      node.rotation(val); keepLabelsUpright(node); overlayLayer.batchDraw();
     });
 
     if (locked) {
-        addStaticRow("Seats", seatCount);
+      addStaticRow("Table label", tableLabel);
+      addStaticRow("Seats", seatCount);
     } else {
-        addNumberField("Seats around table", seatCount, 1, 1, (val) => {
-            updateCircularTableGeometry(node, val); mapLayer.batchDraw(); updateSeatCount(); pushHistory();
-        });
-        addSelectField("Seat labels", node.getAttr("seatLabelMode")||"numbers", [{value:"numbers", label:"1,2..."}, {value:"letters", label:"A,B..."}], (m) => {
-            node.setAttr("seatLabelMode", m); updateCircularTableGeometry(node, seatCount);
-        });
-        addAccessControls();
+      addTextField("Table label", tableLabel, (val) => {
+        node.setAttr("tableLabel", val || "");
+        updateCircularTableGeometry(node, seatCount);
+      });
+      addNumberField("Seats around table", seatCount, 1, 1, (val) => {
+        updateCircularTableGeometry(node, val); mapLayer.batchDraw(); updateSeatCount(); pushHistory();
+      });
+      addSelectField("Seat labels", node.getAttr("seatLabelMode") || "numbers", [{ value: "numbers", label: "1,2..." }, { value: "letters", label: "A,B..." }], (m) => {
+        node.setAttr("seatLabelMode", m); updateCircularTableGeometry(node, seatCount);
+      });
+      addAccessControls();
     }
     return;
   }
@@ -6452,56 +6446,130 @@ function clearAssignmentsFromGroup(group) {
     const tableLabel = node.getAttr("tableLabel") || "";
 
     addTitle("Rectangular table");
-    addNumberField("Rotation", Math.round(node.rotation()||0), -360, 1, (v) => {node.rotation(v); keepLabelsUpright(node); overlayLayer.batchDraw();});
-    addTextField("Table label", tableLabel, (val) => { node.setAttr("tableLabel", val); updateRectTableGeometry(node, longSide, shortSide); });
+    addNumberField("Rotation", Math.round(node.rotation() || 0), -360, 360, 1, (v) => { node.rotation(v); keepLabelsUpright(node); overlayLayer.batchDraw(); });
 
-    if(locked) {
-        addStaticRow("Long side seats", longSide);
-        addStaticRow("Short side seats", shortSide);
+    if (locked) {
+      addStaticRow("Table label", tableLabel);
+      addStaticRow("Long side seats", longSide);
+      addStaticRow("Short side seats", shortSide);
     } else {
-        addNumberField("Seats long side", longSide, 0, 1, (v) => { updateRectTableGeometry(node, v, shortSide); mapLayer.batchDraw(); updateSeatCount(); pushHistory(); });
-        addNumberField("Seats short side", shortSide, 0, 1, (v) => { updateRectTableGeometry(node, longSide, v); mapLayer.batchDraw(); updateSeatCount(); pushHistory(); });
-        addAccessControls();
+      addTextField("Table label", tableLabel, (val) => { node.setAttr("tableLabel", val); updateRectTableGeometry(node, longSide, shortSide); });
+      addNumberField("Seats long side", longSide, 0, 1, (v) => { updateRectTableGeometry(node, v, shortSide); mapLayer.batchDraw(); updateSeatCount(); pushHistory(); });
+      addNumberField("Seats short side", shortSide, 0, 1, (v) => { updateRectTableGeometry(node, longSide, v); mapLayer.batchDraw(); updateSeatCount(); pushHistory(); });
+      addAccessControls();
     }
     return;
   }
 
-  // ---- Fallback for standard shapes (Line, Text, etc) ----
-  // These usually don't have seats attached directly, so we render their original controls.
-  // This block ensures we don't break functionality for lines, stages, symbols, etc.
-  if (["line", "curve-line", "arrow", "arc", "multi-shape", "stage", "bar", "exit", "text", "label", "symbol", "section", "square", "circle", "stairs"].includes(shapeType)) {
-      // --- COPY YOUR ORIGINAL LOGIC FOR THESE TYPES HERE ---
-      // I'll provide the 'Stage' block as an example so you know where it goes.
-      
-      if(shapeType === "stage") {
-          addTitle("Stage");
-          const labelNode = node.findOne(".stage-label") || node.findOne("Text");
-          const stageLabel = node.getAttr("stageLabel") || (labelNode && labelNode.text()) || "STAGE";
-          addTextField("Label", stageLabel, (v) => { node.setAttr("stageLabel", v); if(labelNode) labelNode.text(v); applyStageStyle(node); });
-          
-          const fillMode = node.getAttr("stageFillMode") || "solid";
-          addSelectField("Fill mode", fillMode, [{ value: "solid", label: "Solid" }, { value: "gradient", label: "Gradient" }], (m) => { node.setAttr("stageFillMode", m); applyStageStyle(node); renderInspector(node); });
-          
-          if (fillMode === "solid") {
-             addColorField("Stage colour", node.getAttr("stageSolidColor") || "#000000", (v) => { node.setAttr("stageSolidColor", v); applyStageStyle(node); });
-          } else {
-             addColorField("Start color", node.getAttr("stageGradientStartColor") || "#1d4ed8", (v) => { node.setAttr("stageGradientStartColor", v); applyStageStyle(node); });
-             addColorField("End color", node.getAttr("stageGradientEndColor") || "#22c1c3", (v) => { node.setAttr("stageGradientEndColor", v); applyStageStyle(node); });
-          }
-          addCheckboxField("Auto text color", node.getAttr("stageTextAutoColor")!==false, (c) => { node.setAttr("stageTextAutoColor", c); applyStageStyle(node); renderInspector(node); });
-          if(node.getAttr("stageTextAutoColor")===false) {
-              addColorField("Text color", node.getAttr("stageTextColor")||"#ffffff", (v) => { node.setAttr("stageTextColor", v); applyStageStyle(node); });
-          }
-      }
-      
-      // ... For the rest (lines, symbols, etc), rely on the original code logic you had in your file. 
-      // If you need me to paste the full 300 lines for lines/symbols/etc again, let me know, 
-      // otherwise, keep your existing blocks for those types below this comment.
+  // ---- Stage ----
+  if (shapeType === "stage") {
+    addTitle("Stage");
+    const labelNode = node.findOne(".stage-label") || node.findOne("Text");
+    const stageLabel = node.getAttr("stageLabel") || (labelNode && labelNode.text()) || "STAGE";
+    addTextField("Label", stageLabel, (v) => { node.setAttr("stageLabel", v); if (labelNode) labelNode.text(v); applyStageStyle(node); });
+
+    const fillMode = node.getAttr("stageFillMode") || "solid";
+    addSelectField("Fill mode", fillMode, [{ value: "solid", label: "Solid" }, { value: "gradient", label: "Gradient" }], (m) => { node.setAttr("stageFillMode", m); applyStageStyle(node); renderInspector(node); });
+
+    if (fillMode === "solid") {
+      addColorField("Stage colour", node.getAttr("stageSolidColor") || "#000000", (v) => { node.setAttr("stageSolidColor", v); applyStageStyle(node); });
+    } else {
+      addColorField("Start color", node.getAttr("stageGradientStartColor") || "#1d4ed8", (v) => { node.setAttr("stageGradientStartColor", v); applyStageStyle(node); });
+      addColorField("End color", node.getAttr("stageGradientEndColor") || "#22c1c3", (v) => { node.setAttr("stageGradientEndColor", v); applyStageStyle(node); });
+    }
+    addCheckboxField("Auto text color", node.getAttr("stageTextAutoColor") !== false, (c) => { node.setAttr("stageTextAutoColor", c); applyStageStyle(node); renderInspector(node); });
+    if (node.getAttr("stageTextAutoColor") === false) {
+      addColorField("Text color", node.getAttr("stageTextColor") || "#ffffff", (v) => { node.setAttr("stageTextColor", v); applyStageStyle(node); });
+    }
+    return;
+  }
+
+  // ---- Bar ----
+  if (shapeType === "bar") {
+    addTitle("Bar");
+    const labelNode = node.findOne(".bar-label") || node.findOne("Text");
+    const barLabel = (labelNode && labelNode.text()) || "BAR";
+    addTextField("Label", barLabel, (v) => { if (labelNode) labelNode.text(v); });
+    return;
+  }
+
+  // ---- Exit ----
+  if (shapeType === "exit") {
+    addTitle("Exit");
+    const labelNode = node.findOne(".exit-label") || node.findOne("Text");
+    const exitLabel = (labelNode && labelNode.text()) || "EXIT";
+    addTextField("Label", exitLabel, (v) => { if (labelNode) labelNode.text(v); });
+    return;
+  }
+
+  // ---- Text Label ----
+  if (shapeType === "text" || shapeType === "label") {
+    addTitle("Text Label");
+    const labelNode = node.findOne("Text");
+    const val = (labelNode && labelNode.text()) || "Label";
+    addTextField("Text", val, (v) => { if (labelNode) labelNode.text(v); ensureHitRect(node); mapLayer.batchDraw(); });
+    addNumberField("Font Size", (labelNode && labelNode.fontSize()) || 14, 8, 72, 1, (v) => {
+      if (labelNode) labelNode.fontSize(v); ensureHitRect(node); mapLayer.batchDraw();
+    });
+    return;
+  }
+
+  // ---- Other Shapes & Symbols ----
+  if (["section", "square", "circle", "multi-shape", "symbol"].includes(shapeType)) {
+    addTitle(shapeType.toUpperCase());
+    if (shapeType === "symbol") {
+      addStaticRow("Type", node.getAttr("symbolType") || "Icon");
+    }
+    const fillEnabled = node.getAttr("shapeFillEnabled");
+    addCheckboxField("Fill", fillEnabled !== false, (c) => { node.setAttr("shapeFillEnabled", c); applyBasicShapeStyle(node); });
+    if (fillEnabled !== false) {
+      addColorField("Fill Color", node.getAttr("shapeFillColor") || "#ffffff", (v) => { node.setAttr("shapeFillColor", v); applyBasicShapeStyle(node); });
+    }
+    addColorField("Stroke Color", node.getAttr("shapeStrokeColor") || "#4b5563", (v) => { node.setAttr("shapeStrokeColor", v); applyBasicShapeStyle(node); });
+    addNumberField("Stroke Width", node.getAttr("shapeStrokeWidth") || 1.7, 0, 20, 0.5, (v) => { node.setAttr("shapeStrokeWidth", v); applyBasicShapeStyle(node); });
+    return;
+  }
+
+  // ---- Line / Curve / Arrow / Stairs ----
+  // These usually don't carry tickets, but we retain their controls
+  if (shapeType === "line" || shapeType === "curve-line") {
+    addTitle("Line");
+    addColorField("Color", (node.findOne("Line") && node.findOne("Line").stroke()) || "#111827", (v) => {
+      node.findOne("Line").stroke(v); mapLayer.batchDraw();
+    });
+    addNumberField("Width", (node.findOne("Line") && node.findOne("Line").strokeWidth()) || 2, 1, 20, 1, (v) => {
+      node.findOne("Line").strokeWidth(v); mapLayer.batchDraw();
+    });
+    // Fill support for lines
+    const fillEnabled = node.getAttr("lineFillEnabled");
+    addCheckboxField("Fill Shape", !!fillEnabled, (c) => {
+      node.setAttr("lineFillEnabled", c); updateLineFillShape(node); mapLayer.batchDraw(); renderInspector(node);
+    });
+    if (fillEnabled) {
+      addColorField("Fill Color", node.getAttr("lineFillColor") || "#e5e7eb", (v) => {
+        node.setAttr("lineFillColor", v); updateLineFillShape(node); mapLayer.batchDraw();
+      });
+    }
+    return;
+  }
+
+  if (shapeType === "arrow") {
+    addTitle("Arrow");
+    addColorField("Color", (node.findOne("Arrow") && node.findOne("Arrow").stroke()) || "#111827", (v) => {
+      const arr = node.findOne("Arrow"); if (arr) { arr.stroke(v); arr.fill(v); mapLayer.batchDraw(); }
+    });
+    return;
+  }
+
+  if (shapeType === "stairs") {
+    addTitle("Stairs");
+    addNumberField("Steps", node.getAttr("stairsStepCount") || 8, 2, 50, 1, (v) => {
+      node.setAttr("stairsStepCount", v); updateStairsGeometry(node); mapLayer.batchDraw();
+    });
+    return;
   }
 }
-
-
-  // ---------- Selection / transformer ----------
+  
 
   function keepLabelsUpright(node) {
     const angle = node.rotation();
