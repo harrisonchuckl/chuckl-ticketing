@@ -500,15 +500,32 @@ router.get("/builder/preview/:showId", (req, res) => {
 
     /* Zoom Controls */
     .tb-zoom-toolbar {
-        position: absolute; top: 24px; right: 24px;
-        background: #fff; border-radius: 8px; border: 1px solid var(--border-color);
-        display: flex; box-shadow: 0 2px 8px rgba(0,0,0,0.05); z-index: 50; pointer-events: auto;
-    }
-    .tb-zoom-btn { width: 32px; height: 32px; border: none; background: #fff; cursor: pointer; color: var(--text-main); }
+  position: absolute;
+  bottom: 24px;      /* Move to bottom */
+  right: 24px;       /* Keep on right */
+  top: auto;         /* Unset top */
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  display: flex;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  z-index: 50;
+  pointer-events: auto;
+}
+
+.tb-zoom-btn { width: 32px; height: 32px; border: none; background: #fff; cursor: pointer; color: var(--text-main); }
     .tb-zoom-btn:hover { background: #f8fafc; }
     .tb-zoom-label { width: 44px; font-size: 12px; font-weight: 600; border-left: 1px solid #f1f5f9; border-right: 1px solid #f1f5f9; }
 
-    .tb-tab-panels { flex: 1; position: relative; }
+.tb-tab-panels {
+  flex: 1;
+  position: relative;
+  overflow: hidden; /* This clips the map to the canvas area only */
+  border-radius: 12px; /* Optional: adds nice rounded corners to the map view */
+  margin: 12px; /* Optional: adds a small gap so it doesn't touch the edges */
+  border: 1px solid var(--border-color); /* Optional: distinct border for the map area */
+  background: #fff; /* Ensures grid doesn't show through transparent areas */
+}
     .tb-tab-panel { display: none; width: 100%; height: 100%; }
     .tb-tab-panel.is-active { display: block; }
     #app { width: 100%; height: 100%; }
