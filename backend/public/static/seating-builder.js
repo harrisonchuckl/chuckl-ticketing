@@ -6191,11 +6191,11 @@ seats.forEach(seat => {
 function clearAssignmentsFromGroup(group) {
   if (!group || typeof group.find !== 'function') return;
 
-  [cite_start]// FIX: We must search for "Circle" string first to ensure we find the nodes [cite: 5213]
+  // FIX: Must use "Circle" string selector to find seats reliably in Konva
   const seats = group.find("Circle").filter(n => n.getAttr("isSeat"));
 
   seats.forEach(seat => {
-    [cite_start]// Atomically clear all assignment attributes [cite: 5217]
+    // Atomically clear all assignment attributes
     seat.setAttrs({
       sbTicketId: null,
       sbTicketIds: [],
@@ -6203,7 +6203,7 @@ function clearAssignmentsFromGroup(group) {
       sbAccessibilityType: null,
       sbViewImage: null,
       sbInfoLabel: null,
-      sbInfoDesc: null, 
+      sbInfoDesc: null,
       sbViewInfoId: null
     });
     
@@ -6235,7 +6235,7 @@ function renderInspector(node) {
   el.innerHTML = "";
 
   // =========================================================
-  // 1. UI HELPER FUNCTIONS (Restoring missing functions)
+  // 1. UI HELPER FUNCTIONS
   // =========================================================
   const addTitle = (text) => {
     const h = document.createElement("h4");
@@ -6374,22 +6374,80 @@ function renderInspector(node) {
     el.appendChild(btn);
   };
 
+  // --- RESTORED DETAILED ACCESSIBILITY CONTROLS ---
   const addAccessControls = () => {
-    const d = document.createElement("div");
-    d.style.marginTop = "12px";
-    d.innerHTML = `<div class="sb-label">Accessibility</div>`;
-    const btn = document.createElement("button");
-    btn.className = "tool-button";
-    btn.textContent = "Toggle Accessible Seat";
-    btn.onclick = () => {
-      const seats = node.find ? node.find("Circle").filter(n=>n.getAttr("isSeat")) : [];
-      if(seats.length && typeof cycleSeatKind === 'function') {
-         seats.forEach(s => cycleSeatKind(s));
-         if(mapLayer) mapLayer.batchDraw();
-      }
+    const wrapper = document.createElement("div");
+    wrapper.className = "sb-field-row";
+    wrapper.style.marginTop = "12px";
+    wrapper.style.borderTop = "1px solid #e5e7eb";
+    wrapper.style.paddingTop = "12px";
+    
+    const title = document.createElement("div");
+    title.className = "sb-inspector-title";
+    title.textContent = "Accessibility";
+    title.style.marginBottom = "8px";
+    wrapper.appendChild(title);
+
+    const row = document.createElement("div");
+    row.style.display = "grid";
+    row.style.gridTemplateColumns = "1fr 1fr";
+    row.style.gap = "8px";
+
+    const makeBtn = (mode, label, emoji) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "tool-button";
+
+        // Highlight if active
+        if (activeAccessibilityMode === mode) {
+            btn.classList.add("is-active");
+            btn.style.borderColor = "#2563eb";
+            btn.style.background = "#eff6ff";
+        }
+
+        btn.innerHTML = `<span style="margin-right:4px">${emoji}</span> ${label}`;
+        btn.style.fontSize = "12px";
+        btn.style.height = "36px";
+        btn.onclick = () => {
+            // Check if single seat group (Direct action)
+            const shapeType = node.getAttr("shapeType") || node.name();
+            if (shapeType === "single-seat") {
+                const seat = node.findOne("Circle");
+                if (seat) {
+                    const current = seat.getAttr("sbAccessibilityType");
+                    seat.setAttr("sbAccessibilityType", current === mode ? null : mode);
+                    applySeatVisuals();
+                    pushHistory();
+                    renderInspector(node); // Refresh button state
+                }
+                return;
+            }
+            // Multi-mode toggle
+            if (activeAccessibilityMode === mode) {
+                activeAccessibilityMode = null;
+                setTicketSeatSelectionMode(false, "access-off");
+            } else {
+                activeAccessibilityMode = mode;
+                setTicketSeatSelectionMode(true, "access-on");
+                refreshSeatTicketListeners();
+            }
+            renderInspector(node);
+        };
+        return btn;
     };
-    d.appendChild(btn);
-    el.appendChild(d);
+
+    row.appendChild(makeBtn("disabled", "Disabled", "♿"));
+    row.appendChild(makeBtn("carer", "Carer", "C"));
+    wrapper.appendChild(row);
+
+    const hint = document.createElement("div");
+    hint.className = "sb-helper";
+    hint.style.marginTop = "6px";
+    hint.textContent = activeAccessibilityMode
+        ? `Click seats on the map to toggle ${activeAccessibilityMode} status.`
+        : "Select a type, then click seats to assign.";
+    wrapper.appendChild(hint);
+    el.appendChild(wrapper);
   };
 
   const addAlignButtonsPanel = (count) => {
@@ -6486,7 +6544,7 @@ function renderInspector(node) {
         mapLayer.batchDraw();
         pushHistory();
       });
-      addAccessControls();
+      addAccessControls(); // <--- Restored Detailed Controls
     }
     return;
   }
@@ -6562,7 +6620,7 @@ function renderInspector(node) {
         });
       }
       addRangeField("Curve rows", curve, -15, 15, 1, (val) => { node.setAttr("curve", val); rebuild(); });
-      addAccessControls();
+      addAccessControls(); // <--- Restored Detailed Controls
     }
     return;
   }
@@ -6599,7 +6657,7 @@ function renderInspector(node) {
         node.setAttr("seatLabelMode", m); 
         if(typeof updateCircularTableGeometry === 'function') updateCircularTableGeometry(node, seatCount);
       });
-      addAccessControls();
+      addAccessControls(); // <--- Restored Detailed Controls
     }
     return;
   }
@@ -6625,7 +6683,7 @@ function renderInspector(node) {
       addTextField("Table label", tableLabel, (val) => { node.setAttr("tableLabel", val); updateRectTableGeometry(node, longSide, shortSide); });
       addNumberField("Seats long side", longSide, 0, 50, 1, (v) => { updateRectTableGeometry(node, v, shortSide); mapLayer.batchDraw(); updateSeatCount(); pushHistory(); });
       addNumberField("Seats short side", shortSide, 0, 50, 1, (v) => { updateRectTableGeometry(node, longSide, v); mapLayer.batchDraw(); updateSeatCount(); pushHistory(); });
-      addAccessControls();
+      addAccessControls(); // <--- Restored Detailed Controls
     }
     return;
   }
