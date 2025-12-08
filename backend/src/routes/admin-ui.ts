@@ -696,7 +696,7 @@ router.get(
           var bar   = '<div style="background:#e5e7eb;height:6px;border-radius:999px;overflow:hidden;width:140px">'
                     +'<div style="background:#111827;height:6px;width:'+pct+'%"></div>'
                     +'</div>';
-                     var statusLabel = (s.status || 'DRAFT');
+          var statusLabel = (s.status || 'DRAFT');
           var statusBadge = '<span class="pill" style="background:'
             +(statusLabel === 'LIVE' ? '#ecfdf3' : '#f8fafc')
             +';color:'+(statusLabel === 'LIVE' ? '#166534' : '#475569')
@@ -753,8 +753,8 @@ router.get(
           a.addEventListener('click', function(e){
             e.preventDefault();
             var id = a.getAttribute('data-seating');
-if (id) window.location.href = '/admin/seating/builder/preview/' + id;
-});
+            if (id) window.location.href = '/admin/seating/builder/preview/' + id;
+          });
         });
         $$('[data-tickets]').forEach(function(a){
           a.addEventListener('click', function(e){
@@ -778,7 +778,7 @@ if (id) window.location.href = '/admin/seating/builder/preview/' + id;
             }
           });
         });
-         $$('[data-row]').forEach(function(row){
+        $$('[data-row]').forEach(function(row){
           row.addEventListener('click', function(e){
             if (e.target && (e.target.closest('a') || e.target.closest('button'))) return;
             var id = row.getAttribute('data-row');
@@ -926,9 +926,9 @@ if (id) window.location.href = '/admin/seating/builder/preview/' + id;
           venueText: vInput.value.trim(),
           venueId: vInput.dataset.venueId || null,
           imageUrl: prev.src || null,
-descriptionHtml: $('#desc').innerHTML.trim(),
+          descriptionHtml: $('#desc').innerHTML.trim(),
           status: item.status
-          };
+        };
         if (!payload.title || !payload.date || !payload.venueText || !payload.descriptionHtml){
           throw new Error('Title, date/time, venue and description are required');
         }
@@ -947,6 +947,7 @@ descriptionHtml: $('#desc').innerHTML.trim(),
       }
     });
   }
+
   // --- SUMMARY PAGE ---
   async function summaryPage(id){
     if (!main) return;
@@ -1388,10 +1389,11 @@ descriptionHtml: $('#desc').innerHTML.trim(),
         var id3 = path.split('/')[4];
         return seatingPage(id3);
       }
-  if (path.startsWith('/admin/ui/shows/') && path.endsWith('/summary')){
+      if (path.startsWith('/admin/ui/shows/') && path.endsWith('/summary')){
         var id4 = path.split('/')[4];
         return summaryPage(id4);
       }
+
       return home();
     }catch(err){
       console.error('[Admin UI] route error', err);
