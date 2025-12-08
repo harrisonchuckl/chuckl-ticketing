@@ -110,7 +110,7 @@ router.get('/', async (req, res) => {
         startDate && endDate ? { date: { gte: startDate, lt: endDate } } : {},
         city ? { venue: { city: { equals: city } } } : {},
         venueId ? { venueId } : {},
-        { OR: [{ status: ShowStatus.LIVE }, { status: null }] },
+        { status: ShowStatus.LIVE },
         q
           ? {
               OR: [
@@ -181,9 +181,9 @@ router.get('/cities', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const id = String(req.params.id);
-   const show = await prisma.show.findFirst({
-      where: { id, OR: [{ status: ShowStatus.LIVE }, { status: null }] },
-     include: {
+    const show = await prisma.show.findFirst({
+      where: { id, status: ShowStatus.LIVE },
+      include: {
         venue: true,
         ticketTypes: { select: { id: true, name: true, pricePence: true, available: true }, orderBy: { pricePence: 'asc' } },
       },
@@ -210,11 +210,11 @@ router.get('/venue/:venueId', async (req, res) => {
     if (!venue) return res.status(404).json({ ok: false, error: 'Venue not found' });
 
     const items = await prisma.show.findMany({
-where: {
+      where: {
         venueId,
         ...(upcoming === '1' ? { date: { gte: now } } : {}),
-        OR: [{ status: ShowStatus.LIVE }, { status: null }],
-      },     
+        status: ShowStatus.LIVE,
+      },
       include: {
         venue: true,
         ticketTypes: { select: { id: true, name: true, pricePence: true, available: true }, orderBy: { pricePence: 'asc' } },
