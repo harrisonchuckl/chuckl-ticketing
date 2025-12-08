@@ -8634,10 +8634,11 @@ function hookPhase1Buttons() {
 
   if (btnDraft) {
     btnDraft.addEventListener('click', () => {
-          const ok = confirm(
+      const ok = confirm(
         'Are you sure you want to save this show as a draft and exit the seating builder?'
       );
       if (!ok) return;
+      // Save as Draft -> Redirect to My Shows
       saveShowWithStatus('DRAFT', '/admin/ui/shows/current');
     });
   }
@@ -9301,5 +9302,3 @@ return true;
 }
 
 })();
- 
- 
