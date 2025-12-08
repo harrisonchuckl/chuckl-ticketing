@@ -16,27 +16,36 @@ let ensureShowPublishingSchemaPromise: Promise<void> | null = null;
 
 async function ensureShowPublishingSchema(): Promise<void> {
   if (!ensureShowPublishingSchemaPromise) {
-    ensureShowPublishingSchemaPromise = prisma.$executeRawUnsafe(`
-      DO $$
-      BEGIN
-        CREATE TYPE "ShowStatus" AS ENUM ('DRAFT', 'LIVE');
-      EXCEPTION
-        WHEN duplicate_object THEN NULL;
-      END $$;
+    ensureShowPublishingSchemaPromise = (async () => {
+      await prisma.$executeRawUnsafe(`
+        DO $$
+        BEGIN
+          CREATE TYPE "ShowStatus" AS ENUM ('DRAFT', 'LIVE');
+        EXCEPTION
+          WHEN duplicate_object THEN NULL;
+        END $$;
+      `);
 
-      ALTER TABLE "Show"
-      ADD COLUMN IF NOT EXISTS "status" "ShowStatus" NOT NULL DEFAULT 'DRAFT';
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE "Show"
+        ADD COLUMN IF NOT EXISTS "status" "ShowStatus" NOT NULL DEFAULT 'DRAFT';
+      `);
 
-      ALTER TABLE "Show"
-      ADD COLUMN IF NOT EXISTS "publishedAt" TIMESTAMP(3);
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE "Show"
+        ADD COLUMN IF NOT EXISTS "publishedAt" TIMESTAMP(3);
+      `);
 
-      DO $$
-      BEGIN
-        ALTER TABLE "Show" ALTER COLUMN "status" SET DEFAULT 'DRAFT';
-      EXCEPTION
-        WHEN undefined_column THEN NULL;
-      END $$;
-    `).then(() => undefined);
+      await prisma.$executeRawUnsafe(`
+        DO $$
+        BEGIN
+          ALTER TABLE "Show" ALTER COLUMN "status" SET DEFAULT 'DRAFT';
+        EXCEPTION
+          WHEN undefined_column THEN NULL;
+        END $$;
+      `);
+    })();
+
   }
 
   return ensureShowPublishingSchemaPromise;
