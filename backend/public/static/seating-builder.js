@@ -362,16 +362,44 @@ window.__TIXALL_TAB_VALIDATION__ = {
 
 function validateCurrentTabLogic(tab) {
     const errors = [];
-    
+
     // 1. MAP VALIDATION
     if (tab === 'map') {
-        const stageNode = mapLayer ? mapLayer.findOne('Group[shapeType="stage"]') : null;
-        if (!stageNode) {
-            errors.push("There is no STAGE. Please add a stage from the left toolbar.");
+        let stageFound = false;
+
+        if (mapLayer) {
+            // A. Check for the official Stage Tool Element
+            const standardStage = mapLayer.findOne('Group[shapeType="stage"]');
+            if (standardStage) {
+                stageFound = true;
+            } 
+            
+            // B. Check for ANY Text Label containing "STAGE" or "SCREEN"
+            if (!stageFound) {
+                // Find all text nodes on the layer
+                const allText = mapLayer.find('Text'); 
+                for (const t of allText) {
+                    // Ignore seat labels (A, B, 1, 2 etc) to be safe
+                    if (t.getAttr("isSeatLabel") || t.getAttr("isRowLabel")) continue;
+
+                    // Clean the text: uppercase and remove extra spaces
+                    const val = (t.text() || "").trim().toUpperCase();
+                    
+                    // The criteria: exact match for STAGE or SCREEN
+                    if (val === "STAGE" || val === "SCREEN") {
+                        stageFound = true;
+                        break; // Found one, stop searching
+                    }
+                }
+            }
         }
-        
+
+        if (!stageFound) {
+            errors.push("There is no STAGE. Please add a Stage element or a Text Label reading 'STAGE' or 'SCREEN'.");
+        }
+
         // Check for duplicates
-        refreshSeatMetadata(); // Update duplicate set
+        refreshSeatMetadata(); 
         if (duplicateSeatRefs && duplicateSeatRefs.size > 0) {
             errors.push(`Duplicate seat numbers detected (${duplicateSeatRefs.size}). Identifiers must be unique.`);
         }
@@ -394,18 +422,17 @@ function validateCurrentTabLogic(tab) {
         if (unassignedCount > 0) {
             errors.push(`${unassignedCount} seats have not been allocated to a ticket type.`);
         }
-        
+
         if (ticketTypes.length === 0) {
             errors.push("No ticket types created.");
         }
     }
 
-    // 3. HOLDS (Permissive, but good to check)
+    // 3. HOLDS (Permissive)
     // 4. VIEW (Permissive)
 
     return { valid: errors.length === 0, errors };
 }
-
   // [NEW] Automatically re-check for errors and update the UI immediately
 function revalidateCurrentTab() {
     const tab = activeMainTab;
