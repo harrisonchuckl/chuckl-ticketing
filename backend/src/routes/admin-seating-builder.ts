@@ -239,13 +239,33 @@ where: { id: existingSeatMap.id },
     }
 
     if (showStatus === "LIVE" || showStatus === "DRAFT") {
-      await prisma.show.update({
-        where: { id: showId },
-        data: {
-          status: showStatus === "LIVE" ? ShowStatus.LIVE : ShowStatus.DRAFT,
-          publishedAt: showStatus === "LIVE" ? new Date() : null,
-        },
-      });
+    try {
+        await prisma.show.update({
+          where: { id: showId },
+          data: {
+            status: showStatus === "LIVE" ? ShowStatus.LIVE : ShowStatus.DRAFT,
+            publishedAt: showStatus === "LIVE" ? new Date() : null,
+          },
+        });
+      } catch (err) {
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === "P2021"
+        ) {
+          console.error(
+            "[seatmap] Missing show publishing columns (status/publishedAt). Run migrations to add them.",
+            err
+          );
+          return res.status(400).json({
+            error: "schema_mismatch",
+            message:
+              "Database schema is missing Show.status/publishedAt. Apply the latest Prisma migrations.",
+          });
+        }
+
+        console.error("Error updating show status in POST /builder/api/seatmaps/:showId", err);
+        return res.status(500).json({ error: "show_update_failed" });
+      }
     }
 
     return res.json({
@@ -258,20 +278,7 @@ where: { id: existingSeatMap.id },
       },
     });
   } catch (err) {
-        if (
-      err instanceof Prisma.PrismaClientKnownRequestError &&
-      err.code === "P2021"
-    ) {
-      console.error(
-        "[seatmap] Missing show publishing columns (status/publishedAt). Run migrations to add them.",
-        err
-      );
-      return res.status(500).json({
-        error: "schema_mismatch",
-        message:
-          "Database schema is missing Show.status/publishedAt. Apply the latest Prisma migrations.",
-      });
-    }
+       
     console.error("Error in POST /builder/api/seatmaps/:showId", err);
     return res.status(500).json({ error: "internal_error" });
   }
