@@ -346,35 +346,30 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
       });
     }
 
-    if (showStatus === "LIVE" || showStatus === "DRAFT") {
+       if (showStatus === "LIVE" || showStatus === "DRAFT") {
       try {
-        await prisma.show.update({
-          where: { id: showId },
-          data: {
-            status: showStatus === "LIVE" ? ShowStatus.LIVE : ShowStatus.DRAFT,
-            publishedAt: showStatus === "LIVE" ? new Date() : null,
-          },
-        });
+        const publishedAtValue = showStatus === "LIVE" ? new Date() : null;
+
+        // Use raw SQL so we bypass any Prisma schema confusion and just hit the DB directly.
+        await prisma.$executeRaw`
+          UPDATE "Show"
+          SET "status" = ${showStatus}::"ShowStatus",
+              "publishedAt" = ${publishedAtValue}
+          WHERE "id" = ${showId}
+        `;
       } catch (err) {
-        if (isMissingColumnError(err)) {
+        console.error(
+          "[seatmap] Raw SQL update of Show.status/publishedAt failed in POST /builder/api/seatmaps/:showId",
+          err
+        );
 
-          console.error(
-            "[seatmap] Missing show publishing columns (status/publishedAt). Run migrations to add them.",
-            err
-          );
-          return res.status(400).json({
-            error: "schema_mismatch",
-            message:
-              "Database schema is missing Show.status/publishedAt. Apply the latest Prisma migrations.",
-          });
-        }
-
-        console.error("Error updating show status in POST /builder/api/seatmaps/:showId", err);
-               const knownErrorResponse = respondWithKnownPrismaError(res, err);
+        const knownErrorResponse = respondWithKnownPrismaError(res, err);
         if (knownErrorResponse) return knownErrorResponse;
+
         return res.status(500).json({ error: "show_update_failed" });
       }
     }
+
 
     return res.json({
       ok: true,
