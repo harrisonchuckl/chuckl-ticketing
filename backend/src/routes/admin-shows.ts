@@ -39,13 +39,12 @@ router.get("/shows", requireAdminOrOrganiser, async (_req, res) => {
         description: true,
         imageUrl: true,
         date: true,
-      status: true,
+        status: true,
         publishedAt: true,
         venue: { select: { id: true, name: true, city: true } },
       },
     });
 
-   
     const enriched = items.map((s) => ({
       ...s,
       _alloc: { total: 0, sold: 0, hold: 0 },
@@ -76,8 +75,7 @@ router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
         imageUrl: imageUrl ?? null,
         description: descriptionHtml ?? null,
         venueId: finalVenueId,
-                status: ShowStatus.DRAFT,
-
+        status: ShowStatus.DRAFT,
       },
       select: { id: true },
     });
@@ -103,13 +101,12 @@ router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
         status: true,
         publishedAt: true,
         venue: { select: { id: true, name: true, city: true } },
-         ticketTypes: {
+        ticketTypes: {
           select: { id: true, name: true, pricePence: true, available: true },
           orderBy: { createdAt: "asc" },
         },
       },
     });
-    
     if (!s) return res.status(404).json({ ok: false, error: "Not found" });
 
     res.json({ ok: true, item: { ...s, venueText: s.venue?.name ?? "" } });
@@ -122,7 +119,7 @@ router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
 /** PATCH /admin/shows/:id */
 router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
   try {
-const { title, date, imageUrl, descriptionHtml, venueId, venueText, status } = req.body || {};
+    const { title, date, imageUrl, descriptionHtml, venueId, venueText, status } = req.body || {};
     const finalVenueId = await ensureVenue(venueId, venueText);
 
     const updated = await prisma.show.update({
@@ -133,7 +130,7 @@ const { title, date, imageUrl, descriptionHtml, venueId, venueText, status } = r
         ...(imageUrl !== undefined ? { imageUrl: imageUrl ?? null } : {}),
         ...(descriptionHtml !== undefined ? { description: descriptionHtml ?? null } : {}),
         ...(finalVenueId ? { venueId: finalVenueId } : {}),
-          ...(status
+        ...(status
           ? {
               status: status === "LIVE" ? ShowStatus.LIVE : ShowStatus.DRAFT,
               publishedAt: status === "LIVE" ? new Date() : null,
