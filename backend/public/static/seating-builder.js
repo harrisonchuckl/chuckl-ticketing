@@ -8615,9 +8615,22 @@ function saveShowWithStatus(status, redirectUrl) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body)
   })
-  .then(res => {
-    if (!res.ok) throw new Error("Save failed");
-    return res.json();
+ .then(async res => {
+    if (res.ok) return res.json();
+
+    let message = "Save failed";
+    try {
+      const data = await res.json();
+      if (data && typeof data.message === "string") {
+        message = data.message;
+      } else if (data && typeof data.error === "string") {
+        message = data.error;
+      }
+    } catch (parseErr) {
+      console.warn("[seatmap] failed to parse error response", parseErr);
+    }
+
+    throw new Error(message);
   })
   .then(data => {
     if (redirectUrl) {
@@ -8629,7 +8642,7 @@ function saveShowWithStatus(status, redirectUrl) {
   })
   .catch(err => {
     console.error(err);
-    alert("Error saving show.");
+alert(err && err.message ? err.message : "Error saving show.");
     if(btn) { btn.disabled = false; btn.textContent = originalText; }
   });
 }
