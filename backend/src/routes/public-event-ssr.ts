@@ -1,6 +1,6 @@
 // backend/src/routes/public-event-ssr.ts
 import { Router } from 'express';
-import { ShowStatus } from '@prisma/client';
+import { Prisma, ShowStatus } from '@prisma/client';
 import prisma from '../lib/prisma.js';
 
 const router = Router();
@@ -21,7 +21,7 @@ router.get('/event/:id', async (req, res) => {
   if (!id) return res.status(404).send('Not found');
 
   try {
-    const show = await prisma.show.findFirst({
+    const rawShow = await prisma.show.findFirst({
       where: { id, status: ShowStatus.LIVE },
       include: {
         venue: {
@@ -39,39 +39,60 @@ router.get('/event/:id', async (req, res) => {
       },
     });
 
-    if (!show) return res.status(404).send('Event not found');
+    const typedShow = rawShow as
+      | Prisma.ShowGetPayload<{
+          include: {
+            venue: {
+              select: {
+                name: true;
+                address: true;
+                city: true;
+                postcode: true;
+              };
+            };
+            ticketTypes: {
+              select: { id: true; name: true; pricePence: true; available: true };
+              orderBy: { pricePence: 'asc' };
+            };
+          };
+        }>
+      | null;
+
+    if (!typedShow) return res.status(404).send('Event not found');
+
+    const show = typedShow;
 
     // Derived
-    const whenISO = show.date ? new Date(show.date).toISOString() : undefined;
-    const whenHuman = show.date ? new Date(show.date).toLocaleString() : '';
+    const whenISO = typedShow.date ? new Date(typedShow.date).toISOString() : undefined;
+    const whenHuman = typedShow.date ? new Date(typedShow.date).toLocaleString() : '';
     const venueLine = [
-      show.venue?.name,
-      [show.venue?.address, show.venue?.city, show.venue?.postcode].filter(Boolean).join(', '),
+      typedShow.venue?.name,
+      [typedShow.venue?.address, typedShow.venue?.city, typedShow.venue?.postcode].filter(Boolean).join(', '),
     ]
       .filter(Boolean)
       .join(' · ');
 
-    const cheapest = (show.ticketTypes || [])[0];
+    const cheapest = (typedShow.ticketTypes || [])[0];
     const fromPrice = cheapest ? pFmt(cheapest.pricePence) : undefined;
 
-    const canonical = base ? `${base}/public/event/${show.id}` : `/public/event/${show.id}`;
-    const poster = show.imageUrl || ''; // optional
-    const desc = cleanDesc(show.description) || `Stand-up comedy: ${show.title} — ${venueLine || 'Live show'}`;
+    const canonical = base ? `${base}/public/event/${typedShow.id}` : `/public/event/${typedShow.id}`;
+    const poster = typedShow.imageUrl || ''; // optional
+    const desc = cleanDesc(typedShow.description) || `Stand-up comedy: ${typedShow.title} — ${venueLine || 'Live show'}`;
 
     // JSON-LD
-    const offers = (show.ticketTypes || []).map((t) => ({
+    const offers = (typedShow.ticketTypes || []).map((t) => ({
       '@type': 'Offer',
       name: t.name,
       price: pDec(t.pricePence),
       priceCurrency: 'GBP',
       availability: t.available && t.available > 0 ? 'http://schema.org/InStock' : 'http://schema.org/LimitedAvailability',
-      url: (base ? `${base}` : '') + `/checkout?showId=${encodeURIComponent(show.id)}`,
+      url: (base ? `${base}` : '') + `/checkout?showId=${encodeURIComponent(typedShow.id)}`,
     }));
 
     const jsonLd = {
       '@context': 'https://schema.org',
       '@type': 'Event',
-      name: show.title,
+      name: typedShow.title,
       description: desc,
       startDate: whenISO,
       eventStatus: 'https://schema.org/EventScheduled',
@@ -79,12 +100,12 @@ router.get('/event/:id', async (req, res) => {
       image: poster ? [poster] : undefined,
       location: {
         '@type': 'Place',
-        name: show.venue?.name || 'Venue',
+        name: typedShow.venue?.name || 'Venue',
         address: {
           '@type': 'PostalAddress',
-          streetAddress: show.venue?.address || '',
-          addressLocality: show.venue?.city || '',
-          postalCode: show.venue?.postcode || '',
+          streetAddress: typedShow.venue?.address || '',
+          addressLocality: typedShow.venue?.city || '',
+          postalCode: typedShow.venue?.postcode || '',
           addressCountry: 'GB',
         },
       },
@@ -94,7 +115,14 @@ router.get('/event/:id', async (req, res) => {
 
     // Simple Google Maps embed using query (no API key)
     const mapQuery = encodeURIComponent(
-      [show.venue?.name, show.venue?.address, show.venue?.city, show.venue?.postcode].filter(Boolean).join(', ')
+      [
+        typedShow.venue?.name,
+        typedShow.venue?.address,
+        typedShow.venue?.city,
+        typedShow.venue?.postcode,
+      ]
+        .filter(Boolean)
+        .join(', ')
     );
     const mapEmbed = `https://www.google.com/maps?q=${mapQuery}&output=embed`;
 
