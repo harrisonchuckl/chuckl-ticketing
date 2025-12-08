@@ -969,12 +969,13 @@ router.get(
     const venueName = show.venue
       ? (show.venue.name + (show.venue.city ? ' – ' + show.venue.city : ''))
       : (show.venueText || '');
-    const statusLabel = show.status || 'DRAFT';
-    const publicUrl = '/public/event/' + id;
-    const nextUrl = '/events/' + id;
-
-    main.innerHTML = ''
-      +'<div class="card">'
+   const statusLabel = show.status || 'DRAFT';
+  // Derive URLs dynamically (Option 1)
+  const publicUrl = 'https://chuckl.co.uk/event/' + id;
+  const nextUrl = 'https://chuckl-ticketing-production.up.railway.app/show/' + id;
+  
+  main.innerHTML = ''
+  +'<div class="card">'
         +'<div class="header">'
           +'<div>'
             +'<div class="title">'+(show.title || 'Untitled show')+'</div>'
