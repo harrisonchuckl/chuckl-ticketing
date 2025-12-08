@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { PrismaClient, ShowStatus } from "@prisma/client";
+import { Prisma, PrismaClient, ShowStatus } from "@prisma/client";
 import { verifyJwt } from "../utils/security.js";
 
 const prisma = new PrismaClient();
@@ -258,6 +258,20 @@ where: { id: existingSeatMap.id },
       },
     });
   } catch (err) {
+        if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === "P2021"
+    ) {
+      console.error(
+        "[seatmap] Missing show publishing columns (status/publishedAt). Run migrations to add them.",
+        err
+      );
+      return res.status(500).json({
+        error: "schema_mismatch",
+        message:
+          "Database schema is missing Show.status/publishedAt. Apply the latest Prisma migrations.",
+      });
+    }
     console.error("Error in POST /builder/api/seatmaps/:showId", err);
     return res.status(500).json({ error: "internal_error" });
   }
