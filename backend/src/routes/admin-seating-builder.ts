@@ -187,8 +187,7 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
         showId,
         venueId: showRow.venueId ?? null,
         savedAt: new Date().toISOString(),
-                completionStatus: completionStatus ?? null,
-
+        completionStatus: completionStatus ?? null,
       },
     };
 
@@ -218,7 +217,7 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
       });
     }
 
-      if (showStatus === "LIVE" || showStatus === "DRAFT") {
+    if (showStatus === "LIVE" || showStatus === "DRAFT") {
       await prisma.show.update({
         where: { id: showId },
         data: {
