@@ -5,6 +5,13 @@ import { verifyJwt } from "../utils/security.js";
 const prisma = new PrismaClient();
 const router = Router();
 
+function isMissingColumnError(err: unknown): err is Prisma.PrismaClientKnownRequestError {
+  return (
+    err instanceof Prisma.PrismaClientKnownRequestError &&
+    (err.code === "P2021" || err.code === "P2022")
+  );
+}
+
 /**
  * LayoutKey is still used for analytics + templates
  * but now the saved layout includes full Konva JSON.
@@ -248,12 +255,8 @@ where: { id: existingSeatMap.id },
           },
         });
       } catch (err) {
-       const isKnownRequestError = err instanceof Prisma.PrismaClientKnownRequestError;
-  
-        if (
-         isKnownRequestError &&
-          (err.code === "P2021" || err.code === "P2022")
-        ) {
+               if (isMissingColumnError(err)) {
+
           console.error(
             "[seatmap] Missing show publishing columns (status/publishedAt). Run migrations to add them.",
             err
@@ -280,7 +283,17 @@ where: { id: existingSeatMap.id },
       },
     });
   } catch (err) {
-       
+          if (isMissingColumnError(err)) {
+      console.error(
+        "[seatmap] Database schema mismatch when saving seat map. Run migrations to sync columns.",
+        err
+      );
+      return res.status(400).json({
+        error: "schema_mismatch",
+        message: "Database schema is missing columns required for the seating builder. Please run Prisma migrations.",
+      });
+    }
+    
     console.error("Error in POST /builder/api/seatmaps/:showId", err);
     return res.status(500).json({ error: "internal_error" });
   }
