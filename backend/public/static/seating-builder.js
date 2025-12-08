@@ -8512,13 +8512,13 @@ function handleStageMouseMove() {
             ? selectionBeforeSave.id()
             : null,
         });
-        const body = {
-          konvaJson,
-          layoutType: initialLayoutKey,
-          seatMapId: seatMapIdForSave,
-          name: nameForSave,
-        };
-
+       const body = {
+        konvaJson,
+        layoutType: initialLayoutKey,
+        seatMapId: seatMapIdForSave,
+        name: nameForSave,
+        tickets: ticketTypes, // Send the array of tickets to backend
+      };
         const res = await fetch(
           `/admin/seating/builder/api/seatmaps/${encodeURIComponent(showId)}`,
           {
@@ -8593,17 +8593,18 @@ function handleStageMouseMove() {
 function saveShowWithStatus(status, redirectUrl) {
   const saveBtn = window.__TICKIN_SAVE_BUTTON__; // The hidden one, logic reused logic manually below
   // We manually construct the payload similar to hookSaveButton
-  const konvaJson = stage.toJSON();
-  const body = {
-    konvaJson,
-    layoutType: window.__SEATMAP_LAYOUT__ || "tables",
-    seatMapId: currentSeatMapId, // Update existing map
-    name: currentSeatMapName || "Draft Layout",
-    // New fields for Phase 1:
-    showStatus: status, // "DRAFT" or "LIVE"
-    completionStatus: window.__TIXALL_COMPLETION_STATUS__
-  };
-
+ // We manually construct the payload similar to hookSaveButton
+    const konvaJson = stage.toJSON();
+    const body = {
+      konvaJson,
+      layoutType: window.__SEATMAP_LAYOUT__ || "tables",
+      seatMapId: currentSeatMapId, // Update existing map
+      name: currentSeatMapName || "Draft Layout",
+      // New fields for Phase 1:
+      showStatus: status, // "DRAFT" or "LIVE"
+      completionStatus: window.__TIXALL_COMPLETION_STATUS__,
+      tickets: ticketTypes, // Send the array of tickets to backend
+    };
   // UI Feedback
   const btnId = status === 'LIVE' ? 'tb-btn-publish' : 'tb-btn-draft';
   const btn = document.getElementById(btnId);
