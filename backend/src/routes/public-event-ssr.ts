@@ -21,14 +21,9 @@ router.get('/event/:id', async (req, res) => {
   if (!id) return res.status(404).send('Not found');
 
   try {
-   const show = await prisma.show.findFirst({
-      where: { id, OR: [{ status: ShowStatus.LIVE }, { status: null }] },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        date: true,
-        imageUrl: true, // optional field in your schema (ok if present)
+    const show = await prisma.show.findFirst({
+      where: { id, status: ShowStatus.LIVE },
+      include: {
         venue: {
           select: {
             name: true,
