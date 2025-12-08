@@ -248,9 +248,11 @@ where: { id: existingSeatMap.id },
           },
         });
       } catch (err) {
+       const isKnownRequestError = err instanceof Prisma.PrismaClientKnownRequestError;
+  
         if (
-          err instanceof Prisma.PrismaClientKnownRequestError &&
-          err.code === "P2021"
+         isKnownRequestError &&
+          (err.code === "P2021" || err.code === "P2022")
         ) {
           console.error(
             "[seatmap] Missing show publishing columns (status/publishedAt). Run migrations to add them.",
