@@ -12,6 +12,36 @@ function isMissingColumnError(err: unknown): err is Prisma.PrismaClientKnownRequ
   );
 }
 
+let ensureShowPublishingSchemaPromise: Promise<void> | null = null;
+
+async function ensureShowPublishingSchema(): Promise<void> {
+  if (!ensureShowPublishingSchemaPromise) {
+    ensureShowPublishingSchemaPromise = prisma.$executeRawUnsafe(`
+      DO $$
+      BEGIN
+        CREATE TYPE "ShowStatus" AS ENUM ('DRAFT', 'LIVE');
+      EXCEPTION
+        WHEN duplicate_object THEN NULL;
+      END $$;
+
+      ALTER TABLE "Show"
+      ADD COLUMN IF NOT EXISTS "status" "ShowStatus" NOT NULL DEFAULT 'DRAFT';
+
+      ALTER TABLE "Show"
+      ADD COLUMN IF NOT EXISTS "publishedAt" TIMESTAMP(3);
+
+      DO $$
+      BEGIN
+        ALTER TABLE "Show" ALTER COLUMN "status" SET DEFAULT 'DRAFT';
+      EXCEPTION
+        WHEN undefined_column THEN NULL;
+      END $$;
+    `).then(() => undefined);
+  }
+
+  return ensureShowPublishingSchemaPromise;
+}
+
 /**
  * LayoutKey is still used for analytics + templates
  * but now the saved layout includes full Konva JSON.
@@ -55,8 +85,7 @@ router.get("/builder/api/seatmaps/:showId", async (req, res) => {
     const showRow = rawShows[0];
     if (!showRow) {
       return res.status(404).json({ error: "Show not found" });
-    }
-
+    }    
     let venue: any = null;
     if (showRow.venueId) {
       venue = await prisma.venue.findUnique({
@@ -177,7 +206,7 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
     if (!showRow) {
       return res.status(404).json({ error: "Show not found" });
     }
-
+ await ensureShowPublishingSchema();
     const userId = await getUserIdFromRequest(req);
 
     const finalName =
