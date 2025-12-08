@@ -4325,6 +4325,7 @@ function getSeatDisplayName(seat) {
   // ----- Ticket ring overlays for multi-ticket seats -----
 
 // [Source: 3495] - Updated to ensure rings only display in the 'tickets' tab.
+// [Source: 3495] - Updated to ensure rings only display in the 'tickets' tab AND for valid tickets.
 function updateTicketRings() {
   if (!mapLayer) return;
 
@@ -4343,7 +4344,6 @@ function updateTicketRings() {
   });
 
   // 2. If we are NOT in the Tickets tab, stop here.
-  // This hides the rings immediately when switching tabs.
   if (activeMainTab !== "tickets") {
     if (stage) stage.batchDraw();
     return;
@@ -4385,16 +4385,23 @@ function updateTicketRings() {
         : seatCircle.getAttr("radius") || 8;
 
     // Draw new rings (max 10 rings per seat)
-    const maxRings = Math.min(ticketIds.length, 10);
+    // FIX: Filter out invalid tickets BEFORE counting them for rings
+    const validTicketIds = ticketIds.filter(tId => ticketById.has(tId));
+    
+    const maxRings = Math.min(validTicketIds.length, 10);
+
     for (let i = 0; i < maxRings; i += 1) {
-      const tId = ticketIds[i];
-      if (!tId) continue;
+      const tId = validTicketIds[i];
       const ticket = ticketById.get(tId);
-      const color = (ticket && ticket.color) || "#2563eb";
+      
+      // CRITICAL FIX: If ticket type doesn't exist, DO NOT draw a default ring.
+      if (!ticket) continue; 
+
+      const color = ticket.color || "#2563eb";
 
       // Calculate radius: starts just outside the seat stroke
       const radius = baseRadius + 1.5 + i * 2.5;
-      
+
       const ring = new Konva.Circle({
         x: seatCircle.x(),
         y: seatCircle.y(),
@@ -4408,7 +4415,7 @@ function updateTicketRings() {
       // Mark attributes so we can find and remove it later
       ring.setAttr("isTicketRing", true);
       ring.setAttr("ringOwnerSeatId", sid);
-      
+
       group.add(ring);
     }
   });
@@ -4417,7 +4424,6 @@ function updateTicketRings() {
     stage.batchDraw();
   }
 }
-
 /**
  * Applies the final visual overrides for Accessibility seats (Icon/C and color).
  * @param {Konva.Circle} seatCircle The Konva shape node for the seat circle.
