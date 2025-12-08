@@ -20,18 +20,17 @@ router.post('/session', async (req, res) => {
     }
 
     // Unit price: prefer ticket type price or fallback to provided value
-     const show = await prisma.show.findFirst({
-      where: { id: showId, OR: [{ status: ShowStatus.LIVE }, { status: null }] },
+    const show = await prisma.show.findFirst({
+      where: { id: showId, status: ShowStatus.LIVE },
       select: {
-         status: true,
+        status: true,
         ticketTypes: { select: { pricePence: true }, orderBy: { createdAt: 'asc' } },
       },
     });
 
-      if (!show) {
+    if (!show) {
       return res.status(404).json({ ok: false, message: 'Show not available' });
     }
-    
 
     const unitPricePence =
       show.ticketTypes?.[0]?.pricePence ??
