@@ -254,8 +254,8 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
       konvaJson,
       showStatus,
       completionStatus,
+      tickets, // Extract tickets array
     } = req.body ?? {};
-
     const showRow = (
       await prisma.$queryRaw<{ id: string; venueId: string | null }[]>
         `SELECT "id","venueId" FROM "Show" WHERE "id" = ${showId} LIMIT 1`
@@ -346,12 +346,32 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
       });
     }
 
-       if (showStatus === "LIVE" || showStatus === "DRAFT") {
+     // --- SYNC TICKET TYPES ---
+    if (Array.isArray(tickets)) {
+      // 1. Clear existing ticket types for this show (simple sync)
+      await prisma.ticketType.deleteMany({ where: { showId } });
+
+      // 2. Create new ticket types from the builder config
+      for (const t of tickets) {
+        if (!t.name) continue;
+        const pricePence = Math.round(Number(t.price || 0) * 100);
+        await prisma.ticketType.create({
+          data: {
+            showId,
+            name: t.name,
+            pricePence,
+            available: null, // Unlimited/Open for now as builder doesn't specify caps
+          },
+        });
+      }
+    }
+
+    if (showStatus === "LIVE" || showStatus === "DRAFT") {
       try {
         const publishedAtValue = showStatus === "LIVE" ? new Date() : null;
-
         // Use raw SQL so we bypass any Prisma schema confusion and just hit the DB directly.
-    const publicBookingUrl = `https://chuckl.co.uk/event/${showId}`;
+        
+        const publicBookingUrl = `https://chuckl.co.uk/event/${showId}`;
 const publicNextUrl = `https://chuckl-ticketing-production.up.railway.app/show/${showId}`;
 
 await prisma.$executeRaw`
