@@ -29,7 +29,6 @@ enum ShowStatus {
   LIVE
 }
 
-
 model User {
   id                String   @id @default(cuid())
   createdAt         DateTime @default(now())
@@ -71,7 +70,7 @@ model Show {
   imageUrl    String?
   date        DateTime
 
-status      ShowStatus @default(DRAFT)
+  status      ShowStatus @default(DRAFT)
   publishedAt DateTime?
 
   venueId     String?
