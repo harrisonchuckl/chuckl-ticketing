@@ -6,10 +6,34 @@ const prisma = new PrismaClient();
 const router = Router();
 
 function isMissingColumnError(err: unknown): err is Prisma.PrismaClientKnownRequestError {
-  return (
-    err instanceof Prisma.PrismaClientKnownRequestError &&
-    (err.code === "P2021" || err.code === "P2022")
-  );
+  if (!(err instanceof Prisma.PrismaClientKnownRequestError)) {
+    return false;
+  }
+
+  // Debug logging so we can see what's REALLY happening in Railway logs
+  console.error("[seatmap] Prisma error in show update", {
+    code: err.code,
+    message: err.message,
+    meta: (err as any).meta,
+  });
+
+  if (err.code !== "P2021" && err.code !== "P2022") {
+    return false;
+  }
+
+  const msg = (err.message || "").toLowerCase();
+  const metaStr = JSON.stringify((err as any).meta ?? {}).toLowerCase();
+  const text = msg + " " + metaStr;
+
+  const mentionsShowTable =
+    text.includes('"show"') || text.includes("show");
+
+  const mentionsPublishingColumns =
+    text.includes("status") || text.includes("publishedat");
+
+  // Only treat it as "publishing columns missing" if it clearly mentions our
+  // Show table AND the status/publishedAt fields.
+  return mentionsShowTable && mentionsPublishingColumns;
 }
 
 let ensureShowPublishingSchemaPromise: Promise<void> | null = null;
