@@ -6339,22 +6339,7 @@ function renderViewFromSeatsPanel() {
     }
   }));
 
-  // 4. Next Step Button
-  const nextBtn = document.createElement("button");
-  nextBtn.className = "sb-next-step-btn";
-  nextBtn.style.cssText = "width:100%; margin-top:16px; padding:12px; background:#10b981; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer;";
-  nextBtn.textContent = "Mark View Step Complete";
-  nextBtn.onclick = () => {
-    window.__TIXALL_COMPLETION_STATUS__.view = true;
-    updateCompletionUI();
-    const s = window.__TIXALL_COMPLETION_STATUS__;
-    if (s.map && s.tickets && s.holds && s.view) {
-      alert("All steps complete! You can now Publish the show from the top bar.");
-    } else {
-      alert("View step marked complete.");
-    }
-  };
-  el.appendChild(nextBtn);
+  
 const spacer = document.createElement("div");
     spacer.style.height = "40px";
     el.appendChild(spacer);
