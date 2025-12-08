@@ -1,6 +1,6 @@
 // backend/src/routes/checkout.ts
 import { Router } from 'express';
-import { ShowStatus } from '@prisma/client';
+import { Prisma, ShowStatus } from '@prisma/client';
 import prisma from '../lib/prisma.js';
 import { calcFeesForShow } from '../services/fees.js';
 import Stripe from 'stripe';
@@ -28,12 +28,21 @@ router.post('/session', async (req, res) => {
       },
     });
 
-    if (!show) {
+    const typedShow = show as
+      | Prisma.ShowGetPayload<{
+          select: {
+            status: true;
+            ticketTypes: { select: { pricePence: true } };
+          };
+        }>
+      | null;
+
+    if (!typedShow) {
       return res.status(404).json({ ok: false, message: 'Show not available' });
     }
 
     const unitPricePence =
-      show.ticketTypes?.[0]?.pricePence ??
+      typedShow.ticketTypes?.[0]?.pricePence ??
       (typeof req.body.unitPricePence === 'number' ? req.body.unitPricePence : null);
 
     if (!unitPricePence) {
