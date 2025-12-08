@@ -24,6 +24,12 @@ enum SeatStatus {
   BLOCKED
 }
 
+enum ShowStatus {
+  DRAFT
+  LIVE
+}
+
+
 model User {
   id                String   @id @default(cuid())
   createdAt         DateTime @default(now())
@@ -64,6 +70,9 @@ model Show {
   description String?
   imageUrl    String?
   date        DateTime
+
+status      ShowStatus @default(DRAFT)
+  publishedAt DateTime?
 
   venueId     String?
   organiserId String?
