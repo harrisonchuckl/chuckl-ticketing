@@ -402,11 +402,26 @@ function validateCurrentTabLogic(tab) {
 
     // 2. TICKETS VALIDATION
     if (tab === 'tickets') {
+        // Force refresh so we definitely have every seat node
+        refreshSeatMetadata(); 
+        
         const seats = getAllSeatNodes();
         let unassignedCount = 0;
+        
+        // Create a set of valid Ticket IDs for fast lookup
+        const validTicketIds = new Set(ticketTypes.map(t => t.id));
+
         seats.forEach(s => {
             const tIds = s.getAttr("sbTicketIds");
-            if (!tIds || tIds.length === 0) unassignedCount++;
+            
+            // Check if there are any IDs, AND if at least one of them is a real, valid ticket
+            const hasValidAssignment = tIds && 
+                                       Array.isArray(tIds) && 
+                                       tIds.some(id => validTicketIds.has(id));
+
+            if (!hasValidAssignment) {
+                unassignedCount++;
+            }
         });
 
         if (unassignedCount > 0) {
@@ -417,7 +432,7 @@ function validateCurrentTabLogic(tab) {
             errors.push("No ticket types created.");
         }
 
-        // [NEW] Check for Unnamed Tickets
+        // Check for Unnamed Tickets
         let unnamedCount = 0;
         ticketTypes.forEach(t => {
             if (!t.name || !t.name.trim()) {
@@ -429,9 +444,11 @@ function validateCurrentTabLogic(tab) {
         }
     }
 
+    // 3. HOLDS (Permissive)
+    // 4. VIEW (Permissive)
+
     return { valid: errors.length === 0, errors };
-}
-  
+}  
   // [NEW] Automatically re-check for errors and update the UI immediately
 function revalidateCurrentTab() {
     const tab = activeMainTab;
