@@ -1,3 +1,5 @@
+// backend/src/routes/admin-ui.ts
+import { Router } from "express";
 import { requireAdminOrOrganiser } from "../lib/authz.js";
 
 const router = Router();
