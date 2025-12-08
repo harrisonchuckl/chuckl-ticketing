@@ -42,6 +42,31 @@ async function ensureShowPublishingSchema(): Promise<void> {
   return ensureShowPublishingSchemaPromise;
 }
 
+function respondWithKnownPrismaError(res: any, err: any) {
+  if (
+    err instanceof Prisma.PrismaClientKnownRequestError &&
+    err.code === "P2025"
+  ) {
+    return res.status(404).json({
+      error: "not_found",
+      message: "Seat map was not found for this show.",
+    });
+  }
+
+  if (
+    err instanceof Prisma.PrismaClientKnownRequestError &&
+    err.code === "P2003"
+  ) {
+    return res.status(400).json({
+      error: "invalid_reference",
+      message: "Seat map save failed because the related show or venue is missing.",
+    });
+  }
+
+  return null;
+}
+
+
 /**
  * LayoutKey is still used for analytics + templates
  * but now the saved layout includes full Konva JSON.
@@ -206,7 +231,21 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
     if (!showRow) {
       return res.status(404).json({ error: "Show not found" });
     }
- await ensureShowPublishingSchema();
+
+     try {
+      await ensureShowPublishingSchema();
+    } catch (schemaErr) {
+      console.error(
+        "[seatmap] Failed to ensure publishing schema before saving seat map",
+        schemaErr
+      );
+      return res.status(400).json({
+        error: "schema_mismatch",
+        message:
+          "Database schema is missing Show publishing columns. Run the latest Prisma migrations.",
+      });
+    }
+    
     const userId = await getUserIdFromRequest(req);
 
     const finalName =
@@ -229,11 +268,11 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
 
     let saved;
 
-        let existingSeatMap: { id: string } | null = null;
+    let existingSeatMap: { id: string } | null = null;
 
     
     if (seatMapId) {
-       const scope: any[] = [{ showId }];
+      const scope: any[] = [{ showId }];
       if (showRow.venueId) {
         scope.push({ venueId: showRow.venueId });
       }
@@ -246,7 +285,7 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
 
     if (existingSeatMap) {
       saved = await prisma.seatMap.update({
-where: { id: existingSeatMap.id },
+        where: { id: existingSeatMap.id },
         data: {
           name: finalName,
           layout: layoutPayload as any,
@@ -256,7 +295,7 @@ where: { id: existingSeatMap.id },
         },
       });
     } else {
-       if (seatMapId) {
+      if (seatMapId) {
         console.warn(
           "[seatmap] POST /builder/api/seatmaps/:showId: seat map id not found in scope, creating new map",
           { seatMapId, showId }
@@ -275,7 +314,7 @@ where: { id: existingSeatMap.id },
     }
 
     if (showStatus === "LIVE" || showStatus === "DRAFT") {
-    try {
+      try {
         await prisma.show.update({
           where: { id: showId },
           data: {
@@ -284,7 +323,7 @@ where: { id: existingSeatMap.id },
           },
         });
       } catch (err) {
-               if (isMissingColumnError(err)) {
+        if (isMissingColumnError(err)) {
 
           console.error(
             "[seatmap] Missing show publishing columns (status/publishedAt). Run migrations to add them.",
@@ -298,6 +337,8 @@ where: { id: existingSeatMap.id },
         }
 
         console.error("Error updating show status in POST /builder/api/seatmaps/:showId", err);
+               const knownErrorResponse = respondWithKnownPrismaError(res, err);
+        if (knownErrorResponse) return knownErrorResponse;
         return res.status(500).json({ error: "show_update_failed" });
       }
     }
@@ -324,6 +365,8 @@ where: { id: existingSeatMap.id },
     }
     
     console.error("Error in POST /builder/api/seatmaps/:showId", err);
+    const knownErrorResponse = respondWithKnownPrismaError(res, err);
+    if (knownErrorResponse) return knownErrorResponse;
     return res.status(500).json({ error: "internal_error" });
   }
 });
