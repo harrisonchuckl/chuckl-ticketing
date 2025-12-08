@@ -696,14 +696,20 @@ router.get(
           var bar   = '<div style="background:#e5e7eb;height:6px;border-radius:999px;overflow:hidden;width:140px">'
                     +'<div style="background:#111827;height:6px;width:'+pct+'%"></div>'
                     +'</div>';
+          var statusLabel = (s.status || 'DRAFT');
+          var statusBadge = '<span class="pill" style="background:'
+            +(statusLabel === 'LIVE' ? '#ecfdf3' : '#f8fafc')
+            +';color:'+(statusLabel === 'LIVE' ? '#166534' : '#475569')
+            +';border:1px solid '+(statusLabel === 'LIVE' ? '#bbf7d0' : '#e2e8f0')
+            +';">'+statusLabel+'</span>';
           return ''
-            +'<tr>'
+            +'<tr data-row="'+s.id+'" data-status="'+statusLabel+'">'
               +'<td>'+(s.title || '')+'</td>'
               +'<td>'+when+'</td>'
               +'<td>'+(s.venue ? (s.venue.name + (s.venue.city ? ' – '+s.venue.city : '')) : '')+'</td>'
               +'<td><span class="muted">Sold '+sold+' · Hold '+hold+' · Avail '+avail+'</span> '+bar+'</td>'
               +'<td>£'+(((s._revenue && s._revenue.grossFace) || 0).toFixed(2))+'</td>'
-              +'<td>'+(s.status || 'DRAFT')+'</td>'
+              +'<td>'+statusBadge+'</td>'
               +'<td>'
                 +'<div class="kebab">'
                   +'<button class="btn" data-kebab="'+s.id+'">⋮</button>'
@@ -747,7 +753,7 @@ router.get(
           a.addEventListener('click', function(e){
             e.preventDefault();
             var id = a.getAttribute('data-seating');
-            if (id) go('/admin/ui/shows/'+id+'/seating');
+            if (id) window.location.href = '/admin/seating/builder/preview/' + id;
           });
         });
         $$('[data-tickets]').forEach(function(a){
@@ -769,6 +775,19 @@ router.get(
               }
             }catch(err){
               alert('Duplicate failed: ' + (err.message || err));
+            }
+          });
+        });
+        $$('[data-row]').forEach(function(row){
+          row.addEventListener('click', function(e){
+            if (e.target && (e.target.closest('a') || e.target.closest('button'))) return;
+            var id = row.getAttribute('data-row');
+            var status = row.getAttribute('data-status');
+            if (!id) return;
+            if (status === 'DRAFT') {
+              window.location.href = '/admin/seating/builder/preview/' + id;
+            } else {
+              go('/admin/ui/shows/' + id + '/summary');
             }
           });
         });
@@ -907,7 +926,8 @@ router.get(
           venueText: vInput.value.trim(),
           venueId: vInput.dataset.venueId || null,
           imageUrl: prev.src || null,
-          descriptionHtml: $('#desc').innerHTML.trim()
+          descriptionHtml: $('#desc').innerHTML.trim(),
+          status: item.status
         };
         if (!payload.title || !payload.date || !payload.venueText || !payload.descriptionHtml){
           throw new Error('Title, date/time, venue and description are required');
@@ -926,6 +946,94 @@ router.get(
         errEl.textContent = e.message || String(e);
       }
     });
+  }
+
+  // --- SUMMARY PAGE ---
+  async function summaryPage(id){
+    if (!main) return;
+    main.innerHTML = '<div class="card"><div class="title">Loading summary…</div></div>';
+
+    let resp;
+    try{
+      resp = await j('/admin/shows/' + id);
+    }catch(e){
+      main.innerHTML = '<div class="card"><div class="error">Failed to load show: '+(e.message||e)+'</div></div>';
+      return;
+    }
+
+    const show = resp.item || {};
+    const ticketTypes = show.ticketTypes || [];
+    const when = show.date
+      ? new Date(show.date).toLocaleString('en-GB', { dateStyle:'full', timeStyle:'short' })
+      : '';
+    const venueName = show.venue
+      ? (show.venue.name + (show.venue.city ? ' – ' + show.venue.city : ''))
+      : (show.venueText || '');
+    const statusLabel = show.status || 'DRAFT';
+    const publicUrl = '/public/event/' + id;
+    const nextUrl = '/events/' + id;
+
+    main.innerHTML = ''
+      +'<div class="card">'
+        +'<div class="header">'
+          +'<div>'
+            +'<div class="title">'+(show.title || 'Untitled show')+'</div>'
+            +'<div class="muted">'+(when ? when + ' · ' : '')+venueName+'</div>'
+            +'<div style="margin-top:6px">'
+              +'<span class="pill" style="background:'+(statusLabel === 'LIVE' ? '#ecfdf3' : '#f8fafc')+';color:'+(statusLabel === 'LIVE' ? '#166534' : '#475569')+';border:1px solid '+(statusLabel === 'LIVE' ? '#bbf7d0' : '#e2e8f0')+'">'+statusLabel+'</span>'
+              +(show.publishedAt ? '<span class="muted" style="margin-left:8px">Published '+new Date(show.publishedAt).toLocaleString('en-GB')+'</span>' : '')
+            +'</div>'
+          +'</div>'
+          +'<div class="row">'
+            +'<button class="btn" id="summarySeating">Edit seating</button>'
+            +'<button class="btn" id="summaryTickets">Manage tickets</button>'
+          +'</div>'
+        +'</div>'
+
+        +(show.imageUrl ? '<div style="margin-bottom:16px"><img src="'+show.imageUrl+'" alt="Poster" style="max-height:220px;border-radius:12px;border:1px solid var(--border)" /></div>' : '')
+
+        +'<div class="grid grid-2" style="margin-bottom:16px">'
+          +'<div class="card" style="margin:0">'
+            +'<div class="title" style="margin-bottom:6px">Shareable links</div>'
+            +'<div class="grid">'
+              +'<a href="'+publicUrl+'" target="_blank" rel="noopener" class="btn">Public booking page</a>'
+              +'<a href="'+nextUrl+'" target="_blank" rel="noopener" class="btn">Public Next.js page</a>'
+            +'</div>'
+            +'<div class="muted" style="margin-top:6px">Copy a link to share with ticket buyers.</div>'
+          +'</div>'
+          +'<div class="card" style="margin:0">'
+            +'<div class="title" style="margin-bottom:6px">Key details</div>'
+            +'<div class="grid">'
+              +'<div><div class="muted">Date & time</div><div>'+(when || 'TBC')+'</div></div>'
+              +'<div><div class="muted">Venue</div><div>'+(venueName || 'TBC')+'</div></div>'
+            +'</div>'
+          +'</div>'
+        +'</div>'
+
+        +'<div class="card" style="margin:0">'
+          +'<div class="title" style="margin-bottom:8px">Ticket types</div>'
+          +(ticketTypes.length === 0
+            ? '<div class="muted">No ticket types yet. Use "Manage tickets" to add them.</div>'
+            : '<table><thead><tr><th>Name</th><th>Price</th><th>Available</th></tr></thead><tbody>'
+              + ticketTypes.map(function(t){
+                  return '<tr><td>'+t.name+'</td><td>£'+((t.pricePence || 0)/100).toFixed(2)+'</td><td>'+(t.available == null ? '—' : t.available)+'</td></tr>';
+                }).join('')
+              +'</tbody></table>')
+        +'</div>'
+      +'</div>';
+
+    var summarySeating = $('#summarySeating');
+    var summaryTickets = $('#summaryTickets');
+    if (summarySeating){
+      summarySeating.addEventListener('click', function(){
+        window.location.href = '/admin/seating/builder/preview/' + id;
+      });
+    }
+    if (summaryTickets){
+      summaryTickets.addEventListener('click', function(){
+        go('/admin/ui/shows/' + id + '/tickets');
+      });
+    }
   }
 
   // --- TICKETS PAGE ---
@@ -1280,6 +1388,10 @@ router.get(
       if (path.startsWith('/admin/ui/shows/') && path.endsWith('/seating')){
         var id3 = path.split('/')[4];
         return seatingPage(id3);
+      }
+      if (path.startsWith('/admin/ui/shows/') && path.endsWith('/summary')){
+        var id4 = path.split('/')[4];
+        return summaryPage(id4);
       }
 
       return home();

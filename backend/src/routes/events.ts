@@ -1,5 +1,6 @@
 // backend/src/routes/events.ts
 import { Router } from 'express';
+import { ShowStatus } from '@prisma/client';
 import prisma from '../lib/prisma.js';
 
 const router = Router();
@@ -51,7 +52,7 @@ router.post('/', async (req, res) => {
         venueId: String(venueId),
         date: when,
         description: description ? String(description).trim() : null,
-        // status: 'DRAFT' // uncomment if you have this field
+        status: ShowStatus.DRAFT,
       },
       select: { id: true }
     });
@@ -109,6 +110,7 @@ router.get('/', async (req, res) => {
         startDate && endDate ? { date: { gte: startDate, lt: endDate } } : {},
         city ? { venue: { city: { equals: city } } } : {},
         venueId ? { venueId } : {},
+        { OR: [{ status: ShowStatus.LIVE }, { status: null }] },
         q
           ? {
               OR: [
@@ -179,8 +181,8 @@ router.get('/cities', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const id = String(req.params.id);
-    const show = await prisma.show.findUnique({
-      where: { id },
+    const show = await prisma.show.findFirst({
+      where: { id, OR: [{ status: ShowStatus.LIVE }, { status: null }] },
       include: {
         venue: true,
         ticketTypes: { select: { id: true, name: true, pricePence: true, available: true }, orderBy: { pricePence: 'asc' } },
@@ -208,7 +210,11 @@ router.get('/venue/:venueId', async (req, res) => {
     if (!venue) return res.status(404).json({ ok: false, error: 'Venue not found' });
 
     const items = await prisma.show.findMany({
-      where: { venueId, ...(upcoming === '1' ? { date: { gte: now } } : {}) },
+      where: {
+        venueId,
+        ...(upcoming === '1' ? { date: { gte: now } } : {}),
+        OR: [{ status: ShowStatus.LIVE }, { status: null }],
+      },
       include: {
         venue: true,
         ticketTypes: { select: { id: true, name: true, pricePence: true, available: true }, orderBy: { pricePence: 'asc' } },

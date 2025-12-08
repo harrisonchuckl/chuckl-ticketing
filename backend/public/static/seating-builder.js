@@ -8634,8 +8634,12 @@ function hookPhase1Buttons() {
 
   if (btnDraft) {
     btnDraft.addEventListener('click', () => {
+      const ok = confirm(
+        'Are you sure you want to save this show as a draft and exit the seating builder?'
+      );
+      if (!ok) return;
       // Save as Draft -> Redirect to My Shows
-      saveShowWithStatus('DRAFT', '/admin/shows'); 
+      saveShowWithStatus('DRAFT', '/admin/ui/shows/current');
     });
   }
 
@@ -8643,8 +8647,8 @@ function hookPhase1Buttons() {
     btnPublish.addEventListener('click', () => {
       if (confirm("Are you sure you want to go LIVE? This will generate a public link.")) {
         // Save as Live -> Redirect to Summary
-        // Assuming /admin/shows/summary/:id exists or falls back to dashboard
-        saveShowWithStatus('LIVE', `/admin/shows/${showId}/summary`); 
+        // Redirect to admin summary page
+        saveShowWithStatus('LIVE', `/admin/ui/shows/${showId}/summary`);
       }
     });
   }

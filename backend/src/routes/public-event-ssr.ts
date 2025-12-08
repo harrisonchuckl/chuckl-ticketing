@@ -1,5 +1,6 @@
 // backend/src/routes/public-event-ssr.ts
 import { Router } from 'express';
+import { ShowStatus } from '@prisma/client';
 import prisma from '../lib/prisma.js';
 
 const router = Router();
@@ -20,8 +21,8 @@ router.get('/event/:id', async (req, res) => {
   if (!id) return res.status(404).send('Not found');
 
   try {
-    const show = await prisma.show.findUnique({
-      where: { id },
+    const show = await prisma.show.findFirst({
+      where: { id, OR: [{ status: ShowStatus.LIVE }, { status: null }] },
       select: {
         id: true,
         title: true,

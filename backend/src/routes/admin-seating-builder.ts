@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, ShowStatus } from "@prisma/client";
 import { verifyJwt } from "../utils/security.js";
 
 const prisma = new PrismaClient();
@@ -158,6 +158,8 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
       config,
       estimatedCapacity,
       konvaJson,
+      showStatus,
+      completionStatus,
     } = req.body ?? {};
 
     const showRow = (
@@ -185,6 +187,7 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
         showId,
         venueId: showRow.venueId ?? null,
         savedAt: new Date().toISOString(),
+        completionStatus: completionStatus ?? null,
       },
     };
 
@@ -210,6 +213,16 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
           createdByUserId: userId ?? null,
           showId: showRow.id,
           venueId: showRow.venueId ?? null,
+        },
+      });
+    }
+
+    if (showStatus === "LIVE" || showStatus === "DRAFT") {
+      await prisma.show.update({
+        where: { id: showId },
+        data: {
+          status: showStatus === "LIVE" ? ShowStatus.LIVE : ShowStatus.DRAFT,
+          publishedAt: showStatus === "LIVE" ? new Date() : null,
         },
       });
     }
