@@ -8962,70 +8962,81 @@ function hookPhase1Buttons() {
     setActiveTool("select");
   };
 // [Source: ~8745] - Tab Switch Handler
+// [Source: ~8745] - Tab Switch Handler
 window.__TIXALL_SET_TAB_MODE__ = function (tab) {
-  // 1. Update the global state variable
-  activeMainTab = tab || "map";
-
-  // 2. Reset all special interaction modes to prevent conflicts
-  // This ensures we don't carry over "add ticket" or "add view" clicks into other tabs
-  setTicketSeatSelectionMode(false, "tab-change");
-
-  activeAccessibilityMode = null; // <--- Critical Fix for Holds & Glitches
-  
-  activeHoldMode = null;
-  activeViewMode = false;
-  activeViewType = null; // Clear sub-mode (Info vs View)
-  activeViewInfoId = null;
-
-  // 3. Clear any selected objects (Transformer box) so we start clean
-  clearSelection();
-
-  // 4. Update the Side Panel content based on the new tab
-  if (activeMainTab === "tickets") {
-    findDuplicateSeatRefs();
-    renderTicketingPanel();
-  } 
-  else if (activeMainTab === "holds") {
-    // --- Toast Notification (Preserved from your code) ---
-    const toast = document.createElement("div");
-    toast.style.cssText = `
-      position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
-      background: #111827; color: white; padding: 12px 20px; border-radius: 99px;
-      font-family: system-ui; font-size: 14px; font-weight: 500;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.2); z-index: 9999; pointer-events: none;
-      animation: fadeOut 0.5s ease 4s forwards;
-    `;
-    toast.textContent = "Use this section to block seating or allocate to external promoters";
-    document.body.appendChild(toast);
-    setTimeout(() => { 
-      if (toast.parentNode) toast.parentNode.removeChild(toast); 
-    }, 4500);
-    
-    renderHoldsPanel();
-  } 
-  else if (activeMainTab === "view") {
-    // --- View Tab Logic (Preserved from your code) ---
-    activeViewMode = true; // Flag used by applySeatVisuals to show 'V'/'i'
-    
-    // Load items from stage attributes if they exist (persistence)
-    const stored = stage.getAttr("sbViewInfoItems");
-    if (stored) {
-      try { viewInfoItems = JSON.parse(stored); } catch (e) {}
+    // [NEW] 1. Auto-validate the tab we are LEAVING
+    // This treats clicking a new tab exactly like clicking "Mark Complete" on the old one
+    const oldTab = activeMainTab;
+    if (oldTab && oldTab !== tab) {
+        // Run validation on the tab user is navigating away from
+        const res = validateCurrentTabLogic(oldTab);
+        
+        // Save state so we know it's "visited" and what the errors are
+        window.__TIXALL_TAB_VALIDATION__[oldTab] = res;
+        window.__TIXALL_COMPLETION_STATUS__[oldTab] = true;
+        
+        // Update the Top Bar Ticks/Crosses immediately
+        updateCompletionUI();
     }
-    renderViewFromSeatsPanel();
-  } 
-  else {
-    // Map Tab (Default)
-    // We don't render panel here because we want the Inspector (which renders on selection)
-    renderInspector(selectedNode);
-  }
 
-  // 5. CRITICAL: Refresh all visuals (Colors, Rings, Icons)
-  // This calls updateTicketRings() internally.
-  // Because we updated 'activeMainTab' at the start of this function,
-  // applySeatVisuals will now know exactly which elements to Hide vs Show.
-  applySeatVisuals(); 
+    // 2. Update the global state variable
+    activeMainTab = tab || "map";
+
+    // 3. Reset all special interaction modes to prevent conflicts
+    setTicketSeatSelectionMode(false, "tab-change");
+    activeAccessibilityMode = null; 
+    activeHoldMode = null;
+    activeViewMode = false;
+    activeViewType = null; 
+    activeViewInfoId = null;
+
+    // 4. Clear any selected objects so we start clean
+    clearSelection();
+
+    // 5. Update the Side Panel content based on the new tab
+    if (activeMainTab === "tickets") {
+        findDuplicateSeatRefs();
+        renderTicketingPanel();
+    }
+    else if (activeMainTab === "holds") {
+        // --- Toast Notification ---
+        const toast = document.createElement("div");
+        toast.style.cssText = `
+            position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
+            background: #111827; color: white; padding: 12px 20px; border-radius: 99px;
+            font-family: system-ui; font-size: 14px; font-weight: 500;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2); z-index: 9999; pointer-events: none;
+            animation: fadeOut 0.5s ease 4s forwards;
+        `;
+        toast.textContent = "Use this section to block seating or allocate to external promoters";
+        document.body.appendChild(toast);
+        setTimeout(() => {
+            if (toast.parentNode) toast.parentNode.removeChild(toast);
+        }, 4500);
+
+        renderHoldsPanel();
+    }
+    else if (activeMainTab === "view") {
+        activeViewMode = true; 
+        const stored = stage.getAttr("sbViewInfoItems");
+        if (stored) {
+            try { viewInfoItems = JSON.parse(stored); } catch (e) {}
+        }
+        renderViewFromSeatsPanel();
+    }
+    else {
+        // Map Tab (Default)
+        renderInspector(selectedNode);
+    }
+
+    // 6. Refresh all visuals (Colors, Rings, Icons)
+    applySeatVisuals();
+    
+    // 7. Render Footer (This ensures errors persist when you come back to a tab)
+    // We call this LAST so it sees the validation state we saved in Step 1 or previous visits
+    renderSidebarFooter();
 };
+  
   stage.on("click", handleStageClick);
   stage.on("contentClick", handleStageClick);
   stage.on("tap", handleStageClick);
