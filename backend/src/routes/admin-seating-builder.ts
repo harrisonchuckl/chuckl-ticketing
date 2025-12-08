@@ -193,9 +193,24 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
 
     let saved;
 
+        let existingSeatMap: { id: string } | null = null;
+
+    
     if (seatMapId) {
+       const scope: any[] = [{ showId }];
+      if (showRow.venueId) {
+        scope.push({ venueId: showRow.venueId });
+      }
+
+      existingSeatMap = await prisma.seatMap.findFirst({
+        where: { id: seatMapId, OR: scope },
+        select: { id: true },
+      });
+    }
+
+    if (existingSeatMap) {
       saved = await prisma.seatMap.update({
-        where: { id: seatMapId },
+where: { id: existingSeatMap.id },
         data: {
           name: finalName,
           layout: layoutPayload as any,
@@ -205,6 +220,12 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
         },
       });
     } else {
+       if (seatMapId) {
+        console.warn(
+          "[seatmap] POST /builder/api/seatmaps/:showId: seat map id not found in scope, creating new map",
+          { seatMapId, showId }
+        );
+      }
       saved = await prisma.seatMap.create({
         data: {
           name: finalName,
