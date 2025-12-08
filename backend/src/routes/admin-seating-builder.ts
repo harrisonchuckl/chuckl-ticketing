@@ -351,12 +351,18 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
         const publishedAtValue = showStatus === "LIVE" ? new Date() : null;
 
         // Use raw SQL so we bypass any Prisma schema confusion and just hit the DB directly.
-        await prisma.$executeRaw`
-          UPDATE "Show"
-          SET "status" = ${showStatus}::"ShowStatus",
-              "publishedAt" = ${publishedAtValue}
-          WHERE "id" = ${showId}
-        `;
+    const publicBookingUrl = `https://chuckl.co.uk/event/${showId}`;
+const publicNextUrl = `https://chuckl-ticketing-production.up.railway.app/show/${showId}`;
+
+await prisma.$executeRaw`
+  UPDATE "Show"
+  SET "status" = ${showStatus}::"ShowStatus",
+      "publishedAt" = ${publishedAtValue},
+      "publicUrl" = ${publicBookingUrl},
+      "nextUrl" = ${publicNextUrl}
+  WHERE "id" = ${showId}
+`;
+
       } catch (err) {
         console.error(
           "[seatmap] Raw SQL update of Show.status/publishedAt failed in POST /builder/api/seatmaps/:showId",
