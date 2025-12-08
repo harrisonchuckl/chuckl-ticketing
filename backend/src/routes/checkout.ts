@@ -1,5 +1,6 @@
 // backend/src/routes/checkout.ts
 import { Router } from 'express';
+import { ShowStatus } from '@prisma/client';
 import prisma from '../lib/prisma.js';
 import { calcFeesForShow } from '../services/fees.js';
 import Stripe from 'stripe';
@@ -19,15 +20,21 @@ router.post('/session', async (req, res) => {
     }
 
     // Unit price: prefer ticket type price or fallback to provided value
-    const show = await prisma.show.findUnique({
-      where: { id: showId },
+     const show = await prisma.show.findFirst({
+      where: { id: showId, OR: [{ status: ShowStatus.LIVE }, { status: null }] },
       select: {
+         status: true,
         ticketTypes: { select: { pricePence: true }, orderBy: { createdAt: 'asc' } },
       },
     });
 
+      if (!show) {
+      return res.status(404).json({ ok: false, message: 'Show not available' });
+    }
+    
+
     const unitPricePence =
-      show?.ticketTypes?.[0]?.pricePence ??
+      show.ticketTypes?.[0]?.pricePence ??
       (typeof req.body.unitPricePence === 'number' ? req.body.unitPricePence : null);
 
     if (!unitPricePence) {
