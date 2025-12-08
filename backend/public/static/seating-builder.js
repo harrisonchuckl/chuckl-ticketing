@@ -366,29 +366,20 @@ function validateCurrentTabLogic(tab) {
     // 1. MAP VALIDATION
     if (tab === 'map') {
         let stageFound = false;
-
         if (mapLayer) {
             // A. Check for the official Stage Tool Element
             const standardStage = mapLayer.findOne('Group[shapeType="stage"]');
-            if (standardStage) {
-                stageFound = true;
-            } 
+            if (standardStage) stageFound = true;
             
             // B. Check for ANY Text Label containing "STAGE" or "SCREEN"
             if (!stageFound) {
-                // Find all text nodes on the layer
                 const allText = mapLayer.find('Text'); 
                 for (const t of allText) {
-                    // Ignore seat labels (A, B, 1, 2 etc) to be safe
                     if (t.getAttr("isSeatLabel") || t.getAttr("isRowLabel")) continue;
-
-                    // Clean the text: uppercase and remove extra spaces
                     const val = (t.text() || "").trim().toUpperCase();
-                    
-                    // The criteria: exact match for STAGE or SCREEN
                     if (val === "STAGE" || val === "SCREEN") {
                         stageFound = true;
-                        break; // Found one, stop searching
+                        break; 
                     }
                 }
             }
@@ -398,7 +389,6 @@ function validateCurrentTabLogic(tab) {
             errors.push("There is no STAGE. Please add a Stage element or a Text Label reading 'STAGE' or 'SCREEN'.");
         }
 
-        // Check for duplicates
         refreshSeatMetadata(); 
         if (duplicateSeatRefs && duplicateSeatRefs.size > 0) {
             errors.push(`Duplicate seat numbers detected (${duplicateSeatRefs.size}). Identifiers must be unique.`);
@@ -426,13 +416,22 @@ function validateCurrentTabLogic(tab) {
         if (ticketTypes.length === 0) {
             errors.push("No ticket types created.");
         }
-    }
 
-    // 3. HOLDS (Permissive)
-    // 4. VIEW (Permissive)
+        // [NEW] Check for Unnamed Tickets
+        let unnamedCount = 0;
+        ticketTypes.forEach(t => {
+            if (!t.name || !t.name.trim()) {
+                unnamedCount++;
+            }
+        });
+        if (unnamedCount > 0) {
+            errors.push(`${unnamedCount} ticket(s) are missing a name. Please name all tickets.`);
+        }
+    }
 
     return { valid: errors.length === 0, errors };
 }
+  
   // [NEW] Automatically re-check for errors and update the UI immediately
 function revalidateCurrentTab() {
     const tab = activeMainTab;
@@ -5628,7 +5627,7 @@ function renderTicketingPanel() {
       maxInput.addEventListener("change", () => { ticket.maxPerOrder = parseInt(maxInput.value) || 15; });
 
       // Append Fields to Grid
-      formGrid.appendChild(makeField("Ticket Name", nameInput));
+formGrid.appendChild(makeField("Ticket Name *", nameInput));
       formGrid.appendChild(makeField(`Price (${venueCurrencyCode})`, priceInput));
       formGrid.appendChild(makeField("Seat Color", colorWrap, "Color used on the map"));
       formGrid.appendChild(makeField("On Sale Time", onSaleInput));
@@ -5792,6 +5791,7 @@ function renderTicketingPanel() {
   const addBtn = document.createElement("button");
   addBtn.type = "button";
   addBtn.className = "sb-btn-primary-large";
+addBtn.style.marginTop = "24px"; // Adds space between the last ticket card and this button
   addBtn.innerHTML = `<span>＋</span> Add New Ticket`;
   
   addBtn.addEventListener("click", () => {
