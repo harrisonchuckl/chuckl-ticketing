@@ -49,8 +49,10 @@ app.use(
 );
 
 app.use(morgan("dev"));
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true }));
+// Seat map payloads can include large Konva JSON blobs, so allow a higher limit
+// to avoid 413 errors when saving/publishing larger layouts.
+app.use(express.json({ limit: "25mb" }));
+app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 app.use(cookieParser());
 
 // ---------- Static assets ----------
