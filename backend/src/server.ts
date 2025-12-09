@@ -16,6 +16,9 @@ import publicOrdersRouter from "./routes/public-orders.js";
 import uploadsRouter from "./routes/uploads.js";
 import imageProxyRouter from "./routes/image-proxy.js";
 
+// --- MISSING ROUTER IMPORT ---
+import publicEventRouter from "./routes/public-event-ssr.js"; 
+
 // ---- Admin / new routers ----
 import adminUploadsRouter from "./routes/admin-uploads.js";
 import adminUiRouter from "./routes/admin-ui.js";
@@ -27,7 +30,6 @@ import seatMapsRouter from "./routes/seatmaps.js";
 
 // Seating choice + layout wizard (Steps 1–2)
 import seatingChoiceRouter from "./routes/seating-choice.js";
-
 // Full-screen builder (Step 3)
 import adminSeatingBuilderRouter from "./routes/admin-seating-builder.js";
 
@@ -47,28 +49,21 @@ app.use(
     credentials: true,
   })
 );
-
 app.use(morgan("dev"));
-// Seat map payloads can include large Konva JSON blobs, so allow a higher limit
-// to avoid 413 errors when saving/publishing larger layouts.
+
+// Seat map payloads can include large Konva JSON blobs
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 app.use(cookieParser());
 
 // ---------- Static assets ----------
-
-// Seating builder static bundle (JS + CSS)
-// This makes /static/seating-builder.js and /static/seating-builder.css work.
 app.use(
   "/static",
   express.static(path.join(__dirname, "..", "public", "static"))
 );
-
-// NEW: serve everything under /public at the root
-// e.g. /public/seatmap-icons/row.png -> https://your-domain/seatmap-icons/row.png
 app.use(express.static(path.join(__dirname, "..", "public")));
 
-// ---------- Basic global rate limit (tune as needed) ----------
+// ---------- Basic global rate limit ----------
 app.use(
   rateLimit({
     windowMs: 60 * 1000,
@@ -89,61 +84,30 @@ app.use("/checkout", checkoutRouter);
 app.use("/webhook", webhookRouter);
 app.use("/public/orders", publicOrdersRouter);
 
+// --- SWITCH ON PUBLIC EVENT ROUTER ---
+// This handles /public/event/:id
+app.use("/public", publicEventRouter);
+
 // Legacy / miscellaneous
 app.use("/uploads", uploadsRouter);
 app.use("/image-proxy", imageProxyRouter);
 
 // ---------- Admin uploads ----------
-
-// Uploads (new): accept POST /admin/uploads (and /admin/uploads/poster)
 app.use("/admin/uploads", adminUploadsRouter);
-
-// Back-compat alias some older UI used (/api/upload → same handler)
 app.use("/api/upload", adminUploadsRouter);
 
 // ---------- Admin domain APIs ----------
-
-// Venues (search/create/update)
 app.use("/admin", adminVenuesRouter);
-
-// Shows (create/edit/list/duplicate etc.)
 app.use("/admin", adminShowsRouter);
-
-// Ticket types for shows
-//  - GET  /admin/shows/:showId/ticket-types
-//  - POST /admin/shows/:showId/ticket-types
-//  - PUT  /admin/ticket-types/:id
-//  - DELETE /admin/ticket-types/:id
 app.use("/admin", adminTicketTypesRouter);
-
-// Seat map CRUD + external allocations
-//  - GET/POST /admin/seatmaps
-//  - PATCH    /admin/seatmaps/:id/default
-//  - POST     /admin/seatmaps/:id/allocations
 app.use("/admin/seatmaps", adminSeatMapsRouter);
-
-// Seat-level operations (used by the seating editor)
-//  - GET   /seatmaps/:seatMapId/seats
-//  - POST  /seatmaps/:seatMapId/seats/bulk
-//  - PATCH /seatmaps/seat/:seatId/status
-//  - GET   /seatmaps/allocations/:allocationId
 app.use("/seatmaps", seatMapsRouter);
 
 // ---------- Seating wizard + full-screen builder ----------
-
-// IMPORTANT: mount the full-screen builder BEFORE the seating-choice
-// router so it doesn't get shadowed by the old stub route.
 app.use("/admin/seating", adminSeatingBuilderRouter);
-
-// Seating choice + layout wizard (Steps 1–2)
-//  - GET /admin/seating-choice/:showId
-//  - GET /admin/seating/unallocated/:showId
-//  - GET /admin/seating/layout-wizard/:showId
 app.use("/admin", seatingChoiceRouter);
 
 // ---------- Admin SPA (Organiser Console) ----------
-
-// Admin Console SPA at /admin/ui/*
 app.use("/admin", adminUiRouter);
 
 // ---------- 404 handler (JSON) ----------
