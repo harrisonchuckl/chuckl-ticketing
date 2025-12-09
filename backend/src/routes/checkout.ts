@@ -59,6 +59,9 @@ router.get('/', async (req, res) => {
         }
     }
 
+    // ============================================================
+    // MODE A: TICKET LIST (No Map)
+    // ============================================================
     if (!konvaData) {
        const ticketsJson = JSON.stringify(ticketTypes);
        res.type('html').send(`<!doctype html>
@@ -80,6 +83,10 @@ router.get('/', async (req, res) => {
        return; 
     }
 
+    // ============================================================
+    // MODE B: INTERACTIVE MAP
+    // ============================================================
+    
     const mapData = JSON.stringify(konvaData);
     const ticketsData = JSON.stringify(ticketTypes);
     const showIdStr = JSON.stringify(show.id);
@@ -147,7 +154,7 @@ router.get('/', async (req, res) => {
   </footer>
   <script>
     const rawLayout = ${mapData};
-    const ticketTypes = ${ticketsTypesJson};
+    const ticketTypes = ${ticketsData}; // <--- FIXED: Was ticketsTypesJson
     const showId = ${showIdStr};
     const selectedSeats = new Set(); const seatPrices = new Map();
     const width = window.innerWidth; const height = window.innerHeight - 160;
@@ -155,6 +162,10 @@ router.get('/', async (req, res) => {
     // 1. Create Main Stage
     const stage = new Konva.Stage({ container: 'stage-container', width: width, height: height, draggable: true });
     
+    // 2. Create Main Layer
+    const layer = new Konva.Layer();
+    stage.add(layer);
+
     function getPriceForSeat(seatNode) {
         const assignedId = seatNode.getAttr('sbTicketId');
         let match = ticketTypes.find(t => t.id === assignedId);
@@ -175,7 +186,6 @@ router.get('/', async (req, res) => {
         console.log("[DEBUG] Loading Layout...", layout);
 
         // --- NEW STRATEGY: Load WHOLE Layer (Preserves hierarchy) ---
-        // Instead of picking children, find the main Layer object and instantiate it.
         
         let layerData = null;
 
@@ -187,16 +197,31 @@ router.get('/', async (req, res) => {
         }
 
         if (!layerData) {
-            throw new Error("Could not find a valid Layer in the saved map data.");
+            // Fallback: If it's just an array of shapes or a Group, wrap it in a layer structure
+            console.warn("No root Layer found, attempting to wrap content.");
+            layerData = { className: 'Layer', children: Array.isArray(layout) ? layout : [layout] };
         }
 
         // Create the Layer from data (this creates all children/groups recursively!)
-        const layer = Konva.Node.create(layerData);
-        stage.add(layer);
+        // Note: We use a temporary node creation because we want to add it to OUR layer, 
+        // or replace our layer. Ideally we just load everything into 'layer'.
+        
+        // Actually, Konva.Node.create(layerData) creates a NEW Layer instance.
+        // We should add THAT to the stage and remove our empty one.
+        const loadedLayer = Konva.Node.create(layerData);
+        
+        // Remove our empty default layer
+        layer.destroy();
+        
+        // Add the loaded layer
+        stage.add(loadedLayer);
+        
+        // Rename for convenience
+        const activeLayer = loadedLayer;
 
         // Now traverse the *created* nodes to attach logic
         // We look for 'Group' nodes that have our special shape types
-        const groups = layer.find('Group');
+        const groups = activeLayer.find('Group');
         
         groups.forEach(group => {
             // Lock movement
@@ -243,7 +268,7 @@ router.get('/', async (req, res) => {
         });
 
         // Center Content
-        const rect = layer.getClientRect();
+        const rect = activeLayer.getClientRect();
         if (rect && rect.width > 0) {
             const scale = Math.min((width - 40) / rect.width, (height - 40) / rect.height);
             const finalScale = Math.min(Math.max(scale, 0.2), 1.5);
@@ -256,7 +281,7 @@ router.get('/', async (req, res) => {
             stage.scale({ x: finalScale, y: finalScale });
         }
         
-        layer.batchDraw();
+        activeLayer.batchDraw();
         document.getElementById('loader').style.display = 'none';
 
     } catch (err) {
