@@ -1,8 +1,9 @@
 // backend/src/routes/public-event-ssr.ts
 import { Router } from 'express';
-// 1. Import the shared prisma instance (like events.ts does) to avoid connection limits
-import prisma from '../lib/prisma.js'; 
+import { PrismaClient } from '@prisma/client';
 
+// We use a local instance to ensure we don't have import path issues
+const prisma = new PrismaClient();
 const router = Router();
 
 function pFmt(p: number | null | undefined) {
@@ -16,10 +17,10 @@ function cleanDesc(s: string | null | undefined) {
   return s.replace(/\s+/g, ' ').trim().slice(0, 300);
 }
 function esc(s: any) {
-  return String(s ?? '').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c] as string));
+  return String(s ?? '').replace(/[<>&]/g, c => ({'<':'<','>':'>','&':'&'}[c] as string));
 }
 function escAttr(s: any) {
-  return esc(s).replace(/"/g,'&quot;');
+  return esc(s).replace(/"/g,'"');
 }
 function escJSON(obj: any) {
   return JSON.stringify(obj).replace(/</g,'\\u003c');
@@ -32,7 +33,7 @@ router.get('/event/:id', async (req, res) => {
   if (!id) return res.status(404).send('Not found');
 
   try {
-    // 2. Fetch WITHOUT filtering by 'status' in the DB query to avoid Enum errors
+    // 1. Fetch by ID only (we filter status in JS to avoid Enum errors)
     const show = await prisma.show.findFirst({
       where: { id },
       include: {
@@ -46,13 +47,19 @@ router.get('/event/:id', async (req, res) => {
       },
     });
 
-    // 3. Handle 404 or Status check in JavaScript (safer)
-    // We check if show.status is 'LIVE' manually here
-    if (!show || (show as any).status !== 'LIVE') {
-        return res.status(404).send('Event not found');
+    // 2. Check if show exists
+    if (!show) {
+       [cite_start]return res.status(404).send('Event ID not found in database [cite: 30]');
     }
 
-    // --- FIX: Use 'as any' to prevent TypeScript errors on empty objects ---
+    // 3. Manually check status (Case insensitive safety check)
+    // We cast to 'any' to bypass strict TS Enum checking if the client is out of sync
+    const status = (show as any).status; 
+    if (status !== 'LIVE' && status !== 'live') {
+       return res.status(404).send('Event is not LIVE. Current status: ' + status);
+    }
+
+    // --- Data Prep ---
     const venue = (show.venue || {}) as any;
     const ticketTypes = (show.ticketTypes || []) as any[];
 
@@ -218,9 +225,16 @@ ${venue.name ? `<iframe src="${escAttr(mapEmbed)}" loading="lazy" referrerpolicy
 </main>
 </body>
 </html>`);
-  } catch (err) {
+  } catch (err: any) {
     console.error('[public-event-ssr] Error:', err);
-    res.status(500).send('Server error: unable to load event.');
+    // 4. Expose the actual error details to the browser so you can debug
+    res.status(500).send(`
+      <div style="padding:20px; font-family:sans-serif; color:#b91c1c; background:#fef2f2; border:1px solid #fecaca; margin:20px; border-radius:8px;">
+        <h2 style="margin-top:0">Server Error: Unable to load event</h2>
+        <p><strong>Detailed Error:</strong> ${err.message || String(err)}</p>
+        <pre style="background:#fff; padding:10px; border:1px solid #e5e7eb; overflow:auto;">${JSON.stringify(err, null, 2)}</pre>
+      </div>
+    `);
   }
 });
 
