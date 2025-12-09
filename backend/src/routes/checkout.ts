@@ -59,6 +59,9 @@ router.get('/', async (req, res) => {
         }
     }
 
+    // ============================================================
+    // MODE A: TICKET LIST (No Map)
+    // ============================================================
     if (!konvaData) {
        const ticketsJson = JSON.stringify(ticketTypes);
        res.type('html').send(`<!doctype html>
@@ -80,6 +83,10 @@ router.get('/', async (req, res) => {
        return; 
     }
 
+    // ============================================================
+    // MODE B: INTERACTIVE MAP
+    // ============================================================
+    
     const mapData = JSON.stringify(konvaData);
     const ticketsData = JSON.stringify(ticketTypes);
     const showIdStr = JSON.stringify(show.id);
@@ -152,9 +159,13 @@ router.get('/', async (req, res) => {
     const selectedSeats = new Set(); const seatPrices = new Map();
     const width = window.innerWidth; const height = window.innerHeight - 160;
     
-    // Create Main Stage
+    // 1. Create Main Stage
     const stage = new Konva.Stage({ container: 'stage-container', width: width, height: height, draggable: true });
     
+    // 2. Create Main Layer
+    const layer = new Konva.Layer();
+    stage.add(layer);
+
     function getPriceForSeat(seatNode) {
         const assignedId = seatNode.getAttr('sbTicketId');
         let match = ticketTypes.find(t => t.id === assignedId);
@@ -172,23 +183,19 @@ router.get('/', async (req, res) => {
              if (typeof layout === 'string') layout = JSON.parse(layout);
         }
 
-        console.log("[DEBUG] Loading Layout:", layout);
+        console.log("[DEBUG] Loading Layout...", layout);
 
-        // --- NEW STRATEGY: Find ALL Layers ---
+        // --- MANUAL LOADING STRATEGY ---
         let layersToLoad = [];
 
         if (layout.className === 'Stage' && layout.children) {
-            // Filter all children that are Layers
             layersToLoad = layout.children.filter(c => c.className === 'Layer');
             if (layersToLoad.length === 0) {
-                // If no layers found but children exist, maybe the children themselves are groups inside an implicit layer
-                console.warn("[DEBUG] No explicit Layers found in Stage. Wrapping children.");
                 layersToLoad = [{ className: 'Layer', children: layout.children }];
             }
         } else if (layout.className === 'Layer') {
             layersToLoad = [layout];
         } else {
-            // Wrap raw shape/group
             layersToLoad = [{ className: 'Layer', children: Array.isArray(layout) ? layout : [layout] }];
         }
 
@@ -196,14 +203,11 @@ router.get('/', async (req, res) => {
 
         // Create and add all layers
         layersToLoad.forEach((layerData, idx) => {
-            const layer = Konva.Node.create(layerData);
-            stage.add(layer);
+            const loadedLayer = Konva.Node.create(layerData);
+            stage.add(loadedLayer);
             
-            console.log(\`[DEBUG] Layer \${idx} loaded with \${layer.getChildren().length} children.\`);
-
             // Now recursively process to add interaction
-            // We use .find() on the layer instance, which is safe
-            const groups = layer.find('Group');
+            const groups = loadedLayer.find('Group');
             
             groups.forEach(group => {
                 // Lock everything
@@ -211,7 +215,6 @@ router.get('/', async (req, res) => {
                 group.listening(false);
 
                 const type = group.getAttr('shapeType') || group.name();
-                // Check if this is a seat group
                 if (['row-seats', 'circular-table', 'rect-table', 'single-seat'].includes(type)) {
                     
                     const circles = group.find('Circle');
@@ -233,7 +236,9 @@ router.get('/', async (req, res) => {
                         
                         // Enable Interaction
                         seat.listening(true); 
-                        seat.cursor('pointer');
+                        
+                        // REMOVED seat.cursor('pointer') to fix crash
+                        // Handled via CSS in mouseenter/mouseleave below
 
                         seat.on('mouseenter', () => { 
                             if (selectedSeats.has(seat._id)) return; 
@@ -256,7 +261,6 @@ router.get('/', async (req, res) => {
 
         // --- SMART CENTERING ---
         // Calculate the bounding box of ALL visible layers
-        // We iterate nodes because getClientRect() on empty space might be weird
         const allNodesRect = stage.getClientRect({ skipTransform: true });
         
         console.log("[DEBUG] Content Bounds:", allNodesRect);
@@ -271,8 +275,6 @@ router.get('/', async (req, res) => {
             // Center based on the content bounds
             const newX = (width - allNodesRect.width * finalScale) / 2 - (allNodesRect.x * finalScale);
             const newY = (height - allNodesRect.height * finalScale) / 2 - (allNodesRect.y * finalScale);
-
-            console.log(\`[DEBUG] Scaling to \${finalScale} at (\${newX}, \${newY})\`);
 
             stage.x(newX);
             stage.y(newY);
