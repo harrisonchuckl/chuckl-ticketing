@@ -40,12 +40,11 @@ router.get('/', async (req, res) => {
 
     const venueName = show.venue?.name || 'Venue TBC';
     const ticketTypes = show.ticketTypes || [];
-    
     const dateObj = new Date(show.date);
     const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-    // 2. Get Holds
+    // 2. Get Holds (Allocations)
     const heldSeatIds = new Set<string>();
     if (show.allocations) {
         show.allocations.forEach(alloc => {
@@ -61,13 +60,11 @@ router.get('/', async (req, res) => {
         else if (layoutObj.attrs || layoutObj.className) konvaData = layoutObj;
     }
 
-    // --- MODE A: LIST VIEW ---
     if (!konvaData) {
        res.type('html').send(`<!doctype html><html><body><h1>General Admission</h1><p>Please use the list view.</p></body></html>`);
        return; 
     }
 
-    // --- MODE B: INTERACTIVE MAP ---
     const mapData = JSON.stringify(konvaData);
     const ticketsData = JSON.stringify(ticketTypes);
     const showIdStr = JSON.stringify(show.id);
@@ -87,7 +84,7 @@ router.get('/', async (req, res) => {
     :root { --bg:#F3F4F6; --surface:#FFFFFF; --primary:#0F172A; --brand:#0056D2; --text-main:#111827; --text-muted:#6B7280; --border:#E5E7EB; --success:#10B981; --blocked:#334155; }
     body { margin:0; font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); display:flex; flex-direction:column; height:100vh; overflow:hidden; }
     
-    header { background:var(--surface); border-bottom:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; z-index:4000; position:relative; }
+    header { background:var(--surface); border-bottom:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; z-index:3000; position:relative; }
     .header-info h1 { font-family:'Outfit',sans-serif; font-size:1.25rem; margin:0; font-weight:700; color:var(--primary); }
     .header-meta { font-size:0.9rem; color:var(--muted); margin-top:4px; }
     .btn-close { text-decoration:none; font-size:1.5rem; color:var(--muted); width:40px; height:40px; display:flex; align-items:center; justify-content:center; border-radius:50%; }
@@ -96,13 +93,12 @@ router.get('/', async (req, res) => {
     #stage-container { width:100%; height:100%; cursor:grab; }
     #stage-container:active { cursor:grabbing; }
     
-    /* LEGEND */
     .legend { 
         position:absolute; top:20px; left:20px; 
         background:rgba(255,255,255,0.98); padding:12px 16px; border-radius:12px; 
         box-shadow:0 4px 20px rgba(0,0,0,0.15); 
         display:flex; flex-direction:column; gap:12px; 
-        font-size:0.75rem; font-weight:700; z-index:4000; 
+        font-size:0.75rem; font-weight:700; z-index:3000; 
     }
     .legend-row { display:flex; gap:16px; align-items:center; }
     .legend-item { display:flex; align-items:center; gap:6px; }
@@ -114,7 +110,7 @@ router.get('/', async (req, res) => {
     .view-toggle { padding-top:10px; border-top:1px solid #e2e8f0; display:flex; align-items:center; gap:8px; cursor:pointer; }
     .view-toggle input { accent-color: var(--brand); transform:scale(1.2); cursor:pointer; }
 
-    footer { background:var(--surface); border-top:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; box-shadow:0 -4px 10px rgba(0,0,0,0.03); z-index:4000; position:relative; }
+    footer { background:var(--surface); border-top:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; box-shadow:0 -4px 10px rgba(0,0,0,0.03); z-index:3000; position:relative; }
     .basket-info { display:flex; flex-direction:column; }
     .basket-label { font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em; font-weight:600; color:var(--muted); }
     .basket-total { font-family:'Outfit',sans-serif; font-size:1.5rem; font-weight:800; color:var(--primary); }
@@ -124,11 +120,11 @@ router.get('/', async (req, res) => {
     .btn-checkout.active { opacity:1; pointer-events:auto; box-shadow:0 4px 12px rgba(16, 185, 129, 0.3); }
     .btn-checkout:hover { background:#059669; }
     
-    #loader { position:absolute; top:0; left:0; right:0; bottom:0; background:rgba(255,255,255,0.95); z-index:5000; display:flex; flex-direction:column; gap:10px; align-items:center; justify-content:center; font-weight:600; color:var(--primary); }
+    #loader { position:absolute; top:0; left:0; right:0; bottom:0; background:rgba(255,255,255,0.95); z-index:4000; display:flex; flex-direction:column; gap:10px; align-items:center; justify-content:center; font-weight:600; color:var(--primary); }
     
     #tooltip {
       position: absolute; display: none; padding: 12px; background: #1e293b; color: #fff;
-      border-radius: 8px; pointer-events: none; font-size: 0.85rem; z-index: 4500;
+      border-radius: 8px; pointer-events: none; font-size: 0.85rem; z-index: 3500;
       box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3); max-width: 240px; border:1px solid rgba(255,255,255,0.1);
     }
     #tooltip img { width: 100%; border-radius: 4px; margin-top: 8px; display: block; }
@@ -172,16 +168,18 @@ router.get('/', async (req, res) => {
     const seatPrices = new Map();
     const rowMap = new Map(); 
 
-    const stage = new Konva.Stage({ 
-        container: 'stage-container', 
-        width: window.innerWidth, 
-        height: window.innerHeight - 160, 
-        draggable: true 
-    });
+    const width = window.innerWidth; 
+    const height = window.innerHeight - 160;
     
-    // Create new clean layer
+    const stage = new Konva.Stage({ container: 'stage-container', width: width, height: height, draggable: true });
+    
+    // TWO Layers: 
+    // 1. mainLayer for the map content (seats, stage)
+    // 2. uiLayer for Icons (i, camera) so they ALWAYS float on top of map elements
     const mainLayer = new Konva.Layer();
+    const uiLayer = new Konva.Layer({ listening: false }); 
     stage.add(mainLayer);
+    stage.add(uiLayer);
     
     const tooltip = document.getElementById('tooltip');
     
@@ -199,10 +197,9 @@ router.get('/', async (req, res) => {
 
         console.log("[DEBUG] Loading Layout...", layout);
 
-        // --- 1. EXTRACT CONTENT ---
+        // --- 1. LOAD LAYER IN-PLACE ---
         let layersToLoad = [];
         if (layout.className === 'Stage' && layout.children) {
-            // Find Layer(s) inside Stage
             layersToLoad = layout.children.filter(c => c.className === 'Layer');
             if (layersToLoad.length === 0) layersToLoad = [{ className: 'Layer', children: layout.children }];
         } else if (layout.className === 'Layer') {
@@ -213,14 +210,9 @@ router.get('/', async (req, res) => {
 
         layersToLoad.forEach((layerData) => {
             const tempLayer = Konva.Node.create(layerData);
+            // RESET TRANSFORM to ensure we can calculate a clean bounding box
+            tempLayer.x(0); tempLayer.y(0); tempLayer.scale({x:1, y:1});
             
-            // --- CRITICAL FIX: RESET TRANSFORM ---
-            // If the user saved the map while panned/zoomed, the layer has x/y/scale values.
-            // We MUST reset these so our auto-fit logic works from a clean state.
-            tempLayer.x(0);
-            tempLayer.y(0);
-            tempLayer.scale({x:1, y:1});
-
             const children = tempLayer.getChildren().slice();
             children.forEach(node => {
                 node.moveTo(mainLayer);
@@ -229,14 +221,14 @@ router.get('/', async (req, res) => {
             tempLayer.destroy();
         });
 
-        // --- 2. RECURSIVE PROCESSOR ---
+        // RECURSIVE NODE PROCESSOR
         function processNode(node, parentGroup) {
             const nodeType = node.getClassName();
             const groupType = node.getAttr('shapeType') || node.name();
             const isSeatGroup = nodeType === 'Group' && ['row-seats', 'circular-table', 'rect-table', 'single-seat'].includes(groupType);
             
             if (isSeatGroup) {
-                // Visual Cleanup: Hide Numbers
+                // CLEANUP: Hide number text
                 node.find('Text').forEach(t => {
                      const txt = t.text().trim();
                      if (/^\\d+$/.test(txt)) t.destroy();
@@ -247,13 +239,13 @@ router.get('/', async (req, res) => {
             if (nodeType === 'Circle' && node.getAttr('isSeat')) {
                 const seat = node;
                 
-                // Status
+                // STATUS Check
                 const status = seat.getAttr('status') || 'AVAILABLE';
                 const isBlocked = status === 'BLOCKED' || status === 'SOLD' || status === 'HELD';
                 const isHeldDB = heldSeatIds.has(seat.id()) || heldSeatIds.has(seat.getAttr('sbSeatId'));
                 const isUnavailable = isBlocked || isHeldDB;
 
-                // Data
+                // DATA
                 const tType = getTicketType(seat);
                 const price = tType ? tType.pricePence : 0;
                 seatPrices.set(seat._id, price);
@@ -262,7 +254,7 @@ router.get('/', async (req, res) => {
                 const info = seat.getAttr('sbInfo');
                 const viewImg = seat.getAttr('sbViewImage');
 
-                // Gap Logic
+                // GAP REGISTRATION
                 if (parentGroup) {
                     const grpId = parentGroup._id;
                     if (!rowMap.has(grpId)) rowMap.set(grpId, []);
@@ -272,7 +264,7 @@ router.get('/', async (req, res) => {
                     });
                 }
 
-                // Visuals
+                // VISUALS
                 if (isUnavailable) {
                     seat.fill('#334155'); seat.stroke('#1e293b'); seat.strokeWidth(1); 
                     seat.opacity(0.8); seat.listening(false);
@@ -283,36 +275,19 @@ router.get('/', async (req, res) => {
                 seat.shadowEnabled(false);
                 seat.visible(true);
 
-                // Icons: Info (i)
+                // --- ICONS (UI LAYER) ---
+                // We calculate global position to place icons on the top UI layer
+                // They will be updated on zoom/pan in the 'wheel' event
+                
                 if (info && !isUnavailable) {
-                    const r = seat.radius();
-                    const iGroup = new Konva.Group({ x: seat.x() + r*0.7, y: seat.y() - r*0.7, listening: false });
-                    const iDot = new Konva.Circle({ radius: 5, fill: '#0F172A' });
-                    const iTxt = new Konva.Text({ x: -1.5, y: -2.5, text:'i', fontSize:6, fill:'#fff', fontStyle:'bold' });
-                    iGroup.add(iDot); iGroup.add(iTxt);
-                    if (seat.parent) {
-                        seat.parent.add(iGroup);
-                        iGroup.moveToTop();
-                    }
+                    // Tag seat to track icon
+                    seat.setAttr('hasInfo', true);
                 }
-
-                // Icons: View (Camera)
                 if (viewImg) {
-                    const vGroup = new Konva.Group({ 
-                        x: seat.x(), y: seat.y(), visible: false, name: 'view-icon-group', listening: false 
-                    });
-                    const bg = new Konva.Circle({ radius: 9, fill: '#0056D2' });
-                    const icon = new Konva.Path({
-                        data: 'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5 5 2.24 5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z',
-                        fill: 'white', scaleX: 0.6, scaleY: 0.6, offsetX: 12, offsetY: 12
-                    });
-                    vGroup.add(bg); vGroup.add(icon);
-                    if (seat.parent) {
-                        seat.parent.add(vGroup);
-                        vGroup.moveToTop();
-                    }
+                    seat.setAttr('hasView', true);
                 }
 
+                // EVENTS
                 if (!isUnavailable) {
                     seat.on('mouseenter', () => {
                         stage.container().style.cursor = 'pointer';
@@ -324,7 +299,6 @@ router.get('/', async (req, res) => {
                         const priceStr = '£' + (price/100).toFixed(2);
                         let html = \`<span class="tt-title">\${label}</span><span class="tt-meta">\${tType ? tType.name : 'Standard'} • \${priceStr}</span>\`;
                         if (info) html += \`<div class="tt-info">\${info}</div>\`;
-                        
                         const viewMode = document.getElementById('toggle-views').checked;
                         if (viewImg && viewMode) html += \`<img src="\${viewImg}" />\`;
                         else if (viewImg) html += \`<div style="font-size:0.7rem; color:#94a3b8; margin-top:4px;">(Show seat views to preview)</div>\`;
@@ -364,43 +338,53 @@ router.get('/', async (req, res) => {
              else seats.sort((a, b) => a.x - b.x);
         });
 
-        // --- 4. PERFECT FIT ZOOM ---
-        function fitMap() {
-            // Get Box of ALL visible content
-            const box = mainLayer.getClientRect({ skipTransform: true, relativeTo: mainLayer });
+        // --- 4. CROP & ZOOM (Strict Content Bounds) ---
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        let count = 0;
+
+        // Scan ONLY Semantic Nodes: Seats, Text Labels, Stage Rects
+        mainLayer.find('Circle, Text, Rect, Path').forEach(node => {
+            if (!node.visible() || node.opacity() === 0) return;
+            // Skip background grids (usually huge)
+            if (node.width() > 2000 || node.height() > 2000) return; 
+
+            // Get absolute rect relative to layer
+            const r = node.getClientRect({ skipTransform: true, relativeTo: mainLayer });
             
-            console.log("[DEBUG] Content Bounds:", box);
-
-            if (box.width > 0 && box.height > 0) {
-                const padding = 60;
-                const w = window.innerWidth - padding;
-                const h = (window.innerHeight - 160) - padding;
-
-                const scale = Math.min(w / box.width, h / box.height);
-                
-                // Center
-                const cx = box.x + box.width / 2;
-                const cy = box.y + box.height / 2;
-                
-                const stageW = window.innerWidth;
-                const stageH = window.innerHeight - 160;
-
-                stage.position({
-                    x: stageW / 2 - cx * scale,
-                    y: stageH / 2 - cy * scale
-                });
-                stage.scale({ x: scale, y: scale });
-                mainLayer.batchDraw();
+            if (r.width > 0 && r.height > 0) {
+                count++;
+                if (r.x < minX) minX = r.x;
+                if (r.y < minY) minY = r.y;
+                if (r.x + r.width > maxX) maxX = r.x + r.width;
+                if (r.y + r.height > maxY) maxY = r.y + r.height;
             }
-        }
-        
-        // Run Fit
-        fitMap();
-        window.addEventListener('resize', () => {
-             stage.width(window.innerWidth);
-             stage.height(window.innerHeight - 160);
-             fitMap();
         });
+
+        console.log(\`[DEBUG] Strict Bounds: Shapes=\${count}, X=\${minX} to \${maxX}\`);
+
+        if (count > 0 && maxX > minX) {
+            const mapW = maxX - minX;
+            const mapH = maxY - minY;
+            const padding = 40;
+            const availW = width - padding;
+            const availH = height - padding;
+
+            const scale = Math.min(availW / mapW, availH / mapH) * 0.95; 
+            
+            const cx = minX + mapW / 2;
+            const cy = minY + mapH / 2;
+
+            const newX = (width / 2) - (cx * scale);
+            const newY = (height / 2) - (cy * scale);
+
+            stage.x(newX);
+            stage.y(newY);
+            stage.scale({ x: scale, y: scale });
+        }
+
+        // --- 5. RENDER ICONS (Initial) ---
+        updateIcons();
+        mainLayer.batchDraw();
 
         document.getElementById('loader').style.display = 'none';
 
@@ -409,12 +393,40 @@ router.get('/', async (req, res) => {
         document.getElementById('loader').innerHTML = 'Error loading map<br><small>' + err.message + '</small>';
     }
 
-    // Events & Logic
-    document.getElementById('toggle-views').addEventListener('change', (e) => {
-        const show = e.target.checked;
-        stage.find('.view-icon-group').forEach(icon => icon.visible(show));
-        mainLayer.batchDraw();
-    });
+    // --- ICON RENDERER (Called on Zoom/Pan) ---
+    function updateIcons() {
+        uiLayer.destroyChildren();
+        const showViews = document.getElementById('toggle-views').checked;
+        const scale = stage.scaleX();
+        const iconScale = 1 / scale; // Keep icons constant size visually
+
+        mainLayer.find('Circle').forEach(seat => {
+            if (!seat.getAttr('isSeat')) return;
+            const pos = seat.getAbsolutePosition();
+            
+            // Info Icon 'i'
+            if (seat.getAttr('hasInfo')) {
+                const r = 8;
+                const grp = new Konva.Group({ x: pos.x + 10, y: pos.y - 10 });
+                grp.add(new Konva.Circle({ radius: r, fill: '#0F172A' }));
+                grp.add(new Konva.Text({ text: 'i', fontSize: 10, fill: '#fff', x: -2, y: -5, fontStyle: 'bold' }));
+                uiLayer.add(grp);
+            }
+            // View Icon
+            if (seat.getAttr('hasView') && showViews) {
+                const grp = new Konva.Group({ x: pos.x, y: pos.y });
+                grp.add(new Konva.Circle({ radius: 10, fill: '#0056D2' }));
+                // Simple camera shape
+                const cam = new Konva.Path({ data: 'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5z', fill: 'white', scaleX: 0.6, scaleY: 0.6, offsetX: 12, offsetY: 12 });
+                grp.add(cam);
+                uiLayer.add(grp);
+            }
+        });
+        uiLayer.batchDraw();
+    }
+
+    // --- UI EVENTS ---
+    document.getElementById('toggle-views').addEventListener('change', updateIcons);
 
     stage.on('wheel', (e) => {
         e.evt.preventDefault();
@@ -426,8 +438,13 @@ router.get('/', async (req, res) => {
         stage.scale({ x: newScale, y: newScale });
         const newPos = { x: pointer.x - mousePointTo.x * newScale, y: pointer.y - mousePointTo.y * newScale };
         stage.position(newPos);
+        updateIcons(); // Re-render icons at new positions
     });
+    
+    // Update icons on drag too
+    stage.on('dragmove', updateIcons);
 
+    // --- GAP LOGIC ---
     function checkGap(seat, rowGroup) {
         if (!rowGroup) return true;
         const row = rowMap.get(rowGroup._id);
