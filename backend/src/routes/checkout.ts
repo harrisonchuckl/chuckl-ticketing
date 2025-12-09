@@ -13,6 +13,7 @@ router.get('/', async (req, res) => {
   if (!showId) return res.status(404).send('Show ID is required');
 
   try {
+    // 1. Fetch Show Data
     const show = await prisma.show.findUnique({
       where: { id: showId },
       include: {
@@ -24,7 +25,7 @@ router.get('/', async (req, res) => {
 
     if (!show) return res.status(404).send('Event not found');
 
-    // 1. Get Seat Map
+    // 2. Get Active Seat Map
     let seatMap = null;
     // @ts-ignore
     if (show.activeSeatMapId) {
@@ -45,7 +46,7 @@ router.get('/', async (req, res) => {
     const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-    // 2. Get Holds
+    // 3. Process Holds
     const heldSeatIds = new Set<string>();
     if (show.allocations) {
         show.allocations.forEach(alloc => {
@@ -53,7 +54,7 @@ router.get('/', async (req, res) => {
         });
     }
 
-    // 3. Extract Layout
+    // 4. Extract Layout
     let konvaData = null;
     if (seatMap && seatMap.layout) {
         const layoutObj = seatMap.layout as any;
@@ -61,9 +62,9 @@ router.get('/', async (req, res) => {
         else if (layoutObj.attrs || layoutObj.className) konvaData = layoutObj;
     }
 
-    // --- MODE A: LIST VIEW ---
+    // --- MODE A: LIST VIEW (Fallback) ---
     if (!konvaData) {
-       res.type('html').send(`<!doctype html><html><body><h1>General Admission</h1><p>No map available.</p></body></html>`);
+       res.type('html').send(`<!doctype html><html><body><h1>General Admission</h1><p>Please use the list view.</p></body></html>`);
        return; 
     }
 
@@ -80,29 +81,27 @@ router.get('/', async (req, res) => {
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Select Seats | ${show.title}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@700&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/konva@9.3.3/konva.min.js"></script>
 
   <style>
-    :root { --bg:#F3F4F6; --surface:#FFFFFF; --primary:#0F172A; --brand:#0056D2; --text:#1F2937; --muted:#6B7280; --border:#E5E7EB; --success:#10B981; --blocked:#94a3b8; }
+    :root { --bg:#F3F4F6; --surface:#FFFFFF; --primary:#0F172A; --brand:#0056D2; --text-main:#111827; --text-muted:#6B7280; --border:#E5E7EB; --success:#10B981; --blocked:#94a3b8; }
     body { margin:0; font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); display:flex; flex-direction:column; height:100vh; overflow:hidden; }
     
     header { background:var(--surface); border-bottom:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; z-index:3000; position:relative; }
     .header-info h1 { font-family:'Outfit',sans-serif; font-size:1.25rem; margin:0; font-weight:700; color:var(--primary); }
     .header-meta { font-size:0.9rem; color:var(--muted); margin-top:4px; }
     .btn-close { text-decoration:none; font-size:1.5rem; color:var(--muted); width:40px; height:40px; display:flex; align-items:center; justify-content:center; border-radius:50%; }
-    .btn-close:hover { background:#F3F4F6; color:var(--primary); }
     
     #map-wrapper { flex:1; position:relative; background:#E2E8F0; overflow:hidden; }
     #stage-container { width:100%; height:100%; cursor:grab; }
     #stage-container:active { cursor:grabbing; }
     
-    /* LEGEND - Z-Index 3000 to stay on top */
     .legend { 
         position:absolute; top:20px; left:20px; 
         background:rgba(255,255,255,0.98); padding:12px 16px; border-radius:12px; 
         box-shadow:0 4px 20px rgba(0,0,0,0.15); 
-        display:flex; flex-direction:column; gap:10px; 
+        display:flex; flex-direction:column; gap:12px; 
         font-size:0.75rem; font-weight:700; z-index:3000; 
     }
     .legend-row { display:flex; gap:16px; align-items:center; }
@@ -177,6 +176,7 @@ router.get('/', async (req, res) => {
     const height = window.innerHeight - 160;
     
     const stage = new Konva.Stage({ container: 'stage-container', width: width, height: height, draggable: true });
+    // We will load content into this layer
     const mainLayer = new Konva.Layer();
     stage.add(mainLayer);
     
@@ -196,6 +196,7 @@ router.get('/', async (req, res) => {
 
         console.log("[DEBUG] Loading Layout...", layout);
 
+        // --- 1. LOAD LAYER IN-PLACE ---
         let layersToLoad = [];
         if (layout.className === 'Stage' && layout.children) {
             layersToLoad = layout.children.filter(c => c.className === 'Layer');
@@ -223,19 +224,21 @@ router.get('/', async (req, res) => {
             const isSeatGroup = nodeType === 'Group' && ['row-seats', 'circular-table', 'rect-table', 'single-seat'].includes(groupType);
             
             if (isSeatGroup) {
-                // Remove numbers (Text nodes) inside seat groups - Visual Cleanup
-                const texts = node.find('Text');
-                texts.forEach(t => t.destroy());
+                // Remove numbers (Visual Cleanup)
+                node.find('Text').forEach(t => t.destroy());
                 parentGroup = node;
             }
 
             if (nodeType === 'Circle' && node.getAttr('isSeat')) {
                 const seat = node;
+                
+                // --- STATUS ---
                 const status = seat.getAttr('status') || 'AVAILABLE';
                 const isBlocked = status === 'BLOCKED' || status === 'SOLD' || status === 'HELD';
                 const isHeldDB = heldSeatIds.has(seat.id()) || heldSeatIds.has(seat.getAttr('sbSeatId'));
                 const isUnavailable = isBlocked || isHeldDB;
 
+                // --- DATA ---
                 const tType = getTicketType(seat);
                 const price = tType ? tType.pricePence : 0;
                 seatPrices.set(seat._id, price);
@@ -244,6 +247,7 @@ router.get('/', async (req, res) => {
                 const info = seat.getAttr('sbInfo');
                 const viewImg = seat.getAttr('sbViewImage');
 
+                // --- GAP REGISTRATION ---
                 if (parentGroup) {
                     const grpId = parentGroup._id;
                     if (!rowMap.has(grpId)) rowMap.set(grpId, []);
@@ -251,58 +255,70 @@ router.get('/', async (req, res) => {
                     rowMap.get(grpId).push({
                         id: seat._id,
                         x: absPos.x,
-                        y: absPos.y, 
+                        y: absPos.y, // Save Y for orientation check
                         unavailable: isUnavailable,
                         node: seat
                     });
                 }
 
+                // --- VISUALS ---
                 if (isUnavailable) {
-                    seat.fill('#e2e8f0'); seat.stroke('#cbd5e1'); seat.strokeWidth(1); 
-                    seat.opacity(0.6); seat.listening(false);
+                    seat.fill('#e2e8f0'); seat.stroke('#cbd5e1'); 
+                    seat.listening(false);
                 } else {
                     seat.fill('#ffffff'); seat.stroke('#64748B'); seat.strokeWidth(1.5);
-                    seat.opacity(1); seat.listening(true); 
+                    seat.listening(true); 
                 }
                 seat.shadowEnabled(false);
+                seat.opacity(1);
                 seat.visible(true);
 
-                // --- INFO ICON (i) ---
+                // --- ICON: Info (i) ---
                 if (info && !isUnavailable) {
-                    const iGroup = new Konva.Group({ x: seat.x(), y: seat.y(), listening:false });
                     const r = seat.radius();
-                    // Top-right offset
-                    const iDot = new Konva.Circle({ x: r*0.7, y: -r*0.7, radius:5, fill:'#0F172A' });
-                    const iTxt = new Konva.Text({ x: (r*0.7)-1.5, y:(-r*0.7)-2.5, text:'i', fontSize:6, fill:'#fff', fontStyle:'bold' });
+                    const iGroup = new Konva.Group({ 
+                        x: seat.x(), y: seat.y(), listening: false 
+                    });
+                    // Draw black circle on top
+                    const iDot = new Konva.Circle({ x: r*0.6, y: -r*0.6, radius: 5, fill: '#0F172A' });
+                    const iTxt = new Konva.Text({ 
+                        x: (r*0.6)-1.5, y: (-r*0.6)-2.5, 
+                        text:'i', fontSize:6, fill:'#fff', fontStyle:'bold' 
+                    });
                     iGroup.add(iDot); iGroup.add(iTxt);
-                    if (seat.parent) seat.parent.add(iGroup);
+                    
+                    if (seat.parent) {
+                        seat.parent.add(iGroup);
+                        iGroup.moveToTop(); // Ensure it's above seat
+                    }
                 }
 
-                // --- VIEW ICON (Camera) - Hidden by default ---
+                // --- ICON: View (Camera) ---
                 if (viewImg) {
                     const vGroup = new Konva.Group({ 
                         x: seat.x(), y: seat.y(), 
-                        visible: false, 
-                        name: 'view-icon-group',
-                        listening: false 
+                        visible: false, name: 'view-icon-group', listening: false 
                     });
                     const bg = new Konva.Circle({ radius: 9, fill: '#0056D2' });
-                    // Camera icon
                     const icon = new Konva.Path({
                         data: 'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5 5 2.24 5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z',
                         fill: 'white', scaleX: 0.6, scaleY: 0.6, offsetX: 12, offsetY: 12
                     });
                     vGroup.add(bg); vGroup.add(icon);
-                    if (seat.parent) seat.parent.add(vGroup);
+                    if (seat.parent) {
+                        seat.parent.add(vGroup);
+                        vGroup.moveToTop();
+                    }
                 }
 
+                // --- EVENTS ---
                 if (!isUnavailable) {
                     seat.on('mouseenter', () => {
                         stage.container().style.cursor = 'pointer';
                         if (!selectedSeats.has(seat._id)) {
                             seat.stroke('#0056D2'); seat.strokeWidth(3); mainLayer.batchDraw();
                         }
-                        
+                        // Tooltip
                         const pos = stage.getPointerPosition();
                         const priceStr = '£' + (price/100).toFixed(2);
                         let html = \`<span class="tt-title">\${label}</span><span class="tt-meta">\${tType ? tType.name : 'Standard'} • \${priceStr}</span>\`;
@@ -310,7 +326,7 @@ router.get('/', async (req, res) => {
                         
                         const viewMode = document.getElementById('toggle-views').checked;
                         if (viewImg && viewMode) html += \`<img src="\${viewImg}" />\`;
-                        else if (viewImg) html += \`<div style="font-size:0.7rem; color:#94a3b8; margin-top:4px;">(Show seat views to preview)</div>\`;
+                        else if (viewImg) html += \`<div style="font-size:0.7rem; color:#94a3b8; margin-top:4px;">(Enable 'Show seat views' to preview)</div>\`;
 
                         tooltip.innerHTML = html;
                         tooltip.style.display = 'block';
@@ -338,29 +354,39 @@ router.get('/', async (req, res) => {
             }
         }
 
-        // --- 3. SORT ROWS ---
-        rowMap.forEach((seats) => seats.sort((a, b) => a.x - b.x));
-
-        // --- 4. GLOBAL AUTO-FIT (Including Stage/Walls) ---
-        // Iterate all SHAPES to get true content bounds
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        let shapeCount = 0;
-        
-        mainLayer.find('Shape').forEach(shape => {
-             // Skip invisible or tiny shapes
-             if (!shape.visible() || shape.opacity() === 0) return;
+        // --- 3. SORT & ORIENT ROWS ---
+        rowMap.forEach((seats) => {
+             if (seats.length < 2) return;
+             // Detect orientation: Compare X range vs Y range
+             const minX = Math.min(...seats.map(s=>s.x)), maxX = Math.max(...seats.map(s=>s.x));
+             const minY = Math.min(...seats.map(s=>s.y)), maxY = Math.max(...seats.map(s=>s.y));
              
-             const rect = shape.getClientRect({ skipTransform: true, relativeTo: mainLayer });
-             if (rect.width > 0 && rect.height > 0) {
-                 shapeCount++;
-                 if (rect.x < minX) minX = rect.x;
-                 if (rect.y < minY) minY = rect.y;
-                 if (rect.x + rect.width > maxX) maxX = rect.x + rect.width;
-                 if (rect.y + rect.height > maxY) maxY = rect.y + rect.height;
+             // If height > width, it's vertical. Sort by Y. Else sort by X.
+             if ((maxY - minY) > (maxX - minX)) {
+                 seats.sort((a, b) => a.y - b.y);
+             } else {
+                 seats.sort((a, b) => a.x - b.x);
              }
         });
 
-        console.log(\`[DEBUG] Map Bounds: Shapes=\${shapeCount}, X=\${minX} to \${maxX}, Y=\${minY} to \${maxY}\`);
+        // --- 4. MANUAL CONTENT BOUNDS (Fixes Zoom) ---
+        // Iterate all shapes to find true edges
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        let shapeCount = 0;
+
+        mainLayer.find('Shape').forEach(shape => {
+            if (!shape.visible() || shape.opacity() === 0) return;
+            const r = shape.getClientRect({ skipTransform: true, relativeTo: mainLayer });
+            if (r.width > 0 && r.height > 0) {
+                shapeCount++;
+                if (r.x < minX) minX = r.x;
+                if (r.y < minY) minY = r.y;
+                if (r.x + r.width > maxX) maxX = r.x + r.width;
+                if (r.y + r.height > maxY) maxY = r.y + r.height;
+            }
+        });
+
+        console.log(\`[DEBUG] Map Bounds: Shapes=\${shapeCount}, X=\${minX} to \${maxX}\`);
 
         if (shapeCount > 0 && maxX > minX) {
             const mapW = maxX - minX;
@@ -377,12 +403,11 @@ router.get('/', async (req, res) => {
             const newX = (width / 2) - (cx * scale);
             const newY = (height / 2) - (cy * scale);
 
-            stage.x(newX);
-            stage.y(newY);
+            stage.position({ x: newX, y: newY });
             stage.scale({ x: scale, y: scale });
             mainLayer.batchDraw();
         } else {
-            console.warn("Could not calculate bounds. Centering default.");
+            console.warn("Empty map detected.");
             stage.x(width/2); stage.y(height/2);
         }
 
@@ -393,7 +418,7 @@ router.get('/', async (req, res) => {
         document.getElementById('loader').innerHTML = 'Error loading map<br><small>' + err.message + '</small>';
     }
 
-    // UI & Logic
+    // --- UI EVENTS ---
     document.getElementById('toggle-views').addEventListener('change', (e) => {
         const show = e.target.checked;
         stage.find('.view-icon-group').forEach(icon => icon.visible(show));
@@ -412,7 +437,7 @@ router.get('/', async (req, res) => {
         stage.position(newPos);
     });
 
-    // GAP CHECK
+    // --- GAP CHECK ---
     function checkGap(seat, rowGroup) {
         if (!rowGroup) return true;
         const row = rowMap.get(rowGroup._id);
@@ -420,7 +445,7 @@ router.get('/', async (req, res) => {
 
         const states = row.map(s => {
             if (s.unavailable) return 0; // Wall/Sold
-            if (s.id === seat._id) return selectedSeats.has(s.id) ? 2 : 1; // Toggle logic
+            if (s.id === seat._id) return selectedSeats.has(s.id) ? 2 : 1; // Toggle simulation
             if (selectedSeats.has(s.id)) return 1; // Selected
             return 2; // Free
         });
@@ -479,18 +504,10 @@ router.get('/', async (req, res) => {
         const btn = document.getElementById('btn-next');
         if (!btn.classList.contains('active')) return;
         btn.innerText = 'Processing...';
-        
-        let totalPence = 0;
-        selectedSeats.forEach(id => totalPence += (seatPrices.get(id) || 0));
-        const quantity = selectedSeats.size;
-        const unitPricePence = Math.round(totalPence / quantity);
-
+        let totalPence = 0; selectedSeats.forEach(id => totalPence += (seatPrices.get(id) || 0));
+        const quantity = selectedSeats.size; const unitPricePence = Math.round(totalPence / quantity);
         try {
-            const res = await fetch('/checkout/session', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ showId, quantity, unitPricePence })
-            });
+            const res = await fetch('/checkout/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ showId, quantity, unitPricePence }) });
             const data = await res.json();
             if (data.ok && data.url) window.location.href = data.url;
             else { alert("Error: " + (data.message || "Unknown")); btn.innerText = 'Continue'; }
@@ -501,7 +518,7 @@ router.get('/', async (req, res) => {
 </html>`);
 
   } catch (err: any) {
-    console.error('checkout/session error', err);
+    console.error('checkout/map error', err);
     res.status(500).send('Server error');
   }
 });
