@@ -24,7 +24,7 @@ router.get('/', async (req, res) => {
 
     if (!show) return res.status(404).send('Event not found');
 
-    // --- 1. GET MAP ---
+    // 1. Get Seat Map (Active or Latest)
     let seatMap = null;
     // @ts-ignore
     if (show.activeSeatMapId) {
@@ -45,7 +45,7 @@ router.get('/', async (req, res) => {
     const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-    // --- 2. GET HOLDS ---
+    // 2. Get Holds
     const heldSeatIds = new Set<string>();
     if (show.allocations) {
         show.allocations.forEach(alloc => {
@@ -53,7 +53,7 @@ router.get('/', async (req, res) => {
         });
     }
 
-    // --- 3. EXTRACT KONVA ---
+    // 3. Extract Layout
     let konvaData = null;
     if (seatMap && seatMap.layout) {
         const layoutObj = seatMap.layout as any;
@@ -61,13 +61,28 @@ router.get('/', async (req, res) => {
         else if (layoutObj.attrs || layoutObj.className) konvaData = layoutObj;
     }
 
-    // --- MODE A: LIST ---
+    // --- MODE A: LIST VIEW (No Map) ---
     if (!konvaData) {
-       res.type('html').send(`<!doctype html><html lang="en"><head><meta charset="utf-8"/><title>${show.title}</title></head><body><h1>General Admission</h1><p>Please use the previous list view.</p></body></html>`);
+       res.type('html').send(`<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>${show.title}</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@700&display=swap" rel="stylesheet">
+<style>body{font-family:'Inter',sans-serif;background:#F3F4F6;display:flex;justify-content:center;align-items:center;height:100vh;margin:0} .card{background:white;padding:40px;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.1);text-align:center;max-width:400px;width:100%} h1{font-family:'Outfit',sans-serif;margin-bottom:10px} .btn{display:inline-block;margin-top:20px;padding:12px 24px;background:#0056D2;color:white;text-decoration:none;border-radius:8px;font-weight:700}</style>
+</head>
+<body>
+<div class="card">
+  <h1>Select Tickets</h1>
+  <p>General Admission - Unallocated Seating</p>
+  <div style="text-align:left;margin-top:20px;border-top:1px solid #eee;padding-top:20px">
+    ${ticketTypes.map(t => `<div style="display:flex;justify-content:space-between;margin-bottom:10px"><span>${t.name}</span><strong>£${(t.pricePence/100).toFixed(2)}</strong></div>`).join('')}
+  </div>
+  <a href="/public/event/${show.id}" class="btn">Back to Event</a>
+</div>
+</body></html>`);
        return; 
     }
 
-    // --- MODE B: MAP ---
+    // --- MODE B: INTERACTIVE MAP ---
     const mapData = JSON.stringify(konvaData);
     const ticketsData = JSON.stringify(ticketTypes);
     const showIdStr = JSON.stringify(show.id);
@@ -80,31 +95,34 @@ router.get('/', async (req, res) => {
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Select Seats | ${show.title}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@400;700;800&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/konva@9.3.3/konva.min.js"></script>
 
   <style>
-    :root { --bg:#F3F4F6; --surface:#FFFFFF; --primary:#0F172A; --brand:#0056D2; --text:#1F2937; --muted:#6B7280; --border:#E5E7EB; --success:#10B981; --blocked:#94a3b8; }
+    :root { --bg:#F3F4F6; --surface:#FFFFFF; --primary:#0F172A; --brand:#0056D2; --text-main:#111827; --text-muted:#6B7280; --border:#E5E7EB; --success:#10B981; --blocked:#94a3b8; }
     body { margin:0; font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); display:flex; flex-direction:column; height:100vh; overflow:hidden; }
     
     header { background:var(--surface); border-bottom:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; z-index:10; }
     .header-info h1 { font-family:'Outfit',sans-serif; font-size:1.25rem; margin:0; font-weight:700; color:var(--primary); }
     .header-meta { font-size:0.9rem; color:var(--muted); margin-top:4px; }
-    .btn-close { text-decoration:none; font-size:1.5rem; color:var(--muted); width:40px; height:40px; display:flex; align-items:center; justify-content:center; border-radius:50%; }
+    
+    .btn-close { text-decoration:none; font-size:1.5rem; color:var(--muted); width:40px; height:40px; display:flex; align-items:center; justify-content:center; border-radius:50%; transition:background 0.2s; }
     .btn-close:hover { background:#F3F4F6; color:var(--primary); }
     
-    #map-wrapper { flex:1; position:relative; background:#E2E8F0; overflow:hidden; }
+    #map-wrapper { flex:1; position:relative; background:#E2E8F0; overflow:hidden; background-image:radial-gradient(#CBD5E1 1px, transparent 1px); background-size:20px 20px; }
     #stage-container { width:100%; height:100%; cursor:grab; }
     #stage-container:active { cursor:grabbing; }
     
+    /* LEGEND - Z-Index Boost */
     .legend { 
         position:absolute; top:20px; left:20px; 
         background:rgba(255,255,255,0.98); padding:12px 16px; border-radius:12px; 
-        box-shadow:0 4px 20px rgba(0,0,0,0.15); 
-        display:flex; flex-direction:column; gap:10px; 
-        font-size:0.75rem; font-weight:700; z-index:1000; 
+        box-shadow:0 10px 25px -5px rgba(0,0,0,0.15); border:1px solid rgba(0,0,0,0.05);
+        display:flex; flex-direction:column; gap:12px; 
+        font-size:0.75rem; font-weight:600; 
+        z-index: 3000; /* Ensure on top of everything */
     }
-    .legend-row { display:flex; gap:16px; }
+    .legend-row { display:flex; gap:16px; flex-wrap:wrap; }
     .legend-item { display:flex; align-items:center; gap:6px; }
     .dot { width:14px; height:14px; border-radius:50%; border:1px solid rgba(0,0,0,0.1); }
     .dot-avail { background:#fff; border-color:#64748B; }
@@ -118,17 +136,17 @@ router.get('/', async (req, res) => {
     .basket-info { display:flex; flex-direction:column; }
     .basket-label { font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em; font-weight:600; color:var(--muted); }
     .basket-total { font-family:'Outfit',sans-serif; font-size:1.5rem; font-weight:800; color:var(--primary); }
-    .basket-detail { font-size:0.85rem; color:var(--text); margin-top:2px; }
+    .basket-detail { font-size:0.85rem; color:var(--text-main); margin-top:2px; }
     
     .btn-checkout { background:var(--success); color:white; border:none; padding:12px 32px; border-radius:99px; font-size:1rem; font-weight:700; font-family:'Outfit',sans-serif; text-transform:uppercase; letter-spacing:0.05em; cursor:pointer; transition:all 0.2s; opacity:0.5; pointer-events:none; }
     .btn-checkout.active { opacity:1; pointer-events:auto; box-shadow:0 4px 12px rgba(16, 185, 129, 0.3); }
     .btn-checkout:hover { background:#059669; }
     
-    #loader { position:absolute; top:0; left:0; right:0; bottom:0; background:rgba(255,255,255,0.95); z-index:2000; display:flex; flex-direction:column; gap:10px; align-items:center; justify-content:center; font-weight:600; color:var(--primary); }
+    #loader { position:absolute; top:0; left:0; right:0; bottom:0; background:rgba(255,255,255,0.95); z-index:4000; display:flex; flex-direction:column; gap:10px; align-items:center; justify-content:center; font-weight:600; color:var(--primary); }
     
     #tooltip {
       position: absolute; display: none; padding: 12px; background: #1e293b; color: #fff;
-      border-radius: 8px; pointer-events: none; font-size: 0.85rem; z-index: 1500;
+      border-radius: 8px; pointer-events: none; font-size: 0.85rem; z-index: 3500;
       box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3); max-width: 240px; border:1px solid rgba(255,255,255,0.1);
     }
     #tooltip img { width: 100%; border-radius: 4px; margin-top: 8px; display: block; }
@@ -170,19 +188,18 @@ router.get('/', async (req, res) => {
     
     const selectedSeats = new Set(); 
     const seatPrices = new Map();
-    // For gap detection: Map<groupId, Array<SeatObject>>
-    const rowMap = new Map(); 
+    const rowMap = new Map(); // For gap logic
 
     const width = window.innerWidth; 
     const height = window.innerHeight - 160;
     
-    // Create Stage & Layer
     const stage = new Konva.Stage({ container: 'stage-container', width: width, height: height, draggable: true });
-    // Note: We will load the layer from JSON, so we don't create one yet.
+    // We will load content into this layer
+    const mainLayer = new Konva.Layer();
+    stage.add(mainLayer);
     
     const tooltip = document.getElementById('tooltip');
     
-    // Helper: Pricing
     function getTicketType(seatNode) {
         const assignedId = seatNode.getAttr('sbTicketId');
         let match = ticketTypes.find(t => t.id === assignedId);
@@ -197,185 +214,227 @@ router.get('/', async (req, res) => {
 
         console.log("[DEBUG] Loading Layout...", layout);
 
-        // --- 1. LOAD LAYER IN-PLACE ---
-        let layerNode = null;
-        
-        // Find layer data in JSON
-        let layerData = null;
+        // --- LOAD LAYERS ---
+        let layersToLoad = [];
         if (layout.className === 'Stage' && layout.children) {
-            layerData = layout.children.find(c => c.className === 'Layer');
+            layersToLoad = layout.children.filter(c => c.className === 'Layer');
+            if (layersToLoad.length === 0) layersToLoad = [{ className: 'Layer', children: layout.children }];
         } else if (layout.className === 'Layer') {
-            layerData = layout;
+            layersToLoad = [layout];
+        } else {
+            layersToLoad = [{ className: 'Layer', children: Array.isArray(layout) ? layout : [layout] }];
         }
 
-        if (!layerData) {
-            // Fallback: Wrap simple content
-            layerData = { className: 'Layer', children: Array.isArray(layout) ? layout : [layout] };
-        }
-
-        // Create Layer
-        const mainLayer = Konva.Node.create(layerData);
-        stage.add(mainLayer);
-        
-        // Separate layer for "View Icons" so they float on top
-        const iconLayer = new Konva.Layer({ listening: false }); 
-        stage.add(iconLayer);
-        iconLayer.visible(false);
-
-        // --- 2. PROCESS SEATS (Deep Find) ---
-        // We use .find() to locate seats deep inside groups without moving them
-        const seats = mainLayer.find('Circle');
-        
-        seats.forEach(seat => {
-            if (!seat.getAttr('isSeat')) return;
-
-            const parentGroup = seat.getParent(); // This is the Row/Table
+        layersToLoad.forEach((layerData) => {
+            // Create temporary layer to parse nodes
+            const tempLayer = Konva.Node.create(layerData);
             
-            // --- A. Status & Availability ---
-            const status = seat.getAttr('status') || 'AVAILABLE';
-            const isBlocked = status === 'BLOCKED' || status === 'SOLD' || status === 'HELD';
-            const isHeldDB = heldSeatIds.has(seat.id()) || heldSeatIds.has(seat.getAttr('sbSeatId'));
-            const isUnavailable = isBlocked || isHeldDB;
-
-            // --- B. Remove Old Numbers ---
-            // If the user added text numbers in builder, hide them for clean look
-            if (parentGroup) {
-               const texts = parentGroup.find('Text');
-               texts.forEach(t => t.visible(false)); 
-            }
-
-            // --- C. Register for Gap Logic ---
-            if (parentGroup) {
-                const grpId = parentGroup._id;
-                if (!rowMap.has(grpId)) rowMap.set(grpId, []);
-                // Store seat data for row analysis
-                // Note: We use absolute position relative to Group to sort
-                rowMap.get(grpId).push({
-                    id: seat._id,
-                    x: seat.x(), // Relative X inside the row
-                    unavailable: isUnavailable,
-                    node: seat
-                });
-            }
-
-            // --- D. Visuals ---
-            if (isUnavailable) {
-                seat.fill('#cbd5e1'); // Light Grey
-                seat.stroke('transparent'); 
-                seat.opacity(0.5);
-                seat.listening(false);
-            } else {
-                seat.fill('#ffffff'); // White
-                seat.stroke('#64748B'); // Slate
-                seat.strokeWidth(1.5);
-                seat.opacity(1);
-                seat.listening(true);
-                seat.cursor('pointer'); // Hand cursor
-            }
-            
-            // --- E. Info Icon (Small 'i' dot) ---
-            const info = seat.getAttr('sbInfo');
-            if (info && !isUnavailable) {
-                const iDot = new Konva.Circle({
-                    x: seat.getAbsolutePosition().x + 8, // Offset slightly
-                    y: seat.getAbsolutePosition().y - 8,
-                    radius: 3,
-                    fill: '#0F172A',
-                    listening: false
-                });
-                // We add to iconLayer to keep it on top, but need to track position
-                // Actually, safer to add to parent group so it moves with zoom
-                parentGroup.add(iDot);
-                iDot.position({ x: seat.x() + 6, y: seat.y() - 6 }); 
-            }
-
-            // --- F. View Icon (Camera) ---
-            const viewImg = seat.getAttr('sbViewImage');
-            if (viewImg) {
-                // Add a marker to the toggleable layer
-                // We need global coords for this separate layer
-                const absPos = seat.getAbsolutePosition();
-                const camIcon = new Konva.Circle({
-                    x: 0, y: 0, radius: 6, fill: '#0056D2',
-                    listening: false
-                });
-                // To make it track correctly with zoom, simpler to add to parent group 
-                // but toggle visibility based on global state class? 
-                // Let's stick to the iconLayer approach but we need to update it on zoom.
-                // EASIER: Add to parent, toggle opacity.
-                
-                const camGroup = new Konva.Group({ x: seat.x(), y: seat.y(), visible: false, name: 'view-icon-group' });
-                const bg = new Konva.Circle({ radius: 8, fill: '#0056D2' });
-                // Simple 'V' shape
-                const v = new Konva.Line({ points: [-3,-1, 0,2, 3,-1], stroke:'white', strokeWidth:1.5 });
-                camGroup.add(bg); camGroup.add(v);
-                parentGroup.add(camGroup);
-            }
-
-            // --- G. Metadata & Events ---
-            const tType = getTicketType(seat);
-            const price = tType ? tType.pricePence : 0;
-            seatPrices.set(seat._id, price);
-            const label = seat.getAttr('label') || seat.name() || 'Seat';
-
-            if (!isUnavailable) {
-                seat.on('mouseenter', () => {
-                    stage.container().style.cursor = 'pointer';
-                    if (!selectedSeats.has(seat._id)) {
-                        seat.stroke('#0056D2'); seat.strokeWidth(3); 
-                        mainLayer.batchDraw();
-                    }
-                    // Tooltip
-                    const pos = stage.getPointerPosition();
-                    const priceStr = '£' + (price/100).toFixed(2);
-                    let html = \`<span class="tt-title">\${label}</span><span class="tt-meta">\${tType ? tType.name : 'Standard'} • \${priceStr}</span>\`;
-                    if (info) html += \`<div class="tt-info">\${info}</div>\`;
-                    
-                    // Show view image if exists (on hover)
-                    if (viewImg) html += \`<img src="\${viewImg}" />\`;
-
-                    tooltip.innerHTML = html;
-                    tooltip.style.display = 'block';
-                    tooltip.style.left = (pos.x + 20) + 'px';
-                    tooltip.style.top = (pos.y + 20) + 'px';
-                });
-
-                seat.on('mouseleave', () => {
-                    stage.container().style.cursor = 'default';
-                    tooltip.style.display = 'none';
-                    if (!selectedSeats.has(seat._id)) {
-                        seat.stroke('#64748B'); seat.strokeWidth(1.5); 
-                        mainLayer.batchDraw();
-                    }
-                });
-
-                seat.on('click tap', (e) => {
-                    e.cancelBubble = true;
-                    toggleSeat(seat, parentGroup);
-                });
-            }
+            // Move children to our main layer to flatten structure for easy management
+            const children = tempLayer.getChildren().slice();
+            children.forEach(node => {
+                node.moveTo(mainLayer);
+                processNode(node, null);
+            });
+            tempLayer.destroy();
         });
+
+        // RECURSIVE NODE PROCESSOR
+        function processNode(node, parentGroup) {
+            // Identify Groups (Rows/Tables)
+            const nodeType = node.getClassName();
+            const groupType = node.getAttr('shapeType') || node.name();
+            const isSeatGroup = nodeType === 'Group' && ['row-seats', 'circular-table', 'rect-table', 'single-seat'].includes(groupType);
+            
+            if (isSeatGroup) {
+                // Remove numbers (Text nodes) inside seat groups
+                const texts = node.find('Text');
+                texts.forEach(t => t.visible(false));
+                
+                // Track for gap logic
+                parentGroup = node;
+            }
+
+            // Identify Seats
+            if (nodeType === 'Circle' && node.getAttr('isSeat')) {
+                const seat = node;
+                
+                // --- STATUS CHECK ---
+                const status = seat.getAttr('status') || 'AVAILABLE';
+                const isBlocked = status === 'BLOCKED' || status === 'SOLD' || status === 'HELD';
+                const isHeldDB = heldSeatIds.has(seat.id()) || heldSeatIds.has(seat.getAttr('sbSeatId'));
+                const isUnavailable = isBlocked || isHeldDB;
+
+                // --- DATA PREP ---
+                const tType = getTicketType(seat);
+                const price = tType ? tType.pricePence : 0;
+                seatPrices.set(seat._id, price);
+                
+                const label = seat.getAttr('label') || seat.name() || 'Seat';
+                const info = seat.getAttr('sbInfo');
+                const viewImg = seat.getAttr('sbViewImage');
+
+                // Register for gap detection
+                if (parentGroup) {
+                    const grpId = parentGroup._id;
+                    if (!rowMap.has(grpId)) rowMap.set(grpId, []);
+                    // We need GLOBAL coordinates for accurate sorting/bounds
+                    const absPos = seat.getAbsolutePosition();
+                    rowMap.get(grpId).push({
+                        id: seat._id,
+                        x: absPos.x,
+                        y: absPos.y, // Store Y for bounds calculation
+                        unavailable: isUnavailable,
+                        node: seat
+                    });
+                }
+
+                // --- VISUALS ---
+                if (isUnavailable) {
+                    seat.fill('#e2e8f0'); // Light grey
+                    seat.stroke('#cbd5e1'); 
+                    seat.strokeWidth(1);
+                    seat.listening(false);
+                } else {
+                    seat.fill('#ffffff'); // White
+                    seat.stroke('#64748B'); // Dark Grey Border
+                    seat.strokeWidth(1.5);
+                    seat.listening(true);
+                    seat.cursor('pointer');
+                }
+                seat.shadowEnabled(false);
+                seat.opacity(1);
+                seat.visible(true);
+
+                // --- ICONS ---
+                // Info 'i' (Black dot)
+                if (info && !isUnavailable) {
+                    const iGroup = new Konva.Group({ 
+                        x: seat.x(), 
+                        y: seat.y(),
+                        listening: false 
+                    });
+                    // Position relative to seat center (top-right corner)
+                    const offset = seat.radius() * 0.7;
+                    const iDot = new Konva.Circle({ x: offset, y: -offset, radius: 4, fill: '#0F172A' });
+                    const iTxt = new Konva.Text({ x: offset-1.5, y: -offset-2.5, text:'i', fontSize:6, fill:'#fff', fontStyle:'bold' });
+                    iGroup.add(iDot); iGroup.add(iTxt);
+                    if (seat.parent) seat.parent.add(iGroup);
+                }
+
+                // View Icon (Camera) - Hidden by default
+                if (viewImg) {
+                    const vGroup = new Konva.Group({ 
+                        x: seat.x(), y: seat.y(), 
+                        visible: false, 
+                        name: 'view-icon-group',
+                        listening: false // Click seat to trigger
+                    });
+                    const bg = new Konva.Circle({ radius: 9, fill: '#0056D2' });
+                    // Simple camera/eye shape
+                    const icon = new Konva.Path({
+                        data: 'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5 5 2.24 5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z',
+                        fill: 'white', scaleX: 0.5, scaleY: 0.5, offsetX: 12, offsetY: 12
+                    });
+                    vGroup.add(bg); vGroup.add(icon);
+                    if (seat.parent) seat.parent.add(vGroup);
+                }
+
+                // --- EVENTS ---
+                if (!isUnavailable) {
+                    seat.on('mouseenter', () => {
+                        stage.container().style.cursor = 'pointer';
+                        if (!selectedSeats.has(seat._id)) {
+                            seat.stroke('#0056D2'); seat.strokeWidth(3); 
+                            mainLayer.batchDraw();
+                        }
+                        
+                        // Tooltip content
+                        const pos = stage.getPointerPosition();
+                        const priceStr = '£' + (price/100).toFixed(2);
+                        let html = \`<span class="tt-title">\${label}</span><span class="tt-meta">\${tType ? tType.name : 'Standard'} • \${priceStr}</span>\`;
+                        if (info) html += \`<div class="tt-info">\${info}</div>\`;
+                        
+                        // Show view logic
+                        const viewMode = document.getElementById('toggle-views').checked;
+                        if (viewImg && viewMode) {
+                            html += \`<img src="\${viewImg}" />\`;
+                        } else if (viewImg) {
+                            html += \`<div style="font-size:0.7rem; color:#94a3b8; margin-top:4px;">(Enable 'Show seat views' to see preview)</div>\`;
+                        }
+
+                        tooltip.innerHTML = html;
+                        tooltip.style.display = 'block';
+                        tooltip.style.left = (pos.x + 20) + 'px';
+                        tooltip.style.top = (pos.y + 20) + 'px';
+                    });
+
+                    seat.on('mouseleave', () => {
+                        stage.container().style.cursor = 'default';
+                        tooltip.style.display = 'none';
+                        if (!selectedSeats.has(seat._id)) {
+                            seat.stroke('#64748B'); seat.strokeWidth(1.5); 
+                            mainLayer.batchDraw();
+                        }
+                    });
+
+                    seat.on('click tap', (e) => {
+                        e.cancelBubble = true;
+                        toggleSeat(seat, parentGroup);
+                    });
+                }
+            }
+
+            if (node.getChildren) {
+                node.getChildren().forEach(child => processNode(child, parentGroup));
+            }
+        }
 
         // --- 3. SORT ROWS (For Gap Logic) ---
         rowMap.forEach((seats) => seats.sort((a, b) => a.x - b.x));
 
-        // --- 4. AUTO ZOOM (Fit to Screen) ---
-        // We get the rect of the main layer content
-        const box = mainLayer.getClientRect({ skipTransform: true });
-        
-        if (box.width > 0) {
+        // --- 4. ROBUST AUTO ZOOM (Manual Bounds) ---
+        // We iterate through all known seats to find the true extent of the map
+        // This avoids issues with Konva.Layer.getClientRect() returning 0
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        let seatCount = 0;
+
+        rowMap.forEach((seats) => {
+            seats.forEach(s => {
+                seatCount++;
+                // A standard seat is ~20-30px wide usually. 
+                // We add some buffer around the center point (x,y)
+                const r = 20; 
+                if (s.x - r < minX) minX = s.x - r;
+                if (s.x + r > maxX) maxX = s.x + r;
+                if (s.y - r < minY) minY = s.y - r;
+                if (s.y + r > maxY) maxY = s.y + r;
+            });
+        });
+
+        console.log(\`[DEBUG] Manual Bounds: Seats=\${seatCount}, X=\${minX} to \${maxX}, Y=\${minY} to \${maxY}\`);
+
+        if (seatCount > 0 && maxX > minX) {
+            const mapW = maxX - minX;
+            const mapH = maxY - minY;
             const padding = 60;
             const availW = width - padding;
             const availH = height - padding;
-            const scale = Math.min(availW / box.width, availH / box.height);
-            
-            // Center it
-            const cx = (width - box.width * scale) / 2 - box.x * scale;
-            const cy = (height - box.height * scale) / 2 - box.y * scale;
 
-            stage.x(cx); stage.y(cy);
+            const scale = Math.min(availW / mapW, availH / mapH) * 0.95; // 95% fit
+            
+            const cx = minX + mapW / 2;
+            const cy = minY + mapH / 2;
+
+            const newX = (width / 2) - (cx * scale);
+            const newY = (height / 2) - (cy * scale);
+
+            stage.position({ x: newX, y: newY });
             stage.scale({ x: scale, y: scale });
             mainLayer.batchDraw();
+        } else {
+            console.warn("Could not calculate bounds from seats. Attempting fallback.");
+            // Fallback to auto-centering 0,0
+            stage.x(width/2); stage.y(height/2);
         }
 
         document.getElementById('loader').style.display = 'none';
@@ -385,54 +444,38 @@ router.get('/', async (req, res) => {
         document.getElementById('loader').innerHTML = 'Error loading map';
     }
 
-    // --- VIEW TOGGLE ---
+    // --- TOGGLE VIEWS ---
     document.getElementById('toggle-views').addEventListener('change', (e) => {
         const show = e.target.checked;
         const icons = stage.find('.view-icon-group');
         icons.forEach(icon => icon.visible(show));
-        // We might need to hide seats if we want ONLY icons? 
-        // User said "shows you all the Vs... click it to see video"
-        // For now, we overlay the V icon on top of the seat.
+        mainLayer.batchDraw();
     });
 
-    // --- ZOOM ---
-    stage.on('wheel', (e) => {
-        e.evt.preventDefault();
-        const scaleBy = 1.1;
-        const oldScale = stage.scaleX();
-        const pointer = stage.getPointerPosition();
-        const mousePointTo = { x: (pointer.x - stage.x()) / oldScale, y: (pointer.y - stage.y()) / oldScale };
-        const newScale = e.evt.deltaY > 0 ? oldScale / scaleBy : oldScale * scaleBy;
-        stage.scale({ x: newScale, y: newScale });
-        const newPos = { x: pointer.x - mousePointTo.x * newScale, y: pointer.y - mousePointTo.y * newScale };
-        stage.position(newPos);
-    });
-
-    // --- GAP LOGIC ---
+    // --- GAP CHECKER ---
     function checkGap(seat, rowGroup) {
         if (!rowGroup) return true;
         const row = rowMap.get(rowGroup._id);
         if (!row || row.length < 3) return true;
 
-        // Simulate new state
-        const isSelecting = !selectedSeats.has(seat._id);
-        
-        // Build array of states: 0=Unavailable, 1=Selected, 2=Free
+        // Build status array based on X-order
         const states = row.map(s => {
-            if (s.unavailable) return 0;
-            if (s.id === seat._id) return isSelecting ? 1 : 2;
-            if (selectedSeats.has(s.id)) return 1;
-            return 2;
+            if (s.unavailable) return 0; // Wall/Sold
+            if (s.id === seat._id) return selectedSeats.has(s.id) ? 2 : 1; // Toggle simulation
+            if (selectedSeats.has(s.id)) return 1; // Selected
+            return 2; // Free
         });
 
-        // Scan for pattern: 2 flanked by 0s or 1s (Orphan)
-        // e.g. 1 2 1  or  0 2 1  or 1 2 0
+        // Rules:
+        // 1. Do not leave single seat (2) between unavailable (0) or selected (1)
+        // Pattern: [Non-2] [2] [Non-2] is BAD
+        
         for (let i = 0; i < states.length; i++) {
-            if (states[i] === 2) { // Empty seat
+            if (states[i] === 2) { // Found empty seat
                 const left = (i === 0) ? 0 : states[i-1];
                 const right = (i === states.length - 1) ? 0 : states[i+1];
                 
-                // If both sides are Occupied/Selected/Wall -> We have a gap of 1
+                // If flanked by 'occupied' things (0 or 1)
                 if (left !== 2 && right !== 2) {
                     return false; // GAP DETECTED
                 }
@@ -443,26 +486,41 @@ router.get('/', async (req, res) => {
 
     function toggleSeat(seat, parentGroup) {
         const id = seat._id;
-        
-        // 1. GAP CHECK
-        if (!checkGap(seat, parentGroup)) {
-            alert("Please do not leave single seat gaps.");
-            return;
-        }
+        const willSelect = !selectedSeats.has(id);
 
-        if (selectedSeats.has(id)) {
-            selectedSeats.delete(id);
-            seat.fill('#ffffff');
-            seat.stroke('#64748B');
-        } else {
-            if (selectedSeats.size >= 10) { alert("Maximum 10 tickets."); return; }
+        if (willSelect) {
+            // Apply Gap Check BEFORE selecting
+            // Actually simpler: Make change, check validity, revert if invalid
             selectedSeats.add(id);
-            seat.fill('#0056D2');
-            seat.stroke('#0056D2');
+            if (!checkGap(seat, parentGroup)) {
+                selectedSeats.delete(id);
+                alert("Please do not leave single seat gaps.");
+                return;
+            }
+            // Limit check
+            if (selectedSeats.size > 10) {
+                selectedSeats.delete(id);
+                alert("Maximum 10 tickets.");
+                return;
+            }
+            seat.fill('#0056D2'); seat.stroke('#0056D2');
+        } else {
+            // Deselect
+            selectedSeats.delete(id);
+            // Check if deselecting created a gap elsewhere?
+            // Usually strict gap rules prevent deselecting if it strands a neighbor
+            if (!checkGap(seat, parentGroup)) {
+                selectedSeats.add(id); // Revert
+                alert("Deselecting this would leave a gap.");
+                return;
+            }
+            seat.fill('#ffffff'); seat.stroke('#64748B');
         }
+        mainLayer.batchDraw();
         updateBasket();
     }
 
+    // --- BASKET & SUBMIT ---
     function updateBasket() {
         let totalPence = 0; let count = 0;
         selectedSeats.forEach(id => { totalPence += (seatPrices.get(id) || 0); count++; });
@@ -505,7 +563,7 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/session', async (req, res) => {
-  // ... (POST logic unchanged)
+  // ... (POST logic preserved as standard)
   try {
     const { showId, quantity, ticketTypeId, unitPricePence } = req.body ?? {};
     if (!showId || !quantity || quantity < 1) return res.status(400).json({ ok: false, message: 'showId and quantity are required' });
