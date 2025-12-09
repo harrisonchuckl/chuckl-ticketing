@@ -59,9 +59,6 @@ router.get('/', async (req, res) => {
         }
     }
 
-    // ============================================================
-    // MODE A: TICKET LIST (No Map)
-    // ============================================================
     if (!konvaData) {
        const ticketsJson = JSON.stringify(ticketTypes);
        res.type('html').send(`<!doctype html>
@@ -83,10 +80,6 @@ router.get('/', async (req, res) => {
        return; 
     }
 
-    // ============================================================
-    // MODE B: INTERACTIVE MAP
-    // ============================================================
-    
     const mapData = JSON.stringify(konvaData);
     const ticketsData = JSON.stringify(ticketTypes);
     const showIdStr = JSON.stringify(show.id);
@@ -154,18 +147,14 @@ router.get('/', async (req, res) => {
   </footer>
   <script>
     const rawLayout = ${mapData};
-    const ticketTypes = ${ticketsData}; // <--- FIXED: Was ticketsTypesJson
+    const ticketTypes = ${ticketsData};
     const showId = ${showIdStr};
     const selectedSeats = new Set(); const seatPrices = new Map();
     const width = window.innerWidth; const height = window.innerHeight - 160;
     
-    // 1. Create Main Stage
+    // Create Main Stage
     const stage = new Konva.Stage({ container: 'stage-container', width: width, height: height, draggable: true });
     
-    // 2. Create Main Layer
-    const layer = new Konva.Layer();
-    stage.add(layer);
-
     function getPriceForSeat(seatNode) {
         const assignedId = seatNode.getAttr('sbTicketId');
         let match = ticketTypes.find(t => t.id === assignedId);
@@ -183,105 +172,116 @@ router.get('/', async (req, res) => {
              if (typeof layout === 'string') layout = JSON.parse(layout);
         }
 
-        console.log("[DEBUG] Loading Layout...", layout);
+        console.log("[DEBUG] Loading Layout:", layout);
 
-        // --- NEW STRATEGY: Load WHOLE Layer (Preserves hierarchy) ---
-        
-        let layerData = null;
+        // --- NEW STRATEGY: Find ALL Layers ---
+        let layersToLoad = [];
 
         if (layout.className === 'Stage' && layout.children) {
-            // Find the first Layer
-            layerData = layout.children.find(c => c.className === 'Layer');
-        } else if (layout.className === 'Layer') {
-            layerData = layout;
-        }
-
-        if (!layerData) {
-            // Fallback: If it's just an array of shapes or a Group, wrap it in a layer structure
-            console.warn("No root Layer found, attempting to wrap content.");
-            layerData = { className: 'Layer', children: Array.isArray(layout) ? layout : [layout] };
-        }
-
-        // Create the Layer from data (this creates all children/groups recursively!)
-        // Note: We use a temporary node creation because we want to add it to OUR layer, 
-        // or replace our layer. Ideally we just load everything into 'layer'.
-        
-        // Actually, Konva.Node.create(layerData) creates a NEW Layer instance.
-        // We should add THAT to the stage and remove our empty one.
-        const loadedLayer = Konva.Node.create(layerData);
-        
-        // Remove our empty default layer
-        layer.destroy();
-        
-        // Add the loaded layer
-        stage.add(loadedLayer);
-        
-        // Rename for convenience
-        const activeLayer = loadedLayer;
-
-        // Now traverse the *created* nodes to attach logic
-        // We look for 'Group' nodes that have our special shape types
-        const groups = activeLayer.find('Group');
-        
-        groups.forEach(group => {
-            // Lock movement
-            group.draggable(false);
-            group.listening(false);
-
-            const type = group.getAttr('shapeType') || group.name();
-            if (['row-seats', 'circular-table', 'rect-table', 'single-seat'].includes(type)) {
-                
-                const circles = group.find('Circle');
-                circles.forEach(seat => {
-                    if (!seat.getAttr('isSeat')) return;
-                    
-                    const price = getPriceForSeat(seat);
-                    seatPrices.set(seat._id, price);
-                    
-                    // Reset Visuals (in case saved state was weird)
-                    seat.fill('#ffffff'); 
-                    seat.stroke('#64748B'); 
-                    seat.strokeWidth(1.5);
-                    seat.shadowEnabled(false);
-                    
-                    // Enable Interaction
-                    seat.listening(true); 
-                    seat.cursor('pointer');
-
-                    // Events
-                    seat.on('mouseenter', () => { 
-                        if (selectedSeats.has(seat._id)) return; 
-                        stage.container().style.cursor = 'pointer'; 
-                        seat.stroke('#0056D2'); seat.strokeWidth(3); 
-                    });
-                    seat.on('mouseleave', () => { 
-                        stage.container().style.cursor = 'default'; 
-                        if (selectedSeats.has(seat._id)) return; 
-                        seat.stroke('#64748B'); seat.strokeWidth(1.5); 
-                    });
-                    seat.on('click tap', (e) => { 
-                        e.cancelBubble = true; 
-                        toggleSeat(seat); 
-                    });
-                });
+            // Filter all children that are Layers
+            layersToLoad = layout.children.filter(c => c.className === 'Layer');
+            if (layersToLoad.length === 0) {
+                // If no layers found but children exist, maybe the children themselves are groups inside an implicit layer
+                console.warn("[DEBUG] No explicit Layers found in Stage. Wrapping children.");
+                layersToLoad = [{ className: 'Layer', children: layout.children }];
             }
+        } else if (layout.className === 'Layer') {
+            layersToLoad = [layout];
+        } else {
+            // Wrap raw shape/group
+            layersToLoad = [{ className: 'Layer', children: Array.isArray(layout) ? layout : [layout] }];
+        }
+
+        console.log("[DEBUG] Found", layersToLoad.length, "layers.");
+
+        // Create and add all layers
+        layersToLoad.forEach((layerData, idx) => {
+            const layer = Konva.Node.create(layerData);
+            stage.add(layer);
+            
+            console.log(\`[DEBUG] Layer \${idx} loaded with \${layer.getChildren().length} children.\`);
+
+            // Now recursively process to add interaction
+            // We use .find() on the layer instance, which is safe
+            const groups = layer.find('Group');
+            
+            groups.forEach(group => {
+                // Lock everything
+                group.draggable(false);
+                group.listening(false);
+
+                const type = group.getAttr('shapeType') || group.name();
+                // Check if this is a seat group
+                if (['row-seats', 'circular-table', 'rect-table', 'single-seat'].includes(type)) {
+                    
+                    const circles = group.find('Circle');
+                    console.log(\`[DEBUG] Found Group (\${type}) with \${circles.length} seats.\`);
+
+                    circles.forEach(seat => {
+                        if (!seat.getAttr('isSeat')) return;
+                        
+                        const price = getPriceForSeat(seat);
+                        seatPrices.set(seat._id, price);
+                        
+                        // Force visibility/style reset
+                        seat.fill('#ffffff'); 
+                        seat.stroke('#64748B'); 
+                        seat.strokeWidth(1.5);
+                        seat.opacity(1);
+                        seat.visible(true);
+                        seat.shadowEnabled(false);
+                        
+                        // Enable Interaction
+                        seat.listening(true); 
+                        seat.cursor('pointer');
+
+                        seat.on('mouseenter', () => { 
+                            if (selectedSeats.has(seat._id)) return; 
+                            stage.container().style.cursor = 'pointer'; 
+                            seat.stroke('#0056D2'); seat.strokeWidth(3); 
+                        });
+                        seat.on('mouseleave', () => { 
+                            stage.container().style.cursor = 'default'; 
+                            if (selectedSeats.has(seat._id)) return; 
+                            seat.stroke('#64748B'); seat.strokeWidth(1.5); 
+                        });
+                        seat.on('click tap', (e) => { 
+                            e.cancelBubble = true; 
+                            toggleSeat(seat); 
+                        });
+                    });
+                }
+            });
         });
 
-        // Center Content
-        const rect = activeLayer.getClientRect();
-        if (rect && rect.width > 0) {
-            const scale = Math.min((width - 40) / rect.width, (height - 40) / rect.height);
-            const finalScale = Math.min(Math.max(scale, 0.2), 1.5);
-            
-            // Calculate center offset
-            const newX = (width - rect.width * finalScale) / 2 - (rect.x * finalScale);
-            const newY = (height - rect.height * finalScale) / 2 - (rect.y * finalScale);
+        // --- SMART CENTERING ---
+        // Calculate the bounding box of ALL visible layers
+        // We iterate nodes because getClientRect() on empty space might be weird
+        const allNodesRect = stage.getClientRect({ skipTransform: true });
+        
+        console.log("[DEBUG] Content Bounds:", allNodesRect);
 
-            stage.position({ x: newX, y: newY });
+        if (allNodesRect.width > 0 && allNodesRect.height > 0) {
+            const scale = Math.min(
+                (width - 60) / allNodesRect.width,
+                (height - 60) / allNodesRect.height
+            );
+            const finalScale = Math.min(Math.max(scale, 0.1), 2.0); // Allow zooming out more
+            
+            // Center based on the content bounds
+            const newX = (width - allNodesRect.width * finalScale) / 2 - (allNodesRect.x * finalScale);
+            const newY = (height - allNodesRect.height * finalScale) / 2 - (allNodesRect.y * finalScale);
+
+            console.log(\`[DEBUG] Scaling to \${finalScale} at (\${newX}, \${newY})\`);
+
+            stage.x(newX);
+            stage.y(newY);
             stage.scale({ x: finalScale, y: finalScale });
+            stage.batchDraw();
+        } else {
+            console.warn("[DEBUG] Map seems empty (0 width/height).");
         }
         
-        activeLayer.batchDraw();
         document.getElementById('loader').style.display = 'none';
 
     } catch (err) {
@@ -289,7 +289,6 @@ router.get('/', async (req, res) => {
         document.getElementById('loader').innerHTML = '<div>Error loading map</div><div id="debug-msg">' + err.message + '</div>';
     }
 
-    // Zoom Logic
     stage.on('wheel', (e) => {
         e.evt.preventDefault(); const scaleBy = 1.1; const oldScale = stage.scaleX(); const pointer = stage.getPointerPosition();
         const mousePointTo = { x: (pointer.x - stage.x()) / oldScale, y: (pointer.y - stage.y()) / oldScale };
