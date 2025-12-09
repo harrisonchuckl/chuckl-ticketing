@@ -12,10 +12,6 @@ function pFmt(p: number) {
   return '£' + (p / 100).toFixed(2);
 }
 
-/**
- * GET /checkout
- * Renders the Checkout Page (Map or List)
- */
 router.get('/', async (req, res) => {
   const showId = String(req.query.showId || '');
   if (!showId) return res.status(404).send('Show ID is required');
@@ -31,7 +27,6 @@ router.get('/', async (req, res) => {
 
     if (!show) return res.status(404).send('Event not found');
 
-    // 1. Find the map
     let seatMap = null;
     // @ts-ignore
     if (show.activeSeatMapId) {
@@ -53,27 +48,18 @@ router.get('/', async (req, res) => {
     const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-    // --- DATA EXTRACTION ---
     let konvaData = null;
     if (seatMap && seatMap.layout) {
         const layoutObj = seatMap.layout as any;
-        
-        // Priority 1: The builder usually saves it under 'konvaJson'
         if (layoutObj.konvaJson) {
             konvaData = layoutObj.konvaJson;
-        } 
-        // Priority 2: Legacy/Direct save (the layout IS the konva data)
-        else if (layoutObj.attrs || layoutObj.className) {
+        } else if (layoutObj.attrs || layoutObj.className) {
             konvaData = layoutObj;
         }
     }
 
-    // ============================================================
-    // MODE A: TICKET LIST (No Map)
-    // ============================================================
     if (!konvaData) {
        const ticketsJson = JSON.stringify(ticketTypes);
-       // (Keeping this short as the issue is in Mode B)
        res.type('html').send(`<!doctype html>
 <html lang="en">
 <head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>${show.title}</title>
@@ -93,11 +79,6 @@ router.get('/', async (req, res) => {
        return; 
     }
 
-    // ============================================================
-    // MODE B: INTERACTIVE MAP (With Debugging)
-    // ============================================================
-    
-    // We stringify explicitly here to ensure it's safe to inject into <script>
     const mapData = JSON.stringify(konvaData);
     const ticketsData = JSON.stringify(ticketTypes);
     const showIdStr = JSON.stringify(show.id);
@@ -170,11 +151,7 @@ router.get('/', async (req, res) => {
     const selectedSeats = new Set(); const seatPrices = new Map();
     const width = window.innerWidth; const height = window.innerHeight - 160;
     
-    // --- DEBUGGING START ---
-    console.log("[DEBUG] Raw Layout from Server:", rawLayout);
-    console.log("[DEBUG] Type of rawLayout:", typeof rawLayout);
-    // --- DEBUGGING END ---
-
+    // Create the Main Stage and Layer
     const stage = new Konva.Stage({ container: 'stage-container', width: width, height: height, draggable: true });
     const layer = new Konva.Layer();
     stage.add(layer);
@@ -188,54 +165,57 @@ router.get('/', async (req, res) => {
 
     try {
         let layout = rawLayout;
-        
-        // 1. Handle JSON string
         if (typeof layout === 'string') {
-            try { 
-                layout = JSON.parse(layout); 
-                console.log("[DEBUG] Parsed JSON String. New value:", layout);
-            } catch(e) { 
-                console.error("[DEBUG] JSON Parse Error:", e);
-            }
+            try { layout = JSON.parse(layout); } catch(e) { console.error("JSON parse error", e); }
         }
-
-        // 2. Unwrap wrapper if it exists (e.g. { konvaJson: ... })
         if (layout.konvaJson) {
-             console.log("[DEBUG] Found 'konvaJson' wrapper. Unwrapping.");
              layout = layout.konvaJson;
              if (typeof layout === 'string') layout = JSON.parse(layout);
         }
 
-        // 3. Last-ditch validation: Does it have a className?
-        if (!layout.className) {
-            console.warn("[DEBUG] Missing className. Attempting to auto-fix.");
-            if (layout.attrs || layout.children) {
-                // Heuristic: If it has children/attrs, assume it's a Stage data object
-                layout.className = 'Stage'; 
-            } else {
-                throw new Error("Invalid map format: Root object missing className and structure.");
-            }
-        }
+        console.log("[DEBUG] Loading Layout:", layout);
 
-        console.log("[DEBUG] Final Layout Object passed to Konva:", layout);
-
-        const tempNode = Konva.Node.create(layout);
+        // --- FIXED LOADING LOGIC ---
+        // Instead of trying to create the root node (which might be a Stage without a container),
+        // we manually traverse the structure and create children nodes individually.
         
-        let nodesToMove = [];
-        if (tempNode.getClassName() === 'Stage') {
-             const tempLayer = tempNode.findOne('Layer') || tempNode.getChildren()[0];
-             if (tempLayer) nodesToMove = tempLayer.getChildren().slice();
-        } else if (tempNode.getClassName() === 'Layer') {
-             nodesToMove = tempNode.getChildren().slice();
+        let nodesToCreate = [];
+
+        if (layout.className === 'Stage') {
+            // If the saved root is a Stage, we want its children (usually Layers)
+            // But we ignore the Stage itself because we already created one linked to the DOM.
+            if (layout.children) {
+                // Find the main layer inside the saved stage (or just take all children)
+                const savedLayer = layout.children.find(c => c.className === 'Layer');
+                if (savedLayer && savedLayer.children) {
+                    nodesToCreate = savedLayer.children; // Take items INSIDE the layer
+                } else {
+                    nodesToCreate = layout.children; // Fallback
+                }
+            }
+        } else if (layout.className === 'Layer') {
+            // If root is a Layer, take its children
+            if (layout.children) nodesToCreate = layout.children;
         } else {
-             nodesToMove = [tempNode];
+            // If it's a raw shape/group, just wrap it
+            nodesToCreate = [layout];
         }
 
-        nodesToMove.forEach(node => {
-            node.moveTo(layer);
-            node.draggable(false); node.listening(false);
-            node.find('*').forEach(n => { n.draggable(false); n.listening(false); });
+        // Loop through the list of raw data objects and create Konva nodes
+        nodesToCreate.forEach(childData => {
+            // Skip 'Transformer' nodes from the builder, we don't need them in checkout
+            if (childData.className === 'Transformer') return;
 
+            const node = Konva.Node.create(childData);
+            
+            // Add to OUR layer
+            layer.add(node);
+
+            // Lock interaction on groups
+            node.draggable(false);
+            node.listening(false);
+
+            // Identify "Seat Groups" and make seats interactive
             const groups = node.find('Group').concat(node.nodeType === 'Group' ? [node] : []);
             groups.forEach(group => {
                 const type = group.getAttr('shapeType') || group.name();
@@ -243,9 +223,14 @@ router.get('/', async (req, res) => {
                     const circles = group.find('Circle');
                     circles.forEach(seat => {
                         if (!seat.getAttr('isSeat')) return;
+                        
                         const price = getPriceForSeat(seat);
                         seatPrices.set(seat._id, price);
+                        
+                        // Style
                         seat.fill('#ffffff'); seat.stroke('#64748B'); seat.strokeWidth(1.5);
+                        
+                        // Interact
                         seat.listening(true); seat.cursor('pointer');
                         seat.on('mouseenter', () => { if (selectedSeats.has(seat._id)) return; stage.container().style.cursor = 'pointer'; seat.stroke('#0056D2'); seat.strokeWidth(3); });
                         seat.on('mouseleave', () => { stage.container().style.cursor = 'default'; if (selectedSeats.has(seat._id)) return; seat.stroke('#64748B'); seat.strokeWidth(1.5); });
@@ -255,6 +240,7 @@ router.get('/', async (req, res) => {
             });
         });
 
+        // Center the content
         const rect = layer.getClientRect();
         if (rect && rect.width > 0) {
             const scale = Math.min((width - 40) / rect.width, (height - 40) / rect.height);
@@ -268,9 +254,8 @@ router.get('/', async (req, res) => {
         document.getElementById('loader').style.display = 'none';
 
     } catch (err) {
-        console.error("[DEBUG] CRITICAL RENDER ERROR:", err);
-        document.getElementById('loader').innerHTML = '<div>Error loading map</div><div id="debug-msg">Check console for [DEBUG] logs</div>';
-        document.getElementById('debug-msg').innerText = err.message;
+        console.error("[DEBUG] RENDER ERROR:", err);
+        document.getElementById('loader').innerHTML = '<div>Error loading map</div><div id="debug-msg">' + err.message + '</div>';
     }
 
     stage.on('wheel', (e) => {
@@ -315,8 +300,8 @@ router.get('/', async (req, res) => {
 </html>`);
 
   } catch (err: any) {
-    console.error('checkout/map error', err);
-    res.status(500).send('Server error');
+    console.error('checkout/session error', err);
+    return res.status(500).json({ ok: false, message: 'Checkout error' });
   }
 });
 
