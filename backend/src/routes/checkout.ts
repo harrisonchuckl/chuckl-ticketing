@@ -13,7 +13,6 @@ router.get('/', async (req, res) => {
   if (!showId) return res.status(404).send('Show ID is required');
 
   try {
-    // 1. Fetch Show Data
     const show = await prisma.show.findUnique({
       where: { id: showId },
       include: {
@@ -25,7 +24,7 @@ router.get('/', async (req, res) => {
 
     if (!show) return res.status(404).send('Event not found');
 
-    // 2. Get Active Seat Map
+    // 1. Get Seat Map
     let seatMap = null;
     // @ts-ignore
     if (show.activeSeatMapId) {
@@ -46,7 +45,7 @@ router.get('/', async (req, res) => {
     const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-    // 3. Process Holds
+    // 2. Get Holds
     const heldSeatIds = new Set<string>();
     if (show.allocations) {
         show.allocations.forEach(alloc => {
@@ -54,7 +53,7 @@ router.get('/', async (req, res) => {
         });
     }
 
-    // 4. Extract Layout
+    // 3. Extract Layout
     let konvaData = null;
     if (seatMap && seatMap.layout) {
         const layoutObj = seatMap.layout as any;
@@ -62,13 +61,11 @@ router.get('/', async (req, res) => {
         else if (layoutObj.attrs || layoutObj.className) konvaData = layoutObj;
     }
 
-    // --- MODE A: LIST VIEW (Fallback) ---
     if (!konvaData) {
        res.type('html').send(`<!doctype html><html><body><h1>General Admission</h1><p>Please use the list view.</p></body></html>`);
        return; 
     }
 
-    // --- MODE B: INTERACTIVE MAP ---
     const mapData = JSON.stringify(konvaData);
     const ticketsData = JSON.stringify(ticketTypes);
     const showIdStr = JSON.stringify(show.id);
@@ -81,11 +78,11 @@ router.get('/', async (req, res) => {
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Select Seats | ${show.title}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@700&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/konva@9.3.3/konva.min.js"></script>
 
   <style>
-    :root { --bg:#F3F4F6; --surface:#FFFFFF; --primary:#0F172A; --brand:#0056D2; --text-main:#111827; --text-muted:#6B7280; --border:#E5E7EB; --success:#10B981; --blocked:#94a3b8; }
+    :root { --bg:#F3F4F6; --surface:#FFFFFF; --primary:#0F172A; --brand:#0056D2; --text-main:#111827; --text-muted:#6B7280; --border:#E5E7EB; --success:#10B981; --blocked:#334155; }
     body { margin:0; font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); display:flex; flex-direction:column; height:100vh; overflow:hidden; }
     
     header { background:var(--surface); border-bottom:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; z-index:3000; position:relative; }
@@ -109,7 +106,7 @@ router.get('/', async (req, res) => {
     .dot { width:14px; height:14px; border-radius:50%; border:1px solid rgba(0,0,0,0.1); }
     .dot-avail { background:#fff; border-color:#64748B; }
     .dot-selected { background:var(--brand); border-color:var(--brand); }
-    .dot-sold { background:var(--blocked); border-color:var(--text); opacity:0.3; }
+    .dot-sold { background:var(--blocked); border-color:var(--text); opacity:0.8; }
     
     .view-toggle { padding-top:10px; border-top:1px solid #e2e8f0; display:flex; align-items:center; gap:8px; cursor:pointer; }
     .view-toggle input { accent-color: var(--brand); transform:scale(1.2); cursor:pointer; }
@@ -176,7 +173,6 @@ router.get('/', async (req, res) => {
     const height = window.innerHeight - 160;
     
     const stage = new Konva.Stage({ container: 'stage-container', width: width, height: height, draggable: true });
-    // We will load content into this layer
     const mainLayer = new Konva.Layer();
     stage.add(mainLayer);
     
@@ -196,7 +192,6 @@ router.get('/', async (req, res) => {
 
         console.log("[DEBUG] Loading Layout...", layout);
 
-        // --- 1. LOAD LAYER IN-PLACE ---
         let layersToLoad = [];
         if (layout.className === 'Stage' && layout.children) {
             layersToLoad = layout.children.filter(c => c.className === 'Layer');
@@ -217,15 +212,20 @@ router.get('/', async (req, res) => {
             tempLayer.destroy();
         });
 
-        // RECURSIVE NODE PROCESSOR
         function processNode(node, parentGroup) {
             const nodeType = node.getClassName();
             const groupType = node.getAttr('shapeType') || node.name();
             const isSeatGroup = nodeType === 'Group' && ['row-seats', 'circular-table', 'rect-table', 'single-seat'].includes(groupType);
             
             if (isSeatGroup) {
-                // Remove numbers (Visual Cleanup)
-                node.find('Text').forEach(t => t.destroy());
+                // IMPORTANT: Only hide numbers (digits), preserve Row Letters (A, B, C...)
+                const texts = node.find('Text');
+                texts.forEach(t => {
+                   // If text is a number (1, 2, 10), hide/destroy it. If it's a letter (A, Row A), keep it.
+                   if (/^\\d+$/.test(t.text())) {
+                       t.destroy();
+                   }
+                });
                 parentGroup = node;
             }
 
@@ -235,6 +235,7 @@ router.get('/', async (req, res) => {
                 // --- STATUS ---
                 const status = seat.getAttr('status') || 'AVAILABLE';
                 const isBlocked = status === 'BLOCKED' || status === 'SOLD' || status === 'HELD';
+                // Check if ID matches a held seat from DB
                 const isHeldDB = heldSeatIds.has(seat.id()) || heldSeatIds.has(seat.getAttr('sbSeatId'));
                 const isUnavailable = isBlocked || isHeldDB;
 
@@ -247,53 +248,56 @@ router.get('/', async (req, res) => {
                 const info = seat.getAttr('sbInfo');
                 const viewImg = seat.getAttr('sbViewImage');
 
-                // --- GAP REGISTRATION ---
                 if (parentGroup) {
                     const grpId = parentGroup._id;
                     if (!rowMap.has(grpId)) rowMap.set(grpId, []);
                     const absPos = seat.getAbsolutePosition();
                     rowMap.get(grpId).push({
-                        id: seat._id,
-                        x: absPos.x,
-                        y: absPos.y, // Save Y for orientation check
-                        unavailable: isUnavailable,
-                        node: seat
+                        id: seat._id, x: absPos.x, y: absPos.y, unavailable: isUnavailable, node: seat
                     });
                 }
 
                 // --- VISUALS ---
                 if (isUnavailable) {
-                    seat.fill('#e2e8f0'); seat.stroke('#cbd5e1'); 
+                    seat.fill('#334155'); // Dark Grey (Blocked/Sold)
+                    seat.stroke('#1e293b'); 
+                    seat.strokeWidth(1);
+                    seat.opacity(0.8);
                     seat.listening(false);
                 } else {
-                    seat.fill('#ffffff'); seat.stroke('#64748B'); seat.strokeWidth(1.5);
-                    seat.listening(true); 
+                    seat.fill('#ffffff'); 
+                    seat.stroke('#64748B'); 
+                    seat.strokeWidth(1.5);
+                    seat.listening(true);
+                    seat.cursor('pointer'); // Note: handled by container cursor logic too
                 }
                 seat.shadowEnabled(false);
-                seat.opacity(1);
                 seat.visible(true);
 
-                // --- ICON: Info (i) ---
+                // --- ICONS: Info (i) ---
                 if (info && !isUnavailable) {
                     const r = seat.radius();
+                    // Create a separate group for the icon, added to parent so it's on top of seat
                     const iGroup = new Konva.Group({ 
-                        x: seat.x(), y: seat.y(), listening: false 
+                        x: seat.x() + r * 0.7, 
+                        y: seat.y() - r * 0.7, 
+                        listening: false 
                     });
-                    // Draw black circle on top
-                    const iDot = new Konva.Circle({ x: r*0.6, y: -r*0.6, radius: 5, fill: '#0F172A' });
+                    const iDot = new Konva.Circle({ radius: 5, fill: '#0F172A' });
                     const iTxt = new Konva.Text({ 
-                        x: (r*0.6)-1.5, y: (-r*0.6)-2.5, 
+                        x: -1.5, y: -2.5, 
                         text:'i', fontSize:6, fill:'#fff', fontStyle:'bold' 
                     });
                     iGroup.add(iDot); iGroup.add(iTxt);
                     
+                    // Add to parent group (e.g. the Row) so it moves with the seat
                     if (seat.parent) {
                         seat.parent.add(iGroup);
-                        iGroup.moveToTop(); // Ensure it's above seat
+                        iGroup.moveToTop(); // Force to top of stack
                     }
                 }
 
-                // --- ICON: View (Camera) ---
+                // --- ICONS: View (Camera) ---
                 if (viewImg) {
                     const vGroup = new Konva.Group({ 
                         x: seat.x(), y: seat.y(), 
@@ -318,6 +322,7 @@ router.get('/', async (req, res) => {
                         if (!selectedSeats.has(seat._id)) {
                             seat.stroke('#0056D2'); seat.strokeWidth(3); mainLayer.batchDraw();
                         }
+                        
                         // Tooltip
                         const pos = stage.getPointerPosition();
                         const priceStr = '£' + (price/100).toFixed(2);
@@ -357,28 +362,26 @@ router.get('/', async (req, res) => {
         // --- 3. SORT & ORIENT ROWS ---
         rowMap.forEach((seats) => {
              if (seats.length < 2) return;
-             // Detect orientation: Compare X range vs Y range
              const minX = Math.min(...seats.map(s=>s.x)), maxX = Math.max(...seats.map(s=>s.x));
              const minY = Math.min(...seats.map(s=>s.y)), maxY = Math.max(...seats.map(s=>s.y));
              
-             // If height > width, it's vertical. Sort by Y. Else sort by X.
-             if ((maxY - minY) > (maxX - minX)) {
-                 seats.sort((a, b) => a.y - b.y);
-             } else {
-                 seats.sort((a, b) => a.x - b.x);
-             }
+             if ((maxY - minY) > (maxX - minX)) seats.sort((a, b) => a.y - b.y);
+             else seats.sort((a, b) => a.x - b.x);
         });
 
-        // --- 4. MANUAL CONTENT BOUNDS (Fixes Zoom) ---
-        // Iterate all shapes to find true edges
+        // --- 4. MANUAL CONTENT BOUNDS (Targeted Zoom) ---
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        let shapeCount = 0;
+        let hasContent = false;
 
-        mainLayer.find('Shape').forEach(shape => {
-            if (!shape.visible() || shape.opacity() === 0) return;
-            const r = shape.getClientRect({ skipTransform: true, relativeTo: mainLayer });
+        // Only consider Seats, Labels, and Stage. Ignore large invisible BGs.
+        mainLayer.find('Shape, Text, Path').forEach(node => {
+            if (!node.visible() || node.opacity() === 0) return;
+            // Ignore tiny artifacts
+            if (node.width() < 1 && node.height() < 1) return;
+            
+            const r = node.getClientRect({ skipTransform: true, relativeTo: mainLayer });
             if (r.width > 0 && r.height > 0) {
-                shapeCount++;
+                hasContent = true;
                 if (r.x < minX) minX = r.x;
                 if (r.y < minY) minY = r.y;
                 if (r.x + r.width > maxX) maxX = r.x + r.width;
@@ -386,12 +389,10 @@ router.get('/', async (req, res) => {
             }
         });
 
-        console.log(\`[DEBUG] Map Bounds: Shapes=\${shapeCount}, X=\${minX} to \${maxX}\`);
-
-        if (shapeCount > 0 && maxX > minX) {
+        if (hasContent && maxX > minX) {
             const mapW = maxX - minX;
             const mapH = maxY - minY;
-            const padding = 60;
+            const padding = 50;
             const availW = width - padding;
             const availH = height - padding;
 
@@ -407,7 +408,6 @@ router.get('/', async (req, res) => {
             stage.scale({ x: scale, y: scale });
             mainLayer.batchDraw();
         } else {
-            console.warn("Empty map detected.");
             stage.x(width/2); stage.y(height/2);
         }
 
@@ -418,7 +418,6 @@ router.get('/', async (req, res) => {
         document.getElementById('loader').innerHTML = 'Error loading map<br><small>' + err.message + '</small>';
     }
 
-    // --- UI EVENTS ---
     document.getElementById('toggle-views').addEventListener('change', (e) => {
         const show = e.target.checked;
         stage.find('.view-icon-group').forEach(icon => icon.visible(show));
@@ -437,20 +436,18 @@ router.get('/', async (req, res) => {
         stage.position(newPos);
     });
 
-    // --- GAP CHECK ---
     function checkGap(seat, rowGroup) {
         if (!rowGroup) return true;
         const row = rowMap.get(rowGroup._id);
         if (!row || row.length < 3) return true;
 
         const states = row.map(s => {
-            if (s.unavailable) return 0; // Wall/Sold
-            if (s.id === seat._id) return selectedSeats.has(s.id) ? 2 : 1; // Toggle simulation
-            if (selectedSeats.has(s.id)) return 1; // Selected
-            return 2; // Free
+            if (s.unavailable) return 0;
+            if (s.id === seat._id) return selectedSeats.has(s.id) ? 2 : 1; 
+            if (selectedSeats.has(s.id)) return 1;
+            return 2;
         });
         
-        // Invalid: A free seat (2) flanked by non-free (0 or 1)
         for (let i = 0; i < states.length; i++) {
             if (states[i] === 2) { 
                 const left = (i === 0) ? 0 : states[i-1];
@@ -518,7 +515,7 @@ router.get('/', async (req, res) => {
 </html>`);
 
   } catch (err: any) {
-    console.error('checkout/map error', err);
+    console.error('checkout/session error', err);
     res.status(500).send('Server error');
   }
 });
