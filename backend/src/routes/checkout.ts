@@ -48,7 +48,7 @@ router.get('/', async (req, res) => {
     const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-    // --- EXTRACT KONVA DATA ---
+    // --- DATA EXTRACTION ---
     let konvaData = null;
     if (seatMap && seatMap.layout) {
         const layoutObj = seatMap.layout as any;
@@ -59,6 +59,9 @@ router.get('/', async (req, res) => {
         }
     }
 
+    // ============================================================
+    // MODE A: TICKET LIST (No Map)
+    // ============================================================
     if (!konvaData) {
        const ticketsJson = JSON.stringify(ticketTypes);
        res.type('html').send(`<!doctype html>
@@ -80,6 +83,10 @@ router.get('/', async (req, res) => {
        return; 
     }
 
+    // ============================================================
+    // MODE B: INTERACTIVE MAP
+    // ============================================================
+    
     const mapData = JSON.stringify(konvaData);
     const ticketsData = JSON.stringify(ticketTypes);
     const showIdStr = JSON.stringify(show.id);
@@ -152,7 +159,10 @@ router.get('/', async (req, res) => {
     const selectedSeats = new Set(); const seatPrices = new Map();
     const width = window.innerWidth; const height = window.innerHeight - 160;
     
+    // 1. Create our OWN Stage (prevents "no container" error)
     const stage = new Konva.Stage({ container: 'stage-container', width: width, height: height, draggable: true });
+    
+    // 2. Create our OWN Layer
     const layer = new Konva.Layer();
     stage.add(layer);
 
@@ -173,41 +183,53 @@ router.get('/', async (req, res) => {
              if (typeof layout === 'string') layout = JSON.parse(layout);
         }
 
-        // --- FIX: Robust Node Creation ---
-        if (!layout.className) {
-            // Heuristic to detect Stage vs Group/Layer
-            if (layout.attrs || layout.children) {
-                layout.className = 'Stage';
-            }
-        }
-
-        const tempNode = Konva.Node.create(layout);
+        // --- MANUAL LOADING STRATEGY ---
+        // Instead of Konva.Node.create(), we manually pluck the children out of the data structure.
         
-        // Extract children to move to our main layer
-        let nodesToMove = [];
-        if (tempNode.getClassName() === 'Stage') {
-             // If Stage, find its Layer
-             const tempLayer = tempNode.findOne('Layer') || (tempNode.children ? tempNode.children[0] : null);
-             if (tempLayer) nodesToMove = tempLayer.getChildren().slice();
-             else if (tempNode.children) nodesToMove = tempNode.children.slice();
-        } else if (tempNode.getClassName() === 'Layer') {
-             nodesToMove = tempNode.getChildren().slice();
-        } else {
-             nodesToMove = [tempNode];
+        let childrenToLoad = [];
+
+        // Case A: Root is a Stage (has children, which are Layers)
+        if (layout.className === 'Stage' && layout.children) {
+            // Find the layer inside the stage data
+            const savedLayer = layout.children.find(c => c.className === 'Layer');
+            if (savedLayer && savedLayer.children) {
+                childrenToLoad = savedLayer.children; // These are Groups/Shapes
+            } else {
+                childrenToLoad = layout.children; // Fallback
+            }
+        } 
+        // Case B: Root is a Layer (has children which are Groups/Shapes)
+        else if (layout.className === 'Layer' && layout.children) {
+            childrenToLoad = layout.children;
+        } 
+        // Case C: Root is just a Group/Shape (rare but possible)
+        else {
+            childrenToLoad = [layout];
         }
 
-        nodesToMove.forEach(node => {
-            node.moveTo(layer);
+        console.log("[DEBUG] Found", childrenToLoad.length, "elements to load.");
+
+        // Loop through the extracted data and create nodes one by one
+        childrenToLoad.forEach(childData => {
+            // Skip Transformer tools
+            if (childData.className === 'Transformer') return;
+
+            // SAFELY create the node
+            const node = Konva.Node.create(childData);
             
+            // Add to OUR existing layer
+            layer.add(node);
+
             // Lock interaction
             node.draggable(false);
             node.listening(false);
-            
-            // Safety: Check if .find exists before calling it (Fixes TypeError: node.find is not a function)
+
+            // Identify "Seat Groups" and make seats interactive
+            // Check both find() method existence AND if it's a Group/Stage
             if (typeof node.find === 'function') {
+                // recursively lock children
                 node.find('*').forEach(n => { n.draggable(false); n.listening(false); });
 
-                // Process Seat Groups
                 const groups = node.find('Group').concat(node.nodeType === 'Group' ? [node] : []);
                 groups.forEach(group => {
                     const type = group.getAttr('shapeType') || group.name();
@@ -219,9 +241,11 @@ router.get('/', async (req, res) => {
                             const price = getPriceForSeat(seat);
                             seatPrices.set(seat._id, price);
                             
+                            // Style
                             seat.fill('#ffffff'); seat.stroke('#64748B'); seat.strokeWidth(1.5);
+                            
+                            // Interact
                             seat.listening(true); seat.cursor('pointer');
-
                             seat.on('mouseenter', () => { if (selectedSeats.has(seat._id)) return; stage.container().style.cursor = 'pointer'; seat.stroke('#0056D2'); seat.strokeWidth(3); });
                             seat.on('mouseleave', () => { stage.container().style.cursor = 'default'; if (selectedSeats.has(seat._id)) return; seat.stroke('#64748B'); seat.strokeWidth(1.5); });
                             seat.on('click tap', (e) => { e.cancelBubble = true; toggleSeat(seat); });
@@ -245,7 +269,7 @@ router.get('/', async (req, res) => {
         document.getElementById('loader').style.display = 'none';
 
     } catch (err) {
-        console.error(err);
+        console.error("[DEBUG] RENDER ERROR:", err);
         document.getElementById('loader').innerHTML = '<div>Error loading map</div><div id="debug-msg">' + err.message + '</div>';
     }
 
