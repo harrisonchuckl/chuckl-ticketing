@@ -87,7 +87,7 @@ router.get('/', async (req, res) => {
     :root { --bg:#F3F4F6; --surface:#FFFFFF; --primary:#0F172A; --brand:#0056D2; --text-main:#111827; --text-muted:#6B7280; --border:#E5E7EB; --success:#10B981; --blocked:#334155; }
     body { margin:0; font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); display:flex; flex-direction:column; height:100vh; overflow:hidden; }
     
-    header { background:var(--surface); border-bottom:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; z-index:3000; position:relative; }
+    header { background:var(--surface); border-bottom:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; z-index:4000; position:relative; }
     .header-info h1 { font-family:'Outfit',sans-serif; font-size:1.25rem; margin:0; font-weight:700; color:var(--primary); }
     .header-meta { font-size:0.9rem; color:var(--muted); margin-top:4px; }
     .btn-close { text-decoration:none; font-size:1.5rem; color:var(--muted); width:40px; height:40px; display:flex; align-items:center; justify-content:center; border-radius:50%; }
@@ -96,12 +96,13 @@ router.get('/', async (req, res) => {
     #stage-container { width:100%; height:100%; cursor:grab; }
     #stage-container:active { cursor:grabbing; }
     
+    /* LEGEND */
     .legend { 
         position:absolute; top:20px; left:20px; 
         background:rgba(255,255,255,0.98); padding:12px 16px; border-radius:12px; 
         box-shadow:0 4px 20px rgba(0,0,0,0.15); 
         display:flex; flex-direction:column; gap:12px; 
-        font-size:0.75rem; font-weight:700; z-index:3000; 
+        font-size:0.75rem; font-weight:700; z-index:4000; 
     }
     .legend-row { display:flex; gap:16px; align-items:center; }
     .legend-item { display:flex; align-items:center; gap:6px; }
@@ -113,7 +114,7 @@ router.get('/', async (req, res) => {
     .view-toggle { padding-top:10px; border-top:1px solid #e2e8f0; display:flex; align-items:center; gap:8px; cursor:pointer; }
     .view-toggle input { accent-color: var(--brand); transform:scale(1.2); cursor:pointer; }
 
-    footer { background:var(--surface); border-top:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; box-shadow:0 -4px 10px rgba(0,0,0,0.03); z-index:3000; position:relative; }
+    footer { background:var(--surface); border-top:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; box-shadow:0 -4px 10px rgba(0,0,0,0.03); z-index:4000; position:relative; }
     .basket-info { display:flex; flex-direction:column; }
     .basket-label { font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em; font-weight:600; color:var(--muted); }
     .basket-total { font-family:'Outfit',sans-serif; font-size:1.5rem; font-weight:800; color:var(--primary); }
@@ -123,11 +124,11 @@ router.get('/', async (req, res) => {
     .btn-checkout.active { opacity:1; pointer-events:auto; box-shadow:0 4px 12px rgba(16, 185, 129, 0.3); }
     .btn-checkout:hover { background:#059669; }
     
-    #loader { position:absolute; top:0; left:0; right:0; bottom:0; background:rgba(255,255,255,0.95); z-index:4000; display:flex; flex-direction:column; gap:10px; align-items:center; justify-content:center; font-weight:600; color:var(--primary); }
+    #loader { position:absolute; top:0; left:0; right:0; bottom:0; background:rgba(255,255,255,0.95); z-index:5000; display:flex; flex-direction:column; gap:10px; align-items:center; justify-content:center; font-weight:600; color:var(--primary); }
     
     #tooltip {
       position: absolute; display: none; padding: 12px; background: #1e293b; color: #fff;
-      border-radius: 8px; pointer-events: none; font-size: 0.85rem; z-index: 3500;
+      border-radius: 8px; pointer-events: none; font-size: 0.85rem; z-index: 4500;
       box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3); max-width: 240px; border:1px solid rgba(255,255,255,0.1);
     }
     #tooltip img { width: 100%; border-radius: 4px; margin-top: 8px; display: block; }
@@ -171,11 +172,14 @@ router.get('/', async (req, res) => {
     const seatPrices = new Map();
     const rowMap = new Map(); 
 
-    const width = window.innerWidth; 
-    const height = window.innerHeight - 160;
+    const stage = new Konva.Stage({ 
+        container: 'stage-container', 
+        width: window.innerWidth, 
+        height: window.innerHeight - 160, 
+        draggable: true 
+    });
     
-    const stage = new Konva.Stage({ container: 'stage-container', width: width, height: height, draggable: true });
-    // We will load content into this layer
+    // Create new clean layer
     const mainLayer = new Konva.Layer();
     stage.add(mainLayer);
     
@@ -195,9 +199,10 @@ router.get('/', async (req, res) => {
 
         console.log("[DEBUG] Loading Layout...", layout);
 
-        // --- 1. LOAD NODES PRESERVING STRUCTURE ---
+        // --- 1. EXTRACT CONTENT ---
         let layersToLoad = [];
         if (layout.className === 'Stage' && layout.children) {
+            // Find Layer(s) inside Stage
             layersToLoad = layout.children.filter(c => c.className === 'Layer');
             if (layersToLoad.length === 0) layersToLoad = [{ className: 'Layer', children: layout.children }];
         } else if (layout.className === 'Layer') {
@@ -208,6 +213,14 @@ router.get('/', async (req, res) => {
 
         layersToLoad.forEach((layerData) => {
             const tempLayer = Konva.Node.create(layerData);
+            
+            // --- CRITICAL FIX: RESET TRANSFORM ---
+            // If the user saved the map while panned/zoomed, the layer has x/y/scale values.
+            // We MUST reset these so our auto-fit logic works from a clean state.
+            tempLayer.x(0);
+            tempLayer.y(0);
+            tempLayer.scale({x:1, y:1});
+
             const children = tempLayer.getChildren().slice();
             children.forEach(node => {
                 node.moveTo(mainLayer);
@@ -216,15 +229,15 @@ router.get('/', async (req, res) => {
             tempLayer.destroy();
         });
 
-        // RECURSIVE NODE PROCESSOR
+        // --- 2. RECURSIVE PROCESSOR ---
         function processNode(node, parentGroup) {
             const nodeType = node.getClassName();
             const groupType = node.getAttr('shapeType') || node.name();
             const isSeatGroup = nodeType === 'Group' && ['row-seats', 'circular-table', 'rect-table', 'single-seat'].includes(groupType);
             
             if (isSeatGroup) {
-                const texts = node.find('Text');
-                texts.forEach(t => {
+                // Visual Cleanup: Hide Numbers
+                node.find('Text').forEach(t => {
                      const txt = t.text().trim();
                      if (/^\\d+$/.test(txt)) t.destroy();
                 });
@@ -234,11 +247,13 @@ router.get('/', async (req, res) => {
             if (nodeType === 'Circle' && node.getAttr('isSeat')) {
                 const seat = node;
                 
+                // Status
                 const status = seat.getAttr('status') || 'AVAILABLE';
                 const isBlocked = status === 'BLOCKED' || status === 'SOLD' || status === 'HELD';
                 const isHeldDB = heldSeatIds.has(seat.id()) || heldSeatIds.has(seat.getAttr('sbSeatId'));
                 const isUnavailable = isBlocked || isHeldDB;
 
+                // Data
                 const tType = getTicketType(seat);
                 const price = tType ? tType.pricePence : 0;
                 seatPrices.set(seat._id, price);
@@ -247,6 +262,7 @@ router.get('/', async (req, res) => {
                 const info = seat.getAttr('sbInfo');
                 const viewImg = seat.getAttr('sbViewImage');
 
+                // Gap Logic
                 if (parentGroup) {
                     const grpId = parentGroup._id;
                     if (!rowMap.has(grpId)) rowMap.set(grpId, []);
@@ -256,16 +272,18 @@ router.get('/', async (req, res) => {
                     });
                 }
 
+                // Visuals
                 if (isUnavailable) {
                     seat.fill('#334155'); seat.stroke('#1e293b'); seat.strokeWidth(1); 
                     seat.opacity(0.8); seat.listening(false);
                 } else {
                     seat.fill('#ffffff'); seat.stroke('#64748B'); seat.strokeWidth(1.5);
-                    seat.listening(true); 
+                    seat.opacity(1); seat.listening(true); 
                 }
                 seat.shadowEnabled(false);
                 seat.visible(true);
 
+                // Icons: Info (i)
                 if (info && !isUnavailable) {
                     const r = seat.radius();
                     const iGroup = new Konva.Group({ x: seat.x() + r*0.7, y: seat.y() - r*0.7, listening: false });
@@ -278,6 +296,7 @@ router.get('/', async (req, res) => {
                     }
                 }
 
+                // Icons: View (Camera)
                 if (viewImg) {
                     const vGroup = new Konva.Group({ 
                         x: seat.x(), y: seat.y(), visible: false, name: 'view-icon-group', listening: false 
@@ -300,18 +319,22 @@ router.get('/', async (req, res) => {
                         if (!selectedSeats.has(seat._id)) {
                             seat.stroke('#0056D2'); seat.strokeWidth(3); mainLayer.batchDraw();
                         }
+                        
                         const pos = stage.getPointerPosition();
                         const priceStr = '£' + (price/100).toFixed(2);
                         let html = \`<span class="tt-title">\${label}</span><span class="tt-meta">\${tType ? tType.name : 'Standard'} • \${priceStr}</span>\`;
                         if (info) html += \`<div class="tt-info">\${info}</div>\`;
+                        
                         const viewMode = document.getElementById('toggle-views').checked;
                         if (viewImg && viewMode) html += \`<img src="\${viewImg}" />\`;
-                        else if (viewImg) html += \`<div style="font-size:0.7rem; color:#94a3b8; margin-top:4px;">(Enable 'Show seat views' to preview)</div>\`;
+                        else if (viewImg) html += \`<div style="font-size:0.7rem; color:#94a3b8; margin-top:4px;">(Show seat views to preview)</div>\`;
+
                         tooltip.innerHTML = html;
                         tooltip.style.display = 'block';
                         tooltip.style.left = (pos.x + 20) + 'px';
                         tooltip.style.top = (pos.y + 20) + 'px';
                     });
+
                     seat.on('mouseleave', () => {
                         stage.container().style.cursor = 'default';
                         tooltip.style.display = 'none';
@@ -319,17 +342,20 @@ router.get('/', async (req, res) => {
                             seat.stroke('#64748B'); seat.strokeWidth(1.5); mainLayer.batchDraw();
                         }
                     });
+
                     seat.on('click tap', (e) => {
                         e.cancelBubble = true;
                         toggleSeat(seat, parentGroup);
                     });
                 }
             }
+
             if (node.getChildren) {
                 node.getChildren().forEach(child => processNode(child, parentGroup));
             }
         }
 
+        // --- 3. SORT ROWS ---
         rowMap.forEach((seats) => {
              if (seats.length < 2) return;
              const minX = Math.min(...seats.map(s=>s.x)), maxX = Math.max(...seats.map(s=>s.x));
@@ -338,63 +364,43 @@ router.get('/', async (req, res) => {
              else seats.sort((a, b) => a.x - b.x);
         });
 
-        // --- 4. SEMANTIC AUTO-FIT (Fixes Zoom) ---
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        let contentFound = false;
+        // --- 4. PERFECT FIT ZOOM ---
+        function fitMap() {
+            // Get Box of ALL visible content
+            const box = mainLayer.getClientRect({ skipTransform: true, relativeTo: mainLayer });
+            
+            console.log("[DEBUG] Content Bounds:", box);
 
-        // Iterate RECURSIVELY to find all actual Shapes (Seats, Rects, Text)
-        // Ignoring top-level "invisible containers"
-        function scanBounds(node) {
-             if (!node.visible() || node.opacity() === 0) return;
-             
-             // Check if it's a semantic shape
-             const isShape = node.getClassName() === 'Circle' || node.getClassName() === 'Rect' || node.getClassName() === 'Text' || node.getClassName() === 'Path';
-             
-             if (isShape) {
-                 const r = node.getClientRect({ skipTransform: true, relativeTo: mainLayer });
-                 // Filter out massive background rectangles (usually > 2000px)
-                 if (r.width > 0 && r.width < 2000 && r.height > 0 && r.height < 2000) {
-                     contentFound = true;
-                     if (r.x < minX) minX = r.x;
-                     if (r.y < minY) minY = r.y;
-                     if (r.x + r.width > maxX) maxX = r.x + r.width;
-                     if (r.y + r.height > maxY) maxY = r.y + r.height;
-                 }
-             }
+            if (box.width > 0 && box.height > 0) {
+                const padding = 60;
+                const w = window.innerWidth - padding;
+                const h = (window.innerHeight - 160) - padding;
 
-             if (node.getChildren) {
-                 node.getChildren().forEach(scanBounds);
-             }
+                const scale = Math.min(w / box.width, h / box.height);
+                
+                // Center
+                const cx = box.x + box.width / 2;
+                const cy = box.y + box.height / 2;
+                
+                const stageW = window.innerWidth;
+                const stageH = window.innerHeight - 160;
+
+                stage.position({
+                    x: stageW / 2 - cx * scale,
+                    y: stageH / 2 - cy * scale
+                });
+                stage.scale({ x: scale, y: scale });
+                mainLayer.batchDraw();
+            }
         }
         
-        // Start scanning from main layer
-        mainLayer.getChildren().forEach(scanBounds);
-
-        console.log(\`[DEBUG] Bounds: X=\${minX} to \${maxX}, Y=\${minY} to \${maxY}\`);
-
-        if (contentFound && maxX > minX) {
-            const mapW = maxX - minX;
-            const mapH = maxY - minY;
-            const padding = 60;
-            const availW = width - padding;
-            const availH = height - padding;
-
-            let scale = Math.min(availW / mapW, availH / mapH);
-            scale = Math.min(scale, 1.5); // CLAMP: Never zoom in more than 1.5x
-            
-            const cx = minX + mapW / 2;
-            const cy = minY + mapH / 2;
-
-            const newX = (width / 2) - (cx * scale);
-            const newY = (height / 2) - (cy * scale);
-
-            stage.x(newX);
-            stage.y(newY);
-            stage.scale({ x: scale, y: scale });
-            mainLayer.batchDraw();
-        } else {
-            stage.x(width/2); stage.y(height/2);
-        }
+        // Run Fit
+        fitMap();
+        window.addEventListener('resize', () => {
+             stage.width(window.innerWidth);
+             stage.height(window.innerHeight - 160);
+             fitMap();
+        });
 
         document.getElementById('loader').style.display = 'none';
 
@@ -403,6 +409,7 @@ router.get('/', async (req, res) => {
         document.getElementById('loader').innerHTML = 'Error loading map<br><small>' + err.message + '</small>';
     }
 
+    // Events & Logic
     document.getElementById('toggle-views').addEventListener('change', (e) => {
         const show = e.target.checked;
         stage.find('.view-icon-group').forEach(icon => icon.visible(show));
