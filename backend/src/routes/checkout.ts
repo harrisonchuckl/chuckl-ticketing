@@ -16,9 +16,9 @@ function pFmt(p: number) {
 /**
  * GET /checkout
  * INTELLIGENT ROUTER:
- * 1. Checks show.activeSeatMapId (The one saved specifically for this show)
- * 2. If it exists -> Render Interactive Map
- * 3. If it is null -> Render Ticket List (General Admission)
+ * 1. Checks show.activeSeatMapId.
+ * 2. FALLBACK: If null, looks for the most recent map for this show.
+ * 3. Renders Map (Allocated) OR Ticket List (Unallocated).
  */
 router.get('/', async (req, res) => {
   const showId = String(req.query.showId || '');
@@ -35,8 +35,10 @@ router.get('/', async (req, res) => {
 
     if (!show) return res.status(404).send('Event not found');
 
-    // 1. Check for linked Seat Map
+    // --- LOGIC FIX: Smart Map Lookup ---
     let seatMap = null;
+    
+    // 1. Try the explicit link (New System)
     // @ts-ignore
     if (show.activeSeatMapId) {
         seatMap = await prisma.seatMap.findUnique({ 
@@ -45,18 +47,24 @@ router.get('/', async (req, res) => {
         });
     }
 
+    // 2. Fallback: If legacy show (no link yet), find the newest map
+    if (!seatMap) {
+        seatMap = await prisma.seatMap.findFirst({
+            where: { showId: show.id },
+            orderBy: { updatedAt: 'desc' } // Get the one you most recently worked on
+        });
+    }
+
     const venue = show.venue;
+    const venueName = venue?.name || 'Venue TBC';
     const ticketTypes = show.ticketTypes || [];
     
     const dateObj = new Date(show.date);
     const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-    
-    // FIX: Pre-calculate venue name safely
-    const venueName = venue?.name || 'Venue TBC';
 
     // ============================================================
-    // MODE A: TICKET LIST (Unallocated / GA / No Active Map)
+    // MODE A: TICKET LIST (Unallocated / GA / No Map Found)
     // ============================================================
     if (!seatMap || !seatMap.layout) {
        const ticketsJson = JSON.stringify(ticketTypes);
@@ -162,7 +170,10 @@ router.get('/', async (req, res) => {
     window.update = (id, delta) => {
       const current = state[id] || 0;
       const next = Math.max(0, current + delta);
-      // Logic: Allow multiple types (e.g. 2 Adults, 1 Child)
+      // For V1: Single ticket type selection to simplify checkout logic
+      if (delta > 0) {
+          Object.keys(state).forEach(k => { if (k !== id) state[k] = 0; });
+      }
       state[id] = next;
       render();
     };
@@ -219,7 +230,7 @@ router.get('/', async (req, res) => {
     }
 
     // ============================================================
-    // MODE B: ALLOCATED SEATING (Konva Map)
+    // MODE B: ALLOCATED SEATING (Konva Map Found)
     // ============================================================
     
     const mapData = JSON.stringify(seatMap.layout);
@@ -432,8 +443,8 @@ router.get('/', async (req, res) => {
 </html>`);
 
   } catch (err: any) {
-    console.error('checkout/session error', err);
-    return res.status(500).send('Server error');
+    console.error('checkout/map error', err);
+    res.status(500).send('Server error');
   }
 });
 
