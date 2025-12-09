@@ -45,7 +45,7 @@ router.get('/', async (req, res) => {
     const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-    // 2. Get Holds (Allocations)
+    // 2. Get Holds
     const heldSeatIds = new Set<string>();
     if (show.allocations) {
         show.allocations.forEach(alloc => {
@@ -208,8 +208,7 @@ router.get('/', async (req, res) => {
 
         layersToLoad.forEach((layerData) => {
             const tempLayer = Konva.Node.create(layerData);
-            // Move children to our main layer (Groups, Shapes)
-            // IMPORTANT: We do NOT flatten deeply. We keep Row Groups intact.
+            // Move children to our main layer
             const children = tempLayer.getChildren().slice();
             children.forEach(node => {
                 node.moveTo(mainLayer);
@@ -218,11 +217,9 @@ router.get('/', async (req, res) => {
         });
 
         // --- 2. TRAVERSE & HYDRATE ---
-        // Traverse the tree to find seats, but keep them inside their parents
-        // This ensures relative positioning is preserved.
+        // We do not move nodes, we find them in-place.
         
         mainLayer.find('Group').forEach(group => {
-            // Check if this group is a "Seat Group" (Row/Table)
             const groupType = group.getAttr('shapeType') || group.name();
             const isSeatGroup = ['row-seats', 'circular-table', 'rect-table', 'single-seat'].includes(groupType);
 
@@ -230,7 +227,7 @@ router.get('/', async (req, res) => {
                 // VISUAL CLEANUP: Remove numbers inside the group
                 const texts = group.find('Text');
                 texts.forEach(t => {
-                     // Hide numbers, keep letters (Row names)
+                     // Hide numbers (1, 2, 12) but KEEP letters (A, Row A)
                      const txt = t.text().trim();
                      if (/^\\d+$/.test(txt)) t.destroy();
                 });
@@ -241,7 +238,6 @@ router.get('/', async (req, res) => {
                     if (!seat.getAttr('isSeat')) return;
                     
                     // --- STATUS ---
-                    // Priority: Blocked in DB > Blocked in JSON > Available
                     const status = seat.getAttr('status') || 'AVAILABLE';
                     const isBlocked = status === 'BLOCKED' || status === 'SOLD' || status === 'HELD';
                     const isHeldDB = heldSeatIds.has(seat.id()) || heldSeatIds.has(seat.getAttr('sbSeatId'));
@@ -259,7 +255,6 @@ router.get('/', async (req, res) => {
                     // --- GAP REGISTRATION ---
                     const grpId = group._id;
                     if (!rowMap.has(grpId)) rowMap.set(grpId, []);
-                    // Use Absolute Position for sorting logic
                     const absPos = seat.getAbsolutePosition();
                     rowMap.get(grpId).push({
                         id: seat._id, x: absPos.x, y: absPos.y, unavailable: isUnavailable, node: seat
@@ -288,14 +283,15 @@ router.get('/', async (req, res) => {
                         const iDot = new Konva.Circle({ radius: 5, fill: '#0F172A' });
                         const iTxt = new Konva.Text({ x: -1.5, y: -2.5, text:'i', fontSize:6, fill:'#fff', fontStyle:'bold' });
                         iGroup.add(iDot); iGroup.add(iTxt);
-                        group.add(iGroup); // Add to same parent group
+                        group.add(iGroup);
                         iGroup.moveToTop();
                     }
 
                     // --- VIEW ICON (Camera) ---
                     if (viewImg) {
                         const vGroup = new Konva.Group({ 
-                            x: seat.x(), y: seat.y(), visible: false, name: 'view-icon-group', listening: false 
+                            x: seat.x(), y: seat.y(), 
+                            visible: false, name: 'view-icon-group', listening: false 
                         });
                         const bg = new Konva.Circle({ radius: 9, fill: '#0056D2' });
                         const icon = new Konva.Path({
@@ -307,18 +303,19 @@ router.get('/', async (req, res) => {
                         vGroup.moveToTop();
                     }
 
-                    // --- INTERACTIONS ---
+                    // --- EVENTS ---
                     if (!isUnavailable) {
                         seat.on('mouseenter', () => {
                             stage.container().style.cursor = 'pointer';
                             if (!selectedSeats.has(seat._id)) {
                                 seat.stroke('#0056D2'); seat.strokeWidth(3); mainLayer.batchDraw();
                             }
-                            // Tooltip
+                            
                             const pos = stage.getPointerPosition();
                             const priceStr = '£' + (price/100).toFixed(2);
                             let html = \`<span class="tt-title">\${label}</span><span class="tt-meta">\${tType ? tType.name : 'Standard'} • \${priceStr}</span>\`;
                             if (info) html += \`<div class="tt-info">\${info}</div>\`;
+                            
                             const viewMode = document.getElementById('toggle-views').checked;
                             if (viewImg && viewMode) html += \`<img src="\${viewImg}" />\`;
                             else if (viewImg) html += \`<div style="font-size:0.7rem; color:#94a3b8; margin-top:4px;">(Show seat views to preview)</div>\`;
@@ -349,26 +346,28 @@ router.get('/', async (req, res) => {
         // --- 3. SORT ROWS (For Gap Logic) ---
         rowMap.forEach((seats) => {
              if (seats.length < 2) return;
-             // Determine orientation
              const minX = Math.min(...seats.map(s=>s.x)), maxX = Math.max(...seats.map(s=>s.x));
              const minY = Math.min(...seats.map(s=>s.y)), maxY = Math.max(...seats.map(s=>s.y));
+             
              if ((maxY - minY) > (maxX - minX)) seats.sort((a, b) => a.y - b.y);
              else seats.sort((a, b) => a.x - b.x);
         });
 
-        // --- 4. SMART BOUNDS CALCULATION (Fixes Tiny Map) ---
-        // Iterate only VISIBLE shapes (Seats, Stage, Letters)
+        // --- 4. GLOBAL AUTO-FIT (Correct Bounds) ---
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        let count = 0;
+        let shapeCount = 0;
 
         mainLayer.find('Shape, Text').forEach(node => {
             if (!node.visible() || node.opacity() === 0) return;
-            // Ignore huge background rects (often used for grids)
-            if (node.width() > 2000 || node.height() > 2000) return;
+            // IGNORE HUGE BACKGROUNDS: This fixes the "Zoomed Out" issue
+            if (node.width() > 1500 || node.height() > 1500) {
+                console.log("[DEBUG] Skipping huge shape:", node.name() || node.getClassName());
+                return;
+            }
             
             const r = node.getClientRect({ skipTransform: true, relativeTo: mainLayer });
             if (r.width > 0 && r.height > 0) {
-                count++;
+                shapeCount++;
                 if (r.x < minX) minX = r.x;
                 if (r.y < minY) minY = r.y;
                 if (r.x + r.width > maxX) maxX = r.x + r.width;
@@ -376,25 +375,29 @@ router.get('/', async (req, res) => {
             }
         });
 
-        if (count > 0 && maxX > minX) {
+        console.log(\`[DEBUG] Map Bounds: Shapes=\${shapeCount}, X=\${minX} to \${maxX}\`);
+
+        if (shapeCount > 0 && maxX > minX) {
             const mapW = maxX - minX;
             const mapH = maxY - minY;
-            const padding = 40; // Tight padding for max zoom
+            const padding = 50; // Comfortable padding
             const availW = width - padding;
             const availH = height - padding;
 
-            const scale = Math.min(availW / mapW, availH / mapH) * 0.95; // 95% fill
+            const scale = Math.min(availW / mapW, availH / mapH) * 0.95; 
             
             const cx = minX + mapW / 2;
             const cy = minY + mapH / 2;
+
             const newX = (width / 2) - (cx * scale);
             const newY = (height / 2) - (cy * scale);
 
-            stage.position({ x: newX, y: newY });
+            stage.x(newX);
+            stage.y(newY);
             stage.scale({ x: scale, y: scale });
             mainLayer.batchDraw();
         } else {
-            console.warn("Bounds empty. Centering default.");
+            console.warn("Could not calculate bounds. Centering default.");
             stage.x(width/2); stage.y(height/2);
         }
 
@@ -405,7 +408,7 @@ router.get('/', async (req, res) => {
         document.getElementById('loader').innerHTML = 'Error loading map<br><small>' + err.message + '</small>';
     }
 
-    // --- EVENTS ---
+    // --- UI EVENTS ---
     document.getElementById('toggle-views').addEventListener('change', (e) => {
         const show = e.target.checked;
         stage.find('.view-icon-group').forEach(icon => icon.visible(show));
@@ -424,16 +427,17 @@ router.get('/', async (req, res) => {
         stage.position(newPos);
     });
 
+    // --- GAP CHECK ---
     function checkGap(seat, rowGroup) {
         if (!rowGroup) return true;
         const row = rowMap.get(rowGroup._id);
         if (!row || row.length < 3) return true;
 
         const states = row.map(s => {
-            if (s.unavailable) return 0;
-            if (s.id === seat._id) return selectedSeats.has(s.id) ? 2 : 1; 
-            if (selectedSeats.has(s.id)) return 1;
-            return 2;
+            if (s.unavailable) return 0; // Wall/Sold
+            if (s.id === seat._id) return selectedSeats.has(s.id) ? 2 : 1; // Toggle simulation
+            if (selectedSeats.has(s.id)) return 1; // Selected
+            return 2; // Free
         });
         
         for (let i = 0; i < states.length; i++) {
@@ -502,6 +506,59 @@ router.get('/', async (req, res) => {
 </body>
 </html>`);
 
+  } catch (err: any) {
+    console.error('checkout/session error', err);
+    res.status(500).send('Server error');
+  }
+});
+
+// ... POST route unchanged ...
+router.post('/session', async (req, res) => {
+  try {
+    const { showId, quantity, ticketTypeId, unitPricePence } = req.body ?? {};
+    if (!showId || !quantity || quantity < 1) return res.status(400).json({ ok: false, message: 'showId and quantity are required' });
+
+    const show = await prisma.show.findUnique({
+      where: { id: showId },
+      select: { status: true, ticketTypes: { select: { id: true, pricePence: true }, orderBy: { createdAt: 'asc' } } },
+    });
+
+    if (!show) return res.status(404).json({ ok: false, message: 'Show not found' });
+
+    let finalPrice = 0;
+    if (unitPricePence) finalPrice = Number(unitPricePence);
+    else if (ticketTypeId) {
+        const match = show.ticketTypes.find(t => t.id === ticketTypeId);
+        if (!match) return res.status(400).json({ ok: false, message: 'Invalid ticket type' });
+        finalPrice = match.pricePence;
+    } else finalPrice = show.ticketTypes[0]?.pricePence || 0;
+
+    let organiserSplitBps: number | null = null;
+    const userId = (req as any).userId as string | undefined;
+    if (userId) {
+      const user = await prisma.user.findUnique({ where: { id: userId }, select: { organiserSplitBps: true } });
+      organiserSplitBps = user?.organiserSplitBps ?? null;
+    }
+
+    const fees = await calcFeesForShow(prisma, showId, Number(quantity), finalPrice, organiserSplitBps);
+    const order = await prisma.order.create({
+      data: {
+        show: { connect: { id: showId } }, quantity: Number(quantity), amountPence: finalPrice * Number(quantity), status: 'PENDING',
+        platformFeePence: fees.platformFeePence, organiserSharePence: fees.organiserSharePence, paymentFeePence: fees.paymentFeePence, netPayoutPence: fees.netPayoutPence,
+        ticketType: ticketTypeId ? { connect: { id: ticketTypeId } } : undefined
+      },
+      select: { id: true },
+    });
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment', currency: 'gbp',
+      line_items: [{ quantity, price_data: { currency: 'gbp', unit_amount: finalPrice, product_data: { name: 'Tickets' } } }],
+      metadata: { orderId: order.id, showId },
+      success_url: `${process.env.PUBLIC_BASE_URL}/success?order=${order.id}`,
+      cancel_url: `${process.env.PUBLIC_BASE_URL}/cancel?order=${order.id}`,
+    });
+
+    return res.json({ ok: true, url: session.url });
   } catch (err: any) {
     console.error('checkout/session error', err);
     return res.status(500).json({ ok: false, message: 'Checkout error' });
