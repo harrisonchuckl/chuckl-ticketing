@@ -51,6 +51,9 @@ router.get('/', async (req, res) => {
     const dateObj = new Date(show.date);
     const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    
+    // FIX: Pre-calculate venue name safely
+    const venueName = venue?.name || 'Venue TBC';
 
     // ============================================================
     // MODE A: TICKET LIST (Unallocated / GA / No Active Map)
@@ -116,7 +119,7 @@ router.get('/', async (req, res) => {
     <div class="card">
       <div class="card-header">
         <div class="card-title">Select Tickets</div>
-        <div style="color:var(--muted)">${venue.name || 'Venue TBC'}</div>
+        <div style="color:var(--muted)">${venueName}</div>
       </div>
       <ul class="ticket-list" id="list"></ul>
       <div class="footer">
@@ -167,11 +170,15 @@ router.get('/', async (req, res) => {
     function calcTotal() {
       let totalPence = 0;
       let count = 0;
-      
+      let activeId = null;
+
       ticketTypes.forEach(t => {
         const qty = state[t.id] || 0;
-        totalPence += (t.pricePence * qty);
-        count += qty;
+        if (qty > 0) {
+           totalPence += (t.pricePence * qty);
+           count += qty;
+           activeId = t.id;
+        }
       });
 
       document.getElementById('total').innerText = '£' + (totalPence / 100).toFixed(2);
@@ -179,25 +186,21 @@ router.get('/', async (req, res) => {
       
       if (count > 0) {
         btn.classList.add('active');
-        btn.onclick = () => doCheckout(count, totalPence);
+        btn.onclick = () => doCheckout(activeId, count);
       } else {
         btn.classList.remove('active');
       }
     }
 
-    async function doCheckout(quantity, totalPence) {
+    async function doCheckout(ticketTypeId, quantity) {
        const btn = document.getElementById('btn-next');
        btn.innerText = 'Processing...';
-       
-       // Calculate an average unit price for the current simplistic backend logic
-       // (Real implementation should pass the full cart to backend)
-       const unitPricePence = Math.round(totalPence / quantity);
        
        try {
          const res = await fetch('/checkout/session', {
            method: 'POST',
            headers: { 'Content-Type': 'application/json' },
-           body: JSON.stringify({ showId, quantity, unitPricePence })
+           body: JSON.stringify({ showId, quantity, ticketTypeId })
          });
          const data = await res.json();
          if (data.ok && data.url) window.location.href = data.url;
@@ -271,7 +274,7 @@ router.get('/', async (req, res) => {
   <header>
     <div class="header-info">
       <h1>${show.title}</h1>
-      <div class="header-meta">${dateStr} • ${timeStr} • ${venue.name}</div>
+      <div class="header-meta">${dateStr} • ${timeStr} • ${venueName}</div>
     </div>
     <a href="/public/event/${show.id}" class="btn-close">✕</a>
   </header>
@@ -429,8 +432,8 @@ router.get('/', async (req, res) => {
 </html>`);
 
   } catch (err: any) {
-    console.error('checkout/map error', err);
-    res.status(500).send('Server error');
+    console.error('checkout/session error', err);
+    return res.status(500).send('Server error');
   }
 });
 
