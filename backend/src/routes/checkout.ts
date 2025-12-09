@@ -17,19 +17,16 @@ router.get('/', async (req, res) => {
   if (!showId) return res.status(404).send('Show ID is required');
 
   try {
-    // 1. Fetch Show, Venue, TicketTypes
+    // 1. Fetch Show, Venue, TicketTypes, Allocations
     const show = await prisma.show.findUnique({
       where: { id: showId },
       include: {
         venue: true,
         ticketTypes: { orderBy: { pricePence: 'asc' } },
-        // Also fetch allocations to block out held seats
         allocations: {
           include: {
             seats: {
-              include: {
-                seat: true
-              }
+              include: { seat: true }
             }
           }
         }
@@ -60,15 +57,12 @@ router.get('/', async (req, res) => {
     const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-    // 3. Extract Blocked/Held Seat IDs from Database Allocations
-    // (This handles the "External Promoter" tab holds)
+    // 3. Extract Blocked/Held Seat IDs
     const heldSeatIds = new Set<string>();
     if (show.allocations) {
         show.allocations.forEach(alloc => {
             if (alloc.seats) {
                 alloc.seats.forEach(allocSeat => {
-                    // We assume the builder syncs 'seat.id' or 'seat.label' to the map
-                    // For robustness, we'll try to match by the seat's ID if available
                     if (allocSeat.seatId) heldSeatIds.add(allocSeat.seatId);
                 });
             }
@@ -117,7 +111,6 @@ router.get('/', async (req, res) => {
     const mapData = JSON.stringify(konvaData);
     const ticketsData = JSON.stringify(ticketTypes);
     const showIdStr = JSON.stringify(show.id);
-    // Convert Set to Array for JSON injection
     const heldSeatsArray = JSON.stringify(Array.from(heldSeatIds)); 
 
     res.type('html').send(`<!doctype html>
@@ -248,8 +241,6 @@ router.get('/', async (req, res) => {
                     const isBlocked = status === 'BLOCKED' || status === 'SOLD' || status === 'HELD';
                     
                     // 2. Check Database Holds
-                    // We assume the seat has an 'id' or 'name' that matches the alloc seatId
-                    // If no ID match, we fallback to logic 1
                     const isHeldDB = heldSeatIds.has(seat.id()) || heldSeatIds.has(seat.getAttr('sbSeatId'));
                     
                     const isUnavailable = isBlocked || isHeldDB;
@@ -276,7 +267,7 @@ router.get('/', async (req, res) => {
                         seat.strokeWidth(1.5);
                         seat.opacity(1);
                         seat.listening(true); 
-                        seat.cursor('pointer');
+                        // Note: cursor styling handled in mouseenter/mouseleave
                     }
                     
                     seat.visible(true);
