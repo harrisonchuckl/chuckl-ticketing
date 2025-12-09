@@ -59,7 +59,7 @@ router.get('/event/:id', async (req, res) => {
     const venue = (show.venue || {}) as any;
     const ticketTypes = (show.ticketTypes || []) as any[];
 
-    // --- DATE VARIABLES (Defined early to avoid scope errors) ---
+    // --- DATE VARIABLES (Defined early) ---
     const dateObj = show.date ? new Date(show.date) : null;
     const whenISO = dateObj ? dateObj.toISOString() : undefined;
     
@@ -69,7 +69,7 @@ router.get('/event/:id', async (req, res) => {
     const yearNum = dateObj ? dateObj.toLocaleDateString('en-GB', { year: 'numeric' }) : '';
     const timeStr = dateObj ? dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '';
     
-    // Explicitly define fullDate and prettyDate here
+    // Explicitly define fullDate here
     const fullDate = dateObj ? dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Date TBC';
     const prettyDate = `${dayName} ${dayNum} ${monthName} ${yearNum}`;
 
@@ -129,24 +129,19 @@ router.get('/event/:id', async (req, res) => {
 
   <style>
     :root {
-      /* Refined Palette based on 'The Dukes' */
+      /* Refined Palette */
       --bg-page: #F3F4F6;
       --bg-surface: #FFFFFF;
-      
-      --primary: #0F172A; /* Slate 900 */
+      --primary: #0F172A;
       --primary-hover: #1E293B;
-      
-      --brand: #E11D48; /* Vibrant Theatre Red */
+      --brand: #E11D48;
       --brand-hover: #BE123C;
-      
       --text-main: #111827;
       --text-muted: #6B7280;
       --border: #E5E7EB;
-      
       --radius-sm: 6px;
       --radius-md: 12px;
       --radius-lg: 16px;
-      
       --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
       --shadow-float: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
     }
@@ -171,15 +166,15 @@ router.get('/event/:id', async (req, res) => {
     a { color: inherit; text-decoration: none; transition: opacity 0.2s; }
     a:hover { opacity: 0.8; }
 
-    /* --- HERO SECTION (Sharp, not blurred) --- */
+    /* --- HERO SECTION (Adjusted for Banners) --- */
     .hero {
       position: relative;
       background: var(--primary);
       color: white;
-      min-height: 65vh; /* Taller, more dramatic */
+      min-height: 55vh; /* Reduced height to prevent excessive cropping */
       display: flex;
       flex-direction: column;
-      justify-content: flex-end; /* Align content to bottom */
+      justify-content: flex-end;
       overflow: hidden;
     }
 
@@ -188,19 +183,23 @@ router.get('/event/:id', async (req, res) => {
       inset: 0;
       background-image: url('${escAttr(poster)}');
       background-size: cover;
-      background-position: center top;
-      opacity: 0.9; /* SHARP image */
-      transform: scale(1.02); /* Subtle zoom */
+      background-position: center center; /* Center focus */
+      background-repeat: no-repeat;
+      opacity: 1; 
+      transform: scale(1.0);
     }
     
-    /* Complex Gradient Mask to make text readable */
+    /* Subtle Gradient Mask */
     .hero-overlay {
       position: absolute;
       inset: 0;
-      /* Left is dark (for text), Right is transparent (for image), Bottom is dark (for fade) */
-      background: radial-gradient(circle at 70% 30%, transparent 20%, rgba(15,23,42,0.8) 70%),
-                  linear-gradient(to right, rgba(15,23,42,1) 0%, rgba(15,23,42,0.8) 40%, rgba(15,23,42,0.1) 100%),
-                  linear-gradient(to top, rgba(15,23,42,1) 0%, transparent 50%);
+      background: linear-gradient(to right, 
+                    rgba(15,23,42,0.9) 0%, 
+                    rgba(15,23,42,0.3) 50%, 
+                    transparent 100%),
+                  linear-gradient(to top, 
+                    rgba(15,23,42,0.9) 0%, 
+                    transparent 40%);
     }
 
     .hero-top-nav {
@@ -221,8 +220,9 @@ router.get('/event/:id', async (req, res) => {
       opacity: 0.8;
       display: flex;
       gap: 8px;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.5);
     }
-    .breadcrumbs span { opacity: 0.5; }
+    .breadcrumbs span { opacity: 0.8; }
 
     .hero-content {
       position: relative;
@@ -230,7 +230,7 @@ router.get('/event/:id', async (req, res) => {
       width: 100%;
       max-width: 1200px;
       margin: 0 auto;
-      padding: 40px 24px 80px; /* Extra bottom padding to clear overlap */
+      padding: 40px 24px 60px;
       display: grid;
       gap: 20px;
     }
@@ -239,9 +239,9 @@ router.get('/event/:id', async (req, res) => {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      background: rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.15);
       backdrop-filter: blur(8px);
-      border: 1px solid rgba(255,255,255,0.2);
+      border: 1px solid rgba(255,255,255,0.3);
       padding: 6px 12px;
       border-radius: 4px;
       font-size: 0.8rem;
@@ -250,17 +250,18 @@ router.get('/event/:id', async (req, res) => {
       letter-spacing: 0.05em;
       color: #fff;
       width: fit-content;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
     }
     .status-dot { width: 8px; height: 8px; background: #10B981; border-radius: 50%; box-shadow: 0 0 8px #10B981; }
 
     .hero-title {
-      font-size: clamp(2.5rem, 6vw, 5rem); /* Massive, cinematic text */
+      font-size: clamp(2.5rem, 5vw, 4.5rem);
       font-weight: 800;
-      line-height: 0.95;
+      line-height: 1;
       text-transform: uppercase;
       letter-spacing: -0.02em;
       max-width: 800px;
-      text-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      text-shadow: 0 4px 30px rgba(0,0,0,0.6);
     }
 
     .hero-meta {
@@ -270,7 +271,8 @@ router.get('/event/:id', async (req, res) => {
       margin-top: 16px;
       font-size: 1.1rem;
       font-weight: 500;
-      color: rgba(255,255,255,0.9);
+      color: rgba(255,255,255,0.95);
+      text-shadow: 0 2px 4px rgba(0,0,0,0.5);
     }
     .hero-meta-item {
       display: flex;
@@ -278,7 +280,8 @@ router.get('/event/:id', async (req, res) => {
       gap: 10px;
     }
     .hero-meta-icon {
-      color: var(--brand); /* Brand accent color for icons */
+      color: var(--brand);
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));
     }
 
     /* --- LAYOUT CONTAINER --- */
@@ -295,7 +298,7 @@ router.get('/event/:id', async (req, res) => {
     @media (min-width: 960px) {
       .layout {
         grid-template-columns: 1fr 380px; /* Content | Sticky Booking */
-        margin-top: -60px; /* Overlap effect */
+        margin-top: -40px; /* Slight overlap */
       }
     }
 
@@ -325,7 +328,7 @@ router.get('/event/:id', async (req, res) => {
     }
     .rich-text p { margin-bottom: 1.5em; }
 
-    /* Gallery Grid (Placeholder) */
+    /* Gallery Grid */
     .gallery-grid {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
@@ -356,7 +359,7 @@ router.get('/event/:id', async (req, res) => {
       height: 120px;
       background: #CBD5E1;
       position: relative;
-      background-image: url('https://maps.googleapis.com/maps/api/staticmap?center=${escAttr(venue.postcode)}&zoom=14&size=600x300&key=YOUR_API_KEY_HERE'); /* Optional */
+      background-image: url('https://maps.googleapis.com/maps/api/staticmap?center=${escAttr(venue.postcode)}&zoom=14&size=600x300&key=YOUR_API_KEY_HERE');
       background-size: cover;
     }
     .venue-details { padding: 24px; }
@@ -475,13 +478,12 @@ router.get('/event/:id', async (req, res) => {
     }
 
     @media (max-width: 960px) {
-      .hero { padding-bottom: 40px; justify-content: center; }
+      .hero { min-height: 50vh; padding-bottom: 40px; justify-content: flex-end; }
       .hero-title { font-size: 2.8rem; text-align: left; }
       .layout { display: block; margin-top: 0; }
       .booking-area { display: none; } /* Hide desktop booking on mobile */
       .mobile-bar { display: flex; } /* Show mobile bar */
       .content-col { padding-top: 0; }
-      /* Reveal booking on anchor click if needed, or just redirect to checkout */
     }
   </style>
 </head>
