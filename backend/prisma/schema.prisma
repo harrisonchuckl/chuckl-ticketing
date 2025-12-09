@@ -43,6 +43,7 @@ model User {
   orders         Order[]
   showsOrganised Show[]  @relation("OrganiserShows")
   tickets        Ticket[]
+showsOrganised Show[]  @relation("OrganiserShows")
 }
 
 model Venue {
@@ -75,7 +76,8 @@ model Show {
 
   venueId     String?
   organiserId String?
-
+organiserId String?
+organiser   User?    @relation("OrganiserShows", fields: [organiserId], references: [id])
   venue       Venue? @relation(fields: [venueId], references: [id])
   organiser   User?  @relation("OrganiserShows", fields: [organiserId], references: [id])
 
