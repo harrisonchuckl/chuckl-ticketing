@@ -37,8 +37,9 @@ router.get('/', async (req, res) => {
 
     if (!show) return res.status(404).send('Event not found');
 
-    // 2. Prepare Data for Frontend
-    const venue = show.venue;
+    // 2. Prepare Data for Frontend (FIX: Handle potentially null venue)
+    // We cast to 'any' here to prevent the strict null check error on venue.name later
+    const venue = (show.venue || {}) as any; 
     const ticketTypes = show.ticketTypes || [];
     const seatMap = show.seatMaps[0]; // The active map
     
@@ -78,9 +79,9 @@ router.get('/', async (req, res) => {
 
   <style>
     :root {
-      --bg-page: #F3F4F6;
+      --bg-page: #F9FAFB;
       --bg-surface: #FFFFFF;
-      --primary: #0F172A;
+      --primary: #111827;
       --brand: #0056D2;
       --brand-hover: #0044A8;
       --text-main: #111827;
@@ -172,7 +173,7 @@ router.get('/', async (req, res) => {
   <header>
     <div class="header-info">
       <h1>${show.title}</h1>
-      <div class="header-meta">${dateStr} • ${timeStr} • ${venue.name}</div>
+      <div class="header-meta">${dateStr} • ${timeStr} • ${venue.name || 'Venue TBC'}</div>
     </div>
     <a href="/public/event/${show.id}" class="btn-close">✕</a>
   </header>
@@ -430,7 +431,7 @@ router.get('/', async (req, res) => {
 </body>
 </html>`);
 
-  } catch (err: any) {
+  } catch (err) {
     console.error('checkout/map error', err);
     res.status(500).send('Server error');
   }
