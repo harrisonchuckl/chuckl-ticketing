@@ -111,14 +111,14 @@ router.get('/event/:id', async (req, res) => {
     const mapQuery = encodeURIComponent([venue.name, venue.address, venue.city, venue.postcode].filter(Boolean).join(', '));
     const mapLink = `https://maps.google.com/maps?q=${mapQuery}`;
 
-    // Helper to generate ticket list HTML (reused twice)
+    // Helper to generate ticket list HTML
     const renderTicketList = (isMainColumn = false) => {
         if (!ticketTypes.length) {
             return '<div style="padding:20px; text-align:center; font-size:0.9rem; color:var(--text-muted);">Tickets coming soon</div>';
         }
         return ticketTypes.map(t => {
              const avail = (t.available === null || t.available > 0);
-             // Slightly different styling for main column vs sidebar widget
+             // Different styling for main column list vs sidebar widget list
              const rowClass = isMainColumn ? 'ticket-row main-col-row' : 'ticket-row widget-row';
              
              return `
@@ -154,12 +154,12 @@ router.get('/event/:id', async (req, res) => {
 
   <style>
     :root {
-      /* UPDATED: TiXALL Blue Palette */
-      --bg-page: #F3F4F6;
+      /* TiXALL Blue Palette */
+      --bg-page: #F3F4F6; /* Light Gray Background */
       --bg-surface: #FFFFFF;
       --primary: #0F172A;
       
-      /* New Blue Brand Color */
+      /* Brand Color */
       --brand: #0056D2; 
       --brand-hover: #0044A8;
       
@@ -168,7 +168,6 @@ router.get('/event/:id', async (req, res) => {
       --border: #E5E7EB;
       --radius-md: 12px;
       --radius-lg: 16px;
-      --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
       --shadow-float: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
     }
 
@@ -197,7 +196,7 @@ router.get('/event/:id', async (req, res) => {
       position: relative;
       background: var(--primary);
       color: white;
-      min-height: 50vh; /* Slightly shorter for tighter feel */
+      min-height: 50vh;
       display: flex;
       flex-direction: column;
       justify-content: flex-end;
@@ -236,19 +235,12 @@ router.get('/event/:id', async (req, res) => {
       width: 100%;
       max-width: 1200px;
       margin: 0 auto;
-      padding: 40px 24px 50px; /* Reduced bottom padding */
+      padding: 40px 24px 50px;
       display: grid;
       gap: 16px;
     }
 
-    .status-badge {
-      display: inline-flex; align-items: center; gap: 6px;
-      background: rgba(255,255,255,0.15); backdrop-filter: blur(8px);
-      border: 1px solid rgba(255,255,255,0.3); padding: 6px 12px;
-      border-radius: 4px; font-size: 0.8rem; font-weight: 700;
-      text-transform: uppercase; letter-spacing: 0.05em; color: #fff;
-    }
-    .status-dot { width: 8px; height: 8px; background: #10B981; border-radius: 50%; }
+    /* Badge removed here */
 
     .hero-title {
       font-size: clamp(2.5rem, 5vw, 4.5rem);
@@ -263,16 +255,15 @@ router.get('/event/:id', async (req, res) => {
       text-shadow: 0 1px 2px rgba(0,0,0,0.5);
     }
     .hero-meta-item { display: flex; align-items: center; gap: 8px; }
-    /* Updated accent color */
     .hero-meta-icon { color: var(--brand); filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5)); }
 
     /* --- LAYOUT CONTAINER --- */
     .layout {
       max-width: 1200px;
       margin: 0 auto;
-      padding: 0 24px 60px;
+      padding: 0 24px 80px;
       display: grid;
-      gap: 32px; /* Tighter gap */
+      gap: 48px; /* Increased gap for unboxed layout */
       position: relative;
       z-index: 20;
     }
@@ -284,29 +275,21 @@ router.get('/event/:id', async (req, res) => {
       }
     }
 
-    /* --- MAIN CONTENT COLUMN (Now using white cards) --- */
+    /* --- MAIN CONTENT COLUMN (Unboxed) --- */
     .content-area {
       display: flex;
       flex-direction: column;
-      gap: 24px; /* Gap between white cards */
+      gap: 48px; /* Gap between sections on background */
+      padding-top: 32px;
     }
 
-    /* New White Card style for main content blocks */
-    .content-card {
-        background: var(--bg-surface);
-        border-radius: var(--radius-md);
-        border: 1px solid var(--border);
-        box-shadow: var(--shadow-card);
-        padding: 32px;
-        overflow: hidden;
-    }
+    /* .content-card wrapper REMOVED */
 
-    /* Updated Section Label with Blue accent */
     .section-label {
       font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.08em;
       font-weight: 700; color: var(--text-muted); margin-bottom: 16px;
       display: block;
-      border-left: 4px solid var(--brand); /* Changed to blue brand color */
+      border-left: 4px solid var(--brand);
       padding-left: 12px;
     }
 
@@ -317,12 +300,12 @@ router.get('/event/:id', async (req, res) => {
 
     /* Gallery Grid */
     .gallery-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 24px; }
-    .gallery-item { aspect-ratio: 16/9; background: #E2E8F0; border-radius: 8px; overflow: hidden; }
+    .gallery-item { aspect-ratio: 16/9; background: #E2E8F0; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
     .gallery-img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s; }
     .gallery-item:hover .gallery-img { transform: scale(1.05); }
 
-    /* Venue Map Styles */
-    .venue-map-container { margin-top: 24px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); }
+    /* Venue Map Styles (Contained in white) */
+    .venue-map-container { margin-top: 24px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
     .venue-map-header {
       height: 150px; background: #CBD5E1; position: relative;
       background-image: url('https://maps.googleapis.com/maps/api/staticmap?center=${escAttr(venue.postcode)}&zoom=14&size=800x300&key=YOUR_API_KEY_HERE');
@@ -337,7 +320,7 @@ router.get('/event/:id', async (req, res) => {
     }
     .btn-outline:hover { border-color: var(--brand); color: var(--brand); background: #F8FAFC; }
 
-    /* --- BOOKING WIDGET (Sidebar) --- */
+    /* --- BOOKING WIDGET (Sidebar - Kept Boxed) --- */
     .booking-widget {
       position: sticky; top: 24px; background: white;
       border-radius: var(--radius-lg); box-shadow: var(--shadow-float);
@@ -348,19 +331,28 @@ router.get('/event/:id', async (req, res) => {
     .widget-subtitle { font-size: 0.9rem; color: var(--text-muted); margin-top: 4px; font-weight: 500;}
     .widget-footer { background: #F8FAFC; padding: 16px; border-top: 1px solid var(--border); text-align: center; font-size: 0.8rem; color: var(--text-muted); }
 
-    /* --- TICKET LIST STYLES (Shared) --- */
+    /* --- TICKET LIST STYLES --- */
     .ticket-list-container { padding: 8px; }
+    
+    /* Shared Row Styles */
     .ticket-row {
       display: grid; grid-template-columns: 1fr auto; align-items: center;
-      padding: 16px; border-radius: 8px; transition: background 0.2s;
-      cursor: pointer; text-decoration: none; color: inherit; border: 1px solid transparent;
+      padding: 16px; border-radius: 8px; transition: background 0.2s, box-shadow 0.2s;
+      cursor: pointer; text-decoration: none; color: inherit;
     }
-    .ticket-row:hover { background: #F8FAFC; border-color: var(--border); }
     
-    /* Slight style difference for sidebar widget vs main content list */
+    /* Sidebar Widget Rows */
     .widget-row { padding: 12px 16px; }
-    .main-col-row { border: 1px solid var(--border); margin-bottom: 8px; }
-    .main-col-row:hover { box-shadow: var(--shadow-card); }
+    .widget-row:hover { background: #F8FAFC; }
+
+    /* Main Column Rows (Sitting on background) */
+    .main-col-row { 
+        background: #fff; /* Give them a white background so they pop off the gray page */
+        border: 1px solid var(--border); 
+        margin-bottom: 8px; 
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+    .main-col-row:hover { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); border-color: #d1d5db; }
 
 
     .t-main { display: flex; flex-direction: column; }
@@ -369,11 +361,10 @@ router.get('/event/:id', async (req, res) => {
     .t-action { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px;}
     .t-price { font-weight: 700; color: var(--primary); font-size: 1.1rem; }
     
-    /* Updated Button Style & Color */
     .btn-buy {
-      background: var(--brand); /* Blue */
+      background: var(--brand);
       color: white; font-size: 0.85rem; font-weight: 700;
-      padding: 8px 16px; border-radius: 6px; /* Less rounded */
+      padding: 8px 16px; border-radius: 6px;
       text-transform: uppercase; letter-spacing: 0.05em;
       transition: background 0.2s; white-space: nowrap;
     }
@@ -402,7 +393,7 @@ router.get('/event/:id', async (req, res) => {
     @media (max-width: 960px) {
       .hero { min-height: 45vh; }
       .hero-title { font-size: 2.8rem; text-align: left; }
-      .layout { display: block; margin-top: -20px; gap: 24px; }
+      .layout { display: block; margin-top: -20px; gap: 40px; }
       .booking-area { display: none; } /* Hide sidebar on mobile */
       .mobile-bar { display: flex; }
     }
@@ -422,10 +413,6 @@ router.get('/event/:id', async (req, res) => {
     </div>
 
     <div class="hero-content">
-      <div class="status-badge">
-        <span class="status-dot"></span> Live Event
-      </div>
-      
       <h1 class="hero-title">${esc(show.title)}</h1>
       
       <div class="hero-meta">
@@ -446,7 +433,7 @@ router.get('/event/:id', async (req, res) => {
     
     <div class="content-area">
       
-      <div class="content-card">
+      <div>
           <span class="section-label">Overview</span>
           <div class="rich-text">
             ${show.description ? show.description.replace(/\n/g, '<br/>') : '<p>Full details coming soon.</p>'}
@@ -460,7 +447,7 @@ router.get('/event/:id', async (req, res) => {
           ` : ''}
       </div>
 
-      <div class="content-card">
+      <div>
           <span class="section-label">Location</span>
           <div class="venue-map-container">
             <div class="venue-map-header"></div>
@@ -472,7 +459,7 @@ router.get('/event/:id', async (req, res) => {
           </div>
       </div>
 
-      <div class="content-card" id="main-tickets">
+      <div id="main-tickets">
           <span class="section-label">Tickets</span>
           <div class="ticket-list-container" style="padding:0;">
               ${renderTicketList(true)} </div>
