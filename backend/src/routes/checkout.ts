@@ -1,12 +1,16 @@
 // backend/src/routes/checkout.ts
 import { Router } from 'express';
-import { Prisma } from '@prisma/client';
+import { Prisma, ShowStatus } from '@prisma/client';
 import prisma from '../lib/prisma.js';
 import { calcFeesForShow } from '../services/fees.js';
 import Stripe from 'stripe';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, { apiVersion: '2024-06-20' });
 const router = Router();
+
+function pFmt(p: number) {
+  return '£' + (p / 100).toFixed(2);
+}
 
 router.get('/', async (req, res) => {
   const showId = String(req.query.showId || '');
@@ -18,13 +22,14 @@ router.get('/', async (req, res) => {
       include: {
         venue: true,
         ticketTypes: { orderBy: { pricePence: 'asc' } },
-        allocations: { include: { seats: true } }
+        allocations: {
+          include: { seats: { include: { seat: true } } }
+        }
       }
     });
 
     if (!show) return res.status(404).send('Event not found');
 
-    // 1. Get Seat Map (Active or Latest)
     let seatMap = null;
     // @ts-ignore
     if (show.activeSeatMapId) {
@@ -38,31 +43,42 @@ router.get('/', async (req, res) => {
         });
     }
 
-    const venueName = show.venue?.name || 'Venue TBC';
+    const venue = show.venue;
+    const venueName = venue?.name || 'Venue TBC';
     const ticketTypes = show.ticketTypes || [];
     
     const dateObj = new Date(show.date);
     const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-    // 2. Get Holds
+    // Extract Blocked/Held Seat IDs
     const heldSeatIds = new Set<string>();
     if (show.allocations) {
         show.allocations.forEach(alloc => {
-            if (alloc.seats) alloc.seats.forEach(s => heldSeatIds.add(s.seatId));
+            if (alloc.seats) {
+                alloc.seats.forEach(allocSeat => {
+                    if (allocSeat.seatId) heldSeatIds.add(allocSeat.seatId);
+                });
+            }
         });
     }
 
-    // 3. Extract Layout
+    // --- DATA EXTRACTION ---
     let konvaData = null;
     if (seatMap && seatMap.layout) {
         const layoutObj = seatMap.layout as any;
-        if (layoutObj.konvaJson) konvaData = layoutObj.konvaJson;
-        else if (layoutObj.attrs || layoutObj.className) konvaData = layoutObj;
+        if (layoutObj.konvaJson) {
+            konvaData = layoutObj.konvaJson;
+        } else if (layoutObj.attrs || layoutObj.className) {
+            konvaData = layoutObj;
+        }
     }
 
-    // --- MODE A: LIST VIEW (No Map) ---
+    // ============================================================
+    // MODE A: TICKET LIST (No Map)
+    // ============================================================
     if (!konvaData) {
+       const ticketsJson = JSON.stringify(ticketTypes);
        res.type('html').send(`<!doctype html>
 <html lang="en">
 <head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>${show.title}</title>
@@ -82,7 +98,10 @@ router.get('/', async (req, res) => {
        return; 
     }
 
-    // --- MODE B: INTERACTIVE MAP ---
+    // ============================================================
+    // MODE B: INTERACTIVE MAP
+    // ============================================================
+    
     const mapData = JSON.stringify(konvaData);
     const ticketsData = JSON.stringify(ticketTypes);
     const showIdStr = JSON.stringify(show.id);
@@ -95,6 +114,7 @@ router.get('/', async (req, res) => {
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Select Seats | ${show.title}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@400;700;800&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/konva@9.3.3/konva.min.js"></script>
 
@@ -132,7 +152,7 @@ router.get('/', async (req, res) => {
     .view-toggle { padding-top:10px; border-top:1px solid #e2e8f0; display:flex; align-items:center; gap:8px; cursor:pointer; }
     .view-toggle input { accent-color: var(--brand); transform:scale(1.2); cursor:pointer; }
 
-    footer { background:var(--surface); border-top:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; box-shadow:0 -4px 10px rgba(0,0,0,0.03); z-index:10; }
+    footer { background:var(--surface); border-top:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; box-shadow:0 -4px 10px rgba(0,0,0,0.03); z-index:3000; }
     .basket-info { display:flex; flex-direction:column; }
     .basket-label { font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em; font-weight:600; color:var(--muted); }
     .basket-total { font-family:'Outfit',sans-serif; font-size:1.5rem; font-weight:800; color:var(--primary); }
@@ -188,7 +208,8 @@ router.get('/', async (req, res) => {
     
     const selectedSeats = new Set(); 
     const seatPrices = new Map();
-    const rowMap = new Map(); // For gap logic
+    // For gap logic: Map<groupId, Array<SeatObject>>
+    const rowMap = new Map(); 
 
     const width = window.innerWidth; 
     const height = window.innerHeight - 160;
@@ -214,29 +235,32 @@ router.get('/', async (req, res) => {
 
         console.log("[DEBUG] Loading Layout...", layout);
 
-        // --- LOAD LAYERS ---
-        let layersToLoad = [];
+        // --- 1. LOAD LAYER IN-PLACE ---
+        
+        let layerData = null;
         if (layout.className === 'Stage' && layout.children) {
-            layersToLoad = layout.children.filter(c => c.className === 'Layer');
-            if (layersToLoad.length === 0) layersToLoad = [{ className: 'Layer', children: layout.children }];
+            layerData = layout.children.find(c => c.className === 'Layer');
         } else if (layout.className === 'Layer') {
-            layersToLoad = [layout];
-        } else {
-            layersToLoad = [{ className: 'Layer', children: Array.isArray(layout) ? layout : [layout] }];
+            layerData = layout;
         }
 
-        layersToLoad.forEach((layerData) => {
-            // Create temporary layer to parse nodes
-            const tempLayer = Konva.Node.create(layerData);
-            
-            // Move children to our main layer to flatten structure for easy management
-            const children = tempLayer.getChildren().slice();
-            children.forEach(node => {
-                node.moveTo(mainLayer);
-                processNode(node, null);
-            });
-            tempLayer.destroy();
+        if (!layerData) {
+            // Fallback: Wrap simple content
+            layerData = { className: 'Layer', children: Array.isArray(layout) ? layout : [layout] };
+        }
+
+        // Create the Layer from data (this creates all children/groups recursively!)
+        const loadedLayer = Konva.Node.create(layerData);
+        
+        // Move children to our main layer to flatten structure for easy management
+        // Note: Using a single layer lets us control zoom/pan easily
+        const children = loadedLayer.getChildren().slice();
+        children.forEach(node => {
+            node.moveTo(mainLayer);
+            processNode(node, null);
         });
+        // We don't need the loaded shell anymore
+        loadedLayer.destroy();
 
         // RECURSIVE NODE PROCESSOR
         function processNode(node, parentGroup) {
@@ -246,12 +270,11 @@ router.get('/', async (req, res) => {
             const isSeatGroup = nodeType === 'Group' && ['row-seats', 'circular-table', 'rect-table', 'single-seat'].includes(groupType);
             
             if (isSeatGroup) {
-                // Remove numbers (Text nodes) inside seat groups
+                // Remove text numbers inside seat groups (Visual Cleanup)
                 const texts = node.find('Text');
-                texts.forEach(t => t.visible(false));
+                texts.forEach(t => t.destroy()); // Destroy completely
                 
-                // Track for gap logic
-                parentGroup = node;
+                parentGroup = node; // Track for gap logic
             }
 
             // Identify Seats
@@ -277,12 +300,12 @@ router.get('/', async (req, res) => {
                 if (parentGroup) {
                     const grpId = parentGroup._id;
                     if (!rowMap.has(grpId)) rowMap.set(grpId, []);
-                    // We need GLOBAL coordinates for accurate sorting/bounds
+                    // We need GLOBAL coordinates for accurate sorting bounds
                     const absPos = seat.getAbsolutePosition();
                     rowMap.get(grpId).push({
                         id: seat._id,
                         x: absPos.x,
-                        y: absPos.y, // Store Y for bounds calculation
+                        y: absPos.y, 
                         unavailable: isUnavailable,
                         node: seat
                     });
@@ -299,7 +322,7 @@ router.get('/', async (req, res) => {
                     seat.stroke('#64748B'); // Dark Grey Border
                     seat.strokeWidth(1.5);
                     seat.listening(true);
-                    seat.cursor('pointer');
+                    // Cursor is handled by stage container events below
                 }
                 seat.shadowEnabled(false);
                 seat.opacity(1);
@@ -308,15 +331,17 @@ router.get('/', async (req, res) => {
                 // --- ICONS ---
                 // Info 'i' (Black dot)
                 if (info && !isUnavailable) {
+                    // Create a little group for the icon so it moves with the seat
+                    // Add it to the seat's parent group to keep structure
                     const iGroup = new Konva.Group({ 
                         x: seat.x(), 
                         y: seat.y(),
                         listening: false 
                     });
-                    // Position relative to seat center (top-right corner)
-                    const offset = seat.radius() * 0.7;
-                    const iDot = new Konva.Circle({ x: offset, y: -offset, radius: 4, fill: '#0F172A' });
-                    const iTxt = new Konva.Text({ x: offset-1.5, y: -offset-2.5, text:'i', fontSize:6, fill:'#fff', fontStyle:'bold' });
+                    const offset = seat.radius();
+                    // Small black circle top-right
+                    const iDot = new Konva.Circle({ x: offset * 0.7, y: -offset * 0.7, radius: 5, fill: '#0F172A' });
+                    const iTxt = new Konva.Text({ x: (offset * 0.7)-1.5, y: (-offset * 0.7)-2.5, text:'i', fontSize:6, fill:'#fff', fontStyle:'bold' });
                     iGroup.add(iDot); iGroup.add(iTxt);
                     if (seat.parent) seat.parent.add(iGroup);
                 }
@@ -327,13 +352,13 @@ router.get('/', async (req, res) => {
                         x: seat.x(), y: seat.y(), 
                         visible: false, 
                         name: 'view-icon-group',
-                        listening: false // Click seat to trigger
+                        listening: false 
                     });
-                    const bg = new Konva.Circle({ radius: 9, fill: '#0056D2' });
-                    // Simple camera/eye shape
+                    const bg = new Konva.Circle({ radius: 10, fill: '#0056D2' });
+                    // Simple camera icon path
                     const icon = new Konva.Path({
                         data: 'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5 5 2.24 5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z',
-                        fill: 'white', scaleX: 0.5, scaleY: 0.5, offsetX: 12, offsetY: 12
+                        fill: 'white', scaleX: 0.6, scaleY: 0.6, offsetX: 12, offsetY: 12
                     });
                     vGroup.add(bg); vGroup.add(icon);
                     if (seat.parent) seat.parent.add(vGroup);
@@ -354,7 +379,6 @@ router.get('/', async (req, res) => {
                         let html = \`<span class="tt-title">\${label}</span><span class="tt-meta">\${tType ? tType.name : 'Standard'} • \${priceStr}</span>\`;
                         if (info) html += \`<div class="tt-info">\${info}</div>\`;
                         
-                        // Show view logic
                         const viewMode = document.getElementById('toggle-views').checked;
                         if (viewImg && viewMode) {
                             html += \`<img src="\${viewImg}" />\`;
@@ -385,25 +409,23 @@ router.get('/', async (req, res) => {
             }
 
             if (node.getChildren) {
-                node.getChildren().forEach(child => processNode(child, parentGroup));
+                node.getChildren().forEach(child => processNode(child, node.nodeType === 'Group' ? node : parentGroup));
             }
         }
 
         // --- 3. SORT ROWS (For Gap Logic) ---
+        // Sort by X coordinate so we know neighbours
         rowMap.forEach((seats) => seats.sort((a, b) => a.x - b.x));
 
-        // --- 4. ROBUST AUTO ZOOM (Manual Bounds) ---
-        // We iterate through all known seats to find the true extent of the map
-        // This avoids issues with Konva.Layer.getClientRect() returning 0
+        // --- 4. MANUAL BOUNDS CALCULATION (Fixes Zoom) ---
+        // We calculate bounds manually based on seat positions to guarantee correctness
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         let seatCount = 0;
 
         rowMap.forEach((seats) => {
             seats.forEach(s => {
                 seatCount++;
-                // A standard seat is ~20-30px wide usually. 
-                // We add some buffer around the center point (x,y)
-                const r = 20; 
+                const r = 25; // Approximate radius buffer
                 if (s.x - r < minX) minX = s.x - r;
                 if (s.x + r > maxX) maxX = s.x + r;
                 if (s.y - r < minY) minY = s.y - r;
@@ -428,12 +450,12 @@ router.get('/', async (req, res) => {
             const newX = (width / 2) - (cx * scale);
             const newY = (height / 2) - (cy * scale);
 
-            stage.position({ x: newX, y: newY });
+            stage.x(newX);
+            stage.y(newY);
             stage.scale({ x: scale, y: scale });
             mainLayer.batchDraw();
         } else {
-            console.warn("Could not calculate bounds from seats. Attempting fallback.");
-            // Fallback to auto-centering 0,0
+            console.warn("Could not calculate bounds. Centering default.");
             stage.x(width/2); stage.y(height/2);
         }
 
@@ -452,6 +474,19 @@ router.get('/', async (req, res) => {
         mainLayer.batchDraw();
     });
 
+    // --- ZOOM ---
+    stage.on('wheel', (e) => {
+        e.evt.preventDefault();
+        const scaleBy = 1.1;
+        const oldScale = stage.scaleX();
+        const pointer = stage.getPointerPosition();
+        const mousePointTo = { x: (pointer.x - stage.x()) / oldScale, y: (pointer.y - stage.y()) / oldScale };
+        const newScale = e.evt.deltaY > 0 ? oldScale / scaleBy : oldScale * scaleBy;
+        stage.scale({ x: newScale, y: newScale });
+        const newPos = { x: pointer.x - mousePointTo.x * newScale, y: pointer.y - mousePointTo.y * newScale };
+        stage.position(newPos);
+    });
+
     // --- GAP CHECKER ---
     function checkGap(seat, rowGroup) {
         if (!rowGroup) return true;
@@ -460,18 +495,17 @@ router.get('/', async (req, res) => {
 
         // Build status array based on X-order
         const states = row.map(s => {
-            if (s.unavailable) return 0; // Wall/Sold
+            if (s.unavailable) return 0; // Blocked/Sold
             if (s.id === seat._id) return selectedSeats.has(s.id) ? 2 : 1; // Toggle simulation
             if (selectedSeats.has(s.id)) return 1; // Selected
             return 2; // Free
         });
 
-        // Rules:
-        // 1. Do not leave single seat (2) between unavailable (0) or selected (1)
-        // Pattern: [Non-2] [2] [Non-2] is BAD
+        // 0=Taken/Blocked, 1=MySelection, 2=Free
+        // Invalid pattern: [0 or 1] [2] [0 or 1] -> Single free seat flanked by taken
         
         for (let i = 0; i < states.length; i++) {
-            if (states[i] === 2) { // Found empty seat
+            if (states[i] === 2) { // If seat is free
                 const left = (i === 0) ? 0 : states[i-1];
                 const right = (i === states.length - 1) ? 0 : states[i+1];
                 
@@ -490,14 +524,12 @@ router.get('/', async (req, res) => {
 
         if (willSelect) {
             // Apply Gap Check BEFORE selecting
-            // Actually simpler: Make change, check validity, revert if invalid
             selectedSeats.add(id);
             if (!checkGap(seat, parentGroup)) {
                 selectedSeats.delete(id);
                 alert("Please do not leave single seat gaps.");
                 return;
             }
-            // Limit check
             if (selectedSeats.size > 10) {
                 selectedSeats.delete(id);
                 alert("Maximum 10 tickets.");
@@ -507,8 +539,6 @@ router.get('/', async (req, res) => {
         } else {
             // Deselect
             selectedSeats.delete(id);
-            // Check if deselecting created a gap elsewhere?
-            // Usually strict gap rules prevent deselecting if it strands a neighbor
             if (!checkGap(seat, parentGroup)) {
                 selectedSeats.add(id); // Revert
                 alert("Deselecting this would leave a gap.");
@@ -563,7 +593,6 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/session', async (req, res) => {
-  // ... (POST logic preserved as standard)
   try {
     const { showId, quantity, ticketTypeId, unitPricePence } = req.body ?? {};
     if (!showId || !quantity || quantity < 1) return res.status(400).json({ ok: false, message: 'showId and quantity are required' });
