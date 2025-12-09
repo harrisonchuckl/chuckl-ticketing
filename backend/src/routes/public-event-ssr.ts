@@ -2,7 +2,7 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 
-// We use a local instance to ensure we don't have import path issues
+// Use a local PrismaClient instance to ensure no module resolution issues
 const prisma = new PrismaClient();
 const router = Router();
 
@@ -33,7 +33,7 @@ router.get('/event/:id', async (req, res) => {
   if (!id) return res.status(404).send('Not found');
 
   try {
-    // 1. Fetch by ID only (we filter status in JS to avoid Enum errors)
+    // 1. Fetch the show by ID (ignore status in DB query to avoid Enum crash)
     const show = await prisma.show.findFirst({
       where: { id },
       include: {
@@ -47,19 +47,21 @@ router.get('/event/:id', async (req, res) => {
       },
     });
 
-    // 2. Check if show exists
     if (!show) {
-       [cite_start]return res.status(404).send('Event ID not found in database [cite: 30]');
+       return res.status(404).send('Event ID not found in database');
     }
 
-    // 3. Manually check status (Case insensitive safety check)
-    // We cast to 'any' to bypass strict TS Enum checking if the client is out of sync
-    const status = (show as any).status; 
+    // 2. Check status manually using simpler syntax to avoid TS build errors
+    // @ts-ignore
+    const status = show['status'];
+    
+    // Check for 'LIVE' (or 'live')
     if (status !== 'LIVE' && status !== 'live') {
        return res.status(404).send('Event is not LIVE. Current status: ' + status);
     }
 
-    // --- Data Prep ---
+    // 3. Prepare data
+    // Use 'as any' casting for safety on nested objects
     const venue = (show.venue || {}) as any;
     const ticketTypes = (show.ticketTypes || []) as any[];
 
@@ -227,7 +229,6 @@ ${venue.name ? `<iframe src="${escAttr(mapEmbed)}" loading="lazy" referrerpolicy
 </html>`);
   } catch (err: any) {
     console.error('[public-event-ssr] Error:', err);
-    // 4. Expose the actual error details to the browser so you can debug
     res.status(500).send(`
       <div style="padding:20px; font-family:sans-serif; color:#b91c1c; background:#fef2f2; border:1px solid #fecaca; margin:20px; border-radius:8px;">
         <h2 style="margin-top:0">Server Error: Unable to load event</h2>
