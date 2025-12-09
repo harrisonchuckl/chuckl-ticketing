@@ -17,16 +17,28 @@ router.get('/', async (req, res) => {
   if (!showId) return res.status(404).send('Show ID is required');
 
   try {
+    // 1. Fetch Show, Venue, TicketTypes
     const show = await prisma.show.findUnique({
       where: { id: showId },
       include: {
         venue: true,
-        ticketTypes: { orderBy: { pricePence: 'asc' } }
+        ticketTypes: { orderBy: { pricePence: 'asc' } },
+        // Also fetch allocations to block out held seats
+        allocations: {
+          include: {
+            seats: {
+              include: {
+                seat: true
+              }
+            }
+          }
+        }
       }
     });
 
     if (!show) return res.status(404).send('Event not found');
 
+    // 2. Find Active Seat Map
     let seatMap = null;
     // @ts-ignore
     if (show.activeSeatMapId) {
@@ -47,6 +59,21 @@ router.get('/', async (req, res) => {
     const dateObj = new Date(show.date);
     const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+    // 3. Extract Blocked/Held Seat IDs from Database Allocations
+    // (This handles the "External Promoter" tab holds)
+    const heldSeatIds = new Set<string>();
+    if (show.allocations) {
+        show.allocations.forEach(alloc => {
+            if (alloc.seats) {
+                alloc.seats.forEach(allocSeat => {
+                    // We assume the builder syncs 'seat.id' or 'seat.label' to the map
+                    // For robustness, we'll try to match by the seat's ID if available
+                    if (allocSeat.seatId) heldSeatIds.add(allocSeat.seatId);
+                });
+            }
+        });
+    }
 
     // --- DATA EXTRACTION ---
     let konvaData = null;
@@ -90,6 +117,8 @@ router.get('/', async (req, res) => {
     const mapData = JSON.stringify(konvaData);
     const ticketsData = JSON.stringify(ticketTypes);
     const showIdStr = JSON.stringify(show.id);
+    // Convert Set to Array for JSON injection
+    const heldSeatsArray = JSON.stringify(Array.from(heldSeatIds)); 
 
     res.type('html').send(`<!doctype html>
 <html lang="en">
@@ -103,7 +132,7 @@ router.get('/', async (req, res) => {
   <script src="https://unpkg.com/konva@9.3.3/konva.min.js"></script>
 
   <style>
-    :root { --bg:#F3F4F6; --surface:#FFFFFF; --primary:#0F172A; --brand:#0056D2; --text-main:#111827; --text-muted:#6B7280; --border:#E5E7EB; --success:#10B981; }
+    :root { --bg:#F3F4F6; --surface:#FFFFFF; --primary:#0F172A; --brand:#0056D2; --text-main:#111827; --text-muted:#6B7280; --border:#E5E7EB; --success:#10B981; --blocked:#94a3b8; }
     body { margin:0; font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); display:flex; flex-direction:column; height:100vh; overflow:hidden; }
     header { background:var(--surface); border-bottom:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; z-index:10; }
     .header-info h1 { font-family:'Outfit',sans-serif; font-size:1.25rem; margin:0; font-weight:700; color:var(--primary); }
@@ -118,7 +147,7 @@ router.get('/', async (req, res) => {
     .dot { width:12px; height:12px; border-radius:50%; }
     .dot-avail { background:#fff; border:2px solid #64748B; }
     .dot-selected { background:var(--brand); border:2px solid var(--brand); }
-    .dot-sold { background:#E2E8F0; border:2px solid #CBD5E1; }
+    .dot-sold { background:var(--blocked); border:2px solid var(--text-muted); opacity:0.5; }
     footer { background:var(--surface); border-top:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; box-shadow:0 -4px 10px rgba(0,0,0,0.03); z-index:10; }
     .basket-info { display:flex; flex-direction:column; }
     .basket-label { font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em; font-weight:600; color:var(--muted); }
@@ -129,6 +158,17 @@ router.get('/', async (req, res) => {
     .btn-checkout:hover { background:#059669; }
     #loader { position:absolute; top:0; left:0; right:0; bottom:0; background:rgba(255,255,255,0.95); z-index:50; display:flex; flex-direction:column; gap:10px; align-items:center; justify-content:center; font-weight:600; color:var(--primary); }
     #debug-msg { font-size:0.8rem; color:#ef4444; font-family:monospace; max-width:80%; text-align:center;}
+    
+    /* TOOLTIP */
+    #tooltip {
+      position: absolute; display: none; padding: 12px; background: rgba(15, 23, 42, 0.95); color: #fff;
+      border-radius: 8px; pointer-events: none; font-size: 0.85rem; z-index: 100;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2); max-width: 220px;
+    }
+    #tooltip img { width: 100%; border-radius: 4px; margin-top: 8px; display: block; }
+    #tooltip .tt-title { font-weight: 700; margin-bottom: 2px; display:block; }
+    #tooltip .tt-meta { color: #94a3b8; font-size: 0.75rem; margin-bottom: 4px; display:block; }
+    #tooltip .tt-info { margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.2); font-style: italic; color: #e2e8f0; }
   </style>
 </head>
 <body>
@@ -143,6 +183,7 @@ router.get('/', async (req, res) => {
       <div class="legend-item"><div class="dot dot-sold"></div> Unavailable</div>
     </div>
     <div id="stage-container"></div>
+    <div id="tooltip"></div>
     <div id="loader">
         <div>Loading seating plan...</div>
         <div id="debug-msg"></div>
@@ -156,123 +197,147 @@ router.get('/', async (req, res) => {
     const rawLayout = ${mapData};
     const ticketTypes = ${ticketsData};
     const showId = ${showIdStr};
-    const selectedSeats = new Set(); const seatPrices = new Map();
-    const width = window.innerWidth; const height = window.innerHeight - 160;
+    const heldSeatIds = new Set(${heldSeatsArray});
     
-    // 1. Create Main Stage
+    const selectedSeats = new Set(); 
+    const seatPrices = new Map();
+    const width = window.innerWidth; 
+    const height = window.innerHeight - 160;
+    
     const stage = new Konva.Stage({ container: 'stage-container', width: width, height: height, draggable: true });
-    
-    // 2. Create Main Layer
     const layer = new Konva.Layer();
     stage.add(layer);
+    const tooltip = document.getElementById('tooltip');
 
-    function getPriceForSeat(seatNode) {
+    function getTicketType(seatNode) {
         const assignedId = seatNode.getAttr('sbTicketId');
         let match = ticketTypes.find(t => t.id === assignedId);
         if (!match && ticketTypes.length > 0) match = ticketTypes[0];
-        return match ? match.pricePence : 0;
+        return match;
     }
 
     try {
         let layout = rawLayout;
-        if (typeof layout === 'string') {
-            try { layout = JSON.parse(layout); } catch(e) { console.error("JSON parse error", e); }
-        }
-        if (layout.konvaJson) {
-             layout = layout.konvaJson;
-             if (typeof layout === 'string') layout = JSON.parse(layout);
-        }
+        if (typeof layout === 'string') { try { layout = JSON.parse(layout); } catch(e) {} }
+        if (layout.konvaJson) { layout = layout.konvaJson; if (typeof layout === 'string') layout = JSON.parse(layout); }
 
         console.log("[DEBUG] Loading Layout...", layout);
 
-        // --- MANUAL LOADING STRATEGY ---
+        // --- LOAD LAYERS ---
         let layersToLoad = [];
-
         if (layout.className === 'Stage' && layout.children) {
             layersToLoad = layout.children.filter(c => c.className === 'Layer');
-            if (layersToLoad.length === 0) {
-                layersToLoad = [{ className: 'Layer', children: layout.children }];
-            }
+            if (layersToLoad.length === 0) layersToLoad = [{ className: 'Layer', children: layout.children }];
         } else if (layout.className === 'Layer') {
             layersToLoad = [layout];
         } else {
             layersToLoad = [{ className: 'Layer', children: Array.isArray(layout) ? layout : [layout] }];
         }
 
-        console.log("[DEBUG] Found", layersToLoad.length, "layers.");
-
-        // Create and add all layers
-        layersToLoad.forEach((layerData, idx) => {
+        layersToLoad.forEach((layerData) => {
             const loadedLayer = Konva.Node.create(layerData);
             stage.add(loadedLayer);
             
-            // Now recursively process to add interaction
-            const groups = loadedLayer.find('Group');
-            
-            groups.forEach(group => {
-                // Lock everything
-                group.draggable(false);
-                group.listening(false);
-
-                const type = group.getAttr('shapeType') || group.name();
-                if (['row-seats', 'circular-table', 'rect-table', 'single-seat'].includes(type)) {
+            // RECURSIVE NODE PROCESSOR
+            function processNode(node) {
+                if (node.getClassName() === 'Circle' && node.getAttr('isSeat')) {
+                    const seat = node;
                     
-                    const circles = group.find('Circle');
-                    console.log(\`[DEBUG] Found Group (\${type}) with \${circles.length} seats.\`);
+                    // 1. Check Status
+                    const status = seat.getAttr('status') || 'AVAILABLE';
+                    const isBlocked = status === 'BLOCKED' || status === 'SOLD' || status === 'HELD';
+                    
+                    // 2. Check Database Holds
+                    // We assume the seat has an 'id' or 'name' that matches the alloc seatId
+                    // If no ID match, we fallback to logic 1
+                    const isHeldDB = heldSeatIds.has(seat.id()) || heldSeatIds.has(seat.getAttr('sbSeatId'));
+                    
+                    const isUnavailable = isBlocked || isHeldDB;
 
-                    circles.forEach(seat => {
-                        if (!seat.getAttr('isSeat')) return;
-                        
-                        const price = getPriceForSeat(seat);
-                        seatPrices.set(seat._id, price);
-                        
-                        // Force visibility/style reset
+                    // Metadata
+                    const tType = getTicketType(seat);
+                    const price = tType ? tType.pricePence : 0;
+                    seatPrices.set(seat._id, price);
+                    
+                    const label = seat.getAttr('label') || seat.name() || 'Seat';
+                    const info = seat.getAttr('sbInfo');
+                    const viewImg = seat.getAttr('sbViewImage');
+
+                    // Visuals based on availability
+                    if (isUnavailable) {
+                        seat.fill('#cbd5e1'); // Grey
+                        seat.stroke('#94a3b8'); // Darker grey
+                        seat.strokeWidth(1);
+                        seat.opacity(0.6);
+                        seat.listening(false); // Disable interaction
+                    } else {
                         seat.fill('#ffffff'); 
                         seat.stroke('#64748B'); 
                         seat.strokeWidth(1.5);
                         seat.opacity(1);
-                        seat.visible(true);
-                        seat.shadowEnabled(false);
-                        
-                        // Enable Interaction
                         seat.listening(true); 
-                        
-                        // REMOVED seat.cursor('pointer') to fix crash
-                        // Handled via CSS in mouseenter/mouseleave below
-
-                        seat.on('mouseenter', () => { 
-                            if (selectedSeats.has(seat._id)) return; 
+                        seat.cursor('pointer');
+                    }
+                    
+                    seat.visible(true);
+                    seat.shadowEnabled(false);
+                    
+                    // Events (Only for available seats)
+                    if (!isUnavailable) {
+                        seat.on('mouseenter', (e) => { 
                             stage.container().style.cursor = 'pointer'; 
-                            seat.stroke('#0056D2'); seat.strokeWidth(3); 
+                            if (!selectedSeats.has(seat._id)) {
+                                seat.stroke('#0056D2'); seat.strokeWidth(3); 
+                                layer.batchDraw();
+                            }
+                            // Show Tooltip
+                            const pos = stage.getPointerPosition();
+                            const priceStr = '£' + (price/100).toFixed(2);
+                            let html = \`<span class="tt-title">\${label}</span><span class="tt-meta">\${tType ? tType.name : 'Standard'} • \${priceStr}</span>\`;
+                            if (info) html += \`<div class="tt-info">\${info}</div>\`;
+                            if (viewImg) html += \`<img src="\${viewImg}" />\`;
+                            tooltip.innerHTML = html;
+                            tooltip.style.display = 'block';
+                            tooltip.style.left = (pos.x + 15) + 'px';
+                            tooltip.style.top = (pos.y + 15) + 'px';
                         });
+
                         seat.on('mouseleave', () => { 
                             stage.container().style.cursor = 'default'; 
-                            if (selectedSeats.has(seat._id)) return; 
-                            seat.stroke('#64748B'); seat.strokeWidth(1.5); 
+                            tooltip.style.display = 'none';
+                            if (!selectedSeats.has(seat._id)) {
+                                seat.stroke('#64748B'); seat.strokeWidth(1.5); 
+                                layer.batchDraw();
+                            }
                         });
+
                         seat.on('click tap', (e) => { 
                             e.cancelBubble = true; 
                             toggleSeat(seat); 
                         });
-                    });
+                    }
+                } 
+                
+                if (node.getChildren) {
+                    node.getChildren().forEach(processNode);
                 }
-            });
+            }
+
+            loadedLayer.getChildren().forEach(processNode);
         });
 
-        // --- SMART CENTERING ---
-        // Calculate the bounding box of ALL visible layers
+        // --- SMART FIT LOGIC ---
         const allNodesRect = stage.getClientRect({ skipTransform: true });
-        
         console.log("[DEBUG] Content Bounds:", allNodesRect);
 
         if (allNodesRect.width > 0 && allNodesRect.height > 0) {
-            const scale = Math.min(
-                (width - 60) / allNodesRect.width,
-                (height - 60) / allNodesRect.height
-            );
-            const finalScale = Math.min(Math.max(scale, 0.1), 2.0); // Allow zooming out more
+            const padding = 40;
+            const availableW = width - padding * 2;
+            const availableH = height - padding * 2;
+            const scaleX = availableW / allNodesRect.width;
+            const scaleY = availableH / allNodesRect.height;
+            const finalScale = Math.min(scaleX, scaleY);
             
-            // Center based on the content bounds
             const newX = (width - allNodesRect.width * finalScale) / 2 - (allNodesRect.x * finalScale);
             const newY = (height - allNodesRect.height * finalScale) / 2 - (allNodesRect.y * finalScale);
 
@@ -280,8 +345,6 @@ router.get('/', async (req, res) => {
             stage.y(newY);
             stage.scale({ x: finalScale, y: finalScale });
             stage.batchDraw();
-        } else {
-            console.warn("[DEBUG] Map seems empty (0 width/height).");
         }
         
         document.getElementById('loader').style.display = 'none';
