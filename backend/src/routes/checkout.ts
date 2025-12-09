@@ -61,15 +61,12 @@ router.get('/', async (req, res) => {
     const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-    // --- FIX: Extract the actual Konva data from the saved layout wrapper ---
+    // --- EXTRACT KONVA DATA ---
     let konvaData = null;
     if (seatMap && seatMap.layout) {
         const layoutObj = seatMap.layout as any;
-        // The builder saves it as { layoutType: ..., konvaJson: ... }
-        // We need specifically the konvaJson part.
         konvaData = layoutObj.konvaJson || null;
-        
-        // If for some reason legacy data was saved directly (rare), allow fallback
+        // Legacy fallback
         if (!konvaData && layoutObj.attrs) {
             konvaData = layoutObj;
         }
@@ -197,7 +194,7 @@ router.get('/', async (req, res) => {
         if (qty > 0) {
            totalPence += (t.pricePence * qty);
            count += qty;
-           activeId = t.id; // Just for V1 checkout link
+           activeId = t.id;
         }
       });
 
@@ -206,13 +203,13 @@ router.get('/', async (req, res) => {
       
       if (count > 0) {
         btn.classList.add('active');
-        btn.onclick = () => doCheckout(count, totalPence, activeId);
+        btn.onclick = () => doCheckout(activeId, count);
       } else {
         btn.classList.remove('active');
       }
     }
 
-    async function doCheckout(quantity, totalPence, ticketTypeId) {
+    async function doCheckout(ticketTypeId, quantity) {
        const btn = document.getElementById('btn-next');
        btn.innerText = 'Processing...';
        
@@ -244,7 +241,7 @@ router.get('/', async (req, res) => {
     // MODE B: ALLOCATED SEATING (Konva Map Found)
     // ============================================================
     
-    // Inject extracted data
+    // Use the extracted konvaData
     const mapData = JSON.stringify(konvaData);
     const ticketsData = JSON.stringify(ticketTypes);
     const showIdStr = JSON.stringify(show.id);
@@ -338,25 +335,40 @@ router.get('/', async (req, res) => {
     }
 
     try {
-        // Konva can read the JSON string directly
-        const tempNode = Konva.Node.create(rawLayout);
+        // --- FIX: Robust Layout Loading ---
+        // 1. Handle potential JSON string
+        let layout = rawLayout;
+        if (typeof layout === 'string') {
+            try { layout = JSON.parse(layout); } catch(e) { console.error('Parse error', e); }
+        }
         
-        // Safety: If it's a Stage (unlikely but possible), get its children
+        // 2. Ensure className exists on root
+        if (layout && !layout.className) {
+            // If it looks like a Stage/Layer structure, assume Stage
+            if (layout.attrs || layout.children) {
+                layout.className = 'Stage';
+            }
+        }
+
+        const tempNode = Konva.Node.create(layout);
+        
+        // 3. Extract children to move to our main layer
         let nodesToMove = [];
         if (tempNode.getClassName() === 'Stage') {
-             const tempLayer = tempNode.findOne('Layer');
+             // Find the layer inside the stage
+             const tempLayer = tempNode.findOne('Layer') || tempNode.getChildren()[0];
              if (tempLayer) nodesToMove = tempLayer.getChildren().slice();
         } else if (tempNode.getClassName() === 'Layer') {
              nodesToMove = tempNode.getChildren().slice();
         } else {
-             // If it's just a group/shape, wrap it
+             // If it's a raw Group or Shape
              nodesToMove = [tempNode];
         }
 
         nodesToMove.forEach(node => {
             node.moveTo(layer);
             
-            // recursively lock everything
+            // Lock everything
             node.draggable(false);
             node.listening(false);
             node.find('*').forEach(n => { n.draggable(false); n.listening(false); });
@@ -482,92 +494,6 @@ router.get('/', async (req, res) => {
 </body>
 </html>`);
 
-  } catch (err: any) {
-    console.error('checkout/map error', err);
-    res.status(500).send('Server error');
-  }
-});
-
-
-/**
- * POST /checkout/session
- * Handles Stripe Session Creation.
- * Supports explicit Ticket Type selection for GA.
- */
-router.post('/session', async (req, res) => {
-  try {
-    const { showId, quantity, ticketTypeId, unitPricePence } = req.body ?? {};
-    
-    if (!showId || !quantity || quantity < 1) {
-      return res.status(400).json({ ok: false, message: 'showId and quantity are required' });
-    }
-
-    const show = await prisma.show.findUnique({
-      where: { id: showId },
-      select: {
-        status: true,
-        ticketTypes: { select: { id: true, pricePence: true }, orderBy: { createdAt: 'asc' } },
-      },
-    });
-
-    if (!show) {
-      return res.status(404).json({ ok: false, message: 'Show not found' });
-    }
-
-    let finalPrice = 0;
-    if (unitPricePence) {
-        finalPrice = Number(unitPricePence);
-    } else if (ticketTypeId) {
-        const match = show.ticketTypes.find(t => t.id === ticketTypeId);
-        if (!match) return res.status(400).json({ ok: false, message: 'Invalid ticket type' });
-        finalPrice = match.pricePence;
-    } else {
-        finalPrice = show.ticketTypes[0]?.pricePence || 0;
-    }
-
-    let organiserSplitBps: number | null = null;
-    const userId = (req as any).userId as string | undefined;
-    if (userId) {
-      const user = await prisma.user.findUnique({ where: { id: userId }, select: { organiserSplitBps: true } });
-      organiserSplitBps = user?.organiserSplitBps ?? null;
-    }
-
-    const fees = await calcFeesForShow(prisma, showId, Number(quantity), finalPrice, organiserSplitBps);
-
-    const order = await prisma.order.create({
-      data: {
-        show: { connect: { id: showId } },
-        quantity: Number(quantity),
-        amountPence: finalPrice * Number(quantity),
-        status: 'PENDING',
-        platformFeePence: fees.platformFeePence,
-        organiserSharePence: fees.organiserSharePence,
-        paymentFeePence: fees.paymentFeePence,
-        netPayoutPence: fees.netPayoutPence,
-        ticketType: ticketTypeId ? { connect: { id: ticketTypeId } } : undefined
-      },
-      select: { id: true },
-    });
-
-    const session = await stripe.checkout.sessions.create({
-      mode: 'payment',
-      currency: 'gbp',
-      line_items: [
-        {
-          quantity,
-          price_data: {
-            currency: 'gbp',
-            unit_amount: finalPrice,
-            product_data: { name: 'Tickets' },
-          },
-        },
-      ],
-      metadata: { orderId: order.id, showId },
-      success_url: `${process.env.PUBLIC_BASE_URL}/success?order=${order.id}`,
-      cancel_url: `${process.env.PUBLIC_BASE_URL}/cancel?order=${order.id}`,
-    });
-
-    return res.json({ ok: true, url: session.url });
   } catch (err: any) {
     console.error('checkout/session error', err);
     return res.status(500).json({ ok: false, message: 'Checkout error' });
