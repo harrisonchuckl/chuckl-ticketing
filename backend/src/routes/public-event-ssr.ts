@@ -2,7 +2,6 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 
-// Use a local PrismaClient instance to ensure no module resolution issues
 const prisma = new PrismaClient();
 const router = Router();
 
@@ -33,7 +32,6 @@ router.get('/event/:id', async (req, res) => {
   if (!id) return res.status(404).send('Not found');
 
   try {
-    // 1. Fetch the show by ID (ignore status in DB query to avoid Enum crash)
     const show = await prisma.show.findFirst({
       where: { id },
       include: {
@@ -48,194 +46,449 @@ router.get('/event/:id', async (req, res) => {
     });
 
     if (!show) {
-       return res.status(404).send('Event ID not found in database');
+       return res.status(404).send('Event ID not found');
     }
 
-    // 2. CHECK STATUS (Fixed to bypass TypeScript Error TS2367)
-    // We cast the whole object to 'any' so TypeScript stops enforcing the Enum type
-    const rawShow = show as any;
-    const status = rawShow.status; 
-    
-    // Now we can safely check for variations without breaking the build
+    // @ts-ignore
+    const status = show['status'];
     if (status !== 'LIVE' && status !== 'live') {
        return res.status(404).send(`Event is not LIVE (Status: ${status})`);
     }
 
-    // 3. Prepare data
     const venue = (show.venue || {}) as any;
     const ticketTypes = (show.ticketTypes || []) as any[];
 
-    const whenISO = show.date ? new Date(show.date).toISOString() : undefined;
-    const whenHuman = show.date
-      ? new Date(show.date).toLocaleString('en-GB', { dateStyle: 'full', timeStyle: 'short' })
-      : 'Date TBC';
+    // Date Logic
+    const dateObj = show.date ? new Date(show.date) : null;
+    const whenISO = dateObj ? dateObj.toISOString() : undefined;
+    
+    // Nice formats
+    const dayName = dateObj ? dateObj.toLocaleDateString('en-GB', { weekday: 'long' }) : '';
+    const fullDate = dateObj ? dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Date TBC';
+    const timeStr = dateObj ? dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '';
 
-    const venueLine = [
-      venue.name,
-      [venue.address, venue.city, venue.postcode].filter(Boolean).join(', '),
-    ]
-      .filter(Boolean)
-      .join(' · ');
+    const venueLine = [venue.name, venue.city].filter(Boolean).join(', ');
+    const fullAddress = [venue.address, venue.city, venue.postcode].filter(Boolean).join(', ');
 
-    const cheapest = ticketTypes[0];
-    const fromPrice = cheapest ? pFmt(cheapest.pricePence) : undefined;
     const canonical = base ? `${base}/public/event/${show.id}` : `/public/event/${show.id}`;
     const poster = show.imageUrl || '';
-    const desc = cleanDesc(show.description) || `Stand-up comedy: ${show.title} — ${venueLine || 'Live show'}`;
+    const desc = cleanDesc(show.description) || `Live event at ${venueLine}`;
 
-    const offers = ticketTypes.map((t) => ({
-      '@type': 'Offer',
-      name: t.name,
-      price: pDec(t.pricePence),
-      priceCurrency: 'GBP',
-      availability: t.available && t.available > 0 ? 'http://schema.org/InStock' : 'http://schema.org/LimitedAvailability',
-      url: (base ? `${base}` : '') + `/checkout?showId=${encodeURIComponent(show.id)}`,
-    }));
+    // Map URL
+    const mapQuery = encodeURIComponent(fullAddress || venueLine);
+    const mapLink = `https://www.google.com/maps/search/?api=1&query=${mapQuery}`;
 
+    // JSON-LD for SEO
     const jsonLd = {
       '@context': 'https://schema.org',
       '@type': 'Event',
       name: show.title,
       description: desc,
       startDate: whenISO,
-      eventStatus: 'https://schema.org/EventScheduled',
-      eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
       image: poster ? [poster] : undefined,
       location: {
         '@type': 'Place',
         name: venue.name || 'Venue',
-        address: {
-          '@type': 'PostalAddress',
-          streetAddress: venue.address || '',
-          addressLocality: venue.city || '',
-          postalCode: venue.postcode || '',
-          addressCountry: 'GB',
-        },
+        address: venue.address
       },
-      offers,
-      url: canonical,
+      offers: ticketTypes.map((t) => ({
+        '@type': 'Offer',
+        name: t.name,
+        price: pDec(t.pricePence),
+        priceCurrency: 'GBP',
+        availability: (t.available === null || t.available > 0) ? 'https://schema.org/InStock' : 'https://schema.org/SoldOut'
+      }))
     };
-
-    const mapQuery = encodeURIComponent(
-      [venue.name, venue.address, venue.city, venue.postcode].filter(Boolean).join(', ')
-    );
-    const mapEmbed = `https://maps.google.com/maps?q=${mapQuery}&t=&z=13&ie=UTF8&iwloc=&output=embed`;
-    const mapLink = `https://maps.google.com/maps?q=${mapQuery}`;
 
     res.type('html').send(`<!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>${esc(show.title)} – Comedy Tickets</title>
-<link rel="canonical" href="${escAttr(canonical)}" />
-<meta name="description" content="${escAttr(desc)}" />
-<meta property="og:type" content="website" />
-<meta property="og:title" content="${escAttr(show.title)}" />
-<meta property="og:description" content="${escAttr(desc)}" />
-<meta property="og:url" content="${escAttr(canonical)}" />
-${poster ? `<meta property="og:image" content="${escAttr(poster)}" />` : ''}
-<script type="application/ld+json">${escJSON(jsonLd)}</script>
-<style>
-:root{ --bg:#ffffff; --text:#0f172a; --muted:#475569; --border:#e2e8f0; --brand:#0ea5e9; }
-*{box-sizing:border-box}
-body{margin:0; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; color:var(--text); background:var(--bg);}
-header{padding:16px; border-bottom:1px solid var(--border);}
-.wrap{max-width:1100px; margin:0 auto; padding:16px;}
-a{color:inherit}
-.muted{color:var(--muted)}
-.grid{display:grid; gap:16px}
-@media (min-width:900px){ .grid{grid-template-columns: 1fr 1.2fr} }
-.poster{width:100%; aspect-ratio:3/4; object-fit:cover; border:1px solid var(--border); border-radius:12px; background:#f8fafc}
-.panel{border:1px solid var(--border); border-radius:12px; padding:16px; background:#fff}
-.btn{display:inline-block; background:#111; color:#fff; border-radius:8px; padding:10px 14px; text-decoration:none; font-weight:600;}
-.btn:hover{background:#333}
-table{width:100%; border-collapse:collapse; font-size:14px}
-th,td{padding:10px; border-bottom:1px solid var(--border); text-align:left}
-th{background:#f8fafc}
-iframe{width:100%; height:320px; border:0; border-radius:12px}
-.crumbs{font-size:14px; margin-bottom:8px}
-.crumbs a{color:var(--muted); text-decoration:none}
-.crumbs a:hover{text-decoration:underline}
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>${esc(show.title)} | Tickets</title>
+  <meta name="description" content="${escAttr(desc)}" />
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <script type="application/ld+json">${escJSON(jsonLd)}</script>
+
+  <style>
+    :root {
+      --primary: #111827; /* Dark Navy/Black */
+      --accent: #E11D48; /* Brand Red/Pink Accent */
+      --bg-page: #F9FAFB;
+      --bg-panel: #FFFFFF;
+      --text-main: #1F2937;
+      --text-muted: #6B7280;
+      --border: #E5E7EB;
+      --radius: 12px;
+      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    }
+
+    * { box-sizing: border-box; }
+    
+    body {
+      margin: 0;
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-page);
+      color: var(--text-main);
+      line-height: 1.5;
+    }
+
+    /* --- HERO SECTION --- */
+    .hero {
+      position: relative;
+      background-color: var(--primary);
+      color: white;
+      padding: 40px 20px 80px; /* Extra bottom padding for overlap */
+      overflow: hidden;
+    }
+    
+    /* Blurred backdrop effect */
+    .hero-bg {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-image: url('${escAttr(poster)}');
+      background-size: cover;
+      background-position: center;
+      opacity: 0.2;
+      filter: blur(20px);
+      transform: scale(1.1);
+    }
+    .hero-overlay {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: linear-gradient(to bottom, rgba(17,24,39,0.8), rgba(17,24,39,1));
+    }
+
+    .hero-content {
+      position: relative;
+      max-width: 1100px;
+      margin: 0 auto;
+      z-index: 2;
+      text-align: center;
+    }
+
+    .badge {
+      display: inline-block;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      padding: 4px 12px;
+      border-radius: 99px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+
+    h1 {
+      font-size: 2.5rem;
+      font-weight: 800;
+      line-height: 1.1;
+      margin: 0 0 16px 0;
+      letter-spacing: -0.02em;
+    }
+
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 24px;
+      font-size: 1.1rem;
+      color: #D1D5DB;
+      font-weight: 500;
+    }
+
+    .hero-meta span {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* --- MAIN LAYOUT --- */
+    .container {
+      max-width: 1100px;
+      margin: -60px auto 40px; /* Negative margin to pull up over hero */
+      padding: 0 20px;
+      position: relative;
+      z-index: 10;
+      display: grid;
+      gap: 32px;
+    }
+
+    @media (min-width: 900px) {
+      .container {
+        grid-template-columns: 350px 1fr; /* Sidebar Left, Content Right */
+      }
+      h1 { font-size: 3.5rem; }
+    }
+
+    /* --- SIDEBAR (STICKY POSTER) --- */
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .poster-card {
+      background: white;
+      padding: 8px;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .poster-img {
+      width: 100%;
+      aspect-ratio: 2/3;
+      object-fit: cover;
+      border-radius: 8px;
+      display: block;
+      background: #f3f4f6;
+    }
+
+    /* --- MAIN CONTENT PANEL --- */
+    .content-panel {
+      background: var(--bg-panel);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 32px;
+      border: 1px solid var(--border);
+    }
+
+    .section-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin: 0 0 20px 0;
+      padding-bottom: 12px;
+      border-bottom: 2px solid var(--bg-page);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* --- TICKET LIST --- */
+    .ticket-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .ticket-card {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+
+    .ticket-card:hover {
+      border-color: #9CA3AF;
+      background: #F9FAFB;
+    }
+
+    .ticket-info h4 {
+      margin: 0 0 4px 0;
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    .ticket-status {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .status-dot {
+      width: 8px; height: 8px;
+      background: #10B981; /* Green */
+      border-radius: 50%;
+    }
+    .status-dot.sold-out { background: #EF4444; }
+
+    .ticket-price {
+      font-weight: 700;
+      font-size: 1.1rem;
+      margin-right: 16px;
+    }
+
+    .btn-book {
+      background: var(--primary);
+      color: white;
+      text-decoration: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      transition: background 0.2s;
+      white-space: nowrap;
+    }
+    .btn-book:hover {
+      background: #374151;
+    }
+    .btn-disabled {
+      background: #E5E7EB;
+      color: #9CA3AF;
+      cursor: not-allowed;
+    }
+
+    /* --- DESCRIPTION TEXT --- */
+    .description {
+      font-size: 1.05rem;
+      color: #374151;
+      line-height: 1.7;
+    }
+    .description p { margin-bottom: 1.5em; }
+
+    /* --- INFO GRID --- */
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      margin-bottom: 32px;
+      background: #F3F4F6;
+      padding: 20px;
+      border-radius: 8px;
+    }
+    .info-item {
+      display: flex;
+      flex-direction: column;
+    }
+    .info-label {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+    .info-val {
+      font-weight: 600;
+      color: var(--primary);
+    }
+
+    /* --- MOBILE STICKY FOOTER (if needed) --- */
+    @media (max-width: 600px) {
+      .hero { padding-bottom: 40px; }
+      .container { grid-template-columns: 1fr; margin-top: 0; }
+      .poster-card { display: none; } /* Hide poster in sidebar on mobile, show in hero instead? */
+      h1 { font-size: 2rem; }
+    }
+  </style>
 </head>
 <body>
-<header>
-<div class="wrap">
-<span style="font-weight:700">CHUCKL.</span>
-</div>
-</header>
-<main class="wrap">
-<nav class="crumbs">
-<span>Events</span> / <span>${esc(show.title)}</span>
-</nav>
-<h1 style="margin:0 0 6px 0;">${esc(show.title)}</h1>
-<div class="muted">${esc(whenHuman)}${venueLine ? ' · ' + esc(venueLine) : ''}</div>
-${fromPrice ? `<div class="muted" style="margin-top:6px; font-weight:500;">From ${esc(fromPrice)}</div>` : ''}
-<div class="grid" style="margin-top:24px;">
-<div>
-${poster ? `<img class="poster" src="${escAttr(poster)}" alt="${escAttr(show.title)} poster" />` : `<div class="poster" style="display:flex;align-items:center;justify-content:center;color:#ccc">No Poster</div>`}
 
-<div class="panel" style="margin-top:16px;">
-<h3 style="margin:0 0 8px 0;">About</h3>
-<div style="line-height:1.6; font-size:15px;">
-${show.description ? show.description.replace(/\n/g, '<br/>') : '<div class="muted">A brilliant night of live stand-up comedy.</div>'}
-</div>
-</div>
-</div>
-<div>
-<section class="panel">
-<h3 style="margin:0 0 12px 0;">Select Tickets</h3>
-${ticketTypes.length
-? `<table>
-<thead><tr><th>Ticket</th><th>Price</th><th></th></tr></thead>
-<tbody>
-${ticketTypes.map((t) => {
-const avail = typeof t.available === 'number' ? (t.available > 0) : true;
-return `<tr>
-<td>
-<div style="font-weight:600">${esc(t.name)}</div>
-<div class="muted" style="font-size:12px">${avail ? 'Available' : 'Sold Out'}</div>
-</td>
-<td>${esc(pFmt(t.pricePence))}</td>
-<td style="text-align:right;">
-${avail
-? `<a class="btn" href="/checkout?showId=${encodeURIComponent(show.id)}&ticketId=${t.id}">Book</a>`
-: '<button disabled style="opacity:0.5; padding:8px 12px;">Sold Out</button>'
-}
-</td>
-</tr>`;
-}).join('')}
-</tbody>
-</table>`
-: `<div class="muted">Tickets coming soon.</div>`
-}
-</section>
-<section class="panel" style="margin-top:16px;">
-<h3 style="margin:0 0 8px 0;">Venue</h3>
-<div style="font-weight:500">${esc(venue.name || 'TBC')}</div>
-<div class="muted" style="margin-bottom:12px;">${esc([venue.address, venue.city, venue.postcode].filter(Boolean).join(', '))}</div>
+  <header class="hero">
+    <div class="hero-bg"></div>
+    <div class="hero-overlay"></div>
+    
+    <div class="hero-content">
+      <div class="badge">Live Event</div>
+      <h1>${esc(show.title)}</h1>
+      
+      <div class="hero-meta">
+        <span>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+          ${esc(dayName)}, ${esc(fullDate)}
+        </span>
+        <span>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          ${esc(timeStr)}
+        </span>
+        <span>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+          ${esc(venue.name)}
+        </span>
+      </div>
+    </div>
+  </header>
 
-${venue.name ? `<iframe src="${escAttr(mapEmbed)}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" aria-label="Map"></iframe>` : ''}
+  <div class="container">
+    
+    <aside class="sidebar">
+      <div class="poster-card">
+        ${poster 
+          ? `<img class="poster-img" src="${escAttr(poster)}" alt="${escAttr(show.title)}" />`
+          : `<div class="poster-img" style="display:flex;align-items:center;justify-content:center;color:#ccc">No Image</div>`
+        }
+      </div>
+      
+      <a href="${escAttr(mapLink)}" target="_blank" style="display:block; text-align:center; padding:12px; background:white; border-radius:8px; border:1px solid var(--border); text-decoration:none; color:var(--text-main); font-weight:500; font-size:0.9rem;">
+        📍 View Venue Map
+      </a>
+    </aside>
 
-<div style="margin-top:12px;">
-<a href="${escAttr(mapLink)}" target="_blank" rel="noopener" style="color:var(--brand); text-decoration:none; font-weight:500;">Open in Google Maps  ↗ </a>
-</div>
-</section>
-</div>
-</div>
-</main>
+    <main class="content-panel">
+      
+      <div class="info-grid">
+        <div class="info-item">
+          <span class="info-label">Date</span>
+          <span class="info-val">${esc(fullDate)}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Time</span>
+          <span class="info-val">${esc(timeStr)}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Venue</span>
+          <span class="info-val">${esc(venue.city || 'TBC')}</span>
+        </div>
+      </div>
+
+      <div class="section-title">About the Event</div>
+      <div class="description">
+        ${show.description ? show.description.replace(/\n/g, '<br/>') : '<p>No description available.</p>'}
+      </div>
+
+      <div style="margin: 40px 0; border-top: 1px solid var(--border);"></div>
+
+      <div class="section-title">
+        <span>Select Tickets</span>
+      </div>
+
+      ${ticketTypes.length ? `
+        <div class="ticket-list">
+          ${ticketTypes.map((t) => {
+            const avail = typeof t.available === 'number' ? (t.available > 0) : true;
+            return `
+            <div class="ticket-card">
+              <div class="ticket-info">
+                <h4>${esc(t.name)}</h4>
+                <div class="ticket-status">
+                  <span class="status-dot ${avail ? '' : 'sold-out'}"></span>
+                  ${avail ? 'Available' : 'Sold Out'}
+                </div>
+              </div>
+              <div style="display:flex; align-items:center;">
+                <div class="ticket-price">${esc(pFmt(t.pricePence))}</div>
+                ${avail 
+                  ? `<a class="btn-book" href="/checkout?showId=${encodeURIComponent(show.id)}&ticketId=${t.id}">Book</a>`
+                  : `<span class="btn-book btn-disabled">Sold Out</span>`
+                }
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+      ` : `
+        <div style="padding:20px; text-align:center; color:var(--text-muted); background:#F3F4F6; border-radius:8px;">
+          Tickets will be available soon.
+        </div>
+      `}
+
+    </main>
+  </div>
+
 </body>
 </html>`);
   } catch (err: any) {
     console.error('[public-event-ssr] Error:', err);
-    res.status(500).send(`
-      <div style="padding:20px; font-family:sans-serif; color:#b91c1c; background:#fef2f2; border:1px solid #fecaca; margin:20px; border-radius:8px;">
-        <h2 style="margin-top:0">Server Error: Unable to load event</h2>
-        <p><strong>Detailed Error:</strong> ${err.message || String(err)}</p>
-        <pre style="background:#fff; padding:10px; border:1px solid #e5e7eb; overflow:auto;">${JSON.stringify(err, null, 2)}</pre>
-      </div>
-    `);
+    res.status(500).send('Server Error');
   }
 });
 
