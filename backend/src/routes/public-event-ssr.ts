@@ -1,33 +1,28 @@
 // backend/src/routes/public-event-ssr.ts
 import { Router } from 'express';
-import { PrismaClient, ShowStatus } from '@prisma/client';
+// 1. Import the shared prisma instance (like events.ts does) to avoid connection limits
+import prisma from '../lib/prisma.js'; 
 
-const prisma = new PrismaClient();
 const router = Router();
 
-function pFmt(p: number | null | undefined) { 
-  return '£' + (Number(p || 0) / 100).toFixed(2); 
+function pFmt(p: number | null | undefined) {
+  return '£' + (Number(p || 0) / 100).toFixed(2);
 }
-
-function pDec(p: number | null | undefined) { 
-  return (Number(p || 0) / 100).toFixed(2); 
+function pDec(p: number | null | undefined) {
+  return (Number(p || 0) / 100).toFixed(2);
 }
-
 function cleanDesc(s: string | null | undefined) {
   if (!s) return '';
-  return s.replace(/\\s+/g, ' ').trim().slice(0, 300);
+  return s.replace(/\s+/g, ' ').trim().slice(0, 300);
 }
-
-function esc(s: any) { 
-  return String(s ?? '').replace(/[<>&]/g, c => ({'<':'<','>':'>','&':'&'}[c] as string)); 
+function esc(s: any) {
+  return String(s ?? '').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c] as string));
 }
-
-function escAttr(s: any) { 
-  return esc(s).replace(/"/g,'"'); 
+function escAttr(s: any) {
+  return esc(s).replace(/"/g,'&quot;');
 }
-
-function escJSON(obj: any) { 
-  return JSON.stringify(obj).replace(/</g,'\\u003c'); 
+function escJSON(obj: any) {
+  return JSON.stringify(obj).replace(/</g,'\\u003c');
 }
 
 router.get('/event/:id', async (req, res) => {
@@ -37,8 +32,9 @@ router.get('/event/:id', async (req, res) => {
   if (!id) return res.status(404).send('Not found');
 
   try {
+    // 2. Fetch WITHOUT filtering by 'status' in the DB query to avoid Enum errors
     const show = await prisma.show.findFirst({
-      where: { id, status: ShowStatus.LIVE },
+      where: { id },
       include: {
         venue: {
           select: { name: true, address: true, city: true, postcode: true },
@@ -50,28 +46,32 @@ router.get('/event/:id', async (req, res) => {
       },
     });
 
-    if (!show) return res.status(404).send('Event not found');
+    // 3. Handle 404 or Status check in JavaScript (safer)
+    // We check if show.status is 'LIVE' manually here
+    if (!show || (show as any).status !== 'LIVE') {
+        return res.status(404).send('Event not found');
+    }
 
     // --- FIX: Use 'as any' to prevent TypeScript errors on empty objects ---
     const venue = (show.venue || {}) as any;
     const ticketTypes = (show.ticketTypes || []) as any[];
 
     const whenISO = show.date ? new Date(show.date).toISOString() : undefined;
-    const whenHuman = show.date 
-      ? new Date(show.date).toLocaleString('en-GB', { dateStyle: 'full', timeStyle: 'short' }) 
+    const whenHuman = show.date
+      ? new Date(show.date).toLocaleString('en-GB', { dateStyle: 'full', timeStyle: 'short' })
       : 'Date TBC';
 
     const venueLine = [
       venue.name,
       [venue.address, venue.city, venue.postcode].filter(Boolean).join(', '),
     ]
-    .filter(Boolean)
-    .join(' · ');
+      .filter(Boolean)
+      .join(' · ');
 
     const cheapest = ticketTypes[0];
     const fromPrice = cheapest ? pFmt(cheapest.pricePence) : undefined;
     const canonical = base ? `${base}/public/event/${show.id}` : `/public/event/${show.id}`;
-    const poster = show.imageUrl || ''; 
+    const poster = show.imageUrl || '';
     const desc = cleanDesc(show.description) || `Stand-up comedy: ${show.title} — ${venueLine || 'Live show'}`;
 
     const offers = ticketTypes.map((t) => ({
@@ -111,7 +111,7 @@ router.get('/event/:id', async (req, res) => {
       [venue.name, venue.address, venue.city, venue.postcode].filter(Boolean).join(', ')
     );
     const mapEmbed = `https://maps.google.com/maps?q=${mapQuery}&t=&z=13&ie=UTF8&iwloc=&output=embed`;
-    const mapLink = `https://www.google.com/maps/search/?api=1&query=${mapQuery}`;
+    const mapLink = `https://maps.google.com/maps?q=${mapQuery}`;
 
     res.type('html').send(`<!doctype html>
 <html lang="en">
@@ -153,75 +153,71 @@ iframe{width:100%; height:320px; border:0; border-radius:12px}
 <body>
 <header>
 <div class="wrap">
-  <span style="font-weight:700">CHUCKL.</span>
+<span style="font-weight:700">CHUCKL.</span>
 </div>
 </header>
 <main class="wrap">
 <nav class="crumbs">
-  <span>Events</span> / <span>${esc(show.title)}</span>
+<span>Events</span> / <span>${esc(show.title)}</span>
 </nav>
 <h1 style="margin:0 0 6px 0;">${esc(show.title)}</h1>
 <div class="muted">${esc(whenHuman)}${venueLine ? ' · ' + esc(venueLine) : ''}</div>
 ${fromPrice ? `<div class="muted" style="margin-top:6px; font-weight:500;">From ${esc(fromPrice)}</div>` : ''}
-
 <div class="grid" style="margin-top:24px;">
-  <div>
-    ${poster ? `<img class="poster" src="${escAttr(poster)}" alt="${escAttr(show.title)} poster" />` : `<div class="poster" style="display:flex;align-items:center;justify-content:center;color:#ccc">No Poster</div>`}
-    
-    <div class="panel" style="margin-top:16px;">
-      <h3 style="margin:0 0 8px 0;">About</h3>
-      <div style="line-height:1.6; font-size:15px;">
-        ${show.description ? show.description.replace(/\n/g, '<br/>') : '<div class="muted">A brilliant night of live stand-up comedy.</div>'}
-      </div>
-    </div>
-  </div>
+<div>
+${poster ? `<img class="poster" src="${escAttr(poster)}" alt="${escAttr(show.title)} poster" />` : `<div class="poster" style="display:flex;align-items:center;justify-content:center;color:#ccc">No Poster</div>`}
 
-  <div>
-    <section class="panel">
-      <h3 style="margin:0 0 12px 0;">Select Tickets</h3>
-      ${ticketTypes.length
-        ? `<table>
-            <thead><tr><th>Ticket</th><th>Price</th><th></th></tr></thead>
-            <tbody>
-            ${ticketTypes.map((t) => {
-              const avail = typeof t.available === 'number' ? (t.available > 0) : true;
-              return `<tr>
-                <td>
-                  <div style="font-weight:600">${esc(t.name)}</div>
-                  <div class="muted" style="font-size:12px">${avail ? 'Available' : 'Sold Out'}</div>
-                </td>
-                <td>${esc(pFmt(t.pricePence))}</td>
-                <td style="text-align:right;">
-                  ${avail 
-                    ? `<a class="btn" href="/checkout?showId=${encodeURIComponent(show.id)}&ticketId=${t.id}">Book</a>` 
-                    : '<button disabled style="opacity:0.5; padding:8px 12px;">Sold Out</button>'
-                  }
-                </td>
-              </tr>`;
-            }).join('')}
-            </tbody>
-          </table>`
-        : `<div class="muted">Tickets coming soon.</div>`
-      }
-    </section>
+<div class="panel" style="margin-top:16px;">
+<h3 style="margin:0 0 8px 0;">About</h3>
+<div style="line-height:1.6; font-size:15px;">
+${show.description ? show.description.replace(/\n/g, '<br/>') : '<div class="muted">A brilliant night of live stand-up comedy.</div>'}
+</div>
+</div>
+</div>
+<div>
+<section class="panel">
+<h3 style="margin:0 0 12px 0;">Select Tickets</h3>
+${ticketTypes.length
+? `<table>
+<thead><tr><th>Ticket</th><th>Price</th><th></th></tr></thead>
+<tbody>
+${ticketTypes.map((t) => {
+const avail = typeof t.available === 'number' ? (t.available > 0) : true;
+return `<tr>
+<td>
+<div style="font-weight:600">${esc(t.name)}</div>
+<div class="muted" style="font-size:12px">${avail ? 'Available' : 'Sold Out'}</div>
+</td>
+<td>${esc(pFmt(t.pricePence))}</td>
+<td style="text-align:right;">
+${avail
+? `<a class="btn" href="/checkout?showId=${encodeURIComponent(show.id)}&ticketId=${t.id}">Book</a>`
+: '<button disabled style="opacity:0.5; padding:8px 12px;">Sold Out</button>'
+}
+</td>
+</tr>`;
+}).join('')}
+</tbody>
+</table>`
+: `<div class="muted">Tickets coming soon.</div>`
+}
+</section>
+<section class="panel" style="margin-top:16px;">
+<h3 style="margin:0 0 8px 0;">Venue</h3>
+<div style="font-weight:500">${esc(venue.name || 'TBC')}</div>
+<div class="muted" style="margin-bottom:12px;">${esc([venue.address, venue.city, venue.postcode].filter(Boolean).join(', '))}</div>
 
-    <section class="panel" style="margin-top:16px;">
-      <h3 style="margin:0 0 8px 0;">Venue</h3>
-      <div style="font-weight:500">${esc(venue.name || 'TBC')}</div>
-      <div class="muted" style="margin-bottom:12px;">${esc([venue.address, venue.city, venue.postcode].filter(Boolean).join(', '))}</div>
-      
-      ${venue.name ? `<iframe src="${escAttr(mapEmbed)}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" aria-label="Map"></iframe>` : ''}
-      
-      <div style="margin-top:12px;">
-        <a href="${escAttr(mapLink)}" target="_blank" rel="noopener" style="color:var(--brand); text-decoration:none; font-weight:500;">Open in Google Maps ↗</a>
-      </div>
-    </section>
-  </div>
+${venue.name ? `<iframe src="${escAttr(mapEmbed)}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" aria-label="Map"></iframe>` : ''}
+
+<div style="margin-top:12px;">
+<a href="${escAttr(mapLink)}" target="_blank" rel="noopener" style="color:var(--brand); text-decoration:none; font-weight:500;">Open in Google Maps  ↗ </a>
+</div>
+</section>
+</div>
 </div>
 </main>
 </body>
 </html>`);
-
   } catch (err) {
     console.error('[public-event-ssr] Error:', err);
     res.status(500).send('Server error: unable to load event.');
