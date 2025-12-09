@@ -109,6 +109,8 @@ router.get('/event/:id', async (req, res) => {
     };
 
     const mapQuery = encodeURIComponent([venue.name, venue.address, venue.city, venue.postcode].filter(Boolean).join(', '));
+    // Using an embed iframe URL instead of a direct link for the preview
+    const mapEmbedUrl = `https://maps.google.com/maps?q=${mapQuery}&t=&z=15&ie=UTF8&iwloc=&output=embed`;
     const mapLink = `https://maps.google.com/maps?q=${mapQuery}`;
 
     // Helper to generate ticket list HTML
@@ -118,7 +120,6 @@ router.get('/event/:id', async (req, res) => {
         }
         return ticketTypes.map(t => {
              const avail = (t.available === null || t.available > 0);
-             // Different styling for main column list vs sidebar widget list
              const rowClass = isMainColumn ? 'ticket-row main-col-row' : 'ticket-row widget-row';
              
              return `
@@ -155,14 +156,11 @@ router.get('/event/:id', async (req, res) => {
   <style>
     :root {
       /* TiXALL Blue Palette */
-      --bg-page: #F3F4F6; /* Light Gray Background */
+      --bg-page: #F3F4F6;
       --bg-surface: #FFFFFF;
       --primary: #0F172A;
-      
-      /* Brand Color */
       --brand: #0056D2; 
       --brand-hover: #0044A8;
-      
       --text-main: #111827;
       --text-muted: #6B7280;
       --border: #E5E7EB;
@@ -174,129 +172,73 @@ router.get('/event/:id', async (req, res) => {
     * { box-sizing: border-box; }
     
     body {
-      margin: 0;
-      font-family: 'Inter', sans-serif;
-      background-color: var(--bg-page);
-      color: var(--text-main);
-      -webkit-font-smoothing: antialiased;
+      margin: 0; font-family: 'Inter', sans-serif; background-color: var(--bg-page); color: var(--text-main); -webkit-font-smoothing: antialiased;
     }
 
-    h1, h2, h3, h4, .font-heading {
-      font-family: 'Outfit', sans-serif;
-      font-weight: 700;
-      line-height: 1.1;
-      margin: 0;
-    }
-
+    h1, h2, h3, h4, .font-heading { font-family: 'Outfit', sans-serif; font-weight: 700; line-height: 1.1; margin: 0; }
     a { color: inherit; text-decoration: none; transition: opacity 0.2s; }
     a:hover { opacity: 0.8; }
 
     /* --- HERO SECTION --- */
     .hero {
-      position: relative;
-      background: var(--primary);
-      color: white;
-      min-height: 50vh;
-      display: flex;
-      flex-direction: column;
-      justify-content: flex-end;
-      overflow: hidden;
+      position: relative; background: var(--primary); color: white; min-height: 50vh;
+      display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden;
     }
-
     .hero-bg {
-      position: absolute;
-      inset: 0;
-      background-image: url('${escAttr(poster)}');
-      background-size: cover;
-      background-position: center center;
-      opacity: 1; 
+      position: absolute; inset: 0; background-image: url('${escAttr(poster)}');
+      background-size: cover; background-position: center center; opacity: 1; 
     }
-    
     .hero-overlay {
-      position: absolute;
-      inset: 0;
+      position: absolute; inset: 0;
       background: linear-gradient(to right, rgba(15,23,42,0.9) 0%, rgba(15,23,42,0.4) 50%, transparent 100%),
                   linear-gradient(to top, rgba(15,23,42,0.9) 0%, transparent 40%);
     }
-
-    .hero-top-nav {
-      position: absolute;
-      top: 0; left: 0; right: 0; padding: 24px; z-index: 20;
-    }
-
+    .hero-top-nav { position: absolute; top: 0; left: 0; right: 0; padding: 24px; z-index: 20; }
     .breadcrumbs {
       font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
       display: flex; gap: 8px; text-shadow: 0 1px 2px rgba(0,0,0,0.5); color: rgba(255,255,255,0.8);
     }
-
     .hero-content {
-      position: relative;
-      z-index: 10;
-      width: 100%;
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 40px 24px 50px;
-      display: grid;
-      gap: 16px;
+      position: relative; z-index: 10; width: 100%; max-width: 1200px; margin: 0 auto;
+      padding: 40px 24px 50px; display: grid; gap: 16px;
     }
-
-    /* Badge removed here */
-
     .hero-title {
-      font-size: clamp(2.5rem, 5vw, 4.5rem);
-      font-weight: 800; line-height: 1; text-transform: uppercase;
-      letter-spacing: -0.02em; max-width: 800px;
-      text-shadow: 0 4px 30px rgba(0,0,0,0.6);
+      font-size: clamp(2.5rem, 5vw, 4.5rem); font-weight: 800; line-height: 1; text-transform: uppercase;
+      letter-spacing: -0.02em; max-width: 800px; text-shadow: 0 4px 30px rgba(0,0,0,0.6);
     }
-
     .hero-meta {
-      display: flex; flex-wrap: wrap; gap: 24px; margin-top: 8px;
-      font-size: 1.05rem; font-weight: 500; color: rgba(255,255,255,0.95);
-      text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+      display: flex; flex-wrap: wrap; gap: 24px; margin-top: 8px; font-size: 1.05rem; font-weight: 500;
+      color: rgba(255,255,255,0.95); text-shadow: 0 1px 2px rgba(0,0,0,0.5);
     }
     .hero-meta-item { display: flex; align-items: center; gap: 8px; }
     .hero-meta-icon { color: var(--brand); filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5)); }
 
     /* --- LAYOUT CONTAINER --- */
     .layout {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 0 24px 80px;
-      display: grid;
-      gap: 48px; /* Increased gap for unboxed layout */
-      position: relative;
-      z-index: 20;
+      max-width: 1200px; margin: 0 auto; padding: 0 24px 80px;
+      display: grid; gap: 48px; position: relative; z-index: 20;
     }
-
     @media (min-width: 960px) {
       .layout {
         grid-template-columns: 1fr 380px;
-        margin-top: -32px; /* Tighter overlap */
+        margin-top: -24px; /* Reduced overlap for more space */
       }
     }
 
-    /* --- MAIN CONTENT COLUMN (Unboxed) --- */
+    /* --- MAIN CONTENT COLUMN --- */
     .content-area {
-      display: flex;
-      flex-direction: column;
-      gap: 48px; /* Gap between sections on background */
-      padding-top: 32px;
+      display: flex; flex-direction: column; gap: 48px;
+      padding-top: 64px; /* INCREASED PADDING for defined space */
     }
-
-    /* .content-card wrapper REMOVED */
 
     .section-label {
-      font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.08em;
-      font-weight: 700; color: var(--text-muted); margin-bottom: 16px;
-      display: block;
-      border-left: 4px solid var(--brand);
-      padding-left: 12px;
+      font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700;
+      color: var(--text-muted); margin-bottom: 16px; display: block;
+      border-left: 4px solid var(--brand); padding-left: 12px;
     }
-
     .rich-text { font-size: 1.1rem; line-height: 1.7; color: #334155; }
     .rich-text p { margin-bottom: 1.5em; }
     .rich-text p:last-child { margin-bottom: 0; }
-
 
     /* Gallery Grid */
     .gallery-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 24px; }
@@ -304,27 +246,29 @@ router.get('/event/:id', async (req, res) => {
     .gallery-img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s; }
     .gallery-item:hover .gallery-img { transform: scale(1.05); }
 
-    /* Venue Map Styles (Contained in white) */
+    /* Venue Map Styles (Updated for Iframe) */
     .venue-map-container { margin-top: 24px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
     .venue-map-header {
-      height: 150px; background: #CBD5E1; position: relative;
-      background-image: url('https://maps.googleapis.com/maps/api/staticmap?center=${escAttr(venue.postcode)}&zoom=14&size=800x300&key=YOUR_API_KEY_HERE');
-      background-size: cover; background-position: center;
+      position: relative; height: 220px; /* Taller for better map view */ background: #E2E8F0;
     }
-    .venue-details { padding: 20px; background: #fff; }
+    .venue-map-iframe {
+        position: absolute; top:0; left:0; width:100%; height:100%; border:0;
+        filter: grayscale(100%); transition: filter 0.3s; /* Grayscale until hover */
+    }
+    .venue-map-header:hover .venue-map-iframe { filter: grayscale(0%); }
+
+    .venue-details { padding: 20px; background: #fff; position: relative; z-index: 2;}
     .venue-name { font-size: 1.3rem; margin-bottom: 4px; font-family: 'Outfit', sans-serif; }
     .venue-address { color: var(--text-muted); margin-bottom: 16px; }
     .btn-outline {
       display: inline-block; padding: 8px 16px; border: 2px solid var(--border);
-      border-radius: 6px; font-weight: 600; font-size: 0.9rem; transition: all 0.2s;
+      border-radius: 6px; font-weight: 600; font-size: 0.9rem; transition: all 0.2s; background: #fff;
     }
     .btn-outline:hover { border-color: var(--brand); color: var(--brand); background: #F8FAFC; }
 
-    /* --- BOOKING WIDGET (Sidebar - Kept Boxed) --- */
+    /* --- BOOKING WIDGET (Sidebar) --- */
     .booking-widget {
-      position: sticky; top: 24px; background: white;
-      border-radius: var(--radius-lg); box-shadow: var(--shadow-float);
-      border: 1px solid var(--border); overflow: hidden;
+      position: sticky; top: 24px; background: white; border-radius: var(--radius-lg); box-shadow: var(--shadow-float); border: 1px solid var(--border); overflow: hidden;
     }
     .widget-header { padding: 24px; border-bottom: 1px solid var(--border); background: #fff; }
     .widget-title { font-size: 1.25rem; font-weight: 800; color: var(--primary); }
@@ -333,68 +277,50 @@ router.get('/event/:id', async (req, res) => {
 
     /* --- TICKET LIST STYLES --- */
     .ticket-list-container { padding: 8px; }
-    
-    /* Shared Row Styles */
     .ticket-row {
       display: grid; grid-template-columns: 1fr auto; align-items: center;
       padding: 16px; border-radius: 8px; transition: background 0.2s, box-shadow 0.2s;
       cursor: pointer; text-decoration: none; color: inherit;
     }
-    
-    /* Sidebar Widget Rows */
     .widget-row { padding: 12px 16px; }
     .widget-row:hover { background: #F8FAFC; }
-
-    /* Main Column Rows (Sitting on background) */
-    .main-col-row { 
-        background: #fff; /* Give them a white background so they pop off the gray page */
-        border: 1px solid var(--border); 
-        margin-bottom: 8px; 
-        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-    }
+    .main-col-row { background: #fff; border: 1px solid var(--border); margin-bottom: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
     .main-col-row:hover { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); border-color: #d1d5db; }
-
 
     .t-main { display: flex; flex-direction: column; }
     .t-name { font-weight: 700; color: var(--primary); font-size: 1rem; }
     .t-desc { font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
     .t-action { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px;}
     .t-price { font-weight: 700; color: var(--primary); font-size: 1.1rem; }
-    
     .btn-buy {
-      background: var(--brand);
-      color: white; font-size: 0.85rem; font-weight: 700;
-      padding: 8px 16px; border-radius: 6px;
-      text-transform: uppercase; letter-spacing: 0.05em;
+      background: var(--brand); color: white; font-size: 0.85rem; font-weight: 700;
+      padding: 8px 16px; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.05em;
       transition: background 0.2s; white-space: nowrap;
     }
     .ticket-row:hover .btn-buy { background: var(--brand-hover); box-shadow: 0 2px 8px rgba(0, 86, 210, 0.3); }
-    
     .btn-sold {
       background: #F1F5F9; color: #94A3B8; cursor: not-allowed;
       font-size: 0.85rem; font-weight: 700; padding: 8px 16px; border-radius: 6px; text-transform: uppercase;
     }
 
-
     /* --- MOBILE FOOTER --- */
     .mobile-bar {
       display: none; position: fixed; bottom: 0; left: 0; right: 0;
-      background: white; padding: 16px 20px;
-      box-shadow: 0 -4px 20px rgba(0,0,0,0.1); z-index: 100;
+      background: white; padding: 16px 20px; box-shadow: 0 -4px 20px rgba(0,0,0,0.1); z-index: 100;
       align-items: center; justify-content: space-between; border-top: 1px solid var(--border);
     }
     .mob-price { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; }
     .mob-val { font-size: 1.2rem; font-weight: 800; color: var(--primary); }
     .btn-mob-cta {
-      background: var(--brand); color: white; padding: 12px 24px;
-      border-radius: 8px; font-weight: 700; font-size: 1rem;
+      background: var(--brand); color: white; padding: 12px 24px; border-radius: 8px; font-weight: 700; font-size: 1rem;
     }
 
     @media (max-width: 960px) {
       .hero { min-height: 45vh; }
       .hero-title { font-size: 2.8rem; text-align: left; }
       .layout { display: block; margin-top: -20px; gap: 40px; }
-      .booking-area { display: none; } /* Hide sidebar on mobile */
+      .content-area { padding-top: 40px; }
+      .booking-area { display: none; }
       .mobile-bar { display: flex; }
     }
   </style>
@@ -404,17 +330,14 @@ router.get('/event/:id', async (req, res) => {
   <header class="hero">
     <div class="hero-bg"></div>
     <div class="hero-overlay"></div>
-    
     <div class="hero-top-nav">
       <div class="breadcrumbs">
         <span>Home</span> <span>/</span> <span>Events</span> <span>/</span>
         <span style="color:var(--brand);">${esc(show.title)}</span>
       </div>
     </div>
-
     <div class="hero-content">
       <h1 class="hero-title">${esc(show.title)}</h1>
-      
       <div class="hero-meta">
         <div class="hero-meta-item">
           <span class="hero-meta-icon">📅</span> <span>${esc(prettyDate)}</span>
@@ -438,7 +361,6 @@ router.get('/event/:id', async (req, res) => {
           <div class="rich-text">
             ${show.description ? show.description.replace(/\n/g, '<br/>') : '<p>Full details coming soon.</p>'}
           </div>
-
           ${poster ? `
           <div class="gallery-grid">
             <div class="gallery-item"><img src="${escAttr(poster)}" class="gallery-img" alt="Gallery 1"></div>
@@ -450,7 +372,9 @@ router.get('/event/:id', async (req, res) => {
       <div>
           <span class="section-label">Location</span>
           <div class="venue-map-container">
-            <div class="venue-map-header"></div>
+            <div class="venue-map-header">
+                <iframe class="venue-map-iframe" src="${mapEmbedUrl}" allowfullscreen loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+            </div>
             <div class="venue-details">
               <h3 class="venue-name">${esc(venue.name)}</h3>
               <p class="venue-address">${esc(fullAddress)}</p>
@@ -462,7 +386,8 @@ router.get('/event/:id', async (req, res) => {
       <div id="main-tickets">
           <span class="section-label">Tickets</span>
           <div class="ticket-list-container" style="padding:0;">
-              ${renderTicketList(true)} </div>
+              ${renderTicketList(true)}
+          </div>
       </div>
 
     </div>
@@ -474,10 +399,9 @@ router.get('/event/:id', async (req, res) => {
           <div class="widget-title">Select Tickets</div>
           <div class="widget-subtitle">${esc(dayName)}, ${esc(fullDate)} at ${esc(timeStr)}</div>
         </div>
-
         <div class="ticket-list-container">
-          ${renderTicketList(false)} </div>
-
+          ${renderTicketList(false)}
+        </div>
         <div class="widget-footer">
           🔒 Secure checkout powered by Chuckl.
         </div>
