@@ -949,94 +949,142 @@ router.get(
   }
 
   // --- SUMMARY PAGE ---
-  async function summaryPage(id){
-    if (!main) return;
-    main.innerHTML = '<div class="card"><div class="title">Loading summary…</div></div>';
-
-    let resp;
-    try{
-      resp = await j('/admin/shows/' + id);
-    }catch(e){
-      main.innerHTML = '<div class="card"><div class="error">Failed to load show: '+(e.message||e)+'</div></div>';
-      return;
-    }
-
-    const show = resp.item || {};
-    const ticketTypes = show.ticketTypes || [];
-    const when = show.date
-      ? new Date(show.date).toLocaleString('en-GB', { dateStyle:'full', timeStyle:'short' })
-      : '';
-    const venueName = show.venue
-      ? (show.venue.name + (show.venue.city ? ' – ' + show.venue.city : ''))
-      : (show.venueText || '');
-   const statusLabel = show.status || 'DRAFT';
-  // Derive URLs dynamically (Option 1)
-  const publicUrl = 'https://chuckl.co.uk/event/' + id;
-  const nextUrl = 'https://chuckl-ticketing-production.up.railway.app/show/' + id;
+ async function summaryPage(id) {
+  if (!main) return;
+  main.innerHTML = '<div class="card"><div class="title">Loading summary…</div></div>';
+  let resp;
+  try {
+    resp = await j('/admin/shows/' + id);
+  } catch (e) {
+    main.innerHTML = '<div class="card"><div class="error">Failed to load show: ' + (e.message || e) + '</div></div>';
+    return;
+  }
+  const show = resp.item || {};
+  const ticketTypes = show.ticketTypes || [];
+  const when = show.date ?
+    new Date(show.date).toLocaleString('en-GB', {
+      dateStyle: 'full',
+      timeStyle: 'short'
+    }) :
+    '';
+  const venueName = show.venue ?
+    (show.venue.name + (show.venue.city ? ' – ' + show.venue.city : '')) :
+    (show.venueText || '');
   
-  main.innerHTML = ''
-  +'<div class="card">'
-        +'<div class="header">'
-          +'<div>'
-            +'<div class="title">'+(show.title || 'Untitled show')+'</div>'
-            +'<div class="muted">'+(when ? when + ' · ' : '')+venueName+'</div>'
-            +'<div style="margin-top:6px">'
-              +'<span class="pill" style="background:'+(statusLabel === 'LIVE' ? '#ecfdf3' : '#f8fafc')+';color:'+(statusLabel === 'LIVE' ? '#166534' : '#475569')+';border:1px solid '+(statusLabel === 'LIVE' ? '#bbf7d0' : '#e2e8f0')+'">'+statusLabel+'</span>'
-              +(show.publishedAt ? '<span class="muted" style="margin-left:8px">Published '+new Date(show.publishedAt).toLocaleString('en-GB')+'</span>' : '')
-            +'</div>'
-          +'</div>'
-          +'<div class="row">'
-            +'<button class="btn" id="summarySeating">Edit seating</button>'
-            +'<button class="btn" id="summaryTickets">Manage tickets</button>'
-          +'</div>'
-        +'</div>'
+  // Status check (Live vs Draft)
+  const statusLabel = show.status || 'DRAFT';
+  const isLive = statusLabel === 'LIVE';
 
-        +(show.imageUrl ? '<div style="margin-bottom:16px"><img src="'+show.imageUrl+'" alt="Poster" style="max-height:220px;border-radius:12px;border:1px solid var(--border)" /></div>' : '')
+  // --- 1. Define Live Links ---
+  // SSR Route defined in public-event-ssr.ts 
+  const publicBookingUrl = window.location.origin + '/public/event/' + id; 
+  // Frontend Route defined in frontend/app/events/[id]/page.tsx 
+  // Assuming frontend runs on same domain or you can hardcode the production domain here
+  const publicFrontendUrl = window.location.origin + '/events/' + id; 
 
-        +'<div class="grid grid-2" style="margin-bottom:16px">'
-          +'<div class="card" style="margin:0">'
-            +'<div class="title" style="margin-bottom:6px">Shareable links</div>'
-            +'<div class="grid">'
-              +'<a href="'+publicUrl+'" target="_blank" rel="noopener" class="btn">Public booking page</a>'
-              +'<a href="'+nextUrl+'" target="_blank" rel="noopener" class="btn">Public Next.js page</a>'
-            +'</div>'
-            +'<div class="muted" style="margin-top:6px">Copy a link to share with ticket buyers.</div>'
-          +'</div>'
-          +'<div class="card" style="margin:0">'
-            +'<div class="title" style="margin-bottom:6px">Key details</div>'
-            +'<div class="grid">'
-              +'<div><div class="muted">Date & time</div><div>'+(when || 'TBC')+'</div></div>'
-              +'<div><div class="muted">Venue</div><div>'+(venueName || 'TBC')+'</div></div>'
-            +'</div>'
-          +'</div>'
-        +'</div>'
-
-        +'<div class="card" style="margin:0">'
-          +'<div class="title" style="margin-bottom:8px">Ticket types</div>'
-          +(ticketTypes.length === 0
-            ? '<div class="muted">No ticket types yet. Use "Manage tickets" to add them.</div>'
-            : '<table><thead><tr><th>Name</th><th>Price</th><th>Available</th></tr></thead><tbody>'
-              + ticketTypes.map(function(t){
-                  return '<tr><td>'+t.name+'</td><td>£'+((t.pricePence || 0)/100).toFixed(2)+'</td><td>'+(t.available == null ? '—' : t.available)+'</td></tr>';
-                }).join('')
-              +'</tbody></table>')
-        +'</div>'
-      +'</div>';
-
-    var summarySeating = $('#summarySeating');
-    var summaryTickets = $('#summaryTickets');
-    if (summarySeating){
-      summarySeating.addEventListener('click', function(){
-        window.location.href = '/admin/seating/builder/preview/' + id;
-      });
-    }
-    if (summaryTickets){
-      summaryTickets.addEventListener('click', function(){
-        go('/admin/ui/shows/' + id + '/tickets');
-      });
-    }
+  // --- 2. Generate Link HTML based on Status ---
+  let linksHtml = '';
+  if (isLive) {
+    linksHtml = `
+      <div class="grid">
+        <div style="margin-bottom:8px">
+          <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;color:#64748b">Public booking page</label>
+          <div style="display:flex;gap:8px">
+            <input readonly value="${publicBookingUrl}" style="flex:1;background:#f8fafc;color:#334155" onclick="this.select()">
+            <a href="${publicBookingUrl}" target="_blank" class="btn" style="color:#0284c7;border-color:#0284c7">Open ↗</a>
+          </div>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;color:#64748b">Public Next.js page</label>
+          <div style="display:flex;gap:8px">
+            <input readonly value="${publicFrontendUrl}" style="flex:1;background:#f8fafc;color:#334155" onclick="this.select()">
+            <a href="${publicFrontendUrl}" target="_blank" class="btn" style="color:#0284c7;border-color:#0284c7">Open ↗</a>
+          </div>
+        </div>
+      </div>
+      <div class="muted" style="margin-top:12px;font-size:13px">
+        Your event is live. Copy these links to share with customers.
+      </div>
+    `;
+  } else {
+    // Draft State UI
+    linksHtml = `
+      <div style="background:#fff1f2;border:1px solid #fecdd3;border-radius:8px;padding:12px;color:#9f1239;font-size:13px;line-height:1.4">
+        <strong>Event is not live.</strong><br/>
+        Please configure tickets and click "Publish Show" in the <a href="#" id="linkToBuilder" style="color:inherit;text-decoration:underline">Seating Builder</a> to generate shareable links.
+      </div>
+    `;
   }
 
+  // --- 3. Render Full Page ---
+  main.innerHTML = '' +
+    '<div class="card">' +
+    '<div class="header">' +
+    '<div>' +
+    '<div class="title">' + (show.title || 'Untitled show') + '</div>' +
+    '<div class="muted">' + (when ? when + ' · ' : '') + venueName + '</div>' +
+    '<div style="margin-top:6px">' +
+    '<span class="pill" style="background:' + (isLive ? '#ecfdf3' : '#f8fafc') + ';color:' + (isLive ? '#166534' : '#475569') + ';border:1px solid ' + (isLive ? '#bbf7d0' : '#e2e8f0') + '">' + statusLabel + '</span>' +
+    (show.publishedAt ? '<span class="muted" style="margin-left:8px">Published ' + new Date(show.publishedAt).toLocaleString('en-GB') + '</span>' : '') +
+    '</div>' +
+    '</div>' +
+    '<div class="row">' +
+    '<button class="btn" id="summarySeating">Edit seating</button>' +
+    '<button class="btn" id="summaryTickets">Manage tickets</button>' +
+    '</div>' +
+    '</div>' +
+    (show.imageUrl ? '<div style="margin-bottom:16px"><img src="' + show.imageUrl + '" alt="Poster" style="max-height:220px;border-radius:12px;border:1px solid var(--border)" /></div>' : '') +
+    '<div class="grid grid-2" style="margin-bottom:16px">' +
+    
+    // SHAREABLE LINKS CARD (Updated)
+    '<div class="card" style="margin:0">' +
+    '<div class="title" style="margin-bottom:12px">Shareable links</div>' +
+    linksHtml +
+    '</div>' +
+
+    '<div class="card" style="margin:0">' +
+    '<div class="title" style="margin-bottom:6px">Key details</div>' +
+    '<div class="grid">' +
+    '<div><div class="muted">Date & time</div><div>' + (when || 'TBC') + '</div></div>' +
+    '<div><div class="muted">Venue</div><div>' + (venueName || 'TBC') + '</div></div>' +
+    '</div>' +
+    '</div>' +
+    '</div>' +
+    '<div class="card" style="margin:0">' +
+    '<div class="title" style="margin-bottom:8px">Ticket types</div>' +
+    (ticketTypes.length === 0 ?
+      '<div class="muted">No ticket types yet. Use "Manage tickets" to add them.</div>' :
+      '<table><thead><tr><th>Name</th><th>Price</th><th>Available</th></tr></thead><tbody>' +
+      ticketTypes.map(function(t) {
+        return '<tr><td>' + t.name + '</td><td>£' + ((t.pricePence || 0) / 100).toFixed(2) + '</td><td>' + (t.available == null ? '—' : t.available) + '</td></tr>';
+      }).join('') +
+      '</tbody></table>') +
+    '</div>' +
+    '</div>';
+
+  // --- 4. Event Listeners ---
+  var summarySeating = $('#summarySeating');
+  var summaryTickets = $('#summaryTickets');
+  var linkToBuilder = $('#linkToBuilder');
+
+  if (summarySeating) {
+    summarySeating.addEventListener('click', function() {
+      window.location.href = '/admin/seating/builder/preview/' + id;
+    });
+  }
+  if (summaryTickets) {
+    summaryTickets.addEventListener('click', function() {
+      go('/admin/ui/shows/' + id + '/tickets');
+    });
+  }
+  // Helper link inside the draft warning box
+  if (linkToBuilder) {
+    linkToBuilder.addEventListener('click', function(e) {
+      e.preventDefault();
+      window.location.href = '/admin/seating/builder/preview/' + id;
+    });
+  }
+}
   // --- TICKETS PAGE ---
   async function ticketsPage(id){
     if (!main) return;
