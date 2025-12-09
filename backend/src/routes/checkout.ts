@@ -48,6 +48,7 @@ router.get('/', async (req, res) => {
     const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
+    // --- EXTRACT KONVA DATA ---
     let konvaData = null;
     if (seatMap && seatMap.layout) {
         const layoutObj = seatMap.layout as any;
@@ -151,7 +152,6 @@ router.get('/', async (req, res) => {
     const selectedSeats = new Set(); const seatPrices = new Map();
     const width = window.innerWidth; const height = window.innerHeight - 160;
     
-    // Create the Main Stage and Layer
     const stage = new Konva.Stage({ container: 'stage-container', width: width, height: height, draggable: true });
     const layer = new Konva.Layer();
     stage.add(layer);
@@ -173,74 +173,65 @@ router.get('/', async (req, res) => {
              if (typeof layout === 'string') layout = JSON.parse(layout);
         }
 
-        console.log("[DEBUG] Loading Layout:", layout);
-
-        // --- FIXED LOADING LOGIC ---
-        // Instead of trying to create the root node (which might be a Stage without a container),
-        // we manually traverse the structure and create children nodes individually.
-        
-        let nodesToCreate = [];
-
-        if (layout.className === 'Stage') {
-            // If the saved root is a Stage, we want its children (usually Layers)
-            // But we ignore the Stage itself because we already created one linked to the DOM.
-            if (layout.children) {
-                // Find the main layer inside the saved stage (or just take all children)
-                const savedLayer = layout.children.find(c => c.className === 'Layer');
-                if (savedLayer && savedLayer.children) {
-                    nodesToCreate = savedLayer.children; // Take items INSIDE the layer
-                } else {
-                    nodesToCreate = layout.children; // Fallback
-                }
+        // --- FIX: Robust Node Creation ---
+        if (!layout.className) {
+            // Heuristic to detect Stage vs Group/Layer
+            if (layout.attrs || layout.children) {
+                layout.className = 'Stage';
             }
-        } else if (layout.className === 'Layer') {
-            // If root is a Layer, take its children
-            if (layout.children) nodesToCreate = layout.children;
-        } else {
-            // If it's a raw shape/group, just wrap it
-            nodesToCreate = [layout];
         }
 
-        // Loop through the list of raw data objects and create Konva nodes
-        nodesToCreate.forEach(childData => {
-            // Skip 'Transformer' nodes from the builder, we don't need them in checkout
-            if (childData.className === 'Transformer') return;
+        const tempNode = Konva.Node.create(layout);
+        
+        // Extract children to move to our main layer
+        let nodesToMove = [];
+        if (tempNode.getClassName() === 'Stage') {
+             // If Stage, find its Layer
+             const tempLayer = tempNode.findOne('Layer') || (tempNode.children ? tempNode.children[0] : null);
+             if (tempLayer) nodesToMove = tempLayer.getChildren().slice();
+             else if (tempNode.children) nodesToMove = tempNode.children.slice();
+        } else if (tempNode.getClassName() === 'Layer') {
+             nodesToMove = tempNode.getChildren().slice();
+        } else {
+             nodesToMove = [tempNode];
+        }
 
-            const node = Konva.Node.create(childData);
+        nodesToMove.forEach(node => {
+            node.moveTo(layer);
             
-            // Add to OUR layer
-            layer.add(node);
-
-            // Lock interaction on groups
+            // Lock interaction
             node.draggable(false);
             node.listening(false);
+            
+            // Safety: Check if .find exists before calling it (Fixes TypeError: node.find is not a function)
+            if (typeof node.find === 'function') {
+                node.find('*').forEach(n => { n.draggable(false); n.listening(false); });
 
-            // Identify "Seat Groups" and make seats interactive
-            const groups = node.find('Group').concat(node.nodeType === 'Group' ? [node] : []);
-            groups.forEach(group => {
-                const type = group.getAttr('shapeType') || group.name();
-                if (['row-seats', 'circular-table', 'rect-table', 'single-seat'].includes(type)) {
-                    const circles = group.find('Circle');
-                    circles.forEach(seat => {
-                        if (!seat.getAttr('isSeat')) return;
-                        
-                        const price = getPriceForSeat(seat);
-                        seatPrices.set(seat._id, price);
-                        
-                        // Style
-                        seat.fill('#ffffff'); seat.stroke('#64748B'); seat.strokeWidth(1.5);
-                        
-                        // Interact
-                        seat.listening(true); seat.cursor('pointer');
-                        seat.on('mouseenter', () => { if (selectedSeats.has(seat._id)) return; stage.container().style.cursor = 'pointer'; seat.stroke('#0056D2'); seat.strokeWidth(3); });
-                        seat.on('mouseleave', () => { stage.container().style.cursor = 'default'; if (selectedSeats.has(seat._id)) return; seat.stroke('#64748B'); seat.strokeWidth(1.5); });
-                        seat.on('click tap', (e) => { e.cancelBubble = true; toggleSeat(seat); });
-                    });
-                }
-            });
+                // Process Seat Groups
+                const groups = node.find('Group').concat(node.nodeType === 'Group' ? [node] : []);
+                groups.forEach(group => {
+                    const type = group.getAttr('shapeType') || group.name();
+                    if (['row-seats', 'circular-table', 'rect-table', 'single-seat'].includes(type)) {
+                        const circles = group.find('Circle');
+                        circles.forEach(seat => {
+                            if (!seat.getAttr('isSeat')) return;
+                            
+                            const price = getPriceForSeat(seat);
+                            seatPrices.set(seat._id, price);
+                            
+                            seat.fill('#ffffff'); seat.stroke('#64748B'); seat.strokeWidth(1.5);
+                            seat.listening(true); seat.cursor('pointer');
+
+                            seat.on('mouseenter', () => { if (selectedSeats.has(seat._id)) return; stage.container().style.cursor = 'pointer'; seat.stroke('#0056D2'); seat.strokeWidth(3); });
+                            seat.on('mouseleave', () => { stage.container().style.cursor = 'default'; if (selectedSeats.has(seat._id)) return; seat.stroke('#64748B'); seat.strokeWidth(1.5); });
+                            seat.on('click tap', (e) => { e.cancelBubble = true; toggleSeat(seat); });
+                        });
+                    }
+                });
+            }
         });
 
-        // Center the content
+        // Center Map
         const rect = layer.getClientRect();
         if (rect && rect.width > 0) {
             const scale = Math.min((width - 40) / rect.width, (height - 40) / rect.height);
@@ -254,7 +245,7 @@ router.get('/', async (req, res) => {
         document.getElementById('loader').style.display = 'none';
 
     } catch (err) {
-        console.error("[DEBUG] RENDER ERROR:", err);
+        console.error(err);
         document.getElementById('loader').innerHTML = '<div>Error loading map</div><div id="debug-msg">' + err.message + '</div>';
     }
 
