@@ -48,7 +48,7 @@ router.get('/event/:id', async (req, res) => {
 
     if (!show) return res.status(404).send('Event ID not found');
 
-    // Safe status check
+    // FIX: Status check (explicit string cast)
     // @ts-ignore
     const status = (show as any).status as string;
     
@@ -59,17 +59,18 @@ router.get('/event/:id', async (req, res) => {
     const venue = (show.venue || {}) as any;
     const ticketTypes = (show.ticketTypes || []) as any[];
 
-    // Date Logic
+    // --- DATE VARIABLES (Defined early to avoid scope errors) ---
     const dateObj = show.date ? new Date(show.date) : null;
     const whenISO = dateObj ? dateObj.toISOString() : undefined;
     
-    // Formatting
     const dayName = dateObj ? dateObj.toLocaleDateString('en-GB', { weekday: 'long' }) : '';
     const dayNum = dateObj ? dateObj.toLocaleDateString('en-GB', { day: 'numeric' }) : '';
     const monthName = dateObj ? dateObj.toLocaleDateString('en-GB', { month: 'long' }) : '';
     const yearNum = dateObj ? dateObj.toLocaleDateString('en-GB', { year: 'numeric' }) : '';
     const timeStr = dateObj ? dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '';
     
+    // Explicitly define fullDate and prettyDate here
+    const fullDate = dateObj ? dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Date TBC';
     const prettyDate = `${dayName} ${dayNum} ${monthName} ${yearNum}`;
 
     const venueLine = [venue.name, venue.city].filter(Boolean).join(', ');
@@ -79,7 +80,7 @@ router.get('/event/:id', async (req, res) => {
     const poster = show.imageUrl || '';
     const desc = cleanDesc(show.description) || `Live event at ${venueLine}`;
 
-    // Price Logic
+    // --- PRICE VARIABLES ---
     const cheapest = ticketTypes[0];
     const fromPrice = cheapest ? pFmt(cheapest.pricePence) : undefined;
 
