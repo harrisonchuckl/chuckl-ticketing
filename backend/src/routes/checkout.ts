@@ -24,7 +24,6 @@ router.get('/', async (req, res) => {
 
     if (!show) return res.status(404).send('Event not found');
 
-    // 1. Get Seat Map
     let seatMap = null;
     // @ts-ignore
     if (show.activeSeatMapId) {
@@ -44,7 +43,6 @@ router.get('/', async (req, res) => {
     const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-    // 2. Get Holds (Allocations)
     const heldSeatIds = new Set<string>();
     if (show.allocations) {
         show.allocations.forEach(alloc => {
@@ -52,7 +50,6 @@ router.get('/', async (req, res) => {
         });
     }
 
-    // 3. Extract Layout
     let konvaData = null;
     if (seatMap && seatMap.layout) {
         const layoutObj = seatMap.layout as any;
@@ -172,14 +169,9 @@ router.get('/', async (req, res) => {
     const height = window.innerHeight - 160;
     
     const stage = new Konva.Stage({ container: 'stage-container', width: width, height: height, draggable: true });
-    
-    // TWO Layers: 
-    // 1. mainLayer for the map content (seats, stage)
-    // 2. uiLayer for Icons (i, camera) so they ALWAYS float on top of map elements
+    // We will load content into this layer
     const mainLayer = new Konva.Layer();
-    const uiLayer = new Konva.Layer({ listening: false }); 
     stage.add(mainLayer);
-    stage.add(uiLayer);
     
     const tooltip = document.getElementById('tooltip');
     
@@ -275,16 +267,34 @@ router.get('/', async (req, res) => {
                 seat.shadowEnabled(false);
                 seat.visible(true);
 
-                // --- ICONS (UI LAYER) ---
-                // We calculate global position to place icons on the top UI layer
-                // They will be updated on zoom/pan in the 'wheel' event
-                
+                // Icons: Info (i)
                 if (info && !isUnavailable) {
-                    // Tag seat to track icon
-                    seat.setAttr('hasInfo', true);
+                    const r = seat.radius();
+                    const iGroup = new Konva.Group({ x: seat.x() + r*0.7, y: seat.y() - r*0.7, listening: false });
+                    const iDot = new Konva.Circle({ radius: 5, fill: '#0F172A' });
+                    const iTxt = new Konva.Text({ x: -1.5, y: -2.5, text:'i', fontSize:6, fill:'#fff', fontStyle:'bold' });
+                    iGroup.add(iDot); iGroup.add(iTxt);
+                    if (seat.parent) {
+                        seat.parent.add(iGroup);
+                        iGroup.moveToTop();
+                    }
                 }
+
+                // Icons: View (Camera)
                 if (viewImg) {
-                    seat.setAttr('hasView', true);
+                    const vGroup = new Konva.Group({ 
+                        x: seat.x(), y: seat.y(), visible: false, name: 'view-icon-group', listening: false 
+                    });
+                    const bg = new Konva.Circle({ radius: 9, fill: '#0056D2' });
+                    const icon = new Konva.Path({
+                        data: 'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5 5 2.24 5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z',
+                        fill: 'white', scaleX: 0.6, scaleY: 0.6, offsetX: 12, offsetY: 12
+                    });
+                    vGroup.add(bg); vGroup.add(icon);
+                    if (seat.parent) {
+                        seat.parent.add(vGroup);
+                        vGroup.moveToTop();
+                    }
                 }
 
                 // EVENTS
@@ -338,19 +348,15 @@ router.get('/', async (req, res) => {
              else seats.sort((a, b) => a.x - b.x);
         });
 
-        // --- 4. CROP & ZOOM (Strict Content Bounds) ---
+        // --- 4. CROP & ZOOM (Strict Content Bounds + Clamp) ---
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         let count = 0;
 
-        // Scan ONLY Semantic Nodes: Seats, Text Labels, Stage Rects
         mainLayer.find('Circle, Text, Rect, Path').forEach(node => {
             if (!node.visible() || node.opacity() === 0) return;
-            // Skip background grids (usually huge)
             if (node.width() > 2000 || node.height() > 2000) return; 
 
-            // Get absolute rect relative to layer
             const r = node.getClientRect({ skipTransform: true, relativeTo: mainLayer });
-            
             if (r.width > 0 && r.height > 0) {
                 count++;
                 if (r.x < minX) minX = r.x;
@@ -366,23 +372,24 @@ router.get('/', async (req, res) => {
             const mapW = maxX - minX;
             const mapH = maxY - minY;
             const padding = 40;
-            const availW = width - padding;
-            const availH = height - padding;
+            const container = document.getElementById('stage-container');
+            const availW = container.offsetWidth - padding;
+            const availH = container.offsetHeight - padding;
 
-            const scale = Math.min(availW / mapW, availH / mapH) * 0.95; 
+            let scale = Math.min(availW / mapW, availH / mapH);
+            scale = Math.min(scale, 1.1); // CLAMP: Never zoom in > 110%
             
             const cx = minX + mapW / 2;
             const cy = minY + mapH / 2;
 
-            const newX = (width / 2) - (cx * scale);
-            const newY = (height / 2) - (cy * scale);
+            const newX = (container.offsetWidth / 2) - (cx * scale);
+            const newY = (container.offsetHeight / 2) - (cy * scale);
 
             stage.x(newX);
             stage.y(newY);
             stage.scale({ x: scale, y: scale });
         }
 
-        // --- 5. RENDER ICONS (Initial) ---
         updateIcons();
         mainLayer.batchDraw();
 
@@ -393,39 +400,13 @@ router.get('/', async (req, res) => {
         document.getElementById('loader').innerHTML = 'Error loading map<br><small>' + err.message + '</small>';
     }
 
-    // --- ICON RENDERER (Called on Zoom/Pan) ---
     function updateIcons() {
-        uiLayer.destroyChildren();
         const showViews = document.getElementById('toggle-views').checked;
-        const scale = stage.scaleX();
-        const iconScale = 1 / scale; // Keep icons constant size visually
-
-        mainLayer.find('Circle').forEach(seat => {
-            if (!seat.getAttr('isSeat')) return;
-            const pos = seat.getAbsolutePosition();
-            
-            // Info Icon 'i'
-            if (seat.getAttr('hasInfo')) {
-                const r = 8;
-                const grp = new Konva.Group({ x: pos.x + 10, y: pos.y - 10 });
-                grp.add(new Konva.Circle({ radius: r, fill: '#0F172A' }));
-                grp.add(new Konva.Text({ text: 'i', fontSize: 10, fill: '#fff', x: -2, y: -5, fontStyle: 'bold' }));
-                uiLayer.add(grp);
-            }
-            // View Icon
-            if (seat.getAttr('hasView') && showViews) {
-                const grp = new Konva.Group({ x: pos.x, y: pos.y });
-                grp.add(new Konva.Circle({ radius: 10, fill: '#0056D2' }));
-                // Simple camera shape
-                const cam = new Konva.Path({ data: 'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5z', fill: 'white', scaleX: 0.6, scaleY: 0.6, offsetX: 12, offsetY: 12 });
-                grp.add(cam);
-                uiLayer.add(grp);
-            }
-        });
-        uiLayer.batchDraw();
+        // Icons are now embedded in scene graph, just toggle visibility of View Icons
+        stage.find('.view-icon-group').forEach(icon => icon.visible(showViews));
+        mainLayer.batchDraw();
     }
 
-    // --- UI EVENTS ---
     document.getElementById('toggle-views').addEventListener('change', updateIcons);
 
     stage.on('wheel', (e) => {
@@ -438,13 +419,8 @@ router.get('/', async (req, res) => {
         stage.scale({ x: newScale, y: newScale });
         const newPos = { x: pointer.x - mousePointTo.x * newScale, y: pointer.y - mousePointTo.y * newScale };
         stage.position(newPos);
-        updateIcons(); // Re-render icons at new positions
     });
-    
-    // Update icons on drag too
-    stage.on('dragmove', updateIcons);
 
-    // --- GAP LOGIC ---
     function checkGap(seat, rowGroup) {
         if (!rowGroup) return true;
         const row = rowMap.get(rowGroup._id);
@@ -523,58 +499,6 @@ router.get('/', async (req, res) => {
 </body>
 </html>`);
 
-  } catch (err: any) {
-    console.error('checkout/session error', err);
-    res.status(500).send('Server error');
-  }
-});
-
-router.post('/session', async (req, res) => {
-  try {
-    const { showId, quantity, ticketTypeId, unitPricePence } = req.body ?? {};
-    if (!showId || !quantity || quantity < 1) return res.status(400).json({ ok: false, message: 'showId and quantity are required' });
-
-    const show = await prisma.show.findUnique({
-      where: { id: showId },
-      select: { status: true, ticketTypes: { select: { id: true, pricePence: true }, orderBy: { createdAt: 'asc' } } },
-    });
-
-    if (!show) return res.status(404).json({ ok: false, message: 'Show not found' });
-
-    let finalPrice = 0;
-    if (unitPricePence) finalPrice = Number(unitPricePence);
-    else if (ticketTypeId) {
-        const match = show.ticketTypes.find(t => t.id === ticketTypeId);
-        if (!match) return res.status(400).json({ ok: false, message: 'Invalid ticket type' });
-        finalPrice = match.pricePence;
-    } else finalPrice = show.ticketTypes[0]?.pricePence || 0;
-
-    let organiserSplitBps: number | null = null;
-    const userId = (req as any).userId as string | undefined;
-    if (userId) {
-      const user = await prisma.user.findUnique({ where: { id: userId }, select: { organiserSplitBps: true } });
-      organiserSplitBps = user?.organiserSplitBps ?? null;
-    }
-
-    const fees = await calcFeesForShow(prisma, showId, Number(quantity), finalPrice, organiserSplitBps);
-    const order = await prisma.order.create({
-      data: {
-        show: { connect: { id: showId } }, quantity: Number(quantity), amountPence: finalPrice * Number(quantity), status: 'PENDING',
-        platformFeePence: fees.platformFeePence, organiserSharePence: fees.organiserSharePence, paymentFeePence: fees.paymentFeePence, netPayoutPence: fees.netPayoutPence,
-        ticketType: ticketTypeId ? { connect: { id: ticketTypeId } } : undefined
-      },
-      select: { id: true },
-    });
-
-    const session = await stripe.checkout.sessions.create({
-      mode: 'payment', currency: 'gbp',
-      line_items: [{ quantity, price_data: { currency: 'gbp', unit_amount: finalPrice, product_data: { name: 'Tickets' } } }],
-      metadata: { orderId: order.id, showId },
-      success_url: `${process.env.PUBLIC_BASE_URL}/success?order=${order.id}`,
-      cancel_url: `${process.env.PUBLIC_BASE_URL}/cancel?order=${order.id}`,
-    });
-
-    return res.json({ ok: true, url: session.url });
   } catch (err: any) {
     console.error('checkout/session error', err);
     return res.status(500).json({ ok: false, message: 'Checkout error' });
