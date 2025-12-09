@@ -48,9 +48,9 @@ router.get('/event/:id', async (req, res) => {
 
     if (!show) return res.status(404).send('Event ID not found');
 
-    // Safe status check
-    // @ts-ignore
-    const status = show['status'];
+    // FIX 1: Force status to string to avoid Enum comparison errors
+    const status = (show as any).status as string;
+    
     if (status !== 'LIVE' && status !== 'live') {
        return res.status(404).send(`Event is not LIVE (Status: ${status})`);
     }
@@ -77,6 +77,10 @@ router.get('/event/:id', async (req, res) => {
     const canonical = base ? `${base}/public/event/${show.id}` : `/public/event/${show.id}`;
     const poster = show.imageUrl || '';
     const desc = cleanDesc(show.description) || `Live event at ${venueLine}`;
+
+    // FIX 2: Define fromPrice logic (missing in previous version)
+    const cheapest = ticketTypes[0];
+    const fromPrice = cheapest ? pFmt(cheapest.pricePence) : undefined;
 
     // Schema.org
     const offers = ticketTypes.map((t) => ({
@@ -468,7 +472,7 @@ router.get('/event/:id', async (req, res) => {
             ${esc(fullAddress)}
           </p>
           <a href="${escAttr(mapLink)}" target="_blank" style="display:inline-block; margin-top:8px; color:var(--accent); text-decoration:none; font-weight:600; font-size:0.9rem;">
-            Get Directions &rarr;
+            Get Directions →
           </a>
         </div>
       </div>
