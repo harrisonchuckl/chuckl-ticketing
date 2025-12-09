@@ -16,9 +16,9 @@ function pFmt(p: number) {
 /**
  * GET /checkout
  * INTELLIGENT ROUTER:
- * 1. Checks show.activeSeatMapId.
- * 2. FALLBACK: If null, looks for the most recent map for this show.
- * 3. Renders Map (Allocated) OR Ticket List (Unallocated).
+ * 1. Checks show.activeSeatMapId
+ * 2. If valid map -> Renders Interactive Map (Extracts konvaJson correctly)
+ * 3. If null/invalid -> Renders Ticket List (General Admission)
  */
 router.get('/', async (req, res) => {
   const showId = String(req.query.showId || '');
@@ -35,10 +35,8 @@ router.get('/', async (req, res) => {
 
     if (!show) return res.status(404).send('Event not found');
 
-    // --- LOGIC FIX: Smart Map Lookup ---
+    // 1. Check for linked Seat Map
     let seatMap = null;
-    
-    // 1. Try the explicit link (New System)
     // @ts-ignore
     if (show.activeSeatMapId) {
         seatMap = await prisma.seatMap.findUnique({ 
@@ -51,7 +49,7 @@ router.get('/', async (req, res) => {
     if (!seatMap) {
         seatMap = await prisma.seatMap.findFirst({
             where: { showId: show.id },
-            orderBy: { updatedAt: 'desc' } // Get the one you most recently worked on
+            orderBy: { updatedAt: 'desc' }
         });
     }
 
@@ -63,10 +61,24 @@ router.get('/', async (req, res) => {
     const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
+    // --- FIX: Extract the actual Konva data from the saved layout wrapper ---
+    let konvaData = null;
+    if (seatMap && seatMap.layout) {
+        const layoutObj = seatMap.layout as any;
+        // The builder saves it as { layoutType: ..., konvaJson: ... }
+        // We need specifically the konvaJson part.
+        konvaData = layoutObj.konvaJson || null;
+        
+        // If for some reason legacy data was saved directly (rare), allow fallback
+        if (!konvaData && layoutObj.attrs) {
+            konvaData = layoutObj;
+        }
+    }
+
     // ============================================================
-    // MODE A: TICKET LIST (Unallocated / GA / No Map Found)
+    // MODE A: TICKET LIST (Unallocated / GA / No Map Data)
     // ============================================================
-    if (!seatMap || !seatMap.layout) {
+    if (!konvaData) {
        const ticketsJson = JSON.stringify(ticketTypes);
        
        res.type('html').send(`<!doctype html>
@@ -170,10 +182,7 @@ router.get('/', async (req, res) => {
     window.update = (id, delta) => {
       const current = state[id] || 0;
       const next = Math.max(0, current + delta);
-      // For V1: Single ticket type selection to simplify checkout logic
-      if (delta > 0) {
-          Object.keys(state).forEach(k => { if (k !== id) state[k] = 0; });
-      }
+      // Logic: Allow multiple types
       state[id] = next;
       render();
     };
@@ -188,7 +197,7 @@ router.get('/', async (req, res) => {
         if (qty > 0) {
            totalPence += (t.pricePence * qty);
            count += qty;
-           activeId = t.id;
+           activeId = t.id; // Just for V1 checkout link
         }
       });
 
@@ -197,21 +206,23 @@ router.get('/', async (req, res) => {
       
       if (count > 0) {
         btn.classList.add('active');
-        btn.onclick = () => doCheckout(activeId, count);
+        btn.onclick = () => doCheckout(count, totalPence, activeId);
       } else {
         btn.classList.remove('active');
       }
     }
 
-    async function doCheckout(ticketTypeId, quantity) {
+    async function doCheckout(quantity, totalPence, ticketTypeId) {
        const btn = document.getElementById('btn-next');
        btn.innerText = 'Processing...';
+       
+       const unitPricePence = Math.round(totalPence / quantity);
        
        try {
          const res = await fetch('/checkout/session', {
            method: 'POST',
            headers: { 'Content-Type': 'application/json' },
-           body: JSON.stringify({ showId, quantity, ticketTypeId })
+           body: JSON.stringify({ showId, quantity, unitPricePence, ticketTypeId })
          });
          const data = await res.json();
          if (data.ok && data.url) window.location.href = data.url;
@@ -233,7 +244,8 @@ router.get('/', async (req, res) => {
     // MODE B: ALLOCATED SEATING (Konva Map Found)
     // ============================================================
     
-    const mapData = JSON.stringify(seatMap.layout);
+    // Inject extracted data
+    const mapData = JSON.stringify(konvaData);
     const ticketsData = JSON.stringify(ticketTypes);
     const showIdStr = JSON.stringify(show.id);
 
@@ -326,45 +338,72 @@ router.get('/', async (req, res) => {
     }
 
     try {
+        // Konva can read the JSON string directly
         const tempNode = Konva.Node.create(rawLayout);
-        const children = tempNode.getChildren().slice();
-        children.forEach(group => {
-            group.moveTo(layer);
-            group.draggable(false);
-            group.listening(false); 
-            const type = group.getAttr('shapeType') || group.name();
-            if (['row-seats', 'circular-table', 'rect-table', 'single-seat'].includes(type)) {
-                const circles = group.find('Circle');
-                circles.forEach(seat => {
-                    if (!seat.getAttr('isSeat')) return;
-                    const price = getPriceForSeat(seat);
-                    seatPrices.set(seat._id, price);
-                    seat.fill('#ffffff'); 
-                    seat.stroke('#64748B'); 
-                    seat.strokeWidth(1.5);
-                    seat.listening(true);
-                    seat.cursor('pointer');
-                    seat.on('mouseenter', () => {
-                        if (selectedSeats.has(seat._id)) return;
-                        stage.container().style.cursor = 'pointer';
-                        seat.stroke('#0056D2');
-                        seat.strokeWidth(3);
-                    });
-                    seat.on('mouseleave', () => {
-                        stage.container().style.cursor = 'default';
-                        if (selectedSeats.has(seat._id)) return;
-                        seat.stroke('#64748B');
+        
+        // Safety: If it's a Stage (unlikely but possible), get its children
+        let nodesToMove = [];
+        if (tempNode.getClassName() === 'Stage') {
+             const tempLayer = tempNode.findOne('Layer');
+             if (tempLayer) nodesToMove = tempLayer.getChildren().slice();
+        } else if (tempNode.getClassName() === 'Layer') {
+             nodesToMove = tempNode.getChildren().slice();
+        } else {
+             // If it's just a group/shape, wrap it
+             nodesToMove = [tempNode];
+        }
+
+        nodesToMove.forEach(node => {
+            node.moveTo(layer);
+            
+            // recursively lock everything
+            node.draggable(false);
+            node.listening(false);
+            node.find('*').forEach(n => { n.draggable(false); n.listening(false); });
+
+            // Identify "Seat Groups"
+            const groups = node.find('Group').concat(node.nodeType === 'Group' ? [node] : []);
+            
+            groups.forEach(group => {
+                const type = group.getAttr('shapeType') || group.name();
+                if (['row-seats', 'circular-table', 'rect-table', 'single-seat'].includes(type)) {
+                    const circles = group.find('Circle');
+                    circles.forEach(seat => {
+                        if (!seat.getAttr('isSeat')) return;
+                        const price = getPriceForSeat(seat);
+                        seatPrices.set(seat._id, price);
+                        
+                        // Base style
+                        seat.fill('#ffffff'); 
+                        seat.stroke('#64748B'); 
                         seat.strokeWidth(1.5);
+                        seat.listening(true);
+                        seat.cursor('pointer');
+
+                        seat.on('mouseenter', () => {
+                            if (selectedSeats.has(seat._id)) return;
+                            stage.container().style.cursor = 'pointer';
+                            seat.stroke('#0056D2');
+                            seat.strokeWidth(3);
+                        });
+                        seat.on('mouseleave', () => {
+                            stage.container().style.cursor = 'default';
+                            if (selectedSeats.has(seat._id)) return;
+                            seat.stroke('#64748B');
+                            seat.strokeWidth(1.5);
+                        });
+                        seat.on('click tap', (e) => {
+                            e.cancelBubble = true;
+                            toggleSeat(seat);
+                        });
                     });
-                    seat.on('click tap', (e) => {
-                        e.cancelBubble = true;
-                        toggleSeat(seat);
-                    });
-                });
-            }
+                }
+            });
         });
+
+        // Auto-center logic
         const rect = layer.getClientRect();
-        if (rect) {
+        if (rect && rect.width > 0) {
             const scale = Math.min((width - 40) / rect.width, (height - 40) / rect.height);
             const finalScale = Math.min(Math.max(scale, 0.2), 1.5);
             stage.scale({ x: finalScale, y: finalScale });
@@ -375,6 +414,7 @@ router.get('/', async (req, res) => {
         layer.draw();
         document.getElementById('loader').style.display = 'none';
     } catch (err) {
+        console.error(err);
         document.getElementById('loader').innerText = "Error loading map";
     }
 
