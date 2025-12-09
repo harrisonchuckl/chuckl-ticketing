@@ -59,7 +59,7 @@ router.get('/event/:id', async (req, res) => {
     const venue = (show.venue || {}) as any;
     const ticketTypes = (show.ticketTypes || []) as any[];
 
-    // --- DATE VARIABLES (Defined early) ---
+    // --- DATE VARIABLES ---
     const dateObj = show.date ? new Date(show.date) : null;
     const whenISO = dateObj ? dateObj.toISOString() : undefined;
     
@@ -69,7 +69,6 @@ router.get('/event/:id', async (req, res) => {
     const yearNum = dateObj ? dateObj.toLocaleDateString('en-GB', { year: 'numeric' }) : '';
     const timeStr = dateObj ? dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '';
     
-    // Explicitly define fullDate here
     const fullDate = dateObj ? dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Date TBC';
     const prettyDate = `${dayName} ${dayNum} ${monthName} ${yearNum}`;
 
@@ -112,6 +111,32 @@ router.get('/event/:id', async (req, res) => {
     const mapQuery = encodeURIComponent([venue.name, venue.address, venue.city, venue.postcode].filter(Boolean).join(', '));
     const mapLink = `https://maps.google.com/maps?q=${mapQuery}`;
 
+    // Helper to generate ticket list HTML (reused twice)
+    const renderTicketList = (isMainColumn = false) => {
+        if (!ticketTypes.length) {
+            return '<div style="padding:20px; text-align:center; font-size:0.9rem; color:var(--text-muted);">Tickets coming soon</div>';
+        }
+        return ticketTypes.map(t => {
+             const avail = (t.available === null || t.available > 0);
+             // Slightly different styling for main column vs sidebar widget
+             const rowClass = isMainColumn ? 'ticket-row main-col-row' : 'ticket-row widget-row';
+             
+             return `
+             <a href="${avail ? `/checkout?showId=${encodeURIComponent(show.id)}&ticketId=${t.id}` : '#'}" class="${rowClass}" ${!avail ? 'style="pointer-events:none; opacity:0.6;"' : ''}>
+               <div class="t-main">
+                 <div class="t-name">${esc(t.name)}</div>
+                 <div class="t-desc">${avail ? 'Available' : 'Sold Out'}</div>
+               </div>
+               <div class="t-action">
+                 <span class="t-price">${esc(pFmt(t.pricePence))}</span>
+                 <span class="${avail ? 'btn-buy' : 'btn-sold'}">${avail ? 'BOOK TICKETS' : 'Sold Out'}</span>
+               </div>
+             </a>
+             `;
+          }).join('');
+    };
+
+
     // --- RENDER HTML ---
     res.type('html').send(`<!doctype html>
 <html lang="en">
@@ -129,20 +154,21 @@ router.get('/event/:id', async (req, res) => {
 
   <style>
     :root {
-      /* Refined Palette */
+      /* UPDATED: TiXALL Blue Palette */
       --bg-page: #F3F4F6;
       --bg-surface: #FFFFFF;
       --primary: #0F172A;
-      --primary-hover: #1E293B;
-      --brand: #E11D48;
-      --brand-hover: #BE123C;
+      
+      /* New Blue Brand Color */
+      --brand: #0056D2; 
+      --brand-hover: #0044A8;
+      
       --text-main: #111827;
       --text-muted: #6B7280;
       --border: #E5E7EB;
-      --radius-sm: 6px;
       --radius-md: 12px;
       --radius-lg: 16px;
-      --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+      --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
       --shadow-float: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
     }
 
@@ -166,12 +192,12 @@ router.get('/event/:id', async (req, res) => {
     a { color: inherit; text-decoration: none; transition: opacity 0.2s; }
     a:hover { opacity: 0.8; }
 
-    /* --- HERO SECTION (Adjusted for Banners) --- */
+    /* --- HERO SECTION --- */
     .hero {
       position: relative;
       background: var(--primary);
       color: white;
-      min-height: 55vh; /* Reduced height to prevent excessive cropping */
+      min-height: 50vh; /* Slightly shorter for tighter feel */
       display: flex;
       flex-direction: column;
       justify-content: flex-end;
@@ -183,46 +209,26 @@ router.get('/event/:id', async (req, res) => {
       inset: 0;
       background-image: url('${escAttr(poster)}');
       background-size: cover;
-      background-position: center center; /* Center focus */
-      background-repeat: no-repeat;
+      background-position: center center;
       opacity: 1; 
-      transform: scale(1.0);
     }
     
-    /* Subtle Gradient Mask */
     .hero-overlay {
       position: absolute;
       inset: 0;
-      background: linear-gradient(to right, 
-                    rgba(15,23,42,0.9) 0%, 
-                    rgba(15,23,42,0.3) 50%, 
-                    transparent 100%),
-                  linear-gradient(to top, 
-                    rgba(15,23,42,0.9) 0%, 
-                    transparent 40%);
+      background: linear-gradient(to right, rgba(15,23,42,0.9) 0%, rgba(15,23,42,0.4) 50%, transparent 100%),
+                  linear-gradient(to top, rgba(15,23,42,0.9) 0%, transparent 40%);
     }
 
     .hero-top-nav {
       position: absolute;
-      top: 0; left: 0; right: 0;
-      padding: 24px;
-      z-index: 20;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+      top: 0; left: 0; right: 0; padding: 24px; z-index: 20;
     }
 
     .breadcrumbs {
-      font-size: 0.85rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      opacity: 0.8;
-      display: flex;
-      gap: 8px;
-      text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+      font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+      display: flex; gap: 8px; text-shadow: 0 1px 2px rgba(0,0,0,0.5); color: rgba(255,255,255,0.8);
     }
-    .breadcrumbs span { opacity: 0.8; }
 
     .hero-content {
       position: relative;
@@ -230,260 +236,175 @@ router.get('/event/:id', async (req, res) => {
       width: 100%;
       max-width: 1200px;
       margin: 0 auto;
-      padding: 40px 24px 60px;
+      padding: 40px 24px 50px; /* Reduced bottom padding */
       display: grid;
-      gap: 20px;
+      gap: 16px;
     }
 
     .status-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      background: rgba(255,255,255,0.15);
-      backdrop-filter: blur(8px);
-      border: 1px solid rgba(255,255,255,0.3);
-      padding: 6px 12px;
-      border-radius: 4px;
-      font-size: 0.8rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: #fff;
-      width: fit-content;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(255,255,255,0.15); backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.3); padding: 6px 12px;
+      border-radius: 4px; font-size: 0.8rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.05em; color: #fff;
     }
-    .status-dot { width: 8px; height: 8px; background: #10B981; border-radius: 50%; box-shadow: 0 0 8px #10B981; }
+    .status-dot { width: 8px; height: 8px; background: #10B981; border-radius: 50%; }
 
     .hero-title {
       font-size: clamp(2.5rem, 5vw, 4.5rem);
-      font-weight: 800;
-      line-height: 1;
-      text-transform: uppercase;
-      letter-spacing: -0.02em;
-      max-width: 800px;
+      font-weight: 800; line-height: 1; text-transform: uppercase;
+      letter-spacing: -0.02em; max-width: 800px;
       text-shadow: 0 4px 30px rgba(0,0,0,0.6);
     }
 
     .hero-meta {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 32px;
-      margin-top: 16px;
-      font-size: 1.1rem;
-      font-weight: 500;
-      color: rgba(255,255,255,0.95);
-      text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+      display: flex; flex-wrap: wrap; gap: 24px; margin-top: 8px;
+      font-size: 1.05rem; font-weight: 500; color: rgba(255,255,255,0.95);
+      text-shadow: 0 1px 2px rgba(0,0,0,0.5);
     }
-    .hero-meta-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .hero-meta-icon {
-      color: var(--brand);
-      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));
-    }
+    .hero-meta-item { display: flex; align-items: center; gap: 8px; }
+    /* Updated accent color */
+    .hero-meta-icon { color: var(--brand); filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5)); }
 
     /* --- LAYOUT CONTAINER --- */
     .layout {
       max-width: 1200px;
       margin: 0 auto;
-      padding: 0 24px 80px;
+      padding: 0 24px 60px;
       display: grid;
-      gap: 48px;
+      gap: 32px; /* Tighter gap */
       position: relative;
       z-index: 20;
     }
 
     @media (min-width: 960px) {
       .layout {
-        grid-template-columns: 1fr 380px; /* Content | Sticky Booking */
-        margin-top: -40px; /* Slight overlap */
+        grid-template-columns: 1fr 380px;
+        margin-top: -32px; /* Tighter overlap */
       }
     }
 
-    /* --- CONTENT COLUMN --- */
+    /* --- MAIN CONTENT COLUMN (Now using white cards) --- */
     .content-area {
-      background: transparent;
-      padding-top: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px; /* Gap between white cards */
     }
 
+    /* New White Card style for main content blocks */
+    .content-card {
+        background: var(--bg-surface);
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow-card);
+        padding: 32px;
+        overflow: hidden;
+    }
+
+    /* Updated Section Label with Blue accent */
     .section-label {
-      font-size: 0.9rem;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      font-weight: 700;
-      color: var(--text-muted);
-      margin-bottom: 16px;
+      font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.08em;
+      font-weight: 700; color: var(--text-muted); margin-bottom: 16px;
       display: block;
-      border-left: 3px solid var(--brand);
+      border-left: 4px solid var(--brand); /* Changed to blue brand color */
       padding-left: 12px;
     }
 
-    .rich-text {
-      font-size: 1.15rem;
-      line-height: 1.7;
-      color: #334155;
-      margin-bottom: 48px;
-    }
+    .rich-text { font-size: 1.1rem; line-height: 1.7; color: #334155; }
     .rich-text p { margin-bottom: 1.5em; }
+    .rich-text p:last-child { margin-bottom: 0; }
+
 
     /* Gallery Grid */
-    .gallery-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 16px;
-      margin-bottom: 48px;
-    }
-    .gallery-item {
-      aspect-ratio: 16/9;
-      background: #E2E8F0;
-      border-radius: var(--radius-sm);
-      overflow: hidden;
-    }
-    .gallery-img {
-      width: 100%; height: 100%; object-fit: cover;
-      transition: transform 0.5s;
-    }
+    .gallery-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 24px; }
+    .gallery-item { aspect-ratio: 16/9; background: #E2E8F0; border-radius: 8px; overflow: hidden; }
+    .gallery-img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s; }
     .gallery-item:hover .gallery-img { transform: scale(1.05); }
 
-    /* Venue Card */
-    .venue-card {
-      background: white;
-      border-radius: var(--radius-md);
-      overflow: hidden;
-      border: 1px solid var(--border);
-      box-shadow: var(--shadow-card);
-    }
+    /* Venue Map Styles */
+    .venue-map-container { margin-top: 24px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); }
     .venue-map-header {
-      height: 120px;
-      background: #CBD5E1;
-      position: relative;
-      background-image: url('https://maps.googleapis.com/maps/api/staticmap?center=${escAttr(venue.postcode)}&zoom=14&size=600x300&key=YOUR_API_KEY_HERE');
-      background-size: cover;
+      height: 150px; background: #CBD5E1; position: relative;
+      background-image: url('https://maps.googleapis.com/maps/api/staticmap?center=${escAttr(venue.postcode)}&zoom=14&size=800x300&key=YOUR_API_KEY_HERE');
+      background-size: cover; background-position: center;
     }
-    .venue-details { padding: 24px; }
-    .venue-name { font-size: 1.4rem; margin-bottom: 8px; font-family: 'Outfit', sans-serif; }
+    .venue-details { padding: 20px; background: #fff; }
+    .venue-name { font-size: 1.3rem; margin-bottom: 4px; font-family: 'Outfit', sans-serif; }
     .venue-address { color: var(--text-muted); margin-bottom: 16px; }
     .btn-outline {
-      display: inline-block;
-      padding: 8px 16px;
-      border: 2px solid var(--border);
-      border-radius: 6px;
-      font-weight: 600;
-      font-size: 0.9rem;
-      transition: all 0.2s;
+      display: inline-block; padding: 8px 16px; border: 2px solid var(--border);
+      border-radius: 6px; font-weight: 600; font-size: 0.9rem; transition: all 0.2s;
     }
-    .btn-outline:hover { border-color: var(--primary); color: var(--primary); background: #F8FAFC; }
+    .btn-outline:hover { border-color: var(--brand); color: var(--brand); background: #F8FAFC; }
 
-    /* --- BOOKING COLUMN --- */
-    .booking-area {
-      position: relative;
-    }
-
+    /* --- BOOKING WIDGET (Sidebar) --- */
     .booking-widget {
-      position: sticky;
-      top: 24px;
-      background: white;
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-float);
-      border: 1px solid rgba(0,0,0,0.05);
-      overflow: hidden;
+      position: sticky; top: 24px; background: white;
+      border-radius: var(--radius-lg); box-shadow: var(--shadow-float);
+      border: 1px solid var(--border); overflow: hidden;
     }
-
-    .widget-header {
-      padding: 24px;
-      border-bottom: 1px solid var(--border);
-      background: #ffffff;
-    }
-    
+    .widget-header { padding: 24px; border-bottom: 1px solid var(--border); background: #fff; }
     .widget-title { font-size: 1.25rem; font-weight: 800; color: var(--primary); }
     .widget-subtitle { font-size: 0.9rem; color: var(--text-muted); margin-top: 4px; font-weight: 500;}
+    .widget-footer { background: #F8FAFC; padding: 16px; border-top: 1px solid var(--border); text-align: center; font-size: 0.8rem; color: var(--text-muted); }
 
-    .ticket-list {
-      padding: 8px;
-    }
-
+    /* --- TICKET LIST STYLES (Shared) --- */
+    .ticket-list-container { padding: 8px; }
     .ticket-row {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      align-items: center;
-      padding: 16px;
-      border-radius: var(--radius-sm);
-      transition: background 0.2s;
-      cursor: pointer;
-      text-decoration: none;
-      color: inherit;
+      display: grid; grid-template-columns: 1fr auto; align-items: center;
+      padding: 16px; border-radius: 8px; transition: background 0.2s;
+      cursor: pointer; text-decoration: none; color: inherit; border: 1px solid transparent;
     }
-    .ticket-row:hover { background: #F8FAFC; }
+    .ticket-row:hover { background: #F8FAFC; border-color: var(--border); }
+    
+    /* Slight style difference for sidebar widget vs main content list */
+    .widget-row { padding: 12px 16px; }
+    .main-col-row { border: 1px solid var(--border); margin-bottom: 8px; }
+    .main-col-row:hover { box-shadow: var(--shadow-card); }
+
 
     .t-main { display: flex; flex-direction: column; }
     .t-name { font-weight: 700; color: var(--primary); font-size: 1rem; }
     .t-desc { font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
+    .t-action { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px;}
+    .t-price { font-weight: 700; color: var(--primary); font-size: 1.1rem; }
     
-    .t-action { text-align: right; }
-    .t-price { font-weight: 700; color: var(--primary); font-size: 1.1rem; display: block; margin-bottom: 4px;}
-    
+    /* Updated Button Style & Color */
     .btn-buy {
-      background: var(--brand);
-      color: white;
-      font-size: 0.8rem;
-      font-weight: 700;
-      padding: 6px 12px;
-      border-radius: 99px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      transition: background 0.2s;
+      background: var(--brand); /* Blue */
+      color: white; font-size: 0.85rem; font-weight: 700;
+      padding: 8px 16px; border-radius: 6px; /* Less rounded */
+      text-transform: uppercase; letter-spacing: 0.05em;
+      transition: background 0.2s; white-space: nowrap;
     }
-    .ticket-row:hover .btn-buy { background: var(--brand-hover); }
+    .ticket-row:hover .btn-buy { background: var(--brand-hover); box-shadow: 0 2px 8px rgba(0, 86, 210, 0.3); }
     
     .btn-sold {
       background: #F1F5F9; color: #94A3B8; cursor: not-allowed;
-      font-size: 0.75rem; font-weight: 700; padding: 6px 10px; border-radius: 6px;
+      font-size: 0.85rem; font-weight: 700; padding: 8px 16px; border-radius: 6px; text-transform: uppercase;
     }
 
-    .widget-footer {
-      background: #F8FAFC;
-      padding: 16px;
-      border-top: 1px solid var(--border);
-      text-align: center;
-      font-size: 0.8rem;
-      color: var(--text-muted);
-    }
 
     /* --- MOBILE FOOTER --- */
     .mobile-bar {
-      display: none;
-      position: fixed;
-      bottom: 0; left: 0; right: 0;
-      background: white;
-      padding: 16px 20px;
-      box-shadow: 0 -4px 20px rgba(0,0,0,0.1);
-      z-index: 100;
-      align-items: center;
-      justify-content: space-between;
-      border-top: 1px solid var(--border);
+      display: none; position: fixed; bottom: 0; left: 0; right: 0;
+      background: white; padding: 16px 20px;
+      box-shadow: 0 -4px 20px rgba(0,0,0,0.1); z-index: 100;
+      align-items: center; justify-content: space-between; border-top: 1px solid var(--border);
     }
     .mob-price { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; }
     .mob-val { font-size: 1.2rem; font-weight: 800; color: var(--primary); }
-    
     .btn-mob-cta {
-      background: var(--brand);
-      color: white;
-      padding: 12px 24px;
-      border-radius: 8px;
-      font-weight: 700;
-      font-size: 1rem;
-      box-shadow: 0 4px 12px rgba(225, 29, 72, 0.3);
+      background: var(--brand); color: white; padding: 12px 24px;
+      border-radius: 8px; font-weight: 700; font-size: 1rem;
     }
 
     @media (max-width: 960px) {
-      .hero { min-height: 50vh; padding-bottom: 40px; justify-content: flex-end; }
+      .hero { min-height: 45vh; }
       .hero-title { font-size: 2.8rem; text-align: left; }
-      .layout { display: block; margin-top: 0; }
-      .booking-area { display: none; } /* Hide desktop booking on mobile */
-      .mobile-bar { display: flex; } /* Show mobile bar */
-      .content-col { padding-top: 0; }
+      .layout { display: block; margin-top: -20px; gap: 24px; }
+      .booking-area { display: none; } /* Hide sidebar on mobile */
+      .mobile-bar { display: flex; }
     }
   </style>
 </head>
@@ -495,11 +416,8 @@ router.get('/event/:id', async (req, res) => {
     
     <div class="hero-top-nav">
       <div class="breadcrumbs">
-        <span style="opacity:1">Home</span>
-        <span>/</span>
-        <span style="opacity:1">Events</span>
-        <span>/</span>
-        <span style="color:var(--brand); opacity:1;">${esc(show.title)}</span>
+        <span>Home</span> <span>/</span> <span>Events</span> <span>/</span>
+        <span style="color:var(--brand);">${esc(show.title)}</span>
       </div>
     </div>
 
@@ -512,16 +430,13 @@ router.get('/event/:id', async (req, res) => {
       
       <div class="hero-meta">
         <div class="hero-meta-item">
-          <span class="hero-meta-icon">📅</span>
-          <span>${esc(prettyDate)}</span>
+          <span class="hero-meta-icon">📅</span> <span>${esc(prettyDate)}</span>
         </div>
         <div class="hero-meta-item">
-          <span class="hero-meta-icon">📍</span>
-          <span>${esc(venue.name)}</span>
+          <span class="hero-meta-icon">📍</span> <span>${esc(venue.name)}</span>
         </div>
         <div class="hero-meta-item">
-          <span class="hero-meta-icon">⏰</span>
-          <span>${esc(timeStr)}</span>
+          <span class="hero-meta-icon">⏰</span> <span>${esc(timeStr)}</span>
         </div>
       </div>
     </div>
@@ -530,54 +445,51 @@ router.get('/event/:id', async (req, res) => {
   <div class="layout">
     
     <div class="content-area">
-      <span class="section-label">Overview</span>
-      <div class="rich-text">
-        ${show.description ? show.description.replace(/\n/g, '<br/>') : '<p>Join us for an exciting event. Full details coming soon.</p>'}
+      
+      <div class="content-card">
+          <span class="section-label">Overview</span>
+          <div class="rich-text">
+            ${show.description ? show.description.replace(/\n/g, '<br/>') : '<p>Full details coming soon.</p>'}
+          </div>
+
+          ${poster ? `
+          <div class="gallery-grid">
+            <div class="gallery-item"><img src="${escAttr(poster)}" class="gallery-img" alt="Gallery 1"></div>
+            <div class="gallery-item"><img src="${escAttr(poster)}" class="gallery-img" alt="Gallery 2" style="filter:hue-rotate(20deg);"></div>
+          </div>
+          ` : ''}
       </div>
 
-      ${poster ? `
-      <span class="section-label">Gallery</span>
-      <div class="gallery-grid">
-        <div class="gallery-item"><img src="${escAttr(poster)}" class="gallery-img" alt="Gallery 1"></div>
-        <div class="gallery-item"><img src="${escAttr(poster)}" class="gallery-img" alt="Gallery 2" style="filter:hue-rotate(20deg);"></div>
+      <div class="content-card">
+          <span class="section-label">Location</span>
+          <div class="venue-map-container">
+            <div class="venue-map-header"></div>
+            <div class="venue-details">
+              <h3 class="venue-name">${esc(venue.name)}</h3>
+              <p class="venue-address">${esc(fullAddress)}</p>
+              <a href="${escAttr(mapLink)}" target="_blank" class="btn-outline">Open in Maps ↗</a>
+            </div>
+          </div>
       </div>
-      ` : ''}
 
-      <span class="section-label">Location</span>
-      <div class="venue-card">
-        <div class="venue-map-header"></div>
-        <div class="venue-details">
-          <h3 class="venue-name">${esc(venue.name)}</h3>
-          <p class="venue-address">${esc(fullAddress)}</p>
-          <a href="${escAttr(mapLink)}" target="_blank" class="btn-outline">Open in Maps ↗</a>
-        </div>
+      <div class="content-card" id="main-tickets">
+          <span class="section-label">Tickets</span>
+          <div class="ticket-list-container" style="padding:0;">
+              ${renderTicketList(true)} </div>
       </div>
+
     </div>
 
-    <div class="booking-area" id="tickets">
+
+    <div class="booking-area">
       <div class="booking-widget">
         <div class="widget-header">
           <div class="widget-title">Select Tickets</div>
           <div class="widget-subtitle">${esc(dayName)}, ${esc(fullDate)} at ${esc(timeStr)}</div>
         </div>
 
-        <div class="ticket-list">
-          ${ticketTypes.length ? ticketTypes.map(t => {
-             const avail = (t.available === null || t.available > 0);
-             return `
-             <a href="${avail ? `/checkout?showId=${encodeURIComponent(show.id)}&ticketId=${t.id}` : '#'}" class="ticket-row" ${!avail ? 'style="pointer-events:none; opacity:0.6;"' : ''}>
-               <div class="t-main">
-                 <div class="t-name">${esc(t.name)}</div>
-                 <div class="t-desc">${avail ? 'Available' : 'Sold Out'}</div>
-               </div>
-               <div class="t-action">
-                 <span class="t-price">${esc(pFmt(t.pricePence))}</span>
-                 <span class="${avail ? 'btn-buy' : 'btn-sold'}">${avail ? 'Add' : 'Sold Out'}</span>
-               </div>
-             </a>
-             `;
-          }).join('') : '<div style="padding:20px; text-align:center; font-size:0.9rem; color:var(--text-muted);">Tickets coming soon</div>'}
-        </div>
+        <div class="ticket-list-container">
+          ${renderTicketList(false)} </div>
 
         <div class="widget-footer">
           🔒 Secure checkout powered by Chuckl.
@@ -592,7 +504,7 @@ router.get('/event/:id', async (req, res) => {
       <div class="mob-price">From</div>
       <div class="mob-val">${fromPrice ? esc(fromPrice) : '£0.00'}</div>
     </div>
-    <a href="/checkout?showId=${encodeURIComponent(show.id)}" class="btn-mob-cta">Get Tickets</a>
+    <a href="#main-tickets" class="btn-mob-cta">BOOK TICKETS</a>
   </div>
 
 </body>
