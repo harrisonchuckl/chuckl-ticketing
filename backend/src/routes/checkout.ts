@@ -8,16 +8,11 @@ import Stripe from 'stripe';
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, { apiVersion: '2024-06-20' });
 const router = Router();
 
-function pFmt(p: number) {
-  return '£' + (p / 100).toFixed(2);
-}
-
 router.get('/', async (req, res) => {
   const showId = String(req.query.showId || '');
   if (!showId) return res.status(404).send('Show ID is required');
 
   try {
-    // 1. Fetch Show Data
     const show = await prisma.show.findUnique({
       where: { id: showId },
       include: {
@@ -29,7 +24,7 @@ router.get('/', async (req, res) => {
 
     if (!show) return res.status(404).send('Event not found');
 
-    // 2. Get Active Seat Map
+    // 1. Get Seat Map
     let seatMap = null;
     // @ts-ignore
     if (show.activeSeatMapId) {
@@ -50,7 +45,7 @@ router.get('/', async (req, res) => {
     const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-    // 3. Process Holds
+    // 2. Get Holds (Allocations)
     const heldSeatIds = new Set<string>();
     if (show.allocations) {
         show.allocations.forEach(alloc => {
@@ -58,7 +53,7 @@ router.get('/', async (req, res) => {
         });
     }
 
-    // 4. Extract Layout
+    // 3. Extract Layout
     let konvaData = null;
     if (seatMap && seatMap.layout) {
         const layoutObj = seatMap.layout as any;
@@ -66,9 +61,9 @@ router.get('/', async (req, res) => {
         else if (layoutObj.attrs || layoutObj.className) konvaData = layoutObj;
     }
 
-    // --- MODE A: LIST VIEW (Fallback) ---
+    // --- MODE A: LIST VIEW ---
     if (!konvaData) {
-       res.type('html').send(`<!doctype html><html><body><h1>General Admission</h1><p>Please use the list view.</p></body></html>`);
+       res.type('html').send(`<!doctype html><html><body><h1>General Admission</h1><p>No map available.</p></body></html>`);
        return; 
     }
 
@@ -85,24 +80,22 @@ router.get('/', async (req, res) => {
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Select Seats | ${show.title}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@700&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/konva@9.3.3/konva.min.js"></script>
 
   <style>
-    :root { --bg:#F3F4F6; --surface:#FFFFFF; --primary:#0F172A; --brand:#0056D2; --text-main:#111827; --text-muted:#6B7280; --border:#E5E7EB; --success:#10B981; --blocked:#94a3b8; }
+    :root { --bg:#F3F4F6; --surface:#FFFFFF; --primary:#0F172A; --brand:#0056D2; --text-main:#111827; --text-muted:#6B7280; --border:#E5E7EB; --success:#10B981; --blocked:#334155; }
     body { margin:0; font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); display:flex; flex-direction:column; height:100vh; overflow:hidden; }
     
     header { background:var(--surface); border-bottom:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; z-index:3000; position:relative; }
     .header-info h1 { font-family:'Outfit',sans-serif; font-size:1.25rem; margin:0; font-weight:700; color:var(--primary); }
     .header-meta { font-size:0.9rem; color:var(--muted); margin-top:4px; }
     .btn-close { text-decoration:none; font-size:1.5rem; color:var(--muted); width:40px; height:40px; display:flex; align-items:center; justify-content:center; border-radius:50%; }
-    .btn-close:hover { background:#F3F4F6; color:var(--primary); }
     
     #map-wrapper { flex:1; position:relative; background:#E2E8F0; overflow:hidden; }
     #stage-container { width:100%; height:100%; cursor:grab; }
     #stage-container:active { cursor:grabbing; }
     
-    /* LEGEND - Z-Index Boost */
     .legend { 
         position:absolute; top:20px; left:20px; 
         background:rgba(255,255,255,0.98); padding:12px 16px; border-radius:12px; 
@@ -115,7 +108,7 @@ router.get('/', async (req, res) => {
     .dot { width:14px; height:14px; border-radius:50%; border:1px solid rgba(0,0,0,0.1); }
     .dot-avail { background:#fff; border-color:#64748B; }
     .dot-selected { background:var(--brand); border-color:var(--brand); }
-    .dot-sold { background:var(--blocked); border-color:var(--text); opacity:0.3; }
+    .dot-sold { background:var(--blocked); border-color:var(--text); opacity:0.8; }
     
     .view-toggle { padding-top:10px; border-top:1px solid #e2e8f0; display:flex; align-items:center; gap:8px; cursor:pointer; }
     .view-toggle input { accent-color: var(--brand); transform:scale(1.2); cursor:pointer; }
@@ -176,7 +169,6 @@ router.get('/', async (req, res) => {
     
     const selectedSeats = new Set(); 
     const seatPrices = new Map();
-    // For gap logic: Map<groupId, Array<SeatObject>>
     const rowMap = new Map(); 
 
     const width = window.innerWidth; 
@@ -203,7 +195,7 @@ router.get('/', async (req, res) => {
 
         console.log("[DEBUG] Loading Layout...", layout);
 
-        // --- 1. LOAD LAYER IN-PLACE ---
+        // --- 1. LOAD NODES PRESERVING STRUCTURE ---
         let layersToLoad = [];
         if (layout.className === 'Stage' && layout.children) {
             layersToLoad = layout.children.filter(c => c.className === 'Layer');
@@ -215,204 +207,168 @@ router.get('/', async (req, res) => {
         }
 
         layersToLoad.forEach((layerData) => {
-            // Create temporary layer to parse nodes
             const tempLayer = Konva.Node.create(layerData);
-            
-            // Move children to our main layer to flatten structure for easy management
+            // Move children to our main layer (Groups, Shapes)
+            // IMPORTANT: We do NOT flatten deeply. We keep Row Groups intact.
             const children = tempLayer.getChildren().slice();
             children.forEach(node => {
                 node.moveTo(mainLayer);
-                processNode(node, null);
             });
             tempLayer.destroy();
         });
 
-        // RECURSIVE NODE PROCESSOR
-        function processNode(node, parentGroup) {
-            // Identify Groups (Rows/Tables)
-            const nodeType = node.getClassName();
-            const groupType = node.getAttr('shapeType') || node.name();
-            const isSeatGroup = nodeType === 'Group' && ['row-seats', 'circular-table', 'rect-table', 'single-seat'].includes(groupType);
-            
+        // --- 2. TRAVERSE & HYDRATE ---
+        // Traverse the tree to find seats, but keep them inside their parents
+        // This ensures relative positioning is preserved.
+        
+        mainLayer.find('Group').forEach(group => {
+            // Check if this group is a "Seat Group" (Row/Table)
+            const groupType = group.getAttr('shapeType') || group.name();
+            const isSeatGroup = ['row-seats', 'circular-table', 'rect-table', 'single-seat'].includes(groupType);
+
             if (isSeatGroup) {
-                // Remove numbers (Text nodes) inside seat groups - Visual Cleanup
-                // Keep ONLY if it is NOT a number (e.g. Row letters "A", "B")
-                const texts = node.find('Text');
+                // VISUAL CLEANUP: Remove numbers inside the group
+                const texts = group.find('Text');
                 texts.forEach(t => {
-                     // Simple heuristic: if it parses as a number, hide it. If it's "A" or "Row A", keep it.
+                     // Hide numbers, keep letters (Row names)
                      const txt = t.text().trim();
-                     if (/^\\d+$/.test(txt)) {
-                         t.destroy();
-                     }
+                     if (/^\\d+$/.test(txt)) t.destroy();
                 });
-                
-                parentGroup = node;
-            }
 
-            // Identify Seats
-            if (nodeType === 'Circle' && node.getAttr('isSeat')) {
-                const seat = node;
-                
-                // --- STATUS CHECK ---
-                const status = seat.getAttr('status') || 'AVAILABLE';
-                const isBlocked = status === 'BLOCKED' || status === 'SOLD' || status === 'HELD';
-                const isHeldDB = heldSeatIds.has(seat.id()) || heldSeatIds.has(seat.getAttr('sbSeatId'));
-                const isUnavailable = isBlocked || isHeldDB;
+                // Process Seats inside this group
+                const seats = group.find('Circle');
+                seats.forEach(seat => {
+                    if (!seat.getAttr('isSeat')) return;
+                    
+                    // --- STATUS ---
+                    // Priority: Blocked in DB > Blocked in JSON > Available
+                    const status = seat.getAttr('status') || 'AVAILABLE';
+                    const isBlocked = status === 'BLOCKED' || status === 'SOLD' || status === 'HELD';
+                    const isHeldDB = heldSeatIds.has(seat.id()) || heldSeatIds.has(seat.getAttr('sbSeatId'));
+                    const isUnavailable = isBlocked || isHeldDB;
 
-                // --- DATA PREP ---
-                const tType = getTicketType(seat);
-                const price = tType ? tType.pricePence : 0;
-                seatPrices.set(seat._id, price);
-                
-                const label = seat.getAttr('label') || seat.name() || 'Seat';
-                const info = seat.getAttr('sbInfo');
-                const viewImg = seat.getAttr('sbViewImage');
+                    // --- DATA ---
+                    const tType = getTicketType(seat);
+                    const price = tType ? tType.pricePence : 0;
+                    seatPrices.set(seat._id, price);
+                    
+                    const label = seat.getAttr('label') || seat.name() || 'Seat';
+                    const info = seat.getAttr('sbInfo');
+                    const viewImg = seat.getAttr('sbViewImage');
 
-                // Register for gap detection
-                if (parentGroup) {
-                    const grpId = parentGroup._id;
+                    // --- GAP REGISTRATION ---
+                    const grpId = group._id;
                     if (!rowMap.has(grpId)) rowMap.set(grpId, []);
-                    // We need GLOBAL coordinates for accurate sorting/bounds
+                    // Use Absolute Position for sorting logic
                     const absPos = seat.getAbsolutePosition();
                     rowMap.get(grpId).push({
-                        id: seat._id,
-                        x: absPos.x,
-                        y: absPos.y, // Store Y for bounds calculation
-                        unavailable: isUnavailable,
-                        node: seat
+                        id: seat._id, x: absPos.x, y: absPos.y, unavailable: isUnavailable, node: seat
                     });
-                }
 
-                // --- VISUALS ---
-                if (isUnavailable) {
-                    seat.fill('#e2e8f0'); // Light grey
-                    seat.stroke('#cbd5e1'); 
-                    seat.strokeWidth(1);
-                    seat.listening(false);
-                } else {
-                    seat.fill('#ffffff'); // White
-                    seat.stroke('#64748B'); // Dark Grey Border
-                    seat.strokeWidth(1.5);
-                    seat.listening(true);
-                    // No 'cursor' call here, managed via stage events
-                }
-                seat.shadowEnabled(false);
-                seat.opacity(1);
-                seat.visible(true);
-
-                // --- ICONS ---
-                // Info 'i' (Black dot)
-                if (info && !isUnavailable) {
-                    const iGroup = new Konva.Group({ 
-                        x: seat.x(), 
-                        y: seat.y(),
-                        listening: false 
-                    });
-                    // Position relative to seat center (top-right corner)
-                    const offset = seat.radius() * 0.7;
-                    const iDot = new Konva.Circle({ x: offset, y: -offset, radius: 4, fill: '#0F172A' });
-                    const iTxt = new Konva.Text({ x: offset-1.5, y: -offset-2.5, text:'i', fontSize:6, fill:'#fff', fontStyle:'bold' });
-                    iGroup.add(iDot); iGroup.add(iTxt);
-                    if (seat.parent) {
-                        seat.parent.add(iGroup);
-                        iGroup.moveToTop(); // Ensure on top
+                    // --- VISUALS ---
+                    if (isUnavailable) {
+                        seat.fill('#334155'); // Dark Grey
+                        seat.stroke('#1e293b'); seat.strokeWidth(1);
+                        seat.opacity(0.8);
+                        seat.listening(false); // No interaction
+                    } else {
+                        seat.fill('#ffffff'); seat.stroke('#64748B'); seat.strokeWidth(1.5);
+                        seat.opacity(1);
+                        seat.listening(true);
                     }
-                }
+                    seat.shadowEnabled(false);
+                    seat.visible(true);
 
-                // View Icon (Camera) - Hidden by default
-                if (viewImg) {
-                    const vGroup = new Konva.Group({ 
-                        x: seat.x(), y: seat.y(), 
-                        visible: false, 
-                        name: 'view-icon-group',
-                        listening: false 
-                    });
-                    const bg = new Konva.Circle({ radius: 9, fill: '#0056D2' });
-                    // Simple camera/eye shape
-                    const icon = new Konva.Path({
-                        data: 'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5 5 2.24 5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z',
-                        fill: 'white', scaleX: 0.5, scaleY: 0.5, offsetX: 12, offsetY: 12
-                    });
-                    vGroup.add(bg); vGroup.add(icon);
-                    if (seat.parent) {
-                        seat.parent.add(vGroup);
+                    // --- INFO ICON (i) ---
+                    if (info && !isUnavailable) {
+                        const r = seat.radius();
+                        const iGroup = new Konva.Group({ 
+                            x: seat.x() + r*0.7, y: seat.y() - r*0.7, listening: false 
+                        });
+                        const iDot = new Konva.Circle({ radius: 5, fill: '#0F172A' });
+                        const iTxt = new Konva.Text({ x: -1.5, y: -2.5, text:'i', fontSize:6, fill:'#fff', fontStyle:'bold' });
+                        iGroup.add(iDot); iGroup.add(iTxt);
+                        group.add(iGroup); // Add to same parent group
+                        iGroup.moveToTop();
+                    }
+
+                    // --- VIEW ICON (Camera) ---
+                    if (viewImg) {
+                        const vGroup = new Konva.Group({ 
+                            x: seat.x(), y: seat.y(), visible: false, name: 'view-icon-group', listening: false 
+                        });
+                        const bg = new Konva.Circle({ radius: 9, fill: '#0056D2' });
+                        const icon = new Konva.Path({
+                            data: 'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5 5 2.24 5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z',
+                            fill: 'white', scaleX: 0.6, scaleY: 0.6, offsetX: 12, offsetY: 12
+                        });
+                        vGroup.add(bg); vGroup.add(icon);
+                        group.add(vGroup);
                         vGroup.moveToTop();
                     }
-                }
 
-                // --- EVENTS ---
-                if (!isUnavailable) {
-                    seat.on('mouseenter', () => {
-                        stage.container().style.cursor = 'pointer';
-                        if (!selectedSeats.has(seat._id)) {
-                            seat.stroke('#0056D2'); seat.strokeWidth(3); 
-                            mainLayer.batchDraw();
-                        }
-                        
-                        // Tooltip content
-                        const pos = stage.getPointerPosition();
-                        const priceStr = '£' + (price/100).toFixed(2);
-                        let html = \`<span class="tt-title">\${label}</span><span class="tt-meta">\${tType ? tType.name : 'Standard'} • \${priceStr}</span>\`;
-                        if (info) html += \`<div class="tt-info">\${info}</div>\`;
-                        
-                        const viewMode = document.getElementById('toggle-views').checked;
-                        if (viewImg && viewMode) {
-                            html += \`<img src="\${viewImg}" />\`;
-                        } else if (viewImg) {
-                            html += \`<div style="font-size:0.7rem; color:#94a3b8; margin-top:4px;">(Enable 'Show seat views' to see preview)</div>\`;
-                        }
+                    // --- INTERACTIONS ---
+                    if (!isUnavailable) {
+                        seat.on('mouseenter', () => {
+                            stage.container().style.cursor = 'pointer';
+                            if (!selectedSeats.has(seat._id)) {
+                                seat.stroke('#0056D2'); seat.strokeWidth(3); mainLayer.batchDraw();
+                            }
+                            // Tooltip
+                            const pos = stage.getPointerPosition();
+                            const priceStr = '£' + (price/100).toFixed(2);
+                            let html = \`<span class="tt-title">\${label}</span><span class="tt-meta">\${tType ? tType.name : 'Standard'} • \${priceStr}</span>\`;
+                            if (info) html += \`<div class="tt-info">\${info}</div>\`;
+                            const viewMode = document.getElementById('toggle-views').checked;
+                            if (viewImg && viewMode) html += \`<img src="\${viewImg}" />\`;
+                            else if (viewImg) html += \`<div style="font-size:0.7rem; color:#94a3b8; margin-top:4px;">(Show seat views to preview)</div>\`;
 
-                        tooltip.innerHTML = html;
-                        tooltip.style.display = 'block';
-                        tooltip.style.left = (pos.x + 20) + 'px';
-                        tooltip.style.top = (pos.y + 20) + 'px';
-                    });
+                            tooltip.innerHTML = html;
+                            tooltip.style.display = 'block';
+                            tooltip.style.left = (pos.x + 20) + 'px';
+                            tooltip.style.top = (pos.y + 20) + 'px';
+                        });
 
-                    seat.on('mouseleave', () => {
-                        stage.container().style.cursor = 'default';
-                        tooltip.style.display = 'none';
-                        if (!selectedSeats.has(seat._id)) {
-                            seat.stroke('#64748B'); seat.strokeWidth(1.5); 
-                            mainLayer.batchDraw();
-                        }
-                    });
+                        seat.on('mouseleave', () => {
+                            stage.container().style.cursor = 'default';
+                            tooltip.style.display = 'none';
+                            if (!selectedSeats.has(seat._id)) {
+                                seat.stroke('#64748B'); seat.strokeWidth(1.5); mainLayer.batchDraw();
+                            }
+                        });
 
-                    seat.on('click tap', (e) => {
-                        e.cancelBubble = true;
-                        toggleSeat(seat, parentGroup);
-                    });
-                }
+                        seat.on('click tap', (e) => {
+                            e.cancelBubble = true;
+                            toggleSeat(seat, group);
+                        });
+                    }
+                });
             }
-
-            if (node.getChildren) {
-                node.getChildren().forEach(child => processNode(child, parentGroup));
-            }
-        }
-
-        // --- 3. SORT & ORIENT ROWS (For Gap Logic) ---
-        rowMap.forEach((seats) => {
-             if (seats.length < 2) return;
-             // Detect orientation
-             const minX = Math.min(...seats.map(s=>s.x)), maxX = Math.max(...seats.map(s=>s.x));
-             const minY = Math.min(...seats.map(s=>s.y)), maxY = Math.max(...seats.map(s=>s.y));
-             
-             if ((maxY - minY) > (maxX - minX)) {
-                 seats.sort((a, b) => a.y - b.y);
-             } else {
-                 seats.sort((a, b) => a.x - b.x);
-             }
         });
 
-        // --- 4. GLOBAL AUTO-FIT (Smart Bounds) ---
-        // Scan ALL visible nodes (Seats + Shapes + Text) to find true size
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        let shapeCount = 0;
+        // --- 3. SORT ROWS (For Gap Logic) ---
+        rowMap.forEach((seats) => {
+             if (seats.length < 2) return;
+             // Determine orientation
+             const minX = Math.min(...seats.map(s=>s.x)), maxX = Math.max(...seats.map(s=>s.x));
+             const minY = Math.min(...seats.map(s=>s.y)), maxY = Math.max(...seats.map(s=>s.y));
+             if ((maxY - minY) > (maxX - minX)) seats.sort((a, b) => a.y - b.y);
+             else seats.sort((a, b) => a.x - b.x);
+        });
 
-        mainLayer.find('Shape, Text, Path').forEach(node => {
+        // --- 4. SMART BOUNDS CALCULATION (Fixes Tiny Map) ---
+        // Iterate only VISIBLE shapes (Seats, Stage, Letters)
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        let count = 0;
+
+        mainLayer.find('Shape, Text').forEach(node => {
             if (!node.visible() || node.opacity() === 0) return;
+            // Ignore huge background rects (often used for grids)
+            if (node.width() > 2000 || node.height() > 2000) return;
+            
             const r = node.getClientRect({ skipTransform: true, relativeTo: mainLayer });
             if (r.width > 0 && r.height > 0) {
-                shapeCount++;
+                count++;
                 if (r.x < minX) minX = r.x;
                 if (r.y < minY) minY = r.y;
                 if (r.x + r.width > maxX) maxX = r.x + r.width;
@@ -420,27 +376,26 @@ router.get('/', async (req, res) => {
             }
         });
 
-        console.log(\`[DEBUG] Map Bounds: Shapes=\${shapeCount}, X=\${minX} to \${maxX}\`);
-
-        if (shapeCount > 0 && maxX > minX) {
+        if (count > 0 && maxX > minX) {
             const mapW = maxX - minX;
             const mapH = maxY - minY;
-            const padding = 60;
+            const padding = 40; // Tight padding for max zoom
             const availW = width - padding;
             const availH = height - padding;
 
-            const scale = Math.min(availW / mapW, availH / mapH) * 0.95; 
+            const scale = Math.min(availW / mapW, availH / mapH) * 0.95; // 95% fill
             
             const cx = minX + mapW / 2;
             const cy = minY + mapH / 2;
-
             const newX = (width / 2) - (cx * scale);
             const newY = (height / 2) - (cy * scale);
 
-            stage.x(newX);
-            stage.y(newY);
+            stage.position({ x: newX, y: newY });
             stage.scale({ x: scale, y: scale });
             mainLayer.batchDraw();
+        } else {
+            console.warn("Bounds empty. Centering default.");
+            stage.x(width/2); stage.y(height/2);
         }
 
         document.getElementById('loader').style.display = 'none';
@@ -450,7 +405,7 @@ router.get('/', async (req, res) => {
         document.getElementById('loader').innerHTML = 'Error loading map<br><small>' + err.message + '</small>';
     }
 
-    // --- UI EVENTS ---
+    // --- EVENTS ---
     document.getElementById('toggle-views').addEventListener('change', (e) => {
         const show = e.target.checked;
         stage.find('.view-icon-group').forEach(icon => icon.visible(show));
@@ -469,7 +424,6 @@ router.get('/', async (req, res) => {
         stage.position(newPos);
     });
 
-    // --- GAP CHECK ---
     function checkGap(seat, rowGroup) {
         if (!rowGroup) return true;
         const row = rowMap.get(rowGroup._id);
@@ -548,58 +502,6 @@ router.get('/', async (req, res) => {
 </body>
 </html>`);
 
-  } catch (err: any) {
-    console.error('checkout/map error', err);
-    res.status(500).send('Server error');
-  }
-});
-
-router.post('/session', async (req, res) => {
-  try {
-    const { showId, quantity, ticketTypeId, unitPricePence } = req.body ?? {};
-    if (!showId || !quantity || quantity < 1) return res.status(400).json({ ok: false, message: 'showId and quantity are required' });
-
-    const show = await prisma.show.findUnique({
-      where: { id: showId },
-      select: { status: true, ticketTypes: { select: { id: true, pricePence: true }, orderBy: { createdAt: 'asc' } } },
-    });
-
-    if (!show) return res.status(404).json({ ok: false, message: 'Show not found' });
-
-    let finalPrice = 0;
-    if (unitPricePence) finalPrice = Number(unitPricePence);
-    else if (ticketTypeId) {
-        const match = show.ticketTypes.find(t => t.id === ticketTypeId);
-        if (!match) return res.status(400).json({ ok: false, message: 'Invalid ticket type' });
-        finalPrice = match.pricePence;
-    } else finalPrice = show.ticketTypes[0]?.pricePence || 0;
-
-    let organiserSplitBps: number | null = null;
-    const userId = (req as any).userId as string | undefined;
-    if (userId) {
-      const user = await prisma.user.findUnique({ where: { id: userId }, select: { organiserSplitBps: true } });
-      organiserSplitBps = user?.organiserSplitBps ?? null;
-    }
-
-    const fees = await calcFeesForShow(prisma, showId, Number(quantity), finalPrice, organiserSplitBps);
-    const order = await prisma.order.create({
-      data: {
-        show: { connect: { id: showId } }, quantity: Number(quantity), amountPence: finalPrice * Number(quantity), status: 'PENDING',
-        platformFeePence: fees.platformFeePence, organiserSharePence: fees.organiserSharePence, paymentFeePence: fees.paymentFeePence, netPayoutPence: fees.netPayoutPence,
-        ticketType: ticketTypeId ? { connect: { id: ticketTypeId } } : undefined
-      },
-      select: { id: true },
-    });
-
-    const session = await stripe.checkout.sessions.create({
-      mode: 'payment', currency: 'gbp',
-      line_items: [{ quantity, price_data: { currency: 'gbp', unit_amount: finalPrice, product_data: { name: 'Tickets' } } }],
-      metadata: { orderId: order.id, showId },
-      success_url: `${process.env.PUBLIC_BASE_URL}/success?order=${order.id}`,
-      cancel_url: `${process.env.PUBLIC_BASE_URL}/cancel?order=${order.id}`,
-    });
-
-    return res.json({ ok: true, url: session.url });
   } catch (err: any) {
     console.error('checkout/session error', err);
     return res.status(500).json({ ok: false, message: 'Checkout error' });
