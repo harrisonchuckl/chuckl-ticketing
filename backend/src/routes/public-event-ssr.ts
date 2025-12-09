@@ -51,17 +51,17 @@ router.get('/event/:id', async (req, res) => {
        return res.status(404).send('Event ID not found in database');
     }
 
-    // 2. Check status manually using simpler syntax to avoid TS build errors
-    // @ts-ignore
-    const status = show['status'];
+    // 2. CHECK STATUS (Fixed to bypass TypeScript Error TS2367)
+    // We cast the whole object to 'any' so TypeScript stops enforcing the Enum type
+    const rawShow = show as any;
+    const status = rawShow.status; 
     
-    // Check for 'LIVE' (or 'live')
+    // Now we can safely check for variations without breaking the build
     if (status !== 'LIVE' && status !== 'live') {
-       return res.status(404).send('Event is not LIVE. Current status: ' + status);
+       return res.status(404).send(`Event is not LIVE (Status: ${status})`);
     }
 
     // 3. Prepare data
-    // Use 'as any' casting for safety on nested objects
     const venue = (show.venue || {}) as any;
     const ticketTypes = (show.ticketTypes || []) as any[];
 
