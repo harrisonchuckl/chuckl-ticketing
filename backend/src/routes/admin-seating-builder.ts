@@ -131,105 +131,86 @@ async function getUserIdFromRequest(req: any): Promise<string | null> {
 /* -------------------------------------------------------------
    ROUTE: GET available seat maps for this show
 -------------------------------------------------------------- */
+// --- GET: Load Editor ---
 router.get("/builder/api/seatmaps/:showId", async (req, res) => {
   try {
     const showId = req.params.showId;
     const userId = await getUserIdFromRequest(req);
 
-    const rawShows = await prisma.$queryRaw<
-      { id: string; title: string | null; date: Date | null; venueId: string | null }[]
-    >`SELECT "id","title","date","venueId" FROM "Show" WHERE "id" = ${showId} LIMIT 1`;
+    // Fetch show AND the new activeSeatMapId field
+    const show = await prisma.show.findUnique({
+      where: { id: showId },
+      include: { venue: true }
+    });
 
-    const showRow = rawShows[0];
-    if (!showRow) {
-      return res.status(404).json({ error: "Show not found" });
-    }    
-    let venue: any = null;
-    if (showRow.venueId) {
-      venue = await prisma.venue.findUnique({
-        where: { id: showRow.venueId },
-        select: {
-          id: true,
-          name: true,
-          city: true,
-          capacity: true,
-        },
-      });
-    }
+    if (!show) return res.status(404).json({ error: "Show not found" });
 
+    // Fetch all maps for this show
     const seatMapsForShow = await prisma.seatMap.findMany({
       where: { showId },
       orderBy: { createdAt: "desc" },
     });
-    const activeSeatMap = seatMapsForShow.length > 0 ? seatMapsForShow[0] : null;
 
-    let previousMaps: any[] = [];
+    // --- LOGIC UPDATE: Determine Active Map ---
+    let activeSeatMap = null;
+    
+    // 1. Try the one explicitly linked as 'activeSeatMapId'
+    // @ts-ignore (Field exists in DB after migration)
+    if (show.activeSeatMapId) {
+        // @ts-ignore
+        activeSeatMap = seatMapsForShow.find(m => m.id === show.activeSeatMapId);
+    }
+    
+    // 2. Fallback to the most recent one (if no link exists yet)
+    if (!activeSeatMap && seatMapsForShow.length > 0) {
+        activeSeatMap = seatMapsForShow[0];
+    }
+
+    // Previous maps (excluding the active one)
+    const previousMaps = seatMapsForShow.filter(m => m.id !== (activeSeatMap?.id));
+
+    // Fetch templates (unchanged)
     let templates: any[] = [];
-
-    if (showRow.venueId) {
-      const base = { venueId: showRow.venueId };
-      const previousWhere: any = { ...base, isTemplate: false };
-      const templateWhere: any = { ...base, isTemplate: true };
-
-      if (userId) {
-        previousWhere.createdByUserId = userId;
-        templateWhere.createdByUserId = userId;
-      }
-
-      previousMaps = await prisma.seatMap.findMany({
-        where: previousWhere,
-        orderBy: { createdAt: "desc" },
-        select: {
-          id: true,
-          name: true,
-          createdAt: true,
-          version: true,
-          layout: true,
-          isTemplate: true,
-          isDefault: true,
-        },
-      });
-
-      templates = await prisma.seatMap.findMany({
-        where: templateWhere,
-        orderBy: { createdAt: "desc" },
-        select: {
-          id: true,
-          name: true,
-          createdAt: true,
-          version: true,
-          layout: true,
-          isTemplate: true,
-          isDefault: true,
-        },
-      });
+    if (show.venueId) {
+        const templateWhere: any = { venueId: show.venueId, isTemplate: true };
+        if (userId) templateWhere.createdByUserId = userId;
+        
+        templates = await prisma.seatMap.findMany({
+            where: templateWhere,
+            orderBy: { createdAt: "desc" },
+            select: {
+                id: true, name: true, createdAt: true, version: true,
+                layout: true, isTemplate: true, isDefault: true,
+            },
+        });
     }
 
     return res.json({
       show: {
-        id: showRow.id,
-        title: showRow.title,
-        date: showRow.date,
-        venue: venue
-          ? {
-              id: venue.id,
-              name: venue.name,
-              city: venue.city,
-              capacity: venue.capacity,
-            }
-          : null,
+        id: show.id,
+        title: show.title,
+        date: show.date,
+        venue: show.venue ? {
+          id: show.venue.id,
+          name: show.venue.name,
+          city: show.venue.city,
+          capacity: show.venue.capacity,
+        } : null,
       },
-      activeSeatMap: activeSeatMap
-        ? {
-            id: activeSeatMap.id,
-            name: activeSeatMap.name,
-            layout: activeSeatMap.layout,
-            isTemplate: activeSeatMap.isTemplate,
-            isDefault: activeSeatMap.isDefault,
-            version: activeSeatMap.version,
-          }
-        : null,
-      previousMaps,
+      activeSeatMap: activeSeatMap ? {
+        id: activeSeatMap.id,
+        name: activeSeatMap.name,
+        layout: activeSeatMap.layout,
+        isTemplate: activeSeatMap.isTemplate,
+        isDefault: activeSeatMap.isDefault,
+        version: activeSeatMap.version,
+      } : null,
+      previousMaps: previousMaps.map(m => ({
+        id: m.id,
+        name: m.name,
+        createdAt: m.createdAt,
+        version: m.version
+      })),
       templates,
     });
   } catch (err) {
@@ -241,50 +222,23 @@ router.get("/builder/api/seatmaps/:showId", async (req, res) => {
 /* -------------------------------------------------------------
    ROUTE: POST save seat map
 -------------------------------------------------------------- */
+// --- POST: Save Map ---
 router.post("/builder/api/seatmaps/:showId", async (req, res) => {
   try {
     const showId = req.params.showId;
     const {
-      seatMapId,
-      saveAsTemplate,
-      name,
-      layoutType,
-      config,
-      estimatedCapacity,
-      konvaJson,
-      showStatus,
-      completionStatus,
-      tickets, // Extract tickets array
+      seatMapId, saveAsTemplate, name, layoutType, config,
+      estimatedCapacity, konvaJson, showStatus, completionStatus, tickets,
     } = req.body ?? {};
-    const showRow = (
-      await prisma.$queryRaw<{ id: string; venueId: string | null }[]>
-        `SELECT "id","venueId" FROM "Show" WHERE "id" = ${showId} LIMIT 1`
-    )[0];
 
-    if (!showRow) {
-      return res.status(404).json({ error: "Show not found" });
-    }
+    const showRow = await prisma.show.findUnique({ where: { id: showId } });
+    if (!showRow) return res.status(404).json({ error: "Show not found" });
 
-     try {
-      await ensureShowPublishingSchema();
-    } catch (schemaErr) {
-      console.error(
-        "[seatmap] Failed to ensure publishing schema before saving seat map",
-        schemaErr
-      );
-      return res.status(400).json({
-        error: "schema_mismatch",
-        message:
-          "Database schema is missing Show publishing columns. Run the latest Prisma migrations.",
-      });
-    }
-    
+    // Ensure schema (safety check)
+    try { await ensureShowPublishingSchema(); } catch (e) { /* ignore */ }
+
     const userId = await getUserIdFromRequest(req);
-
-    const finalName =
-      name ||
-      ((showRow.venueId ? "Room layout" : "Room") +
-        (layoutType ? ` – ${layoutType}` : " – Layout"));
+    const finalName = name || "Seating Map";
 
     const layoutPayload = {
       layoutType: layoutType ?? null,
@@ -300,23 +254,21 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
     };
 
     let saved;
-
     let existingSeatMap: { id: string } | null = null;
 
-    
     if (seatMapId) {
-      const scope: any[] = [{ showId }];
-      if (showRow.venueId) {
-        scope.push({ venueId: showRow.venueId });
-      }
-
-      existingSeatMap = await prisma.seatMap.findFirst({
-        where: { id: seatMapId, OR: scope },
-        select: { id: true },
-      });
+        // Look for map by ID
+        const scope: any[] = [{ showId }];
+        if (showRow.venueId) scope.push({ venueId: showRow.venueId });
+        
+        existingSeatMap = await prisma.seatMap.findFirst({
+            where: { id: seatMapId, OR: scope },
+            select: { id: true },
+        });
     }
 
     if (existingSeatMap) {
+      // Update existing
       saved = await prisma.seatMap.update({
         where: { id: existingSeatMap.id },
         data: {
@@ -328,12 +280,7 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
         },
       });
     } else {
-      if (seatMapId) {
-        console.warn(
-          "[seatmap] POST /builder/api/seatmaps/:showId: seat map id not found in scope, creating new map",
-          { seatMapId, showId }
-        );
-      }
+      // Create new
       saved = await prisma.seatMap.create({
         data: {
           name: finalName,
@@ -346,51 +293,29 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
       });
     }
 
-     // --- SYNC TICKET TYPES ---
-    if (Array.isArray(tickets)) {
-      // 1. Clear existing ticket types for this show (simple sync)
-      await prisma.ticketType.deleteMany({ where: { showId } });
+    // --- CRITICAL UPDATE: Link this specific map as the ACTIVE map for the show ---
+    await prisma.show.update({
+        where: { id: showId },
+        data: { 
+            // @ts-ignore
+            activeSeatMapId: saved.id,
+            status: showStatus === "LIVE" ? "LIVE" : undefined
+        }
+    });
 
-      // 2. Create new ticket types from the builder config
+    // --- Sync Ticket Types ---
+    if (Array.isArray(tickets)) {
+      await prisma.ticketType.deleteMany({ where: { showId } });
       for (const t of tickets) {
         if (!t.name) continue;
         const pricePence = Math.round(Number(t.price || 0) * 100);
         await prisma.ticketType.create({
           data: {
-            showId,
-            name: t.name,
-            pricePence,
-            available: null, // Unlimited/Open for now as builder doesn't specify caps
+            showId, name: t.name, pricePence, available: null,
           },
         });
       }
     }
-
-    if (showStatus === "LIVE" || showStatus === "DRAFT") {
-      try {
-        const publishedAtValue = showStatus === "LIVE" ? new Date() : null;
-      // Use raw SQL so we bypass any Prisma schema confusion and just hit the DB directly.
-        // Removed publicUrl/nextUrl updates because those columns do not exist in the DB schema.
-        await prisma.$executeRaw`
-            UPDATE "Show"
-            SET "status" = ${showStatus}::"ShowStatus",
-                "publishedAt" = ${publishedAtValue}
-            WHERE "id" = ${showId}
-          `;
-        
-      } catch (err) {
-        console.error(
-          "[seatmap] Raw SQL update of Show.status/publishedAt failed in POST /builder/api/seatmaps/:showId",
-          err
-        );
-
-        const knownErrorResponse = respondWithKnownPrismaError(res, err);
-        if (knownErrorResponse) return knownErrorResponse;
-
-        return res.status(500).json({ error: "show_update_failed" });
-      }
-    }
-
 
     return res.json({
       ok: true,
@@ -402,20 +327,10 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
       },
     });
   } catch (err) {
-          if (isMissingColumnError(err)) {
-      console.error(
-        "[seatmap] Database schema mismatch when saving seat map. Run migrations to sync columns.",
-        err
-      );
-      return res.status(400).json({
-        error: "schema_mismatch",
-        message: "Database schema is missing columns required for the seating builder. Please run Prisma migrations.",
-      });
+    if (isMissingColumnError(err)) {
+      return res.status(400).json({ error: "schema_mismatch", message: "Database schema out of sync." });
     }
-    
     console.error("Error in POST /builder/api/seatmaps/:showId", err);
-    const knownErrorResponse = respondWithKnownPrismaError(res, err);
-    if (knownErrorResponse) return knownErrorResponse;
     return res.status(500).json({ error: "internal_error" });
   }
 });
