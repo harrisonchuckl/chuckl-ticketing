@@ -49,8 +49,10 @@ router.get('/event/:id', async (req, res) => {
        return res.status(404).send('Event ID not found');
     }
 
-    // @ts-ignore
-    const status = show['status'];
+    // --- FIX: Force status to string to avoid Enum comparison errors ---
+    const status = (show as any).status as string;
+    
+    // Now we can safely compare with 'live' without TypeScript complaining
     if (status !== 'LIVE' && status !== 'live') {
        return res.status(404).send(`Event is not LIVE (Status: ${status})`);
     }
