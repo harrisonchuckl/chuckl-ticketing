@@ -72,6 +72,7 @@ model Show {
 
   status      ShowStatus @default(DRAFT)
   publishedAt DateTime?
+activeSeatMapId String?
 
   venueId     String?
   organiserId String?
