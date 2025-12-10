@@ -1,12 +1,76 @@
 // backend/src/routes/checkout.ts
 import { Router } from 'express';
-import { Prisma } from '@prisma/client';
+import { OrderStatus } from '@prisma/client';
 import prisma from '../lib/prisma.js';
 import { calcFeesForShow } from '../services/fees.js';
 import Stripe from 'stripe';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, { apiVersion: '2024-06-20' });
+const stripeSecret = process.env.STRIPE_SECRET_KEY;
+const stripe = stripeSecret ? new Stripe(stripeSecret, { apiVersion: '2024-06-20' }) : null;
 const router = Router();
+
+router.post('/session', async (req, res) => {
+  try {
+    const { showId, quantity, unitPricePence } = req.body || {};
+    const qty = Number(quantity);
+    const unitPence = Number(unitPricePence);
+
+    if (!showId || !Number.isFinite(qty) || !Number.isFinite(unitPence) || qty <= 0 || unitPence <= 0) {
+      return res.status(400).json({ ok: false, message: 'showId, quantity and unitPricePence are required' });
+    }
+
+    const show = await prisma.show.findUnique({ where: { id: String(showId) }, select: { id: true, title: true } });
+    if (!show) return res.status(404).json({ ok: false, message: 'Event not found' });
+
+    const amountPence = Math.round(unitPence) * Math.round(qty);
+    const fees = await calcFeesForShow(show.id, amountPence, qty);
+
+    const order = await prisma.order.create({
+      data: {
+        showId: show.id,
+        amountPence,
+        quantity: qty,
+        status: OrderStatus.PENDING,
+        platformFeePence: fees.platformFeePence,
+        organiserSharePence: fees.organiserSharePence,
+        paymentFeePence: fees.paymentFeePence,
+        netPayoutPence: fees.netPayoutPence,
+      },
+    });
+
+    const origin = (process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get('host') || ''}` || '').replace(/\/$/, '') || 'http://localhost:3000';
+
+    if (!stripe) {
+      console.error('checkout/session error: STRIPE_SECRET_KEY is not configured');
+      return res.status(500).json({ ok: false, message: 'Payment processing unavailable' });
+    }
+
+    const successUrl = new URL(`/public/event/${show.id}?status=success&orderId=${order.id}`, origin).toString();
+    const cancelUrl = new URL(`/public/event/${show.id}?status=cancelled`, origin).toString();
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: [
+        {
+          price_data: {
+            currency: 'gbp',
+            product_data: { name: show.title },
+            unit_amount: Math.round(unitPence),
+          },
+          quantity: Math.round(qty),
+        },
+      ],
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      metadata: { orderId: order.id, showId: show.id },
+    });
+
+    return res.json({ ok: true, url: session.url });
+  } catch (err: any) {
+    console.error('checkout/session error', err);
+    return res.status(500).json({ ok: false, message: 'Checkout error' });
+  }
+});
 
 router.get('/', async (req, res) => {
   const showId = String(req.query.showId || '');
@@ -570,7 +634,7 @@ router.get('/', async (req, res) => {
 </html>`);
 
   } catch (err: any) {
-    console.error('checkout/session error', err);
+    console.error('checkout page error', err);
     return res.status(500).json({ ok: false, message: 'Checkout error' });
   }
 });
