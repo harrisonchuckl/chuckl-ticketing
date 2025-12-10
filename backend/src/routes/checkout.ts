@@ -33,34 +33,69 @@ router.post('/session', async (req, res) => {
     }
     const showTitle = show.title ?? 'Event ticket';
 
-    const amountPence = Math.round(unitPence) * Math.round(qty);
-    console.debug('checkout/session computed totals', { qty, unitPence: Math.round(unitPence), amountPence });
-    const fees = await calcFeesForShow(show.id, amountPence, qty);
-    console.debug('checkout/session fees', fees);
+  const amountPence = Math.round(unitPence) * Math.round(qty);
+    console.debug('checkout/session computed totals', { qty, unitPence: Math.round(unitPence), amountPence });
+    
+    // --- DEBUG START: FEE CALCULATION ---
+    console.debug('checkout/session calling calcFeesForShow with:', { showId: show.id, amountPence, qty });
+    const fees = await calcFeesForShow(show.id, amountPence, qty);
+    console.debug('checkout/session fees result:', fees);
+    // --- DEBUG END: FEE CALCULATION ---
 
-    const order = await prisma.order.create({
-      data: {
-        showId: show.id,
-        amountPence,
-        quantity: qty,
-        status: OrderStatus.PENDING,
-        platformFeePence: fees.platformFeePence,
-        organiserSharePence: fees.organiserSharePence,
-        paymentFeePence: fees.paymentFeePence,
-        netPayoutPence: fees.netPayoutPence,
-      },
-    });
-    console.debug('checkout/session order created', { orderId: order.id, status: order.status, amountPence, qty });
+    const order = await prisma.order.create({
+      data: {
+        showId: show.id,
+        amountPence,
+        quantity: qty,
+        status: OrderStatus.PENDING,
+        platformFeePence: fees.platformFeePence,
+        organiserSharePence: fees.organiserSharePence,
+        paymentFeePence: fees.paymentFeePence,
+        netPayoutPence: fees.netPayoutPence,
+      },
+    });
+    console.debug('checkout/session order created', { orderId: order.id, status: order.status, amountPence, qty });
 
-    const candidateOrigin = process.env.PUBLIC_BASE_URL || (req.get('host') ? `${req.protocol}://${req.get('host')}` : '');
-    let origin = 'http://localhost:3000';
-    try {
-      if (candidateOrigin) origin = new URL(candidateOrigin).origin;
-    } catch (err) {
-      console.warn('checkout/session origin fallback', candidateOrigin, err);
-    }
-    console.debug('checkout/session origin', { candidateOrigin, origin });
+    const candidateOrigin = process.env.PUBLIC_BASE_URL || (req.get('host') ? `${req.protocol}://${req.get('host')}` : '');
+    let origin = 'http://localhost:3000';
+    try {
+      if (candidateOrigin) origin = new URL(candidateOrigin).origin;
+    } catch (err) {
+      console.warn('checkout/session origin fallback', candidateOrigin, err);
+    }
+    console.debug('checkout/session origin', { candidateOrigin, origin });
 
+    if (!stripe) {
+      console.error('checkout/session error: STRIPE_SECRET_KEY is not configured');
+      return res.status(500).json({ ok: false, message: 'Payment processing unavailable' });
+    }
+
+    const successUrl = new URL(`/public/event/${show.id}?status=success&orderId=${order.id}`, origin).toString();
+    const cancelUrl = new URL(`/public/event/${show.id}?status=cancelled`, origin).toString();
+    console.debug('checkout/session redirect urls', { successUrl, cancelUrl });
+
+    // --- DEBUG START: STRIPE SESSION CREATION ---
+    const lineItems = [
+        {
+          price_data: {
+            currency: 'gbp',
+            product_data: { name: showTitle },
+            unit_amount: Math.round(unitPence),
+          },
+          quantity: Math.round(qty),
+        },
+    ];
+    console.debug('checkout/session Stripe line_items:', JSON.stringify(lineItems));
+    
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: lineItems,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      metadata: { orderId: order.id, showId: show.id },
+    });
+    console.debug('checkout/session created Stripe session (ID):', session.id);
+    // --- DEBUG END: STRIPE SESSION CREATION ---
     if (!stripe) {
       console.error('checkout/session error: STRIPE_SECRET_KEY is not configured');
       return res.status(500).json({ ok: false, message: 'Payment processing unavailable' });
@@ -89,15 +124,18 @@ router.post('/session', async (req, res) => {
     console.debug('checkout/session created Stripe session', { sessionId: session.id, url: session.url });
 
     return res.json({ ok: true, url: session.url });
-  } catch (err: any) {
-    console.error('checkout/session error', {
-      message: err?.message,
-      name: err?.name,
-      stack: err?.stack,
-      raw: err,
-    });
-    return res.status(500).json({ ok: false, message: 'Checkout error', detail: err?.message });
-  }
+ } catch (err: any) {
+    // --- DEBUG START: FINAL CATCH LOG ---
+    console.error('checkout/session CRITICAL ERROR', {
+      requestBody: req.body,
+      errorMessage: err?.message,
+      errorName: err?.name,
+      errorStack: err?.stack,
+      rawError: err,
+    });
+    // --- DEBUG END: FINAL CATCH LOG ---
+    return res.status(500).json({ ok: false, message: 'Checkout error', detail: err?.message });
+  }
 });
 
 router.get('/', async (req, res) => {
