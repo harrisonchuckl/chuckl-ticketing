@@ -21,6 +21,7 @@ router.post('/session', async (req, res) => {
 
     const show = await prisma.show.findUnique({ where: { id: String(showId) }, select: { id: true, title: true } });
     if (!show) return res.status(404).json({ ok: false, message: 'Event not found' });
+    const showTitle = show.title ?? 'Event ticket';
 
     const amountPence = Math.round(unitPence) * Math.round(qty);
     const fees = await calcFeesForShow(show.id, amountPence, qty);
@@ -54,7 +55,7 @@ router.post('/session', async (req, res) => {
         {
           price_data: {
             currency: 'gbp',
-            product_data: { name: show.title },
+            product_data: { name: showTitle },
             unit_amount: Math.round(unitPence),
           },
           quantity: Math.round(qty),
