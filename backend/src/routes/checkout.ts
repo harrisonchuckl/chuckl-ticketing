@@ -95,35 +95,10 @@ router.post('/session', async (req, res) => {
       metadata: { orderId: order.id, showId: show.id },
     });
     console.debug('checkout/session created Stripe session (ID):', session.id);
+   console.debug('checkout/session created Stripe session (ID):', session.id);
     // --- DEBUG END: STRIPE SESSION CREATION ---
-    if (!stripe) {
-      console.error('checkout/session error: STRIPE_SECRET_KEY is not configured');
-      return res.status(500).json({ ok: false, message: 'Payment processing unavailable' });
-    }
 
-    const successUrl = new URL(`/public/event/${show.id}?status=success&orderId=${order.id}`, origin).toString();
-    const cancelUrl = new URL(`/public/event/${show.id}?status=cancelled`, origin).toString();
-    console.debug('checkout/session redirect urls', { successUrl, cancelUrl });
-
-    const session = await stripe.checkout.sessions.create({
-      mode: 'payment',
-      line_items: [
-        {
-          price_data: {
-            currency: 'gbp',
-            product_data: { name: showTitle },
-            unit_amount: Math.round(unitPence),
-          },
-          quantity: Math.round(qty),
-        },
-      ],
-      success_url: successUrl,
-      cancel_url: cancelUrl,
-      metadata: { orderId: order.id, showId: show.id },
-    });
-    console.debug('checkout/session created Stripe session', { sessionId: session.id, url: session.url });
-
-    return res.json({ ok: true, url: session.url });
+    return res.json({ ok: true, url: session.url });
  } catch (err: any) {
     // --- DEBUG START: FINAL CATCH LOG ---
     console.error('checkout/session CRITICAL ERROR', {
