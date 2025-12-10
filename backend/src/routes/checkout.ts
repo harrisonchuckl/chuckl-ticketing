@@ -260,8 +260,9 @@ router.get('/', async (req, res) => {
                 seatPrices.set(seat._id, price);
                 
                 const label = seat.getAttr('label') || seat.name() || 'Seat';
-                const info = seat.getAttr('sbInfo');
-                const viewImg = seat.getAttr('sbViewImage');
+                const infoRaw = seat.getAttr('sbInfo') ?? seat.getAttr('info') ?? seat.getAttr('infoText') ?? seat.getAttr('sbInfoText');
+                const info = typeof infoRaw === 'string' ? infoRaw.trim() : infoRaw;
+                const viewImg = seat.getAttr('sbViewImage') || seat.getAttr('sbView');
 
                 if (parentGroup) {
                     const grpId = parentGroup._id;
@@ -296,8 +297,8 @@ router.get('/', async (req, res) => {
                 seat.visible(true);
 
                 // --- Tag for Icon Layer ---
-                if (info) seat.setAttr('hasInfo', true);
-                if (viewImg) seat.setAttr('hasView', true);
+                if (info) seat.setAttr('hasInfo', true); else seat.setAttr('hasInfo', false);
+                if (viewImg) seat.setAttr('hasView', true); else seat.setAttr('hasView', false);
 
                 // EVENTS
                 seat.on('mouseenter', () => {
@@ -440,17 +441,20 @@ router.get('/', async (req, res) => {
         mainLayer.find('Circle').forEach(seat => {
             if (!seat.visible() || !seat.getAttr('isSeat')) return;
             const meta = seatMeta.get(seat._id);
-            const hasInfo = seat.getAttr('hasInfo');
-            const hasView = seat.getAttr('hasView');
+            const infoText = meta?.info;
+            const viewImg = meta?.viewImg;
+            const hasInfo = Boolean(infoText && String(infoText).trim().length > 0);
+            const hasView = Boolean(viewImg);
 
             if (!meta || (!hasInfo && !hasView)) return;
 
             const parentGroup = meta.parentGroup || null;
 
-            const rect = seat.getClientRect({ relativeTo: mainLayer, skipShadow: true });
-            const cx = rect.x + rect.width / 2;
-            const cy = rect.y + rect.height / 2;
-            const radius = seat.radius();
+            const absPos = seat.getAbsolutePosition();
+            const absScale = seat.getAbsoluteScale();
+            const radius = (typeof seat.radius === 'function' ? seat.radius() : 0) * Math.max(absScale.x || 1, absScale.y || 1);
+            const cx = absPos.x;
+            const cy = absPos.y;
 
             // INFO ICON
             if (hasInfo) {
