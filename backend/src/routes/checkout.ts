@@ -12,19 +12,26 @@ const router = Router();
 router.post('/session', async (req, res) => {
   try {
     const { showId, quantity, unitPricePence } = req.body || {};
+    console.debug('checkout/session request body', { showId, quantity, unitPricePence, headers: req.headers });
     const qty = Number(quantity);
     const unitPence = Number(unitPricePence);
 
     if (!showId || !Number.isFinite(qty) || !Number.isFinite(unitPence) || qty <= 0 || unitPence <= 0) {
+      console.warn('checkout/session validation failed', { showId, qty, unitPence });
       return res.status(400).json({ ok: false, message: 'showId, quantity and unitPricePence are required' });
     }
 
     const show = await prisma.show.findUnique({ where: { id: String(showId) }, select: { id: true, title: true } });
-    if (!show) return res.status(404).json({ ok: false, message: 'Event not found' });
+    if (!show) {
+      console.warn('checkout/session missing show', { showId });
+      return res.status(404).json({ ok: false, message: 'Event not found' });
+    }
     const showTitle = show.title ?? 'Event ticket';
 
     const amountPence = Math.round(unitPence) * Math.round(qty);
+    console.debug('checkout/session computed totals', { qty, unitPence: Math.round(unitPence), amountPence });
     const fees = await calcFeesForShow(show.id, amountPence, qty);
+    console.debug('checkout/session fees', fees);
 
     const order = await prisma.order.create({
       data: {
@@ -38,6 +45,7 @@ router.post('/session', async (req, res) => {
         netPayoutPence: fees.netPayoutPence,
       },
     });
+    console.debug('checkout/session order created', { orderId: order.id, status: order.status, amountPence, qty });
 
     const candidateOrigin = process.env.PUBLIC_BASE_URL || (req.get('host') ? `${req.protocol}://${req.get('host')}` : '');
     let origin = 'http://localhost:3000';
@@ -46,6 +54,7 @@ router.post('/session', async (req, res) => {
     } catch (err) {
       console.warn('checkout/session origin fallback', candidateOrigin, err);
     }
+    console.debug('checkout/session origin', { candidateOrigin, origin });
 
     if (!stripe) {
       console.error('checkout/session error: STRIPE_SECRET_KEY is not configured');
@@ -54,6 +63,7 @@ router.post('/session', async (req, res) => {
 
     const successUrl = new URL(`/public/event/${show.id}?status=success&orderId=${order.id}`, origin).toString();
     const cancelUrl = new URL(`/public/event/${show.id}?status=cancelled`, origin).toString();
+    console.debug('checkout/session redirect urls', { successUrl, cancelUrl });
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
@@ -71,11 +81,17 @@ router.post('/session', async (req, res) => {
       cancel_url: cancelUrl,
       metadata: { orderId: order.id, showId: show.id },
     });
+    console.debug('checkout/session created Stripe session', { sessionId: session.id, url: session.url });
 
     return res.json({ ok: true, url: session.url });
   } catch (err: any) {
-    console.error('checkout/session error', err);
-    return res.status(500).json({ ok: false, message: 'Checkout error' });
+    console.error('checkout/session error', {
+      message: err?.message,
+      name: err?.name,
+      stack: err?.stack,
+      raw: err,
+    });
+    return res.status(500).json({ ok: false, message: 'Checkout error', detail: err?.message });
   }
 });
 
