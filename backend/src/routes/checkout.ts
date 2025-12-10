@@ -248,9 +248,11 @@ router.get('/', async (req, res) => {
                 const seat = node;
                 
                 const status = seat.getAttr('status') || 'AVAILABLE';
+                const holdStatus = (seat.getAttr('sbHoldStatus') || '').toString().toLowerCase();
                 const isBlocked = status === 'BLOCKED' || status === 'SOLD' || status === 'HELD';
                 const isHeldDB = heldSeatIds.has(seat.id()) || heldSeatIds.has(seat.getAttr('sbSeatId'));
-                const isUnavailable = isBlocked || isHeldDB;
+                const isHeldOrAllocated = holdStatus === 'hold' || holdStatus === 'allocation' || holdStatus === 'allocated';
+                const isUnavailable = isBlocked || isHeldDB || isHeldOrAllocated;
 
                 const tType = getTicketType(seat);
                 const price = tType ? tType.pricePence : 0;
@@ -271,12 +273,12 @@ router.get('/', async (req, res) => {
 
                 // VISUALS
                 if (isUnavailable) {
-                    seat.fill('#334155'); // Dark Grey
-                    seat.stroke('#1e293b'); seat.strokeWidth(1); 
-                    seat.opacity(0.8); seat.listening(false);
+                    seat.fill('#000000'); // Blackout for sold/held/allocated
+                    seat.stroke('#000000'); seat.strokeWidth(1);
+                    seat.opacity(0.85); seat.listening(false);
                 } else {
                     seat.fill('#ffffff'); seat.stroke('#64748B'); seat.strokeWidth(1.5);
-                    seat.opacity(1); seat.listening(true); 
+                    seat.opacity(1); seat.listening(true);
                 }
                 seat.shadowEnabled(false);
                 seat.visible(true);
@@ -333,7 +335,12 @@ router.get('/', async (req, res) => {
         });
 
         // --- 4. PRECISE AUTO-FIT WITH DELAY ---
-function fitStageToContent(padding = 50) {
+        function fitStageToContent(padding = 50) {
+            const prevScale = stage.scaleX();
+            const prevPos = stage.position();
+            stage.scale({ x: 1, y: 1 });
+            stage.position({ x: 0, y: 0 });
+
             const semanticSelector = (node) => {
                 if (!(node instanceof Konva.Shape)) return false;
                 if (!node.isVisible() || node.opacity() === 0) return false;
@@ -356,56 +363,48 @@ function fitStageToContent(padding = 50) {
                 minY = Math.min(minY, rect.y);
                 maxX = Math.max(maxX, rect.x + rect.width);
                 maxY = Math.max(maxY, rect.y + rect.height);
-                
-                });
+            });
 
-                if (!isFinite(minX) || !isFinite(minY)) return;
+            if (!isFinite(minX) || !isFinite(minY)) return;
 
             const contentWidth = maxX - minX;
             const contentHeight = maxY - minY;
             const cw = container.offsetWidth;
             const ch = container.offsetHeight;
-
             if (cw === 0 || ch === 0) return;
 
             const availableWidth = Math.max(10, cw - padding * 2);
             const availableHeight = Math.max(10, ch - padding * 2);
             const scale = Math.min(availableWidth / contentWidth, availableHeight / contentHeight);
-            stage.scale({ x: scale, y: scale });
 
             const offsetX = padding + (availableWidth - contentWidth * scale) / 2;
             const offsetY = padding + (availableHeight - contentHeight * scale) / 2;
+
+            stage.scale({ x: scale, y: scale });
             stage.position({ x: offsetX - minX * scale, y: offsetY - minY * scale });
 
             uiLayer.find('.debug-bounds').forEach(n => n.destroy());
-            const debugRect = new Konva.Rect({
-                x: minX,
-                y: minY,
-                width: contentWidth,
-                height: contentHeight,
-                stroke: 'red',
-                strokeWidth: 2 / scale,
-                dash: [8 / scale, 6 / scale],
-                listening: false,
-                name: 'debug-bounds'
-            });
-            uiLayer.add(debugRect);
             uiLayer.batchDraw();
-document.getElementById('loader').classList.add('hidden');
+
+            // Notify listeners if a manual zoom/drag was replaced by an auto-fit
+            if (prevScale !== 1 || prevPos.x !== 0 || prevPos.y !== 0) {
+                stage.fire('fit:applied');
+            }
+
+            document.getElementById('loader').classList.add('hidden');
             document.getElementById('stage-container').classList.add('visible');
         }
-        
 
         // Wait for DOM layout to settle (300ms delay for safety)
         setTimeout(() => { fitStageToContent(); updateIcons(); }, 300);
-        
+
         // Watch for resizes
         const ro = new ResizeObserver(() => {
             stage.width(container.offsetWidth);
             stage.height(container.offsetHeight);
-   fitStageToContent();
+            fitStageToContent();
             updateIcons();
-            });
+        });
         ro.observe(container);
 
     } catch (err) {
@@ -418,6 +417,7 @@ document.getElementById('loader').classList.add('hidden');
         uiLayer.find('.info-icon, .view-icon').forEach(n => n.destroy());
         const showViews = document.getElementById('toggle-views').checked;
         const scale = stage.scaleX();
+        const inverseScale = scale === 0 ? 1 : 1 / scale;
 
         mainLayer.find('Circle').forEach(seat => {
             if (!seat.visible()) return;
@@ -427,20 +427,19 @@ document.getElementById('loader').classList.add('hidden');
             if (!hasInfo && !hasView) return;
             
             const pos = seat.getAbsolutePosition();
-            const radius = seat.radius() * scale;
-            
+            const radius = seat.radius();
+
             // INFO ICON
             if (hasInfo) {
-               const grp = new Konva.Group({ x: pos.x + radius*0.7, y: pos.y - radius*0.7, listening:false, name:'info-icon' });
-
-              grp.add(new Konva.Circle({ radius: 6, fill: '#0F172A' }));
-               grp.add(new Konva.Text({ text:'i', fontSize:9, fill:'#fff', x:-1.5, y:-4, fontStyle:'bold', fontFamily:'sans-serif' }));
+               const grp = new Konva.Group({ x: pos.x + radius*0.7, y: pos.y - radius*0.7, listening:false, name:'info-icon', scaleX: inverseScale, scaleY: inverseScale });
+               grp.add(new Konva.Circle({ radius: 6, fill: '#0F172A' }));
+               grp.add(new Konva.Text({ text:'i', fontSize:9, fill:'#fff', offsetX: 3, offsetY: 5, fontStyle:'bold', fontFamily:'Inter, sans-serif', listening:false }));
                uiLayer.add(grp);
             }
-            
+
             // VIEW ICON
             if (hasView && showViews) {
-               const grp = new Konva.Group({ x: pos.x, y: pos.y, listening:false, name:'view-icon' });
+               const grp = new Konva.Group({ x: pos.x, y: pos.y, listening:false, name:'view-icon', scaleX: inverseScale, scaleY: inverseScale });
                grp.add(new Konva.Circle({ radius: 10, fill: '#0056D2' }));
                const cam = new Konva.Path({ data: 'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5 5 2.24 5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z', fill: 'white', scaleX: 0.6, scaleY: 0.6, offsetX: 12, offsetY: 12 });
                grp.add(cam);
@@ -466,15 +465,15 @@ document.getElementById('loader').classList.add('hidden');
         updateIcons();
     });
 
-        function leavesGap(row, seatId, willSelect) {
+    function leavesGap(row, seatId, willSelect) {
         const states = row.map(s => {
-             if (s.unavailable) return 0; // blocked/held
+            if (s.unavailable) return 0; // blocked/held
             if (s.id === seatId) return willSelect ? 2 : 1; // simulate new state
             return selectedSeats.has(s.id) ? 2 : 1; // 2 selected, 1 open
         });
-        
+
         for (let i = 0; i < states.length; i++) {
-          if (states[i] !== 1) continue; // only care about empty seats
+            if (states[i] !== 1) continue; // only care about empty seats
             const left = i === 0 ? 0 : states[i - 1];
             const right = i === states.length - 1 ? 0 : states[i + 1];
             if (left !== 1 && right !== 1) return true; // orphaned single
