@@ -15,9 +15,13 @@ function pFmt(p: number | null | undefined) {
 }
 
 router.post('/session', async (req, res) => {
-  try {
-    const { showId, quantity, unitPricePence } = req.body || {};
-    console.debug('checkout/session request body', { showId, quantity, unitPricePence, headers: req.headers });
+    const DEBUG_REQ_BODY = req.body || {};
+    console.debug('checkout/session request body (RAW):', DEBUG_REQ_BODY); // Log raw body first
+  try {
+    const { showId, quantity, unitPricePence } = DEBUG_REQ_BODY;
+    console.debug('checkout/session extracted data:', { showId, quantity, unitPricePence, headers: req.headers });
+    const qty = Number(quantity);
+    const unitPence = Number(unitPricePence);
     const qty = Number(quantity);
     const unitPence = Number(unitPricePence);
 
@@ -95,20 +99,21 @@ router.post('/session', async (req, res) => {
       metadata: { orderId: order.id, showId: show.id },
     });
     console.debug('checkout/session created Stripe session (ID):', session.id);
-   console.debug('checkout/session created Stripe session (ID):', session.id);
+  console.debug('checkout/session created Stripe session (ID):', session.id);
     // --- DEBUG END: STRIPE SESSION CREATION ---
-
+    console.debug('checkout/session success: returning URL');
     return res.json({ ok: true, url: session.url });
- } catch (err: any) {
+ } catch (err: any) {
     // --- DEBUG START: FINAL CATCH LOG ---
     console.error('checkout/session CRITICAL ERROR', {
-      requestBody: req.body,
+      requestBody: DEBUG_REQ_BODY, // Use the new variable for consistency
       errorMessage: err?.message,
       errorName: err?.name,
       errorStack: err?.stack,
       rawError: err,
     });
     // --- DEBUG END: FINAL CATCH LOG ---
+      // --- DEBUG END: FINAL CATCH LOG ---
     return res.status(500).json({ ok: false, message: 'Checkout error', detail: err?.message });
   }
 });
