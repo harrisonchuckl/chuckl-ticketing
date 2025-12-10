@@ -40,7 +40,6 @@ router.get('/', async (req, res) => {
 
     const venueName = show.venue?.name || 'Venue TBC';
     const ticketTypes = show.ticketTypes || [];
-    
     const dateObj = new Date(show.date);
     const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -67,7 +66,7 @@ router.get('/', async (req, res) => {
        return; 
     }
 
-    // --- MODE B: INTERACTIVE MAP ---
+    // --- MODE B: MAP VIEW ---
     const mapData = JSON.stringify(konvaData);
     const ticketsData = JSON.stringify(ticketTypes);
     const showIdStr = JSON.stringify(show.id);
@@ -96,7 +95,6 @@ router.get('/', async (req, res) => {
     #stage-container { width:100%; height:100%; cursor:grab; }
     #stage-container:active { cursor:grabbing; }
     
-    /* LEGEND - Z-Index 4000 */
     .legend { 
         position:absolute; top:20px; left:20px; 
         background:rgba(255,255,255,0.98); padding:12px 16px; border-radius:12px; 
@@ -157,7 +155,7 @@ router.get('/', async (req, res) => {
     <div id="stage-container"></div>
     <div id="tooltip"></div>
     <div id="loader"><div>Loading seating plan...</div></div>
-    </div>
+  </div>
   <footer>
     <div class="basket-info"><div class="basket-label">Total</div><div class="basket-total" id="ui-total">£0.00</div><div class="basket-detail" id="ui-count">0 tickets selected</div></div>
     <button class="btn-checkout" id="btn-next">Continue</button>
@@ -181,9 +179,8 @@ router.get('/', async (req, res) => {
         draggable: true 
     });
     
-    // LAYERS: Map (Bottom), Icons (Top)
     const mainLayer = new Konva.Layer();
-    const uiLayer = new Konva.Layer({ listening: false });
+    const uiLayer = new Konva.Layer({ listening: false }); // Icons always on top
     stage.add(mainLayer);
     stage.add(uiLayer);
     
@@ -203,7 +200,7 @@ router.get('/', async (req, res) => {
 
         console.log("[DEBUG] Loading Layout...", layout);
 
-        // --- 1. LOAD LAYER ---
+        // --- 1. LOAD NODES ---
         let layersToLoad = [];
         if (layout.className === 'Stage' && layout.children) {
             layersToLoad = layout.children.filter(c => c.className === 'Layer');
@@ -216,9 +213,7 @@ router.get('/', async (req, res) => {
 
         layersToLoad.forEach((layerData) => {
             const tempLayer = Konva.Node.create(layerData);
-            // RESET TRANSFORM
-            tempLayer.x(0); tempLayer.y(0); tempLayer.scale({x:1, y:1});
-            
+            tempLayer.x(0); tempLayer.y(0); tempLayer.scale({x:1, y:1}); // Clear transforms
             const children = tempLayer.getChildren().slice();
             children.forEach(node => {
                 node.moveTo(mainLayer);
@@ -227,7 +222,7 @@ router.get('/', async (req, res) => {
             tempLayer.destroy();
         });
 
-        // --- 2. PROCESS NODES ---
+        // --- 2. PROCESS MAP NODES ---
         function processNode(node, parentGroup) {
             const nodeType = node.getClassName();
             const groupType = node.getAttr('shapeType') || node.name();
@@ -245,13 +240,11 @@ router.get('/', async (req, res) => {
             if (nodeType === 'Circle' && node.getAttr('isSeat')) {
                 const seat = node;
                 
-                // STATUS Check
                 const status = seat.getAttr('status') || 'AVAILABLE';
                 const isBlocked = status === 'BLOCKED' || status === 'SOLD' || status === 'HELD';
                 const isHeldDB = heldSeatIds.has(seat.id()) || heldSeatIds.has(seat.getAttr('sbSeatId'));
                 const isUnavailable = isBlocked || isHeldDB;
 
-                // DATA
                 const tType = getTicketType(seat);
                 const price = tType ? tType.pricePence : 0;
                 seatPrices.set(seat._id, price);
@@ -260,7 +253,6 @@ router.get('/', async (req, res) => {
                 const info = seat.getAttr('sbInfo');
                 const viewImg = seat.getAttr('sbViewImage');
 
-                // GAP Logic
                 if (parentGroup) {
                     const grpId = parentGroup._id;
                     if (!rowMap.has(grpId)) rowMap.set(grpId, []);
@@ -272,7 +264,7 @@ router.get('/', async (req, res) => {
 
                 // VISUALS
                 if (isUnavailable) {
-                    seat.fill('#334155'); // Dark Grey
+                    seat.fill('#334155'); 
                     seat.stroke('#1e293b'); 
                     seat.strokeWidth(1); 
                     seat.opacity(0.8); 
@@ -339,15 +331,15 @@ router.get('/', async (req, res) => {
              else seats.sort((a, b) => a.x - b.x);
         });
 
-        // --- 4. PRECISE AUTO-FIT ---
+        // --- 4. PRECISE AUTO-FIT (Smart Bounds) ---
         function fitMap() {
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
             let count = 0;
 
-            // Only scan SEMANTIC nodes
+            // Only scan SEMANTIC nodes (Seats, Text, Rects)
             mainLayer.find('Circle, Text, Rect, Path').forEach(node => {
                 if (!node.visible() || node.opacity() === 0) return;
-                // Exclude large backgrounds
+                // Exclude huge backgrounds
                 if (node.width() > 2000 || node.height() > 2000) return; 
 
                 const r = node.getClientRect({ skipTransform: true, relativeTo: mainLayer });
@@ -374,15 +366,14 @@ router.get('/', async (req, res) => {
                 const availH = h - padding;
 
                 let scale = Math.min(availW / mapW, availH / mapH);
-                scale = Math.min(scale, 1.6); // Cap Max Zoom 1.6x
+                // Allow scaling up for small maps (up to 3x) so they aren't tiny
+                scale = Math.min(scale, 3.0); 
                 
                 const cx = minX + mapW / 2;
                 const cy = minY + mapH / 2;
 
                 const newX = (w / 2) - (cx * scale);
                 const newY = (h / 2) - (cy * scale);
-
-                console.log(\`[DEBUG] Centering: Stage(\${w}x\${h}) Map(\${mapW}x\${mapH}) -> Scale \${scale}, Pos(\${newX}, \${newY})\`);
 
                 stage.x(newX);
                 stage.y(newY);
@@ -396,13 +387,16 @@ router.get('/', async (req, res) => {
             }
         }
 
-        setTimeout(fitMap, 100);
-        
-        window.addEventListener('resize', () => {
-             stage.width(container.offsetWidth);
-             stage.height(container.offsetHeight);
-             fitMap();
+        // Use ResizeObserver for robust layout detection
+        const ro = new ResizeObserver(() => {
+            stage.width(container.offsetWidth);
+            stage.height(container.offsetHeight);
+            fitMap();
         });
+        ro.observe(container);
+        
+        // Initial fit
+        setTimeout(fitMap, 50);
 
         document.getElementById('loader').style.display = 'none';
 
@@ -424,11 +418,10 @@ router.get('/', async (req, res) => {
             
             if (!hasInfo && !hasView) return;
             
-            // Get position on screen relative to stage
             const pos = seat.getAbsolutePosition();
             const radius = seat.radius() * scale; 
             
-            // INFO ICON (Black Dot)
+            // INFO ICON
             if (hasInfo) {
                const grp = new Konva.Group({ x: pos.x + radius*0.7, y: pos.y - radius*0.7 });
                grp.add(new Konva.Circle({ radius: 6, fill: '#0F172A' }));
@@ -436,7 +429,7 @@ router.get('/', async (req, res) => {
                uiLayer.add(grp);
             }
             
-            // VIEW ICON (Camera)
+            // VIEW ICON
             if (hasView && showViews) {
                const grp = new Konva.Group({ x: pos.x, y: pos.y });
                grp.add(new Konva.Circle({ radius: 10, fill: '#0056D2' }));
