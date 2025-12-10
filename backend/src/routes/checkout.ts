@@ -5,8 +5,16 @@ import prisma from '../lib/prisma.js';
 import { calcFeesForShow } from '../services/fees.js';
 import Stripe from 'stripe';
 
+// --- ROBUST STRIPE INITIALIZATION ---
 const stripeSecret = process.env.STRIPE_SECRET_KEY;
-const stripe = stripeSecret ? new Stripe(stripeSecret, { apiVersion: '2024-06-20' }) : null;
+
+// Check for the .default property for safer ES Module interop with Stripe
+const StripeClient = (Stripe as any)?.default || Stripe;
+
+const stripe = stripeSecret
+    ? new StripeClient(stripeSecret, { apiVersion: '2024-06-20' })
+    : null;
+// ------------------------------------
 const router = Router();
 
 // --- formatting helper (Required for List View HTML) ---
