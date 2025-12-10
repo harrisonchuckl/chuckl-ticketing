@@ -333,69 +333,79 @@ router.get('/', async (req, res) => {
         });
 
         // --- 4. PRECISE AUTO-FIT WITH DELAY ---
-        function fitMap() {
+function fitStageToContent(padding = 50) {
+            const semanticSelector = (node) => {
+                if (!(node instanceof Konva.Shape)) return false;
+                if (!node.isVisible() || node.opacity() === 0) return false;
+                if (node.width && node.height && (node.width() > 4000 || node.height() > 4000)) return false;
+                if (node.getAttr('isSeat')) return true;
+                const name = node.name() || '';
+                const type = node.getAttr('shapeType');
+                if (type === 'stage') return true;
+                if (node.getClassName() === 'Text') return true;
+                if (name.includes('label') || name.includes('row')) return true;
+                return false;
+            };
+
+            const semanticNodes = mainLayer.find(semanticSelector);
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-            let count = 0;
+            semanticNodes.forEach((node) => {
+                const rect = node.getClientRect({ relativeTo: mainLayer, skipShadow: true });
+                if (!rect || rect.width === 0 || rect.height === 0) return;
+                minX = Math.min(minX, rect.x);
+                minY = Math.min(minY, rect.y);
+                maxX = Math.max(maxX, rect.x + rect.width);
+                maxY = Math.max(maxY, rect.y + rect.height);
+                
+                });
 
-            // Only scan SEMANTIC nodes
-            mainLayer.find('Circle, Text, Rect, Path').forEach(node => {
-                if (!node.visible() || node.opacity() === 0) return;
-                // Exclude backgrounds > 2000px
-                if (node.width() > 2000 || node.height() > 2000) return; 
+                if (!isFinite(minX) || !isFinite(minY)) return;
 
-                const r = node.getClientRect({ skipTransform: true, relativeTo: mainLayer });
-                if (r.width > 0 && r.height > 0) {
-                    count++;
-                    if (r.x < minX) minX = r.x;
-                    if (r.y < minY) minY = r.y;
-                    if (r.x + r.width > maxX) maxX = r.x + r.width;
-                    if (r.y + r.height > maxY) maxY = r.y + r.height;
-                }
-            });
-
+            const contentWidth = maxX - minX;
+            const contentHeight = maxY - minY;
             const cw = container.offsetWidth;
             const ch = container.offsetHeight;
 
-            // ONLY RUN if we have content AND a real container size
-            if (count > 0 && maxX > minX && cw > 0 && ch > 0) {
-                const mapW = maxX - minX;
-                const mapH = maxY - minY;
-                const padding = 50;
-                
-                const availW = cw - padding;
-                const availH = ch - padding;
+            if (cw === 0 || ch === 0) return;
 
-                let scale = Math.min(availW / mapW, availH / mapH);
-                scale = Math.min(scale, 1.3); // Clamped Max Zoom
-                
-                const cx = minX + mapW / 2;
-                const cy = minY + mapH / 2;
+            const availableWidth = Math.max(10, cw - padding * 2);
+            const availableHeight = Math.max(10, ch - padding * 2);
+            const scale = Math.min(availableWidth / contentWidth, availableHeight / contentHeight);
+            stage.scale({ x: scale, y: scale });
 
-                const newX = (cw / 2) - (cx * scale);
-                const newY = (ch / 2) - (cy * scale);
+            const offsetX = padding + (availableWidth - contentWidth * scale) / 2;
+            const offsetY = padding + (availableHeight - contentHeight * scale) / 2;
+            stage.position({ x: offsetX - minX * scale, y: offsetY - minY * scale });
 
-                stage.x(newX);
-                stage.y(newY);
-                stage.scale({ x: scale, y: scale });
-                
-                updateIcons(); // Re-sync icons
-                mainLayer.batchDraw();
-                
-                // Show Map, Hide Loader
-                document.getElementById('loader').classList.add('hidden');
-                document.getElementById('stage-container').classList.add('visible');
-            }
+            uiLayer.find('.debug-bounds').forEach(n => n.destroy());
+            const debugRect = new Konva.Rect({
+                x: minX,
+                y: minY,
+                width: contentWidth,
+                height: contentHeight,
+                stroke: 'red',
+                strokeWidth: 2 / scale,
+                dash: [8 / scale, 6 / scale],
+                listening: false,
+                name: 'debug-bounds'
+            });
+            uiLayer.add(debugRect);
+            uiLayer.batchDraw();
+document.getElementById('loader').classList.add('hidden');
+            document.getElementById('stage-container').classList.add('visible');
         }
+        
 
         // Wait for DOM layout to settle (300ms delay for safety)
-        setTimeout(fitMap, 300);
+        setTimeout(() => { fitStageToContent(); updateIcons(); }, 300);
         
         // Watch for resizes
         const ro = new ResizeObserver(() => {
             stage.width(container.offsetWidth);
             stage.height(container.offsetHeight);
-            fitMap();
-        });
+   fitStageToContent();
+            updateIcons();
+            });
         ro.observe(container);
 
     } catch (err) {
@@ -405,7 +415,7 @@ router.get('/', async (req, res) => {
 
     // --- ICON RENDERER (UI Layer) ---
     function updateIcons() {
-        uiLayer.destroyChildren();
+        uiLayer.find('.info-icon, .view-icon').forEach(n => n.destroy());
         const showViews = document.getElementById('toggle-views').checked;
         const scale = stage.scaleX();
 
@@ -417,19 +427,20 @@ router.get('/', async (req, res) => {
             if (!hasInfo && !hasView) return;
             
             const pos = seat.getAbsolutePosition();
-            const radius = seat.radius() * scale; 
+            const radius = seat.radius() * scale;
             
             // INFO ICON
             if (hasInfo) {
-               const grp = new Konva.Group({ x: pos.x + radius*0.7, y: pos.y - radius*0.7 });
-               grp.add(new Konva.Circle({ radius: 6, fill: '#0F172A' }));
+               const grp = new Konva.Group({ x: pos.x + radius*0.7, y: pos.y - radius*0.7, listening:false, name:'info-icon' });
+
+              grp.add(new Konva.Circle({ radius: 6, fill: '#0F172A' }));
                grp.add(new Konva.Text({ text:'i', fontSize:9, fill:'#fff', x:-1.5, y:-4, fontStyle:'bold', fontFamily:'sans-serif' }));
                uiLayer.add(grp);
             }
             
             // VIEW ICON
             if (hasView && showViews) {
-               const grp = new Konva.Group({ x: pos.x, y: pos.y });
+               const grp = new Konva.Group({ x: pos.x, y: pos.y, listening:false, name:'view-icon' });
                grp.add(new Konva.Circle({ radius: 10, fill: '#0056D2' }));
                const cam = new Konva.Path({ data: 'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5 5 2.24 5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z', fill: 'white', scaleX: 0.6, scaleY: 0.6, offsetX: 12, offsetY: 12 });
                grp.add(cam);
@@ -455,35 +466,32 @@ router.get('/', async (req, res) => {
         updateIcons();
     });
 
-    function checkGap(seat, rowGroup) {
-        if (!rowGroup) return true;
-        const row = rowMap.get(rowGroup._id);
-        if (!row || row.length < 3) return true;
-
+        function leavesGap(row, seatId, willSelect) {
         const states = row.map(s => {
-            if (s.unavailable) return 0;
-            if (s.id === seat._id) return selectedSeats.has(s.id) ? 2 : 1; 
-            if (selectedSeats.has(s.id)) return 1;
-            return 2;
+             if (s.unavailable) return 0; // blocked/held
+            if (s.id === seatId) return willSelect ? 2 : 1; // simulate new state
+            return selectedSeats.has(s.id) ? 2 : 1; // 2 selected, 1 open
         });
         
         for (let i = 0; i < states.length; i++) {
-            if (states[i] === 2) { 
-                const left = (i === 0) ? 0 : states[i-1];
-                const right = (i === states.length - 1) ? 0 : states[i+1];
-                if (left !== 2 && right !== 2) return false;
-            }
+          if (states[i] !== 1) continue; // only care about empty seats
+            const left = i === 0 ? 0 : states[i - 1];
+            const right = i === states.length - 1 ? 0 : states[i + 1];
+            if (left !== 1 && right !== 1) return true; // orphaned single
         }
-        return true;
+        return false;
     }
 
     function toggleSeat(seat, parentGroup) {
         const id = seat._id;
         const willSelect = !selectedSeats.has(id);
+        const row = parentGroup ? rowMap.get(parentGroup._id) : null;
+
+        const gapInvalid = row && row.length > 0 && leavesGap(row, id, willSelect);
 
         if (willSelect) {
             selectedSeats.add(id);
-            if (!checkGap(seat, parentGroup)) {
+            if (gapInvalid) {
                 selectedSeats.delete(id);
                 alert("Please do not leave single seat gaps.");
                 return;
@@ -496,8 +504,8 @@ router.get('/', async (req, res) => {
             seat.fill('#0056D2'); seat.stroke('#0056D2');
         } else {
             selectedSeats.delete(id);
-            if (!checkGap(seat, parentGroup)) {
-                selectedSeats.add(id); 
+            if (gapInvalid) {
+                selectedSeats.add(id);
                 alert("Deselecting this would leave a gap.");
                 return;
             }
