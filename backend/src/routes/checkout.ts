@@ -340,11 +340,11 @@ router.get('/', async (req, res) => {
             const pos = stage.getPointerPosition();
             if (!pos) return;
             const priceStr = '£' + ((meta.price || 0)/100).toFixed(2);
-            let html = `<span class="tt-title">${meta.label}</span><span class="tt-meta">${meta.ticketName} • ${priceStr}</span>`;
-            if (meta.info) html += `<div class="tt-info">${meta.info}</div>`;
+            let html = '<span class="tt-title">' + meta.label + '</span><span class="tt-meta">' + meta.ticketName + ' • ' + priceStr + '</span>';
+            if (meta.info) html += '<div class="tt-info">' + meta.info + '</div>';
             const viewMode = document.getElementById('toggle-views').checked;
-            if (meta.viewImg && viewMode) html += `<img src="${meta.viewImg}" />`;
-            else if (meta.viewImg) html += `<div style="font-size:0.7rem; color:#94a3b8; margin-top:4px;">(Show seat views to preview)</div>`;
+            if (meta.viewImg && viewMode) html += '<img src="' + meta.viewImg + '" />';
+            else if (meta.viewImg) html += '<div style="font-size:0.7rem; color:#94a3b8; margin-top:4px;">(Show seat views to preview)</div>';
 
             tooltip.innerHTML = html;
             tooltip.style.display = 'block';
