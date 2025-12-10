@@ -40,11 +40,12 @@ router.get('/', async (req, res) => {
 
     const venueName = show.venue?.name || 'Venue TBC';
     const ticketTypes = show.ticketTypes || [];
+    
     const dateObj = new Date(show.date);
     const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-    // 2. Get Holds (Allocations)
+    // 2. Get Holds
     const heldSeatIds = new Set<string>();
     if (show.allocations) {
         show.allocations.forEach(alloc => {
@@ -60,7 +61,7 @@ router.get('/', async (req, res) => {
         else if (layoutObj.attrs || layoutObj.className) konvaData = layoutObj;
     }
 
-    // --- MODE A: LIST VIEW (Fallback) ---
+    // --- MODE A: LIST VIEW ---
     if (!konvaData) {
        res.type('html').send(`<!doctype html><html><body><h1>General Admission</h1><p>Please use the list view.</p></body></html>`);
        return; 
@@ -95,6 +96,7 @@ router.get('/', async (req, res) => {
     #stage-container { width:100%; height:100%; cursor:grab; }
     #stage-container:active { cursor:grabbing; }
     
+    /* LEGEND - Z-Index 4000 */
     .legend { 
         position:absolute; top:20px; left:20px; 
         background:rgba(255,255,255,0.98); padding:12px 16px; border-radius:12px; 
@@ -124,13 +126,6 @@ router.get('/', async (req, res) => {
     
     #loader { position:absolute; top:0; left:0; right:0; bottom:0; background:rgba(255,255,255,0.95); z-index:5000; display:flex; flex-direction:column; gap:10px; align-items:center; justify-content:center; font-weight:600; color:var(--primary); }
     
-    /* Live Debug for position */
-    #debug-overlay {
-        position:absolute; bottom:80px; left:20px; background:rgba(0,0,0,0.8); color:#0f0;
-        font-family:monospace; font-size:10px; padding:10px; z-index:6000; pointer-events:none;
-        white-space:pre; display:none; 
-    }
-
     #tooltip {
       position: absolute; display: none; padding: 12px; background: #1e293b; color: #fff;
       border-radius: 8px; pointer-events: none; font-size: 0.85rem; z-index: 4500;
@@ -162,8 +157,7 @@ router.get('/', async (req, res) => {
     <div id="stage-container"></div>
     <div id="tooltip"></div>
     <div id="loader"><div>Loading seating plan...</div></div>
-    <div id="debug-overlay">Initializing...</div>
-  </div>
+    </div>
   <footer>
     <div class="basket-info"><div class="basket-label">Total</div><div class="basket-total" id="ui-total">£0.00</div><div class="basket-detail" id="ui-count">0 tickets selected</div></div>
     <button class="btn-checkout" id="btn-next">Continue</button>
@@ -194,13 +188,7 @@ router.get('/', async (req, res) => {
     stage.add(uiLayer);
     
     const tooltip = document.getElementById('tooltip');
-    const debugEl = document.getElementById('debug-overlay');
     
-    function logDebug(msg) {
-        console.log('[DEBUG] ' + msg);
-        if(debugEl) debugEl.innerText = msg + '\\n' + debugEl.innerText;
-    }
-
     function getTicketType(seatNode) {
         const assignedId = seatNode.getAttr('sbTicketId');
         let match = ticketTypes.find(t => t.id === assignedId);
@@ -213,7 +201,7 @@ router.get('/', async (req, res) => {
         if (typeof layout === 'string') { try { layout = JSON.parse(layout); } catch(e) {} }
         if (layout.konvaJson) { layout = layout.konvaJson; if (typeof layout === 'string') layout = JSON.parse(layout); }
 
-        logDebug("Loading Layout...");
+        console.log("[DEBUG] Loading Layout...", layout);
 
         // --- 1. LOAD LAYER ---
         let layersToLoad = [];
@@ -356,11 +344,10 @@ router.get('/', async (req, res) => {
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
             let count = 0;
 
-            // Only scan SEMANTIC nodes (Seats, Text, Rect, Path)
-            // This filters out large hidden selection rectangles
+            // Only scan SEMANTIC nodes
             mainLayer.find('Circle, Text, Rect, Path').forEach(node => {
                 if (!node.visible() || node.opacity() === 0) return;
-                // Exclude background grids > 2000px
+                // Exclude large backgrounds
                 if (node.width() > 2000 || node.height() > 2000) return; 
 
                 const r = node.getClientRect({ skipTransform: true, relativeTo: mainLayer });
@@ -373,7 +360,7 @@ router.get('/', async (req, res) => {
                 }
             });
 
-            logDebug(\`Bounds: \${minX.toFixed(0)}:\${maxX.toFixed(0)} / \${minY.toFixed(0)}:\${maxY.toFixed(0)} (Shapes: \${count})\`);
+            console.log(\`[DEBUG] Strict Bounds: Shapes=\${count}, X=\${minX} to \${maxX}, Y=\${minY} to \${maxY}\`);
 
             const w = container.offsetWidth;
             const h = container.offsetHeight;
@@ -395,6 +382,8 @@ router.get('/', async (req, res) => {
                 const newX = (w / 2) - (cx * scale);
                 const newY = (h / 2) - (cy * scale);
 
+                console.log(\`[DEBUG] Centering: Stage(\${w}x\${h}) Map(\${mapW}x\${mapH}) -> Scale \${scale}, Pos(\${newX}, \${newY})\`);
+
                 stage.x(newX);
                 stage.y(newY);
                 stage.scale({ x: scale, y: scale });
@@ -402,6 +391,7 @@ router.get('/', async (req, res) => {
                 updateIcons(); // Re-sync icons
                 mainLayer.batchDraw();
             } else {
+                console.warn("[DEBUG] Map seems empty. Centering default.");
                 stage.x(w/2); stage.y(h/2);
             }
         }
@@ -436,16 +426,6 @@ router.get('/', async (req, res) => {
             
             // Get position on screen relative to stage
             const pos = seat.getAbsolutePosition();
-            // Undo stage transform to find where it is relative to Top-Left of canvas
-            // actually, if UI layer is static (identity transform), we can just use absolute pos.
-            // But we need to account for stage X/Y if we want them to move?
-            // BETTER: Use stage transform on UI layer too? No, icons should stay same pixel size?
-            // User requested: "Little i icon" - usually scales with map.
-            
-            // Let's draw them at Absolute coordinates on the UI layer. 
-            // We need to re-run this on zoom/pan.
-            
-            // Scaled radius for positioning
             const radius = seat.radius() * scale; 
             
             // INFO ICON (Black Dot)
@@ -460,7 +440,7 @@ router.get('/', async (req, res) => {
             if (hasView && showViews) {
                const grp = new Konva.Group({ x: pos.x, y: pos.y });
                grp.add(new Konva.Circle({ radius: 10, fill: '#0056D2' }));
-               const cam = new Konva.Path({ data: 'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5z', fill: 'white', scaleX: 0.6, scaleY: 0.6, offsetX: 12, offsetY: 12 });
+               const cam = new Konva.Path({ data: 'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5 5 2.24 5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z', fill: 'white', scaleX: 0.6, scaleY: 0.6, offsetX: 12, offsetY: 12 });
                grp.add(cam);
                uiLayer.add(grp);
             }
