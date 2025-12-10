@@ -24,7 +24,7 @@ router.get('/', async (req, res) => {
 
     if (!show) return res.status(404).send('Event not found');
 
-    // 1. Get Seat Map
+    // 1. Get Active Seat Map
     let seatMap = null;
     // @ts-ignore
     if (show.activeSeatMapId) {
@@ -40,7 +40,6 @@ router.get('/', async (req, res) => {
 
     const venueName = show.venue?.name || 'Venue TBC';
     const ticketTypes = show.ticketTypes || [];
-    
     const dateObj = new Date(show.date);
     const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -87,34 +86,33 @@ router.get('/', async (req, res) => {
     :root { --bg:#F3F4F6; --surface:#FFFFFF; --primary:#0F172A; --brand:#0056D2; --text-main:#111827; --text-muted:#6B7280; --border:#E5E7EB; --success:#10B981; --blocked:#334155; }
     body { margin:0; font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); display:flex; flex-direction:column; height:100vh; overflow:hidden; }
     
-    header { background:var(--surface); border-bottom:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; z-index:3000; position:relative; }
+    header { background:var(--surface); border-bottom:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; z-index:4000; position:relative; }
     .header-info h1 { font-family:'Outfit',sans-serif; font-size:1.25rem; margin:0; font-weight:700; color:var(--primary); }
     .header-meta { font-size:0.9rem; color:var(--muted); margin-top:4px; }
     .btn-close { text-decoration:none; font-size:1.5rem; color:var(--muted); width:40px; height:40px; display:flex; align-items:center; justify-content:center; border-radius:50%; }
     
-    #map-wrapper { flex:1; position:relative; background:#E2E8F0; overflow:hidden; }
+    #map-wrapper { flex:1; position:relative; background:#E2E8F0; overflow:hidden; width: 100%; height: 100%; }
     #stage-container { width:100%; height:100%; cursor:grab; }
     #stage-container:active { cursor:grabbing; }
     
-    /* LEGEND - Z-Index 3000 to stay on top */
     .legend { 
         position:absolute; top:20px; left:20px; 
         background:rgba(255,255,255,0.98); padding:12px 16px; border-radius:12px; 
         box-shadow:0 4px 20px rgba(0,0,0,0.15); 
         display:flex; flex-direction:column; gap:12px; 
-        font-size:0.75rem; font-weight:700; z-index:3000; 
+        font-size:0.75rem; font-weight:700; z-index:4000; 
     }
     .legend-row { display:flex; gap:16px; align-items:center; }
     .legend-item { display:flex; align-items:center; gap:6px; }
     .dot { width:14px; height:14px; border-radius:50%; border:1px solid rgba(0,0,0,0.1); }
     .dot-avail { background:#fff; border-color:#64748B; }
     .dot-selected { background:var(--brand); border-color:var(--brand); }
-    .dot-sold { background:var(--blocked); border-color:var(--text); opacity:0.8; }
+    .dot-sold { background:var(--blocked); border-color:var(--text-main); opacity:0.8; }
     
     .view-toggle { padding-top:10px; border-top:1px solid #e2e8f0; display:flex; align-items:center; gap:8px; cursor:pointer; }
     .view-toggle input { accent-color: var(--brand); transform:scale(1.2); cursor:pointer; }
 
-    footer { background:var(--surface); border-top:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; box-shadow:0 -4px 10px rgba(0,0,0,0.03); z-index:3000; position:relative; }
+    footer { background:var(--surface); border-top:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; box-shadow:0 -4px 10px rgba(0,0,0,0.03); z-index:4000; position:relative; }
     .basket-info { display:flex; flex-direction:column; }
     .basket-label { font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em; font-weight:600; color:var(--muted); }
     .basket-total { font-family:'Outfit',sans-serif; font-size:1.5rem; font-weight:800; color:var(--primary); }
@@ -172,19 +170,17 @@ router.get('/', async (req, res) => {
     const seatPrices = new Map();
     const rowMap = new Map(); 
 
+    // Initialize Stage (Full container size)
+    const container = document.getElementById('stage-container');
     const stage = new Konva.Stage({ 
         container: 'stage-container', 
-        width: window.innerWidth, 
-        height: window.innerHeight - 160, 
+        width: container.offsetWidth, 
+        height: container.offsetHeight, 
         draggable: true 
     });
     
-    // Create new clean layer
     const mainLayer = new Konva.Layer();
-    // Create separate UI layer for Icons so they are always on top
-    const uiLayer = new Konva.Layer({ listening: false });
     stage.add(mainLayer);
-    stage.add(uiLayer);
     
     const tooltip = document.getElementById('tooltip');
     
@@ -202,7 +198,6 @@ router.get('/', async (req, res) => {
 
         console.log("[DEBUG] Loading Layout...", layout);
 
-        // --- 1. LOAD LAYER ---
         let layersToLoad = [];
         if (layout.className === 'Stage' && layout.children) {
             layersToLoad = layout.children.filter(c => c.className === 'Layer');
@@ -215,7 +210,7 @@ router.get('/', async (req, res) => {
 
         layersToLoad.forEach((layerData) => {
             const tempLayer = Konva.Node.create(layerData);
-            // RESET TRANSFORM to ensure we can calculate a clean bounding box
+            // RESET TRANSFORM
             tempLayer.x(0); tempLayer.y(0); tempLayer.scale({x:1, y:1});
             
             const children = tempLayer.getChildren().slice();
@@ -226,16 +221,16 @@ router.get('/', async (req, res) => {
             tempLayer.destroy();
         });
 
-        // --- 2. RECURSIVE NODE PROCESSOR ---
         function processNode(node, parentGroup) {
             const nodeType = node.getClassName();
             const groupType = node.getAttr('shapeType') || node.name();
             const isSeatGroup = nodeType === 'Group' && ['row-seats', 'circular-table', 'rect-table', 'single-seat'].includes(groupType);
             
             if (isSeatGroup) {
-                // CLEANUP: Hide number text, Keep Labels
+                // CLEANUP: Only hide NUMBERS, keep LETTERS
                 node.find('Text').forEach(t => {
                      const txt = t.text().trim();
+                     // Regex: Only digits. "1", "12". Not "A", "Row A"
                      if (/^\\d+$/.test(txt)) t.destroy();
                 });
                 parentGroup = node;
@@ -259,7 +254,7 @@ router.get('/', async (req, res) => {
                 const info = seat.getAttr('sbInfo');
                 const viewImg = seat.getAttr('sbViewImage');
 
-                // GAP REGISTRATION
+                // GAP Logic
                 if (parentGroup) {
                     const grpId = parentGroup._id;
                     if (!rowMap.has(grpId)) rowMap.set(grpId, []);
@@ -271,20 +266,58 @@ router.get('/', async (req, res) => {
 
                 // VISUALS
                 if (isUnavailable) {
-                    seat.fill('#334155'); seat.stroke('#1e293b'); seat.strokeWidth(1); 
-                    seat.opacity(0.8); seat.listening(false);
+                    seat.fill('#334155'); // Dark Grey
+                    seat.stroke('#1e293b'); 
+                    seat.strokeWidth(1); 
+                    seat.opacity(0.8); 
+                    seat.listening(false);
                 } else {
-                    seat.fill('#ffffff'); seat.stroke('#64748B'); seat.strokeWidth(1.5);
-                    seat.opacity(1); seat.listening(true); 
+                    seat.fill('#ffffff'); 
+                    seat.stroke('#64748B'); 
+                    seat.strokeWidth(1.5);
+                    seat.opacity(1); 
+                    seat.listening(true); 
                 }
                 seat.shadowEnabled(false);
                 seat.visible(true);
 
-                // --- Tag for Icon Layer ---
-                if (info && !isUnavailable) seat.setAttr('hasInfo', true);
-                if (viewImg) seat.setAttr('hasView', true);
+                // --- INFO ICON (i) ---
+                if (info) {
+                    const r = seat.radius();
+                    const iGroup = new Konva.Group({ 
+                        x: seat.x() + r * 0.7, 
+                        y: seat.y() - r * 0.7, 
+                        listening: false 
+                    });
+                    const iDot = new Konva.Circle({ radius: 5, fill: '#0F172A' });
+                    const iTxt = new Konva.Text({ x: -1.5, y: -2.5, text:'i', fontSize:6, fill:'#fff', fontStyle:'bold' });
+                    iGroup.add(iDot); iGroup.add(iTxt);
+                    
+                    if (seat.parent) {
+                        seat.parent.add(iGroup);
+                        iGroup.moveToTop();
+                    }
+                }
 
-                // EVENTS
+                // --- VIEW ICON (Camera) ---
+                if (viewImg) {
+                    const vGroup = new Konva.Group({ 
+                        x: seat.x(), y: seat.y(), 
+                        visible: false, name: 'view-icon-group', listening: false 
+                    });
+                    const bg = new Konva.Circle({ radius: 9, fill: '#0056D2' });
+                    const icon = new Konva.Path({
+                        data: 'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5 5 2.24 5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z',
+                        fill: 'white', scaleX: 0.6, scaleY: 0.6, offsetX: 12, offsetY: 12
+                    });
+                    vGroup.add(bg); vGroup.add(icon);
+                    if (seat.parent) {
+                        seat.parent.add(vGroup);
+                        vGroup.moveToTop();
+                    }
+                }
+
+                // --- EVENTS ---
                 if (!isUnavailable) {
                     seat.on('mouseenter', () => {
                         stage.container().style.cursor = 'pointer';
@@ -327,7 +360,6 @@ router.get('/', async (req, res) => {
             }
         }
 
-        // --- 3. SORT ROWS ---
         rowMap.forEach((seats) => {
              if (seats.length < 2) return;
              const minX = Math.min(...seats.map(s=>s.x)), maxX = Math.max(...seats.map(s=>s.x));
@@ -336,16 +368,17 @@ router.get('/', async (req, res) => {
              else seats.sort((a, b) => a.x - b.x);
         });
 
-        // --- 4. CENTER & FIT (Manual Bounds) ---
-        // Function to fit map (callable on resize)
+        // --- 4. PRECISE AUTO-FIT ---
         function fitMap() {
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
             let count = 0;
 
-            // Scan Semantic Nodes
+            // Only scan VISIBLE semantic shapes (Seats, Letters, Stage)
             mainLayer.find('Circle, Text, Rect, Path').forEach(node => {
                 if (!node.visible() || node.opacity() === 0) return;
+                // Ignore large backgrounds or transformer tools
                 if (node.width() > 2000 || node.height() > 2000) return; 
+                if (node.getClassName() === 'Rect' && node.fill() === 'transparent') return;
 
                 const r = node.getClientRect({ skipTransform: true, relativeTo: mainLayer });
                 if (r.width > 0 && r.height > 0) {
@@ -359,122 +392,55 @@ router.get('/', async (req, res) => {
 
             console.log(\`[DEBUG] Strict Bounds: Shapes=\${count}, X=\${minX} to \${maxX}\`);
 
+            const container = document.getElementById('stage-container');
+            const w = container.offsetWidth;
+            const h = container.offsetHeight;
+
             if (count > 0 && maxX > minX) {
                 const mapW = maxX - minX;
                 const mapH = maxY - minY;
-                const padding = 50;
-                const availW = stage.width() - padding;
-                const availH = stage.height() - padding;
+                const padding = 60;
+                
+                const availW = w - padding;
+                const availH = h - padding;
 
                 let scale = Math.min(availW / mapW, availH / mapH);
-                scale = Math.min(scale, 1.35); // Max Zoom 135% to prevent HUGE seats on small maps
+                scale = Math.min(scale, 1.35); // Max zoom level to keep things looking nice
                 
                 const cx = minX + mapW / 2;
                 const cy = minY + mapH / 2;
 
-                const newX = (stage.width() / 2) - (cx * scale);
-                const newY = (stage.height() / 2) - (cy * scale);
+                const newX = (w / 2) - (cx * scale);
+                const newY = (h / 2) - (cy * scale);
 
                 stage.x(newX);
                 stage.y(newY);
                 stage.scale({ x: scale, y: scale });
-                
-                updateIcons(); // Re-sync icons
                 mainLayer.batchDraw();
+            } else {
+                stage.x(w/2); stage.y(h/2);
             }
         }
 
-        // Run Fit after tiny delay to ensure render
-        setTimeout(fitMap, 50);
-        document.getElementById('loader').style.display = 'none';
-        
-        // Handle Resize
+        setTimeout(fitMap, 100);
         window.addEventListener('resize', () => {
-             stage.width(window.innerWidth);
-             stage.height(window.innerHeight - 160);
+             stage.width(document.getElementById('stage-container').offsetWidth);
+             stage.height(document.getElementById('stage-container').offsetHeight);
              fitMap();
         });
 
+        document.getElementById('loader').style.display = 'none';
+
     } catch (err) {
         console.error(err);
-        document.getElementById('loader').innerHTML = 'Error loading map<br><small>' + err.message + '</small>';
+        document.getElementById('loader').innerHTML = 'Error loading map';
     }
 
-    // --- ICON RENDERER (On top layer) ---
-    function updateIcons() {
-        uiLayer.destroyChildren();
-        const showViews = document.getElementById('toggle-views').checked;
-        const scale = stage.scaleX(); 
-        
-        // Keep icons consistent size relative to view? No, let them scale with map.
-        // Actually, icons are better if they scale with map so they stay on seat.
-        // But we want them on top.
-        uiLayer.scale(stage.scale());
-        uiLayer.position(stage.position());
-
-        mainLayer.find('Circle').forEach(seat => {
-            if (!seat.getAttr('isSeat')) return;
-            // Get position relative to layer (since we sync layer transform)
-            // seat.x() is relative to group. We need absolute relative to Layer.
-            const transform = seat.getAbsoluteTransform().copy();
-            // Undo stage transform to get Layer-relative coordinate
-            transform.invert(); 
-            // Wait, simpler: if uiLayer syncs transform with stage, we just need coordinates same as mainLayer?
-            // No, mainLayer has structure. uiLayer is flat.
-            // Best approach: Use absolute position and do NOT transform uiLayer.
-        });
-        
-        // RE-APPROACH: uiLayer matches stage transform exactly.
-        // We just need flat coordinates relative to origin.
-        // Actually, cleanest is to just draw them into mainLayer but use moveToTop().
-        // BUT user wanted "on top of everything". 
-        // Let's stick to the previous working method: Group inside Seat Group, moveToTop().
-        // It worked visually before moving to layers.
-    }
-    
-    // --- ICON RENDERER V2 (Simple) ---
-    // We already tagged seats. We will just draw icons into the UI layer using absolute coords.
-    function drawIcons() {
-        uiLayer.destroyChildren();
-        const showViews = document.getElementById('toggle-views').checked;
-        
-        mainLayer.find('Circle').forEach(seat => {
-            if (!seat.visible()) return;
-            const hasInfo = seat.getAttr('hasInfo');
-            const hasView = seat.getAttr('hasView');
-            
-            if (!hasInfo && !hasView) return;
-            
-            const pos = seat.getAbsolutePosition();
-            const radius = seat.radius() * stage.scaleX(); // Scale radius visually
-            
-            if (hasInfo) {
-               const grp = new Konva.Group({ x: pos.x + radius*0.7, y: pos.y - radius*0.7 });
-               grp.add(new Konva.Circle({ radius: 5, fill: '#0F172A' }));
-               grp.add(new Konva.Text({ text:'i', fontSize:6, fill:'#fff', x:-1.5, y:-2.5, fontStyle:'bold' }));
-               uiLayer.add(grp);
-            }
-            
-            if (hasView && showViews) {
-               const grp = new Konva.Group({ x: pos.x, y: pos.y });
-               grp.add(new Konva.Circle({ radius: 10, fill: '#0056D2' }));
-               const cam = new Konva.Path({ data: 'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5z', fill: 'white', scaleX: 0.6, scaleY: 0.6, offsetX: 12, offsetY: 12 });
-               grp.add(cam);
-               uiLayer.add(grp);
-            }
-        });
-        uiLayer.batchDraw();
-    }
-    
-    // Bind icon redraw to move events
-    stage.on('wheel dragmove', drawIcons);
-    // Initial draw
-    setTimeout(drawIcons, 100);
-    
-    // Redefine updateIcons for the toggle
-    window.updateIcons = drawIcons;
-    document.getElementById('toggle-views').addEventListener('change', drawIcons);
-
+    document.getElementById('toggle-views').addEventListener('change', (e) => {
+        const show = e.target.checked;
+        stage.find('.view-icon-group').forEach(icon => icon.visible(show));
+        mainLayer.batchDraw();
+    });
 
     stage.on('wheel', (e) => {
         e.evt.preventDefault();
@@ -486,7 +452,6 @@ router.get('/', async (req, res) => {
         stage.scale({ x: newScale, y: newScale });
         const newPos = { x: pointer.x - mousePointTo.x * newScale, y: pointer.y - mousePointTo.y * newScale };
         stage.position(newPos);
-        drawIcons();
     });
 
     function checkGap(seat, rowGroup) {
