@@ -39,7 +39,13 @@ router.post('/session', async (req, res) => {
       },
     });
 
-    const origin = (process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get('host') || ''}` || '').replace(/\/$/, '') || 'http://localhost:3000';
+    const candidateOrigin = process.env.PUBLIC_BASE_URL || (req.get('host') ? `${req.protocol}://${req.get('host')}` : '');
+    let origin = 'http://localhost:3000';
+    try {
+      if (candidateOrigin) origin = new URL(candidateOrigin).origin;
+    } catch (err) {
+      console.warn('checkout/session origin fallback', candidateOrigin, err);
+    }
 
     if (!stripe) {
       console.error('checkout/session error: STRIPE_SECRET_KEY is not configured');
