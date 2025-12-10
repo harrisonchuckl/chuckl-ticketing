@@ -13,7 +13,6 @@ router.get('/', async (req, res) => {
   if (!showId) return res.status(404).send('Show ID is required');
 
   try {
-    // 1. Fetch Data
     const show = await prisma.show.findUnique({
       where: { id: showId },
       include: {
@@ -25,7 +24,7 @@ router.get('/', async (req, res) => {
 
     if (!show) return res.status(404).send('Event not found');
 
-    // 2. Get Seat Map
+    // 1. Get Active Seat Map
     let seatMap = null;
     // @ts-ignore
     if (show.activeSeatMapId) {
@@ -41,11 +40,12 @@ router.get('/', async (req, res) => {
 
     const venueName = show.venue?.name || 'Venue TBC';
     const ticketTypes = show.ticketTypes || [];
+    
     const dateObj = new Date(show.date);
     const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-    // 3. Holds
+    // 2. Holds
     const heldSeatIds = new Set<string>();
     if (show.allocations) {
         show.allocations.forEach(alloc => {
@@ -53,7 +53,7 @@ router.get('/', async (req, res) => {
         });
     }
 
-    // 4. Layout Data
+    // 3. Layout
     let konvaData = null;
     if (seatMap && seatMap.layout) {
         const layoutObj = seatMap.layout as any;
@@ -61,13 +61,11 @@ router.get('/', async (req, res) => {
         else if (layoutObj.attrs || layoutObj.className) konvaData = layoutObj;
     }
 
-    // --- MODE A: LIST ---
     if (!konvaData) {
        res.type('html').send(`<!doctype html><html><body><h1>General Admission</h1><p>Please use the list view.</p></body></html>`);
        return; 
     }
 
-    // --- MODE B: MAP ---
     const mapData = JSON.stringify(konvaData);
     const ticketsData = JSON.stringify(ticketTypes);
     const showIdStr = JSON.stringify(show.id);
@@ -87,12 +85,12 @@ router.get('/', async (req, res) => {
     :root { --bg:#F3F4F6; --surface:#FFFFFF; --primary:#0F172A; --brand:#0056D2; --text-main:#111827; --text-muted:#6B7280; --border:#E5E7EB; --success:#10B981; --blocked:#334155; }
     body { margin:0; font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); display:flex; flex-direction:column; height:100vh; overflow:hidden; }
     
-    header { background:var(--surface); border-bottom:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; z-index:3000; position:relative; }
+    header { background:var(--surface); border-bottom:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; z-index:4000; position:relative; }
     .header-info h1 { font-family:'Outfit',sans-serif; font-size:1.25rem; margin:0; font-weight:700; color:var(--primary); }
     .header-meta { font-size:0.9rem; color:var(--muted); margin-top:4px; }
     .btn-close { text-decoration:none; font-size:1.5rem; color:var(--muted); width:40px; height:40px; display:flex; align-items:center; justify-content:center; border-radius:50%; }
     
-    #map-wrapper { flex:1; position:relative; background:#E2E8F0; overflow:hidden; }
+    #map-wrapper { flex:1; position:relative; background:#E2E8F0; overflow:hidden; width:100%; }
     #stage-container { width:100%; height:100%; cursor:grab; }
     #stage-container:active { cursor:grabbing; }
     
@@ -101,7 +99,7 @@ router.get('/', async (req, res) => {
         background:rgba(255,255,255,0.98); padding:12px 16px; border-radius:12px; 
         box-shadow:0 4px 20px rgba(0,0,0,0.15); 
         display:flex; flex-direction:column; gap:12px; 
-        font-size:0.75rem; font-weight:700; z-index:3000; 
+        font-size:0.75rem; font-weight:700; z-index:4000; 
     }
     .legend-row { display:flex; gap:16px; align-items:center; }
     .legend-item { display:flex; align-items:center; gap:6px; }
@@ -113,7 +111,7 @@ router.get('/', async (req, res) => {
     .view-toggle { padding-top:10px; border-top:1px solid #e2e8f0; display:flex; align-items:center; gap:8px; cursor:pointer; }
     .view-toggle input { accent-color: var(--brand); transform:scale(1.2); cursor:pointer; }
 
-    footer { background:var(--surface); border-top:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; box-shadow:0 -4px 10px rgba(0,0,0,0.03); z-index:3000; position:relative; }
+    footer { background:var(--surface); border-top:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; box-shadow:0 -4px 10px rgba(0,0,0,0.03); z-index:4000; position:relative; }
     .basket-info { display:flex; flex-direction:column; }
     .basket-label { font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em; font-weight:600; color:var(--muted); }
     .basket-total { font-family:'Outfit',sans-serif; font-size:1.5rem; font-weight:800; color:var(--primary); }
@@ -125,6 +123,13 @@ router.get('/', async (req, res) => {
     
     #loader { position:absolute; top:0; left:0; right:0; bottom:0; background:rgba(255,255,255,0.95); z-index:5000; display:flex; flex-direction:column; gap:10px; align-items:center; justify-content:center; font-weight:600; color:var(--primary); }
     
+    /* LIVE DEBUG OVERLAY (Visible to help you debug) */
+    #debug-overlay {
+        position:absolute; bottom:80px; left:20px; background:rgba(0,0,0,0.8); color:#0f0;
+        font-family:monospace; font-size:10px; padding:10px; z-index:6000; pointer-events:none;
+        white-space:pre; display:none; /* Set to block if you want to see it */
+    }
+
     #tooltip {
       position: absolute; display: none; padding: 12px; background: #1e293b; color: #fff;
       border-radius: 8px; pointer-events: none; font-size: 0.85rem; z-index: 4500;
@@ -156,6 +161,7 @@ router.get('/', async (req, res) => {
     <div id="stage-container"></div>
     <div id="tooltip"></div>
     <div id="loader"><div>Loading seating plan...</div></div>
+    <div id="debug-overlay">Initializing...</div>
   </div>
   <footer>
     <div class="basket-info"><div class="basket-label">Total</div><div class="basket-total" id="ui-total">£0.00</div><div class="basket-detail" id="ui-count">0 tickets selected</div></div>
@@ -180,14 +186,18 @@ router.get('/', async (req, res) => {
         draggable: true 
     });
     
-    // LAYERS: Map (Bottom), Icons (Top)
+    // Single Layer - Simpler Z-indexing
     const mainLayer = new Konva.Layer();
-    const uiLayer = new Konva.Layer({ listening: false });
     stage.add(mainLayer);
-    stage.add(uiLayer);
     
     const tooltip = document.getElementById('tooltip');
+    const debugEl = document.getElementById('debug-overlay');
     
+    function logDebug(msg) {
+        console.log('[DEBUG] ' + msg);
+        if(debugEl) debugEl.innerText = msg + '\\n' + debugEl.innerText;
+    }
+
     function getTicketType(seatNode) {
         const assignedId = seatNode.getAttr('sbTicketId');
         let match = ticketTypes.find(t => t.id === assignedId);
@@ -200,9 +210,9 @@ router.get('/', async (req, res) => {
         if (typeof layout === 'string') { try { layout = JSON.parse(layout); } catch(e) {} }
         if (layout.konvaJson) { layout = layout.konvaJson; if (typeof layout === 'string') layout = JSON.parse(layout); }
 
-        console.log("[DEBUG] Loading Layout...", layout);
+        logDebug("Loading Layout...");
 
-        // --- 1. LOAD NODES & FLATTEN ---
+        // --- 1. LOAD LAYER ---
         let layersToLoad = [];
         if (layout.className === 'Stage' && layout.children) {
             layersToLoad = layout.children.filter(c => c.className === 'Layer');
@@ -215,7 +225,9 @@ router.get('/', async (req, res) => {
 
         layersToLoad.forEach((layerData) => {
             const tempLayer = Konva.Node.create(layerData);
-            tempLayer.x(0); tempLayer.y(0); tempLayer.scale({x:1, y:1}); // RESET TRANSFORM
+            // RESET TRANSFORM
+            tempLayer.x(0); tempLayer.y(0); tempLayer.scale({x:1, y:1});
+            
             const children = tempLayer.getChildren().slice();
             children.forEach(node => {
                 node.moveTo(mainLayer);
@@ -224,13 +236,14 @@ router.get('/', async (req, res) => {
             tempLayer.destroy();
         });
 
+        // --- 2. PROCESS NODES ---
         function processNode(node, parentGroup) {
             const nodeType = node.getClassName();
             const groupType = node.getAttr('shapeType') || node.name();
             const isSeatGroup = nodeType === 'Group' && ['row-seats', 'circular-table', 'rect-table', 'single-seat'].includes(groupType);
             
             if (isSeatGroup) {
-                // CLEANUP: Only hide numbers (digits), keep Row Letters
+                // CLEANUP: Hide Numbers, Keep Letters
                 node.find('Text').forEach(t => {
                      const txt = t.text().trim();
                      if (/^\\d+$/.test(txt)) t.destroy();
@@ -277,9 +290,46 @@ router.get('/', async (req, res) => {
                 seat.shadowEnabled(false);
                 seat.visible(true);
 
-                // --- TAG FOR ICONS ---
-                if (info && !isUnavailable) seat.setAttr('hasInfo', true);
-                if (viewImg) seat.setAttr('hasView', true);
+                // --- INFO ICON (i) ---
+                // Add DIRECTLY to parent group (moves with zoom) but visually on top
+                if (info && !isUnavailable) {
+                    const r = seat.radius();
+                    const iGroup = new Konva.Group({ 
+                        x: seat.x() + r * 0.7, 
+                        y: seat.y() - r * 0.7, 
+                        listening: false 
+                    });
+                    const iDot = new Konva.Circle({ radius: 5, fill: '#0F172A' });
+                    const iTxt = new Konva.Text({ 
+                        x: -1.5, y: -2.5, 
+                        text:'i', fontSize:6, fill:'#fff', fontStyle:'bold' 
+                    });
+                    iGroup.add(iDot); iGroup.add(iTxt);
+                    
+                    if (seat.parent) {
+                        seat.parent.add(iGroup);
+                        // Z-Index trick: move to top of group
+                        iGroup.moveToTop(); 
+                    }
+                }
+
+                // --- VIEW ICON (Camera) ---
+                if (viewImg) {
+                    const vGroup = new Konva.Group({ 
+                        x: seat.x(), y: seat.y(), 
+                        visible: false, name: 'view-icon-group', listening: false 
+                    });
+                    const bg = new Konva.Circle({ radius: 9, fill: '#0056D2' });
+                    const icon = new Konva.Path({
+                        data: 'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5 5 2.24 5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z',
+                        fill: 'white', scaleX: 0.6, scaleY: 0.6, offsetX: 12, offsetY: 12
+                    });
+                    vGroup.add(bg); vGroup.add(icon);
+                    if (seat.parent) {
+                        seat.parent.add(vGroup);
+                        vGroup.moveToTop();
+                    }
+                }
 
                 // EVENTS
                 if (!isUnavailable) {
@@ -334,10 +384,10 @@ router.get('/', async (req, res) => {
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
             let count = 0;
 
-            // Only scan SEMANTIC nodes (Seats, Text, Rects for stage)
+            // Only scan SEMANTIC nodes (Seats only - ignore stage for tighter seat fit, or include both)
+            // Including 'Rect' captures the Stage, which is good.
             mainLayer.find('Circle, Text, Rect, Path').forEach(node => {
                 if (!node.visible() || node.opacity() === 0) return;
-                // Ignore large backgrounds
                 if (node.width() > 2000 || node.height() > 2000) return; 
 
                 const r = node.getClientRect({ skipTransform: true, relativeTo: mainLayer });
@@ -350,48 +400,50 @@ router.get('/', async (req, res) => {
                 }
             });
 
-            console.log(\`[DEBUG] Strict Bounds: Shapes=\${count}, X=\${minX} to \${maxX}, Y=\${minY} to \${maxY}\`);
-
-            const w = stage.width();
-            const h = stage.height();
+            // Get Container Size (Fresh)
+            const cw = container.offsetWidth;
+            const ch = container.offsetHeight;
+            
+            logDebug(\`Bounds: \${minX.toFixed(0)}:\${maxX.toFixed(0)} / \${minY.toFixed(0)}:\${maxY.toFixed(0)}\`);
+            logDebug(\`Container: \${cw} x \${ch}\`);
 
             if (count > 0 && maxX > minX) {
                 const mapW = maxX - minX;
                 const mapH = maxY - minY;
-                const padding = 50;
+                const padding = 60;
                 
-                const availW = w - padding;
-                const availH = h - padding;
+                const availW = cw - padding;
+                const availH = ch - padding;
 
                 let scale = Math.min(availW / mapW, availH / mapH);
-                scale = Math.min(scale, 1.35); // Max zoom 135%
+                // Clamp scale for usability
+                scale = Math.min(Math.max(scale, 0.1), 1.6);
                 
+                // Calculate Center of Content
                 const cx = minX + mapW / 2;
                 const cy = minY + mapH / 2;
 
-                const newX = (w / 2) - (cx * scale);
-                const newY = (h / 2) - (cy * scale);
-
-                console.log(\`[DEBUG] Centering: Stage(\${w}x\${h}) Map(\${mapW}x\${mapH}) -> Scale \${scale}, Pos(\${newX}, \${newY})\`);
+                // Center in Container
+                const newX = (cw / 2) - (cx * scale);
+                const newY = (ch / 2) - (cy * scale);
+                
+                logDebug(\`Scaling to \${scale.toFixed(2)} at \${newX.toFixed(0)},\${newY.toFixed(0)}\`);
 
                 stage.x(newX);
                 stage.y(newY);
                 stage.scale({ x: scale, y: scale });
-                
-                updateIcons(); // Re-sync icons
                 mainLayer.batchDraw();
             } else {
-                console.warn("[DEBUG] Map seems empty. Centering default.");
-                stage.x(w/2); stage.y(h/2);
+                stage.x(cw/2); stage.y(ch/2);
             }
         }
 
-        setTimeout(fitMap, 50); // Delay slightly for font rendering
+        // Run Fit slightly later to ensure DOM layout
+        setTimeout(fitMap, 100);
         
         window.addEventListener('resize', () => {
-             const c = document.getElementById('stage-container');
-             stage.width(c.offsetWidth);
-             stage.height(c.offsetHeight);
+             stage.width(container.offsetWidth);
+             stage.height(container.offsetHeight);
              fitMap();
         });
 
@@ -399,59 +451,15 @@ router.get('/', async (req, res) => {
 
     } catch (err) {
         console.error(err);
-        document.getElementById('loader').innerHTML = 'Error loading map<br><small>' + err.message + '</small>';
+        document.getElementById('loader').innerHTML = 'Error loading map';
     }
 
-    // --- ICON RENDERER (UI Layer) ---
-    function updateIcons() {
-        uiLayer.destroyChildren();
-        const showViews = document.getElementById('toggle-views').checked;
-        const scale = stage.scaleX();
+    document.getElementById('toggle-views').addEventListener('change', (e) => {
+        const show = e.target.checked;
+        stage.find('.view-icon-group').forEach(icon => icon.visible(show));
+        mainLayer.batchDraw();
+    });
 
-        mainLayer.find('Circle').forEach(seat => {
-            if (!seat.visible()) return;
-            const hasInfo = seat.getAttr('hasInfo');
-            const hasView = seat.getAttr('hasView');
-            
-            if (!hasInfo && !hasView) return;
-            
-            // Get position on screen relative to stage
-            const pos = seat.getAbsolutePosition();
-            const radius = seat.radius() * scale; 
-            
-            // We draw icons in UI layer but apply Stage Transform manually?
-            // Actually simplest: Draw them in UI Layer using same transform as stage?
-            // No, UI layer is static. We project coordinates.
-            
-            // Wait, simpler: Add UI layer to Stage so it moves, but put it ON TOP.
-            // But we want icons to stay readable size? 
-            // Let's keep it simple: Draw them in UI layer using projected coords.
-            
-            // INFO ICON
-            if (hasInfo) {
-               const grp = new Konva.Group({ x: pos.x + radius*0.7, y: pos.y - radius*0.7 });
-               grp.add(new Konva.Circle({ radius: 5, fill: '#0F172A' }));
-               grp.add(new Konva.Text({ text:'i', fontSize:6, fill:'#fff', x:-1.5, y:-2.5, fontStyle:'bold' }));
-               uiLayer.add(grp);
-            }
-            
-            // VIEW ICON
-            if (hasView && showViews) {
-               const grp = new Konva.Group({ x: pos.x, y: pos.y });
-               grp.add(new Konva.Circle({ radius: 10, fill: '#0056D2' }));
-               const cam = new Konva.Path({ data: 'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5 5 2.24 5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z', fill: 'white', scaleX: 0.6, scaleY: 0.6, offsetX: 12, offsetY: 12 });
-               grp.add(cam);
-               uiLayer.add(grp);
-            }
-        });
-        uiLayer.batchDraw();
-    }
-    
-    // Re-render icons on zoom/pan
-    stage.on('wheel dragmove', updateIcons);
-    document.getElementById('toggle-views').addEventListener('change', updateIcons);
-
-    // Zoom Logic
     stage.on('wheel', (e) => {
         e.evt.preventDefault();
         const scaleBy = 1.1;
@@ -462,7 +470,6 @@ router.get('/', async (req, res) => {
         stage.scale({ x: newScale, y: newScale });
         const newPos = { x: pointer.x - mousePointTo.x * newScale, y: pointer.y - mousePointTo.y * newScale };
         stage.position(newPos);
-        updateIcons();
     });
 
     function checkGap(seat, rowGroup) {
