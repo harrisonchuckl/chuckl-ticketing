@@ -4,7 +4,11 @@ import prisma from '../lib/prisma.js';
 import Stripe from 'stripe';
 import { calcFeesForShow } from '../services/fees.js';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, { apiVersion: '2024-06-20' });
+// --- ROBUST STRIPE INITIALIZATION (Prevents module load crashes) ---
+const StripeClient = (Stripe as any)?.default || Stripe;
+
+const stripe = new StripeClient(process.env.STRIPE_SECRET_KEY as string, { apiVersion: '2024-06-20' });
+// -----------------------------------------------------------
 const router = Router();
 
 /**
