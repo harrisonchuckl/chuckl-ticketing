@@ -92,10 +92,10 @@ router.get('/', async (req, res) => {
     .btn-close { text-decoration:none; font-size:1.5rem; color:var(--muted); width:40px; height:40px; display:flex; align-items:center; justify-content:center; border-radius:50%; }
     
     #map-wrapper { flex:1; position:relative; background:#E2E8F0; overflow:hidden; width:100%; height:100%; }
-    #stage-container { width:100%; height:100%; cursor:grab; }
-    #stage-container:active { cursor:grabbing; }
+    #stage-container { width:100%; height:100%; cursor:grab; opacity:0; transition:opacity 0.3s; }
+    #stage-container.visible { opacity:1; }
     
-    /* LEGEND - Z-Index Boost */
+    /* LEGEND */
     .legend { 
         position:absolute; top:20px; left:20px; 
         background:rgba(255,255,255,0.98); padding:12px 16px; border-radius:12px; 
@@ -123,7 +123,11 @@ router.get('/', async (req, res) => {
     .btn-checkout.active { opacity:1; pointer-events:auto; box-shadow:0 4px 12px rgba(16, 185, 129, 0.3); }
     .btn-checkout:hover { background:#059669; }
     
-    #loader { position:absolute; top:0; left:0; right:0; bottom:0; background:rgba(255,255,255,0.95); z-index:5000; display:flex; flex-direction:column; gap:10px; align-items:center; justify-content:center; font-weight:600; color:var(--primary); }
+    /* LOADER - Visible by default */
+    #loader { position:absolute; top:0; left:0; right:0; bottom:0; background:rgba(255,255,255,1); z-index:5000; display:flex; flex-direction:column; gap:10px; align-items:center; justify-content:center; font-weight:600; color:var(--primary); transition: opacity 0.5s; }
+    #loader.hidden { opacity:0; pointer-events:none; }
+    .spinner { width:40px; height:40px; border:4px solid #e5e7eb; border-top-color:var(--brand); border-radius:50%; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
     
     #tooltip {
       position: absolute; display: none; padding: 12px; background: #1e293b; color: #fff;
@@ -155,7 +159,7 @@ router.get('/', async (req, res) => {
     </div>
     <div id="stage-container"></div>
     <div id="tooltip"></div>
-    <div id="loader"><div>Loading seating plan...</div></div>
+    <div id="loader"><div class="spinner"></div><div>Loading seating plan...</div></div>
   </div>
   <footer>
     <div class="basket-info"><div class="basket-label">Total</div><div class="basket-total" id="ui-total">£0.00</div><div class="basket-detail" id="ui-count">0 tickets selected</div></div>
@@ -180,15 +184,11 @@ router.get('/', async (req, res) => {
         draggable: true 
     });
     
-    // Main Layer
+    // LAYERS: Main map and UI on top
     const mainLayer = new Konva.Layer();
-    const uiLayer = new Konva.Layer({ listening: false }); // Icons always on top
+    const uiLayer = new Konva.Layer({ listening: false }); // Pass-through clicks
     stage.add(mainLayer);
     stage.add(uiLayer);
-    
-    // --- DEBUG: Red Box to visualize zoom area ---
-    const debugRect = new Konva.Rect({ stroke: 'red', strokeWidth: 5, listening: false });
-    mainLayer.add(debugRect);
     
     const tooltip = document.getElementById('tooltip');
     
@@ -219,7 +219,8 @@ router.get('/', async (req, res) => {
 
         layersToLoad.forEach((layerData) => {
             const tempLayer = Konva.Node.create(layerData);
-            tempLayer.x(0); tempLayer.y(0); tempLayer.scale({x:1, y:1}); // Clear transforms
+            // RESET TRANSFORM to ensure clean math
+            tempLayer.x(0); tempLayer.y(0); tempLayer.scale({x:1, y:1});
             const children = tempLayer.getChildren().slice();
             children.forEach(node => {
                 node.moveTo(mainLayer);
@@ -235,7 +236,7 @@ router.get('/', async (req, res) => {
             const isSeatGroup = nodeType === 'Group' && ['row-seats', 'circular-table', 'rect-table', 'single-seat'].includes(groupType);
             
             if (isSeatGroup) {
-                // CLEANUP: Only hide Numbers, Keep Letters
+                // CLEANUP: Hide Numbers (Digits only), keep Labels (A, B, C)
                 node.find('Text').forEach(t => {
                      const txt = t.text().trim();
                      if (/^\\d+$/.test(txt)) t.destroy();
@@ -246,13 +247,11 @@ router.get('/', async (req, res) => {
             if (nodeType === 'Circle' && node.getAttr('isSeat')) {
                 const seat = node;
                 
-                // STATUS Check
                 const status = seat.getAttr('status') || 'AVAILABLE';
                 const isBlocked = status === 'BLOCKED' || status === 'SOLD' || status === 'HELD';
                 const isHeldDB = heldSeatIds.has(seat.id()) || heldSeatIds.has(seat.getAttr('sbSeatId'));
                 const isUnavailable = isBlocked || isHeldDB;
 
-                // DATA
                 const tType = getTicketType(seat);
                 const price = tType ? tType.pricePence : 0;
                 seatPrices.set(seat._id, price);
@@ -261,7 +260,6 @@ router.get('/', async (req, res) => {
                 const info = seat.getAttr('sbInfo');
                 const viewImg = seat.getAttr('sbViewImage');
 
-                // GAP Logic
                 if (parentGroup) {
                     const grpId = parentGroup._id;
                     if (!rowMap.has(grpId)) rowMap.set(grpId, []);
@@ -274,21 +272,16 @@ router.get('/', async (req, res) => {
                 // VISUALS
                 if (isUnavailable) {
                     seat.fill('#334155'); // Dark Grey
-                    seat.stroke('#1e293b'); 
-                    seat.strokeWidth(1); 
-                    seat.opacity(0.8); 
-                    seat.listening(false);
+                    seat.stroke('#1e293b'); seat.strokeWidth(1); 
+                    seat.opacity(0.8); seat.listening(false);
                 } else {
-                    seat.fill('#ffffff'); 
-                    seat.stroke('#64748B'); 
-                    seat.strokeWidth(1.5);
-                    seat.opacity(1); 
-                    seat.listening(true); 
+                    seat.fill('#ffffff'); seat.stroke('#64748B'); seat.strokeWidth(1.5);
+                    seat.opacity(1); seat.listening(true); 
                 }
                 seat.shadowEnabled(false);
                 seat.visible(true);
 
-                // --- TAG FOR ICONS ---
+                // --- Tag for Icon Layer ---
                 if (info && !isUnavailable) seat.setAttr('hasInfo', true);
                 if (viewImg) seat.setAttr('hasView', true);
 
@@ -299,7 +292,6 @@ router.get('/', async (req, res) => {
                         if (!selectedSeats.has(seat._id)) {
                             seat.stroke('#0056D2'); seat.strokeWidth(3); mainLayer.batchDraw();
                         }
-                        
                         const pos = stage.getPointerPosition();
                         const priceStr = '£' + (price/100).toFixed(2);
                         let html = \`<span class="tt-title">\${label}</span><span class="tt-meta">\${tType ? tType.name : 'Standard'} • \${priceStr}</span>\`;
@@ -340,16 +332,15 @@ router.get('/', async (req, res) => {
              else seats.sort((a, b) => a.x - b.x);
         });
 
-        // --- 4. PRECISE AUTO-FIT ---
+        // --- 4. PRECISE AUTO-FIT WITH DELAY ---
         function fitMap() {
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
             let count = 0;
 
             // Only scan SEMANTIC nodes
             mainLayer.find('Circle, Text, Rect, Path').forEach(node => {
-                if (node === debugRect) return; // Skip our debug box!
                 if (!node.visible() || node.opacity() === 0) return;
-                // Exclude huge backgrounds
+                // Exclude backgrounds > 2000px
                 if (node.width() > 2000 || node.height() > 2000) return; 
 
                 const r = node.getClientRect({ skipTransform: true, relativeTo: mainLayer });
@@ -362,33 +353,26 @@ router.get('/', async (req, res) => {
                 }
             });
 
-            console.log(\`[DEBUG] Strict Bounds: Shapes=\${count}, X=\${minX} to \${maxX}, Y=\${minY} to \${maxY}\`);
+            const cw = container.offsetWidth;
+            const ch = container.offsetHeight;
 
-            const w = container.offsetWidth;
-            const h = container.offsetHeight;
-
-            if (count > 0 && maxX > minX) {
-                // Update Debug Rect so user can see what code found
-                debugRect.position({ x: minX, y: minY });
-                debugRect.width(maxX - minX);
-                debugRect.height(maxY - minY);
-                debugRect.visible(true);
-
+            // ONLY RUN if we have content AND a real container size
+            if (count > 0 && maxX > minX && cw > 0 && ch > 0) {
                 const mapW = maxX - minX;
                 const mapH = maxY - minY;
                 const padding = 50;
                 
-                const availW = w - padding;
-                const availH = h - padding;
+                const availW = cw - padding;
+                const availH = ch - padding;
 
                 let scale = Math.min(availW / mapW, availH / mapH);
-                scale = Math.min(scale, 1.6); // Cap Max Zoom
+                scale = Math.min(scale, 1.3); // Clamped Max Zoom
                 
                 const cx = minX + mapW / 2;
                 const cy = minY + mapH / 2;
 
-                const newX = (w / 2) - (cx * scale);
-                const newY = (h / 2) - (cy * scale);
+                const newX = (cw / 2) - (cx * scale);
+                const newY = (ch / 2) - (cy * scale);
 
                 stage.x(newX);
                 stage.y(newY);
@@ -396,21 +380,23 @@ router.get('/', async (req, res) => {
                 
                 updateIcons(); // Re-sync icons
                 mainLayer.batchDraw();
-            } else {
-                console.warn("[DEBUG] Map seems empty. Centering default.");
-                stage.x(w/2); stage.y(h/2);
+                
+                // Show Map, Hide Loader
+                document.getElementById('loader').classList.add('hidden');
+                document.getElementById('stage-container').classList.add('visible');
             }
         }
 
-        setTimeout(fitMap, 100);
+        // Wait for DOM layout to settle (300ms delay for safety)
+        setTimeout(fitMap, 300);
         
-        window.addEventListener('resize', () => {
-             stage.width(container.offsetWidth);
-             stage.height(container.offsetHeight);
-             fitMap();
+        // Watch for resizes
+        const ro = new ResizeObserver(() => {
+            stage.width(container.offsetWidth);
+            stage.height(container.offsetHeight);
+            fitMap();
         });
-
-        document.getElementById('loader').style.display = 'none';
+        ro.observe(container);
 
     } catch (err) {
         console.error(err);
@@ -453,11 +439,9 @@ router.get('/', async (req, res) => {
         uiLayer.batchDraw();
     }
     
-    // Re-render icons on zoom/pan
     stage.on('wheel dragmove', updateIcons);
     document.getElementById('toggle-views').addEventListener('change', updateIcons);
 
-    // Zoom Logic
     stage.on('wheel', (e) => {
         e.evt.preventDefault();
         const scaleBy = 1.1;
