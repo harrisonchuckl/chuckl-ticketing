@@ -9,6 +9,11 @@ const stripeSecret = process.env.STRIPE_SECRET_KEY;
 const stripe = stripeSecret ? new Stripe(stripeSecret, { apiVersion: '2024-06-20' }) : null;
 const router = Router();
 
+// --- formatting helper (Required for List View HTML) ---
+function pFmt(p: number | null | undefined) {
+    return '£' + (Number(p || 0) / 100).toFixed(2);
+}
+
 router.post('/session', async (req, res) => {
   try {
     const { showId, quantity, unitPricePence } = req.body || {};
@@ -147,108 +152,108 @@ router.get('/', async (req, res) => {
         else if (layoutObj.attrs || layoutObj.className) konvaData = layoutObj;
     }
 
-   // --- MODE A: LIST VIEW (General Admission) ---
-// This uses the ticket type logic from the public event page to handle checkout for non-seated venues.
-if (!konvaData) {
-    const showIdStr = JSON.stringify(show.id);
-    const ticketOptions = ticketTypes.map(t => `<option value="${t.id}" data-price="${t.pricePence}">${t.name} - ${pFmt(t.pricePence)}</option>`).join('');
-    
-    // Fallback HTML page with a basic form for GA purchase
-    res.type('html').send(`<!doctype html>
-        <html lang="en"><head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>General Admission | ${show.title}</title>
-        <style>
-            body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
-            h1 { font-size: 1.5rem; }
-            form { display: flex; flex-direction: column; gap: 15px; background: #f9f9f9; padding: 20px; border-radius: 8px; border: 1px solid #ddd; }
-            label { font-weight: bold; margin-bottom: 5px; }
-            select, input[type="number"] { padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
-            button { padding: 10px 20px; background: #0056D2; color: white; border: none; border-radius: 4px; font-size: 1rem; cursor: pointer; }
-            button:disabled { background: #9E9E9E; cursor: not-allowed; }
-            .total { font-size: 1.2rem; font-weight: bold; margin-top: 10px; }
-            .error { color: red; margin-top: 10px; }
-        </style>
-        </head><body>
-        <h1>${show.title}</h1>
-        <p>${dateStr} • ${timeStr} • ${venueName}</p>
-        <h2>Select Tickets</h2>
-        <form id="ga-checkout-form">
-            <label for="ticketType">Ticket Type:</label>
-            <select id="ticketType" name="ticketType">
-                ${ticketOptions}
-            </select>
-            <label for="quantity">Quantity:</label>
-            <input type="number" id="quantity" name="quantity" value="1" min="1" max="10" required />
-            <div class="total">Total: <span id="total-price">£0.00</span></div>
-            <button type="submit" id="btn-buy">Continue to Payment</button>
-            <div class="error" id="error-message"></div>
-        </form>
-        <script>
-            const showId = ${showIdStr};
-            const form = document.getElementById('ga-checkout-form');
-            const ticketTypeSelect = document.getElementById('ticketType');
-            const quantityInput = document.getElementById('quantity');
-            const totalPriceSpan = document.getElementById('total-price');
-            const buyButton = document.getElementById('btn-buy');
-            const errorMessage = document.getElementById('error-message');
+ // --- MODE A: LIST VIEW (General Admission) ---
+    if (!konvaData) {
+        const showIdStr = JSON.stringify(show.id);
+        // NOTE: pFmt is now defined above to fix the TypeScript error.
+        const ticketOptions = ticketTypes.map(t => `<option value="${t.id}" data-price="${t.pricePence}">${t.name} - ${pFmt(t.pricePence)}</option>`).join('');
+        
+        // Fallback HTML page with a basic form for GA purchase
+        res.type('html').send(`<!doctype html>
+            <html lang="en"><head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>General Admission | ${show.title}</title>
+            <style>
+                body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+                h1 { font-size: 1.5rem; }
+                form { display: flex; flex-direction: column; gap: 15px; background: #f9f9f9; padding: 20px; border-radius: 8px; border: 1px solid #ddd; }
+                label { font-weight: bold; margin-bottom: 5px; }
+                select, input[type="number"] { padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
+                button { padding: 10px 20px; background: #0056D2; color: white; border: none; border-radius: 4px; font-size: 1rem; cursor: pointer; }
+                button:disabled { background: #9E9E9E; cursor: not-allowed; }
+                .total { font-size: 1.2rem; font-weight: bold; margin-top: 10px; }
+                .error { color: red; margin-top: 10px; }
+            </style>
+            </head><body>
+            <h1>${show.title}</h1>
+            <p>${dateStr} • ${timeStr} • ${venueName}</p>
+            <h2>Select Tickets</h2>
+            <form id="ga-checkout-form">
+                <label for="ticketType">Ticket Type:</label>
+                <select id="ticketType" name="ticketType">
+                    ${ticketOptions}
+                </select>
+                <label for="quantity">Quantity:</label>
+                <input type="number" id="quantity" name="quantity" value="1" min="1" max="10" required />
+                <div class="total">Total: <span id="total-price">£0.00</span></div>
+                <button type="submit" id="btn-buy">Continue to Payment</button>
+                <div class="error" id="error-message"></div>
+            </form>
+            <script>
+                const showId = ${showIdStr};
+                const form = document.getElementById('ga-checkout-form');
+                const ticketTypeSelect = document.getElementById('ticketType');
+                const quantityInput = document.getElementById('quantity');
+                const totalPriceSpan = document.getElementById('total-price');
+                const buyButton = document.getElementById('btn-buy');
+                const errorMessage = document.getElementById('error-message');
 
-            function updatePrice() {
-                const selectedOption = ticketTypeSelect.options[ticketTypeSelect.selectedIndex];
-                const pricePence = Number(selectedOption.getAttribute('data-price')) || 0;
-                const quantity = Number(quantityInput.value) || 0;
-                const total = (pricePence * quantity) / 100;
-                totalPriceSpan.innerText = '£' + total.toFixed(2);
-                buyButton.disabled = quantity === 0 || pricePence === 0;
-            }
+                function updatePrice() {
+                    const selectedOption = ticketTypeSelect.options[ticketTypeSelect.selectedIndex];
+                    const pricePence = Number(selectedOption.getAttribute('data-price')) || 0;
+                    const quantity = Number(quantityInput.value) || 0;
+                    const total = (pricePence * quantity) / 100;
+                    totalPriceSpan.innerText = '£' + total.toFixed(2);
+                    buyButton.disabled = quantity === 0 || pricePence === 0;
+                }
 
-            ticketTypeSelect.addEventListener('change', updatePrice);
-            quantityInput.addEventListener('input', updatePrice);
-            updatePrice(); // Initial calculation
+                ticketTypeSelect.addEventListener('change', updatePrice);
+                quantityInput.addEventListener('input', updatePrice);
+                updatePrice(); // Initial calculation
 
-            form.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                errorMessage.innerText = '';
-                buyButton.disabled = true;
-                buyButton.innerText = 'Processing...';
+                form.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    errorMessage.innerText = '';
+                    buyButton.disabled = true;
+                    buyButton.innerText = 'Processing...';
 
-                const quantity = Number(quantityInput.value);
-                const selectedOption = ticketTypeSelect.options[ticketTypeSelect.selectedIndex];
-                const unitPricePence = Number(selectedOption.getAttribute('data-price'));
+                    const quantity = Number(quantityInput.value);
+                    const selectedOption = ticketTypeSelect.options[ticketTypeSelect.selectedIndex];
+                    const unitPricePence = Number(selectedOption.getAttribute('data-price'));
 
-                if (quantity <= 0 || unitPricePence <= 0) {
-                    errorMessage.innerText = 'Please select a valid quantity and ticket type.';
-                    buyButton.disabled = false;
-                    buyButton.innerText = 'Continue to Payment';
-                    return;
-                }
+                    if (quantity <= 0 || unitPricePence <= 0) {
+                        errorMessage.innerText = 'Please select a valid quantity and ticket type.';
+                        buyButton.disabled = false;
+                        buyButton.innerText = 'Continue to Payment';
+                        return;
+                    }
 
-                try {
-                    const res = await fetch('/checkout/session', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ showId, quantity, unitPricePence })
-                    });
-                    const data = await res.json();
+                    try {
+                        const res = await fetch('/checkout/session', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ showId, quantity, unitPricePence })
+                        });
+                        const data = await res.json();
 
-                    if (data.ok && data.url) {
-                        window.location.href = data.url;
-                    } else {
-                        errorMessage.innerText = 'Error: ' + (data.message || 'Unknown checkout error.');
-                        buyButton.disabled = false;
-                        buyButton.innerText = 'Continue to Payment';
-                    }
-                } catch (error) {
-                    errorMessage.innerText = 'Connection error. Please try again.';
-                    buyButton.disabled = false;
-                    buyButton.innerText = 'Continue to Payment';
-                }
-            });
-        </script>
-        </body></html>`);
-    return;
-}
+                        if (data.ok && data.url) {
+                            window.location.href = data.url;
+                        } else {
+                            alert("Error: " + (data.message || 'Unknown checkout error.'));
+                            buyButton.disabled = false;
+                            buyButton.innerText = 'Continue to Payment';
+                        }
+                    } catch (error) {
+                        alert("Connection error. Please try again.");
+                        buyButton.disabled = false;
+                        buyButton.innerText = 'Continue to Payment';
+                    }
+                });
+            </script>
+            </body></html>`);
+        return;
+    }
     // --- MODE B: MAP VIEW ---
     const mapData = JSON.stringify(konvaData);
     const ticketsData = JSON.stringify(ticketTypes);
