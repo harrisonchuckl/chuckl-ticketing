@@ -112,9 +112,8 @@ router.post('/session', async (req, res) => {
       rawError: err,
     });
     // --- DEBUG END: FINAL CATCH LOG ---
-      // --- DEBUG END: FINAL CATCH LOG ---
     return res.status(500).json({ ok: false, message: 'Checkout error', detail: err?.message });
-  }
+  }
 });
 
 router.get('/', async (req, res) => {
