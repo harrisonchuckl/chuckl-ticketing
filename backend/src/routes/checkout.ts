@@ -15,8 +15,10 @@ function pFmt(p: number | null | undefined) {
 }
 
 router.post('/session', async (req, res) => {
+    // --- DEBUG START: RAW REQUEST LOG (Moved out of try/catch to ensure logging) ---
     const DEBUG_REQ_BODY = req.body || {};
-    console.debug('checkout/session request body (RAW):', DEBUG_REQ_BODY); // Log raw body first
+    console.debug('checkout/session request body (RAW):', DEBUG_REQ_BODY);
+    // --- DEBUG END: RAW REQUEST LOG ---
   try {
     const { showId, quantity, unitPricePence } = DEBUG_REQ_BODY;
     console.debug('checkout/session extracted data:', { showId, quantity, unitPricePence, headers: req.headers });
