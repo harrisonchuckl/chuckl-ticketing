@@ -40,6 +40,7 @@ router.get('/', async (req, res) => {
 
     const venueName = show.venue?.name || 'Venue TBC';
     const ticketTypes = show.ticketTypes || [];
+    
     const dateObj = new Date(show.date);
     const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -95,6 +96,7 @@ router.get('/', async (req, res) => {
     #stage-container { width:100%; height:100%; cursor:grab; }
     #stage-container:active { cursor:grabbing; }
     
+    /* LEGEND - Z-Index Boost */
     .legend { 
         position:absolute; top:20px; left:20px; 
         background:rgba(255,255,255,0.98); padding:12px 16px; border-radius:12px; 
@@ -133,6 +135,12 @@ router.get('/', async (req, res) => {
     #tooltip .tt-title { font-weight: 700; margin-bottom: 2px; display:block; font-size:0.95rem; }
     #tooltip .tt-meta { color: #94a3b8; font-size: 0.75rem; display:block; margin-bottom: 6px; }
     #tooltip .tt-info { padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.2); font-style: italic; color: #e2e8f0; line-height:1.4; }
+    
+    #recenter-btn {
+        position: absolute; bottom: 100px; right: 20px; z-index: 4000;
+        background: white; border: 1px solid #ccc; padding: 8px 12px; border-radius: 8px;
+        font-size: 12px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
   </style>
 </head>
 <body>
@@ -153,6 +161,7 @@ router.get('/', async (req, res) => {
       </label>
     </div>
     <div id="stage-container"></div>
+    <button id="recenter-btn">⌖ Fit Map</button>
     <div id="tooltip"></div>
     <div id="loader"><div>Loading seating plan...</div></div>
   </div>
@@ -179,10 +188,13 @@ router.get('/', async (req, res) => {
         draggable: true 
     });
     
+    // Single Layer to keep things simple and synced
     const mainLayer = new Konva.Layer();
-    const uiLayer = new Konva.Layer({ listening: false }); // Icons always on top
     stage.add(mainLayer);
-    stage.add(uiLayer);
+    
+    // Debug Rect (Will show the bounding box we are calculating)
+    const debugRect = new Konva.Rect({ stroke: 'red', strokeWidth: 2, listening: false, visible: true });
+    mainLayer.add(debugRect);
     
     const tooltip = document.getElementById('tooltip');
     
@@ -213,7 +225,9 @@ router.get('/', async (req, res) => {
 
         layersToLoad.forEach((layerData) => {
             const tempLayer = Konva.Node.create(layerData);
-            tempLayer.x(0); tempLayer.y(0); tempLayer.scale({x:1, y:1}); // Clear transforms
+            // RESET TRANSFORM
+            tempLayer.x(0); tempLayer.y(0); tempLayer.scale({x:1, y:1});
+            
             const children = tempLayer.getChildren().slice();
             children.forEach(node => {
                 node.moveTo(mainLayer);
@@ -222,7 +236,7 @@ router.get('/', async (req, res) => {
             tempLayer.destroy();
         });
 
-        // --- 2. PROCESS MAP NODES ---
+        // --- 2. PROCESS NODES ---
         function processNode(node, parentGroup) {
             const nodeType = node.getClassName();
             const groupType = node.getAttr('shapeType') || node.name();
@@ -240,11 +254,13 @@ router.get('/', async (req, res) => {
             if (nodeType === 'Circle' && node.getAttr('isSeat')) {
                 const seat = node;
                 
+                // STATUS Check
                 const status = seat.getAttr('status') || 'AVAILABLE';
                 const isBlocked = status === 'BLOCKED' || status === 'SOLD' || status === 'HELD';
                 const isHeldDB = heldSeatIds.has(seat.id()) || heldSeatIds.has(seat.getAttr('sbSeatId'));
                 const isUnavailable = isBlocked || isHeldDB;
 
+                // DATA
                 const tType = getTicketType(seat);
                 const price = tType ? tType.pricePence : 0;
                 seatPrices.set(seat._id, price);
@@ -253,6 +269,7 @@ router.get('/', async (req, res) => {
                 const info = seat.getAttr('sbInfo');
                 const viewImg = seat.getAttr('sbViewImage');
 
+                // GAP Logic
                 if (parentGroup) {
                     const grpId = parentGroup._id;
                     if (!rowMap.has(grpId)) rowMap.set(grpId, []);
@@ -264,7 +281,7 @@ router.get('/', async (req, res) => {
 
                 // VISUALS
                 if (isUnavailable) {
-                    seat.fill('#334155'); 
+                    seat.fill('#334155'); // Dark Grey
                     seat.stroke('#1e293b'); 
                     seat.strokeWidth(1); 
                     seat.opacity(0.8); 
@@ -279,9 +296,40 @@ router.get('/', async (req, res) => {
                 seat.shadowEnabled(false);
                 seat.visible(true);
 
-                // --- TAG FOR ICONS ---
-                if (info && !isUnavailable) seat.setAttr('hasInfo', true);
-                if (viewImg) seat.setAttr('hasView', true);
+                // --- INFO ICON (i) ---
+                if (info && !isUnavailable) {
+                    const r = seat.radius();
+                    const iGroup = new Konva.Group({ 
+                        x: seat.x() + r * 0.7, 
+                        y: seat.y() - r * 0.7, 
+                        listening: false 
+                    });
+                    const iDot = new Konva.Circle({ radius: 5, fill: '#0F172A' });
+                    const iTxt = new Konva.Text({ x: -1.5, y: -2.5, text:'i', fontSize:6, fill:'#fff', fontStyle:'bold' });
+                    iGroup.add(iDot); iGroup.add(iTxt);
+                    if (seat.parent) {
+                        seat.parent.add(iGroup);
+                        iGroup.moveToTop();
+                    }
+                }
+
+                // --- VIEW ICON (Camera) ---
+                if (viewImg) {
+                    const vGroup = new Konva.Group({ 
+                        x: seat.x(), y: seat.y(), 
+                        visible: false, name: 'view-icon-group', listening: false 
+                    });
+                    const bg = new Konva.Circle({ radius: 9, fill: '#0056D2' });
+                    const icon = new Konva.Path({
+                        data: 'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5 5 2.24 5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z',
+                        fill: 'white', scaleX: 0.6, scaleY: 0.6, offsetX: 12, offsetY: 12
+                    });
+                    vGroup.add(bg); vGroup.add(icon);
+                    if (seat.parent) {
+                        seat.parent.add(vGroup);
+                        vGroup.moveToTop();
+                    }
+                }
 
                 // EVENTS
                 if (!isUnavailable) {
@@ -331,13 +379,16 @@ router.get('/', async (req, res) => {
              else seats.sort((a, b) => a.x - b.x);
         });
 
-        // --- 4. PRECISE AUTO-FIT (Smart Bounds) ---
+        // --- 4. CALCULATE CENTER POINT ---
         function fitMap() {
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
             let count = 0;
 
-            // Only scan SEMANTIC nodes (Seats, Text, Rects)
+            // Only scan VISIBLE SEMANTIC NODES
             mainLayer.find('Circle, Text, Rect, Path').forEach(node => {
+                // Ignore Debug Rect
+                if (node === debugRect) return;
+                
                 if (!node.visible() || node.opacity() === 0) return;
                 // Exclude huge backgrounds
                 if (node.width() > 2000 || node.height() > 2000) return; 
@@ -352,51 +403,53 @@ router.get('/', async (req, res) => {
                 }
             });
 
-            console.log(\`[DEBUG] Strict Bounds: Shapes=\${count}, X=\${minX} to \${maxX}, Y=\${minY} to \${maxY}\`);
+            console.log(\`[DEBUG] Bounds: X=\${minX} to \${maxX}, Y=\${minY} to \${maxY}\`);
 
             const w = container.offsetWidth;
             const h = container.offsetHeight;
 
             if (count > 0 && maxX > minX) {
+                // DRAW DEBUG BOX
+                debugRect.position({ x: minX, y: minY });
+                debugRect.width(maxX - minX);
+                debugRect.height(maxY - minY);
+                
                 const mapW = maxX - minX;
                 const mapH = maxY - minY;
-                const padding = 50;
+                const padding = 60;
                 
                 const availW = w - padding;
                 const availH = h - padding;
 
                 let scale = Math.min(availW / mapW, availH / mapH);
-                // Allow scaling up for small maps (up to 3x) so they aren't tiny
-                scale = Math.min(scale, 3.0); 
+                // Clamp scale (0.1 to 3.0)
+                scale = Math.min(Math.max(scale, 0.1), 3.0); 
                 
+                // Content Center
                 const cx = minX + mapW / 2;
                 const cy = minY + mapH / 2;
 
+                // Stage Center
                 const newX = (w / 2) - (cx * scale);
                 const newY = (h / 2) - (cy * scale);
 
                 stage.x(newX);
                 stage.y(newY);
                 stage.scale({ x: scale, y: scale });
-                
-                updateIcons(); // Re-sync icons
                 mainLayer.batchDraw();
             } else {
-                console.warn("[DEBUG] Map seems empty. Centering default.");
                 stage.x(w/2); stage.y(h/2);
             }
         }
 
-        // Use ResizeObserver for robust layout detection
-        const ro = new ResizeObserver(() => {
-            stage.width(container.offsetWidth);
-            stage.height(container.offsetHeight);
-            fitMap();
-        });
-        ro.observe(container);
+        setTimeout(fitMap, 200); // 200ms delay to let DOM settle
+        document.getElementById('recenter-btn').onclick = fitMap;
         
-        // Initial fit
-        setTimeout(fitMap, 50);
+        window.addEventListener('resize', () => {
+             stage.width(container.offsetWidth);
+             stage.height(container.offsetHeight);
+             fitMap();
+        });
 
         document.getElementById('loader').style.display = 'none';
 
@@ -405,47 +458,13 @@ router.get('/', async (req, res) => {
         document.getElementById('loader').innerHTML = 'Error loading map<br><small>' + err.message + '</small>';
     }
 
-    // --- ICON RENDERER (UI Layer) ---
-    function updateIcons() {
-        uiLayer.destroyChildren();
-        const showViews = document.getElementById('toggle-views').checked;
-        const scale = stage.scaleX();
+    // --- UI EVENTS ---
+    document.getElementById('toggle-views').addEventListener('change', (e) => {
+        const show = e.target.checked;
+        stage.find('.view-icon-group').forEach(icon => icon.visible(show));
+        mainLayer.batchDraw();
+    });
 
-        mainLayer.find('Circle').forEach(seat => {
-            if (!seat.visible()) return;
-            const hasInfo = seat.getAttr('hasInfo');
-            const hasView = seat.getAttr('hasView');
-            
-            if (!hasInfo && !hasView) return;
-            
-            const pos = seat.getAbsolutePosition();
-            const radius = seat.radius() * scale; 
-            
-            // INFO ICON
-            if (hasInfo) {
-               const grp = new Konva.Group({ x: pos.x + radius*0.7, y: pos.y - radius*0.7 });
-               grp.add(new Konva.Circle({ radius: 6, fill: '#0F172A' }));
-               grp.add(new Konva.Text({ text:'i', fontSize:9, fill:'#fff', x:-1.5, y:-4, fontStyle:'bold', fontFamily:'sans-serif' }));
-               uiLayer.add(grp);
-            }
-            
-            // VIEW ICON
-            if (hasView && showViews) {
-               const grp = new Konva.Group({ x: pos.x, y: pos.y });
-               grp.add(new Konva.Circle({ radius: 10, fill: '#0056D2' }));
-               const cam = new Konva.Path({ data: 'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5 5 2.24 5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z', fill: 'white', scaleX: 0.6, scaleY: 0.6, offsetX: 12, offsetY: 12 });
-               grp.add(cam);
-               uiLayer.add(grp);
-            }
-        });
-        uiLayer.batchDraw();
-    }
-    
-    // Re-render icons on zoom/pan
-    stage.on('wheel dragmove', updateIcons);
-    document.getElementById('toggle-views').addEventListener('change', updateIcons);
-
-    // Zoom Logic
     stage.on('wheel', (e) => {
         e.evt.preventDefault();
         const scaleBy = 1.1;
@@ -456,7 +475,6 @@ router.get('/', async (req, res) => {
         stage.scale({ x: newScale, y: newScale });
         const newPos = { x: pointer.x - mousePointTo.x * newScale, y: pointer.y - mousePointTo.y * newScale };
         stage.position(newPos);
-        updateIcons();
     });
 
     function checkGap(seat, rowGroup) {
