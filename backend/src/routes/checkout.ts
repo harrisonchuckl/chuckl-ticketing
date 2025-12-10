@@ -22,8 +22,6 @@ router.post('/session', async (req, res) => {
     console.debug('checkout/session extracted data:', { showId, quantity, unitPricePence, headers: req.headers });
     const qty = Number(quantity);
     const unitPence = Number(unitPricePence);
-    const qty = Number(quantity);
-    const unitPence = Number(unitPricePence);
 
     if (!showId || !Number.isFinite(qty) || !Number.isFinite(unitPence) || qty <= 0 || unitPence <= 0) {
       console.warn('checkout/session validation failed', { showId, qty, unitPence });
@@ -99,7 +97,6 @@ router.post('/session', async (req, res) => {
       metadata: { orderId: order.id, showId: show.id },
     });
     console.debug('checkout/session created Stripe session (ID):', session.id);
-  console.debug('checkout/session created Stripe session (ID):', session.id);
     // --- DEBUG END: STRIPE SESSION CREATION ---
     console.debug('checkout/session success: returning URL');
     return res.json({ ok: true, url: session.url });
