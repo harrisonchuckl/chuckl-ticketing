@@ -28,7 +28,8 @@ router.post('/session', async (req, res) => {
     console.debug('checkout/session request body (RAW):', DEBUG_REQ_BODY);
     // --- DEBUG END: RAW REQUEST LOG ---
   try {
-    const { showId, quantity, unitPricePence } = DEBUG_REQ_BODY;
+    const { showId, quantity, unitPricePence, seats } = DEBUG_REQ_BODY;
+    const seatIds: string[] = Array.isArray(seats) ? seats.map((s: any) => String(s)) : [];
     console.debug('checkout/session extracted data:', { showId, quantity, unitPricePence, headers: req.headers });
     const qty = Number(quantity);
     const unitPence = Number(unitPricePence);
@@ -129,13 +130,18 @@ console.debug('checkout/session fees result:', fees);
     ];
     console.debug('checkout/session Stripe line_items:', JSON.stringify(lineItems));
     
-    const session = await stripe.checkout.sessions.create({
-      mode: 'payment',
-      line_items: lineItems,
-      success_url: successUrl,
-      cancel_url: cancelUrl,
-      metadata: { orderId: order.id, showId: show.id },
-    });
+     const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: lineItems,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      metadata: {
+        orderId: order.id,
+        showId: show.id,
+        seatIds: seatIds.join(','),
+      },
+    });
+
     console.debug('checkout/session created Stripe session (ID):', session.id);
     // --- DEBUG END: STRIPE SESSION CREATION ---
     console.debug('checkout/session success: returning URL');
@@ -801,18 +807,43 @@ router.get('/', async (req, res) => {
     }
 
     document.getElementById('btn-next').addEventListener('click', async () => {
-const btn = document.getElementById('btn-next');
-if (!btn.classList.contains('active')) return;
-btn.innerText = 'Processing...';
-let totalPence = 0; selectedSeats.forEach(id => totalPence += (seatPrices.get(id) || 0));
-const quantity = selectedSeats.size; const unitPricePence = Math.round(totalPence / quantity);
-try {
-const res = await fetch('/checkout/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ showId, quantity, unitPricePence }) });
-const data = await res.json();
-if (data.ok && data.url) window.location.href = data.url;
-else { alert("Error: " + (data.message || "Unknown")); btn.innerText = 'Continue'; }
-} catch (e) { alert("Connection error"); btn.innerText = 'Continue'; }
-});
+      const btn = document.getElementById('btn-next');
+      if (!btn.classList.contains('active')) return;
+
+      btn.innerText = 'Processing...';
+
+      let totalPence = 0;
+      const seatIds = [];
+
+      selectedSeats.forEach(id => {
+        totalPence += (seatPrices.get(id) || 0);
+        const stableId = seatIdMap.get(id);
+        if (stableId) seatIds.push(stableId);
+      });
+
+      const quantity = selectedSeats.size;
+      const unitPricePence = Math.round(totalPence / quantity);
+
+      try {
+        const res = await fetch('/checkout/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ showId, quantity, unitPricePence, seats: seatIds })
+        });
+        const data = await res.json();
+
+        if (data.ok && data.url) {
+          window.location.href = data.url;
+        } else {
+          alert("Error: " + (data.message || "Unknown"));
+          btn.innerText = 'Continue';
+        }
+      } catch (e) {
+        alert("Connection error");
+        btn.innerText = 'Continue';
+      }
+    });
+
 </script>
 </body>
 </html>`);
