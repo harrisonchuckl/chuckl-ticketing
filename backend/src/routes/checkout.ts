@@ -48,11 +48,43 @@ router.post('/session', async (req, res) => {
   const amountPence = Math.round(unitPence) * Math.round(qty);
     console.debug('checkout/session computed totals', { qty, unitPence: Math.round(unitPence), amountPence });
     
-    // --- DEBUG START: FEE CALCULATION ---
-    console.debug('checkout/session calling calcFeesForShow with:', { showId: show.id, amountPence, qty });
-    const fees = await calcFeesForShow(show.id, amountPence, qty);
-    console.debug('checkout/session fees result:', fees);
-    // --- DEBUG END: FEE CALCULATION ---
+ // --- DEBUG START: FEE CALCULATION ---
+console.debug('checkout/session calling calcFeesForShow with:', {
+  showId: show.id,
+  qty,
+  unitPence: Math.round(unitPence),
+});
+
+let fees;
+try {
+  const unit = Math.round(unitPence);
+
+  // Match the webhook signature: calcFeesForShow(prisma, showId, quantity, unitPricePence, organiserSplitBps?)
+  fees = await calcFeesForShow(
+    prisma,
+    show.id,
+    qty,
+    unit,
+    null // organiserSplitBps – public checkout, so no organiser override here
+  );
+} catch (feeErr: any) {
+  console.error('checkout/session fee calc error', {
+    showId: show.id,
+    qty,
+    unitPence,
+    amountPence,
+    feeErrorMessage: feeErr?.message,
+    feeErrorStack: feeErr?.stack,
+  });
+
+  return res
+    .status(500)
+    .json({ ok: false, message: 'Fee calculation error', detail: feeErr?.message });
+}
+
+console.debug('checkout/session fees result:', fees);
+// --- DEBUG END: FEE CALCULATION ---
+
 
     const order = await prisma.order.create({
       data: {
