@@ -413,10 +413,11 @@ router.get('/', async (req, res) => {
     const showId = ${showIdStr};
     const heldSeatIds = new Set(${heldSeatsArray});
     
-    const selectedSeats = new Set();
+     const selectedSeats = new Set();
     const seatPrices = new Map();
     const seatMeta = new Map();
     const rowMap = new Map();
+    const seatIdMap = new Map();
 
     // --- SETUP STAGE ---
     const container = document.getElementById('stage-container');
@@ -514,7 +515,7 @@ router.get('/', async (req, res) => {
                     });
                 }
 
-                seatMeta.set(seat._id, {
+                              seatMeta.set(seat._id, {
                     label,
                     info,
                     viewImg,
@@ -524,6 +525,11 @@ router.get('/', async (req, res) => {
                     seat,
                     parentGroup
                 });
+
+                // Map internal Konva id -> stable seat id used in DB (sbSeatId if present, otherwise node id)
+                const stableId = seat.getAttr('sbSeatId') || seat.id();
+                seatIdMap.set(seat._id, stableId);
+
 
                 // VISUALS
                 if (isUnavailable) {
