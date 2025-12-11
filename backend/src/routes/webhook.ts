@@ -4,10 +4,9 @@ import prisma from '../lib/prisma.js';
 import Stripe from 'stripe';
 import { calcFeesForShow } from '../services/fees.js';
 
-// --- STANDARD STRIPE INITIALIZATION ---
+// Standard Stripe initialization
 const stripeSecret = process.env.STRIPE_SECRET_KEY;
 const stripe = stripeSecret ? new Stripe(stripeSecret, { apiVersion: '2024-06-20' }) : null;
-// --------------------------------------
 const router = Router();
 
 /**
