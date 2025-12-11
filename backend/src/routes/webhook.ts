@@ -4,11 +4,10 @@ import prisma from '../lib/prisma.js';
 import Stripe from 'stripe';
 import { calcFeesForShow } from '../services/fees.js';
 
-// --- ROBUST STRIPE INITIALIZATION (Prevents module load crashes) ---
-const StripeClient = (Stripe as any)?.default || Stripe;
-
-const stripe = new StripeClient(process.env.STRIPE_SECRET_KEY as string, { apiVersion: '2024-06-20' });
-// -----------------------------------------------------------
+// --- STANDARD STRIPE INITIALIZATION ---
+const stripeSecret = process.env.STRIPE_SECRET_KEY;
+const stripe = stripeSecret ? new Stripe(stripeSecret, { apiVersion: '2024-06-20' }) : null;
+// --------------------------------------
 const router = Router();
 
 /**
@@ -16,6 +15,11 @@ const router = Router();
  */
 router.post('/webhooks/stripe', async (req, res) => {
   try {
+    if (!stripe) {
+      console.error('stripe webhook error: STRIPE_SECRET_KEY is not configured');
+      return res.status(500).send('Stripe configuration error');
+    }
+
     const sig = req.headers['stripe-signature'] as string | undefined;
     if (!sig) return res.status(400).send('No signature');
 
@@ -39,8 +43,6 @@ router.post('/webhooks/stripe', async (req, res) => {
         });
 
         if (order) {
-          const unit = order.quantity && order.amountPence ? Math.round(order.amountPence / order.quantity) : 0;
-
           let organiserSplitBps: number | null = null;
           if (order.userId) {
             const user = await prisma.user.findUnique({
@@ -50,7 +52,12 @@ router.post('/webhooks/stripe', async (req, res) => {
             organiserSplitBps = user?.organiserSplitBps ?? null;
           }
 
-          const fees = await calcFeesForShow(prisma, showId, Number(order.quantity ?? 0), unit, organiserSplitBps);
+          const fees = await calcFeesForShow(
+            showId,
+            Number(order.amountPence ?? 0),
+            Number(order.quantity ?? 0),
+            organiserSplitBps ?? undefined,
+          );
 
           await prisma.order.update({
             where: { id: orderId },
