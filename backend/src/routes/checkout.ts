@@ -645,22 +645,17 @@ console.log("[DEBUG] Loading Layout summary:", {
         }
 
         // --- 4. PRECISE AUTO-FIT WITH DELAY ---
-        function fitStageToContent(padding = 50, zoom = 0.95) {
+      function fitStageToContent(padding = 50, zoom = 0.95) {
   const loaderEl = document.getElementById('loader');
   const stageEl = document.getElementById('stage-container');
 
-  // Remember previous (so we can optionally fire an event like your old code)
-  const prevScale = stage.scaleX();
-  const prevPos = stage.position();
-
-  // Always reset first so bounds are measured correctly
+  // Reset first so bounds are measured correctly
   stage.scale({ x: 1, y: 1 });
   stage.position({ x: 0, y: 0 });
 
   const cw = container.offsetWidth;
   const ch = container.offsetHeight;
 
-  // If container hasn't sized yet, don't leave the user stuck
   if (!cw || !ch) {
     console.warn('[checkout] fitStageToContent container not ready', { cw, ch });
     if (loaderEl) loaderEl.classList.add('hidden');
@@ -670,54 +665,55 @@ console.log("[DEBUG] Loading Layout summary:", {
     return;
   }
 
-  // ✅ OLD BEHAVIOUR: only include "semantic" nodes so huge invisible shapes don't break zoom
-  const semanticSelector = (node: any) => {
-    if (!(node instanceof Konva.Shape)) return false;
-    if (!node.isVisible() || node.opacity() === 0) return false;
+  // Only include "semantic" nodes so huge/invisible shapes don't break zoom
+  function isSemantic(node) {
+    if (!node || !node.getClassName) return false;
 
-    // Ignore absurdly large shapes (common culprit for tiny scale)
-    if (node.width && node.height) {
-      const w = typeof node.width === 'function' ? node.width() : node.width;
-      const h = typeof node.height === 'function' ? node.height() : node.height;
-      if (w > 4000 || h > 4000) return false;
-    }
+    const cn = node.getClassName();
 
-    // Seats are always included
+    // We only care about renderable shapes/text
+    if (cn === 'Text') return true;
+
+    // Konva Shapes (Circle/Rect/Path/Line/etc)
     if (node.getAttr && node.getAttr('isSeat')) return true;
 
-    // Stage (your builder tags these)
     const type = node.getAttr ? node.getAttr('shapeType') : null;
     if (type === 'stage') return true;
 
-    // Text / labels
-    if (node.getClassName && node.getClassName() === 'Text') return true;
-
-    const name = (node.name && node.name()) || '';
+    const name = (typeof node.name === 'function' ? node.name() : '') || '';
     if (name.includes('label') || name.includes('row')) return true;
 
     return false;
-  };
+  }
 
-  const semanticNodes = mainLayer.find(semanticSelector);
-
+  // Konva doesn't support find(fn) reliably; use find('*') and filter via .each
+  const all = mainLayer.find('*');
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
 
-  semanticNodes.forEach((node: any) => {
-    const rect = node.getClientRect({ relativeTo: mainLayer, skipShadow: true });
-    if (!rect || rect.width === 0 || rect.height === 0) return;
+  all.each((node) => {
+    try {
+      if (!isSemantic(node)) return;
+      if (typeof node.isVisible === 'function' && !node.isVisible()) return;
+      if (typeof node.opacity === 'function' && node.opacity() === 0) return;
 
-    minX = Math.min(minX, rect.x);
-    minY = Math.min(minY, rect.y);
-    maxX = Math.max(maxX, rect.x + rect.width);
-    maxY = Math.max(maxY, rect.y + rect.height);
+      const rect = node.getClientRect({ skipShadow: true });
+      if (!rect || rect.width <= 0 || rect.height <= 0) return;
+
+      minX = Math.min(minX, rect.x);
+      minY = Math.min(minY, rect.y);
+      maxX = Math.max(maxX, rect.x + rect.width);
+      maxY = Math.max(maxY, rect.y + rect.height);
+    } catch (_) {
+      // ignore individual node errors
+    }
   });
 
-  // If semantic scan fails (rare), fallback to mainLayer bounds (but still don't block UI)
+  // Fallback to full layer bounds if semantic scan fails
   if (!isFinite(minX) || !isFinite(minY) || maxX <= minX || maxY <= minY) {
     console.warn('[checkout] semantic bounds failed, falling back to mainLayer bounds');
     const rect = mainLayer.getClientRect({ skipShadow: true });
 
-    if (!rect || !isFinite(rect.width) || !isFinite(rect.height) || rect.width <= 0 || rect.height <= 0) {
+    if (!rect || rect.width <= 0 || rect.height <= 0) {
       if (loaderEl) loaderEl.classList.add('hidden');
       if (stageEl) stageEl.classList.add('visible');
       mainLayer.batchDraw();
@@ -737,35 +733,27 @@ console.log("[DEBUG] Loading Layout summary:", {
   const availableWidth = Math.max(10, cw - padding * 2);
   const availableHeight = Math.max(10, ch - padding * 2);
 
-  // Base fit scale
   let scale = Math.min(availableWidth / contentWidth, availableHeight / contentHeight);
 
-  // ✅ Your requested “about 95%” zoom (slightly closer than full fit padding)
+  // Your “~95%” zoom-in preference
   scale = scale * zoom;
 
-  // Safety clamp (prevents silly zoom if map is tiny)
+  // Safety clamp
   scale = Math.max(0.05, Math.min(scale, 4));
 
-  // Centre the bounds inside the container
   const offsetX = padding + (availableWidth - contentWidth * scale) / 2;
   const offsetY = padding + (availableHeight - contentHeight * scale) / 2;
 
   stage.scale({ x: scale, y: scale });
   stage.position({
     x: offsetX - minX * scale,
-    y: offsetY - minY * scale
+    y: offsetY - minY * scale,
   });
 
-  // Clean up any debug elements if present
-  uiLayer.find('.debug-bounds').forEach((n: any) => n.destroy());
+  // Remove any debug bounds if present
+  uiLayer.find('.debug-bounds').each((n) => n.destroy());
   uiLayer.batchDraw();
 
-  // Keep your old behaviour of notifying listeners if something was overridden
-  if (prevScale !== 1 || prevPos.x !== 0 || prevPos.y !== 0) {
-    stage.fire('fit:applied');
-  }
-
-  // Hide loader / show stage
   if (loaderEl) loaderEl.classList.add('hidden');
   if (stageEl) stageEl.classList.add('visible');
 
@@ -773,35 +761,6 @@ console.log("[DEBUG] Loading Layout summary:", {
   uiLayer.batchDraw();
 }
 
-  const availableWidth = Math.max(10, cw - padding * 2);
-  const availableHeight = Math.max(10, ch - padding * 2);
-
-  const scale = Math.min(
-    availableWidth / rect.width,
-    availableHeight / rect.height
-  );
-
-  // Centre the rect inside the container with padding
-  const offsetX = padding + (availableWidth - rect.width * scale) / 2;
-  const offsetY = padding + (availableHeight - rect.height * scale) / 2;
-
-  stage.scale({ x: scale, y: scale });
-  stage.position({
-    x: offsetX - rect.x * scale,
-    y: offsetY - rect.y * scale
-  });
-
-  // Clean up any debug elements if present
-  uiLayer.find('.debug-bounds').forEach(n => n.destroy());
-  uiLayer.batchDraw();
-
-  // Hide loader / show stage
-  if (loaderEl) loaderEl.classList.add('hidden');
-  if (stageEl) stageEl.classList.add('visible');
-
-  mainLayer.batchDraw();
-  uiLayer.batchDraw();
-}
 
 // ✅ Initial fit (this hides loader once the map is built)
 fitStageToContent();
