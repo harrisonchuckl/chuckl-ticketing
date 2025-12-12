@@ -762,21 +762,43 @@ document.getElementById('toggle-views').addEventListener('change', updateIcons);
     });
 
     function leavesGap(row, seatId, willSelect) {
-        const states = row.map(s => {
-            if (s.unavailable) return 0; // blocked/held
-            if (s.id === seatId) return willSelect ? 2 : 1; // simulate new state
-            return selectedSeats.has(s.id) ? 2 : 1; // 2 selected, 1 open
-        });
+  const states = row.map(s => {
+    if (s.unavailable) return 0; // blocked/held
+    if (s.id === seatId) return willSelect ? 2 : 1; // simulate new state
+    return selectedSeats.has(s.id) ? 2 : 1; // 2 selected, 1 open
+  });
 
-        for (let i = 0; i < states.length; i++) {
-            if (states[i] !== 1) continue; // only care about empty seats
-            const left = i === 0 ? 0 : states[i - 1];
-            const right = i === states.length - 1 ? 0 : states[i + 1];
-            if (left !== 1 && right !== 1) return true; // orphaned single
-        }
+  // --- EXCEPTION RULE ---
+  // If there are exactly 3 available seats in this row,
+  // and after this click the customer will have selected 2 of them
+  // (leaving just 1 unsold), we ALLOW that even though it leaves a "gap".
+  if (willSelect) {
+    const availableIndices = row
+      .map((s, idx) => ({ s, idx }))
+      .filter(({ s }) => !s.unavailable)
+      .map(({ idx }) => idx);
+
+    if (availableIndices.length === 3) {
+      const selectedAfter = states.filter(v => v === 2).length;
+      const emptyAfter = states.filter(v => v === 1).length;
+
+      if (selectedAfter === 2 && emptyAfter === 1) {
+        // e.g. 3 seats left, they take 2 of them – that's OK
         return false;
+      }
     }
+  }
+  // --- END EXCEPTION ---
 
+  // Original single-gap detection
+  for (let i = 0; i < states.length; i++) {
+    if (states[i] !== 1) continue; // only care about empty seats
+    const left = i === 0 ? 0 : states[i - 1];
+    const right = i === states.length - 1 ? 0 : states[i + 1];
+    if (left !== 1 && right !== 1) return true; // orphaned single
+  }
+  return false;
+}
     function toggleSeat(seat, parentGroup) {
         const id = seat._id;
         const willSelect = !selectedSeats.has(id);
