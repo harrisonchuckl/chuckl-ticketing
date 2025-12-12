@@ -442,6 +442,19 @@ router.get('/', async (req, res) => {
     stage.add(uiLayer);
     
     const tooltip = document.getElementById('tooltip');
+
+    // EARLY FAILSAFE: schedule immediately so the loader can't hang if Konva JSON processing blocks later
+setTimeout(() => {
+  const loaderEl = document.getElementById('loader');
+  const stageEl = document.getElementById('stage-container');
+
+  if (loaderEl && !loaderEl.classList.contains('hidden')) {
+    console.warn('[checkout] EARLY failsafe – forcing stage visible (map may still be loading)');
+    loaderEl.classList.add('hidden');
+    if (stageEl) stageEl.classList.add('visible');
+  }
+}, 3000);
+
     
     function getTicketType(seatNode) {
         const assignedId = seatNode.getAttr('sbTicketId');
@@ -455,7 +468,11 @@ router.get('/', async (req, res) => {
         if (typeof layout === 'string') { try { layout = JSON.parse(layout); } catch(e) {} }
         if (layout.konvaJson) { layout = layout.konvaJson; if (typeof layout === 'string') layout = JSON.parse(layout); }
 
-        console.log("[DEBUG] Loading Layout...", layout);
+console.log("[DEBUG] Loading Layout summary:", {
+  className: layout?.className,
+  hasChildren: Array.isArray(layout?.children),
+  childrenCount: Array.isArray(layout?.children) ? layout.children.length : 0
+});
 
         // --- 1. LOAD LAYER ---
         let layersToLoad = [];
@@ -469,16 +486,36 @@ router.get('/', async (req, res) => {
         }
 
         layersToLoad.forEach((layerData) => {
-            const tempLayer = Konva.Node.create(layerData);
-            // RESET TRANSFORM to ensure clean math
-            tempLayer.x(0); tempLayer.y(0); tempLayer.scale({x:1, y:1});
-            const children = tempLayer.getChildren().slice();
-            children.forEach(node => {
-                node.moveTo(mainLayer);
-                processNode(node, null);
-            });
-            tempLayer.destroy();
-        });
+  const tempLayer = Konva.Node.create(layerData);
+
+  // RESET TRANSFORM to ensure clean math
+  tempLayer.x(0);
+  tempLayer.y(0);
+  tempLayer.scale({ x: 1, y: 1 });
+
+  const children = tempLayer.getChildren().slice();
+
+  children.forEach((node) => {
+    const cn = node.getClassName();
+
+    // If a Layer/FastLayer got nested in here, DON'T move the layer itself.
+    // Instead, move its contents into our mainLayer.
+    if (cn === 'Layer' || cn === 'FastLayer') {
+      const inner = node.getChildren ? node.getChildren().slice() : [];
+      inner.forEach((child) => {
+        child.moveTo(mainLayer);
+        processNode(child, null);
+      });
+      node.destroy();
+      return;
+    }
+
+    node.moveTo(mainLayer);
+    processNode(node, null);
+  });
+
+  tempLayer.destroy();
+});
 
         // --- 2. PROCESS NODES ---
         function processNode(node, parentGroup) {
