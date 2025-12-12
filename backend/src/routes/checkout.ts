@@ -676,24 +676,18 @@ router.get('/', async (req, res) => {
   uiLayer.batchDraw();
 }
 
-        // Wait for DOM layout to settle (300ms delay for safety)
-
-    // Kick initial render + fit once the DOM has a size
+                // Wait for DOM layout to settle (initial boot)
 setTimeout(() => {
   try {
     // Ensure stage matches container size
     stage.width(container.offsetWidth);
     stage.height(container.offsetHeight);
 
-    // Draw what we've loaded
-    mainLayer.batchDraw();
-    uiLayer.batchDraw();
-
-    // Fit + show stage + hide loader (your fitStageToContent() already does this)
+    // Fit + hide loader + show stage
     fitStageToContent();
     updateIcons();
 
-    console.log('[checkout] initial fit complete', {
+    console.log('[checkout] initial fit done', {
       w: container.offsetWidth,
       h: container.offsetHeight
     });
@@ -701,7 +695,6 @@ setTimeout(() => {
     console.error('[checkout] initial fit failed', e);
   }
 }, 50);
-
 
 // Failsafe: never allow the loader to remain forever
 setTimeout(() => {
@@ -714,7 +707,6 @@ setTimeout(() => {
     if (stageEl) stageEl.classList.add('visible');
 
     try {
-      // At least attempt to draw something
       mainLayer.batchDraw();
       uiLayer.batchDraw();
       updateIcons();
