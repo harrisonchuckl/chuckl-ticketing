@@ -653,65 +653,114 @@ function isInfoGlyphTextNode(t) {
   }
 }
 
-function extractInfoFromEmbeddedGlyph(group) {
+function extractFirstHelpfulStringAttr(node) {
   try {
-    if (!group || typeof group.find !== 'function') return '';
-    const glyphs = group.find('Text').filter(isInfoGlyphTextNode);
-    for (const g of glyphs) {
-      const raw =
-        (g.getAttr && (g.getAttr('sbInfo') || g.getAttr('info'))) ||
-        '';
-      const info = String(raw || '').trim();
-      if (info) return info;
+    if (!node || typeof node.getAttrs !== 'function') return '';
+    const attrs = node.getAttrs() || {};
+    const hints = ['sbinfo', 'info', 'tooltip', 'note', 'desc', 'description', 'seatinfo'];
+
+    for (const [k, v] of Object.entries(attrs)) {
+      if (typeof v !== 'string') continue;
+      const key = String(k).toLowerCase();
+      if (!hints.some(h => key.includes(h))) continue;
+      const s = String(v || '').trim();
+      if (s) return s;
     }
   } catch (_) {}
   return '';
 }
 
+// Walk up from the glyph until we find a parent that actually contains the seat circle
+function findSeatCircleForGlyph(glyph, maxDepth = 8) {
+  try {
+    let p = glyph && typeof glyph.getParent === 'function' ? glyph.getParent() : null;
+    let depth = 0;
+
+    while (p && depth < maxDepth) {
+      if (typeof p.find === 'function') {
+        const seatCircle = p.find('Circle').find(c => c && c.getAttr && c.getAttr('isSeat'));
+        if (seatCircle) return { seatCircle, seatContainer: p };
+      }
+      p = typeof p.getParent === 'function' ? p.getParent() : null;
+      depth++;
+    }
+  } catch (_) {}
+  return { seatCircle: null, seatContainer: null };
+}
+
+// Try to pull info from the badge glyph, its badge group, or the seat container/seat itself
+function extractInfoFromEmbeddedGlyph(glyph, seatCircle, seatContainer) {
+  try {
+    const candidates = [];
+
+    if (glyph) candidates.push(glyph);
+    const badgeGroup = glyph && typeof glyph.getParent === 'function' ? glyph.getParent() : null;
+    if (badgeGroup) candidates.push(badgeGroup);
+
+    if (seatCircle) candidates.push(seatCircle);
+    if (seatContainer) candidates.push(seatContainer);
+
+    // Try common explicit attrs first
+    for (const n of candidates) {
+      const raw =
+        (n && n.getAttr && (n.getAttr('sbInfo') || n.getAttr('info') || n.getAttr('sbSeatInfo'))) ||
+        '';
+      const s = String(raw || '').trim();
+      if (s) return s;
+    }
+
+    // Then fallback: scan attrs for any info-like key
+    for (const n of candidates) {
+      const s = extractFirstHelpfulStringAttr(n);
+      if (s) return s;
+    }
+  } catch (_) {}
+  return '';
+}
+
+
 function linkEmbeddedInfoGlyphs() {
   const glyphs = mainLayer.find('Text').filter(isInfoGlyphTextNode);
 
-  dbg('[checkout][info] embedded glyph scan', {
-    glyphCount: glyphs.length
-  });
+  dbg('[checkout][info] embedded glyph scan', { glyphCount: glyphs.length });
 
   let linked = 0;
 
   glyphs.forEach((glyph, idx) => {
     try {
-      const seatGroup = glyph.getParent && glyph.getParent();
-      if (!seatGroup || !seatGroup.find) return;
-
-      const seatCircle = seatGroup.find('Circle').find(c => c.getAttr && c.getAttr('isSeat'));
-      if (!seatCircle) return;
+      const { seatCircle, seatContainer } = findSeatCircleForGlyph(glyph, 10);
+      if (!seatCircle) {
+        dbg('[checkout][info] glyph found but no seatCircle up the chain', { idx, glyph: nodeBrief(glyph) });
+        return;
+      }
 
       const seatInternalId = seatCircle._id;
 
-      // Make glyph visible on white seats immediately
+      // Make the glyph visible but never steal events from the seat circle
       glyph.fill('#0F172A');
       glyph.opacity(1);
       glyph.fontStyle('bold');
-glyph.listening(false); // ✅ do NOT steal hover/click from the seat circle
+      glyph.listening(false);
       glyph.name('sb-info-glyph');
 
-      // Mark the seat so updateIcons() can create the badge if needed
+      // Mark seat as having info + embedded glyph
       seatCircle.setAttr('hasInfo', true);
       seatCircle.setAttr('sbEmbeddedInfoGlyph', true);
 
-      // Debug what we linked
+      // Best-effort: recover info text from badge / groups / seat attrs and store into seatMeta
+      const recovered = extractInfoFromEmbeddedGlyph(glyph, seatCircle, seatContainer);
+      const meta = seatMeta.get(seatInternalId);
+      if (meta && recovered && !String(meta.info || '').trim()) {
+        meta.info = recovered;
+      }
+
       dbg('[checkout][info] linked embedded glyph -> seat', {
         idx,
         seatInternalId,
         stableId: seatIdMap.get(seatInternalId),
+        recoveredInfo: recovered ? recovered.slice(0, 80) : '',
         glyph: nodeBrief(glyph),
-        parent: nodeBrief(seatGroup)
-      });
-
-    
-
-      glyph.on('mouseleave', () => {
-        stage.container().style.cursor = 'default';
-        tooltip.style.display = 'none';
+        seatContainer: nodeBrief(seatContainer)
       });
 
       if (typeof glyph.moveToTop === 'function') glyph.moveToTop();
@@ -723,6 +772,7 @@ glyph.listening(false); // ✅ do NOT steal hover/click from the seat circle
 
   dbg('[checkout][info] embedded glyph linked summary', { linked });
 }
+
 
 function wireEmbeddedInfoGlyph(seat, seatInternalId, parentGroup) {
   try {
@@ -1014,16 +1064,16 @@ if (viewImg) seat.setAttr('hasView', true);
   stage.container().style.cursor = isUnavailable ? 'not-allowed' : 'pointer';
   setHoverSeat(seat);
 
-  const meta = seatMeta.get(seat._id);
-  const hasInfo = !!(meta && meta.info && String(meta.info).trim());
-  const hasView = !!(meta && meta.viewImg && String(meta.viewImg).trim());
+  const hasInfo = !!seat.getAttr('hasInfo');
+const hasView = !!seat.getAttr('hasView');
 
-  // ✅ Tooltip only for seats that actually have the “i”/info or a view
-  if (hasInfo || hasView) {
-    showSeatTooltip(seat._id, e && e.evt);
-  } else {
-    tooltip.style.display = 'none';
-  }
+// ✅ Tooltip only for seats that actually have the “i”/info or a view
+if (hasInfo || hasView) {
+  showSeatTooltip(seat._id, e && e.evt);
+} else {
+  tooltip.style.display = 'none';
+}
+
 });
 
 
@@ -1060,6 +1110,24 @@ seat.on('mouseleave', () => {
        function showSeatTooltip(seatId, nativeEvt) {
   const meta = seatMeta.get(seatId);
   if (!meta) return;
+  
+  // If seat is marked as info-capable but meta.info is empty, try to recover it at hover time
+if (!String(meta.info || '').trim()) {
+  try {
+    const seatNode = meta.seat || seatNodeMap.get(seatId);
+    const wrapper = seatNode && typeof seatNode.getParent === 'function' ? seatNode.getParent() : null;
+    const recovered =
+      extractInfoFromEmbeddedGlyph(
+        // pass a glyph if we can find one near the wrapper, otherwise null
+        (wrapper && typeof wrapper.find === 'function' ? wrapper.find('Text').filter(isInfoGlyphTextNode)[0] : null),
+        seatNode,
+        meta.parentGroup || wrapper
+      );
+
+    if (recovered) meta.info = recovered;
+  } catch (_) {}
+}
+
 
   const wrapper = document.getElementById('map-wrapper');
   if (!wrapper) return;
