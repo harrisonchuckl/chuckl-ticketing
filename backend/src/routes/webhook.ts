@@ -122,28 +122,48 @@ router.post('/webhooks/stripe', async (req, res) => {
             },
           });
 
-          // If we have seat IDs, mark them as SOLD in the latest seat map for this show
-          if (seatIds.length > 0) {
-            const seatMap = await prisma.seatMap.findFirst({
-              where: { showId },
-              orderBy: { updatedAt: 'desc' },
-            });
+// If we have seat IDs, mark them as SOLD in the ACTIVE seat map for this show (fallback to latest)
+if (seatIds.length > 0) {
+  const show = await prisma.show.findUnique({
+    where: { id: showId },
+    select: { activeSeatMapId: true },
+  });
 
-            if (seatMap && seatMap.layout) {
-              let layout: any = seatMap.layout as any;
+  let seatMap =
+    show?.activeSeatMapId
+      ? await prisma.seatMap.findUnique({ where: { id: show.activeSeatMapId } })
+      : null;
 
-              if (layout.konvaJson) {
-                layout = {
-                  ...layout,
-                  konvaJson: markSeatsSold(layout.konvaJson, seatIds),
-                };
-              } else {
-                layout = markSeatsSold(layout, seatIds);
-              }
+  if (!seatMap) {
+    seatMap = await prisma.seatMap.findFirst({
+      where: { showId },
+      orderBy: { updatedAt: 'desc' },
+    });
+  }
 
-              await prisma.seatMap.update({
-                where: { id: seatMap.id },
-                data: { layout },
+  console.log('[webhook] seat sell update', {
+    showId,
+    activeSeatMapId: show?.activeSeatMapId ?? null,
+    seatMapIdUsed: seatMap?.id ?? null,
+    seatIdsCount: seatIds.length,
+    seatIdsSample: seatIds.slice(0, 10),
+  });
+
+  if (seatMap && seatMap.layout) {
+    let layout: any = seatMap.layout as any;
+
+    if (layout.konvaJson) {
+      layout = {
+        ...layout,
+        konvaJson: markSeatsSold(layout.konvaJson, seatIds),
+      };
+    } else {
+      layout = markSeatsSold(layout, seatIds);
+    }
+
+    await prisma.seatMap.update({
+      where: { id: seatMap.id },
+      data: { layout },
               });
             }
           }
