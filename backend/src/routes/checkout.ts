@@ -443,6 +443,111 @@ router.get('/', async (req, res) => {
     
     const tooltip = document.getElementById('tooltip');
 
+    // ============================
+// DEBUG TOOLKIT (INFO ICONS)
+// ============================
+const DEBUG_INFO = true; // toggle off when fixed
+const dbg = (...args) => { if (DEBUG_INFO) console.log(...args); };
+const dbgw = (...args) => { if (DEBUG_INFO) console.warn(...args); };
+
+function nodeBrief(n) {
+  if (!n) return null;
+  const cn = (typeof n.getClassName === 'function') ? n.getClassName() : n.className;
+  const name = (typeof n.name === 'function') ? n.name() : n.attrs?.name;
+  const id = (typeof n.id === 'function') ? n.id() : n.attrs?.id;
+  const text = (cn === 'Text' && typeof n.text === 'function') ? n.text() : undefined;
+  const fill = (typeof n.fill === 'function') ? n.fill() : n.attrs?.fill;
+  const opacity = (typeof n.opacity === 'function') ? n.opacity() : n.attrs?.opacity;
+  const visible = (typeof n.isVisible === 'function') ? n.isVisible() : n.visible?.();
+  return { cn, name, id, text, fill, opacity, visible };
+}
+
+function listInfoGlyphCandidates(root) {
+  if (!root || typeof root.find !== 'function') return [];
+  const out = [];
+  try {
+    root.find('Text').forEach(t => {
+      const txt = (typeof t.text === 'function') ? t.text() : '';
+      if (!txt) return;
+      // Candidate matches: lowercase i, info symbols, or anything that looks like "info"
+      const trimmed = String(txt).trim();
+      if (trimmed === 'i' || trimmed === 'ℹ' || trimmed === 'ⓘ' || /info/i.test(trimmed)) {
+        out.push(t);
+      }
+    });
+  } catch (_) {}
+  try {
+    root.find('*').forEach(n => {
+      const nm = (typeof n.name === 'function') ? n.name() : '';
+      if (nm && /info/i.test(nm)) out.push(n);
+    });
+  } catch (_) {}
+  return out;
+}
+
+function debugScanInfoState(tag = 'scan') {
+  try {
+    const allSeats = mainLayer.find('Circle').filter(s => s.getAttr && s.getAttr('isSeat'));
+    const seatsWithHasInfo = allSeats.filter(s => !!s.getAttr('hasInfo'));
+    const seatsWithMetaInfo = allSeats.filter(s => {
+      const m = seatMeta.get(s._id);
+      return !!(m && m.info && String(m.info).trim().length);
+    });
+
+    dbg(`[checkout][info][${tag}] seats`, {
+      totalSeats: allSeats.length,
+      hasInfoAttr: seatsWithHasInfo.length,
+      metaInfo: seatsWithMetaInfo.length
+    });
+
+    // Inspect first 20 seats that *should* have info
+    seatsWithMetaInfo.slice(0, 20).forEach((seat, idx) => {
+      const meta = seatMeta.get(seat._id);
+      const stableId = seatIdMap.get(seat._id);
+      const p = seat.getParent ? seat.getParent() : null;
+
+      dbg(`[checkout][info][${tag}] seat#${idx}`, {
+        seatInternalId: seat._id,
+        stableId,
+        label: meta?.label,
+        info: meta?.info,
+        hasInfoAttr: !!seat.getAttr('hasInfo'),
+        sbEmbeddedInfoGlyph: !!seat.getAttr('sbEmbeddedInfoGlyph'),
+        seatFill: (seat.fill && seat.fill()) || seat.getAttr('fill'),
+        parent: nodeBrief(p),
+      });
+
+      // What "info glyph" nodes exist near this seat?
+      const candidates = []
+        .concat(listInfoGlyphCandidates(p))
+        .concat(listInfoGlyphCandidates(meta?.parentGroup));
+
+      dbg(`[checkout][info][${tag}] glyph candidates`, candidates.map(nodeBrief));
+
+      // Do we have a UI overlay icon created for this seat?
+      const uiIcons = uiLayer.find('.info-icon').filter(g => g.getAttr && g.getAttr('sbSeatInternalId') === seat._id);
+      dbg(`[checkout][info][${tag}] ui icon groups`, uiIcons.map(nodeBrief));
+    });
+  } catch (e) {
+    dbgw('[checkout][info] debugScanInfoState failed', e);
+  }
+}
+
+// Expose a couple helpers so you can run them from DevTools console
+window.__checkoutDebug = {
+  scan: (tag) => debugScanInfoState(tag || 'manual'),
+  dumpSeat: (seatInternalId) => {
+    const seat = mainLayer.find('Circle').find(s => s._id === seatInternalId);
+    dbg('[checkout][info] dumpSeat seat', nodeBrief(seat));
+    dbg('[checkout][info] dumpSeat meta', seatMeta.get(seatInternalId));
+    if (seat) {
+      const p = seat.getParent ? seat.getParent() : null;
+      dbg('[checkout][info] dumpSeat parent candidates', listInfoGlyphCandidates(p).map(nodeBrief));
+    }
+  }
+};
+
+
     // EARLY FAILSAFE: schedule immediately so the loader can't hang if Konva JSON processing blocks later
 setTimeout(() => {
   const loaderEl = document.getElementById('loader');
@@ -465,6 +570,16 @@ setTimeout(() => {
 
 function wireEmbeddedInfoGlyph(seat, seatInternalId, parentGroup) {
   try {
+  dbg('[checkout][info] wireEmbeddedInfoGlyph START', {
+  seatInternalId,
+  stableId: seatIdMap.get(seatInternalId),
+  seatHasInfoAttr: !!seat.getAttr('hasInfo'),
+  seatSbInfo: seat.getAttr('sbInfo'),
+  parentSbInfo: parentGroup && parentGroup.getAttr ? parentGroup.getAttr('sbInfo') : null,
+  parentGroup: nodeBrief(parentGroup),
+  seatParent: nodeBrief(seat.getParent ? seat.getParent() : null),
+});
+
     // Prefer the immediate parent (usually the seat group), fall back to the logical parentGroup.
     const p = (seat && typeof seat.getParent === 'function') ? seat.getParent() : null;
 
@@ -485,6 +600,9 @@ function wireEmbeddedInfoGlyph(seat, seatInternalId, parentGroup) {
           return false;
         }
       });
+
+      dbg('[checkout][info] searching root', nodeBrief(root));
+dbg('[checkout][info] glyphs found', glyphs.map(nodeBrief));
 
       if (!glyphs || !glyphs.length) continue;
 
@@ -528,6 +646,12 @@ function wireEmbeddedInfoGlyph(seat, seatInternalId, parentGroup) {
         });
       });
     }
+    dbg('[checkout][info] wireEmbeddedInfoGlyph END', {
+  seatInternalId,
+  found,
+  sbEmbeddedInfoGlyph: !!seat.getAttr('sbEmbeddedInfoGlyph')
+});
+
 
     return found;
   } catch (e) {
@@ -926,11 +1050,9 @@ updateIcons();
 setTimeout(() => {
 
   try {
-    // Ensure stage matches container size
     stage.width(container.offsetWidth);
     stage.height(container.offsetHeight);
 
-    // Fit + hide loader + show stage
     fitStageToContent();
     updateIcons();
 
@@ -938,10 +1060,13 @@ setTimeout(() => {
       w: container.offsetWidth,
       h: container.offsetHeight
     });
+
+    setTimeout(() => debugScanInfoState('post-timeout-50ms'), 0);
   } catch (e) {
     console.error('[checkout] initial fit failed', e);
   }
 }, 50);
+
 
 // Failsafe: never allow the loader to remain forever
 setTimeout(() => {
@@ -1003,13 +1128,26 @@ setTimeout(() => {
 // If the saved layout already has an embedded "i" glyph, we don't need the overlay badge.
 if (hasInfo && !seat.getAttr('sbEmbeddedInfoGlyph')) {
    const grp = new Konva.Group({
-     x: cx + radius * 0.65,
-     y: cy - radius * 0.65,
-     listening: true,
-     name: 'info-icon',
-     scaleX: inverseScale,
-     scaleY: inverseScale
-   });
+  x: cx + radius * 0.65,
+  y: cy - radius * 0.65,
+  listening: true,
+  name: 'info-icon',
+  scaleX: inverseScale,
+  scaleY: inverseScale
+});
+
+// Tag the icon so debug can link it back to the seat
+grp.setAttr('sbSeatInternalId', seat._id);
+
+dbg('[checkout][info] creating UI info-icon overlay', {
+  seatInternalId: seat._id,
+  stableId: seatIdMap.get(seat._id),
+  label: meta?.label,
+  info: meta?.info,
+  seatFill: seat.fill && seat.fill(),
+  inverseScale
+});
+
 
    // ✅ High-contrast badge (works on white seats, blue selected seats, and black blocked seats)
    grp.add(new Konva.Circle({
@@ -1051,6 +1189,13 @@ if (hasInfo && !seat.getAttr('sbEmbeddedInfoGlyph')) {
                uiLayer.add(grp);
             }
         });
+
+        dbg('[checkout][info] updateIcons summary', {
+  uiInfoIcons: uiLayer.find('.info-icon').length,
+  uiViewIcons: uiLayer.find('.view-icon').length
+});
+
+
         uiLayer.batchDraw();
 
 // After building the map, hard-lock all nodes so customers can't drag blocks, tables, stage, etc.
