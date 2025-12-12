@@ -494,7 +494,7 @@ function debugScanInfoState(tag = 'scan') {
       return !!(m && m.info && String(m.info).trim().length);
     });
 
-    dbg(`[checkout][info][${tag}] seats`, {
+dbg('[checkout][info][' + tag + '] seats', {
       totalSeats: allSeats.length,
       hasInfoAttr: seatsWithHasInfo.length,
       metaInfo: seatsWithMetaInfo.length
@@ -506,7 +506,7 @@ function debugScanInfoState(tag = 'scan') {
       const stableId = seatIdMap.get(seat._id);
       const p = seat.getParent ? seat.getParent() : null;
 
-      dbg(`[checkout][info][${tag}] seat#${idx}`, {
+dbg('[checkout][info][' + tag + '] seat#' + idx, {
         seatInternalId: seat._id,
         stableId,
         label: meta?.label,
@@ -522,11 +522,11 @@ function debugScanInfoState(tag = 'scan') {
         .concat(listInfoGlyphCandidates(p))
         .concat(listInfoGlyphCandidates(meta?.parentGroup));
 
-      dbg(`[checkout][info][${tag}] glyph candidates`, candidates.map(nodeBrief));
+dbg('[checkout][info][' + tag + '] glyph candidates', candidates.map(nodeBrief));
 
       // Do we have a UI overlay icon created for this seat?
       const uiIcons = uiLayer.find('.info-icon').filter(g => g.getAttr && g.getAttr('sbSeatInternalId') === seat._id);
-      dbg(`[checkout][info][${tag}] ui icon groups`, uiIcons.map(nodeBrief));
+dbg('[checkout][info][' + tag + '] ui icon groups', uiIcons.map(nodeBrief));
     });
   } catch (e) {
     dbgw('[checkout][info] debugScanInfoState failed', e);
