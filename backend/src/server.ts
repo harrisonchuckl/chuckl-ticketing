@@ -1,4 +1,3 @@
-// backend/src/server.ts
 import express from "express";
 import cors from "cors";
 import morgan from "morgan";
@@ -45,7 +44,17 @@ app.use(morgan("dev"));
 // Apply raw ONLY for the Stripe webhook endpoint BEFORE express.json().
 app.post("/webhook/webhooks/stripe", express.raw({ type: "application/json" }));
 
-app.use(express.json({ limit: "25mb" }));
+app.use(
+  express.json({
+    limit: "25mb",
+    verify: (req: any, _res, buf) => {
+      // Stripe needs the raw body for signature verification
+      if (req.originalUrl === "/webhooks/stripe") {
+        req.rawBody = buf;
+      }
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 app.use(cookieParser());
 
