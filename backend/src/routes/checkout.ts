@@ -619,10 +619,10 @@ function linkEmbeddedInfoGlyphs() {
       glyph.off('mouseenter');
       glyph.off('mouseleave');
 
-      glyph.on('mouseenter', () => {
-        stage.container().style.cursor = 'help';
-        showSeatTooltip(seatInternalId);
-      });
+      glyph.on('mouseenter', (e) => {
+  stage.container().style.cursor = 'help';
+  showSeatTooltip(seatInternalId, e && e.evt);
+});
 
       glyph.on('mouseleave', () => {
         stage.container().style.cursor = 'default';
@@ -699,10 +699,37 @@ dbg('[checkout][info] glyphs found', glyphs.map(nodeBrief));
         t.off('click');
         t.off('tap');
 
-        t.on('mouseenter', () => {
-          stage.container().style.cursor = 'help';
-          showSeatTooltip(seatInternalId);
-        });
+          // --- DEBUG/RECOVERY: ensure seatMeta has the info text for tooltip ---
+  const seatCircle = seat;          // the Circle node passed into wireEmbeddedInfoGlyph
+  const seatGroup = root;           // the Group we’re currently scanning
+  const glyph = t;                  // the Text("i") glyph
+
+  const rawInfo =
+    (seatCircle.getAttr && seatCircle.getAttr('sbInfo')) ||
+    (seatGroup.getAttr && seatGroup.getAttr('sbInfo')) ||
+    (glyph.getAttr && (glyph.getAttr('sbInfo') || glyph.getAttr('info'))) ||
+    '';
+
+  const info = String(rawInfo || '').trim();
+
+  if (info) {
+    const m = seatMeta.get(seatInternalId);
+    if (m) m.info = info; // what showSeatTooltip reads
+  } else {
+    console.warn('[checkout][info] embedded glyph has NO info text', {
+      seatInternalId,
+      seatCircleAttrs: seatCircle?.getAttrs?.(),
+      seatGroupAttrs: seatGroup?.getAttrs?.(),
+      glyphAttrs: glyph?.getAttrs?.(),
+    });
+  }
+  // --- end debug/recovery ---
+
+
+   t.on('mouseenter', (e) => {
+  stage.container().style.cursor = 'help';
+  showSeatTooltip(seatInternalId, e && e.evt);
+});
 
         t.on('mouseleave', () => {
           stage.container().style.cursor = 'default';
@@ -886,13 +913,14 @@ if (viewImg) seat.setAttr('hasView', true);
 
 
                 // EVENTS
-                seat.on('mouseenter', () => {
-                    stage.container().style.cursor = isUnavailable ? 'not-allowed' : 'pointer';
-                    if (!selectedSeats.has(seat._id) && !isUnavailable) {
-                        seat.stroke('#0056D2'); seat.strokeWidth(3); mainLayer.batchDraw();
-                    }
-                    showSeatTooltip(seat._id);
-                });
+                seat.on('mouseenter', (e) => {
+  stage.container().style.cursor = isUnavailable ? 'not-allowed' : 'pointer';
+  if (!selectedSeats.has(seat._id) && !isUnavailable) {
+    seat.stroke('#0056D2'); seat.strokeWidth(3); mainLayer.batchDraw();
+  }
+  showSeatTooltip(seat._id, e && e.evt);
+});
+
                 seat.on('mouseleave', () => {
                     stage.container().style.cursor = 'default';
                     tooltip.style.display = 'none';
@@ -920,23 +948,55 @@ if (viewImg) seat.setAttr('hasView', true);
              else seats.sort((a, b) => a.x - b.x);
         });
 
-        function showSeatTooltip(seatId) {
-            const meta = seatMeta.get(seatId);
-            if (!meta) return;
-            const pos = stage.getPointerPosition();
-            if (!pos) return;
-            const priceStr = '£' + ((meta.price || 0)/100).toFixed(2);
-            let html = '<span class="tt-title">' + meta.label + '</span><span class="tt-meta">' + meta.ticketName + ' • ' + priceStr + '</span>';
-if (meta.info) html += '<div class="tt-info"><span style="font-weight:700;">Info:</span> ' + meta.info + '</div>';
-            const viewMode = document.getElementById('toggle-views').checked;
-            if (meta.viewImg && viewMode) html += '<img src="' + meta.viewImg + '" />';
-            else if (meta.viewImg) html += '<div style="font-size:0.7rem; color:#94a3b8; margin-top:4px;">(Show seat views to preview)</div>';
+        function showSeatTooltip(seatId, nativeEvt) {
+  const meta = seatMeta.get(seatId);
+  if (!meta) return;
 
-            tooltip.innerHTML = html;
-            tooltip.style.display = 'block';
-            tooltip.style.left = (pos.x + 20) + 'px';
-            tooltip.style.top = (pos.y + 20) + 'px';
-        }
+  // Prefer DOM mouse position (works reliably for Text nodes on mouseenter)
+  let pos = null;
+
+  if (nativeEvt && typeof nativeEvt.clientX === 'number') {
+    const wrapper = document.getElementById('map-wrapper');
+    const rect = wrapper.getBoundingClientRect();
+    pos = {
+      x: nativeEvt.clientX - rect.left,
+      y: nativeEvt.clientY - rect.top
+    };
+  } else {
+    // Fallback (works on normal seat hover/mousemove)
+    pos = stage.getPointerPosition();
+  }
+
+  if (!pos) return;
+
+  const priceStr = '£' + ((meta.price || 0) / 100).toFixed(2);
+  let html =
+    '<span class="tt-title">' + meta.label + '</span>' +
+    '<span class="tt-meta">' + meta.ticketName + ' • ' + priceStr + '</span>';
+
+  if (meta.info) {
+    html += '<div class="tt-info"><span style="font-weight:700;">Info:</span> ' + meta.info + '</div>';
+  }
+
+  const viewMode = document.getElementById('toggle-views').checked;
+  if (meta.viewImg && viewMode) html += '<img src="' + meta.viewImg + '" />';
+  else if (meta.viewImg) html += '<div style="font-size:0.7rem; color:#94a3b8; margin-top:4px;">(Show seat views to preview)</div>';
+
+  tooltip.innerHTML = html;
+  tooltip.style.display = 'block';
+
+  // Small clamp so it doesn’t go off-screen
+  const pad = 12;
+  const maxX = (wrapper.clientWidth || 0) - pad;
+  const maxY = (wrapper.clientHeight || 0) - pad;
+
+  const left = Math.min(maxX, Math.max(pad, pos.x + 20));
+  const top = Math.min(maxY, Math.max(pad, pos.y + 20));
+
+  tooltip.style.left = left + 'px';
+  tooltip.style.top = top + 'px';
+}
+
 
         // --- 4. PRECISE AUTO-FIT WITH DELAY ---
 
@@ -1253,7 +1313,7 @@ dbg('[checkout][info] creating UI info-icon overlay', {
      listening: false
    }));
 
-   grp.on('mouseenter', () => { stage.container().style.cursor = 'help'; showSeatTooltip(seat._id); });
+grp.on('mouseenter', (e) => { stage.container().style.cursor = 'zoom-in'; showSeatTooltip(seat._id, e && e.evt); });
    grp.on('mouseleave', () => { stage.container().style.cursor = 'default'; tooltip.style.display = 'none'; });
    grp.on('click tap', (e) => { e.cancelBubble = true; if (!meta.unavailable) toggleSeat(seat, parentGroup); });
 
