@@ -684,7 +684,7 @@ if (!cw || !ch) {
     // ✅ Fit ONLY to seats (+ stage if present). This prevents “huge rect” zoom-out.
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
 
-  const nodesToMeasure = [];
+   const nodesToMeasure = [];
 
   // Seats are always the correct “content bounds”
   forEachNodeList(mainLayer.find('Circle'), (n) => {
@@ -693,12 +693,50 @@ if (!cw || !ch) {
     } catch (_) {}
   });
 
-  // If you have a stage shape tagged with shapeType='stage', include it too
-  forEachNodeList(mainLayer.find('*'), (n) => {
+  // ✅ Include STAGE by detecting the Text node "STAGE" and measuring its parent container
+  let stageAdded = false;
+
+  forEachNodeList(mainLayer.find('Text'), (t) => {
     try {
-      if (n && n.getAttr && n.getAttr('shapeType') === 'stage') nodesToMeasure.push(n);
+      const txt = (typeof t.text === 'function' ? t.text() : '').trim().toUpperCase();
+      if (txt !== 'STAGE') return;
+
+      const p = typeof t.getParent === 'function' ? t.getParent() : null;
+
+      // measure parent if possible (usually contains the black rounded rect + the text)
+      if (p) {
+        nodesToMeasure.push(p);
+        stageAdded = true;
+      } else {
+        nodesToMeasure.push(t);
+        stageAdded = true;
+      }
     } catch (_) {}
   });
+
+  // Fallback 1: stage tagged explicitly (if present in some maps)
+  forEachNodeList(mainLayer.find('*'), (n) => {
+    try {
+      if (n && n.getAttr && n.getAttr('shapeType') === 'stage') {
+        nodesToMeasure.push(n);
+        stageAdded = true;
+      }
+    } catch (_) {}
+  });
+
+  // Fallback 2: any node/group named "stage"
+  if (!stageAdded) {
+    forEachNodeList(mainLayer.find('*'), (n) => {
+      try {
+        const nm = (typeof n.name === 'function' ? n.name() : '') || '';
+        if (nm.toLowerCase().includes('stage')) {
+          nodesToMeasure.push(n);
+          stageAdded = true;
+        }
+      } catch (_) {}
+    });
+  }
+
 
   // If for some reason we still have nothing, bail gracefully (don’t use mainLayer bounds)
   if (!nodesToMeasure.length) {
