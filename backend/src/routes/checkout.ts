@@ -736,16 +736,52 @@ function linkEmbeddedInfoGlyphs() {
 
       const seatInternalId = seatCircle._id;
 
-      // Make the glyph visible but never steal events from the seat circle
-      glyph.fill('#0F172A');
-      glyph.opacity(1);
-      glyph.fontStyle('bold');
-      glyph.listening(false);
-      glyph.name('sb-info-glyph');
+     // Make the glyph visible AND interactive (so tooltip works when hovering the "i")
+glyph.fill('#0F172A');
+glyph.opacity(1);
+glyph.fontStyle('bold');
+glyph.listening(true);              // ✅ must be TRUE for hover to work
+glyph.name('sb-info-glyph');
 
-      // Mark seat as having info + embedded glyph
-      seatCircle.setAttr('hasInfo', true);
-      seatCircle.setAttr('sbEmbeddedInfoGlyph', true);
+// Mark seat as having info + embedded glyph
+seatCircle.setAttr('hasInfo', true);
+seatCircle.setAttr('sbEmbeddedInfoGlyph', true);
+
+// Avoid double-binding if this runs more than once
+glyph.off('mouseenter');
+glyph.off('mousemove');
+glyph.off('mouseleave');
+glyph.off('click');
+glyph.off('tap');
+
+// Hovering the "i" should behave like hovering the seat
+glyph.on('mouseenter', (e) => {
+  stage.container().style.cursor = 'help';
+  setHoverSeat(seatCircle); // show the blue hover ring on the seat
+  showSeatTooltip(seatInternalId, e && e.evt);
+});
+
+// Keep tooltip tracking the cursor while moving on the glyph
+glyph.on('mousemove', (e) => {
+  showSeatTooltip(seatInternalId, e && e.evt);
+});
+
+glyph.on('mouseleave', () => {
+  stage.container().style.cursor = 'default';
+  tooltip.style.display = 'none';
+  if (hoveredSeatId === seatInternalId) clearHoverSeat();
+});
+
+// Clicking the "i" should toggle the same seat (unless unavailable)
+glyph.on('click tap', (e) => {
+  e.cancelBubble = true;
+  const meta = seatMeta.get(seatInternalId);
+  if (!meta || meta.unavailable) return;
+  toggleSeat(seatCircle, meta.parentGroup || null);
+});
+
+if (typeof glyph.moveToTop === 'function') glyph.moveToTop();
+
 
       // Best-effort: recover info text from badge / groups / seat attrs and store into seatMeta
       const recovered = extractInfoFromEmbeddedGlyph(glyph, seatCircle, seatContainer);
