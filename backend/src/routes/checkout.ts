@@ -1246,19 +1246,60 @@ if (!String(meta.info || '').trim()) {
     html += '<div style="font-size:0.7rem; color:#94a3b8; margin-top:4px;">(Show seat views to preview)</div>';
   }
 
-  tooltip.innerHTML = html;
+    tooltip.innerHTML = html;
+
+  // Render (hidden) so we can measure real size before positioning
   tooltip.style.display = 'block';
+  tooltip.style.visibility = 'hidden';
 
-  // Clamp to wrapper bounds
   const pad = 12;
-  const maxX = (wrapper.clientWidth || 0) - pad;
-  const maxY = (wrapper.clientHeight || 0) - pad;
+  const gap = 16; // distance from cursor
+  const wrapW = wrapper.clientWidth || 0;
+  const wrapH = wrapper.clientHeight || 0;
 
-  const left = Math.min(maxX, Math.max(pad, pos.x + 20));
-  const top = Math.min(maxY, Math.max(pad, pos.y + 20));
+  // Measure tooltip size (includes text; image may load after)
+  const measureAndPlace = () => {
+    const ttW = tooltip.offsetWidth || 0;
+    const ttH = tooltip.offsetHeight || 0;
 
-  tooltip.style.left = left + 'px';
-  tooltip.style.top = top + 'px';
+    // Horizontal: prefer to the right, but flip left if it would overflow
+    let left = pos.x + gap;
+    const maxLeft = Math.max(pad, wrapW - pad - ttW);
+    const minLeft = pad;
+
+    if (left > maxLeft) left = pos.x - gap - ttW; // flip to left of cursor
+    left = Math.min(maxLeft, Math.max(minLeft, left));
+
+    // Vertical: prefer below, but flip above if it would overflow
+    const spaceBelow = wrapH - (pos.y + gap);
+    const spaceAbove = pos.y - gap;
+
+    let top;
+    if (spaceBelow >= ttH + pad) {
+      // below fits
+      top = pos.y + gap;
+    } else if (spaceAbove >= ttH + pad) {
+      // above fits
+      top = pos.y - gap - ttH;
+    } else {
+      // neither fully fits: clamp within wrapper
+      top = Math.min(Math.max(pad, pos.y + gap), Math.max(pad, wrapH - pad - ttH));
+    }
+
+    tooltip.style.left = left + 'px';
+    tooltip.style.top = top + 'px';
+    tooltip.style.visibility = 'visible';
+  };
+
+  // Place now (text-only size)
+  measureAndPlace();
+
+  // If an image loads after render, re-place (prevents bottom clipping)
+  const img = tooltip.querySelector('img');
+  if (img) {
+    img.onload = () => measureAndPlace();
+  }
+
 }
 
 
