@@ -427,12 +427,12 @@ router.get('/', async (req, res) => {
 
     // --- SETUP STAGE ---
     const container = document.getElementById('stage-container');
-    const stage = new Konva.Stage({ 
-        container: 'stage-container', 
-        width: container.offsetWidth, 
-        height: container.offsetHeight, 
-        draggable: true 
-    });
+    const stage = new Konva.Stage({
+  container: 'seatmap-container',
+  width: container.offsetWidth,
+  height: container.offsetHeight,
+  draggable: false // customer view: whole stage is fixed
+});
     
     // LAYERS: Main map and UI on top
     const mainLayer = new Konva.Layer();
@@ -730,10 +730,23 @@ router.get('/', async (req, res) => {
             }
         });
         uiLayer.batchDraw();
+
+// After building the map, hard-lock all nodes so customers can't drag blocks, tables, stage, etc.
+try {
+  stage.draggable(false);
+  stage.find('*').forEach(node => {
+    if (typeof (node as any).draggable === 'function') {
+      (node as any).draggable(false);
     }
-    
-    stage.on('wheel dragmove', updateIcons);
-    document.getElementById('toggle-views').addEventListener('change', updateIcons);
+  });
+} catch (lockErr) {
+  console.warn('[checkout] failed to lock nodes', lockErr);
+}
+
+}
+
+stage.on('wheel dragmove', updateIcons);
+document.getElementById('toggle-views').addEventListener('change', updateIcons);
 
     stage.on('wheel', (e) => {
         e.evt.preventDefault();
