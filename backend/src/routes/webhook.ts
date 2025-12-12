@@ -67,7 +67,8 @@ router.post('/webhooks/stripe', async (req, res) => {
     const sig = req.headers['stripe-signature'] as string | undefined;
     if (!sig) return res.status(400).send('No signature');
 
-    const event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET as string);
+const rawBody = (req as any).rawBody || req.body;
+const event = stripe.webhooks.constructEvent(rawBody, sig, process.env.STRIPE_WEBHOOK_SECRET as string);
 
         if (event.type === 'checkout.session.completed') {
       const session = event.data.object as Stripe.Checkout.Session;
