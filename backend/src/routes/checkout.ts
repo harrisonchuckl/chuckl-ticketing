@@ -711,13 +711,19 @@ forEachNodeList(all, (node) => {
       if (typeof node.isVisible === 'function' && !node.isVisible()) return;
       if (typeof node.opacity === 'function' && node.opacity() === 0) return;
 
-      const rect = node.getClientRect({ skipShadow: true });
-      if (!rect || rect.width <= 0 || rect.height <= 0) return;
+      const rect = node.getClientRect({ relativeTo: mainLayer, skipShadow: true });
+if (!rect || rect.width <= 0 || rect.height <= 0) return;
 
-      minX = Math.min(minX, rect.x);
-      minY = Math.min(minY, rect.y);
-      maxX = Math.max(maxX, rect.x + rect.width);
-      maxY = Math.max(maxY, rect.y + rect.height);
+// Ignore absurd bounds that shrink the whole map (common culprit for “tiny / zoomed out”)
+const MAX_DIM = Math.max(4000, Math.max(cw, ch) * 10);
+if (rect.width > MAX_DIM || rect.height > MAX_DIM) return;
+if (Math.abs(rect.x) > MAX_DIM * 2 || Math.abs(rect.y) > MAX_DIM * 2) return;
+
+minX = Math.min(minX, rect.x);
+minY = Math.min(minY, rect.y);
+maxX = Math.max(maxX, rect.x + rect.width);
+maxY = Math.max(maxY, rect.y + rect.height);
+
     } catch (_) {
       // ignore individual node errors
     }
@@ -744,6 +750,13 @@ forEachNodeList(all, (node) => {
 
   const contentWidth = maxX - minX;
   const contentHeight = maxY - minY;
+
+  console.log('[checkout][fit] bounds', {
+  minX, minY, maxX, maxY,
+  contentWidth, contentHeight,
+  cw, ch
+});
+
 
   const availableWidth = Math.max(10, cw - padding * 2);
   const availableHeight = Math.max(10, ch - padding * 2);
