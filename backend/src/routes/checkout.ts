@@ -713,8 +713,13 @@ console.log("[DEBUG] Loading Layout summary:", {
   uiLayer.batchDraw();
 }
 
-                // Wait for DOM layout to settle (initial boot)
+// ✅ Initial fit (this hides loader once the map is built)
+fitStageToContent();
+updateIcons();
+
+// Failsafe: never allow the loader to remain forever
 setTimeout(() => {
+
   try {
     // Ensure stage matches container size
     stage.width(container.offsetWidth);
@@ -817,14 +822,15 @@ setTimeout(() => {
 // After building the map, hard-lock all nodes so customers can't drag blocks, tables, stage, etc.
 try {
   stage.draggable(false);
-  stage.find('*').forEach(node => {
-    if (typeof (node as any).draggable === 'function') {
-      (node as any).draggable(false);
+  stage.find('*').forEach((node) => {
+    if (node && typeof node.draggable === 'function') {
+      node.draggable(false);
     }
   });
 } catch (lockErr) {
   console.warn('[checkout] failed to lock nodes', lockErr);
 }
+
 
 }
 
@@ -844,11 +850,17 @@ document.getElementById('toggle-views').addEventListener('change', updateIcons);
         updateIcons();
     });
 
-    function leavesGap(row, seatId, willSelect) {
-  const states = row.map(s => {
-    if (s.unavailable) return 0; // blocked/held
-    if (s.id === seatId) return willSelect ? 2 : 1; // simulate new state
-    return selectedSeats.has(s.id) ? 2 : 1; // 2 selected, 1 open
+   function leavesGap(row, seatId, willSelect) {
+  // row is an array of Konva Circle seats (from rowMap)
+  const states = row.map((seat) => {
+    const meta = seatMeta.get(seat._id);
+    const unavailable = meta ? !!meta.unavailable : false;
+
+    if (unavailable) return 0; // blocked/sold/held/allocated
+
+    if (seat._id === seatId) return willSelect ? 2 : 1; // simulate new state
+
+    return selectedSeats.has(seat._id) ? 2 : 1; // 2 selected, 1 open
   });
 
   // --- EXCEPTION RULE ---
@@ -857,8 +869,11 @@ document.getElementById('toggle-views').addEventListener('change', updateIcons);
   // (leaving just 1 unsold), we ALLOW that even though it leaves a "gap".
   if (willSelect) {
     const availableIndices = row
-      .map((s, idx) => ({ s, idx }))
-      .filter(({ s }) => !s.unavailable)
+      .map((seat, idx) => ({ seat, idx }))
+      .filter(({ seat }) => {
+        const meta = seatMeta.get(seat._id);
+        return !(meta && meta.unavailable);
+      })
       .map(({ idx }) => idx);
 
     if (availableIndices.length === 3) {
@@ -866,9 +881,24 @@ document.getElementById('toggle-views').addEventListener('change', updateIcons);
       const emptyAfter = states.filter(v => v === 1).length;
 
       if (selectedAfter === 2 && emptyAfter === 1) {
-        // e.g. 3 seats left, they take 2 of them – that's OK
-        return false;
+        return false; // allow
       }
+    }
+  }
+
+  // Original single-gap detection
+  for (let i = 0; i < states.length; i++) {
+    if (states[i] !== 1) continue; // only care about empty seats
+    const left = i === 0 ? 0 : states[i - 1];
+    const right = i === states.length - 1 ? 0 : states[i + 1];
+
+    // If an empty seat is surrounded by non-empty on both sides (or edge + non-empty),
+    // it's a stranded single.
+    if (left !== 1 && right !== 1) return true;
+  }
+
+  return false;
+}
     }
   }
   // --- END EXCEPTION ---
