@@ -428,6 +428,10 @@ const seatNodeMap = new Map(); // seatInternalId -> Konva Circle (for hover clea
 
 let hoveredSeatId = null;
 
+// When the pointer is on an embedded "i" glyph, we don't want the seat Circle's mouseleave
+// to instantly hide the tooltip (moving from Circle -> Text triggers Circle mouseleave in Konva).
+let hoveringInfoGlyphSeatId = null;
+
 function resetSeatStroke(seat) {
   if (!seat) return;
   const id = seat._id;
@@ -671,15 +675,35 @@ function extractFirstHelpfulStringAttr(node) {
 }
 
 // Walk up from the glyph until we find a parent that actually contains the seat circle
-function findSeatCircleForGlyph(glyph, maxDepth = 8) {
+function findSeatCircleForGlyph(glyph, maxDepth = 10) {
   try {
     let p = glyph && typeof glyph.getParent === 'function' ? glyph.getParent() : null;
     let depth = 0;
 
     while (p && depth < maxDepth) {
       if (typeof p.find === 'function') {
-        const seatCircle = p.find('Circle').find(c => c && c.getAttr && c.getAttr('isSeat'));
-        if (seatCircle) return { seatCircle, seatContainer: p };
+        const seats = p.find('Circle').filter(c => c && c.getAttr && c.getAttr('isSeat'));
+        if (seats && seats.length) {
+          // Use glyph centre vs seat centre and pick the closest
+          const gRect = glyph.getClientRect({ relativeTo: mainLayer, skipShadow: true });
+          const gx = gRect.x + gRect.width / 2;
+          const gy = gRect.y + gRect.height / 2;
+
+          let best = seats[0];
+          let bestD = Infinity;
+
+          seats.forEach((s) => {
+            const r = s.getClientRect({ relativeTo: mainLayer, skipShadow: true });
+            const sx = r.x + r.width / 2;
+            const sy = r.y + r.height / 2;
+            const dx = sx - gx;
+            const dy = sy - gy;
+            const d2 = dx * dx + dy * dy;
+            if (d2 < bestD) { bestD = d2; best = s; }
+          });
+
+          return { seatCircle: best, seatContainer: p };
+        }
       }
       p = typeof p.getParent === 'function' ? p.getParent() : null;
       depth++;
@@ -755,22 +779,27 @@ glyph.off('click');
 glyph.off('tap');
 
 // Hovering the "i" should behave like hovering the seat
+glyph.setAttr('sbSeatInternalId', seatInternalId);
+
 glyph.on('mouseenter', (e) => {
+  hoveringInfoGlyphSeatId = seatInternalId;
   stage.container().style.cursor = 'help';
-  setHoverSeat(seatCircle); // show the blue hover ring on the seat
+  setHoverSeat(seatCircle);
   showSeatTooltip(seatInternalId, e && e.evt);
 });
 
-// Keep tooltip tracking the cursor while moving on the glyph
 glyph.on('mousemove', (e) => {
+  // Keep tooltip locked to cursor while moving on the "i"
   showSeatTooltip(seatInternalId, e && e.evt);
 });
 
 glyph.on('mouseleave', () => {
+  if (hoveringInfoGlyphSeatId === seatInternalId) hoveringInfoGlyphSeatId = null;
   stage.container().style.cursor = 'default';
   tooltip.style.display = 'none';
   if (hoveredSeatId === seatInternalId) clearHoverSeat();
 });
+
 
 // Clicking the "i" should toggle the same seat (unless unavailable)
 glyph.on('click tap', (e) => {
@@ -897,15 +926,26 @@ dbg('[checkout][info] glyphs found', glyphs.map(nodeBrief));
   // --- end debug/recovery ---
 
 
-   t.on('mouseenter', (e) => {
+  t.setAttr('sbSeatInternalId', seatInternalId);
+
+t.on('mouseenter', (e) => {
+  hoveringInfoGlyphSeatId = seatInternalId;
   stage.container().style.cursor = 'help';
+  setHoverSeat(seat); // keep the hover ring on the correct seat
   showSeatTooltip(seatInternalId, e && e.evt);
 });
 
-        t.on('mouseleave', () => {
-          stage.container().style.cursor = 'default';
-          tooltip.style.display = 'none';
-        });
+t.on('mousemove', (e) => {
+  showSeatTooltip(seatInternalId, e && e.evt);
+});
+
+t.on('mouseleave', () => {
+  if (hoveringInfoGlyphSeatId === seatInternalId) hoveringInfoGlyphSeatId = null;
+  stage.container().style.cursor = 'default';
+  tooltip.style.display = 'none';
+  if (hoveredSeatId === seatInternalId) clearHoverSeat();
+});
+
 
         t.on('click tap', (e) => {
           e.cancelBubble = true;
@@ -1114,10 +1154,12 @@ if (hasInfo || hasView) {
 
 
 seat.on('mouseleave', () => {
+  // If the pointer moved from the Circle onto its embedded "i" glyph, don't kill the tooltip/hover.
+  if (hoveringInfoGlyphSeatId === seat._id) return;
+
   stage.container().style.cursor = 'default';
   tooltip.style.display = 'none';
 
-  // Only clear if this seat is the one we think is hovered
   if (hoveredSeatId === seat._id) {
     clearHoverSeat();
   }
