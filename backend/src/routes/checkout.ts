@@ -427,12 +427,13 @@ router.get('/', async (req, res) => {
 
     // --- SETUP STAGE ---
     const container = document.getElementById('stage-container');
-    const stage = new Konva.Stage({
-  container: 'seatmap-container',
+   const stage = new Konva.Stage({
+  container: 'stage-container',
   width: container.offsetWidth,
   height: container.offsetHeight,
   draggable: false // customer view: whole stage is fixed
 });
+
     
     // LAYERS: Main map and UI on top
     const mainLayer = new Konva.Layer();
