@@ -609,67 +609,86 @@ router.get('/', async (req, res) => {
 
         // --- 4. PRECISE AUTO-FIT WITH DELAY ---
         function fitStageToContent(padding = 50) {
-            const prevScale = stage.scaleX();
-            const prevPos = stage.position();
-            stage.scale({ x: 1, y: 1 });
-            stage.position({ x: 0, y: 0 });
+  const loaderEl = document.getElementById('loader');
+  const stageEl = document.getElementById('stage-container');
 
-            const semanticSelector = (node) => {
-                if (!(node instanceof Konva.Shape)) return false;
-                if (!node.isVisible() || node.opacity() === 0) return false;
-                if (node.width && node.height && (node.width() > 4000 || node.height() > 4000)) return false;
-                if (node.getAttr('isSeat')) return true;
-                const name = node.name() || '';
-                const type = node.getAttr('shapeType');
-                if (type === 'stage') return true;
-                if (node.getClassName() === 'Text') return true;
-                if (name.includes('label') || name.includes('row')) return true;
-                return false;
-            };
+  // Always reset first so bounds are measured correctly
+  stage.scale({ x: 1, y: 1 });
+  stage.position({ x: 0, y: 0 });
 
-            const semanticNodes = mainLayer.find(semanticSelector);
-            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-            semanticNodes.forEach((node) => {
-                const rect = node.getClientRect({ relativeTo: mainLayer, skipShadow: true });
-                if (!rect || rect.width === 0 || rect.height === 0) return;
-                minX = Math.min(minX, rect.x);
-                minY = Math.min(minY, rect.y);
-                maxX = Math.max(maxX, rect.x + rect.width);
-                maxY = Math.max(maxY, rect.y + rect.height);
-            });
+  // Compute bounds from everything currently on the main layer
+  const rect = mainLayer.getClientRect({ skipShadow: true });
 
-            if (!isFinite(minX) || !isFinite(minY)) return;
+  const cw = container.offsetWidth;
+  const ch = container.offsetHeight;
 
-            const contentWidth = maxX - minX;
-            const contentHeight = maxY - minY;
-            const cw = container.offsetWidth;
-            const ch = container.offsetHeight;
-            if (cw === 0 || ch === 0) return;
+  // If we can't get sensible bounds (or container hasn't sized yet), don't block the UI forever
+  const rectBad =
+    !rect ||
+    !isFinite(rect.x) ||
+    !isFinite(rect.y) ||
+    !isFinite(rect.width) ||
+    !isFinite(rect.height) ||
+    rect.width <= 0 ||
+    rect.height <= 0;
 
-            const availableWidth = Math.max(10, cw - padding * 2);
-            const availableHeight = Math.max(10, ch - padding * 2);
-            const scale = Math.min(availableWidth / contentWidth, availableHeight / contentHeight);
+  const containerBad = !cw || !ch;
 
-            const offsetX = padding + (availableWidth - contentWidth * scale) / 2;
-            const offsetY = padding + (availableHeight - contentHeight * scale) / 2;
+  if (rectBad || containerBad) {
+    console.warn('[checkout] fitStageToContent fallback', { rect, cw, ch });
 
-            stage.scale({ x: scale, y: scale });
-            stage.position({ x: offsetX - minX * scale, y: offsetY - minY * scale });
+    // Show whatever we have rather than leaving the user stuck on the loader
+    if (loaderEl) loaderEl.classList.add('hidden');
+    if (stageEl) stageEl.classList.add('visible');
 
-            uiLayer.find('.debug-bounds').forEach(n => n.destroy());
-            uiLayer.batchDraw();
+    mainLayer.batchDraw();
+    uiLayer.batchDraw();
+    return;
+  }
 
-            // Notify listeners if a manual zoom/drag was replaced by an auto-fit
-            if (prevScale !== 1 || prevPos.x !== 0 || prevPos.y !== 0) {
-                stage.fire('fit:applied');
-            }
+  const availableWidth = Math.max(10, cw - padding * 2);
+  const availableHeight = Math.max(10, ch - padding * 2);
 
-            document.getElementById('loader').classList.add('hidden');
-            document.getElementById('stage-container').classList.add('visible');
-        }
+  const scale = Math.min(
+    availableWidth / rect.width,
+    availableHeight / rect.height
+  );
+
+  // Centre the rect inside the container with padding
+  const offsetX = padding + (availableWidth - rect.width * scale) / 2;
+  const offsetY = padding + (availableHeight - rect.height * scale) / 2;
+
+  stage.scale({ x: scale, y: scale });
+  stage.position({
+    x: offsetX - rect.x * scale,
+    y: offsetY - rect.y * scale
+  });
+
+  // Clean up any debug elements if present
+  uiLayer.find('.debug-bounds').forEach(n => n.destroy());
+  uiLayer.batchDraw();
+
+  // Hide loader / show stage
+  if (loaderEl) loaderEl.classList.add('hidden');
+  if (stageEl) stageEl.classList.add('visible');
+
+  mainLayer.batchDraw();
+  uiLayer.batchDraw();
+}
 
         // Wait for DOM layout to settle (300ms delay for safety)
-        setTimeout(() => { fitStageToContent(); updateIcons(); }, 300);
+// Failsafe: never allow the loader to remain forever
+setTimeout(() => {
+  const loaderEl = document.getElementById('loader');
+  const stageEl = document.getElementById('stage-container');
+  if (loaderEl && !loaderEl.classList.contains('hidden')) {
+    console.warn('[checkout] loader failsafe triggered – forcing visible stage');
+    loaderEl.classList.add('hidden');
+    stageEl && stageEl.classList.add('visible');
+    mainLayer.batchDraw();
+    uiLayer.batchDraw();
+  }
+}, 2500);
 
         // Watch for resizes
         const ro = new ResizeObserver(() => {
