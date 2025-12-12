@@ -463,6 +463,80 @@ setTimeout(() => {
         return match;
     }
 
+function wireEmbeddedInfoGlyph(seat, seatInternalId, parentGroup) {
+  try {
+    // Prefer the immediate parent (usually the seat group), fall back to the logical parentGroup.
+    const p = (seat && typeof seat.getParent === 'function') ? seat.getParent() : null;
+
+    const searchRoots = [];
+    if (p) searchRoots.push(p);
+    if (parentGroup && parentGroup !== p) searchRoots.push(parentGroup);
+
+    let found = false;
+
+    for (const root of searchRoots) {
+      if (!root || typeof root.find !== 'function') continue;
+
+      // Only target lowercase "i" glyphs (avoid row letter "I")
+      const glyphs = root.find('Text').filter(t => {
+        try {
+          return (t.text && typeof t.text === 'function' && t.text().trim() === 'i');
+        } catch (_) {
+          return false;
+        }
+      });
+
+      if (!glyphs || !glyphs.length) continue;
+
+      found = true;
+      seat.setAttr('sbEmbeddedInfoGlyph', true);
+
+      glyphs.forEach((t) => {
+        // Make it visible on white seats immediately
+        t.fill('#0F172A');
+        t.opacity(1);
+        t.fontStyle('bold');
+
+        // Make sure it receives hover events
+        t.listening(true);
+        t.name('sb-info-glyph');
+
+        // Keep it on top of the seat group
+        if (typeof t.moveToTop === 'function') t.moveToTop();
+
+        // Avoid double-binding if map reprocess happens
+        t.off('mouseenter');
+        t.off('mouseleave');
+        t.off('click');
+        t.off('tap');
+
+        t.on('mouseenter', () => {
+          stage.container().style.cursor = 'help';
+          showSeatTooltip(seatInternalId);
+        });
+
+        t.on('mouseleave', () => {
+          stage.container().style.cursor = 'default';
+          tooltip.style.display = 'none';
+        });
+
+        t.on('click tap', (e) => {
+          e.cancelBubble = true;
+          const meta = seatMeta.get(seatInternalId);
+          if (!meta || meta.unavailable) return;
+          toggleSeat(seat, meta.parentGroup || null);
+        });
+      });
+    }
+
+    return found;
+  } catch (e) {
+    console.warn('[checkout] wireEmbeddedInfoGlyph failed', e);
+    return false;
+  }
+}
+
+
     try {
         let layout = rawLayout;
         if (typeof layout === 'string') { try { layout = JSON.parse(layout); } catch(e) {} }
@@ -596,9 +670,18 @@ const viewImg = seat.getAttr('sbViewImage');
                 seat.shadowEnabled(false);
                 seat.visible(true);
 
-                // --- Tag for Icon Layer ---
-if (info && info.length) seat.setAttr('hasInfo', true);
+               // --- Tag for Icon Layer ---
+
+if (info && info.length) {
+  seat.setAttr('hasInfo', true);
+
+  // ✅ If the layout already contains a Text("i") glyph, recolour it to black on load
+  // and wire tooltip behaviour to match the seat-view tooltip style.
+  wireEmbeddedInfoGlyph(seat, seat._id, parentGroup);
+}
+
 if (viewImg) seat.setAttr('hasView', true);
+
 
                 // EVENTS
                 seat.on('mouseenter', () => {
@@ -916,8 +999,9 @@ setTimeout(() => {
             const cy = rect.y + rect.height / 2;
             const radius = seat.radius();
 
-            // INFO ICON
-if (hasInfo) {
+// INFO ICON
+// If the saved layout already has an embedded "i" glyph, we don't need the overlay badge.
+if (hasInfo && !seat.getAttr('sbEmbeddedInfoGlyph')) {
    const grp = new Konva.Group({
      x: cx + radius * 0.65,
      y: cy - radius * 0.65,
