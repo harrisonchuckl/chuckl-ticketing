@@ -567,6 +567,77 @@ setTimeout(() => {
         if (!match && ticketTypes.length > 0) match = ticketTypes[0];
         return match;
     }
+function isInfoGlyphTextNode(t) {
+  try {
+    const txt = (typeof t.text === 'function' ? t.text() : String(t.text || '')).trim();
+    return txt === 'i' || txt === 'ℹ' || txt === 'ⓘ';
+  } catch (_) {
+    return false;
+  }
+}
+
+function linkEmbeddedInfoGlyphs() {
+  const glyphs = mainLayer.find('Text').filter(isInfoGlyphTextNode);
+
+  dbg('[checkout][info] embedded glyph scan', {
+    glyphCount: glyphs.length
+  });
+
+  let linked = 0;
+
+  glyphs.forEach((glyph, idx) => {
+    try {
+      const seatGroup = glyph.getParent && glyph.getParent();
+      if (!seatGroup || !seatGroup.find) return;
+
+      const seatCircle = seatGroup.find('Circle').find(c => c.getAttr && c.getAttr('isSeat'));
+      if (!seatCircle) return;
+
+      const seatInternalId = seatCircle._id;
+
+      // Make glyph visible on white seats immediately
+      glyph.fill('#0F172A');
+      glyph.opacity(1);
+      glyph.fontStyle('bold');
+      glyph.listening(true);
+      glyph.name('sb-info-glyph');
+
+      // Mark the seat so updateIcons() can create the badge if needed
+      seatCircle.setAttr('hasInfo', true);
+      seatCircle.setAttr('sbEmbeddedInfoGlyph', true);
+
+      // Debug what we linked
+      dbg('[checkout][info] linked embedded glyph -> seat', {
+        idx,
+        seatInternalId,
+        stableId: seatIdMap.get(seatInternalId),
+        glyph: nodeBrief(glyph),
+        parent: nodeBrief(seatGroup)
+      });
+
+      // Bind tooltip behaviour on hover
+      glyph.off('mouseenter');
+      glyph.off('mouseleave');
+
+      glyph.on('mouseenter', () => {
+        stage.container().style.cursor = 'help';
+        showSeatTooltip(seatInternalId);
+      });
+
+      glyph.on('mouseleave', () => {
+        stage.container().style.cursor = 'default';
+        tooltip.style.display = 'none';
+      });
+
+      if (typeof glyph.moveToTop === 'function') glyph.moveToTop();
+      linked++;
+    } catch (e) {
+      dbg('[checkout][info] linkEmbeddedInfoGlyphs error', { idx, err: String(e) });
+    }
+  });
+
+  dbg('[checkout][info] embedded glyph linked summary', { linked });
+}
 
 function wireEmbeddedInfoGlyph(seat, seatInternalId, parentGroup) {
   try {
@@ -1060,8 +1131,14 @@ setTimeout(() => {
     stage.width(container.offsetWidth);
     stage.height(container.offsetHeight);
 
-    fitStageToContent();
-    updateIcons();
+   // ✅ Make embedded "i" glyphs visible and link them to seats BEFORE rendering icons
+linkEmbeddedInfoGlyphs();
+
+fitStageToContent();
+updateIcons();
+
+setTimeout(() => debugScanInfoState('post-timeout-50ms'), 0);
+
 
     console.log('[checkout] initial fit done', {
       w: container.offsetWidth,
