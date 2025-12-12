@@ -419,11 +419,81 @@ router.get('/', async (req, res) => {
     const showId = ${showIdStr};
     const heldSeatIds = new Set(${heldSeatsArray});
     
-     const selectedSeats = new Set();
-    const seatPrices = new Map();
-    const seatMeta = new Map();
-    const rowMap = new Map();
-    const seatIdMap = new Map();
+    const selectedSeats = new Set();
+const seatPrices = new Map();
+const seatMeta = new Map();
+const rowMap = new Map();
+const seatIdMap = new Map();
+const seatNodeMap = new Map(); // seatInternalId -> Konva Circle (for hover cleanup)
+
+let hoveredSeatId = null;
+
+function resetSeatStroke(seat) {
+  if (!seat) return;
+  const id = seat._id;
+  const meta = seatMeta.get(id);
+
+  // If we don't have meta yet, just do a safe reset
+  if (!meta) {
+    seat.stroke('#64748B');
+    seat.strokeWidth(1.5);
+    return;
+  }
+
+  if (meta.unavailable) {
+    seat.stroke('#000000');
+    seat.strokeWidth(1);
+    return;
+  }
+
+  if (selectedSeats.has(id)) {
+    // Keep selected styling
+    seat.stroke('#0056D2');
+    seat.strokeWidth(3);
+    return;
+  }
+
+  // Default available styling
+  seat.stroke('#64748B');
+  seat.strokeWidth(1.5);
+}
+
+function applyHoverStroke(seat) {
+  if (!seat) return;
+  seat.stroke('#0056D2');
+  seat.strokeWidth(3);
+}
+
+function clearHoverSeat() {
+  if (!hoveredSeatId) return;
+  const prev = seatNodeMap.get(hoveredSeatId);
+  if (prev) resetSeatStroke(prev);
+  hoveredSeatId = null;
+  mainLayer.batchDraw();
+}
+
+function setHoverSeat(seat) {
+  if (!seat) return;
+
+  const id = seat._id;
+
+  // If we hover a new seat, always clear the old one first
+  if (hoveredSeatId && hoveredSeatId !== id) {
+    const prev = seatNodeMap.get(hoveredSeatId);
+    if (prev) resetSeatStroke(prev);
+  }
+
+  hoveredSeatId = id;
+
+  // Only apply hover ring to AVAILABLE + not selected seats
+  const meta = seatMeta.get(id);
+  if (meta && !meta.unavailable && !selectedSeats.has(id)) {
+    applyHoverStroke(seat);
+  }
+
+  mainLayer.batchDraw();
+}
+
 
     // --- SETUP STAGE ---
     const container = document.getElementById('stage-container');
@@ -442,6 +512,13 @@ router.get('/', async (req, res) => {
     stage.add(uiLayer);
     
     const tooltip = document.getElementById('tooltip');
+
+    stage.container().addEventListener('mouseleave', () => {
+  tooltip.style.display = 'none';
+  stage.container().style.cursor = 'default';
+  clearHoverSeat();
+});
+
 
     // ============================
 // DEBUG TOOLKIT (INFO ICONS)
@@ -830,6 +907,9 @@ console.log("[DEBUG] Loading Layout summary:", {
 
             if (nodeType === 'Circle' && node.getAttr('isSeat')) {
                 const seat = node;
+
+                seatNodeMap.set(seat._id, seat);
+
                 
                 const status = seat.getAttr('status') || 'AVAILABLE';
                 const holdStatus = (seat.getAttr('sbHoldStatus') || '').toString().toLowerCase();
@@ -915,19 +995,20 @@ if (viewImg) seat.setAttr('hasView', true);
                 // EVENTS
                 seat.on('mouseenter', (e) => {
   stage.container().style.cursor = isUnavailable ? 'not-allowed' : 'pointer';
-  if (!selectedSeats.has(seat._id) && !isUnavailable) {
-    seat.stroke('#0056D2'); seat.strokeWidth(3); mainLayer.batchDraw();
-  }
+  setHoverSeat(seat);
   showSeatTooltip(seat._id, e && e.evt);
 });
 
-                seat.on('mouseleave', () => {
-                    stage.container().style.cursor = 'default';
-                    tooltip.style.display = 'none';
-                    if (!selectedSeats.has(seat._id) && !isUnavailable) {
-                        seat.stroke('#64748B'); seat.strokeWidth(1.5); mainLayer.batchDraw();
-                    }
-                });
+seat.on('mouseleave', () => {
+  stage.container().style.cursor = 'default';
+  tooltip.style.display = 'none';
+
+  // Only clear if this seat is the one we think is hovered
+  if (hoveredSeatId === seat._id) {
+    clearHoverSeat();
+  }
+});
+
                 seat.on('click tap', (e) => {
                     e.cancelBubble = true;
                     if (isUnavailable) return;
@@ -948,28 +1029,32 @@ if (viewImg) seat.setAttr('hasView', true);
              else seats.sort((a, b) => a.x - b.x);
         });
 
-        function showSeatTooltip(seatId, nativeEvt) {
+       function showSeatTooltip(seatId, nativeEvt) {
   const meta = seatMeta.get(seatId);
   if (!meta) return;
 
-  // Prefer DOM mouse position (works reliably for Text nodes on mouseenter)
+  const wrapper = document.getElementById('map-wrapper');
+  if (!wrapper) return;
+
+  const rect = wrapper.getBoundingClientRect();
+
+  // Prefer DOM mouse position (best for Text glyph hover + Konva events)
   let pos = null;
 
   if (nativeEvt && typeof nativeEvt.clientX === 'number') {
-    const wrapper = document.getElementById('map-wrapper');
-    const rect = wrapper.getBoundingClientRect();
     pos = {
       x: nativeEvt.clientX - rect.left,
       y: nativeEvt.clientY - rect.top
     };
   } else {
-    // Fallback (works on normal seat hover/mousemove)
-    pos = stage.getPointerPosition();
+    // Fallback (works for normal seat hover)
+    const p = stage.getPointerPosition();
+    if (!p) return;
+    pos = { x: p.x, y: p.y };
   }
 
-  if (!pos) return;
-
   const priceStr = '£' + ((meta.price || 0) / 100).toFixed(2);
+
   let html =
     '<span class="tt-title">' + meta.label + '</span>' +
     '<span class="tt-meta">' + meta.ticketName + ' • ' + priceStr + '</span>';
@@ -978,14 +1063,19 @@ if (viewImg) seat.setAttr('hasView', true);
     html += '<div class="tt-info"><span style="font-weight:700;">Info:</span> ' + meta.info + '</div>';
   }
 
-  const viewMode = document.getElementById('toggle-views').checked;
-  if (meta.viewImg && viewMode) html += '<img src="' + meta.viewImg + '" />';
-  else if (meta.viewImg) html += '<div style="font-size:0.7rem; color:#94a3b8; margin-top:4px;">(Show seat views to preview)</div>';
+  const viewModeEl = document.getElementById('toggle-views');
+  const viewMode = !!(viewModeEl && viewModeEl.checked);
+
+  if (meta.viewImg && viewMode) {
+    html += '<img src="' + meta.viewImg + '" />';
+  } else if (meta.viewImg) {
+    html += '<div style="font-size:0.7rem; color:#94a3b8; margin-top:4px;">(Show seat views to preview)</div>';
+  }
 
   tooltip.innerHTML = html;
   tooltip.style.display = 'block';
 
-  // Small clamp so it doesn’t go off-screen
+  // Clamp to wrapper bounds
   const pad = 12;
   const maxX = (wrapper.clientWidth || 0) - pad;
   const maxY = (wrapper.clientHeight || 0) - pad;
@@ -996,6 +1086,7 @@ if (viewImg) seat.setAttr('hasView', true);
   tooltip.style.left = left + 'px';
   tooltip.style.top = top + 'px';
 }
+
 
 
         // --- 4. PRECISE AUTO-FIT WITH DELAY ---
@@ -1233,13 +1324,15 @@ setTimeout(() => {
 }, 2500);
 
         // Watch for resizes
-        const ro = new ResizeObserver(() => {
-            stage.width(container.offsetWidth);
-            stage.height(container.offsetHeight);
-            fitStageToContent();
-            updateIcons();
-        });
-        ro.observe(container);
+       const ro = new ResizeObserver(() => {
+    clearHoverSeat(); // ✅ add this first
+    stage.width(container.offsetWidth);
+    stage.height(container.offsetHeight);
+    fitStageToContent();
+    updateIcons();
+});
+ro.observe(container);
+
 
     } catch (err) {
         console.error(err);
@@ -1313,7 +1406,7 @@ dbg('[checkout][info] creating UI info-icon overlay', {
      listening: false
    }));
 
-grp.on('mouseenter', (e) => { stage.container().style.cursor = 'zoom-in'; showSeatTooltip(seat._id, e && e.evt); });
+grp.on('mouseenter', (e) => { stage.container().style.cursor = 'help'; showSeatTooltip(seat._id, e && e.evt); });
    grp.on('mouseleave', () => { stage.container().style.cursor = 'default'; tooltip.style.display = 'none'; });
    grp.on('click tap', (e) => { e.cancelBubble = true; if (!meta.unavailable) toggleSeat(seat, parentGroup); });
 
@@ -1327,7 +1420,7 @@ grp.on('mouseenter', (e) => { stage.container().style.cursor = 'zoom-in'; showSe
                grp.add(new Konva.Circle({ radius: 10, fill: '#0056D2' }));
                const cam = new Konva.Path({ data: 'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5 5 2.24 5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z', fill: 'white', scaleX: 0.6, scaleY: 0.6, offsetX: 12, offsetY: 12 });
                grp.add(cam);
-               grp.on('mouseenter', () => { stage.container().style.cursor = 'zoom-in'; showSeatTooltip(seat._id); });
+grp.on('mouseenter', (e) => { stage.container().style.cursor = 'zoom-in'; showSeatTooltip(seat._id, e && e.evt); });
                grp.on('mouseleave', () => { stage.container().style.cursor = 'default'; tooltip.style.display = 'none'; });
                grp.on('click tap', (e) => { e.cancelBubble = true; if (!meta.unavailable) toggleSeat(seat, parentGroup); });
                uiLayer.add(grp);
@@ -1361,9 +1454,10 @@ stage.on('wheel dragmove', updateIcons);
 document.getElementById('toggle-views').addEventListener('change', updateIcons);
 
     stage.on('wheel', (e) => {
-        e.evt.preventDefault();
-        const scaleBy = 1.1;
-        const oldScale = stage.scaleX();
+    clearHoverSeat(); // ✅ add this first
+    e.evt.preventDefault();
+    const scaleBy = 1.1;
+    const oldScale = stage.scaleX();
         const pointer = stage.getPointerPosition();
         const mousePointTo = { x: (pointer.x - stage.x()) / oldScale, y: (pointer.y - stage.y()) / oldScale };
         const newScale = e.evt.deltaY > 0 ? oldScale / scaleBy : oldScale * scaleBy;
