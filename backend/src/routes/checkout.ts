@@ -653,6 +653,21 @@ function isInfoGlyphTextNode(t) {
   }
 }
 
+function extractInfoFromEmbeddedGlyph(group) {
+  try {
+    if (!group || typeof group.find !== 'function') return '';
+    const glyphs = group.find('Text').filter(isInfoGlyphTextNode);
+    for (const g of glyphs) {
+      const raw =
+        (g.getAttr && (g.getAttr('sbInfo') || g.getAttr('info'))) ||
+        '';
+      const info = String(raw || '').trim();
+      if (info) return info;
+    }
+  } catch (_) {}
+  return '';
+}
+
 function linkEmbeddedInfoGlyphs() {
   const glyphs = mainLayer.find('Text').filter(isInfoGlyphTextNode);
 
@@ -676,7 +691,7 @@ function linkEmbeddedInfoGlyphs() {
       glyph.fill('#0F172A');
       glyph.opacity(1);
       glyph.fontStyle('bold');
-      glyph.listening(true);
+glyph.listening(false); // ✅ do NOT steal hover/click from the seat circle
       glyph.name('sb-info-glyph');
 
       // Mark the seat so updateIcons() can create the badge if needed
@@ -692,14 +707,7 @@ function linkEmbeddedInfoGlyphs() {
         parent: nodeBrief(seatGroup)
       });
 
-      // Bind tooltip behaviour on hover
-      glyph.off('mouseenter');
-      glyph.off('mouseleave');
-
-      glyph.on('mouseenter', (e) => {
-  stage.container().style.cursor = 'help';
-  showSeatTooltip(seatInternalId, e && e.evt);
-});
+    
 
       glyph.on('mouseleave', () => {
         stage.container().style.cursor = 'default';
@@ -932,7 +940,16 @@ const rawInfo =
   (seatWrapper && seatWrapper.getAttr ? seatWrapper.getAttr('sbInfo') : null) ||
   (parentGroup && parentGroup.getAttr ? parentGroup.getAttr('sbInfo') : null);
 
-const info = (rawInfo ?? '').toString().trim();
+let info = (rawInfo ?? '').toString().trim();
+
+// ✅ Some layouts store the info text on the embedded "i" glyph instead of the seat/group
+if (!info) {
+  info =
+    extractInfoFromEmbeddedGlyph(seatWrapper) ||
+    extractInfoFromEmbeddedGlyph(parentGroup) ||
+    '';
+}
+
 
 const viewImg =
   seat.getAttr('sbViewImage') ||
@@ -996,8 +1013,19 @@ if (viewImg) seat.setAttr('hasView', true);
                 seat.on('mouseenter', (e) => {
   stage.container().style.cursor = isUnavailable ? 'not-allowed' : 'pointer';
   setHoverSeat(seat);
-  showSeatTooltip(seat._id, e && e.evt);
+
+  const meta = seatMeta.get(seat._id);
+  const hasInfo = !!(meta && meta.info && String(meta.info).trim());
+  const hasView = !!(meta && meta.viewImg && String(meta.viewImg).trim());
+
+  // ✅ Tooltip only for seats that actually have the “i”/info or a view
+  if (hasInfo || hasView) {
+    showSeatTooltip(seat._id, e && e.evt);
+  } else {
+    tooltip.style.display = 'none';
+  }
 });
+
 
 seat.on('mouseleave', () => {
   stage.container().style.cursor = 'default';
