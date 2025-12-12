@@ -681,75 +681,73 @@ if (!cw || !ch) {
   }
 
   // Only include "semantic" nodes so huge/invisible shapes don't break zoom
-  function isSemantic(node) {
-    if (!node || !node.getClassName) return false;
-
-    const cn = node.getClassName();
-
-    // We only care about renderable shapes/text
-    if (cn === 'Text') return true;
-
-    // Konva Shapes (Circle/Rect/Path/Line/etc)
-    if (node.getAttr && node.getAttr('isSeat')) return true;
-
-    const type = node.getAttr ? node.getAttr('shapeType') : null;
-    if (type === 'stage') return true;
-
-    const name = (typeof node.name === 'function' ? node.name() : '') || '';
-    if (name.includes('label') || name.includes('row')) return true;
-
-    return false;
-  }
-
-  // Konva doesn't support find(fn) reliably; use find('*') and filter via .each
-  const all = mainLayer.find('*');
+    // ✅ Fit ONLY to seats (+ stage if present). This prevents “huge rect” zoom-out.
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
 
-forEachNodeList(all, (node) => {
+  const nodesToMeasure = [];
+
+  // Seats are always the correct “content bounds”
+  forEachNodeList(mainLayer.find('Circle'), (n) => {
     try {
-      if (!isSemantic(node)) return;
+      if (n && n.getAttr && n.getAttr('isSeat')) nodesToMeasure.push(n);
+    } catch (_) {}
+  });
+
+  // If you have a stage shape tagged with shapeType='stage', include it too
+  forEachNodeList(mainLayer.find('*'), (n) => {
+    try {
+      if (n && n.getAttr && n.getAttr('shapeType') === 'stage') nodesToMeasure.push(n);
+    } catch (_) {}
+  });
+
+  // If for some reason we still have nothing, bail gracefully (don’t use mainLayer bounds)
+  if (!nodesToMeasure.length) {
+    console.warn('[checkout] no measurable nodes found for fit (seats/stage missing)');
+
+    if (loaderEl) loaderEl.classList.add('hidden');
+    if (stageEl) stageEl.classList.add('visible');
+
+    mainLayer.batchDraw();
+    uiLayer.batchDraw();
+    return;
+  }
+
+  const MAX_DIM = Math.max(4000, Math.max(cw, ch) * 10);
+
+  forEachNodeList(nodesToMeasure, (node) => {
+    try {
       if (typeof node.isVisible === 'function' && !node.isVisible()) return;
       if (typeof node.opacity === 'function' && node.opacity() === 0) return;
 
       const rect = node.getClientRect({ relativeTo: mainLayer, skipShadow: true });
-if (!rect || rect.width <= 0 || rect.height <= 0) return;
+      if (!rect || rect.width <= 0 || rect.height <= 0) return;
 
-// Ignore absurd bounds that shrink the whole map (common culprit for “tiny / zoomed out”)
-const MAX_DIM = Math.max(4000, Math.max(cw, ch) * 10);
-if (rect.width > MAX_DIM || rect.height > MAX_DIM) return;
-if (Math.abs(rect.x) > MAX_DIM * 2 || Math.abs(rect.y) > MAX_DIM * 2) return;
+      // ignore absurd rects
+      if (rect.width > MAX_DIM || rect.height > MAX_DIM) return;
+      if (Math.abs(rect.x) > MAX_DIM * 2 || Math.abs(rect.y) > MAX_DIM * 2) return;
 
-minX = Math.min(minX, rect.x);
-minY = Math.min(minY, rect.y);
-maxX = Math.max(maxX, rect.x + rect.width);
-maxY = Math.max(maxY, rect.y + rect.height);
-
-    } catch (_) {
-      // ignore individual node errors
-    }
+      minX = Math.min(minX, rect.x);
+      minY = Math.min(minY, rect.y);
+      maxX = Math.max(maxX, rect.x + rect.width);
+      maxY = Math.max(maxY, rect.y + rect.height);
+    } catch (_) {}
   });
 
-  // Fallback to full layer bounds if semantic scan fails
+  // If still invalid, just don’t refit (don’t fallback to huge mainLayer rect)
   if (!isFinite(minX) || !isFinite(minY) || maxX <= minX || maxY <= minY) {
-    console.warn('[checkout] semantic bounds failed, falling back to mainLayer bounds');
-    const rect = mainLayer.getClientRect({ skipShadow: true });
+    console.warn('[checkout] seat/stage bounds invalid — skipping fit');
 
-    if (!rect || rect.width <= 0 || rect.height <= 0) {
-      if (loaderEl) loaderEl.classList.add('hidden');
-      if (stageEl) stageEl.classList.add('visible');
-      mainLayer.batchDraw();
-      uiLayer.batchDraw();
-      return;
-    }
+    if (loaderEl) loaderEl.classList.add('hidden');
+    if (stageEl) stageEl.classList.add('visible');
 
-    minX = rect.x;
-    minY = rect.y;
-    maxX = rect.x + rect.width;
-    maxY = rect.y + rect.height;
+    mainLayer.batchDraw();
+    uiLayer.batchDraw();
+    return;
   }
 
   const contentWidth = maxX - minX;
   const contentHeight = maxY - minY;
+
 
   console.log('[checkout][fit] bounds', {
   minX, minY, maxX, maxY,
