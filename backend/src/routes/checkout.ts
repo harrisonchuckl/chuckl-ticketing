@@ -645,6 +645,15 @@ console.log("[DEBUG] Loading Layout summary:", {
         }
 
         // --- 4. PRECISE AUTO-FIT WITH DELAY ---
+
+function forEachNodeList(list, fn) {
+  if (!list) return;
+  if (Array.isArray(list)) return list.forEach(fn);
+  if (typeof list.forEach === 'function') return list.forEach(fn);
+  if (typeof list.each === 'function') return list.each(fn); // Konva Collection in some builds
+  if (typeof list.toArray === 'function') return list.toArray().forEach(fn);
+}
+
       function fitStageToContent(padding = 50, zoom = 0.95) {
   const loaderEl = document.getElementById('loader');
   const stageEl = document.getElementById('stage-container');
@@ -653,10 +662,16 @@ console.log("[DEBUG] Loading Layout summary:", {
   stage.scale({ x: 1, y: 1 });
   stage.position({ x: 0, y: 0 });
 
-  const cw = container.offsetWidth;
-  const ch = container.offsetHeight;
+ const cw = container.offsetWidth;
+const ch = container.offsetHeight;
 
-  if (!cw || !ch) {
+// Ensure stage matches container BEFORE bounds + centring maths
+if (cw && ch) {
+  stage.width(cw);
+  stage.height(ch);
+}
+
+if (!cw || !ch) {
     console.warn('[checkout] fitStageToContent container not ready', { cw, ch });
     if (loaderEl) loaderEl.classList.add('hidden');
     if (stageEl) stageEl.classList.add('visible');
@@ -690,7 +705,7 @@ console.log("[DEBUG] Loading Layout summary:", {
   const all = mainLayer.find('*');
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
 
-  all.each((node) => {
+forEachNodeList(all, (node) => {
     try {
       if (!isSemantic(node)) return;
       if (typeof node.isVisible === 'function' && !node.isVisible()) return;
@@ -751,7 +766,7 @@ console.log("[DEBUG] Loading Layout summary:", {
   });
 
   // Remove any debug bounds if present
-  uiLayer.find('.debug-bounds').each((n) => n.destroy());
+forEachNodeList(uiLayer.find('.debug-bounds'), (n) => n.destroy());
   uiLayer.batchDraw();
 
   if (loaderEl) loaderEl.classList.add('hidden');
