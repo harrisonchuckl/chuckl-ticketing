@@ -546,9 +546,17 @@ console.log("[DEBUG] Loading Layout summary:", {
                 const price = tType ? tType.pricePence : 0;
                 seatPrices.set(seat._id, price);
                 
-                const label = seat.getAttr('label') || seat.name() || 'Seat';
-                const info = seat.getAttr('sbInfo');
-                const viewImg = seat.getAttr('sbViewImage');
+               const label = seat.getAttr('label') || seat.name() || 'Seat';
+
+// ✅ Support info stored on the seat OR the parent group
+const rawInfo =
+  seat.getAttr('sbInfo') ||
+  (parentGroup && parentGroup.getAttr ? parentGroup.getAttr('sbInfo') : null);
+
+const info = (rawInfo ?? '').toString().trim();
+
+const viewImg = seat.getAttr('sbViewImage');
+
 
                 if (parentGroup) {
                     const grpId = parentGroup._id;
@@ -559,16 +567,17 @@ console.log("[DEBUG] Loading Layout summary:", {
                     });
                 }
 
-                              seatMeta.set(seat._id, {
-                    label,
-                    info,
-                    viewImg,
-                    price,
-                    ticketName: tType ? tType.name : 'Standard',
-                    unavailable: isUnavailable,
-                    seat,
-                    parentGroup
-                });
+                            seatMeta.set(seat._id, {
+    label,
+    info,      // now always a trimmed string (or '')
+    viewImg,
+    price,
+    ticketName: tType ? tType.name : 'Standard',
+    unavailable: isUnavailable,
+    seat,
+    parentGroup
+});
+
 
                 // Map internal Konva id -> stable seat id used in DB (sbSeatId if present, otherwise node id)
                 const stableId = seat.getAttr('sbSeatId') || seat.id();
@@ -588,8 +597,8 @@ console.log("[DEBUG] Loading Layout summary:", {
                 seat.visible(true);
 
                 // --- Tag for Icon Layer ---
-                if (info) seat.setAttr('hasInfo', true);
-                if (viewImg) seat.setAttr('hasView', true);
+if (info && info.length) seat.setAttr('hasInfo', true);
+if (viewImg) seat.setAttr('hasView', true);
 
                 // EVENTS
                 seat.on('mouseenter', () => {
@@ -633,7 +642,7 @@ console.log("[DEBUG] Loading Layout summary:", {
             if (!pos) return;
             const priceStr = '£' + ((meta.price || 0)/100).toFixed(2);
             let html = '<span class="tt-title">' + meta.label + '</span><span class="tt-meta">' + meta.ticketName + ' • ' + priceStr + '</span>';
-            if (meta.info) html += '<div class="tt-info">' + meta.info + '</div>';
+if (meta.info) html += '<div class="tt-info"><span style="font-weight:700;">Info:</span> ' + meta.info + '</div>';
             const viewMode = document.getElementById('toggle-views').checked;
             if (meta.viewImg && viewMode) html += '<img src="' + meta.viewImg + '" />';
             else if (meta.viewImg) html += '<div style="font-size:0.7rem; color:#94a3b8; margin-top:4px;">(Show seat views to preview)</div>';
@@ -908,15 +917,43 @@ setTimeout(() => {
             const radius = seat.radius();
 
             // INFO ICON
-            if (hasInfo) {
-               const grp = new Konva.Group({ x: cx + radius*0.65, y: cy - radius*0.65, listening:true, name:'info-icon', scaleX: inverseScale, scaleY: inverseScale });
-               grp.add(new Konva.Circle({ radius: 6, fill: '#0F172A' }));
-               grp.add(new Konva.Text({ text:'i', fontSize:9, fill:'#fff', offsetX: 3, offsetY: 5, fontStyle:'bold', fontFamily:'Inter, sans-serif', listening:false }));
-               grp.on('mouseenter', () => { stage.container().style.cursor = 'help'; showSeatTooltip(seat._id); });
-               grp.on('mouseleave', () => { stage.container().style.cursor = 'default'; tooltip.style.display = 'none'; });
-               grp.on('click tap', (e) => { e.cancelBubble = true; if (!meta.unavailable) toggleSeat(seat, parentGroup); });
-               uiLayer.add(grp);
-            }
+if (hasInfo) {
+   const grp = new Konva.Group({
+     x: cx + radius * 0.65,
+     y: cy - radius * 0.65,
+     listening: true,
+     name: 'info-icon',
+     scaleX: inverseScale,
+     scaleY: inverseScale
+   });
+
+   // ✅ High-contrast badge (works on white seats, blue selected seats, and black blocked seats)
+   grp.add(new Konva.Circle({
+     radius: 7,
+     fill: '#FFFFFF',
+     stroke: '#0F172A',
+     strokeWidth: 1.5
+   }));
+
+   // ✅ Black “i” so it’s readable immediately
+   grp.add(new Konva.Text({
+     text: 'i',
+     fontSize: 10,
+     fill: '#0F172A',
+     offsetX: 3,
+     offsetY: 6,
+     fontStyle: 'bold',
+     fontFamily: 'Inter, sans-serif',
+     listening: false
+   }));
+
+   grp.on('mouseenter', () => { stage.container().style.cursor = 'help'; showSeatTooltip(seat._id); });
+   grp.on('mouseleave', () => { stage.container().style.cursor = 'default'; tooltip.style.display = 'none'; });
+   grp.on('click tap', (e) => { e.cancelBubble = true; if (!meta.unavailable) toggleSeat(seat, parentGroup); });
+
+   uiLayer.add(grp);
+   grp.moveToTop(); // ✅ ensure it never sits behind other UI icons
+}
 
             // VIEW ICON
             if (hasView && showViews) {
