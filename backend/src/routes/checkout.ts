@@ -746,14 +746,21 @@ console.log("[DEBUG] Loading Layout summary:", {
                 
                const label = seat.getAttr('label') || seat.name() || 'Seat';
 
-// ✅ Support info stored on the seat OR the parent group
+// ✅ Support info stored on the seat OR its immediate wrapper OR the seat-group parent
+const seatWrapper = (seat && typeof seat.getParent === 'function') ? seat.getParent() : null;
+
 const rawInfo =
   seat.getAttr('sbInfo') ||
+  (seatWrapper && seatWrapper.getAttr ? seatWrapper.getAttr('sbInfo') : null) ||
   (parentGroup && parentGroup.getAttr ? parentGroup.getAttr('sbInfo') : null);
 
 const info = (rawInfo ?? '').toString().trim();
 
-const viewImg = seat.getAttr('sbViewImage');
+const viewImg =
+  seat.getAttr('sbViewImage') ||
+  (seatWrapper && seatWrapper.getAttr ? seatWrapper.getAttr('sbViewImage') : null) ||
+  (parentGroup && parentGroup.getAttr ? parentGroup.getAttr('sbViewImage') : null);
+
 
 
                 if (parentGroup) {
