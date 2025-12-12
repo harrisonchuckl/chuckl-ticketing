@@ -43,7 +43,7 @@ app.use(morgan("dev"));
 
 // IMPORTANT: Stripe webhooks require the raw request body for signature verification.
 // Apply raw ONLY for the Stripe webhook endpoint BEFORE express.json().
-app.post("/webhooks/stripe", express.raw({ type: "application/json" }));
+app.post("/webhook/webhooks/stripe", express.raw({ type: "application/json" }));
 
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
