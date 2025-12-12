@@ -851,67 +851,39 @@ document.getElementById('toggle-views').addEventListener('change', updateIcons);
     });
 
    function leavesGap(row, seatId, willSelect) {
-  // row is an array of Konva Circle seats (from rowMap)
-  const states = row.map((seat) => {
-    const meta = seatMeta.get(seat._id);
-    const unavailable = meta ? !!meta.unavailable : false;
+  // rowMap stores objects: { id, x, y, unavailable, node }
+  const states = row.map((s) => {
+    if (s.unavailable) return 0; // blocked/sold/held/allocated
 
-    if (unavailable) return 0; // blocked/sold/held/allocated
+    if (s.id === seatId) return willSelect ? 2 : 1; // simulate this click
 
-    if (seat._id === seatId) return willSelect ? 2 : 1; // simulate new state
-
-    return selectedSeats.has(seat._id) ? 2 : 1; // 2 selected, 1 open
+    return selectedSeats.has(s.id) ? 2 : 1; // selected vs open
   });
 
-  // --- EXCEPTION RULE ---
-  // If there are exactly 3 available seats in this row,
-  // and after this click the customer will have selected 2 of them
-  // (leaving just 1 unsold), we ALLOW that even though it leaves a "gap".
+  // EXCEPTION: if exactly 3 available seats remain in the row and customer takes 2 (leaving 1),
+  // allow it even if it technically leaves a gap.
   if (willSelect) {
-    const availableIndices = row
-      .map((seat, idx) => ({ seat, idx }))
-      .filter(({ seat }) => {
-        const meta = seatMeta.get(seat._id);
-        return !(meta && meta.unavailable);
-      })
-      .map(({ idx }) => idx);
-
-    if (availableIndices.length === 3) {
-      const selectedAfter = states.filter(v => v === 2).length;
-      const emptyAfter = states.filter(v => v === 1).length;
-
-      if (selectedAfter === 2 && emptyAfter === 1) {
-        return false; // allow
-      }
+    const availableCount = row.filter((s) => !s.unavailable).length;
+    if (availableCount === 3) {
+      const selectedAfter = states.filter((v) => v === 2).length;
+      const emptyAfter = states.filter((v) => v === 1).length;
+      if (selectedAfter === 2 && emptyAfter === 1) return false;
     }
   }
 
-  // Original single-gap detection
+  // Detect a stranded single: an empty seat with non-empty neighbours (or edge + non-empty)
   for (let i = 0; i < states.length; i++) {
-    if (states[i] !== 1) continue; // only care about empty seats
+    if (states[i] !== 1) continue;
+
     const left = i === 0 ? 0 : states[i - 1];
     const right = i === states.length - 1 ? 0 : states[i + 1];
 
-    // If an empty seat is surrounded by non-empty on both sides (or edge + non-empty),
-    // it's a stranded single.
     if (left !== 1 && right !== 1) return true;
   }
 
   return false;
 }
-    }
-  }
-  // --- END EXCEPTION ---
 
-  // Original single-gap detection
-  for (let i = 0; i < states.length; i++) {
-    if (states[i] !== 1) continue; // only care about empty seats
-    const left = i === 0 ? 0 : states[i - 1];
-    const right = i === states.length - 1 ? 0 : states[i + 1];
-    if (left !== 1 && right !== 1) return true; // orphaned single
-  }
-  return false;
-}
     function toggleSeat(seat, parentGroup) {
         const id = seat._id;
         const willSelect = !selectedSeats.has(id);
