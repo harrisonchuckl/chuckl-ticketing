@@ -677,16 +677,50 @@ router.get('/', async (req, res) => {
 }
 
         // Wait for DOM layout to settle (300ms delay for safety)
+
+    // Kick initial render + fit once the DOM has a size
+setTimeout(() => {
+  try {
+    // Ensure stage matches container size
+    stage.width(container.offsetWidth);
+    stage.height(container.offsetHeight);
+
+    // Draw what we've loaded
+    mainLayer.batchDraw();
+    uiLayer.batchDraw();
+
+    // Fit + show stage + hide loader (your fitStageToContent() already does this)
+    fitStageToContent();
+    updateIcons();
+
+    console.log('[checkout] initial fit complete', {
+      w: container.offsetWidth,
+      h: container.offsetHeight
+    });
+  } catch (e) {
+    console.error('[checkout] initial fit failed', e);
+  }
+}, 50);
+
+
 // Failsafe: never allow the loader to remain forever
 setTimeout(() => {
   const loaderEl = document.getElementById('loader');
   const stageEl = document.getElementById('stage-container');
+
   if (loaderEl && !loaderEl.classList.contains('hidden')) {
     console.warn('[checkout] loader failsafe triggered – forcing visible stage');
     loaderEl.classList.add('hidden');
-    stageEl && stageEl.classList.add('visible');
-    mainLayer.batchDraw();
-    uiLayer.batchDraw();
+    if (stageEl) stageEl.classList.add('visible');
+
+    try {
+      // At least attempt to draw something
+      mainLayer.batchDraw();
+      uiLayer.batchDraw();
+      updateIcons();
+    } catch (e) {
+      console.error('[checkout] failsafe draw error', e);
+    }
   }
 }, 2500);
 
