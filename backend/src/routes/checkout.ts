@@ -1870,72 +1870,78 @@ document.getElementById('toggle-views').addEventListener('change', () => {
         updateIcons();
     });
 
-   function leavesGap(row, seatId, willSelect) {
-  // rowMap stores objects: { id, x, y, unavailable, node }
-  const states = row.map((s) => {
-    if (s.unavailable) return 0; // blocked/sold/held/allocated
+   function isSingleGapRuleEnabled() {
+  // Rule is ON if there exists ANY row/group with > 3 available seats.
+  // Rule is OFF only when ALL rows are down to 3 or fewer available seats (i.e., near sell-out scraps).
+  let maxAvail = 0;
 
-    if (s.id === seatId) return willSelect ? 2 : 1; // simulate this click
-
-    return selectedSeats.has(s.id) ? 2 : 1; // selected vs open
+  rowMap.forEach((row) => {
+    if (!row || !row.length) return;
+    const availableCount = row.filter((s) => !s.unavailable).length;
+    if (availableCount > maxAvail) maxAvail = availableCount;
   });
 
-  // EXCEPTION: if exactly 3 available seats remain in the row and customer takes 2 (leaving 1),
-  // allow it even if it technically leaves a gap.
-  if (willSelect) {
-    const availableCount = row.filter((s) => !s.unavailable).length;
-    if (availableCount === 3) {
-      const selectedAfter = states.filter((v) => v === 2).length;
-      const emptyAfter = states.filter((v) => v === 1).length;
-      if (selectedAfter === 2 && emptyAfter === 1) return false;
-    }
-  }
-
-  // Detect a stranded single: an empty seat with non-empty neighbours (or edge + non-empty)
-  for (let i = 0; i < states.length; i++) {
-    if (states[i] !== 1) continue;
-
-    const left = i === 0 ? 0 : states[i - 1];
-    const right = i === states.length - 1 ? 0 : states[i + 1];
-
-    if (left !== 1 && right !== 1) return true;
-  }
-
-  return false;
+  return maxAvail > 3;
 }
 
-    function toggleSeat(seat, parentGroup) {
-        const id = seat._id;
-        const willSelect = !selectedSeats.has(id);
-        const row = parentGroup ? rowMap.get(parentGroup._id) : null;
+function findSingleGapGroups() {
+  // If we're ONLY down to rows with <=3 available seats, disable the rule entirely.
+  if (!isSingleGapRuleEnabled()) return [];
 
-        const gapInvalid = row && row.length > 0 && leavesGap(row, id, willSelect);
+  const badGroups = [];
 
-        if (willSelect) {
-            selectedSeats.add(id);
-            if (gapInvalid) {
-                selectedSeats.delete(id);
-                alert("Please do not leave single seat gaps.");
-                return;
-            }
-            if (selectedSeats.size > 10) {
-                selectedSeats.delete(id);
-                alert("Maximum 10 tickets.");
-                return;
-            }
-            seat.fill('#0056D2'); seat.stroke('#0056D2');
-        } else {
-            selectedSeats.delete(id);
-            if (gapInvalid) {
-                selectedSeats.add(id);
-                alert("Deselecting this would leave a gap.");
-                return;
-            }
-            seat.fill('#ffffff'); seat.stroke('#64748B');
-        }
-        mainLayer.batchDraw();
-        updateBasket();
+  rowMap.forEach((row, groupId) => {
+    if (!row || row.length < 2) return;
+
+    // 0 = unavailable, 1 = empty available, 2 = selected
+    const states = row.map((s) => {
+      if (s.unavailable) return 0;
+      return selectedSeats.has(s.id) ? 2 : 1;
+    });
+
+    // Detect a stranded single empty seat:
+    // an empty seat (1) whose neighbours are not empty (or edges treated as blocked)
+    for (let i = 0; i < states.length; i++) {
+      if (states[i] !== 1) continue;
+
+      const left = i === 0 ? 0 : states[i - 1];
+      const right = i === states.length - 1 ? 0 : states[i + 1];
+
+      if (left !== 1 && right !== 1) {
+        badGroups.push(groupId);
+        break;
+      }
     }
+  });
+
+  return badGroups;
+}
+
+   function toggleSeat(seat, parentGroup) {
+  const id = seat._id;
+  const willSelect = !selectedSeats.has(id);
+
+  if (willSelect) {
+    selectedSeats.add(id);
+
+    // Keep max 10 immediate (good UX)
+    if (selectedSeats.size > 10) {
+      selectedSeats.delete(id);
+      alert("Maximum 10 tickets.");
+      return;
+    }
+
+    seat.fill('#0056D2');
+    seat.stroke('#0056D2');
+  } else {
+    selectedSeats.delete(id);
+    seat.fill('#ffffff');
+    seat.stroke('#64748B');
+  }
+
+  mainLayer.batchDraw();
+  updateBasket();
+}
 
     function updateBasket() {
         let totalPence = 0; let count = 0;
@@ -1979,6 +1985,14 @@ if (isMobileView) {
       if (!btn.classList.contains('active')) return;
 
       btn.innerText = 'Processing...';
+            // Validate single-seat gaps ONLY at Continue time
+      const badGroups = findSingleGapGroups();
+      if (badGroups.length) {
+        alert("Please don’t leave single-seat gaps. Select the neighbouring seat(s) or choose a different spot.");
+        btn.innerText = 'Continue';
+        return;
+      }
+
 
       let totalPence = 0;
       const seatIds = [];
