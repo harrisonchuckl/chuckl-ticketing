@@ -340,7 +340,17 @@ router.get('/', async (req, res) => {
     .btn-close { text-decoration:none; font-size:1.5rem; color:var(--muted); width:40px; height:40px; display:flex; align-items:center; justify-content:center; border-radius:50%; }
     
     #map-wrapper { flex:1; position:relative; background:#E2E8F0; overflow:hidden; width:100%; height:100%; }
-    #stage-container { width:100%; height:100%; cursor:grab; opacity:0; transition:opacity 0.3s; }
+#stage-container { width:100%; height:100%; cursor:grab; opacity:0; transition:opacity 0.3s; }
+
+/* Mobile-only: reserve space under the legend so it doesn't block map interactions */
+@media (max-width: 820px), (pointer: coarse), (hover: none) {
+  #map-wrapper { --legend-safe: 0px; }
+
+  #stage-container{
+    height: calc(100% - var(--legend-safe));
+    margin-top: var(--legend-safe);
+  }
+}
     #stage-container.visible { opacity:1; }
     
     /* LEGEND */
@@ -577,6 +587,25 @@ function setHoverSeat(seat) {
     stage.add(uiLayer);
     
     const tooltip = document.getElementById('tooltip');
+
+    function applyMobileLegendSafeArea() {
+  const mw = document.getElementById('map-wrapper');
+  const legend = document.querySelector('.legend');
+  if (!mw || !legend) return;
+
+  // Only apply on mobile view
+  if (!isMobileView) {
+    mw.style.setProperty('--legend-safe', '0px');
+    return;
+  }
+
+  // Add a small gap so it feels intentional
+  const gap = 12;
+  const h = legend.offsetHeight || 0;
+
+  mw.style.setProperty('--legend-safe', (h + gap) + 'px');
+}
+
 
   const isMobileView =
   (window.matchMedia && window.matchMedia('(max-width: 820px)').matches) ||
@@ -1654,15 +1683,23 @@ forEachNodeList(uiLayer.find('.debug-bounds'), (n) => n.destroy());
 
 
 // ✅ Initial fit (this hides loader once the map is built)
+applyMobileLegendSafeArea();
+
+// Make sure Konva stage uses the NEW container size (after safe-area applied)
+stage.width(container.offsetWidth);
+stage.height(container.offsetHeight);
+
 fitStageToContent();
 updateIcons();
 
+
 // Failsafe: never allow the loader to remain forever
 setTimeout(() => {
+try {
+  applyMobileLegendSafeArea();
+  stage.width(container.offsetWidth);
+  stage.height(container.offsetHeight);
 
-  try {
-    stage.width(container.offsetWidth);
-    stage.height(container.offsetHeight);
 
    // ✅ Make embedded "i" glyphs visible and link them to seats BEFORE rendering icons
 linkEmbeddedInfoGlyphs();
@@ -1707,13 +1744,20 @@ setTimeout(() => {
 
         // Watch for resizes
        const ro = new ResizeObserver(() => {
-    clearHoverSeat(); // ✅ add this first
-    stage.width(container.offsetWidth);
-    stage.height(container.offsetHeight);
-    fitStageToContent();
-    updateIcons();
+  clearHoverSeat();
+  applyMobileLegendSafeArea();
+
+  stage.width(container.offsetWidth);
+  stage.height(container.offsetHeight);
+  fitStageToContent();
+  updateIcons();
 });
 ro.observe(container);
+
+// Also handle orientation changes / mobile browser UI resizing
+window.addEventListener('resize', () => {
+  applyMobileLegendSafeArea();
+}, { passive: true });
 
 
     } catch (err) {
