@@ -2026,14 +2026,20 @@ seat.on('mouseleave', () => {
 });
 
 function showSeatTooltip(seatId, nativeEvt) {
- // Mobile: only show tooltips for seat views when "Show seat views" is enabled.
-// Seat "info" (lowercase i) is handled in the footer line above Total.
-if (isMobileView) {
-  const viewModeEl = document.getElementById('toggle-views');
-  const viewMode = !!(viewModeEl && viewModeEl.checked);
-  const meta = seatMeta.get(seatId);
-  if (!viewMode || !meta || !meta.viewImg) return;
-}
+  // Mobile: allow tooltip for EITHER:
+  // - seat INFO (meta.info), or
+  // - seat VIEW (meta.viewImg) when "Show seat views" is enabled.
+  if (isMobileView) {
+    const viewModeEl = document.getElementById('toggle-views');
+    const viewMode = !!(viewModeEl && viewModeEl.checked);
+    const meta = seatMeta.get(seatId);
+
+    const hasInfo = !!(meta && meta.info && String(meta.info).trim().length);
+    const hasView = !!(meta && meta.viewImg);
+
+    if (!(hasInfo || (viewMode && hasView))) return;
+  }
+
 
   const meta = seatMeta.get(seatId);
   if (!meta) return;
@@ -2571,8 +2577,10 @@ window.addEventListener('resize', () => {
             const radius = seat.radius();
 
 // INFO ICON
-// If the saved layout already has an embedded "i" glyph, we don't need the overlay badge.
-if (hasInfo && !seat.getAttr('sbEmbeddedInfoGlyph')) {
+// Always render the overlay badge in checkout.
+// (Some layouts include embedded "i" glyphs, but they are not reliably interactive across all maps.)
+if (hasInfo) {
+
    const grp = new Konva.Group({
   x: cx + radius * 0.65,
   y: cy - radius * 0.65,
