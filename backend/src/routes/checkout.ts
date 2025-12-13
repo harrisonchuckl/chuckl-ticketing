@@ -415,6 +415,7 @@ router.get('/', async (req, res) => {
       margin-bottom:6px;
     }
     .basket-seatinfo strong{ font-weight:800; }
+  </style>
 
 </head>
 <body>
