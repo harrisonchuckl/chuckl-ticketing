@@ -524,21 +524,7 @@ router.get('/', async (req, res) => {
     <div id="stage-container"></div>
     <div id="tooltip"></div>
     <div id="loader"><div class="spinner"></div><div>Loading seating plan...</div></div>
-</div>
-      <div class="legend-row">
-        <div class="legend-item"><div class="dot dot-avail"></div> Available</div>
-        <div class="legend-item"><div class="dot dot-selected"></div> Selected</div>
-        <div class="legend-item"><div class="dot dot-sold"></div> Unavailable</div>
-      </div>
-      <label class="view-toggle">
-        <input type="checkbox" id="toggle-views" /> 
-        <span>Show seat views</span>
-      </label>
-    </div>
-    <div id="stage-container"></div>
-    <div id="tooltip"></div>
-    <div id="loader"><div class="spinner"></div><div>Loading seating plan...</div></div>
-  </div>
+
 <footer>
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;">
     <div class="basket-info">
@@ -2044,13 +2030,17 @@ setTimeout(() => debugScanInfoState('post-timeout-50ms'), 0);
 
 // Failsafe: never allow the loader to remain forever
 setTimeout(() => {
-  const loaderEl = document.getElementById('loader');
-  const stageEl = document.getElementById('stage-container');
+  const loaderEls = Array.from(document.querySelectorAll('#loader'));
+  const stageEls  = Array.from(document.querySelectorAll('#stage-container'));
 
-  if (loaderEl && !loaderEl.classList.contains('hidden')) {
+  // If ANY loader is still visible, hide ALL loaders and show ALL stage containers
+  const anyLoaderVisible = loaderEls.some(el => !el.classList.contains('hidden'));
+
+  if (anyLoaderVisible) {
     console.warn('[checkout] loader failsafe triggered – forcing visible stage');
-    loaderEl.classList.add('hidden');
-    if (stageEl) stageEl.classList.add('visible');
+
+    loaderEls.forEach(el => el.classList.add('hidden'));
+    stageEls.forEach(el => el.classList.add('visible'));
 
     try {
       mainLayer.batchDraw();
