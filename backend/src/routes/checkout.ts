@@ -2340,6 +2340,36 @@ console.log('[checkout][tiered] tickets=', sortedTickets.length,
   'IS_TIERED_PRICING=', IS_TIERED_PRICING
 );
 
+console.log('[checkout][tiered] tickets=', sortedTickets.length,
+  'rawSeen=', __seatAssignedTicketIdsRaw.size,
+  'resolvedSeen=', __seatAssignedTicketIdsResolved.size,
+  'IS_TIERED_PRICING=', IS_TIERED_PRICING
+);
+
+(function debugTicketAssignmentSummary(){
+  try {
+    const rawCounts = new Map();
+    const resCounts = new Map();
+
+    for (const m of seatMeta.values()) {
+      const r = String(m.ticketIdRaw || '').trim();
+      const t = String(m.ticketId || '').trim();
+      if (r) rawCounts.set(r, (rawCounts.get(r) || 0) + 1);
+      if (r && t) resCounts.set(t, (resCounts.get(t) || 0) + 1); // only if raw existed
+    }
+
+    const top = (map) => Array.from(map.entries()).sort((a,b)=>b[1]-a[1]).slice(0,10);
+
+    console.log('[checkout][tiered][counts] rawTop=', top(rawCounts));
+    console.log('[checkout][tiered][counts] resolvedTop=', top(resCounts));
+
+    const anyObjectSmell = Array.from(__seatAssignedTicketIdsRaw).some(v => String(v).includes('[object Object]'));
+    if (anyObjectSmell) console.warn('[checkout][tiered] WARNING: raw ticket ids include [object Object] — layout stores objects');
+  } catch (e) {
+    console.warn('[checkout][tiered] debugTicketAssignmentSummary failed', e);
+  }
+})();
+
 // Repaint all seats now we know the mode
 try {
   mainLayer.find('Circle').forEach(seat => {
