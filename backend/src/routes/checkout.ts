@@ -1870,22 +1870,105 @@ document.getElementById('toggle-views').addEventListener('change', () => {
         updateIcons();
     });
 
-   function isSingleGapRuleEnabled() {
-  // Rule is ON if there exists ANY row/group with > 3 available seats.
-  // Rule is OFF only when ALL rows are down to 3 or fewer available seats (i.e., near sell-out scraps).
+function rowLooksLinear(row) {
+  // Avoid applying this rule to circular tables etc.
+  // "Row-like" = clearly wider than tall or taller than wide.
+  if (!row || row.length < 4) return false;
+
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  row.forEach(s => {
+    minX = Math.min(minX, s.x);
+    maxX = Math.max(maxX, s.x);
+    minY = Math.min(minY, s.y);
+    maxY = Math.max(maxY, s.y);
+  });
+
+  const w = maxX - minX;
+  const h = maxY - minY;
+
+  const big = Math.max(w, h);
+  const small = Math.max(1, Math.min(w, h));
+  const ratio = big / small;
+
+  return ratio >= 1.8;
+}
+
+function median(nums) {
+  const a = (nums || []).filter(n => Number.isFinite(n)).slice().sort((x, y) => x - y);
+  if (!a.length) return 0;
+  const mid = Math.floor(a.length / 2);
+  return a.length % 2 ? a[mid] : (a[mid - 1] + a[mid]) / 2;
+}
+
+function splitRowIntoSegments(row) {
+  // Row is already sorted by your earlier code (x or y). We just detect big jumps (aisles).
+  if (!row || row.length <= 1) return [row || []];
+
+  // Work out if row is "more horizontal" or "more vertical"
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  row.forEach(s => {
+    minX = Math.min(minX, s.x);
+    maxX = Math.max(maxX, s.x);
+    minY = Math.min(minY, s.y);
+    maxY = Math.max(maxY, s.y);
+  });
+  const horizontal = (maxX - minX) >= (maxY - minY);
+  const coord = (s) => horizontal ? s.x : s.y;
+
+  const deltas = [];
+  for (let i = 0; i < row.length - 1; i++) {
+    deltas.push(Math.abs(coord(row[i + 1]) - coord(row[i])));
+  }
+
+  const med = median(deltas) || 0;
+  const threshold = med > 0 ? (med * 1.75) : 999999; // if med=0, don't split
+
+  const segments = [];
+  let cur = [row[0]];
+
+  for (let i = 1; i < row.length; i++) {
+    const d = Math.abs(coord(row[i]) - coord(row[i - 1]));
+    if (d > threshold) {
+      segments.push(cur);
+      cur = [row[i]];
+    } else {
+      cur.push(row[i]);
+    }
+  }
+  if (cur.length) segments.push(cur);
+
+  return segments.filter(seg => seg && seg.length);
+}
+
+function isSingleGapRuleEnabled() {
+  // GLOBAL rule:
+  // ON if there exists ANY linear row with >3 available seats anywhere
+  // OFF only if ALL linear rows are <=3 available seats (near sell-out scraps)
   let maxAvail = 0;
+  let sawLinearRow = false;
 
   rowMap.forEach((row) => {
     if (!row || !row.length) return;
-    const availableCount = row.filter((s) => !s.unavailable).length;
-    if (availableCount > maxAvail) maxAvail = availableCount;
+    if (!rowLooksLinear(row)) return;
+
+    sawLinearRow = true;
+    const avail = row.filter(s => !s.unavailable).length;
+    if (avail > maxAvail) maxAvail = avail;
   });
+
+  // If we didn't detect any "linear rows", fall back to old behaviour (safe)
+  if (!sawLinearRow) {
+    rowMap.forEach((row) => {
+      if (!row || !row.length) return;
+      const avail = row.filter(s => !s.unavailable).length;
+      if (avail > maxAvail) maxAvail = avail;
+    });
+  }
 
   return maxAvail > 3;
 }
 
 function findSingleGapGroups() {
-  // If we're ONLY down to rows with <=3 available seats, disable the rule entirely.
   if (!isSingleGapRuleEnabled()) return [];
 
   const badGroups = [];
@@ -1893,24 +1976,34 @@ function findSingleGapGroups() {
   rowMap.forEach((row, groupId) => {
     if (!row || row.length < 2) return;
 
-    // 0 = unavailable, 1 = empty available, 2 = selected
-    const states = row.map((s) => {
-      if (s.unavailable) return 0;
-      return selectedSeats.has(s.id) ? 2 : 1;
-    });
+    // Only enforce on linear rows (prevents weird table false-positives)
+    if (!rowLooksLinear(row)) return;
 
-    // Detect a stranded single empty seat:
-    // an empty seat (1) whose neighbours are not empty (or edges treated as blocked)
-    for (let i = 0; i < states.length; i++) {
-      if (states[i] !== 1) continue;
+    const segments = splitRowIntoSegments(row);
 
-      const left = i === 0 ? 0 : states[i - 1];
-      const right = i === states.length - 1 ? 0 : states[i + 1];
+    for (const seg of segments) {
+      if (!seg || seg.length < 2) continue;
 
-      if (left !== 1 && right !== 1) {
-        badGroups.push(groupId);
-        break;
+      // 0 = unavailable, 1 = empty available, 2 = selected
+      const states = seg.map((s) => {
+        if (s.unavailable) return 0;
+        return selectedSeats.has(s.id) ? 2 : 1;
+      });
+
+      // Detect isolated single empty seat INCLUDING end-of-segment
+      for (let i = 0; i < states.length; i++) {
+        if (states[i] !== 1) continue;
+
+        const left = (i === 0) ? 0 : states[i - 1];
+        const right = (i === states.length - 1) ? 0 : states[i + 1];
+
+        if (left !== 1 && right !== 1) {
+          badGroups.push(groupId);
+          break;
+        }
       }
+
+      if (badGroups.includes(groupId)) break;
     }
   });
 
@@ -1988,7 +2081,7 @@ if (isMobileView) {
             // Validate single-seat gaps ONLY at Continue time
       const badGroups = findSingleGapGroups();
       if (badGroups.length) {
-        alert("Please don’t leave single-seat gaps. Select the neighbouring seat(s) or choose a different spot.");
+alert("Almost there — those seats would leave a single isolated seat on its own in that row. Please choose a different pair (or add the neighbouring seat) so we don’t strand a lone seat.");
         btn.innerText = 'Continue';
         return;
       }
