@@ -392,6 +392,21 @@ router.get('/', async (req, res) => {
       max-width:260px;
       border:1px solid rgba(255,255,255,0.10);
     }
+
+    /* Bigger tooltip on mobile */
+@media (max-width: 820px), (pointer: coarse), (hover: none) {
+  #tooltip{
+    max-width: 340px;
+    font-size: 1rem;
+    padding: 14px;
+    border-radius: 12px;
+  }
+  #tooltip img{
+    max-width: 340px;
+    max-height: 240px;
+  }
+}
+
     #tooltip .tt-title{ display:block; font-weight:800; margin-bottom:2px; }
     #tooltip .tt-meta{ display:block; font-size:0.75rem; color:#cbd5e1; margin-bottom:6px; }
     #tooltip .tt-info{ font-size:0.82rem; color:#e2e8f0; line-height:1.25; margin-top:6px; }
@@ -1227,13 +1242,24 @@ seat.on('mouseleave', () => {
   }
 });
 
-             seat.on('click tap', (e) => {
+          seat.on('click tap', (e) => {
   e.cancelBubble = true;
   if (isUnavailable) return;
 
-  // Always select/deselect on seat tap/click (view previews happen via the eye icons)
+  // Mobile: when Show seat views is ON, disable buying/selection.
+  // Instead, tapping a seat should just preview (if it has a view/info).
+  const viewModeEl = document.getElementById('toggle-views');
+  const viewMode = !!(isMobileView && viewModeEl && viewModeEl.checked);
+
+  if (viewMode) {
+    showSeatTooltip(seat._id, e && e.evt);
+    return;
+  }
+
+  // Normal behaviour: select/deselect seat
   toggleSeat(seat, parentGroup);
 });
+
 
             }
 
@@ -1721,7 +1747,18 @@ grp.on('click tap', (e) => {
                grp.add(cam);
 grp.on('mouseenter', (e) => { stage.container().style.cursor = 'zoom-in'; showSeatTooltip(seat._id, e && e.evt); });
                grp.on('mouseleave', () => { stage.container().style.cursor = 'default'; tooltip.style.display = 'none'; });
-               grp.on('click tap', (e) => { e.cancelBubble = true; if (!meta.unavailable) toggleSeat(seat, parentGroup); });
+grp.on('click tap', (e) => {
+  e.cancelBubble = true;
+
+  // Mobile + Show seat views: preview only
+  if (isMobileView) {
+    showSeatTooltip(seat._id, e && e.evt);
+    return;
+  }
+
+  // Desktop fallback (keep existing behaviour)
+  if (!meta.unavailable) toggleSeat(seat, parentGroup);
+});
                uiLayer.add(grp);
             }
         });
