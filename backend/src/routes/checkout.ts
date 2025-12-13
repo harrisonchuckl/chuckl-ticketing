@@ -580,6 +580,45 @@ function setHoverSeat(seat) {
   (window.matchMedia && window.matchMedia('(hover: none)').matches) ||
   ('ontouchstart' in window);
 
+// --- Tooltip dismiss on mobile (tap anywhere else) ---
+let __ttLastOpenAt = 0;
+
+function hideSeatTooltip() {
+  if (!tooltip) return;
+  tooltip.style.display = 'none';
+}
+
+function markSeatTooltipOpened() {
+  __ttLastOpenAt = Date.now();
+}
+
+// Capture taps anywhere on the page; only dismiss when:
+// - mobile view
+// - "Show seat views" is ON
+// - tooltip is currently visible
+// - and not immediately after opening (prevents "open then instantly close")
+document.addEventListener('pointerdown', (e) => {
+  if (!isMobileView) return;
+
+  const viewModeEl = document.getElementById('toggle-views');
+  const viewMode = !!(viewModeEl && viewModeEl.checked);
+  if (!viewMode) return;
+
+  if (!tooltip || tooltip.style.display !== 'block') return;
+
+  // Prevent the same tap that opened the tooltip from closing it immediately
+  if (Date.now() - __ttLastOpenAt < 250) return;
+
+  // If user taps the legend area (including the checkbox), don't auto-dismiss
+  const t = e.target;
+  if (t && t.closest && t.closest('.legend')) return;
+
+  hideSeatTooltip();
+  clearHoverSeat();
+}, { capture: true, passive: true });
+// --- end tooltip dismiss ---
+
+
 const toggleViews = document.getElementById('toggle-views');
 const uiSeatInfo = document.getElementById('ui-seatinfo');
 
@@ -1356,6 +1395,9 @@ if (!pos) {
 
   // Render (hidden) so we can measure real size before positioning
   tooltip.style.display = 'block';
+  // Mark as "just opened" so the global tap-to-dismiss doesn't instantly close it
+markSeatTooltipOpened();
+
   tooltip.style.visibility = 'hidden';
 
   const pad = 12;
@@ -1605,8 +1647,8 @@ setTimeout(() => {
 
    // ✅ Make embedded "i" glyphs visible and link them to seats BEFORE rendering icons
 linkEmbeddedInfoGlyphs();
-
 fitStageToContent();
+updateSeatViewsToggleVisibility();
 updateIcons();
 
 setTimeout(() => debugScanInfoState('post-timeout-50ms'), 0);
@@ -1787,7 +1829,32 @@ try {
 }
 
 stage.on('wheel dragmove', updateIcons);
-document.getElementById('toggle-views').addEventListener('change', updateIcons);
+function updateSeatViewsToggleVisibility() {
+  const label = document.querySelector('.view-toggle');
+  const cb = document.getElementById('toggle-views');
+  if (!label || !cb) return;
+
+  // Check if ANY seat meta contains a view image
+  let anyViews = false;
+  for (const m of seatMeta.values()) {
+    if (m && m.viewImg) { anyViews = true; break; }
+  }
+
+  if (!anyViews) {
+    cb.checked = false;            // force off
+    label.style.display = 'none';  // hide the whole toggle row
+  } else {
+    label.style.display = '';      // show as normal
+  }
+}
+
+// Ensure toggle visibility is correct once we’ve built seatMeta
+updateSeatViewsToggleVisibility();
+
+document.getElementById('toggle-views').addEventListener('change', () => {
+  // If they somehow toggle it (desktop / edge cases), keep UI consistent
+  updateIcons();
+});
 
     stage.on('wheel', (e) => {
     clearHoverSeat(); // ✅ add this first
