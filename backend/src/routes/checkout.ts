@@ -1285,12 +1285,49 @@ const TICKET_ATTR_KEYS = [
   'ticket'
 ];
 
+function normaliseTicketAttrValue(v) {
+  if (v === undefined || v === null) return '';
+
+  // If it's already a string/number, use it
+  if (typeof v === 'string' || typeof v === 'number') {
+    const s = String(v).trim();
+    return s;
+  }
+
+  // If it's an object, try common shapes
+  if (typeof v === 'object') {
+    // e.g. { id: "..." }
+    if (v.id !== undefined && v.id !== null) {
+      const s = String(v.id).trim();
+      if (s) return s;
+    }
+
+    // e.g. { ticketTypeId: "..." } or { sbTicketId: "..." }
+    for (const kk of TICKET_ATTR_KEYS) {
+      if (v[kk] !== undefined && v[kk] !== null) {
+        const s = String(v[kk]).trim();
+        if (s) return s;
+      }
+    }
+
+    // e.g. { value: "..." }
+    if (v.value !== undefined && v.value !== null) {
+      const s = String(v.value).trim();
+      if (s) return s;
+    }
+  }
+
+  // Avoid returning "[object Object]"
+  return '';
+}
+
 function readTicketAttrFromNode(node) {
   try {
     if (!node || !node.getAttr) return '';
     for (const k of TICKET_ATTR_KEYS) {
       const v = node.getAttr(k);
-      if (v !== undefined && v !== null && String(v).trim()) return String(v).trim();
+      const s = normaliseTicketAttrValue(v);
+      if (s) return s;
     }
   } catch (_) {}
   return '';
@@ -1304,8 +1341,23 @@ function getSeatWrapper(seatNode) {
   }
 }
 
+function findAssignedTicketRawUpTree(node, maxDepth = 10) {
+  let cur = node;
+  let d = 0;
+
+  while (cur && d < maxDepth) {
+    const s = readTicketAttrFromNode(cur);
+    if (s) return s;
+
+    cur = (typeof cur.getParent === 'function') ? cur.getParent() : null;
+    d++;
+  }
+
+  return '';
+}
+
 function findAssignedTicketRaw(seatNode, parentGroup) {
-  // Priority: seat -> wrapper -> parentGroup
+  // Priority: seat -> wrapper -> explicit parentGroup -> walk up the tree
   const seatRaw = readTicketAttrFromNode(seatNode);
   if (seatRaw) return seatRaw;
 
@@ -1315,6 +1367,13 @@ function findAssignedTicketRaw(seatNode, parentGroup) {
 
   const pgRaw = readTicketAttrFromNode(parentGroup);
   if (pgRaw) return pgRaw;
+
+  // Walk up from wrapper (usually the right chain), then from seat as fallback
+  const upFromWrap = findAssignedTicketRawUpTree(wrap, 12);
+  if (upFromWrap) return upFromWrap;
+
+  const upFromSeat = findAssignedTicketRawUpTree(seatNode, 12);
+  if (upFromSeat) return upFromSeat;
 
   return '';
 }
@@ -1762,7 +1821,7 @@ const tType = getTicketType(seat, parentGroup);
 const ticketIdResolved = (tType && tType.id) ? String(tType.id) : (sortedTickets[0] ? String(sortedTickets[0].id) : '');
 
 // Track resolved ids actually used across seats
-if (ticketIdResolved) __seatAssignedTicketIdsResolved.add(ticketIdResolved);
+if (rawTicketId && ticketIdResolved) __seatAssignedTicketIdsResolved.add(ticketIdResolved);
 
 const ticketColor = getTicketColor(ticketIdResolved);
 
