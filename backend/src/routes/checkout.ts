@@ -234,6 +234,46 @@ router.get('/', async (req, res) => {
                 button:disabled { background: #9E9E9E; cursor: not-allowed; }
                 .total { font-size: 1.2rem; font-weight: bold; margin-top: 10px; }
                 .error { color: red; margin-top: 10px; }
+                /* ZOOM CONTROLS */
+.zoom-controls{
+  position:absolute;
+  right:16px;
+  top:90px;
+  z-index:4200;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.zoom-btn{
+  width:46px;
+  height:46px;
+  border-radius:14px;
+  border:1px solid rgba(15,23,42,0.18);
+  background:rgba(255,255,255,0.98);
+  box-shadow:0 6px 18px rgba(0,0,0,0.14);
+  font-size:22px;
+  font-weight:800;
+  line-height:1;
+  color:#0F172A;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.zoom-btn:active{
+  transform: translateY(1px);
+}
+
+@media (max-width: 820px), (pointer: coarse), (hover: none) {
+  .zoom-controls{
+    top:auto;
+    bottom:110px; /* keeps it above the footer */
+    right:14px;
+  }
+}
+
             </style>
             </head><body>
             <h1>${show.title}</h1>
@@ -340,7 +380,21 @@ router.get('/', async (req, res) => {
     .btn-close { text-decoration:none; font-size:1.5rem; color:var(--muted); width:40px; height:40px; display:flex; align-items:center; justify-content:center; border-radius:50%; }
     
     #map-wrapper { flex:1; position:relative; background:#E2E8F0; overflow:hidden; width:100%; height:100%; }
-#stage-container { width:100%; height:100%; cursor:grab; opacity:0; transition:opacity 0.3s; }
+#stage-container {
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  opacity: 0;
+  transition: opacity 0.3s;
+
+  /* Critical: prevent browser pinch-zoom / scroll on the page */
+  touch-action: none;
+  -ms-touch-action: none;
+
+  /* Helps avoid text selection during pan */
+  user-select: none;
+  -webkit-user-select: none;
+}
 
 /* Mobile-only: reserve space under the legend so it doesn't block map interactions */
 @media (max-width: 820px), (pointer: coarse), (hover: none) {
@@ -448,8 +502,29 @@ router.get('/', async (req, res) => {
     <div class="header-info"><h1>${show.title}</h1><div class="header-meta">${dateStr} • ${timeStr} • ${venueName}</div></div>
     <a href="/public/event/${show.id}" class="btn-close">✕</a>
   </header>
-  <div id="map-wrapper">
+ <div id="map-wrapper">
     <div class="legend">
+      <div class="legend-row">
+        <div class="legend-item"><div class="dot dot-avail"></div> Available</div>
+        <div class="legend-item"><div class="dot dot-selected"></div> Selected</div>
+        <div class="legend-item"><div class="dot dot-sold"></div> Unavailable</div>
+      </div>
+      <label class="view-toggle">
+        <input type="checkbox" id="toggle-views" /> 
+        <span>Show seat views</span>
+      </label>
+    </div>
+
+    <!-- ZOOM CONTROLS -->
+    <div class="zoom-controls" aria-label="Zoom controls">
+      <button type="button" class="zoom-btn" id="zoom-in" aria-label="Zoom in">+</button>
+      <button type="button" class="zoom-btn" id="zoom-out" aria-label="Zoom out">−</button>
+    </div>
+
+    <div id="stage-container"></div>
+    <div id="tooltip"></div>
+    <div id="loader"><div class="spinner"></div><div>Loading seating plan...</div></div>
+</div>
       <div class="legend-row">
         <div class="legend-item"><div class="dot dot-avail"></div> Available</div>
         <div class="legend-item"><div class="dot dot-selected"></div> Selected</div>
@@ -576,8 +651,12 @@ function setHoverSeat(seat) {
   container: 'stage-container',
   width: container.offsetWidth,
   height: container.offsetHeight,
-  draggable: false // customer view: whole stage is fixed
+  draggable: true // customer view: allow pan
 });
+
+// Make “accidental micro-drags” not steal clicks
+stage.dragDistance(8);
+
 
     
     // LAYERS: Main map and UI on top
@@ -587,6 +666,240 @@ function setHoverSeat(seat) {
     stage.add(uiLayer);
     
     const tooltip = document.getElementById('tooltip');
+
+// ============================
+// ZOOM + PAN ENGINE (buttons, wheel, pinch)
+// ============================
+const ZOOM_CFG = {
+  minScale: 0.05,
+  maxScale: 4,
+  step: 1.15,
+  minSeatPx: 14 // minimum “tap-safe” seat radius in screen pixels (mobile)
+};
+
+let __autoMinZoomDone = false;
+let __pinching = false;
+let __pinchStartDist = 0;
+let __pinchStartScale = 1;
+
+// Throttle heavy icon rebuilds to 1/frame
+let __iconsRAF = 0;
+function scheduleUpdateIcons() {
+  if (__iconsRAF) return;
+  __iconsRAF = requestAnimationFrame(() => {
+    __iconsRAF = 0;
+    try { updateIcons(); } catch (_) {}
+  });
+}
+
+function clampScale(s) {
+  return Math.max(ZOOM_CFG.minScale, Math.min(ZOOM_CFG.maxScale, s));
+}
+
+function zoomToScaleAtPoint(newScale, screenPoint) {
+  clearHoverSeat();
+  if (!screenPoint) screenPoint = { x: stage.width() / 2, y: stage.height() / 2 };
+
+  const oldScale = stage.scaleX();
+  const nextScale = clampScale(newScale);
+
+  // Avoid doing work for tiny changes
+  if (!Number.isFinite(nextScale) || Math.abs(nextScale - oldScale) < 0.0001) return;
+
+  // Keep zoom anchored around the screenPoint
+  const mousePointTo = {
+    x: (screenPoint.x - stage.x()) / oldScale,
+    y: (screenPoint.y - stage.y()) / oldScale
+  };
+
+  stage.scale({ x: nextScale, y: nextScale });
+
+  const newPos = {
+    x: screenPoint.x - mousePointTo.x * nextScale,
+    y: screenPoint.y - mousePointTo.y * nextScale
+  };
+
+  stage.position(newPos);
+
+  scheduleUpdateIcons();
+  mainLayer.batchDraw();
+  uiLayer.batchDraw();
+}
+
+function zoomByFactor(factor, screenPoint) {
+  zoomToScaleAtPoint(stage.scaleX() * factor, screenPoint);
+}
+
+function getContainerRect() {
+  const el = stage.container();
+  return el ? el.getBoundingClientRect() : null;
+}
+
+function screenPointFromNativeEvent(nativeEvt) {
+  const rect = getContainerRect();
+  if (!rect || !nativeEvt) return null;
+
+  // touch event
+  const t = nativeEvt.touches && nativeEvt.touches[0] ? nativeEvt.touches[0] : null;
+  const cx = t ? t.clientX : nativeEvt.clientX;
+  const cy = t ? t.clientY : nativeEvt.clientY;
+
+  if (!Number.isFinite(cx) || !Number.isFinite(cy)) return null;
+  return { x: cx - rect.left, y: cy - rect.top };
+}
+
+function getFirstSeatRadiusWorld() {
+  let r = 0;
+  try {
+    const circles = mainLayer.find('Circle');
+    circles.each((c) => {
+      if (r) return;
+      if (c && c.getAttr && c.getAttr('isSeat')) {
+        r = (typeof c.radius === 'function') ? c.radius() : (c.getAttr('radius') || 0);
+      }
+    });
+  } catch (_) {}
+  return Number(r) || 0;
+}
+
+/**
+ * Mobile-only: on first interaction, if seats are too small to safely tap,
+ * zoom in to a minimum seat size around the user’s tap point.
+ * Returns true if it performed an auto-zoom (callers should STOP the click).
+ */
+function ensureMinSeatTapSize(nativeEvt) {
+  if (!isMobileView) return false;
+  if (__autoMinZoomDone) return false;
+
+  const seatR = getFirstSeatRadiusWorld();
+  if (!seatR) { __autoMinZoomDone = true; return false; }
+
+  const currentScale = stage.scaleX();
+  const seatPx = seatR * currentScale;
+
+  // Already tap-safe
+  if (seatPx >= ZOOM_CFG.minSeatPx) {
+    __autoMinZoomDone = true;
+    return false;
+  }
+
+  const targetScale = clampScale(currentScale * (ZOOM_CFG.minSeatPx / Math.max(0.0001, seatPx)));
+  if (targetScale <= currentScale + 0.0001) {
+    __autoMinZoomDone = true;
+    return false;
+  }
+
+  const p = screenPointFromNativeEvent(nativeEvt) || { x: stage.width() / 2, y: stage.height() / 2 };
+  zoomToScaleAtPoint(targetScale, p);
+
+  __autoMinZoomDone = true;
+  return true;
+}
+
+// Cursor feel during pan
+stage.on('dragstart', () => {
+  hideSeatTooltip();
+  clearHoverSeat();
+  stage.container().style.cursor = 'grabbing';
+});
+stage.on('dragend', () => {
+  stage.container().style.cursor = 'grab';
+});
+stage.on('dragmove', () => {
+  // keep overlays aligned (throttled)
+  scheduleUpdateIcons();
+});
+
+// Buttons
+const zoomInBtn = document.getElementById('zoom-in');
+const zoomOutBtn = document.getElementById('zoom-out');
+
+if (zoomInBtn) zoomInBtn.addEventListener('click', () => {
+  const center = { x: stage.width() / 2, y: stage.height() / 2 };
+  zoomByFactor(ZOOM_CFG.step, center);
+});
+
+if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => {
+  const center = { x: stage.width() / 2, y: stage.height() / 2 };
+  zoomByFactor(1 / ZOOM_CFG.step, center);
+});
+
+// Wheel zoom (desktop trackpads/mice)
+stage.on('wheel', (e) => {
+  clearHoverSeat();
+  e.evt.preventDefault();
+
+  const pointer = stage.getPointerPosition() || { x: stage.width() / 2, y: stage.height() / 2 };
+  const factor = (e.evt.deltaY > 0) ? (1 / ZOOM_CFG.step) : ZOOM_CFG.step;
+
+  zoomByFactor(factor, pointer);
+});
+
+// Pinch zoom (mobile)
+stage.container().addEventListener('touchstart', (e) => {
+  if (e.touches && e.touches.length === 2) {
+    __pinching = true;
+    __autoMinZoomDone = true; // pinch implies they can control zoom now
+    stage.draggable(false);
+
+    const rect = getContainerRect();
+    const a = e.touches[0];
+    const b = e.touches[1];
+
+    const ax = a.clientX - rect.left;
+    const ay = a.clientY - rect.top;
+    const bx = b.clientX - rect.left;
+    const by = b.clientY - rect.top;
+
+    __pinchStartDist = Math.hypot(bx - ax, by - ay);
+    __pinchStartScale = stage.scaleX();
+  }
+}, { passive: false });
+
+stage.container().addEventListener('touchmove', (e) => {
+  if (!__pinching) return;
+  if (!(e.touches && e.touches.length === 2)) return;
+
+  e.preventDefault();
+
+  const rect = getContainerRect();
+  const a = e.touches[0];
+  const b = e.touches[1];
+
+  const ax = a.clientX - rect.left;
+  const ay = a.clientY - rect.top;
+  const bx = b.clientX - rect.left;
+  const by = b.clientY - rect.top;
+
+  const dist = Math.hypot(bx - ax, by - ay);
+  if (!__pinchStartDist) return;
+
+  const center = { x: (ax + bx) / 2, y: (ay + by) / 2 };
+  const scale = __pinchStartScale * (dist / __pinchStartDist);
+
+  zoomToScaleAtPoint(scale, center);
+}, { passive: false });
+
+stage.container().addEventListener('touchend', (e) => {
+  if (__pinching && (!e.touches || e.touches.length < 2)) {
+    __pinching = false;
+    stage.draggable(true);
+    stage.container().style.cursor = 'grab';
+  }
+}, { passive: true });
+
+// Mobile: first tap on the map (empty space) auto-zooms if needed
+stage.container().addEventListener('pointerdown', (e) => {
+  if (!isMobileView) return;
+
+  // ignore taps on the legend / zoom buttons
+  if (e.target && e.target.closest && (e.target.closest('.legend') || e.target.closest('.zoom-controls'))) return;
+
+  // If they tapped a seat/icon, the seat handlers will deal with it (we’ll auto-zoom there too via seat click patch below)
+  // But tapping empty map should also zoom
+  ensureMinSeatTapSize(e);
+}, { passive: true });
+
 
     function applyMobileLegendSafeArea() {
   const mw = document.getElementById('map-wrapper');
@@ -1327,9 +1640,15 @@ seat.on('mouseleave', () => {
   }
 });
 
-          seat.on('click tap', (e) => {
+         seat.on('click tap', (e) => {
   e.cancelBubble = true;
   if (isUnavailable) return;
+
+  // Mobile: if seats are too small, FIRST tap should zoom in (no selection yet)
+  if (isMobileView) {
+    const didAutoZoom = ensureMinSeatTapSize(e && e.evt ? e.evt : e);
+    if (didAutoZoom) return;
+  }
 
   // Mobile: when Show seat views is ON, disable buying/selection.
   // Instead, tapping a seat should just preview (if it has a view/info).
@@ -1344,6 +1663,7 @@ seat.on('mouseleave', () => {
   // Normal behaviour: select/deselect seat
   toggleSeat(seat, parentGroup);
 });
+
 
 
             }
@@ -1876,9 +2196,11 @@ grp.on('click tap', (e) => {
 
         uiLayer.batchDraw();
 
-// After building the map, hard-lock all nodes so customers can't drag blocks, tables, stage, etc.
+// After building the map, lock all NODES so customers can't drag blocks, tables, seats etc.
+// But keep the STAGE draggable so customers can pan the map.
 try {
-  stage.draggable(false);
+  stage.draggable(true);
+
   stage.find('*').forEach((node) => {
     if (node && typeof node.draggable === 'function') {
       node.draggable(false);
@@ -1891,7 +2213,7 @@ try {
 
 }
 
-stage.on('wheel dragmove', updateIcons);
+
 function updateSeatViewsToggleVisibility() {
   const label = document.querySelector('.view-toggle');
   const cb = document.getElementById('toggle-views');
@@ -1919,20 +2241,7 @@ document.getElementById('toggle-views').addEventListener('change', () => {
   updateIcons();
 });
 
-    stage.on('wheel', (e) => {
-    clearHoverSeat(); // ✅ add this first
-    e.evt.preventDefault();
-    const scaleBy = 1.1;
-    const oldScale = stage.scaleX();
-        const pointer = stage.getPointerPosition();
-        const mousePointTo = { x: (pointer.x - stage.x()) / oldScale, y: (pointer.y - stage.y()) / oldScale };
-        const newScale = e.evt.deltaY > 0 ? oldScale / scaleBy : oldScale * scaleBy;
-        stage.scale({ x: newScale, y: newScale });
-        const newPos = { x: pointer.x - mousePointTo.x * newScale, y: pointer.y - mousePointTo.y * newScale };
-        stage.position(newPos);
-        updateIcons();
-    });
-function getGroupTypeSafe(g) {
+   function getGroupTypeSafe(g) {
   try {
     return (g && g.getAttr && (g.getAttr('shapeType') || g.name && g.name())) || '';
   } catch (_) {
