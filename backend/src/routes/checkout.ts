@@ -371,6 +371,65 @@ router.get('/', async (req, res) => {
   <script src="https://unpkg.com/konva@9.3.3/konva.min.js"></script>
 
   <style>
+  /* Tickets & Prices panel (below footer) */
+#ticket-prices-panel{
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+#ticket-prices-panel .tpp-inner{
+  padding: 12px 24px 18px 24px;
+}
+#ticket-prices-panel .tpp-title{
+  font-family:'Outfit',sans-serif;
+  font-weight:800;
+  color: var(--primary);
+  margin-bottom: 10px;
+}
+#ticket-prices-panel .tpp-tablewrap{
+  width:100%;
+  overflow:auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+#ticket-prices-panel .tpp-table{
+  width:100%;
+  border-collapse: collapse;
+  min-width: 520px;
+  background: #fff;
+}
+#ticket-prices-panel .tpp-table th,
+#ticket-prices-panel .tpp-table td{
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  font-size: 0.9rem;
+}
+#ticket-prices-panel .tpp-table th{
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  background: rgba(243,244,246,0.8);
+}
+.tpp-swatch{
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  border: 1px solid rgba(15,23,42,0.25);
+  display:inline-block;
+  vertical-align: middle;
+}
+
+/* Make legend wrap nicely when we show multiple ticket bands */
+.legend-row{
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+.legend-item{
+  white-space: nowrap;
+}
+
     :root { --bg:#F3F4F6; --surface:#FFFFFF; --primary:#0F172A; --brand:#0056D2; --text-main:#111827; --text-muted:#6B7280; --border:#E5E7EB; --success:#10B981; --blocked:#334155; }
     body { margin:0; font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); display:flex; flex-direction:column; height:100vh; overflow:hidden; }
     
@@ -536,8 +595,8 @@ router.get('/', async (req, res) => {
     <a href="/public/event/${show.id}" class="btn-close">✕</a>
   </header>
  <div id="map-wrapper">
-    <div class="legend">
-      <div class="legend-row">
+<div class="legend">
+  <div class="legend-row" id="legend-main-row">
         <div class="legend-item"><div class="dot dot-avail"></div> Available</div>
         <div class="legend-item"><div class="dot dot-selected"></div> Selected</div>
         <div class="legend-item"><div class="dot dot-sold"></div> Unavailable</div>
@@ -574,11 +633,71 @@ router.get('/', async (req, res) => {
   </div>
 </footer>
 
+<!-- Tickets & Prices (tiered pricing mode only) -->
+<section id="ticket-prices-panel" style="display:none;">
+  <div class="tpp-inner">
+    <div class="tpp-title">Tickets & Prices</div>
+    <div class="tpp-tablewrap">
+      <table class="tpp-table" aria-label="Tickets and prices">
+        <thead>
+          <tr>
+            <th style="width:56px;">Colour</th>
+            <th>Ticket</th>
+            <th style="width:120px;">Price</th>
+          </tr>
+        </thead>
+        <tbody id="ticket-prices-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
   <script>
-    const rawLayout = ${mapData};
-    const ticketTypes = ${ticketsData};
-    const showId = ${showIdStr};
-    const heldSeatIds = new Set(${heldSeatsArray});
+
+  const rawLayout = ${mapData};
+const ticketTypes = ${ticketsData};
+const showId = ${showIdStr};
+const heldSeatIds = new Set(${heldSeatsArray});
+
+/* -----------------------------
+   Tiered pricing (banded seats)
+------------------------------ */
+const TICKET_PALETTE = [
+  '#2563EB', '#16A34A', '#F97316', '#A855F7', '#DC2626',
+  '#0EA5E9', '#84CC16', '#F59E0B', '#14B8A6', '#DB2777',
+  '#64748B'
+];
+
+const sortedTickets = (ticketTypes || []).slice().sort((a,b) =>
+  (Number(a.pricePence||0) - Number(b.pricePence||0)) || String(a.name||'').localeCompare(String(b.name||''))
+);
+
+const ticketColorById = new Map();
+sortedTickets.forEach((t, idx) => ticketColorById.set(t.id, TICKET_PALETTE[idx % TICKET_PALETTE.length]));
+
+function pFmtLocal(p) {
+  return '£' + (Number(p || 0) / 100).toFixed(2);
+}
+
+function escHtml(s){
+  return String(s ?? '')
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+
+function getTicketColor(ticketId){
+  return ticketColorById.get(ticketId) || '#64748B';
+}
+
+// Raw (seat-assigned) ticket IDs seen in the layout (used to detect banded pricing)
+const __seatAssignedTicketIdsRaw = new Set();
+
+// Tiered mode flag (computed after seats are processed)
+let IS_TIERED_PRICING = false;
+
     
     const selectedSeats = new Set();
 const seatPrices = new Map();
@@ -602,33 +721,64 @@ function resetSeatStroke(seat) {
   const id = seat._id;
   const meta = seatMeta.get(id);
 
-  // If we don't have meta yet, just do a safe reset
   if (!meta) {
     seat.stroke('#64748B');
     seat.strokeWidth(1.5);
+    seat.fill('#ffffff');
     return;
   }
 
   if (meta.unavailable) {
+    seat.fill('#000000');
     seat.stroke('#000000');
     seat.strokeWidth(1);
     return;
   }
 
+  const tc = meta.ticketColor || '#64748B';
+
   if (selectedSeats.has(id)) {
-    // Keep selected styling
-    seat.stroke('#0056D2');
-    seat.strokeWidth(3);
+    // Selected styling:
+    // Tiered mode -> white fill + coloured outline
+    // Normal -> blue fill + blue outline
+    if (IS_TIERED_PRICING) {
+      seat.fill('#FFFFFF');
+      seat.stroke(tc);
+      seat.strokeWidth(3);
+    } else {
+      seat.fill('#0056D2');
+      seat.stroke('#0056D2');
+      seat.strokeWidth(3);
+    }
     return;
   }
 
   // Default available styling
-  seat.stroke('#64748B');
-  seat.strokeWidth(1.5);
+  if (IS_TIERED_PRICING) {
+    seat.fill(tc);
+    seat.stroke(tc);
+    seat.strokeWidth(1.5);
+  } else {
+    seat.fill('#ffffff');
+    seat.stroke('#64748B');
+    seat.strokeWidth(1.5);
+  }
 }
 
 function applyHoverStroke(seat) {
   if (!seat) return;
+
+  const meta = seatMeta.get(seat._id);
+  if (meta && meta.unavailable) return;
+
+  // Keep hover consistent with the band colour in tiered mode
+  if (IS_TIERED_PRICING && meta) {
+    seat.stroke(meta.ticketColor || '#64748B');
+    seat.strokeWidth(3);
+    return;
+  }
+
+  // Existing behaviour
   seat.stroke('#0056D2');
   seat.strokeWidth(3);
 }
@@ -1533,10 +1683,22 @@ console.log("[DEBUG] Loading Layout summary:", {
                 const isHeldOrAllocated = holdStatus === 'hold' || holdStatus === 'allocation' || holdStatus === 'allocated';
                 const isUnavailable = isBlocked || isHeldDB || isHeldOrAllocated;
 
-                const tType = getTicketType(seat);
-                const price = tType ? tType.pricePence : 0;
-                seatPrices.set(seat._id, price);
-                
+              // Ticket assignment (raw from seat, may be null)
+const rawTicketId = seat.getAttr('sbTicketId') ? String(seat.getAttr('sbTicketId')) : '';
+
+// Track raw ticket IDs actually assigned on seats
+if (rawTicketId && ticketTypes.some(t => t.id === rawTicketId)) {
+  __seatAssignedTicketIdsRaw.add(rawTicketId);
+}
+
+const tType = getTicketType(seat);
+const ticketIdResolved = (tType && tType.id) ? tType.id : (sortedTickets[0] ? sortedTickets[0].id : '');
+const ticketColor = getTicketColor(ticketIdResolved);
+
+const price = tType ? tType.pricePence : 0;
+seatPrices.set(seat._id, price);
+
+  
                const label = seat.getAttr('label') || seat.name() || 'Seat';
 
 // ✅ Support info stored on the seat OR its immediate wrapper OR the seat-group parent
@@ -1587,16 +1749,19 @@ const viewImg =
 }
 
 
-                            seatMeta.set(seat._id, {
-    label,
-    info,      // now always a trimmed string (or '')
-    viewImg,
-    price,
-    ticketName: tType ? tType.name : 'Standard',
-    unavailable: isUnavailable,
-    seat,
-    parentGroup
+                         seatMeta.set(seat._id, {
+  label,
+  info,
+  viewImg,
+  price,
+  ticketId: ticketIdResolved,
+  ticketColor,
+  ticketName: tType ? tType.name : 'Standard',
+  unavailable: isUnavailable,
+  seat,
+  parentGroup
 });
+
 
 
                 // Map internal Konva id -> stable seat id used in DB (sbSeatId if present, otherwise node id)
@@ -1609,11 +1774,15 @@ const viewImg =
                     seat.fill('#000000'); // Blackout for sold/held/allocated
                     seat.stroke('#000000'); seat.strokeWidth(1);
                     seat.opacity(0.85); seat.listening(true);
-                } else {
-                    seat.fill('#ffffff'); seat.stroke('#64748B'); seat.strokeWidth(1.5);
-                    seat.opacity(1); seat.listening(true);
-                }
-                seat.shadowEnabled(false);
+              } else {
+  // Default for now; we’ll repaint properly once we know if this show is tiered pricing
+  seat.fill('#ffffff');
+  seat.stroke('#64748B');
+  seat.strokeWidth(1.5);
+  seat.opacity(1);
+  seat.listening(true);
+}
+  seat.shadowEnabled(false);
                 seat.visible(true);
 
                // --- Tag for Icon Layer ---
@@ -2029,7 +2198,88 @@ stage.width(container.offsetWidth);
 stage.height(container.offsetHeight);
 
 fitStageToContent();
+
+// Determine if this is a tiered/banded pricing map:
+// Must have multiple ticket types AND at least 2 different ticket IDs assigned across seats
+IS_TIERED_PRICING = (sortedTickets.length > 1 && __seatAssignedTicketIdsRaw.size > 1);
+
+// Repaint all seats now we know the mode
+try {
+  mainLayer.find('Circle').forEach(seat => {
+    if (!seat.getAttr || !seat.getAttr('isSeat')) return;
+    resetSeatStroke(seat);
+  });
+  mainLayer.batchDraw();
+} catch (_) {}
+
+// Render legend + ticket table for tiered mode (or keep default legend otherwise)
+function renderLegendAndTicketTable(){
+  const legendRow = document.getElementById('legend-main-row');
+  const panel = document.getElementById('ticket-prices-panel');
+  const tbody = document.getElementById('ticket-prices-tbody');
+
+  if (!legendRow) return;
+
+  if (!IS_TIERED_PRICING) {
+    // Keep your existing default legend and hide the prices panel
+    if (panel) panel.style.display = 'none';
+    return;
+  }
+
+  // Build legend: ticket colours + prices, plus Selected + Unavailable
+  const usedTickets = sortedTickets.filter(t => __seatAssignedTicketIdsRaw.has(t.id));
+  const legendBits = [];
+
+  usedTickets.forEach(t => {
+    const c = getTicketColor(t.id);
+    legendBits.push(
+      '<div class="legend-item">' +
+        '<div class="dot" style="background:' + c + ';border-color:' + c + ';"></div>' +
+        escHtml(t.name) + ' • ' + escHtml(pFmtLocal(t.pricePence)) +
+      '</div>'
+    );
+  });
+
+  legendBits.push(
+    '<div class="legend-item">' +
+      '<div class="dot" style="background:#ffffff;border-color:#0F172A;"></div>' +
+      'Selected' +
+    '</div>'
+  );
+
+  legendBits.push(
+    '<div class="legend-item">' +
+      '<div class="dot" style="background:#000000;border-color:#000000;"></div>' +
+      'Unavailable' +
+    '</div>'
+  );
+
+  legendRow.innerHTML = legendBits.join('');
+
+  // Build ticket price table
+  if (panel && tbody) {
+    tbody.innerHTML = usedTickets.map(t => {
+      const c = getTicketColor(t.id);
+      return (
+        '<tr>' +
+          '<td><span class="tpp-swatch" style="background:' + c + ';"></span></td>' +
+          '<td>' + escHtml(t.name) + '</td>' +
+          '<td>' + escHtml(pFmtLocal(t.pricePence)) + '</td>' +
+        '</tr>'
+      );
+    }).join('');
+
+    panel.style.display = '';
+  }
+
+  // Re-apply legend safe area (mobile) because legend height changed
+  try { applyMobileLegendSafeArea(); } catch(_) {}
+}
+
+renderLegendAndTicketTable();
+
 updateIcons();
+
 
 
 // Failsafe: never allow the loader to remain forever
@@ -2573,7 +2823,10 @@ function findTableSingleGapGroups() {
 
    function toggleSeat(seat, parentGroup) {
   const id = seat._id;
+  const meta = seatMeta.get(id);
   const willSelect = !selectedSeats.has(id);
+
+  if (!meta || meta.unavailable) return;
 
   if (willSelect) {
     selectedSeats.add(id);
@@ -2585,17 +2838,35 @@ function findTableSingleGapGroups() {
       return;
     }
 
-    seat.fill('#0056D2');
-    seat.stroke('#0056D2');
+    if (IS_TIERED_PRICING) {
+      // Selected -> white (as requested), with band-colour outline for clarity
+      seat.fill('#FFFFFF');
+      seat.stroke(meta.ticketColor || '#64748B');
+      seat.strokeWidth(3);
+    } else {
+      seat.fill('#0056D2');
+      seat.stroke('#0056D2');
+      seat.strokeWidth(3);
+    }
+
   } else {
     selectedSeats.delete(id);
-    seat.fill('#ffffff');
-    seat.stroke('#64748B');
+
+    if (IS_TIERED_PRICING) {
+      seat.fill(meta.ticketColor || '#64748B');
+      seat.stroke(meta.ticketColor || '#64748B');
+      seat.strokeWidth(1.5);
+    } else {
+      seat.fill('#ffffff');
+      seat.stroke('#64748B');
+      seat.strokeWidth(1.5);
+    }
   }
 
   mainLayer.batchDraw();
   updateBasket();
 }
+
 
     function updateBasket() {
         let totalPence = 0; let count = 0;
