@@ -1,31 +1,20 @@
 // backend/src/routes/checkout.ts
 import { Router } from 'express';
 import { OrderStatus } from '@prisma/client';
-import prisma from '../lib/prisma';
+import prisma from '../lib/prisma.js';
 import { calcFeesForShow } from '../services/fees.js';
 import Stripe from 'stripe';
 
 // --- ROBUST STRIPE INITIALIZATION ---
-const stripeSecret = process.env.STRIPE_SECRET_KEY || '';
+const stripeSecret = process.env.STRIPE_SECRET_KEY;
 
-// Handle multiple export shapes across TS transpiles / bundlers
-const StripeCtor: any =
-  (Stripe as any)?.Stripe ||
-  (Stripe as any)?.default ||
-  (Stripe as any);
+// Check for the .default property for safer ES Module interop with Stripe
+const StripeClient = (Stripe as any)?.default || Stripe;
 
-let stripe: any = null;
-
-try {
-  if (stripeSecret) {
-stripe = new StripeCtor(stripeSecret, { apiVersion: '2024-06-20' as any });
-  }
-} catch (e) {
-  console.error('[checkout] Stripe init failed', e);
-  stripe = null;
-}
+const stripe = stripeSecret
+    ? new StripeClient(stripeSecret, { apiVersion: '2024-06-20' })
+    : null;
 // ------------------------------------
-
 const router = Router();
 
 // --- formatting helper (Required for List View HTML) ---
@@ -176,19 +165,14 @@ router.get('/', async (req, res) => {
   if (!showId) return res.status(404).send('Show ID is required');
 
   try {
-   const show = await prisma.show.findUnique({
-  where: { id: showId },
-  include: {
-    venue: true,
-    ticketTypes: { orderBy: { pricePence: 'asc' } },
-    // allocations is optional at type-level in case Prisma client/schema differs in deploy
-    ...((
-      {
+    const show = await prisma.show.findUnique({
+      where: { id: showId },
+      include: {
+        venue: true,
+        ticketTypes: { orderBy: { pricePence: 'asc' } },
         allocations: { include: { seats: true } }
-      } as any
-    )),
-  } as any
-} as any);
+      }
+    });
 
     if (!show) return res.status(404).send('Event not found');
 
@@ -254,21 +238,12 @@ router.get('/', async (req, res) => {
 .zoom-controls{
   position:absolute;
   right:16px;
-  bottom:110px;   /* ✅ bottom-right */
-  top:auto;       /* ✅ remove top anchoring */
+  top:90px;
   z-index:4200;
   display:flex;
   flex-direction:column;
   gap:10px;
 }
-
-@media (max-width: 820px), (pointer: coarse), (hover: none) {
-  .zoom-controls{
-    right:14px;
-    bottom:130px; /* a touch higher on mobile so it clears the footer */
-  }
-}
-
 
 .zoom-btn{
   width:46px;
@@ -549,7 +524,7 @@ router.get('/', async (req, res) => {
     <div id="stage-container"></div>
     <div id="tooltip"></div>
     <div id="loader"><div class="spinner"></div><div>Loading seating plan...</div></div>
-  </div>
+
 <footer>
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;">
     <div class="basket-info">
