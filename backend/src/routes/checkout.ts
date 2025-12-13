@@ -693,7 +693,8 @@ function getTicketColor(ticketId){
 }
 
 // Raw (seat-assigned) ticket IDs seen in the layout (used to detect banded pricing)
-const __seatAssignedTicketIdsRaw = new Set();
+const __seatAssignedTicketIdsRaw = new Set();       // raw strings found in layout attrs
+const __seatAssignedTicketIdsResolved = new Set();  // actual ticketType ids resolved for seats
 
 // Tiered mode flag (computed after seats are processed)
 let IS_TIERED_PRICING = false;
@@ -1273,12 +1274,77 @@ setTimeout(() => {
 }, 3000);
 
     
-    function getTicketType(seatNode) {
-        const assignedId = seatNode.getAttr('sbTicketId');
-        let match = ticketTypes.find(t => t.id === assignedId);
-        if (!match && ticketTypes.length > 0) match = ticketTypes[0];
-        return match;
+   // Ticket assignment can be stored on the seat Circle, the seat wrapper Group, or the row/table Group.
+// It can also use slightly different attribute keys depending on builder version.
+const TICKET_ATTR_KEYS = [
+  'sbTicketId',
+  'sbTicketTypeId',
+  'ticketTypeId',
+  'ticketId',
+  'ticketType',
+  'ticket'
+];
+
+function readTicketAttrFromNode(node) {
+  try {
+    if (!node || !node.getAttr) return '';
+    for (const k of TICKET_ATTR_KEYS) {
+      const v = node.getAttr(k);
+      if (v !== undefined && v !== null && String(v).trim()) return String(v).trim();
     }
+  } catch (_) {}
+  return '';
+}
+
+function getSeatWrapper(seatNode) {
+  try {
+    return (seatNode && typeof seatNode.getParent === 'function') ? seatNode.getParent() : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function findAssignedTicketRaw(seatNode, parentGroup) {
+  // Priority: seat -> wrapper -> parentGroup
+  const seatRaw = readTicketAttrFromNode(seatNode);
+  if (seatRaw) return seatRaw;
+
+  const wrap = getSeatWrapper(seatNode);
+  const wrapRaw = readTicketAttrFromNode(wrap);
+  if (wrapRaw) return wrapRaw;
+
+  const pgRaw = readTicketAttrFromNode(parentGroup);
+  if (pgRaw) return pgRaw;
+
+  return '';
+}
+
+function resolveTicketType(raw) {
+  const r = String(raw || '').trim();
+  if (!r) return null;
+
+  // 1) Exact id match
+  let t = ticketTypes.find(tt => String(tt.id) === r);
+  if (t) return t;
+
+  // 2) Sometimes stored as name
+  t = ticketTypes.find(tt => String(tt.name || '').trim().toLowerCase() === r.toLowerCase());
+  if (t) return t;
+
+  // 3) Sometimes stored as an index ("0", "1", ...)
+  if (/^\d+$/.test(r)) {
+    const idx = Number(r);
+    if (Number.isFinite(idx) && idx >= 0 && idx < ticketTypes.length) return ticketTypes[idx];
+  }
+
+  return null;
+}
+
+function getTicketType(seatNode, parentGroup) {
+  const raw = findAssignedTicketRaw(seatNode, parentGroup);
+  return resolveTicketType(raw) || (ticketTypes.length > 0 ? ticketTypes[0] : null);
+}
+
 function isInfoGlyphTextNode(t) {
   try {
     const txt = (typeof t.text === 'function' ? t.text() : String(t.text || '')).trim();
@@ -1683,16 +1749,21 @@ console.log("[DEBUG] Loading Layout summary:", {
                 const isHeldOrAllocated = holdStatus === 'hold' || holdStatus === 'allocation' || holdStatus === 'allocated';
                 const isUnavailable = isBlocked || isHeldDB || isHeldOrAllocated;
 
-              // Ticket assignment (raw from seat, may be null)
-const rawTicketId = seat.getAttr('sbTicketId') ? String(seat.getAttr('sbTicketId')) : '';
+             // Ticket assignment (raw may exist on seat Circle OR wrapper Group OR parentGroup)
+const rawTicketId = findAssignedTicketRaw(seat, parentGroup);
 
-// Track raw ticket IDs actually assigned on seats
-if (rawTicketId && ticketTypes.some(t => t.id === rawTicketId)) {
-  __seatAssignedTicketIdsRaw.add(rawTicketId);
-}
+// Track raw values we saw (useful for debugging)
+if (rawTicketId) __seatAssignedTicketIdsRaw.add(rawTicketId);
 
-const tType = getTicketType(seat);
-const ticketIdResolved = (tType && tType.id) ? tType.id : (sortedTickets[0] ? sortedTickets[0].id : '');
+// Resolve ticket type robustly
+const tType = getTicketType(seat, parentGroup);
+
+// Resolve final ticket id (guaranteed stable id if we have any ticketTypes)
+const ticketIdResolved = (tType && tType.id) ? String(tType.id) : (sortedTickets[0] ? String(sortedTickets[0].id) : '');
+
+// Track resolved ids actually used across seats
+if (ticketIdResolved) __seatAssignedTicketIdsResolved.add(ticketIdResolved);
+
 const ticketColor = getTicketColor(ticketIdResolved);
 
 const price = tType ? tType.pricePence : 0;
@@ -1749,11 +1820,12 @@ const viewImg =
 }
 
 
-                         seatMeta.set(seat._id, {
+                        seatMeta.set(seat._id, {
   label,
   info,
   viewImg,
   price,
+  ticketIdRaw: rawTicketId,
   ticketId: ticketIdResolved,
   ticketColor,
   ticketName: tType ? tType.name : 'Standard',
@@ -2201,7 +2273,13 @@ fitStageToContent();
 
 // Determine if this is a tiered/banded pricing map:
 // Must have multiple ticket types AND at least 2 different ticket IDs assigned across seats
-IS_TIERED_PRICING = (sortedTickets.length > 1 && __seatAssignedTicketIdsRaw.size > 1);
+IS_TIERED_PRICING = (sortedTickets.length > 1 && __seatAssignedTicketIdsResolved.size > 1);
+
+console.log('[checkout][tiered] tickets=', sortedTickets.length,
+  'rawSeen=', __seatAssignedTicketIdsRaw.size,
+  'resolvedSeen=', __seatAssignedTicketIdsResolved.size,
+  'IS_TIERED_PRICING=', IS_TIERED_PRICING
+);
 
 // Repaint all seats now we know the mode
 try {
@@ -2227,7 +2305,7 @@ function renderLegendAndTicketTable(){
   }
 
   // Build legend: ticket colours + prices, plus Selected + Unavailable
-  const usedTickets = sortedTickets.filter(t => __seatAssignedTicketIdsRaw.has(t.id));
+const usedTickets = sortedTickets.filter(t => __seatAssignedTicketIdsResolved.has(String(t.id)));
   const legendBits = [];
 
   usedTickets.forEach(t => {
