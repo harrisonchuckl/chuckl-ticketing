@@ -1378,41 +1378,128 @@ function findAssignedTicketRaw(seatNode, parentGroup) {
   return '';
 }
 
-function resolveTicketType(raw) {
+// Fallback map: raw layout ticket key -> actual ticketType object
+// This ensures tiered maps still behave correctly even when the layout stores local ids.
+const __rawTicketFallbackMap = new Map(); // raw:string -> ticketType
+
+function tryExtractTicketIndex(r) {
+  const s = String(r || '').trim();
+  if (!s) return null;
+
+  // Common patterns:
+  // "ticket-123-3" => 3
+  // "ticketType-2" / "ticket_type_2" / "band:2" => 2
+  // "TT 1" => 1
+  let m =
+    s.match(/-(\d+)\s*$/) ||
+    s.match(/(?:tickettype|ticket_type|ticket|band|tier|tt)\s*[:#\-_ ]\s*(\d+)\s*$/i) ||
+    s.match(/\b(\d+)\s*$/);
+
+  if (!m) return null;
+
+  const n = Number(m[1]);
+  if (!Number.isFinite(n)) return null;
+  return n;
+}
+
+function tryExtractPrismaIdLike(r) {
+  // Prisma ids in your project look like "cmj4..."/"cmi8..." (cuid-ish).
+  // If the raw string contains a real id inside it, pull it out.
+  const s = String(r || '').trim();
+  if (!s) return null;
+
+  const m = s.match(/\b(c[a-z0-9]{12,})\b/i);
+  return m ? String(m[1]) : null;
+}
+
+function resolveTicketTypeStrict(raw) {
   const r = String(raw || '').trim();
   if (!r) return null;
 
-  // 0) Builder-local ids like: "ticket-1765637713557-3"
-  // Map suffix "-N" to ticketTypes[N-1] (1-based index).
-  // This is the key fix for your logs.
-  if (r.startsWith('ticket-')) {
-    const m = r.match(/-(\d+)$/);
-    if (m) {
-      const n = Number(m[1]);          // 1..N
-      const idx = n - 1;               // 0-based
-      if (Number.isFinite(idx) && idx >= 0 && idx < ticketTypes.length) {
-        return ticketTypes[idx];
+  // 0) If raw looks JSON-ish, try parse and re-resolve from common shapes
+  if (r.startsWith('{') && r.endsWith('}')) {
+    try {
+      const obj = JSON.parse(r);
+      if (obj && typeof obj === 'object') {
+        if (obj.id) return resolveTicketTypeStrict(String(obj.id));
+        for (const k of TICKET_ATTR_KEYS) {
+          if (obj[k]) return resolveTicketTypeStrict(String(obj[k]));
+        }
+        if (obj.value) return resolveTicketTypeStrict(String(obj.value));
       }
-    }
+    } catch (_) {}
   }
 
-  // 1) Exact id match (Prisma ticketType.id)
+  // 1) Exact id match
   let t = ticketTypes.find(tt => String(tt.id) === r);
   if (t) return t;
 
-  // 2) Stored as name
+  // 2) Id embedded inside a longer string (e.g. "TicketType:cmj4...")
+  const embeddedId = tryExtractPrismaIdLike(r);
+  if (embeddedId) {
+    t = ticketTypes.find(tt => String(tt.id) === embeddedId);
+    if (t) return t;
+  }
+
+  // 3) Stored as name
   t = ticketTypes.find(tt => String(tt.name || '').trim().toLowerCase() === r.toLowerCase());
   if (t) return t;
 
-  // 3) Stored as index ("0", "1", ...)
+  // 4) Pure index string ("0", "1", ...)
   if (/^\d+$/.test(r)) {
     const idx = Number(r);
     if (Number.isFinite(idx) && idx >= 0 && idx < ticketTypes.length) return ticketTypes[idx];
   }
 
+  // 5) Builder-local ids like "ticket-...-3" or "ticketType-2" etc
+  // Prefer 1-based mapping, but also try 0-based just in case.
+  const n = tryExtractTicketIndex(r);
+  if (n !== null) {
+    const idx1 = n - 1; // 1-based
+    if (Number.isFinite(idx1) && idx1 >= 0 && idx1 < ticketTypes.length) return ticketTypes[idx1];
+
+    const idx0 = n; // 0-based fallback
+    if (Number.isFinite(idx0) && idx0 >= 0 && idx0 < ticketTypes.length) return ticketTypes[idx0];
+  }
+
   return null;
 }
 
+function resolveTicketType(raw) {
+  const r = String(raw || '').trim();
+  if (!r) return null;
+
+  // First: strict resolution
+  const strict = resolveTicketTypeStrict(r);
+  if (strict) return strict;
+
+  // Second: deterministic fallback mapping by raw value
+  if (__rawTicketFallbackMap.has(r)) return __rawTicketFallbackMap.get(r);
+
+  // If it has a usable numeric suffix, map that to ticketTypes
+  const n = tryExtractTicketIndex(r);
+  if (n !== null) {
+    const idx1 = n - 1;
+    if (idx1 >= 0 && idx1 < ticketTypes.length) {
+      const tt = ticketTypes[idx1];
+      __rawTicketFallbackMap.set(r, tt);
+      return tt;
+    }
+    const idx0 = n;
+    if (idx0 >= 0 && idx0 < ticketTypes.length) {
+      const tt = ticketTypes[idx0];
+      __rawTicketFallbackMap.set(r, tt);
+      return tt;
+    }
+  }
+
+  // Otherwise: assign next unused ticketType (keeps different raw values as different bands)
+  const usedIds = new Set(Array.from(__rawTicketFallbackMap.values()).map(tt => String(tt.id)));
+  const next = ticketTypes.find(tt => !usedIds.has(String(tt.id))) || ticketTypes[0] || null;
+
+  if (next) __rawTicketFallbackMap.set(r, next);
+  return next;
+}
 
 function getTicketType(seatNode, parentGroup) {
   const raw = findAssignedTicketRaw(seatNode, parentGroup);
@@ -2352,10 +2439,12 @@ stage.width(container.offsetWidth);
 stage.height(container.offsetHeight);
 
 fitStageToContent();
+// Tiered if there are multiple ticket types AND we see multiple distinct assignments
+// (either resolved ids OR distinct raw keys).
+IS_TIERED_PRICING =
+  (sortedTickets.length > 1) &&
+  (__seatAssignedTicketIdsResolved.size > 1 || __seatAssignedTicketIdsRaw.size > 1);
 
-// Determine if this is a tiered/banded pricing map:
-// Must have multiple ticket types AND at least 2 different ticket IDs assigned across seats
-IS_TIERED_PRICING = (sortedTickets.length > 1 && __seatAssignedTicketIdsResolved.size > 1);
 
 console.log('[checkout][tiered] tickets=', sortedTickets.length,
   'rawSeen=', __seatAssignedTicketIdsRaw.size,
@@ -2383,8 +2472,10 @@ console.log('[checkout][tiered] tickets=', sortedTickets.length,
 
     const top = (map) => Array.from(map.entries()).sort((a,b)=>b[1]-a[1]).slice(0,10);
 
-    console.log('[checkout][tiered][counts] rawTop=', top(rawCounts));
-    console.log('[checkout][tiered][counts] resolvedTop=', top(resCounts));
+    console.log('[checkout][tiered][counts] rawTop=', JSON.parse(JSON.stringify(top(rawCounts))));
+console.log('[checkout][tiered][counts] resolvedTop=', JSON.parse(JSON.stringify(top(resCounts))));
+console.log('[checkout][tiered] rawSeenValues=', Array.from(__seatAssignedTicketIdsRaw).slice(0, 20));
+console.log('[checkout][tiered] fallbackMap=', Array.from(__rawTicketFallbackMap.entries()).slice(0, 20));
 
     const anyObjectSmell = Array.from(__seatAssignedTicketIdsRaw).some(v => String(v).includes('[object Object]'));
     if (anyObjectSmell) console.warn('[checkout][tiered] WARNING: raw ticket ids include [object Object] — layout stores objects');
