@@ -1,7 +1,7 @@
 // backend/src/routes/checkout.ts
 import { Router } from 'express';
 import { OrderStatus } from '@prisma/client';
-import prisma from '../lib/prisma.js';
+import prisma from '../lib/prisma';
 import { calcFeesForShow } from '../services/fees.js';
 import Stripe from 'stripe';
 
@@ -18,7 +18,7 @@ let stripe: any = null;
 
 try {
   if (stripeSecret) {
-    stripe = new StripeCtor(stripeSecret, { apiVersion: '2024-06-20' });
+stripe = new StripeCtor(stripeSecret, { apiVersion: '2024-06-20' as any });
   }
 } catch (e) {
   console.error('[checkout] Stripe init failed', e);
@@ -176,14 +176,19 @@ router.get('/', async (req, res) => {
   if (!showId) return res.status(404).send('Show ID is required');
 
   try {
-    const show = await prisma.show.findUnique({
-      where: { id: showId },
-      include: {
-        venue: true,
-        ticketTypes: { orderBy: { pricePence: 'asc' } },
+   const show = await prisma.show.findUnique({
+  where: { id: showId },
+  include: {
+    venue: true,
+    ticketTypes: { orderBy: { pricePence: 'asc' } },
+    // allocations is optional at type-level in case Prisma client/schema differs in deploy
+    ...((
+      {
         allocations: { include: { seats: true } }
-      }
-    });
+      } as any
+    )),
+  } as any
+} as any);
 
     if (!show) return res.status(404).send('Event not found');
 
