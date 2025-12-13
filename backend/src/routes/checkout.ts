@@ -2078,6 +2078,123 @@ function findSingleGapGroups() {
   return bad;
 }
 
+// ============================
+// TABLE SINGLE-GAP ENFORCEMENT
+// ============================
+
+function isTableRowKey(rowKey) {
+  const meta = rowKeyMeta.get(rowKey);
+  const gt = String(meta && meta.groupType ? meta.groupType : '').toLowerCase();
+  return gt.includes('table') || String(rowKey).includes('::TABLE');
+}
+
+function isTableGapRuleEnabled() {
+  // Mirror the row behaviour: only enforce if there exists any table
+  // with "enough" availability that rules still make sense.
+  let sawTable = false;
+  let maxAvail = 0;
+
+  rowMap.forEach((group, rowKey) => {
+    if (!group || !group.length) return;
+    if (!isTableRowKey(rowKey)) return;
+
+    sawTable = true;
+    const avail = group.filter(s => !s.unavailable).length;
+    if (avail > maxAvail) maxAvail = avail;
+  });
+
+  // If there are no tables in the map, do nothing.
+  if (!sawTable) return false;
+
+  // Same style as rows: relax when everything is down to tiny scraps.
+  return maxAvail > 3;
+}
+
+function sortTableSeatsByAngle(seats) {
+  // seats: [{id,x,y,unavailable,node}]
+  if (!seats || seats.length <= 1) return seats || [];
+
+  let cx = 0, cy = 0;
+  seats.forEach(s => { cx += s.x; cy += s.y; });
+  cx /= seats.length;
+  cy /= seats.length;
+
+  const withAngle = seats.map(s => ({
+    ...s,
+    __ang: Math.atan2(s.y - cy, s.x - cx)
+  }));
+
+  withAngle.sort((a, b) => a.__ang - b.__ang);
+  return withAngle;
+}
+
+function findTableSingleGapGroups() {
+  if (!isTableGapRuleEnabled()) return [];
+
+  const bad = [];
+
+  rowMap.forEach((group, rowKey) => {
+    if (!group || group.length < 3) return;
+    if (!isTableRowKey(rowKey)) return;
+
+    const ordered = sortTableSeatsByAngle(group);
+
+    // 0 = unavailable, 1 = empty available, 2 = selected
+    const states = ordered.map((s) => {
+      if (s.unavailable) return 0;
+      return selectedSeats.has(s.id) ? 2 : 1;
+    });
+
+    const n = states.length;
+    if (n < 3) return;
+
+    const firstZero = states.indexOf(0);
+
+    // Case A: no unavailable seats on this table -> treat as a ring (wrap-around adjacency)
+    if (firstZero === -1) {
+      for (let i = 0; i < n; i++) {
+        if (states[i] !== 1) continue;
+        const left = states[(i - 1 + n) % n];
+        const right = states[(i + 1) % n];
+
+        // isolated single empty seat (not adjacent to another empty seat)
+        if (left !== 1 && right !== 1) {
+          bad.push(rowKey);
+          return;
+        }
+      }
+      return;
+    }
+
+    // Case B: there is at least one unavailable seat -> split into segments between 0s.
+    // Rotate so we start scanning right after a 0, to avoid wrap complexity.
+    const rot = states.slice(firstZero + 1).concat(states.slice(0, firstZero + 1));
+
+    let i = 0;
+    while (i < rot.length) {
+      if (rot[i] === 0) { i++; continue; }
+
+      const start = i;
+      while (i < rot.length && rot[i] !== 0) i++;
+      const end = i - 1;
+
+      // scan this segment as linear (edges are bounded by 0)
+      for (let j = start; j <= end; j++) {
+        if (rot[j] !== 1) continue;
+        const left = (j === start) ? 0 : rot[j - 1];
+        const right = (j === end) ? 0 : rot[j + 1];
+
+        if (left !== 1 && right !== 1) {
+          bad.push(rowKey);
+          return;
+        }
+      }
+    }
+  });
+
+  return bad;
+}
+
    function toggleSeat(seat, parentGroup) {
   const id = seat._id;
   const willSelect = !selectedSeats.has(id);
@@ -2146,13 +2263,23 @@ if (isMobileView) {
       if (!btn.classList.contains('active')) return;
 
       btn.innerText = 'Processing...';
-            // Validate single-seat gaps ONLY at Continue time
-      const badGroups = findSingleGapGroups();
-      if (badGroups.length) {
-alert("Almost there — those seats would leave a single isolated seat on its own in that row. Please choose a different pair (or add the neighbouring seat) so we don’t strand a lone seat.");
-        btn.innerText = 'Continue';
-        return;
-      }
+           // Validate single-seat gaps ONLY at Continue time
+const badRowGroups = findSingleGapGroups();
+const badTableGroups = findTableSingleGapGroups();
+
+if (badRowGroups.length || badTableGroups.length) {
+  if (badTableGroups.length && !badRowGroups.length) {
+    alert("Almost there — that selection would leave a single isolated seat at a table. Please tweak your seats (or add the neighbouring seat) so we don’t strand one seat on its own.");
+  } else if (badRowGroups.length && !badTableGroups.length) {
+    alert("Almost there — those seats would leave a single isolated seat on its own in that row. Please choose a different pair (or add the neighbouring seat) so we don’t strand a lone seat.");
+  } else {
+    alert("Almost there — that selection would leave a single isolated seat in a row and/or at a table. Please tweak your seats (or add the neighbouring seat) so we don’t strand a lone seat.");
+  }
+
+  btn.innerText = 'Continue';
+  return;
+}
+
 
 
       let totalPence = 0;
