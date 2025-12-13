@@ -377,49 +377,44 @@ router.get('/', async (req, res) => {
     .spinner { width:40px; height:40px; border:4px solid #e5e7eb; border-top-color:var(--brand); border-radius:50%; animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     
-    #tooltip {
-      position: absolute; display: none; padding: 12px; background: #1e293b; color: #fff;
-      border-radius: 8px; pointer-events: none; font-size: 0.85rem; z-index: 4500;
-      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3); max-width: 240px; border:1px solid rgba(255,255,255,0.1);
+        /* Tooltip (desktop hover + mobile seat-view tap) */
+    #tooltip{
+      position:absolute;
+      display:none;
+      padding:12px;
+      background:#1e293b;
+      color:#fff;
+      border-radius:10px;
+      pointer-events:none;
+      font-size:0.85rem;
+      z-index:4500;
+      box-shadow:0 10px 25px -5px rgba(0,0,0,0.30);
+      max-width:260px;
+      border:1px solid rgba(255,255,255,0.10);
     }
-    <style>
-  /* all your existing CSS... */
+    #tooltip .tt-title{ display:block; font-weight:800; margin-bottom:2px; }
+    #tooltip .tt-meta{ display:block; font-size:0.75rem; color:#cbd5e1; margin-bottom:6px; }
+    #tooltip .tt-info{ font-size:0.82rem; color:#e2e8f0; line-height:1.25; margin-top:6px; }
+    #tooltip img{
+      width:100%;
+      max-width:260px;
+      max-height:180px;
+      object-fit:cover;
+      border-radius:8px;
+      margin-top:8px;
+      display:block;
+      border:1px solid rgba(255,255,255,0.12);
+    }
 
-  #tooltip { ... }
-  #tooltip img { ... }
-  #tooltip .tt-title { ... }
-  #tooltip .tt-meta { ... }
-  #tooltip .tt-info { ... }
-
-  /* ✅ PASTE PATCH 2 HERE (near the end, still inside <style>) */
-  /* Mobile seat details drawer */
-  #mobile-seatpanel {
-    width: 100%;
-    background: #ffffff;
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 12px;
-    margin-bottom: 12px;
-    box-shadow: 0 8px 20px rgba(0,0,0,0.08);
-  }
-
-  #mobile-seatpanel .md-title { font-weight: 800; font-size: 0.95rem; color: var(--primary); }
-  #mobile-seatpanel .md-meta { font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
-  #mobile-seatpanel .md-info { margin-top: 10px; font-size: 0.9rem; line-height: 1.35; color: #111827; }
-  #mobile-seatpanel img { width: 100%; border-radius: 10px; margin-top: 10px; display:block; border:1px solid rgba(0,0,0,0.06); }
-
-  #btn-eye.active {
-    border-color: var(--brand) !important;
-    box-shadow: 0 6px 16px rgba(0,86,210,0.18);
-  }
-
-  /* Only show the eye button + drawer on mobile-like layouts */
-  @media (max-width: 820px) {
-    #btn-eye { display: inline-flex !important; }
-  }
-  /* ✅ END PATCH 2 */
-
-</style>
+    /* Mobile "seat info" line above Total */
+    .basket-seatinfo{
+      display:none;
+      font-size:0.85rem;
+      color:var(--text-main);
+      line-height:1.2;
+      margin-bottom:6px;
+    }
+    .basket-seatinfo strong{ font-weight:800; }
 
 </head>
 <body>
@@ -443,24 +438,17 @@ router.get('/', async (req, res) => {
     <div id="tooltip"></div>
     <div id="loader"><div class="spinner"></div><div>Loading seating plan...</div></div>
   </div>
- <footer>
-  <!-- Mobile seat details drawer -->
-  <div id="mobile-seatpanel" style="display:none;"></div>
-
+<footer>
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;">
     <div class="basket-info">
+      <div class="basket-seatinfo" id="ui-seatinfo"></div>
+
       <div class="basket-label">Total</div>
       <div class="basket-total" id="ui-total">£0.00</div>
       <div class="basket-detail" id="ui-count">0 tickets selected</div>
     </div>
 
     <div style="display:flex;gap:10px;align-items:center;">
-      <!-- Eye toggle (mobile) -->
-      <button id="btn-eye" type="button" aria-label="Seat views"
-        style="display:none;border:1px solid var(--border);background:var(--surface);border-radius:999px;padding:10px 14px;font-weight:800;cursor:pointer;">
-        👁
-      </button>
-
       <button class="btn-checkout" id="btn-next">Continue</button>
     </div>
   </div>
@@ -570,81 +558,25 @@ function setHoverSeat(seat) {
     
     const tooltip = document.getElementById('tooltip');
 
-    // Mobile detection (covers phones + tablets)
-const isMobileView =
+  const isMobileView =
   (window.matchMedia && window.matchMedia('(max-width: 820px)').matches) ||
   (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ||
   (window.matchMedia && window.matchMedia('(hover: none)').matches) ||
   ('ontouchstart' in window);
 
-const seatPanel = document.getElementById('mobile-seatpanel');
-const btnEye = document.getElementById('btn-eye');
 const toggleViews = document.getElementById('toggle-views');
+const uiSeatInfo = document.getElementById('ui-seatinfo');
 
-function setSeatPanel(html) {
-  if (!seatPanel) return;
-  seatPanel.innerHTML = html || '';
-  seatPanel.style.display = html ? 'block' : 'none';
-}
-
-function showEyeHint() {
-  setSeatPanel(
-    '<div class="md-title">Seat views mode</div>' +
-    '<div class="md-meta">Tap a seat with an eye icon to preview the view from that seat.</div>'
-  );
-}
-
-function renderSeatDetailsInFooter(seatId) {
-  const meta = seatMeta.get(seatId);
-  if (!meta) return;
-
-  const priceStr = '£' + ((meta.price || 0) / 100).toFixed(2);
-  const viewsOn = !!(toggleViews && toggleViews.checked);
-
-  let html =
-    '<div class="md-title">' + (meta.label || 'Seat') + '</div>' +
-    '<div class="md-meta">' + (meta.ticketName || 'Ticket') + ' • ' + priceStr + '</div>';
-
-  if (meta.info) {
-    html += '<div class="md-info"><strong>Info:</strong> ' + meta.info + '</div>';
+function setSeatInfoLine(text) {
+  if (!uiSeatInfo) return;
+  uiSeatInfo.textContent = '';
+  if (!text) {
+    uiSeatInfo.style.display = 'none';
+    return;
   }
-
-  if (viewsOn && meta.viewImg) {
-    html += '<img src="' + meta.viewImg + '" alt="View from seat" />';
-  } else if (viewsOn && !meta.viewImg) {
-    html += '<div class="md-info" style="color:#6B7280;"><strong>View:</strong> No seat view available for this seat.</div>';
-  }
-
-  setSeatPanel(html);
+  uiSeatInfo.style.display = 'block';
+  uiSeatInfo.textContent = text;
 }
-
-function setViewsMode(on) {
-  if (!toggleViews) return;
-  toggleViews.checked = !!on;
-  if (btnEye) btnEye.classList.toggle('active', !!on);
-
-  try { updateIcons(); } catch (_) {}
-
-  if (isMobileView && on) showEyeHint();
-  if (isMobileView && !on) setSeatPanel(''); // collapse drawer when turning off
-}
-
-// On mobile: eye button toggles the existing checkbox
-if (btnEye) {
-  btnEye.addEventListener('click', () => {
-    const nowOn = !(toggleViews && toggleViews.checked);
-    setViewsMode(nowOn);
-  });
-}
-
-// Keep desktop checkbox behaviour, but on mobile show hint when switched on
-if (toggleViews) {
-  toggleViews.addEventListener('change', () => {
-    if (isMobileView && toggleViews.checked) showEyeHint();
-    if (isMobileView && !toggleViews.checked) setSeatPanel('');
-  });
-}
-
 
     stage.container().addEventListener('mouseleave', () => {
   tooltip.style.display = 'none';
@@ -1294,17 +1226,11 @@ seat.on('mouseleave', () => {
   }
 });
 
-               seat.on('click tap', (e) => {
+             seat.on('click tap', (e) => {
   e.cancelBubble = true;
   if (isUnavailable) return;
 
-  // Mobile: if views mode is ON, tapping a seat shows the footer drawer instead of selecting
-  if (isMobileView && toggleViews && toggleViews.checked) {
-    renderSeatDetailsInFooter(seat._id);
-    return;
-  }
-
-  // Normal behaviour
+  // Always select/deselect on seat tap/click (view previews happen via the eye icons)
   toggleSeat(seat, parentGroup);
 });
 
@@ -1324,8 +1250,14 @@ seat.on('mouseleave', () => {
         });
 
 function showSeatTooltip(seatId, nativeEvt) {
-  // No hover tooltips on mobile – we use the bottom drawer instead
-  if (isMobileView) return;
+ // Mobile: only show tooltips for seat views when "Show seat views" is enabled.
+// Seat "info" (lowercase i) is handled in the footer line above Total.
+if (isMobileView) {
+  const viewModeEl = document.getElementById('toggle-views');
+  const viewMode = !!(viewModeEl && viewModeEl.checked);
+  const meta = seatMeta.get(seatId);
+  if (!viewMode || !meta || !meta.viewImg) return;
+}
 
   const meta = seatMeta.get(seatId);
   if (!meta) return;
@@ -1357,12 +1289,17 @@ if (!String(meta.info || '').trim()) {
   // Prefer DOM mouse position (best for Text glyph hover + Konva events)
   let pos = null;
 
-  if (nativeEvt && typeof nativeEvt.clientX === 'number') {
-    pos = {
-      x: nativeEvt.clientX - rect.left,
-      y: nativeEvt.clientY - rect.top
-    };
-  } else {
+if (nativeEvt) {
+  const touch = nativeEvt.touches && nativeEvt.touches[0] ? nativeEvt.touches[0] : null;
+  const cx = touch ? touch.clientX : nativeEvt.clientX;
+  const cy = touch ? touch.clientY : nativeEvt.clientY;
+
+  if (typeof cx === 'number' && typeof cy === 'number') {
+    pos = { x: cx - rect.left, y: cy - rect.top };
+  }
+}
+
+if (!pos) {
     // Fallback (works for normal seat hover)
     const p = stage.getPointerPosition();
     if (!p) return;
@@ -1765,7 +1702,11 @@ dbg('[checkout][info] creating UI info-icon overlay', {
 
 grp.on('mouseenter', (e) => { stage.container().style.cursor = 'help'; showSeatTooltip(seat._id, e && e.evt); });
    grp.on('mouseleave', () => { stage.container().style.cursor = 'default'; tooltip.style.display = 'none'; });
-   grp.on('click tap', (e) => { e.cancelBubble = true; if (!meta.unavailable) toggleSeat(seat, parentGroup); });
+grp.on('click tap', (e) => {
+  e.cancelBubble = true;
+  // In "show seat views" mode: tapping the eye previews the view, does NOT select/deselect seats
+  showSeatTooltip(seat._id, e && e.evt);
+});
 
    uiLayer.add(grp);
    grp.moveToTop(); // ✅ ensure it never sits behind other UI icons
@@ -1898,6 +1839,34 @@ document.getElementById('toggle-views').addEventListener('change', updateIcons);
         document.getElementById('ui-count').innerText = count + (count === 1 ? ' ticket' : ' tickets');
         const btn = document.getElementById('btn-next');
         if (count > 0) btn.classList.add('active'); else btn.classList.remove('active');
+        // Mobile: show seat "info" (lowercase i) as a line above Total
+if (isMobileView) {
+  let withInfo = 0;
+  const infoSet = new Set();
+
+  selectedSeats.forEach((id) => {
+    const meta = seatMeta.get(id);
+    const info = (meta && meta.info ? String(meta.info).trim() : '');
+    if (info) {
+      withInfo++;
+      infoSet.add(info);
+    }
+  });
+
+  const infoList = Array.from(infoSet);
+  if (!withInfo || !infoList.length) {
+    setSeatInfoLine('');
+  } else {
+    const prefix = (withInfo === count)
+      ? 'Your seats have: '
+      : 'Some of your seats have: ';
+    setSeatInfoLine(prefix + infoList.join(' • '));
+  }
+} else {
+  // Desktop: keep this line hidden
+  setSeatInfoLine('');
+}
+
     }
 
     document.getElementById('btn-next').addEventListener('click', async () => {
@@ -1936,6 +1905,8 @@ document.getElementById('toggle-views').addEventListener('change', updateIcons);
         alert("Connection error");
         btn.innerText = 'Continue';
       }
+    
+    
     });
 
 </script>
