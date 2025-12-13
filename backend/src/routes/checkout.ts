@@ -1918,24 +1918,26 @@ function makeRowKey(grpId, groupType, label, absPos) {
   const isTable = gt.includes('table');
   const isRowSeats = gt.includes('row-seats') || gt.includes('row');
 
+  const gid = String(grpId || '');
+
   if (isTable) {
-    return { key: `${grpId}::TABLE`, axis: 'x', enforce: false, groupType };
+    return { key: gid + '::TABLE', axis: 'x', enforce: false, groupType };
   }
 
   if (isRowSeats) {
     const letters = extractRowLettersFromLabel(label);
     if (letters) {
-      return { key: `${grpId}::ROW::${letters}`, axis: 'x', enforce: true, groupType };
+      return { key: gid + '::ROW::' + String(letters), axis: 'x', enforce: true, groupType };
     }
 
     // Fallback if labels don't contain row letters:
     // bucket by Y so each horizontal row becomes its own key
-    const bucket = Math.round((absPos.y || 0) / 10); // 10px bucket works well for your layout scale
-    return { key: `${grpId}::ROWY::${bucket}`, axis: 'x', enforce: true, groupType };
+    const bucket = Math.round(((absPos && absPos.y) || 0) / 10); // 10px bucket works well for your layout scale
+    return { key: gid + '::ROWY::' + String(bucket), axis: 'x', enforce: true, groupType };
   }
 
   // Everything else: don't enforce (single-seat groups etc)
-  return { key: `${grpId}::OTHER`, axis: 'x', enforce: false, groupType };
+  return { key: gid + '::OTHER', axis: 'x', enforce: false, groupType };
 }
 
 function shouldEnforceSingleGap(rowKey) {
