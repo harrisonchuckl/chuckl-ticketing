@@ -422,11 +422,44 @@ router.get('/', async (req, res) => {
     .dot-selected { background:var(--brand); border-color:var(--brand); }
     .dot-sold { background:var(--blocked); border-color:var(--text); opacity:0.8; }
     
-    .view-toggle { padding-top:10px; border-top:1px solid #e2e8f0; display:flex; align-items:center; gap:8px; cursor:pointer; }
+       .view-toggle { padding-top:10px; border-top:1px solid #e2e8f0; display:flex; align-items:center; gap:8px; cursor:pointer; }
     .view-toggle input { accent-color: var(--brand); transform:scale(1.2); cursor:pointer; }
 
+    /* ZOOM CONTROLS (bottom-right, vertical) */
+    .zoom-controls{
+      position:absolute;
+      right:16px;
+      bottom:16px;
+      z-index:4200;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      pointer-events:auto;
+    }
+
+    .zoom-btn{
+      width:46px;
+      height:46px;
+      border-radius:14px;
+      border:1px solid rgba(15,23,42,0.18);
+      background:rgba(255,255,255,0.98);
+      box-shadow:0 6px 18px rgba(0,0,0,0.14);
+      font-size:22px;
+      font-weight:800;
+      line-height:1;
+      color:#0F172A;
+      cursor:pointer;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+
+    .zoom-btn:active{
+      transform: translateY(1px);
+    }
+
     footer { background:var(--surface); border-top:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; box-shadow:0 -4px 10px rgba(0,0,0,0.03); z-index:4000; position:relative; }
-    .basket-info { display:flex; flex-direction:column; }
+  .basket-info { display:flex; flex-direction:column; }
     .basket-label { font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em; font-weight:600; color:var(--muted); }
     .basket-total { font-family:'Outfit',sans-serif; font-size:1.5rem; font-weight:800; color:var(--primary); }
     .basket-detail { font-size:0.85rem; color:var(--text); margin-top:2px; }
@@ -524,7 +557,7 @@ router.get('/', async (req, res) => {
     <div id="stage-container"></div>
     <div id="tooltip"></div>
     <div id="loader"><div class="spinner"></div><div>Loading seating plan...</div></div>
-
+  </div> <!-- /#map-wrapper -->
 <footer>
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;">
     <div class="basket-info">
