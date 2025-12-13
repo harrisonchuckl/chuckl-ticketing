@@ -6,15 +6,26 @@ import { calcFeesForShow } from '../services/fees.js';
 import Stripe from 'stripe';
 
 // --- ROBUST STRIPE INITIALIZATION ---
-const stripeSecret = process.env.STRIPE_SECRET_KEY;
+const stripeSecret = process.env.STRIPE_SECRET_KEY || '';
 
-// Check for the .default property for safer ES Module interop with Stripe
-const StripeClient = (Stripe as any)?.default || Stripe;
+// Handle multiple export shapes across TS transpiles / bundlers
+const StripeCtor: any =
+  (Stripe as any)?.Stripe ||
+  (Stripe as any)?.default ||
+  (Stripe as any);
 
-const stripe = stripeSecret
-    ? new StripeClient(stripeSecret, { apiVersion: '2024-06-20' })
-    : null;
+let stripe: any = null;
+
+try {
+  if (stripeSecret) {
+    stripe = new StripeCtor(stripeSecret, { apiVersion: '2024-06-20' });
+  }
+} catch (e) {
+  console.error('[checkout] Stripe init failed', e);
+  stripe = null;
+}
 // ------------------------------------
+
 const router = Router();
 
 // --- formatting helper (Required for List View HTML) ---
@@ -533,7 +544,7 @@ router.get('/', async (req, res) => {
     <div id="stage-container"></div>
     <div id="tooltip"></div>
     <div id="loader"><div class="spinner"></div><div>Loading seating plan...</div></div>
-
+  </div>
 <footer>
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;">
     <div class="basket-info">
