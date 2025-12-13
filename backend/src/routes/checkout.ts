@@ -1382,15 +1382,29 @@ function resolveTicketType(raw) {
   const r = String(raw || '').trim();
   if (!r) return null;
 
-  // 1) Exact id match
+  // 0) Builder-local ids like: "ticket-1765637713557-3"
+  // Map suffix "-N" to ticketTypes[N-1] (1-based index).
+  // This is the key fix for your logs.
+  if (r.startsWith('ticket-')) {
+    const m = r.match(/-(\d+)$/);
+    if (m) {
+      const n = Number(m[1]);          // 1..N
+      const idx = n - 1;               // 0-based
+      if (Number.isFinite(idx) && idx >= 0 && idx < ticketTypes.length) {
+        return ticketTypes[idx];
+      }
+    }
+  }
+
+  // 1) Exact id match (Prisma ticketType.id)
   let t = ticketTypes.find(tt => String(tt.id) === r);
   if (t) return t;
 
-  // 2) Sometimes stored as name
+  // 2) Stored as name
   t = ticketTypes.find(tt => String(tt.name || '').trim().toLowerCase() === r.toLowerCase());
   if (t) return t;
 
-  // 3) Sometimes stored as an index ("0", "1", ...)
+  // 3) Stored as index ("0", "1", ...)
   if (/^\d+$/.test(r)) {
     const idx = Number(r);
     if (Number.isFinite(idx) && idx >= 0 && idx < ticketTypes.length) return ticketTypes[idx];
@@ -1398,6 +1412,7 @@ function resolveTicketType(raw) {
 
   return null;
 }
+
 
 function getTicketType(seatNode, parentGroup) {
   const raw = findAssignedTicketRaw(seatNode, parentGroup);
@@ -1808,20 +1823,28 @@ console.log("[DEBUG] Loading Layout summary:", {
                 const isHeldOrAllocated = holdStatus === 'hold' || holdStatus === 'allocation' || holdStatus === 'allocated';
                 const isUnavailable = isBlocked || isHeldDB || isHeldOrAllocated;
 
-             // Ticket assignment (raw may exist on seat Circle OR wrapper Group OR parentGroup)
+           // Ticket assignment (raw may exist on seat Circle OR wrapper Group OR parentGroup)
 const rawTicketId = findAssignedTicketRaw(seat, parentGroup);
 
 // Track raw values we saw (useful for debugging)
 if (rawTicketId) __seatAssignedTicketIdsRaw.add(rawTicketId);
 
-// Resolve ticket type robustly
-const tType = getTicketType(seat, parentGroup);
+// Try to resolve using the raw value (this is what decides tiered mode)
+const resolvedType = resolveTicketType(rawTicketId);
 
-// Resolve final ticket id (guaranteed stable id if we have any ticketTypes)
-const ticketIdResolved = (tType && tType.id) ? String(tType.id) : (sortedTickets[0] ? String(sortedTickets[0].id) : '');
+// Fallback type for pricing/checkout safety (don’t break purchases if a seat has no mapping)
+const tType = resolvedType || (ticketTypes.length > 0 ? ticketTypes[0] : null);
 
-// Track resolved ids actually used across seats
-if (rawTicketId && ticketIdResolved) __seatAssignedTicketIdsResolved.add(ticketIdResolved);
+// IMPORTANT: only count as "resolved" if we truly resolved from the raw id
+if (resolvedType && resolvedType.id) {
+  __seatAssignedTicketIdsResolved.add(String(resolvedType.id));
+}
+
+// Use resolved id if available; otherwise fallback id (so colours/prices still render)
+const ticketIdResolved =
+  (resolvedType && resolvedType.id) ? String(resolvedType.id)
+  : (tType && tType.id) ? String(tType.id)
+  : (sortedTickets[0] ? String(sortedTickets[0].id) : '');
 
 const ticketColor = getTicketColor(ticketIdResolved);
 
