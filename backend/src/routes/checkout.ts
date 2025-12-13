@@ -479,7 +479,11 @@ router.get('/', async (req, res) => {
     const selectedSeats = new Set();
 const seatPrices = new Map();
 const seatMeta = new Map();
+// rowKey -> [{ id, x, y, unavailable, node }]
 const rowMap = new Map();
+
+// rowKey -> { groupType, axis, enforce }
+const rowKeyMeta = new Map();
 const seatIdMap = new Map();
 const seatNodeMap = new Map(); // seatInternalId -> Konva Circle (for hover cleanup)
 
@@ -1201,13 +1205,26 @@ const viewImg =
 
 
                 if (parentGroup) {
-                    const grpId = parentGroup._id;
-                    if (!rowMap.has(grpId)) rowMap.set(grpId, []);
-                    const absPos = seat.getAbsolutePosition();
-                    rowMap.get(grpId).push({
-                        id: seat._id, x: absPos.x, y: absPos.y, unavailable: isUnavailable, node: seat
-                    });
-                }
+  const grpId = parentGroup._id;
+  const groupType = getGroupTypeSafe(parentGroup);
+  const absPos = seat.getAbsolutePosition();
+
+  const rk = makeRowKey(grpId, groupType, label, absPos);
+
+  if (!rowMap.has(rk.key)) rowMap.set(rk.key, []);
+  rowMap.get(rk.key).push({
+    id: seat._id,
+    x: absPos.x,
+    y: absPos.y,
+    unavailable: isUnavailable,
+    node: seat
+  });
+
+  if (!rowKeyMeta.has(rk.key)) {
+    rowKeyMeta.set(rk.key, { groupType: rk.groupType, axis: rk.axis, enforce: rk.enforce });
+  }
+}
+
 
                             seatMeta.set(seat._id, {
     label,
@@ -1307,13 +1324,15 @@ seat.on('mouseleave', () => {
             }
         }
 
-        rowMap.forEach((seats) => {
-             if (seats.length < 2) return;
-             const minX = Math.min(...seats.map(s=>s.x)), maxX = Math.max(...seats.map(s=>s.x));
-             const minY = Math.min(...seats.map(s=>s.y)), maxY = Math.max(...seats.map(s=>s.y));
-             if ((maxY - minY) > (maxX - minX)) seats.sort((a, b) => a.y - b.y);
-             else seats.sort((a, b) => a.x - b.x);
-        });
+       rowMap.forEach((seats, rowKey) => {
+  if (!seats || seats.length < 2) return;
+
+  const meta = rowKeyMeta.get(rowKey);
+  const axis = meta && meta.axis ? meta.axis : 'x';
+
+  if (axis === 'y') seats.sort((a, b) => a.y - b.y);
+  else seats.sort((a, b) => a.x - b.x);
+});
 
 function showSeatTooltip(seatId, nativeEvt) {
  // Mobile: only show tooltips for seat views when "Show seat views" is enabled.
@@ -1869,6 +1888,66 @@ document.getElementById('toggle-views').addEventListener('change', () => {
         stage.position(newPos);
         updateIcons();
     });
+function getGroupTypeSafe(g) {
+  try {
+    return (g && g.getAttr && (g.getAttr('shapeType') || g.name && g.name())) || '';
+  } catch (_) {
+    return '';
+  }
+}
+
+// Extract "D" from "D14", "AA" from "AA12", etc.
+function extractRowLettersFromLabel(label) {
+  const s = String(label || '').trim();
+
+  // Common: "D14", "D 14", "D-14"
+  let m = s.match(/^([A-Za-z]{1,3})\s*[- ]?\s*\d+/);
+  if (m) return m[1].toUpperCase();
+
+  // Sometimes label is like "Row D Seat 14"
+  m = s.match(/row\s*([A-Za-z]{1,3})/i);
+  if (m) return m[1].toUpperCase();
+
+  return '';
+}
+
+function makeRowKey(grpId, groupType, label, absPos) {
+  const gt = String(groupType || '').toLowerCase();
+
+  // Only enforce on row seating groups (NOT tables)
+  const isTable = gt.includes('table');
+  const isRowSeats = gt.includes('row-seats') || gt.includes('row');
+
+  if (isTable) {
+    return { key: `${grpId}::TABLE`, axis: 'x', enforce: false, groupType };
+  }
+
+  if (isRowSeats) {
+    const letters = extractRowLettersFromLabel(label);
+    if (letters) {
+      return { key: `${grpId}::ROW::${letters}`, axis: 'x', enforce: true, groupType };
+    }
+
+    // Fallback if labels don't contain row letters:
+    // bucket by Y so each horizontal row becomes its own key
+    const bucket = Math.round((absPos.y || 0) / 10); // 10px bucket works well for your layout scale
+    return { key: `${grpId}::ROWY::${bucket}`, axis: 'x', enforce: true, groupType };
+  }
+
+  // Everything else: don't enforce (single-seat groups etc)
+  return { key: `${grpId}::OTHER`, axis: 'x', enforce: false, groupType };
+}
+
+function shouldEnforceSingleGap(rowKey) {
+  const m = rowKeyMeta.get(rowKey);
+  if (!m || !m.enforce) return false;
+
+  const gt = String(m.groupType || '').toLowerCase();
+  if (gt.includes('table')) return false;
+  if (gt.includes('single-seat')) return false;
+
+  return true;
+}
 
 function rowLooksLinear(row) {
   // Avoid applying this rule to circular tables etc.
@@ -1900,20 +1979,10 @@ function median(nums) {
   return a.length % 2 ? a[mid] : (a[mid - 1] + a[mid]) / 2;
 }
 
-function splitRowIntoSegments(row) {
-  // Row is already sorted by your earlier code (x or y). We just detect big jumps (aisles).
+function splitRowIntoSegments(row, axis = 'x') {
   if (!row || row.length <= 1) return [row || []];
 
-  // Work out if row is "more horizontal" or "more vertical"
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  row.forEach(s => {
-    minX = Math.min(minX, s.x);
-    maxX = Math.max(maxX, s.x);
-    minY = Math.min(minY, s.y);
-    maxY = Math.max(maxY, s.y);
-  });
-  const horizontal = (maxX - minX) >= (maxY - minY);
-  const coord = (s) => horizontal ? s.x : s.y;
+  const coord = (s) => (axis === 'y' ? s.y : s.x);
 
   const deltas = [];
   for (let i = 0; i < row.length - 1; i++) {
@@ -1921,7 +1990,9 @@ function splitRowIntoSegments(row) {
   }
 
   const med = median(deltas) || 0;
-  const threshold = med > 0 ? (med * 1.75) : 999999; // if med=0, don't split
+
+  // Slightly more aggressive split than before (helps catch block ends/aisles)
+  const threshold = med > 0 ? (med * 1.55) : 999999;
 
   const segments = [];
   let cur = [row[0]];
@@ -1942,28 +2013,22 @@ function splitRowIntoSegments(row) {
 
 function isSingleGapRuleEnabled() {
   // GLOBAL rule:
-  // ON if there exists ANY linear row with >3 available seats anywhere
-  // OFF only if ALL linear rows are <=3 available seats (near sell-out scraps)
+  // ON if there exists ANY enforceable row with >3 available seats anywhere
+  // OFF only if ALL enforceable rows are <=3 available seats (near sell-out scraps)
   let maxAvail = 0;
-  let sawLinearRow = false;
+  let sawEnforceable = false;
 
-  rowMap.forEach((row) => {
+  rowMap.forEach((row, rowKey) => {
     if (!row || !row.length) return;
-    if (!rowLooksLinear(row)) return;
+    if (!shouldEnforceSingleGap(rowKey)) return;
 
-    sawLinearRow = true;
+    sawEnforceable = true;
     const avail = row.filter(s => !s.unavailable).length;
     if (avail > maxAvail) maxAvail = avail;
   });
 
-  // If we didn't detect any "linear rows", fall back to old behaviour (safe)
-  if (!sawLinearRow) {
-    rowMap.forEach((row) => {
-      if (!row || !row.length) return;
-      const avail = row.filter(s => !s.unavailable).length;
-      if (avail > maxAvail) maxAvail = avail;
-    });
-  }
+  // If we couldn't detect any enforceable "rows", keep rule ON (safer than letting gaps through)
+  if (!sawEnforceable) return true;
 
   return maxAvail > 3;
 }
@@ -1971,15 +2036,16 @@ function isSingleGapRuleEnabled() {
 function findSingleGapGroups() {
   if (!isSingleGapRuleEnabled()) return [];
 
-  const badGroups = [];
+  const bad = [];
 
-  rowMap.forEach((row, groupId) => {
+  rowMap.forEach((row, rowKey) => {
     if (!row || row.length < 2) return;
+    if (!shouldEnforceSingleGap(rowKey)) return;
 
-    // Only enforce on linear rows (prevents weird table false-positives)
-    if (!rowLooksLinear(row)) return;
+    const meta = rowKeyMeta.get(rowKey) || {};
+    const axis = meta.axis || 'x';
 
-    const segments = splitRowIntoSegments(row);
+    const segments = splitRowIntoSegments(row, axis);
 
     for (const seg of segments) {
       if (!seg || seg.length < 2) continue;
@@ -1998,16 +2064,16 @@ function findSingleGapGroups() {
         const right = (i === states.length - 1) ? 0 : states[i + 1];
 
         if (left !== 1 && right !== 1) {
-          badGroups.push(groupId);
+          bad.push(rowKey);
           break;
         }
       }
 
-      if (badGroups.includes(groupId)) break;
+      if (bad.includes(rowKey)) break;
     }
   });
 
-  return badGroups;
+  return bad;
 }
 
    function toggleSeat(seat, parentGroup) {
