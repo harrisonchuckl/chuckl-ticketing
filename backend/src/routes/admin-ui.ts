@@ -4,6 +4,7 @@ import { requireAdminOrOrganiser } from "../lib/authz.js";
 
 const router = Router();
 
+
 /**
  * Admin Single Page App (Organiser Console)
  * Served at /admin/ui/*
