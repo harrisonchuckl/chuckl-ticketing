@@ -26,6 +26,8 @@ function escJSON(obj: any) {
   return JSON.stringify(obj).replace(/</g,'\\u003c');
 }
 
+export default router;
+
 router.get('/event/:id', async (req, res) => {
   const id = String(req.params.id || '').trim();
   const base = (process.env.SITE_BASE_URL || '').replace(/\/+$/, '');
