@@ -3,6 +3,8 @@ import { Router } from 'express';
 import prisma from '../lib/prisma.js';
 import Stripe from 'stripe';
 import { calcFeesForShow } from '../services/fees.js';
+import { sendOrderEmail } from '../services/mailer.js';
+
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, { apiVersion: '2024-06-20' });
 const router = Router();
@@ -111,17 +113,38 @@ const event = stripe.webhooks.constructEvent(rawBody, sig, process.env.STRIPE_WE
             organiserSplitBps ?? undefined
           );
 
-          await prisma.order.update({
-            where: { id: orderId },
-            data: {
-              status: 'PAID',
-              platformFeePence: fees.platformFeePence,
-              organiserSharePence: fees.organiserSharePence,
-              paymentFeePence: fees.paymentFeePence,
-              netPayoutPence: fees.netPayoutPence,
-              stripeId: session.payment_intent as string,
-            },
-          });
+         const existing = await prisma.order.findUnique({
+  where: { id: orderId },
+  select: { status: true },
+});
+
+await prisma.order.update({
+  where: { id: orderId },
+  data: {
+    status: 'PAID',
+    platformFeePence: fees.platformFeePence,
+    organiserSharePence: fees.organiserSharePence,
+    paymentFeePence: fees.paymentFeePence,
+    netPayoutPence: fees.netPayoutPence,
+    stripeId: session.payment_intent as string,
+  },
+});
+
+// Only send the email the first time we flip to PAID (webhooks retry)
+if (existing?.status !== 'PAID') {
+  try {
+    await sendOrderEmail(orderId);
+    console.info('webhook: confirmation email sent', { orderId });
+  } catch (emailErr: any) {
+    console.error('webhook: confirmation email failed', {
+      orderId,
+      message: emailErr?.message,
+      stack: emailErr?.stack,
+    });
+  }
+} else {
+  console.info('webhook: order already PAID, skipping email', { orderId });
+}
 
 // If we have seat IDs, mark them as SOLD in the ACTIVE seat map for this show (fallback to latest)
 if (seatIds.length > 0) {
