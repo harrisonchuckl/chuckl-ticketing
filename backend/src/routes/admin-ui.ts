@@ -445,294 +445,217 @@ router.get(
     });
   }
 
- async function createShow(){
-  if (!main) return;
-  
-  // 1. Render the HTML Form
-  main.innerHTML =
-    '<div class="card" style="padding: 24px;">'
-    +'<div class="header" style="margin-bottom: 24px; border-bottom: 1px solid var(--border); padding-bottom: 16px;">'
-    +'<div>'
-    +'<div class="title" style="font-size: 1.5rem; font-weight: 700;">Create New Event</div>'
-    +'<div class="muted">Start setting up your event with core details, categories, and artwork.</div>'
-    +'</div>'
-    +'</div>'
-    
-    // Grid Layout
-    +'<div class="grid" style="gap: 20px;">'
-    
-    // COL 1: Details
-    +'<div style="flex: 1; padding-right: 20px; border-right: 1px solid var(--border);">'
-    +'<div class="grid" style="margin-bottom: 20px;">'
-    +'<label>Event Title</label>'
-    +'<input id="sh_title" placeholder="e.g. Chuckl. Comedy Club Live" />'
-    +'</div>'
-    +'<div class="grid" style="margin-bottom: 20px;">'
-    +'<label>Date & Time</label>'
-    +'<input id="sh_dt" type="datetime-local" />'
-    +'</div>'
-    +'<div class="grid" style="margin-bottom: 20px;">'
-    +'<label>Venue</label>'
-    +'<input id="venue_input" placeholder="Start typing a venue…" />'
-    +'<div class="tip">Pick an existing venue or create a new one.</div>'
-    +'</div>'
-    
-    // Category Section
-    +'<div class="grid grid-2" style="margin-bottom: 20px; gap: 16px;">'
-    +'<div class="grid">'
-    +'<label>Event Type</label>'
-    +'<select id="event_type_select">'
-    +'<option value="">Select Primary Type</option>'
-    +'<option value="music">Music</option>'
-    +'<option value="comedy">Comedy</option>'
-    +'<option value="arts">Arts & Theatre</option>'
-    +'<option value="sport">Sporting Event</option>'
-    +'<option value="conference">Conference / Workshop</option>'
-    +'<option value="family">Family / Kids</option>'
-    +'<option value="food">Food & Drink</option>'
-    +'</select>'
-    +'</div>'
-    +'<div class="grid">'
-    +'<label>Category</label>'
-    +'<select id="event_category_select">'
-    +'<option value="">Select Sub-Category</option>'
-    +'<option data-parent="music" value="rock">Rock & Pop</option>'
-    +'<option data-parent="music" value="classical">Classical</option>'
-    +'<option data-parent="music" value="jazz">Jazz / Blues</option>'
-    +'<option data-parent="comedy" value="standup">Stand-Up Comedy</option>'
-    +'<option data-parent="comedy" value="improv">Improv / Sketch</option>'
-    +'<option data-parent="arts" value="theatre">Theatre / Play</option>'
-    +'<option data-parent="arts" value="dance">Dance</option>'
-    +'<option data-parent="sport" value="football">Football / Soccer</option>'
-    +'<option data-parent="sport" value="running">Running / Marathon</option>'
-    +'<option data-parent="conference" value="tech">Tech & IT</option>'
-    +'<option data-parent="conference" value="business">Business & Finance</option>'
-    +'<option data-parent="family" value="show">Kids Show</option>'
-    +'<option data-parent="family" value="activity">Family Activity</option>'
-    +'<option data-parent="food" value="festival">Food Festival</option>'
-    +'<option data-parent="food" value="tasting">Tasting / Tour</option>'
-    +'</select>'
-    +'<div class="tip">The list will filter based on Event Type.</div>'
-    +'</div>'
-    +'</div>'
+  // --- CREATE SHOW ---
+  async function createShow(){
+    if (!main) return;
 
-    // Description
-    +'<div class="grid" style="margin-bottom: 20px;">'
-    +'<label>Description (mandatory)</label>'
-    + editorToolbarHtml()
-    +'<div id="desc" data-editor contenteditable="true" style="min-height:150px; border:1px solid var(--border); border-radius:8px; padding:12px; background: #fff;"></div>'
-    +'<div class="muted">Write a compelling description for your attendees.</div>'
-    +'</div>'
-    +'</div>' // End COL 1
+    main.innerHTML =
+      '<div class="card">'
+      +'<div class="header">'
+        +'<div>'
+          +'<div class="title">Add show</div>'
+          +'<div class="muted">Create the show, upload artwork and set up your first ticket type.</div>'
+        +'</div>'
+      +'</div>'
 
-    // COL 2: Images
-    +'<div style="flex: 1;">'
-    +'<div class="grid" style="margin-bottom: 24px; background: #f9fafb; padding: 16px; border-radius: 10px; border: 1px solid var(--border);">'
-    +'<label style="font-size: 14px; font-weight: 600;">Main Poster Image (Required)</label>'
-    +'<div id="drop_main" class="drop" style="min-height: 120px; border-style: solid; border-color: #94a3b8; background: #fff;"><p style="margin: 0; font-weight: 500;">Drop image here or click to upload</p><p class="muted" style="margin-top: 4px; font-size: 12px;">Recommended: High-resolution, Aspect Ratio 2:3</p></div>'
-    +'<input id="file_main" type="file" accept="image/*" style="display:none" />'
-    +'<div class="progress" style="margin-top:8px"><div id="bar_main" class="bar"></div></div>'
-    +'<img id="prev_main" class="imgprev" alt="Main Poster Preview" style="max-height: 200px; display: none;" />'
-    +'</div>'
+      +'<div class="grid grid-2" style="margin-bottom:12px">'
+        +'<div class="grid">'
+          +'<label>Title</label>'
+          +'<input id="sh_title" placeholder="e.g. Chuckl. Comedy Club" />'
+          +'<label style="margin-top:10px">Venue</label>'
+          +'<input id="venue_input" placeholder="Start typing a venue…" />'
+          +'<div class="tip">Pick an existing venue or create a new one.</div>'
+        +'</div>'
 
-    +'<div class="grid" style="margin-bottom: 24px;">'
-    +'<label style="font-size: 14px; font-weight: 600;">Additional Images (Max 10)</label>'
-    +'<div id="additional_images_container" style="display: flex; flex-wrap: wrap; gap: 8px; border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: #ffffff;">'
-    +'<div id="drop_add" class="drop" style="width: 100px; height: 100px; padding: 0; line-height: 100px; margin: 0; font-size: 24px; border: 2px dashed #94a3b8; color: #475569;">+</div>'
-    +'<input id="file_add" type="file" accept="image/*" multiple style="display:none" />'
-    +'<div id="add_previews" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>'
-    +'</div>'
-    +'<div class="progress" style="margin-top:8px"><div id="bar_add" class="bar"></div></div>'
-    +'<div class="tip">Upload photos of the venue, performers, or past events.</div>'
-    +'</div>'
-    +'<input type="hidden" id="all_image_urls" value="" />'
-    +'</div>' // End COL 2
+        +'<div class="grid">'
+          +'<label>Date & time</label>'
+          +'<input id="sh_dt" type="datetime-local" />'
+          +'<label style="margin-top:10px">Poster image</label>'
+          +'<div id="drop" class="drop">Drop image here or click to choose</div>'
+          +'<input id="file" type="file" accept="image/*" style="display:none" />'
+          +'<div class="progress" style="margin-top:8px"><div id="bar" class="bar"></div></div>'
+          +'<div class="row" style="margin-top:8px;gap:8px;align-items:center">'
+            +'<img id="prev" class="imgprev" alt="" />'
+          +'</div>'
+        +'</div>'
+      +'</div>'
 
-    +'</div>' // End Grid
-    +'<div class="row" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); justify-content: flex-end;">'
-    +'<button id="save" class="btn p" style="padding: 10px 20px; font-size: 16px;">Save Event Details</button>'
-    +'<div id="err" class="error"></div>'
-    +'</div>'
-    +'</div>';
+      +'<div class="grid" style="margin-top:10px;margin-bottom:16px">'
+        +'<label>Description (optional)</label>'
+        + editorToolbarHtml()
+        +'<div id="desc" data-editor contenteditable="true" '
+          +'style="min-height:120px;border:1px solid var(--border);border-radius:8px;padding:10px"></div>'
+        +'<div class="muted">Use the toolbar to format your event description.</div>'
+      +'</div>'
 
-  bindWysiwyg(main);
-  mountVenuePicker($('#venue_input'));
+      +'<div class="card" style="margin:0;margin-bottom:16px">'
+        +'<div class="title" style="margin-bottom:4px">First ticket type</div>'
+        +'<div class="muted" style="margin-bottom:8px;font-size:13px">'
+          +'Optional, but recommended. You can add more ticket types on the next screen.'
+        +'</div>'
+        +'<div class="grid grid-3">'
+          +'<div class="grid">'
+            +'<label>Name</label>'
+            +'<input id="ft_name" placeholder="e.g. General Admission" value="General Admission" />'
+          +'</div>'
+          +'<div class="grid">'
+            +'<label>Price (£)</label>'
+            +'<input id="ft_price" type="number" min="0" step="0.01" placeholder="e.g. 25" />'
+          +'</div>'
+          +'<div class="grid">'
+            +'<label>Allocation (optional)</label>'
+            +'<input id="ft_allocation" type="number" min="0" step="1" placeholder="e.g. 300" />'
+          +'</div>'
+        +'</div>'
+        +'<div class="tip" style="margin-top:6px;font-size:12px">'
+          +'Leave these blank if you prefer to set up all tickets on the next page.'
+        +'</div>'
+      +'</div>'
 
-  // 2. Event Handlers & Logic
-  const eventTypeSelect = $('#event_type_select');
-  const categorySelect = $('#event_category_select');
-  
-  // Capture category options immediately
-  let categoryOptions = [];
-  if (categorySelect) {
-     categoryOptions = Array.from(categorySelect.querySelectorAll('option[data-parent]'));
-  }
+      +'<div class="row" style="margin-top:6px">'
+        +'<button id="save" class="btn p">Save show and add tickets</button>'
+        +'<div id="err" class="error"></div>'
+      +'</div>'
+      +'</div>';
 
-  function updateCategoryOptions() {
-    if (!eventTypeSelect || !categorySelect) return;
-    const selectedType = eventTypeSelect.value;
-    categorySelect.innerHTML = '<option value="">Select Sub-Category</option>';
-    categoryOptions.forEach(function(option) {
-      if (option.getAttribute('data-parent') === selectedType || !selectedType) {
-        categorySelect.appendChild(option.cloneNode(true));
+    bindWysiwyg(main);
+    mountVenuePicker($('#venue_input'));
+
+    var drop = $('#drop');
+    var file = $('#file');
+    var bar  = $('#bar');
+    var prev = $('#prev');
+
+    async function doUpload(f){
+      $('#err').textContent = '';
+      bar.style.width = '15%';
+      try{
+        var out = await uploadPoster(f);
+        prev.src = out.url;
+        prev.style.display = 'block';
+        bar.style.width = '100%';
+        setTimeout(function(){ bar.style.width = '0%'; }, 800);
+      }catch(e){
+        bar.style.width = '0%';
+        $('#err').textContent = 'Upload failed: ' + (e.message || e);
       }
-    });
-    categorySelect.value = '';
-  }
-
-  if (eventTypeSelect) {
-    eventTypeSelect.addEventListener('change', updateCategoryOptions);
-    updateCategoryOptions();
-  }
-
-  // Helper variables
-  var dropMain = $('#drop_main');
-  var fileMain = $('#file_main');
-  var barMain = $('#bar_main');
-  var prevMain = $('#prev_main');
-  var dropAdd = $('#drop_add');
-  var fileAdd = $('#file_add');
-  var barAdd = $('#bar_add');
-  var addPreviews = $('#add_previews');
-  var allImageUrls = $('#all_image_urls');
-
-  // Helper: Update hidden input for additional images
-  function updateAllImageUrls() {
-    if (!addPreviews || !allImageUrls) return;
-    var urls = [];
-    var divs = addPreviews.querySelectorAll('div');
-    divs.forEach(function(d){ if(d.dataset.url) urls.push(d.dataset.url); });
-    allImageUrls.value = JSON.stringify(urls);
-    if (dropAdd) dropAdd.style.display = urls.length >= 10 ? 'none' : 'block';
-  }
-
-  // Helper: Upload logic
-  async function doUpload(file, barEl, previewEl, isAdditional) {
-    $('#err').textContent = '';
-    if (barEl) barEl.style.width = '15%';
-    try {
-      var out = await uploadPoster(file);
-      if (isAdditional && addPreviews) {
-        var div = document.createElement('div');
-        div.style.cssText = 'position:relative;width:100px;height:100px;overflow:hidden;border-radius:6px;';
-        div.dataset.url = out.url;
-        
-        var img = document.createElement('img');
-        img.src = out.url;
-        img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
-        
-        var btn = document.createElement('button');
-        btn.textContent = 'x';
-        btn.style.cssText = 'position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;border:none;background:rgba(255,255,255,0.9);font-weight:bold;cursor:pointer;';
-        btn.addEventListener('click', function(){
-            div.remove();
-            updateAllImageUrls();
-        });
-        
-        div.appendChild(img);
-        div.appendChild(btn);
-        addPreviews.appendChild(div);
-        updateAllImageUrls();
-      } else if (previewEl) {
-        previewEl.src = out.url;
-        previewEl.style.display = 'block';
-      }
-      if (barEl) {
-        barEl.style.width = '100%';
-        setTimeout(function(){ barEl.style.width='0%'; }, 800);
-      }
-    } catch(e) {
-      if (barEl) barEl.style.width = '0%';
-      $('#err').textContent = 'Upload failed: ' + (e.message || e);
     }
-  }
 
-  if (dropMain && fileMain) {
-    dropMain.addEventListener('click', function(){ fileMain.click(); });
-    dropMain.addEventListener('dragover', function(e){ e.preventDefault(); dropMain.classList.add('drag'); });
-    dropMain.addEventListener('dragleave', function(){ dropMain.classList.remove('drag'); });
-    dropMain.addEventListener('drop', async function(e){
-      e.preventDefault(); dropMain.classList.remove('drag');
+    drop.addEventListener('click', function(){ file.click(); });
+    drop.addEventListener('dragover', function(e){ e.preventDefault(); drop.classList.add('drag'); });
+    drop.addEventListener('dragleave', function(){ drop.classList.remove('drag'); });
+    drop.addEventListener('drop', async function(e){
+      e.preventDefault();
+      drop.classList.remove('drag');
       var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-      if (f) await doUpload(f, barMain, prevMain, false);
+      if (f) await doUpload(f);
     });
-    fileMain.addEventListener('change', async function(){
-      var f = fileMain.files && fileMain.files[0];
-      if (f) await doUpload(f, barMain, prevMain, false);
+    file.addEventListener('change', async function(){
+      var f = file.files && file.files[0];
+      if (f) await doUpload(f);
     });
-  }
 
-  if (dropAdd && fileAdd) {
-    dropAdd.addEventListener('click', function(){
-      var current = (addPreviews && addPreviews.children.length) || 0;
-      if (current < 10) fileAdd.click();
-    });
-    fileAdd.addEventListener('change', async function(){
-      var files = fileAdd.files;
-      if (files && files.length) {
-        var current = (addPreviews && addPreviews.children.length) || 0;
-        var toAdd = Array.from(files).slice(0, 10 - current);
-        for (var i=0; i<toAdd.length; i++) {
-           await doUpload(toAdd[i], barAdd, null, true);
+    $('#save').addEventListener('click', async function(){
+      var errEl = $('#err');
+      errEl.textContent = '';
+
+      try{
+        var title = $('#sh_title').value.trim();
+        var dtRaw = $('#sh_dt').value;
+        var venueInput = $('#venue_input');
+        var venueText = venueInput.value.trim();
+        var venueId = venueInput.dataset.venueId || null;
+        var imageUrl = prev.src || null;
+        var descHtml = $('#desc').innerHTML.trim();
+
+        if (!title || !dtRaw || !venueText){
+          throw new Error('Title, date/time and venue are required');
         }
+
+        var dateIso = new Date(dtRaw).toISOString();
+
+        var ftName = $('#ft_name').value.trim();
+        var ftPriceStr = $('#ft_price').value.trim();
+        var ftAllocStr = $('#ft_allocation').value.trim();
+
+        var firstTicketPayload = null;
+        if (ftName || ftPriceStr || ftAllocStr){
+          var pricePence = 0;
+          if (ftPriceStr){
+            var p = Number(ftPriceStr);
+            if (!Number.isFinite(p) || p < 0){
+              throw new Error('First ticket price must be a non-negative number');
+            }
+            pricePence = Math.round(p * 100);
+          }
+          var available = null;
+          if (ftAllocStr){
+            var a = Number(ftAllocStr);
+            if (!Number.isFinite(a) || a < 0){
+              throw new Error('First ticket allocation must be a non-negative number');
+            }
+            available = a;
+          }
+          firstTicketPayload = {
+            name: ftName || 'General Admission',
+            pricePence: pricePence,
+            available: available
+          };
+        }
+
+        var showRes = await j('/admin/shows', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            title: title,
+            date: dateIso,
+            venueText: venueText,
+            venueId: venueId,
+            imageUrl: imageUrl,
+            descriptionHtml: descHtml
+          })
+        });
+
+        if (showRes && showRes.error){
+          throw new Error(showRes.error);
+        }
+
+        var showId =
+          (showRes &&
+            ( showRes.id
+              || (showRes.show && showRes.show.id)
+              || (showRes.item && showRes.item.id)
+            )) || null;
+
+        if (!showId){
+          throw new Error('Failed to create show (no id returned from server)');
+        }
+
+                if (firstTicketPayload){
+          try{
+            await j('/admin/shows/' + showId + '/ticket-types', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(firstTicketPayload)
+            });
+          }catch(ttErr){
+            alert(
+              'Show created, but the first ticket type could not be saved: '
+              + (ttErr.message || ttErr)
+              + '. You can add it manually on the Tickets page.'
+            );
+          }
+        }
+
+        // NEW: go straight into the seating-choice wizard (unallocated vs allocated)
+        window.location.href = '/admin/seating-choice/' + showId;
+      }catch(e){
+        errEl.textContent = e.message || String(e);
       }
-      fileAdd.value = '';
+
     });
   }
 
-  $('#save').addEventListener('click', async function(){
-    var errEl = $('#err');
-    errEl.textContent = '';
-    try {
-      var title = $('#sh_title').value.trim();
-      var dtRaw = $('#sh_dt').value;
-      var venueInput = $('#venue_input');
-      var venueText = venueInput.value.trim();
-      var venueId = venueInput.dataset.venueId || null;
-      var imageUrl = prevMain.src || null;
-      var descHtml = $('#desc').innerHTML.trim();
-      
-      var eventType = eventTypeSelect ? eventTypeSelect.value : '';
-      var eventCategory = categorySelect ? categorySelect.value : '';
-      var additionalImages = [];
-      if (allImageUrls && allImageUrls.value) {
-         try { additionalImages = JSON.parse(allImageUrls.value); } catch(e){}
-      }
-
-      if (!title || !dtRaw || !venueText || !descHtml || !eventType || !eventCategory || !imageUrl) {
-        throw new Error('Title, date/time, venue, description, event type, category, and a main image are required.');
-      }
-      
-      var dateIso = new Date(dtRaw).toISOString();
-      
-      var showRes = await j('/admin/shows', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({
-          title: title,
-          date: dateIso,
-          venueText: venueText,
-          venueId: venueId,
-          imageUrl: imageUrl,
-          descriptionHtml: descHtml,
-          eventType: eventType,
-          eventCategory: eventCategory,
-          additionalImages: additionalImages
-        })
-      });
-
-      if (showRes && showRes.error) throw new Error(showRes.error);
-      
-      var showId = (showRes && (showRes.id || (showRes.show && showRes.show.id))) || null;
-      if (!showId) throw new Error('Failed to create show');
-      
-      // Redirect to seating choice
-      window.location.href = '/admin/seating-choice/' + showId;
-    } catch(e) {
-      errEl.textContent = e.message || String(e);
-    }
-  });
-}
   // --- LIST SHOWS ---
   async function listShows(){
     if (!main) return;
@@ -1151,258 +1074,279 @@ async function summaryPage(id){
     });
   }
 }
-async function ticketsPage(id){
-  if (!main) return;
-  main.innerHTML = '<div class="card"><div class="title">Loading tickets…</div></div>';
-  var showResp;
-  try{
-    showResp = await j('/admin/shows/' + id);
-  }catch(e){
-    main.innerHTML = '<div class="card"><div class="error">Failed to load show: '+(e.message||e)+'</div></div>';
-    return;
-  }
-  var show = showResp.item || {};
-  var when = show.date
-    ? new Date(show.date).toLocaleString('en-GB', { dateStyle:'full', timeStyle:'short' })
-    : '';
-  var venueName = show.venue
-    ? (show.venue.name + (show.venue.city ? ' – ' + show.venue.city : ''))
-    : (show.venueText || '');
 
-  main.innerHTML =
-    '<div class="card">'
-    +'<div class="header">'
-    +'<div>'
-    +'<div class="title">Tickets for '+(show.title || 'Untitled show')+'</div>'
-    +'<div class="muted">'+(when ? when + ' · ' : '') + venueName +'</div>'
-    +'</div>'
-    +'<div class="row">'
-    +'<button class="btn" id="backToShows">Back to all events</button>'
-    +'<button class="btn" id="editShowBtn">Edit show</button>'
-    +'</div>'
-    +'</div>'
-    +'<div class="grid grid-2" style="margin-bottom:16px">'
-    +'<div class="card" style="margin:0">'
-    +'<div class="title" style="margin-bottom:4px">Ticket structure</div>'
-    +'<div class="muted" style="margin-bottom:8px">'
-    +'Tickets can be free (price £0) or paid, and can be sold as general admission or allocated seating.'
-    +'</div>'
-    +'<div class="row" style="margin-bottom:8px">'
-    +'<span class="pill" id="structureGeneral">General admission</span>'
-    +'<span class="pill" id="structureAllocated">Allocated seating</span>'
-    +'</div>'
-    +'<div class="muted" style="font-size:12px">'
-    +'Allocated seating uses a seating map for this venue. You can reuse an existing map or create a new one just for this show.'
-    +'</div>'
-    +'</div>'
-    +'<div class="card" style="margin:0">'
-    +'<div class="title" style="margin-bottom:4px">Seat maps for this show</div>'
-    +'<div class="muted" id="seatMapsSummary">Loading seat maps…</div>'
-    +'<div id="seatMapsList" style="margin-top:8px"></div>'
-    +'<div class="row" style="margin-top:8px">'
-    +'<button class="btn" id="refreshSeatMaps">Refresh seat maps</button>'
-    +'<button class="btn" id="editSeatMaps">Create / edit seat map</button>'
-    +'</div>'
-    +'</div>'
-    +'</div>'
-    +'<div class="card" style="margin:0">'
-    +'<div class="header">'
-    +'<div class="title">Ticket types</div>'
-    +'<button class="btn" id="addTypeBtn">Add ticket type</button>'
-    +'</div>'
-    +'<div class="muted" style="margin-bottom:8px">'
-    // FIX IS HERE: Joined string to one line
-    +'Set up the tickets you want to sell for this show. A £0 price will be treated as a free ticket.'
-    +'</div>'
-    +'<div id="ticketTypesEmpty" class="muted" style="display:none">No ticket types yet. Use “Add ticket type” to create one.</div>'
-    +'<table>'
-    +'<thead><tr><th>Name</th><th>Price</th><th>Available</th><th></th></tr></thead>'
-    +'<tbody id="ticketTypesBody"><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>'
-    +'</table>'
-    +'<div id="addTypeForm" style="margin-top:12px;display:none">'
-    +'<div class="grid grid-3">'
-    +'<div class="grid"><label>Name</label><input id="tt_name" placeholder="e.g. Standard" /></div>'
-    +'<div class="grid"><label>Price (£)</label><input id="tt_price" type="number" min="0" step="0.01" placeholder="e.g. 15" /></div>'
-    +'<div class="grid"><label>Available (optional)</label><input id="tt_available" type="number" min="0" step="1" placeholder="Leave blank for unlimited" /></div>'
-    +'</div>'
-    +'<div class="row" style="margin-top:8px">'
-    +'<button class="btn p" id="tt_save">Save ticket type</button>'
-    +'<button class="btn" id="tt_cancel">Cancel</button>'
-    +'<div id="tt_err" class="error"></div>'
-    +'</div>'
-    +'</div>'
-    +'</div>'
-    +'</div>';
+  // --- TICKETS PAGE ---
+  async function ticketsPage(id){
+    if (!main) return;
+    main.innerHTML = '<div class="card"><div class="title">Loading tickets…</div></div>';
 
-  $('#backToShows').addEventListener('click', function(){ go('/admin/ui/shows/current'); });
-  $('#editShowBtn').addEventListener('click', function(){ go('/admin/ui/shows/' + id + '/edit'); });
-  
-  var addTypeForm = $('#addTypeForm');
-  var ticketTypesBody = $('#ticketTypesBody');
-  var ticketTypesEmpty = $('#ticketTypesEmpty');
-  
-  $('#addTypeBtn').addEventListener('click', function(){
-    addTypeForm.style.display = 'block';
-    $('#tt_name').focus();
-  });
-  
-  $('#tt_cancel').addEventListener('click', function(){
-    addTypeForm.style.display = 'none';
-    $('#tt_err').textContent = '';
-  });
-  
-  async function loadTicketTypes(){
+    var showResp;
     try{
-      var res = await j('/admin/shows/' + id + '/ticket-types');
-      var items = res.ticketTypes || [];
-      if (!items.length){
-        ticketTypesBody.innerHTML = '<tr><td colspan="4" class="muted">No ticket types yet.</td></tr>';
-        ticketTypesEmpty.style.display = 'block';
-      }else{
-        ticketTypesEmpty.style.display = 'none';
-        ticketTypesBody.innerHTML = items.map(function(tt){
-          var price = (tt.pricePence || 0) / 100;
-          var priceLabel = price === 0 ? 'Free' : '£' + price.toFixed(2);
-          var availLabel = tt.available == null ? 'Unlimited' : String(tt.available);
-          return ''
-          +'<tr>'
-          +'<td>'+(tt.name || '')+'</td>'
-          +'<td>'+priceLabel+'</td>'
-          +'<td>'+availLabel+'</td>'
-          +'<td><button class="btn" data-del="'+tt.id+'">Delete</button></td>'
-          +'</tr>';
+      showResp = await j('/admin/shows/' + id);
+    }catch(e){
+      main.innerHTML = '<div class="card"><div class="error">Failed to load show: '+(e.message||e)+'</div></div>';
+      return;
+    }
+    var show = showResp.item || {};
+    var when = show.date
+      ? new Date(show.date).toLocaleString('en-GB', { dateStyle:'full', timeStyle:'short' })
+      : '';
+    var venueName = show.venue
+      ? (show.venue.name + (show.venue.city ? ' – ' + show.venue.city : ''))
+      : (show.venueText || '');
+
+    main.innerHTML =
+      '<div class="card">'
+        +'<div class="header">'
+          +'<div>'
+            +'<div class="title">Tickets for '+(show.title || 'Untitled show')+'</div>'
+            +'<div class="muted">'+(when ? when + ' · ' : '') + venueName +'</div>'
+          +'</div>'
+          +'<div class="row">'
+            +'<button class="btn" id="backToShows">Back to all events</button>'
+            +'<button class="btn" id="editShowBtn">Edit show</button>'
+          +'</div>'
+        +'</div>'
+
+        +'<div class="grid grid-2" style="margin-bottom:16px">'
+          +'<div class="card" style="margin:0">'
+            +'<div class="title" style="margin-bottom:4px">Ticket structure</div>'
+            +'<div class="muted" style="margin-bottom:8px">'
+              +'Tickets can be free (price £0) or paid, and can be sold as general admission or allocated seating.'
+            +'</div>'
+            +'<div class="row" style="margin-bottom:8px">'
+              +'<span class="pill" id="structureGeneral">General admission</span>'
+              +'<span class="pill" id="structureAllocated">Allocated seating</span>'
+            +'</div>'
+            +'<div class="muted" style="font-size:12px">'
+              +'Allocated seating uses a seating map for this venue. You can reuse an existing map or create a new one just for this show.'
+            +'</div>'
+          +'</div>'
+
+          +'<div class="card" style="margin:0">'
+            +'<div class="title" style="margin-bottom:4px">Seat maps for this show</div>'
+            +'<div class="muted" id="seatMapsSummary">Loading seat maps…</div>'
+            +'<div id="seatMapsList" style="margin-top:8px"></div>'
+            +'<div class="row" style="margin-top:8px">'
+              +'<button class="btn" id="refreshSeatMaps">Refresh seat maps</button>'
+              +'<button class="btn" id="editSeatMaps">Create / edit seat map</button>'
+            +'</div>'
+          +'</div>'
+        +'</div>'
+
+        +'<div class="card" style="margin:0">'
+          +'<div class="header">'
+            +'<div class="title">Ticket types</div>'
+            +'<button class="btn" id="addTypeBtn">Add ticket type</button>'
+          +'</div>'
+          +'<div class="muted" style="margin-bottom:8px">'
+// [Fixed Code]
++'Set up the tickets you want to sell for this show. A £0 price will be treated as a free ticket.'
++'</div>'
+          +'<div id="ticketTypesEmpty" class="muted" style="display:none">No ticket types yet. Use “Add ticket type” to create one.</div>'
+          +'<table>'
+            +'<thead><tr><th>Name</th><th>Price</th><th>Available</th><th></th></tr></thead>'
+            +'<tbody id="ticketTypesBody"><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>'
+          +'</table>'
+          +'<div id="addTypeForm" style="margin-top:12px;display:none">'
+            +'<div class="grid grid-3">'
+              +'<div class="grid"><label>Name</label><input id="tt_name" placeholder="e.g. Standard" /></div>'
+              +'<div class="grid"><label>Price (£)</label><input id="tt_price" type="number" min="0" step="0.01" placeholder="e.g. 15" /></div>'
+              +'<div class="grid"><label>Available (optional)</label><input id="tt_available" type="number" min="0" step="1" placeholder="Leave blank for unlimited" /></div>'
+            +'</div>'
+            +'<div class="row" style="margin-top:8px">'
+              +'<button class="btn p" id="tt_save">Save ticket type</button>'
+              +'<button class="btn" id="tt_cancel">Cancel</button>'
+              +'<div id="tt_err" class="error"></div>'
+            +'</div>'
+          +'</div>'
+        +'</div>'
+      +'</div>';
+
+    $('#backToShows').addEventListener('click', function(){ go('/admin/ui/shows/current'); });
+    $('#editShowBtn').addEventListener('click', function(){ go('/admin/ui/shows/' + id + '/edit'); });
+
+    var addTypeForm = $('#addTypeForm');
+    var ticketTypesBody = $('#ticketTypesBody');
+    var ticketTypesEmpty = $('#ticketTypesEmpty');
+
+    $('#addTypeBtn').addEventListener('click', function(){
+      addTypeForm.style.display = 'block';
+      $('#tt_name').focus();
+    });
+    $('#tt_cancel').addEventListener('click', function(){
+      addTypeForm.style.display = 'none';
+      $('#tt_err').textContent = '';
+    });
+
+    async function loadTicketTypes(){
+      try{
+        var res = await j('/admin/shows/' + id + '/ticket-types');
+        var items = res.ticketTypes || [];
+        if (!items.length){
+          ticketTypesBody.innerHTML = '<tr><td colspan="4" class="muted">No ticket types yet.</td></tr>';
+          ticketTypesEmpty.style.display = 'block';
+        }else{
+          ticketTypesEmpty.style.display = 'none';
+          ticketTypesBody.innerHTML = items.map(function(tt){
+            var price = (tt.pricePence || 0) / 100;
+            var priceLabel = price === 0 ? 'Free' : '£' + price.toFixed(2);
+            var availLabel = tt.available == null ? 'Unlimited' : String(tt.available);
+            return ''
+              +'<tr>'
+                +'<td>'+(tt.name || '')+'</td>'
+                +'<td>'+priceLabel+'</td>'
+                +'<td>'+availLabel+'</td>'
+                +'<td><button class="btn" data-del="'+tt.id+'">Delete</button></td>'
+              +'</tr>';
+          }).join('');
+
+          $$('[data-del]', ticketTypesBody).forEach(function(btn){
+            btn.addEventListener('click', async function(e){
+              e.preventDefault();
+              var toDel = btn.getAttribute('data-del');
+              if (!toDel) return;
+              if (!confirm('Delete this ticket type?')) return;
+              try{
+                await j('/admin/ticket-types/' + toDel, { method:'DELETE' });
+                loadTicketTypes();
+              }catch(err){
+                alert('Failed to delete: ' + (err.message || err));
+              }
+            });
+          });
+        }
+      }catch(e){
+        ticketTypesBody.innerHTML = '<tr><td colspan="4" class="error">Failed to load ticket types: '+(e.message||e)+'</td></tr>';
+      }
+    }
+
+    $('#tt_save').addEventListener('click', async function(){
+      var errEl = $('#tt_err');
+      errEl.textContent = '';
+      var name = $('#tt_name').value.trim();
+      var priceStr = $('#tt_price').value.trim();
+      var availStr = $('#tt_available').value.trim();
+
+      if (!name){
+        errEl.textContent = 'Name is required';
+        return;
+      }
+
+      var pricePence = 0;
+      if (priceStr){
+        var p = Number(priceStr);
+        if (!Number.isFinite(p) || p < 0){
+          errEl.textContent = 'Price must be a non-negative number';
+          return;
+        }
+        pricePence = Math.round(p * 100);
+      }
+
+      var available = null;
+      if (availStr){
+        var a = Number(availStr);
+        if (!Number.isFinite(a) || a < 0){
+          errEl.textContent = 'Available must be a non-negative number';
+          return;
+        }
+        available = a;
+      }
+
+      try{
+        await j('/admin/shows/' + id + '/ticket-types', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ name:name, pricePence:pricePence, available:available })
+        });
+        $('#tt_name').value = '';
+        $('#tt_price').value = '';
+        $('#tt_available').value = '';
+        addTypeForm.style.display = 'none';
+        loadTicketTypes();
+      }catch(err){
+        errEl.textContent = err.message || String(err);
+      }
+    });
+
+    loadTicketTypes();
+
+    // seat map summary
+    var seatMapsSummary = $('#seatMapsSummary');
+    var seatMapsList = $('#seatMapsList');
+    var venueId = show.venue && show.venue.id ? show.venue.id : null;
+
+    async function loadSeatMaps(){
+      seatMapsSummary.textContent = 'Loading seat maps…';
+      seatMapsList.innerHTML = '';
+      try{
+        var url = '/admin/seatmaps?showId=' + encodeURIComponent(id);
+        if (venueId) url += '&venueId=' + encodeURIComponent(venueId);
+        var maps = await j(url);
+        if (!Array.isArray(maps) || !maps.length){
+          seatMapsSummary.textContent = 'No seat maps yet for this show/venue.';
+          seatMapsList.innerHTML = '<div class="muted" style="font-size:13px">You can create a seat map using the “Create / edit seat map” button.</div>';
+          return;
+        }
+        seatMapsSummary.textContent = maps.length + ' seat map' + (maps.length > 1 ? 's' : '') + ' found.';
+        seatMapsList.innerHTML = maps.map(function(m){
+          var def = m.isDefault ? ' · <strong>Default</strong>' : '';
+          return '<div class="row" style="margin-bottom:4px;justify-content:space-between">'
+              +'<div><strong>'+m.name+'</strong> <span class="muted">v'+(m.version || 1)+'</span>'+def+'</div>'
+              +'<div class="row" style="gap:4px">'+(!m.isDefault ? '<button class="btn" data-make-default="'+m.id+'">Make default</button>' : '')+'</div>'
+            +'</div>';
         }).join('');
-        $$('[data-del]', ticketTypesBody).forEach(function(btn){
+
+        $$('[data-make-default]', seatMapsList).forEach(function(btn){
           btn.addEventListener('click', async function(e){
             e.preventDefault();
-            var toDel = btn.getAttribute('data-del');
-            if (!toDel) return;
-            if (!confirm('Delete this ticket type?')) return;
+            var mid = btn.getAttribute('data-make-default');
+            if (!mid) return;
             try{
-              await j('/admin/ticket-types/' + toDel, { method:'DELETE' });
-              loadTicketTypes();
+              await j('/admin/seatmaps/' + mid + '/default', {
+                method:'PATCH',
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ isDefault:true })
+              });
+              loadSeatMaps();
             }catch(err){
-              alert('Failed to delete: ' + (err.message || err));
+              alert('Failed to update default: ' + (err.message || err));
             }
           });
         });
+      }catch(e){
+        seatMapsSummary.textContent = 'Failed to load seat maps.';
+        seatMapsList.innerHTML = '<div class="error" style="font-size:13px">'+(e.message||e)+'</div>';
       }
-    }catch(e){
-      ticketTypesBody.innerHTML = '<tr><td colspan="4" class="error">Failed to load ticket types: '+(e.message||e)+'</td></tr>';
     }
-  }
-  
-  $('#tt_save').addEventListener('click', async function(){
-    var errEl = $('#tt_err');
-    errEl.textContent = '';
-    var name = $('#tt_name').value.trim();
-    var priceStr = $('#tt_price').value.trim();
-    var availStr = $('#tt_available').value.trim();
-    if (!name){ errEl.textContent = 'Name is required'; return; }
-    var pricePence = 0;
-    if (priceStr){
-      var p = Number(priceStr);
-      if (!Number.isFinite(p) || p < 0){ errEl.textContent = 'Price must be a non-negative number'; return; }
-      pricePence = Math.round(p * 100);
-    }
-    var available = null;
-    if (availStr){
-      var a = Number(availStr);
-      if (!Number.isFinite(a) || a < 0){ errEl.textContent = 'Available must be a non-negative number'; return; }
-      available = a;
-    }
-    try{
-      await j('/admin/shows/' + id + '/ticket-types', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ name:name, pricePence:pricePence, available:available })
-      });
-      $('#tt_name').value = '';
-      $('#tt_price').value = '';
-      $('#tt_available').value = '';
-      addTypeForm.style.display = 'none';
-      loadTicketTypes();
-    }catch(err){
-      errEl.textContent = err.message || String(err);
-    }
-  });
-  
-  loadTicketTypes();
-  
-  // seat map summary
-  var seatMapsSummary = $('#seatMapsSummary');
-  var seatMapsList = $('#seatMapsList');
-  var venueId = show.venue && show.venue.id ? show.venue.id : null;
-  
-  async function loadSeatMaps(){
-    seatMapsSummary.textContent = 'Loading seat maps…';
-    seatMapsList.innerHTML = '';
-    try{
-      var url = '/admin/seatmaps?showId=' + encodeURIComponent(id);
-      if (venueId) url += '&venueId=' + encodeURIComponent(venueId);
-      var maps = await j(url);
-      if (!Array.isArray(maps) || !maps.length){
-        seatMapsSummary.textContent = 'No seat maps yet for this show/venue.';
-        seatMapsList.innerHTML = '<div class="muted" style="font-size:13px">You can create a seat map using the “Create / edit seat map” button.</div>';
-        return;
+
+    $('#refreshSeatMaps').addEventListener('click', loadSeatMaps);
+    $('#editSeatMaps').addEventListener('click', function(){
+      go('/admin/ui/shows/' + id + '/seating');
+    });
+
+    loadSeatMaps();
+
+    // ticket structure pill toggle (visual only for now)
+    var structureGeneral = $('#structureGeneral');
+    var structureAllocated = $('#structureAllocated');
+    function setStructure(mode){
+      if (mode === 'allocated'){
+        structureAllocated.style.background = '#111827';
+        structureAllocated.style.color = '#ffffff';
+        structureGeneral.style.background = '#f9fafb';
+        structureGeneral.style.color = '#111827';
+      }else{
+        structureGeneral.style.background = '#111827';
+        structureGeneral.style.color = '#ffffff';
+        structureAllocated.style.background = '#f9fafb';
+        structureAllocated.style.color = '#111827';
       }
-      seatMapsSummary.textContent = maps.length + ' seat map' + (maps.length > 1 ? 's' : '') + ' found.';
-      seatMapsList.innerHTML = maps.map(function(m){
-        var def = m.isDefault ? ' · <strong>Default</strong>' : '';
-        return '<div class="row" style="margin-bottom:4px;justify-content:space-between">'
-          +'<div><strong>'+m.name+'</strong> <span class="muted">v'+(m.version || 1)+'</span>'+def+'</div>'
-          +'<div class="row" style="gap:4px">'+(!m.isDefault ? '<button class="btn" data-make-default="'+m.id+'">Make default</button>' : '')+'</div>'
-          +'</div>';
-      }).join('');
-      $$('[data-make-default]', seatMapsList).forEach(function(btn){
-        btn.addEventListener('click', async function(e){
-          e.preventDefault();
-          var mid = btn.getAttribute('data-make-default');
-          if (!mid) return;
-          try{
-            await j('/admin/seatmaps/' + mid + '/default', {
-              method:'PATCH',
-              headers:{'Content-Type':'application/json'},
-              body: JSON.stringify({ isDefault:true })
-            });
-            loadSeatMaps();
-          }catch(err){
-            alert('Failed to update default: ' + (err.message || err));
-          }
-        });
-      });
-    }catch(e){
-      seatMapsSummary.textContent = 'Failed to load seat maps.';
-      seatMapsList.innerHTML = '<div class="error" style="font-size:13px">'+(e.message||e)+'</div>';
     }
+    structureGeneral.addEventListener('click', function(){ setStructure('general'); });
+    structureAllocated.addEventListener('click', function(){ setStructure('allocated'); });
+    setStructure(show.usesAllocatedSeating ? 'allocated' : 'general');
   }
-  
-  $('#refreshSeatMaps').addEventListener('click', loadSeatMaps);
-  $('#editSeatMaps').addEventListener('click', function(){
-    go('/admin/ui/shows/' + id + '/seating');
-  });
-  
-  loadSeatMaps();
-  
-  var structureGeneral = $('#structureGeneral');
-  var structureAllocated = $('#structureAllocated');
-  function setStructure(mode){
-    if (mode === 'allocated'){
-      structureAllocated.style.background = '#111827';
-      structureAllocated.style.color = '#ffffff';
-      structureGeneral.style.background = '#f9fafb';
-      structureGeneral.style.color = '#111827';
-    }else{
-      structureGeneral.style.background = '#111827';
-      structureGeneral.style.color = '#ffffff';
-      structureAllocated.style.background = '#f9fafb';
-      structureAllocated.style.color = '#111827';
-    }
-  }
-  structureGeneral.addEventListener('click', function(){ setStructure('general'); });
-  structureAllocated.addEventListener('click', function(){ setStructure('allocated'); });
-  setStructure(show.usesAllocatedSeating ? 'allocated' : 'general');
-}
 
   // --- SEATING PAGE (temporary stub UI) ---
   async function seatingPage(showId){
