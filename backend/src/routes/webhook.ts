@@ -72,6 +72,7 @@ router.post('/webhooks/stripe', async (req, res) => {
 const rawBody = (req as any).rawBody || req.body;
 const event = stripe.webhooks.constructEvent(rawBody, sig, process.env.STRIPE_WEBHOOK_SECRET as string);
 
+
         if (event.type === 'checkout.session.completed') {
       const session = event.data.object as Stripe.Checkout.Session;
       const orderId = session.metadata?.orderId;
