@@ -46,12 +46,17 @@ app.use(morgan("dev"));
 app.use(
   express.json({
     limit: "25mb",
-    verify: (req: any, _res, buf) => {
-      // Stripe needs the raw body for signature verification
-     if (req.originalUrl === "/webhook/webhooks/stripe") {
-  req.rawBody = buf;
-}
-    },
+   verify: (req: any, _res, buf) => {
+  // Stripe needs the raw body for signature verification.
+  // NOTE: This route is mounted under /webhook, so originalUrl includes that prefix.
+  if (
+    req.originalUrl === "/webhook/webhooks/stripe" ||
+    req.originalUrl === "/webhooks/stripe" ||
+    req.originalUrl.endsWith("/webhooks/stripe")
+  ) {
+    req.rawBody = buf;
+  }
+},
   })
 );
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
