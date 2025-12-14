@@ -445,217 +445,374 @@ router.get(
     });
   }
 
-  // --- CREATE SHOW ---
   async function createShow(){
     if (!main) return;
+    
+    // --- New Look: White background for main content area ---
+    // Change the root variable in <style> to make the content area white (if not already done globally).
+    // The default --bg is #f7f8fb, but we want a cleaner white form area. 
+    // We will ensure the main wrapper background is white for a modern look.
+    // The .card background is already white (var(--panel):#ffffff), so we mostly update the structure.
 
     main.innerHTML =
-      '<div class="card">'
-      +'<div class="header">'
+        '<div class="card" style="padding: 24px;">' // Increased padding for more whitespace
+        +'<div class="header" style="margin-bottom: 24px; border-bottom: 1px solid var(--border); padding-bottom: 16px;">'
         +'<div>'
-          +'<div class="title">Add show</div>'
-          +'<div class="muted">Create the show, upload artwork and set up your first ticket type.</div>'
+        +'<div class="title" style="font-size: 1.5rem; font-weight: 700;">Create New Event</div>'
+        +'<div class="muted">Start setting up your event with core details, categories, and artwork.</div>'
         +'</div>'
-      +'</div>'
+        +'</div>'
+        
+        // Use a single, wider grid column structure for better readability
+        +'<div class="grid" style="gap: 20px;">' 
+        
+        // --- COL 1: Core Details, Category, Venue ---
+        +'<div style="flex: 1; padding-right: 20px; border-right: 1px solid var(--border);">'
 
-      +'<div class="grid grid-2" style="margin-bottom:12px">'
+        // Title
+        +'<div class="grid" style="margin-bottom: 20px;">'
+        +'<label>Event Title</label>'
+        +'<input id="sh_title" placeholder="e.g. Chuckl. Comedy Club Live" />'
+        +'</div>'
+
+        // Date & Time
+        +'<div class="grid" style="margin-bottom: 20px;">'
+        +'<label>Date & Time</label>'
+        +'<input id="sh_dt" type="datetime-local" />'
+        +'</div>'
+
+        // Venue
+        +'<div class="grid" style="margin-bottom: 20px;">'
+        +'<label>Venue</label>'
+        +'<input id="venue_input" placeholder="Start typing a venue…" />'
+        +'<div class="tip">Pick an existing venue or create a new one.</div>'
+        +'</div>'
+        
+        // --- NEW: Category and Sub-Category Section ---
+        +'<div class="grid grid-2" style="margin-bottom: 20px; gap: 16px;">'
         +'<div class="grid">'
-          +'<label>Title</label>'
-          +'<input id="sh_title" placeholder="e.g. Chuckl. Comedy Club" />'
-          +'<label style="margin-top:10px">Venue</label>'
-          +'<input id="venue_input" placeholder="Start typing a venue…" />'
-          +'<div class="tip">Pick an existing venue or create a new one.</div>'
+        +'<label>Event Type</label>'
+        +'<select id="event_type_select">'
+        +'<option value="">Select Primary Type</option>'
+        // Add all event types you can think of here:
+        +'<option value="music">Music</option>'
+        +'<option value="comedy">Comedy</option>'
+        +'<option value="arts">Arts & Theatre</option>'
+        +'<option value="sport">Sporting Event</option>'
+        +'<option value="conference">Conference / Workshop</option>'
+        +'<option value="family">Family / Kids</option>'
+        +'<option value="food">Food & Drink</option>'
+        +'</select>'
         +'</div>'
-
         +'<div class="grid">'
-          +'<label>Date & time</label>'
-          +'<input id="sh_dt" type="datetime-local" />'
-          +'<label style="margin-top:10px">Poster image</label>'
-          +'<div id="drop" class="drop">Drop image here or click to choose</div>'
-          +'<input id="file" type="file" accept="image/*" style="display:none" />'
-          +'<div class="progress" style="margin-top:8px"><div id="bar" class="bar"></div></div>'
-          +'<div class="row" style="margin-top:8px;gap:8px;align-items:center">'
-            +'<img id="prev" class="imgprev" alt="" />'
-          +'</div>'
+        +'<label>Category</label>'
+        +'<select id="event_category_select">'
+        +'<option value="">Select Sub-Category</option>'
+        +'<option data-parent="music" value="rock">Rock & Pop</option>'
+        +'<option data-parent="music" value="classical">Classical</option>'
+        +'<option data-parent="music" value="jazz">Jazz / Blues</option>'
+        +'<option data-parent="comedy" value="standup">Stand-Up Comedy</option>'
+        +'<option data-parent="comedy" value="improv">Improv / Sketch</option>'
+        +'<option data-parent="arts" value="theatre">Theatre / Play</option>'
+        +'<option data-parent="arts" value="dance">Dance</option>'
+        +'<option data-parent="sport" value="football">Football / Soccer</option>'
+        +'<option data-parent="sport" value="running">Running / Marathon</option>'
+        +'<option data-parent="conference" value="tech">Tech & IT</option>'
+        +'<option data-parent="conference" value="business">Business & Finance</option>'
+        +'<option data-parent="family" value="show">Kids Show</option>'
+        +'<option data-parent="family" value="activity">Family Activity</option>'
+        +'<option data-parent="food" value="festival">Food Festival</option>'
+        +'<option data-parent="food" value="tasting">Tasting / Tour</option>'
+        +'</select>'
+        +'<div class="tip">The list will filter based on Event Type.</div>'
         +'</div>'
-      +'</div>'
+        +'</div>' // End grid-2
 
-      +'<div class="grid" style="margin-top:10px;margin-bottom:16px">'
-        +'<label>Description (optional)</label>'
+        // Description
+        +'<div class="grid" style="margin-bottom: 20px;">'
+        +'<label>Description (mandatory)</label>'
         + editorToolbarHtml()
         +'<div id="desc" data-editor contenteditable="true" '
-          +'style="min-height:120px;border:1px solid var(--border);border-radius:8px;padding:10px"></div>'
-        +'<div class="muted">Use the toolbar to format your event description.</div>'
-      +'</div>'
+        +'style="min-height:150px; border:1px solid var(--border); border-radius:8px; padding:12px; background: #fff;"></div>'
+        +'<div class="muted">Write a compelling description for your attendees.</div>'
+        +'</div>'
+        
+        +'</div>' // End COL 1
 
-      +'<div class="card" style="margin:0;margin-bottom:16px">'
-        +'<div class="title" style="margin-bottom:4px">First ticket type</div>'
-        +'<div class="muted" style="margin-bottom:8px;font-size:13px">'
-          +'Optional, but recommended. You can add more ticket types on the next screen.'
+        // --- COL 2: Image Uploads ---
+        +'<div style="flex: 1;">'
+        
+        // Main Poster Image
+        +'<div class="grid" style="margin-bottom: 24px; background: #f9fafb; padding: 16px; border-radius: 10px; border: 1px solid var(--border);">'
+        +'<label style="font-size: 14px; font-weight: 600;">Main Poster Image (Required)</label>'
+        +'<div id="drop_main" class="drop" style="min-height: 120px; border-style: solid; border-color: #94a3b8; background: #fff;">'
+        +'<p style="margin: 0; font-weight: 500;">Drop image here or click to upload</p>'
+        +'<p class="muted" style="margin-top: 4px; font-size: 12px;">Recommended: High-resolution, Aspect Ratio 2:3</p>'
         +'</div>'
-        +'<div class="grid grid-3">'
-          +'<div class="grid">'
-            +'<label>Name</label>'
-            +'<input id="ft_name" placeholder="e.g. General Admission" value="General Admission" />'
-          +'</div>'
-          +'<div class="grid">'
-            +'<label>Price (£)</label>'
-            +'<input id="ft_price" type="number" min="0" step="0.01" placeholder="e.g. 25" />'
-          +'</div>'
-          +'<div class="grid">'
-            +'<label>Allocation (optional)</label>'
-            +'<input id="ft_allocation" type="number" min="0" step="1" placeholder="e.g. 300" />'
-          +'</div>'
+        +'<input id="file_main" type="file" accept="image/*" style="display:none" />'
+        +'<div class="progress" style="margin-top:8px"><div id="bar_main" class="bar"></div></div>'
+        +'<img id="prev_main" class="imgprev" alt="Main Poster Preview" style="max-height: 200px; display: none;" />'
         +'</div>'
-        +'<div class="tip" style="margin-top:6px;font-size:12px">'
-          +'Leave these blank if you prefer to set up all tickets on the next page.'
+        
+        // Additional Images (up to 10)
+        +'<div class="grid" style="margin-bottom: 24px;">'
+        +'<label style="font-size: 14px; font-weight: 600;">Additional Images (Max 10)</label>'
+        +'<div id="additional_images_container" style="display: flex; flex-wrap: wrap; gap: 8px; border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: #ffffff;">'
+        // Upload button for additional images
+        +'<div id="drop_add" class="drop" style="width: 100px; height: 100px; padding: 0; line-height: 100px; margin: 0; font-size: 24px; border: 2px dashed #94a3b8; color: #475569;">+</div>'
+        +'<input id="file_add" type="file" accept="image/*" multiple style="display:none" />'
+        // Image previews will be appended here
+        +'<div id="add_previews" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>'
         +'</div>'
-      +'</div>'
+        +'<div class="progress" style="margin-top:8px"><div id="bar_add" class="bar"></div></div>'
+        +'<div class="tip">Upload photos of the venue, performers, or past events.</div>'
+        +'</div>'
 
-      +'<div class="row" style="margin-top:6px">'
-        +'<button id="save" class="btn p">Save show and add tickets</button>'
+        // Placeholder to display all uploaded image URLs for submission (hidden)
+        +'<input type="hidden" id="all_image_urls" value="" />'
+
+        +'</div>' // End COL 2
+        
+        +'</div>' // End main grid
+
+        // --- Action Button ---
+        +'<div class="row" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); justify-content: flex-end;">'
+        +'<button id="save" class="btn p" style="padding: 10px 20px; font-size: 16px;">Save Event Details</button>'
         +'<div id="err" class="error"></div>'
-      +'</div>'
-      +'</div>';
-
+        +'</div>'
+        +'</div>';
+    
+    // Bind editor and venue picker
     bindWysiwyg(main);
     mountVenuePicker($('#venue_input'));
 
-    var drop = $('#drop');
-    var file = $('#file');
-    var bar  = $('#bar');
-    var prev = $('#prev');
+    // --- Category Filtering Logic ---
+    const eventTypeSelect = $('#event_type_select');
+    const categorySelect = $('#event_category_select');
+    const categoryOptions = Array.from(categorySelect.querySelectorAll('option[data-parent]'));
 
-    async function doUpload(f){
-      $('#err').textContent = '';
-      bar.style.width = '15%';
-      try{
-        var out = await uploadPoster(f);
-        prev.src = out.url;
-        prev.style.display = 'block';
-        bar.style.width = '100%';
-        setTimeout(function(){ bar.style.width = '0%'; }, 800);
-      }catch(e){
-        bar.style.width = '0%';
-        $('#err').textContent = 'Upload failed: ' + (e.message || e);
-      }
+    function updateCategoryOptions() {
+        const selectedType = eventTypeSelect.value;
+        categorySelect.innerHTML = '<option value="">Select Sub-Category</option>';
+        
+        categoryOptions.forEach(option => {
+            if (option.getAttribute('data-parent') === selectedType || !selectedType) {
+                categorySelect.appendChild(option.cloneNode(true));
+            }
+        });
+        categorySelect.value = ''; // Reset selection
     }
 
-    drop.addEventListener('click', function(){ file.click(); });
-    drop.addEventListener('dragover', function(e){ e.preventDefault(); drop.classList.add('drag'); });
-    drop.addEventListener('dragleave', function(){ drop.classList.remove('drag'); });
-    drop.addEventListener('drop', async function(e){
-      e.preventDefault();
-      drop.classList.remove('drag');
-      var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-      if (f) await doUpload(f);
+    eventTypeSelect.addEventListener('change', updateCategoryOptions);
+    updateCategoryOptions(); // Initial call to populate sub-categories
+
+    // --- Image Upload Logic (Updated for Main & Additional Images) ---
+    var dropMain = $('#drop_main');
+    var fileMain = $('#file_main');
+    var barMain = $('#bar_main');
+    var prevMain = $('#prev_main');
+
+    var dropAdd = $('#drop_add');
+    var fileAdd = $('#file_add');
+    var barAdd = $('#bar_add');
+    var addPreviews = $('#add_previews');
+    var allImageUrls = $('#all_image_urls');
+    
+    // Upload function for a single file (used for main image and each additional image)
+    async function doUpload(file, barEl, previewEl, isAdditional = false) {
+        $('#err').textContent = '';
+        barEl.style.width = '15%';
+
+        try {
+            var out = await uploadPoster(file); // Reusing existing uploadPoster API
+
+            if (isAdditional) {
+                // Add new preview element and update hidden field
+                var imgContainer = document.createElement('div');
+                imgContainer.style.position = 'relative';
+                imgContainer.style.width = '100px';
+                imgContainer.style.height = '100px';
+                imgContainer.style.overflow = 'hidden';
+                imgContainer.style.borderRadius = '6px';
+                imgContainer.dataset.url = out.url;
+
+                var img = document.createElement('img');
+                img.src = out.url;
+                img.alt = 'Additional Image';
+                img.style.width = '100%';
+                img.style.height = '100%';
+                img.style.objectFit = 'cover';
+
+                var deleteBtn = document.createElement('button');
+                deleteBtn.textContent = 'x';
+                deleteBtn.className = 'btn';
+                deleteBtn.style.position = 'absolute';
+                deleteBtn.style.top = '4px';
+                deleteBtn.style.right = '4px';
+                deleteBtn.style.width = '24px';
+                deleteBtn.style.height = '24px';
+                deleteBtn.style.padding = '0';
+                deleteBtn.style.borderRadius = '50%';
+                deleteBtn.style.lineHeight = '24px';
+                deleteBtn.style.fontSize = '12px';
+                deleteBtn.style.fontWeight = 'bold';
+                deleteBtn.style.background = 'rgba(255, 255, 255, 0.8)';
+                deleteBtn.style.borderColor = 'rgba(0, 0, 0, 0.1)';
+                deleteBtn.style.cursor = 'pointer';
+
+                deleteBtn.addEventListener('click', function() {
+                    imgContainer.remove();
+                    updateAllImageUrls();
+                });
+
+                imgContainer.appendChild(img);
+                imgContainer.appendChild(deleteBtn);
+                addPreviews.appendChild(imgContainer);
+
+                updateAllImageUrls();
+            } else {
+                // Update main image preview
+                previewEl.src = out.url;
+                previewEl.style.display = 'block';
+            }
+
+            barEl.style.width = '100%';
+            setTimeout(function() { barEl.style.width = '0%'; }, 800);
+            return out.url;
+        } catch (e) {
+            barEl.style.width = '0%';
+            $('#err').textContent = 'Upload failed: ' + (e.message || e);
+            throw e; // Re-throw to be caught by the calling function if needed
+        }
+    }
+
+    // Helper to update the hidden field with all additional image URLs
+    function updateAllImageUrls() {
+        const urls = $$('#add_previews > div').map(el => el.dataset.url);
+        allImageUrls.value = JSON.stringify(urls);
+        // Hide/show the drop button if at the 10 image limit
+        if (urls.length >= 10) {
+            dropAdd.style.display = 'none';
+        } else {
+            dropAdd.style.display = 'block';
+        }
+    }
+
+
+    // --- Main Image Event Listeners ---
+    dropMain.addEventListener('click', function() { fileMain.click(); });
+    dropMain.addEventListener('dragover', function(e) { e.preventDefault(); dropMain.classList.add('drag'); });
+    dropMain.addEventListener('dragleave', function() { dropMain.classList.remove('drag'); });
+    dropMain.addEventListener('drop', async function(e) {
+        e.preventDefault();
+        dropMain.classList.remove('drag');
+        var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (f) await doUpload(f, barMain, prevMain);
     });
-    file.addEventListener('change', async function(){
-      var f = file.files && file.files[0];
-      if (f) await doUpload(f);
+    fileMain.addEventListener('change', async function() {
+        var f = fileMain.files && fileMain.files[0];
+        if (f) await doUpload(f, barMain, prevMain);
     });
 
+    // --- Additional Images Event Listeners ---
+    dropAdd.addEventListener('click', function() { 
+        // Only open file dialog if we haven't hit the limit
+        if ($$('#add_previews > div').length < 10) {
+            fileAdd.click(); 
+        }
+    });
+    fileAdd.addEventListener('change', async function() {
+        var files = fileAdd.files;
+        if (files) {
+            let currentCount = $$('#add_previews > div').length;
+            let filesToUpload = Array.from(files).slice(0, 10 - currentCount);
+
+            if (filesToUpload.length > 0) {
+                // We show one progress bar for simplicity, as multiple simultaneous uploads can be complex
+                barAdd.style.width = '15%'; 
+                let uploadedCount = 0;
+                let total = filesToUpload.length;
+
+                for (const f of filesToUpload) {
+                    try {
+                        await doUpload(f, barAdd, null, true);
+                        uploadedCount++;
+                        barAdd.style.width = Math.round((uploadedCount / total) * 100) + '%';
+                    } catch (e) {
+                        // Error handling is inside doUpload
+                    }
+                }
+                setTimeout(function() { barAdd.style.width = '0%'; }, 800);
+            }
+        }
+        fileAdd.value = ''; // Reset file input so change event fires if the same file is selected again
+    });
+
+    // --- Save Logic (Updated to remove ticket-specific fields and include new fields) ---
     $('#save').addEventListener('click', async function(){
-      var errEl = $('#err');
-      errEl.textContent = '';
+        var errEl = $('#err');
+        errEl.textContent = '';
+        try{
+            var title = $('#sh_title').value.trim();
+            var dtRaw = $('#sh_dt').value;
+            var venueInput = $('#venue_input');
+            var venueText = venueInput.value.trim();
+            var venueId = venueInput.dataset.venueId || null;
+            var imageUrl = prevMain.src || null;
+            var descHtml = $('#desc').innerHTML.trim();
+            
+            // New fields
+            var eventType = eventTypeSelect.value;
+            var eventCategory = categorySelect.value;
+            var additionalImages = JSON.parse(allImageUrls.value || '[]');
 
-      try{
-        var title = $('#sh_title').value.trim();
-        var dtRaw = $('#sh_dt').value;
-        var venueInput = $('#venue_input');
-        var venueText = venueInput.value.trim();
-        var venueId = venueInput.dataset.venueId || null;
-        var imageUrl = prev.src || null;
-        var descHtml = $('#desc').innerHTML.trim();
-
-        if (!title || !dtRaw || !venueText){
-          throw new Error('Title, date/time and venue are required');
-        }
-
-        var dateIso = new Date(dtRaw).toISOString();
-
-        var ftName = $('#ft_name').value.trim();
-        var ftPriceStr = $('#ft_price').value.trim();
-        var ftAllocStr = $('#ft_allocation').value.trim();
-
-        var firstTicketPayload = null;
-        if (ftName || ftPriceStr || ftAllocStr){
-          var pricePence = 0;
-          if (ftPriceStr){
-            var p = Number(ftPriceStr);
-            if (!Number.isFinite(p) || p < 0){
-              throw new Error('First ticket price must be a non-negative number');
+            if (!title || !dtRaw || !venueText || !descHtml || !eventType || !eventCategory || !imageUrl){
+                throw new Error('Title, date/time, venue, description, event type, category, and a main image are required.');
             }
-            pricePence = Math.round(p * 100);
-          }
-          var available = null;
-          if (ftAllocStr){
-            var a = Number(ftAllocStr);
-            if (!Number.isFinite(a) || a < 0){
-              throw new Error('First ticket allocation must be a non-negative number');
-            }
-            available = a;
-          }
-          firstTicketPayload = {
-            name: ftName || 'General Admission',
-            pricePence: pricePence,
-            available: available
-          };
-        }
-
-        var showRes = await j('/admin/shows', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({
-            title: title,
-            date: dateIso,
-            venueText: venueText,
-            venueId: venueId,
-            imageUrl: imageUrl,
-            descriptionHtml: descHtml
-          })
-        });
-
-        if (showRes && showRes.error){
-          throw new Error(showRes.error);
-        }
-
-        var showId =
-          (showRes &&
-            ( showRes.id
-              || (showRes.show && showRes.show.id)
-              || (showRes.item && showRes.item.id)
-            )) || null;
-
-        if (!showId){
-          throw new Error('Failed to create show (no id returned from server)');
-        }
-
-                if (firstTicketPayload){
-          try{
-            await j('/admin/shows/' + showId + '/ticket-types', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(firstTicketPayload)
+            
+            var dateIso = new Date(dtRaw).toISOString();
+            
+            // The logic for first ticket payload is now REMOVED
+            // var firstTicketPayload = null; 
+            
+            var showRes = await j('/admin/shows', {
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({
+                    title: title,
+                    date: dateIso,
+                    venueText: venueText,
+                    venueId: venueId,
+                    imageUrl: imageUrl, // Main image
+                    descriptionHtml: descHtml,
+                    eventType: eventType, // NEW: Event Type
+                    eventCategory: eventCategory, // NEW: Event Category
+                    additionalImages: additionalImages // NEW: Additional Images Array
+                })
             });
-          }catch(ttErr){
-            alert(
-              'Show created, but the first ticket type could not be saved: '
-              + (ttErr.message || ttErr)
-              + '. You can add it manually on the Tickets page.'
-            );
-          }
+
+            if (showRes && showRes.error){
+                throw new Error(showRes.error);
+            }
+            var showId =
+                (showRes &&
+                ( showRes.id
+                || (showRes.show && showRes.show.id)
+                || (showRes.item && showRes.item.id)
+                )) || null;
+
+            if (!showId){
+                throw new Error('Failed to create show (no id returned from server)');
+            }
+            
+            // NEW: Redirect to the tickets page or seating choice, as first ticket creation is removed
+            window.location.href = '/admin/seating-choice/' + showId; 
+
+        }catch(e){
+            errEl.textContent = e.message || String(e);
         }
-
-        // NEW: go straight into the seating-choice wizard (unallocated vs allocated)
-        window.location.href = '/admin/seating-choice/' + showId;
-      }catch(e){
-        errEl.textContent = e.message || String(e);
-      }
-
     });
-  }
-
+}
   // --- LIST SHOWS ---
   async function listShows(){
     if (!main) return;
