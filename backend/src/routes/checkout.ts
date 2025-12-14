@@ -2959,6 +2959,11 @@ function findSingleGapGroups() {
     for (const seg of segments) {
       if (!seg || seg.length < 2) continue;
 
+      // ✅ Only enforce the rule for the segment the customer is actually interacting with
+      // If there are no selected seats in this segment, skip it (prevents unrelated “stranded seat” elsewhere blocking checkout)
+      const segHasSelected = seg.some(s => !s.unavailable && selectedSeats.has(s.id));
+      if (!segHasSelected) continue;
+
       // 0 = unavailable, 1 = empty available, 2 = selected
       const states = seg.map((s) => {
         if (s.unavailable) return 0;
@@ -3034,7 +3039,6 @@ function sortTableSeatsByAngle(seats) {
   withAngle.sort((a, b) => a.__ang - b.__ang);
   return withAngle;
 }
-
 function findTableSingleGapGroups() {
   if (!isTableGapRuleEnabled()) return [];
 
@@ -3043,6 +3047,10 @@ function findTableSingleGapGroups() {
   rowMap.forEach((group, rowKey) => {
     if (!group || group.length < 3) return;
     if (!isTableRowKey(rowKey)) return;
+
+    // ✅ Only enforce table gap rule for tables the customer has actually selected seats on
+    const tableHasSelected = group.some(s => !s.unavailable && selectedSeats.has(s.id));
+    if (!tableHasSelected) return;
 
     const ordered = sortTableSeatsByAngle(group);
 
@@ -3064,7 +3072,6 @@ function findTableSingleGapGroups() {
         const left = states[(i - 1 + n) % n];
         const right = states[(i + 1) % n];
 
-        // isolated single empty seat (not adjacent to another empty seat)
         if (left !== 1 && right !== 1) {
           bad.push(rowKey);
           return;
@@ -3074,7 +3081,6 @@ function findTableSingleGapGroups() {
     }
 
     // Case B: there is at least one unavailable seat -> split into segments between 0s.
-    // Rotate so we start scanning right after a 0, to avoid wrap complexity.
     const rot = states.slice(firstZero + 1).concat(states.slice(0, firstZero + 1));
 
     let i = 0;
@@ -3085,7 +3091,6 @@ function findTableSingleGapGroups() {
       while (i < rot.length && rot[i] !== 0) i++;
       const end = i - 1;
 
-      // scan this segment as linear (edges are bounded by 0)
       for (let j = start; j <= end; j++) {
         if (rot[j] !== 1) continue;
         const left = (j === start) ? 0 : rot[j - 1];
@@ -3101,7 +3106,6 @@ function findTableSingleGapGroups() {
 
   return bad;
 }
-
    function toggleSeat(seat, parentGroup) {
   const id = seat._id;
   const meta = seatMeta.get(id);
