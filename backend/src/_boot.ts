@@ -1,6 +1,9 @@
+<<<<<<< Updated upstream
 cd ~/Projects/chuckl-ticketing/backend
 
 cat > src/_boot.ts <<'EOF'
+=======
+>>>>>>> Stashed changes
 process.on('uncaughtException', (err: any) => {
   console.error('[uncaughtException]', err);
   try { console.error('[uncaughtException JSON]', JSON.stringify(err, null, 2)); } catch {}
@@ -18,4 +21,7 @@ import('./server.ts').catch((e) => {
   try { console.error('[server import failed JSON]', JSON.stringify(e, null, 2)); } catch {}
   process.exit(1);
 });
+<<<<<<< Updated upstream
 EOF
+=======
+>>>>>>> Stashed changes
