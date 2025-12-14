@@ -26,9 +26,203 @@ function escJSON(obj: any) {
   return JSON.stringify(obj).replace(/</g,'\\u003c');
 }
 
-export default router;
+router.get('/checkout/success', async (req, res) => {
+  const orderId = String(req.query.orderId || '').trim();
+  const base = (process.env.SITE_BASE_URL || '').replace(/\/+$/, '');
+
+  if (!orderId) return res.status(400).send('Missing orderId');
+
+  try {
+    const order = await prisma.order.findFirst({
+      where: { id: orderId },
+      include: {
+        show: {
+          include: {
+            venue: { select: { name: true, address: true, city: true, postcode: true } },
+          },
+        },
+      },
+    });
+
+    if (!order || !order.show) return res.status(404).send('Order not found');
+
+    const show: any = order.show as any;
+    const venue: any = (show.venue || {}) as any;
+
+    const dateObj = show.date ? new Date(show.date) : null;
+    const dayName = dateObj ? dateObj.toLocaleDateString('en-GB', { weekday: 'long' }) : '';
+    const fullDate = dateObj ? dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Date TBC';
+    const timeStr = dateObj ? dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '';
+
+    const title = String(show.title || 'Your event');
+    const poster = show.imageUrl || '';
+    const venueLine = [venue.name, venue.city].filter(Boolean).join(', ');
+    const fullAddress = [venue.address, venue.city, venue.postcode].filter(Boolean).join(', ');
+
+    const canonical = base ? `${base}/public/checkout/success?orderId=${encodeURIComponent(orderId)}` : `/public/checkout/success?orderId=${encodeURIComponent(orderId)}`;
+
+    const amountPounds = (Number((order as any).amountPence || 0) / 100).toFixed(2);
+    const qty = Number((order as any).quantity || 0);
+    const status = String((order as any).status || '');
+
+    // If webhook hasn’t flipped it to PAID yet, refresh a few times.
+    const shouldRefresh = status !== 'PAID';
+
+    res.type('html').send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Payment successful | ${esc(title)}</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <link rel="canonical" href="${escAttr(canonical)}" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@400;700;800;900&display=swap" rel="stylesheet">
+
+  ${shouldRefresh ? `<meta http-equiv="refresh" content="3">` : ''}
+
+  <style>
+    :root {
+      --bg-page: #F3F4F6;
+      --bg-surface: #FFFFFF;
+      --primary: #0F172A;
+      --brand: #0056D2;
+      --brand-hover: #0044A8;
+      --text-main: #111827;
+      --text-muted: #6B7280;
+      --border: #E5E7EB;
+      --radius-lg: 16px;
+      --shadow-float: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:'Inter', sans-serif; background: var(--bg-page); color: var(--text-main); }
+    h1,h2,.font-heading { font-family:'Outfit', sans-serif; margin:0; line-height:1.1; }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 28px 16px 70px; }
+    .hero {
+      background: var(--primary);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-float);
+      border: 1px solid rgba(255,255,255,0.06);
+      position: relative;
+      min-height: 280px;
+      display:flex;
+      align-items:flex-end;
+    }
+    .hero-bg {
+      position:absolute; inset:0;
+      background-image: url('${escAttr(poster)}');
+      background-size: cover;
+      background-position: center;
+      opacity: 0.9;
+    }
+    .hero-overlay {
+      position:absolute; inset:0;
+      background:
+        linear-gradient(to right, rgba(15,23,42,0.92) 0%, rgba(15,23,42,0.55) 55%, rgba(15,23,42,0.25) 100%),
+        linear-gradient(to top, rgba(15,23,42,0.92) 0%, rgba(15,23,42,0.3) 55%, rgba(15,23,42,0.1) 100%);
+    }
+    .hero-inner { position:relative; z-index:2; padding: 26px; color:#fff; width:100%; }
+    .pill {
+      display:inline-block; padding: 6px 10px; border-radius: 999px;
+      background: rgba(0,86,210,0.18); border: 1px solid rgba(0,86,210,0.35);
+      color: rgba(255,255,255,0.9); font-weight:700; font-size: 12px; letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+    .title { margin-top: 10px; font-size: clamp(2rem, 3vw, 2.7rem); font-weight: 900; text-transform: uppercase; }
+    .sub { margin-top: 10px; color: rgba(255,255,255,0.9); font-weight: 600; }
+    .grid { display:grid; gap: 16px; margin-top: 18px; grid-template-columns: 1fr; }
+    @media (min-width: 900px) { .grid { grid-template-columns: 1.2fr 0.8fr; } }
+    .card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-float);
+      padding: 18px;
+    }
+    .kv { margin-top: 6px; }
+    .kv div { margin: 8px 0; color: var(--text-muted); }
+    .kv strong { color: var(--text-main); }
+    .warn { margin-top: 10px; color: #b45309; background: #fff7ed; border: 1px solid #fed7aa; padding: 10px 12px; border-radius: 10px; font-weight: 600; }
+    .btns { display:flex; flex-wrap:wrap; gap: 10px; margin-top: 12px; }
+    a.btn {
+      display:inline-block; padding: 10px 14px; border-radius: 10px; font-weight: 800; text-decoration:none;
+      text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.85rem;
+    }
+    a.primary { background: var(--brand); color: #fff; }
+    a.primary:hover { background: var(--brand-hover); }
+    a.ghost { background: #fff; border: 2px solid var(--border); color: var(--primary); }
+    a.ghost:hover { border-color: var(--brand); color: var(--brand); }
+    .small { margin-top: 10px; color: var(--text-muted); font-size: 0.95rem; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+
+    <div class="hero">
+      <div class="hero-bg"></div>
+      <div class="hero-overlay"></div>
+      <div class="hero-inner">
+        <div class="pill">${status === 'PAID' ? 'Payment confirmed' : 'Payment received'}</div>
+        <h1 class="title">You’re booked in!</h1>
+        <div class="sub">Order reference: <strong>${esc(orderId)}</strong></div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2 class="font-heading" style="font-size:1.25rem;">Your tickets</h2>
+
+        ${shouldRefresh ? `<div class="warn">We’re just confirming your payment… this page will refresh automatically.</div>` : ''}
+
+        <div class="kv">
+          <div><strong>Event:</strong> ${esc(title)}</div>
+          <div><strong>When:</strong> ${esc(dayName)} ${esc(fullDate)} at ${esc(timeStr)}</div>
+          <div><strong>Venue:</strong> ${esc(venueLine)}</div>
+          <div><strong>Address:</strong> ${esc(fullAddress)}</div>
+          <div><strong>Tickets:</strong> ${esc(qty)}</div>
+          <div><strong>Total paid:</strong> £${esc(amountPounds)}</div>
+        </div>
+
+        <div class="btns">
+          <a class="btn ghost" href="/public/event/${escAttr(show.id)}">Back to event page</a>
+        </div>
+
+        <div class="small">
+          You’ll also receive a confirmation email with your ticket(s). If it doesn’t arrive within a couple of minutes, check your spam folder.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="font-heading" style="font-size:1.25rem;">Create an account</h2>
+        <div class="small">
+          Create an account to access tickets, manage bookings, and re-book faster next time.
+        </div>
+
+        <div class="btns">
+          <a class="btn primary" href="/signup">Sign up</a>
+          <a class="btn ghost" href="/login">Log in</a>
+        </div>
+
+        <div class="small">
+          (If your auth routes aren’t <code>/signup</code> and <code>/login</code>, tell me your exact paths and I’ll patch this precisely.)
+        </div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>`);
+  } catch (err: any) {
+    console.error('[public-checkout-success] Error:', err);
+    res.status(500).send('Server Error');
+  }
+});
 
 router.get('/event/:id', async (req, res) => {
+
   const id = String(req.params.id || '').trim();
   const base = (process.env.SITE_BASE_URL || '').replace(/\/+$/, '');
 
