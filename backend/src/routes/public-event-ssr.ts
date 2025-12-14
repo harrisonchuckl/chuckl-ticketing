@@ -73,7 +73,7 @@ router.get('/checkout/success', async (req, res) => {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Payment successful | ${esc(title)}</title>
+<title>Order received | ${esc(title)}</title>
   <meta name="robots" content="noindex,nofollow" />
   <link rel="canonical" href="${escAttr(canonical)}" />
 
@@ -136,12 +136,13 @@ router.get('/checkout/success', async (req, res) => {
     .grid { display:grid; gap: 16px; margin-top: 18px; grid-template-columns: 1fr; }
     @media (min-width: 900px) { .grid { grid-template-columns: 1.2fr 0.8fr; } }
     .card {
-      background: var(--bg-surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-float);
-      padding: 18px;
-    }
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: 18px;
+}
+
     .kv { margin-top: 6px; }
     .kv div { margin: 8px 0; color: var(--text-muted); }
     .kv strong { color: var(--text-main); }
@@ -165,7 +166,7 @@ router.get('/checkout/success', async (req, res) => {
       <div class="hero-bg"></div>
       <div class="hero-overlay"></div>
       <div class="hero-inner">
-        <div class="pill">${status === 'PAID' ? 'Payment confirmed' : 'Payment received'}</div>
+<div class="pill">${status === 'PAID' ? 'Order confirmed' : 'Order received'}</div>
         <h1 class="title">You’re booked in!</h1>
         <div class="sub">Order reference: <strong>${esc(orderId)}</strong></div>
       </div>
@@ -175,7 +176,7 @@ router.get('/checkout/success', async (req, res) => {
       <div class="card">
         <h2 class="font-heading" style="font-size:1.25rem;">Your tickets</h2>
 
-        ${shouldRefresh ? `<div class="warn">We’re just confirming your payment… this page will refresh automatically.</div>` : ''}
+${shouldRefresh ? `<div class="warn">Order received — we’re processing your payment now. This page will refresh automatically. We’ll email your receipt and ticket(s) once payment has been confirmed.</div>` : ''}
 
         <div class="kv">
           <div><strong>Event:</strong> ${esc(title)}</div>
@@ -190,10 +191,13 @@ router.get('/checkout/success', async (req, res) => {
           <a class="btn ghost" href="/public/event/${escAttr(show.id)}">Back to event page</a>
         </div>
 
-        <div class="small">
-          You’ll also receive a confirmation email with your ticket(s). If it doesn’t arrive within a couple of minutes, check your spam folder.
-        </div>
-      </div>
+      <div class="small">
+  ${shouldRefresh
+    ? 'We’re processing your payment. Once it’s confirmed, we’ll email your receipt and ticket(s).'
+    : 'Payment confirmed. We’ll email your receipt and ticket(s) shortly.'}
+  If it doesn’t arrive within a couple of minutes, check your spam folder.
+</div>
+</div>
 
       <div class="card">
         <h2 class="font-heading" style="font-size:1.25rem;">Create an account</h2>
@@ -362,7 +366,8 @@ router.get('/event/:id', async (req, res) => {
       --border: #E5E7EB;
       --radius-md: 12px;
       --radius-lg: 16px;
-      --shadow-float: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+--shadow-float: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+--shadow-card: 0 2px 10px rgba(0,0,0,0.06);
     }
 
     * { box-sizing: border-box; }
