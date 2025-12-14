@@ -113,9 +113,9 @@ console.debug('checkout/session fees result:', fees);
       return res.status(500).json({ ok: false, message: 'Payment processing unavailable' });
     }
 
-    const successUrl = new URL(`/public/event/${show.id}?status=success&orderId=${order.id}`, origin).toString();
-    const cancelUrl = new URL(`/public/event/${show.id}?status=cancelled`, origin).toString();
-    console.debug('checkout/session redirect urls', { successUrl, cancelUrl });
+   const successUrl = new URL(`/public/checkout/success?orderId=${order.id}`, origin).toString();
+const cancelUrl = new URL(`/public/event/${show.id}?status=cancelled`, origin).toString();
+console.debug('checkout/session redirect urls', { successUrl, cancelUrl });
 
     // --- DEBUG START: STRIPE SESSION CREATION ---
     const lineItems = [
