@@ -140,6 +140,12 @@ router.get(
   box-shadow:0 0 0 3px rgba(0,159,227,.12);
 }
 
+.ai-prefill{
+  border:2px solid var(--ai) !important;
+  box-shadow:0 0 0 3px rgba(0,159,227,.12);
+}
+
+
 /* AI highlight for contenteditable editor */
 .ai-gen-editor{
   border:2px solid var(--ai) !important;
@@ -318,29 +324,42 @@ router.get(
   function $(sel, root){ return (root || document).querySelector(sel); }
   function $$(sel, root){ return Array.from((root || document).querySelectorAll(sel)); }
     // --- AI field highlighting ---
-  function markAi(el, kind){
-    if (!el) return;
-    if (kind === 'editor') el.classList.add('ai-gen-editor');
-    else if (kind === 'drop') el.classList.add('ai-gen-drop');
-    else el.classList.add('ai-gen');
-    el.dataset.aiGen = '1';
-  }
+ // --- AI field highlighting (remove only when value actually changes) ---
+function aiGetValue(el){
+  if (!el) return '';
+  if (el.isContentEditable) return (el.innerHTML || '');
+  if (typeof el.value !== 'undefined') return String(el.value || '');
+  return '';
+}
 
-  function clearAi(el){
-    if (!el) return;
-    el.classList.remove('ai-gen','ai-gen-editor','ai-gen-drop');
-    el.dataset.aiGen = '';
-  }
+function markAi(el, kind){
+  if (!el) return;
+  if (kind === 'editor') el.classList.add('ai-gen-editor');
+  else if (kind === 'drop') el.classList.add('ai-gen-drop');
+  else el.classList.add('ai-gen'); // or 'ai-prefill' if you prefer
+  el.dataset.aiGen = '1';
+  el.dataset.aiStartValue = aiGetValue(el);
+}
 
-  // Remove blue border as soon as the user changes the field
-  function bindAiClearOnUserEdit(el, evts){
-    if (!el) return;
-    (evts || ['input','change','blur']).forEach(function(evt){
-      el.addEventListener(evt, function(){
-        if (el.dataset.aiGen === '1') clearAi(el);
-      }, { passive:true });
-    });
-  }
+function clearAi(el){
+  if (!el) return;
+  el.classList.remove('ai-gen','ai-gen-editor','ai-gen-drop','ai-prefill');
+  delete el.dataset.aiGen;
+  delete el.dataset.aiStartValue;
+}
+
+function bindAiClearOnUserEdit(el, evts){
+  if (!el) return;
+  (evts || ['input','change','keyup']).forEach(function(evt){
+    el.addEventListener(evt, function(){
+      if (el.dataset.aiGen !== '1') return;
+      var start = (el.dataset.aiStartValue || '');
+      var cur = aiGetValue(el);
+      if (cur !== start) clearAi(el);
+    }, { passive:true });
+  });
+}
+
 
 
   var main = $('#main');
@@ -375,10 +394,10 @@ router.get(
     }
   }
 
-  function go(path){
-    history.pushState(null, '', path);
-    route();
-  }
+ function go(path){
+  history.pushState(null, '', path);
+  routeSafe();
+}
 
   // SPA sidebar links
   document.addEventListener('click', function(e){
@@ -781,23 +800,29 @@ router.get(
   +   '<input id="ai_files" type="file" multiple '
   +     'accept=".pdf,.doc,.docx,.txt,.md,image/*" style="display:none" />'
 
-  +   '<div id="ai_list" style="margin-top:12px;"></div>'
+  +   '+   '<div id="ai_list" style="margin-top:12px;"></div>'
 
-  +           +'<div class="row" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); justify-content: space-between; align-items:center;">'
-        +  '<label id="ai_approval_wrap" style="display:none; align-items:center; gap:10px; font-size:13px; color:#334155;">'
-        +    '<input id="ai_approval" type="checkbox" />'
-        +    'I’ve checked the AI-filled details above (and edited anything needed).'
-        +  '</label>'
-        +  '<div class="row" style="gap:10px; align-items:center;">'
-        +    '<button id="save" class="btn p" style="padding: 10px 20px; font-size: 16px;">Save Event Details and Add Tickets</button>'
-        +    '<div id="err" class="error"></div>'
-        +  '</div>'
-        +'</div>'
++   '<div class="row" style="margin-top:12px; gap:10px; align-items:center;">'
++     '<button id="ai_analyse" class="btn p">Analyse & Pre-fill</button>'
++     '<div id="ai_status" class="muted" style="font-size:13px;"></div>'
++   '</div>'
 
++   '<div id="ai_err" class="error" style="margin-top:10px;"></div>'
++   '<div id="ai_result" style="margin-top:14px;"></div>'
 
-  +   '<div id="ai_err" class="error" style="margin-top:10px;"></div>'
-  +   '<div id="ai_result" style="margin-top:14px;"></div>'
-  + '</div>';
++   '<div class="row" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); justify-content: space-between; align-items:center;">'
++     '<label id="ai_approval_wrap" style="display:none; align-items:center; gap:10px; font-size:13px; color:#334155;">'
++       '<input id="ai_approval" type="checkbox" />'
++       'I’ve checked the AI-filled details above (and edited anything needed).'
++     '</label>'
++     '<div class="row" style="gap:10px; align-items:center;">'
++       '<button id="save" class="btn p" style="padding: 10px 20px; font-size: 16px;">Save Event Details and Add Tickets</button>'
++       '<div id="err" class="error"></div>'
++     '</div>'
++   '</div>'
+
++ '</div>';
+
 
   const drop = $('#ai_drop');
   const fileInput = $('#ai_files');
@@ -2572,51 +2597,58 @@ async function summaryPage(id){
   }
 
   // --- ROUTER ---
-  function route(){
-    try{
-      var path = location.pathname.replace(/\\/$/, '');
-      console.log('[Admin UI] route', path);
-      setActive(path);
-
-      if (path === '/admin/ui' || path === '/admin/ui/home' || path === '/admin/ui/index.html') return home();
-      if (path === '/admin/ui/shows/create-ai') return createShowAI();
-      if (path === '/admin/ui/shows/create') return createShow();
-      if (path === '/admin/ui/shows/current')  return listShows();
-      if (path === '/admin/ui/orders')         return orders();
-      if (path === '/admin/ui/venues')         return venues();
-      if (path === '/admin/ui/analytics')      return analytics();
-      if (path === '/admin/ui/audiences')      return audiences();
-      if (path === '/admin/ui/email')          return emailPage();
-      if (path === '/admin/ui/account')        return account();
-
-      if (path.startsWith('/admin/ui/shows/') && path.endsWith('/edit')){
-        var id1 = path.split('/')[4];
-        return editShow(id1);
-      }
-      if (path.startsWith('/admin/ui/shows/') && path.endsWith('/tickets')){
-        var id2 = path.split('/')[4];
-        return ticketsPage(id2);
-      }
-      if (path.startsWith('/admin/ui/shows/') && path.endsWith('/seating')){
-        var id3 = path.split('/')[4];
-        return seatingPage(id3);
-      }
-      if (path.startsWith('/admin/ui/shows/') && path.endsWith('/summary')){
-        var id4 = path.split('/')[4];
-        return summaryPage(id4);
-      }
-
-      return home();
-    }catch(err){
+ function routeSafe(){
+  return Promise.resolve()
+    .then(route)
+    .catch(function(err){
       console.error('[Admin UI] route error', err);
       if (main){
-        main.innerHTML = '<div class="card"><div class="error">Routing error: '+(err.message||err)+'</div></div>';
+        main.innerHTML = '<div class="card"><div class="error">Routing error: '+((err && err.message) || err)+'</div></div>';
       }
-    }
+    });
+}
+
+window.addEventListener('popstate', function(){ routeSafe(); });
+
+async function route(){
+  var path = location.pathname.replace(/\/$/, '');
+  console.log('[Admin UI] route', path);
+  setActive(path);
+
+  if (path === '/admin/ui' || path === '/admin/ui/home' || path === '/admin/ui/index.html') return home();
+  if (path === '/admin/ui/shows/create-ai') return await createShowAI();
+  if (path === '/admin/ui/shows/create') return await createShow();
+  if (path === '/admin/ui/shows/current') return await listShows();
+  if (path === '/admin/ui/orders') return orders();
+  if (path === '/admin/ui/venues') return venues();
+  if (path === '/admin/ui/analytics') return analytics();
+  if (path === '/admin/ui/audiences') return audiences();
+  if (path === '/admin/ui/email') return emailPage();
+  if (path === '/admin/ui/account') return account();
+
+  if (path.startsWith('/admin/ui/shows/') && path.endsWith('/edit')){
+    var id1 = path.split('/')[4];
+    return await editShow(id1);
+  }
+  if (path.startsWith('/admin/ui/shows/') && path.endsWith('/tickets')){
+    var id2 = path.split('/')[4];
+    return await ticketsPage(id2);
+  }
+  if (path.startsWith('/admin/ui/shows/') && path.endsWith('/seating')){
+    var id3 = path.split('/')[4];
+    return await seatingPage(id3);
+  }
+  if (path.startsWith('/admin/ui/shows/') && path.endsWith('/summary')){
+    var id4 = path.split('/')[4];
+    return await summaryPage(id4);
   }
 
-  console.log('[Admin UI] initial route()');
-  route();
+  return home();
+}
+
+console.log('[Admin UI] initial route()');
+routeSafe();
+
 })();
 </script>
 </body>
@@ -2645,6 +2677,61 @@ const model = process.env.OPENAI_MODEL_SHOW_EXTRACT || "gpt-4o-mini";
       const images: Array<{ name?: string; url: string }> = Array.isArray(body.images) ? body.images : [];
       const docs: Array<{ name?: string; type?: string; dataUrl: string }> = Array.isArray(body.docs) ? body.docs : [];
 
+      // --- Deterministic main poster selection (server-side) ---
+async function fetchImageMeta(url: string){
+  const sharpMod: any = await import("sharp");
+  const sharp = sharpMod?.default || sharpMod;
+
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`Failed to fetch image: ${url} (${resp.status})`);
+  const ab = await resp.arrayBuffer();
+  const buf = Buffer.from(ab);
+
+  const meta = await sharp(buf).metadata();
+  const w = meta.width || 0;
+  const h = meta.height || 0;
+  const ratio = h ? (w / h) : 0;
+  const target = 2/3;
+  const diff = Math.abs(ratio - target);
+  return { w, h, ratio, diff };
+}
+
+function nameScore(name?: string){
+  const n = String(name || "").toLowerCase();
+  let s = 0;
+  if (n.includes("poster") || n.includes("artwork") || n.includes("a3") || n.includes("print") || n.includes("main")) s -= 0.25;
+  if (n.includes("banner") || n.includes("header") || n.includes("web")) s += 0.6;
+  if (n.includes("sq") || n.includes("square") || n.includes("insta")) s += 0.75;
+  return s;
+}
+
+function finalScore(meta: {diff:number, w:number, h:number}, name?: string){
+  // lower is better
+  const px = (meta.w || 0) * (meta.h || 0);
+  const resBonus = px > 0 ? (1 / Math.log10(px + 10)) : 1;
+  return meta.diff + nameScore(name) + resBonus;
+}
+
+async function pickBestMainPosterServer(imgs: Array<{name?: string; url: string}>){
+  const candidates = imgs.filter(x => x && x.url);
+  if (!candidates.length) return null;
+
+  const scored: Array<{url:string; name?:string; score:number}> = [];
+  for (const img of candidates){
+    try{
+      const meta = await fetchImageMeta(img.url);
+      scored.push({ url: img.url, name: img.name, score: finalScore(meta, img.name) });
+    }catch{
+      // ignore fetch/meta failures
+    }
+  }
+  scored.sort((a,b) => a.score - b.score);
+  return scored[0]?.url || null;
+}
+
+const forcedMainImageUrl = await pickBestMainPosterServer(images);
+
+      
             const eventTypes = [
         "comedy","theatre","music","festival","film","talks","workshop",
         "corporate","nightlife","sport","food","community","arts","other"
@@ -2683,7 +2770,9 @@ const model = process.env.OPENAI_MODEL_SHOW_EXTRACT || "gpt-4o-mini";
           "3) TYPE + CATEGORY: eventType must be one of: " + eventTypes.join(", ") + ".\n" +
           "   category MUST be one of these exact values (or null): " + categories.join(", ") + ".\n" +
           "   Example: stand-up comedy => eventType='comedy' and category='standup'.\n" +
-          "4) IMAGES: Choose the main poster image from the provided images (prefer closest to 2:3 portrait and likely poster artwork). Put the rest in additionalImageUrls.\n" +
+"4) IMAGES: The main poster image is PRE-SELECTED by the server and you MUST use it as mainImageUrl. Do not choose a different one.\n" +
+(forcedMainImageUrl ? ("   mainImageUrl MUST equal: " + forcedMainImageUrl + "\n") : "") +
+"   Put the rest in additionalImageUrls.\n" +
           "5) TAGS: Return exactly 10 tags. If fewer are explicitly present, infer the remaining tags from the event and venue context.\n" +
           "6) Dates/times: output ISO 8601 for startDateTime/endDateTime. If local UK time and no timezone stated, assume Europe/London.\n" +
           "   doorsOpenTime: HH:MM 24h.\n"
@@ -2819,11 +2908,12 @@ for (const d of docs) {
           },
 
                    tags: {
-            type: "array",
-            items: { type: "string" },
-            minItems: 10,
-            maxItems: 10
-          },
+  type: "array",
+  items: { type: "string" },
+  minItems: 10,
+  maxItems: 10
+},
+
 
 
           descriptionHtml: { type: "string" },
@@ -2959,14 +3049,27 @@ if (!outText) {
 }
 
 
-      let draft: any = null;
-      try {
-        draft = JSON.parse(outText);
-      } catch {
-        return res.status(500).json({ ok: false, error: "Failed to parse model JSON", outText });
-      }
+     let draft: any = null;
+try {
+  draft = JSON.parse(outText);
+} catch {
+  return res.status(500).json({ ok: false, error: "Failed to parse model JSON", outText });
+}
 
-      return res.json({ ok: true, draft });
+// Hard override: deterministic main poster always wins
+if (forcedMainImageUrl){
+  draft.mainImageUrl = forcedMainImageUrl;
+
+  const extra = Array.isArray(draft.additionalImageUrls) ? draft.additionalImageUrls : [];
+  const all = [ ...extra, ...(images.map(i => i.url).filter(Boolean)) ];
+
+  // remove main + dedupe + cap 10
+  const dedup = Array.from(new Set(all.filter(u => u && u !== forcedMainImageUrl)));
+  draft.additionalImageUrls = dedup.slice(0, 10);
+}
+
+return res.json({ ok: true, draft });
+
 
     } catch (e: any) {
       return res.status(500).json({ ok: false, error: e?.message || String(e) });
