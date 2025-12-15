@@ -2886,6 +2886,13 @@ async function summaryPage(id){
 
   // --- ROUTER ---
  function routeSafe(){
+  // Re-grab main each route in case the DOM rendered after script eval, or main reference went stale
+  main = document.getElementById('main');
+  if (!main) {
+    console.error('[Admin UI] routeSafe: #main not found');
+    return Promise.resolve();
+  }
+
   return Promise.resolve()
     .then(route)
     .catch(function(err){
@@ -2961,7 +2968,12 @@ path = cleanPath;
 }
 
 console.log('[Admin UI] initial route()');
-routeSafe();
+
+if (document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', routeSafe);
+} else {
+  routeSafe();
+}
 
 })();
 </script>
