@@ -2427,15 +2427,64 @@ router.post(
         });
       }
 
-      // Attach docs as file inputs (data URLs). This enables the model (and code_interpreter tool) to read DOCX/PDF/TXT.
-      for (const d of docs) {
-        if (!d || !d.dataUrl) continue;
-        content.push({
-          type: "input_file",
-          filename: d.name || "document",
-          file_data: d.dataUrl
-        });
-      }
+      function parseDataUrl(dataUrl: string){
+  const m = String(dataUrl || "").match(/^data:(.*?);base64,(.*)$/);
+  if (!m) return null;
+  return { mime: m[1] || "", b64: m[2] || "" };
+}
+
+async function docToText(name: string, type: string, dataUrl: string){
+  const parsed = parseDataUrl(dataUrl);
+  if (!parsed) return "";
+
+  const buf = Buffer.from(parsed.b64, "base64");
+  const mime = (parsed.mime || type || "").toLowerCase();
+  const lowerName = String(name || "").toLowerCase();
+
+  // Lazy requires to avoid TS import/esModuleInterop issues
+  const mammoth = require("mammoth");
+  const pdfParse = require("pdf-parse");
+
+  // DOCX
+  if (mime.includes("wordprocessingml.document") || lowerName.endsWith(".docx")) {
+    const out = await mammoth.extractRawText({ buffer: buf });
+    return (out && out.value) ? String(out.value) : "";
+  }
+
+  // PDF
+  if (mime.includes("pdf") || lowerName.endsWith(".pdf")) {
+    const out = await pdfParse(buf);
+    return (out && out.text) ? String(out.text) : "";
+  }
+
+  // TXT/MD/other – treat as utf8 text
+  return buf.toString("utf8");
+}
+
+// Turn all docs into plain text and feed as input_text
+for (const d of docs) {
+  if (!d || !d.dataUrl) continue;
+  try{
+    const text = await docToText(d.name || "document", d.type || "", d.dataUrl);
+    const cleaned = String(text || "").trim();
+    if (!cleaned) continue;
+
+    // Keep it bounded so a huge PDF can’t explode tokens
+    const clipped = cleaned.slice(0, 20000);
+
+    content.push({
+      type: "input_text",
+      text: `Document: ${d.name || "document"}\n\n${clipped}`
+    });
+  }catch(e){
+    // Don’t fail the whole request if one doc can’t be parsed
+    content.push({
+      type: "input_text",
+      text: `Document: ${d.name || "document"}\n\n[Could not parse this file on server]`
+    });
+  }
+}
+
 
       // Attach images as vision inputs (URLs)
       for (const img of images) {
@@ -2521,10 +2570,7 @@ router.post(
       const openaiReq = {
         model,
         input: [{ role: "user", content }],
-tools: [{
-  type: "code_interpreter",
-  container: { type: "auto", memory_limit: "1g" }
-}],
+
         text: {
           format: {
             type: "json_schema",
