@@ -20,14 +20,18 @@ router.get(
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Organiser Console</title>
   <style>
-    :root{
-      --bg:#f7f8fb;
-      --panel:#ffffff;
-      --border:#e5e7eb;
-      --text:#111827;
-      --muted:#6b7280;
-      --ink:#111827;
-    }
+  :root{
+  --bg:#f7f8fb;
+  --panel:#ffffff;
+  --border:#e5e7eb;
+  --text:#111827;
+  --muted:#6b7280;
+  --ink:#111827;
+
+  /* TIXall AI highlight */
+  --ai:#009fe3;
+}
+
     *{box-sizing:border-box;}
     html,body{
       margin:0;
@@ -130,6 +134,23 @@ router.get(
       outline:none;
       font:inherit;
     }
+    /* AI-generated field highlight (removed once user edits) */
+.ai-gen{
+  border:2px solid var(--ai) !important;
+  box-shadow:0 0 0 3px rgba(0,159,227,.12);
+}
+
+/* AI highlight for contenteditable editor */
+.ai-gen-editor{
+  border:2px solid var(--ai) !important;
+  box-shadow:0 0 0 3px rgba(0,159,227,.12);
+}
+
+/* AI highlight for drop areas */
+.ai-gen-drop{
+  border-color: var(--ai) !important;
+}
+
 
     /* Fixed-height controls (use on selects that must line up perfectly) */
   .ctl{
@@ -296,6 +317,31 @@ router.get(
   console.log('[Admin UI] booting');
   function $(sel, root){ return (root || document).querySelector(sel); }
   function $$(sel, root){ return Array.from((root || document).querySelectorAll(sel)); }
+    // --- AI field highlighting ---
+  function markAi(el, kind){
+    if (!el) return;
+    if (kind === 'editor') el.classList.add('ai-gen-editor');
+    else if (kind === 'drop') el.classList.add('ai-gen-drop');
+    else el.classList.add('ai-gen');
+    el.dataset.aiGen = '1';
+  }
+
+  function clearAi(el){
+    if (!el) return;
+    el.classList.remove('ai-gen','ai-gen-editor','ai-gen-drop');
+    el.dataset.aiGen = '';
+  }
+
+  // Remove blue border as soon as the user changes the field
+  function bindAiClearOnUserEdit(el, evts){
+    if (!el) return;
+    (evts || ['input','change','blur']).forEach(function(evt){
+      el.addEventListener(evt, function(){
+        if (el.dataset.aiGen === '1') clearAi(el);
+      }, { passive:true });
+    });
+  }
+
 
   var main = $('#main');
 
@@ -394,6 +440,24 @@ router.get(
   wrapper.appendChild(createPanel);
 
   var selectedVenue = null;
+    // Allow programmatic AI prefill (select existing venue or open create form with address)
+  input._venuePicker = {
+    selectExisting: async function(v){
+      if (!v) return;
+      input.value = v.name || input.value || '';
+      input.dataset.venueId = v.id || '';
+      createPanel.style.display = 'none';
+      close();
+      selectedVenue = await tryFetchVenueDetails(v);
+      setApproved(false);
+      renderDetails();
+    },
+    openCreate: function(name, address){
+      resetSelection();
+      openCreateForm(name || '', address || '');
+    }
+  };
+
 
   function close(){ pop.classList.remove('open'); }
 
@@ -518,7 +582,7 @@ router.get(
     }
   }
 
-  function openCreateForm(prefillName){
+  function openCreateForm(prefillName, prefillAddress){
     close();
     createPanel.innerHTML = ''
       + '<div style="font-weight:600;margin-bottom:8px;">Create new venue</div>'
@@ -529,7 +593,9 @@ router.get(
       +   '</div>'
       +   '<div class="grid" style="gap:6px;">'
       +     '<label style="margin:0;">Address</label>'
-      +     '<textarea id="newVenueAddress" rows="2" style="resize:vertical;"></textarea>'
+      +     '<textarea id="newVenueAddress" rows="2" style="resize:vertical;">'
+      +       (prefillAddress || '').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      +     '</textarea>'
       +   '</div>'
       +   '<div class="row" style="justify-content:flex-end;gap:8px;margin-top:6px;">'
       +     '<button type="button" id="cancelCreateVenue" class="btn">Cancel</button>'
@@ -717,10 +783,17 @@ router.get(
 
   +   '<div id="ai_list" style="margin-top:12px;"></div>'
 
-  +   '<div class="row" style="margin-top:14px; gap:10px; align-items:center;">'
-  +     '<button id="ai_analyse" class="btn p">Analyse & Pre-fill</button>'
-  +     '<div id="ai_status" class="muted"></div>'
-  +   '</div>'
+  +           +'<div class="row" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); justify-content: space-between; align-items:center;">'
+        +  '<label id="ai_approval_wrap" style="display:none; align-items:center; gap:10px; font-size:13px; color:#334155;">'
+        +    '<input id="ai_approval" type="checkbox" />'
+        +    'I’ve checked the AI-filled details above (and edited anything needed).'
+        +  '</label>'
+        +  '<div class="row" style="gap:10px; align-items:center;">'
+        +    '<button id="save" class="btn p" style="padding: 10px 20px; font-size: 16px;">Save Event Details and Add Tickets</button>'
+        +    '<div id="err" class="error"></div>'
+        +  '</div>'
+        +'</div>'
+
 
   +   '<div id="ai_err" class="error" style="margin-top:10px;"></div>'
   +   '<div id="ai_result" style="margin-top:14px;"></div>'
@@ -734,8 +807,8 @@ router.get(
   const status = $('#ai_status');
   const result = $('#ai_result');
 
-  const state = {
-    images: [], // { file, name, type, size, url }
+   const state = {
+    images: [], // { file, name, type, size, url, w, h, ratio, score23 }
     docs: [],   // { file, name, type, size, dataUrl }
   };
 
@@ -789,6 +862,64 @@ router.get(
     });
   }
 
+    function isLikelySquareName(name){
+    const n = String(name || '').toLowerCase();
+    return n.includes('sq') || n.includes('square') || n.includes('insta');
+  }
+
+  function isLikelyBannerName(name){
+    const n = String(name || '').toLowerCase();
+    return n.includes('banner') || n.includes('header') || n.includes('web');
+  }
+
+  function isLikelyPosterName(name){
+    const n = String(name || '').toLowerCase();
+    return n.includes('poster') || n.includes('artwork') || n.includes('a3') || n.includes('print');
+  }
+
+  async function getImageMeta(url){
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = function(){
+        const w = img.naturalWidth || 0;
+        const h = img.naturalHeight || 0;
+        const ratio = h ? (w / h) : 0;
+        // 2:3 portrait target ratio = 0.666...
+        const target = 2/3;
+        const diff = Math.abs(ratio - target);
+        resolve({ w, h, ratio, diff });
+      };
+      img.onerror = () => resolve({ w:0,h:0,ratio:0,diff:999 });
+      img.src = url;
+    });
+  }
+
+  function scoreForMainPoster(item){
+    // Lower is better
+    const diff = item && typeof item.diff === 'number' ? item.diff : 999;
+    let penalty = 0;
+
+    if (isLikelySquareName(item.name)) penalty += 0.75;
+    if (isLikelyBannerName(item.name)) penalty += 0.6;
+    if (isLikelyPosterName(item.name)) penalty -= 0.25;
+
+    // Prefer higher resolution when diff is similar
+    const px = (item.w || 0) * (item.h || 0);
+    const resBonus = px > 0 ? (1 / Math.log10(px + 10)) : 1;
+
+    return diff + penalty + resBonus;
+  }
+
+  function pickBestMainPoster(images){
+    if (!Array.isArray(images) || !images.length) return null;
+    const scored = images
+      .filter(x => x && x.url)
+      .map(x => ({ ...x, _score: scoreForMainPoster(x) }))
+      .sort((a,b) => a._score - b._score);
+    return scored[0] || null;
+  }
+
+
   async function addFiles(fileList){
     err.textContent = '';
     status.textContent = '';
@@ -802,7 +933,7 @@ router.get(
 
     // Upload images immediately (re-uses your existing /admin/uploads endpoint)
     for (const f of imgs){
-      const item = { file: f, name: f.name, type: f.type, size: f.size, url: '' };
+     const item = { file: f, name: f.name, type: f.type, size: f.size, url: '', w:0, h:0, ratio:0, diff:999 };
       state.images.push(item);
       renderList();
 
@@ -811,6 +942,11 @@ router.get(
         const out = await uploadPoster(f);
         item.url = out.url;
         renderList();
+                // capture real image dimensions for poster selection + send to AI
+        const meta = await getImageMeta(item.url);
+        item.w = meta.w; item.h = meta.h; item.ratio = meta.ratio; item.diff = meta.diff;
+        renderList();
+
       }catch(e){
         err.textContent = 'Image upload failed for "' + f.name + '": ' + (e.message || e);
       }
@@ -867,9 +1003,28 @@ router.get(
     status.textContent = 'Sending assets to AI…';
 
     try{
+           const best = pickBestMainPoster(state.images);
+
       const payload = {
-        images: state.images.filter(x => x.url).map(x => ({ name: x.name, url: x.url })),
-        docs: state.docs.filter(x => x.dataUrl).map(x => ({ name: x.name, type: x.type, dataUrl: x.dataUrl })),
+        images: state.images
+          .filter(x => x.url)
+          .map(x => ({
+            name: x.name,
+            url: x.url,
+            width: x.w || null,
+            height: x.h || null,
+            ratio: x.ratio || null,
+            // hinting only (AI still decides)
+            likelyPoster: isLikelyPosterName(x.name),
+            likelySquare: isLikelySquareName(x.name),
+            likelyBanner: isLikelyBannerName(x.name),
+          })),
+        docs: state.docs
+          .filter(x => x.dataUrl)
+          .map(x => ({ name: x.name, type: x.type, dataUrl: x.dataUrl })),
+
+        // strong hint for main poster choice
+        suggestedMainImageUrl: best ? best.url : null
       };
 
       const res = await fetch('/admin/ai/extract-show', {
@@ -1323,99 +1478,180 @@ updateCategoryOptions();
                   + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
             }
 
-            // Basics
-            if (draft.title && $('#sh_title')) $('#sh_title').value = draft.title;
+                        // Flag that this page is AI-filled
+            window.__aiPrefill = true;
 
-            if (draft.startDateTime && $('#sh_dt')) $('#sh_dt').value = isoToLocalInput(draft.startDateTime);
-            if (draft.endDateTime && $('#sh_dt_end')) $('#sh_dt_end').value = isoToLocalInput(draft.endDateTime);
+            // Show approval UI + change button wording
+            var aiWrap = $('#ai_approval_wrap');
+            if (aiWrap) aiWrap.style.display = 'flex';
 
-            if (draft.doorsOpenTime && $('#doors_open_time')) $('#doors_open_time').value = String(draft.doorsOpenTime).slice(0,5);
-            if (draft.ageGuidance && $('#age_guidance')) $('#age_guidance').value = String(draft.ageGuidance);
+            var saveBtn = $('#save');
+            if (saveBtn){
+              saveBtn.textContent = 'I’ve checked the AI-filled details — Save and add tickets';
+            }
 
-            if (draft.descriptionHtml && $('#desc')) $('#desc').innerHTML = draft.descriptionHtml;
+            // Bind clear-on-edit for key fields
+            bindAiClearOnUserEdit($('#sh_title'));
+            bindAiClearOnUserEdit($('#sh_dt'));
+            bindAiClearOnUserEdit($('#sh_dt_end'));
+            bindAiClearOnUserEdit($('#doors_open_time'));
+            bindAiClearOnUserEdit($('#age_guidance'));
+            bindAiClearOnUserEdit($('#tags'));
+            bindAiClearOnUserEdit(eventTypeSelect);
+            bindAiClearOnUserEdit(categorySelect);
 
-            // Type + category (trigger your existing filter logic)
+            // Contenteditable description
+            bindAiClearOnUserEdit($('#desc'), ['input','blur','keyup']);
+
+            // Drops
+            bindAiClearOnUserEdit($('#drop_main'), ['click','drop']);
+            bindAiClearOnUserEdit($('#drop_add'), ['click']);
+
+            // --- Title (AI) ---
+            if (draft.title && $('#sh_title')){
+              $('#sh_title').value = draft.title;
+              markAi($('#sh_title'));
+            }
+
+            // --- Dates ---
+            if (draft.startDateTime && $('#sh_dt')){
+              $('#sh_dt').value = isoToLocalInput(draft.startDateTime);
+              markAi($('#sh_dt'));
+            }
+            if (draft.endDateTime && $('#sh_dt_end')){
+              $('#sh_dt_end').value = isoToLocalInput(draft.endDateTime);
+              markAi($('#sh_dt_end'));
+            }
+
+            // --- Doors / Age ---
+            if (draft.doorsOpenTime && $('#doors_open_time')){
+              $('#doors_open_time').value = String(draft.doorsOpenTime).slice(0,5);
+              markAi($('#doors_open_time'));
+            }
+            if (draft.ageGuidance && $('#age_guidance')){
+              $('#age_guidance').value = String(draft.ageGuidance);
+              markAi($('#age_guidance'));
+            }
+
+            // --- Description: use doc text if provided by AI extractor ---
+            if (draft.descriptionHtml && $('#desc')){
+              $('#desc').innerHTML = draft.descriptionHtml;
+              markAi($('#desc'), 'editor');
+            }
+
+            // --- Type + Category ---
             if (draft.eventType && eventTypeSelect){
-                eventTypeSelect.value = draft.eventType;
-                updateCategoryOptions();
+              eventTypeSelect.value = draft.eventType;
+              updateCategoryOptions();
+              markAi(eventTypeSelect);
             }
             if (draft.category && categorySelect){
-                categorySelect.value = draft.category;
+              categorySelect.value = draft.category;
+              markAi(categorySelect);
             }
 
-            // Tags
+            // --- Tags (force showing 10, comma-separated) ---
             if (Array.isArray(draft.tags) && $('#tags')){
-                $('#tags').value = draft.tags.filter(Boolean).join(', ');
+              $('#tags').value = draft.tags.filter(Boolean).slice(0,10).join(', ');
+              markAi($('#tags'));
             }
 
-            // Accessibility
+            // --- Accessibility ---
             if (draft.accessibility){
-                if ($('#acc_wheelchair')) $('#acc_wheelchair').checked = !!draft.accessibility.wheelchair;
-                if ($('#acc_stepfree')) $('#acc_stepfree').checked = !!draft.accessibility.stepFree;
-                if ($('#acc_hearingloop')) $('#acc_hearingloop').checked = !!draft.accessibility.hearingLoop;
-                if ($('#acc_toilet')) $('#acc_toilet').checked = !!draft.accessibility.accessibleToilet;
-                if ($('#acc_more')) $('#acc_more').value = (draft.accessibility.notes || '');
+              if ($('#acc_wheelchair')) { $('#acc_wheelchair').checked = !!draft.accessibility.wheelchair; markAi($('#acc_wheelchair')); }
+              if ($('#acc_stepfree')) { $('#acc_stepfree').checked = !!draft.accessibility.stepFree; markAi($('#acc_stepfree')); }
+              if ($('#acc_hearingloop')) { $('#acc_hearingloop').checked = !!draft.accessibility.hearingLoop; markAi($('#acc_hearingloop')); }
+              if ($('#acc_toilet')) { $('#acc_toilet').checked = !!draft.accessibility.accessibleToilet; markAi($('#acc_toilet')); }
+              if ($('#acc_more')) { $('#acc_more').value = (draft.accessibility.notes || ''); markAi($('#acc_more')); }
             }
 
-            // Venue (let user pick + approve via your existing picker)
-            if (draft.venueName && $('#venue_input')){
-                $('#venue_input').value = draft.venueName;
-                // Trigger suggestions
-                $('#venue_input').dispatchEvent(new Event('input', { bubbles: true }));
+            // --- Venue: attempt auto-select existing venue; else open create with address prefilled ---
+            if ($('#venue_input')){
+              var vin = $('#venue_input');
+              bindAiClearOnUserEdit(vin);
+
+              if (draft.venueName){
+                vin.value = draft.venueName;
+                markAi(vin);
+
+                // If venue picker API is present, try to select best match
+                if (vin._venuePicker && typeof searchVenues === 'function'){
+                  (async function(){
+                    var list = await searchVenues(draft.venueName);
+                    if (Array.isArray(list) && list.length){
+                      await vin._venuePicker.selectExisting(list[0]);
+                      markAi(vin);
+                    } else {
+                      // No match found: open create venue panel prefilled with address
+                      if (draft.venueAddress){
+                        vin._venuePicker.openCreate(draft.venueName, draft.venueAddress);
+                        markAi(vin);
+                      } else {
+                        // still force user to confirm manually
+                        vin.dispatchEvent(new Event('input', { bubbles:true }));
+                      }
+                    }
+                  })();
+                } else {
+                  vin.dispatchEvent(new Event('input', { bubbles:true }));
+                }
+              }
             }
 
-            // Images (no re-upload: we just set URLs already uploaded on the AI page)
+            // --- Images ---
             if (draft.mainImageUrl && prevMain){
-                prevMain.src = draft.mainImageUrl;
-                prevMain.style.display = 'block';
+              prevMain.src = draft.mainImageUrl;
+              prevMain.style.display = 'block';
+              markAi($('#drop_main'), 'drop');
             }
 
             if (Array.isArray(draft.additionalImageUrls) && draft.additionalImageUrls.length && addPreviews){
-                addPreviews.innerHTML = '';
-                draft.additionalImageUrls.slice(0,10).forEach(function(url){
-                    var imgContainer = document.createElement('div');
-                    imgContainer.style.position = 'relative';
-                    imgContainer.style.width = '100px';
-                    imgContainer.style.height = '100px';
-                    imgContainer.style.overflow = 'hidden';
-                    imgContainer.style.borderRadius = '6px';
-                    imgContainer.dataset.url = url;
+              addPreviews.innerHTML = '';
+              draft.additionalImageUrls.slice(0,10).forEach(function(url){
+                var imgContainer = document.createElement('div');
+                imgContainer.style.position = 'relative';
+                imgContainer.style.width = '100px';
+                imgContainer.style.height = '100px';
+                imgContainer.style.overflow = 'hidden';
+                imgContainer.style.borderRadius = '6px';
+                imgContainer.dataset.url = url;
 
-                    var img = document.createElement('img');
-                    img.src = url;
-                    img.alt = 'Additional Image';
-                    img.style.width = '100%';
-                    img.style.height = '100%';
-                    img.style.objectFit = 'cover';
+                var img = document.createElement('img');
+                img.src = url;
+                img.alt = 'Additional Image';
+                img.style.width = '100%';
+                img.style.height = '100%';
+                img.style.objectFit = 'cover';
 
-                    var deleteBtn = document.createElement('button');
-                    deleteBtn.textContent = 'x';
-                    deleteBtn.className = 'btn';
-                    deleteBtn.style.position = 'absolute';
-                    deleteBtn.style.top = '4px';
-                    deleteBtn.style.right = '4px';
-                    deleteBtn.style.width = '24px';
-                    deleteBtn.style.height = '24px';
-                    deleteBtn.style.padding = '0';
-                    deleteBtn.style.borderRadius = '50%';
-                    deleteBtn.style.lineHeight = '24px';
-                    deleteBtn.style.fontSize = '12px';
-                    deleteBtn.style.fontWeight = 'bold';
-                    deleteBtn.style.background = 'rgba(255, 255, 255, 0.8)';
-                    deleteBtn.style.borderColor = 'rgba(0, 0, 0, 0.1)';
-                    deleteBtn.style.cursor = 'pointer';
+                var deleteBtn = document.createElement('button');
+                deleteBtn.textContent = 'x';
+                deleteBtn.className = 'btn';
+                deleteBtn.style.position = 'absolute';
+                deleteBtn.style.top = '4px';
+                deleteBtn.style.right = '4px';
+                deleteBtn.style.width = '24px';
+                deleteBtn.style.height = '24px';
+                deleteBtn.style.padding = '0';
+                deleteBtn.style.borderRadius = '50%';
+                deleteBtn.style.lineHeight = '24px';
+                deleteBtn.style.fontSize = '12px';
+                deleteBtn.style.fontWeight = 'bold';
+                deleteBtn.style.background = 'rgba(255, 255, 255, 0.8)';
+                deleteBtn.style.borderColor = 'rgba(0, 0, 0, 0.1)';
+                deleteBtn.style.cursor = 'pointer';
 
-                    deleteBtn.addEventListener('click', function() {
-                        imgContainer.remove();
-                        updateAllImageUrls();
-                    });
-
-                    imgContainer.appendChild(img);
-                    imgContainer.appendChild(deleteBtn);
-                    addPreviews.appendChild(imgContainer);
+                deleteBtn.addEventListener('click', function() {
+                  imgContainer.remove();
+                  updateAllImageUrls();
                 });
 
-                updateAllImageUrls();
+                imgContainer.appendChild(img);
+                imgContainer.appendChild(deleteBtn);
+                addPreviews.appendChild(imgContainer);
+              });
+
+              updateAllImageUrls();
+              markAi($('#drop_add'), 'drop');
             }
 
         }catch(e){
@@ -1479,6 +1715,14 @@ updateCategoryOptions();
         var errEl = $('#err');
         errEl.textContent = '';
         try{
+                    // If AI prefilled this page, force an explicit approval tick
+            if (window.__aiPrefill){
+              var okBox = $('#ai_approval');
+              if (!okBox || !okBox.checked){
+                throw new Error('Please confirm you’ve checked the AI-filled details before continuing.');
+              }
+            }
+
             var title = $('#sh_title').value.trim();
             var dtRaw = $('#sh_dt').value;
             var dtEndRaw = $('#sh_dt_end') ? $('#sh_dt_end').value : '';
@@ -2395,38 +2639,77 @@ router.post(
 const model = process.env.OPENAI_MODEL_SHOW_EXTRACT || "gpt-4o-mini";
 
       const body = req.body || {};
+            const suggestedMainImageUrl: string | null =
+        typeof (body as any).suggestedMainImageUrl === "string" ? (body as any).suggestedMainImageUrl : null;
+
       const images: Array<{ name?: string; url: string }> = Array.isArray(body.images) ? body.images : [];
       const docs: Array<{ name?: string; type?: string; dataUrl: string }> = Array.isArray(body.docs) ? body.docs : [];
 
-      const eventTypes = [
+            const eventTypes = [
         "comedy","theatre","music","festival","film","talks","workshop",
         "corporate","nightlife","sport","food","community","arts","other"
+      ];
+
+      // Must match the <option value="..."> values in your admin UI select
+      const categories = [
+        "rock","classical","jazz",
+        "standup","improv",
+        "theatre","dance",
+        "football","running",
+        "tech","business",
+        "show","activity",
+        "festival","tasting",
+        "play_drama","panto","musical","opera","cabaret",
+        "comedy_festival","music_festival","arts_festival","food_festival",
+        "cinema_screening","premiere","q_and_a",
+        "live_podcast","panel","talk","book_event",
+        "corporate_night","private_party","awards","fundraiser",
+        "club_night","tour_show","new_material","edinburgh_preview","tv_warmup","roast_battle",
+        "misc"
       ];
 
       const content: any[] = [];
 
       content.push({
         type: "input_text",
-        text:
-          "You are extracting event/show details for a UK ticketing admin UI. " +
-          "Use ONLY the provided files/images. If unknown, set null/empty values and list what is missing. " +
+               text:
+          "You are extracting event/show details for a UK ticketing admin UI.\n" +
+          "Use ONLY the provided documents + images. If unknown, set null/empty values and list what is missing.\n" +
           "Return a single JSON object that matches the schema exactly.\n\n" +
-          "Important:\n" +
-          "- Dates/times: output ISO 8601 (startDateTime/endDateTime). If the source is local UK time and no timezone given, assume Europe/London.\n" +
-          "- doorsOpenTime: use HH:MM 24h.\n" +
-          "- eventType must be one of: " + eventTypes.join(", ") + ".\n" +
-          "- category should be the closest subcategory value if you can infer it; otherwise null.\n" +
-          "- Choose a main poster image from the provided images if possible (prefer 2:3 poster artwork). Others go in additionalImageUrls.\n"
+          "CRITICAL RULES:\n" +
+          "1) TITLE: Prefer the title found in the document(s) exactly as written (punctuation included). Do NOT add hyphens or extra separators unless the source includes them.\n" +
+          "   If no clear title is in docs, read the title from the poster image text. If still unknown, propose a sensible title using the available info.\n" +
+          "2) DESCRIPTION: If a full event description exists in the documents, copy it (do not rewrite). Only generate a new description if no usable description exists.\n" +
+          "3) TYPE + CATEGORY: eventType must be one of: " + eventTypes.join(", ") + ".\n" +
+          "   category MUST be one of these exact values (or null): " + categories.join(", ") + ".\n" +
+          "   Example: stand-up comedy => eventType='comedy' and category='standup'.\n" +
+          "4) IMAGES: Choose the main poster image from the provided images (prefer closest to 2:3 portrait and likely poster artwork). Put the rest in additionalImageUrls.\n" +
+          "5) TAGS: Return exactly 10 tags. If fewer are explicitly present, infer the remaining tags from the event and venue context.\n" +
+          "6) Dates/times: output ISO 8601 for startDateTime/endDateTime. If local UK time and no timezone stated, assume Europe/London.\n" +
+          "   doorsOpenTime: HH:MM 24h.\n"
+
       });
 
-      if (images.length) {
+            if (images.length) {
         content.push({
           type: "input_text",
           text:
             "Image candidates (name → url):\n" +
-            images.map((x) => `- ${x.name || "image"} → ${x.url}`).join("\n")
+            images.map((x: any) => {
+              const bits = [
+                `- ${x.name || "image"} → ${x.url}`,
+                x.width && x.height ? `(${x.width}x${x.height})` : "",
+                typeof x.ratio === "number" ? `ratio=${x.ratio.toFixed(3)}` : "",
+                x.likelyPoster ? "[likely poster]" : "",
+                x.likelySquare ? "[likely square]" : "",
+                x.likelyBanner ? "[likely banner]" : ""
+              ].filter(Boolean);
+              return bits.join(" ");
+            }).join("\n") +
+            (suggestedMainImageUrl ? ("\n\nSuggested main poster (closest 2:3): " + suggestedMainImageUrl) : "")
         });
       }
+
 
       function parseDataUrl(dataUrl: string){
   const m = String(dataUrl || "").match(/^data:(.*?);base64,(.*)$/);
@@ -2513,7 +2796,12 @@ for (const d of docs) {
               { type: "null" }
             ]
           },
-          category: { anyOf: [{ type: "string" }, { type: "null" }] },
+          category: {
+            anyOf: [
+              { type: "string", enum: categories },
+              { type: "null" }
+            ]
+          },
 
           ageGuidance: { anyOf: [{ type: "string" }, { type: "null" }] },
 
@@ -2530,11 +2818,13 @@ for (const d of docs) {
             required: ["wheelchair", "stepFree", "hearingLoop", "accessibleToilet", "notes"]
           },
 
-          tags: {
+                   tags: {
             type: "array",
             items: { type: "string" },
+            minItems: 10,
             maxItems: 10
           },
+
 
           descriptionHtml: { type: "string" },
 
