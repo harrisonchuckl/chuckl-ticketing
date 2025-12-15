@@ -2521,7 +2521,10 @@ router.post(
       const openaiReq = {
         model,
         input: [{ role: "user", content }],
-        tools: [{ type: "code_interpreter" }],
+tools: [{
+  type: "code_interpreter",
+  container: { type: "auto", memory_limit: "1g" }
+}],
         text: {
           format: {
             type: "json_schema",
