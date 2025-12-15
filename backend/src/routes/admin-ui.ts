@@ -445,362 +445,373 @@ router.get(
     });
   }
 
- async function createShow(){
-  if (!main) return;
-  
-  // 1. Render the HTML Form
-  main.innerHTML =
-    '<div class="card" style="padding: 24px;">'
-    +'<div class="header" style="margin-bottom: 24px; border-bottom: 1px solid var(--border); padding-bottom: 16px;">'
-    +'<div>'
-    +'<div class="title" style="font-size: 1.5rem; font-weight: 700;">Create New Event</div>'
-    +'<div class="muted">Start setting up your event with core details, categories, and artwork.</div>'
-    +'</div>'
-    +'</div>'
+  async function createShow(){
+    if (!main) return;
     
-    // Grid Layout
-    +'<div class="grid" style="gap: 20px;">'
-    
-    // COL 1: Details
-    +'<div style="flex: 1; padding-right: 20px; border-right: 1px solid var(--border);">'
-    +'<div class="grid" style="margin-bottom: 20px;">'
-    +'<label>Event Title</label>'
-    +'<input id="sh_title" placeholder="e.g. Chuckl. Comedy Club Live" />'
-    +'</div>'
-    +'<div class="grid" style="margin-bottom: 20px;">'
-    +'<label>Date & Time</label>'
-    +'<input id="sh_dt" type="datetime-local" />'
-    +'</div>'
-    +'<div class="grid" style="margin-bottom: 20px;">'
-    +'<label>Venue</label>'
-    +'<input id="venue_input" placeholder="Start typing a venue…" />'
-    +'<div class="tip">Pick an existing venue or create a new one.</div>'
-    +'</div>'
-    
-    // === UPDATED Category Section (Alignment fixed & expanded options) ===
-    +'<div class="grid grid-2" style="margin-bottom: 8px; gap: 16px; align-items: start;">'
-    // Left Dropdown
-    +'<div class="grid">'
-    +'<label>Event Type</label>'
-    // Added explicit height style for uniformity
-    +'<select id="event_type_select" style="height: 40px;">'
-    +'<option value="">Select Primary Type</option>'
-    +'<option value="music">Music & Concerts</option>'
-    +'<option value="comedy">Comedy</option>'
-    +'<option value="arts">Arts, Theatre & Culture</option>'
-    +'<option value="nightlife">Nightlife & Social</option>'
-    +'<option value="sport">Sports & Fitness</option>'
-    +'<option value="food">Food & Drink</option>'
-    +'<option value="conference">Conference & Business</option>'
-    +'<option value="workshop">Classes & Workshops</option>'
-    +'<option value="family">Family & Kids</option>'
-    +'<option value="community">Community & Charity</option>'
-    +'</select>'
-    +'</div>'
-    // Right Dropdown
-    +'<div class="grid">'
-    +'<label>Category</label>'
-    // Added explicit height style for uniformity
-    +'<select id="event_category_select" style="height: 40px;">'
-    +'<option value="">Select Sub-Category</option>'
-    
-    // Music
-    +'<option data-parent="music" value="rock_pop">Rock & Pop</option>'
-    +'<option data-parent="music" value="hiphop_rnb">Hip-Hop & RnB</option>'
-    +'<option data-parent="music" value="electronic">Electronic & Dance</option>'
-    +'<option data-parent="music" value="jazz_blues">Jazz & Blues</option>'
-    +'<option data-parent="music" value="classical">Classical & Opera</option>'
-    +'<option data-parent="music" value="country_folk">Country & Folk</option>'
-    +'<option data-parent="music" value="metal_punk">Metal & Punk</option>'
-    +'<option data-parent="music" value="world">World Music</option>'
-    +'<option data-parent="music" value="tribute">Tribute Act</option>'
-    
-    // Comedy
-    +'<option data-parent="comedy" value="standup">Stand-Up Comedy</option>'
-    +'<option data-parent="comedy" value="improv_sketch">Improv & Sketch</option>'
-    +'<option data-parent="comedy" value="open_mic">Open Mic</option>'
-    +'<option data-parent="comedy" value="panel_show">Panel Show / Podcast Live</option>'
-    
-    // Arts & Theatre
-    +'<option data-parent="arts" value="musical">Musical Theatre</option>'
-    +'<option data-parent="arts" value="play">Play / Drama</option>'
-    +'<option data-parent="arts" value="dance_ballet">Dance & Ballet</option>'
-    +'<option data-parent="arts" value="opera">Opera</option>'
-    +'<option data-parent="arts" value="cabaret_variety">Cabaret & Variety</option>'
-    +'<option data-parent="arts" value="spoken_word">Poetry & Spoken Word</option>'
-    +'<option data-parent="arts" value="exhibition">Museum & Exhibition</option>'
+    // --- New Look: White background for main content area ---
+    // Change the root variable in <style> to make the content area white (if not already done globally).
+    // The default --bg is #f7f8fb, but we want a cleaner white form area. 
+    // We will ensure the main wrapper background is white for a modern look.
+    // The .card background is already white (var(--panel):#ffffff), so we mostly update the structure.
 
-    // Nightlife
-    +'<option data-parent="nightlife" value="club_night">Club Night / DJ Set</option>'
-    +'<option data-parent="nightlife" value="party">Theme Party</option>'
-    +'<option data-parent="nightlife" value="pub_quiz">Pub Quiz / Trivia</option>'
-    +'<option data-parent="nightlife" value="dating">Speed Dating / Singles</option>'
-    
-    // Sport
-    +'<option data-parent="sport" value="football">Football / Soccer</option>'
-    +'<option data-parent="sport" value="basketball">Basketball</option>'
-    +'<option data-parent="sport" value="rugby">Rugby</option>'
-    +'<option data-parent="sport" value="combat">Boxing / MMA / Wrestling</option>'
-    +'<option data-parent="sport" value="motorsports">Motorsports</option>'
-    +'<option data-parent="sport" value="athletics">Running / Athletics</option>'
-    +'<option data-parent="sport" value="yoga_fitness">Yoga & Fitness Class</option>'
-    
-    // Food & Drink
-    +'<option data-parent="food" value="festival">Food Festival</option>'
-    +'<option data-parent="food" value="tasting">Tasting Event (Wine/Spirit/Beer)</option>'
-    +'<option data-parent="food" value="dining_exp">Dining Experience / Supper Club</option>'
-    +'<option data-parent="food" value="market">Food Market</option>'
-
-    // Conference & Business
-    +'<option data-parent="conference" value="tech_it">Technology & IT</option>'
-    +'<option data-parent="conference" value="business_finance">Business & Finance</option>'
-    +'<option data-parent="conference" value="marketing">Marketing & Media</option>'
-    +'<option data-parent="conference" value="networking">Networking Event</option>'
-    +'<option data-parent="conference" value="talk_lecture">Talk / Lecture / Seminar</option>'
-
-    // Workshops
-    +'<option data-parent="workshop" value="arts_crafts">Arts & Crafts</option>'
-    +'<option data-parent="workshop" value="tech_coding">Tech & Coding</option>'
-    +'<option data-parent="workshop" value="food_drink">Cooking & Mixology</option>'
-    +'<option data-parent="workshop" value="health_wellness">Health & Wellness</option>'
-
-    // Family
-    +'<option data-parent="family" value="kids_show">Children\'s Show / Theatre</option>'
-    +'<option data-parent="family" value="family_activity">Family Activity / Workshop</option>'
-    +'<option data-parent="family" value="circus">Circus / Magic</option>'
-    +'<option data-parent="family" value="attraction">Attraction Entry</option>'
-
-    // Community
-    +'<option data-parent="community" value="fundraiser">Fundraiser / Charity</option>'
-    +'<option data-parent="community" value="meetup">Social Meetup</option>'
-    +'<option data-parent="community" value="religious">Religious / Spiritual</option>'
-    +'<option data-parent="community" value="political">Political / Debate</option>'
-
-    +'</select>'
-    +'</div>'
-    +'</div>'
-    // Moved tip outside the grid-2 block so it doesn't affect alignment
-    +'<div class="tip" style="margin-bottom: 20px;">The category list will update based on the Event Type selected above.</div>'
-
-    // Description
-    +'<div class="grid" style="margin-bottom: 20px;">'
-    +'<label>Description (mandatory)</label>'
-    + editorToolbarHtml()
-    +'<div id="desc" data-editor contenteditable="true" style="min-height:150px; border:1px solid var(--border); border-radius:8px; padding:12px; background: #fff;"></div>'
-    +'<div class="muted">Write a compelling description for your attendees.</div>'
-    +'</div>'
-    +'</div>' // End COL 1
-
-    // COL 2: Images
-    +'<div style="flex: 1;">'
-    +'<div class="grid" style="margin-bottom: 24px; background: #f9fafb; padding: 16px; border-radius: 10px; border: 1px solid var(--border);">'
-    +'<label style="font-size: 14px; font-weight: 600;">Main Poster Image (Required)</label>'
-    +'<div id="drop_main" class="drop" style="min-height: 120px; border-style: solid; border-color: #94a3b8; background: #fff;"><p style="margin: 0; font-weight: 500;">Drop image here or click to upload</p><p class="muted" style="margin-top: 4px; font-size: 12px;">Recommended: High-resolution, Aspect Ratio 2:3</p></div>'
-    +'<input id="file_main" type="file" accept="image/*" style="display:none" />'
-    +'<div class="progress" style="margin-top:8px"><div id="bar_main" class="bar"></div></div>'
-    +'<img id="prev_main" class="imgprev" alt="Main Poster Preview" style="max-height: 200px; display: none;" />'
-    +'</div>'
-
-    +'<div class="grid" style="margin-bottom: 24px;">'
-    +'<label style="font-size: 14px; font-weight: 600;">Additional Images (Max 10)</label>'
-    +'<div id="additional_images_container" style="display: flex; flex-wrap: wrap; gap: 8px; border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: #ffffff;">'
-    +'<div id="drop_add" class="drop" style="width: 100px; height: 100px; padding: 0; line-height: 100px; margin: 0; font-size: 24px; border: 2px dashed #94a3b8; color: #475569;">+</div>'
-    +'<input id="file_add" type="file" accept="image/*" multiple style="display:none" />'
-    +'<div id="add_previews" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>'
-    +'</div>'
-    +'<div class="progress" style="margin-top:8px"><div id="bar_add" class="bar"></div></div>'
-    +'<div class="tip">Upload photos of the venue, performers, or past events.</div>'
-    +'</div>'
-    +'<input type="hidden" id="all_image_urls" value="" />'
-    +'</div>' // End COL 2
-
-    +'</div>' // End Grid
-    +'<div class="row" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); justify-content: flex-end;">'
-    +'<button id="save" class="btn p" style="padding: 10px 20px; font-size: 16px;">Save Event Details</button>'
-    +'<div id="err" class="error"></div>'
-    +'</div>'
-    +'</div>';
-
-  bindWysiwyg(main);
-  mountVenuePicker($('#venue_input'));
-
-  // 2. Event Handlers & Logic
-  const eventTypeSelect = $('#event_type_select');
-  const categorySelect = $('#event_category_select');
-  
-  // Capture category options immediately
-  let categoryOptions = [];
-  if (categorySelect) {
-     categoryOptions = Array.from(categorySelect.querySelectorAll('option[data-parent]'));
-  }
-
-  function updateCategoryOptions() {
-    if (!eventTypeSelect || !categorySelect) return;
-    const selectedType = eventTypeSelect.value;
-    // Keep the placeholder as the first option
-    categorySelect.innerHTML = '<option value="">Select Sub-Category</option>';
-    categoryOptions.forEach(function(option) {
-      // Show option if it matches the parent type OR if no parent type is selected yet
-      if (option.getAttribute('data-parent') === selectedType || !selectedType) {
-        categorySelect.appendChild(option.cloneNode(true));
-      }
-    });
-    categorySelect.value = ''; // Reset selection on type change
-  }
-
-  if (eventTypeSelect) {
-    eventTypeSelect.addEventListener('change', updateCategoryOptions);
-    // Initial call to set up the list based on the default empty selection
-    updateCategoryOptions();
-  }
-
-  // Helper variables
-  var dropMain = $('#drop_main');
-  var fileMain = $('#file_main');
-  var barMain = $('#bar_main');
-  var prevMain = $('#prev_main');
-  var dropAdd = $('#drop_add');
-  var fileAdd = $('#file_add');
-  var barAdd = $('#bar_add');
-  var addPreviews = $('#add_previews');
-  var allImageUrls = $('#all_image_urls');
-
-  // Helper: Update hidden input for additional images
-  function updateAllImageUrls() {
-    if (!addPreviews || !allImageUrls) return;
-    var urls = [];
-    var divs = addPreviews.querySelectorAll('div');
-    divs.forEach(function(d){ if(d.dataset.url) urls.push(d.dataset.url); });
-    allImageUrls.value = JSON.stringify(urls);
-    if (dropAdd) dropAdd.style.display = urls.length >= 10 ? 'none' : 'block';
-  }
-
-  // Helper: Upload logic
-  async function doUpload(file, barEl, previewEl, isAdditional) {
-    $('#err').textContent = '';
-    if (barEl) barEl.style.width = '15%';
-    try {
-      var out = await uploadPoster(file);
-      if (isAdditional && addPreviews) {
-        var div = document.createElement('div');
-        div.style.cssText = 'position:relative;width:100px;height:100px;overflow:hidden;border-radius:6px;';
-        div.dataset.url = out.url;
+    main.innerHTML =
+        '<div class="card" style="padding: 24px;">' // Increased padding for more whitespace
+        +'<div class="header" style="margin-bottom: 24px; border-bottom: 1px solid var(--border); padding-bottom: 16px;">'
+        +'<div>'
+        +'<div class="title" style="font-size: 1.5rem; font-weight: 700;">Create New Event</div>'
+        +'<div class="muted">Start setting up your event with core details, categories, and artwork.</div>'
+        +'</div>'
+        +'</div>'
         
-        var img = document.createElement('img');
-        img.src = out.url;
-        img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+        // Use a single, wider grid column structure for better readability
+        +'<div class="grid" style="gap: 20px;">' 
         
-        var btn = document.createElement('button');
-        btn.textContent = 'x';
-        btn.style.cssText = 'position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;border:none;background:rgba(255,255,255,0.9);font-weight:bold;cursor:pointer;';
-        btn.addEventListener('click', function(){
-            div.remove();
-            updateAllImageUrls();
+        // --- COL 1: Core Details, Category, Venue ---
+        +'<div style="flex: 1; padding-right: 20px; border-right: 1px solid var(--border);">'
+
+        // Title
+        +'<div class="grid" style="margin-bottom: 20px;">'
+        +'<label>Event Title</label>'
+        +'<input id="sh_title" placeholder="e.g. Chuckl. Comedy Club Live" />'
+        +'</div>'
+
+        // Date & Time
+        +'<div class="grid" style="margin-bottom: 20px;">'
+        +'<label>Date & Time</label>'
+        +'<input id="sh_dt" type="datetime-local" />'
+        +'</div>'
+
+        // Venue
+        +'<div class="grid" style="margin-bottom: 20px;">'
+        +'<label>Venue</label>'
+        +'<input id="venue_input" placeholder="Start typing a venue…" />'
+        +'<div class="tip">Pick an existing venue or create a new one.</div>'
+        +'</div>'
+        
+        // --- NEW: Category and Sub-Category Section ---
+        +'<div class="grid grid-2" style="margin-bottom: 20px; gap: 16px;">'
+        +'<div class="grid">'
+        +'<label>Event Type</label>'
+        +'<select id="event_type_select">'
+        +'<option value="">Select Primary Type</option>'
+        // Add all event types you can think of here:
+        +'<option value="music">Music</option>'
+        +'<option value="comedy">Comedy</option>'
+        +'<option value="arts">Arts & Theatre</option>'
+        +'<option value="sport">Sporting Event</option>'
+        +'<option value="conference">Conference / Workshop</option>'
+        +'<option value="family">Family / Kids</option>'
+        +'<option value="food">Food & Drink</option>'
+        +'</select>'
+        +'</div>'
+        +'<div class="grid">'
+        +'<label>Category</label>'
+        +'<select id="event_category_select">'
+        +'<option value="">Select Sub-Category</option>'
+        +'<option data-parent="music" value="rock">Rock & Pop</option>'
+        +'<option data-parent="music" value="classical">Classical</option>'
+        +'<option data-parent="music" value="jazz">Jazz / Blues</option>'
+        +'<option data-parent="comedy" value="standup">Stand-Up Comedy</option>'
+        +'<option data-parent="comedy" value="improv">Improv / Sketch</option>'
+        +'<option data-parent="arts" value="theatre">Theatre / Play</option>'
+        +'<option data-parent="arts" value="dance">Dance</option>'
+        +'<option data-parent="sport" value="football">Football / Soccer</option>'
+        +'<option data-parent="sport" value="running">Running / Marathon</option>'
+        +'<option data-parent="conference" value="tech">Tech & IT</option>'
+        +'<option data-parent="conference" value="business">Business & Finance</option>'
+        +'<option data-parent="family" value="show">Kids Show</option>'
+        +'<option data-parent="family" value="activity">Family Activity</option>'
+        +'<option data-parent="food" value="festival">Food Festival</option>'
+        +'<option data-parent="food" value="tasting">Tasting / Tour</option>'
+        +'</select>'
+        +'<div class="tip">The list will filter based on Event Type.</div>'
+        +'</div>'
+        +'</div>' // End grid-2
+
+        // Description
+        +'<div class="grid" style="margin-bottom: 20px;">'
+        +'<label>Description (mandatory)</label>'
+        + editorToolbarHtml()
+        +'<div id="desc" data-editor contenteditable="true" '
+        +'style="min-height:150px; border:1px solid var(--border); border-radius:8px; padding:12px; background: #fff;"></div>'
+        +'<div class="muted">Write a compelling description for your attendees.</div>'
+        +'</div>'
+        
+        +'</div>' // End COL 1
+
+        // --- COL 2: Image Uploads ---
+        +'<div style="flex: 1;">'
+        
+        // Main Poster Image
+        +'<div class="grid" style="margin-bottom: 24px; background: #f9fafb; padding: 16px; border-radius: 10px; border: 1px solid var(--border);">'
+        +'<label style="font-size: 14px; font-weight: 600;">Main Poster Image (Required)</label>'
+        +'<div id="drop_main" class="drop" style="min-height: 120px; border-style: solid; border-color: #94a3b8; background: #fff;">'
+        +'<p style="margin: 0; font-weight: 500;">Drop image here or click to upload</p>'
+        +'<p class="muted" style="margin-top: 4px; font-size: 12px;">Recommended: High-resolution, Aspect Ratio 2:3</p>'
+        +'</div>'
+        +'<input id="file_main" type="file" accept="image/*" style="display:none" />'
+        +'<div class="progress" style="margin-top:8px"><div id="bar_main" class="bar"></div></div>'
+        +'<img id="prev_main" class="imgprev" alt="Main Poster Preview" style="max-height: 200px; display: none;" />'
+        +'</div>'
+        
+        // Additional Images (up to 10)
+        +'<div class="grid" style="margin-bottom: 24px;">'
+        +'<label style="font-size: 14px; font-weight: 600;">Additional Images (Max 10)</label>'
+        +'<div id="additional_images_container" style="display: flex; flex-wrap: wrap; gap: 8px; border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: #ffffff;">'
+        // Upload button for additional images
+        +'<div id="drop_add" class="drop" style="width: 100px; height: 100px; padding: 0; line-height: 100px; margin: 0; font-size: 24px; border: 2px dashed #94a3b8; color: #475569;">+</div>'
+        +'<input id="file_add" type="file" accept="image/*" multiple style="display:none" />'
+        // Image previews will be appended here
+        +'<div id="add_previews" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>'
+        +'</div>'
+        +'<div class="progress" style="margin-top:8px"><div id="bar_add" class="bar"></div></div>'
+        +'<div class="tip">Upload photos of the venue, performers, or past events.</div>'
+        +'</div>'
+
+        // Placeholder to display all uploaded image URLs for submission (hidden)
+        +'<input type="hidden" id="all_image_urls" value="" />'
+
+        +'</div>' // End COL 2
+        
+        +'</div>' // End main grid
+
+        // --- Action Button ---
+        +'<div class="row" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); justify-content: flex-end;">'
+        +'<button id="save" class="btn p" style="padding: 10px 20px; font-size: 16px;">Save Event Details</button>'
+        +'<div id="err" class="error"></div>'
+        +'</div>'
+        +'</div>';
+    
+    // Bind editor and venue picker
+    bindWysiwyg(main);
+    mountVenuePicker($('#venue_input'));
+
+    // --- Category Filtering Logic ---
+    const eventTypeSelect = $('#event_type_select');
+    const categorySelect = $('#event_category_select');
+    const categoryOptions = Array.from(categorySelect.querySelectorAll('option[data-parent]'));
+
+    function updateCategoryOptions() {
+        const selectedType = eventTypeSelect.value;
+        categorySelect.innerHTML = '<option value="">Select Sub-Category</option>';
+        
+        categoryOptions.forEach(option => {
+            if (option.getAttribute('data-parent') === selectedType || !selectedType) {
+                categorySelect.appendChild(option.cloneNode(true));
+            }
         });
-        
-        div.appendChild(img);
-        div.appendChild(btn);
-        addPreviews.appendChild(div);
-        updateAllImageUrls();
-      } else if (previewEl) {
-        previewEl.src = out.url;
-        previewEl.style.display = 'block';
-      }
-      if (barEl) {
-        barEl.style.width = '100%';
-        setTimeout(function(){ barEl.style.width='0%'; }, 800);
-      }
-    } catch(e) {
-      if (barEl) barEl.style.width = '0%';
-      $('#err').textContent = 'Upload failed: ' + (e.message || e);
+        categorySelect.value = ''; // Reset selection
     }
-  }
 
-  if (dropMain && fileMain) {
-    dropMain.addEventListener('click', function(){ fileMain.click(); });
-    dropMain.addEventListener('dragover', function(e){ e.preventDefault(); dropMain.classList.add('drag'); });
-    dropMain.addEventListener('dragleave', function(){ dropMain.classList.remove('drag'); });
-    dropMain.addEventListener('drop', async function(e){
-      e.preventDefault(); dropMain.classList.remove('drag');
-      var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-      if (f) await doUpload(f, barMain, prevMain, false);
-    });
-    fileMain.addEventListener('change', async function(){
-      var f = fileMain.files && fileMain.files[0];
-      if (f) await doUpload(f, barMain, prevMain, false);
-    });
-  }
+    eventTypeSelect.addEventListener('change', updateCategoryOptions);
+    updateCategoryOptions(); // Initial call to populate sub-categories
 
-  if (dropAdd && fileAdd) {
-    dropAdd.addEventListener('click', function(){
-      var current = (addPreviews && addPreviews.children.length) || 0;
-      if (current < 10) fileAdd.click();
-    });
-    fileAdd.addEventListener('change', async function(){
-      var files = fileAdd.files;
-      if (files && files.length) {
-        var current = (addPreviews && addPreviews.children.length) || 0;
-        var toAdd = Array.from(files).slice(0, 10 - current);
-        for (var i=0; i<toAdd.length; i++) {
-           await doUpload(toAdd[i], barAdd, null, true);
+    // --- Image Upload Logic (Updated for Main & Additional Images) ---
+    var dropMain = $('#drop_main');
+    var fileMain = $('#file_main');
+    var barMain = $('#bar_main');
+    var prevMain = $('#prev_main');
+
+    var dropAdd = $('#drop_add');
+    var fileAdd = $('#file_add');
+    var barAdd = $('#bar_add');
+    var addPreviews = $('#add_previews');
+    var allImageUrls = $('#all_image_urls');
+    
+    // Upload function for a single file (used for main image and each additional image)
+    async function doUpload(file, barEl, previewEl, isAdditional = false) {
+        $('#err').textContent = '';
+        barEl.style.width = '15%';
+
+        try {
+            var out = await uploadPoster(file); // Reusing existing uploadPoster API
+
+            if (isAdditional) {
+                // Add new preview element and update hidden field
+                var imgContainer = document.createElement('div');
+                imgContainer.style.position = 'relative';
+                imgContainer.style.width = '100px';
+                imgContainer.style.height = '100px';
+                imgContainer.style.overflow = 'hidden';
+                imgContainer.style.borderRadius = '6px';
+                imgContainer.dataset.url = out.url;
+
+                var img = document.createElement('img');
+                img.src = out.url;
+                img.alt = 'Additional Image';
+                img.style.width = '100%';
+                img.style.height = '100%';
+                img.style.objectFit = 'cover';
+
+                var deleteBtn = document.createElement('button');
+                deleteBtn.textContent = 'x';
+                deleteBtn.className = 'btn';
+                deleteBtn.style.position = 'absolute';
+                deleteBtn.style.top = '4px';
+                deleteBtn.style.right = '4px';
+                deleteBtn.style.width = '24px';
+                deleteBtn.style.height = '24px';
+                deleteBtn.style.padding = '0';
+                deleteBtn.style.borderRadius = '50%';
+                deleteBtn.style.lineHeight = '24px';
+                deleteBtn.style.fontSize = '12px';
+                deleteBtn.style.fontWeight = 'bold';
+                deleteBtn.style.background = 'rgba(255, 255, 255, 0.8)';
+                deleteBtn.style.borderColor = 'rgba(0, 0, 0, 0.1)';
+                deleteBtn.style.cursor = 'pointer';
+
+                deleteBtn.addEventListener('click', function() {
+                    imgContainer.remove();
+                    updateAllImageUrls();
+                });
+
+                imgContainer.appendChild(img);
+                imgContainer.appendChild(deleteBtn);
+                addPreviews.appendChild(imgContainer);
+
+                updateAllImageUrls();
+            } else {
+                // Update main image preview
+                previewEl.src = out.url;
+                previewEl.style.display = 'block';
+            }
+
+            barEl.style.width = '100%';
+            setTimeout(function() { barEl.style.width = '0%'; }, 800);
+            return out.url;
+        } catch (e) {
+            barEl.style.width = '0%';
+            $('#err').textContent = 'Upload failed: ' + (e.message || e);
+            throw e; // Re-throw to be caught by the calling function if needed
         }
-      }
-      fileAdd.value = '';
-    });
-  }
-
-  $('#save').addEventListener('click', async function(){
-    var errEl = $('#err');
-    errEl.textContent = '';
-    try {
-      var title = $('#sh_title').value.trim();
-      var dtRaw = $('#sh_dt').value;
-      var venueInput = $('#venue_input');
-      var venueText = venueInput.value.trim();
-      var venueId = venueInput.dataset.venueId || null;
-      var imageUrl = prevMain.src || null;
-      var descHtml = $('#desc').innerHTML.trim();
-      
-      var eventType = eventTypeSelect ? eventTypeSelect.value : '';
-      var eventCategory = categorySelect ? categorySelect.value : '';
-      var additionalImages = [];
-      if (allImageUrls && allImageUrls.value) {
-         try { additionalImages = JSON.parse(allImageUrls.value); } catch(e){}
-      }
-
-      if (!title || !dtRaw || !venueText || !descHtml || !eventType || !eventCategory || !imageUrl) {
-        throw new Error('Title, date/time, venue, description, event type, category, and a main image are required.');
-      }
-      
-      var dateIso = new Date(dtRaw).toISOString();
-      
-      var showRes = await j('/admin/shows', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({
-          title: title,
-          date: dateIso,
-          venueText: venueText,
-          venueId: venueId,
-          imageUrl: imageUrl,
-          descriptionHtml: descHtml,
-          eventType: eventType,
-          eventCategory: eventCategory,
-          additionalImages: additionalImages
-        })
-      });
-
-      if (showRes && showRes.error) throw new Error(showRes.error);
-      
-      var showId = (showRes && (showRes.id || (showRes.show && showRes.show.id))) || null;
-      if (!showId) throw new Error('Failed to create show');
-      
-      // Redirect to seating choice
-      window.location.href = '/admin/seating-choice/' + showId;
-    } catch(e) {
-      errEl.textContent = e.message || String(e);
     }
-  });
+
+    // Helper to update the hidden field with all additional image URLs
+    function updateAllImageUrls() {
+        const urls = $$('#add_previews > div').map(el => el.dataset.url);
+        allImageUrls.value = JSON.stringify(urls);
+        // Hide/show the drop button if at the 10 image limit
+        if (urls.length >= 10) {
+            dropAdd.style.display = 'none';
+        } else {
+            dropAdd.style.display = 'block';
+        }
+    }
+
+
+    // --- Main Image Event Listeners ---
+    dropMain.addEventListener('click', function() { fileMain.click(); });
+    dropMain.addEventListener('dragover', function(e) { e.preventDefault(); dropMain.classList.add('drag'); });
+    dropMain.addEventListener('dragleave', function() { dropMain.classList.remove('drag'); });
+    dropMain.addEventListener('drop', async function(e) {
+        e.preventDefault();
+        dropMain.classList.remove('drag');
+        var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (f) await doUpload(f, barMain, prevMain);
+    });
+    fileMain.addEventListener('change', async function() {
+        var f = fileMain.files && fileMain.files[0];
+        if (f) await doUpload(f, barMain, prevMain);
+    });
+
+    // --- Additional Images Event Listeners ---
+    dropAdd.addEventListener('click', function() { 
+        // Only open file dialog if we haven't hit the limit
+        if ($$('#add_previews > div').length < 10) {
+            fileAdd.click(); 
+        }
+    });
+    fileAdd.addEventListener('change', async function() {
+        var files = fileAdd.files;
+        if (files) {
+            let currentCount = $$('#add_previews > div').length;
+            let filesToUpload = Array.from(files).slice(0, 10 - currentCount);
+
+            if (filesToUpload.length > 0) {
+                // We show one progress bar for simplicity, as multiple simultaneous uploads can be complex
+                barAdd.style.width = '15%'; 
+                let uploadedCount = 0;
+                let total = filesToUpload.length;
+
+                for (const f of filesToUpload) {
+                    try {
+                        await doUpload(f, barAdd, null, true);
+                        uploadedCount++;
+                        barAdd.style.width = Math.round((uploadedCount / total) * 100) + '%';
+                    } catch (e) {
+                        // Error handling is inside doUpload
+                    }
+                }
+                setTimeout(function() { barAdd.style.width = '0%'; }, 800);
+            }
+        }
+        fileAdd.value = ''; // Reset file input so change event fires if the same file is selected again
+    });
+
+    // --- Save Logic (Updated to remove ticket-specific fields and include new fields) ---
+    $('#save').addEventListener('click', async function(){
+        var errEl = $('#err');
+        errEl.textContent = '';
+        try{
+            var title = $('#sh_title').value.trim();
+            var dtRaw = $('#sh_dt').value;
+            var venueInput = $('#venue_input');
+            var venueText = venueInput.value.trim();
+            var venueId = venueInput.dataset.venueId || null;
+            var imageUrl = prevMain.src || null;
+            var descHtml = $('#desc').innerHTML.trim();
+            
+            // New fields
+            var eventType = eventTypeSelect.value;
+            var eventCategory = categorySelect.value;
+            var additionalImages = JSON.parse(allImageUrls.value || '[]');
+
+            if (!title || !dtRaw || !venueText || !descHtml || !eventType || !eventCategory || !imageUrl){
+                throw new Error('Title, date/time, venue, description, event type, category, and a main image are required.');
+            }
+            
+            var dateIso = new Date(dtRaw).toISOString();
+            
+            // The logic for first ticket payload is now REMOVED
+            // var firstTicketPayload = null; 
+            
+            var showRes = await j('/admin/shows', {
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({
+                    title: title,
+                    date: dateIso,
+                    venueText: venueText,
+                    venueId: venueId,
+                    imageUrl: imageUrl, // Main image
+                    descriptionHtml: descHtml,
+                    eventType: eventType, // NEW: Event Type
+                    eventCategory: eventCategory, // NEW: Event Category
+                    additionalImages: additionalImages // NEW: Additional Images Array
+                })
+            });
+
+            if (showRes && showRes.error){
+                throw new Error(showRes.error);
+            }
+            var showId =
+                (showRes &&
+                ( showRes.id
+                || (showRes.show && showRes.show.id)
+                || (showRes.item && showRes.item.id)
+                )) || null;
+
+            if (!showId){
+                throw new Error('Failed to create show (no id returned from server)');
+            }
+            
+            // NEW: Redirect to the tickets page or seating choice, as first ticket creation is removed
+            window.location.href = '/admin/seating-choice/' + showId; 
+
+        }catch(e){
+            errEl.textContent = e.message || String(e);
+        }
+    });
 }
   // --- LIST SHOWS ---
   async function listShows(){
@@ -1221,88 +1232,93 @@ async function summaryPage(id){
   }
 }
 
- async function ticketsPage(id){
+  // --- TICKETS PAGE ---
+  async function ticketsPage(id){
     if (!main) return;
     main.innerHTML = '<div class="card"><div class="title">Loading tickets…</div></div>';
+
     var showResp;
     try{
-        showResp = await j('/admin/shows/' + id);
+      showResp = await j('/admin/shows/' + id);
     }catch(e){
-        main.innerHTML = '<div class="card"><div class="error">Failed to load show: '+(e.message||e)+'</div></div>';
-        return;
+      main.innerHTML = '<div class="card"><div class="error">Failed to load show: '+(e.message||e)+'</div></div>';
+      return;
     }
     var show = showResp.item || {};
     var when = show.date
-        ? new Date(show.date).toLocaleString('en-GB', { dateStyle:'full', timeStyle:'short' })
-        : '';
+      ? new Date(show.date).toLocaleString('en-GB', { dateStyle:'full', timeStyle:'short' })
+      : '';
     var venueName = show.venue
-        ? (show.venue.name + (show.venue.city ? ' – ' + show.venue.city : ''))
-        : (show.venueText || '');
+      ? (show.venue.name + (show.venue.city ? ' – ' + show.venue.city : ''))
+      : (show.venueText || '');
 
     main.innerHTML =
-        '<div class="card">'
+      '<div class="card">'
         +'<div class="header">'
-        +'<div>'
-        +'<div class="title">Tickets for '+(show.title || 'Untitled show')+'</div>'
-        +'<div class="muted">'+(when ? when + ' · ' : '') + venueName +'</div>'
+          +'<div>'
+            +'<div class="title">Tickets for '+(show.title || 'Untitled show')+'</div>'
+            +'<div class="muted">'+(when ? when + ' · ' : '') + venueName +'</div>'
+          +'</div>'
+          +'<div class="row">'
+            +'<button class="btn" id="backToShows">Back to all events</button>'
+            +'<button class="btn" id="editShowBtn">Edit show</button>'
+          +'</div>'
         +'</div>'
-        +'<div class="row">'
-        +'<button class="btn" id="backToShows">Back to all events</button>'
-        +'<button class="btn" id="editShowBtn">Edit show</button>'
-        +'</div>'
-        +'</div>'
+
         +'<div class="grid grid-2" style="margin-bottom:16px">'
+          +'<div class="card" style="margin:0">'
+            +'<div class="title" style="margin-bottom:4px">Ticket structure</div>'
+            +'<div class="muted" style="margin-bottom:8px">'
+              +'Tickets can be free (price £0) or paid, and can be sold as general admission or allocated seating.'
+            +'</div>'
+            +'<div class="row" style="margin-bottom:8px">'
+              +'<span class="pill" id="structureGeneral">General admission</span>'
+              +'<span class="pill" id="structureAllocated">Allocated seating</span>'
+            +'</div>'
+            +'<div class="muted" style="font-size:12px">'
+              +'Allocated seating uses a seating map for this venue. You can reuse an existing map or create a new one just for this show.'
+            +'</div>'
+          +'</div>'
+
+          +'<div class="card" style="margin:0">'
+            +'<div class="title" style="margin-bottom:4px">Seat maps for this show</div>'
+            +'<div class="muted" id="seatMapsSummary">Loading seat maps…</div>'
+            +'<div id="seatMapsList" style="margin-top:8px"></div>'
+            +'<div class="row" style="margin-top:8px">'
+              +'<button class="btn" id="refreshSeatMaps">Refresh seat maps</button>'
+              +'<button class="btn" id="editSeatMaps">Create / edit seat map</button>'
+            +'</div>'
+          +'</div>'
+        +'</div>'
+
         +'<div class="card" style="margin:0">'
-        +'<div class="title" style="margin-bottom:4px">Ticket structure</div>'
-        +'<div class="muted" style="margin-bottom:8px">'
-        +'Tickets can be free (price £0) or paid, and can be sold as general admission or allocated seating.'
+          +'<div class="header">'
+            +'<div class="title">Ticket types</div>'
+            +'<button class="btn" id="addTypeBtn">Add ticket type</button>'
+          +'</div>'
+          +'<div class="muted" style="margin-bottom:8px">'
+// [Fixed Code]
++'Set up the tickets you want to sell for this show. A £0 price will be treated as a free ticket.'
++'</div>'
+          +'<div id="ticketTypesEmpty" class="muted" style="display:none">No ticket types yet. Use “Add ticket type” to create one.</div>'
+          +'<table>'
+            +'<thead><tr><th>Name</th><th>Price</th><th>Available</th><th></th></tr></thead>'
+            +'<tbody id="ticketTypesBody"><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>'
+          +'</table>'
+          +'<div id="addTypeForm" style="margin-top:12px;display:none">'
+            +'<div class="grid grid-3">'
+              +'<div class="grid"><label>Name</label><input id="tt_name" placeholder="e.g. Standard" /></div>'
+              +'<div class="grid"><label>Price (£)</label><input id="tt_price" type="number" min="0" step="0.01" placeholder="e.g. 15" /></div>'
+              +'<div class="grid"><label>Available (optional)</label><input id="tt_available" type="number" min="0" step="1" placeholder="Leave blank for unlimited" /></div>'
+            +'</div>'
+            +'<div class="row" style="margin-top:8px">'
+              +'<button class="btn p" id="tt_save">Save ticket type</button>'
+              +'<button class="btn" id="tt_cancel">Cancel</button>'
+              +'<div id="tt_err" class="error"></div>'
+            +'</div>'
+          +'</div>'
         +'</div>'
-        +'<div class="row" style="margin-bottom:8px">'
-        +'<span class="pill" id="structureGeneral">General admission</span>'
-        +'<span class="pill" id="structureAllocated">Allocated seating</span>'
-        +'</div>'
-        +'<div class="muted" style="font-size:12px">'
-        +'Allocated seating uses a seating map for this venue. You can reuse an existing map or create a new one just for this show.'
-        +'</div>'
-        +'</div>'
-        +'<div class="card" style="margin:0">'
-        +'<div class="title" style="margin-bottom:4px">Seat maps for this show</div>'
-        +'<div class="muted" id="seatMapsSummary">Loading seat maps…</div>'
-        +'<div id="seatMapsList" style="margin-top:8px"></div>'
-        +'<div class="row" style="margin-top:8px">'
-        +'<button class="btn" id="refreshSeatMaps">Refresh seat maps</button>'
-        +'<button class="btn" id="editSeatMaps">Create / edit seat map</button>'
-        +'</div>'
-        +'</div>'
-        +'</div>'
-        +'<div class="card" style="margin:0">'
-        +'<div class="header">'
-        +'<div class="title">Ticket types</div>'
-        +'<button class="btn" id="addTypeBtn">Add ticket type</button>'
-        +'</div>'
-        +'<div class="muted" style="margin-bottom:8px">'
-        // FIXED LINE BELOW: Joined string to one line to prevent syntax crash
-        +'Set up the tickets you want to sell for this show. A £0 price will be treated as a free ticket.'
-        +'</div>'
-        +'<div id="ticketTypesEmpty" class="muted" style="display:none">No ticket types yet. Use “Add ticket type” to create one.</div>'
-        +'<table>'
-        +'<thead><tr><th>Name</th><th>Price</th><th>Available</th><th></th></tr></thead>'
-        +'<tbody id="ticketTypesBody"><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>'
-        +'</table>'
-        +'<div id="addTypeForm" style="margin-top:12px;display:none">'
-        +'<div class="grid grid-3">'
-        +'<div class="grid"><label>Name</label><input id="tt_name" placeholder="e.g. Standard" /></div>'
-        +'<div class="grid"><label>Price (£)</label><input id="tt_price" type="number" min="0" step="0.01" placeholder="e.g. 15" /></div>'
-        +'<div class="grid"><label>Available (optional)</label><input id="tt_available" type="number" min="0" step="1" placeholder="Leave blank for unlimited" /></div>'
-        +'</div>'
-        +'<div class="row" style="margin-top:8px">'
-        +'<button class="btn p" id="tt_save">Save ticket type</button>'
-        +'<button class="btn" id="tt_cancel">Cancel</button>'
-        +'<div id="tt_err" class="error"></div>'
-        +'</div>'
-        +'</div>'
-        +'</div>'
-        +'</div>';
+      +'</div>';
 
     $('#backToShows').addEventListener('click', function(){ go('/admin/ui/shows/current'); });
     $('#editShowBtn').addEventListener('click', function(){ go('/admin/ui/shows/' + id + '/edit'); });
@@ -1312,89 +1328,102 @@ async function summaryPage(id){
     var ticketTypesEmpty = $('#ticketTypesEmpty');
 
     $('#addTypeBtn').addEventListener('click', function(){
-        addTypeForm.style.display = 'block';
-        $('#tt_name').focus();
+      addTypeForm.style.display = 'block';
+      $('#tt_name').focus();
     });
-
     $('#tt_cancel').addEventListener('click', function(){
-        addTypeForm.style.display = 'none';
-        $('#tt_err').textContent = '';
+      addTypeForm.style.display = 'none';
+      $('#tt_err').textContent = '';
     });
 
     async function loadTicketTypes(){
-        try{
-            var res = await j('/admin/shows/' + id + '/ticket-types');
-            var items = res.ticketTypes || [];
-            if (!items.length){
-                ticketTypesBody.innerHTML = '<tr><td colspan="4" class="muted">No ticket types yet.</td></tr>';
-                ticketTypesEmpty.style.display = 'block';
-            }else{
-                ticketTypesEmpty.style.display = 'none';
-                ticketTypesBody.innerHTML = items.map(function(tt){
-                    var price = (tt.pricePence || 0) / 100;
-                    var priceLabel = price === 0 ? 'Free' : '£' + price.toFixed(2);
-                    var availLabel = tt.available == null ? 'Unlimited' : String(tt.available);
-                    return ''
-                        +'<tr>'
-                        +'<td>'+(tt.name || '')+'</td>'
-                        +'<td>'+priceLabel+'</td>'
-                        +'<td>'+availLabel+'</td>'
-                        +'<td><button class="btn" data-del="'+tt.id+'">Delete</button></td>'
-                        +'</tr>';
-                }).join('');
-                $$('[data-del]', ticketTypesBody).forEach(function(btn){
-                    btn.addEventListener('click', async function(e){
-                        e.preventDefault();
-                        var toDel = btn.getAttribute('data-del');
-                        if (!toDel) return;
-                        if (!confirm('Delete this ticket type?')) return;
-                        try{
-                            await j('/admin/ticket-types/' + toDel, { method:'DELETE' });
-                            loadTicketTypes();
-                        }catch(err){
-                            alert('Failed to delete: ' + (err.message || err));
-                        }
-                    });
-                });
-            }
-        }catch(e){
-            ticketTypesBody.innerHTML = '<tr><td colspan="4" class="error">Failed to load ticket types: '+(e.message||e)+'</td></tr>';
+      try{
+        var res = await j('/admin/shows/' + id + '/ticket-types');
+        var items = res.ticketTypes || [];
+        if (!items.length){
+          ticketTypesBody.innerHTML = '<tr><td colspan="4" class="muted">No ticket types yet.</td></tr>';
+          ticketTypesEmpty.style.display = 'block';
+        }else{
+          ticketTypesEmpty.style.display = 'none';
+          ticketTypesBody.innerHTML = items.map(function(tt){
+            var price = (tt.pricePence || 0) / 100;
+            var priceLabel = price === 0 ? 'Free' : '£' + price.toFixed(2);
+            var availLabel = tt.available == null ? 'Unlimited' : String(tt.available);
+            return ''
+              +'<tr>'
+                +'<td>'+(tt.name || '')+'</td>'
+                +'<td>'+priceLabel+'</td>'
+                +'<td>'+availLabel+'</td>'
+                +'<td><button class="btn" data-del="'+tt.id+'">Delete</button></td>'
+              +'</tr>';
+          }).join('');
+
+          $$('[data-del]', ticketTypesBody).forEach(function(btn){
+            btn.addEventListener('click', async function(e){
+              e.preventDefault();
+              var toDel = btn.getAttribute('data-del');
+              if (!toDel) return;
+              if (!confirm('Delete this ticket type?')) return;
+              try{
+                await j('/admin/ticket-types/' + toDel, { method:'DELETE' });
+                loadTicketTypes();
+              }catch(err){
+                alert('Failed to delete: ' + (err.message || err));
+              }
+            });
+          });
         }
+      }catch(e){
+        ticketTypesBody.innerHTML = '<tr><td colspan="4" class="error">Failed to load ticket types: '+(e.message||e)+'</td></tr>';
+      }
     }
 
     $('#tt_save').addEventListener('click', async function(){
-        var errEl = $('#tt_err');
-        errEl.textContent = '';
-        var name = $('#tt_name').value.trim();
-        var priceStr = $('#tt_price').value.trim();
-        var availStr = $('#tt_available').value.trim();
-        if (!name){ errEl.textContent = 'Name is required'; return; }
-        var pricePence = 0;
-        if (priceStr){
-            var p = Number(priceStr);
-            if (!Number.isFinite(p) || p < 0){ errEl.textContent = 'Price must be a non-negative number'; return; }
-            pricePence = Math.round(p * 100);
+      var errEl = $('#tt_err');
+      errEl.textContent = '';
+      var name = $('#tt_name').value.trim();
+      var priceStr = $('#tt_price').value.trim();
+      var availStr = $('#tt_available').value.trim();
+
+      if (!name){
+        errEl.textContent = 'Name is required';
+        return;
+      }
+
+      var pricePence = 0;
+      if (priceStr){
+        var p = Number(priceStr);
+        if (!Number.isFinite(p) || p < 0){
+          errEl.textContent = 'Price must be a non-negative number';
+          return;
         }
-        var available = null;
-        if (availStr){
-            var a = Number(availStr);
-            if (!Number.isFinite(a) || a < 0){ errEl.textContent = 'Available must be a non-negative number'; return; }
-            available = a;
+        pricePence = Math.round(p * 100);
+      }
+
+      var available = null;
+      if (availStr){
+        var a = Number(availStr);
+        if (!Number.isFinite(a) || a < 0){
+          errEl.textContent = 'Available must be a non-negative number';
+          return;
         }
-        try{
-            await j('/admin/shows/' + id + '/ticket-types', {
-                method:'POST',
-                headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({ name:name, pricePence:pricePence, available:available })
-            });
-            $('#tt_name').value = '';
-            $('#tt_price').value = '';
-            $('#tt_available').value = '';
-            addTypeForm.style.display = 'none';
-            loadTicketTypes();
-        }catch(err){
-            errEl.textContent = err.message || String(err);
-        }
+        available = a;
+      }
+
+      try{
+        await j('/admin/shows/' + id + '/ticket-types', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ name:name, pricePence:pricePence, available:available })
+        });
+        $('#tt_name').value = '';
+        $('#tt_price').value = '';
+        $('#tt_available').value = '';
+        addTypeForm.style.display = 'none';
+        loadTicketTypes();
+      }catch(err){
+        errEl.textContent = err.message || String(err);
+      }
     });
 
     loadTicketTypes();
@@ -1405,74 +1434,76 @@ async function summaryPage(id){
     var venueId = show.venue && show.venue.id ? show.venue.id : null;
 
     async function loadSeatMaps(){
-        seatMapsSummary.textContent = 'Loading seat maps…';
-        seatMapsList.innerHTML = '';
-        try{
-            var url = '/admin/seatmaps?showId=' + encodeURIComponent(id);
-            if (venueId) url += '&venueId=' + encodeURIComponent(venueId);
-            var maps = await j(url);
-            if (!Array.isArray(maps) || !maps.length){
-                seatMapsSummary.textContent = 'No seat maps yet for this show/venue.';
-                seatMapsList.innerHTML = '<div class="muted" style="font-size:13px">You can create a seat map using the “Create / edit seat map” button.</div>';
-                return;
-            }
-            seatMapsSummary.textContent = maps.length + ' seat map' + (maps.length > 1 ? 's' : '') + ' found.';
-            seatMapsList.innerHTML = maps.map(function(m){
-                var def = m.isDefault ? ' · <strong>Default</strong>' : '';
-                return '<div class="row" style="margin-bottom:4px;justify-content:space-between">'
-                    +'<div><strong>'+m.name+'</strong> <span class="muted">v'+(m.version || 1)+'</span>'+def+'</div>'
-                    +'<div class="row" style="gap:4px">'+(!m.isDefault ? '<button class="btn" data-make-default="'+m.id+'">Make default</button>' : '')+'</div>'
-                    +'</div>';
-            }).join('');
-            $$('[data-make-default]', seatMapsList).forEach(function(btn){
-                btn.addEventListener('click', async function(e){
-                    e.preventDefault();
-                    var mid = btn.getAttribute('data-make-default');
-                    if (!mid) return;
-                    try{
-                        await j('/admin/seatmaps/' + mid + '/default', {
-                            method:'PATCH',
-                            headers:{'Content-Type':'application/json'},
-                            body: JSON.stringify({ isDefault:true })
-                        });
-                        loadSeatMaps();
-                    }catch(err){
-                        alert('Failed to update default: ' + (err.message || err));
-                    }
-                });
-            });
-        }catch(e){
-            seatMapsSummary.textContent = 'Failed to load seat maps.';
-            seatMapsList.innerHTML = '<div class="error" style="font-size:13px">'+(e.message||e)+'</div>';
+      seatMapsSummary.textContent = 'Loading seat maps…';
+      seatMapsList.innerHTML = '';
+      try{
+        var url = '/admin/seatmaps?showId=' + encodeURIComponent(id);
+        if (venueId) url += '&venueId=' + encodeURIComponent(venueId);
+        var maps = await j(url);
+        if (!Array.isArray(maps) || !maps.length){
+          seatMapsSummary.textContent = 'No seat maps yet for this show/venue.';
+          seatMapsList.innerHTML = '<div class="muted" style="font-size:13px">You can create a seat map using the “Create / edit seat map” button.</div>';
+          return;
         }
+        seatMapsSummary.textContent = maps.length + ' seat map' + (maps.length > 1 ? 's' : '') + ' found.';
+        seatMapsList.innerHTML = maps.map(function(m){
+          var def = m.isDefault ? ' · <strong>Default</strong>' : '';
+          return '<div class="row" style="margin-bottom:4px;justify-content:space-between">'
+              +'<div><strong>'+m.name+'</strong> <span class="muted">v'+(m.version || 1)+'</span>'+def+'</div>'
+              +'<div class="row" style="gap:4px">'+(!m.isDefault ? '<button class="btn" data-make-default="'+m.id+'">Make default</button>' : '')+'</div>'
+            +'</div>';
+        }).join('');
+
+        $$('[data-make-default]', seatMapsList).forEach(function(btn){
+          btn.addEventListener('click', async function(e){
+            e.preventDefault();
+            var mid = btn.getAttribute('data-make-default');
+            if (!mid) return;
+            try{
+              await j('/admin/seatmaps/' + mid + '/default', {
+                method:'PATCH',
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ isDefault:true })
+              });
+              loadSeatMaps();
+            }catch(err){
+              alert('Failed to update default: ' + (err.message || err));
+            }
+          });
+        });
+      }catch(e){
+        seatMapsSummary.textContent = 'Failed to load seat maps.';
+        seatMapsList.innerHTML = '<div class="error" style="font-size:13px">'+(e.message||e)+'</div>';
+      }
     }
 
     $('#refreshSeatMaps').addEventListener('click', loadSeatMaps);
     $('#editSeatMaps').addEventListener('click', function(){
-        go('/admin/ui/shows/' + id + '/seating');
+      go('/admin/ui/shows/' + id + '/seating');
     });
 
     loadSeatMaps();
 
+    // ticket structure pill toggle (visual only for now)
     var structureGeneral = $('#structureGeneral');
     var structureAllocated = $('#structureAllocated');
     function setStructure(mode){
-        if (mode === 'allocated'){
-            structureAllocated.style.background = '#111827';
-            structureAllocated.style.color = '#ffffff';
-            structureGeneral.style.background = '#f9fafb';
-            structureGeneral.style.color = '#111827';
-        }else{
-            structureGeneral.style.background = '#111827';
-            structureGeneral.style.color = '#ffffff';
-            structureAllocated.style.background = '#f9fafb';
-            structureAllocated.style.color = '#111827';
-        }
+      if (mode === 'allocated'){
+        structureAllocated.style.background = '#111827';
+        structureAllocated.style.color = '#ffffff';
+        structureGeneral.style.background = '#f9fafb';
+        structureGeneral.style.color = '#111827';
+      }else{
+        structureGeneral.style.background = '#111827';
+        structureGeneral.style.color = '#ffffff';
+        structureAllocated.style.background = '#f9fafb';
+        structureAllocated.style.color = '#111827';
+      }
     }
     structureGeneral.addEventListener('click', function(){ setStructure('general'); });
     structureAllocated.addEventListener('click', function(){ setStructure('allocated'); });
     setStructure(show.usesAllocatedSeating ? 'allocated' : 'general');
-}
+  }
 
   // --- SEATING PAGE (temporary stub UI) ---
   async function seatingPage(showId){
