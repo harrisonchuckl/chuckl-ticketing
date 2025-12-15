@@ -635,17 +635,65 @@ function __wireDirtyInputsForCreateShow(){
 }
 
   // SPA sidebar links
-  document.addEventListener('click', function(e){
-    var tgt = e.target;
-    if (!tgt || !tgt.closest) return;
-    var a = tgt.closest('a.sb-link');
-    if (a && a.getAttribute('data-view')){
-      e.preventDefault();
-      go(a.getAttribute('data-view'));
-    }
-  });
+document.addEventListener('click', function(e){
+  var tgt = e.target;
+  var a = tgt && tgt.closest ? tgt.closest('a.sb-link') : null;
+  if (!a) return;
 
-  window.addEventListener('popstate', route);
+  var dataView = a.getAttribute('data-view');
+  var href = a.getAttribute('href');
+
+  // Determine where this click wants to go
+  var nav = null;
+  if (dataView) nav = { type:'view', target: dataView };
+  else if (href) nav = { type:'href', target: href };
+
+  if (!nav) return;
+
+  // If dirty, block + prompt
+  if (__dirty.enabled && __dirty.isDirty){
+    e.preventDefault();
+    __dirty.pendingNav = nav;
+    __showExitGuard();
+    return;
+  }
+
+  // Not dirty: proceed normally
+  if (nav.type === 'view'){
+    e.preventDefault();
+    go(nav.target);
+    return;
+  }
+
+  // nav.type === 'href'
+  // Let browser navigate
+  // (we don't preventDefault here)
+});
+
+
+window.addEventListener('popstate', function(){
+  var nextPath = (location.pathname || '').replace(/\/+$/,'') || '/';
+
+  // If user tries to leave Create Show via back/forward and we’re dirty:
+  if (__dirty.enabled && __dirty.isDirty){
+    // Revert URL back to the current page, then prompt
+    try {
+      history.pushState(null, '', __dirty.lastPath);
+    } catch(e){}
+
+    // Re-render current view (keep UI stable)
+    try { route(); } catch(e){}
+
+    __dirty.pendingNav = { type:'popstate', target: nextPath };
+    __showExitGuard();
+    return;
+  }
+
+  // Normal behaviour
+  try { route(); } catch(e){}
+  __dirty.lastPath = nextPath;
+});
+
 
   function home(){
     if (!main) return;
@@ -1015,6 +1063,11 @@ function __wireDirtyInputsForCreateShow(){
         if (cmd) document.execCommand(cmd);
       });
     });
+
+      // Dirty tracking for Create Show (must be AFTER fields exist in DOM)
+  __wireDirtyInputsForCreateShow();
+
+
   }
 
   async function createShowAI(){
@@ -2847,10 +2900,27 @@ window.addEventListener('popstate', function(){ routeSafe(); });
 
 async function route(){
   var path = location.pathname.replace(/\/$/, '');
-  console.log('[Admin UI] route', path);
-  setActive(path);
 
-  if (path === '/admin/ui' || path === '/admin/ui/home' || path === '/admin/ui/index.html') return home();
+console.log('[Admin UI] route', path);
+setActive(path);
+
+// --- Dirty guard enable/disable (Create Show only) ---
+var cleanPath = (path || '').replace(/\/+$/,'') || '/';
+
+if (cleanPath === '/admin/ui/shows/create' || cleanPath === '/admin/ui/shows/create-ai'){
+  __setDirtyEnabled(true);
+} else {
+  __setDirtyEnabled(false);
+}
+
+// Track the last “safe” path for popstate revert
+__dirty.lastPath = cleanPath;
+
+// (optional) if you want all route checks to use the cleaned path:
+path = cleanPath;
+
+
+  
   if (path === '/admin/ui/shows/create-ai') return await createShowAI();
   if (path === '/admin/ui/shows/create') return await createShow();
   if (path === '/admin/ui/shows/current') return await listShows();
