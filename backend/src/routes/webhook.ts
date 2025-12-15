@@ -3,7 +3,7 @@ import { Router } from 'express';
 import prisma from '../lib/prisma.js';
 import Stripe from 'stripe';
 import { calcFeesForShow } from '../services/fees.js';
-import { sendOrderEmail } from '../services/mailer.js';
+import { sendTicketsEmail } from '../services/email.js';
 
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, { apiVersion: '2024-06-20' });
@@ -134,8 +134,8 @@ await prisma.order.update({
 // Only send the email the first time we flip to PAID (webhooks retry)
 if (existing?.status !== 'PAID') {
   try {
-    await sendOrderEmail(orderId);
-    console.info('webhook: confirmation email sent', { orderId });
+  await sendTicketsEmail(orderId);
+console.info('webhook: tickets email sent', { orderId });
   } catch (emailErr: any) {
     console.error('webhook: confirmation email failed', {
       orderId,
