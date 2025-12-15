@@ -2597,28 +2597,71 @@ for (const d of docs) {
       }
 
       const data = raw ? JSON.parse(raw) : {};
+           function extractText(val: any): string {
+        // OpenAI Responses can return content.text as:
+        // - string
+        // - { value: string, annotations?: ... }
+        if (typeof val === "string") return val;
+        if (val && typeof val === "object") {
+          if (typeof val.value === "string") return val.value;
+          if (typeof val.text === "string") return val.text;
+        }
+        return "";
+      }
+
       const outText =
         typeof (data as any).output_text === "string"
           ? (data as any).output_text
           : Array.isArray((data as any).output)
           ? (data as any).output
-              .flatMap((item: any) =>
-                item && item.type === "message" && Array.isArray(item.content)
-                  ? item.content.map((c: any) => (c && (c.type === "output_text" || c.type === "text") ? c.text : "")).filter(Boolean)
-                  : []
-              )
+              .flatMap((item: any) => {
+                // Messages with content blocks
+                if (item && item.type === "message" && Array.isArray(item.content)) {
+                  return item.content
+                    .map((c: any) => {
+                      if (!c) return "";
+                      if (c.type === "output_text" || c.type === "text") return extractText(c.text);
+                      // Some variants use: { type:"output_text", text:{value:"..."} }
+                      if (c.type === "output_text" && c.text) return extractText(c.text);
+                      return "";
+                    })
+                    .filter(Boolean);
+                }
+
+                // Some variants may emit direct text blocks
+                if (item && Array.isArray(item.content)) {
+                  return item.content
+                    .map((c: any) => extractText(c?.text))
+                    .filter(Boolean);
+                }
+
+                return [];
+              })
               .join("\n")
               .trim()
           : "";
 
+
+            if (!outText) {
+        // Make this actionable: UI will show a real error instead of "Unexpected AI response"
+        return res.status(500).json({
+          ok: false,
+          error: "Model returned empty output_text",
+          hint: "Check OPENAI_MODEL_SHOW_EXTRACT and the Responses API output shape.",
+          rawKeys: Object.keys(data || {}),
+          sample: (data as any)?.output?.[0] || null
+        });
+      }
+
       let draft: any = null;
       try {
-        draft = outText ? JSON.parse(outText) : null;
+        draft = JSON.parse(outText);
       } catch {
         return res.status(500).json({ ok: false, error: "Failed to parse model JSON", outText });
       }
 
       return res.json({ ok: true, draft });
+
     } catch (e: any) {
       return res.status(500).json({ ok: false, error: e?.message || String(e) });
     }
