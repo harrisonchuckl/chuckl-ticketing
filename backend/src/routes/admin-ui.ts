@@ -277,144 +277,6 @@ router.get(
       cursor:pointer;
     }
     .opt:hover{background:#f8fafc;}
-
-    /* --- NEW LIST STYLES (SeeTickets style) --- */
-.controls-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 20px;
-}
-.search-box {
-  flex: 1;
-  min-width: 200px;
-  position: relative;
-}
-.search-icon {
-  position: absolute;
-  left: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--muted);
-  pointer-events: none;
-}
-.search-input {
-  padding-left: 32px;
-  width: 100%;
-}
-.filter-tabs {
-  display: flex;
-  background: #f1f5f9;
-  padding: 4px;
-  border-radius: 8px;
-}
-.filter-tab {
-  padding: 6px 12px;
-  font-size: 13px;
-  font-weight: 600;
-  border-radius: 6px;
-  cursor: pointer;
-  color: #64748b;
-  user-select: none;
-}
-.filter-tab.active {
-  background: #ffffff;
-  color: #0f172a;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-}
-
-/* Event List Row Grid */
-.evt-list-header {
-  display: grid;
-  grid-template-columns: 40px 3fr 160px 200px 100px 120px 40px; 
-  gap: 16px;
-  padding: 12px 16px;
-  background: #f8fafc;
-  border-bottom: 1px solid var(--border);
-  border-radius: 12px 12px 0 0;
-  font-size: 12px;
-  font-weight: 600;
-  color: #64748b;
-  text-transform: uppercase;
-}
-.evt-row-wrap {
-  background: #ffffff;
-  border: 1px solid var(--border);
-  border-top: none;
-}
-.evt-row-wrap:first-of-type { border-top: 1px solid var(--border); }
-.evt-row-wrap:last-child { border-radius: 0 0 12px 12px; }
-
-.evt-row {
-  display: grid;
-  grid-template-columns: 40px 3fr 160px 200px 100px 120px 40px; 
-  gap: 16px;
-  padding: 20px 16px;
-  align-items: center;
-  transition: background 0.1s;
-}
-.evt-row:hover { background: #fdfdfd; }
-
-/* Chevron */
-.chev-btn {
-  background: transparent; border: none; cursor: pointer; color: #94a3b8;
-  display: flex; align-items: center; justify-content: center;
-  width: 28px; height: 28px; border-radius: 4px;
-}
-.chev-btn:hover { background: #f1f5f9; color: #334155; }
-.chev-icon { transition: transform 0.2s; width: 16px; height: 16px; }
-.evt-row-wrap.open .chev-icon { transform: rotate(180deg); }
-
-/* Info Column */
-.evt-info { display: flex; flex-direction: column; gap: 4px; }
-.evt-title { font-weight: 600; color: #0f172a; font-size: 14px; }
-.evt-meta { color: #64748b; font-size: 13px; display: flex; align-items: center; gap: 6px; }
-
-/* Donut Chart */
-.donut-wrap { position: relative; width: 60px; height: 60px; }
-.donut {
-  width: 100%; height: 100%;
-  border-radius: 50%;
-  background: conic-gradient(var(--chart-color) var(--p), #e2e8f0 0);
-  /* Create the hole */
-  mask: radial-gradient(transparent 55%, black 56%);
-  -webkit-mask: radial-gradient(transparent 55%, black 56%);
-}
-.donut-center {
-  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 12px; font-weight: 700; color: #334155;
-}
-
-/* Legend */
-.legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #64748b; margin-bottom: 2px; }
-.legend-dot { width: 8px; height: 8px; border-radius: 2px; }
-.bg-sold { background: #3b82f6; }
-.bg-hold { background: #cbd5e1; }
-.bg-avail { background: #e2e8f0; }
-
-/* Status Badges (Updated) */
-.st-badge {
-  display: inline-flex; align-items: center; padding: 4px 10px;
-  border-radius: 999px; font-size: 11px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.02em;
-}
-.st-live { background: #ecfdf3; color: #027a48; border: 1px solid #bbf7d0; }
-.st-draft { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
-.st-hidden { background: #fff1f2; color: #be123c; border: 1px solid #fecdd3; }
-.st-past { background: #f8fafc; color: #94a3b8; border: 1px solid #e2e8f0; }
-
-/* Expanded Details */
-.evt-details {
-  display: none;
-  padding: 0 16px 20px 72px; /* Indented to align with content */
-  border-top: 1px dashed #e2e8f0;
-  margin-top: -1px;
-  background: #fdfdfd;
-}
-.evt-row-wrap.open .evt-details { display: block; }
-
   </style>
 </head>
 <body>
@@ -1990,236 +1852,149 @@ if (allImageUrls && allImageUrls.value) {
         }
     });
 }
- async function listShows(){
-  if (!main) return;
-  
-  // 1. Initial Frame
-  main.innerHTML = 
-    '<div class="card" style="border:none; background:transparent; box-shadow:none; padding:0;">'
-  +   '<div class="header" style="margin-bottom:20px">'
-  +     '<div class="title" style="font-size:24px">Events</div>'
-  +     '<button id="addEventBtn" class="btn p"> + Add event</button>'
-  +   '</div>'
-      // Controls Bar
-  +   '<div class="controls-bar">'
-  +     '<div class="search-box">'
-  +       '<span class="search-icon">🔍</span>'
-  +       '<input id="listSearch" class="search-input" placeholder="Search events..." />'
-  +     '</div>'
-  +     '<input id="listDate" type="date" class="ctl" style="width:auto;" />'
-  +     '<div class="filter-tabs" id="statusTabs">'
-  +       '<div class="filter-tab active" data-tab="all">All</div>'
-  +       '<div class="filter-tab" data-tab="live">Live</div>'
-  +       '<div class="filter-tab" data-tab="draft">Draft</div>'
-  +       '<div class="filter-tab" data-tab="past">Past</div>'
-  +     '</div>'
-  +   '</div>'
-      // List Header
-  +   '<div class="evt-list-header">'
-  +     '<div></div>' // chevron col
-  +     '<div>Event Information</div>'
-  +     '<div style="text-align:center">Total Allocation</div>'
-  +     '<div>Sales Performance</div>'
-  +     '<div>Gross Face</div>'
-  +     '<div>Status</div>'
-  +     '<div></div>' // kebab col
-  +   '</div>'
-      // List Body Container
-  +   '<div id="showsListBody"></div>'
-  + '</div>';
+  // --- LIST SHOWS ---
+  async function listShows(){
+    if (!main) return;
+    main.innerHTML =
+      '<div class="card">'
+        +'<div class="header">'
+          +'<div class="title">All events</div>'
+          +'<button id="refresh" class="btn">Refresh</button>'
+        +'</div>'
+        +'<table>'
+          +'<thead><tr>'
+            +'<th>Title</th><th>When</th><th>Venue</th>'
+            +'<th>Total allocation</th><th>Gross face</th><th>Status</th><th></th>'
+          +'</tr></thead>'
+          +'<tbody id="tbody"></tbody>'
+        +'</table>'
+      +'</div>';
 
-  // 2. Logic & Rendering
-  const listBody = $('#showsListBody');
-  const searchInput = $('#listSearch');
-  const dateInput = $('#listDate');
-  const statusTabs = $$('.filter-tab', $('#statusTabs'));
-  let allItems = [];
-  let currentFilter = 'all';
+    async function load(){
+      var tb = $('#tbody');
+      tb.innerHTML = '<tr><td colspan="7" class="muted">Loading…</td></tr>';
+      try{
+        var data = await j('/admin/shows');
+        var items = data.items || [];
+        if (!items.length){
+          tb.innerHTML = '<tr><td colspan="7" class="muted">No shows yet</td></tr>';
+          return;
+        }
+        tb.innerHTML = items.map(function(s){
+          var when = s.date
+            ? new Date(s.date).toLocaleString('en-GB', { dateStyle:'short', timeStyle:'short' })
+            : '';
+          var total = (s._alloc && s._alloc.total) || 0;
+          var sold  = (s._alloc && s._alloc.sold) || 0;
+          var hold  = (s._alloc && s._alloc.hold) || 0;
+          var avail = Math.max(total - sold - hold, 0);
+          var pct   = total ? Math.round((sold / total) * 100) : 0;
+          var bar   = '<div style="background:#e5e7eb;height:6px;border-radius:999px;overflow:hidden;width:140px">'
+                    +'<div style="background:#111827;height:6px;width:'+pct+'%"></div>'
+                    +'</div>';
+          var statusLabel = (s.status || 'DRAFT');
+          var statusBadge = '<span class="pill" style="background:'
+            +(statusLabel === 'LIVE' ? '#ecfdf3' : '#f8fafc')
+            +';color:'+(statusLabel === 'LIVE' ? '#166534' : '#475569')
+            +';border:1px solid '+(statusLabel === 'LIVE' ? '#bbf7d0' : '#e2e8f0')
+            +';">'+statusLabel+'</span>';
+          return ''
+            +'<tr data-row="'+s.id+'" data-status="'+statusLabel+'">'
+              +'<td>'+(s.title || '')+'</td>'
+              +'<td>'+when+'</td>'
+              +'<td>'+(s.venue ? (s.venue.name + (s.venue.city ? ' – '+s.venue.city : '')) : '')+'</td>'
+              +'<td><span class="muted">Sold '+sold+' · Hold '+hold+' · Avail '+avail+'</span> '+bar+'</td>'
+              +'<td>£'+(((s._revenue && s._revenue.grossFace) || 0).toFixed(2))+'</td>'
+              +'<td>'+statusBadge+'</td>'
+              +'<td>'
+                +'<div class="kebab">'
+                  +'<button class="btn" data-kebab="'+s.id+'">⋮</button>'
+                  +'<div class="menu" id="m-'+s.id+'">'
+                    +'<a href="#" data-edit="'+s.id+'">Edit</a>'
+                    +'<a href="#" data-seating="'+s.id+'">Seating map</a>'
+                    +'<a href="#" data-tickets="'+s.id+'">Tickets</a>'
+                    +'<a href="#" data-dup="'+s.id+'">Duplicate</a>'
+                  +'</div>'
+                +'</div>'
+              +'</td>'
+            +'</tr>';
+        }).join('');
 
-  function renderList(items){
-    if (!items.length){
-      listBody.innerHTML = '<div style="padding:40px; text-align:center; color:#64748b; background:#fff; border:1px solid var(--border); border-top:none;">No events found matching criteria.</div>';
-      return;
+        // kebab menu
+        $$('[data-kebab]').forEach(function(btn){
+          btn.addEventListener('click', function(e){
+            e.preventDefault();
+            var id = btn.getAttribute('data-kebab');
+            var m = $('#m-' + id);
+            $$('.menu').forEach(function(x){ x.classList.remove('open'); });
+            if (m) m.classList.add('open');
+          });
+        });
+        document.addEventListener('click', function(e){
+          var t = e.target;
+          if (!t || !t.closest || !t.closest('.kebab')){
+            $$('.menu').forEach(function(x){ x.classList.remove('open'); });
+          }
+        });
+
+        // actions
+        $$('[data-edit]').forEach(function(a){
+          a.addEventListener('click', function(e){
+            e.preventDefault();
+            var id = a.getAttribute('data-edit');
+            if (id) go('/admin/ui/shows/'+id+'/edit');
+          });
+        });
+        $$('[data-seating]').forEach(function(a){
+          a.addEventListener('click', function(e){
+            e.preventDefault();
+            var id = a.getAttribute('data-seating');
+            if (id) window.location.href = '/admin/seating/builder/preview/' + id;
+          });
+        });
+        $$('[data-tickets]').forEach(function(a){
+          a.addEventListener('click', function(e){
+            e.preventDefault();
+            var id = a.getAttribute('data-tickets');
+            if (id) go('/admin/ui/shows/'+id+'/tickets');
+          });
+        });
+        $$('[data-dup]').forEach(function(a){
+          a.addEventListener('click', async function(e){
+            e.preventDefault();
+            try{
+              var id = a.getAttribute('data-dup');
+              if (!id) return;
+              var r = await j('/admin/shows/'+id+'/duplicate', { method:'POST' });
+              if (r && r.ok && r.newId){
+                go('/admin/ui/shows/'+r.newId+'/edit');
+              }
+            }catch(err){
+              alert('Duplicate failed: ' + (err.message || err));
+            }
+          });
+        });
+        $$('[data-row]').forEach(function(row){
+          row.addEventListener('click', function(e){
+            if (e.target && (e.target.closest('a') || e.target.closest('button'))) return;
+            var id = row.getAttribute('data-row');
+            var status = row.getAttribute('data-status');
+            if (!id) return;
+            if (status === 'DRAFT') {
+              window.location.href = '/admin/seating/builder/preview/' + id;
+            } else {
+              go('/admin/ui/shows/' + id + '/summary');
+            }
+          });
+        });
+      }catch(e){
+        tb.innerHTML = '<tr><td colspan="7" class="error">Failed to load shows: '+(e.message||e)+'</td></tr>';
+      }
     }
-    listBody.innerHTML = items.map(function(s){
-      // Data Prep
-      const when = s.date ? new Date(s.date) : null;
-      const dateStr = when ? when.toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short', year:'numeric' }) : 'TBC';
-      const timeStr = when ? when.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' }) : '';
-      const venueName = s.venue ? (s.venue.name + (s.venue.city ? `, ${s.venue.city}` : '')) : (s.venueText || 'No Venue');
-      
-      // Allocation Math
-      const total = (s._alloc && s._alloc.total) || 0;
-      const sold  = (s._alloc && s._alloc.sold) || 0;
-      const hold  = (s._alloc && s._alloc.hold) || 0;
-      const avail = Math.max(total - sold - hold, 0);
-      const pct   = total ? Math.round((sold / total) * 100) : 0;
-      const gross = (s._revenue && s._revenue.grossFace) ? s._revenue.grossFace : 0;
 
-      // Styling Status
-      let stClass = 'st-draft';
-      let stText = s.status || 'DRAFT';
-      if (stText === 'LIVE') stClass = 'st-live';
-      // logic for past events?
-      if (when && when < new Date()) { stClass = 'st-past'; if(stText==='LIVE') stText='ENDED'; }
-
-      return `
-      <div class="evt-row-wrap" id="row-${s.id}">
-        <div class="evt-row">
-                    <button class="chev-btn" onclick="document.getElementById('row-${s.id}').classList.toggle('open')">
-            <svg class="chev-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
-          </button>
-
-                    <div class="evt-info" style="cursor:pointer" data-row="${s.id}" data-status="${s.status}">
-            <div class="evt-title">${s.title || 'Untitled Event'}</div>
-            <div class="evt-meta">
-              <span>📍 ${venueName}</span>
-              <span style="margin:0 4px">·</span>
-              <span>📅 ${dateStr} ${timeStr}</span>
-            </div>
-            <div style="font-size:11px; color:#94a3b8; margin-top:2px;">Code: ${s.id.slice(0,8)}</div>
-          </div>
-
-                    <div style="display:flex; justify-content:center;">
-            <div class="donut-wrap">
-              <div class="donut" style="--p:${pct}%; --chart-color:#3b82f6;"></div>
-              <div class="donut-center">${total}</div>
-            </div>
-          </div>
-
-                    <div>
-            <div class="legend-item"><div class="legend-dot bg-hold"></div> ${hold} Holds</div>
-            <div class="legend-item"><div class="legend-dot bg-avail"></div> ${avail} Available</div>
-            <div class="legend-item"><div class="legend-dot bg-sold"></div> <strong>${sold} Sold</strong></div>
-          </div>
-
-                    <div style="font-weight:600; color:#334155;">£${gross.toFixed(2)}</div>
-
-                    <div><span class="st-badge ${stClass}">${stText}</span></div>
-
-                    <div class="kebab" style="text-align:right">
-            <button class="btn" style="border:none; padding:4px 8px;" data-kebab="${s.id}">⋮</button>
-            <div class="menu" id="m-${s.id}">
-              <a href="#" data-edit="${s.id}">Edit Details</a>
-              <a href="#" data-seating="${s.id}">Seating Builder</a>
-              <a href="#" data-tickets="${s.id}">Manage Tickets</a>
-              <div style="border-top:1px solid #eee; margin:4px 0;"></div>
-              <a href="#" data-dup="${s.id}">Duplicate Event</a>
-            </div>
-          </div>
-        </div>
-        
-                <div class="evt-details">
-          <div class="grid grid-3" style="gap:20px; font-size:13px;">
-             <div>
-                <div style="font-weight:600; margin-bottom:4px;">Quick Actions</div>
-                <button class="btn" style="font-size:12px" data-tickets="${s.id}">View Ticket Allocations</button>
-             </div>
-             <div>
-                <div style="font-weight:600; margin-bottom:4px;">Tags</div>
-                <div class="muted">${(s.tags || []).join(', ') || 'No tags'}</div>
-             </div>
-          </div>
-        </div>
-      </div>`;
-    }).join('');
-
-    // Rebind events
-    bindEvents();
+    $('#refresh').addEventListener('click', load);
+    load();
   }
-
-  function filterItems(){
-    const q = searchInput.value.toLowerCase().trim();
-    const d = dateInput.value;
-    
-    let filtered = allItems.filter(item => {
-      // Text Search
-      const txt = (item.title||'') + ' ' + (item.venue?.name||'') + ' ' + (item.venue?.city||'');
-      if (q && !txt.toLowerCase().includes(q)) return false;
-
-      // Date Search
-      if (d && item.date && !item.date.startsWith(d)) return false;
-
-      // Tabs
-      const isPast = item.date ? (new Date(item.date) < new Date()) : false;
-      const status = item.status || 'DRAFT';
-
-      if (currentFilter === 'live') return status === 'LIVE' && !isPast;
-      if (currentFilter === 'draft') return status !== 'LIVE' && !isPast;
-      if (currentFilter === 'past') return isPast;
-      return true; // 'all'
-    });
-    renderList(filtered);
-  }
-
-  async function load(){
-    listBody.innerHTML = '<div style="padding:40px; text-align:center;">Loading events...</div>';
-    try {
-      const res = await j('/admin/shows');
-      allItems = res.items || [];
-      filterItems();
-    } catch(e) {
-      listBody.innerHTML = '<div class="error">Failed to load: '+e.message+'</div>';
-    }
-  }
-
-  // Event Binding Helper
-  function bindEvents(){
-    // Kebab menus
-    $$('[data-kebab]').forEach(btn => {
-      btn.addEventListener('click', e => {
-        e.preventDefault(); e.stopPropagation();
-        const id = btn.getAttribute('data-kebab');
-        const m = $('#m-'+id);
-        $$('.menu').forEach(x => x.classList.remove('open'));
-        if(m) m.classList.add('open');
-      });
-    });
-    // Row click (title area)
-    $$('.evt-info').forEach(row => {
-      row.addEventListener('click', () => {
-        const id = row.getAttribute('data-row');
-        const st = row.getAttribute('data-status');
-        if(st === 'DRAFT') window.location.href = '/admin/seating/builder/preview/' + id;
-        else go('/admin/ui/shows/' + id + '/summary');
-      });
-    });
-    // Actions (Edit, Seating, etc) - Reusing existing logic
-    $$('[data-edit]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); go('/admin/ui/shows/'+a.getAttribute('data-edit')+'/edit'); }));
-    $$('[data-tickets]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); go('/admin/ui/shows/'+a.getAttribute('data-tickets')+'/tickets'); }));
-    $$('[data-seating]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); window.location.href='/admin/seating/builder/preview/'+a.getAttribute('data-seating'); }));
-    $$('[data-dup]').forEach(a => a.addEventListener('click', async e => {
-       e.preventDefault();
-       if(!confirm('Duplicate this event?')) return;
-       try {
-         const r = await j('/admin/shows/'+a.getAttribute('data-dup')+'/duplicate', {method:'POST'});
-         if(r && r.newId) go('/admin/ui/shows/'+r.newId+'/edit');
-       } catch(err){ alert(err.message); }
-    }));
-  }
-
-  // Global Listeners
-  $('#addEventBtn').addEventListener('click', () => go('/admin/ui/shows/create'));
-  searchInput.addEventListener('input', filterItems);
-  dateInput.addEventListener('change', filterItems);
-  
-  // Tab Logic
-  statusTabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-      statusTabs.forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      currentFilter = tab.getAttribute('data-tab');
-      filterItems();
-    });
-  });
-  
-  // Close menus on click away
-  document.addEventListener('click', e => {
-    if(!e.target.closest('.kebab')) $$('.menu').forEach(x => x.classList.remove('open'));
-  });
-
-  load();
-}
 
   // --- EDIT SHOW ---
   async function editShow(id){
