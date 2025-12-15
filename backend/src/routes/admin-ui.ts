@@ -463,14 +463,15 @@ function __saveCreateShowDraft(){
     venueId: ($('#venue_input' ) && $('#venue_input').dataset) ? ($('#venue_input').dataset.venueId || '') : '',
     eventType: $('#eventType') ? $('#eventType').value : ( $('#sh_eventType') ? $('#sh_eventType').value : '' ),
     category: $('#category') ? $('#category').value : ( $('#sh_category') ? $('#sh_category').value : '' ),
-    doorsOpenTime: $('#sh_doorsOpenTime') ? $('#sh_doorsOpenTime').value : '',
-    ageGuidance: $('#sh_ageGuidance') ? $('#sh_ageGuidance').value : '',
+doorsOpenTime: $('#doors_open_time') ? $('#doors_open_time').value : ( $('#sh_doorsOpenTime') ? $('#sh_doorsOpenTime').value : '' ),
+ageGuidance: $('#age_guidance') ? $('#age_guidance').value : ( $('#sh_ageGuidance') ? $('#sh_ageGuidance').value : '' ),
+
     tags: $('#sh_tags') ? $('#sh_tags').value : ( $('#tags') ? $('#tags').value : '' ),
     accessibilityNote: $('#sh_accessibilityNote') ? $('#sh_accessibilityNote').value : '',
     accessibility: {
       wheelchair: $('#acc_wheelchair') ? !!$('#acc_wheelchair').checked : false,
       stepfree: $('#acc_stepfree') ? !!$('#acc_stepfree').checked : false,
-      hearingLoop: $('#acc_hearing') ? !!$('#acc_hearing').checked : false,
+hearingLoop: $('#acc_hearingloop') ? !!$('#acc_hearingloop').checked : false,
       toilet: $('#acc_toilet') ? !!$('#acc_toilet').checked : false
     },
     descriptionHtml: $('#sh_desc') ? $('#sh_desc').innerHTML : ( $('#desc') ? $('#desc').innerHTML : '' ),
@@ -497,22 +498,22 @@ function __showExitGuard(){
   var modal = document.createElement('div');
   modal.className = 'exit-guard-modal';
 
-  modal.innerHTML = `
-    <div class="exit-guard-head">
-      <strong>Unsaved changes</strong>
-      <span style="font-size:12px;color:#64748b;">Create Show</span>
-    </div>
-    <div class="exit-guard-body">
-      If you leave this page, <strong>your changes will be lost</strong>.
-      <br><br>
-      Choose <strong>Save draft</strong> if you want to continue later.
-    </div>
-    <div class="exit-guard-actions">
-      <button class="btn btn-ghost" id="exitGuardStay">Stay on page</button>
-      <button class="btn" id="exitGuardSave">Save draft</button>
-      <button class="btn btn-danger" id="exitGuardExit">Exit without saving</button>
-    </div>
-  `;
+modal.innerHTML =
+  '<div class="exit-guard-head">'
++ '  <strong>Unsaved changes</strong>'
++ '  <span style="font-size:12px;color:#64748b;">Create Show</span>'
++ '</div>'
++ '<div class="exit-guard-body">'
++ '  If you leave this page, <strong>your changes will be lost</strong>.'
++ '  <br><br>'
++ '  Choose <strong>Save draft</strong> if you want to continue later.'
++ '</div>'
++ '<div class="exit-guard-actions">'
++ '  <button class="btn btn-ghost" id="exitGuardStay">Stay on page</button>'
++ '  <button class="btn" id="exitGuardSave">Save draft</button>'
++ '  <button class="btn btn-danger" id="exitGuardExit">Exit without saving</button>'
++ '</div>';
+
 
   backdrop.appendChild(modal);
   document.body.appendChild(backdrop);
@@ -2897,6 +2898,15 @@ async function summaryPage(id){
 }
 
 window.addEventListener('popstate', function(){ routeSafe(); });
+
+window.addEventListener('beforeunload', function(e){
+  if (__dirty.enabled && __dirty.isDirty){
+    e.preventDefault();
+    e.returnValue = ''; // required for Chrome
+    return '';
+  }
+});
+
 
 async function route(){
   var path = location.pathname.replace(/\/$/, '');
