@@ -1057,19 +1057,17 @@ window.addEventListener('popstate', function(){
   }
 
   function bindWysiwyg(root){
-    if (!root) return;
-    root.querySelectorAll('[data-cmd]').forEach(function(btn){
-      btn.addEventListener('click', function(){
-        var cmd = btn.getAttribute('data-cmd') || '';
-        if (cmd) document.execCommand(cmd);
-      });
+  if (!root) return;
+  root.querySelectorAll('[data-cmd]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var cmd = btn.getAttribute('data-cmd') || '';
+      if (cmd) document.execCommand(cmd);
     });
+  });
 
-      // Dirty tracking for Create Show (must be AFTER fields exist in DOM)
   __wireDirtyInputsForCreateShow();
 
-
-  }
+}
 
   async function createShowAI(){
   if (!main) return;
@@ -2070,6 +2068,7 @@ var accessibility = {
   accessibleToilet: $('#acc_toilet') ? !!$('#acc_toilet').checked : false,
   notes: $('#acc_more') ? $('#acc_more').value.trim() : ''
 };
+
 
 var tags = [];
 if ($('#tags') && $('#tags').value) {
