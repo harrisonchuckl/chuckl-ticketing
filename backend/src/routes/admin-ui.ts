@@ -504,10 +504,9 @@ router.get(
         +'<div class="tip">Pick an existing venue or create a new one.</div>'
         +'</div>'
         
-   // --- NEW: Category and Sub-Category Section ---
-+'<div class="grid grid-2" style="margin-bottom: 20px; gap: 16px;">'
-
-  +'<div class="field">'
+// --- NEW: Category and Sub-Category Section ---
++'<div class="grid grid-2" style="margin-bottom: 20px; gap: 16px; align-items: end;">'
+  +'<div class="grid" style="gap:4px;">'
     +'<label>Event Type</label>'
     +'<select id="event_type_select" class="ctl">'
       +'<option value="">Select Primary Type</option>'
@@ -527,8 +526,7 @@ router.get(
       +'<option value="other">Other</option>'
     +'</select>'
   +'</div>'
-
-  +'<div class="field">'
+  +'<div class="grid" style="gap:4px;">'
     +'<label>Category</label>'
     +'<select id="event_category_select" class="ctl">'
       +'<option value="">Select Sub-Category</option>'
@@ -592,11 +590,69 @@ router.get(
       // Other
       +'<option data-parent="other" value="misc">Miscellaneous</option>'
 
-    +'</select>'
-    +'<div class="tip" style="margin-top:0">The list will filter based on Event Type.</div>'
+ +'</select>'
+    +'<div class="tip">The list will filter based on Event Type.</div>'
   +'</div>'
-
 +'</div>' // End grid-2
+
+// --- NEW: Doors Open + Age Guidance ---
++'<div class="grid grid-2" style="margin-bottom: 20px; gap: 16px;">'
+  +'<div class="grid" style="gap:4px;">'
+    +'<label>Doors Open Time</label>'
+    +'<input id="doors_open_time" class="ctl" type="time" />'
+    +'<div class="tip">Separate from show start time.</div>'
+  +'</div>'
+  +'<div class="grid" style="gap:4px;">'
+    +'<label>Age Guidance</label>'
+    +'<select id="age_guidance" class="ctl">'
+      +'<option value="">Select age guidance</option>'
+      +'<option value="all_ages">All ages</option>'
+      +'<option value="12+">12+</option>'
+      +'<option value="14+">14+</option>'
+      +'<option value="16+">16+</option>'
+      +'<option value="18+">18+</option>'
+    +'</select>'
+    +'<div class="tip">Helps reduce customer queries/refunds.</div>'
+  +'</div>'
++'</div>'
+
+// --- NEW: End Time / Duration ---
++'<div class="grid" style="margin-bottom: 20px;">'
+  +'<label>End Time / Duration</label>'
+  +'<input id="end_time_note" class="ctl" placeholder="e.g. Approx. 2 hours incl. interval" />'
++'</div>'
+
+// --- NEW: Accessibility ---
++'<div class="grid" style="margin-bottom: 20px;">'
+  +'<label>Accessibility</label>'
+  +'<div style="border:1px solid var(--border); border-radius:8px; padding:12px; background:#fff;">'
+    +'<div class="grid grid-2" style="gap:10px; margin-bottom: 10px;">'
+      +'<label style="display:flex; align-items:center; gap:8px; font-weight:500;">'
+        +'<input id="acc_wheelchair" type="checkbox" />Wheelchair spaces'
+      +'</label>'
+      +'<label style="display:flex; align-items:center; gap:8px; font-weight:500;">'
+        +'<input id="acc_stepfree" type="checkbox" />Step-free access'
+      +'</label>'
+      +'<label style="display:flex; align-items:center; gap:8px; font-weight:500;">'
+        +'<input id="acc_hearingloop" type="checkbox" />Hearing loop'
+      +'</label>'
+      +'<label style="display:flex; align-items:center; gap:8px; font-weight:500;">'
+        +'<input id="acc_toilet" type="checkbox" />Accessible toilet'
+      +'</label>'
+    +'</div>'
+    +'<div class="grid" style="gap:4px;">'
+      +'<label style="font-size:12px; color:#64748b; font-weight:600;">More info (optional)</label>'
+      +'<input id="acc_more" class="ctl" placeholder="e.g. Contact venue for access requirements" />'
+    +'</div>'
+  +'</div>'
++'</div>'
+
+// --- NEW: Tags / Keywords ---
++'<div class="grid" style="margin-bottom: 20px;">'
+  +'<label>Tags / Keywords</label>'
+  +'<input id="tags" class="ctl" placeholder="Comma-separated (e.g. stand-up, tour, friday, cheltenham)" />'
+  +'<div class="tip">Improves internal search and future recommendations.</div>'
++'</div>'
 
 
 
@@ -836,9 +892,35 @@ router.get(
             var descHtml = $('#desc').innerHTML.trim();
             
             // New fields
-            var eventType = eventTypeSelect.value;
-            var eventCategory = categorySelect.value;
-            var additionalImages = JSON.parse(allImageUrls.value || '[]');
+           var eventType = eventTypeSelect ? eventTypeSelect.value : '';
+var eventCategory = categorySelect ? categorySelect.value : '';
+
+// NEW fields (optional)
+var doorsOpenTime = $('#doors_open_time') ? $('#doors_open_time').value : '';
+var ageGuidance = $('#age_guidance') ? $('#age_guidance').value : '';
+var endTimeNote = $('#end_time_note') ? $('#end_time_note').value.trim() : '';
+
+var accessibility = {
+  wheelchair: $('#acc_wheelchair') ? !!$('#acc_wheelchair').checked : false,
+  stepFree: $('#acc_stepfree') ? !!$('#acc_stepfree').checked : false,
+  hearingLoop: $('#acc_hearingloop') ? !!$('#acc_hearingloop').checked : false,
+  accessibleToilet: $('#acc_toilet') ? !!$('#acc_toilet').checked : false,
+  notes: $('#acc_more') ? $('#acc_more').value.trim() : ''
+};
+
+var tags = [];
+if ($('#tags') && $('#tags').value) {
+  tags = $('#tags').value
+    .split(',')
+    .map(function(s){ return s.trim(); })
+    .filter(Boolean);
+}
+
+var additionalImages = [];
+if (allImageUrls && allImageUrls.value) {
+  try { additionalImages = JSON.parse(allImageUrls.value); } catch(e){}
+}
+
 
             if (!title || !dtRaw || !venueText || !descHtml || !eventType || !eventCategory || !imageUrl){
                 throw new Error('Title, date/time, venue, description, event type, category, and a main image are required.');
@@ -853,16 +935,24 @@ router.get(
                 method:'POST',
                 headers:{'Content-Type':'application/json'},
                 body: JSON.stringify({
-                    title: title,
-                    date: dateIso,
-                    venueText: venueText,
-                    venueId: venueId,
-                    imageUrl: imageUrl, // Main image
-                    descriptionHtml: descHtml,
-                    eventType: eventType, // NEW: Event Type
-                    eventCategory: eventCategory, // NEW: Event Category
-                    additionalImages: additionalImages // NEW: Additional Images Array
-                })
+  title: title,
+  date: dateIso,
+  venueText: venueText,
+  venueId: venueId,
+  imageUrl: imageUrl,
+  descriptionHtml: descHtml,
+  eventType: eventType,
+  eventCategory: eventCategory,
+  additionalImages: additionalImages,
+
+  // NEW fields
+  doorsOpenTime: doorsOpenTime || null,
+  ageGuidance: ageGuidance || null,
+  endTimeNote: endTimeNote || null,
+  accessibility: accessibility,
+  tags: tags
+})
+
             });
 
             if (showRes && showRes.error){
