@@ -800,7 +800,7 @@ function bindAiClearOnUserEdit(el, evts){
   +   '<input id="ai_files" type="file" multiple '
   +     'accept=".pdf,.doc,.docx,.txt,.md,image/*" style="display:none" />'
 
-  +   '+   '<div id="ai_list" style="margin-top:12px;"></div>'
++   '<div id="ai_list" style="margin-top:12px;"></div>'
 
 +   '<div class="row" style="margin-top:12px; gap:10px; align-items:center;">'
 +     '<button id="ai_analyse" class="btn p">Analyse & Pre-fill</button>'
