@@ -2142,7 +2142,6 @@ if (allImageUrls && allImageUrls.value) {
     __wireDirtyInputsForCreateShow();
 }
 
-}
   // --- LIST SHOWS ---
   async function listShows(){
     if (!main) return;
