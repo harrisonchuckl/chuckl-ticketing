@@ -119,6 +119,11 @@ const event = stripe.webhooks.constructEvent(rawBody, sig, process.env.STRIPE_WE
   select: { status: true },
 });
 
+          const payerEmail =
+  session.customer_details?.email ||
+  session.customer_email ||
+  undefined;
+          
 await prisma.order.update({
   where: { id: orderId },
   data: {
@@ -128,6 +133,7 @@ await prisma.order.update({
     paymentFeePence: fees.paymentFeePence,
     netPayoutPence: fees.netPayoutPence,
     stripeId: session.payment_intent as string,
+    email: payerEmail,
   },
 });
 
