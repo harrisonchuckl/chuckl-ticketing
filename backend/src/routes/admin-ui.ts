@@ -497,8 +497,8 @@ router.get(
         +'<div class="tip">Pick an existing venue or create a new one.</div>'
         +'</div>'
         
-       // --- NEW: Category and Sub-Category Section ---
-+'<div class="grid grid-2" style="margin-bottom: 20px; gap: 16px; align-items: end;">'
+      // --- NEW: Category and Sub-Category Section ---
++'<div class="grid grid-2" style="margin-bottom: 20px; gap: 16px;">'
 
   +'<div class="grid">'
     +'<label>Event Type</label>'
@@ -614,6 +614,7 @@ router.get(
   +'</div>'
 
 +'</div>' // End grid-2
+
 
 
         // Description
