@@ -2691,7 +2691,9 @@ async function fetchImageMeta(url: string){
   const w = meta.width || 0;
   const h = meta.height || 0;
   const ratio = h ? (w / h) : 0;
-  const target = 2/3;
+// We want LANDSCAPE 3:2 (user refers to “2x3 landscape”)
+// ratio is w/h, so landscape 3:2 = 1.5
+const target = 3/2;
   const diff = Math.abs(ratio - target);
   return { w, h, ratio, diff };
 }
@@ -2700,8 +2702,14 @@ function nameScore(name?: string){
   const n = String(name || "").toLowerCase();
   let s = 0;
   if (n.includes("poster") || n.includes("artwork") || n.includes("a3") || n.includes("print") || n.includes("main")) s -= 0.25;
-  if (n.includes("banner") || n.includes("header") || n.includes("web")) s += 0.6;
-  if (n.includes("sq") || n.includes("square") || n.includes("insta")) s += 0.75;
+  // Prefer banner/hero/main artwork for the main poster.
+// Penalise “square / insta / story” assets.
+if (n.includes("banner") || n.includes("header") || n.includes("hero")) s -= 0.35;
+if (n.includes("poster") || n.includes("main") || n.includes("artwork")) s -= 0.25;
+
+if (n.includes("sq") || n.includes("square") || n.includes("insta") || n.includes("ig")) s += 0.75;
+if (n.includes("story")) s += 0.95;
+
   return s;
 }
 
@@ -2834,6 +2842,9 @@ async function docToText(name: string, type: string, dataUrl: string){
   return buf.toString("utf8");
 }
 
+      const docTexts: Array<{ name: string; text: string }> = [];
+
+
 // Turn all docs into plain text and feed as input_text
 for (const d of docs) {
   if (!d || !d.dataUrl) continue;
@@ -2841,6 +2852,8 @@ for (const d of docs) {
     const text = await docToText(d.name || "document", d.type || "", d.dataUrl);
     const cleaned = String(text || "").trim();
     if (!cleaned) continue;
+    docTexts.push({ name: d.name || "document", text: cleaned });
+
 
     // Keep it bounded so a huge PDF can’t explode tokens
     const clipped = cleaned.slice(0, 20000);
@@ -3056,6 +3069,58 @@ try {
   return res.status(500).json({ ok: false, error: "Failed to parse model JSON", outText });
 }
 
+      function stripTitleFromText(full: string, title: string){
+  if (!full || !title) return full;
+  const lines = full.split(/\r?\n/);
+  if (lines.length && lines[0].trim() === title.trim()){
+    // remove title line + any immediate blank lines
+    lines.shift();
+    while (lines.length && !lines[0].trim()) lines.shift();
+    return lines.join("\n").trim();
+  }
+  return full.trim();
+}
+
+function plainTextToHtml(t: string){
+  const esc = (s: string) => s
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;");
+  const safe = esc(t);
+  // paragraph split on double newlines, preserve single newlines
+  return safe
+    .split(/\n{2,}/)
+    .map(p => `<p>${p.replace(/\n/g,"<br/>")}</p>`)
+    .join("");
+}
+
+// Pick the “best doc” (longest text tends to be event copy)
+const bestDoc = docTexts.sort((a,b)=>b.text.length-a.text.length)[0] || null;
+let docTitle: string | null = null;
+let docDescText: string | null = null;
+
+if (bestDoc && bestDoc.text){
+  const lines = bestDoc.text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  if (lines.length){
+    docTitle = lines[0]; // first heading line
+    const remaining = stripTitleFromText(bestDoc.text, docTitle);
+    if (remaining && remaining.length > 20) docDescText = remaining;
+  }
+}
+
+// HARD OVERRIDES:
+// If doc title exists → always use it (exact punctuation, no AI rewrite)
+if (docTitle){
+  draft.title = docTitle;
+}
+
+// If doc description exists → always use it verbatim (no AI rewrite)
+if (docDescText){
+  draft.descriptionHtml = plainTextToHtml(docDescText);
+}
+
+    
 // Hard override: deterministic main poster always wins
 if (forcedMainImageUrl){
   draft.mainImageUrl = forcedMainImageUrl;
@@ -3067,6 +3132,24 @@ if (forcedMainImageUrl){
   const dedup = Array.from(new Set(all.filter(u => u && u !== forcedMainImageUrl)));
   draft.additionalImageUrls = dedup.slice(0, 10);
 }
+
+      draft.aiGenerated = {
+  title: !!draft.title,
+  startDateTime: !!draft.startDateTime,
+  endDateTime: !!draft.endDateTime,
+  venueName: !!draft.venueName,
+  venueAddress: !!draft.venueAddress,
+  eventType: !!draft.eventType,
+  category: !!draft.category,
+  doorsOpenTime: !!draft.doorsOpenTime,
+  ageGuidance: !!draft.ageGuidance,
+  descriptionHtml: !!draft.descriptionHtml,
+  mainImageUrl: !!draft.mainImageUrl,
+  additionalImageUrls: Array.isArray(draft.additionalImageUrls) && draft.additionalImageUrls.length > 0,
+  tags: Array.isArray(draft.tags) && draft.tags.length > 0,
+  accessibility: !!draft.accessibility
+};
+
 
 return res.json({ ok: true, draft });
 
