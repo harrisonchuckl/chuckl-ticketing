@@ -418,6 +418,30 @@ function bindAiClearOnUserEdit(el, evts){
 
 
   var main = $('#main');
+
+function __fatal(label, err){
+  try{
+    var m = document.getElementById('main');
+    if (!m) return;
+    var msg = (err && (err.stack || err.message)) ? (err.stack || err.message) : String(err);
+    m.innerHTML =
+      '<div class="card">'
+    +   '<div class="title">Admin UI crashed</div>'
+    +   '<div class="error" style="margin-top:8px;white-space:pre-wrap;">'
+    +     label + ':\n' + msg
+    +   '</div>'
+    + '</div>';
+  }catch(e){}
+}
+
+window.addEventListener('error', function(e){
+  __fatal('window.error', e && e.error ? e.error : (e && e.message ? e.message : e));
+});
+
+window.addEventListener('unhandledrejection', function(e){
+  __fatal('unhandledrejection', e && e.reason ? e.reason : e);
+});
+
 // ------------------------------
 // Dirty-exit guard (Create Show)
 // ------------------------------
@@ -675,24 +699,22 @@ document.addEventListener('click', function(e){
 window.addEventListener('popstate', function(){
   var nextPath = (location.pathname || '').replace(/\/+$/,'') || '/';
 
-  // If user tries to leave Create Show via back/forward and we’re dirty:
   if (__dirty.enabled && __dirty.isDirty){
-    // Revert URL back to the current page, then prompt
-    try {
-      history.pushState(null, '', __dirty.lastPath);
-    } catch(e){}
+    // Prevent leaving immediately
+    try { history.pushState(null, '', __dirty.lastPath); } catch(e){}
 
-    // Re-render current view (keep UI stable)
-    try { route(); } catch(e){}
-
+    // Keep UI stable and show the modal
     __dirty.pendingNav = { type:'popstate', target: nextPath };
     __showExitGuard();
+
+    // Re-render the current page safely (so errors show on-screen)
+    routeSafe();
     return;
   }
 
   // Normal behaviour
-  try { route(); } catch(e){}
   __dirty.lastPath = nextPath;
+  routeSafe();
 });
 
 
@@ -2905,15 +2927,6 @@ async function summaryPage(id){
     });
 }
 
-window.addEventListener('popstate', function(){ routeSafe(); });
-
-window.addEventListener('beforeunload', function(e){
-  if (__dirty.enabled && __dirty.isDirty){
-    e.preventDefault();
-    e.returnValue = ''; // required for Chrome
-    return '';
-  }
-});
 
 
 async function route(){
@@ -2969,13 +2982,13 @@ path = cleanPath;
   return home();
 }
 
-console.log('[Admin UI] initial route()');
+console.log('[Admin UI] initial routeSafe()');
 
-if (document.readyState === 'loading'){
-  document.addEventListener('DOMContentLoaded', routeSafe);
-} else {
-  routeSafe();
-}
+// Run immediately (script is at end of <body>, so #main should exist)
+routeSafe();
+
+// Also run on DOMContentLoaded just in case
+document.addEventListener('DOMContentLoaded', routeSafe);
 
 })();
 </script>
