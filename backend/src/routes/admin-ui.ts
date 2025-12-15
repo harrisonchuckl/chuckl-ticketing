@@ -1,5 +1,5 @@
 // backend/src/routes/admin-ui.ts
-import { Router } from "express";
+import { Router, json } from "express";
 import { requireAdminOrOrganiser } from "../lib/authz.js";
 
 const router = Router();
@@ -71,6 +71,19 @@ router.get(
       background:#f1f5f9;
     }
     .sb-sub{margin-left:10px;}
+    .ai-badge{
+  display:inline-block;
+  margin-left:8px;
+  font-size:11px;
+  font-weight:700;
+  padding:2px 7px;
+  border-radius:999px;
+  border:1px solid var(--border);
+  background:#eef2ff;
+  color:#3730a3;
+  line-height:1.2;
+}
+
     .content{
       flex:1;
       padding:20px;
@@ -247,11 +260,16 @@ router.get(
 
       <div class="sb-group">Manage</div>
       <div>
-        <a class="sb-link" href="#" id="showsToggle">Shows ▾</a>
-        <div id="showsSub" class="sb-sub" style="display:none">
-          <a class="sb-link" href="/admin/ui/shows/create" data-view="/admin/ui/shows/create">Create show</a>
-          <a class="sb-link" href="/admin/ui/shows/current" data-view="/admin/ui/shows/current">All events</a>
-        </div>
+        <div class="sb-sub" id="showsSub">
+        <a class="sb-link sub" href="/admin/ui/shows/create" data-view="/admin/ui/shows/create">Create Show</a>
+
+        <a class="sb-link sub" href="/admin/ui/shows/create-ai" data-view="/admin/ui/shows/create-ai">
+          Create Show <span class="ai-badge" title="AI assisted">AI</span>
+        </a>
+
+        <a class="sb-link sub" href="/admin/ui/shows/current" data-view="/admin/ui/shows/current">All Events</a>
+      </div>
+
       </div>
       <a class="sb-link" href="/admin/ui/orders" data-view="/admin/ui/orders">Orders</a>
       <a class="sb-link" href="/admin/ui/venues" data-view="/admin/ui/venues">Venues</a>
@@ -679,7 +697,232 @@ router.get(
     });
   }
 
-  async function createShow(){
+  async function createShowAI(){
+  if (!main) return;
+
+  main.innerHTML =
+    '<div class="card">'
+  +   '<div class="title">Create Show (AI)</div>'
+  +   '<div class="muted" style="margin-top:6px; line-height:1.4">'
+  +     'Drop your show assets here (event copy, briefs, PDFs/DOCX, and artwork). '
+  +     'We’ll extract key details and pre-fill the Create Show form for you to review and approve.'
+  +   '</div>'
+
+  +   '<div id="ai_drop" class="drop" style="margin-top:14px; padding:18px; min-height:120px;">'
+  +     '<div style="font-weight:600">Drop files here or click to upload</div>'
+  +     '<div class="muted" style="margin-top:4px">Supports: PDF, DOC/DOCX, TXT/MD, and images (JPG/PNG/WebP)</div>'
+  +   '</div>'
+  +   '<input id="ai_files" type="file" multiple '
+  +     'accept=".pdf,.doc,.docx,.txt,.md,image/*" style="display:none" />'
+
+  +   '<div id="ai_list" style="margin-top:12px;"></div>'
+
+  +   '<div class="row" style="margin-top:14px; gap:10px; align-items:center;">'
+  +     '<button id="ai_analyse" class="btn p">Analyse & Pre-fill</button>'
+  +     '<div id="ai_status" class="muted"></div>'
+  +   '</div>'
+
+  +   '<div id="ai_err" class="error" style="margin-top:10px;"></div>'
+  +   '<div id="ai_result" style="margin-top:14px;"></div>'
+  + '</div>';
+
+  const drop = $('#ai_drop');
+  const fileInput = $('#ai_files');
+  const list = $('#ai_list');
+  const btn = $('#ai_analyse');
+  const err = $('#ai_err');
+  const status = $('#ai_status');
+  const result = $('#ai_result');
+
+  const state = {
+    images: [], // { file, name, type, size, url }
+    docs: [],   // { file, name, type, size, dataUrl }
+  };
+
+  function bytes(n){
+    if (!n && n !== 0) return '';
+    if (n < 1024) return n + ' B';
+    if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
+    return (n/(1024*1024)).toFixed(1) + ' MB';
+  }
+
+  function esc(s){
+    return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function renderList(){
+    const rows = []
+      .concat(state.images.map(f => ({
+        kind: 'Image', name: f.name, size: f.size, extra: f.url ? 'Uploaded' : 'Pending upload'
+      })))
+      .concat(state.docs.map(f => ({
+        kind: 'Doc', name: f.name, size: f.size, extra: f.dataUrl ? 'Ready' : 'Pending read'
+      })));
+
+    if (!rows.length){
+      list.innerHTML = '<div class="muted">No files added yet.</div>';
+      return;
+    }
+
+    list.innerHTML =
+      '<div style="border:1px solid var(--border); border-radius:10px; overflow:hidden;">'
+    +   '<div style="display:grid; grid-template-columns: 110px 1fr 90px 120px; gap:10px; padding:10px 12px; background:#f8fafc; font-weight:600; font-size:12px;">'
+    +     '<div>Type</div><div>File</div><div>Size</div><div>Status</div>'
+    +   '</div>'
+    +   rows.map(r =>
+          '<div style="display:grid; grid-template-columns: 110px 1fr 90px 120px; gap:10px; padding:10px 12px; border-top:1px solid var(--border); font-size:13px;">'
+        +   '<div>'+esc(r.kind)+'</div>'
+        +   '<div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">'+esc(r.name)+'</div>'
+        +   '<div>'+esc(bytes(r.size))+'</div>'
+        +   '<div class="muted">'+esc(r.extra)+'</div>'
+        + '</div>'
+        ).join('')
+    + '</div>';
+  }
+
+  function readAsDataURL(file){
+    return new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(String(fr.result || ''));
+      fr.onerror = () => reject(fr.error || new Error('Failed to read file'));
+      fr.readAsDataURL(file);
+    });
+  }
+
+  async function addFiles(fileList){
+    err.textContent = '';
+    status.textContent = '';
+
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+
+    // Split into images vs docs
+    const imgs = files.filter(f => (f.type || '').startsWith('image/'));
+    const docs = files.filter(f => !(f.type || '').startsWith('image/'));
+
+    // Upload images immediately (re-uses your existing /admin/uploads endpoint)
+    for (const f of imgs){
+      const item = { file: f, name: f.name, type: f.type, size: f.size, url: '' };
+      state.images.push(item);
+      renderList();
+
+      try{
+        status.textContent = 'Uploading images…';
+        const out = await uploadPoster(f);
+        item.url = out.url;
+        renderList();
+      }catch(e){
+        err.textContent = 'Image upload failed for "' + f.name + '": ' + (e.message || e);
+      }
+    }
+
+    // Read docs as data URLs (sent to server for AI extraction)
+    for (const f of docs){
+      const item = { file: f, name: f.name, type: f.type, size: f.size, dataUrl: '' };
+      state.docs.push(item);
+      renderList();
+
+      try{
+        status.textContent = 'Reading documents…';
+        item.dataUrl = await readAsDataURL(f);
+        renderList();
+      }catch(e){
+        err.textContent = 'Document read failed for "' + f.name + '": ' + (e.message || e);
+      }
+    }
+
+    status.textContent = '';
+  }
+
+  // Dropzone bindings
+  drop.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files && fileInput.files.length) addFiles(fileInput.files);
+    fileInput.value = '';
+  });
+
+  drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.style.borderColor = '#64748b'; });
+  drop.addEventListener('dragleave', () => { drop.style.borderColor = ''; });
+  drop.addEventListener('drop', (e) => {
+    e.preventDefault();
+    drop.style.borderColor = '';
+    if (e.dataTransfer && e.dataTransfer.files) addFiles(e.dataTransfer.files);
+  });
+
+  renderList();
+
+  // Analyse button → call backend AI extractor → store draft → send user to Create Show
+  btn.addEventListener('click', async () => {
+    err.textContent = '';
+    result.innerHTML = '';
+    status.textContent = '';
+
+    if (!state.images.length && !state.docs.length){
+      err.textContent = 'Please add at least one document or image.';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Analysing…';
+    status.textContent = 'Sending assets to AI…';
+
+    try{
+      const payload = {
+        images: state.images.filter(x => x.url).map(x => ({ name: x.name, url: x.url })),
+        docs: state.docs.filter(x => x.dataUrl).map(x => ({ name: x.name, type: x.type, dataUrl: x.dataUrl })),
+      };
+
+      const res = await fetch('/admin/ai/extract-show', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload),
+      });
+
+      const txt = await res.text();
+      if (!res.ok) throw new Error(txt || ('HTTP ' + res.status));
+      const data = txt ? JSON.parse(txt) : {};
+      if (!data.ok || !data.draft) throw new Error('Unexpected AI response');
+
+      const draft = data.draft;
+
+      // Show a quick preview
+      result.innerHTML =
+        '<div style="border:1px solid var(--border); border-radius:12px; padding:12px;">'
+      +   '<div style="font-weight:700; margin-bottom:8px;">AI draft ready</div>'
+      +   '<div class="muted" style="margin-bottom:10px;">Review the Create Show form next, edit anything needed, then approve.</div>'
+      +   '<div style="font-size:13px; line-height:1.5;">'
+      +     '<div><b>Title:</b> ' + esc(draft.title || '') + '</div>'
+      +     '<div><b>Start:</b> ' + esc(draft.startDateTime || '') + '</div>'
+      +     '<div><b>End:</b> ' + esc(draft.endDateTime || '') + '</div>'
+      +     '<div><b>Venue:</b> ' + esc(draft.venueName || '') + '</div>'
+      +     '<div><b>Type / Category:</b> ' + esc(draft.eventType || '') + ' / ' + esc(draft.category || '') + '</div>'
+      +   '</div>'
+      +   '<div class="row" style="margin-top:12px; gap:10px;">'
+      +     '<button id="ai_apply" class="btn p">Open Create Show with this draft</button>'
+      +   '</div>'
+      + '</div>';
+
+      $('#ai_apply').addEventListener('click', () => {
+        // Store draft for Create Show to consume
+        sessionStorage.setItem('aiShowDraft', JSON.stringify(draft));
+        // Navigate to existing Create Show page
+        history.pushState({}, '', '/admin/ui/shows/create');
+        route();
+      });
+
+      status.textContent = '';
+    }catch(e){
+      err.textContent = 'AI analyse failed: ' + (e.message || e);
+      status.textContent = '';
+    }finally{
+      btn.disabled = false;
+      btn.textContent = 'Analyse & Pre-fill';
+    }
+  });
+}
+
+async function createShow(){
     if (!main) return;
     
     // --- New Look: White background for main content area ---
@@ -1058,6 +1301,128 @@ updateCategoryOptions();
             dropAdd.style.display = 'block';
         }
     }
+
+        // --- AI Prefill (one-time) ---
+    (function applyAiDraftIfPresent(){
+        try{
+            var raw = sessionStorage.getItem('aiShowDraft');
+            if (!raw) return;
+
+            // One-time consume
+            sessionStorage.removeItem('aiShowDraft');
+
+            var draft = JSON.parse(raw || '{}') || {};
+
+            function isoToLocalInput(iso){
+                if (!iso) return '';
+                var d = new Date(iso);
+                if (isNaN(d.getTime())) return '';
+                // yyyy-MM-ddTHH:mm
+                var pad = (n) => String(n).padStart(2,'0');
+                return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate())
+                  + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+            }
+
+            // Basics
+            if (draft.title && $('#sh_title')) $('#sh_title').value = draft.title;
+
+            if (draft.startDateTime && $('#sh_dt')) $('#sh_dt').value = isoToLocalInput(draft.startDateTime);
+            if (draft.endDateTime && $('#sh_dt_end')) $('#sh_dt_end').value = isoToLocalInput(draft.endDateTime);
+
+            if (draft.doorsOpenTime && $('#doors_open_time')) $('#doors_open_time').value = String(draft.doorsOpenTime).slice(0,5);
+            if (draft.ageGuidance && $('#age_guidance')) $('#age_guidance').value = String(draft.ageGuidance);
+
+            if (draft.descriptionHtml && $('#desc')) $('#desc').innerHTML = draft.descriptionHtml;
+
+            // Type + category (trigger your existing filter logic)
+            if (draft.eventType && eventTypeSelect){
+                eventTypeSelect.value = draft.eventType;
+                updateCategoryOptions();
+            }
+            if (draft.category && categorySelect){
+                categorySelect.value = draft.category;
+            }
+
+            // Tags
+            if (Array.isArray(draft.tags) && $('#tags')){
+                $('#tags').value = draft.tags.filter(Boolean).join(', ');
+            }
+
+            // Accessibility
+            if (draft.accessibility){
+                if ($('#acc_wheelchair')) $('#acc_wheelchair').checked = !!draft.accessibility.wheelchair;
+                if ($('#acc_stepfree')) $('#acc_stepfree').checked = !!draft.accessibility.stepFree;
+                if ($('#acc_hearingloop')) $('#acc_hearingloop').checked = !!draft.accessibility.hearingLoop;
+                if ($('#acc_toilet')) $('#acc_toilet').checked = !!draft.accessibility.accessibleToilet;
+                if ($('#acc_more')) $('#acc_more').value = (draft.accessibility.notes || '');
+            }
+
+            // Venue (let user pick + approve via your existing picker)
+            if (draft.venueName && $('#venue_input')){
+                $('#venue_input').value = draft.venueName;
+                // Trigger suggestions
+                $('#venue_input').dispatchEvent(new Event('input', { bubbles: true }));
+            }
+
+            // Images (no re-upload: we just set URLs already uploaded on the AI page)
+            if (draft.mainImageUrl && prevMain){
+                prevMain.src = draft.mainImageUrl;
+                prevMain.style.display = 'block';
+            }
+
+            if (Array.isArray(draft.additionalImageUrls) && draft.additionalImageUrls.length && addPreviews){
+                addPreviews.innerHTML = '';
+                draft.additionalImageUrls.slice(0,10).forEach(function(url){
+                    var imgContainer = document.createElement('div');
+                    imgContainer.style.position = 'relative';
+                    imgContainer.style.width = '100px';
+                    imgContainer.style.height = '100px';
+                    imgContainer.style.overflow = 'hidden';
+                    imgContainer.style.borderRadius = '6px';
+                    imgContainer.dataset.url = url;
+
+                    var img = document.createElement('img');
+                    img.src = url;
+                    img.alt = 'Additional Image';
+                    img.style.width = '100%';
+                    img.style.height = '100%';
+                    img.style.objectFit = 'cover';
+
+                    var deleteBtn = document.createElement('button');
+                    deleteBtn.textContent = 'x';
+                    deleteBtn.className = 'btn';
+                    deleteBtn.style.position = 'absolute';
+                    deleteBtn.style.top = '4px';
+                    deleteBtn.style.right = '4px';
+                    deleteBtn.style.width = '24px';
+                    deleteBtn.style.height = '24px';
+                    deleteBtn.style.padding = '0';
+                    deleteBtn.style.borderRadius = '50%';
+                    deleteBtn.style.lineHeight = '24px';
+                    deleteBtn.style.fontSize = '12px';
+                    deleteBtn.style.fontWeight = 'bold';
+                    deleteBtn.style.background = 'rgba(255, 255, 255, 0.8)';
+                    deleteBtn.style.borderColor = 'rgba(0, 0, 0, 0.1)';
+                    deleteBtn.style.cursor = 'pointer';
+
+                    deleteBtn.addEventListener('click', function() {
+                        imgContainer.remove();
+                        updateAllImageUrls();
+                    });
+
+                    imgContainer.appendChild(img);
+                    imgContainer.appendChild(deleteBtn);
+                    addPreviews.appendChild(imgContainer);
+                });
+
+                updateAllImageUrls();
+            }
+
+        }catch(e){
+            console.warn('[AI draft] apply failed', e);
+        }
+    })();
+
 
 
     // --- Main Image Event Listeners ---
@@ -1970,7 +2335,8 @@ async function summaryPage(id){
       setActive(path);
 
       if (path === '/admin/ui' || path === '/admin/ui/home' || path === '/admin/ui/index.html') return home();
-      if (path === '/admin/ui/shows/create')   return createShow();
+      if (path === '/admin/ui/shows/create-ai') return createShowAI();
+      if (path === '/admin/ui/shows/create') return createShow();
       if (path === '/admin/ui/shows/current')  return listShows();
       if (path === '/admin/ui/orders')         return orders();
       if (path === '/admin/ui/venues')         return venues();
@@ -2011,6 +2377,202 @@ async function summaryPage(id){
 </script>
 </body>
 </html>`);
+  }
+);
+// --- AI: Extract show details from uploaded assets (docs + image URLs) ---
+router.post(
+  "/ai/extract-show",
+  requireAdminOrOrganiser,
+  json({ limit: "60mb" }),
+  async (req, res) => {
+    try {
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ ok: false, error: "Missing OPENAI_API_KEY in environment" });
+      }
+
+      const model = process.env.OPENAI_MODEL_SHOW_EXTRACT || "gpt-5";
+
+      const body = req.body || {};
+      const images: Array<{ name?: string; url: string }> = Array.isArray(body.images) ? body.images : [];
+      const docs: Array<{ name?: string; type?: string; dataUrl: string }> = Array.isArray(body.docs) ? body.docs : [];
+
+      const eventTypes = [
+        "comedy","theatre","music","festival","film","talks","workshop",
+        "corporate","nightlife","sport","food","community","arts","other"
+      ];
+
+      const content: any[] = [];
+
+      content.push({
+        type: "input_text",
+        text:
+          "You are extracting event/show details for a UK ticketing admin UI. " +
+          "Use ONLY the provided files/images. If unknown, set null/empty values and list what is missing. " +
+          "Return a single JSON object that matches the schema exactly.\n\n" +
+          "Important:\n" +
+          "- Dates/times: output ISO 8601 (startDateTime/endDateTime). If the source is local UK time and no timezone given, assume Europe/London.\n" +
+          "- doorsOpenTime: use HH:MM 24h.\n" +
+          "- eventType must be one of: " + eventTypes.join(", ") + ".\n" +
+          "- category should be the closest subcategory value if you can infer it; otherwise null.\n" +
+          "- Choose a main poster image from the provided images if possible (prefer 2:3 poster artwork). Others go in additionalImageUrls.\n"
+      });
+
+      if (images.length) {
+        content.push({
+          type: "input_text",
+          text:
+            "Image candidates (name → url):\n" +
+            images.map((x) => `- ${x.name || "image"} → ${x.url}`).join("\n")
+        });
+      }
+
+      // Attach docs as file inputs (data URLs). This enables the model (and code_interpreter tool) to read DOCX/PDF/TXT.
+      for (const d of docs) {
+        if (!d || !d.dataUrl) continue;
+        content.push({
+          type: "input_file",
+          filename: d.name || "document",
+          file_data: d.dataUrl
+        });
+      }
+
+      // Attach images as vision inputs (URLs)
+      for (const img of images) {
+        if (!img || !img.url) continue;
+        content.push({
+          type: "input_image",
+          image_url: img.url
+        });
+      }
+
+      const schema = {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          title: { type: "string" },
+          startDateTime: { anyOf: [{ type: "string" }, { type: "null" }] },
+          endDateTime: { anyOf: [{ type: "string" }, { type: "null" }] },
+          doorsOpenTime: { anyOf: [{ type: "string" }, { type: "null" }] },
+          venueName: { type: "string" },
+          venueAddress: { type: "string" },
+
+          eventType: {
+            anyOf: [
+              { type: "string", enum: eventTypes },
+              { type: "null" }
+            ]
+          },
+          category: { anyOf: [{ type: "string" }, { type: "null" }] },
+
+          ageGuidance: { anyOf: [{ type: "string" }, { type: "null" }] },
+
+          accessibility: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              wheelchair: { type: "boolean" },
+              stepFree: { type: "boolean" },
+              hearingLoop: { type: "boolean" },
+              accessibleToilet: { type: "boolean" },
+              notes: { type: "string" }
+            },
+            required: ["wheelchair", "stepFree", "hearingLoop", "accessibleToilet", "notes"]
+          },
+
+          tags: {
+            type: "array",
+            items: { type: "string" },
+            maxItems: 10
+          },
+
+          descriptionHtml: { type: "string" },
+
+          mainImageUrl: { anyOf: [{ type: "string" }, { type: "null" }] },
+          additionalImageUrls: {
+            type: "array",
+            items: { type: "string" },
+            maxItems: 10
+          },
+
+          confidence: { type: "number", minimum: 0, maximum: 1 },
+          missing: { type: "array", items: { type: "string" } }
+        },
+        required: [
+          "title",
+          "startDateTime",
+          "endDateTime",
+          "doorsOpenTime",
+          "venueName",
+          "venueAddress",
+          "eventType",
+          "category",
+          "ageGuidance",
+          "accessibility",
+          "tags",
+          "descriptionHtml",
+          "mainImageUrl",
+          "additionalImageUrls",
+          "confidence",
+          "missing"
+        ]
+      };
+
+      const openaiReq = {
+        model,
+        input: [{ role: "user", content }],
+        tools: [{ type: "code_interpreter" }],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "show_draft",
+            strict: true,
+            schema
+          }
+        },
+        max_output_tokens: 1200
+      };
+
+      const r = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(openaiReq)
+      });
+
+      const raw = await r.text();
+      if (!r.ok) {
+        return res.status(500).json({ ok: false, error: "OpenAI request failed", detail: raw });
+      }
+
+      const data = raw ? JSON.parse(raw) : {};
+      const outText =
+        typeof (data as any).output_text === "string"
+          ? (data as any).output_text
+          : Array.isArray((data as any).output)
+          ? (data as any).output
+              .flatMap((item: any) =>
+                item && item.type === "message" && Array.isArray(item.content)
+                  ? item.content.map((c: any) => (c && (c.type === "output_text" || c.type === "text") ? c.text : "")).filter(Boolean)
+                  : []
+              )
+              .join("\n")
+              .trim()
+          : "";
+
+      let draft: any = null;
+      try {
+        draft = outText ? JSON.parse(outText) : null;
+      } catch {
+        return res.status(500).json({ ok: false, error: "Failed to parse model JSON", outText });
+      }
+
+      return res.json({ ok: true, draft });
+    } catch (e: any) {
+      return res.status(500).json({ ok: false, error: e?.message || String(e) });
+    }
   }
 );
 
