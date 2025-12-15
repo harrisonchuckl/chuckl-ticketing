@@ -11,9 +11,25 @@ const router = Router();
 router.get(
   ["/ui", "/ui/", "/ui/home", "/ui/*"],
   requireAdminOrOrganiser,
-  (_req, res) => {
+    (_req, res) => {
     res.set("Cache-Control", "no-store");
+
+    // If you use helmet CSP globally, it will block this inline <script> and the SPA will never boot.
+    // This route is already protected by requireAdminOrOrganiser, so allow inline JS for this admin shell.
+    res.set("Content-Security-Policy", [
+      "default-src 'self'",
+      "base-uri 'self'",
+      "object-src 'none'",
+      "frame-ancestors 'none'",
+      "form-action 'self'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: https:",
+      "connect-src 'self' https:"
+    ].join("; "));
+
     res.type("html").send(`<!doctype html>
+
 <html lang="en">
 <head>
   <meta charset="utf-8" />
