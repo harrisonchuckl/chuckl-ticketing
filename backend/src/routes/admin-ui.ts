@@ -349,80 +349,298 @@ router.get(
     }
   }
 
-  function mountVenuePicker(input){
-    if (!input) return;
-    var wrapper = document.createElement('div');
-    wrapper.style.position = 'relative';
-    input.parentNode.insertBefore(wrapper, input);
-    wrapper.appendChild(input);
+  function mountVenuePicker(input, dateInput, opts){
+  if (!input) return;
+  opts = opts || {};
+  var requireApproval = !!opts.requireApproval;
 
-    var pop = document.createElement('div');
-    pop.className = 'pop';
-    wrapper.appendChild(pop);
+  var wrapper = document.createElement('div');
+  wrapper.style.position = 'relative';
+  input.parentNode.insertBefore(wrapper, input);
+  wrapper.appendChild(input);
 
-    function close(){ pop.classList.remove('open'); }
+  var pop = document.createElement('div');
+  pop.className = 'pop';
+  wrapper.appendChild(pop);
 
-    function render(list, q){
-      pop.innerHTML = '';
-      if (list && list.length){
-        list.forEach(function(v){
-          var el = document.createElement('div');
-          el.className = 'opt';
-          el.textContent = (v.name || '') + (v.city ? (' — ' + v.city) : '');
-          el.addEventListener('click', function(){
-            input.value = v.name || '';
-            input.dataset.venueId = v.id;
-            close();
-          });
-          pop.appendChild(el);
-        });
-      }
-      if (q && !list.some(function(v){ return (v.name || '').toLowerCase() === q.toLowerCase(); })){
-        var add = document.createElement('div');
-        add.className = 'opt';
-        add.innerHTML = '➕ Create venue “' + q + '”';
-        add.addEventListener('click', async function(){
-          try{
-            var created = await j('/admin/venues', {
-              method:'POST',
-              headers:{'Content-Type':'application/json'},
-              body: JSON.stringify({ name:q })
-            });
-            if (created && created.ok && created.venue){
-              input.value = created.venue.name;
-              input.dataset.venueId = created.venue.id;
-            }else{
-              alert('Failed to create venue');
-            }
-          }catch(err){
-            alert('Create failed: ' + (err.message || err));
-          }
-          close();
-        });
-        pop.appendChild(add);
-      }
-      if (pop.children.length){ pop.classList.add('open'); } else { close(); }
+  // expandable details panel (address + approval)
+  var details = document.createElement('div');
+  details.style.cssText =
+    'display:none;margin-top:8px;padding:10px;border:1px solid var(--border);border-radius:8px;background:#fff;';
+  wrapper.appendChild(details);
+
+  // expandable create panel (name + address + save)
+  var createPanel = document.createElement('div');
+  createPanel.style.cssText =
+    'display:none;margin-top:8px;padding:10px;border:1px dashed var(--border);border-radius:8px;background:#fff;';
+  wrapper.appendChild(createPanel);
+
+  var selectedVenue = null;
+
+  function close(){ pop.classList.remove('open'); }
+
+  function fmtDate(){
+    if (!dateInput || !dateInput.value) return '';
+    // datetime-local -> readable
+    return dateInput.value.replace('T', ' ');
+  }
+
+  function fmtAddress(v){
+    if (!v) return '';
+    var parts = [];
+    // try common keys (safe + non-breaking)
+    if (v.address) parts.push(v.address);
+    if (v.address1) parts.push(v.address1);
+    if (v.address2) parts.push(v.address2);
+    if (v.line1) parts.push(v.line1);
+    if (v.line2) parts.push(v.line2);
+    if (v.city) parts.push(v.city);
+    if (v.town) parts.push(v.town);
+    if (v.postcode) parts.push(v.postcode);
+    if (v.zip) parts.push(v.zip);
+    if (v.country) parts.push(v.country);
+    return parts.filter(Boolean).join(', ');
+  }
+
+  function setApproved(val){
+    if (!requireApproval) return;
+    input.dataset.venueApproved = val ? '1' : '';
+    renderDetails();
+  }
+
+  function canApprove(){
+    return !!(selectedVenue && (selectedVenue.id || input.dataset.venueId) && dateInput && dateInput.value);
+  }
+
+  function renderDetails(){
+    if (!selectedVenue){
+      details.style.display = 'none';
+      return;
     }
 
-    input.addEventListener('input', async function(){
-      input.dataset.venueId = '';
-      var q = input.value.trim();
-      if (!q){ close(); return; }
-      var list = await searchVenues(q);
-      render(list, q);
+    var addr = fmtAddress(selectedVenue);
+    var when = fmtDate();
+
+    var approved = (input.dataset.venueApproved === '1');
+    var approveDisabled = !canApprove();
+
+    details.innerHTML = ''
+      + '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">'
+      +   '<div>'
+      +     '<div style="font-weight:600;">Venue selected</div>'
+      +     '<div class="muted" style="margin-top:2px;">' + (selectedVenue.name || input.value || '') + '</div>'
+      +     (addr ? ('<div class="muted" style="margin-top:2px;">' + addr + '</div>') : '')
+      +     (when ? ('<div class="muted" style="margin-top:2px;">Date: ' + when + '</div>') : '')
+      +   '</div>'
+      +   (requireApproval ? (
+            '<button type="button" id="venueApproveBtn" class="btn ' + (approved ? 'p' : '') + '" '
+          + (approveDisabled ? 'disabled' : '')
+          + ' style="white-space:nowrap;">'
+          + (approved ? 'Approved ✓' : 'Approve venue & date')
+          + '</button>'
+        ) : '')
+      + '</div>'
+      + (requireApproval && !approved ? '<div class="muted" style="margin-top:8px;">Please approve before saving.</div>' : '');
+
+    details.style.display = 'block';
+
+    if (requireApproval){
+      var btn = details.querySelector('#venueApproveBtn');
+      if (btn){
+        btn.addEventListener('click', function(){
+          if (!canApprove()) return;
+          setApproved(true);
+        });
+      }
+    }
+  }
+
+  function resetSelection(){
+    selectedVenue = null;
+    input.dataset.venueId = '';
+    if (requireApproval) input.dataset.venueApproved = '';
+    details.style.display = 'none';
+  }
+
+  async function tryFetchVenueDetails(v){
+    // If your searchVenues already returns full address, this is a no-op.
+    // If you have an endpoint like /admin/venues/:id, we’ll attempt it and fall back safely.
+    if (!v || !v.id) return v;
+    try{
+      var full = await j('/admin/venues/' + v.id);
+      // support different shapes
+      return (full && (full.venue || full.item || full)) || v;
+    }catch(e){
+      return v;
+    }
+  }
+
+  async function createVenue(name, address){
+    // attempt with address (preferred)
+    try{
+      var created = await j('/admin/venues', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ name:name, address:address })
+      });
+      return created;
+    }catch(e){
+      // fallback: if backend rejects unknown keys, try name-only (won’t break your flow)
+      var created2 = await j('/admin/venues', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ name:name })
+      });
+      // attach address locally so UI can still show it
+      if (created2 && (created2.venue || created2.item)){
+        var vv = created2.venue || created2.item;
+        vv.address = vv.address || address;
+      }
+      return created2;
+    }
+  }
+
+  function openCreateForm(prefillName){
+    close();
+    createPanel.innerHTML = ''
+      + '<div style="font-weight:600;margin-bottom:8px;">Create new venue</div>'
+      + '<div class="grid" style="gap:8px;">'
+      +   '<div class="grid" style="gap:6px;">'
+      +     '<label style="margin:0;">Venue name</label>'
+      +     '<input id="newVenueName" value="' + (prefillName || '').replace(/"/g,'&quot;') + '" />'
+      +   '</div>'
+      +   '<div class="grid" style="gap:6px;">'
+      +     '<label style="margin:0;">Address</label>'
+      +     '<textarea id="newVenueAddress" rows="2" style="resize:vertical;"></textarea>'
+      +   '</div>'
+      +   '<div class="row" style="justify-content:flex-end;gap:8px;margin-top:6px;">'
+      +     '<button type="button" id="cancelCreateVenue" class="btn">Cancel</button>'
+      +     '<button type="button" id="saveCreateVenue" class="btn p">Save venue</button>'
+      +   '</div>'
+      +   '<div class="error" id="createVenueErr" style="margin-top:6px;"></div>'
+      + '</div>';
+
+    createPanel.style.display = 'block';
+
+    var nameEl = createPanel.querySelector('#newVenueName');
+    var addrEl = createPanel.querySelector('#newVenueAddress');
+    if (addrEl) addrEl.focus();
+
+    createPanel.querySelector('#cancelCreateVenue').addEventListener('click', function(){
+      createPanel.style.display = 'none';
     });
 
-    input.addEventListener('focus', async function(){
-      var q = input.value.trim();
-      if (!q) return;
-      var list = await searchVenues(q);
-      render(list, q);
-    });
+    createPanel.querySelector('#saveCreateVenue').addEventListener('click', async function(){
+      var errEl = createPanel.querySelector('#createVenueErr');
+      if (errEl) errEl.textContent = '';
 
-    document.addEventListener('click', function(e){
-      if (!pop.contains(e.target) && e.target !== input) close();
+      var nm = nameEl ? nameEl.value.trim() : '';
+      var ad = addrEl ? addrEl.value.trim() : '';
+
+      if (!nm || !ad){
+        if (errEl) errEl.textContent = 'Venue name and address are required.';
+        return;
+      }
+
+      try{
+        var created = await createVenue(nm, ad);
+        var v = (created && (created.venue || created.item)) ? (created.venue || created.item) : null;
+        if (!v || !v.id){
+          throw new Error('Failed to create venue (no id returned).');
+        }
+        v.name = v.name || nm;
+        v.address = v.address || ad;
+
+        selectedVenue = v;
+        input.value = v.name;
+        input.dataset.venueId = v.id;
+
+        createPanel.style.display = 'none';
+        setApproved(false);
+        renderDetails();
+      }catch(e){
+        if (errEl) errEl.textContent = 'Create failed: ' + (e.message || e);
+      }
     });
   }
+
+  function render(list, q){
+    pop.innerHTML = '';
+
+    // Always show only existing venues from search
+    if (list && list.length){
+      list.forEach(function(v){
+        var el = document.createElement('div');
+        el.className = 'opt';
+
+        var label = (v.name || '');
+        var addr = fmtAddress(v);
+        el.textContent = label + (addr ? (' — ' + addr) : (v.city ? (' — ' + v.city) : ''));
+
+        el.addEventListener('click', async function(){
+          // select existing
+          input.value = v.name || '';
+          input.dataset.venueId = v.id;
+
+          createPanel.style.display = 'none';
+          close();
+
+          selectedVenue = await tryFetchVenueDetails(v);
+          setApproved(false);
+          renderDetails();
+        });
+
+        pop.appendChild(el);
+      });
+    }
+
+    // Create option if no exact match
+    if (q && (!list || !list.some(function(v){ return (v.name || '').toLowerCase() === q.toLowerCase(); }))){
+      var add = document.createElement('div');
+      add.className = 'opt';
+      add.innerHTML = '➕ Create venue “' + q + '”';
+      add.addEventListener('click', function(){
+        resetSelection();
+        openCreateForm(q);
+      });
+      pop.appendChild(add);
+    }
+
+    if (pop.children.length){ pop.classList.add('open'); } else { close(); }
+  }
+
+  // typing clears selection + approval (forces picking from list or creating)
+  input.addEventListener('input', async function(){
+    resetSelection();
+    createPanel.style.display = 'none';
+
+    var q = input.value.trim();
+    if (!q){ close(); return; }
+
+    var list = await searchVenues(q);
+    render(list, q);
+  });
+
+  input.addEventListener('focus', async function(){
+    var q = input.value.trim();
+    if (!q) return;
+    var list = await searchVenues(q);
+    render(list, q);
+  });
+
+  // changing the date invalidates approval
+  if (dateInput){
+    dateInput.addEventListener('change', function(){
+      if (requireApproval) input.dataset.venueApproved = '';
+      if (selectedVenue) renderDetails();
+    });
+  }
+
+  document.addEventListener('click', function(e){
+    if (!pop.contains(e.target) && e.target !== input) close();
+  });
+}
+
 
   // --- Upload helper ---
   async function uploadPoster(file){
@@ -711,7 +929,7 @@ router.get(
     
     // Bind editor and venue picker
     bindWysiwyg(main);
-    mountVenuePicker($('#venue_input'));
+mountVenuePicker($('#venue_input'), $('#sh_dt'), { requireApproval: true });
 
     // --- Category Filtering Logic ---
    const eventTypeSelect = $('#event_type_select');
@@ -903,6 +1121,13 @@ var endDateIso = dtEndRaw ? new Date(dtEndRaw).toISOString() : null;
             var venueInput = $('#venue_input');
             var venueText = venueInput.value.trim();
             var venueId = venueInput.dataset.venueId || null;
+            if (!venueId){
+  throw new Error('Please select an existing venue from the list (or create one).');
+}
+if (venueInput.dataset.venueApproved !== '1'){
+  throw new Error('Please approve the venue and date before saving.');
+}
+
             var imageUrl = prevMain.src || null;
             var descHtml = $('#desc').innerHTML.trim();
             
