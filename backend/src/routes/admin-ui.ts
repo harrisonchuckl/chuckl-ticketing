@@ -2391,7 +2391,8 @@ router.post(
         return res.status(500).json({ ok: false, error: "Missing OPENAI_API_KEY in environment" });
       }
 
-      const model = process.env.OPENAI_MODEL_SHOW_EXTRACT || "gpt-5";
+// Use a model that reliably supports structured outputs + vision
+const model = process.env.OPENAI_MODEL_SHOW_EXTRACT || "gpt-4o-mini";
 
       const body = req.body || {};
       const images: Array<{ name?: string; url: string }> = Array.isArray(body.images) ? body.images : [];
@@ -2579,7 +2580,7 @@ for (const d of docs) {
             schema
           }
         },
-        max_output_tokens: 1200
+max_output_tokens: 2000
       };
 
       const r = await fetch("https://api.openai.com/v1/responses", {
@@ -2597,61 +2598,76 @@ for (const d of docs) {
       }
 
       const data = raw ? JSON.parse(raw) : {};
-           function extractText(val: any): string {
-        // OpenAI Responses can return content.text as:
-        // - string
-        // - { value: string, annotations?: ... }
-        if (typeof val === "string") return val;
-        if (val && typeof val === "object") {
-          if (typeof val.value === "string") return val.value;
-          if (typeof val.text === "string") return val.text;
+
+// Helpers because Responses content blocks aren’t always plain strings
+function readText(val: any): string {
+  if (!val) return "";
+  if (typeof val === "string") return val;
+  if (typeof val?.value === "string") return val.value; // common shape
+  if (typeof val?.text === "string") return val.text;
+  return "";
+}
+
+const outText = (() => {
+  // SDK convenience field sometimes exists, sometimes not
+  if (typeof (data as any).output_text === "string") {
+    const s = (data as any).output_text.trim();
+    if (s) return s;
+  }
+
+  // Raw Responses format: output[] can include multiple items (reasoning, message, etc.)
+  if (Array.isArray((data as any).output)) {
+    const parts: string[] = [];
+
+    for (const item of (data as any).output) {
+      if (!item || item.type !== "message" || !Array.isArray(item.content)) continue;
+
+      for (const c of item.content) {
+        if (!c) continue;
+
+        // Normal text blocks
+        if (c.type === "output_text" || c.type === "text") {
+          const s = readText(c.text);
+          if (s) parts.push(s);
+          continue;
         }
-        return "";
+
+        // Some variants can return JSON directly
+        if ((c.type === "output_json" || c.type === "json") && c.json) {
+          parts.push(JSON.stringify(c.json));
+          continue;
+        }
+
+        // Last-ditch: if a text-ish field exists
+        const fallback = readText(c.text);
+        if (fallback) parts.push(fallback);
       }
+    }
 
-      const outText =
-        typeof (data as any).output_text === "string"
-          ? (data as any).output_text
-          : Array.isArray((data as any).output)
-          ? (data as any).output
-              .flatMap((item: any) => {
-                // Messages with content blocks
-                if (item && item.type === "message" && Array.isArray(item.content)) {
-                  return item.content
-                    .map((c: any) => {
-                      if (!c) return "";
-                      if (c.type === "output_text" || c.type === "text") return extractText(c.text);
-                      // Some variants use: { type:"output_text", text:{value:"..."} }
-                      if (c.type === "output_text" && c.text) return extractText(c.text);
-                      return "";
-                    })
-                    .filter(Boolean);
-                }
+    return parts.join("\n").trim();
+  }
 
-                // Some variants may emit direct text blocks
-                if (item && Array.isArray(item.content)) {
-                  return item.content
-                    .map((c: any) => extractText(c?.text))
-                    .filter(Boolean);
-                }
+  return "";
+})();
 
-                return [];
-              })
-              .join("\n")
-              .trim()
-          : "";
+// If still empty, return useful diagnostics (so you can see what came back)
+if (!outText) {
+  const outputTypes = Array.isArray((data as any).output)
+    ? (data as any).output.map((o: any) => o?.type).filter(Boolean)
+    : [];
 
+  return res.status(500).json({
+    ok: false,
+    error: "Model returned empty output_text",
+    hint: "The response contained no message text blocks we could parse. Inspect status/incomplete_details/outputTypes.",
+    status: (data as any).status,
+    incomplete_details: (data as any).incomplete_details,
+    error_obj: (data as any).error,
+    outputTypes,
+    rawKeys: Object.keys(data || {})
+  });
+}
 
-            if (!outText) {
-        // Make this actionable: UI will show a real error instead of "Unexpected AI response"
-        return res.status(500).json({
-          ok: false,
-          error: "Model returned empty output_text",
-          hint: "Check OPENAI_MODEL_SHOW_EXTRACT and the Responses API output shape.",
-          rawKeys: Object.keys(data || {}),
-          sample: (data as any)?.output?.[0] || null
-        });
-      }
 
       let draft: any = null;
       try {
