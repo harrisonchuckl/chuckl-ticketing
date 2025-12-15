@@ -488,24 +488,30 @@ router.get(
         // Title
         +'<div class="grid" style="margin-bottom: 20px;">'
         +'<label>Event Title</label>'
-        +'<input id="sh_title" placeholder="e.g. Chuckl. Comedy Club Live" />'
++'<input id="sh_title" class="ctl" />'
         +'</div>'
 
         // Date & Time
-        +'<div class="grid" style="margin-bottom: 20px;">'
-        +'<label>Date & Time</label>'
-        +'<input id="sh_dt" type="datetime-local" />'
-        +'</div>'
+       +'<div class="grid" style="margin-bottom: 20px;">'
++'<label>Date & Time</label>'
++'<input id="sh_dt" type="datetime-local" class="ctl" />'
++'</div>'
 
-        // Venue
-        +'<div class="grid" style="margin-bottom: 20px;">'
-        +'<label>Venue</label>'
-        +'<input id="venue_input" placeholder="Start typing a venue…" />'
-        +'<div class="tip">Pick an existing venue or create a new one.</div>'
-        +'</div>'
++'<div class="grid" style="margin-bottom: 20px;">'
++'<label>End Date & Time</label>'
++'<input id="sh_dt_end" type="datetime-local" class="ctl" />'
++'<div class="tip">Optional. Add if you know when the event ends.</div>'
++'</div>'
+
++'<div class="grid" style="margin-bottom: 20px;">'
++'<label>Venue</label>'
++'<input id="venue_input" class="ctl" placeholder="Start typing a venue…" />'
++'<div class="tip">Pick an existing venue or create a new one.</div>'
++'</div>'
+
         
 // --- NEW: Category and Sub-Category Section ---
-+'<div class="grid grid-2" style="margin-bottom: 20px; gap: 16px; align-items: end;">'
++'<div class="grid grid-2" style="margin-bottom: 20px; gap: 16px; align-items: start;">'
   +'<div class="grid" style="gap:4px;">'
     +'<label>Event Type</label>'
     +'<select id="event_type_select" class="ctl">'
@@ -528,7 +534,7 @@ router.get(
   +'</div>'
   +'<div class="grid" style="gap:4px;">'
     +'<label>Category</label>'
-    +'<select id="event_category_select" class="ctl">'
++'<select id="event_category_select" class="ctl" disabled>'
       +'<option value="">Select Sub-Category</option>'
 
       // Original set
@@ -603,23 +609,14 @@ router.get(
     +'<div class="tip">Separate from show start time.</div>'
   +'</div>'
   +'<div class="grid" style="gap:4px;">'
-    +'<label>Age Guidance</label>'
-    +'<select id="age_guidance" class="ctl">'
-      +'<option value="">Select age guidance</option>'
-      +'<option value="all_ages">All ages</option>'
-      +'<option value="12+">12+</option>'
-      +'<option value="14+">14+</option>'
-      +'<option value="16+">16+</option>'
-      +'<option value="18+">18+</option>'
-    +'</select>'
-    +'<div class="tip">Helps reduce customer queries/refunds.</div>'
++'<label>Age Guidance</label>'
++'<input id="age_guidance" class="ctl" placeholder="e.g. 14+ (minimum age)" />'
++'<div class="tip">Helps reduce customer queries/refunds.</div>'
   +'</div>'
 +'</div>'
 
 // --- NEW: End Time / Duration ---
 +'<div class="grid" style="margin-bottom: 20px;">'
-  +'<label>End Time / Duration</label>'
-  +'<input id="end_time_note" class="ctl" placeholder="e.g. Approx. 2 hours incl. interval" />'
 +'</div>'
 
 // --- NEW: Accessibility ---
@@ -707,7 +704,7 @@ router.get(
 
         // --- Action Button ---
         +'<div class="row" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); justify-content: flex-end;">'
-        +'<button id="save" class="btn p" style="padding: 10px 20px; font-size: 16px;">Save Event Details</button>'
+        +'<button id="save" class="btn p" style="padding: 10px 20px; font-size: 16px;">Save Event Details and Add Tickets</button>'
         +'<div id="err" class="error"></div>'
         +'</div>'
         +'</div>';
@@ -717,24 +714,40 @@ router.get(
     mountVenuePicker($('#venue_input'));
 
     // --- Category Filtering Logic ---
-    const eventTypeSelect = $('#event_type_select');
-    const categorySelect = $('#event_category_select');
-    const categoryOptions = Array.from(categorySelect.querySelectorAll('option[data-parent]'));
+   const eventTypeSelect = $('#event_type_select');
+const categorySelect = $('#event_category_select');
 
-    function updateCategoryOptions() {
-        const selectedType = eventTypeSelect.value;
-        categorySelect.innerHTML = '<option value="">Select Sub-Category</option>';
-        
-        categoryOptions.forEach(option => {
-            if (option.getAttribute('data-parent') === selectedType || !selectedType) {
-                categorySelect.appendChild(option.cloneNode(true));
-            }
-        });
-        categorySelect.value = ''; // Reset selection
+// Cache ALL sub-category options once (from the original HTML)
+const allCategoryOptions = Array.from(categorySelect.querySelectorAll('option[data-parent]'));
+
+function updateCategoryOptions() {
+  const selectedType = (eventTypeSelect && eventTypeSelect.value) ? eventTypeSelect.value : '';
+
+  // Always reset
+  categorySelect.innerHTML = '<option value="">Select Sub-Category</option>';
+
+  // Disable until Event Type chosen
+  if (!selectedType) {
+    categorySelect.disabled = true;
+    categorySelect.value = '';
+    return;
+  }
+
+  // Enable + populate only matching options
+  categorySelect.disabled = false;
+
+  allCategoryOptions.forEach(function(opt){
+    if (opt.getAttribute('data-parent') === selectedType) {
+      categorySelect.appendChild(opt.cloneNode(true));
     }
+  });
 
-    eventTypeSelect.addEventListener('change', updateCategoryOptions);
-    updateCategoryOptions(); // Initial call to populate sub-categories
+  categorySelect.value = '';
+}
+
+eventTypeSelect.addEventListener('change', updateCategoryOptions);
+updateCategoryOptions();
+
 
     // --- Image Upload Logic (Updated for Main & Additional Images) ---
     var dropMain = $('#drop_main');
@@ -885,6 +898,8 @@ router.get(
         try{
             var title = $('#sh_title').value.trim();
             var dtRaw = $('#sh_dt').value;
+            var dtEndRaw = $('#sh_dt_end') ? $('#sh_dt_end').value : '';
+var endDateIso = dtEndRaw ? new Date(dtEndRaw).toISOString() : null;
             var venueInput = $('#venue_input');
             var venueText = venueInput.value.trim();
             var venueId = venueInput.dataset.venueId || null;
@@ -937,6 +952,7 @@ if (allImageUrls && allImageUrls.value) {
                 body: JSON.stringify({
   title: title,
   date: dateIso,
+  endDate: endDateIso,
   venueText: venueText,
   venueId: venueId,
   imageUrl: imageUrl,
