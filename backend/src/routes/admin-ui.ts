@@ -277,6 +277,61 @@ router.get(
       cursor:pointer;
     }
     .opt:hover{background:#f8fafc;}
+/* --- Unsaved changes / dirty exit modal --- */
+.exit-guard-backdrop{
+  position:fixed; inset:0;
+  background: rgba(15, 23, 42, 0.45);
+  display:flex;
+  align-items:flex-start;
+  justify-content:center;
+  padding: 24px 14px;
+  z-index: 99999;
+}
+.exit-guard-modal{
+  margin-top: 18px;
+  width: min(720px, calc(100vw - 28px));
+  background:#fff;
+  border:1px solid var(--border);
+  border-radius:14px;
+  box-shadow: 0 20px 70px rgba(0,0,0,0.25);
+  overflow:hidden;
+}
+.exit-guard-head{
+  padding: 14px 16px;
+  border-bottom:1px solid var(--border);
+  display:flex;
+  gap:10px;
+  align-items:center;
+  justify-content:space-between;
+}
+.exit-guard-head strong{ font-size: 14px; }
+.exit-guard-body{
+  padding: 14px 16px;
+  color:#334155;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.exit-guard-actions{
+  padding: 14px 16px;
+  border-top:1px solid var(--border);
+  display:flex;
+  gap:10px;
+  justify-content:flex-end;
+  flex-wrap:wrap;
+}
+.btn-danger{
+  background:#ef4444 !important;
+  border:1px solid #ef4444 !important;
+  color:#fff !important;
+}
+.btn-danger:hover{ filter: brightness(0.95); }
+.btn-ghost{
+  background:#fff !important;
+  border:1px solid var(--border) !important;
+  color:#111827 !important;
+}
+.btn-ghost:hover{ background:#f8fafc !important; }
+
   </style>
 </head>
 <body>
@@ -363,6 +418,186 @@ function bindAiClearOnUserEdit(el, evts){
 
 
   var main = $('#main');
+// ------------------------------
+// Dirty-exit guard (Create Show)
+// ------------------------------
+var __dirty = {
+  enabled: false,
+  isDirty: false,
+  lastPath: (location.pathname || '').replace(/\/+$/,'') || '/',
+  pendingNav: null,        // { type:'view'|'href'|'popstate', target:string }
+  saveDraftFn: null
+};
+
+function __setDirtyEnabled(on){
+  __dirty.enabled = !!on;
+  if (!__dirty.enabled){
+    __dirty.isDirty = false;
+    __dirty.saveDraftFn = null;
+    __dirty.pendingNav = null;
+  }
+}
+
+function __markDirty(){
+  if (__dirty.enabled) __dirty.isDirty = true;
+}
+
+function __clearDirty(){
+  __dirty.isDirty = false;
+}
+
+function __toast(msg){
+  // Use your existing toast() if present, else fallback
+  if (typeof toast === 'function') return toast(msg);
+  try { console.log('[Draft]', msg); } catch(e){}
+}
+
+function __saveCreateShowDraft(){
+  // Grab the common Create Show fields if they exist
+  var draft = {
+    savedAt: new Date().toISOString(),
+    title: $('#sh_title') ? $('#sh_title').value : '',
+    start: $('#sh_dt') ? $('#sh_dt').value : '',
+    end: $('#sh_dt_end') ? $('#sh_dt_end').value : '',
+    venueText: $('#venue_input') ? $('#venue_input').value : '',
+    venueId: ($('#venue_input' ) && $('#venue_input').dataset) ? ($('#venue_input').dataset.venueId || '') : '',
+    eventType: $('#eventType') ? $('#eventType').value : ( $('#sh_eventType') ? $('#sh_eventType').value : '' ),
+    category: $('#category') ? $('#category').value : ( $('#sh_category') ? $('#sh_category').value : '' ),
+    doorsOpenTime: $('#sh_doorsOpenTime') ? $('#sh_doorsOpenTime').value : '',
+    ageGuidance: $('#sh_ageGuidance') ? $('#sh_ageGuidance').value : '',
+    tags: $('#sh_tags') ? $('#sh_tags').value : ( $('#tags') ? $('#tags').value : '' ),
+    accessibilityNote: $('#sh_accessibilityNote') ? $('#sh_accessibilityNote').value : '',
+    accessibility: {
+      wheelchair: $('#acc_wheelchair') ? !!$('#acc_wheelchair').checked : false,
+      stepfree: $('#acc_stepfree') ? !!$('#acc_stepfree').checked : false,
+      hearingLoop: $('#acc_hearing') ? !!$('#acc_hearing').checked : false,
+      toilet: $('#acc_toilet') ? !!$('#acc_toilet').checked : false
+    },
+    descriptionHtml: $('#sh_desc') ? $('#sh_desc').innerHTML : ( $('#desc') ? $('#desc').innerHTML : '' ),
+    mainImageUrl: $('#sh_mainImageUrl') ? $('#sh_mainImageUrl').value : '',
+    additionalImageUrls: (function(){
+      var el = $('#sh_additionalImageUrls');
+      if (!el) return [];
+      try { return JSON.parse(el.value || '[]'); } catch(e){ return []; }
+    })()
+  };
+
+  localStorage.setItem('tixall_create_show_draft_v1', JSON.stringify(draft));
+  __clearDirty();
+  __toast('Draft saved.');
+}
+
+function __showExitGuard(){
+  // Already open?
+  if (document.querySelector('.exit-guard-backdrop')) return;
+
+  var backdrop = document.createElement('div');
+  backdrop.className = 'exit-guard-backdrop';
+
+  var modal = document.createElement('div');
+  modal.className = 'exit-guard-modal';
+
+  modal.innerHTML = `
+    <div class="exit-guard-head">
+      <strong>Unsaved changes</strong>
+      <span style="font-size:12px;color:#64748b;">Create Show</span>
+    </div>
+    <div class="exit-guard-body">
+      If you leave this page, <strong>your changes will be lost</strong>.
+      <br><br>
+      Choose <strong>Save draft</strong> if you want to continue later.
+    </div>
+    <div class="exit-guard-actions">
+      <button class="btn btn-ghost" id="exitGuardStay">Stay on page</button>
+      <button class="btn" id="exitGuardSave">Save draft</button>
+      <button class="btn btn-danger" id="exitGuardExit">Exit without saving</button>
+    </div>
+  `;
+
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+
+  function close(){
+    try { backdrop.remove(); } catch(e){}
+  }
+
+  $('#exitGuardStay').addEventListener('click', function(){
+    __dirty.pendingNav = null;
+    close();
+  });
+
+  $('#exitGuardSave').addEventListener('click', function(){
+    try { __saveCreateShowDraft(); } catch(e){}
+    // After save, proceed with nav (if any)
+    var nav = __dirty.pendingNav;
+    __dirty.pendingNav = null;
+    close();
+    if (nav) __performPendingNav(nav);
+  });
+
+  $('#exitGuardExit').addEventListener('click', function(){
+    __clearDirty();
+    var nav = __dirty.pendingNav;
+    __dirty.pendingNav = null;
+    close();
+    if (nav) __performPendingNav(nav);
+  });
+
+  // Click outside modal -> stay
+  backdrop.addEventListener('click', function(e){
+    if (e.target === backdrop){
+      __dirty.pendingNav = null;
+      close();
+    }
+  });
+}
+
+function __performPendingNav(nav){
+  if (!nav) return;
+  if (nav.type === 'view'){
+    go(nav.target);
+    return;
+  }
+  if (nav.type === 'href'){
+    window.location.href = nav.target;
+    return;
+  }
+  if (nav.type === 'popstate'){
+    // We stored a path; force SPA nav
+    go(nav.target);
+    return;
+  }
+}
+
+// Warn on refresh/close tab as well
+window.addEventListener('beforeunload', function(e){
+  if (!__dirty.enabled || !__dirty.isDirty) return;
+  e.preventDefault();
+  e.returnValue = '';
+  return '';
+});
+
+// Utility: attach dirty listeners on Create Show pages
+function __wireDirtyInputsForCreateShow(){
+  if (!__dirty.enabled) return;
+
+  var scope = document.querySelector('#main');
+  if (!scope) return;
+
+  // Mark dirty on any typing/changes in main form
+  scope.querySelectorAll('input, textarea, select').forEach(function(el){
+    el.addEventListener('input', __markDirty);
+    el.addEventListener('change', __markDirty);
+  });
+
+  // If your description is contenteditable
+  var desc = $('#sh_desc') || $('#desc');
+  if (desc){
+    desc.addEventListener('input', __markDirty);
+    desc.addEventListener('keyup', __markDirty);
+    desc.addEventListener('blur', __markDirty);
+  }
+}
 
   var showsToggle = $('#showsToggle');
   var showsSub = $('#showsSub');
