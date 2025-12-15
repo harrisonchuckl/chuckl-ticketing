@@ -2139,6 +2139,9 @@ if (allImageUrls && allImageUrls.value) {
             errEl.textContent = e.message || String(e);
         }
     });
+    __wireDirtyInputsForCreateShow();
+}
+
 }
   // --- LIST SHOWS ---
   async function listShows(){
