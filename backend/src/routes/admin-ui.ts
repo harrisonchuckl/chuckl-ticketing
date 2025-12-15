@@ -109,7 +109,7 @@ router.get(
     .grid{display:grid;gap:8px;}
     .grid-2{grid-template-columns:repeat(2,1fr);}
     .grid-3{grid-template-columns:repeat(3,1fr);}
-    input,select,textarea{
+        input,select,textarea{
       border:1px solid var(--border);
       border-radius:8px;
       padding:8px 10px;
@@ -117,6 +117,15 @@ router.get(
       outline:none;
       font:inherit;
     }
+
+    /* Fixed-height controls (use on selects that must line up perfectly) */
+    .ctl{
+      width:100%;
+      height:40px;
+      min-height:40px;
+      padding:8px 10px;
+    }
+
     table{
       width:100%;
       border-collapse:collapse;
@@ -488,45 +497,124 @@ router.get(
         +'<div class="tip">Pick an existing venue or create a new one.</div>'
         +'</div>'
         
-        // --- NEW: Category and Sub-Category Section ---
-        +'<div class="grid grid-2" style="margin-bottom: 20px; gap: 16px;">'
-        +'<div class="grid">'
-        +'<label>Event Type</label>'
-        +'<select id="event_type_select">'
-        +'<option value="">Select Primary Type</option>'
-        // Add all event types you can think of here:
-        +'<option value="music">Music</option>'
-        +'<option value="comedy">Comedy</option>'
-        +'<option value="arts">Arts & Theatre</option>'
-        +'<option value="sport">Sporting Event</option>'
-        +'<option value="conference">Conference / Workshop</option>'
-        +'<option value="family">Family / Kids</option>'
-        +'<option value="food">Food & Drink</option>'
-        +'</select>'
-        +'</div>'
-        +'<div class="grid">'
-        +'<label>Category</label>'
-        +'<select id="event_category_select">'
-        +'<option value="">Select Sub-Category</option>'
-        +'<option data-parent="music" value="rock">Rock & Pop</option>'
-        +'<option data-parent="music" value="classical">Classical</option>'
-        +'<option data-parent="music" value="jazz">Jazz / Blues</option>'
-        +'<option data-parent="comedy" value="standup">Stand-Up Comedy</option>'
-        +'<option data-parent="comedy" value="improv">Improv / Sketch</option>'
-        +'<option data-parent="arts" value="theatre">Theatre / Play</option>'
-        +'<option data-parent="arts" value="dance">Dance</option>'
-        +'<option data-parent="sport" value="football">Football / Soccer</option>'
-        +'<option data-parent="sport" value="running">Running / Marathon</option>'
-        +'<option data-parent="conference" value="tech">Tech & IT</option>'
-        +'<option data-parent="conference" value="business">Business & Finance</option>'
-        +'<option data-parent="family" value="show">Kids Show</option>'
-        +'<option data-parent="family" value="activity">Family Activity</option>'
-        +'<option data-parent="food" value="festival">Food Festival</option>'
-        +'<option data-parent="food" value="tasting">Tasting / Tour</option>'
-        +'</select>'
-        +'<div class="tip">The list will filter based on Event Type.</div>'
-        +'</div>'
-        +'</div>' // End grid-2
+       // --- NEW: Category and Sub-Category Section ---
++'<div class="grid grid-2" style="margin-bottom: 20px; gap: 16px; align-items: end;">'
+
+  +'<div class="grid">'
+    +'<label>Event Type</label>'
+    +'<select id="event_type_select" class="ctl">'
+      +'<option value="">Select Primary Type</option>'
+      +'<option value="comedy">Comedy</option>'
+      +'<option value="theatre">Theatre</option>'
+      +'<option value="music">Music & Concerts</option>'
+      +'<option value="festival">Festivals</option>'
+      +'<option value="film">Film & Screenings</option>'
+      +'<option value="talks">Talks, Panels & Podcasts</option>'
+      +'<option value="workshop">Classes & Workshops</option>'
+      +'<option value="corporate">Corporate & Private Events</option>'
+      +'<option value="nightlife">Nightlife & Social</option>'
+      +'<option value="sport">Sports & Fitness</option>'
+      +'<option value="food">Food & Drink</option>'
+      +'<option value="community">Community & Charity</option>'
+      +'<option value="arts">Arts, Exhibitions & Culture</option>'
+      +'<option value="other">Other</option>'
+    +'</select>'
+  +'</div>'
+
+  +'<div class="grid">'
+    +'<label>Category</label>'
+    +'<select id="event_category_select" class="ctl">'
+      +'<option value="">Select Sub-Category</option>'
+
+      // Music
+      +'<option data-parent="music" value="rock_pop">Rock & Pop</option>'
+      +'<option data-parent="music" value="indie">Indie</option>'
+      +'<option data-parent="music" value="classical">Classical</option>'
+      +'<option data-parent="music" value="jazz_blues">Jazz / Blues</option>'
+      +'<option data-parent="music" value="electronic">Electronic / DJ</option>'
+      +'<option data-parent="music" value="tribute">Tribute Act</option>'
+
+      // Comedy
+      +'<option data-parent="comedy" value="standup">Stand-Up Comedy</option>'
+      +'<option data-parent="comedy" value="improv">Improv / Sketch</option>'
+      +'<option data-parent="comedy" value="club_night">Comedy Club Night</option>'
+      +'<option data-parent="comedy" value="tour_show">Stand-up Tour Show</option>'
+      +'<option data-parent="comedy" value="new_material">New Material Night</option>'
+      +'<option data-parent="comedy" value="edinburgh_preview">Edinburgh Preview</option>'
+      +'<option data-parent="comedy" value="tv_warmup">TV Warm-up</option>'
+      +'<option data-parent="comedy" value="roast_battle">Roast / Battle</option>'
+
+      // Theatre
+      +'<option data-parent="theatre" value="play_drama">Play / Drama</option>'
+      +'<option data-parent="theatre" value="panto">Panto</option>'
+      +'<option data-parent="theatre" value="musical">Musical Theatre</option>'
+      +'<option data-parent="theatre" value="dance">Dance</option>'
+      +'<option data-parent="theatre" value="opera">Opera</option>'
+      +'<option data-parent="theatre" value="cabaret">Cabaret & Variety</option>'
+
+      // Festivals
+      +'<option data-parent="festival" value="comedy_festival">Comedy Festival</option>'
+      +'<option data-parent="festival" value="music_festival">Music Festival</option>'
+      +'<option data-parent="festival" value="arts_festival">Arts Festival</option>'
+      +'<option data-parent="festival" value="food_festival">Food Festival</option>'
+      +'<option data-parent="festival" value="beer_festival">Beer / Ale Festival</option>'
+
+      // Film
+      +'<option data-parent="film" value="cinema_screening">Cinema Screening</option>'
+      +'<option data-parent="film" value="premiere">Premiere</option>'
+      +'<option data-parent="film" value="q_and_a">Screening + Q&amp;A</option>'
+      +'<option data-parent="film" value="documentary">Documentary</option>'
+
+      // Talks / Panels / Podcasts
+      +'<option data-parent="talks" value="live_podcast">Live Podcast</option>'
+      +'<option data-parent="talks" value="panel">Panel Discussion</option>'
+      +'<option data-parent="talks" value="talk">Talk / Lecture</option>'
+      +'<option data-parent="talks" value="book_event">Book Talk / Signing</option>'
+
+      // Workshops
+      +'<option data-parent="workshop" value="creative">Creative Workshop</option>'
+      +'<option data-parent="workshop" value="wellbeing">Wellbeing Workshop</option>'
+      +'<option data-parent="workshop" value="skills">Skills / Training</option>'
+
+      // Corporate / Private
+      +'<option data-parent="corporate" value="corporate_night">Corporate Night</option>'
+      +'<option data-parent="corporate" value="private_party">Private Party</option>'
+      +'<option data-parent="corporate" value="awards">Awards Night</option>'
+      +'<option data-parent="corporate" value="fundraiser">Fundraiser</option>'
+
+      // Nightlife
+      +'<option data-parent="nightlife" value="club_night">Club Night</option>'
+      +'<option data-parent="nightlife" value="party">Party</option>'
+      +'<option data-parent="nightlife" value="social">Social / Meetup</option>'
+
+      // Sport
+      +'<option data-parent="sport" value="football">Football / Soccer</option>'
+      +'<option data-parent="sport" value="running">Running / Marathon</option>'
+      +'<option data-parent="sport" value="fitness">Fitness Class</option>'
+
+      // Food
+      +'<option data-parent="food" value="festival">Food Festival</option>'
+      +'<option data-parent="food" value="tasting">Tasting / Tour</option>'
+      +'<option data-parent="food" value="wine">Wine Tasting</option>'
+
+      // Community
+      +'<option data-parent="community" value="charity_event">Charity Event</option>'
+      +'<option data-parent="community" value="community_meetup">Community Meetup</option>'
+
+      // Arts
+      +'<option data-parent="arts" value="exhibition">Exhibition</option>'
+      +'<option data-parent="arts" value="gallery">Gallery / Opening</option>'
+      +'<option data-parent="arts" value="spoken_word">Spoken Word</option>'
+
+      // Other
+      +'<option data-parent="other" value="misc">Miscellaneous</option>'
+
+    +'</select>'
+    +'<div class="tip">The list will filter based on Event Type.</div>'
+  +'</div>'
+
++'</div>' // End grid-2
+
 
         // Description
         +'<div class="grid" style="margin-bottom: 20px;">'
