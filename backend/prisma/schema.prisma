@@ -252,6 +252,9 @@ model Seat {
   status     SeatStatus @default(AVAILABLE)
   zoneId     String?
   zone       Zone?      @relation(fields: [zoneId], references: [id])
+
+  tickets         Ticket[]
+  allocationSeats AllocationSeat[]
 }
 
 model ExternalAllocation {
