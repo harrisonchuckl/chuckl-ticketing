@@ -375,15 +375,197 @@ router.get(
     }
   }
 
-  function go(path){
-    history.pushState(null, '', path);
+   // ---------------------------
+  // Dirty Exit (navigation guard)
+  // ---------------------------
+  var __dirtyExit = {
+    dirty: false,
+    reason: '',
+    saveDraft: null,          // async () => void
+    pendingPath: null,
+    lastPath: location.pathname.replace(/\/$/, ''),
+    _modal: null,
+    _busy: false,
+  };
+
+  function setDirtyExit(isDirty, opts){
+    __dirtyExit.dirty = !!isDirty;
+    if (opts && typeof opts.reason === 'string') __dirtyExit.reason = opts.reason;
+    if (opts && typeof opts.saveDraft === 'function') __dirtyExit.saveDraft = opts.saveDraft;
+
+    if (!__dirtyExit.dirty){
+      __dirtyExit.reason = '';
+      __dirtyExit.saveDraft = null;
+      __dirtyExit.pendingPath = null;
+      __dirtyExit._busy = false;
+      window.onbeforeunload = null;
+    } else {
+      // Also catch closing tab / reload / navigating away from /admin/ui entirely
+      window.onbeforeunload = function(e){
+        e.preventDefault();
+        e.returnValue = '';
+        return '';
+      };
+    }
+  }
+
+  function ensureDirtyExitModal(){
+    if (__dirtyExit._modal) return __dirtyExit._modal;
+
+    var backdrop = document.createElement('div');
+    backdrop.id = 'dirty_exit_backdrop';
+    backdrop.style.cssText =
+      'position:fixed;inset:0;display:none;align-items:center;justify-content:center;' +
+      'background:rgba(15,23,42,0.45);z-index:9999;padding:16px;';
+
+    var box = document.createElement('div');
+    box.style.cssText =
+      'width:min(560px,calc(100vw - 32px));background:#fff;border-radius:14px;' +
+      'border:1px solid rgba(0,0,0,0.08);box-shadow:0 20px 50px rgba(0,0,0,0.25);padding:16px;';
+
+    box.innerHTML =
+      '<div style="font-weight:800;font-size:16px;margin-bottom:6px;">You’re about to leave this page</div>' +
+      '<div id="dirty_exit_msg" class="muted" style="line-height:1.4;margin-bottom:14px;">' +
+        'You have unsaved changes. If you leave now, they could be lost.' +
+      '</div>' +
+      '<div class="row" style="gap:10px;flex-wrap:wrap;justify-content:flex-end;">' +
+        '<button id="dirty_save_stay" class="btn">Save as draft &amp; continue</button>' +
+        '<button id="dirty_save_exit" class="btn p">Save as draft &amp; exit</button>' +
+        '<button id="dirty_exit" class="btn" style="border-color:#ef4444;color:#ef4444;">Exit without saving</button>' +
+        '<button id="dirty_stay" class="btn">Stay on page</button>' +
+      '</div>' +
+      '<div id="dirty_exit_status" class="muted" style="margin-top:10px;display:none;font-size:13px;"></div>';
+
+    backdrop.appendChild(box);
+    document.body.appendChild(backdrop);
+
+    function setBusy(on, txt){
+      __dirtyExit._busy = !!on;
+      var st = $('#dirty_exit_status');
+      var b1 = $('#dirty_save_stay');
+      var b2 = $('#dirty_save_exit');
+      var b3 = $('#dirty_exit');
+      var b4 = $('#dirty_stay');
+
+      [b1,b2,b3,b4].forEach(function(b){ if (b) b.disabled = !!on; });
+      if (st){
+        st.style.display = on ? 'block' : 'none';
+        st.textContent = on ? (txt || 'Working…') : '';
+      }
+    }
+
+    function close(){
+      if (__dirtyExit._busy) return;
+      backdrop.style.display = 'none';
+      __dirtyExit.pendingPath = null;
+    }
+
+    async function doSaveDraft(){
+      if (typeof __dirtyExit.saveDraft !== 'function'){
+        throw new Error('No draft saver is wired for this page.');
+      }
+      await __dirtyExit.saveDraft();
+      // After a successful draft save, we consider it "safe" to leave
+      setDirtyExit(false);
+    }
+
+    $('#dirty_stay').addEventListener('click', function(){
+      close();
+    });
+
+    $('#dirty_exit').addEventListener('click', function(){
+      // Leave without saving
+      var p = __dirtyExit.pendingPath;
+      setDirtyExit(false);
+      close();
+      if (p) go(p, { bypassGuard:true });
+    });
+
+    $('#dirty_save_stay').addEventListener('click', async function(){
+      try{
+        setBusy(true, 'Saving draft…');
+        await doSaveDraft();
+        setBusy(false);
+        close(); // stay on page (now “clean”)
+      }catch(e){
+        setBusy(false);
+        alert('Draft save failed: ' + (e.message || e));
+      }
+    });
+
+    $('#dirty_save_exit').addEventListener('click', async function(){
+      var p = __dirtyExit.pendingPath;
+      try{
+        setBusy(true, 'Saving draft…');
+        await doSaveDraft();
+        setBusy(false);
+        close();
+        if (p) go(p, { bypassGuard:true });
+      }catch(e){
+        setBusy(false);
+        alert('Draft save failed: ' + (e.message || e));
+      }
+    });
+
+    // Click outside closes (same as Stay)
+    backdrop.addEventListener('click', function(e){
+      if (e.target === backdrop) close();
+    });
+
+    __dirtyExit._modal = backdrop;
+    return backdrop;
+  }
+
+  function openDirtyExit(pathAttempted){
+    __dirtyExit.pendingPath = pathAttempted || '/admin/ui';
+    var modal = ensureDirtyExitModal();
+    var msg = $('#dirty_exit_msg');
+
+    var detail = '';
+    if (__dirtyExit.reason === 'create_show'){
+      detail = 'You’re creating a show. Leaving now could lose your changes.';
+    } else if (__dirtyExit.reason === 'create_show_ai'){
+      detail = 'You’ve uploaded files for AI extraction. Leaving now could lose your uploaded set.';
+    }
+
+    if (msg){
+      msg.textContent = detail
+        ? (detail + ' Choose an option below.')
+        : 'You have unsaved changes. If you leave now, they could be lost.';
+    }
+
+    // If no draft saver, disable draft buttons
+    var canDraft = typeof __dirtyExit.saveDraft === 'function';
+    var bStay = $('#dirty_save_stay');
+    var bExit = $('#dirty_save_exit');
+    if (bStay) bStay.disabled = !canDraft;
+    if (bExit) bExit.disabled = !canDraft;
+
+    modal.style.display = 'flex';
+  }
+
+  function go(path, opts){
+    opts = opts || {};
+    var p = String(path || '').replace(/\/$/, '');
+    var bypass = !!opts.bypassGuard;
+
+    if (__dirtyExit.dirty && !bypass){
+      openDirtyExit(p);
+      return;
+    }
+
+    history.pushState(null, '', p);
+    __dirtyExit.lastPath = p;
     route();
   }
+
+
 
   // SPA sidebar links
   document.addEventListener('click', function(e){
     var tgt = e.target;
     if (!tgt || !tgt.closest) return;
+
     var a = tgt.closest('a.sb-link');
     if (a && a.getAttribute('data-view')){
       e.preventDefault();
@@ -391,7 +573,24 @@ router.get(
     }
   });
 
-  window.addEventListener('popstate', route);
+
+
+  // Back/Forward guard
+  window.addEventListener('popstate', function(){
+    var attempted = location.pathname.replace(/\/$/, '');
+
+    if (__dirtyExit.dirty){
+      // Revert URL back to where we were, then show modal.
+      history.pushState(null, '', __dirtyExit.lastPath);
+      route();
+      openDirtyExit(attempted);
+      return;
+    }
+
+    __dirtyExit.lastPath = attempted;
+    route();
+  });
+
 
   function home(){
     if (!main) return;
@@ -813,6 +1012,57 @@ router.get(
     docs: [],   // { file, name, type, size, dataUrl }
   };
 
+  // Dirty exit: only arm once files have been added
+  const AI_DRAFT_KEY = 'createShowAIDraftLocal';
+
+  async function saveAIDraftLocal(){
+    // Store what we can in sessionStorage so “Save draft” actually preserves the upload set.
+    // NOTE: large docs may exceed browser storage; we fail loudly so user can choose “Stay on page”.
+    const payload = {
+      savedAt: new Date().toISOString(),
+      images: state.images
+        .filter(x => x && x.url)
+        .map(x => ({ name:x.name, type:x.type, size:x.size, url:x.url, w:x.w||0, h:x.h||0, ratio:x.ratio||0, diff:x.diff||999 })),
+      docs: state.docs
+        .filter(x => x && x.dataUrl)
+        .map(x => ({ name:x.name, type:x.type, size:x.size, dataUrl:x.dataUrl })),
+    };
+
+    sessionStorage.setItem(AI_DRAFT_KEY, JSON.stringify(payload));
+  }
+
+  function armDirtyIfNeeded(){
+    if (state.images.length || state.docs.length){
+      setDirtyExit(true, { reason:'create_show_ai', saveDraft: saveAIDraftLocal });
+    } else {
+      setDirtyExit(false);
+    }
+  }
+
+  // Restore any locally-saved AI draft (if present)
+  (function restoreAIDraftLocal(){
+    try{
+      const raw = sessionStorage.getItem(AI_DRAFT_KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+
+      if (Array.isArray(d.images)) {
+        d.images.forEach(function(x){
+          state.images.push({
+            file:null, name:x.name, type:x.type, size:x.size,
+            url:x.url || '', w:x.w||0, h:x.h||0, ratio:x.ratio||0, diff:x.diff||999
+          });
+        });
+      }
+      if (Array.isArray(d.docs)) {
+        d.docs.forEach(function(x){
+          state.docs.push({ file:null, name:x.name, type:x.type, size:x.size, dataUrl:x.dataUrl || '' });
+        });
+      }
+    }catch(e){
+      // ignore
+    }
+  })();
 
 
   function bytes(n){
@@ -880,6 +1130,7 @@ router.get(
   + '</div>';
 
   // Wire delete buttons
+    // Wire delete buttons
   list.querySelectorAll('[data-remove-kind][data-remove-idx]').forEach(function(btn){
     btn.addEventListener('click', function(){
       const kind = btn.getAttribute('data-remove-kind');
@@ -898,9 +1149,11 @@ router.get(
       err.textContent = '';
       status.textContent = '';
       renderList();
+      armDirtyIfNeeded();
     });
   });
 }
+
   function readAsDataURL(file){
     return new Promise((resolve, reject) => {
       const fr = new FileReader();
@@ -974,6 +1227,9 @@ router.get(
 
     const files = Array.from(fileList || []);
     if (!files.length) return;
+
+        armDirtyIfNeeded();
+
 
     // Split into images vs docs
     const imgs = files.filter(f => (f.type || '').startsWith('image/'));
@@ -1105,13 +1361,18 @@ router.get(
       +   '</div>'
       + '</div>';
 
-      $('#ai_apply').addEventListener('click', () => {
+           $('#ai_apply').addEventListener('click', () => {
         // Store draft for Create Show to consume
         sessionStorage.setItem('aiShowDraft', JSON.stringify(draft));
-        // Navigate to existing Create Show page
-        history.pushState({}, '', '/admin/ui/shows/create');
-        route();
+
+        // We are intentionally moving to Create Show with the saved AI draft,
+        // so clear the dirty exit guard for this transition.
+        setDirtyExit(false);
+
+        // Navigate via SPA router (bypass guard)
+        go('/admin/ui/shows/create', { bypassGuard:true });
       });
+
 
       status.textContent = '';
     }catch(e){
@@ -1425,14 +1686,173 @@ updateCategoryOptions();
     var barMain = $('#bar_main');
     var prevMain = $('#prev_main');
 
-    var dropAdd = $('#drop_add');
+       var dropAdd = $('#drop_add');
     var fileAdd = $('#file_add');
     var barAdd = $('#bar_add');
     var addPreviews = $('#add_previews');
     var allImageUrls = $('#all_image_urls');
-    
+
+    // -----------------------------
+    // Patch 3A — Local draft + dirty exit wiring (Create Show)
+    // -----------------------------
+    const CREATE_DRAFT_KEY = 'createShowDraftLocal';
+
+    function readCreateShowDraft(){
+      const venueInput = $('#venue_input');
+      return {
+        savedAt: new Date().toISOString(),
+        title: ($('#sh_title') && $('#sh_title').value) ? $('#sh_title').value : '',
+        start: ($('#sh_dt') && $('#sh_dt').value) ? $('#sh_dt').value : '',
+        end: ($('#sh_dt_end') && $('#sh_dt_end').value) ? $('#sh_dt_end').value : '',
+        venueText: (venueInput && venueInput.value) ? venueInput.value : '',
+        venueId: (venueInput && venueInput.dataset) ? (venueInput.dataset.venueId || null) : null,
+        venueApproved: (venueInput && venueInput.dataset) ? (venueInput.dataset.venueApproved || '') : '',
+        eventType: ($('#event_type_select') && $('#event_type_select').value) ? $('#event_type_select').value : '',
+        category: ($('#event_category_select') && $('#event_category_select').value) ? $('#event_category_select').value : '',
+        tags: ($('#tags') && $('#tags').value) ? $('#tags').value : '',
+        descriptionHtml: ($('#desc') && $('#desc').innerHTML) ? $('#desc').innerHTML : '',
+        mainImageUrl: (prevMain && prevMain.src) ? prevMain.src : '',
+        additionalImageUrls: (allImageUrls && allImageUrls.value) ? allImageUrls.value : '',
+        doorsOpenTime: ($('#doors_open_time') && $('#doors_open_time').value) ? $('#doors_open_time').value : '',
+        ageGuidance: ($('#age_guidance') && $('#age_guidance').value) ? $('#age_guidance').value : ''
+      };
+    }
+
+    async function saveCreateShowDraftLocal(){
+      sessionStorage.setItem(CREATE_DRAFT_KEY, JSON.stringify(readCreateShowDraft()));
+    }
+
+    function markDirty(){
+      setDirtyExit(true, { reason:'create_show', saveDraft: saveCreateShowDraftLocal });
+    }
+
+    // Start clean when you land on the page
+    setDirtyExit(false);
+
+    (function wireDirtyHandlers(){
+      if (!main) return;
+
+      main.querySelectorAll('input, textarea, select').forEach(function(el){
+        el.addEventListener('input', function(){
+          if (el && el.id === 'ai_approval') return;
+          markDirty();
+        });
+        el.addEventListener('change', function(){
+          if (el && el.id === 'ai_approval') return;
+          markDirty();
+        });
+      });
+
+      var desc = $('#desc');
+      if (desc){
+        desc.addEventListener('input', function(){ markDirty(); });
+        desc.addEventListener('keyup', function(){ markDirty(); });
+      }
+    })();
+
+    // Restore any locally saved draft (makes “Save as draft” useful)
+    (function restoreCreateShowDraftLocal(){
+      try{
+        const raw = sessionStorage.getItem(CREATE_DRAFT_KEY);
+        if (!raw) return;
+        const d = JSON.parse(raw);
+
+        if (d && typeof d.title === 'string' && $('#sh_title')) $('#sh_title').value = d.title || '';
+        if (d && typeof d.start === 'string' && $('#sh_dt')) $('#sh_dt').value = d.start || '';
+        if (d && typeof d.end === 'string' && $('#sh_dt_end')) $('#sh_dt_end').value = d.end || '';
+
+        if ($('#event_type_select') && typeof d.eventType === 'string') $('#event_type_select').value = d.eventType || '';
+        if ($('#event_type_select')) $('#event_type_select').dispatchEvent(new Event('change', { bubbles:true }));
+
+        if ($('#event_category_select') && typeof d.category === 'string') $('#event_category_select').value = d.category || '';
+        if ($('#tags') && typeof d.tags === 'string') $('#tags').value = d.tags || '';
+
+        if ($('#desc') && typeof d.descriptionHtml === 'string') $('#desc').innerHTML = d.descriptionHtml || '';
+
+        if ($('#venue_input') && typeof d.venueText === 'string') {
+          $('#venue_input').value = d.venueText || '';
+          if ($('#venue_input').dataset){
+            $('#venue_input').dataset.venueId = d.venueId || '';
+            $('#venue_input').dataset.venueApproved = d.venueApproved || '';
+          }
+        }
+
+        if (prevMain && typeof d.mainImageUrl === 'string' && d.mainImageUrl){
+          prevMain.src = d.mainImageUrl;
+          prevMain.style.display = 'block';
+        }
+
+        // Restore additional images (rebuild preview tiles if possible)
+        if (addPreviews && typeof d.additionalImageUrls === 'string' && d.additionalImageUrls){
+          try{
+            const urls = JSON.parse(d.additionalImageUrls);
+            if (Array.isArray(urls)){
+              addPreviews.innerHTML = '';
+              urls.forEach(function(url){
+                var imgContainer = document.createElement('div');
+                imgContainer.style.position = 'relative';
+                imgContainer.style.width = '100px';
+                imgContainer.style.height = '100px';
+                imgContainer.style.overflow = 'hidden';
+                imgContainer.style.borderRadius = '6px';
+                imgContainer.dataset.url = url;
+
+                var img = document.createElement('img');
+                img.src = url;
+                img.alt = 'Additional Image';
+                img.style.width = '100%';
+                img.style.height = '100%';
+                img.style.objectFit = 'cover';
+
+                var deleteBtn = document.createElement('button');
+                deleteBtn.textContent = 'x';
+                deleteBtn.className = 'btn';
+                deleteBtn.style.position = 'absolute';
+                deleteBtn.style.top = '4px';
+                deleteBtn.style.right = '4px';
+                deleteBtn.style.width = '24px';
+                deleteBtn.style.height = '24px';
+                deleteBtn.style.padding = '0';
+                deleteBtn.style.borderRadius = '50%';
+                deleteBtn.style.lineHeight = '24px';
+                deleteBtn.style.fontSize = '12px';
+                deleteBtn.style.fontWeight = 'bold';
+                deleteBtn.style.background = 'rgba(255, 255, 255, 0.8)';
+                deleteBtn.style.borderColor = 'rgba(0, 0, 0, 0.1)';
+                deleteBtn.style.cursor = 'pointer';
+
+                deleteBtn.addEventListener('click', function() {
+                  imgContainer.remove();
+                  updateAllImageUrls();
+                  markDirty();
+                });
+
+                imgContainer.appendChild(img);
+                imgContainer.appendChild(deleteBtn);
+                addPreviews.appendChild(imgContainer);
+              });
+
+              if (allImageUrls) allImageUrls.value = JSON.stringify(urls);
+              // updateAllImageUrls exists below; call after it’s defined
+            }
+          }catch(e){
+            // ignore
+          }
+        }
+
+        if ($('#doors_open_time') && typeof d.doorsOpenTime === 'string') $('#doors_open_time').value = d.doorsOpenTime || '';
+        if ($('#age_guidance') && typeof d.ageGuidance === 'string') $('#age_guidance').value = d.ageGuidance || '';
+
+        // If we restored anything, treat as dirty (unsaved to DB)
+        markDirty();
+      }catch(e){
+        // ignore
+      }
+    })();
+
     // Upload function for a single file (used for main image and each additional image)
     async function doUpload(file, barEl, previewEl, isAdditional = false) {
+
         $('#err').textContent = '';
         barEl.style.width = '15%';
 
@@ -1483,10 +1903,13 @@ updateCategoryOptions();
                 addPreviews.appendChild(imgContainer);
 
                 updateAllImageUrls();
-            } else {
+                                markDirty();
+
+           } else {
                 // Update main image preview
                 previewEl.src = out.url;
                 previewEl.style.display = 'block';
+                markDirty();
             }
 
             barEl.style.width = '100%';
