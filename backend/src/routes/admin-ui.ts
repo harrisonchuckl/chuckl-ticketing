@@ -123,7 +123,7 @@ router.get(
       color:#ffffff;
       border-color:#111827;
     }
-      .btn.warn{
+    .btn.warn{
       background:#f97316;
       color:#ffffff;
       border-color:#ea580c;
@@ -165,7 +165,7 @@ router.get(
   border-color: var(--ai) !important;
 }
 
-.nav-guard{
+    .nav-guard{
       border:1px solid #f97316;
       background:#fffbeb;
       color:#7c2d12;
@@ -403,7 +403,7 @@ router.get(
     });
   }
 
-   // --- Navigation guard + prompt helpers ---
+  // --- Navigation guard + prompt helpers ---
   var navPromptEl = null;
   var activeNavGuard = null;
   var pendingNav = null;
@@ -503,7 +503,6 @@ router.get(
     route();
   }
 
-
   async function j(url, opts){
     const res = await fetch(url, { credentials:'include', ...(opts || {}) });
     let text = '';
@@ -519,7 +518,7 @@ router.get(
     }
   }
 
- function go(path, cause){
+  function go(path, cause){
     requestNavigation(path, cause || 'link');
   }
 
@@ -534,7 +533,7 @@ router.get(
     }
   });
 
- window.addEventListener('popstate', function(){
+  window.addEventListener('popstate', function(){
     var target = (location.pathname || '').replace(/\\/$/, '');
     if (shouldBlockNavigation(target, 'popstate')){
       history.pushState(null, '', lastPath);
@@ -967,7 +966,9 @@ router.get(
     docs: [],   // { file, name, type, size, dataUrl }
   };
 
-setNavigationGuard({
+
+
+  setNavigationGuard({
     shouldBlock: function(){
       return state.images.length > 0 || state.docs.length > 0;
     },
@@ -984,7 +985,6 @@ setNavigationGuard({
     },
     teardown: clearNavPrompt
   });
-
 
   function bytes(n){
     if (!n && n !== 0) return '';
@@ -1280,7 +1280,7 @@ setNavigationGuard({
         // Store draft for Create Show to consume
         sessionStorage.setItem('aiShowDraft', JSON.stringify(draft));
         // Navigate to existing Create Show page
-     clearNavigationGuard();
+        clearNavigationGuard();
         go('/admin/ui/shows/create', 'ai-apply');
       });
 
@@ -1549,10 +1549,10 @@ async function createShow(){
 +'</div>'
 
         +'</div>';
-
-         var createShowDirty = false;
-    function markDirty(){ createShowDirty = true; }
     
+    var createShowDirty = false;
+    function markDirty(){ createShowDirty = true; }
+
     // Bind editor and venue picker
     bindWysiwyg(main);
 mountVenuePicker($('#venue_input'), $('#sh_dt'), { requireApproval: true });
@@ -1605,7 +1605,7 @@ updateCategoryOptions();
     var addPreviews = $('#add_previews');
     var allImageUrls = $('#all_image_urls');
 
-     function parseAdditionalImages(){
+    function parseAdditionalImages(){
         var urls = [];
         if (allImageUrls && allImageUrls.value){
           try{ urls = JSON.parse(allImageUrls.value) || []; }catch(e){ urls = []; }
@@ -1886,7 +1886,7 @@ updateCategoryOptions();
         } else {
             dropAdd.style.display = 'block';
         }
-                markDirty();
+        markDirty();
     }
 
         // --- AI Prefill (one-time) ---
@@ -2086,8 +2086,7 @@ updateCategoryOptions();
               markAi($('#drop_add'), 'drop');
             }
 
-                        markDirty();
-
+            markDirty();
         }catch(e){
             console.warn('[AI draft] apply failed', e);
         }
@@ -2149,18 +2148,17 @@ updateCategoryOptions();
         var errEl = $('#err');
         errEl.textContent = '';
         try{
-                  var state = getCreateShowState();
+            var state = getCreateShowState();
             validateFinal(state);
             var showId = await persistShow(state, { allowPlaceholderDescription:false });
             clearNavigationGuard();
-            window.location.href = '/admin/seating-choice/' + showId; 
-
+            window.location.href = '/admin/seating-choice/' + showId;
         }catch(e){
             errEl.textContent = e.message || String(e);
         }
     });
 
-     setNavigationGuard({
+    setNavigationGuard({
       shouldBlock: function(){
         return hasCreateShowChanges();
       },
