@@ -226,57 +226,27 @@ ${shouldRefresh ? `<div class="warn">Order received — we’re processing your 
 });
 
 router.get('/event/:id', async (req, res) => {
-    try {
-      const id = String(req.params.id || '').trim();
-      const base = (process.env.SITE_BASE_URL || '').replace(/\/+$/, '');
-      if (!id) return res.status(404).send('Not found');
-      try {
-        const show = await prisma.show.findFirst({
-          where: { id },
-          include: {
-            venue: {
-              select: { name: true, address: true, city: true, postcode: true },
-            },
-            ticketTypes: {
-              select: { id: true, name: true, pricePence: true, available: true },
-              orderBy: { pricePence: 'asc' },
-            },
-          },
-        });
-        if (!show) return res.status(404).send('Event ID not found');
 
-        // --- FETCH RECOMMENDATIONS ---
-        const recsRaw = show.organiserId ? await prisma.show.findMany({
-          where: {
-            organiserId: show.organiserId,
-            id: { not: show.id },
-            status: 'LIVE',
-            date: { gte: new Date() }
-          },
-          include: { venue: { select: { name: true, city: true } } },
-          take: 20
-        }) : [];
+  const id = String(req.params.id || '').trim();
+  const base = (process.env.SITE_BASE_URL || '').replace(/\/+$/, '');
 
-        // Sort: 1. Nearest (City match) -> 2. Event Type -> 3. Date
-        const currentCity = show.venue?.city || "";
-        const currentType = show.eventType || "";
-        
-        const recommendations = recsRaw.sort((a, b) => {
-           // Priority 1: City
-           const aCity = a.venue?.city || "";
-           const bCity = b.venue?.city || "";
-           if (aCity === currentCity && bCity !== currentCity) return -1;
-           if (aCity !== currentCity && bCity === currentCity) return 1;
-           
-           // Priority 2: Event Type
-           const aType = a.eventType || "";
-           const bType = b.eventType || "";
-           if (aType === currentType && bType !== currentType) return -1;
-           if (aType !== currentType && bType === currentType) return 1;
-           
-           // Priority 3: Date
-           return new Date(a.date).getTime() - new Date(b.date).getTime();
-        }).slice(0, 5);
+  if (!id) return res.status(404).send('Not found');
+
+  try {
+    const show = await prisma.show.findFirst({
+      where: { id },
+      include: {
+        venue: {
+          select: { name: true, address: true, city: true, postcode: true },
+        },
+        ticketTypes: {
+          select: { id: true, name: true, pricePence: true, available: true },
+          orderBy: { pricePence: 'asc' },
+        },
+      },
+    });
+
+    if (!show) return res.status(404).send('Event ID not found');
 
     // FIX: Status check (explicit string cast)
     // @ts-ignore
@@ -376,7 +346,6 @@ router.get('/event/:id', async (req, res) => {
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>${esc(show.title)} | Tickets</title>
   <meta name="description" content="${escAttr(desc)}" />
-  ${(show.tags && show.tags.length > 0) ? `<meta name="keywords" content="${escAttr(show.tags.join(', '))}" />` : ''}
   
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -472,34 +441,11 @@ router.get('/event/:id', async (req, res) => {
     .rich-text p { margin-bottom: 1.5em; }
     .rich-text p:last-child { margin-bottom: 0; }
 
- /* Gallery Scroll */
-      .gallery-scroll {
-        display: flex; overflow-x: auto; gap: 16px; margin-top: 24px; padding-bottom: 12px;
-        scrollbar-width: thin; scrollbar-color: var(--border) transparent;
-      }
-      .gallery-item {
-        flex: 0 0 auto; width: 280px; aspect-ratio: 4/3; background: #E2E8F0;
-        border-radius: 8px; overflow: hidden; position: relative;
-      }
-      .gallery-img { width: 100%; height: 100%; object-fit: cover; }
-      
-      /* Accessibility Banner */
-      .access-banner {
-        background: #f0f9ff; border-left: 4px solid var(--brand); padding: 12px;
-        margin-bottom: 24px; border-radius: 4px;
-      }
-      .access-title { color: var(--brand); font-weight: 700; margin-bottom: 4px; font-size: 0.9rem; }
-      .access-text { font-size: 0.85rem; color: #334155; }
-
-      /* Recommendations */
-      .rec-section { margin-top: 60px; padding-top: 40px; border-top: 1px solid var(--border); }
-      .rec-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 24px; margin-top: 24px; }
-      .rec-card { display: block; background: #fff; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; transition: transform 0.2s; }
-      .rec-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-card); }
-      .rec-img { width: 100%; height: 140px; object-fit: cover; }
-      .rec-content { padding: 16px; }
-      .rec-title { font-weight: 700; font-size: 1rem; margin-bottom: 4px; }
-      .rec-meta { font-size: 0.85rem; color: var(--text-muted); }
+    /* Gallery Grid */
+    .gallery-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 24px; }
+    .gallery-item { aspect-ratio: 16/9; background: #E2E8F0; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .gallery-img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s; }
+    .gallery-item:hover .gallery-img { transform: scale(1.05); }
 
     /* Venue Map Styles (Updated for Iframe) */
     .venue-map-container { margin-top: 24px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
@@ -600,13 +546,9 @@ router.get('/event/:id', async (req, res) => {
         <div class="hero-meta-item">
           <span class="hero-meta-icon">📍</span> <span>${esc(venue.name)}</span>
         </div>
-       <div class="hero-meta-item">
-              <span class="hero-meta-icon"> ⏰ </span>
-              <span>
-                ${esc(timeStr)}
-                ${show.doorsOpenTime ? `<span style="opacity:0.8; font-size:0.9em; margin-left:6px;">(Doors ${esc(show.doorsOpenTime)})</span>` : ''}
-              </span>
-            </div>
+        <div class="hero-meta-item">
+          <span class="hero-meta-icon">⏰</span> <span>${esc(timeStr)}</span>
+        </div>
       </div>
     </div>
   </header>
@@ -615,25 +557,18 @@ router.get('/event/:id', async (req, res) => {
     
     <div class="content-area">
       
-     <div>
+      <div>
           <span class="section-label">Overview</span>
           <div class="rich-text">
             ${show.description ? show.description.replace(/\n/g, '<br/>') : '<p>Full details coming soon.</p>'}
           </div>
-          
-          ${show.ageGuidance ? `
-          <div style="margin-top: 24px; padding: 16px; background: #F8FAFC; border-radius: 8px; border: 1px solid var(--border);">
-            <strong style="color:var(--primary);">Age Guideline:</strong> <span style="color:var(--text-muted);">${esc(show.ageGuidance)}</span>
+          ${poster ? `
+          <div class="gallery-grid">
+            <div class="gallery-item"><img src="${escAttr(poster)}" class="gallery-img" alt="Gallery 1"></div>
+            <div class="gallery-item"><img src="${escAttr(poster)}" class="gallery-img" alt="Gallery 2" style="filter:hue-rotate(20deg);"></div>
           </div>
           ` : ''}
-
-          <div class="gallery-scroll">
-            ${poster ? `<div class="gallery-item"><img src="${escAttr(poster)}" class="gallery-img" alt="Main"></div>` : ''}
-            ${(show.additionalImageUrls || []).map((img: string) => `
-              <div class="gallery-item"><img src="${escAttr(img)}" class="gallery-img" alt="Gallery"></div>
-            `).join('')}
-          </div>
-        </div>
+      </div>
 
       <div>
           <span class="section-label">Location</span>
@@ -649,56 +584,23 @@ router.get('/event/:id', async (req, res) => {
           </div>
       </div>
 
-     <div id="main-tickets">
+      <div id="main-tickets">
           <span class="section-label">Tickets</span>
           <div class="ticket-list-container" style="padding:0;">
-            ${renderTicketList(true)}
+              ${renderTicketList(true)}
           </div>
-        </div>
-        
-        ${recommendations.length > 0 ? `
-        <div class="rec-section">
-           <div style="display:flex; align-items:center; margin-bottom: 24px;">
-              <div style="width: 4px; height: 24px; background: var(--brand); margin-right: 12px;"></div>
-              <h3 style="font-size: 1.5rem; font-weight: 700;">Other events you may be interested in</h3>
-           </div>
-           <div class="rec-grid">
-              ${recommendations.map((rec: any) => `
-                <a href="/public/event/${rec.id}" class="rec-card">
-                   <img src="${escAttr(rec.imageUrl || '')}" class="rec-img" loading="lazy">
-                   <div class="rec-content">
-                      <div class="rec-title">${esc(rec.title)}</div>
-                      <div class="rec-meta">
-                         ${esc(rec.venue?.city || '')} • ${new Date(rec.date).toLocaleDateString('en-GB', {day:'numeric', month:'short'})}
-                      </div>
-                   </div>
-                </a>
-              `).join('')}
-           </div>
-        </div>
-        ` : ''}
-
       </div>
-      <div class="booking-area">
-          
-          ${(show.accessibility && (show.accessibility.wheelchair || show.accessibility.stepFree || show.accessibility.accessibleToilet)) ? `
-          <div class="access-banner" style="margin: 0; border-radius: 0; border-left: 0; border-bottom: 1px solid var(--border);">
-             <div class="access-title">♿ Disabled Friendly Show</div>
-             <div class="access-text">
-               ${[
-                 show.accessibility.wheelchair ? 'Wheelchair spaces' : null,
-                 show.accessibility.stepFree ? 'Step-free access' : null,
-                 show.accessibility.accessibleToilet ? 'Accessible toilets' : null
-               ].filter(Boolean).join(', ')}
-             </div>
-          </div>
-          ` : ''}
 
-          <div class="widget-header">
-            <div class="widget-title">Select Tickets</div>
-            <div class="widget-subtitle">${esc(dayName)}, ${esc(fullDate)} at ${esc(timeStr)}</div>
-          </div>
-          <div class="ticket-list-container">
+    </div>
+
+
+    <div class="booking-area">
+      <div class="booking-widget">
+        <div class="widget-header">
+          <div class="widget-title">Select Tickets</div>
+          <div class="widget-subtitle">${esc(dayName)}, ${esc(fullDate)} at ${esc(timeStr)}</div>
+        </div>
+        <div class="ticket-list-container">
           ${renderTicketList(false)}
         </div>
         <div class="widget-footer">
