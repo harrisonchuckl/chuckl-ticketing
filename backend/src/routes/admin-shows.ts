@@ -42,6 +42,15 @@ router.get("/shows", requireAdminOrOrganiser, async (_req, res) => {
         status: true,
         publishedAt: true,
         venue: { select: { id: true, name: true, city: true } },
+endDate: true,
+doorsOpenTime: true,
+ageGuidance: true,
+endTimeNote: true,
+eventType: true,
+eventCategory: true,
+accessibility: true,
+tags: true,
+additionalImages: true,
       },
     });
 
@@ -159,7 +168,24 @@ router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
 /** PATCH /admin/shows/:id */
 router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
   try {
-    const { title, date, imageUrl, descriptionHtml, venueId, venueText, status } = req.body || {};
+    const {
+  title,
+  date,
+  endDate,
+  imageUrl,
+  descriptionHtml,
+  venueId,
+  venueText,
+  status,
+  eventType,
+  eventCategory,
+  doorsOpenTime,
+  ageGuidance,
+  endTimeNote,
+  accessibility,
+  tags,
+  additionalImages,
+} = req.body || {};
     const finalVenueId = await ensureVenue(venueId, venueText);
 
     const updated = await prisma.show.update({
@@ -170,6 +196,15 @@ router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
         ...(imageUrl !== undefined ? { imageUrl: imageUrl ?? null } : {}),
         ...(descriptionHtml !== undefined ? { description: descriptionHtml ?? null } : {}),
         ...(finalVenueId ? { venueId: finalVenueId } : {}),
+...(endDate !== undefined ? { endDate: endDate ? new Date(endDate) : null } : {}),
+...(eventType !== undefined ? { eventType: eventType ? String(eventType) : null } : {}),
+...(eventCategory !== undefined ? { eventCategory: eventCategory ? String(eventCategory) : null } : {}),
+...(doorsOpenTime !== undefined ? { doorsOpenTime: doorsOpenTime ? String(doorsOpenTime) : null } : {}),
+...(ageGuidance !== undefined ? { ageGuidance: ageGuidance ? String(ageGuidance) : null } : {}),
+...(endTimeNote !== undefined ? { endTimeNote: endTimeNote ? String(endTimeNote) : null } : {}),
+...(accessibility !== undefined ? { accessibility: accessibility ?? null } : {}),
+...(tags !== undefined ? { tags: Array.isArray(tags) ? tags.map(String) : [] } : {}),
+...(additionalImages !== undefined ? { additionalImages: Array.isArray(additionalImages) ? additionalImages.map(String) : [] } : {}),
         ...(status
           ? {
               status: status === "LIVE" ? ShowStatus.LIVE : ShowStatus.DRAFT,
@@ -192,7 +227,23 @@ router.post("/shows/:id/duplicate", requireAdminOrOrganiser, async (req, res) =>
   try {
     const src = await prisma.show.findUnique({
       where: { id: String(req.params.id) },
-      select: { title: true, description: true, imageUrl: true, date: true, venueId: true },
+      select: {
+  title: true,
+  description: true,
+  imageUrl: true,
+  date: true,
+  endDate: true,
+  venueId: true,
+  organiserId: true,
+  eventType: true,
+  eventCategory: true,
+  doorsOpenTime: true,
+  ageGuidance: true,
+  endTimeNote: true,
+  accessibility: true,
+  tags: true,
+  additionalImages: true,
+},
     });
     if (!src) return res.status(404).json({ ok: false, error: "Not found" });
 
@@ -203,6 +254,16 @@ router.post("/shows/:id/duplicate", requireAdminOrOrganiser, async (req, res) =>
         imageUrl: src.imageUrl,
         date: src.date, // you’ll likely change date in the editor
         venueId: src.venueId,
+endDate: src.endDate,
+organiserId: src.organiserId,
+eventType: src.eventType,
+eventCategory: src.eventCategory,
+doorsOpenTime: src.doorsOpenTime,
+ageGuidance: src.ageGuidance,
+endTimeNote: src.endTimeNote,
+accessibility: src.accessibility as any,
+tags: src.tags ?? [],
+additionalImages: src.additionalImages ?? [],
       },
       select: { id: true },
     });
