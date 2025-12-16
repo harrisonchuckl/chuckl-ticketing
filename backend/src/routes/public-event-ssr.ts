@@ -1,6 +1,6 @@
 // backend/src/routes/public-event-ssr.ts
 import { Router } from 'express';
-import { PrismaClient, ShowStatus } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 const router = Router();
@@ -24,45 +24,6 @@ function escAttr(s: any) {
 }
 function escJSON(obj: any) {
   return JSON.stringify(obj).replace(/</g,'\\u003c');
-}
-
-function formatTimeHHMM(raw: any) {
-  if (raw === null || raw === undefined) return '';
-  const parts = String(raw).split(':');
-  if (!parts.length) return String(raw);
-  const h = Number(parts[0]);
-  const m = Number(parts[1] || 0);
-  if (Number.isNaN(h) || Number.isNaN(m)) return String(raw);
-  const d = new Date();
-  d.setHours(h);
-  d.setMinutes(m);
-  d.setSeconds(0);
-  d.setMilliseconds(0);
-  return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-}
-
-function outwardCode(postcode: string | null | undefined) {
-  if (!postcode) return '';
-  return String(postcode).trim().split(' ')[0]?.toUpperCase() || '';
-}
-
-function scoreVenueProximity(baseVenue: any, candidateVenue: any) {
-  if (!baseVenue || !candidateVenue) return 0;
-  if (baseVenue.id && candidateVenue.id && baseVenue.id === candidateVenue.id) return 4;
-
-  const baseOut = outwardCode(baseVenue.postcode);
-  const candOut = outwardCode(candidateVenue.postcode);
-  if (baseOut && candOut && baseOut === candOut) return 3;
-
-  const baseCity = String(baseVenue.city || '').trim().toLowerCase();
-  const candCity = String(candidateVenue.city || '').trim().toLowerCase();
-  if (baseCity && candCity && baseCity === candCity) return 2;
-
-  const baseName = String(baseVenue.name || '').trim().toLowerCase();
-  const candName = String(candidateVenue.name || '').trim().toLowerCase();
-  if (baseName && candName && baseName === candName) return 1;
-
-  return 0;
 }
 
 router.get('/checkout/success', async (req, res) => {
@@ -276,7 +237,7 @@ router.get('/event/:id', async (req, res) => {
       where: { id },
       include: {
         venue: {
-          select: { id: true, name: true, address: true, city: true, postcode: true },
+          select: { name: true, address: true, city: true, postcode: true },
         },
         ticketTypes: {
           select: { id: true, name: true, pricePence: true, available: true },
@@ -318,41 +279,6 @@ router.get('/event/:id', async (req, res) => {
     const poster = show.imageUrl || '';
     const desc = cleanDesc(show.description) || `Live event at ${venueLine}`;
 
-    const rawAdditionalImages = (show as any).additionalImages;
-    const additionalImages = Array.isArray(rawAdditionalImages)
-      ? rawAdditionalImages.map((u: any) => String(u)).filter(Boolean)
-      : [];
-    const imageList = [poster, ...additionalImages].filter(Boolean);
-
-    const tags = Array.isArray((show as any).tags)
-      ? (show as any).tags.map((t: any) => String(t).trim()).filter(Boolean)
-      : [];
-    const keywordsMeta = tags.join(', ');
-
-    const ageGuidance = (show as any).ageGuidance as string | null;
-    const doorsOpenRaw = (show as any).doorsOpenTime as string | null;
-    const doorTimeDisplay = formatTimeHHMM(doorsOpenRaw);
-    let doorTimeIso: string | undefined;
-    if (doorsOpenRaw && dateObj) {
-      const [dh, dm] = String(doorsOpenRaw).split(':');
-      const hNum = Number(dh);
-      const mNum = Number(dm || 0);
-      if (!Number.isNaN(hNum) && !Number.isNaN(mNum)) {
-        const d = new Date(dateObj);
-        d.setHours(hNum, mNum, 0, 0);
-        doorTimeIso = d.toISOString();
-      }
-    }
-
-    const accessibility = ((show as any).accessibility || {}) as any;
-    const hasAccessibleFeatures = !!(
-      (accessibility && (accessibility as any).wheelchair) ||
-      (accessibility && (accessibility as any).stepFree) ||
-      (accessibility && (accessibility as any).accessibleToilet)
-    );
-
-    const baseEventType = (show as any).eventType || null;
-
     // --- PRICE VARIABLES ---
     const cheapest = ticketTypes[0];
     const fromPrice = cheapest ? pFmt(cheapest.pricePence) : undefined;
@@ -372,9 +298,7 @@ router.get('/event/:id', async (req, res) => {
       name: show.title,
       description: desc,
       startDate: whenISO,
-      image: imageList.length ? imageList : undefined,
-      doorTime: doorTimeIso,
-      keywords: keywordsMeta || undefined,
+      image: poster ? [poster] : undefined,
       location: {
         '@type': 'Place',
         name: venue.name || 'Venue',
@@ -388,40 +312,6 @@ router.get('/event/:id', async (req, res) => {
     // Using an embed iframe URL instead of a direct link for the preview
     const mapEmbedUrl = `https://maps.google.com/maps?q=${mapQuery}&t=&z=15&ie=UTF8&iwloc=&output=embed`;
     const mapLink = `https://maps.google.com/maps?q=${mapQuery}`;
-
-    const organiserId = (show as any).organiserId as string | null;
-    let relatedShows: any[] = [];
-
-    if (organiserId) {
-      const others = await prisma.show.findMany({
-        where: {
-          organiserId,
-          id: { not: show.id },
-          status: ShowStatus.LIVE,
-        },
-        include: {
-          venue: { select: { id: true, name: true, address: true, city: true, postcode: true } },
-          ticketTypes: {
-            select: { pricePence: true, available: true },
-            orderBy: { pricePence: 'asc' },
-          },
-        },
-        orderBy: { date: 'asc' },
-        take: 20,
-      });
-
-      relatedShows = others
-        .map((o) => ({
-          ...o,
-          _locScore: scoreVenueProximity(venue, o.venue),
-          _typeScore: baseEventType && o.eventType === baseEventType ? 1 : 0,
-          _dateVal: o.date ? new Date(o.date).getTime() : Number.MAX_SAFE_INTEGER,
-        }))
-        .sort((a, b) =>
-          b._locScore - a._locScore || b._typeScore - a._typeScore || a._dateVal - b._dateVal
-        )
-        .slice(0, 5);
-    }
 
     // Helper to generate ticket list HTML
     const renderTicketList = (isMainColumn = false) => {
@@ -447,42 +337,6 @@ router.get('/event/:id', async (req, res) => {
           }).join('');
     };
 
-    const renderRelatedShows = () => {
-      if (!relatedShows.length) return '';
-      return `
-      <div class="related-section">
-        <span class="section-label">Other events you may be interested in</span>
-        <div class="related-grid">
-          ${relatedShows
-            .map((ev) => {
-              const v = (ev.venue || {}) as any;
-              const rDate = ev.date ? new Date(ev.date) : null;
-              const rDatePretty = rDate
-                ? rDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-                : 'Date TBC';
-              const rTimePretty = rDate
-                ? rDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-                : '';
-              const cityLine = [v.name, v.city].filter(Boolean).join(' • ');
-              const cheapestRel = (ev.ticketTypes || [])[0];
-              const priceStr = cheapestRel ? pFmt(cheapestRel.pricePence) : '';
-              const img = ev.imageUrl || poster;
-              return `
-              <a class="related-card" href="/public/event/${escAttr(ev.id)}">
-                <img src="${escAttr(img || '')}" alt="${escAttr(ev.title || 'Event poster')}" class="related-card-img" />
-                <div class="related-card-body">
-                  <div class="related-card-title">${esc(ev.title || 'Event')}</div>
-                  <div class="related-card-meta">${esc(rDatePretty)}${rTimePretty ? ' · ' + esc(rTimePretty) : ''}</div>
-                  <div class="related-card-meta">${esc(cityLine)}</div>
-                  ${priceStr ? `<div class="related-card-cta">From ${esc(priceStr)}</div>` : ''}
-                </div>
-              </a>`;
-            })
-            .join('')}
-        </div>
-      </div>`;
-    };
-
 
     // --- RENDER HTML ---
     res.type('html').send(`<!doctype html>
@@ -492,7 +346,6 @@ router.get('/event/:id', async (req, res) => {
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>${esc(show.title)} | Tickets</title>
   <meta name="description" content="${escAttr(desc)}" />
-  ${keywordsMeta ? `<meta name="keywords" content="${escAttr(keywordsMeta)}" />` : ''}
   
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -588,28 +441,11 @@ router.get('/event/:id', async (req, res) => {
     .rich-text p { margin-bottom: 1.5em; }
     .rich-text p:last-child { margin-bottom: 0; }
 
-    /* Info + Gallery Strip */
-    .info-banner {
-      margin-top: 18px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 14px;
-      padding: 12px 14px;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      background: #fff;
-      box-shadow: var(--shadow-card);
-    }
-    .info-item { display: flex; flex-direction: column; font-weight: 600; color: var(--primary); }
-    .info-label { font-size: 0.8rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
-    .info-value { font-size: 1rem; }
-
-    .gallery-strip { margin-top: 22px; display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px; scroll-snap-type: x mandatory; }
-    .gallery-strip::-webkit-scrollbar { height: 8px; }
-    .gallery-strip::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
-    .gallery-strip-item { flex: 0 0 auto; min-width: 260px; max-width: 360px; aspect-ratio: 16/9; border-radius: 10px; overflow: hidden; box-shadow: var(--shadow-card); scroll-snap-align: start; background: #e2e8f0; }
-    .gallery-strip-img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.4s; }
-    .gallery-strip-item:hover .gallery-strip-img { transform: scale(1.03); }
+    /* Gallery Grid */
+    .gallery-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 24px; }
+    .gallery-item { aspect-ratio: 16/9; background: #E2E8F0; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .gallery-img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s; }
+    .gallery-item:hover .gallery-img { transform: scale(1.05); }
 
     /* Venue Map Styles (Updated for Iframe) */
     .venue-map-container { margin-top: 24px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
@@ -634,17 +470,6 @@ router.get('/event/:id', async (req, res) => {
     /* --- BOOKING WIDGET (Sidebar) --- */
     .booking-widget {
       position: sticky; top: 24px; background: white; border-radius: var(--radius-lg); box-shadow: var(--shadow-float); border: 1px solid var(--border); overflow: hidden;
-    }
-    .accessibility-pill {
-      background: #ecfeff;
-      color: #0f172a;
-      padding: 10px 14px;
-      font-weight: 700;
-      font-size: 0.9rem;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      border-bottom: 1px solid var(--border);
     }
     .widget-header { padding: 24px; border-bottom: 1px solid var(--border); background: #fff; }
     .widget-title { font-size: 1.25rem; font-weight: 800; color: var(--primary); }
@@ -690,17 +515,6 @@ router.get('/event/:id', async (req, res) => {
     .btn-mob-cta {
       background: var(--brand); color: white; padding: 12px 24px; border-radius: 8px; font-weight: 700; font-size: 1rem;
     }
-
-    /* Related events */
-    .related-section { max-width: 1200px; margin: 0 auto; padding: 0 24px 100px; }
-    .related-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
-    .related-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow-card); display: flex; flex-direction: column; height: 100%; }
-    .related-card-img { width: 100%; aspect-ratio: 16/9; object-fit: cover; background: #e2e8f0; }
-    .related-card-body { padding: 14px; display: grid; gap: 6px; flex: 1; }
-    .related-card-title { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.05rem; }
-    .related-card-meta { color: var(--text-muted); font-size: 0.9rem; }
-    .related-card-cta { color: var(--brand); font-weight: 700; font-size: 0.95rem; margin-top: 4px; }
-    .related-section .section-label { margin-bottom: 12px; display: inline-block; }
 
     @media (max-width: 960px) {
       .hero { min-height: 45vh; }
@@ -748,22 +562,10 @@ router.get('/event/:id', async (req, res) => {
           <div class="rich-text">
             ${show.description ? show.description.replace(/\n/g, '<br/>') : '<p>Full details coming soon.</p>'}
           </div>
-          ${doorTimeDisplay || ageGuidance ? `
-          <div class="info-banner">
-            ${doorTimeDisplay ? `<div class="info-item"><span class="info-label">Doors open</span><span class="info-value">${esc(doorTimeDisplay)}</span></div>` : ''}
-            ${ageGuidance ? `<div class="info-item"><span class="info-label">Age guidance</span><span class="info-value">${esc(ageGuidance)}</span></div>` : ''}
-          </div>
-          ` : ''}
-          ${imageList.length ? `
-          <div class="gallery-strip">
-            ${imageList
-              .map(
-                (src, idx) => `
-                <div class="gallery-strip-item">
-                  <img src="${escAttr(src)}" class="gallery-strip-img" alt="Event image ${idx + 1}" />
-                </div>`
-              )
-              .join('')}
+          ${poster ? `
+          <div class="gallery-grid">
+            <div class="gallery-item"><img src="${escAttr(poster)}" class="gallery-img" alt="Gallery 1"></div>
+            <div class="gallery-item"><img src="${escAttr(poster)}" class="gallery-img" alt="Gallery 2" style="filter:hue-rotate(20deg);"></div>
           </div>
           ` : ''}
       </div>
@@ -794,7 +596,6 @@ router.get('/event/:id', async (req, res) => {
 
     <div class="booking-area">
       <div class="booking-widget">
-        ${hasAccessibleFeatures ? `<div class="accessibility-pill">♿ Disabled-friendly show</div>` : ''}
         <div class="widget-header">
           <div class="widget-title">Select Tickets</div>
           <div class="widget-subtitle">${esc(dayName)}, ${esc(fullDate)} at ${esc(timeStr)}</div>
@@ -809,8 +610,6 @@ router.get('/event/:id', async (req, res) => {
     </div>
 
   </div>
-
-  ${renderRelatedShows()}
 
   <div class="mobile-bar">
     <div>
