@@ -85,6 +85,20 @@ activeSeatMapId String?
   orders      Order[]
   seatMaps    SeatMap[]
   allocations ExternalAllocation[]
+
+  doorsOpenTime           String?   // e.g., "19:00"
+  ageGuideline            String?   // e.g., "18+" or "Suitable for all ages"
+  
+  // Accessibility Booleans
+  accessibilityWheelchair Boolean   @default(false)
+  accessibilityStepFree   Boolean   @default(false)
+  accessibilityToilets    Boolean   @default(false)
+  
+  // SEO Fields (Not visible on page)
+  seoMetaTags             String[]  // Array of tags
+  seoMetaKeywords         String?   // Comma-separated string or similar
+  // ---------------------------
+
 }
 
 model TicketType {
