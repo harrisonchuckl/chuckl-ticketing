@@ -60,39 +60,28 @@ router.get("/shows", requireAdminOrOrganiser, async (_req, res) => {
 
 /** POST /admin/shows — create (auto-creates venue if needed) */
 router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
-    try {
-      const { 
-        title, date, imageUrl, descriptionHtml, venueId, venueText,
-        // New Fields
-        doorsOpenTime, ageGuidance, eventType, eventCategory, endTimeNote, tags, additionalImageUrls, accessibility
-      } = req.body || {};
+  try {
+    const { title, date, imageUrl, descriptionHtml, venueId, venueText } = req.body || {};
+    if (!title || !date || !(venueId || venueText) || !descriptionHtml) {
+      return res.status(400).json({ ok: false, error: "Missing required fields" });
+    }
 
-      if (!title || !date || !(venueId || venueText) || !descriptionHtml) {
-        return res.status(400).json({ ok: false, error: "Missing required fields" });
-      }
-      const finalVenueId = await ensureVenue(venueId, venueText);
-      const created = await prisma.show.create({
-        data: {
-          title: String(title),
-          date: new Date(date),
-          imageUrl: imageUrl ?? null,
-          description: descriptionHtml ?? null,
-          venueId: finalVenueId,
-          status: ShowStatus.DRAFT,
-          // New Fields
-          doorsOpenTime: doorsOpenTime || null,
-          ageGuidance: ageGuidance || null,
-          eventType: eventType || null,
-          category: eventCategory || null,
-          endTimeNote: endTimeNote || null,
-          tags: Array.isArray(tags) ? tags : [],
-          additionalImageUrls: Array.isArray(additionalImageUrls) ? additionalImageUrls : [],
-          accessibility: accessibility || null,
-        },
-        select: { id: true },
-      });
-      res.json({ ok: true, id: created.id });
-    } catch (e) {
+    const finalVenueId = await ensureVenue(venueId, venueText);
+
+    const created = await prisma.show.create({
+      data: {
+        title: String(title),
+        date: new Date(date),
+        imageUrl: imageUrl ?? null,
+        description: descriptionHtml ?? null,
+        venueId: finalVenueId,
+        status: ShowStatus.DRAFT,
+      },
+      select: { id: true },
+    });
+
+    res.json({ ok: true, id: created.id });
+  } catch (e) {
     console.error("POST /admin/shows failed", e);
     res.status(500).json({ ok: false, error: "Failed to create show" });
   }
@@ -129,44 +118,30 @@ router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
 
 /** PATCH /admin/shows/:id */
 router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
-    try {
-      const { 
-        title, date, imageUrl, descriptionHtml, venueId, venueText, status,
-        // New fields
-        doorsOpenTime, ageGuidance, eventType, eventCategory, endTimeNote, tags, additionalImageUrls, accessibility
-      } = req.body || {};
-      
-      const finalVenueId = await ensureVenue(venueId, venueText);
-      const updated = await prisma.show.update({
-        where: { id: String(req.params.id) },
-        data: {
-          ...(title != null ? { title: String(title) } : {}),
-          ...(date != null ? { date: new Date(date) } : {}),
-          ...(imageUrl !== undefined ? { imageUrl: imageUrl ?? null } : {}),
-          ...(descriptionHtml !== undefined ? { description: descriptionHtml ?? null } : {}),
-          ...(finalVenueId ? { venueId: finalVenueId } : {}),
-          
-          // New Fields Updates
-          ...(doorsOpenTime !== undefined ? { doorsOpenTime: doorsOpenTime || null } : {}),
-          ...(ageGuidance !== undefined ? { ageGuidance: ageGuidance || null } : {}),
-          ...(eventType !== undefined ? { eventType: eventType || null } : {}),
-          ...(eventCategory !== undefined ? { category: eventCategory || null } : {}),
-          ...(endTimeNote !== undefined ? { endTimeNote: endTimeNote || null } : {}),
-          ...(tags !== undefined ? { tags: Array.isArray(tags) ? tags : [] } : {}),
-          ...(additionalImageUrls !== undefined ? { additionalImageUrls: Array.isArray(additionalImageUrls) ? additionalImageUrls : [] } : {}),
-          ...(accessibility !== undefined ? { accessibility: accessibility || null } : {}),
+  try {
+    const { title, date, imageUrl, descriptionHtml, venueId, venueText, status } = req.body || {};
+    const finalVenueId = await ensureVenue(venueId, venueText);
 
-          ...(status
-            ? {
-                status: status === "LIVE" ? ShowStatus.LIVE : ShowStatus.DRAFT,
-                publishedAt: status === "LIVE" ? new Date() : null,
-              }
-            : {}),
-        },
-        select: { id: true },
-      });
-      res.json({ ok: true, id: updated.id });
-    } catch (e) {
+    const updated = await prisma.show.update({
+      where: { id: String(req.params.id) },
+      data: {
+        ...(title != null ? { title: String(title) } : {}),
+        ...(date != null ? { date: new Date(date) } : {}),
+        ...(imageUrl !== undefined ? { imageUrl: imageUrl ?? null } : {}),
+        ...(descriptionHtml !== undefined ? { description: descriptionHtml ?? null } : {}),
+        ...(finalVenueId ? { venueId: finalVenueId } : {}),
+        ...(status
+          ? {
+              status: status === "LIVE" ? ShowStatus.LIVE : ShowStatus.DRAFT,
+              publishedAt: status === "LIVE" ? new Date() : null,
+            }
+          : {}),
+      },
+      select: { id: true },
+    });
+
+    res.json({ ok: true, id: updated.id });
+  } catch (e) {
     console.error("PATCH /admin/shows/:id failed", e);
     res.status(500).json({ ok: false, error: "Failed to update show" });
   }
