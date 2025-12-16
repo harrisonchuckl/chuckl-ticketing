@@ -42,15 +42,6 @@ router.get("/shows", requireAdminOrOrganiser, async (_req, res) => {
         status: true,
         publishedAt: true,
         venue: { select: { id: true, name: true, city: true } },
-endDate: true,
-doorsOpenTime: true,
-ageGuidance: true,
-endTimeNote: true,
-eventType: true,
-eventCategory: true,
-accessibility: true,
-tags: true,
-additionalImages: true,
       },
     });
 
@@ -70,64 +61,24 @@ additionalImages: true,
 /** POST /admin/shows — create (auto-creates venue if needed) */
 router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
   try {
-    const {
-  title,
-  date,
-  endDate,
-  imageUrl,
-  descriptionHtml,
-  venueId,
-  venueText,
-  eventType,
-  eventCategory,
-  doorsOpenTime,
-  ageGuidance,
-  endTimeNote,
-  accessibility,
-  tags,
-  additionalImages,
-} = req.body || {};
+    const { title, date, imageUrl, descriptionHtml, venueId, venueText } = req.body || {};
+    if (!title || !date || !(venueId || venueText) || !descriptionHtml) {
+      return res.status(400).json({ ok: false, error: "Missing required fields" });
+    }
 
-// Keep your existing required rules, but align with Admin UI (type/category/image required)
-if (!title || !date || !(venueId || venueText) || !descriptionHtml || !eventType || !eventCategory || !imageUrl) {
-  return res.status(400).json({ ok: false, error: "Missing required fields" });
-}
+    const finalVenueId = await ensureVenue(venueId, venueText);
 
-const finalVenueId = await ensureVenue(venueId, venueText);
-
-// organiserId: requireAdminOrOrganiser should already have a user context.
-// This keeps it safe even if the shape differs.
-const organiserId =
-  (req as any).user?.id ||
-  (req as any).userId ||
-  (req as any).auth?.userId ||
-  null;
-
-const created = await prisma.show.create({
-  data: {
-    title: String(title),
-    date: new Date(date),
-    endDate: endDate ? new Date(endDate) : null,
-    imageUrl: String(imageUrl),
-    description: String(descriptionHtml),
-    venueId: finalVenueId,
-    organiserId,
-
-    eventType: String(eventType),
-    eventCategory: String(eventCategory),
-
-    doorsOpenTime: doorsOpenTime ? String(doorsOpenTime) : null,
-    ageGuidance: ageGuidance ? String(ageGuidance) : null,
-    endTimeNote: endTimeNote ? String(endTimeNote) : null,
-
-    accessibility: accessibility ?? null,
-    tags: Array.isArray(tags) ? tags.map(String) : [],
-    additionalImages: Array.isArray(additionalImages) ? additionalImages.map(String) : [],
-
-    status: ShowStatus.DRAFT,
-  },
-  select: { id: true },
-});
+    const created = await prisma.show.create({
+      data: {
+        title: String(title),
+        date: new Date(date),
+        imageUrl: imageUrl ?? null,
+        description: descriptionHtml ?? null,
+        venueId: finalVenueId,
+        status: ShowStatus.DRAFT,
+      },
+      select: { id: true },
+    });
 
     res.json({ ok: true, id: created.id });
   } catch (e) {
@@ -168,24 +119,7 @@ router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
 /** PATCH /admin/shows/:id */
 router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
   try {
-    const {
-  title,
-  date,
-  endDate,
-  imageUrl,
-  descriptionHtml,
-  venueId,
-  venueText,
-  status,
-  eventType,
-  eventCategory,
-  doorsOpenTime,
-  ageGuidance,
-  endTimeNote,
-  accessibility,
-  tags,
-  additionalImages,
-} = req.body || {};
+    const { title, date, imageUrl, descriptionHtml, venueId, venueText, status } = req.body || {};
     const finalVenueId = await ensureVenue(venueId, venueText);
 
     const updated = await prisma.show.update({
@@ -196,15 +130,6 @@ router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
         ...(imageUrl !== undefined ? { imageUrl: imageUrl ?? null } : {}),
         ...(descriptionHtml !== undefined ? { description: descriptionHtml ?? null } : {}),
         ...(finalVenueId ? { venueId: finalVenueId } : {}),
-...(endDate !== undefined ? { endDate: endDate ? new Date(endDate) : null } : {}),
-...(eventType !== undefined ? { eventType: eventType ? String(eventType) : null } : {}),
-...(eventCategory !== undefined ? { eventCategory: eventCategory ? String(eventCategory) : null } : {}),
-...(doorsOpenTime !== undefined ? { doorsOpenTime: doorsOpenTime ? String(doorsOpenTime) : null } : {}),
-...(ageGuidance !== undefined ? { ageGuidance: ageGuidance ? String(ageGuidance) : null } : {}),
-...(endTimeNote !== undefined ? { endTimeNote: endTimeNote ? String(endTimeNote) : null } : {}),
-...(accessibility !== undefined ? { accessibility: accessibility ?? null } : {}),
-...(tags !== undefined ? { tags: Array.isArray(tags) ? tags.map(String) : [] } : {}),
-...(additionalImages !== undefined ? { additionalImages: Array.isArray(additionalImages) ? additionalImages.map(String) : [] } : {}),
         ...(status
           ? {
               status: status === "LIVE" ? ShowStatus.LIVE : ShowStatus.DRAFT,
@@ -227,23 +152,7 @@ router.post("/shows/:id/duplicate", requireAdminOrOrganiser, async (req, res) =>
   try {
     const src = await prisma.show.findUnique({
       where: { id: String(req.params.id) },
-      select: {
-  title: true,
-  description: true,
-  imageUrl: true,
-  date: true,
-  endDate: true,
-  venueId: true,
-  organiserId: true,
-  eventType: true,
-  eventCategory: true,
-  doorsOpenTime: true,
-  ageGuidance: true,
-  endTimeNote: true,
-  accessibility: true,
-  tags: true,
-  additionalImages: true,
-},
+      select: { title: true, description: true, imageUrl: true, date: true, venueId: true },
     });
     if (!src) return res.status(404).json({ ok: false, error: "Not found" });
 
@@ -254,16 +163,6 @@ router.post("/shows/:id/duplicate", requireAdminOrOrganiser, async (req, res) =>
         imageUrl: src.imageUrl,
         date: src.date, // you’ll likely change date in the editor
         venueId: src.venueId,
-endDate: src.endDate,
-organiserId: src.organiserId,
-eventType: src.eventType,
-eventCategory: src.eventCategory,
-doorsOpenTime: src.doorsOpenTime,
-ageGuidance: src.ageGuidance,
-endTimeNote: src.endTimeNote,
-accessibility: src.accessibility as any,
-tags: src.tags ?? [],
-additionalImages: src.additionalImages ?? [],
       },
       select: { id: true },
     });
