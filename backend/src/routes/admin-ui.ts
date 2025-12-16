@@ -407,7 +407,7 @@ router.get(
   var navPromptEl = null;
   var activeNavGuard = null;
   var pendingNav = null;
-  var lastPath = (location.pathname || '').replace(/\\/$/, '') || '/admin/ui';
+  var lastPath = (location.pathname || '').replace(/\/$/, '') || '/admin/ui';
 
   function escapeHtml(s){
     const map = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
@@ -428,7 +428,7 @@ router.get(
     el.className = 'nav-guard';
     el.innerHTML =
       '<div class="nav-guard-title">'+escapeHtml(opts && opts.title ? opts.title : 'Unsaved changes')+'</div>'
-      +'<div class="nav-guard-body">'+escapeHtml(opts && opts.message ? opts.message : 'You have unsaved changes.')</div>'
+      +'<div class="nav-guard-body">'+escapeHtml(opts && opts.message ? opts.message : 'You have unsaved changes.')+'</div>'
       +'<div class="nav-guard-status"></div>'
       +'<div class="nav-guard-actions"></div>';
     var actionsRow = el.querySelector('.nav-guard-actions');
@@ -471,7 +471,7 @@ router.get(
   function showGuardPrompt(targetPath, cause){
     if (!activeNavGuard || typeof activeNavGuard.showPrompt !== 'function') return;
     var continueNav = function(overridePath){
-      var dest = (overridePath || targetPath || '/admin/ui').replace(/\\/$/, '');
+      var dest = (overridePath || targetPath || '/admin/ui').replace(/\/$/, '');
       pendingNav = null;
       clearNavigationGuard();
       history.pushState(null, '', dest);
@@ -491,7 +491,7 @@ router.get(
   }
 
   function requestNavigation(path, cause){
-    var dest = (path || '/admin/ui').replace(/\\/$/, '');
+    var dest = (path || '/admin/ui').replace(/\/$/, '');
     if (shouldBlockNavigation(dest, cause)){
       pendingNav = { path: dest, cause: cause || 'nav' };
       showGuardPrompt(dest, cause || 'nav');
@@ -534,7 +534,7 @@ router.get(
   });
 
   window.addEventListener('popstate', function(){
-    var target = (location.pathname || '').replace(/\\/$/, '');
+    var target = (location.pathname || '').replace(/\/$/, '');
     if (shouldBlockNavigation(target, 'popstate')){
       history.pushState(null, '', lastPath);
       pendingNav = { path: target, cause:'popstate' };
@@ -2926,7 +2926,7 @@ async function summaryPage(id){
   // --- ROUTER ---
   function route(){
     try{
-      var path = location.pathname.replace(/\\/$/, '');
+      var path = location.pathname.replace(/\/$/, '');
       console.log('[Admin UI] route', path);
       setActive(path);
 
