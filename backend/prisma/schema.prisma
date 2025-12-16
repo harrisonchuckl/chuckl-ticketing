@@ -69,21 +69,10 @@ model Show {
   description String?
   imageUrl    String?
   date        DateTime
-  endDate     DateTime?
 
-  // New optional fields from the Admin “Create Show” flow
-  doorsOpenTime    String?
-  ageGuidance      String?
-  endTimeNote      String?
-  eventType        String?
-  eventCategory    String?
-  accessibility    Json?
-  tags             String[] @default([])
-  additionalImages String[] @default([])
-
-  status         ShowStatus @default(DRAFT)
-  publishedAt    DateTime?
-  activeSeatMapId String?
+  status      ShowStatus @default(DRAFT)
+  publishedAt DateTime?
+activeSeatMapId String?
 
   venueId     String?
   organiserId String?
@@ -91,11 +80,11 @@ model Show {
   venue       Venue? @relation(fields: [venueId], references: [id])
   organiser   User?  @relation("OrganiserShows", fields: [organiserId], references: [id])
 
-  ticketTypes  TicketType[]
-  tickets      Ticket[]
-  orders       Order[]
-  seatMaps     SeatMap[]
-  allocations  ExternalAllocation[]
+  ticketTypes TicketType[]
+  tickets     Ticket[]
+  orders      Order[]
+  seatMaps    SeatMap[]
+  allocations ExternalAllocation[]
 }
 
 model TicketType {
