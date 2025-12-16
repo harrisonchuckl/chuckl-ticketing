@@ -791,17 +791,6 @@ router.get(
   +   '<div id="ai_err" class="error" style="margin-top:10px;"></div>'
   +   '<div id="ai_result" style="margin-top:14px;"></div>'
 
-  +   '<div class="row" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); justify-content: space-between; align-items:center;">'
-  +     '<label id="ai_approval_wrap" style="display:none; align-items:center; gap:10px; font-size:13px; color:#334155;">'
-  +       '<input id="ai_approval" type="checkbox" />'
-  +       'I’ve checked the AI-filled details above (and edited anything needed).'
-  +     '</label>'
-  +     '<div class="row" style="gap:10px; align-items:center;">'
-  +       '<button id="save" class="btn p" style="padding: 10px 20px; font-size: 16px;">Save Event Details and Add Tickets</button>'
-  +       '<div id="err" class="error"></div>'
-  +     '</div>'
-  +   '</div>'
-
   + '</div>';
 
   const drop = $('#ai_drop');
@@ -838,35 +827,80 @@ router.get(
   }
 
   function renderList(){
-    const rows = []
-      .concat(state.images.map(f => ({
-        kind: 'Image', name: f.name, size: f.size, extra: f.url ? 'Uploaded' : 'Pending upload'
-      })))
-      .concat(state.docs.map(f => ({
-        kind: 'Doc', name: f.name, size: f.size, extra: f.dataUrl ? 'Ready' : 'Pending read'
-      })));
+  const imgRows = state.images.map((f, idx) => ({
+    kind: 'Image',
+    kindKey: 'image',
+    idx,
+    name: f.name,
+    size: f.size,
+    extra: f.url ? 'Uploaded' : 'Pending upload'
+  }));
 
-    if (!rows.length){
-      list.innerHTML = '<div class="muted">No files added yet.</div>';
-      return;
-    }
+  const docRows = state.docs.map((f, idx) => ({
+    kind: 'Doc',
+    kindKey: 'doc',
+    idx,
+    name: f.name,
+    size: f.size,
+    extra: f.dataUrl ? 'Ready' : 'Pending read'
+  }));
 
-    list.innerHTML =
-      '<div style="border:1px solid var(--border); border-radius:10px; overflow:hidden;">'
-    +   '<div style="display:grid; grid-template-columns: 110px 1fr 90px 120px; gap:10px; padding:10px 12px; background:#f8fafc; font-weight:600; font-size:12px;">'
-    +     '<div>Type</div><div>File</div><div>Size</div><div>Status</div>'
-    +   '</div>'
-    +   rows.map(r =>
-          '<div style="display:grid; grid-template-columns: 110px 1fr 90px 120px; gap:10px; padding:10px 12px; border-top:1px solid var(--border); font-size:13px;">'
-        +   '<div>'+esc(r.kind)+'</div>'
-        +   '<div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">'+esc(r.name)+'</div>'
-        +   '<div>'+esc(bytes(r.size))+'</div>'
-        +   '<div class="muted">'+esc(r.extra)+'</div>'
-        + '</div>'
-        ).join('')
-    + '</div>';
+  const rows = imgRows.concat(docRows);
+
+  if (!rows.length){
+    list.innerHTML = '<div class="muted">No files added yet.</div>';
+    return;
   }
 
+  list.innerHTML =
+    '<div style="border:1px solid var(--border); border-radius:10px; overflow:hidden;">'
+  +   '<div style="display:grid; grid-template-columns: 110px 1fr 90px 120px 52px; gap:10px; padding:10px 12px; background:#f8fafc; font-weight:600; font-size:12px; align-items:center;">'
+  +     '<div>Type</div><div>File</div><div>Size</div><div>Status</div><div></div>'
+  +   '</div>'
+  +   rows.map(r =>
+        '<div style="display:grid; grid-template-columns: 110px 1fr 90px 120px 52px; gap:10px; padding:10px 12px; border-top:1px solid var(--border); font-size:13px; align-items:center;">'
+      +   '<div>'+esc(r.kind)+'</div>'
+      +   '<div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">'+esc(r.name)+'</div>'
+      +   '<div>'+esc(bytes(r.size))+'</div>'
+      +   '<div class="muted">'+esc(r.extra)+'</div>'
+      +   '<div style="text-align:right;">'
+      +     '<button'
+      +       ' type="button"'
+      +       ' class="btn"'
+      +       ' title="Remove"'
+      +       ' aria-label="Remove '+esc(r.name)+'"'
+      +       ' data-remove-kind="'+esc(r.kindKey)+'"'
+      +       ' data-remove-idx="'+String(r.idx)+'"'
+      +       ' style="padding:6px 10px; line-height:1; font-size:14px;">'
+      +       '🗑️'
+      +     '</button>'
+      +   '</div>'
+      + '</div>'
+      ).join('')
+  + '</div>';
+
+  // Wire delete buttons
+  list.querySelectorAll('[data-remove-kind][data-remove-idx]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      const kind = btn.getAttribute('data-remove-kind');
+      const idxStr = btn.getAttribute('data-remove-idx');
+      const idx = Number(idxStr);
+
+      if (!Number.isFinite(idx) || idx < 0) return;
+
+      if (kind === 'image'){
+        if (idx >= 0 && idx < state.images.length) state.images.splice(idx, 1);
+      } else if (kind === 'doc'){
+        if (idx >= 0 && idx < state.docs.length) state.docs.splice(idx, 1);
+      }
+
+      // Clear any old messages and redraw
+      err.textContent = '';
+      status.textContent = '';
+      renderList();
+    });
+  });
+}
   function readAsDataURL(file){
     return new Promise((resolve, reject) => {
       const fr = new FileReader();
@@ -1014,8 +1048,7 @@ router.get(
 
     btn.disabled = true;
     btn.textContent = 'Analysing…';
-    status.textContent = 'Sending assets to AI…';
-
+    status.textContent = 'TixAll is doing its magic…';
     try{
            const best = pickBestMainPoster(state.images);
 
