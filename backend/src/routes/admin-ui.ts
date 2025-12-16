@@ -2729,7 +2729,12 @@ const model = process.env.OPENAI_MODEL_SHOW_EXTRACT || "gpt-4o-mini";
                text:
           "You are extracting event/show details for a UK ticketing admin UI.\n" +
           "Use ONLY the provided documents + images. If unknown, set null/empty values and list what is missing.\n" +
-          "Return a single JSON object that matches the schema exactly.\n\n" +
+          "If a document contains a full event description, copy it EXACTLY (word-for-word) into descriptionHtml as multi-paragraph <p>...</p> HTML.\n" +
+"Only generate a new event description if no suitable description exists in the docs.\n" +
+"If generating, write at least 3 paragraphs (not a single line).\n" +
+
+                 
+                 "Return a single JSON object that matches the schema exactly.\n\n" +
           "CRITICAL RULES:\n" +
           "1) TITLE: Prefer the title found in the document(s) exactly as written (punctuation included). Do NOT add hyphens or extra separators unless the source includes them.\n" +
           "   If no clear title is in docs, read the title from the poster image text. If still unknown, propose a sensible title using the available info.\n" +
@@ -2784,9 +2789,14 @@ async function docToText(name: string, type: string, dataUrl: string){
   const mime = (parsed.mime || type || "").toLowerCase();
   const lowerName = String(name || "").toLowerCase();
 
-  // Lazy requires to avoid TS import/esModuleInterop issues
-  const mammoth = require("mammoth");
-  const pdfParse = require("pdf-parse");
+   // NOTE: backend runs as ESM ("type":"module") on Railway, so `require` is not available.
+  // Use dynamic import for these CommonJS deps.
+  const mammothMod: any = await import("mammoth");
+  const mammoth: any = (mammothMod?.default || mammothMod);
+
+  const pdfParseMod: any = await import("pdf-parse");
+  const pdfParse: any = (pdfParseMod?.default || pdfParseMod);
+
 
   // DOCX
   if (mime.includes("wordprocessingml.document") || lowerName.endsWith(".docx")) {
@@ -2825,13 +2835,23 @@ for (const d of docs) {
       type: "input_text",
       text: `Document: ${d.name || "document"}\n\n${clipped}`
     });
-  }catch(e){
-    // Don’t fail the whole request if one doc can’t be parsed
+   }catch(e:any){
+    console.error(
+      "[AI Extract] doc parse failed",
+      {
+        name: d?.name,
+        type: d?.type,
+        err: e?.message || String(e),
+        stack: e?.stack
+      }
+    );
+
     content.push({
       type: "input_text",
       text: `Document: ${d.name || "document"}\n\n[Could not parse this file on server]`
     });
   }
+
 }
 
 
@@ -2870,6 +2890,8 @@ function extractTitleFromText(text: string){
   }
   return null;
 }
+
+    
 
 function escapeHtml(s: string){
   return String(s || "")
@@ -3291,6 +3313,94 @@ if (bestDesc && bestDesc.text) {
     }, { apiKey, model });
   }
 }
+
+      // --- Prefer doc-provided event description (verbatim) over AI-generated copy ---
+const _escapeHtml = (s: string) =>
+  s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+
+const _bestDocText = (() => {
+  const cleaned = (docTexts || []).map(t => (t || "").trim()).filter(Boolean);
+  cleaned.sort((a, b) => b.length - a.length);
+  return cleaned[0] || "";
+})();
+
+const _docParas = _bestDocText
+  .replace(/\r/g, "")
+  .split(/\n{2,}|\n/)
+  .map(s => s.trim())
+  .filter(Boolean);
+
+let _usedDocDescription = false;
+
+if (_docParas.length >= 2) {
+  const maybeTitle = _docParas[0];
+  const rest = _docParas.slice(1);
+
+  // Heuristic: first line is a title if it's reasonably short and not obviously a sentence.
+  const titleLooksLikeTitle = maybeTitle.length <= 140 && !/[.!?]$/.test(maybeTitle);
+
+  const descParas = titleLooksLikeTitle ? rest : _docParas;
+  const descCharCount = descParas.join(" ").replace(/\s+/g, " ").trim().length;
+
+  // Only treat as a real “event description” if it’s got enough substance
+  if (descParas.length >= 2 && descCharCount >= 80) {
+    // Use DOCX/PDF text exactly, only wrapping in <p> blocks.
+    draft.descriptionHtml = descParas.map(p => `<p>${_escapeHtml(p)}</p>`).join("");
+
+    // Only set title from doc if title is currently missing/empty
+    if (titleLooksLikeTitle && (!draft.title || String(draft.title).trim().length < 3)) {
+      draft.title = maybeTitle;
+    }
+
+    _usedDocDescription = true;
+  }
+}
+
+// If we DIDN'T use the doc description, ensure AI output isn't a single-line blob.
+// (No rewriting, just paragraph breaks.)
+if (!_usedDocDescription && typeof draft.descriptionHtml === "string") {
+  const plain = draft.descriptionHtml
+    .replace(/<\/p>\s*<p>/g, "\n\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/?[^>]+>/g, "")
+    .trim();
+
+  const blocks = plain.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
+
+  if (blocks.length < 2 && plain.length > 0) {
+    const sentences = plain.split(/([.!?])\s+/).filter(Boolean);
+    // Rebuild sentences without changing words (just grouping)
+    const rebuilt: string[] = [];
+    for (let i = 0; i < sentences.length; i++) {
+      const part = sentences[i];
+      const next = sentences[i + 1];
+      if (next && (next === "." || next === "!" || next === "?")) {
+        rebuilt.push((part + next).trim());
+        i++;
+      } else {
+        rebuilt.push(part.trim());
+      }
+    }
+
+    if (rebuilt.length >= 3) {
+      const third = Math.ceil(rebuilt.length / 3);
+      const a = rebuilt.slice(0, third).join(" ");
+      const b = rebuilt.slice(third, third * 2).join(" ");
+      const c = rebuilt.slice(third * 2).join(" ");
+      draft.descriptionHtml = [a, b, c].filter(Boolean).map(p => `<p>${_escapeHtml(p)}</p>`).join("");
+    }
+  }
+}
+
+(draft as any)._debug = (draft as any)._debug || {};
+(draft as any)._debug.docDescriptionUsed = _usedDocDescription;
+(draft as any)._debug.bestDocChars = _bestDocText.length;
+(draft as any)._debug.docCount = Array.isArray(docTexts) ? docTexts.length : 0;
 
 
       return res.json({ ok: true, draft });
