@@ -5,8 +5,18 @@ import { requireAdminOrOrganiser } from "../lib/authz.js";
 
 const router = Router();
 
+function asNullableString(value: unknown) {
+  if (value === null || value === undefined) return null;
+  const str = String(value).trim();
+  return str.length ? str : null;
+}
+
+function isNonEmptyString(val: string | null | undefined): val is string {
+  return typeof val === "string" && val.length > 0;
+}
+
 /** Utility: find existing venue (by exact name+city) or create one from text */
-async function ensureVenue(venueId?: string | null, venueText?: string | null) {
+async function ensureVenue(venueId?: string | null, venueText?: string | null): Promise<string | null> {
   if (venueId) {
     const v = await prisma.venue.findUnique({ where: { id: venueId } });
     if (v) return v.id;
@@ -39,6 +49,8 @@ router.get("/shows", requireAdminOrOrganiser, async (_req, res) => {
         description: true,
         imageUrl: true,
         date: true,
+        eventType: true,
+        eventCategory: true,
         status: true,
         publishedAt: true,
         venue: { select: { id: true, name: true, city: true } },
@@ -61,21 +73,54 @@ router.get("/shows", requireAdminOrOrganiser, async (_req, res) => {
 /** POST /admin/shows — create (auto-creates venue if needed) */
 router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
   try {
-    const { title, date, imageUrl, descriptionHtml, venueId, venueText } = req.body || {};
+    const {
+      title,
+      date,
+      endDate,
+      imageUrl,
+      descriptionHtml,
+      venueId,
+      venueText,
+      eventType,
+      eventCategory,
+      doorsOpenTime,
+      ageGuidance,
+      endTimeNote,
+      accessibility,
+      tags,
+      additionalImages,
+    } = req.body || {};
     if (!title || !date || !(venueId || venueText) || !descriptionHtml) {
       return res.status(400).json({ ok: false, error: "Missing required fields" });
     }
 
-    const finalVenueId = await ensureVenue(venueId, venueText);
+    const finalVenueId = (await ensureVenue(venueId, venueText)) || undefined;
+    const parsedTags = Array.isArray(tags)
+      ? tags.map((t: unknown) => asNullableString(t)).filter(isNonEmptyString)
+      : [];
+    const parsedAdditionalImages = Array.isArray(additionalImages)
+      ? additionalImages.map((u: unknown) => asNullableString(u)).filter(isNonEmptyString)
+      : [];
+    const parsedAccessibility =
+      accessibility && typeof accessibility === "object" ? accessibility : null;
 
     const created = await prisma.show.create({
       data: {
         title: String(title),
         date: new Date(date),
+        ...(endDate ? { endDate: new Date(endDate) } : {}),
         imageUrl: imageUrl ?? null,
         description: descriptionHtml ?? null,
         venueId: finalVenueId,
         status: ShowStatus.DRAFT,
+        eventType: asNullableString(eventType),
+        eventCategory: asNullableString(eventCategory),
+        doorsOpenTime: asNullableString(doorsOpenTime),
+        ageGuidance: asNullableString(ageGuidance),
+        endTimeNote: asNullableString(endTimeNote),
+        accessibility: parsedAccessibility,
+        tags: parsedTags,
+        additionalImages: parsedAdditionalImages,
       },
       select: { id: true },
     });
@@ -98,6 +143,15 @@ router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
         description: true,
         imageUrl: true,
         date: true,
+        endDate: true,
+        eventType: true,
+        eventCategory: true,
+        doorsOpenTime: true,
+        ageGuidance: true,
+        endTimeNote: true,
+        accessibility: true,
+        tags: true,
+        additionalImages: true,
         status: true,
         publishedAt: true,
         venue: { select: { id: true, name: true, city: true } },
@@ -119,17 +173,51 @@ router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
 /** PATCH /admin/shows/:id */
 router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
   try {
-    const { title, date, imageUrl, descriptionHtml, venueId, venueText, status } = req.body || {};
-    const finalVenueId = await ensureVenue(venueId, venueText);
+    const {
+      title,
+      date,
+      endDate,
+      imageUrl,
+      descriptionHtml,
+      venueId,
+      venueText,
+      status,
+      eventType,
+      eventCategory,
+      doorsOpenTime,
+      ageGuidance,
+      endTimeNote,
+      accessibility,
+      tags,
+      additionalImages,
+    } = req.body || {};
+    const finalVenueId = (await ensureVenue(venueId, venueText)) || undefined;
+    const parsedTags = Array.isArray(tags)
+      ? tags.map((t: unknown) => asNullableString(t)).filter(isNonEmptyString)
+      : undefined;
+    const parsedAdditionalImages = Array.isArray(additionalImages)
+      ? additionalImages.map((u: unknown) => asNullableString(u)).filter(isNonEmptyString)
+      : undefined;
+    const parsedAccessibility =
+      accessibility && typeof accessibility === "object" ? accessibility : undefined;
 
     const updated = await prisma.show.update({
       where: { id: String(req.params.id) },
       data: {
         ...(title != null ? { title: String(title) } : {}),
         ...(date != null ? { date: new Date(date) } : {}),
+        ...(endDate != null ? { endDate: endDate ? new Date(endDate) : null } : {}),
         ...(imageUrl !== undefined ? { imageUrl: imageUrl ?? null } : {}),
         ...(descriptionHtml !== undefined ? { description: descriptionHtml ?? null } : {}),
         ...(finalVenueId ? { venueId: finalVenueId } : {}),
+        ...(eventType !== undefined ? { eventType: asNullableString(eventType) } : {}),
+        ...(eventCategory !== undefined ? { eventCategory: asNullableString(eventCategory) } : {}),
+        ...(doorsOpenTime !== undefined ? { doorsOpenTime: asNullableString(doorsOpenTime) } : {}),
+        ...(ageGuidance !== undefined ? { ageGuidance: asNullableString(ageGuidance) } : {}),
+        ...(endTimeNote !== undefined ? { endTimeNote: asNullableString(endTimeNote) } : {}),
+        ...(parsedAccessibility !== undefined ? { accessibility: parsedAccessibility ?? null } : {}),
+        ...(parsedTags !== undefined ? { tags: parsedTags } : {}),
+        ...(parsedAdditionalImages !== undefined ? { additionalImages: parsedAdditionalImages } : {}),
         ...(status
           ? {
               status: status === "LIVE" ? ShowStatus.LIVE : ShowStatus.DRAFT,
