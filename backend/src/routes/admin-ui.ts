@@ -2806,7 +2806,8 @@ async function docToText(name: string, type: string, dataUrl: string){
 
 const docTexts: Array<{ name: string; text: string }> = [];
 
- // Turn all docs into plain text and feed as input_text
+// Turn all docs into plain text and feed as input_text
+
 for (const d of docs) {
   if (!d || !d.dataUrl) continue;
   try{
@@ -2814,23 +2815,25 @@ for (const d of docs) {
     const cleaned = String(text || "").trim();
     if (!cleaned) continue;
 
-    // ✅ keep the full cleaned text for deterministic overrides later
-    docTexts.push({ name: d.name || "document", text: cleaned });
-
     // Keep it bounded so a huge PDF can’t explode tokens
     const clipped = cleaned.slice(0, 20000);
+
+    // ✅ store for deterministic overrides later
+    docTexts.push({ name: d.name || "document", text: clipped });
 
     content.push({
       type: "input_text",
       text: `Document: ${d.name || "document"}\n\n${clipped}`
     });
   }catch(e){
+    // Don’t fail the whole request if one doc can’t be parsed
     content.push({
       type: "input_text",
       text: `Document: ${d.name || "document"}\n\n[Could not parse this file on server]`
     });
   }
 }
+
 
       function pickBestDocText(docTexts: Array<{name:string; text:string}>){
   if (!docTexts.length) return null;
@@ -2856,9 +2859,14 @@ function extractTitleFromText(text: string){
   for (const l of lines.slice(0, 30)){
     if (l.length < 4) continue;
     if (l.length > 120) continue;
-    if (/^as seen on/i.test(l)) continue;
+        if (/^as seen on/i.test(l)) continue;
     if (/^get ready/i.test(l)) continue;
+    if (/^join us/i.test(l)) continue;
+    if (/^featuring/i.test(l)) continue;
+    if (/^this is /i.test(l)) continue;
+    if (/^expect /i.test(l)) continue;
     return l;
+
   }
   return null;
 }
@@ -2908,7 +2916,7 @@ function extractEventDescriptionFromText(raw: string): string | null {
         out.push(l);
       }
       const joined = out.join("\n").trim();
-      if (joined.length >= 120) candidates.push(joined);
+      if (joined.length >= 60) candidates.push(joined);
       continue;
     }
 
@@ -2954,7 +2962,7 @@ function extractEventDescriptionFromText(raw: string): string | null {
       .sort((a, b) => b.score - a.score);
 
     const best = scored[0]?.p;
-    if (best && best.length >= 180) candidates.push(best);
+    if (best && best.length >= 80) candidates.push(best);
   }
 
   if (!candidates.length) return null;
