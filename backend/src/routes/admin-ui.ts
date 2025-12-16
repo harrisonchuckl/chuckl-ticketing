@@ -123,20 +123,6 @@ router.get(
       color:#ffffff;
       border-color:#111827;
     }
-    .btn.warn{
-      background:#f97316;
-      color:#ffffff;
-      border-color:#ea580c;
-    }
-    .btn.danger{
-      background:#b91c1c;
-      color:#ffffff;
-      border-color:#b91c1c;
-    }
-    .btn.ghost{
-      background:transparent;
-      color:var(--text);
-    }
     .grid{display:grid;gap:8px;}
     .grid-2{grid-template-columns:repeat(2,1fr);}
     .grid-3{grid-template-columns:repeat(3,1fr);}
@@ -164,35 +150,6 @@ router.get(
 .ai-gen-drop{
   border-color: var(--ai) !important;
 }
-
-    .nav-guard{
-      border:1px solid #f97316;
-      background:#fffbeb;
-      color:#7c2d12;
-      padding:12px;
-      border-radius:12px;
-      margin-bottom:12px;
-      box-shadow:0 1px 2px rgba(0,0,0,0.04);
-    }
-    .nav-guard-title{
-      font-weight:700;
-      margin-bottom:4px;
-    }
-    .nav-guard-body{
-      font-size:14px;
-      line-height:1.4;
-    }
-    .nav-guard-status{
-      margin-top:6px;
-      font-size:13px;
-      color:#b91c1c;
-    }
-    .nav-guard-actions{
-      display:flex;
-      flex-wrap:wrap;
-      gap:8px;
-      margin-top:10px;
-    }
 
 
     /* Fixed-height controls (use on selects that must line up perfectly) */
@@ -403,106 +360,6 @@ router.get(
     });
   }
 
-  // --- Navigation guard + prompt helpers ---
-  var navPromptEl = null;
-  var activeNavGuard = null;
-  var pendingNav = null;
-  var lastPath = (location.pathname || '').replace(/\/$/, '') || '/admin/ui';
-
-  function escapeHtml(s){
-    const map = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
-    return String(s || '').replace(/[&<>"']/g, function(c){ return map[c] || c; });
-  }
-
-  function clearNavPrompt(){
-    if (navPromptEl && navPromptEl.parentNode){
-      navPromptEl.parentNode.removeChild(navPromptEl);
-    }
-    navPromptEl = null;
-  }
-
-  function renderNavPrompt(opts){
-    if (!main) return null;
-    clearNavPrompt();
-    var el = document.createElement('div');
-    el.className = 'nav-guard';
-    el.innerHTML =
-      '<div class="nav-guard-title">'+escapeHtml(opts && opts.title ? opts.title : 'Unsaved changes')+'</div>'
-      +'<div class="nav-guard-body">'+escapeHtml(opts && opts.message ? opts.message : 'You have unsaved changes.')+'</div>'
-      +'<div class="nav-guard-status"></div>'
-      +'<div class="nav-guard-actions"></div>';
-    var actionsRow = el.querySelector('.nav-guard-actions');
-    (opts && Array.isArray(opts.actions) ? opts.actions : []).forEach(function(action){
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'btn ' + (action.variant || '');
-      btn.textContent = action.label || 'Action';
-      if (action.id) btn.dataset.actionId = action.id;
-      btn.addEventListener('click', function(){ if (typeof action.onClick === 'function') action.onClick(btn); });
-      actionsRow && actionsRow.appendChild(btn);
-    });
-    main.insertBefore(el, main.firstChild);
-    navPromptEl = el;
-    return el;
-  }
-
-  function setNavigationGuard(guard){
-    activeNavGuard = guard || null;
-  }
-
-  function clearNavigationGuard(){
-    if (activeNavGuard && typeof activeNavGuard.teardown === 'function'){
-      try{ activeNavGuard.teardown(); }catch(e){}
-    }
-    activeNavGuard = null;
-    pendingNav = null;
-    clearNavPrompt();
-  }
-
-  function shouldBlockNavigation(targetPath, cause){
-    if (!activeNavGuard || typeof activeNavGuard.shouldBlock !== 'function') return false;
-    try{
-      return !!activeNavGuard.shouldBlock(targetPath, cause);
-    }catch(e){
-      return false;
-    }
-  }
-
-  function showGuardPrompt(targetPath, cause){
-    if (!activeNavGuard || typeof activeNavGuard.showPrompt !== 'function') return;
-    var continueNav = function(overridePath){
-      var dest = (overridePath || targetPath || '/admin/ui').replace(/\/$/, '');
-      pendingNav = null;
-      clearNavigationGuard();
-      history.pushState(null, '', dest);
-      lastPath = dest;
-      route();
-    };
-    var stay = function(){
-      pendingNav = null;
-      clearNavPrompt();
-    };
-    activeNavGuard.showPrompt({
-      path: targetPath,
-      cause: cause || 'nav',
-      continueNavigation: continueNav,
-      stayOnPage: stay
-    });
-  }
-
-  function requestNavigation(path, cause){
-    var dest = (path || '/admin/ui').replace(/\/$/, '');
-    if (shouldBlockNavigation(dest, cause)){
-      pendingNav = { path: dest, cause: cause || 'nav' };
-      showGuardPrompt(dest, cause || 'nav');
-      return;
-    }
-    clearNavigationGuard();
-    history.pushState(null, '', dest);
-    lastPath = dest;
-    route();
-  }
-
   async function j(url, opts){
     const res = await fetch(url, { credentials:'include', ...(opts || {}) });
     let text = '';
@@ -518,8 +375,9 @@ router.get(
     }
   }
 
-  function go(path, cause){
-    requestNavigation(path, cause || 'link');
+  function go(path){
+    history.pushState(null, '', path);
+    route();
   }
 
   // SPA sidebar links
@@ -533,18 +391,7 @@ router.get(
     }
   });
 
-  window.addEventListener('popstate', function(){
-    var target = (location.pathname || '').replace(/\/$/, '');
-    if (shouldBlockNavigation(target, 'popstate')){
-      history.pushState(null, '', lastPath);
-      pendingNav = { path: target, cause:'popstate' };
-      showGuardPrompt(target, 'popstate');
-      return;
-    }
-    lastPath = target;
-    clearNavigationGuard();
-    route();
-  });
+  window.addEventListener('popstate', route);
 
   function home(){
     if (!main) return;
@@ -968,24 +815,6 @@ router.get(
 
 
 
-  setNavigationGuard({
-    shouldBlock: function(){
-      return state.images.length > 0 || state.docs.length > 0;
-    },
-    showPrompt: function(ctx){
-      var prompt = renderNavPrompt({
-        title: 'Discard uploaded files?',
-        message: 'You have added files for AI pre-fill. Leaving this page will clear them.',
-        actions: [
-          { label: 'Exit without saving uploads', variant: 'danger', onClick: function(){ if (ctx && ctx.continueNavigation) ctx.continueNavigation(); } },
-          { label: 'Stay on this page', variant: 'ghost', onClick: function(){ clearNavPrompt(); if (ctx && ctx.stayOnPage) ctx.stayOnPage(); } }
-        ]
-      });
-      if (!prompt && ctx && ctx.stayOnPage) ctx.stayOnPage();
-    },
-    teardown: clearNavPrompt
-  });
-
   function bytes(n){
     if (!n && n !== 0) return '';
     if (n < 1024) return n + ' B';
@@ -1280,8 +1109,8 @@ router.get(
         // Store draft for Create Show to consume
         sessionStorage.setItem('aiShowDraft', JSON.stringify(draft));
         // Navigate to existing Create Show page
-        clearNavigationGuard();
-        go('/admin/ui/shows/create', 'ai-apply');
+        history.pushState({}, '', '/admin/ui/shows/create');
+        route();
       });
 
       status.textContent = '';
@@ -1550,9 +1379,6 @@ async function createShow(){
 
         +'</div>';
     
-    var createShowDirty = false;
-    function markDirty(){ createShowDirty = true; }
-
     // Bind editor and venue picker
     bindWysiwyg(main);
 mountVenuePicker($('#venue_input'), $('#sh_dt'), { requireApproval: true });
@@ -1604,207 +1430,6 @@ updateCategoryOptions();
     var barAdd = $('#bar_add');
     var addPreviews = $('#add_previews');
     var allImageUrls = $('#all_image_urls');
-
-    function parseAdditionalImages(){
-        var urls = [];
-        if (allImageUrls && allImageUrls.value){
-          try{ urls = JSON.parse(allImageUrls.value) || []; }catch(e){ urls = []; }
-        }
-        return Array.isArray(urls) ? urls.filter(Boolean) : [];
-    }
-
-    function descriptionHasContent(html){
-        if (!html) return false;
-        var plain = html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim();
-        return plain.length > 0;
-    }
-
-    function getCreateShowState(){
-        var venueInput = $('#venue_input');
-        var descEl = $('#desc');
-        var endTimeNoteInput = $('#end_time_note');
-        return {
-          title: ($('#sh_title') ? $('#sh_title').value.trim() : ''),
-          dtRaw: ($('#sh_dt') ? $('#sh_dt').value : ''),
-          dtEndRaw: ($('#sh_dt_end') ? $('#sh_dt_end').value : ''),
-          venueText: venueInput ? venueInput.value.trim() : '',
-          venueId: venueInput ? (venueInput.dataset.venueId || null) : null,
-          venueApproved: venueInput ? (venueInput.dataset.venueApproved === '1') : false,
-          imageUrl: (prevMain && prevMain.src) ? prevMain.src : '',
-          descHtml: descEl ? (descEl.innerHTML || '').trim() : '',
-          eventType: eventTypeSelect ? eventTypeSelect.value : '',
-          eventCategory: categorySelect ? categorySelect.value : '',
-          doorsOpenTime: $('#doors_open_time') ? $('#doors_open_time').value : '',
-          ageGuidance: $('#age_guidance') ? $('#age_guidance').value : '',
-          endTimeNote: endTimeNoteInput && endTimeNoteInput.value ? endTimeNoteInput.value.trim() : '',
-          accessibility: {
-            wheelchair: $('#acc_wheelchair') ? !!$('#acc_wheelchair').checked : false,
-            stepFree: $('#acc_stepfree') ? !!$('#acc_stepfree').checked : false,
-            hearingLoop: $('#acc_hearingloop') ? !!$('#acc_hearingloop').checked : false,
-            accessibleToilet: $('#acc_toilet') ? !!$('#acc_toilet').checked : false,
-            notes: $('#acc_more') ? $('#acc_more').value.trim() : ''
-          },
-          tags: ($('#tags') && $('#tags').value
-            ? $('#tags').value.split(',').map(function(s){ return s.trim(); }).filter(Boolean)
-            : []),
-          additionalImages: parseAdditionalImages()
-        };
-    }
-
-    function buildShowPayload(state, opts){
-        opts = opts || {};
-        var dateIso = null;
-        if (state.dtRaw){
-          var d1 = new Date(state.dtRaw);
-          if (!isNaN(d1.getTime())) dateIso = d1.toISOString();
-        }
-        var endDateIso = null;
-        if (state.dtEndRaw){
-          var d2 = new Date(state.dtEndRaw);
-          if (!isNaN(d2.getTime())) endDateIso = d2.toISOString();
-        }
-        var descHtml = state.descHtml;
-        if (!descriptionHasContent(descHtml) && opts.allowPlaceholderDescription){
-          descHtml = '<p>Draft description pending.</p>';
-        }
-
-        var payload = {
-          title: state.title || '',
-          date: dateIso,
-          endDate: endDateIso,
-          venueText: state.venueText,
-          venueId: state.venueId,
-          imageUrl: state.imageUrl || null,
-          descriptionHtml: descHtml || '',
-          eventType: state.eventType || null,
-          eventCategory: state.eventCategory || null,
-          additionalImages: state.additionalImages || [],
-          doorsOpenTime: state.doorsOpenTime || null,
-          ageGuidance: state.ageGuidance || null,
-          endTimeNote: state.endTimeNote || null,
-          accessibility: state.accessibility,
-          tags: state.tags || [],
-          status: opts.forceDraftStatus ? 'DRAFT' : undefined
-        };
-
-        if (!payload.venueId) delete payload.venueId;
-        if (!payload.eventType) delete payload.eventType;
-        if (!payload.eventCategory) delete payload.eventCategory;
-        if (!opts.forceDraftStatus) delete payload.status;
-        if (!descriptionHasContent(descHtml) && !opts.allowPlaceholderDescription){
-          payload.descriptionHtml = '';
-        }
-
-        return payload;
-    }
-
-    async function persistShow(state, opts){
-        var payload = buildShowPayload(state, opts);
-        var showRes = await j('/admin/shows', {
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body: JSON.stringify(payload)
-        });
-
-        if (showRes && showRes.error){
-            throw new Error(showRes.error);
-        }
-        var showId =
-            (showRes &&
-            ( showRes.id
-            || (showRes.show && showRes.show.id)
-            || (showRes.item && showRes.item.id)
-            )) || null;
-
-        if (!showId){
-            throw new Error('Failed to create show (no id returned from server)');
-        }
-        return showId;
-    }
-
-    ['#sh_title','#sh_dt','#sh_dt_end','#venue_input','#doors_open_time','#age_guidance','#tags'].forEach(function(sel){
-      var el = $(sel);
-      if (el) el.addEventListener('input', markDirty);
-    });
-    ['#event_type_select','#event_category_select','#acc_wheelchair','#acc_stepfree','#acc_hearingloop','#acc_toilet','#acc_more'].forEach(function(sel){
-      var el = $(sel);
-      if (el) el.addEventListener('change', markDirty);
-    });
-    var descEl = $('#desc');
-    if (descEl){
-      descEl.addEventListener('input', markDirty);
-    }
-
-    function hasCreateShowChanges(){
-        var state = getCreateShowState();
-        if (createShowDirty) return true;
-        return !!(
-          state.title
-          || state.dtRaw
-          || state.dtEndRaw
-          || state.venueText
-          || descriptionHasContent(state.descHtml)
-          || state.imageUrl
-          || (state.additionalImages && state.additionalImages.length)
-          || (state.tags && state.tags.length)
-          || state.eventType
-          || state.eventCategory
-          || state.doorsOpenTime
-          || state.ageGuidance
-        );
-    }
-
-    function validateDraft(state){
-        var missing = [];
-        if (!state.title) missing.push('title');
-        if (!state.dtRaw || isNaN(new Date(state.dtRaw).getTime())) missing.push('date/time');
-        if (!state.venueText) missing.push('venue');
-        if (missing.length){
-          throw new Error('Add ' + missing.join(', ') + ' to save a draft.');
-        }
-    }
-
-    function validateFinal(state){
-        if (window.__aiPrefill){
-          var okBox = $('#ai_approval');
-          if (!okBox || !okBox.checked){
-            throw new Error('Please confirm you’ve checked the AI-filled details before continuing.');
-          }
-        }
-
-        if (!state.title) throw new Error('Title is required.');
-        if (!state.dtRaw || isNaN(new Date(state.dtRaw).getTime())) throw new Error('Date/time is required.');
-        if (!state.venueText) throw new Error('Please enter a venue.');
-        if (!state.venueId) throw new Error('Please select an existing venue from the list (or create one).');
-        if (!state.venueApproved) throw new Error('Please approve the venue and date before saving.');
-        if (!descriptionHasContent(state.descHtml)) throw new Error('Description is required.');
-        if (!state.eventType) throw new Error('Event type is required.');
-        if (!state.eventCategory) throw new Error('Event category is required.');
-        if (!state.imageUrl) throw new Error('Main poster image is required.');
-    }
-
-    async function saveDraftAndLeave(ctx, statusEl, btn){
-        if (statusEl) statusEl.textContent = '';
-        if (btn){ btn.disabled = true; btn.textContent = 'Saving draft…'; }
-        try{
-          var draftState = getCreateShowState();
-          validateDraft(draftState);
-          await persistShow(draftState, { allowPlaceholderDescription:true, forceDraftStatus:true });
-          if (ctx && ctx.continueNavigation){
-            ctx.continueNavigation(ctx.path || '/admin/ui/shows/current');
-          } else {
-            clearNavigationGuard();
-            go('/admin/ui/shows/current', 'draft-saved');
-          }
-        }catch(e){
-          if (statusEl) statusEl.textContent = e.message || String(e);
-        }finally{
-          if (btn){
-            btn.disabled = false;
-            btn.textContent = 'Save as draft';
-          }
-        }
-    }
     
     // Upload function for a single file (used for main image and each additional image)
     async function doUpload(file, barEl, previewEl, isAdditional = false) {
@@ -1858,12 +1483,10 @@ updateCategoryOptions();
                 addPreviews.appendChild(imgContainer);
 
                 updateAllImageUrls();
-                markDirty();
             } else {
                 // Update main image preview
                 previewEl.src = out.url;
                 previewEl.style.display = 'block';
-                markDirty();
             }
 
             barEl.style.width = '100%';
@@ -1886,7 +1509,6 @@ updateCategoryOptions();
         } else {
             dropAdd.style.display = 'block';
         }
-        markDirty();
     }
 
         // --- AI Prefill (one-time) ---
@@ -2086,7 +1708,6 @@ updateCategoryOptions();
               markAi($('#drop_add'), 'drop');
             }
 
-            markDirty();
         }catch(e){
             console.warn('[AI draft] apply failed', e);
         }
@@ -2148,35 +1769,116 @@ updateCategoryOptions();
         var errEl = $('#err');
         errEl.textContent = '';
         try{
-            var state = getCreateShowState();
-            validateFinal(state);
-            var showId = await persistShow(state, { allowPlaceholderDescription:false });
-            clearNavigationGuard();
-            window.location.href = '/admin/seating-choice/' + showId;
+                    // If AI prefilled this page, force an explicit approval tick
+            if (window.__aiPrefill){
+              var okBox = $('#ai_approval');
+              if (!okBox || !okBox.checked){
+                throw new Error('Please confirm you’ve checked the AI-filled details before continuing.');
+              }
+            }
+
+            var title = $('#sh_title').value.trim();
+            var dtRaw = $('#sh_dt').value;
+            var dtEndRaw = $('#sh_dt_end') ? $('#sh_dt_end').value : '';
+var endDateIso = dtEndRaw ? new Date(dtEndRaw).toISOString() : null;
+            var venueInput = $('#venue_input');
+            var venueText = venueInput.value.trim();
+            var venueId = venueInput.dataset.venueId || null;
+            if (!venueId){
+  throw new Error('Please select an existing venue from the list (or create one).');
+}
+if (venueInput.dataset.venueApproved !== '1'){
+  throw new Error('Please approve the venue and date before saving.');
+}
+
+            var imageUrl = prevMain.src || null;
+            var descHtml = $('#desc').innerHTML.trim();
+            
+            // New fields
+           var eventType = eventTypeSelect ? eventTypeSelect.value : '';
+var eventCategory = categorySelect ? categorySelect.value : '';
+
+// NEW fields (optional)
+var doorsOpenTime = $('#doors_open_time') ? $('#doors_open_time').value : '';
+var ageGuidance = $('#age_guidance') ? $('#age_guidance').value : '';
+var endTimeNote = $('#end_time_note') ? $('#end_time_note').value.trim() : '';
+
+var accessibility = {
+  wheelchair: $('#acc_wheelchair') ? !!$('#acc_wheelchair').checked : false,
+  stepFree: $('#acc_stepfree') ? !!$('#acc_stepfree').checked : false,
+  hearingLoop: $('#acc_hearingloop') ? !!$('#acc_hearingloop').checked : false,
+  accessibleToilet: $('#acc_toilet') ? !!$('#acc_toilet').checked : false,
+  notes: $('#acc_more') ? $('#acc_more').value.trim() : ''
+};
+
+var tags = [];
+if ($('#tags') && $('#tags').value) {
+  tags = $('#tags').value
+    .split(',')
+    .map(function(s){ return s.trim(); })
+    .filter(Boolean);
+}
+
+var additionalImages = [];
+if (allImageUrls && allImageUrls.value) {
+  try { additionalImages = JSON.parse(allImageUrls.value); } catch(e){}
+}
+
+
+            if (!title || !dtRaw || !venueText || !descHtml || !eventType || !eventCategory || !imageUrl){
+                throw new Error('Title, date/time, venue, description, event type, category, and a main image are required.');
+            }
+            
+            var dateIso = new Date(dtRaw).toISOString();
+            
+            // The logic for first ticket payload is now REMOVED
+            // var firstTicketPayload = null; 
+            
+            var showRes = await j('/admin/shows', {
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({
+  title: title,
+  date: dateIso,
+  endDate: endDateIso,
+  venueText: venueText,
+  venueId: venueId,
+  imageUrl: imageUrl,
+  descriptionHtml: descHtml,
+  eventType: eventType,
+  eventCategory: eventCategory,
+  additionalImages: additionalImages,
+
+  // NEW fields
+  doorsOpenTime: doorsOpenTime || null,
+  ageGuidance: ageGuidance || null,
+  endTimeNote: endTimeNote || null,
+  accessibility: accessibility,
+  tags: tags
+})
+
+            });
+
+            if (showRes && showRes.error){
+                throw new Error(showRes.error);
+            }
+            var showId =
+                (showRes &&
+                ( showRes.id
+                || (showRes.show && showRes.show.id)
+                || (showRes.item && showRes.item.id)
+                )) || null;
+
+            if (!showId){
+                throw new Error('Failed to create show (no id returned from server)');
+            }
+            
+            // NEW: Redirect to the tickets page or seating choice, as first ticket creation is removed
+            window.location.href = '/admin/seating-choice/' + showId; 
+
         }catch(e){
             errEl.textContent = e.message || String(e);
         }
-    });
-
-    setNavigationGuard({
-      shouldBlock: function(){
-        return hasCreateShowChanges();
-      },
-      showPrompt: function(ctx){
-        var statusEl = null;
-        var prompt = renderNavPrompt({
-          title: 'Leave Create Show?',
-          message: 'You have started creating an event. Save a draft to keep your progress or exit without saving.',
-          actions: [
-            { id:'save-draft', label: 'Save as draft', variant:'warn', onClick: function(btn){ saveDraftAndLeave(ctx, statusEl, btn); } },
-            { label: 'Exit without saving', variant:'danger', onClick: function(){ if (ctx && ctx.continueNavigation) ctx.continueNavigation(); } },
-            { label: 'Stay on this page', variant:'ghost', onClick: function(){ clearNavPrompt(); if (ctx && ctx.stayOnPage) ctx.stayOnPage(); } }
-          ]
-        });
-        statusEl = prompt ? prompt.querySelector('.nav-guard-status') : null;
-        if (!prompt && ctx && ctx.stayOnPage) ctx.stayOnPage();
-      },
-      teardown: clearNavPrompt
     });
 }
   // --- LIST SHOWS ---
@@ -2926,7 +2628,7 @@ async function summaryPage(id){
   // --- ROUTER ---
   function route(){
     try{
-      var path = location.pathname.replace(/\/$/, '');
+      var path = location.pathname.replace(/\\/$/, '');
       console.log('[Admin UI] route', path);
       setActive(path);
 
