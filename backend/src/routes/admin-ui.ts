@@ -9,7 +9,7 @@ const router = Router();
  * Served at /admin/ui/*
  */
 router.get(
-  ["/ui", "/ui/", "/ui/home"],
+  ["/ui", "/ui/", "/ui/home", "/ui/*"],
   requireAdminOrOrganiser,
   (_req, res) => {
     res.set("Cache-Control", "no-store");
@@ -31,7 +31,7 @@ router.get(
   /* TIXall AI highlight */
   --ai:#009fe3;
 }
- 
+
     *{box-sizing:border-box;}
     html,body{
       margin:0;
@@ -277,61 +277,6 @@ router.get(
       cursor:pointer;
     }
     .opt:hover{background:#f8fafc;}
-/* --- Unsaved changes / dirty exit modal --- */
-.exit-guard-backdrop{
-  position:fixed; inset:0;
-  background: rgba(15, 23, 42, 0.45);
-  display:flex;
-  align-items:flex-start;
-  justify-content:center;
-  padding: 24px 14px;
-  z-index: 99999;
-}
-.exit-guard-modal{
-  margin-top: 18px;
-  width: min(720px, calc(100vw - 28px));
-  background:#fff;
-  border:1px solid var(--border);
-  border-radius:14px;
-  box-shadow: 0 20px 70px rgba(0,0,0,0.25);
-  overflow:hidden;
-}
-.exit-guard-head{
-  padding: 14px 16px;
-  border-bottom:1px solid var(--border);
-  display:flex;
-  gap:10px;
-  align-items:center;
-  justify-content:space-between;
-}
-.exit-guard-head strong{ font-size: 14px; }
-.exit-guard-body{
-  padding: 14px 16px;
-  color:#334155;
-  font-size: 13px;
-  line-height: 1.45;
-}
-.exit-guard-actions{
-  padding: 14px 16px;
-  border-top:1px solid var(--border);
-  display:flex;
-  gap:10px;
-  justify-content:flex-end;
-  flex-wrap:wrap;
-}
-.btn-danger{
-  background:#ef4444 !important;
-  border:1px solid #ef4444 !important;
-  color:#fff !important;
-}
-.btn-danger:hover{ filter: brightness(0.95); }
-.btn-ghost{
-  background:#fff !important;
-  border:1px solid var(--border) !important;
-  color:#111827 !important;
-}
-.btn-ghost:hover{ background:#f8fafc !important; }
-
   </style>
 </head>
 <body>
@@ -419,211 +364,6 @@ function bindAiClearOnUserEdit(el, evts){
 
   var main = $('#main');
 
-function __fatal(label, err){
-  try{
-    var m = document.getElementById('main');
-    if (!m) return;
-    var msg = (err && (err.stack || err.message)) ? (err.stack || err.message) : String(err);
-    m.innerHTML =
-      '<div class="card">'
-    +   '<div class="title">Admin UI crashed</div>'
-    +   '<div class="error" style="margin-top:8px;white-space:pre-wrap;">'
-    +     label + ':\n' + msg
-    +   '</div>'
-    + '</div>';
-  }catch(e){}
-}
-
-window.addEventListener('error', function(e){
-  __fatal('window.error', e && e.error ? e.error : (e && e.message ? e.message : e));
-});
-
-window.addEventListener('unhandledrejection', function(e){
-  __fatal('unhandledrejection', e && e.reason ? e.reason : e);
-});
-
-// ------------------------------
-// Dirty-exit guard (Create Show)
-// ------------------------------
-var __dirty = {
-  enabled: false,
-  isDirty: false,
-  lastPath: (location.pathname || '').replace(/\/+$/,'') || '/',
-  pendingNav: null,        // { type:'view'|'href'|'popstate', target:string }
-  saveDraftFn: null
-};
-
-function __setDirtyEnabled(on){
-  __dirty.enabled = !!on;
-  if (!__dirty.enabled){
-    __dirty.isDirty = false;
-    __dirty.saveDraftFn = null;
-    __dirty.pendingNav = null;
-  }
-}
-
-function __markDirty(){
-  if (__dirty.enabled) __dirty.isDirty = true;
-}
-
-function __clearDirty(){
-  __dirty.isDirty = false;
-}
-
-function __toast(msg){
-  // Use your existing toast() if present, else fallback
-  if (typeof toast === 'function') return toast(msg);
-  try { console.log('[Draft]', msg); } catch(e){}
-}
-
-function __saveCreateShowDraft(){
-  // Grab the common Create Show fields if they exist
-  var draft = {
-    savedAt: new Date().toISOString(),
-    title: $('#sh_title') ? $('#sh_title').value : '',
-    start: $('#sh_dt') ? $('#sh_dt').value : '',
-    end: $('#sh_dt_end') ? $('#sh_dt_end').value : '',
-    venueText: $('#venue_input') ? $('#venue_input').value : '',
-    venueId: ($('#venue_input' ) && $('#venue_input').dataset) ? ($('#venue_input').dataset.venueId || '') : '',
-    eventType: $('#eventType') ? $('#eventType').value : ( $('#sh_eventType') ? $('#sh_eventType').value : '' ),
-    category: $('#category') ? $('#category').value : ( $('#sh_category') ? $('#sh_category').value : '' ),
-doorsOpenTime: $('#doors_open_time') ? $('#doors_open_time').value : ( $('#sh_doorsOpenTime') ? $('#sh_doorsOpenTime').value : '' ),
-ageGuidance: $('#age_guidance') ? $('#age_guidance').value : ( $('#sh_ageGuidance') ? $('#sh_ageGuidance').value : '' ),
-
-    tags: $('#sh_tags') ? $('#sh_tags').value : ( $('#tags') ? $('#tags').value : '' ),
-    accessibilityNote: $('#sh_accessibilityNote') ? $('#sh_accessibilityNote').value : '',
-    accessibility: {
-      wheelchair: $('#acc_wheelchair') ? !!$('#acc_wheelchair').checked : false,
-      stepfree: $('#acc_stepfree') ? !!$('#acc_stepfree').checked : false,
-hearingLoop: $('#acc_hearingloop') ? !!$('#acc_hearingloop').checked : false,
-      toilet: $('#acc_toilet') ? !!$('#acc_toilet').checked : false
-    },
-    descriptionHtml: $('#sh_desc') ? $('#sh_desc').innerHTML : ( $('#desc') ? $('#desc').innerHTML : '' ),
-    mainImageUrl: $('#sh_mainImageUrl') ? $('#sh_mainImageUrl').value : '',
-    additionalImageUrls: (function(){
-      var el = $('#sh_additionalImageUrls');
-      if (!el) return [];
-      try { return JSON.parse(el.value || '[]'); } catch(e){ return []; }
-    })()
-  };
-
-  localStorage.setItem('tixall_create_show_draft_v1', JSON.stringify(draft));
-  __clearDirty();
-  __toast('Draft saved.');
-}
-
-function __showExitGuard(){
-  // Already open?
-  if (document.querySelector('.exit-guard-backdrop')) return;
-
-  var backdrop = document.createElement('div');
-  backdrop.className = 'exit-guard-backdrop';
-
-  var modal = document.createElement('div');
-  modal.className = 'exit-guard-modal';
-
-modal.innerHTML =
-  '<div class="exit-guard-head">'
-+ '  <strong>Unsaved changes</strong>'
-+ '  <span style="font-size:12px;color:#64748b;">Create Show</span>'
-+ '</div>'
-+ '<div class="exit-guard-body">'
-+ '  If you leave this page, <strong>your changes will be lost</strong>.'
-+ '  <br><br>'
-+ '  Choose <strong>Save draft</strong> if you want to continue later.'
-+ '</div>'
-+ '<div class="exit-guard-actions">'
-+ '  <button class="btn btn-ghost" id="exitGuardStay">Stay on page</button>'
-+ '  <button class="btn" id="exitGuardSave">Save draft</button>'
-+ '  <button class="btn btn-danger" id="exitGuardExit">Exit without saving</button>'
-+ '</div>';
-
-
-  backdrop.appendChild(modal);
-  document.body.appendChild(backdrop);
-
-  function close(){
-    try { backdrop.remove(); } catch(e){}
-  }
-
-  $('#exitGuardStay').addEventListener('click', function(){
-    __dirty.pendingNav = null;
-    close();
-  });
-
-  $('#exitGuardSave').addEventListener('click', function(){
-    try { __saveCreateShowDraft(); } catch(e){}
-    // After save, proceed with nav (if any)
-    var nav = __dirty.pendingNav;
-    __dirty.pendingNav = null;
-    close();
-    if (nav) __performPendingNav(nav);
-  });
-
-  $('#exitGuardExit').addEventListener('click', function(){
-    __clearDirty();
-    var nav = __dirty.pendingNav;
-    __dirty.pendingNav = null;
-    close();
-    if (nav) __performPendingNav(nav);
-  });
-
-  // Click outside modal -> stay
-  backdrop.addEventListener('click', function(e){
-    if (e.target === backdrop){
-      __dirty.pendingNav = null;
-      close();
-    }
-  });
-}
-
-function __performPendingNav(nav){
-  if (!nav) return;
-  if (nav.type === 'view'){
-    go(nav.target);
-    return;
-  }
-  if (nav.type === 'href'){
-    window.location.href = nav.target;
-    return;
-  }
-  if (nav.type === 'popstate'){
-    // We stored a path; force SPA nav
-    go(nav.target);
-    return;
-  }
-}
-
-// Warn on refresh/close tab as well
-window.addEventListener('beforeunload', function(e){
-  if (!__dirty.enabled || !__dirty.isDirty) return;
-  e.preventDefault();
-  e.returnValue = '';
-  return '';
-});
-
-// Utility: attach dirty listeners on Create Show pages
-function __wireDirtyInputsForCreateShow(){
-  if (!__dirty.enabled) return;
-
-  var scope = document.querySelector('#main');
-  if (!scope) return;
-
-  // Mark dirty on any typing/changes in main form
-  scope.querySelectorAll('input, textarea, select').forEach(function(el){
-    el.addEventListener('input', __markDirty);
-    el.addEventListener('change', __markDirty);
-  });
-
-  // If your description is contenteditable
-  var desc = $('#sh_desc') || $('#desc');
-  if (desc){
-    desc.addEventListener('input', __markDirty);
-    desc.addEventListener('keyup', __markDirty);
-    desc.addEventListener('blur', __markDirty);
-  }
-}
-
   var showsToggle = $('#showsToggle');
   var showsSub = $('#showsSub');
   if (showsToggle && showsSub){
@@ -660,63 +400,17 @@ function __wireDirtyInputsForCreateShow(){
 }
 
   // SPA sidebar links
-document.addEventListener('click', function(e){
-  var tgt = e.target;
-  var a = tgt && tgt.closest ? tgt.closest('a.sb-link') : null;
-  if (!a) return;
+  document.addEventListener('click', function(e){
+    var tgt = e.target;
+    if (!tgt || !tgt.closest) return;
+    var a = tgt.closest('a.sb-link');
+    if (a && a.getAttribute('data-view')){
+      e.preventDefault();
+      go(a.getAttribute('data-view'));
+    }
+  });
 
-  var dataView = a.getAttribute('data-view');
-  var href = a.getAttribute('href');
-
-  // Determine where this click wants to go
-  var nav = null;
-  if (dataView) nav = { type:'view', target: dataView };
-  else if (href) nav = { type:'href', target: href };
-
-  if (!nav) return;
-
-  // If dirty, block + prompt
-  if (__dirty.enabled && __dirty.isDirty){
-    e.preventDefault();
-    __dirty.pendingNav = nav;
-    __showExitGuard();
-    return;
-  }
-
-  // Not dirty: proceed normally
-  if (nav.type === 'view'){
-    e.preventDefault();
-    go(nav.target);
-    return;
-  }
-
-  // nav.type === 'href'
-  // Let browser navigate
-  // (we don't preventDefault here)
-});
-
-
-window.addEventListener('popstate', function(){
-  var nextPath = (location.pathname || '').replace(/\/+$/,'') || '/';
-
-  if (__dirty.enabled && __dirty.isDirty){
-    // Prevent leaving immediately
-    try { history.pushState(null, '', __dirty.lastPath); } catch(e){}
-
-    // Keep UI stable and show the modal
-    __dirty.pendingNav = { type:'popstate', target: nextPath };
-    __showExitGuard();
-
-    // Re-render the current page safely (so errors show on-screen)
-    routeSafe();
-    return;
-  }
-
-  // Normal behaviour
-  __dirty.lastPath = nextPath;
-  routeSafe();
-});
-
+  window.addEventListener('popstate', route);
 
   function home(){
     if (!main) return;
@@ -1079,17 +773,14 @@ window.addEventListener('popstate', function(){
   }
 
   function bindWysiwyg(root){
-  if (!root) return;
-  root.querySelectorAll('[data-cmd]').forEach(function(btn){
-    btn.addEventListener('click', function(){
-      var cmd = btn.getAttribute('data-cmd') || '';
-      if (cmd) document.execCommand(cmd);
+    if (!root) return;
+    root.querySelectorAll('[data-cmd]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var cmd = btn.getAttribute('data-cmd') || '';
+        if (cmd) document.execCommand(cmd);
+      });
     });
-  });
-
-  __wireDirtyInputsForCreateShow();
-
-}
+  }
 
   async function createShowAI(){
   if (!main) return;
@@ -1109,7 +800,7 @@ window.addEventListener('popstate', function(){
   +   '<input id="ai_files" type="file" multiple '
   +     'accept=".pdf,.doc,.docx,.txt,.md,image/*" style="display:none" />'
 
-+   '<div id="ai_list" style="margin-top:12px;"></div>'
+  +   '+   '<div id="ai_list" style="margin-top:12px;"></div>'
 
 +   '<div class="row" style="margin-top:12px; gap:10px; align-items:center;">'
 +     '<button id="ai_analyse" class="btn p">Analyse & Pre-fill</button>'
@@ -2091,7 +1782,6 @@ var accessibility = {
   notes: $('#acc_more') ? $('#acc_more').value.trim() : ''
 };
 
-
 var tags = [];
 if ($('#tags') && $('#tags').value) {
   tags = $('#tags').value
@@ -2161,9 +1851,7 @@ if (allImageUrls && allImageUrls.value) {
             errEl.textContent = e.message || String(e);
         }
     });
-    __wireDirtyInputsForCreateShow();
 }
-
   // --- LIST SHOWS ---
   async function listShows(){
     if (!main) return;
@@ -2910,13 +2598,6 @@ async function summaryPage(id){
 
   // --- ROUTER ---
  function routeSafe(){
-  // Re-grab main each route in case the DOM rendered after script eval, or main reference went stale
-  main = document.getElementById('main');
-  if (!main) {
-    console.error('[Admin UI] routeSafe: #main not found');
-    return Promise.resolve();
-  }
-
   return Promise.resolve()
     .then(route)
     .catch(function(err){
@@ -2927,31 +2608,14 @@ async function summaryPage(id){
     });
 }
 
-
+window.addEventListener('popstate', function(){ routeSafe(); });
 
 async function route(){
   var path = location.pathname.replace(/\/$/, '');
+  console.log('[Admin UI] route', path);
+  setActive(path);
 
-console.log('[Admin UI] route', path);
-setActive(path);
-
-// --- Dirty guard enable/disable (Create Show only) ---
-var cleanPath = (path || '').replace(/\/+$/,'') || '/';
-
-if (cleanPath === '/admin/ui/shows/create' || cleanPath === '/admin/ui/shows/create-ai'){
-  __setDirtyEnabled(true);
-} else {
-  __setDirtyEnabled(false);
-}
-
-// Track the last “safe” path for popstate revert
-__dirty.lastPath = cleanPath;
-
-// (optional) if you want all route checks to use the cleaned path:
-path = cleanPath;
-
-
-  
+  if (path === '/admin/ui' || path === '/admin/ui/home' || path === '/admin/ui/index.html') return home();
   if (path === '/admin/ui/shows/create-ai') return await createShowAI();
   if (path === '/admin/ui/shows/create') return await createShow();
   if (path === '/admin/ui/shows/current') return await listShows();
@@ -2982,13 +2646,8 @@ path = cleanPath;
   return home();
 }
 
-console.log('[Admin UI] initial routeSafe()');
-
-// Run immediately (script is at end of <body>, so #main should exist)
+console.log('[Admin UI] initial route()');
 routeSafe();
-
-// Also run on DOMContentLoaded just in case
-document.addEventListener('DOMContentLoaded', routeSafe);
 
 })();
 </script>
@@ -3032,9 +2691,7 @@ async function fetchImageMeta(url: string){
   const w = meta.width || 0;
   const h = meta.height || 0;
   const ratio = h ? (w / h) : 0;
-// We want LANDSCAPE 3:2 (user refers to “2x3 landscape”)
-// ratio is w/h, so landscape 3:2 = 1.5
-const target = 3/2;
+  const target = 2/3;
   const diff = Math.abs(ratio - target);
   return { w, h, ratio, diff };
 }
@@ -3043,14 +2700,8 @@ function nameScore(name?: string){
   const n = String(name || "").toLowerCase();
   let s = 0;
   if (n.includes("poster") || n.includes("artwork") || n.includes("a3") || n.includes("print") || n.includes("main")) s -= 0.25;
-  // Prefer banner/hero/main artwork for the main poster.
-// Penalise “square / insta / story” assets.
-if (n.includes("banner") || n.includes("header") || n.includes("hero")) s -= 0.35;
-if (n.includes("poster") || n.includes("main") || n.includes("artwork")) s -= 0.25;
-
-if (n.includes("sq") || n.includes("square") || n.includes("insta") || n.includes("ig")) s += 0.75;
-if (n.includes("story")) s += 0.95;
-
+  if (n.includes("banner") || n.includes("header") || n.includes("web")) s += 0.6;
+  if (n.includes("sq") || n.includes("square") || n.includes("insta")) s += 0.75;
   return s;
 }
 
@@ -3183,9 +2834,6 @@ async function docToText(name: string, type: string, dataUrl: string){
   return buf.toString("utf8");
 }
 
-      const docTexts: Array<{ name: string; text: string }> = [];
-
-
 // Turn all docs into plain text and feed as input_text
 for (const d of docs) {
   if (!d || !d.dataUrl) continue;
@@ -3193,8 +2841,6 @@ for (const d of docs) {
     const text = await docToText(d.name || "document", d.type || "", d.dataUrl);
     const cleaned = String(text || "").trim();
     if (!cleaned) continue;
-    docTexts.push({ name: d.name || "document", text: cleaned });
-
 
     // Keep it bounded so a huge PDF can’t explode tokens
     const clipped = cleaned.slice(0, 20000);
@@ -3410,58 +3056,6 @@ try {
   return res.status(500).json({ ok: false, error: "Failed to parse model JSON", outText });
 }
 
-      function stripTitleFromText(full: string, title: string){
-  if (!full || !title) return full;
-  const lines = full.split(/\r?\n/);
-  if (lines.length && lines[0].trim() === title.trim()){
-    // remove title line + any immediate blank lines
-    lines.shift();
-    while (lines.length && !lines[0].trim()) lines.shift();
-    return lines.join("\n").trim();
-  }
-  return full.trim();
-}
-
-function plainTextToHtml(t: string){
-  const esc = (s: string) => s
-    .replace(/&/g,"&amp;")
-    .replace(/</g,"&lt;")
-    .replace(/>/g,"&gt;")
-    .replace(/"/g,"&quot;");
-  const safe = esc(t);
-  // paragraph split on double newlines, preserve single newlines
-  return safe
-    .split(/\n{2,}/)
-    .map(p => `<p>${p.replace(/\n/g,"<br/>")}</p>`)
-    .join("");
-}
-
-// Pick the “best doc” (longest text tends to be event copy)
-const bestDoc = docTexts.sort((a,b)=>b.text.length-a.text.length)[0] || null;
-let docTitle: string | null = null;
-let docDescText: string | null = null;
-
-if (bestDoc && bestDoc.text){
-  const lines = bestDoc.text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
-  if (lines.length){
-    docTitle = lines[0]; // first heading line
-    const remaining = stripTitleFromText(bestDoc.text, docTitle);
-    if (remaining && remaining.length > 20) docDescText = remaining;
-  }
-}
-
-// HARD OVERRIDES:
-// If doc title exists → always use it (exact punctuation, no AI rewrite)
-if (docTitle){
-  draft.title = docTitle;
-}
-
-// If doc description exists → always use it verbatim (no AI rewrite)
-if (docDescText){
-  draft.descriptionHtml = plainTextToHtml(docDescText);
-}
-
-    
 // Hard override: deterministic main poster always wins
 if (forcedMainImageUrl){
   draft.mainImageUrl = forcedMainImageUrl;
@@ -3473,24 +3067,6 @@ if (forcedMainImageUrl){
   const dedup = Array.from(new Set(all.filter(u => u && u !== forcedMainImageUrl)));
   draft.additionalImageUrls = dedup.slice(0, 10);
 }
-
-      draft.aiGenerated = {
-  title: !!draft.title,
-  startDateTime: !!draft.startDateTime,
-  endDateTime: !!draft.endDateTime,
-  venueName: !!draft.venueName,
-  venueAddress: !!draft.venueAddress,
-  eventType: !!draft.eventType,
-  category: !!draft.category,
-  doorsOpenTime: !!draft.doorsOpenTime,
-  ageGuidance: !!draft.ageGuidance,
-  descriptionHtml: !!draft.descriptionHtml,
-  mainImageUrl: !!draft.mainImageUrl,
-  additionalImageUrls: Array.isArray(draft.additionalImageUrls) && draft.additionalImageUrls.length > 0,
-  tags: Array.isArray(draft.tags) && draft.tags.length > 0,
-  accessibility: !!draft.accessibility
-};
-
 
 return res.json({ ok: true, draft });
 
