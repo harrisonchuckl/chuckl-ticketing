@@ -61,24 +61,64 @@ router.get("/shows", requireAdminOrOrganiser, async (_req, res) => {
 /** POST /admin/shows — create (auto-creates venue if needed) */
 router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
   try {
-    const { title, date, imageUrl, descriptionHtml, venueId, venueText } = req.body || {};
-    if (!title || !date || !(venueId || venueText) || !descriptionHtml) {
-      return res.status(400).json({ ok: false, error: "Missing required fields" });
-    }
+    const {
+  title,
+  date,
+  endDate,
+  imageUrl,
+  descriptionHtml,
+  venueId,
+  venueText,
+  eventType,
+  eventCategory,
+  doorsOpenTime,
+  ageGuidance,
+  endTimeNote,
+  accessibility,
+  tags,
+  additionalImages,
+} = req.body || {};
 
-    const finalVenueId = await ensureVenue(venueId, venueText);
+// Keep your existing required rules, but align with Admin UI (type/category/image required)
+if (!title || !date || !(venueId || venueText) || !descriptionHtml || !eventType || !eventCategory || !imageUrl) {
+  return res.status(400).json({ ok: false, error: "Missing required fields" });
+}
 
-    const created = await prisma.show.create({
-      data: {
-        title: String(title),
-        date: new Date(date),
-        imageUrl: imageUrl ?? null,
-        description: descriptionHtml ?? null,
-        venueId: finalVenueId,
-        status: ShowStatus.DRAFT,
-      },
-      select: { id: true },
-    });
+const finalVenueId = await ensureVenue(venueId, venueText);
+
+// organiserId: requireAdminOrOrganiser should already have a user context.
+// This keeps it safe even if the shape differs.
+const organiserId =
+  (req as any).user?.id ||
+  (req as any).userId ||
+  (req as any).auth?.userId ||
+  null;
+
+const created = await prisma.show.create({
+  data: {
+    title: String(title),
+    date: new Date(date),
+    endDate: endDate ? new Date(endDate) : null,
+    imageUrl: String(imageUrl),
+    description: String(descriptionHtml),
+    venueId: finalVenueId,
+    organiserId,
+
+    eventType: String(eventType),
+    eventCategory: String(eventCategory),
+
+    doorsOpenTime: doorsOpenTime ? String(doorsOpenTime) : null,
+    ageGuidance: ageGuidance ? String(ageGuidance) : null,
+    endTimeNote: endTimeNote ? String(endTimeNote) : null,
+
+    accessibility: accessibility ?? null,
+    tags: Array.isArray(tags) ? tags.map(String) : [],
+    additionalImages: Array.isArray(additionalImages) ? additionalImages.map(String) : [],
+
+    status: ShowStatus.DRAFT,
+  },
+  select: { id: true },
+});
 
     res.json({ ok: true, id: created.id });
   } catch (e) {
