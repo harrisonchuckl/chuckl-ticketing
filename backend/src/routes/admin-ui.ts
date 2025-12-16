@@ -3324,7 +3324,9 @@ const _escapeHtml = (s: string) =>
     .replace(/'/g, "&#039;");
 
 const _bestDocText = (() => {
-  const cleaned = (docTexts || []).map(t => (t || "").trim()).filter(Boolean);
+   const cleaned = (docTexts || [])
+    .map((t) => (t?.text ?? "").trim())
+    .filter(Boolean);
   cleaned.sort((a, b) => b.length - a.length);
   return cleaned[0] || "";
 })();
@@ -3332,7 +3334,7 @@ const _bestDocText = (() => {
 const _docParas = _bestDocText
   .replace(/\r/g, "")
   .split(/\n{2,}|\n/)
-  .map(s => s.trim())
+  .map((s: string) => s.trim())
   .filter(Boolean);
 
 let _usedDocDescription = false;
@@ -3350,8 +3352,8 @@ if (_docParas.length >= 2) {
   // Only treat as a real “event description” if it’s got enough substance
   if (descParas.length >= 2 && descCharCount >= 80) {
     // Use DOCX/PDF text exactly, only wrapping in <p> blocks.
-    draft.descriptionHtml = descParas.map(p => `<p>${_escapeHtml(p)}</p>`).join("");
-
+    draft.descriptionHtml = descParas.map((p: string) => `<p>${_escapeHtml(p)}</p>`).join("");
+    
     // Only set title from doc if title is currently missing/empty
     if (titleLooksLikeTitle && (!draft.title || String(draft.title).trim().length < 3)) {
       draft.title = maybeTitle;
@@ -3370,8 +3372,8 @@ if (!_usedDocDescription && typeof draft.descriptionHtml === "string") {
     .replace(/<\/?[^>]+>/g, "")
     .trim();
 
-  const blocks = plain.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
-
+  const blocks = plain.split(/\n{2,}/).map((s: string) => s.trim()).filter(Boolean);
+  
   if (blocks.length < 2 && plain.length > 0) {
     const sentences = plain.split(/([.!?])\s+/).filter(Boolean);
     // Rebuild sentences without changing words (just grouping)
