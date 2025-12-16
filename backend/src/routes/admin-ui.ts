@@ -2733,7 +2733,12 @@ const model = process.env.OPENAI_MODEL_SHOW_EXTRACT || "gpt-4o-mini";
           "CRITICAL RULES:\n" +
           "1) TITLE: Prefer the title found in the document(s) exactly as written (punctuation included). Do NOT add hyphens or extra separators unless the source includes them.\n" +
           "   If no clear title is in docs, read the title from the poster image text. If still unknown, propose a sensible title using the available info.\n" +
-          "2) DESCRIPTION: If a full event description exists in the documents, copy it (do not rewrite). Only generate a new description if no usable description exists.\n" +
+"2) DESCRIPTION: If a full event description exists in the documents, copy it exactly (do not rewrite).\n" +
+"   Only generate a new description if no usable description exists in ANY document.\n" +
+"   If you generate it, it MUST be a proper event description in HTML with multiple paragraphs:\n" +
+"   - Use 3–6 <p> paragraphs\n" +
+"   - Each paragraph should be 1–3 sentences\n" +
+"   - No single-line description\n" +
           "3) TYPE + CATEGORY: eventType must be one of: " + eventTypes.join(", ") + ".\n" +
           "   category MUST be one of these exact values (or null): " + categories.join(", ") + ".\n" +
           "   Example: stand-up comedy => eventType='comedy' and category='standup'.\n" +
@@ -2874,6 +2879,182 @@ function textToExactHtml(text: string){
   return parts.map(p => `<p>${p}</p>`).join("");
 }
 
+function extractEventDescriptionFromText(raw: string): string | null {
+  const text = String(raw || "").replace(/\r/g, "");
+  if (!text.trim()) return null;
+
+  const lines = text.split("\n");
+
+  // 1) Try heading-based extraction: "Description", "Event Description", etc.
+  const headingRe = /^\s*(event\s*)?description\s*:?\s*$/i;
+  const inlineRe = /^\s*(event\s*)?description\s*:\s*(.+)\s*$/i;
+
+  const stopHeadingRe = /^\s*(date|time|doors|venue|location|address|tickets?|price|prices|running\s*time|duration|age|accessibility|tags|keywords|contact|terms)\b/i;
+
+  const candidates: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = (lines[i] || "").trim();
+    if (!line) continue;
+
+    const inline = line.match(inlineRe);
+    if (inline && inline[2] && inline[2].trim().length > 40) {
+      // start with inline text, then keep collecting until a stop heading
+      const out: string[] = [inline[2].trim()];
+      for (let j = i + 1; j < lines.length; j++) {
+        const l = (lines[j] || "").trim();
+        if (!l) { out.push(""); continue; }
+        if (stopHeadingRe.test(l)) break;
+        out.push(l);
+      }
+      const joined = out.join("\n").trim();
+      if (joined.length >= 120) candidates.push(joined);
+      continue;
+    }
+
+    if (headingRe.test(line)) {
+      const out: string[] = [];
+      for (let j = i + 1; j < lines.length; j++) {
+        const l = (lines[j] || "").trim();
+
+        // allow blank lines (paragraph breaks)
+        if (!l) { out.push(""); continue; }
+
+        // stop if we hit another obvious section
+        if (stopHeadingRe.test(l)) break;
+
+        // also stop if we hit a very "heading-ish" short line after we’ve started
+        if (out.length > 0 && l.length < 35 && /^[A-Z0-9 .,'"&()\-\/]+$/.test(l)) break;
+
+        out.push(l);
+      }
+
+      const joined = out.join("\n").trim();
+      if (joined.length >= 120) candidates.push(joined);
+    }
+  }
+
+  // 2) If no heading found, try paragraph heuristic: pick the longest paragraph with multiple sentences
+  if (!candidates.length) {
+    const paras = text
+      .split(/\n{2,}/)
+      .map(p => p.trim())
+      .filter(Boolean);
+
+    const scored = paras
+      .map(p => {
+        const sentenceCount = (p.match(/[.!?](\s|$)/g) || []).length;
+        const looksLikeTable = /\t|\s{3,}\S+\s{3,}/.test(p);
+        const score =
+          (p.length || 0) +
+          (sentenceCount >= 2 ? 250 : 0) -
+          (looksLikeTable ? 300 : 0);
+        return { p, score };
+      })
+      .sort((a, b) => b.score - a.score);
+
+    const best = scored[0]?.p;
+    if (best && best.length >= 180) candidates.push(best);
+  }
+
+  if (!candidates.length) return null;
+
+  // Return the longest candidate (most likely the full description)
+  candidates.sort((a, b) => b.length - a.length);
+  return candidates[0];
+}
+
+function pickBestEventDescriptionFromDocs(docTexts: Array<{ name: string; text: string }>) {
+  const found: Array<{ name: string; text: string }> = [];
+
+  for (const d of docTexts || []) {
+    const desc = extractEventDescriptionFromText(d.text);
+    if (desc) found.push({ name: d.name, text: desc });
+  }
+
+  if (!found.length) return null;
+  found.sort((a, b) => (b.text.length || 0) - (a.text.length || 0));
+  return found[0];
+}
+
+function stripHtml(html: string) {
+  return String(html || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function needsLongerDescription(html: string) {
+  const t = stripHtml(html);
+  const pCount = (String(html || "").match(/<p\b/gi) || []).length;
+  return (t.length < 220) || (pCount < 2);
+}
+
+async function generateMultiParagraphDescriptionHtml(
+  info: {
+    title?: string;
+    venueName?: string;
+    venueAddress?: string;
+    startDateTime?: string | null;
+    endDateTime?: string | null;
+    doorsOpenTime?: string | null;
+    ageGuidance?: string | null;
+    eventType?: string | null;
+    category?: string | null;
+    tags?: string[];
+  },
+  cfg: { apiKey: string; model: string }
+): Promise<string> {
+  const prompt =
+    "Write a proper UK event description in HTML.\n" +
+    "Rules:\n" +
+    "- Use 3–6 <p> paragraphs\n" +
+    "- 1–3 sentences per paragraph\n" +
+    "- Do NOT invent facts (only use the provided details)\n" +
+    "- Keep it engaging and clear\n\n" +
+    "Event details:\n" +
+    `Title: ${info.title || ""}\n` +
+    `Venue: ${info.venueName || ""}\n` +
+    `Address: ${info.venueAddress || ""}\n` +
+    `Start: ${info.startDateTime || ""}\n` +
+    `End: ${info.endDateTime || ""}\n` +
+    `Doors: ${info.doorsOpenTime || ""}\n` +
+    `Age: ${info.ageGuidance || ""}\n` +
+    `Type: ${info.eventType || ""}\n` +
+    `Category: ${info.category || ""}\n` +
+    `Tags: ${(info.tags || []).join(", ")}\n`;
+
+  const openaiReq2: any = {
+    model: cfg.model,
+    input: [{ role: "user", content: [{ type: "input_text", text: prompt }] }],
+    max_output_tokens: 900
+  };
+
+  const r2 = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${cfg.apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(openaiReq2)
+  });
+
+  const raw2 = await r2.text();
+  if (!r2.ok) throw new Error("OpenAI description repair failed: " + raw2);
+
+  const data2 = raw2 ? JSON.parse(raw2) : {};
+  const html = (typeof data2.output_text === "string" ? data2.output_text : "").trim();
+
+  // Last safety: if model ignored HTML, wrap as paragraphs
+  if (!html.includes("<p")) {
+    const safe = escapeHtml(html);
+    return safe
+      .split(/\n{2,}/)
+      .map(p => p.trim())
+      .filter(Boolean)
+      .map(p => `<p>${p}</p>`)
+      .join("");
+  }
+
+  return html;
+}
 
 
 
@@ -3074,17 +3255,35 @@ if (!outText) {
         return res.status(500).json({ ok: false, error: "Failed to parse model JSON", outText });
       }
 
-      const best = pickBestDocText(docTexts);
-if (best && best.text) {
-  const exactHtml = textToExactHtml(best.text);
-  const exactTitle = extractTitleFromText(best.text);
-
-  // ✅ If a doc exists: ALWAYS use exact doc copy (no rewriting)
-  draft.descriptionHtml = exactHtml;
-
-  // ✅ Title comes from doc first (no guessing)
+    // --- Prefer title from docs (deterministic) ---
+const bestForTitle = pickBestDocText(docTexts);
+if (bestForTitle && bestForTitle.text) {
+  const exactTitle = extractTitleFromText(bestForTitle.text);
   if (exactTitle) draft.title = exactTitle;
 }
+
+// --- Prefer EVENT DESCRIPTION from docs if it exists (not the whole doc) ---
+const bestDesc = pickBestEventDescriptionFromDocs(docTexts);
+if (bestDesc && bestDesc.text) {
+  draft.descriptionHtml = textToExactHtml(bestDesc.text);
+} else {
+  // If the model generated something too short / one-liner, force a proper multi-paragraph description.
+  if (needsLongerDescription(draft.descriptionHtml)) {
+    draft.descriptionHtml = await generateMultiParagraphDescriptionHtml({
+      title: draft.title,
+      venueName: draft.venueName,
+      venueAddress: draft.venueAddress,
+      startDateTime: draft.startDateTime,
+      endDateTime: draft.endDateTime,
+      doorsOpenTime: draft.doorsOpenTime,
+      ageGuidance: draft.ageGuidance,
+      eventType: draft.eventType,
+      category: draft.category,
+      tags: Array.isArray(draft.tags) ? draft.tags : [],
+    }, { apiKey, model });
+  }
+}
+
 
       return res.json({ ok: true, draft });
 
