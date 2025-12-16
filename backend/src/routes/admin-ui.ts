@@ -763,7 +763,7 @@ router.get(
     });
   }
 
-  async function createShowAI(){
+ async function createShowAI(){
   if (!main) return;
 
   main.innerHTML =
@@ -783,26 +783,24 @@ router.get(
 
   +   '<div id="ai_list" style="margin-top:12px;"></div>'
 
-+   '<div id="ai_list" style="margin-top:12px;"></div>'
-+
-+   '<div class="row" style="margin-top:12px; gap:10px; align-items:center; justify-content:flex-end;">'
-+     '<div id="ai_status" class="muted" style="flex:1; font-size:13px;"></div>'
-+     '<button id="ai_analyse" class="btn p">Analyse &amp; Pre-fill</button>'
-+   '</div>'
-+
-+   '<div id="ai_err" class="error" style="margin-top:10px;"></div>'
-+   '<div id="ai_result" style="margin-top:14px;"></div>'
-+
-+   '<div class="row" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); justify-content: space-between; align-items:center;">'
-+     '<label id="ai_approval_wrap" style="display:none; align-items:center; gap:10px; font-size:13px; color:#334155;">'
-+       '<input id="ai_approval" type="checkbox" />'
-+       'I’ve checked the AI-filled details above (and edited anything needed).'
-+     '</label>'
-+     '<div class="row" style="gap:10px; align-items:center;">'
-+       '<button id="save" class="btn p" style="padding: 10px 20px; font-size: 16px;">Save Event Details and Add Tickets</button>'
-+       '<div id="err" class="error"></div>'
-+     '</div>'
-+   '</div>'
+  +   '<div class="row" style="margin-top:12px; gap:10px; align-items:center; justify-content:flex-end;">'
+  +     '<div id="ai_status" class="muted" style="flex:1; font-size:13px;"></div>'
+  +     '<button id="ai_analyse" class="btn p">Analyse &amp; Pre-fill</button>'
+  +   '</div>'
+
+  +   '<div id="ai_err" class="error" style="margin-top:10px;"></div>'
+  +   '<div id="ai_result" style="margin-top:14px;"></div>'
+
+  +   '<div class="row" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); justify-content: space-between; align-items:center;">'
+  +     '<label id="ai_approval_wrap" style="display:none; align-items:center; gap:10px; font-size:13px; color:#334155;">'
+  +       '<input id="ai_approval" type="checkbox" />'
+  +       'I’ve checked the AI-filled details above (and edited anything needed).'
+  +     '</label>'
+  +     '<div class="row" style="gap:10px; align-items:center;">'
+  +       '<button id="save" class="btn p" style="padding: 10px 20px; font-size: 16px;">Save Event Details and Add Tickets</button>'
+  +       '<div id="err" class="error"></div>'
+  +     '</div>'
+  +   '</div>'
 
   + '</div>';
 
@@ -814,13 +812,12 @@ router.get(
   const status = $('#ai_status');
   const result = $('#ai_result');
 
-  if (!drop || !file || !status || !btn || !err || !list) {
-  throw new Error(
-    'Create Show AI view is missing expected elements. ' +
-    'Check main.innerHTML string concatenation for missing ids (ai_drop, ai_file, ai_status, ai_analyse, ai_err, ai_list).'
-  );
-}
-
+  if (!drop || !fileInput || !status || !btn || !err || !list || !result) {
+    throw new Error(
+      'Create Show AI view is missing expected elements. ' +
+      'Check main.innerHTML ids: ai_drop, ai_files, ai_status, ai_analyse, ai_err, ai_list, ai_result.'
+    );
+  }
 
    const state = {
     images: [], // { file, name, type, size, url, w, h, ratio, score23 }
