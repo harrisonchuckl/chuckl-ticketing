@@ -783,20 +783,27 @@ router.get(
 
   +   '<div id="ai_list" style="margin-top:12px;"></div>'
 
-  +           +'<div class="row" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); justify-content: space-between; align-items:center;">'
-        +  '<label id="ai_approval_wrap" style="display:none; align-items:center; gap:10px; font-size:13px; color:#334155;">'
-        +    '<input id="ai_approval" type="checkbox" />'
-        +    'I’ve checked the AI-filled details above (and edited anything needed).'
-        +  '</label>'
-        +  '<div class="row" style="gap:10px; align-items:center;">'
-        +    '<button id="save" class="btn p" style="padding: 10px 20px; font-size: 16px;">Save Event Details and Add Tickets</button>'
-        +    '<div id="err" class="error"></div>'
-        +  '</div>'
-        +'</div>'
++   '<div id="ai_list" style="margin-top:12px;"></div>'
++
++   '<div class="row" style="margin-top:12px; gap:10px; align-items:center; justify-content:flex-end;">'
++     '<div id="ai_status" class="muted" style="flex:1; font-size:13px;"></div>'
++     '<button id="ai_analyse" class="btn p">Analyse &amp; Pre-fill</button>'
++   '</div>'
++
++   '<div id="ai_err" class="error" style="margin-top:10px;"></div>'
++   '<div id="ai_result" style="margin-top:14px;"></div>'
++
++   '<div class="row" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); justify-content: space-between; align-items:center;">'
++     '<label id="ai_approval_wrap" style="display:none; align-items:center; gap:10px; font-size:13px; color:#334155;">'
++       '<input id="ai_approval" type="checkbox" />'
++       'I’ve checked the AI-filled details above (and edited anything needed).'
++     '</label>'
++     '<div class="row" style="gap:10px; align-items:center;">'
++       '<button id="save" class="btn p" style="padding: 10px 20px; font-size: 16px;">Save Event Details and Add Tickets</button>'
++       '<div id="err" class="error"></div>'
++     '</div>'
++   '</div>'
 
-
-  +   '<div id="ai_err" class="error" style="margin-top:10px;"></div>'
-  +   '<div id="ai_result" style="margin-top:14px;"></div>'
   + '</div>';
 
   const drop = $('#ai_drop');
@@ -807,10 +814,20 @@ router.get(
   const status = $('#ai_status');
   const result = $('#ai_result');
 
+  if (!drop || !file || !status || !btn || !err || !list) {
+  throw new Error(
+    'Create Show AI view is missing expected elements. ' +
+    'Check main.innerHTML string concatenation for missing ids (ai_drop, ai_file, ai_status, ai_analyse, ai_err, ai_list).'
+  );
+}
+
+
    const state = {
     images: [], // { file, name, type, size, url, w, h, ratio, score23 }
     docs: [],   // { file, name, type, size, dataUrl }
   };
+
+
 
   function bytes(n){
     if (!n && n !== 0) return '';
@@ -885,7 +902,7 @@ router.get(
         const h = img.naturalHeight || 0;
         const ratio = h ? (w / h) : 0;
         // 2:3 portrait target ratio = 0.666...
-        const target = 2/3;
+        const target = 3/2;
         const diff = Math.abs(ratio - target);
         resolve({ w, h, ratio, diff });
       };
@@ -1319,10 +1336,17 @@ async function createShow(){
         +'</div>' // End main grid
 
         // --- Action Button ---
-        +'<div class="row" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); justify-content: flex-end;">'
-        +'<button id="save" class="btn p" style="padding: 10px 20px; font-size: 16px;">Save Event Details and Add Tickets</button>'
-        +'<div id="err" class="error"></div>'
-        +'</div>'
+        +'<div class="row" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); justify-content: space-between; align-items:center;">'
++  '<label id="ai_approval_wrap" style="display:none; align-items:center; gap:10px; font-size:13px; color:#334155;">'
++    '<input id="ai_approval" type="checkbox" />'
++    'I’ve checked the AI-filled details (blue borders) and I’m happy to proceed.'
++  '</label>'
++  '<div class="row" style="gap:10px; align-items:center;">'
++    '<button id="save" class="btn p" style="padding: 10px 20px; font-size: 16px;">Save Event Details and Add Tickets</button>'
++    '<div id="err" class="error"></div>'
++  '</div>'
++'</div>'
+
         +'</div>';
     
     // Bind editor and venue picker
@@ -2683,7 +2707,7 @@ const model = process.env.OPENAI_MODEL_SHOW_EXTRACT || "gpt-4o-mini";
           "3) TYPE + CATEGORY: eventType must be one of: " + eventTypes.join(", ") + ".\n" +
           "   category MUST be one of these exact values (or null): " + categories.join(", ") + ".\n" +
           "   Example: stand-up comedy => eventType='comedy' and category='standup'.\n" +
-          "4) IMAGES: Choose the main poster image from the provided images (prefer closest to 2:3 portrait and likely poster artwork). Put the rest in additionalImageUrls.\n" +
+"4) IMAGES: Choose the main poster image from the provided images (prefer closest to 3:2 landscape and likely main artwork). Put the rest in additionalImageUrls.\n" +
           "5) TAGS: Return exactly 10 tags. If fewer are explicitly present, infer the remaining tags from the event and venue context.\n" +
           "6) Dates/times: output ISO 8601 for startDateTime/endDateTime. If local UK time and no timezone stated, assume Europe/London.\n" +
           "   doorsOpenTime: HH:MM 24h.\n"
@@ -2745,13 +2769,18 @@ async function docToText(name: string, type: string, dataUrl: string){
   return buf.toString("utf8");
 }
 
-// Turn all docs into plain text and feed as input_text
+const docTexts: Array<{ name: string; text: string }> = [];
+
+ // Turn all docs into plain text and feed as input_text
 for (const d of docs) {
   if (!d || !d.dataUrl) continue;
   try{
     const text = await docToText(d.name || "document", d.type || "", d.dataUrl);
     const cleaned = String(text || "").trim();
     if (!cleaned) continue;
+
+    // ✅ keep the full cleaned text for deterministic overrides later
+    docTexts.push({ name: d.name || "document", text: cleaned });
 
     // Keep it bounded so a huge PDF can’t explode tokens
     const clipped = cleaned.slice(0, 20000);
@@ -2761,13 +2790,61 @@ for (const d of docs) {
       text: `Document: ${d.name || "document"}\n\n${clipped}`
     });
   }catch(e){
-    // Don’t fail the whole request if one doc can’t be parsed
     content.push({
       type: "input_text",
       text: `Document: ${d.name || "document"}\n\n[Could not parse this file on server]`
     });
   }
 }
+
+      function pickBestDocText(docTexts: Array<{name:string; text:string}>){
+  if (!docTexts.length) return null;
+  // deterministic: pick the longest non-empty text
+  const sorted = [...docTexts].sort((a,b) => (b.text.length || 0) - (a.text.length || 0));
+  return sorted[0] || null;
+}
+
+function extractTitleFromText(text: string){
+  const lines = String(text || "")
+    .replace(/\r/g, "")
+    .split("\n")
+    .map(l => l.trim())
+    .filter(Boolean);
+
+  // Prefer “Title:” style
+  for (const l of lines.slice(0, 30)){
+    const m = l.match(/^(title|event)\s*:\s*(.+)$/i);
+    if (m && m[2] && m[2].trim().length <= 120) return m[2].trim();
+  }
+
+  // Otherwise first meaningful line that looks title-ish
+  for (const l of lines.slice(0, 30)){
+    if (l.length < 4) continue;
+    if (l.length > 120) continue;
+    if (/^as seen on/i.test(l)) continue;
+    if (/^get ready/i.test(l)) continue;
+    return l;
+  }
+  return null;
+}
+
+function escapeHtml(s: string){
+  return String(s || "")
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;")
+    .replace(/'/g,"&#039;");
+}
+
+function textToExactHtml(text: string){
+  // preserve words exactly; keep line breaks
+  const safe = escapeHtml(text);
+  const parts = safe.split(/\n{2,}/).map(p => p.replace(/\n/g, "<br>"));
+  return parts.map(p => `<p>${p}</p>`).join("");
+}
+
+
 
 
       // Attach images as vision inputs (URLs)
@@ -2966,6 +3043,18 @@ if (!outText) {
       } catch {
         return res.status(500).json({ ok: false, error: "Failed to parse model JSON", outText });
       }
+
+      const best = pickBestDocText(docTexts);
+if (best && best.text) {
+  const exactHtml = textToExactHtml(best.text);
+  const exactTitle = extractTitleFromText(best.text);
+
+  // ✅ If a doc exists: ALWAYS use exact doc copy (no rewriting)
+  draft.descriptionHtml = exactHtml;
+
+  // ✅ Title comes from doc first (no guessing)
+  if (exactTitle) draft.title = exactTitle;
+}
 
       return res.json({ ok: true, draft });
 
