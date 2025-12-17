@@ -5,14 +5,14 @@ import { requireAdminOrOrganiser } from "../lib/authz.js";
 
 const router = Router();
 
-function isOrganiser(req: any) {
-  return String(req.user?.role || "").toUpperCase() === "ORGANISER";
-}
-
 function requireUserId(req: any): string {
-  const id = req.user?.id;
+  const id = req?.user?.id;
   if (!id) throw new Error("Auth middleware did not attach req.user");
   return String(id);
+}
+
+function isOrganiser(req: any) {
+  return String(req.user?.role || "").toUpperCase() === "ORGANISER";
 }
 
 
@@ -140,7 +140,7 @@ router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
 
   // If organiser is creating, force ownership to them.
   // Admin can still create without organiserId (or you can allow passing organiserId later if you want).
-organiserId: isOrganiser(req) ? req.user.id : null,
+organiserId: isOrganiser(req) ? requireUserId(req) : null,
         ...(endDate ? { endDate: new Date(endDate) } : {}),
         imageUrl: imageUrl ?? null,
         description: descriptionHtml ?? null,
@@ -293,8 +293,7 @@ router.post("/shows/:id/duplicate", requireAdminOrOrganiser, async (req, res) =>
     date: src.date, // you’ll likely change date in the editor
     venueId: src.venueId,
 
-organiserId: isOrganiser(req) ? req.user.id : (req.body.organiserId ?? null),
-
+organiserId: isOrganiser(req) ? requireUserId(req) : (req.body.organiserId ?? null),
     status: ShowStatus.DRAFT,
     publishedAt: null,
   },
