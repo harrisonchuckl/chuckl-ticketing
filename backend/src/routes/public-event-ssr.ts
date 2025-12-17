@@ -50,6 +50,57 @@ function formatTimeHHMM(raw: any) {
   return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
 
+function isTruthyFeature(val: any) {
+  if (val === true) return true;
+  if (typeof val === 'number') return val > 0;
+  if (Array.isArray(val)) return val.some(isTruthyFeature);
+  if (val && typeof val === 'object') return Object.values(val).some(isTruthyFeature);
+  if (typeof val === 'string') {
+    const s = val.trim().toLowerCase();
+    if (!s) return false;
+    return ['yes', 'true', 'y', '1', 'available', 'enabled'].includes(s);
+  }
+  return false;
+}
+
+function hasAccessibleFeatures(accessibility: any) {
+  if (!accessibility) return false;
+
+  const keywordMatches = (input: string) => {
+    const key = input.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const keys = [
+      'wheelchair',
+      'wheelchairspaces',
+      'wheelchairspace',
+      'wheelchairaccessible',
+      'wheelchairaccess',
+      'stepfree',
+      'stepfreeaccess',
+      'accessibletoilet',
+      'accessibletoilets',
+      'accessiblebathroom',
+      'accessiblebathrooms',
+      'accessiblewc',
+    ];
+    return keys.some((k) => key.includes(k));
+  };
+
+  if (Array.isArray(accessibility)) {
+    return accessibility.some((entry) => {
+      if (typeof entry === 'string' && keywordMatches(entry)) return true;
+      if (entry && typeof entry === 'object' && hasAccessibleFeatures(entry)) return true;
+      return false;
+    });
+  }
+
+  for (const [key, value] of Object.entries(accessibility)) {
+    if (keywordMatches(key) && isTruthyFeature(value)) return true;
+    if (typeof value === 'string' && keywordMatches(value) && isTruthyFeature(value)) return true;
+  }
+
+  return false;
+}
+
 
 function outwardCode(postcode: string | null | undefined) {
   if (!postcode) return '';
@@ -350,8 +401,8 @@ const endTimeNoteRaw = (show as any).endTimeNote as string | null;
 const endTimeNote = endTimeNoteRaw ? endTimeNoteRaw.trim() : '';
 
     let doorTimeIso: string | undefined;
-    if (doorsOpenRaw && dateObj) {
-      const [dh, dm] = String(doorsOpenRaw).split(':');
+  if (doorsOpenTime && dateObj) {
+  const [dh, dm] = String(doorsOpenTime).split(':');
       const hNum = Number(dh);
       const mNum = Number(dm || 0);
       if (!Number.isNaN(hNum) && !Number.isNaN(mNum)) {
@@ -361,56 +412,8 @@ const endTimeNote = endTimeNoteRaw ? endTimeNoteRaw.trim() : '';
       }
     }
 
-    function isTruthyFeature(val: any) {
-  if (val === true) return true;
-  if (typeof val === 'number') return val > 0;
-  if (Array.isArray(val)) return val.some(isTruthyFeature);
-  if (val && typeof val === 'object') return Object.values(val).some(isTruthyFeature);
-  if (typeof val === 'string') {
-    const s = val.trim().toLowerCase();
-    if (!s) return false;
-    return ['yes', 'true', 'y', '1', 'available', 'enabled'].includes(s);
-  }
-  return false;
-}
-
-function hasAccessibleFeatures(accessibility: any) {
-  if (!accessibility) return false;
-
-  const keywordMatches = (input: string) => {
-    const key = input.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const keys = [
-      'wheelchair',
-      'wheelchairspaces',
-      'wheelchairspace',
-      'wheelchairaccessible',
-      'wheelchairaccess',
-      'stepfree',
-      'stepfreeaccess',
-      'accessibletoilet',
-      'accessibletoilets',
-      'accessiblebathroom',
-      'accessiblebathrooms',
-      'accessiblewc',
-    ];
-    return keys.some((k) => key.includes(k));
-  };
-
-  if (Array.isArray(accessibility)) {
-    return accessibility.some((entry) => {
-      if (typeof entry === 'string' && keywordMatches(entry)) return true;
-      if (entry && typeof entry === 'object' && hasAccessibleFeatures(entry)) return true;
-      return false;
-    });
-  }
-
-  for (const [key, value] of Object.entries(accessibility)) {
-    if (keywordMatches(key) && isTruthyFeature(value)) return true;
-    if (typeof value === 'string' && keywordMatches(value) && isTruthyFeature(value)) return true;
-  }
-
-  return false;
-}
+    const accessibility = ((show as any).accessibility || null) as any;
+const isDisabledFriendly = hasAccessibleFeatures(accessibility);
 
 
     const baseEventType = (show as any).eventType || null;
