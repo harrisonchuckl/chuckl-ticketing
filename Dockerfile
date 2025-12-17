@@ -38,15 +38,14 @@ COPY backend ./
 # Build TS -> dist (tsconfig set to emit even if types complain)
 RUN npm run build
 
-
-# ---------- runtime (distroless, tiny) ----------
-FROM gcr.io/distroless/nodejs20-debian12:nonroot
+# ---------- runtime (needs shell to run Railway pre-deploy/start commands) ----------
+FROM node:20-bullseye-slim
 WORKDIR /app/backend
 
 # Copy compiled JS
 COPY --from=builder /app/backend/dist ./dist
 
-# Copy prisma schema, generated client and node_modules from proddeps
+# Copy prisma schema + node_modules (includes @prisma/client and prisma CLI)
 COPY --from=proddeps /app/backend/node_modules ./node_modules
 COPY --from=proddeps /app/backend/prisma ./prisma
 
@@ -55,4 +54,9 @@ COPY --from=builder /app/backend/public ./public
 
 ENV NODE_ENV=production
 EXPOSE 4000
-CMD ["dist/start.js"]
+
+# Start the server
+CMD ["node", "dist/start.js"]
+
+
+
