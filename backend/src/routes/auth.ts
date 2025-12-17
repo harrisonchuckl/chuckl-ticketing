@@ -145,16 +145,16 @@ router.post("/forgot-password", async (req, res) => {
     const origin = appOriginFromRequest(req);
     const resetLink = `${origin}/auth/reset?token=${encodeURIComponent(token)}`;
 
-    await sendMail({
-      to: email,
-      subject: "Reset your TicketIn password",
-      text: `Use this link to reset your password (expires in ${ttlMinutes} minutes):\n\n${resetLink}`,
-      html:
-        `<p>Use this link to reset your password (expires in ${ttlMinutes} minutes):</p>` +
-        `<p><a href="${resetLink}">${resetLink}</a></p>`,
-    });
+    sendMail({
+  to: email,
+  subject: "Reset your TicketIn password",
+  text: `Use this link to reset your password (expires in ${ttlMinutes} minutes):\n\n${resetLink}`,
+  html:
+    `<p>Use this link to reset your password (expires in ${ttlMinutes} minutes):</p>` +
+    `<p><a href="${resetLink}">${resetLink}</a></p>`,
+}).catch((e) => console.error("[mailer] send failed", e));
 
-    return res.json({ ok: true });
+return res.json({ ok: true });
   } catch (err) {
     console.error("forgot-password failed", err);
     return res.status(500).json({ error: "internal error" });
