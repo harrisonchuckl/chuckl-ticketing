@@ -56,8 +56,10 @@ html, body {
 /* Reduce/remove the heavy gradient on the background
    (your page was flat grey; this gives you the clean blue look) */
 body {
-  background: linear-gradient(180deg, #0e86c7 0%, #0b79b7 100%) !important;
+  background-color: #0e86c7 !important; /* solid */
+  background-image: none !important;    /* kill gradients */
 }
+
 
 /* Remove any shadow behind the white box (future-proof) */
 .card,
