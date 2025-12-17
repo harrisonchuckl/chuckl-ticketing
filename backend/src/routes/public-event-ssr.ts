@@ -6,7 +6,7 @@ import prisma from '../lib/prisma.js';
 const router = Router();
 
 function getPublicBrand() {
-  const name = String(process.env.PUBLIC_BRAND_NAME || 'TIXEL').trim();
+  const name = String(process.env.PUBLIC_BRAND_NAME || 'TixAll').trim();
   const logoUrl = String(process.env.PUBLIC_BRAND_LOGO_URL || '').trim();
   const homeHref = String(process.env.PUBLIC_BRAND_HOME_HREF || '/public').trim();
   return { name, logoUrl, homeHref };
