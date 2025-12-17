@@ -1,23 +1,34 @@
-import { Request, Response, NextFunction } from 'express';
+import type { Request, Response, NextFunction } from "express";
+import { requireAuth } from "../middleware/requireAuth.js";
 
-/**
- * VERY LIGHT placeholder authZ middlewares.
- * Replace with your real checks (e.g., req.user.role === 'ADMIN') once your auth is wired.
- */
-
-export function requireAdmin(_req: Request, _res: Response, next: NextFunction) {
-  // TODO: enforce admin role
-  next();
+function normaliseRole(role: string | undefined | null) {
+  return String(role || "").trim().toUpperCase();
 }
 
-export function requireOrganiser(_req: Request, _res: Response, next: NextFunction) {
-  // TODO: enforce organiser role
-  next();
+export function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  return requireAuth(req, res, () => {
+    const role = normaliseRole(req.user?.role);
+    if (role !== "ADMIN") return res.status(403).json({ error: true, message: "Forbidden" });
+    next();
+  });
 }
 
-export function requireAdminOrOrganiser(_req: Request, _res: Response, next: NextFunction) {
-  // TODO: enforce (admin || organiser)
-  next();
+export function requireOrganiser(req: Request, res: Response, next: NextFunction) {
+  return requireAuth(req, res, () => {
+    const role = normaliseRole(req.user?.role);
+    if (role !== "ORGANISER") return res.status(403).json({ error: true, message: "Forbidden" });
+    next();
+  });
+}
+
+export function requireAdminOrOrganiser(req: Request, res: Response, next: NextFunction) {
+  return requireAuth(req, res, () => {
+    const role = normaliseRole(req.user?.role);
+    if (role !== "ADMIN" && role !== "ORGANISER") {
+      return res.status(403).json({ error: true, message: "Forbidden" });
+    }
+    next();
+  });
 }
 
 export default { requireAdmin, requireOrganiser, requireAdminOrOrganiser };
