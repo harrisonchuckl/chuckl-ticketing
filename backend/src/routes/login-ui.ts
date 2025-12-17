@@ -54,9 +54,17 @@ router.get('/login', (req, res) => {
     <form id="f-login" class="row">
       <label for="login-email">Email</label>
       <input id="login-email" name="email" type="email" autocomplete="username" required />
-      <label for="login-password">Password</label>
-      <input id="login-password" name="password" type="password" autocomplete="current-password" required />
-      <button type="submit">Sign in</button>
+   <label for="login-password">Password</label>
+<input id="login-password" name="password" type="password" autocomplete="current-password" required />
+
+<div style="margin-top:10px">
+  <a href="#" id="go-forgot" style="color:#0284c7;text-decoration:none;font-size:13px">
+    Forgot password?
+  </a>
+</div>
+
+<button type="submit">Sign in</button>
+
       <div id="login-err" class="err"></div>
       <div class="muted">After signing in you’ll be taken to your organiser console.</div>
     </form>
@@ -100,6 +108,20 @@ router.get('/login', (req, res) => {
     Object.keys(views).forEach(k=>views[k].classList.toggle('hidden', k!==tab));
   }
   tabs.forEach(t => t.addEventListener('click', () => sel(t.dataset.tab)));
+
+    // "Forgot password?" link under login password -> switch to Forgot tab
+  const goForgot = document.getElementById('go-forgot');
+  if (goForgot) {
+    goForgot.addEventListener('click', (e) => {
+      e.preventDefault();
+      sel('forgot');
+      // optional: prefill forgot email from login email
+      const em = (document.getElementById('login-email')?.value || '').trim();
+      if (em) document.getElementById('fp-email').value = em;
+      document.getElementById('fp-email')?.focus();
+    });
+  }
+
 
   // Prefill from query params (for convenience)
   try{
@@ -164,7 +186,7 @@ router.get('/login', (req, res) => {
     ev.preventDefault();
     const err = document.getElementById('forgot-err'); err.textContent='';
     const email = document.getElementById('fp-email').value.trim();
-    const { ok, data } = await postJSON('/auth/password/request', { email });
+const { ok, data } = await postJSON('/auth/forgot-password', { email });
     if(!ok){
       err.textContent = (data && data.error) || 'Password reset endpoint not available yet.';
       return;
