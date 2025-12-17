@@ -5,6 +5,25 @@ import { requireAdminOrOrganiser } from "../lib/authz.js";
 
 const router = Router();
 
+function isOrganiser(req: any) {
+  return String(req.user?.role || "").toUpperCase() === "ORGANISER";
+}
+
+function showWhereForRead(req: any, showId: string) {
+  if (isOrganiser(req)) {
+    return { id: showId, organiserId: req.user.id };
+  }
+  return { id: showId };
+}
+
+function showWhereForList(req: any) {
+  if (isOrganiser(req)) {
+    return { organiserId: req.user.id };
+  }
+  return {};
+}
+
+
 
 function asNullableString(value: unknown) {
   if (value === null || value === undefined) return null;
@@ -40,11 +59,12 @@ async function ensureVenue(venueId?: string | null, venueText?: string | null): 
 }
 
 /** GET /admin/shows — list */
-router.get("/shows", requireAdminOrOrganiser, async (_req, res) => {
+router.get("/shows", requireAdminOrOrganiser, async (req, res) => {
   try {
-    const items = await prisma.show.findMany({
-      orderBy: [{ date: "asc" }],
-      select: {
+const items = await prisma.show.findMany({
+  where: showWhereForList(req),
+  orderBy: [{ date: "asc" }],
+  select: {
         id: true,
         title: true,
         description: true,
@@ -95,6 +115,7 @@ router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
       return res.status(400).json({ ok: false, error: "Missing required fields" });
     }
 
+     
     const finalVenueId = (await ensureVenue(venueId, venueText)) || undefined;
     const parsedTags = Array.isArray(tags)
       ? tags.map((t: unknown) => asNullableString(t)).filter(isNonEmptyString)
@@ -107,8 +128,12 @@ router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
 
     const created = await prisma.show.create({
       data: {
-        title: String(title),
-        date: new Date(date),
+  title: String(title),
+  date: new Date(date),
+
+  // If organiser is creating, force ownership to them.
+  // Admin can still create without organiserId (or you can allow passing organiserId later if you want).
+organiserId: isOrganiser(req) ? req.user.id : null,
         ...(endDate ? { endDate: new Date(endDate) } : {}),
         imageUrl: imageUrl ?? null,
         description: descriptionHtml ?? null,
@@ -136,9 +161,9 @@ router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
 /** GET /admin/shows/:id */
 router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
   try {
-    const s = await prisma.show.findUnique({
-      where: { id: String(req.params.id) },
-      select: {
+    const s = await prisma.show.findFirst({
+  where: showWhereForRead(req, String(req.params.id)),
+  select: {
         id: true,
         title: true,
         description: true,
@@ -192,6 +217,13 @@ router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
       tags,
       additionalImages,
     } = req.body || {};
+
+        // Ownership check: organisers can only edit their own shows
+    const where = showWhereForRead(req, String(req.params.id));
+    const existing = await prisma.show.findFirst({ where, select: { id: true } });
+    if (!existing) return res.status(404).json({ ok: false, error: "Not found" });
+
+    
     const finalVenueId = (await ensureVenue(venueId, venueText)) || undefined;
     const parsedTags = Array.isArray(tags)
       ? tags.map((t: unknown) => asNullableString(t)).filter(isNonEmptyString)
@@ -203,14 +235,14 @@ router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
       accessibility && typeof accessibility === "object" ? accessibility : undefined;
 
     const updated = await prisma.show.update({
-      where: { id: String(req.params.id) },
+  where: { id: existing.id },
       data: {
         ...(title != null ? { title: String(title) } : {}),
         ...(date != null ? { date: new Date(date) } : {}),
         ...(endDate != null ? { endDate: endDate ? new Date(endDate) : null } : {}),
         ...(imageUrl !== undefined ? { imageUrl: imageUrl ?? null } : {}),
         ...(descriptionHtml !== undefined ? { description: descriptionHtml ?? null } : {}),
-        ...(finalVenueId ? { venueId: finalVenueId } : {}),
+...(venueId !== undefined || venueText !== undefined ? { venueId: finalVenueId ?? null } : {}),
         ...(eventType !== undefined ? { eventType: asNullableString(eventType) } : {}),
         ...(eventCategory !== undefined ? { eventCategory: asNullableString(eventCategory) } : {}),
         ...(doorsOpenTime !== undefined ? { doorsOpenTime: asNullableString(doorsOpenTime) } : {}),
@@ -239,22 +271,29 @@ router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
 /** POST /admin/shows/:id/duplicate */
 router.post("/shows/:id/duplicate", requireAdminOrOrganiser, async (req, res) => {
   try {
-    const src = await prisma.show.findUnique({
-      where: { id: String(req.params.id) },
-      select: { title: true, description: true, imageUrl: true, date: true, venueId: true },
-    });
+   const src = await prisma.show.findFirst({
+  where: showWhereForRead(req, String(req.params.id)),
+  select: { title: true, description: true, imageUrl: true, date: true, venueId: true },
+});
+
     if (!src) return res.status(404).json({ ok: false, error: "Not found" });
 
-    const newShow = await prisma.show.create({
-      data: {
-        title: (src.title || "") + " (Copy)",
-        description: src.description,
-        imageUrl: src.imageUrl,
-        date: src.date, // you’ll likely change date in the editor
-        venueId: src.venueId,
-      },
-      select: { id: true },
-    });
+   const newShow = await prisma.show.create({
+  data: {
+    title: (src.title || "") + " (Copy)",
+    description: src.description,
+    imageUrl: src.imageUrl,
+    date: src.date, // you’ll likely change date in the editor
+    venueId: src.venueId,
+
+organiserId: isOrganiser(req) ? req.user.id : (req.body.organiserId ?? null),
+
+    status: ShowStatus.DRAFT,
+    publishedAt: null,
+  },
+  select: { id: true },
+});
+
 
     res.json({ ok: true, newId: newShow.id });
   } catch (e) {
