@@ -38,8 +38,8 @@ COPY backend ./
 # Build TS -> dist (tsconfig set to emit even if types complain)
 RUN npm run build
 
-# ---------- runtime (needs shell to run Railway pre-deploy/start commands) ----------
-FROM node:20-bullseye-slim
+# ---------- runtime (allows pre-deploy hooks in Railway) ----------
+FROM node:20-bullseye-slim AS runtime
 WORKDIR /app/backend
 
 # Copy compiled JS
@@ -57,6 +57,5 @@ EXPOSE 4000
 
 # Start the server
 CMD ["node", "dist/start.js"]
-
 
 
