@@ -4,14 +4,112 @@ import { requireAdminOrOrganiser } from "../lib/authz.js";
 
 const router = Router();
 
+// Public login page (must be defined BEFORE the /ui/* catch-all)
+router.get("/ui/login", (_req, res) => {
+  res.set("Cache-Control", "no-store");
+  res.type("html").send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Organiser Login</title>
+  <style>
+    body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:#f7f8fb;color:#111827}
+    .wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+    .card{width:420px;max-width:100%;background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:18px}
+    .title{font-weight:700;font-size:18px;margin-bottom:6px}
+    .muted{color:#6b7280;font-size:13px;margin-bottom:12px}
+    label{display:block;font-size:12px;font-weight:700;color:#374151;margin:10px 0 6px}
+    input{width:100%;padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;font-size:14px}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 12px;border-radius:10px;border:1px solid #111827;background:#111827;color:#fff;font-weight:700;cursor:pointer;width:100%;margin-top:12px}
+    .err{color:#b91c1c;font-size:13px;margin-top:10px;min-height:18px}
+    .link{display:block;text-align:center;margin-top:10px;color:#0284c7;text-decoration:none;font-size:13px}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="title">Organiser Console</div>
+    <div class="muted">Log in to manage your events.</div>
+
+    <label>Email</label>
+    <input id="email" type="email" autocomplete="email" />
+
+    <label>Password</label>
+    <input id="pw" type="password" autocomplete="current-password" />
+
+    <button class="btn" id="go">Log in</button>
+    <div class="err" id="err"></div>
+  </div>
+</div>
+
+<script>
+(async function(){
+  const err = document.getElementById('err');
+  const btn = document.getElementById('go');
+  function setErr(m){ err.textContent = m || ''; }
+
+  btn.addEventListener('click', async function(){
+    setErr('');
+    try{
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('pw').value;
+      if(!email || !password) return setErr('Please enter email + password.');
+
+      const r = await fetch('/auth/login', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+
+      const t = await r.text();
+      if(!r.ok) throw new Error(t || ('HTTP ' + r.status));
+
+      // Success → go home
+      location.href = '/admin/ui/home';
+    }catch(e){
+      setErr(e.message || String(e));
+    }
+  });
+
+  // If already logged in, skip login
+  try{
+    const r = await fetch('/auth/me', { credentials:'include' });
+    if(r.ok) location.href = '/admin/ui/home';
+  }catch{}
+})();
+</script>
+</body>
+</html>`);
+});
+
+// UI logout helper
+router.get("/ui/logout", (_req, res) => {
+  res.clearCookie("auth", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+  });
+  res.redirect("/admin/ui/login");
+});
+
+
 /**
  * Admin Single Page App (Organiser Console)
  * Served at /admin/ui/*
  */
 router.get(
   ["/ui", "/ui/", "/ui/home", "/ui/*"],
+  (req, res, next) => {
+    // If not logged in, force login page
+    if (!req.user) return res.redirect("/admin/ui/login");
+    next();
+  },
   requireAdminOrOrganiser,
   (_req, res) => {
+
     res.set("Cache-Control", "no-store");
     res.type("html").send(`<!doctype html>
 <html lang="en">
@@ -304,7 +402,7 @@ router.get(
 
       <div class="sb-group">Settings</div>
       <a class="sb-link" href="/admin/ui/account" data-view="/admin/ui/account">Account</a>
-      <a class="sb-link" href="/auth/logout">Log out</a>
+<a class="sb-link" href="/admin/ui/logout">Log out</a>
     </aside>
 
     <main class="content" id="main">
@@ -315,6 +413,16 @@ router.get(
 <script>
 (function(){
   console.log('[Admin UI] booting');
+    // If the session has expired, force login (1 hour inactivity)
+  (async function ensureAuth(){
+    try{
+      const r = await fetch('/auth/me', { credentials:'include' });
+      if(!r.ok) location.href = '/admin/ui/login';
+    }catch(e){
+      location.href = '/admin/ui/login';
+    }
+  })();
+
   function $(sel, root){ return (root || document).querySelector(sel); }
   function $$(sel, root){ return Array.from((root || document).querySelectorAll(sel)); }
     // --- AI field highlighting ---
@@ -2620,10 +2728,103 @@ async function summaryPage(id){
     if (!main) return;
     main.innerHTML = '<div class="card"><div class="title">Email Campaigns</div><div class="muted">Email tools will plug into your marketing automation stack.</div></div>';
   }
-  function account(){
-    if (!main) return;
-    main.innerHTML = '<div class="card"><div class="title">Account</div><div class="muted">Account settings coming soon.</div></div>';
+  async function account(){
+  if (!main) return;
+
+  main.innerHTML =
+    '<div class="card">'
+      +'<div class="header">'
+        +'<div>'
+          +'<div class="title">Account</div>'
+          +'<div class="muted">Manage your profile and security.</div>'
+        +'</div>'
+        +'<a class="btn" href="/admin/ui/logout" style="text-decoration:none">Log out</a>'
+      +'</div>'
+      +'<div class="grid" style="grid-template-columns:1fr 1fr;gap:12px">'
+        +'<div class="card" style="margin:0">'
+          +'<div class="title">Profile</div>'
+          +'<div class="muted" style="margin-bottom:10px">Update your name and email.</div>'
+          +'<label style="font-size:12px;font-weight:700;display:block;margin:8px 0 4px">Name</label>'
+          +'<input id="acc_name" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px" />'
+          +'<label style="font-size:12px;font-weight:700;display:block;margin:8px 0 4px">Email</label>'
+          +'<input id="acc_email" type="email" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px" />'
+          +'<div class="row" style="margin-top:10px;gap:8px">'
+            +'<button class="btn p" id="acc_save">Save profile</button>'
+            +'<div id="acc_err" class="error"></div>'
+          +'</div>'
+        +'</div>'
+
+        +'<div class="card" style="margin:0">'
+          +'<div class="title">Security</div>'
+          +'<div class="muted" style="margin-bottom:10px">Change your password.</div>'
+          +'<label style="font-size:12px;font-weight:700;display:block;margin:8px 0 4px">Current password</label>'
+          +'<input id="pw_current" type="password" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px" />'
+          +'<label style="font-size:12px;font-weight:700;display:block;margin:8px 0 4px">New password</label>'
+          +'<input id="pw_new" type="password" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px" />'
+          +'<div class="row" style="margin-top:10px;gap:8px">'
+            +'<button class="btn" id="pw_save">Update password</button>'
+            +'<div id="pw_err" class="error"></div>'
+          +'</div>'
+        +'</div>'
+      +'</div>'
+      +'<div class="card" style="margin-top:12px">'
+        +'<div class="title">Coming next</div>'
+        +'<div class="muted">Company details, payout settings, and permissions can live here later (safe behind login).</div>'
+      +'</div>'
+    +'</div>';
+
+  // Load user
+  try{
+    const me = await j('/auth/me');
+    const u = (me && me.user) || {};
+    $('#acc_name').value = u.name || '';
+    $('#acc_email').value = u.email || '';
+  }catch(e){
+    $('#acc_err').textContent = e.message || String(e);
   }
+
+  $('#acc_save').addEventListener('click', async function(){
+    $('#acc_err').textContent = '';
+    try{
+      const name = $('#acc_name').value.trim();
+      const email = $('#acc_email').value.trim();
+      const r = await j('/auth/me', {
+        method:'PUT',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ name, email })
+      });
+      if (r && r.ok) alert('Profile updated');
+      else throw new Error((r && r.error) || 'Failed to update');
+    }catch(e){
+      $('#acc_err').textContent = e.message || String(e);
+    }
+  });
+
+  $('#pw_save').addEventListener('click', async function(){
+    $('#pw_err').textContent = '';
+    try{
+      const currentPassword = $('#pw_current').value;
+      const newPassword = $('#pw_new').value;
+      if(!currentPassword || !newPassword) throw new Error('Enter both current + new password');
+
+      const r = await j('/auth/change-password', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ currentPassword, newPassword })
+      });
+
+      if (r && r.ok){
+        alert('Password updated');
+        $('#pw_current').value = '';
+        $('#pw_new').value = '';
+      }else{
+        throw new Error((r && r.error) || 'Failed to update password');
+      }
+    }catch(e){
+      $('#pw_err').textContent = e.message || String(e);
+    }
+  });
+}
 
   // --- ROUTER ---
   function route(){
