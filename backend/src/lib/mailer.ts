@@ -36,12 +36,23 @@ export async function sendMail(args: SendMailArgs): Promise<void> {
   const MAIL_FROM = normaliseFrom();
   const REPLY_TO = env("MAIL_REPLY_TO");
 
+  console.log("[mailer] sendMail called", {
+    to: args.to,
+    subject: args.subject,
+    hasResendKey: Boolean(RESEND_API_KEY),
+    nodeEnv: process.env.NODE_ENV,
+    from: MAIL_FROM,
+    replyTo: REPLY_TO || null,
+    hasHtml: Boolean(args.html),
+    hasText: Boolean(args.text),
+  });
+
   // Prefer Resend if configured (recommended for Railway/prod)
   if (RESEND_API_KEY) {
     try {
       const resend = new Resend(RESEND_API_KEY);
 
-      await resend.emails.send({
+           const result = await resend.emails.send({
         from: MAIL_FROM,
         to: [args.to],
         subject: args.subject,
@@ -50,6 +61,7 @@ export async function sendMail(args: SendMailArgs): Promise<void> {
         replyTo: REPLY_TO || undefined,
       });
 
+      console.log("[mailer] resend result", result);
       return;
     } catch (err) {
       console.error("[mailer] send failed (resend)", err);
