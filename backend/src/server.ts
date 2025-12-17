@@ -5,6 +5,7 @@ import rateLimit from "express-rate-limit";
 import cookieParser from "cookie-parser";
 import path from "path";
 import { fileURLToPath } from "url";
+import { attachUser } from "./middleware/requireAuth.js";
 
 // ---- Existing routers ----
 import authRouter from "./routes/auth.js";
@@ -61,6 +62,7 @@ app.use(
 );
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 app.use(cookieParser());
+app.use(attachUser);
 
 
 
