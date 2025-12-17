@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
-import * as bcrypt from "bcryptjs";
+import * as bcryptNS from "bcryptjs";
+
+// Works whether bcryptjs arrives as a namespace object or default export (ESM/CJS interop)
+const bcrypt: any = (bcryptNS as any).default ?? bcryptNS;
 import jwt from "jsonwebtoken";
 import { requireAuth } from "../middleware/requireAuth.js";
 
