@@ -36,10 +36,13 @@ router.get("/ui/login", (_req, res) => {
     <input id="email" type="email" autocomplete="email" />
 
     <label>Password</label>
-    <input id="pw" type="password" autocomplete="current-password" />
+<input id="pw" type="password" autocomplete="current-password" />
 
-    <button class="btn" id="go">Log in</button>
-    <div class="err" id="err"></div>
+<a class="link" href="/auth/forgot">Forgot password?</a>
+
+<button class="btn" id="go">Log in</button>
+<div class="err" id="err"></div>
+
   </div>
 </div>
 
