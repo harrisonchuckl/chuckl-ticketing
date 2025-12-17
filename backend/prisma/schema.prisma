@@ -69,10 +69,21 @@ model Show {
   description String?
   imageUrl    String?
   date        DateTime
+  endDate     DateTime?
+
+  doorsOpenTime   String?
+  ageGuidance     String?
+  endTimeNote     String?
+
+  eventType       String?
+  eventCategory   String?
+  additionalImages String[] @default([])
+  tags             String[] @default([])
+  accessibility    Json?
 
   status      ShowStatus @default(DRAFT)
   publishedAt DateTime?
-activeSeatMapId String?
+  activeSeatMapId String?
 
   venueId     String?
   organiserId String?
@@ -205,7 +216,6 @@ model SeatMap {
   allocations ExternalAllocation[]
 }
 
-
 model Zone {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
@@ -240,47 +250,37 @@ model Seat {
   level      String?
 
   status     SeatStatus @default(AVAILABLE)
-
   zoneId     String?
   zone       Zone?      @relation(fields: [zoneId], references: [id])
-
-  tickets         Ticket[]
-  allocationSeats AllocationSeat[]
 }
 
 model ExternalAllocation {
-  id         String   @id @default(cuid())
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id                String   @id @default(cuid())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  showId            String
+  seatMapId         String?
+  source            String
+  label             String?
+  externalPlatform  String?
+  contactEmail      String?
+  quantity          Int
 
-  showId     String
-  show       Show     @relation(fields: [showId], references: [id])
-
-  seatMapId  String?
-  seatMap    SeatMap? @relation(fields: [seatMapId], references: [id])
-
-  source           String
-  label            String?
-  externalPlatform String?
-  contactEmail     String?
-  quantity         Int
-
-  seats      AllocationSeat[]
+  show   Show    @relation(fields: [showId], references: [id])
+  seatMap SeatMap? @relation(fields: [seatMapId], references: [id])
+  seats  AllocationSeat[]
 }
 
 model AllocationSeat {
-  id            String   @id @default(cuid())
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  allocationId String
+  seatId     String
+  rowLabel   String?
+  seatNumber Int?
+  level      String?
 
-  allocationId  String
-  allocation    ExternalAllocation @relation(fields: [allocationId], references: [id])
-
-  seatId        String
-  seat          Seat    @relation(fields: [seatId], references: [id])
-
-  /// Denormalised helpers that some routes read directly
-  rowLabel      String?
-  seatNumber    Int?
-  level         String?
+  allocation ExternalAllocation @relation(fields: [allocationId], references: [id])
+  seat       Seat             @relation(fields: [seatId], references: [id])
 }
