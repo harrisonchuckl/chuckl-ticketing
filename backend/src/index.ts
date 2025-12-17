@@ -2,6 +2,7 @@
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import { attachUser } from "./middleware/requireAuth.js";
 
 import authRoutes from "./routes/auth.js";
 import logoutRoutes from "./routes/logout.js";
@@ -24,6 +25,7 @@ app.use(
 );
 app.use(express.json());
 app.use(cookieParser());
+app.use(attachUser);
 
 // ---------- Public APIs ----------
 app.use("/auth", authRoutes);
