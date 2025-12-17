@@ -23,9 +23,24 @@ router.get('/login', (req, res) => {
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Sign in</title>
 <style>
-  :root { --border:#e5e7eb; --text:#111827; --muted:#6b7280; --bg:#f7f8fb; --brand:#111827; }
-  html,body{margin:0;padding:0;background:var(--bg);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;color:var(--text)}
-  .wrap{min-height:100vh;display:grid;place-items:center;padding:24px}
+:root { --border:#e5e7eb; --text:#111827; --muted:#6b7280; --bg:#009fe3; --brand:#111827; }
+html,body{
+  margin:0;
+  padding:0;
+  height:100%;
+  background:#009fe3 !important;
+  background-image:none !important;
+  font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
+  color:var(--text);
+}
+.wrap{
+  min-height:100vh;
+  display:grid;
+  place-items:center;
+  padding:24px;
+  background:#009fe3 !important;
+  background-image:none !important;
+}
   .card{width:100%;max-width:460px;background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px}
   h1{margin:0 0 12px 0;font-size:20px}
   label{display:block;font-size:14px;margin:10px 0 6px}
@@ -81,6 +96,23 @@ div[role="dialog"] {
 h1 {
   font-weight: 700;
 }
+
+/* Force SOLID TIXALL blue (no overlays, no gradients) */
+html, body, .wrap {
+  background:#009fe3 !important;
+  background-image:none !important;
+}
+
+body::before, body::after, .wrap::before, .wrap::after {
+  content:none !important;
+  display:none !important;
+}
+
+body, .wrap {
+  filter:none !important;
+  backdrop-filter:none !important;
+}
+
 </style>
 
   
