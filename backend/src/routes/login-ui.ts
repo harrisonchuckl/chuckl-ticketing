@@ -38,9 +38,51 @@ router.get('/login', (req, res) => {
   .tab{flex:1;text-align:center;border:1px solid var(--border);padding:10px;border-radius:8px;cursor:pointer;background:#fff}
   .tab.active{background:#f1f5f9}
   .hidden{display:none}
-  .row{display:grid;gap:8px}
+    .row{display:grid;gap:8px}
+
+/* -------------------------
+   Login UI polish (Dec 2025)
+   ------------------------- */
+
+/* Fix “blurry” bold text rendering */
+html, body {
+  height: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+  font-synthesis: none; /* prevents faux-bold in some setups */
+}
+
+/* Reduce/remove the heavy gradient on the background
+   (your page was flat grey; this gives you the clean blue look) */
+body {
+  background: linear-gradient(180deg, #0e86c7 0%, #0b79b7 100%) !important;
+}
+
+/* Remove any shadow behind the white box (future-proof) */
+.card,
+.panel,
+.auth-card,
+.modal,
+div[role="dialog"] {
+  box-shadow: none !important;
+}
+
+/* Keep a soft border so it still “lifts” without a shadow */
+.card,
+.panel,
+.auth-card {
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+}
+
+/* If your title feels too heavy */
+h1 {
+  font-weight: 700;
+}
 </style>
-</head>
+
+  
+  </head>
 <body>
 <div class="wrap">
   <div class="card">
