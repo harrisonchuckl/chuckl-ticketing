@@ -5,86 +5,288 @@ import { requireAdminOrOrganiser } from "../lib/authz.js";
 const router = Router();
 
 // Public login page (must be defined BEFORE the /ui/* catch-all)
-router.get("/ui/login", (_req, res) => {
+router.get("/ui/login", (req, res) => {
   res.set("Cache-Control", "no-store");
+
+  const brandName = String(process.env.PUBLIC_BRAND_NAME || "TixAll").trim();
+  const logoUrl = String(process.env.PUBLIC_BRAND_LOGO_URL || "").trim();
+  const homeHref = String(process.env.PUBLIC_BRAND_HOME_HREF || "/public").trim();
+
+  const error = typeof req.query.error === "string" ? req.query.error : "";
+
   res.type("html").send(`<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Organiser Login</title>
+  <title>${brandName} | Organiser Login</title>
+  <meta name="robots" content="noindex,nofollow" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@400;700;800;900&display=swap" rel="stylesheet">
+
   <style>
-    body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:#f7f8fb;color:#111827}
-    .wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
-    .card{width:420px;max-width:100%;background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:18px}
-    .title{font-weight:700;font-size:18px;margin-bottom:6px}
-    .muted{color:#6b7280;font-size:13px;margin-bottom:12px}
-    label{display:block;font-size:12px;font-weight:700;color:#374151;margin:10px 0 6px}
-    input{width:100%;padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;font-size:14px}
-    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 12px;border-radius:10px;border:1px solid #111827;background:#111827;color:#fff;font-weight:700;cursor:pointer;width:100%;margin-top:12px}
-    .err{color:#b91c1c;font-size:13px;margin-top:10px;min-height:18px}
-    .link{display:block;text-align:center;margin-top:10px;color:#0284c7;text-decoration:none;font-size:13px}
+    :root{
+      --brand: #009fe3;
+      --brand-deep: #007fb6;
+      --ink: #0F172A;
+      --muted: rgba(15,23,42,0.72);
+      --card: rgba(255,255,255,0.96);
+      --border: rgba(255,255,255,0.28);
+      --shadow: 0 30px 60px rgba(0,0,0,0.25);
+      --radius: 18px;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      min-height:100vh;
+      font-family: 'Inter', sans-serif;
+      color: var(--ink);
+      background: var(--brand);
+      overflow-x:hidden;
+    }
+    .bg{
+      position:fixed; inset:0;
+      background:
+        radial-gradient(900px 450px at 20% 10%, rgba(255,255,255,0.26), transparent 60%),
+        radial-gradient(700px 420px at 80% 30%, rgba(0,0,0,0.16), transparent 55%),
+        radial-gradient(700px 500px at 30% 85%, rgba(0,0,0,0.12), transparent 60%),
+        linear-gradient(180deg, rgba(0,0,0,0.10), rgba(0,0,0,0.20));
+      pointer-events:none;
+    }
+    .wrap{
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding: 28px 16px;
+      position:relative;
+    }
+    .topbar{
+      position:absolute;
+      top: 18px;
+      left: 18px;
+      right: 18px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 12px;
+    }
+    .brand{
+      display:inline-flex;
+      align-items:center;
+      gap:10px;
+      text-decoration:none;
+      color:#fff;
+    }
+    .brand img{ height:32px; width:auto; display:block; }
+    .brand .name{
+      font-family:'Outfit', sans-serif;
+      font-weight:900;
+      letter-spacing:0.02em;
+      text-transform:uppercase;
+      font-size:1.05rem;
+      line-height:1;
+    }
+    .toplink{
+      color: rgba(255,255,255,0.92);
+      text-decoration:none;
+      font-weight:700;
+      font-size:0.95rem;
+    }
+    .toplink:hover{ color:#fff; }
+    .card{
+      width: min(420px, 100%);
+      background: var(--card);
+      border: 1px solid rgba(255,255,255,0.55);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 20px;
+      backdrop-filter: blur(10px);
+    }
+    .title{
+      font-family:'Outfit', sans-serif;
+      font-weight:900;
+      letter-spacing:-0.02em;
+      font-size: 1.7rem;
+      margin: 4px 0 6px;
+    }
+    .subtitle{
+      color: var(--muted);
+      font-weight:600;
+      margin: 0 0 16px;
+      line-height:1.45;
+    }
+    label{
+      display:block;
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
+      text-transform:uppercase;
+      font-weight:800;
+      color: rgba(15,23,42,0.70);
+      margin: 12px 0 6px;
+    }
+    input{
+      width:100%;
+      padding: 12px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(15,23,42,0.14);
+      background: rgba(255,255,255,0.92);
+      outline:none;
+      font-size: 1rem;
+      font-weight:600;
+      color: var(--ink);
+    }
+    input:focus{
+      border-color: rgba(0,159,227,0.55);
+      box-shadow: 0 0 0 4px rgba(0,159,227,0.18);
+    }
+    .row{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 12px;
+      margin-top: 10px;
+    }
+    .link{
+      color: var(--brand-deep);
+      text-decoration:none;
+      font-weight:800;
+      font-size: 0.95rem;
+    }
+    .link:hover{ text-decoration:underline; }
+    button{
+      width:100%;
+      margin-top: 14px;
+      border:0;
+      border-radius: 12px;
+      padding: 12px 14px;
+      background: #0B1220;
+      color:#fff;
+      font-family:'Outfit', sans-serif;
+      font-weight:900;
+      letter-spacing:0.03em;
+      text-transform:uppercase;
+      cursor:pointer;
+      transition: transform .06s ease, opacity .2s ease;
+    }
+    button:active{ transform: translateY(1px); }
+    button[disabled]{ opacity:0.65; cursor:not-allowed; }
+    .msg{
+      margin-top: 12px;
+      font-weight:700;
+      font-size: 0.95rem;
+      line-height:1.4;
+    }
+    .msg.err{ color:#b91c1c; }
+    .msg.ok{ color:#166534; }
+    .footer{
+      margin-top: 14px;
+      color: rgba(15,23,42,0.55);
+      font-size: 0.85rem;
+      text-align:center;
+      font-weight:700;
+    }
   </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="card">
-    <div class="title">Organiser Console</div>
-    <div class="muted">Log in to manage your events.</div>
+  <div class="bg"></div>
 
-    <label>Email</label>
-    <input id="email" type="email" autocomplete="email" />
+  <div class="wrap">
+    <div class="topbar">
+      <a class="brand" href="${homeHref}">
+        ${logoUrl ? `<img src="${logoUrl}" alt="${brandName}" />` : `<span class="name">${brandName}</span>`}
+        ${logoUrl ? `<span class="name">${brandName}</span>` : ``}
+      </a>
+      <a class="toplink" href="${homeHref}">All events</a>
+    </div>
 
-    <label>Password</label>
-<input id="pw" type="password" autocomplete="current-password" />
+    <div class="card">
+      <div class="title">Organiser Console</div>
+      <div class="subtitle">Log in to manage your events.</div>
 
-<a class="link" href="/auth/forgot">Forgot password?</a>
+      <form id="loginForm">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email" required />
 
-<button class="btn" id="go">Log in</button>
-<div class="err" id="err"></div>
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required />
 
+        <div class="row">
+          <a class="link" href="/auth/forgot">Forgot password?</a>
+        </div>
+
+        <button id="btn" type="submit">Log in</button>
+        <div id="msg" class="msg ${error ? "err" : ""}">${error ? String(error) : ""}</div>
+
+        <div class="footer">🔒 Secure sign-in powered by ${brandName}.</div>
+      </form>
+    </div>
   </div>
-</div>
 
 <script>
-(async function(){
-  const err = document.getElementById('err');
-  const btn = document.getElementById('go');
-  function setErr(m){ err.textContent = m || ''; }
+(function(){
+  const form = document.getElementById("loginForm");
+  const btn = document.getElementById("btn");
+  const msg = document.getElementById("msg");
+  const emailEl = document.getElementById("email");
+  const pwEl = document.getElementById("password");
 
-  btn.addEventListener('click', async function(){
-    setErr('');
+  // If already logged in, skip login
+  (async function(){
     try{
-      const email = document.getElementById('email').value.trim();
-      const password = document.getElementById('pw').value;
-      if(!email || !password) return setErr('Please enter email + password.');
+      const r = await fetch('/auth/me', { credentials:'include' });
+      if(r.ok) location.href = '/admin/ui/home';
+    }catch{}
+  })();
 
-      const r = await fetch('/auth/login', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type':'application/json' },
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    msg.textContent = "";
+    msg.className = "msg";
+    btn.disabled = true;
+    btn.textContent = "Signing in…";
+
+    const email = (emailEl.value || "").trim().toLowerCase();
+    const password = String(pwEl.value || "");
+
+    try{
+      const res = await fetch("/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ email, password })
       });
 
-      const t = await r.text();
-      if(!r.ok) throw new Error(t || ('HTTP ' + r.status));
+      const txt = await res.text();
+      let data = null;
+      try{ data = JSON.parse(txt); }catch{}
 
-      // Success → go home
-      location.href = '/admin/ui/home';
-    }catch(e){
-      setErr(e.message || String(e));
+      if(!res.ok){
+        const err = (data && data.error) ? data.error : "Login failed";
+        msg.textContent = err;
+        msg.className = "msg err";
+        return;
+      }
+
+      msg.textContent = "Signed in. Redirecting…";
+      msg.className = "msg ok";
+      setTimeout(() => location.href = "/admin/ui/home", 250);
+    }catch(err){
+      msg.textContent = "Something went wrong. Please try again.";
+      msg.className = "msg err";
+    }finally{
+      btn.disabled = false;
+      btn.textContent = "Log in";
     }
   });
-
-  // If already logged in, skip login
-  try{
-    const r = await fetch('/auth/me', { credentials:'include' });
-    if(r.ok) location.href = '/admin/ui/home';
-  }catch{}
 })();
 </script>
 </body>
 </html>`);
+});
+
 });
 
 // UI logout helper
