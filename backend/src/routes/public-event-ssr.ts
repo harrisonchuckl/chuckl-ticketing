@@ -26,6 +26,7 @@ function escJSON(obj: any) {
   return JSON.stringify(obj).replace(/</g,'\\u003c');
 }
 
+
 function formatTimeHHMM(raw: any) {
   if (raw === null || raw === undefined) return '';
   const parts = String(raw).split(':');
