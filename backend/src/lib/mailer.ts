@@ -1,4 +1,6 @@
 // backend/src/lib/mailer.ts
+import { Resend } from "resend";
+
 type SendMailArgs = {
   to: string;
   subject: string;
@@ -11,14 +13,66 @@ function env(name: string) {
   return typeof v === "string" ? v : "";
 }
 
+function isProd() {
+  return process.env.NODE_ENV === "production";
+}
+
+function normaliseFrom() {
+  // Resend requires a verified sender.
+  // Example: "TicketIn <hello@chuckl.co.uk>"
+  const from = env("MAIL_FROM");
+  const fromName = env("MAIL_FROM_NAME");
+
+  if (from) return from;
+  if (fromName && env("SMTP_USER")) return `${fromName} <${env("SMTP_USER")}>`;
+  if (env("SMTP_USER")) return env("SMTP_USER");
+
+  // Safe fallback (still may fail on Resend if not verified)
+  return "TicketIn <hello@chuckl.co.uk>";
+}
+
 export async function sendMail(args: SendMailArgs): Promise<void> {
+  const RESEND_API_KEY = env("RESEND_API_KEY");
+  const MAIL_FROM = normaliseFrom();
+  const REPLY_TO = env("MAIL_REPLY_TO");
+
+  // Prefer Resend if configured (recommended for Railway/prod)
+  if (RESEND_API_KEY) {
+    try {
+      const resend = new Resend(RESEND_API_KEY);
+
+      await resend.emails.send({
+        from: MAIL_FROM,
+        to: [args.to],
+        subject: args.subject,
+        html: args.html ?? (args.text ? `<pre>${escapeHtml(args.text)}</pre>` : "<p></p>"),
+        text: args.text,
+        replyTo: REPLY_TO || undefined,
+      });
+
+      return;
+    } catch (err) {
+      console.error("[mailer] send failed (resend)", err);
+      return;
+    }
+  }
+
+  // In production, if Resend isn't configured, don't hang on SMTP attempts
+  // (this prevents your “Sending…” UX issues)
+  if (isProd()) {
+    console.warn("[mailer] RESEND_API_KEY not configured; skipping email send", {
+      to: args.to,
+      subject: args.subject,
+    });
+    return;
+  }
+
+  // Dev/local SMTP fallback
   const SMTP_HOST = env("SMTP_HOST");
   const SMTP_PORT = Number(env("SMTP_PORT") || "587");
   const SMTP_USER = env("SMTP_USER");
   const SMTP_PASS = env("SMTP_PASS");
-  const MAIL_FROM = env("MAIL_FROM") || SMTP_USER;
 
-  // If SMTP isn’t configured, don’t crash the app or leak info.
   if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
     console.warn("[mailer] SMTP not configured; skipping email send", {
       to: args.to,
@@ -30,7 +84,6 @@ export async function sendMail(args: SendMailArgs): Promise<void> {
   try {
     const mod: any = await import("nodemailer");
     const nodemailer: any = mod?.default ?? mod;
-
     const secure = SMTP_PORT === 465;
 
     const transporter = nodemailer.createTransport({
@@ -38,17 +91,30 @@ export async function sendMail(args: SendMailArgs): Promise<void> {
       port: SMTP_PORT,
       secure,
       auth: { user: SMTP_USER, pass: SMTP_PASS },
+      // keep timeouts short in dev so it never “hangs”
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 10_000,
     });
 
     await transporter.sendMail({
-      from: MAIL_FROM,
+      from: MAIL_FROM || SMTP_USER,
       to: args.to,
       subject: args.subject,
       text: args.text,
       html: args.html,
+      replyTo: REPLY_TO || undefined,
     });
   } catch (err) {
-    // Crucial: never take the server down because email failed.
-    console.error("[mailer] send failed (nodemailer missing or SMTP error)", err);
+    console.error("[mailer] send failed (nodemailer)", err);
   }
+}
+
+function escapeHtml(input: string) {
+  return input
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
