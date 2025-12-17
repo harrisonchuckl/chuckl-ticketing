@@ -114,22 +114,33 @@ router.post("/login", async (req, res) => {
   }
 });
 
+function sha256(input: string) {
+  return crypto.createHash("sha256").update(input).digest("hex");
+}
+
+function appOriginFromRequest(req: any) {
+  if (process.env.APP_ORIGIN) return process.env.APP_ORIGIN;
+
+  const origin = req.headers?.origin;
+  if (typeof origin === "string" && origin.startsWith("http")) return origin;
+
+  const host = req.headers?.host;
+  if (typeof host === "string" && host.length) return `https://${host}`;
+
+  return "http://localhost:4000";
+}
+
 // POST /auth/forgot-password
 router.post("/forgot-password", async (req, res) => {
   try {
     const email = String(req.body?.email || "").trim().toLowerCase();
-
-    // Always return OK (don’t leak whether the email exists)
     if (!email) return res.json({ ok: true });
 
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) return res.json({ ok: true });
 
-    // Basic anti-spam: if requested in last 60s, silently succeed
     const last = (user as any).resetTokenRequestedAt as Date | null;
-    if (last && Date.now() - last.getTime() < 60_000) {
-      return res.json({ ok: true });
-    }
+    if (last && Date.now() - last.getTime() < 60_000) return res.json({ ok: true });
 
     const token = crypto.randomBytes(32).toString("hex");
     const tokenHash = sha256(token);
@@ -153,9 +164,7 @@ router.post("/forgot-password", async (req, res) => {
     await sendMail({
       to: email,
       subject: "Reset your TicketIn password",
-      text:
-        `Use this link to reset your password (expires in ${ttlMinutes} minutes):\n\n` +
-        resetLink,
+      text: `Use this link to reset your password (expires in ${ttlMinutes} minutes):\n\n${resetLink}`,
       html:
         `<p>Use this link to reset your password (expires in ${ttlMinutes} minutes):</p>` +
         `<p><a href="${resetLink}">${resetLink}</a></p>`,
@@ -177,7 +186,6 @@ router.post("/reset-password", async (req, res) => {
     if (!token || !newPassword) {
       return res.status(400).json({ error: "token and password are required" });
     }
-
     if (newPassword.length < 10) {
       return res.status(400).json({ error: "password must be at least 10 characters" });
     }
@@ -273,7 +281,7 @@ document.getElementById('btn').addEventListener('click', async () => {
 </body></html>`);
 });
 
-// GET /auth/reset?token=... (simple page)
+// GET /auth/reset?token=...
 router.get("/reset", (req, res) => {
   const token = String(req.query?.token || "");
   res.type("html").send(`<!doctype html>
@@ -336,6 +344,7 @@ document.getElementById('btn').addEventListener('click', async () => {
 </script>
 </body></html>`);
 });
+
 
 
 // GET /auth/logout  (fixes your 404)
