@@ -287,8 +287,6 @@ router.get("/ui/login", (req, res) => {
 </html>`);
 });
 
-});
-
 // UI logout helper
 router.get("/ui/logout", (_req, res) => {
   res.clearCookie("auth", {
