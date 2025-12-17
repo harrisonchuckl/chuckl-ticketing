@@ -33,23 +33,51 @@ function escJSON(obj: any) {
   return JSON.stringify(obj).replace(/</g, '\\u003c');
 }
 
-function stripHtml(input: string) {
-  // remove any pasted HTML formatting (Word/Docs etc.)
-  return input.replace(/<[^>]*>/g, ' ');
+function sanitiseRichHtml(input: string) {
+  let html = String(input ?? '');
+
+  // 1) kill scripts/styles entirely
+  html = html.replace(/<\s*script[^>]*>[\s\S]*?<\s*\/\s*script\s*>/gi, '');
+  html = html.replace(/<\s*style[^>]*>[\s\S]*?<\s*\/\s*style\s*>/gi, '');
+
+  // 2) remove inline styling + classes (this is what carries “pasted fonts”)
+  html = html.replace(/\sstyle=(?:"[^"]*"|'[^']*')/gi, '');
+  html = html.replace(/\sclass=(?:"[^"]*"|'[^']*')/gi, '');
+
+  // 3) remove event handler attrs (onclick, onload, etc.)
+  html = html.replace(/\son\w+=(?:"[^"]*"|'[^']*')/gi, '');
+
+  // 4) drop font/span tags (common Word/Docs carry-over)
+  html = html.replace(/<\s*\/?\s*font[^>]*>/gi, '');
+  html = html.replace(/<\s*\/?\s*span[^>]*>/gi, '');
+
+  // 5) convert divs into paragraphs (keeps spacing clean)
+  html = html.replace(/<\s*div[^>]*>/gi, '<p>');
+  html = html.replace(/<\s*\/\s*div\s*>/gi, '</p>');
+
+  // 6) neutralise javascript: links
+  html = html.replace(/\shref=(?:"javascript:[^"]*"|'javascript:[^']*')/gi, ' href="#"');
+
+  return html;
 }
 
 function renderDescriptionHTML(raw: any) {
   const text = String(raw ?? '').trim();
   if (!text) return '<p>Full details coming soon.</p>';
 
-  // strip HTML, normalise whitespace, keep paragraph breaks
-  const cleaned = stripHtml(text)
+  // If it already looks like HTML from your editor, keep structure but strip pasted styling/fonts
+  if (/[<][a-z][\s\S]*[>]/i.test(text)) {
+    const cleanedHtml = sanitiseRichHtml(text).trim();
+    return cleanedHtml || '<p>Full details coming soon.</p>';
+  }
+
+  // Otherwise treat as plain text and keep paragraph spacing
+  const cleaned = text
     .replace(/\r\n/g, '\n')
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 
-  // convert double-newlines to paragraphs, single newlines to <br>
   const paras = cleaned.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
   return paras.map((p) => `<p>${esc(p).replace(/\n/g, '<br/>')}</p>`).join('');
 }
@@ -740,8 +768,20 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
       border-left: 4px solid var(--brand); padding-left: 12px;
     }
     .rich-text { font-size: 1.1rem; line-height: 1.7; color: #334155; }
-    .rich-text p { margin-bottom: 1.5em; }
-    .rich-text p:last-child { margin-bottom: 0; }
+
+/* Force consistent site font inside description (stops pasted fonts) */
+.rich-text, .rich-text * {
+  font-family: 'Inter', sans-serif !important;
+}
+
+.rich-text p { margin: 0 0 1.5em; }
+.rich-text p:last-child { margin-bottom: 0; }
+
+.rich-text ul, .rich-text ol {
+  margin: 0 0 1.5em;
+  padding-left: 1.25rem;
+}
+.rich-text li { margin: 0.35em 0; }
 
    /* Info (no box/shadow) */
 .info-inline{
@@ -836,28 +876,30 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
     .booking-widget {
       position: sticky; top: 24px; background: white; border-radius: var(--radius-lg); box-shadow: var(--shadow-float); border: 1px solid var(--border); overflow: hidden;
     }
-    .accessibility-pill {
-      background: #ecfeff;
-      color: #0f172a;
-      padding: 10px 14px;
-      font-weight: 700;
-      font-size: 0.9rem;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      border-bottom: 1px solid var(--border);
-    }
+   .accessibility-pill{
+  background: #fff;
+  color: var(--primary);
+  padding: 14px;
+  border-bottom: 1px solid var(--border);
+}
 
-    .acc-title{ font-weight: 800; }
-.acc-reasons{ margin-top: 8px; display:flex; flex-wrap:wrap; gap: 8px; }
-.acc-chip{
-  display:inline-block;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: rgba(255,255,255,0.8);
-  font-weight: 700;
-  font-size: 0.82rem;
+.acc-title{
+  font-weight: 900;
+  font-size: 0.95rem;
+  line-height: 1.2;
+  white-space: nowrap; /* keeps it horizontal */
+}
+
+.acc-list{
+  margin-top: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.acc-item{
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #334155;
 }
 
     .widget-header { padding: 24px; border-bottom: 1px solid var(--border); background: #fff; }
@@ -1013,8 +1055,8 @@ ${isDisabledFriendly ? `
   <div class="accessibility-pill">
     <div class="acc-title">Disabled-friendly show</div>
     ${accessibilityReasons.length ? `
-      <div class="acc-reasons">
-        ${accessibilityReasons.map(r => `<span class="acc-chip">${esc(r)}</span>`).join('')}
+      <div class="acc-list">
+        ${accessibilityReasons.map(r => `<div class="acc-item">✅ ${esc(r)}</div>`).join('')}
       </div>
     ` : ''}
   </div>
