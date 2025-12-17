@@ -237,6 +237,9 @@ model Seat {
 
   seatMapId  String
   seatMap    SeatMap   @relation(fields: [seatMapId], references: [id])
+  tickets         Ticket[]
+  allocationSeats AllocationSeat[]
+
 
   /// Basic coordinates
   row        String
