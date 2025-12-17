@@ -1,53 +1,54 @@
-import nodemailer from "nodemailer";
-
+// backend/src/lib/mailer.ts
 type SendMailArgs = {
   to: string;
   subject: string;
-  html: string;
   text?: string;
+  html?: string;
 };
 
-function hasSmtpConfigured() {
-  return !!(process.env.SMTP_URL || process.env.SMTP_HOST);
+function env(name: string) {
+  const v = process.env[name];
+  return typeof v === "string" ? v : "";
 }
 
-function makeTransport() {
-  if (process.env.SMTP_URL) {
-    return nodemailer.createTransport(process.env.SMTP_URL);
+export async function sendMail(args: SendMailArgs): Promise<void> {
+  const SMTP_HOST = env("SMTP_HOST");
+  const SMTP_PORT = Number(env("SMTP_PORT") || "587");
+  const SMTP_USER = env("SMTP_USER");
+  const SMTP_PASS = env("SMTP_PASS");
+  const MAIL_FROM = env("MAIL_FROM") || SMTP_USER;
+
+  // If SMTP isn’t configured, don’t crash the app or leak info.
+  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
+    console.warn("[mailer] SMTP not configured; skipping email send", {
+      to: args.to,
+      subject: args.subject,
+    });
+    return;
   }
 
-  const host = process.env.SMTP_HOST;
-  const port = Number(process.env.SMTP_PORT || "587");
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
+  try {
+    const mod: any = await import("nodemailer");
+    const nodemailer: any = mod?.default ?? mod;
 
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465, // common rule
-    auth: user && pass ? { user, pass } : undefined,
-  });
-}
+    const secure = SMTP_PORT === 465;
 
-export async function sendMail(args: SendMailArgs) {
-  if (!hasSmtpConfigured()) {
-    // Safe fallback: don’t crash prod if SMTP isn’t set yet
-    console.log("[mail] SMTP not configured — would have emailed:", {
+    const transporter = nodemailer.createTransport({
+      host: SMTP_HOST,
+      port: SMTP_PORT,
+      secure,
+      auth: { user: SMTP_USER, pass: SMTP_PASS },
+    });
+
+    await transporter.sendMail({
+      from: MAIL_FROM,
       to: args.to,
       subject: args.subject,
       text: args.text,
+      html: args.html,
     });
-    return { skipped: true };
+  } catch (err) {
+    // Crucial: never take the server down because email failed.
+    console.error("[mailer] send failed (nodemailer missing or SMTP error)", err);
   }
-
-  const from = process.env.EMAIL_FROM || "no-reply@chuckl.co.uk";
-  const transport = makeTransport();
-
-  return transport.sendMail({
-    from,
-    to: args.to,
-    subject: args.subject,
-    text: args.text,
-    html: args.html,
-  });
 }
