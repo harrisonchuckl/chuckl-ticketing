@@ -114,22 +114,6 @@ router.post("/login", async (req, res) => {
   }
 });
 
-function sha256(input: string) {
-  return crypto.createHash("sha256").update(input).digest("hex");
-}
-
-function appOriginFromRequest(req: any) {
-  if (process.env.APP_ORIGIN) return process.env.APP_ORIGIN;
-
-  const origin = req.headers?.origin;
-  if (typeof origin === "string" && origin.startsWith("http")) return origin;
-
-  const host = req.headers?.host;
-  if (typeof host === "string" && host.length) return `https://${host}`;
-
-  return "http://localhost:4000";
-}
-
 // POST /auth/forgot-password
 router.post("/forgot-password", async (req, res) => {
   try {
