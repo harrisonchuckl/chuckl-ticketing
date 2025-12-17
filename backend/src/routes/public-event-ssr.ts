@@ -737,30 +737,90 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
       font-size: clamp(2.5rem, 5vw, 4.5rem); font-weight: 800; line-height: 1; text-transform: uppercase;
       letter-spacing: -0.02em; max-width: 800px; text-shadow: 0 4px 30px rgba(0,0,0,0.6);
     }
-    .hero-meta {
-      display: flex; flex-wrap: wrap; gap: 24px; margin-top: 8px; font-size: 1.05rem; font-weight: 500;
-      color: rgba(255,255,255,0.95); text-shadow: 0 1px 2px rgba(0,0,0,0.5);
-    }
-    .hero-meta-item { display: flex; align-items: center; gap: 8px; }
+   .hero-meta {
+  display: flex; flex-wrap: wrap; gap: 18px; margin-top: 8px; font-size: 1.05rem; font-weight: 500;
+  color: rgba(255,255,255,0.95); text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+
+.hero-meta-item{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  padding-left: 16px; /* space for the divider */
+}
+
+.hero-meta-item:first-child{
+  padding-left: 0;
+}
+
+.hero-meta-item:not(:first-child)::before{
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--brand);
+}
+
     .hero-meta-icon { color: var(--brand); filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5)); }
 
-    /* --- LAYOUT CONTAINER --- */
-    .layout {
-      max-width: 1200px; margin: 0 auto; padding: 0 24px 80px;
-      display: grid; gap: 48px; position: relative; z-index: 20;
-    }
-    @media (min-width: 960px) {
-      .layout {
-        grid-template-columns: 1fr 380px;
-        margin-top: -24px; /* Reduced overlap for more space */
-      }
-    }
+    /* --- TITLE BELOW HERO --- */
+.below-hero{
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 18px 24px 10px;
+}
 
-    /* --- MAIN CONTENT COLUMN --- */
-    .content-area {
-      display: flex; flex-direction: column; gap: 48px;
-      padding-top: 64px; /* INCREASED PADDING for defined space */
-    }
+.below-hero-inner{
+  display: grid;
+  gap: 16px;
+}
+
+.page-title{
+  font-family: 'Outfit', sans-serif;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+  font-size: clamp(1.8rem, 3.2vw, 3.1rem);
+  line-height: 1.05;
+  color: var(--primary);
+  margin: 0;
+}
+
+/* On desktop, keep the title in the LEFT column so it sits “between” content + widget */
+@media (min-width: 960px){
+  .below-hero-inner{
+    grid-template-columns: 1fr 380px;
+    align-items: end;
+  }
+  .page-title{
+    grid-column: 1 / 2;
+    padding-right: 10px;
+  }
+}
+
+/* --- LAYOUT CONTAINER --- */
+.layout {
+  max-width: 1200px; margin: 0 auto; padding: 0 24px 80px;
+  display: grid; gap: 48px; position: relative; z-index: 20;
+}
+@media (min-width: 960px) {
+  .layout {
+    grid-template-columns: 1fr 380px;
+    margin-top: 0; /* keep layout clean now title is outside hero */
+  }
+}
+
+/* --- MAIN CONTENT COLUMN --- */
+.content-area {
+  display: flex; flex-direction: column; gap: 48px;
+  padding-top: 24px; /* title now creates the “breathing room” */
+}
+
 
     .section-label {
       font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700;
@@ -785,7 +845,7 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
 
    /* Info (no box/shadow) */
 .info-inline{
-  margin-top: 16px;
+  margin-top: 48px; /* match the rhythm between major sections */
   display:flex;
   flex-wrap:wrap;
   gap: 22px;
@@ -805,7 +865,7 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
   margin-top: 2px;
 }
 
-  .gallery-wrap{ position:relative; margin-top: 22px; }
+.gallery-wrap{ position:relative; margin-top: 48px; }
 .gallery-strip{
   display:flex;
   gap:12px;
@@ -876,22 +936,23 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
     .booking-widget {
       position: sticky; top: 24px; background: white; border-radius: var(--radius-lg); box-shadow: var(--shadow-float); border: 1px solid var(--border); overflow: hidden;
     }
-   .accessibility-pill{
+  .accessibility-pill{
   background: #fff;
   color: var(--primary);
-  padding: 14px;
+  padding: 24px; /* match .widget-header */
   border-bottom: 1px solid var(--border);
 }
 
 .acc-title{
-  font-weight: 900;
-  font-size: 0.95rem;
-  line-height: 1.2;
-  white-space: nowrap; /* keeps it horizontal */
+  font-size: 1.25rem;   /* match .widget-title */
+  font-weight: 800;     /* match .widget-title */
+  color: var(--primary);
+  line-height: 1.15;
+  white-space: nowrap;
 }
 
 .acc-list{
-  margin-top: 10px;
+  margin-top: 8px;
   display: grid;
   gap: 6px;
 }
@@ -899,7 +960,7 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
 .acc-item{
   font-size: 0.9rem;
   font-weight: 600;
-  color: #334155;
+  color: var(--text-muted); /* matches widget subtitle tone */
 }
 
     .widget-header { padding: 24px; border-bottom: 1px solid var(--border); background: #fff; }
@@ -979,15 +1040,20 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
         <span style="color:var(--brand);">${esc(show.title)}</span>
       </div>
     </div>
-    <div class="hero-content">
-      <h1 class="hero-title">${esc(show.title)}</h1>
-   <div class="hero-meta">
-  <div class="hero-meta-item"><span>${esc(prettyDate)}</span></div>
-  <div class="hero-meta-item"><span>${esc(venue.name)}</span></div>
-  <div class="hero-meta-item"><span>${esc(timeStr)}</span></div>
+   <div class="hero-content">
+  <div class="hero-meta">
+    <div class="hero-meta-item"><span>${esc(prettyDate)}</span></div>
+    <div class="hero-meta-item"><span>${esc(venue.name)}</span></div>
+    <div class="hero-meta-item"><span>${esc(timeStr)}</span></div>
+  </div>
 </div>
- </div>
-  </header>
+ </header>
+
+  <div class="below-hero">
+    <div class="below-hero-inner">
+      <h1 class="page-title">${esc(show.title)}</h1>
+    </div>
+  </div>
 
   <div class="layout">
     
