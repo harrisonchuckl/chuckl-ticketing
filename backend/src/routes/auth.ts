@@ -2,6 +2,8 @@ import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { requireAuth } from "../middleware/requireAuth.js";
+
 
 const prisma = new PrismaClient();
 const router = Router();
@@ -35,13 +37,14 @@ router.post("/register", async (req, res) => {
 
     const token = sign(user);
     // Set a cookie for web flows; also return token in JSON for API use
-    res.cookie("auth", token, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-maxAge: Number(process.env.AUTH_SESSION_MS || 60 * 60 * 1000),
+   res.cookie("auth", token, {
+  httpOnly: true,
+  sameSite: "lax",
+  secure: process.env.NODE_ENV === "production",
+  maxAge: Number(process.env.AUTH_SESSION_MS || 60 * 60 * 1000),
+  path: "/",
+});
 
-    });
 
     return res.status(201).json({ token, user });
   } catch (err) {
@@ -67,12 +70,13 @@ router.post("/login", async (req, res) => {
     if (!ok) return res.status(401).json({ error: "invalid credentials" });
 
     const token = sign(user);
-    res.cookie("auth", token, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: true,
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+   res.cookie("auth", token, {
+  httpOnly: true,
+  sameSite: "lax",
+  secure: process.env.NODE_ENV === "production",
+  maxAge: Number(process.env.AUTH_SESSION_MS || 60 * 60 * 1000),
+  path: "/",
+});
 
     return res.json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role } });
   } catch (err) {
@@ -95,8 +99,6 @@ router.get("/logout", (req, res) => {
   return res.redirect(redirectTo);
 });
 
-
-import { requireAuth } from "../middleware/requireAuth.js";
 
 // GET /auth/me - returns the real user record (safe fields)
 router.get("/me", requireAuth, async (req, res) => {
