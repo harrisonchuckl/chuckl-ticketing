@@ -93,16 +93,28 @@ router.post("/login", async (req, res) => {
     const ok = await bcrypt.compare(String(password), user.passwordHash);
     if (!ok) return res.status(401).json({ error: "invalid credentials" });
 
-    const token = sign(user);
-   res.cookie("auth", token, {
-  httpOnly: true,
-  sameSite: "lax",
-  secure: process.env.NODE_ENV === "production",
-  maxAge: Number(process.env.AUTH_SESSION_MS || 60 * 60 * 1000),
-  path: "/",
+    const token = sign({ id: user.id, email: user.email, role: user.role ?? null });
+
+    res.cookie("auth", token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: Number(process.env.AUTH_SESSION_MS || 60 * 60 * 1000),
+      path: "/",
+    });
+
+    return res.json({
+      ok: true,
+      token,
+      user: { id: user.id, email: user.email, name: user.name, role: user.role },
+    });
+  } catch (err) {
+    console.error("login failed", err);
+    return res.status(500).json({ error: "internal error" });
+  }
 });
 
-    // POST /auth/forgot-password
+// POST /auth/forgot-password
 router.post("/forgot-password", async (req, res) => {
   try {
     const email = String(req.body?.email || "").trim().toLowerCase();
@@ -325,12 +337,6 @@ document.getElementById('btn').addEventListener('click', async () => {
 </body></html>`);
 });
 
-    return res.json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role } });
-  } catch (err) {
-    console.error("login failed", err);
-    return res.status(500).json({ error: "internal error" });
-  }
-});
 
 // GET /auth/logout  (fixes your 404)
 router.get("/logout", (req, res) => {
