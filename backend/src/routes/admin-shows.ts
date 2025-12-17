@@ -5,6 +5,7 @@ import { requireAdminOrOrganiser } from "../lib/authz.js";
 
 const router = Router();
 
+
 function asNullableString(value: unknown) {
   if (value === null || value === undefined) return null;
   const str = String(value).trim();
