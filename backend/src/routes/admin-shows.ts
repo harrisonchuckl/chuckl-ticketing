@@ -9,16 +9,23 @@ function isOrganiser(req: any) {
   return String(req.user?.role || "").toUpperCase() === "ORGANISER";
 }
 
+function requireUserId(req: any): string {
+  const id = req.user?.id;
+  if (!id) throw new Error("Auth middleware did not attach req.user");
+  return String(id);
+}
+
+
 function showWhereForRead(req: any, showId: string) {
   if (isOrganiser(req)) {
-    return { id: showId, organiserId: req.user.id };
+return { id: showId, organiserId: requireUserId(req) };
   }
   return { id: showId };
 }
 
 function showWhereForList(req: any) {
   if (isOrganiser(req)) {
-    return { organiserId: req.user.id };
+    return { organiserId: requireUserId(req) };
   }
   return {};
 }
