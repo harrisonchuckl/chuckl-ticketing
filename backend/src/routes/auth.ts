@@ -7,6 +7,8 @@ const bcrypt: any = (bcryptNS as any).default ?? bcryptNS;
 import jwt from "jsonwebtoken";
 import { requireAuth } from "../middleware/requireAuth.js";
 
+import crypto from "crypto";
+import { sendMail } from "../lib/mailer.js";
 
 const prisma = new PrismaClient();
 const router = Router();
