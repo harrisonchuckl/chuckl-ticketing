@@ -33,6 +33,95 @@ function escJSON(obj: any) {
   return JSON.stringify(obj).replace(/</g, '\\u003c');
 }
 
+function stripHtml(input: string) {
+  // remove any pasted HTML formatting (Word/Docs etc.)
+  return input.replace(/<[^>]*>/g, ' ');
+}
+
+function renderDescriptionHTML(raw: any) {
+  const text = String(raw ?? '').trim();
+  if (!text) return '<p>Full details coming soon.</p>';
+
+  // strip HTML, normalise whitespace, keep paragraph breaks
+  const cleaned = stripHtml(text)
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  // convert double-newlines to paragraphs, single newlines to <br>
+  const paras = cleaned.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  return paras.map((p) => `<p>${esc(p).replace(/\n/g, '<br/>')}</p>`).join('');
+}
+
+function getAccessibilityReasons(accessibility: any): string[] {
+  if (!accessibility) return [];
+
+  const add = (set: Set<string>, label: string) => {
+    if (label && label.trim()) set.add(label.trim());
+  };
+
+  const niceLabelFromKey = (k: string) => {
+    const cleaned = k
+      .replace(/_/g, ' ')
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .trim();
+    return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  };
+
+  const matches = (s: string, patterns: string[]) => {
+    const key = s.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return patterns.some((p) => key.includes(p));
+  };
+
+  const labels = new Set<string>();
+
+  const handleString = (s: string) => {
+    const raw = String(s || '');
+    if (!raw.trim()) return;
+
+    // common accessibility options (covers your “4 options” setup)
+    if (matches(raw, ['wheelchair', 'wheelchairspace', 'wheelchairspaces', 'wheelchairaccessible', 'wheelchairaccess'])) add(labels, 'Wheelchair spaces');
+    else if (matches(raw, ['stepfree', 'stepfreeaccess'])) add(labels, 'Step-free access');
+    else if (matches(raw, ['accessibletoilet', 'accessibletoilets', 'accessiblewc', 'accessiblebathroom'])) add(labels, 'Accessible toilets');
+    else if (matches(raw, ['hearingloop', 'assistivelistening'])) add(labels, 'Hearing loop');
+    else add(labels, raw.trim());
+  };
+
+  const walk = (node: any) => {
+    if (!node) return;
+
+    if (Array.isArray(node)) {
+      node.forEach(walk);
+      return;
+    }
+
+    if (typeof node === 'string') {
+      handleString(node);
+      return;
+    }
+
+    if (typeof node === 'object') {
+      for (const [k, v] of Object.entries(node)) {
+        // if key itself indicates an option and value is truthy → include
+        if (isTruthyFeature(v)) {
+          if (matches(k, ['wheelchair', 'wheelchairspace', 'wheelchairspaces', 'wheelchairaccessible', 'wheelchairaccess'])) add(labels, 'Wheelchair spaces');
+          else if (matches(k, ['stepfree', 'stepfreeaccess'])) add(labels, 'Step-free access');
+          else if (matches(k, ['accessibletoilet', 'accessibletoilets', 'accessiblewc', 'accessiblebathroom'])) add(labels, 'Accessible toilets');
+          else if (matches(k, ['hearingloop', 'assistivelistening'])) add(labels, 'Hearing loop');
+          else add(labels, niceLabelFromKey(k));
+        }
+
+        // also walk children (in case structure nests)
+        walk(v);
+      }
+    }
+  };
+
+  walk(accessibility);
+
+  return Array.from(labels);
+}
 
 
 function formatTimeHHMM(raw: any) {
@@ -412,8 +501,9 @@ const endTimeNote = endTimeNoteRaw ? endTimeNoteRaw.trim() : '';
       }
     }
 
-    const accessibility = ((show as any).accessibility || null) as any;
-const isDisabledFriendly = hasAccessibleFeatures(accessibility);
+   const accessibility = ((show as any).accessibility || null) as any;
+const accessibilityReasons = getAccessibilityReasons(accessibility);
+const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatures(accessibility);
 
 
     const baseEventType = (show as any).eventType || null;
@@ -653,28 +743,74 @@ const isDisabledFriendly = hasAccessibleFeatures(accessibility);
     .rich-text p { margin-bottom: 1.5em; }
     .rich-text p:last-child { margin-bottom: 0; }
 
-    /* Info + Gallery Strip */
-    .info-banner {
-      margin-top: 18px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 14px;
-      padding: 12px 14px;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      background: #fff;
-      box-shadow: var(--shadow-card);
-    }
-    .info-item { display: flex; flex-direction: column; font-weight: 600; color: var(--primary); }
-    .info-label { font-size: 0.8rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
-    .info-value { font-size: 1rem; }
+   /* Info (no box/shadow) */
+.info-inline{
+  margin-top: 16px;
+  display:flex;
+  flex-wrap:wrap;
+  gap: 22px;
+}
+.info-inline-item{ display:flex; flex-direction:column; }
+.info-inline-label{
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.info-inline-value{
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--primary);
+  margin-top: 2px;
+}
 
-    .gallery-strip { margin-top: 22px; display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px; scroll-snap-type: x mandatory; }
-    .gallery-strip::-webkit-scrollbar { height: 8px; }
-    .gallery-strip::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
-    .gallery-strip-item { flex: 0 0 auto; min-width: 260px; max-width: 360px; aspect-ratio: 16/9; border-radius: 10px; overflow: hidden; box-shadow: var(--shadow-card); scroll-snap-align: start; background: #e2e8f0; }
-    .gallery-strip-img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.4s; }
-    .gallery-strip-item:hover .gallery-strip-img { transform: scale(1.03); }
+  .gallery-wrap{ position:relative; margin-top: 22px; }
+.gallery-strip{
+  display:flex;
+  gap:12px;
+  overflow-x:auto;
+  scroll-snap-type:x mandatory;
+  padding-bottom: 2px;
+  scrollbar-width: none; /* Firefox */
+}
+.gallery-strip::-webkit-scrollbar{ display:none; } /* Chrome/Safari */
+
+.gallery-strip-item{
+  flex: 0 0 auto;
+  min-width: 260px;
+  max-width: 360px;
+  aspect-ratio: 16/9;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+  scroll-snap-align: start;
+  background: #e2e8f0;
+}
+.gallery-strip-img{ width:100%; height:100%; object-fit:cover; transition: transform 0.4s; }
+.gallery-strip-item:hover .gallery-strip-img{ transform: scale(1.03); }
+
+.gallery-nav{
+  position:absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.92);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size: 22px;
+  font-weight: 800;
+  cursor:pointer;
+  user-select:none;
+}
+.gallery-left{ left: -12px; }
+.gallery-right{ right: -12px; }
+.gallery-nav[hidden]{ display:none; }
 
     /* Venue Map Styles (Updated for Iframe) */
     .venue-map-container { margin-top: 24px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
@@ -711,6 +847,19 @@ const isDisabledFriendly = hasAccessibleFeatures(accessibility);
       gap: 8px;
       border-bottom: 1px solid var(--border);
     }
+
+    .acc-title{ font-weight: 800; }
+.acc-reasons{ margin-top: 8px; display:flex; flex-wrap:wrap; gap: 8px; }
+.acc-chip{
+  display:inline-block;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.8);
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+
     .widget-header { padding: 24px; border-bottom: 1px solid var(--border); background: #fff; }
     .widget-title { font-size: 1.25rem; font-weight: 800; color: var(--primary); }
     .widget-subtitle { font-size: 0.9rem; color: var(--text-muted); margin-top: 4px; font-weight: 500;}
@@ -790,18 +939,12 @@ const isDisabledFriendly = hasAccessibleFeatures(accessibility);
     </div>
     <div class="hero-content">
       <h1 class="hero-title">${esc(show.title)}</h1>
-      <div class="hero-meta">
-        <div class="hero-meta-item">
-          <span class="hero-meta-icon">📅</span> <span>${esc(prettyDate)}</span>
-        </div>
-        <div class="hero-meta-item">
-          <span class="hero-meta-icon">📍</span> <span>${esc(venue.name)}</span>
-        </div>
-        <div class="hero-meta-item">
-          <span class="hero-meta-icon">⏰</span> <span>${esc(timeStr)}</span>
-        </div>
-      </div>
-    </div>
+   <div class="hero-meta">
+  <div class="hero-meta-item"><span>${esc(prettyDate)}</span></div>
+  <div class="hero-meta-item"><span>${esc(venue.name)}</span></div>
+  <div class="hero-meta-item"><span>${esc(timeStr)}</span></div>
+</div>
+ </div>
   </header>
 
   <div class="layout">
@@ -810,29 +953,34 @@ const isDisabledFriendly = hasAccessibleFeatures(accessibility);
       
       <div>
           <span class="section-label">Overview</span>
-          <div class="rich-text">
-            ${show.description ? show.description.replace(/\n/g, '<br/>') : '<p>Full details coming soon.</p>'}
-          </div>
-         ${doorTimeDisplay || ageGuidance || endTimeNote ? `
-<div class="info-banner">
-  ${doorTimeDisplay ? `<div class="info-item"><span class="info-label">Doors open</span><span class="info-value">${esc(doorTimeDisplay)}</span></div>` : ''}
-  ${ageGuidance ? `<div class="info-item"><span class="info-label">Age guidance</span><span class="info-value">${esc(ageGuidance)}</span></div>` : ''}
-  ${endTimeNote ? `<div class="info-item"><span class="info-label">End time note</span><span class="info-value">${esc(endTimeNote)}</span></div>` : ''}
+         <div class="rich-text">
+  ${renderDescriptionHTML(show.description)}
+</div>
+       ${doorTimeDisplay || ageGuidance || endTimeNote ? `
+<div class="info-inline">
+  ${doorTimeDisplay ? `<div class="info-inline-item"><span class="info-inline-label">Doors open</span><span class="info-inline-value">${esc(doorTimeDisplay)}</span></div>` : ''}
+  ${ageGuidance ? `<div class="info-inline-item"><span class="info-inline-label">Age guidance</span><span class="info-inline-value">${esc(ageGuidance)}</span></div>` : ''}
+  ${endTimeNote ? `<div class="info-inline-item"><span class="info-inline-label">End time note</span><span class="info-inline-value">${esc(endTimeNote)}</span></div>` : ''}
 </div>
 ` : ''}
 
-          ${imageList.length ? `
-          <div class="gallery-strip">
-            ${imageList
-              .map(
-                (src, idx) => `
-                <div class="gallery-strip-item">
-                  <img src="${escAttr(src)}" class="gallery-strip-img" alt="Event image ${idx + 1}" />
-                </div>`
-              )
-              .join('')}
-          </div>
-          ` : ''}
+
+       ${imageList.length ? `
+  <div class="gallery-wrap" data-gallery>
+    <button class="gallery-nav gallery-left" type="button" aria-label="Previous images">‹</button>
+    <div class="gallery-strip" data-gallery-strip>
+      ${imageList
+        .map(
+          (src, idx) => `
+          <div class="gallery-strip-item">
+            <img src="${escAttr(src)}" class="gallery-strip-img" alt="Event image ${idx + 1}" />
+          </div>`
+        )
+        .join('')}
+    </div>
+    <button class="gallery-nav gallery-right" type="button" aria-label="Next images">›</button>
+  </div>
+` : ''}
       </div>
 
       <div>
@@ -861,7 +1009,16 @@ const isDisabledFriendly = hasAccessibleFeatures(accessibility);
 
     <div class="booking-area">
       <div class="booking-widget">
-${isDisabledFriendly ? `<div class="accessibility-pill">♿ Disabled-friendly show</div>` : ''}
+${isDisabledFriendly ? `
+  <div class="accessibility-pill">
+    <div class="acc-title">Disabled-friendly show</div>
+    ${accessibilityReasons.length ? `
+      <div class="acc-reasons">
+        ${accessibilityReasons.map(r => `<span class="acc-chip">${esc(r)}</span>`).join('')}
+      </div>
+    ` : ''}
+  </div>
+` : ''}
         <div class="widget-header">
           <div class="widget-title">Select Tickets</div>
           <div class="widget-subtitle">${esc(dayName)}, ${esc(fullDate)} at ${esc(timeStr)}</div>
@@ -870,7 +1027,7 @@ ${isDisabledFriendly ? `<div class="accessibility-pill">♿ Disabled-friendly sh
           ${renderTicketList(false)}
         </div>
         <div class="widget-footer">
-          🔒 Secure checkout powered by Chuckl.
+          🔒 Secure checkout powered by TixAll.
         </div>
       </div>
     </div>
@@ -886,6 +1043,40 @@ ${isDisabledFriendly ? `<div class="accessibility-pill">♿ Disabled-friendly sh
     </div>
     <a href="#main-tickets" class="btn-mob-cta">BOOK TICKETS</a>
   </div>
+
+  <script>
+  (function () {
+    const root = document.querySelector('[data-gallery]');
+    if (!root) return;
+
+    const strip = root.querySelector('[data-gallery-strip]');
+    const left = root.querySelector('.gallery-left');
+    const right = root.querySelector('.gallery-right');
+    if (!strip || !left || !right) return;
+
+    function update() {
+      const maxScroll = strip.scrollWidth - strip.clientWidth;
+      const atStart = strip.scrollLeft <= 1;
+      const atEnd = strip.scrollLeft >= maxScroll - 1;
+      left.hidden = atStart;
+      right.hidden = atEnd || maxScroll <= 1;
+    }
+
+    function scrollByCard(dir) {
+      const firstCard = strip.querySelector('.gallery-strip-item');
+      const step = firstCard ? firstCard.getBoundingClientRect().width + 12 : 320;
+      strip.scrollBy({ left: dir * step, behavior: 'smooth' });
+    }
+
+    left.addEventListener('click', () => scrollByCard(-1));
+    right.addEventListener('click', () => scrollByCard(1));
+    strip.addEventListener('scroll', update, { passive: true });
+
+    window.addEventListener('resize', update);
+    update();
+  })();
+</script>
+
 
 </body>
 </html>`);
