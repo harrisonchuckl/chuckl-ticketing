@@ -5,6 +5,13 @@ import prisma from '../lib/prisma.js';
 
 const router = Router();
 
+function getPublicBrand() {
+  const name = String(process.env.PUBLIC_BRAND_NAME || 'TIXEL').trim();
+  const logoUrl = String(process.env.PUBLIC_BRAND_LOGO_URL || '').trim();
+  const homeHref = String(process.env.PUBLIC_BRAND_HOME_HREF || '/public').trim();
+  return { name, logoUrl, homeHref };
+}
+
 
 // --- formatting helpers ---
 function pFmt(p: number | null | undefined) {
@@ -285,6 +292,9 @@ router.get('/checkout/success', async (req, res) => {
     // If webhook hasn’t flipped it to PAID yet, refresh a few times.
     const shouldRefresh = status !== 'PAID';
 
+    const brand = getPublicBrand();
+
+
     res.type('html').send(`<!doctype html>
 <html lang="en">
 <head>
@@ -302,6 +312,7 @@ router.get('/checkout/success', async (req, res) => {
 
   <style>
     :root {
+    --app-header-h: 64px;
       --bg-page: #F3F4F6;
       --bg-surface: #FFFFFF;
       --primary: #0F172A;
@@ -312,13 +323,20 @@ router.get('/checkout/success', async (req, res) => {
       --border: #E5E7EB;
       --radius-lg: 16px;
       --shadow-float: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+      --shadow-card: 0 2px 10px rgba(0,0,0,0.06);
     }
     * { box-sizing: border-box; }
-    body { margin:0; font-family:'Inter', sans-serif; background: var(--bg-page); color: var(--text-main); }
+body {
+  margin: 0;
+  padding-top: var(--app-header-h);
+  font-family: 'Inter', sans-serif;
+  background: var(--bg-page);
+  color: var(--text-main);
+}
     h1,h2,.font-heading { font-family:'Outfit', sans-serif; margin:0; line-height:1.1; }
     .wrap { max-width: 980px; margin: 0 auto; padding: 28px 16px 70px; }
     .hero {
-      background: var(--primary);
+background: var(--brand);
       border-radius: var(--radius-lg);
       overflow: hidden;
       box-shadow: var(--shadow-float);
@@ -374,10 +392,101 @@ background: rgba(15,156,223,0.18); border: 1px solid rgba(15,156,223,0.35);
     a.ghost { background: #fff; border: 2px solid var(--border); color: var(--primary); }
     a.ghost:hover { border-color: var(--brand); color: var(--brand); }
     .small { margin-top: 10px; color: var(--text-muted); font-size: 0.95rem; line-height: 1.5; }
+    /* --- FIXED TOP HEADER (white-label) --- */
+.app-header{
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: var(--app-header-h);
+  background: var(--brand); /* TixAll blue */
+  z-index: 500;
+  border-bottom: 1px solid rgba(255,255,255,0.22);
+}
+
+.app-header-inner{
+  max-width: 980px; /* match success page wrap width */
+  height: 100%;
+  margin: 0 auto;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.app-brand{
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 120px;
+}
+
+.app-brand-logo{
+  height: 30px;
+  width: auto;
+  display: block;
+}
+
+.app-brand-text{
+  font-family: 'Outfit', sans-serif;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  color: #fff;
+  text-transform: uppercase;
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.app-nav{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: rgba(255,255,255,0.95);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.app-nav a{
+  color: rgba(255,255,255,0.95);
+}
+
+.app-nav a:hover{
+  color: #fff;
+}
+
+.app-nav-sep{
+  color: rgba(255,255,255,0.35);
+  font-weight: 800;
+}
+
+.app-nav-current{
+  color: rgba(255,255,255,0.98);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 55vw;
+}
+
   </style>
-</head>
-<body>
+</head><body>
+  <header class="app-header">
+    <div class="app-header-inner">
+      <a class="app-brand" href="${escAttr(brand.homeHref)}" aria-label="${escAttr(brand.name)} home">
+        ${brand.logoUrl
+          ? `<img class="app-brand-logo" src="${escAttr(brand.logoUrl)}" alt="${escAttr(brand.name)}" />`
+          : `<span class="app-brand-text">${esc(brand.name)}</span>`}
+      </a>
+
+      <nav class="app-nav" aria-label="Page navigation">
+        <a class="app-nav-link" href="${escAttr(brand.homeHref)}">All events</a>
+        <span class="app-nav-sep">/</span>
+        <span class="app-nav-current">${esc(title)}</span>
+      </nav>
+    </div>
+  </header>
+
   <div class="wrap">
+
 
     <div class="hero">
       <div class="hero-bg"></div>
@@ -666,6 +775,7 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
       </div>`;
     };
 
+    const brand = getPublicBrand();
 
     // --- RENDER HTML ---
     res.type('html').send(`<!doctype html>
@@ -685,6 +795,7 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
 
   <style>
     :root {
+    --app-header-h: 64px;
       /* TiXALL Blue Palette */
       --bg-page: #F3F4F6;
       --bg-surface: #FFFFFF;
@@ -701,9 +812,14 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
 
     * { box-sizing: border-box; }
     
-    body {
-      margin: 0; font-family: 'Inter', sans-serif; background-color: var(--bg-page); color: var(--text-main); -webkit-font-smoothing: antialiased;
-    }
+  body {
+  margin: 0;
+  padding-top: var(--app-header-h);
+  font-family: 'Inter', sans-serif;
+  background-color: var(--bg-page);
+  color: var(--text-main);
+  -webkit-font-smoothing: antialiased;
+}
 
     h1, h2, h3, h4, .font-heading { font-family: 'Outfit', sans-serif; font-weight: 700; line-height: 1.1; margin: 0; }
     a { color: inherit; text-decoration: none; transition: opacity 0.2s; }
@@ -723,11 +839,85 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
       background: linear-gradient(to right, rgba(15,23,42,0.9) 0%, rgba(15,23,42,0.4) 50%, transparent 100%),
                   linear-gradient(to top, rgba(15,23,42,0.9) 0%, transparent 40%);
     }
-    .hero-top-nav { position: absolute; top: 0; left: 0; right: 0; padding: 24px; z-index: 20; }
-    .breadcrumbs {
-      font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
-      display: flex; gap: 8px; text-shadow: 0 1px 2px rgba(0,0,0,0.5); color: rgba(255,255,255,0.8);
-    }
+   /* --- FIXED TOP HEADER (white-label) --- */
+.app-header{
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: var(--app-header-h);
+  background: var(--brand); /* TixAll blue */
+  z-index: 500;
+  border-bottom: 1px solid rgba(255,255,255,0.22);
+}
+
+.app-header-inner{
+  max-width: 1200px;
+  height: 100%;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.app-brand{
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 120px;
+}
+
+.app-brand-logo{
+  height: 30px;
+  width: auto;
+  display: block;
+}
+
+.app-brand-text{
+  font-family: 'Outfit', sans-serif;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  color: #fff;
+  text-transform: uppercase;
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.app-nav{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: rgba(255,255,255,0.9);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.app-nav a{
+  color: rgba(255,255,255,0.9);
+}
+
+.app-nav a:hover{
+  color: #fff;
+}
+
+.app-nav-sep{
+  color: rgba(255,255,255,0.35);
+  font-weight: 800;
+}
+
+.app-nav-current{
+  color: rgba(255,255,255,0.95);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 55vw;
+}
+
+@media (max-width: 960px){
+  .app-header-inner{ padding: 0 16px; }
+  .app-nav-current{ max-width: 45vw; }
+}
     .hero-content {
   position: relative; z-index: 10; width: 100%; max-width: 1200px; margin: 0 auto;
   padding: 24px 24px 18px; display: grid; gap: 16px; /* bottom gap matches .layout top padding */
@@ -929,8 +1119,15 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
 
     /* --- BOOKING WIDGET (Sidebar) --- */
    .booking-widget {
-  position: sticky; top: 16px; background: white; border-radius: var(--radius-lg); box-shadow: var(--shadow-float); border: 1px solid var(--border); overflow: hidden;
+  position: sticky;
+  top: calc(var(--app-header-h) + 16px);
+  background: white;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-float);
+  border: 1px solid var(--border);
+  overflow: hidden;
 }
+
   .accessibility-pill{
   background: #fff;
   color: var(--primary);
@@ -953,10 +1150,22 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
 }
 
 .acc-item{
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--text-muted); /* matches widget subtitle tone */
 }
+
+.acc-tick{
+  color: var(--brand);
+  font-weight: 900;
+  font-size: 1.05rem;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
 
     .widget-header { padding: 24px; border-bottom: 1px solid var(--border); background: #fff; }
     .widget-title { font-size: 1.25rem; font-weight: 800; color: var(--primary); }
@@ -1026,16 +1235,27 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
 </head>
 <body>
 
+  <header class="app-header">
+    <div class="app-header-inner">
+      <a class="app-brand" href="${escAttr(brand.homeHref)}" aria-label="${escAttr(brand.name)} home">
+        ${brand.logoUrl
+          ? `<img class="app-brand-logo" src="${escAttr(brand.logoUrl)}" alt="${escAttr(brand.name)}" />`
+          : `<span class="app-brand-text">${esc(brand.name)}</span>`}
+      </a>
+
+      <nav class="app-nav" aria-label="Page navigation">
+        <a class="app-nav-link" href="${escAttr(brand.homeHref)}">All events</a>
+        <span class="app-nav-sep">/</span>
+        <span class="app-nav-current">${esc(show.title)}</span>
+      </nav>
+    </div>
+  </header>
+
   <header class="hero">
     <div class="hero-bg"></div>
     <div class="hero-overlay"></div>
-    <div class="hero-top-nav">
-      <div class="breadcrumbs">
-        <span>Home</span> <span>/</span> <span>Events</span> <span>/</span>
-        <span style="color:var(--brand);">${esc(show.title)}</span>
-      </div>
-    </div>
-   <div class="hero-content">
+
+    <div class="hero-content">
   <div class="hero-meta">
     <div class="hero-meta-item"><span>${esc(prettyDate)}</span></div>
     <div class="hero-meta-item"><span>${esc(venue.name)}</span></div>
@@ -1115,7 +1335,12 @@ ${isDisabledFriendly ? `
     <div class="acc-title">Disabled-friendly show</div>
     ${accessibilityReasons.length ? `
       <div class="acc-list">
-        ${accessibilityReasons.map(r => `<div class="acc-item">✅ ${esc(r)}</div>`).join('')}
+${accessibilityReasons
+  .map(
+    (r) =>
+      `<div class="acc-item"><span class="acc-tick" aria-hidden="true">✓</span><span>${esc(r)}</span></div>`
+  )
+  .join('')}
       </div>
     ` : ''}
   </div>
