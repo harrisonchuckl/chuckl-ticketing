@@ -40,6 +40,12 @@ model User {
   role              String?
   organiserSplitBps Int?
 
+// ✅ Password reset fields
+  resetTokenHash         String?   @db.Text
+  resetTokenExpiresAt    DateTime?
+  resetTokenRequestedAt  DateTime?
+  resetTokenUsedAt       DateTime?
+
   orders         Order[]
   showsOrganised Show[]  @relation("OrganiserShows")
   tickets        Ticket[]
