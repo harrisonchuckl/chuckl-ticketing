@@ -305,8 +305,8 @@ router.get('/checkout/success', async (req, res) => {
       --bg-page: #F3F4F6;
       --bg-surface: #FFFFFF;
       --primary: #0F172A;
-      --brand: #0056D2;
-      --brand-hover: #0044A8;
+      --brand: #0f9cdf;
+--brand-hover: #0b86c6;
       --text-main: #111827;
       --text-muted: #6B7280;
       --border: #E5E7EB;
@@ -344,7 +344,7 @@ router.get('/checkout/success', async (req, res) => {
     .hero-inner { position:relative; z-index:2; padding: 26px; color:#fff; width:100%; }
     .pill {
       display:inline-block; padding: 6px 10px; border-radius: 999px;
-      background: rgba(0,86,210,0.18); border: 1px solid rgba(0,86,210,0.35);
+background: rgba(15,156,223,0.18); border: 1px solid rgba(15,156,223,0.35);
       color: rgba(255,255,255,0.9); font-weight:700; font-size: 12px; letter-spacing: 0.03em;
       text-transform: uppercase;
     }
@@ -688,9 +688,8 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
       /* TiXALL Blue Palette */
       --bg-page: #F3F4F6;
       --bg-surface: #FFFFFF;
-      --primary: #0F172A;
-      --brand: #0056D2; 
-      --brand-hover: #0044A8;
+      --primary: #0F172A;--brand: #0f9cdf;
+--brand-hover: #0b86c6;
       --text-main: #111827;
       --text-muted: #6B7280;
       --border: #E5E7EB;
@@ -730,9 +729,10 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
       display: flex; gap: 8px; text-shadow: 0 1px 2px rgba(0,0,0,0.5); color: rgba(255,255,255,0.8);
     }
     .hero-content {
-      position: relative; z-index: 10; width: 100%; max-width: 1200px; margin: 0 auto;
-      padding: 40px 24px 50px; display: grid; gap: 16px;
-    }
+  position: relative; z-index: 10; width: 100%; max-width: 1200px; margin: 0 auto;
+  padding: 24px 24px 18px; display: grid; gap: 16px; /* bottom gap matches .layout top padding */
+}
+
     .hero-title {
       font-size: clamp(2.5rem, 5vw, 4.5rem); font-weight: 800; line-height: 1; text-transform: uppercase;
       letter-spacing: -0.02em; max-width: 800px; text-shadow: 0 4px 30px rgba(0,0,0,0.6);
@@ -768,16 +768,9 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
 
     .hero-meta-icon { color: var(--brand); filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5)); }
 
-    /* --- TITLE BELOW HERO --- */
-.below-hero{
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 18px 24px 10px;
-}
-
-.below-hero-inner{
-  display: grid;
-  gap: 16px;
+   /* --- TITLE (Left column, under hero) --- */
+.page-title-row{
+  margin: 0 0 22px;
 }
 
 .page-title{
@@ -790,6 +783,7 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
   color: var(--primary);
   margin: 0;
 }
+
 
 /* On desktop, keep the title in the LEFT column so it sits “between” content + widget */
 @media (min-width: 960px){
@@ -805,9 +799,10 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
 
 /* --- LAYOUT CONTAINER --- */
 .layout {
-  max-width: 1200px; margin: 0 auto; padding: 0 24px 80px;
+  max-width: 1200px; margin: 0 auto; padding: 18px 24px 80px; /* gap under hero */
   display: grid; gap: 48px; position: relative; z-index: 20;
 }
+
 @media (min-width: 960px) {
   .layout {
     grid-template-columns: 1fr 380px;
@@ -933,9 +928,9 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
     .btn-outline:hover { border-color: var(--brand); color: var(--brand); background: #F8FAFC; }
 
     /* --- BOOKING WIDGET (Sidebar) --- */
-    .booking-widget {
-      position: sticky; top: 24px; background: white; border-radius: var(--radius-lg); box-shadow: var(--shadow-float); border: 1px solid var(--border); overflow: hidden;
-    }
+   .booking-widget {
+  position: sticky; top: 16px; background: white; border-radius: var(--radius-lg); box-shadow: var(--shadow-float); border: 1px solid var(--border); overflow: hidden;
+}
   .accessibility-pill{
   background: #fff;
   color: var(--primary);
@@ -990,7 +985,7 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
       padding: 8px 16px; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.05em;
       transition: background 0.2s; white-space: nowrap;
     }
-    .ticket-row:hover .btn-buy { background: var(--brand-hover); box-shadow: 0 2px 8px rgba(0, 86, 210, 0.3); }
+.ticket-row:hover .btn-buy { background: var(--brand-hover); box-shadow: 0 2px 8px rgba(15, 156, 223, 0.35); }
     .btn-sold {
       background: #F1F5F9; color: #94A3B8; cursor: not-allowed;
       font-size: 0.85rem; font-weight: 700; padding: 8px 16px; border-radius: 6px; text-transform: uppercase;
@@ -1047,17 +1042,15 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
     <div class="hero-meta-item"><span>${esc(timeStr)}</span></div>
   </div>
 </div>
- </header>
-
-  <div class="below-hero">
-    <div class="below-hero-inner">
-      <h1 class="page-title">${esc(show.title)}</h1>
-    </div>
-  </div>
+</header>
 
   <div class="layout">
     
-    <div class="content-area">
+   <div class="content-area">
+
+      <div class="page-title-row">
+        <h1 class="page-title">${esc(show.title)}</h1>
+      </div>
       
       <div>
           <span class="section-label">Overview</span>
