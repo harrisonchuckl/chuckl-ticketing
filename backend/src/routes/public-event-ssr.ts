@@ -1,9 +1,10 @@
 // backend/src/routes/public-event-ssr.ts
 import { Router } from 'express';
-import { PrismaClient, ShowStatus } from '@prisma/client';
+import { ShowStatus } from '@prisma/client';
+import prisma from '../lib/prisma.js';
 
-const prisma = new PrismaClient();
 const router = Router();
+
 
 // --- formatting helpers ---
 function pFmt(p: number | null | undefined) {
@@ -17,14 +18,21 @@ function cleanDesc(s: string | null | undefined) {
   return s.replace(/\s+/g, ' ').trim().slice(0, 300);
 }
 function esc(s: any) {
-  return String(s ?? '').replace(/[<>&]/g, c => ({'<':'<','>':'>','&':'&'}[c] as string));
+  return String(s ?? '').replace(/[<>&]/g, (c) => {
+    if (c === '<') return '&lt;';
+    if (c === '>') return '&gt;';
+    return '&amp;';
+  });
 }
 function escAttr(s: any) {
-  return esc(s).replace(/"/g,'"');
+  // escape + make it safe inside attributes
+  return esc(s).replace(/"/g, '&quot;');
 }
 function escJSON(obj: any) {
-  return JSON.stringify(obj).replace(/</g,'\\u003c');
+  // prevent </script> breakouts inside JSON-LD
+  return JSON.stringify(obj).replace(/</g, '\\u003c');
 }
+
 
 
 function formatTimeHHMM(raw: any) {
@@ -41,6 +49,7 @@ function formatTimeHHMM(raw: any) {
   d.setMilliseconds(0);
   return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
+
 
 function outwardCode(postcode: string | null | undefined) {
   if (!postcode) return '';
@@ -330,9 +339,16 @@ router.get('/event/:id', async (req, res) => {
       : [];
     const keywordsMeta = tags.join(', ');
 
-    const ageGuidance = (show as any).ageGuidance as string | null;
-    const doorsOpenRaw = (show as any).doorsOpenTime as string | null;
-    const doorTimeDisplay = formatTimeHHMM(doorsOpenRaw);
+    const ageGuidanceRaw = (show as any).ageGuidance as string | null;
+const ageGuidance = ageGuidanceRaw ? ageGuidanceRaw.trim() : '';
+
+const doorsOpenRaw = (show as any).doorsOpenTime as string | null;
+const doorsOpenTime = doorsOpenRaw ? String(doorsOpenRaw).trim() : '';
+const doorTimeDisplay = doorsOpenTime ? formatTimeHHMM(doorsOpenTime) : '';
+
+const endTimeNoteRaw = (show as any).endTimeNote as string | null;
+const endTimeNote = endTimeNoteRaw ? endTimeNoteRaw.trim() : '';
+
     let doorTimeIso: string | undefined;
     if (doorsOpenRaw && dateObj) {
       const [dh, dm] = String(doorsOpenRaw).split(':');
@@ -345,12 +361,57 @@ router.get('/event/:id', async (req, res) => {
       }
     }
 
-    const accessibility = ((show as any).accessibility || {}) as any;
-    const hasAccessibleFeatures = !!(
-      (accessibility && (accessibility as any).wheelchair) ||
-      (accessibility && (accessibility as any).stepFree) ||
-      (accessibility && (accessibility as any).accessibleToilet)
-    );
+    function isTruthyFeature(val: any) {
+  if (val === true) return true;
+  if (typeof val === 'number') return val > 0;
+  if (Array.isArray(val)) return val.some(isTruthyFeature);
+  if (val && typeof val === 'object') return Object.values(val).some(isTruthyFeature);
+  if (typeof val === 'string') {
+    const s = val.trim().toLowerCase();
+    if (!s) return false;
+    return ['yes', 'true', 'y', '1', 'available', 'enabled'].includes(s);
+  }
+  return false;
+}
+
+function hasAccessibleFeatures(accessibility: any) {
+  if (!accessibility) return false;
+
+  const keywordMatches = (input: string) => {
+    const key = input.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const keys = [
+      'wheelchair',
+      'wheelchairspaces',
+      'wheelchairspace',
+      'wheelchairaccessible',
+      'wheelchairaccess',
+      'stepfree',
+      'stepfreeaccess',
+      'accessibletoilet',
+      'accessibletoilets',
+      'accessiblebathroom',
+      'accessiblebathrooms',
+      'accessiblewc',
+    ];
+    return keys.some((k) => key.includes(k));
+  };
+
+  if (Array.isArray(accessibility)) {
+    return accessibility.some((entry) => {
+      if (typeof entry === 'string' && keywordMatches(entry)) return true;
+      if (entry && typeof entry === 'object' && hasAccessibleFeatures(entry)) return true;
+      return false;
+    });
+  }
+
+  for (const [key, value] of Object.entries(accessibility)) {
+    if (keywordMatches(key) && isTruthyFeature(value)) return true;
+    if (typeof value === 'string' && keywordMatches(value) && isTruthyFeature(value)) return true;
+  }
+
+  return false;
+}
+
 
     const baseEventType = (show as any).eventType || null;
 
@@ -749,12 +810,14 @@ router.get('/event/:id', async (req, res) => {
           <div class="rich-text">
             ${show.description ? show.description.replace(/\n/g, '<br/>') : '<p>Full details coming soon.</p>'}
           </div>
-          ${doorTimeDisplay || ageGuidance ? `
-          <div class="info-banner">
-            ${doorTimeDisplay ? `<div class="info-item"><span class="info-label">Doors open</span><span class="info-value">${esc(doorTimeDisplay)}</span></div>` : ''}
-            ${ageGuidance ? `<div class="info-item"><span class="info-label">Age guidance</span><span class="info-value">${esc(ageGuidance)}</span></div>` : ''}
-          </div>
-          ` : ''}
+         ${doorTimeDisplay || ageGuidance || endTimeNote ? `
+<div class="info-banner">
+  ${doorTimeDisplay ? `<div class="info-item"><span class="info-label">Doors open</span><span class="info-value">${esc(doorTimeDisplay)}</span></div>` : ''}
+  ${ageGuidance ? `<div class="info-item"><span class="info-label">Age guidance</span><span class="info-value">${esc(ageGuidance)}</span></div>` : ''}
+  ${endTimeNote ? `<div class="info-item"><span class="info-label">End time note</span><span class="info-value">${esc(endTimeNote)}</span></div>` : ''}
+</div>
+` : ''}
+
           ${imageList.length ? `
           <div class="gallery-strip">
             ${imageList
@@ -795,7 +858,7 @@ router.get('/event/:id', async (req, res) => {
 
     <div class="booking-area">
       <div class="booking-widget">
-        ${hasAccessibleFeatures ? `<div class="accessibility-pill">♿ Disabled-friendly show</div>` : ''}
+${isDisabledFriendly ? `<div class="accessibility-pill">♿ Disabled-friendly show</div>` : ''}
         <div class="widget-header">
           <div class="widget-title">Select Tickets</div>
           <div class="widget-subtitle">${esc(dayName)}, ${esc(fullDate)} at ${esc(timeStr)}</div>
