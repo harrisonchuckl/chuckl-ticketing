@@ -263,7 +263,10 @@ router.post("/account/invites/accept", json({ limit: "1mb" }), async (req: any, 
     }
 
     // Create or update user
-    const pwHash = await bcrypt.hash(password, 12);
+// Create or update user
+const rounds = Number(process.env.BCRYPT_ROUNDS || 12);
+const salt = await bcrypt.genSalt(rounds);
+const pwHash = await bcrypt.hash(password, salt);
 
     // Adjust these fields to match YOUR User model.
     // This assumes: user.email, user.name, user.passwordHash exist.
