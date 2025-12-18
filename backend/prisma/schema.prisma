@@ -87,6 +87,33 @@ model Venue {
 
 }
 
+model VenueInvite {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  venueId    String
+  email      String
+  role       VenueRole @default(READ_ONLY)
+  permissions String[] @default([])
+
+  tokenHash  String   @db.Text
+  expiresAt  DateTime
+
+  createdById String?
+  createdBy   User?   @relation(fields: [createdById], references: [id])
+
+  revokedAt  DateTime?
+  acceptedAt DateTime?
+
+  venue      Venue    @relation(fields: [venueId], references: [id])
+
+  @@index([venueId])
+  @@index([email])
+  @@unique([tokenHash])
+}
+
+
 model VenueMember {
   id           String   @id @default(cuid())
   createdAt    DateTime @default(now())
