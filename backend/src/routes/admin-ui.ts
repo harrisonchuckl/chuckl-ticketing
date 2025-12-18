@@ -1,7 +1,7 @@
 // backend/src/routes/admin-ui.ts
 import express from "express";
 import { requireAdminOrOrganiser } from "../lib/authz.js";
-import { prisma } from "../lib/prisma.js";
+import prisma from "../lib/prisma.js";
 import { createHash, randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { Resend } from "resend";
@@ -88,12 +88,14 @@ router.get("/account/team", requireAdminOrOrganiser, async (req: any, res) => {
 
     // Pull user details
     const userIds = memberships.map((m: any) => m.userId);
-    const users = await prisma.user.findMany({
-      where: { id: { in: userIds } },
-      select: { id: true, name: true, email: true },
-    });
+   type BasicUser = { id: string; name: string | null; email: string | null };
 
-    const byId = new Map(users.map((u: any) => [u.id, u]));
+const users = (await prisma.user.findMany({
+  where: { id: { in: userIds } },
+  select: { id: true, name: true, email: true },
+})) as BasicUser[];
+
+const byId = new Map<string, BasicUser>(users.map((u) => [u.id, u]));
     const items = memberships.map((m: any) => ({
       id: m.id,
       userId: m.userId,
