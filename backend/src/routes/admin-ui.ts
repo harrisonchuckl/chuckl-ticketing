@@ -2041,7 +2041,7 @@ async function createShow(){
 
         // Title
         +'<div class="grid" style="margin-bottom: 20px;">'
-        +'<label>Event Title</label>'
++'<label>Event Title</label>'
 +'<input id="sh_title" class="ctl" />'
         +'</div>'
 
@@ -2067,8 +2067,8 @@ async function createShow(){
 // --- NEW: Category and Sub-Category Section ---
 +'<div class="grid grid-2" style="margin-bottom: 20px; gap: 16px; align-items: start;">'
   +'<div class="grid" style="gap:4px;">'
-    +'<label>Event Type</label>'
-    +'<select id="event_type_select" class="ctl">'
++'<label>Event Title</label>'
++'<select id="event_type_select" class="ctl">'
       +'<option value="">Select Primary Type</option>'
       +'<option value="comedy">Comedy</option>'
       +'<option value="theatre">Theatre</option>'
@@ -3250,18 +3250,9 @@ async function summaryPage(id){
           +'</div>'
         +'</div>'
 
-        +'<div class="card" style="margin:0">'
-          +'<div class="header">'
-            +'<div class="title">Ticket types</div>'
-            +'<button class="btn" id="addTypeBtn">Add ticket type</button>'
-          +'</div>'
-          +'<div class="muted" style="margin-bottom:8px">'
-// [Fixed Code]
-+'Set up the tickets you want to sell for this show. A £0 price will be treated as a free ticket.'
-+'</div>'
-          +'<div id="ticketTypesEmpty" class="muted" style="display:none">No ticket types yet. Use “Add ticket type” to create one.</div>'
-          +'<table>'
-            +'<thead><tr><th>Name</th><th>Price</th><th>Available</th><th></th></tr></thead>'
+
+        
+                    +'<thead><tr><th>Name</th><th>Price</th><th>Available</th><th></th></tr></thead>'
             +'<tbody id="ticketTypesBody"><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>'
           +'</table>'
           +'<div id="addTypeForm" style="margin-top:12px;display:none">'
