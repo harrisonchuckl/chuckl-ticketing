@@ -189,6 +189,54 @@ router.get("/ui/login", (req, res) => {
       font-weight:700;
     }
   </style>
+  <style id="tixall-login-solid-bg">
+  /* --- FORCE SOLID TIXALL BLUE EVERYWHERE --- */
+  html, body {
+    height: 100%;
+    background: #009fe3 !important;
+    background-color: #009fe3 !important;
+    background-image: none !important;
+  }
+
+  /* If the app root or page wrapper paints a gradient/overlay, nuke it */
+  #root, #app, .app, .App, main, .page, .layout, .login, .login-page, .auth, .auth-page {
+    background: transparent !important;
+    background-image: none !important;
+  }
+
+  /* Kill common “overlay/spotlight” pseudo-elements that create the gradient look */
+  body::before, body::after,
+  #root::before, #root::after,
+  .app::before, .app::after,
+  .login::before, .login::after,
+  .login-page::before, .login-page::after,
+  .auth::before, .auth::after,
+  .auth-page::before, .auth-page::after {
+    content: none !important;
+    display: none !important;
+    background: none !important;
+  }
+
+  /* Remove shadow behind the centre box (card/panel) */
+  .card, .login-card, .auth-card, .panel, [role="dialog"],
+  .MuiPaper-root, .MuiCard-root {
+    box-shadow: none !important;
+    filter: none !important;
+  }
+
+  /* Keep separation without shadow */
+  .card, .login-card, .auth-card, .panel,
+  .MuiPaper-root, .MuiCard-root {
+    border: 1px solid rgba(255,255,255,0.22) !important;
+  }
+
+  /* If any element is using inline gradient styles, nuke those too */
+  [style*="gradient"] {
+    background: none !important;
+    background-image: none !important;
+  }
+</style>
+
 </head>
 <body>
   <div class="bg"></div>
