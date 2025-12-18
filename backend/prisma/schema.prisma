@@ -38,6 +38,8 @@ model User {
   email             String   @unique
   passwordHash      String?
   role              String?
+  platformRole      PlatformRole @default(USER)
+
   organiserSplitBps Int?
 
 // ✅ Password reset fields
@@ -49,6 +51,9 @@ model User {
   orders         Order[]
   showsOrganised Show[]  @relation("OrganiserShows")
   tickets        Ticket[]
+
+  venueMemberships VenueMember[]
+  invitedVenueMembers VenueMember[] @relation("VenueInviter")
 }
 
 model Venue {
@@ -64,7 +69,39 @@ model Venue {
 
   shows     Show[]
   seatMaps  SeatMap[]
+
+  members   VenueMember[]
+
 }
+
+model VenueMember {
+  id           String   @id @default(cuid())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  venueId      String
+  userId       String
+
+  role         VenueRole @default(READ_ONLY)
+
+  // Tick-box system for MVP, expandable later:
+  // e.g. ["FINANCE_VIEW", "FINANCE_EDIT_PAYOUTS", "EVENT_CREATE", ...]
+  permissions  String[] @default([])
+
+  invitedByUserId String?
+  invitedAt       DateTime?
+  acceptedAt      DateTime?
+
+  venue        Venue @relation(fields: [venueId], references: [id])
+  user         User  @relation(fields: [userId], references: [id])
+
+  invitedBy    User? @relation("VenueInviter", fields: [invitedByUserId], references: [id])
+
+  @@unique([venueId, userId])
+  @@index([venueId])
+  @@index([userId])
+}
+
 
 model Show {
   id          String   @id @default(cuid())
