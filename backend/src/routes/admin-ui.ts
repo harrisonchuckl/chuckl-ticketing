@@ -790,6 +790,20 @@ router.get(
   },
   (_req, res) => {
     res.set("Cache-Control", "no-store");
+     // Explicitly allow the inline admin UI script + styles even if an upstream CSP is injected.
+    res.set(
+      "Content-Security-Policy",
+      [
+        "default-src 'self' https: data: blob:",
+        "script-src 'self' 'unsafe-inline'",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' https: data: blob:",
+        "connect-src 'self' https: wss:",
+        "font-src 'self' https: data:",
+        "media-src 'self' https: data: blob:",
+        "frame-ancestors 'self'",
+      ].join("; ")
+    );
     res.type("html").send(`<!doctype html>
 <html lang="en">
 <head>
