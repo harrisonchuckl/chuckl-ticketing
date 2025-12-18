@@ -1090,8 +1090,33 @@ router.get(
   </div>
 
 <script>
+/* --- Admin UI hard-fail overlay (prevents silent “Loading…” forever) --- */
 (function(){
+  var main = document.getElementById('main');
+  function showBootError(title, detail){
+    try{
+      if (!main) return;
+      main.innerHTML =
+        '<div class="card">'
+        + '<div class="title">'+title+'</div>'
+        + '<div class="error" style="margin-top:8px;white-space:pre-wrap;">'+String(detail || '')+'</div>'
+        + '<div class="muted" style="margin-top:10px;">Open DevTools → Console for the full stack trace.</div>'
+        + '</div>';
+    }catch(_){}
+  }
+
+  window.addEventListener('error', function(e){
+    showBootError('Admin UI crashed while loading', (e && (e.message || e.error)) || e);
+  });
+
+  window.addEventListener('unhandledrejection', function(e){
+    showBootError('Admin UI promise rejected while loading', (e && (e.reason && (e.reason.stack || e.reason.message))) || (e && e.reason) || e);
+  });
+
   console.log('[Admin UI] booting');
+
+  // --- your existing code continues below unchanged ---
+
     // If the session has expired, force login (1 hour inactivity)
    async function ensureAuth(){
     try{
