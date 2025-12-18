@@ -67,6 +67,7 @@ model User {
 
   venueMemberships VenueMember[]
   invitedVenueMembers VenueMember[] @relation("VenueInviter")
+venueInvitesCreated VenueInvite[] @relation("VenueInviteCreatedBy")
 }
 
 model Venue {
@@ -84,6 +85,7 @@ model Venue {
   seatMaps  SeatMap[]
 
   members   VenueMember[]
+  venueInvites VenueInvite[] @relation("VenueInviteVenue")
 
 }
 
@@ -101,12 +103,12 @@ model VenueInvite {
   expiresAt  DateTime
 
   createdById String?
-  createdBy   User?   @relation(fields: [createdById], references: [id])
+createdBy   User?   @relation("VenueInviteCreatedBy", fields: [createdById], references: [id])
 
   revokedAt  DateTime?
   acceptedAt DateTime?
 
-  venue      Venue    @relation(fields: [venueId], references: [id])
+venue       Venue   @relation("VenueInviteVenue", fields: [venueId], references: [id])
 
   @@index([venueId])
   @@index([email])
