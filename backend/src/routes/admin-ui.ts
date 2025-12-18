@@ -1,8 +1,287 @@
 // backend/src/routes/admin-ui.ts
 import { Router, json } from "express";
 import { requireAdminOrOrganiser } from "../lib/authz.js";
+import { prisma } from "../lib/prisma.js";
+import { createHash, randomBytes } from "node:crypto";
+import bcrypt from "bcryptjs";
+
 
 const router = Router();
+
+function sha256(s: string) {
+  return createHash("sha256").update(s, "utf8").digest("hex");
+}
+
+function getVenueIdFromUser(req: any): string | null {
+  // Adjust this to your real tenant key.
+  // Common patterns: req.user.venueId, req.user.accountId, req.user.organiserVenueId, etc.
+  return (req.user && (req.user.venueId || req.user.accountId || req.user.venue?.id)) ? String(req.user.venueId || req.user.accountId || req.user.venue?.id) : null;
+}
+
+async function sendInviteEmail(to: string, inviteUrl: string) {
+  const from = String(process.env.INVITE_EMAIL_FROM || process.env.SMTP_FROM || "no-reply@tixall.local");
+  const brandName = String(process.env.PUBLIC_BRAND_NAME || "TixAll").trim();
+
+  const host = process.env.SMTP_HOST;
+  const port = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587;
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+
+  // If SMTP isn't configured, don't hard-fail your flow (useful in dev).
+  if (!host || !user || !pass) {
+    console.log("[InviteEmail] SMTP not set, skipping actual send. Would send:", { to, inviteUrl });
+    return;
+  }
+
+  const nodemailerMod: any = await import("nodemailer");
+  const nodemailer: any = nodemailerMod?.default || nodemailerMod;
+
+  const transporter = nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: { user, pass },
+  });
+
+  const subject = `${brandName}: You’ve been invited`;
+  const text =
+    `You’ve been invited to join ${brandName} as an organiser.\n\n` +
+    `Activate your account here:\n${inviteUrl}\n\n` +
+    `If you didn’t expect this, you can ignore this email.`;
+
+  await transporter.sendMail({
+    from,
+    to,
+    subject,
+    text,
+  });
+}
+
+// List team members for this venue/account
+router.get("/account/team", requireAdminOrOrganiser, async (req: any, res) => {
+  try {
+    const venueId = getVenueIdFromUser(req);
+    if (!venueId) return res.status(400).json({ ok: false, error: "Missing venue/account context for user." });
+
+    const memberships = await prisma.venueUser.findMany({
+      where: { venueId },
+      orderBy: { createdAt: "asc" },
+    });
+
+    // Pull user details
+    const userIds = memberships.map((m: any) => m.userId);
+    const users = await prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, name: true, email: true },
+    });
+
+    const byId = new Map(users.map((u: any) => [u.id, u]));
+    const items = memberships.map((m: any) => ({
+      id: m.id,
+      userId: m.userId,
+      name: byId.get(m.userId)?.name || "",
+      email: byId.get(m.userId)?.email || "",
+      role: m.role,
+      permissions: m.permissions || null,
+      createdAt: m.createdAt,
+    }));
+
+    res.json({ ok: true, items });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+// List invites
+router.get("/account/invites", requireAdminOrOrganiser, async (req: any, res) => {
+  try {
+    const venueId = getVenueIdFromUser(req);
+    if (!venueId) return res.status(400).json({ ok: false, error: "Missing venue/account context for user." });
+
+    const items = await prisma.venueInvite.findMany({
+      where: { venueId },
+      orderBy: { createdAt: "desc" },
+    });
+
+    res.json({ ok: true, items });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+// Create invite
+router.post("/account/invites", requireAdminOrOrganiser, json({ limit: "1mb" }), async (req: any, res) => {
+  try {
+    const venueId = getVenueIdFromUser(req);
+    if (!venueId) return res.status(400).json({ ok: false, error: "Missing venue/account context for user." });
+
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const role = String(req.body?.role || "READONLY").trim().toUpperCase();
+    const permissions = Array.isArray(req.body?.permissions) ? req.body.permissions : [];
+
+    if (!email || !email.includes("@")) return res.status(400).json({ ok: false, error: "Valid email is required." });
+
+    // Create token + hash
+    const token = randomBytes(24).toString("hex");
+    const tokenHash = sha256(token);
+
+    const expiresDays = process.env.INVITE_EXPIRES_DAYS ? Number(process.env.INVITE_EXPIRES_DAYS) : 7;
+    const expiresAt = new Date(Date.now() + Math.max(1, expiresDays) * 86400000);
+
+    const invite = await prisma.venueInvite.create({
+      data: {
+        venueId,
+        email,
+        role: role as any,
+        permissions,
+        tokenHash,
+        expiresAt,
+        createdById: req.user?.id ? String(req.user.id) : null,
+      },
+    });
+
+    const origin =
+      String(process.env.PUBLIC_APP_ORIGIN || "").trim() ||
+      `${req.protocol}://${req.get("host")}`;
+
+    const inviteUrl = `${origin}/admin/ui/accept-invite?token=${encodeURIComponent(token)}`;
+
+    await sendInviteEmail(email, inviteUrl);
+
+    res.json({ ok: true, invite: { ...invite, tokenPreview: token.slice(0, 6) + "…" } });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+// Resend invite (rotates token)
+router.post("/account/invites/:id/resend", requireAdminOrOrganiser, async (req: any, res) => {
+  try {
+    const venueId = getVenueIdFromUser(req);
+    if (!venueId) return res.status(400).json({ ok: false, error: "Missing venue/account context for user." });
+
+    const id = String(req.params.id || "");
+    const existing = await prisma.venueInvite.findFirst({ where: { id, venueId } });
+    if (!existing) return res.status(404).json({ ok: false, error: "Invite not found." });
+    if (existing.revokedAt) return res.status(400).json({ ok: false, error: "Invite is revoked." });
+    if (existing.acceptedAt) return res.status(400).json({ ok: false, error: "Invite already accepted." });
+
+    const token = randomBytes(24).toString("hex");
+    const tokenHash = sha256(token);
+
+    const expiresDays = process.env.INVITE_EXPIRES_DAYS ? Number(process.env.INVITE_EXPIRES_DAYS) : 7;
+    const expiresAt = new Date(Date.now() + Math.max(1, expiresDays) * 86400000);
+
+    const updated = await prisma.venueInvite.update({
+      where: { id },
+      data: { tokenHash, expiresAt },
+    });
+
+    const origin =
+      String(process.env.PUBLIC_APP_ORIGIN || "").trim() ||
+      `${req.protocol}://${req.get("host")}`;
+
+    const inviteUrl = `${origin}/admin/ui/accept-invite?token=${encodeURIComponent(token)}`;
+    await sendInviteEmail(updated.email, inviteUrl);
+
+    res.json({ ok: true });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+// Revoke invite
+router.delete("/account/invites/:id", requireAdminOrOrganiser, async (req: any, res) => {
+  try {
+    const venueId = getVenueIdFromUser(req);
+    if (!venueId) return res.status(400).json({ ok: false, error: "Missing venue/account context for user." });
+
+    const id = String(req.params.id || "");
+    const existing = await prisma.venueInvite.findFirst({ where: { id, venueId } });
+    if (!existing) return res.status(404).json({ ok: false, error: "Invite not found." });
+
+    await prisma.venueInvite.update({
+      where: { id },
+      data: { revokedAt: new Date() },
+    });
+
+    res.json({ ok: true });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+// Accept invite (public endpoint)
+router.post("/account/invites/accept", json({ limit: "1mb" }), async (req: any, res) => {
+  try {
+    const token = String(req.body?.token || "").trim();
+    const name = String(req.body?.name || "").trim();
+    const password = String(req.body?.password || "");
+
+    if (!token) return res.status(400).json({ ok: false, error: "Missing token." });
+    if (!name) return res.status(400).json({ ok: false, error: "Name is required." });
+    if (!password || password.length < 8) return res.status(400).json({ ok: false, error: "Password must be at least 8 characters." });
+
+    const tokenHash = sha256(token);
+
+    const invite = await prisma.venueInvite.findFirst({
+      where: { tokenHash },
+    });
+
+    if (!invite) return res.status(400).json({ ok: false, error: "Invite not found. Please request a new invite." });
+    if (invite.revokedAt) return res.status(400).json({ ok: false, error: "Invite has been revoked." });
+    if (invite.acceptedAt) return res.status(400).json({ ok: false, error: "Invite already accepted." });
+    if (invite.expiresAt && new Date(invite.expiresAt).getTime() < Date.now()) {
+      return res.status(400).json({ ok: false, error: "Invite expired. Please request a new invite." });
+    }
+
+    // Create or update user
+    const pwHash = await bcrypt.hash(password, 12);
+
+    // Adjust these fields to match YOUR User model.
+    // This assumes: user.email, user.name, user.passwordHash exist.
+    const user = await prisma.user.upsert({
+      where: { email: invite.email },
+      create: {
+        email: invite.email,
+        name,
+        passwordHash: pwHash,
+        role: "ORGANISER" as any,
+      },
+      update: {
+        name,
+        passwordHash: pwHash,
+        role: "ORGANISER" as any,
+      },
+      select: { id: true, email: true },
+    });
+
+    // Create membership
+    await prisma.venueUser.upsert({
+      where: { venueId_userId: { venueId: invite.venueId, userId: user.id } },
+      create: {
+        venueId: invite.venueId,
+        userId: user.id,
+        role: invite.role,
+        permissions: invite.permissions || null,
+      },
+      update: {
+        role: invite.role,
+        permissions: invite.permissions || null,
+      },
+    });
+
+    await prisma.venueInvite.update({
+      where: { id: invite.id },
+      data: { acceptedAt: new Date() },
+    });
+
+    res.json({ ok: true });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
 
 // Public login page (must be defined BEFORE the /ui/* catch-all)
 router.get("/ui/login", (req, res) => {
@@ -335,6 +614,124 @@ router.get("/ui/login", (req, res) => {
 </html>`);
 });
 
+// Public accept-invite page (must be BEFORE the /ui/* catch-all)
+router.get("/ui/accept-invite", (req, res) => {
+  res.set("Cache-Control", "no-store");
+  const brandName = String(process.env.PUBLIC_BRAND_NAME || "TixAll").trim();
+
+  res.type("html").send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>${brandName} | Accept Invite</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root{ --brand:#009fe3; --ink:#0F172A; --muted:rgba(15,23,42,.72); --card:#fff; --border:#e5e7eb; --radius:16px; }
+    *{ box-sizing:border-box; }
+    body{ margin:0; min-height:100vh; font-family:Inter,system-ui; background:#f7f8fb; color:var(--ink); display:flex; align-items:center; justify-content:center; padding:24px; }
+    .card{ width:min(520px,100%); background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:18px; }
+    .title{ font-family:Outfit,system-ui; font-weight:900; font-size:1.4rem; margin:0 0 6px; }
+    .muted{ color:var(--muted); font-weight:600; margin:0 0 14px; line-height:1.45; }
+    label{ display:block; font-size:.78rem; letter-spacing:.08em; text-transform:uppercase; font-weight:800; color:rgba(15,23,42,.70); margin:12px 0 6px; }
+    input{ width:100%; padding:12px; border-radius:12px; border:1px solid rgba(15,23,42,.14); background:#fff; font:inherit; font-weight:600; }
+    input:focus{ outline:none; border-color:rgba(0,159,227,.55); box-shadow:0 0 0 4px rgba(0,159,227,.18); }
+    button{ width:100%; margin-top:14px; border:0; border-radius:12px; padding:12px 14px; background:#0B1220; color:#fff; font-family:Outfit,system-ui; font-weight:900; letter-spacing:.03em; text-transform:uppercase; cursor:pointer; }
+    button[disabled]{ opacity:.65; cursor:not-allowed; }
+    .msg{ margin-top:12px; font-weight:700; font-size:.95rem; line-height:1.4; }
+    .err{ color:#b91c1c; } .ok{ color:#166534; }
+    .small{ margin-top:10px; font-size:.9rem; color:rgba(15,23,42,.70); font-weight:700; }
+    a{ color:#0369a1; text-decoration:none; font-weight:800; }
+    a:hover{ text-decoration:underline; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="title">Accept your invite</div>
+    <div class="muted">Set your details to activate your organiser account.</div>
+
+    <div id="badToken" class="msg err" style="display:none"></div>
+
+    <label>Name</label>
+    <input id="name" autocomplete="name" />
+
+    <label>Password</label>
+    <input id="pw" type="password" autocomplete="new-password" />
+
+    <label>Confirm password</label>
+    <input id="pw2" type="password" autocomplete="new-password" />
+
+    <button id="btn">Activate account</button>
+
+    <div id="msg" class="msg"></div>
+    <div class="small">Already activated? <a href="/admin/ui/login">Log in</a></div>
+  </div>
+
+<script>
+(function(){
+  const token = new URLSearchParams(location.search).get('token') || '';
+  const btn = document.getElementById('btn');
+  const msg = document.getElementById('msg');
+  const bad = document.getElementById('badToken');
+  const nameEl = document.getElementById('name');
+  const pwEl = document.getElementById('pw');
+  const pw2El = document.getElementById('pw2');
+
+  if (!token){
+    bad.style.display = 'block';
+    bad.textContent = 'Missing invite token. Please use the link from your email.';
+    btn.disabled = true;
+    return;
+  }
+
+  btn.addEventListener('click', async function(){
+    msg.className = 'msg';
+    msg.textContent = '';
+    const name = (nameEl.value || '').trim();
+    const pw = String(pwEl.value || '');
+    const pw2 = String(pw2El.value || '');
+    if (!name) return (msg.className='msg err', msg.textContent='Please enter your name.');
+    if (!pw || pw.length < 8) return (msg.className='msg err', msg.textContent='Password must be at least 8 characters.');
+    if (pw !== pw2) return (msg.className='msg err', msg.textContent='Passwords do not match.');
+
+    btn.disabled = true;
+    btn.textContent = 'Activating…';
+
+    try{
+      const res = await fetch('/admin/account/invites/accept', {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({ token, name, password: pw })
+      });
+      const txt = await res.text();
+      let data = {};
+      try{ data = JSON.parse(txt); }catch{}
+      if (!res.ok){
+        msg.className = 'msg err';
+        msg.textContent = (data && data.error) ? data.error : (txt || 'Failed to accept invite');
+        return;
+      }
+
+      msg.className = 'msg ok';
+      msg.textContent = 'Account activated. Redirecting to login…';
+      setTimeout(() => location.href = '/admin/ui/login', 900);
+    }catch(e){
+      msg.className = 'msg err';
+      msg.textContent = 'Something went wrong. Please try again.';
+    }finally{
+      btn.disabled = false;
+      btn.textContent = 'Activate account';
+    }
+  });
+})();
+</script>
+</body>
+</html>`);
+});
+
 // UI logout helper
 router.get("/ui/logout", (_req, res) => {
   res.clearCookie("auth", {
@@ -353,14 +750,14 @@ router.get("/ui/logout", (_req, res) => {
  */
 router.get(
   ["/ui", "/ui/", "/ui/home", "/ui/*"],
-  (req, res, next) => {
-    // If not logged in, force login page
+  requireAdminOrOrganiser,
+  (req: any, res, next) => {
+    // After requireAdminOrOrganiser has run, req.user should now be populated.
+    // If it is still missing for any reason, force the login page.
     if (!req.user) return res.redirect("/admin/ui/login");
     next();
   },
-  requireAdminOrOrganiser,
   (_req, res) => {
-
     res.set("Cache-Control", "no-store");
     res.type("html").send(`<!doctype html>
 <html lang="en">
@@ -676,6 +1073,7 @@ router.get(
 
   function $(sel, root){ return (root || document).querySelector(sel); }
   function $$(sel, root){ return Array.from((root || document).querySelectorAll(sel)); }
+
     // --- AI field highlighting ---
   function markAi(el, kind){
     if (!el) return;
