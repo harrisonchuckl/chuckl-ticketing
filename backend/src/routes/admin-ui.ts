@@ -3191,8 +3191,7 @@ async function summaryPage(id){
   }
 }
 
-  // --- TICKETS PAGE ---
-  async function ticketsPage(id){
+async function ticketsPage(id){
     if (!main) return;
     main.innerHTML = '<div class="card"><div class="title">Loading tickets…</div></div>';
 
@@ -3250,9 +3249,12 @@ async function summaryPage(id){
           +'</div>'
         +'</div>'
 
-
-        
-                    +'<thead><tr><th>Name</th><th>Price</th><th>Available</th><th></th></tr></thead>'
+        +'<div class="card" style="margin:0">'
+          +'<div class="title" style="margin-bottom:8px">Ticket types</div>'
+          +'<div id="ticketTypesEmpty" class="muted" style="display:none">No ticket types yet. Use “Add ticket type” to create one.</div>'
+          +'<button class="btn" id="addTypeBtn" style="margin-bottom:12px">Add ticket type</button>'
+          +'<table>'
+            +'<thead><tr><th>Name</th><th>Price</th><th>Available</th><th></th></tr></thead>'
             +'<tbody id="ticketTypesBody"><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>'
           +'</table>'
           +'<div id="addTypeForm" style="margin-top:12px;display:none">'
