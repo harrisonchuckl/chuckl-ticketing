@@ -3572,7 +3572,7 @@ async function summaryPage(id){
   // --- ROUTER ---
   function route(){
     try{
-      var path = location.pathname.replace(/\\/$/, '');
+      var path = location.pathname.replace(/\/$/, '');
       console.log('[Admin UI] route', path);
       setActive(path);
 
