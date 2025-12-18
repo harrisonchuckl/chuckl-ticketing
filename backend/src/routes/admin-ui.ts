@@ -790,17 +790,18 @@ router.get(
   },
   (_req, res) => {
     res.set("Cache-Control", "no-store");
-     // Explicitly allow the inline admin UI script + styles even if an upstream CSP is injected.
+      // Explicitly allow the inline admin UI script + styles even if an upstream CSP is injected.
     res.set(
       "Content-Security-Policy",
       [
-        "default-src 'self' https: data: blob:",
+        "default-src 'self' https: http: data: blob:",
         "script-src 'self' 'unsafe-inline'",
-        "style-src 'self' 'unsafe-inline'",
-        "img-src 'self' https: data: blob:",
-        "connect-src 'self' https: wss:",
-        "font-src 'self' https: data:",
-        "media-src 'self' https: data: blob:",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "img-src 'self' https: http: data: blob:",
+        "connect-src 'self' https: http: wss:",
+        "font-src 'self' https://fonts.gstatic.com data:",
+        "media-src 'self' https: http: data: blob:",
+        "object-src 'none'",
         "frame-ancestors 'self'",
       ].join("; ")
     );
