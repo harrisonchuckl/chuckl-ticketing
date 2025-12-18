@@ -43,31 +43,31 @@ enum VenueRole {
 }
 
 model User {
-  id                String   @id @default(cuid())
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  name              String?
-  email             String   @unique
-  passwordHash      String?
-  role              String?
-  platformRole      PlatformRole @default(USER)
+  name         String?
+  email        String       @unique
+  passwordHash String?
+  role         String?
+  platformRole PlatformRole @default(USER)
 
   organiserSplitBps Int?
 
-// ✅ Password reset fields
-  resetTokenHash         String?   @db.Text
-  resetTokenExpiresAt    DateTime?
-  resetTokenRequestedAt  DateTime?
-  resetTokenUsedAt       DateTime?
+  // ✅ Password reset fields
+  resetTokenHash        String?   @db.Text
+  resetTokenExpiresAt   DateTime?
+  resetTokenRequestedAt DateTime?
+  resetTokenUsedAt      DateTime?
 
   orders         Order[]
-  showsOrganised Show[]  @relation("OrganiserShows")
+  showsOrganised Show[]   @relation("OrganiserShows")
   tickets        Ticket[]
 
-  venueMemberships VenueMember[]
+  venueMemberships    VenueMember[]
   invitedVenueMembers VenueMember[] @relation("VenueInviter")
-venueInvitesCreated VenueInvite[] @relation("VenueInviteCreatedBy")
+  venueInvitesCreated VenueInvite[] @relation("VenueInviteCreatedBy")
 }
 
 model Venue {
@@ -75,80 +75,77 @@ model Venue {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  name      String
-  address   String?
-  city      String?
-  postcode  String?
-  capacity  Int?
+  name     String
+  address  String?
+  city     String?
+  postcode String?
+  capacity Int?
 
-  shows     Show[]
-  seatMaps  SeatMap[]
+  shows    Show[]
+  seatMaps SeatMap[]
 
-  members   VenueMember[]
+  members      VenueMember[]
   venueInvites VenueInvite[] @relation("VenueInviteVenue")
-
 }
 
 model VenueInvite {
-  id         String   @id @default(cuid())
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  venueId    String
-  email      String
-  role       VenueRole @default(READ_ONLY)
-  permissions String[] @default([])
+  venueId     String
+  email       String
+  role        VenueRole @default(READ_ONLY)
+  permissions String[]  @default([])
 
-  tokenHash  String   @db.Text
-  expiresAt  DateTime
+  tokenHash String   @db.Text
+  expiresAt DateTime
 
   createdById String?
-createdBy   User?   @relation("VenueInviteCreatedBy", fields: [createdById], references: [id])
+  createdBy   User?   @relation("VenueInviteCreatedBy", fields: [createdById], references: [id])
 
   revokedAt  DateTime?
   acceptedAt DateTime?
 
-venue       Venue   @relation("VenueInviteVenue", fields: [venueId], references: [id])
+  venue Venue @relation("VenueInviteVenue", fields: [venueId], references: [id])
 
+  @@unique([tokenHash])
   @@index([venueId])
   @@index([email])
-  @@unique([tokenHash])
 }
 
-
 model VenueMember {
-  id           String   @id @default(cuid())
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  venueId      String
-  userId       String
+  venueId String
+  userId  String
 
-  role         VenueRole @default(READ_ONLY)
+  role VenueRole @default(READ_ONLY)
 
   // Tick-box system for MVP, expandable later:
   // e.g. ["FINANCE_VIEW", "FINANCE_EDIT_PAYOUTS", "EVENT_CREATE", ...]
-  permissions  String[] @default([])
+  permissions String[] @default([])
 
   invitedByUserId String?
   invitedAt       DateTime?
   acceptedAt      DateTime?
 
-  venue        Venue @relation(fields: [venueId], references: [id])
-  user         User  @relation(fields: [userId], references: [id])
+  venue Venue @relation(fields: [venueId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
 
-  invitedBy    User? @relation("VenueInviter", fields: [invitedByUserId], references: [id])
+  invitedBy User? @relation("VenueInviter", fields: [invitedByUserId], references: [id])
 
   @@unique([venueId, userId])
   @@index([venueId])
   @@index([userId])
 }
 
-
 model Show {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   title       String?
   description String?
@@ -156,25 +153,25 @@ model Show {
   date        DateTime
   endDate     DateTime?
 
-  doorsOpenTime   String?
-  ageGuidance     String?
-  endTimeNote     String?
+  doorsOpenTime String?
+  ageGuidance   String?
+  endTimeNote   String?
 
-  eventType       String?
-  eventCategory   String?
+  eventType        String?
+  eventCategory    String?
   additionalImages String[] @default([])
   tags             String[] @default([])
   accessibility    Json?
 
-  status      ShowStatus @default(DRAFT)
-  publishedAt DateTime?
+  status          ShowStatus @default(DRAFT)
+  publishedAt     DateTime?
   activeSeatMapId String?
 
   venueId     String?
   organiserId String?
 
-  venue       Venue? @relation(fields: [venueId], references: [id])
-  organiser   User?  @relation("OrganiserShows", fields: [organiserId], references: [id])
+  venue     Venue? @relation(fields: [venueId], references: [id])
+  organiser User?  @relation("OrganiserShows", fields: [organiserId], references: [id])
 
   ticketTypes TicketType[]
   tickets     Ticket[]
@@ -184,27 +181,27 @@ model Show {
 }
 
 model TicketType {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  name        String
-  pricePence  Int
+  name       String
+  pricePence Int
 
   /// Numeric availability used by routes (e.g. comparisons like > 0)
-  available   Int?
+  available Int?
 
-  showId      String
-  show        Show     @relation(fields: [showId], references: [id])
+  showId String
+  show   Show   @relation(fields: [showId], references: [id])
 
-  tickets     Ticket[]
-  orders      Order[]
+  tickets Ticket[]
+  orders  Order[]
 }
 
 model Order {
-  id                  String      @id @default(cuid())
-  createdAt           DateTime    @default(now())
-  updatedAt           DateTime    @updatedAt
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   amountPence         Int
   platformFeePence    Int?
@@ -212,28 +209,28 @@ model Order {
   paymentFeePence     Int?
   netPayoutPence      Int?
 
-  stripeId            String?
-  status              OrderStatus @default(PENDING)
-  email               String?
+  stripeId String?
+  status   OrderStatus @default(PENDING)
+  email    String?
 
   /// Some routes read a top-level quantity directly on the order
-  quantity            Int?
+  quantity Int?
 
   showId       String
   userId       String?
   ticketTypeId String?
 
-  show         Show        @relation(fields: [showId], references: [id])
-  user         User?       @relation(fields: [userId], references: [id])
-  ticketType   TicketType? @relation(fields: [ticketTypeId], references: [id])
+  show       Show        @relation(fields: [showId], references: [id])
+  user       User?       @relation(fields: [userId], references: [id])
+  ticketType TicketType? @relation(fields: [ticketTypeId], references: [id])
 
-  tickets      Ticket[]
-  refunds      Refund[]
+  tickets Ticket[]
+  refunds Refund[]
 }
 
 model Refund {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
 
   /// Kept for routes that read `amount`
   amount      Int
@@ -245,59 +242,59 @@ model Refund {
   /// Some routes refer to this key
   stripeId    String?
 
-  orderId     String
-  order       Order    @relation(fields: [orderId], references: [id])
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id])
 }
 
 model Ticket {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   showId      String
   amountPence Int
-  quantity    Int      @default(1)
+  quantity    Int    @default(1)
 
-  orderId     String
+  orderId      String
   ticketTypeId String
 
-  status      String?
-  seatId      String?
-  serial      String?  @unique
-  scannedAt   DateTime?
-  holderName  String?
+  status     String?
+  seatId     String?
+  serial     String?   @unique
+  scannedAt  DateTime?
+  holderName String?
 
-  show        Show       @relation(fields: [showId], references: [id])
-  order       Order      @relation(fields: [orderId], references: [id])
-  ticketType  TicketType @relation(fields: [ticketTypeId], references: [id])
-  seat        Seat?      @relation(fields: [seatId], references: [id])
+  show       Show       @relation(fields: [showId], references: [id])
+  order      Order      @relation(fields: [orderId], references: [id])
+  ticketType TicketType @relation(fields: [ticketTypeId], references: [id])
+  seat       Seat?      @relation(fields: [seatId], references: [id])
 
-  userId      String?
-  user        User?      @relation(fields: [userId], references: [id])
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
 }
 
 model SeatMap {
-  id         String   @id @default(cuid())
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  name       String
-  version    Int       @default(1)
-  isDefault  Boolean   @default(false)
+  name      String
+  version   Int     @default(1)
+  isDefault Boolean @default(false)
 
   // NEW FIELDS
-  isTemplate       Boolean   @default(false)
-  createdByUserId  String?
+  isTemplate      Boolean @default(false)
+  createdByUserId String?
 
-  layout     Json?
+  layout Json?
 
-  showId     String
-  venueId    String?
+  showId  String
+  venueId String?
 
-  show       Show    @relation(fields: [showId], references: [id])
-  venue      Venue?  @relation(fields: [venueId], references: [id])
-  seats      Seat[]
-  zones      Zone[]
+  show        Show                 @relation(fields: [showId], references: [id])
+  venue       Venue?               @relation(fields: [venueId], references: [id])
+  seats       Seat[]
+  zones       Zone[]
   allocations ExternalAllocation[]
 }
 
@@ -306,29 +303,28 @@ model Zone {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  label     String
-  level     String?
+  label String
+  level String?
 
   seatMapId String
-  seatMap   SeatMap  @relation(fields: [seatMapId], references: [id])
+  seatMap   SeatMap @relation(fields: [seatMapId], references: [id])
 
-  seats     Seat[]
+  seats Seat[]
 }
 
 model Seat {
-  id         String    @id @default(cuid())
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  seatMapId  String
-  seatMap    SeatMap   @relation(fields: [seatMapId], references: [id])
+  seatMapId       String
+  seatMap         SeatMap          @relation(fields: [seatMapId], references: [id])
   tickets         Ticket[]
   allocationSeats AllocationSeat[]
 
-
   /// Basic coordinates
-  row        String
-  number     Int
+  row    String
+  number Int
 
   /// Denormalised / optional fields referenced by routes
   rowLabel   String?
@@ -337,38 +333,38 @@ model Seat {
   kind       String?
   level      String?
 
-  status     SeatStatus @default(AVAILABLE)
-  zoneId     String?
-  zone       Zone?      @relation(fields: [zoneId], references: [id])
+  status SeatStatus @default(AVAILABLE)
+  zoneId String?
+  zone   Zone?      @relation(fields: [zoneId], references: [id])
 }
 
 model ExternalAllocation {
-  id                String   @id @default(cuid())
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  showId            String
-  seatMapId         String?
-  source            String
-  label             String?
-  externalPlatform  String?
-  contactEmail      String?
-  quantity          Int
+  id               String   @id @default(cuid())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  showId           String
+  seatMapId        String?
+  source           String
+  label            String?
+  externalPlatform String?
+  contactEmail     String?
+  quantity         Int
 
-  show   Show    @relation(fields: [showId], references: [id])
-  seatMap SeatMap? @relation(fields: [seatMapId], references: [id])
-  seats  AllocationSeat[]
+  show    Show             @relation(fields: [showId], references: [id])
+  seatMap SeatMap?         @relation(fields: [seatMapId], references: [id])
+  seats   AllocationSeat[]
 }
 
 model AllocationSeat {
-  id         String   @id @default(cuid())
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id           String   @id @default(cuid())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
   allocationId String
-  seatId     String
-  rowLabel   String?
-  seatNumber Int?
-  level      String?
+  seatId       String
+  rowLabel     String?
+  seatNumber   Int?
+  level        String?
 
   allocation ExternalAllocation @relation(fields: [allocationId], references: [id])
-  seat       Seat             @relation(fields: [seatId], references: [id])
+  seat       Seat               @relation(fields: [seatId], references: [id])
 }
