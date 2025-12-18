@@ -1,12 +1,13 @@
 // backend/src/routes/admin-ui.ts
-import { Router, json } from "express";
+import express from "express";
 import { requireAdminOrOrganiser } from "../lib/authz.js";
 import { prisma } from "../lib/prisma.js";
 import { createHash, randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
+import { Resend } from "resend";
 
-
-const router = Router();
+const router = express.Router();
+const json = express.json;
 
 function sha256(s: string) {
   return createHash("sha256").update(s, "utf8").digest("hex");
@@ -19,42 +20,59 @@ function getVenueIdFromUser(req: any): string | null {
 }
 
 async function sendInviteEmail(to: string, inviteUrl: string) {
-  const from = String(process.env.INVITE_EMAIL_FROM || process.env.SMTP_FROM || "no-reply@tixall.local");
+  const from = String(
+    process.env.INVITE_EMAIL_FROM ||
+    process.env.RESEND_FROM ||
+    "no-reply@tixall.local"
+  );
+
   const brandName = String(process.env.PUBLIC_BRAND_NAME || "TixAll").trim();
 
-  const host = process.env.SMTP_HOST;
-  const port = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
+  // Prefer Resend (you said it's already set up)
+  const resendKey = String(
+    process.env.RESEND_API_KEY ||
+    process.env.RESEND_KEY ||
+    ""
+  ).trim();
 
-  // If SMTP isn't configured, don't hard-fail your flow (useful in dev).
-  if (!host || !user || !pass) {
-    console.log("[InviteEmail] SMTP not set, skipping actual send. Would send:", { to, inviteUrl });
+  // If Resend isn't configured, don't hard-fail your flow (useful in dev)
+  if (!resendKey) {
+    console.log("[InviteEmail] RESEND_API_KEY not set, skipping actual send. Would send:", { to, inviteUrl });
     return;
   }
 
-  const nodemailerMod: any = await import("nodemailer");
-  const nodemailer: any = nodemailerMod?.default || nodemailerMod;
-
-  const transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: { user, pass },
-  });
-
   const subject = `${brandName}: You’ve been invited`;
+
   const text =
     `You’ve been invited to join ${brandName} as an organiser.\n\n` +
     `Activate your account here:\n${inviteUrl}\n\n` +
     `If you didn’t expect this, you can ignore this email.`;
 
-  await transporter.sendMail({
+  const html =
+    `<div style="font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;line-height:1.5;color:#0f172a">` +
+      `<h2 style="margin:0 0 12px">${brandName}: You’ve been invited</h2>` +
+      `<p style="margin:0 0 12px">You’ve been invited to join <b>${brandName}</b> as an organiser.</p>` +
+      `<p style="margin:0 0 16px">Activate your account here:</p>` +
+      `<p style="margin:0 0 18px"><a href="${inviteUrl}" style="display:inline-block;background:#0B1220;color:#fff;text-decoration:none;padding:10px 14px;border-radius:10px;font-weight:800">Activate account</a></p>` +
+      `<p style="margin:0;color:rgba(15,23,42,.72)">If you didn’t expect this, you can ignore this email.</p>` +
+    `</div>`;
+
+  const resend = new Resend(resendKey);
+
+  const out = await resend.emails.send({
     from,
-    to,
+    to: [to],
     subject,
     text,
+    html,
   });
+
+  // Optional: keep a small debug log
+  if ((out as any)?.error) {
+    console.error("[InviteEmail] Resend error:", (out as any).error);
+  } else {
+    console.log("[InviteEmail] Sent invite via Resend:", (out as any)?.data?.id || out);
+  }
 }
 
 // List team members for this venue/account
@@ -734,7 +752,7 @@ router.get("/ui/accept-invite", (req, res) => {
 
 // UI logout helper
 router.get("/ui/logout", (_req, res) => {
-  res.clearCookie("auth", {
+res.clearCookie("auth", {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
