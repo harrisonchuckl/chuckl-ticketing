@@ -1090,13 +1090,23 @@ router.get(
 (function(){
   console.log('[Admin UI] booting');
     // If the session has expired, force login (1 hour inactivity)
-  (async function ensureAuth(){
+   async function ensureAuth(){
     try{
       const r = await fetch('/auth/me', { credentials:'include' });
-      if(!r.ok) location.href = '/admin/ui/login';
+      if(!r.ok){
+        location.href = '/admin/ui/login';
+        return false;
+      }
+      return true;
     }catch(e){
       location.href = '/admin/ui/login';
+      return false;
     }
+  }
+
+  (async function init(){
+    const ok = await ensureAuth();
+    if (ok) route();
   })();
 
   function $(sel, root){ return (root || document).querySelector(sel); }
@@ -1160,7 +1170,7 @@ router.get(
     }
   }
 
-  function go(path){
+   function go(path){
     history.pushState(null, '', path);
     route();
   }
@@ -1176,7 +1186,60 @@ router.get(
     }
   });
 
+  // Basic client-side router
+  async function route(){
+    try{
+      var path = location.pathname;
+
+      // mark sidebar active
+      setActive(path);
+
+      // HOME
+      if (path === '/admin/ui' || path === '/admin/ui/' || path === '/admin/ui/home'){
+        return home();
+      }
+
+      // SHOWS
+      if (path === '/admin/ui/shows/create') return createShow();
+      if (path === '/admin/ui/shows/create-ai') return createShowAI();
+      if (path === '/admin/ui/shows/current') return listShows();
+
+      // SHOW DETAILS ROUTES
+      var m;
+
+      m = path.match(/^\/admin\/ui\/shows\/([^/]+)\/edit$/);
+      if (m) return editShow(m[1]);
+
+      m = path.match(/^\/admin\/ui\/shows\/([^/]+)\/summary$/);
+      if (m) return summaryPage(m[1]);
+
+      m = path.match(/^\/admin\/ui\/shows\/([^/]+)\/tickets$/);
+      if (m) return ticketsPage(m[1]);
+
+      // Fallback
+      if (main){
+        main.innerHTML =
+          '<div class="card">'
+          + '<div class="title">Not found</div>'
+          + '<div class="muted">No page registered for <span class="kbd">'+path+'</span></div>'
+          + '</div>';
+      }
+    }catch(err){
+      console.error('[Admin UI] route failed', err);
+      if (main){
+        main.innerHTML =
+          '<div class="card">'
+          + '<div class="title">Something went wrong</div>'
+          + '<div class="error">This page failed to render. Check console for the error.</div>'
+          + '</div>';
+      }
+    }
+  }
+
   window.addEventListener('popstate', route);
+
+  // Initial render (otherwise you can sit on "Loading…" forever)
+  route();
 
   function home(){
     if (!main) return;
