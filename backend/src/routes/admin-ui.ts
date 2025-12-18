@@ -81,7 +81,7 @@ router.get("/account/team", requireAdminOrOrganiser, async (req: any, res) => {
     const venueId = getVenueIdFromUser(req);
     if (!venueId) return res.status(400).json({ ok: false, error: "Missing venue/account context for user." });
 
-    const memberships = await prisma.venueUser.findMany({
+const memberships = await prisma.venueMember.findMany({
       where: { venueId },
       orderBy: { createdAt: "asc" },
     });
@@ -136,7 +136,13 @@ router.post("/account/invites", requireAdminOrOrganiser, json({ limit: "1mb" }),
     if (!venueId) return res.status(400).json({ ok: false, error: "Missing venue/account context for user." });
 
     const email = String(req.body?.email || "").trim().toLowerCase();
-    const role = String(req.body?.role || "READONLY").trim().toUpperCase();
+function normaliseVenueRole(input: string) {
+  const r = String(input || "").trim().toUpperCase();
+  if (r === "READONLY") return "READ_ONLY";
+  return r;
+}
+
+const role = normaliseVenueRole(req.body?.role || "READ_ONLY");
     const permissions = Array.isArray(req.body?.permissions) ? req.body.permissions : [];
 
     if (!email || !email.includes("@")) return res.status(400).json({ ok: false, error: "Valid email is required." });
@@ -148,17 +154,18 @@ router.post("/account/invites", requireAdminOrOrganiser, json({ limit: "1mb" }),
     const expiresDays = process.env.INVITE_EXPIRES_DAYS ? Number(process.env.INVITE_EXPIRES_DAYS) : 7;
     const expiresAt = new Date(Date.now() + Math.max(1, expiresDays) * 86400000);
 
-    const invite = await prisma.venueInvite.create({
-      data: {
-        venueId,
-        email,
-        role: role as any,
-        permissions,
-        tokenHash,
-        expiresAt,
-        createdById: req.user?.id ? String(req.user.id) : null,
-      },
-    });
+   const invite = await prisma.venueInvite.create({
+  data: {
+    venueId,
+    email,
+    role: role as any,
+    permissions: Array.isArray(permissions) ? permissions : [],
+    tokenHash,
+    expiresAt,
+    createdById: req.user?.id ? String(req.user.id) : null,
+  },
+});
+
 
     const origin =
       String(process.env.PUBLIC_APP_ORIGIN || "").trim() ||
@@ -277,19 +284,20 @@ router.post("/account/invites/accept", json({ limit: "1mb" }), async (req: any, 
     });
 
     // Create membership
-    await prisma.venueUser.upsert({
-      where: { venueId_userId: { venueId: invite.venueId, userId: user.id } },
-      create: {
-        venueId: invite.venueId,
-        userId: user.id,
-        role: invite.role,
-        permissions: invite.permissions || null,
-      },
-      update: {
-        role: invite.role,
-        permissions: invite.permissions || null,
-      },
-    });
+   await prisma.venueMember.upsert({
+  where: { venueId_userId: { venueId: invite.venueId, userId: user.id } },
+  create: {
+    venueId: invite.venueId,
+    userId: user.id,
+    role: invite.role,
+    permissions: Array.isArray(invite.permissions) ? invite.permissions : [],
+  },
+  update: {
+    role: invite.role,
+    permissions: Array.isArray(invite.permissions) ? invite.permissions : [],
+  },
+});
+
 
     await prisma.venueInvite.update({
       where: { id: invite.id },
