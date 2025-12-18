@@ -263,10 +263,7 @@ router.post("/account/invites/accept", json({ limit: "1mb" }), async (req: any, 
     }
 
     // Create or update user
-// Create or update user
-const rounds = Number(process.env.BCRYPT_ROUNDS || 12);
-const salt = await bcrypt.genSalt(rounds);
-const pwHash = await bcrypt.hash(password, salt);
+    const pwHash = await bcrypt.hash(password, 12);
 
     // Adjust these fields to match YOUR User model.
     // This assumes: user.email, user.name, user.passwordHash exist.
@@ -790,21 +787,6 @@ router.get(
   },
   (_req, res) => {
     res.set("Cache-Control", "no-store");
-      // Explicitly allow the inline admin UI script + styles even if an upstream CSP is injected.
-    res.set(
-      "Content-Security-Policy",
-      [
-        "default-src 'self' https: http: data: blob:",
-        "script-src 'self' 'unsafe-inline'",
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-        "img-src 'self' https: http: data: blob:",
-        "connect-src 'self' https: http: wss:",
-        "font-src 'self' https://fonts.gstatic.com data:",
-        "media-src 'self' https: http: data: blob:",
-        "object-src 'none'",
-        "frame-ancestors 'self'",
-      ].join("; ")
-    );
     res.type("html").send(`<!doctype html>
 <html lang="en">
 <head>
@@ -1105,51 +1087,16 @@ router.get(
   </div>
 
 <script>
-/* --- Admin UI hard-fail overlay (prevents silent “Loading…” forever) --- */
 (function(){
-  var main = document.getElementById('main');
-  function showBootError(title, detail){
-    try{
-      if (!main) return;
-      main.innerHTML =
-        '<div class="card">'
-        + '<div class="title">'+title+'</div>'
-        + '<div class="error" style="margin-top:8px;white-space:pre-wrap;">'+String(detail || '')+'</div>'
-        + '<div class="muted" style="margin-top:10px;">Open DevTools → Console for the full stack trace.</div>'
-        + '</div>';
-    }catch(_){}
-  }
-
-  window.addEventListener('error', function(e){
-    showBootError('Admin UI crashed while loading', (e && (e.message || e.error)) || e);
-  });
-
-  window.addEventListener('unhandledrejection', function(e){
-    showBootError('Admin UI promise rejected while loading', (e && (e.reason && (e.reason.stack || e.reason.message))) || (e && e.reason) || e);
-  });
-
   console.log('[Admin UI] booting');
-
-  // --- your existing code continues below unchanged ---
-
     // If the session has expired, force login (1 hour inactivity)
-   async function ensureAuth(){
+  (async function ensureAuth(){
     try{
       const r = await fetch('/auth/me', { credentials:'include' });
-      if(!r.ok){
-        location.href = '/admin/ui/login';
-        return false;
-      }
-      return true;
+      if(!r.ok) location.href = '/admin/ui/login';
     }catch(e){
       location.href = '/admin/ui/login';
-      return false;
     }
-  }
-
-  (async function init(){
-    const ok = await ensureAuth();
-    if (ok) route();
   })();
 
   function $(sel, root){ return (root || document).querySelector(sel); }
@@ -1213,7 +1160,7 @@ router.get(
     }
   }
 
-   function go(path){
+  function go(path){
     history.pushState(null, '', path);
     route();
   }
@@ -1229,60 +1176,7 @@ router.get(
     }
   });
 
-  // Basic client-side router
-  async function route(){
-    try{
-      var path = location.pathname;
-
-      // mark sidebar active
-      setActive(path);
-
-      // HOME
-      if (path === '/admin/ui' || path === '/admin/ui/' || path === '/admin/ui/home'){
-        return home();
-      }
-
-      // SHOWS
-      if (path === '/admin/ui/shows/create') return createShow();
-      if (path === '/admin/ui/shows/create-ai') return createShowAI();
-      if (path === '/admin/ui/shows/current') return listShows();
-
-      // SHOW DETAILS ROUTES
-      var m;
-
-      m = path.match(/^\/admin\/ui\/shows\/([^/]+)\/edit$/);
-      if (m) return editShow(m[1]);
-
-      m = path.match(/^\/admin\/ui\/shows\/([^/]+)\/summary$/);
-      if (m) return summaryPage(m[1]);
-
-      m = path.match(/^\/admin\/ui\/shows\/([^/]+)\/tickets$/);
-      if (m) return ticketsPage(m[1]);
-
-      // Fallback
-      if (main){
-        main.innerHTML =
-          '<div class="card">'
-          + '<div class="title">Not found</div>'
-          + '<div class="muted">No page registered for <span class="kbd">'+path+'</span></div>'
-          + '</div>';
-      }
-    }catch(err){
-      console.error('[Admin UI] route failed', err);
-      if (main){
-        main.innerHTML =
-          '<div class="card">'
-          + '<div class="title">Something went wrong</div>'
-          + '<div class="error">This page failed to render. Check console for the error.</div>'
-          + '</div>';
-      }
-    }
-  }
-
   window.addEventListener('popstate', route);
-
-  // Initial render (otherwise you can sit on "Loading…" forever)
-  route();
 
   function home(){
     if (!main) return;
@@ -2041,7 +1935,7 @@ async function createShow(){
 
         // Title
         +'<div class="grid" style="margin-bottom: 20px;">'
-+'<label>Event Title</label>'
+        +'<label>Event Title</label>'
 +'<input id="sh_title" class="ctl" />'
         +'</div>'
 
@@ -2067,8 +1961,8 @@ async function createShow(){
 // --- NEW: Category and Sub-Category Section ---
 +'<div class="grid grid-2" style="margin-bottom: 20px; gap: 16px; align-items: start;">'
   +'<div class="grid" style="gap:4px;">'
-+'<label>Event Title</label>'
-+'<select id="event_type_select" class="ctl">'
+    +'<label>Event Type</label>'
+    +'<select id="event_type_select" class="ctl">'
       +'<option value="">Select Primary Type</option>'
       +'<option value="comedy">Comedy</option>'
       +'<option value="theatre">Theatre</option>'
@@ -3191,7 +3085,8 @@ async function summaryPage(id){
   }
 }
 
-async function ticketsPage(id){
+  // --- TICKETS PAGE ---
+  async function ticketsPage(id){
     if (!main) return;
     main.innerHTML = '<div class="card"><div class="title">Loading tickets…</div></div>';
 
@@ -3250,9 +3145,15 @@ async function ticketsPage(id){
         +'</div>'
 
         +'<div class="card" style="margin:0">'
-          +'<div class="title" style="margin-bottom:8px">Ticket types</div>'
+          +'<div class="header">'
+            +'<div class="title">Ticket types</div>'
+            +'<button class="btn" id="addTypeBtn">Add ticket type</button>'
+          +'</div>'
+          +'<div class="muted" style="margin-bottom:8px">'
+// [Fixed Code]
++'Set up the tickets you want to sell for this show. A £0 price will be treated as a free ticket.'
++'</div>'
           +'<div id="ticketTypesEmpty" class="muted" style="display:none">No ticket types yet. Use “Add ticket type” to create one.</div>'
-          +'<button class="btn" id="addTypeBtn" style="margin-bottom:12px">Add ticket type</button>'
           +'<table>'
             +'<thead><tr><th>Name</th><th>Price</th><th>Available</th><th></th></tr></thead>'
             +'<tbody id="ticketTypesBody"><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>'
@@ -3605,7 +3506,7 @@ async function ticketsPage(id){
   // --- ROUTER ---
   function route(){
     try{
-      var path = location.pathname.replace(/\/$/, '');
+      var path = location.pathname.replace(/\\/$/, '');
       console.log('[Admin UI] route', path);
       setActive(path);
 
