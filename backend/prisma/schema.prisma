@@ -29,6 +29,19 @@ enum ShowStatus {
   LIVE
 }
 
+enum PlatformRole {
+  USER
+  PLATFORM_ADMIN
+}
+
+enum VenueRole {
+  OWNER
+  MANAGER
+  BOX_OFFICE
+  FINANCE
+  READ_ONLY
+}
+
 model User {
   id                String   @id @default(cuid())
   createdAt         DateTime @default(now())
