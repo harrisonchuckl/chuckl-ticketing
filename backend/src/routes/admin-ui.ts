@@ -1605,15 +1605,8 @@ document.addEventListener('click', function(e){
   });
 }
 
-async function createShow(opts){
-  opts = opts || {};
-  var isEdit = (opts.mode === 'edit');
-  var editId = opts.showId || null;
-  var existingShow = opts.existing || null;
-  isEdit = isEdit && !!editId;
-
-  if (!main) return;
-
+async function createShow(){
+    if (!main) return;
     
     // --- New Look: White background for main content area ---
     // Change the root variable in <style> to make the content area white (if not already done globally).
@@ -1625,8 +1618,8 @@ async function createShow(opts){
         '<div class="card" style="padding: 24px;">' // Increased padding for more whitespace
         +'<div class="header" style="margin-bottom: 24px; border-bottom: 1px solid var(--border); padding-bottom: 16px;">'
         +'<div>'
-        +'<div class="title" style="font-size: 1.5rem; font-weight: 700;">'+(isEdit ? 'Edit Event' : 'Create New Event')+'</div>'
-+'<div class="muted">'+(isEdit ? 'Update the details below. Newer fields may be blank if they were added after this event was created.' : 'Start setting up your event with core details, categories, and artwork.')+'</div>'
+        +'<div class="title" style="font-size: 1.5rem; font-weight: 700;">Create New Event</div>'
+        +'<div class="muted">Start setting up your event with core details, categories, and artwork.</div>'
         +'</div>'
         +'</div>'
         
@@ -1853,33 +1846,19 @@ async function createShow(opts){
         
         +'</div>' // End main grid
 
-       // --- Action Button(s) ---
-+ (isEdit
-  ? (
-    '<div class="row" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); justify-content: flex-end; align-items:center;">'
-  +   '<div class="row" style="gap:10px; align-items:center;">'
-  +     '<button id="save" class="btn p" style="padding: 10px 20px; font-size: 16px;">Save changes</button>'
-  +     '<a class="btn" href="#" id="goSeating" style="text-decoration:none">Seating map</a>'
-  +     '<a class="btn" href="#" id="goTickets" style="text-decoration:none">Tickets</a>'
-  +     '<div id="err" class="error"></div>'
-  +   '</div>'
-  + '</div>'
-  )
-  : (
-    '<div class="row" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); justify-content: space-between; align-items:center;">'
-  +   '<label id="ai_approval_wrap" style="display:none; align-items:center; gap:10px; font-size:13px; color:#334155;">'
-  +     '<input id="ai_approval" type="checkbox" />'
-  +     'I’ve checked the AI-filled details (blue borders) and I’m happy to proceed.'
-  +   '</label>'
-  +   '<div class="row" style="gap:10px; align-items:center;">'
-  +     '<button id="save" class="btn p" style="padding: 10px 20px; font-size: 16px;">Save Event Details and Add Tickets</button>'
-  +     '<div id="err" class="error"></div>'
-  +   '</div>'
-  + '</div>'
-  )
-)
-+ '</div>';
+        // --- Action Button ---
+        +'<div class="row" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); justify-content: space-between; align-items:center;">'
++  '<label id="ai_approval_wrap" style="display:none; align-items:center; gap:10px; font-size:13px; color:#334155;">'
++    '<input id="ai_approval" type="checkbox" />'
++    'I’ve checked the AI-filled details (blue borders) and I’m happy to proceed.'
++  '</label>'
++  '<div class="row" style="gap:10px; align-items:center;">'
++    '<button id="save" class="btn p" style="padding: 10px 20px; font-size: 16px;">Save Event Details and Add Tickets</button>'
++    '<div id="err" class="error"></div>'
++  '</div>'
++'</div>'
 
+        +'</div>';
     
     // Bind editor and venue picker
     bindWysiwyg(main);
@@ -2148,145 +2127,6 @@ updateCategoryOptions();
                       }
                     }
                   })();
-
-                  // --- Existing show prefill (edit mode) ---
-(function applyExistingShowIfEdit(){
-  try{
-    if (!isEdit || !existingShow) return;
-
-    var item = existingShow || {};
-
-    function isoToLocalInput(iso){
-      if (!iso) return '';
-      var d = new Date(iso);
-      if (isNaN(d.getTime())) return '';
-      var pad = (n) => String(n).padStart(2,'0');
-      return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate())
-        + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
-    }
-
-    // Core
-    if ($('#sh_title')) $('#sh_title').value = item.title || '';
-
-    if ($('#sh_dt') && item.date) $('#sh_dt').value = isoToLocalInput(item.date);
-    if ($('#sh_dt_end') && item.endDate) $('#sh_dt_end').value = isoToLocalInput(item.endDate);
-
-    // Venue
-    var vIn = $('#venue_input');
-    if (vIn){
-      vIn.value = (item.venue && item.venue.name) || item.venueText || '';
-      // keep id if you have it
-      var vid = item.venueId || (item.venue && item.venue.id) || '';
-      if (vid) vIn.dataset.venueId = vid;
-      // mark approved so edit doesn’t block; if they change venue/date, your picker logic will reset approval
-      vIn.dataset.venueApproved = '1';
-    }
-
-    // Type / category (only if present on the show; otherwise leave blank)
-    if (typeof item.eventType === 'string' && item.eventType && $('#event_type_select')){
-      $('#event_type_select').value = item.eventType;
-      // your existing function
-      try{ updateCategoryOptions(); }catch(e){}
-    }
-    if (typeof item.eventCategory === 'string' && item.eventCategory && $('#event_category_select')){
-      $('#event_category_select').value = item.eventCategory;
-    }
-
-    // Optional newer fields (prefill only if present)
-    if ($('#doors_open_time') && item.doorsOpenTime){
-      $('#doors_open_time').value = String(item.doorsOpenTime).slice(0,5);
-    }
-    if ($('#age_guidance') && item.ageGuidance){
-      $('#age_guidance').value = String(item.ageGuidance);
-    }
-
-    // Tags
-    if ($('#tags')){
-      if (Array.isArray(item.tags)) $('#tags').value = item.tags.filter(Boolean).join(', ');
-      else if (typeof item.tags === 'string') $('#tags').value = item.tags;
-    }
-
-    // Accessibility
-    var acc = item.accessibility || null;
-    if (acc && typeof acc === 'object'){
-      if ($('#acc_wheelchair')) $('#acc_wheelchair').checked = !!acc.wheelchair;
-      if ($('#acc_stepfree')) $('#acc_stepfree').checked = !!acc.stepFree;
-      if ($('#acc_hearingloop')) $('#acc_hearingloop').checked = !!acc.hearingLoop;
-      if ($('#acc_toilet')) $('#acc_toilet').checked = !!acc.accessibleToilet;
-      if ($('#acc_more')) $('#acc_more').value = (acc.notes || '');
-    }
-
-    // Description (support different keys)
-    if ($('#desc')){
-      $('#desc').innerHTML =
-        (item.descriptionHtml || item.description || item.descriptionHTML || '').trim();
-    }
-
-    // Main image
-    if ($('#prev_main') && item.imageUrl){
-      $('#prev_main').src = item.imageUrl;
-      $('#prev_main').style.display = 'block';
-    }
-
-    // Additional images (support common shapes)
-    var additional =
-      (Array.isArray(item.additionalImages) ? item.additionalImages : null) ||
-      (Array.isArray(item.additionalImageUrls) ? item.additionalImageUrls : null) ||
-      [];
-
-    if (additional.length && $('#add_previews')){
-      $('#add_previews').innerHTML = '';
-      additional.slice(0,10).forEach(function(url){
-        var imgContainer = document.createElement('div');
-        imgContainer.style.position = 'relative';
-        imgContainer.style.width = '100px';
-        imgContainer.style.height = '100px';
-        imgContainer.style.overflow = 'hidden';
-        imgContainer.style.borderRadius = '6px';
-        imgContainer.dataset.url = url;
-
-        var img = document.createElement('img');
-        img.src = url;
-        img.alt = 'Additional Image';
-        img.style.width = '100%';
-        img.style.height = '100%';
-        img.style.objectFit = 'cover';
-
-        var deleteBtn = document.createElement('button');
-        deleteBtn.textContent = 'x';
-        deleteBtn.className = 'btn';
-        deleteBtn.style.position = 'absolute';
-        deleteBtn.style.top = '4px';
-        deleteBtn.style.right = '4px';
-        deleteBtn.style.width = '24px';
-        deleteBtn.style.height = '24px';
-        deleteBtn.style.padding = '0';
-        deleteBtn.style.borderRadius = '50%';
-        deleteBtn.style.lineHeight = '24px';
-        deleteBtn.style.fontSize = '12px';
-        deleteBtn.style.fontWeight = 'bold';
-        deleteBtn.style.background = 'rgba(255, 255, 255, 0.8)';
-        deleteBtn.style.borderColor = 'rgba(0, 0, 0, 0.1)';
-        deleteBtn.style.cursor = 'pointer';
-
-        deleteBtn.addEventListener('click', function() {
-          imgContainer.remove();
-          try{ updateAllImageUrls(); }catch(e){}
-        });
-
-        imgContainer.appendChild(img);
-        imgContainer.appendChild(deleteBtn);
-        $('#add_previews').appendChild(imgContainer);
-      });
-
-      try{ updateAllImageUrls(); }catch(e){}
-    }
-
-  }catch(e){
-    console.warn('[Edit prefill] failed', e);
-  }
-})();
-
                 } else {
                   vin.dispatchEvent(new Event('input', { bubbles:true }));
                 }
@@ -2406,159 +2246,99 @@ updateCategoryOptions();
     });
 
     // --- Save Logic (Updated to remove ticket-specific fields and include new fields) ---
-   $('#save').addEventListener('click', async function(){
-  var errEl = $('#err');
-  errEl.textContent = '';
-  try{
-    // If AI prefilled this page, force an explicit approval tick (create mode only)
-    if (!isEdit && window.__aiPrefill){
-      var okBox = $('#ai_approval');
-      if (!okBox || !okBox.checked){
-        throw new Error('Please confirm you’ve checked the AI-filled details before continuing.');
-      }
-    }
+    $('#save').addEventListener('click', async function(){
+        var errEl = $('#err');
+        errEl.textContent = '';
+        try{
+                    // If AI prefilled this page, force an explicit approval tick
+            if (window.__aiPrefill){
+              var okBox = $('#ai_approval');
+              if (!okBox || !okBox.checked){
+                throw new Error('Please confirm you’ve checked the AI-filled details before continuing.');
+              }
+            }
 
-    var title = $('#sh_title').value.trim();
-    var dtRaw = $('#sh_dt').value;
-    var dtEndRaw = $('#sh_dt_end') ? $('#sh_dt_end').value : '';
-    var endDateIso = dtEndRaw ? new Date(dtEndRaw).toISOString() : null;
-
-    var venueInput = $('#venue_input');
-    var venueText = venueInput.value.trim();
-    var venueId = venueInput.dataset.venueId || null;
-
-    // Approval rules:
-    // - Create: must pick venue + approve
-    // - Edit: allow venueText-only if venueId missing (older records), but if venueId exists and approval required, enforce it.
-    if (!venueText){
-      throw new Error('Venue is required.');
-    }
-    if (!isEdit){
-      if (!venueId) throw new Error('Please select an existing venue from the list (or create one).');
-      if (venueInput.dataset.venueApproved !== '1') throw new Error('Please approve the venue and date before saving.');
-    }else{
-      if (venueId && venueInput.dataset.venueApproved !== '1'){
-        throw new Error('Please approve the venue and date before saving.');
-      }
-    }
-
-    var imageUrl = ($('#prev_main') && $('#prev_main').src) ? $('#prev_main').src : null;
-    var descHtml = $('#desc').innerHTML.trim();
-
-    var eventType = $('#event_type_select') ? $('#event_type_select').value : '';
-    var eventCategory = $('#event_category_select') ? $('#event_category_select').value : '';
-
-    // Create requires type/category; Edit allows them to be blank (but if one is set, require both)
-    if (!isEdit){
-      if (!eventType || !eventCategory){
-        throw new Error('Event type and category are required.');
-      }
-    }else{
-      if ((eventType && !eventCategory) || (!eventType && eventCategory)){
-        throw new Error('If you set an Event Type, please also choose a Category (and vice versa).');
-      }
-    }
-
-    // New fields (optional)
-    var doorsOpenTime = $('#doors_open_time') ? $('#doors_open_time').value : '';
-    var ageGuidance = $('#age_guidance') ? $('#age_guidance').value : '';
-
-    var accessibility = {
-      wheelchair: $('#acc_wheelchair') ? !!$('#acc_wheelchair').checked : false,
-      stepFree: $('#acc_stepfree') ? !!$('#acc_stepfree').checked : false,
-      hearingLoop: $('#acc_hearingloop') ? !!$('#acc_hearingloop').checked : false,
-      accessibleToilet: $('#acc_toilet') ? !!$('#acc_toilet').checked : false,
-      notes: $('#acc_more') ? $('#acc_more').value.trim() : ''
-    };
-
-    var tags = [];
-    if ($('#tags') && $('#tags').value) {
-      tags = $('#tags').value
-        .split(',')
-        .map(function(s){ return s.trim(); })
-        .filter(Boolean);
-    }
-
-    var additionalImages = [];
-    if ($('#all_image_urls') && $('#all_image_urls').value) {
-      try { additionalImages = JSON.parse($('#all_image_urls').value); } catch(e){}
-    }
-
-    if (!title || !dtRaw || !descHtml || !imageUrl){
-      throw new Error('Title, date/time, description, and a main image are required.');
-    }
-
-    var dateIso = new Date(dtRaw).toISOString();
-
-    var payload = {
-      title: title,
-      date: dateIso,
-      endDate: endDateIso,
-      venueText: venueText,
-      venueId: venueId || null,
-      imageUrl: imageUrl,
-      descriptionHtml: descHtml,
-
-      // Only send these if present (avoids forcing old shows to fill them)
-      eventType: eventType || null,
-      eventCategory: eventCategory || null,
-
-      additionalImages: additionalImages,
-
-      doorsOpenTime: doorsOpenTime || null,
-      ageGuidance: ageGuidance || null,
-      accessibility: accessibility,
-      tags: tags
-    };
-
-    if (isEdit){
-      var r = await j('/admin/shows/' + editId, {
-        method:'PATCH',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify(payload)
-      });
-      if (r && r.ok){
-        alert('Saved');
-      }else{
-        throw new Error((r && r.error) || 'Failed to save');
-      }
-    }else{
-      var showRes = await j('/admin/shows', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify(payload)
-      });
-
-      if (showRes && showRes.error) throw new Error(showRes.error);
-
-      var showId =
-        (showRes && (showRes.id || (showRes.show && showRes.show.id) || (showRes.item && showRes.item.id))) || null;
-
-      if (!showId) throw new Error('Failed to create show (no id returned from server)');
-
-      window.location.href = '/admin/seating-choice/' + showId;
-    }
-
-  }catch(e){
-    errEl.textContent = e.message || String(e);
-  }
-});
-
-// Footer buttons in edit mode
-var goSeatingBtn = $('#goSeating');
-if (goSeatingBtn && isEdit){
-  goSeatingBtn.addEventListener('click', function(e){
-    e.preventDefault();
-    window.location.href = '/admin/seating/builder/preview/' + editId;
-  });
+            var title = $('#sh_title').value.trim();
+            var dtRaw = $('#sh_dt').value;
+            var dtEndRaw = $('#sh_dt_end') ? $('#sh_dt_end').value : '';
+var endDateIso = dtEndRaw ? new Date(dtEndRaw).toISOString() : null;
+            var venueInput = $('#venue_input');
+            var venueText = venueInput.value.trim();
+            var venueId = venueInput.dataset.venueId || null;
+            if (!venueId){
+  throw new Error('Please select an existing venue from the list (or create one).');
 }
-var goTicketsBtn = $('#goTickets');
-if (goTicketsBtn && isEdit){
-  goTicketsBtn.addEventListener('click', function(e){
-    e.preventDefault();
-    go('/admin/ui/shows/' + editId + '/tickets');
-  });
+if (venueInput.dataset.venueApproved !== '1'){
+  throw new Error('Please approve the venue and date before saving.');
 }
+
+            var imageUrl = prevMain.src || null;
+            var descHtml = $('#desc').innerHTML.trim();
+            
+            // New fields
+           var eventType = eventTypeSelect ? eventTypeSelect.value : '';
+var eventCategory = categorySelect ? categorySelect.value : '';
+
+// NEW fields (optional)
+var doorsOpenTime = $('#doors_open_time') ? $('#doors_open_time').value : '';
+var ageGuidance = $('#age_guidance') ? $('#age_guidance').value : '';
+var endTimeNote = $('#end_time_note') ? $('#end_time_note').value.trim() : '';
+
+var accessibility = {
+  wheelchair: $('#acc_wheelchair') ? !!$('#acc_wheelchair').checked : false,
+  stepFree: $('#acc_stepfree') ? !!$('#acc_stepfree').checked : false,
+  hearingLoop: $('#acc_hearingloop') ? !!$('#acc_hearingloop').checked : false,
+  accessibleToilet: $('#acc_toilet') ? !!$('#acc_toilet').checked : false,
+  notes: $('#acc_more') ? $('#acc_more').value.trim() : ''
+};
+
+var tags = [];
+if ($('#tags') && $('#tags').value) {
+  tags = $('#tags').value
+    .split(',')
+    .map(function(s){ return s.trim(); })
+    .filter(Boolean);
+}
+
+var additionalImages = [];
+if (allImageUrls && allImageUrls.value) {
+  try { additionalImages = JSON.parse(allImageUrls.value); } catch(e){}
+}
+
+
+            if (!title || !dtRaw || !venueText || !descHtml || !eventType || !eventCategory || !imageUrl){
+                throw new Error('Title, date/time, venue, description, event type, category, and a main image are required.');
+            }
+            
+            var dateIso = new Date(dtRaw).toISOString();
+            
+            // The logic for first ticket payload is now REMOVED
+            // var firstTicketPayload = null; 
+            
+            var showRes = await j('/admin/shows', {
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({
+  title: title,
+  date: dateIso,
+  endDate: endDateIso,
+  venueText: venueText,
+  venueId: venueId,
+  imageUrl: imageUrl,
+  descriptionHtml: descHtml,
+  eventType: eventType,
+  eventCategory: eventCategory,
+  additionalImages: additionalImages,
+
+  // NEW fields
+  doorsOpenTime: doorsOpenTime || null,
+  ageGuidance: ageGuidance || null,
+  endTimeNote: endTimeNote || null,
+  accessibility: accessibility,
+  tags: tags
+})
+
+            });
 
             if (showRes && showRes.error){
                 throw new Error(showRes.error);
@@ -2926,20 +2706,18 @@ async function listShows(){
   load();
 }
 
- // --- EDIT SHOW ---
-// Always render the latest Create Show UI, but prefilled
-async function editShow(id){
-  var resp;
-  try{
-    resp = await j('/admin/shows/' + id);
-  }catch(e){
+  // --- EDIT SHOW ---
+  async function editShow(id){
+    var resp;
+    try{
+      resp = await j('/admin/shows/' + id);
+    }catch(e){
+      if (!main) return;
+      main.innerHTML = '<div class="card"><div class="error">Failed to load show: '+(e.message||e)+'</div></div>';
+      return;
+    }
+    var item = resp.item || {};
     if (!main) return;
-    main.innerHTML = '<div class="card"><div class="error">Failed to load show: '+(e.message||e)+'</div></div>';
-    return;
-  }
-  var item = resp.item || {};
-  return createShow({ mode:'edit', showId:id, existing:item });
-}
 
     main.innerHTML =
       '<div class="card">'
