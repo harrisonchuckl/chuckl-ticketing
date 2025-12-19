@@ -6,15 +6,14 @@
   "engines": {
     "node": ">=20"
   },
-"scripts": {
-  "prebuild": "npm run prisma:generate",
-  "build": "tsc -p tsconfig.json",
-  "prestart": "npm run prisma:migrate",
-  "start": "node dist/start.js",
-  "dev": "node --watch --loader ts-node/esm src/server.ts",
-  "prisma:generate": "prisma generate --schema=prisma/schema.prisma",
-  "prisma:migrate": "prisma migrate deploy --schema=prisma/schema.prisma"
-},
+  "scripts": {
+    "prebuild": "npm run prisma:generate",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/start.js",
+    "dev": "node --watch --loader ts-node/esm src/server.ts",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate deploy"
+  },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.929.0",
     "@aws-sdk/lib-storage": "^3.929.0",
