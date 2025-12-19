@@ -1,9 +1,11 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 
 type Venue = { id: string; name: string; city?: string | null };
 
 export default function CreateShow() {
+  const nav = useNavigate();
 
   const [title, setTitle] = useState("");
   const [venueQ, setVenueQ] = useState("");
@@ -13,7 +15,6 @@ export default function CreateShow() {
   const [description, setDescription] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [seatingFlow, setSeatingFlow] = useState<"UNALLOCATED" | "ALLOCATED">("UNALLOCATED");
 
   useEffect(() => {
     let alive = true;
@@ -39,11 +40,8 @@ export default function CreateShow() {
         description: description.trim() || undefined
       });
 
- if (seatingFlow === "ALLOCATED") {
-        window.location.href = `/admin/seating/builder/preview/${showId}?layout=blank`;
-      } else {
-        window.location.href = `/admin/seating/unallocated/${showId}`;
-      }
+      // jump straight to ticket setup, pass venueId for seating suggestions
+      nav(`/events/${showId}/tickets/setup?venueId=${encodeURIComponent(venueId)}`, { replace: true });
     } catch (e: any) {
       setErr(e?.message || "Failed to save show");
     } finally {
@@ -112,27 +110,9 @@ export default function CreateShow() {
 
           {err && <p style={{ color: "crimson" }}>{err}</p>}
 
-         <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              Next step
-              <select
-                value={seatingFlow}
-                onChange={(e) => setSeatingFlow(e.target.value as "UNALLOCATED" | "ALLOCATED")}
-                disabled={saving}
-              >
-                <option value="UNALLOCATED">Save Show and Add Unallocated Seating</option>
-                <option value="ALLOCATED">Save Show and Add Allocated Seating</option>
-              </select>
-            </label>
-
-            <button type="submit" disabled={!canSave || saving}>
-              {saving
-                ? "Saving…"
-                : seatingFlow === "ALLOCATED"
-                ? "Save Show and Add Allocated Seating"
-                : "Save Show and Add Unallocated Seating"}
-            </button>
-          </div>
+          <button type="submit" disabled={!canSave || saving}>
+            {saving ? "Saving…" : "Save Show and Add Tickets"}
+          </button>
         </div>
       </form>
     </main>
