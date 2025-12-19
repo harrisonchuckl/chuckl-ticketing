@@ -35,8 +35,7 @@ router.get('/shows/:id/summary', async (req, res) => {
 router.post('/shows/:id/ticket-types', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, pricePence, available } = req.body || {};
-    if (!name || pricePence == null) {
+       const { name, pricePence, available, onSaleAt, offSaleAt } = req.body || {};
       return res.status(400).json({ ok: false, message: 'name and pricePence required' });
     }
     const tt = await prisma.ticketType.create({
@@ -44,6 +43,8 @@ router.post('/shows/:id/ticket-types', async (req, res) => {
         name: String(name),
         pricePence: Number(pricePence),
         available: available == null ? null : Number(available),
+         onSaleAt: onSaleAt ? new Date(onSaleAt) : null,
+        offSaleAt: offSaleAt ? new Date(offSaleAt) : null,
         showId: String(id)
       }
     });
@@ -59,13 +60,15 @@ router.post('/shows/:id/ticket-types', async (req, res) => {
 router.patch('/ticket-types/:ttId', async (req, res) => {
   try {
     const { ttId } = req.params;
-    const { name, pricePence, available } = req.body || {};
+      const { name, pricePence, available, onSaleAt, offSaleAt } = req.body || {};
     const updated = await prisma.ticketType.update({
       where: { id: String(ttId) },
       data: {
         ...(name !== undefined ? { name: String(name) } : {}),
         ...(pricePence !== undefined ? { pricePence: Number(pricePence) } : {}),
-        ...(available !== undefined ? { available: available == null ? null : Number(available) } : {})
+               ...(available !== undefined ? { available: available == null ? null : Number(available) } : {}),
+        ...(onSaleAt !== undefined ? { onSaleAt: onSaleAt ? new Date(onSaleAt) : null } : {}),
+        ...(offSaleAt !== undefined ? { offSaleAt: offSaleAt ? new Date(offSaleAt) : null } : {})
       }
     });
     res.json({ ok: true, ticketType: updated });
