@@ -1,15 +1,26 @@
 // backend/src/routes/admin-ui.ts
+import path from "path";
+import { fileURLToPath } from "url";
 import { Router, json } from "express";
 import { requireAdminOrOrganiser } from "../lib/authz.js";
 
 const router = Router();
 
-// Public login page (must be defined BEFORE the /ui/* catch-all)
-router.get("/ui/login", (req, res) => {
-  res.set("Cache-Control", "no-store");
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
+// ✅ Serve the brand logo from the admin router (no guessing about /public mounting)
+router.get("/ui/brand-logo", (_req, res) => {
+  res.set("Cache-Control", "public, max-age=86400");
+  res.sendFile(path.join(__dirname, "../../public/TixAll on White Background.png"));
+});
+
+// ✅ Login page (must be inside a route so req/res exist)
+router.get("/ui/login", (req, res) => {
   const brandName = String(process.env.PUBLIC_BRAND_NAME || "TixAll").trim();
-  const logoUrl = String(process.env.PUBLIC_BRAND_LOGO_URL || "").trim();
+  const logoUrl = String(
+    process.env.PUBLIC_BRAND_LOGO_URL || "/admin/ui/brand-logo"
+  ).trim();
   const homeHref = String(process.env.PUBLIC_BRAND_HOME_HREF || "/public").trim();
 
   const error = typeof req.query.error === "string" ? req.query.error : "";
@@ -665,11 +676,11 @@ router.get(
     <a class="hdr-brand" href="/admin/ui/home" data-view="/admin/ui/home">
       <!-- NOTE: spaces must be URL-encoded -->
       <img
-        class="hdr-logo"
-        src="/public/TixAll%20on%20White%20Background.png"
-        alt="TIXL"
-        onerror="this.style.display='none';"
-      />
+  class="hdr-logo"
+  src="/admin/ui/brand-logo"
+  alt="TixAll"
+/>
+
     </a>
 
     <div class="hdr-right">
