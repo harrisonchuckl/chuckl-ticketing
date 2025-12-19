@@ -85,6 +85,8 @@ const items = await prisma.show.findMany({
         eventCategory: true,
         status: true,
         publishedAt: true,
+    usesAllocatedSeating: true,
+
         venue: { select: { id: true, name: true, city: true } },
       },
     });
@@ -172,9 +174,9 @@ organiserId: isOrganiser(req) ? requireUserId(req) : null,
 /** GET /admin/shows/:id */
 router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
   try {
-    const s = await prisma.show.findFirst({
-  where: showWhereForRead(req, String(req.params.id)),
-       select: {
+       const s = await prisma.show.findFirst({
+      where: showWhereForRead(req, String(req.params.id)),
+      select: {
         id: true,
         title: true,
         description: true,
@@ -186,7 +188,6 @@ router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
         status: true,
         publishedAt: true,
         venue: { select: { id: true, name: true, city: true } },
-      },
 
         ticketTypes: {
           select: { id: true, name: true, pricePence: true, available: true },
@@ -194,6 +195,7 @@ router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
         },
       },
     });
+
     if (!s) return res.status(404).json({ ok: false, error: "Not found" });
 
     res.json({ ok: true, item: { ...s, venueText: s.venue?.name ?? "" } });
