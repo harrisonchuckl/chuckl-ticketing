@@ -188,6 +188,11 @@ model TicketType {
   name       String
   pricePence Int
 
+  /// When this ticket should first be available to buy
+  onSaleAt  DateTime?
+  /// When this ticket should stop being available
+  offSaleAt DateTime?
+
   /// Numeric availability used by routes (e.g. comparisons like > 0)
   available Int?
 
