@@ -1848,15 +1848,24 @@ async function createShow(){
 
         // --- Action Button ---
         +'<div class="row" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); justify-content: space-between; align-items:center;">'
-+  '<label id="ai_approval_wrap" style="display:none; align-items:center; gap:10px; font-size:13px; color:#334155;">'
++  '<label id="ai_approval_wrap" style="display:none; align-items:center; gap:10px;; font-size:13px; color:#334155;">'
 +    '<input id="ai_approval" type="checkbox" />'
 +    'I’ve checked the AI-filled details (blue borders) and I’m happy to proceed.'
 +  '</label>'
-+  '<div class="row" style="gap:10px; align-items:center;">'
-+    '<button id="save" class="btn p" style="padding: 10px 20px; font-size: 16px;">Save Event Details and Add Tickets</button>'
+
++  '<div class="row" style="gap:10px; align-items:center; position:relative;">'
++    '<button id="save" class="btn p" style="padding: 10px 20px; font-size: 16px;">Save Show and Add Unallocated Seating</button>'
++    '<button id="save_dd_btn" class="btn" type="button" aria-label="Change next step" style="padding: 10px 12px; font-size: 16px; width: 44px;">▾</button>'
+
++    '<div id="save_dd" style="display:none; position:absolute; right:0; top:44px; background:#fff; border:1px solid var(--border); border-radius:12px; box-shadow: var(--shadow); overflow:hidden; min-width:320px; z-index:50;">'
++      '<button type="button" data-mode="UNALLOCATED" class="btn" style="width:100%; justify-content:flex-start; border:0; border-bottom:1px solid var(--border); border-radius:0; padding:12px 14px;">Save Show and Add Unallocated Seating</button>'
++      '<button type="button" data-mode="ALLOCATED" class="btn" style="width:100%; justify-content:flex-start; border:0; border-radius:0; padding:12px 14px;">Save Show and Add Allocated Seating</button>'
++    '</div>'
+
 +    '<div id="err" class="error"></div>'
 +  '</div>'
 +'</div>'
+
 
         +'</div>';
     
@@ -2245,7 +2254,44 @@ updateCategoryOptions();
         fileAdd.value = ''; // Reset file input so change event fires if the same file is selected again
     });
 
-    // --- Save Logic (Updated to remove ticket-specific fields and include new fields) ---
+// --- Save Logic (Updated to remove ticket-specific fields and include new fields) ---
+
+    // Seating mode chooser (defaults to UNALLOCATED)
+    var seatingMode = 'UNALLOCATED';
+
+    function setSeatingMode(mode){
+      seatingMode = (mode === 'ALLOCATED') ? 'ALLOCATED' : 'UNALLOCATED';
+      var saveBtn = $('#save');
+      if (saveBtn){
+        saveBtn.textContent = (seatingMode === 'ALLOCATED')
+          ? 'Save Show and Add Allocated Seating'
+          : 'Save Show and Add Unallocated Seating';
+      }
+    }
+    setSeatingMode('UNALLOCATED');
+
+    (function bindSaveDropdown(){
+      var ddBtn = $('#save_dd_btn');
+      var dd = $('#save_dd');
+      if (!ddBtn || !dd) return;
+
+      ddBtn.addEventListener('click', function(e){
+        e.preventDefault(); e.stopPropagation();
+        dd.style.display = (dd.style.display === 'block') ? 'none' : 'block';
+      });
+
+      dd.querySelectorAll('[data-mode]').forEach(function(b){
+        b.addEventListener('click', function(e){
+          e.preventDefault();
+          setSeatingMode(b.getAttribute('data-mode'));
+          dd.style.display = 'none';
+        });
+      });
+
+      document.addEventListener('click', function(){ dd.style.display = 'none'; });
+      dd.addEventListener('click', function(e){ e.stopPropagation(); });
+    })();
+
     $('#save').addEventListener('click', async function(){
         var errEl = $('#err');
         errEl.textContent = '';
@@ -2318,7 +2364,7 @@ if (allImageUrls && allImageUrls.value) {
             var showRes = await j('/admin/shows', {
                 method:'POST',
                 headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({
+               body: JSON.stringify({
   title: title,
   date: dateIso,
   endDate: endDateIso,
@@ -2329,6 +2375,9 @@ if (allImageUrls && allImageUrls.value) {
   eventType: eventType,
   eventCategory: eventCategory,
   additionalImages: additionalImages,
+
+  // NEW: capture which flow they chose
+  usesAllocatedSeating: seatingMode === 'ALLOCATED',
 
   // NEW fields
   doorsOpenTime: doorsOpenTime || null,
@@ -2354,8 +2403,12 @@ if (allImageUrls && allImageUrls.value) {
                 throw new Error('Failed to create show (no id returned from server)');
             }
             
-            // NEW: Redirect to the tickets page or seating choice, as first ticket creation is removed
-            window.location.href = '/admin/seating-choice/' + showId; 
+           // NEW: Skip seating-choice page and go straight where the organiser chose
+if (seatingMode === 'ALLOCATED'){
+  window.location.href = '/admin/seating/builder/preview/' + showId + '?layout=blank';
+} else {
+  window.location.href = '/admin/seating/unallocated/' + showId;
+}
 
         }catch(e){
             errEl.textContent = e.message || String(e);
