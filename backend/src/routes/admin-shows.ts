@@ -104,8 +104,7 @@ const items = await prisma.show.findMany({
 
 /** POST /admin/shows — create (auto-creates venue if needed) */
 router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
-  try {
-    const {
+  const {
       title,
       date,
       endDate,
@@ -121,6 +120,7 @@ router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
       accessibility,
       tags,
       additionalImages,
+      usesAllocatedSeating,
     } = req.body || {};
     if (!title || !date || !(venueId || venueText) || !descriptionHtml) {
       return res.status(400).json({ ok: false, error: "Missing required fields" });
@@ -147,8 +147,8 @@ router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
 organiserId: isOrganiser(req) ? requireUserId(req) : null,
         ...(endDate ? { endDate: new Date(endDate) } : {}),
         imageUrl: imageUrl ?? null,
-        description: descriptionHtml ?? null,
-        venueId: finalVenueId,
+        description: descriptionHtml ?? null,        venueId: finalVenueId,
+        usesAllocatedSeating: !!usesAllocatedSeating,
         status: ShowStatus.DRAFT,
         eventType: asNullableString(eventType),
         eventCategory: asNullableString(eventCategory),
@@ -174,24 +174,20 @@ router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
   try {
     const s = await prisma.show.findFirst({
   where: showWhereForRead(req, String(req.params.id)),
-  select: {
+       select: {
         id: true,
         title: true,
         description: true,
         imageUrl: true,
         date: true,
-        endDate: true,
         eventType: true,
         eventCategory: true,
-        doorsOpenTime: true,
-        ageGuidance: true,
-        endTimeNote: true,
-        accessibility: true,
-        tags: true,
-        additionalImages: true,
+        usesAllocatedSeating: true,
         status: true,
         publishedAt: true,
         venue: { select: { id: true, name: true, city: true } },
+      },
+
         ticketTypes: {
           select: { id: true, name: true, pricePence: true, available: true },
           orderBy: { createdAt: "asc" },
@@ -311,7 +307,7 @@ router.delete("/ticket-types/:ttId", requireAdminOrOrganiser, async (req, res) =
 /** PATCH /admin/shows/:id */
 router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
   try {
-    const {
+   const {
       title,
       date,
       endDate,
@@ -328,6 +324,7 @@ router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
       accessibility,
       tags,
       additionalImages,
+      usesAllocatedSeating,
     } = req.body || {};
 
         // Ownership check: organisers can only edit their own shows
@@ -355,6 +352,7 @@ router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
         ...(imageUrl !== undefined ? { imageUrl: imageUrl ?? null } : {}),
         ...(descriptionHtml !== undefined ? { description: descriptionHtml ?? null } : {}),
 ...(venueId !== undefined || venueText !== undefined ? { venueId: finalVenueId ?? null } : {}),
+        ...(usesAllocatedSeating !== undefined ? { usesAllocatedSeating: !!usesAllocatedSeating } : {}),
         ...(eventType !== undefined ? { eventType: asNullableString(eventType) } : {}),
         ...(eventCategory !== undefined ? { eventCategory: asNullableString(eventCategory) } : {}),
         ...(doorsOpenTime !== undefined ? { doorsOpenTime: asNullableString(doorsOpenTime) } : {}),
