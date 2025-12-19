@@ -625,8 +625,28 @@ function renderShell(options: {
  * STEP 1 (of 2) — Unallocated vs Allocated seating
  * Route: GET /admin/seating-choice/:showId
  */
-router.get("/seating-choice/:showId", (req, res) => {
+router.get("/seating-choice/:showId", async (req, res) => {
   const { showId } = req.params;
+
+  // If the show already has a seating mode saved, skip this page entirely.
+  try {
+    const show = await prisma.show.findUnique({
+      where: { id: showId },
+      select: { usesAllocatedSeating: true },
+    });
+
+    // Only auto-skip when the value is explicitly set (true/false).
+    if (show && typeof show.usesAllocatedSeating === "boolean") {
+      return res.redirect(
+        302,
+        show.usesAllocatedSeating
+          ? `/admin/seating/builder/preview/${showId}?layout=blank`
+          : `/admin/seating/unallocated/${showId}`
+      );
+    }
+  } catch (e) {
+    console.error("seating-choice: failed to look up show", e);
+  }
 
   const body = `
     <section class="choice-grid">
