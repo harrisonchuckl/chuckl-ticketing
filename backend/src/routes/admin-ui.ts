@@ -1852,8 +1852,15 @@ async function createShow(){
 +    '<input id="ai_approval" type="checkbox" />'
 +    'I’ve checked the AI-filled details (blue borders) and I’m happy to proceed.'
 +  '</label>'
-+  '<div class="row" style="gap:10px; align-items:center;">'
-+    '<button id="save" class="btn p" style="padding: 10px 20px; font-size: 16px;">Save Event Details and Add Tickets</button>'
++ '<div class="row" style="gap:10px; align-items:center; flex-wrap:wrap;">'
++    '<label class="muted" style="display:flex; flex-direction:column; gap:6px; font-weight:600;">'
++      'After saving'
++      '<select id="seating_flow" class="ctl" style="min-width: 280px;">'
++        '<option value="unallocated">Save Show and Add Unallocated Seating</option>'
++        '<option value="allocated">Save Show and Add Allocated Seating</option>'
++      '</select>'
++    '</label>'
++    '<button id="save" class="btn p" style="padding: 10px 20px; font-size: 16px;">Save Show and Continue</button>'
 +    '<div id="err" class="error"></div>'
 +  '</div>'
 +'</div>'
@@ -1863,6 +1870,7 @@ async function createShow(){
     // Bind editor and venue picker
     bindWysiwyg(main);
 mountVenuePicker($('#venue_input'), $('#sh_dt'), { requireApproval: true });
+    const seatingFlowSelect = $('#seating_flow');
 
     // --- Category Filtering Logic ---
    const eventTypeSelect = $('#event_type_select');
@@ -2022,8 +2030,7 @@ updateCategoryOptions();
 
             var saveBtn = $('#save');
             if (saveBtn){
-              saveBtn.textContent = 'I’ve checked the AI-filled details — Save and add tickets';
-            }
+            saveBtn.textContent = 'I’ve checked the AI-filled details — Save and continue';
 
             // Bind clear-on-edit for key fields
             bindAiClearOnUserEdit($('#sh_title'));
@@ -2354,9 +2361,12 @@ if (allImageUrls && allImageUrls.value) {
                 throw new Error('Failed to create show (no id returned from server)');
             }
             
-            // NEW: Redirect to the tickets page or seating choice, as first ticket creation is removed
-            window.location.href = '/admin/seating-choice/' + showId; 
-
+          var flow = seatingFlowSelect ? seatingFlowSelect.value : 'unallocated';
+            if (flow === 'allocated') {
+              window.location.href = '/admin/seating/builder/preview/' + showId + '?layout=blank';
+            } else {
+              window.location.href = '/admin/seating/unallocated/' + showId;
+            }
         }catch(e){
             errEl.textContent = e.message || String(e);
         }
