@@ -1,7 +1,19 @@
 // backend/src/routes/seating-choice.ts
 import { Router } from "express";
+import { PrismaClient } from "@prisma/client";
 
+const prisma = new PrismaClient();
 const router = Router();
+
+function escapeHtml(str: string | null | undefined) {
+  if (!str) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 /**
  * Simple shared shell so both pages feel like part of the same flow.
@@ -438,6 +450,149 @@ function renderShell(options: {
       border: 2px solid #93c5fd;
       background: #eff6ff;
     }
+
+    /* --- Unallocated ticket editor --- */
+    .tickets-card {
+      background: #ffffff;
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-xl);
+      padding: 24px;
+      box-shadow: var(--card-shadow);
+    }
+
+    .tickets-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: center;
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+    }
+
+    .tickets-header h2 {
+      margin: 6px 0 4px;
+      font-size: 20px;
+      letter-spacing: -0.01em;
+    }
+
+    .eyebrow {
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    .subtext {
+      margin: 0;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    .show-chip {
+      padding: 10px 14px;
+      background: var(--accent-soft);
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--card-border);
+      display: inline-flex;
+      flex-direction: column;
+      min-width: 220px;
+    }
+
+    .chip-title {
+      font-weight: 650;
+      font-size: 14px;
+    }
+
+    .chip-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .tickets-table {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .table-row {
+      display: grid;
+      grid-template-columns: 1.2fr 0.6fr 0.6fr 0.8fr 0.8fr 120px;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 12px;
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-lg);
+      background: #f8fbff;
+    }
+
+    .table-head {
+      background: transparent;
+      border: none;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      padding-top: 0;
+      padding-bottom: 0;
+    }
+
+    .input {
+      width: 100%;
+      padding: 9px 10px;
+      border-radius: 10px;
+      border: 1px solid #d7dfef;
+      font-size: 14px;
+      background: #fff;
+    }
+
+    .row-actions {
+      text-align: right;
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .tickets-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 6px;
+    }
+
+    .action-spacer { flex: 1; }
+
+    .primary-button {
+      border-radius: var(--radius-pill);
+      border: none;
+      padding: 10px 16px;
+      background: #2563eb;
+      color: #fff;
+      font-weight: 650;
+      cursor: pointer;
+      box-shadow: 0 10px 20px rgba(37, 99, 235, 0.25);
+    }
+
+    .primary-button:hover { background: #1d4ed8; }
+
+    .status-row {
+      margin-top: 10px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .status-row[data-tone="success"] { color: #0f9f6e; }
+    .status-row[data-tone="error"] { color: #dc2626; }
+
+    .empty {
+      padding: 12px;
+      background: #f8fafc;
+      border: 1px dashed var(--card-border);
+      border-radius: var(--radius-lg);
+      color: var(--text-muted);
+      text-align: center;
+    }
   </style>
 </head>
 <body>
@@ -467,7 +622,7 @@ function renderShell(options: {
 }
 
 /**
- * STEP 1 (of 4) — Unallocated vs Allocated seating
+ * STEP 1 (of 2) — Unallocated vs Allocated seating
  * Route: GET /admin/seating-choice/:showId
  */
 router.get("/seating-choice/:showId", (req, res) => {
@@ -538,7 +693,7 @@ router.get("/seating-choice/:showId", (req, res) => {
             if (choice === "unallocated") {
               window.location.href = "/admin/seating/unallocated/" + showId;
             } else if (choice === "allocated") {
-              window.location.href = "/admin/seating/layout-wizard/" + showId;
+              window.location.href = "/admin/seating/builder/preview/" + showId + "?layout=blank";
             }
           });
         });
@@ -549,7 +704,7 @@ router.get("/seating-choice/:showId", (req, res) => {
   const html = renderShell({
     title: "How do you want to sell seats for this event?",
     body,
-    stepLabel: "Step 1 of 4 · Seating style",
+    stepLabel: "Step 1 of 2 · Seating style",
     showId,
   });
 
@@ -689,17 +844,275 @@ router.get("/seating/layout-wizard/:showId", (req, res) => {
 });
 
 /**
- * STEP 1 — UNALLOCATED stub
+ * STEP 2 — Unallocated tickets editor
  * Route: GET /admin/seating/unallocated/:showId
- * (For now, just a placeholder until we plug in the ticket-types screen.)
  */
-router.get("/seating/unallocated/:showId", (req, res) => {
+router.get("/seating/unallocated/:showId", async (req, res) => {
   const { showId } = req.params;
-  res.status(200).send({
-    message:
-      "Unallocated seating setup page stub. This will lead to ticket-type creation for show " +
+
+  try {
+    const show = await prisma.show.findUnique({
+      where: { id: showId },
+      include: {
+        venue: { select: { name: true, city: true, capacity: true } },
+        ticketTypes: { orderBy: { createdAt: "asc" } },
+      },
+    });
+
+    if (!show) {
+      return res.status(404).send("Show not found");
+    }
+
+    const initialTickets = (show.ticketTypes || []).map((t) => ({
+      id: t.id,
+      name: t.name,
+      price: (t.pricePence || 0) / 100,
+      available: t.available == null ? "" : String(t.available),
+      onSaleAt: t.onSaleAt ? new Date(t.onSaleAt).toISOString() : "",
+      offSaleAt: t.offSaleAt ? new Date(t.offSaleAt).toISOString() : "",
+    }));
+
+    const showMeta = {
+      id: show.id,
+      title: show.title || "Untitled show",
+      date: show.date ? new Date(show.date).toISOString() : null,
+      venue: show.venue
+        ? {
+            name: show.venue.name,
+            city: show.venue.city,
+            capacity: show.venue.capacity ?? null,
+          }
+        : null,
+    };
+
+    const body = `
+      <section class="tickets-card">
+        <header class="tickets-header">
+          <div>
+            <div class="eyebrow">Unallocated seating</div>
+            <h2>Create general admission tickets</h2>
+            <p class="subtext">Set ticket names, prices, allocations and on/off sale windows before publishing.</p>
+          </div>
+          <div class="show-chip">
+            <span class="chip-title">${escapeHtml(show.title || "Untitled show")}</span>
+            ${show.venue ? `<span class="chip-meta">${escapeHtml(show.venue.name)}${show.venue.city ? " · " + escapeHtml(show.venue.city) : ""}</span>` : ""}
+          </div>
+        </header>
+
+        <div class="tickets-table" id="tickets-table"></div>
+
+        <div class="tickets-actions">
+          <button class="ghost-button" type="button" id="add-ticket">+ Add ticket</button>
+          <div class="action-spacer"></div>
+          <button class="ghost-button" type="button" id="save-tickets">Save tickets</button>
+          <button class="primary-button" type="button" id="publish">Create &amp; publish show</button>
+        </div>
+        <div class="status-row" id="status-row"></div>
+      </section>
+
+      <script>
+        (function () {
+          var showId = ${JSON.stringify(showId)};
+          var initialTickets = ${JSON.stringify(initialTickets)};
+          var showMeta = ${JSON.stringify(showMeta)};
+
+          var tickets = (initialTickets || []).map(function (t) {
+            return Object.assign({}, t);
+          });
+          var table = document.getElementById("tickets-table");
+          var statusRow = document.getElementById("status-row");
+          var defaultAllocation = (showMeta && showMeta.venue && showMeta.venue.capacity) || "";
+
+          function isoToInput(val) {
+            if (!val) return "";
+            try {
+              return new Date(val).toISOString().slice(0, 16);
+            } catch (e) {
+              return "";
+            }
+          }
+
+          function renderTickets() {
+            if (!table) return;
+            if (!tickets.length) {
+              table.innerHTML = '<div class="empty">No tickets yet. Add your first ticket.</div>';
+              return;
+            }
+
+            table.innerHTML = '';
+            var header = document.createElement('div');
+            header.className = 'table-row table-head';
+            header.innerHTML = '<div>Name</div><div>Price (£)</div><div>Allocation</div><div>On sale</div><div>Off sale</div><div></div>';
+            table.appendChild(header);
+
+            tickets.forEach(function (t, idx) {
+              var row = document.createElement('div');
+              row.className = 'table-row';
+
+              row.innerHTML = \`
+                <div><input class="input" value="\${t.name || ''}" data-field="name" data-idx="\${idx}" placeholder="Ticket name" /></div>
+                <div><input class="input" value="\${t.price ?? ''}" data-field="price" data-idx="\${idx}" type="number" min="0" step="0.01" placeholder="0.00" /></div>
+                <div><input class="input" value="\${t.available ?? ''}" data-field="available" data-idx="\${idx}" type="number" min="0" placeholder="Auto" /></div>
+                <div><input class="input" value="\${isoToInput(t.onSaleAt)}" data-field="onSaleAt" data-idx="\${idx}" type="datetime-local" /></div>
+                <div><input class="input" value="\${isoToInput(t.offSaleAt)}" data-field="offSaleAt" data-idx="\${idx}" type="datetime-local" /></div>
+                <div class="row-actions">
+                  <button class="ghost-button" data-action="delete" data-idx="\${idx}" type="button">Remove</button>
+                </div>
+              \`;
+
+              row.querySelectorAll('input').forEach(function (input) {
+                input.addEventListener('input', function () {
+                  var index = Number(input.getAttribute('data-idx'));
+                  var field = input.getAttribute('data-field');
+                  if (!field || Number.isNaN(index)) return;
+                  tickets[index][field] = input.value;
+                });
+              });
+
+              var delBtn = row.querySelector('[data-action="delete"]');
+              if (delBtn) {
+                delBtn.addEventListener('click', function () {
+                  removeTicket(idx);
+                });
+              }
+
+              table.appendChild(row);
+            });
+          }
+
+          function showStatus(msg, tone) {
+            if (!statusRow) return;
+            statusRow.textContent = msg || '';
+            statusRow.setAttribute('data-tone', tone || '');
+          }
+
+          async function jsonRequest(url, options) {
+            var res = await fetch(url, options || {});
+            if (!res.ok) {
+              var text = '';
+              try {
+                var data = await res.json();
+                text = data?.message || data?.error || res.statusText;
+              } catch (e) {
+                text = res.statusText;
+              }
+              throw new Error(text || 'Request failed');
+            }
+            try {
+              return await res.json();
+            } catch (e) {
+              return null;
+            }
+          }
+
+          function removeTicket(idx) {
+            var t = tickets[idx];
+            tickets.splice(idx, 1);
+            renderTickets();
+            if (t && t.id) {
+              fetch('/admin/ticket-types/' + t.id, { method: 'DELETE', credentials: 'include' }).catch(function () {});
+            }
+          }
+
+          function toPayload(t) {
+            var pricePence = Math.round(Number(t.price || 0) * 100);
+            var available = t.available === '' || t.available == null ? null : Number(t.available);
+            return {
+              name: (t.name || '').trim(),
+              pricePence: pricePence,
+              available: Number.isFinite(available) ? available : null,
+              onSaleAt: t.onSaleAt ? new Date(t.onSaleAt).toISOString() : null,
+              offSaleAt: t.offSaleAt ? new Date(t.offSaleAt).toISOString() : null,
+            };
+          }
+
+          async function saveTickets() {
+            showStatus('Saving tickets…');
+            try {
+              for (var i = 0; i < tickets.length; i++) {
+                var t = tickets[i];
+                var payload = toPayload(t);
+                if (!payload.name) {
+                  showStatus('Ticket name is required for all rows.', 'error');
+                  return;
+                }
+
+                if (t.id) {
+                  await jsonRequest('/admin/ticket-types/' + t.id, {
+                    method: 'PATCH',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                  });
+                } else {
+                  var data = await jsonRequest('/admin/shows/' + showId + '/ticket-types', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                  });
+                  if (data && data.ticketType && data.ticketType.id) {
+                    tickets[i].id = data.ticketType.id;
+                  }
+                }
+              }
+              showStatus('Tickets saved.', 'success');
+              renderTickets();
+              return true;
+            } catch (err) {
+              showStatus(err && err.message ? err.message : 'Failed to save tickets', 'error');
+              console.error(err);
+              throw err;
+            }
+          }
+
+          async function publishShow() {
+            try {
+              await saveTickets();
+              showStatus('Publishing…');
+              await jsonRequest('/admin/shows/' + showId, {
+                method: 'PATCH',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'LIVE' }),
+              });
+              showStatus('Show published with unallocated tickets.', 'success');
+            } catch (err) {
+              showStatus(err && err.message ? err.message : 'Publish failed', 'error');
+              console.error(err);
+            }
+          }
+
+          var addBtn = document.getElementById('add-ticket');
+          if (addBtn) {
+            addBtn.addEventListener('click', function () {
+              tickets.push({ name: '', price: '', available: defaultAllocation, onSaleAt: '', offSaleAt: '' });
+              renderTickets();
+            });
+          }
+
+          var saveBtn = document.getElementById('save-tickets');
+          if (saveBtn) saveBtn.addEventListener('click', function () { saveTickets(); });
+          var publishBtn = document.getElementById('publish');
+          if (publishBtn) publishBtn.addEventListener('click', function () { publishShow(); });
+
+          renderTickets();
+        })();
+      </script>
+    `;
+
+    const html = renderShell({
+      title: "Create unallocated tickets",
+      body,
+      stepLabel: "Step 2 of 2 · Unallocated tickets",
       showId,
-  });
+    });
+
+    res.status(200).send(html);
+  } catch (e) {
+    console.error("Error rendering unallocated page", e);
+    res.status(500).send("Failed to load unallocated ticket setup");
+  }
 });
 
 /**
