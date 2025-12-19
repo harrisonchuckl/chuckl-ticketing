@@ -2362,149 +2362,349 @@ if (allImageUrls && allImageUrls.value) {
         }
     });
 }
-  // --- LIST SHOWS ---
-  async function listShows(){
-    if (!main) return;
-    main.innerHTML =
-      '<div class="card">'
-        +'<div class="header">'
+ // --- LIST SHOWS ---
+async function listShows(){
+  if (!main) return;
+
+  main.innerHTML =
+    '<div class="card">'
+      +'<div class="header">'
+        +'<div>'
           +'<div class="title">All events</div>'
-          +'<button id="refresh" class="btn">Refresh</button>'
+          +'<div class="muted" style="margin-top:4px">Search, filter by status/time, or narrow by date range.</div>'
         +'</div>'
-        +'<table>'
-          +'<thead><tr>'
-            +'<th>Title</th><th>When</th><th>Venue</th>'
-            +'<th>Total allocation</th><th>Gross face</th><th>Status</th><th></th>'
-          +'</tr></thead>'
-          +'<tbody id="tbody"></tbody>'
-        +'</table>'
-      +'</div>';
+        +'<button id="refresh" class="btn">Refresh</button>'
+      +'</div>'
 
-    async function load(){
-      var tb = $('#tbody');
-      tb.innerHTML = '<tr><td colspan="7" class="muted">Loading…</td></tr>';
-      try{
-        var data = await j('/admin/shows');
-        var items = data.items || [];
-        if (!items.length){
-          tb.innerHTML = '<tr><td colspan="7" class="muted">No shows yet</td></tr>';
-          return;
-        }
-        tb.innerHTML = items.map(function(s){
-          var when = s.date
-            ? new Date(s.date).toLocaleString('en-GB', { dateStyle:'short', timeStyle:'short' })
-            : '';
-          var total = (s._alloc && s._alloc.total) || 0;
-          var sold  = (s._alloc && s._alloc.sold) || 0;
-          var hold  = (s._alloc && s._alloc.hold) || 0;
-          var avail = Math.max(total - sold - hold, 0);
-          var pct   = total ? Math.round((sold / total) * 100) : 0;
-          var bar   = '<div style="background:#e5e7eb;height:6px;border-radius:999px;overflow:hidden;width:140px">'
-                    +'<div style="background:#111827;height:6px;width:'+pct+'%"></div>'
-                    +'</div>';
-          var statusLabel = (s.status || 'DRAFT');
-          var statusBadge = '<span class="pill" style="background:'
-            +(statusLabel === 'LIVE' ? '#ecfdf3' : '#f8fafc')
-            +';color:'+(statusLabel === 'LIVE' ? '#166534' : '#475569')
-            +';border:1px solid '+(statusLabel === 'LIVE' ? '#bbf7d0' : '#e2e8f0')
-            +';">'+statusLabel+'</span>';
-          return ''
-            +'<tr data-row="'+s.id+'" data-status="'+statusLabel+'">'
-              +'<td>'+(s.title || '')+'</td>'
-              +'<td>'+when+'</td>'
-              +'<td>'+(s.venue ? (s.venue.name + (s.venue.city ? ' – '+s.venue.city : '')) : '')+'</td>'
-              +'<td><span class="muted">Sold '+sold+' · Hold '+hold+' · Avail '+avail+'</span> '+bar+'</td>'
-              +'<td>£'+(((s._revenue && s._revenue.grossFace) || 0).toFixed(2))+'</td>'
-              +'<td>'+statusBadge+'</td>'
-              +'<td>'
-                +'<div class="kebab">'
-                  +'<button class="btn" data-kebab="'+s.id+'">⋮</button>'
-                  +'<div class="menu" id="m-'+s.id+'">'
-                    +'<a href="#" data-edit="'+s.id+'">Edit</a>'
-                    +'<a href="#" data-seating="'+s.id+'">Seating map</a>'
-                    +'<a href="#" data-tickets="'+s.id+'">Tickets</a>'
-                    +'<a href="#" data-dup="'+s.id+'">Duplicate</a>'
-                  +'</div>'
-                +'</div>'
-              +'</td>'
-            +'</tr>';
-        }).join('');
+      // Controls row (under the title)
+      +'<div class="grid" style="grid-template-columns: 1.6fr 180px 160px 160px 110px; gap:10px; align-items:end; margin-bottom:12px;">'
+        +'<div class="grid" style="gap:6px;">'
+          +'<label style="margin:0;">Search</label>'
+          +'<input id="shows_search" class="ctl" type="search" placeholder="Search by show or venue…" />'
+        +'</div>'
 
-        // kebab menu
-        $$('[data-kebab]').forEach(function(btn){
-          btn.addEventListener('click', function(e){
-            e.preventDefault();
-            var id = btn.getAttribute('data-kebab');
-            var m = $('#m-' + id);
-            $$('.menu').forEach(function(x){ x.classList.remove('open'); });
-            if (m) m.classList.add('open');
-          });
-        });
-        document.addEventListener('click', function(e){
-          var t = e.target;
-          if (!t || !t.closest || !t.closest('.kebab')){
-            $$('.menu').forEach(function(x){ x.classList.remove('open'); });
-          }
-        });
+        +'<div class="grid" style="gap:6px;">'
+          +'<label style="margin:0;">Filter</label>'
+          +'<select id="shows_filter" class="ctl">'
+            +'<option value="all">All</option>'
+            +'<option value="present">Present (upcoming)</option>'
+            +'<option value="past">Past</option>'
+            +'<option value="live">Live</option>'
+            +'<option value="draft">Draft</option>'
+          +'</select>'
+        +'</div>'
 
-        // actions
-        $$('[data-edit]').forEach(function(a){
-          a.addEventListener('click', function(e){
-            e.preventDefault();
-            var id = a.getAttribute('data-edit');
-            if (id) go('/admin/ui/shows/'+id+'/edit');
-          });
-        });
-        $$('[data-seating]').forEach(function(a){
-          a.addEventListener('click', function(e){
-            e.preventDefault();
-            var id = a.getAttribute('data-seating');
-            if (id) window.location.href = '/admin/seating/builder/preview/' + id;
-          });
-        });
-        $$('[data-tickets]').forEach(function(a){
-          a.addEventListener('click', function(e){
-            e.preventDefault();
-            var id = a.getAttribute('data-tickets');
-            if (id) go('/admin/ui/shows/'+id+'/tickets');
-          });
-        });
-        $$('[data-dup]').forEach(function(a){
-          a.addEventListener('click', async function(e){
-            e.preventDefault();
-            try{
-              var id = a.getAttribute('data-dup');
-              if (!id) return;
-              var r = await j('/admin/shows/'+id+'/duplicate', { method:'POST' });
-              if (r && r.ok && r.newId){
-                go('/admin/ui/shows/'+r.newId+'/edit');
-              }
-            }catch(err){
-              alert('Duplicate failed: ' + (err.message || err));
-            }
-          });
-        });
-        $$('[data-row]').forEach(function(row){
-          row.addEventListener('click', function(e){
-            if (e.target && (e.target.closest('a') || e.target.closest('button'))) return;
-            var id = row.getAttribute('data-row');
-            var status = row.getAttribute('data-status');
-            if (!id) return;
-            if (status === 'DRAFT') {
-              window.location.href = '/admin/seating/builder/preview/' + id;
-            } else {
-              go('/admin/ui/shows/' + id + '/summary');
-            }
-          });
-        });
-      }catch(e){
-        tb.innerHTML = '<tr><td colspan="7" class="error">Failed to load shows: '+(e.message||e)+'</td></tr>';
-      }
+        +'<div class="grid" style="gap:6px;">'
+          +'<label style="margin:0;">From</label>'
+          +'<input id="shows_from" class="ctl" type="date" />'
+        +'</div>'
+
+        +'<div class="grid" style="gap:6px;">'
+          +'<label style="margin:0;">To</label>'
+          +'<input id="shows_to" class="ctl" type="date" />'
+        +'</div>'
+
+        +'<div class="grid" style="gap:6px;">'
+          +'<label style="margin:0;">&nbsp;</label>'
+          +'<button id="shows_clear" class="btn">Clear</button>'
+        +'</div>'
+      +'</div>'
+
+      +'<div id="shows_count" class="muted" style="margin-bottom:10px;font-size:13px;"></div>'
+
+      +'<table>'
+        +'<thead><tr>'
+          +'<th>Title</th><th>When</th><th>Venue</th>'
+          +'<th>Total allocation</th><th>Gross face</th><th>Status</th><th></th>'
+        +'</tr></thead>'
+        +'<tbody id="tbody"></tbody>'
+      +'</table>'
+    +'</div>';
+
+  var tb = $('#tbody');
+  var searchEl = $('#shows_search');
+  var filterEl = $('#shows_filter');
+  var fromEl = $('#shows_from');
+  var toEl = $('#shows_to');
+  var clearBtn = $('#shows_clear');
+  var countEl = $('#shows_count');
+
+  var allItems = [];
+  var searchTimer = null;
+
+  function norm(s){ return String(s || '').toLowerCase(); }
+
+  function parseISO(d){
+    var dt = d ? new Date(d) : null;
+    return (dt && !isNaN(dt.getTime())) ? dt : null;
+  }
+
+  function startOfDay(d){
+    var x = new Date(d);
+    x.setHours(0,0,0,0);
+    return x;
+  }
+
+  function endOfDay(d){
+    var x = new Date(d);
+    x.setHours(23,59,59,999);
+    return x;
+  }
+
+  function matchesQuery(s, q){
+    if (!q) return true;
+    var hay =
+      norm(s.title) + ' ' +
+      norm(s.venueText) + ' ' +
+      norm(s.venue && s.venue.name) + ' ' +
+      norm(s.venue && s.venue.city);
+    return hay.indexOf(q) !== -1;
+  }
+
+  function matchesMode(s, mode){
+    mode = mode || 'all';
+    var status = (s.status || 'DRAFT');
+    var dt = parseISO(s.date);
+    var now = new Date();
+
+    if (mode === 'live') return status === 'LIVE';
+    if (mode === 'draft') return status !== 'LIVE';
+
+    // Present/Past are based on date/time
+    if (mode === 'present'){
+      if (!dt) return false;
+      return dt.getTime() >= now.getTime();
+    }
+    if (mode === 'past'){
+      if (!dt) return false;
+      return dt.getTime() < now.getTime();
     }
 
-    $('#refresh').addEventListener('click', load);
-    load();
+    return true; // all
   }
+
+  function matchesDateRange(s, fromVal, toVal){
+    if (!fromVal && !toVal) return true;
+
+    var dt = parseISO(s.date);
+    if (!dt) return false;
+
+    var fromD = fromVal ? startOfDay(new Date(fromVal)) : null;
+    var toD = toVal ? endOfDay(new Date(toVal)) : null;
+
+    if (fromD && dt.getTime() < fromD.getTime()) return false;
+    if (toD && dt.getTime() > toD.getTime()) return false;
+    return true;
+  }
+
+  function statusBadgeHTML(statusLabel){
+    statusLabel = statusLabel || 'DRAFT';
+    return '<span class="pill" style="background:'
+      +(statusLabel === 'LIVE' ? '#ecfdf3' : '#f8fafc')
+      +';color:'+(statusLabel === 'LIVE' ? '#166534' : '#475569')
+      +';border:1px solid '+(statusLabel === 'LIVE' ? '#bbf7d0' : '#e2e8f0')
+      +';">'+statusLabel+'</span>';
+  }
+
+  function render(items){
+    if (!tb) return;
+
+    if (!items.length){
+      tb.innerHTML = '<tr><td colspan="7" class="muted">No matching events</td></tr>';
+      return;
+    }
+
+    tb.innerHTML = items.map(function(s){
+      var when = s.date
+        ? new Date(s.date).toLocaleString('en-GB', { dateStyle:'short', timeStyle:'short' })
+        : '';
+
+      var total = (s._alloc && s._alloc.total) || 0;
+      var sold  = (s._alloc && s._alloc.sold) || 0;
+      var hold  = (s._alloc && s._alloc.hold) || 0;
+      var avail = Math.max(total - sold - hold, 0);
+      var pct   = total ? Math.round((sold / total) * 100) : 0;
+
+      var bar   = '<div style="background:#e5e7eb;height:6px;border-radius:999px;overflow:hidden;width:140px">'
+                +'<div style="background:#111827;height:6px;width:'+pct+'%"></div>'
+                +'</div>';
+
+      var statusLabel = (s.status || 'DRAFT');
+      var venueLabel = (s.venue
+        ? (s.venue.name + (s.venue.city ? ' – '+s.venue.city : ''))
+        : (s.venueText || '')
+      );
+
+      return ''
+        +'<tr data-row="'+s.id+'" data-status="'+statusLabel+'">'
+          +'<td>'+(s.title || '')+'</td>'
+          +'<td>'+when+'</td>'
+          +'<td>'+venueLabel+'</td>'
+          +'<td><span class="muted">Sold '+sold+' · Hold '+hold+' · Avail '+avail+'</span> '+bar+'</td>'
+          +'<td>£'+(((s._revenue && s._revenue.grossFace) || 0).toFixed(2))+'</td>'
+          +'<td>'+statusBadgeHTML(statusLabel)+'</td>'
+          +'<td>'
+            +'<div class="kebab">'
+              +'<button class="btn" data-kebab="'+s.id+'">⋮</button>'
+              +'<div class="menu" id="m-'+s.id+'">'
+                +'<a href="#" data-edit="'+s.id+'">Edit</a>'
+                +'<a href="#" data-seating="'+s.id+'">Seating map</a>'
+                +'<a href="#" data-tickets="'+s.id+'">Tickets</a>'
+                +'<a href="#" data-dup="'+s.id+'">Duplicate</a>'
+              +'</div>'
+            +'</div>'
+          +'</td>'
+        +'</tr>';
+    }).join('');
+
+    // kebab menu open
+    $$('[data-kebab]').forEach(function(btn){
+      btn.addEventListener('click', function(e){
+        e.preventDefault();
+        var id = btn.getAttribute('data-kebab');
+        var m = $('#m-' + id);
+        $$('.menu').forEach(function(x){ x.classList.remove('open'); });
+        if (m) m.classList.add('open');
+      });
+    });
+
+    // close kebab when clicking outside (bind once globally)
+    if (!window.__adminKebabCloserBound){
+      window.__adminKebabCloserBound = true;
+      document.addEventListener('click', function(e){
+        var t = e.target;
+        if (!t || !t.closest || !t.closest('.kebab')){
+          $$('.menu').forEach(function(x){ x.classList.remove('open'); });
+        }
+      });
+    }
+
+    // actions
+    $$('[data-edit]').forEach(function(a){
+      a.addEventListener('click', function(e){
+        e.preventDefault();
+        var id = a.getAttribute('data-edit');
+        if (id) go('/admin/ui/shows/'+id+'/edit');
+      });
+    });
+
+    $$('[data-seating]').forEach(function(a){
+      a.addEventListener('click', function(e){
+        e.preventDefault();
+        var id = a.getAttribute('data-seating');
+        if (id) window.location.href = '/admin/seating/builder/preview/' + id;
+      });
+    });
+
+    $$('[data-tickets]').forEach(function(a){
+      a.addEventListener('click', function(e){
+        e.preventDefault();
+        var id = a.getAttribute('data-tickets');
+        if (id) go('/admin/ui/shows/'+id+'/tickets');
+      });
+    });
+
+    $$('[data-dup]').forEach(function(a){
+      a.addEventListener('click', async function(e){
+        e.preventDefault();
+        try{
+          var id = a.getAttribute('data-dup');
+          if (!id) return;
+          var r = await j('/admin/shows/'+id+'/duplicate', { method:'POST' });
+          if (r && r.ok && r.newId){
+            go('/admin/ui/shows/'+r.newId+'/edit');
+          }
+        }catch(err){
+          alert('Duplicate failed: ' + (err.message || err));
+        }
+      });
+    });
+
+    // row click behaviour (unchanged)
+    $$('[data-row]').forEach(function(row){
+      row.addEventListener('click', function(e){
+        if (e.target && (e.target.closest('a') || e.target.closest('button'))) return;
+        var id = row.getAttribute('data-row');
+        var status = row.getAttribute('data-status');
+        if (!id) return;
+        if (status === 'DRAFT') {
+          window.location.href = '/admin/seating/builder/preview/' + id;
+        } else {
+          go('/admin/ui/shows/' + id + '/summary');
+        }
+      });
+    });
+  }
+
+  function applyFilters(){
+    var q = norm(searchEl && searchEl.value ? searchEl.value.trim() : '');
+    var mode = (filterEl && filterEl.value) ? filterEl.value : 'all';
+    var fromVal = (fromEl && fromEl.value) ? fromEl.value : '';
+    var toVal = (toEl && toEl.value) ? toEl.value : '';
+
+    var filtered = (allItems || []).filter(function(s){
+      return matchesQuery(s, q)
+        && matchesMode(s, mode)
+        && matchesDateRange(s, fromVal, toVal);
+    });
+
+    // Helpful count line
+    if (countEl){
+      countEl.textContent =
+        'Showing ' + filtered.length + ' of ' + (allItems ? allItems.length : 0) + ' events';
+    }
+
+    render(filtered);
+  }
+
+  async function load(){
+    if (!tb) return;
+    tb.innerHTML = '<tr><td colspan="7" class="muted">Loading…</td></tr>';
+    if (countEl) countEl.textContent = '';
+
+    try{
+      var data = await j('/admin/shows');
+      allItems = data.items || [];
+      if (!allItems.length){
+        tb.innerHTML = '<tr><td colspan="7" class="muted">No shows yet</td></tr>';
+        if (countEl) countEl.textContent = 'Showing 0 of 0 events';
+        return;
+      }
+      applyFilters();
+    }catch(e){
+      tb.innerHTML = '<tr><td colspan="7" class="error">Failed to load shows: '+(e.message||e)+'</td></tr>';
+    }
+  }
+
+  // Refresh button
+  $('#refresh').addEventListener('click', load);
+
+  // Search (debounced typing)
+  if (searchEl){
+    searchEl.addEventListener('input', function(){
+      if (searchTimer) clearTimeout(searchTimer);
+      searchTimer = setTimeout(applyFilters, 120);
+    });
+  }
+
+  // Filter + date range (instant)
+  if (filterEl) filterEl.addEventListener('change', applyFilters);
+  if (fromEl) fromEl.addEventListener('change', applyFilters);
+  if (toEl) toEl.addEventListener('change', applyFilters);
+
+  // Clear button
+  if (clearBtn){
+    clearBtn.addEventListener('click', function(){
+      if (searchEl) searchEl.value = '';
+      if (filterEl) filterEl.value = 'all';
+      if (fromEl) fromEl.value = '';
+      if (toEl) toEl.value = '';
+      applyFilters();
+    });
+  }
+
+  load();
+}
 
   // --- EDIT SHOW ---
   async function editShow(id){
