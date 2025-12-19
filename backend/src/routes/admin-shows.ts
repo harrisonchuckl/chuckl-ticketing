@@ -15,6 +15,10 @@ function isOrganiser(req: any) {
   return String(req.user?.role || "").toUpperCase() === "ORGANISER";
 }
 
+async function ensureShowAccessible(req: any, showId: string) {
+  return prisma.show.findFirst({ where: showWhereForRead(req, showId), select: { id: true } });
+}
+
 
 function showWhereForRead(req: any, showId: string) {
   if (isOrganiser(req)) {
@@ -200,6 +204,107 @@ router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
   } catch (e) {
     console.error("GET /admin/shows/:id failed", e);
     res.status(500).json({ ok: false, error: "Failed to load show" });
+  }
+});
+
+/**
+ * POST /admin/shows/:id/ticket-types
+ * body: { name, pricePence, available?, onSaleAt?, offSaleAt? }
+ */
+router.post("/shows/:id/ticket-types", requireAdminOrOrganiser, async (req, res) => {
+  try {
+    const showId = String(req.params.id);
+    const { name, pricePence, available, onSaleAt, offSaleAt } = req.body || {};
+
+    if (!name || pricePence == null || Number.isNaN(Number(pricePence))) {
+      return res.status(400).json({ ok: false, error: "name and pricePence required" });
+    }
+
+    const show = await ensureShowAccessible(req, showId);
+    if (!show) return res.status(404).json({ ok: false, error: "Show not found" });
+
+    const ticketType = await prisma.ticketType.create({
+      data: {
+        name: String(name),
+        pricePence: Number(pricePence),
+        available: available === "" || available === undefined ? null : Number(available),
+        onSaleAt: onSaleAt ? new Date(onSaleAt) : null,
+        offSaleAt: offSaleAt ? new Date(offSaleAt) : null,
+        showId,
+      },
+    });
+
+    res.json({ ok: true, ticketType });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e?.message || "Failed to create ticket type" });
+  }
+});
+
+/**
+ * PUT /admin/ticket-types/:ttId
+ */
+router.put("/ticket-types/:ttId", requireAdminOrOrganiser, async (req, res) => {
+  try {
+    const { ttId } = req.params;
+    const { name, pricePence, available, onSaleAt, offSaleAt } = req.body || {};
+
+    const ticketType = await prisma.ticketType.findUnique({
+      where: { id: String(ttId) },
+      select: { id: true, show: { select: { organiserId: true, id: true } } },
+    });
+
+    if (!ticketType || !ticketType.show) {
+      return res.status(404).json({ ok: false, error: "Ticket type not found" });
+    }
+
+    if (isOrganiser(req) && ticketType.show.organiserId !== requireUserId(req)) {
+      return res.status(404).json({ ok: false, error: "Ticket type not found" });
+    }
+
+    const updated = await prisma.ticketType.update({
+      where: { id: String(ttId) },
+      data: {
+        ...(name !== undefined ? { name: String(name) } : {}),
+        ...(pricePence !== undefined ? { pricePence: Number(pricePence) } : {}),
+        ...(available !== undefined
+          ? { available: available === "" || available === undefined ? null : Number(available) }
+          : {}),
+        ...(onSaleAt !== undefined ? { onSaleAt: onSaleAt ? new Date(onSaleAt) : null } : {}),
+        ...(offSaleAt !== undefined ? { offSaleAt: offSaleAt ? new Date(offSaleAt) : null } : {}),
+      },
+    });
+
+    res.json({ ok: true, ticketType: updated });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e?.message || "Failed to update ticket type" });
+  }
+});
+
+/**
+ * DELETE /admin/ticket-types/:ttId
+ */
+router.delete("/ticket-types/:ttId", requireAdminOrOrganiser, async (req, res) => {
+  try {
+    const { ttId } = req.params;
+
+    const ticketType = await prisma.ticketType.findUnique({
+      where: { id: String(ttId) },
+      select: { id: true, show: { select: { organiserId: true, id: true } } },
+    });
+
+    if (!ticketType || !ticketType.show) {
+      return res.status(404).json({ ok: false, error: "Ticket type not found" });
+    }
+
+    if (isOrganiser(req) && ticketType.show.organiserId !== requireUserId(req)) {
+      return res.status(404).json({ ok: false, error: "Ticket type not found" });
+    }
+
+    await prisma.ticketType.delete({ where: { id: String(ttId) } });
+
+    res.json({ ok: true });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e?.message || "Failed to delete ticket type" });
   }
 });
 
