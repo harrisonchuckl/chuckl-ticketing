@@ -69,9 +69,9 @@ router.get('/shows/:id', async (req, res) => {
 router.post('/shows/:id/ticket-types', async (req, res) => {
   try {
     const showId = String(req.params.id);
-    const { name, pricePence, available } = req.body || {};
+    const { name, pricePence, available, onSaleAt, offSaleAt } = req.body || {};
 
-    if (!name || typeof pricePence !== 'number') {
+    if (!name || pricePence == null || Number.isNaN(Number(pricePence))) {
       return res
         .status(400)
         .json({ ok: false, message: 'name and pricePence are required' });
@@ -82,6 +82,8 @@ router.post('/shows/:id/ticket-types', async (req, res) => {
         name: String(name),
         pricePence: Number(pricePence),
         available: available === '' || available === undefined ? null : Number(available),
+        onSaleAt: onSaleAt ? new Date(onSaleAt) : null,
+        offSaleAt: offSaleAt ? new Date(offSaleAt) : null,
         show: { connect: { id: showId } },
       },
     });
@@ -100,18 +102,16 @@ router.post('/shows/:id/ticket-types', async (req, res) => {
 router.patch('/ticket-types/:ttid', async (req, res) => {
   try {
     const id = String(req.params.ttid);
-    const { name, pricePence, available } = req.body || {};
+    const { name, pricePence, available, onSaleAt, offSaleAt } = req.body || {};
 
     const data: any = {};
-    if (typeof name === 'string') data.name = name;
-    if (typeof pricePence === 'number') data.pricePence = pricePence;
-    if (available === '' || available === undefined) {
-      // leave unchanged if not provided; explicitly set null only when null passed
-    } else if (available === null) {
-      data.available = null;
-    } else if (typeof available === 'number') {
-      data.available = available;
+    if (name !== undefined) data.name = String(name);
+    if (pricePence !== undefined) data.pricePence = Number(pricePence);
+    if (available !== undefined) {
+      data.available = available === '' || available === undefined ? null : Number(available);
     }
+    if (onSaleAt !== undefined) data.onSaleAt = onSaleAt ? new Date(onSaleAt) : null;
+    if (offSaleAt !== undefined) data.offSaleAt = offSaleAt ? new Date(offSaleAt) : null;
 
     const updated = await prisma.ticketType.update({
       where: { id },
