@@ -321,7 +321,7 @@ router.get(
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Organiser Console</title>
   <style>
-  :root{
+ :root{
   --bg:#f7f8fb;
   --panel:#ffffff;
   --border:#e5e7eb;
@@ -329,9 +329,13 @@ router.get(
   --muted:#6b7280;
   --ink:#111827;
 
+  /* Global fixed header height */
+  --header-h:56px;
+
   /* TIXall AI highlight */
   --ai:#009fe3;
 }
+
 
     *{box-sizing:border-box;}
     html,body{
@@ -342,20 +346,102 @@ router.get(
       color:var(--text);
       background:var(--bg);
     }
-    .wrap{
-      display:flex;
-      min-height:100vh;
-    }
-    .sidebar{
-      width:220px;
-      background:#ffffff;
-      border-right:1px solid var(--border);
-      padding:16px 12px;
-      position:sticky;
-      top:0;
-      height:100vh;
-      box-sizing:border-box;
-    }
+   /* Fixed header sits above everything */
+.top-header{
+  position:fixed;
+  top:0; left:0; right:0;
+  height:var(--header-h);
+  background:#ffffff;
+  border-bottom:1px solid var(--border); /* soft line like sidebar border */
+  z-index:100;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 16px;
+}
+
+/* Brand (logo) */
+.hdr-brand{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  text-decoration:none;
+}
+.hdr-logo{
+  height:28px;
+  width:auto;
+  display:block;
+}
+
+/* Account button + dropdown */
+.hdr-right{
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.hdr-account{
+  position:relative;
+}
+.hdr-account-btn{
+  width:36px;
+  height:36px;
+  border:1px solid var(--border);
+  background:#ffffff;
+  border-radius:999px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  padding:0;
+}
+.hdr-account-btn:hover{ background:#f9fafb; }
+
+.hdr-account-menu{
+  position:absolute;
+  right:0;
+  top:44px;
+  background:#ffffff;
+  border:1px solid var(--border);
+  border-radius:10px;
+  min-width:180px;
+  display:none;
+  z-index:200;
+}
+.hdr-account-menu.open{ display:block; }
+
+.hdr-menu-item{
+  display:block;
+  padding:10px 12px;
+  text-decoration:none;
+  color:#111827;
+  font-size:14px;
+}
+.hdr-menu-item:hover{ background:#f8fafc; }
+
+.hdr-menu-sep{
+  height:1px;
+  background:var(--border);
+  margin:6px 0;
+}
+
+/* Layout now accounts for fixed header */
+.wrap{
+  display:flex;
+  min-height:calc(100vh - var(--header-h));
+  padding-top:var(--header-h);
+}
+
+.sidebar{
+  width:220px;
+  background:#ffffff;
+  border-right:1px solid var(--border);
+  padding:16px 12px;
+  position:sticky;
+  top:var(--header-h);
+  height:calc(100vh - var(--header-h));
+  box-sizing:border-box;
+  overflow:auto;
+}
     .sb-group{
       font-size:12px;
       letter-spacing:.04em;
@@ -575,6 +661,37 @@ router.get(
   </style>
 </head>
 <body>
+  <header class="top-header">
+    <a class="hdr-brand" href="/admin/ui/home" data-view="/admin/ui/home">
+      <!-- NOTE: spaces must be URL-encoded -->
+      <img
+        class="hdr-logo"
+        src="/public/TixAll%20on%20White%20Background.png"
+        alt="TIXL"
+        onerror="this.style.display='none';"
+      />
+    </a>
+
+    <div class="hdr-right">
+      <div class="hdr-account" id="hdrAccount">
+        <button class="hdr-account-btn" id="hdrAccountBtn" aria-haspopup="menu" aria-expanded="false" title="Account">
+          <!-- Simple person icon (inline SVG) -->
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 12a4.5 4.5 0 1 0-4.5-4.5A4.51 4.51 0 0 0 12 12Z" stroke="#111827" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M4 20.2c1.7-4.1 5.1-6.2 8-6.2s6.3 2.1 8 6.2" stroke="#111827" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+
+        <div class="hdr-account-menu" id="hdrAccountMenu" role="menu" aria-label="Account menu">
+          <a class="hdr-menu-item" href="/admin/ui/account" data-view="/admin/ui/account" role="menuitem">Account</a>
+          <a class="hdr-menu-item" href="/admin/ui/finance" data-view="/admin/ui/finance" role="menuitem">Finance</a>
+          <div class="hdr-menu-sep"></div>
+          <a class="hdr-menu-item" href="/admin/ui/logout" role="menuitem">Log out</a>
+        </div>
+      </div>
+    </div>
+  </header>
+
   <div class="wrap">
     <aside class="sidebar">
       <div class="sb-group">Dashboard</div>
@@ -656,6 +773,43 @@ router.get(
 
   var main = $('#main');
 
+  // --- Fixed header: account dropdown ---
+(function initHeader(){
+  var btn = $('#hdrAccountBtn');
+  var menu = $('#hdrAccountMenu');
+  var wrap = $('#hdrAccount');
+
+  if (!btn || !menu || !wrap) return;
+
+  function close(){
+    menu.classList.remove('open');
+    btn.setAttribute('aria-expanded', 'false');
+  }
+  function toggle(){
+    var isOpen = menu.classList.contains('open');
+    if (isOpen) close();
+    else{
+      menu.classList.add('open');
+      btn.setAttribute('aria-expanded', 'true');
+    }
+  }
+
+  btn.addEventListener('click', function(e){
+    e.preventDefault();
+    e.stopPropagation();
+    toggle();
+  });
+
+  document.addEventListener('click', function(e){
+    if (!wrap.contains(e.target)) close();
+  });
+
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape') close();
+  });
+})();
+
+
   var showsToggle = $('#showsToggle');
   var showsSub = $('#showsSub');
   if (showsToggle && showsSub){
@@ -691,16 +845,21 @@ router.get(
     route();
   }
 
-  // SPA sidebar links
-  document.addEventListener('click', function(e){
-    var tgt = e.target;
-    if (!tgt || !tgt.closest) return;
-    var a = tgt.closest('a.sb-link');
-    if (a && a.getAttribute('data-view')){
+  // SPA links (sidebar + header) using data-view
+document.addEventListener('click', function(e){
+  var tgt = e.target;
+  if (!tgt || !tgt.closest) return;
+
+  var a = tgt.closest('a[data-view]');
+  if (a){
+    var view = a.getAttribute('data-view');
+    if (view){
       e.preventDefault();
-      go(a.getAttribute('data-view'));
+      go(view);
     }
-  });
+  }
+});
+
 
   window.addEventListener('popstate', route);
 
@@ -2931,6 +3090,20 @@ async function summaryPage(id){
     if (!main) return;
     main.innerHTML = '<div class="card"><div class="title">Email Campaigns</div><div class="muted">Email tools will plug into your marketing automation stack.</div></div>';
   }
+  function finance(){
+  if (!main) return;
+  main.innerHTML =
+    '<div class="card">'
+      +'<div class="header">'
+        +'<div>'
+          +'<div class="title">Finance</div>'
+          +'<div class="muted">Payouts, invoices, fees, and reporting will live here.</div>'
+        +'</div>'
+      +'</div>'
+      +'<div class="muted">Coming soon.</div>'
+    +'</div>';
+}
+
   async function account(){
   if (!main) return;
 
@@ -3046,6 +3219,8 @@ async function summaryPage(id){
       if (path === '/admin/ui/audiences')      return audiences();
       if (path === '/admin/ui/email')          return emailPage();
       if (path === '/admin/ui/account')        return account();
+      if (path === '/admin/ui/finance')        return finance();
+
 
       if (path.startsWith('/admin/ui/shows/') && path.endsWith('/edit')){
         var id1 = path.split('/')[4];
