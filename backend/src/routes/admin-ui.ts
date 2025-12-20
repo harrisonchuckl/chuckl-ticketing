@@ -721,8 +721,8 @@ router.get(
       </div>
 
       </div>
-      <a class="sb-link" href="/admin/ui/orders" data-view="/admin/ui/orders">Orders</a>
       <a class="sb-link" href="/admin/ui/venues" data-view="/admin/ui/venues">Venues</a>
+      <a class="sb-link" href="/admin/ui/orders" data-view="/admin/ui/orders">Orders</a>
 
       <div class="sb-group">Insights</div>
       <a class="sb-link" href="/admin/ui/analytics" data-view="/admin/ui/analytics">Analytics</a>
@@ -3340,7 +3340,365 @@ async function summaryPage(id){
   }
   function venues(){
     if (!main) return;
-    main.innerHTML = '<div class="card"><div class="title">Venues</div><div class="muted">Venue management UI coming soon (data API already exists).</div></div>';
+
+    main.innerHTML = ''
+      + '<div class="card" id="venuesCard">'
+      +   '<div class="header">'
+      +     '<div>'
+      +       '<div class="title">Venues</div>'
+      +       '<div class="muted">Keep venue photos, spaces, contacts, and booking fees in one place.</div>'
+      +     '</div>'
+      +     '<div class="row" style="gap:8px;align-items:center;">'
+      +       '<input id="venueSearch" placeholder="Search venues" style="min-width:200px;" />'
+      +       '<button class="btn p" id="addVenueBtn" title="Add new venue">+ Add venue</button>'
+      +     '</div>'
+      +   '</div>'
+      +   '<div class="error" id="venueErr" style="margin-top:6px;"></div>'
+
+      +   '<div class="card" id="newVenueForm" style="margin-top:12px;display:none;">'
+      +     '<div class="header">'
+      +       '<div>'
+      +         '<div class="title">Add a new venue</div>'
+      +         '<div class="muted">We will also show venues created from new shows.</div>'
+      +       '</div>'
+      +       '<button class="btn" id="cancelNewVenue">Cancel</button>'
+      +     '</div>'
+      +     '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">'
+      +       '<label style="display:grid;gap:6px;">Venue name<input id="nv_name" required /></label>'
+      +       '<label style="display:grid;gap:6px;">Address<textarea id="nv_address" rows="2" style="resize:vertical;"></textarea></label>'
+      +       '<label style="display:grid;gap:6px;">City<input id="nv_city" /></label>'
+      +       '<label style="display:grid;gap:6px;">Postcode<input id="nv_postcode" /></label>'
+      +       '<label style="display:grid;gap:6px;">Capacity<input id="nv_capacity" type="number" min="1" /></label>'
+      +     '</div>'
+      +     '<div class="row" style="justify-content:flex-end;gap:8px;margin-top:10px;">'
+      +       '<button class="btn p" id="saveNewVenue">Save venue</button>'
+      +     '</div>'
+      +     '<div class="error" id="newVenueError" style="margin-top:6px;"></div>'
+      +   '</div>'
+
+      +   '<div class="muted" id="venueEmpty" style="display:none;margin-top:12px;">No venues yet. Create one with the + button to get started.</div>'
+      +   '<div id="venueGrid" class="grid" style="grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;margin-top:12px;"></div>'
+      + '</div>';
+
+    var search = $('#venueSearch');
+    var grid = $('#venueGrid');
+    var err = $('#venueErr');
+    var empty = $('#venueEmpty');
+    var addBtn = $('#addVenueBtn');
+    var form = $('#newVenueForm');
+    var formErr = $('#newVenueError');
+    var extras = loadVenueExtras();
+
+    var formFields = {
+      name: $('#nv_name'),
+      address: $('#nv_address'),
+      city: $('#nv_city'),
+      postcode: $('#nv_postcode'),
+      capacity: $('#nv_capacity'),
+      cancel: $('#cancelNewVenue'),
+      save: $('#saveNewVenue'),
+    };
+
+    function loadVenueExtras(){
+      try{
+        var saved = localStorage.getItem('adminVenueExtras');
+        return saved ? JSON.parse(saved) : {};
+      }catch(e){
+        return {};
+      }
+    }
+
+    function saveVenueExtras(){
+      try{ localStorage.setItem('adminVenueExtras', JSON.stringify(extras || {})); }catch(e){}
+    }
+
+    function toggleForm(show){ if (form) form.style.display = show ? 'block' : 'none'; }
+
+    if (addBtn){
+      addBtn.addEventListener('click', function(){ toggleForm(true); if (formFields.name) formFields.name.focus(); });
+    }
+    if (formFields.cancel){
+      formFields.cancel.addEventListener('click', function(){ toggleForm(false); });
+    }
+    if (formFields.save){
+      formFields.save.addEventListener('click', async function(){
+        if (!formErr) return;
+        formErr.textContent = '';
+        var payload = {
+          name: (formFields.name && formFields.name.value.trim()) || '',
+          address: (formFields.address && formFields.address.value.trim()) || null,
+          city: (formFields.city && formFields.city.value.trim()) || null,
+          postcode: (formFields.postcode && formFields.postcode.value.trim()) || null,
+          capacity: formFields.capacity && formFields.capacity.value ? Number(formFields.capacity.value) : null,
+        };
+        if (!payload.name){
+          formErr.textContent = 'Name is required';
+          return;
+        }
+        try{
+          await j('/admin/venues', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify(payload)
+          });
+          toggleForm(false);
+          if (formFields.name) formFields.name.value = '';
+          if (formFields.address) formFields.address.value = '';
+          if (formFields.city) formFields.city.value = '';
+          if (formFields.postcode) formFields.postcode.value = '';
+          if (formFields.capacity) formFields.capacity.value = '';
+          loadVenues(search && search.value ? search.value : '');
+        }catch(e){
+          formErr.textContent = (e && e.message) || 'Failed to create venue';
+        }
+      });
+    }
+
+    var debouncedLoad = debounce(function(){
+      loadVenues(search ? search.value : '');
+    }, 250);
+
+    if (search){
+      search.addEventListener('input', debouncedLoad);
+    }
+
+    loadVenues('');
+
+    async function loadVenues(q){
+      if (!grid) return;
+      grid.innerHTML = '<div class="muted">Loading venues…</div>';
+      if (err) err.textContent = '';
+      try{
+        var res = await j('/admin/venues?q=' + encodeURIComponent(q || ''));
+        var items = (res && res.items) || [];
+        renderVenues(items);
+      }catch(e){
+        if (err) err.textContent = e.message || 'Failed to load venues';
+        grid.innerHTML = '';
+      }
+    }
+
+    function renderVenues(items){
+      if (!grid) return;
+      grid.innerHTML = '';
+      if (empty) empty.style.display = items && items.length ? 'none' : 'block';
+      (items || []).forEach(function(v){
+        var card = document.createElement('div');
+        card.className = 'card';
+        card.style.margin = '0';
+
+        var ext = extras && extras[v.id] ? extras[v.id] : {};
+        var spaces = Array.isArray(ext.spaces) ? ext.spaces.slice() : [];
+        var maps = Array.isArray(ext.maps) ? ext.maps.slice() : [];
+
+        card.innerHTML = ''
+          + '<div class="header">'
+          +   '<div>'
+          +     '<div class="title">' + escapeHtml(v.name || 'Untitled venue') + '</div>'
+          +     '<div class="muted">' + escapeHtml([v.city, v.postcode].filter(Boolean).join(' • ')) + '</div>'
+          +   '</div>'
+          + '</div>'
+
+          + '<div class="grid" style="gap:10px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));">'
+          +   '<div class="grid" style="gap:6px;">'
+          +     '<label style="margin:0;font-weight:600;font-size:13px;">Venue photo</label>'
+          +     '<input type="url" placeholder="https://image-url" data-field="image" value="' + escapeHtml(ext.image || '') + '" />'
+          +     '<div class="muted" style="font-size:12px;">Paste an image URL to show this venue in decks.</div>'
+          +     '<div class="venue-photo" style="border:1px solid var(--border);border-radius:8px;height:140px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#f9fafb;">'
+          +       (ext.image ? '<img src="' + escapeHtml(ext.image) + '" alt="Preview" style="width:100%;height:100%;object-fit:cover;" />' : '<div class="muted">No image yet</div>')
+          +     '</div>'
+          +   '</div>'
+
+          +   '<div class="grid" style="gap:6px;">'
+          +     '<label style="margin:0;font-weight:600;font-size:13px;">Contact name<input data-field="contactName" value="' + escapeHtml(ext.contactName || '') + '" placeholder="Venue manager" /></label>'
+          +     '<label style="margin:0;font-weight:600;font-size:13px;">Contact email<input data-field="contactEmail" type="email" value="' + escapeHtml(ext.contactEmail || '') + '" placeholder="manager@example.com" /></label>'
+          +     '<label style="margin:0;font-weight:600;font-size:13px;">Contact phone<input data-field="contactPhone" value="' + escapeHtml(ext.contactPhone || '') + '" placeholder="+44 20 1234 5678" /></label>'
+          +   '</div>'
+
+          +   '<div class="grid" style="gap:6px;">'
+          +     '<label style="margin:0;font-weight:600;font-size:13px;">Capacity<input type="number" min="1" data-field="capacity" value="' + escapeHtml(String(ext.capacity || v.capacity || '')) + '" /></label>'
+          +     '<label style="margin:0;font-weight:600;font-size:13px;">Ticket contra (%)<input type="number" min="0" max="100" step="0.5" data-field="contra" value="' + escapeHtml(ext.contra ? String(ext.contra) : '') + '" placeholder="e.g. 20" /></label>'
+          +     '<label style="margin:0;font-weight:600;font-size:13px;">Booking fee (%)<input type="number" min="10" step="0.5" data-field="fee" value="' + escapeHtml(ext.fee ? String(ext.fee) : '10') + '" /></label>'
+          +     '<div class="muted" style="font-size:12px;">Fees must be at least 10%. We recommend 10–15%.</div>'
+          +   '</div>'
+          + '</div>'
+
+          + '<div class="grid" style="gap:10px;margin-top:10px;">'
+          +   '<div class="grid" style="gap:6px;">'
+          +     '<div class="row" style="justify-content:space-between;align-items:center;gap:8px;">'
+          +       '<div style="font-weight:600;font-size:13px;">Spaces inside this venue</div>'
+          +       '<button class="btn" data-action="addSpace" style="padding:6px 10px;">+ Space</button>'
+          +     '</div>'
+          +     '<div class="muted" style="font-size:12px;">Add areas like studio, foyer or main room.</div>'
+          +     '<div class="row" style="flex-wrap:wrap;gap:6px;" data-list="spaces"></div>'
+          +     '<input data-input="spaceName" placeholder="Add a space and press Enter" />'
+          +   '</div>'
+
+          +   '<div class="grid" style="gap:6px;">'
+          +     '<div class="row" style="justify-content:space-between;align-items:center;gap:8px;">'
+          +       '<div style="font-weight:600;font-size:13px;">Seating maps</div>'
+          +       '<button class="btn" data-action="addMap" style="padding:6px 10px;">+ Map</button>'
+          +     '</div>'
+          +     '<div class="muted" style="font-size:12px;">Keep versions for different rooms or configurations.</div>'
+          +     '<div class="row" style="flex-wrap:wrap;gap:6px;" data-list="maps"></div>'
+          +     '<input data-input="mapName" placeholder="Name a seating map and press Enter" />'
+          +   '</div>'
+          + '</div>'
+
+          + '<div class="row" style="justify-content:space-between;align-items:center;margin-top:12px;gap:8px;">'
+          +   '<div class="muted" style="font-size:12px;">Save to keep booking fees, spaces and contacts linked to this venue.</div>'
+          +   '<div class="row" style="gap:8px;align-items:center;">'
+          +     '<div class="muted" data-status="' + escapeHtml(v.id) + '" style="font-size:12px;"></div>'
+          +     '<button class="btn p" data-save="' + escapeHtml(v.id) + '">Save details</button>'
+          +   '</div>'
+          + '</div>';
+
+        grid.appendChild(card);
+
+        var imgInput = card.querySelector('input[data-field="image"]');
+        var preview = card.querySelector('.venue-photo');
+        if (imgInput && preview){
+          imgInput.addEventListener('input', function(){
+            var url = imgInput.value.trim();
+            preview.innerHTML = url
+              ? '<img src="' + escapeHtml(url) + '" alt="Preview" style="width:100%;height:100%;object-fit:cover;" />'
+              : '<div class="muted">No image yet</div>';
+          });
+        }
+
+        var spaceInput = card.querySelector('input[data-input="spaceName"]');
+        var mapInput = card.querySelector('input[data-input="mapName"]');
+        var spaceList = card.querySelector('[data-list="spaces"]');
+        var mapList = card.querySelector('[data-list="maps"]');
+
+        function renderChips(listEl, items){
+          if (!listEl) return;
+          listEl.innerHTML = '';
+          if (!items.length){
+            var emptyChip = document.createElement('div');
+            emptyChip.className = 'muted';
+            emptyChip.style.fontSize = '12px';
+            emptyChip.textContent = 'Nothing added yet';
+            listEl.appendChild(emptyChip);
+            return;
+          }
+          items.forEach(function(name, idx){
+            var chip = document.createElement('div');
+            chip.style.display = 'inline-flex';
+            chip.style.alignItems = 'center';
+            chip.style.gap = '6px';
+            chip.style.padding = '6px 10px';
+            chip.style.border = '1px solid var(--border)';
+            chip.style.borderRadius = '999px';
+            chip.style.background = '#f9fafb';
+            chip.style.fontSize = '12px';
+            chip.innerHTML = '<span>' + escapeHtml(name) + '</span>';
+            var remove = document.createElement('button');
+            remove.textContent = '×';
+            remove.style.border = 'none';
+            remove.style.background = 'transparent';
+            remove.style.cursor = 'pointer';
+            remove.style.fontSize = '14px';
+            remove.setAttribute('aria-label', 'Remove');
+            remove.addEventListener('click', function(){
+              items.splice(idx, 1);
+              renderChips(listEl, items);
+            });
+            chip.appendChild(remove);
+            listEl.appendChild(chip);
+          });
+        }
+
+        renderChips(spaceList, spaces);
+        renderChips(mapList, maps);
+
+        function addFromInput(inputEl, arr, listEl){
+          if (!inputEl) return;
+          var value = (inputEl.value || '').trim();
+          if (!value) return;
+          arr.push(value);
+          inputEl.value = '';
+          renderChips(listEl, arr);
+        }
+
+        if (spaceInput){
+          spaceInput.addEventListener('keydown', function(e){
+            if (e.key === 'Enter'){ e.preventDefault(); addFromInput(spaceInput, spaces, spaceList); }
+          });
+        }
+        if (mapInput){
+          mapInput.addEventListener('keydown', function(e){
+            if (e.key === 'Enter'){ e.preventDefault(); addFromInput(mapInput, maps, mapList); }
+          });
+        }
+
+        var addSpaceBtn = card.querySelector('[data-action="addSpace"]');
+        if (addSpaceBtn){
+          addSpaceBtn.addEventListener('click', function(){ addFromInput(spaceInput, spaces, spaceList); if (spaceInput) spaceInput.focus(); });
+        }
+
+        var addMapBtn = card.querySelector('[data-action="addMap"]');
+        if (addMapBtn){
+          addMapBtn.addEventListener('click', function(){ addFromInput(mapInput, maps, mapList); if (mapInput) mapInput.focus(); });
+        }
+
+        var feeInput = card.querySelector('input[data-field="fee"]');
+        if (feeInput){
+          feeInput.addEventListener('change', function(){
+            var v = Number(feeInput.value || 0);
+            if (!v || v < 10){
+              feeInput.value = '10';
+            }
+          });
+        }
+
+        var saveBtn = card.querySelector('[data-save]');
+        if (saveBtn){
+          saveBtn.addEventListener('click', function(){
+            var data = {
+              image: imgInput ? imgInput.value.trim() : '',
+              contactName: valueOf('contactName'),
+              contactEmail: valueOf('contactEmail'),
+              contactPhone: valueOf('contactPhone'),
+              capacity: numberOf('capacity'),
+              contra: numberOf('contra'),
+              fee: Math.max(10, numberOf('fee') || 10),
+              spaces: spaces.slice(),
+              maps: maps.slice(),
+            };
+            extras = extras || {};
+            extras[v.id] = data;
+            saveVenueExtras();
+            var status = card.querySelector('[data-status="' + v.id + '"]');
+            if (status){
+              status.textContent = 'Saved';
+              status.style.color = '#059669';
+              setTimeout(function(){ status.textContent = ''; }, 2000);
+            }
+          });
+        }
+
+        function valueOf(field){
+          var el = card.querySelector('input[data-field="' + field + '"]');
+          return el ? el.value.trim() : '';
+        }
+        function numberOf(field){
+          var raw = valueOf(field);
+          if (!raw) return null;
+          var num = Number(raw);
+          return isNaN(num) ? null : num;
+        }
+      });
+    }
+
+    function debounce(fn, wait){
+      var t;
+      return function(){
+        var args = arguments;
+        clearTimeout(t);
+        t = setTimeout(function(){ fn.apply(null, args); }, wait);
+      };
+    }
   }
   function analytics(){
     if (!main) return;
