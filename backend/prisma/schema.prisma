@@ -165,6 +165,7 @@ model Show {
 
   status          ShowStatus @default(DRAFT)
   publishedAt     DateTime?
+  usesAllocatedSeating Boolean?
   activeSeatMapId String?
 
   venueId     String?
