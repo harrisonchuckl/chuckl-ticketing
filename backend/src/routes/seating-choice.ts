@@ -21,12 +21,12 @@ function median(nums: number[]) {
 }
 
 function buildTicketSuggestions(
-  rows: Array<{ name: string; pricePence: number; available: number | null }>,
-  max = 6
+  rows: Array<{ name: string; pricePence: number; available: number | null; createdAt: Date }>,
+  max = 4
 ) {
   const map = new Map<
     string,
-    { display: string; count: number; prices: number[]; avails: number[] }
+    { display: string; count: number; prices: number[]; avails: number[]; lastSeenAt: number }
   >();
 
   for (const r of rows || []) {
@@ -34,9 +34,14 @@ function buildTicketSuggestions(
     if (!display) continue;
 
     const key = normalizeTicketName(display);
-    const cur = map.get(key) || { display, count: 0, prices: [], avails: [] };
+    const seenAt = r.createdAt ? new Date(r.createdAt).getTime() : 0;
+
+    const cur =
+      map.get(key) || { display, count: 0, prices: [], avails: [], lastSeenAt: 0 };
 
     cur.count += 1;
+    cur.lastSeenAt = Math.max(cur.lastSeenAt, seenAt);
+
     if (Number.isFinite(Number(r.pricePence))) cur.prices.push(Number(r.pricePence));
     if (r.available != null && Number.isFinite(Number(r.available))) cur.avails.push(Number(r.available));
 
@@ -49,26 +54,50 @@ function buildTicketSuggestions(
       pricePence: Math.round(median(x.prices) || 0),
       available: x.avails.length ? Math.round(median(x.avails)) : null,
       count: x.count,
+      lastSeenAt: x.lastSeenAt,
     }))
-    .sort((a, b) => b.count - a.count)
+    .sort((a, b) => (b.count - a.count) || (b.lastSeenAt - a.lastSeenAt))
     .slice(0, max);
 }
 
 async function suggestTicketsForShow(show: any) {
-  const since = new Date(Date.now() - 183 * 24 * 60 * 60 * 1000); // ~6 months
+  const since = new Date();
+  since.setMonth(since.getMonth() - 6);
+
   const organiserId = show?.organiserId || null;
   const venueId = show?.venueId || null;
-  const eventType = show?.eventType || null;       // category
-  const eventCategory = show?.eventCategory || null; // subcategory
+
+  // Note: your schema uses eventType + eventCategory
+  const eventType = show?.eventType || null;
+  const eventCategory = show?.eventCategory || null;
+
+  // If we can’t scope to an organiser, never “global-any” across all users — use safe defaults.
+  if (!organiserId) {
+    return {
+      basedOn: "defaults",
+      since,
+      suggestions: [
+        { name: "General Admission", pricePence: 0, available: null },
+        { name: "VIP", pricePence: 0, available: null },
+      ].slice(0, 2),
+    };
+  }
+
+  const baseShowWhere: any = {
+    organiserId,
+    // don’t use current show’s own ticketTypes as history
+    id: { not: show.id },
+    createdAt: { gte: since },
+  };
 
   const ladder: Array<{ label: string; showWhere: any }> = [];
 
-  // 1) organiser + venue + category/subcategory
-  if (organiserId && venueId && (eventType || eventCategory)) {
+  // Tier 1) Same venue + same category/subcategory (when present)
+  if (venueId && (eventType || eventCategory)) {
     ladder.push({
       label: "organiser+venue+category",
       showWhere: {
-        organiserId,
+        ...baseShowWhere,
         venueId,
         ...(eventType ? { eventType } : {}),
         ...(eventCategory ? { eventCategory } : {}),
@@ -76,57 +105,57 @@ async function suggestTicketsForShow(show: any) {
     });
   }
 
-  // 2) organiser + category/subcategory (ignore venue)
-  if (organiserId && (eventType || eventCategory)) {
+  // Tier 2) Same venue (even if category/subcategory missing)
+  if (venueId) {
+    ladder.push({
+      label: "organiser+venue",
+      showWhere: {
+        ...baseShowWhere,
+        venueId,
+      },
+    });
+  }
+
+  // Tier 3) Same category/subcategory (ignore venue)
+  if (eventType || eventCategory) {
     ladder.push({
       label: "organiser+category",
       showWhere: {
-        organiserId,
+        ...baseShowWhere,
         ...(eventType ? { eventType } : {}),
         ...(eventCategory ? { eventCategory } : {}),
       },
     });
   }
 
-  // 3) organiser-any
-  if (organiserId) {
-    ladder.push({
-      label: "organiser-any",
-      showWhere: { organiserId },
-    });
-  }
-
-  // 4) global-any (never blank)
+  // Tier 4) Organiser-any (last 6 months)
   ladder.push({
-    label: "global-any",
-    showWhere: {},
+    label: "organiser-any",
+    showWhere: { ...baseShowWhere },
   });
 
-  const MIN = 3;
-  let bestLabel = "global-any";
-  let best: Array<{ name: string; pricePence: number; available: number | null; count: number }> = [];
+  const MIN = 2; // if we can find 2 sensible ticket types, stop
+  let bestLabel = "organiser-any";
+  let best: Array<{ name: string; pricePence: number; available: number | null; count: number; lastSeenAt: number }> = [];
 
   for (const step of ladder) {
-   const rows = await prisma.ticketType.findMany({
-  where: {
-    createdAt: { gte: since },
-    ...(step.showWhere && Object.keys(step.showWhere).length
-      ? { show: step.showWhere }
-      : {}),
-  },
-  select: { name: true, pricePence: true, available: true },
-  take: 500,
-});
+    const rows = await prisma.ticketType.findMany({
+      where: {
+        show: step.showWhere,
+      },
+      select: { name: true, pricePence: true, available: true, createdAt: true },
+      take: 500,
+    });
 
-    const suggestions = buildTicketSuggestions(rows, 6);
+    const suggestions = buildTicketSuggestions(rows, 4);
 
     if (suggestions.length > best.length) {
-      best = suggestions;
+      best = suggestions as any;
       bestLabel = step.label;
     }
 
     if (suggestions.length >= MIN) {
-      best = suggestions;
+      best = suggestions as any;
       bestLabel = step.label;
       break;
     }
@@ -135,10 +164,9 @@ async function suggestTicketsForShow(show: any) {
   return {
     basedOn: bestLabel,
     since,
-    suggestions: best.map(({ count, ...rest }) => rest),
+    suggestions: best.map(({ count, lastSeenAt, ...rest }) => rest),
   };
 }
-
 
 function escapeHtml(str: string | null | undefined) {
   if (!str) return "";
