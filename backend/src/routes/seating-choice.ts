@@ -111,7 +111,7 @@ async function suggestTicketsForShow(show: any) {
   where: {
     createdAt: { gte: since },
     ...(step.showWhere && Object.keys(step.showWhere).length
-      ? { show: { is: step.showWhere } }
+      ? { show: step.showWhere }
       : {}),
   },
   select: { name: true, pricePence: true, available: true },
@@ -1285,9 +1285,8 @@ if (publishBtn) publishBtn.addEventListener('click', function () { publishShow()
 
 renderTickets();
 
-// NOTE: this runs only if you have set `var prefillInfo = ...` earlier in the same script.
-// If prefillInfo isn't defined yet, this safely does nothing.
-if (typeof prefillInfo !== 'undefined' && prefillInfo && prefillInfo.used) {
+// ✅ Prefill success message (only shows when suggestions were used)
+if (prefillInfo && prefillInfo.used) {
   var label = prefillInfo.basedOn ? (" (" + prefillInfo.basedOn + ")") : "";
   showStatus(
     "We've prefilled your most common ticket types/prices from the last 6 months" + label +
@@ -1299,6 +1298,7 @@ if (typeof prefillInfo !== 'undefined' && prefillInfo && prefillInfo.used) {
 })();
 
       </script>
+
     `;
 
     const html = renderShell({
