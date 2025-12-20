@@ -107,14 +107,16 @@ async function suggestTicketsForShow(show: any) {
   let best: Array<{ name: string; pricePence: number; available: number | null; count: number }> = [];
 
   for (const step of ladder) {
-    const rows = await prisma.ticketType.findMany({
-      where: {
-        createdAt: { gte: since },
-        show: step.showWhere,
-      },
-      select: { name: true, pricePence: true, available: true },
-      take: 500,
-    });
+   const rows = await prisma.ticketType.findMany({
+  where: {
+    createdAt: { gte: since },
+    ...(step.showWhere && Object.keys(step.showWhere).length
+      ? { show: { is: step.showWhere } }
+      : {}),
+  },
+  select: { name: true, pricePence: true, available: true },
+  take: 500,
+});
 
     const suggestions = buildTicketSuggestions(rows, 6);
 
