@@ -1018,14 +1018,21 @@ router.get("/seating/unallocated/:showId", async (req, res) => {
       return res.status(404).send("Show not found");
     }
 
-    let initialTickets = (show.ticketTypes || []).map((t) => ({
-  id: t.id,
-  name: t.name,
-  price: (t.pricePence || 0) / 100,
-  available: t.available == null ? "" : String(t.available),
-  onSaleAt: t.onSaleAt ? new Date(t.onSaleAt).toISOString() : "",
-  offSaleAt: t.offSaleAt ? new Date(t.offSaleAt).toISOString() : "",
-}));
+  let initialTickets: {
+        id?: string;
+        name: string;
+        price: number;
+        available: string;
+        onSaleAt: string;
+        offSaleAt: string;
+      }[] = (show.ticketTypes || []).map((t) => ({
+        id: t.id,
+        name: t.name,
+        price: (t.pricePence || 0) / 100,
+        available: t.available == null ? "" : String(t.available),
+        onSaleAt: t.onSaleAt ? new Date(t.onSaleAt).toISOString() : "",
+        offSaleAt: t.offSaleAt ? new Date(t.offSaleAt).toISOString() : "",
+      }));
 
 let prefillInfo: { used: boolean; basedOn?: string; since?: string } = { used: false };
 
