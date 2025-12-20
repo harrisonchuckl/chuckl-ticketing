@@ -75,18 +75,18 @@ router.get("/shows", requireAdminOrOrganiser, async (req, res) => {
 const items = await prisma.show.findMany({
   where: showWhereForList(req),
   orderBy: [{ date: "asc" }],
-  select: {
-        id: true,
-        title: true,
-        description: true,
-        imageUrl: true,
+   select: {
+          id: true,
+          title: true,
+          description: true,
+          imageUrl: true,
         date: true,
         eventType: true,
         eventCategory: true,
         status: true,
         publishedAt: true,
-    usesAllocatedSeating: true,
-
+        usesAllocatedSeating: true,
+     
         venue: { select: { id: true, name: true, city: true } },
       },
     });
@@ -106,7 +106,8 @@ const items = await prisma.show.findMany({
 
 /** POST /admin/shows — create (auto-creates venue if needed) */
 router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
-  const {
+    try {
+    const {
       title,
       date,
       endDate,
@@ -124,11 +125,11 @@ router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
       additionalImages,
       usesAllocatedSeating,
     } = req.body || {};
+      
     if (!title || !date || !(venueId || venueText) || !descriptionHtml) {
       return res.status(400).json({ ok: false, error: "Missing required fields" });
     }
 
-     
     const finalVenueId = (await ensureVenue(venueId, venueText)) || undefined;
     const parsedTags = Array.isArray(tags)
       ? tags.map((t: unknown) => asNullableString(t)).filter(isNonEmptyString)
@@ -141,15 +142,16 @@ router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
 
     const created = await prisma.show.create({
       data: {
-  title: String(title),
-  date: new Date(date),
+   title: String(title),
+        date: new Date(date),
 
-  // If organiser is creating, force ownership to them.
-  // Admin can still create without organiserId (or you can allow passing organiserId later if you want).
-organiserId: isOrganiser(req) ? requireUserId(req) : null,
+        // If organiser is creating, force ownership to them.
+        // Admin can still create without organiserId (or you can allow passing organiserId later if you want).
+        organiserId: isOrganiser(req) ? requireUserId(req) : null,
         ...(endDate ? { endDate: new Date(endDate) } : {}),
         imageUrl: imageUrl ?? null,
-        description: descriptionHtml ?? null,        venueId: finalVenueId,
+       description: descriptionHtml ?? null,
+        venueId: finalVenueId,
         usesAllocatedSeating: !!usesAllocatedSeating,
         status: ShowStatus.DRAFT,
         eventType: asNullableString(eventType),
@@ -325,16 +327,17 @@ router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
       venueText,
       status,
       eventType,
-      eventCategory,
-      doorsOpenTime,
-      ageGuidance,
-      endTimeNote,
-      accessibility,
-      tags,
-      additionalImages,
-      usesAllocatedSeating,
-    } = req.body || {};
+         eventCategory,
+        doorsOpenTime,
+        ageGuidance,
+        endTimeNote,
+        accessibility,
+        tags,
+        additionalImages,
+        usesAllocatedSeating,
+      } = req.body || {};
 
+  
         // Ownership check: organisers can only edit their own shows
     const where = showWhereForRead(req, String(req.params.id));
     const existing = await prisma.show.findFirst({ where, select: { id: true } });
@@ -359,7 +362,7 @@ router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
         ...(endDate != null ? { endDate: endDate ? new Date(endDate) : null } : {}),
         ...(imageUrl !== undefined ? { imageUrl: imageUrl ?? null } : {}),
         ...(descriptionHtml !== undefined ? { description: descriptionHtml ?? null } : {}),
-...(venueId !== undefined || venueText !== undefined ? { venueId: finalVenueId ?? null } : {}),
+        ...(venueId !== undefined || venueText !== undefined ? { venueId: finalVenueId ?? null } : {}),
         ...(usesAllocatedSeating !== undefined ? { usesAllocatedSeating: !!usesAllocatedSeating } : {}),
         ...(eventType !== undefined ? { eventType: asNullableString(eventType) } : {}),
         ...(eventCategory !== undefined ? { eventCategory: asNullableString(eventCategory) } : {}),
