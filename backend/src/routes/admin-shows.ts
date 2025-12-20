@@ -174,7 +174,7 @@ organiserId: isOrganiser(req) ? requireUserId(req) : null,
 /** GET /admin/shows/:id */
 router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
   try {
-       const s = await prisma.show.findFirst({
+    const s = await prisma.show.findFirst({
       where: showWhereForRead(req, String(req.params.id)),
       select: {
         id: true,
@@ -182,15 +182,21 @@ router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
         description: true,
         imageUrl: true,
         date: true,
+        endDate: true,
         eventType: true,
         eventCategory: true,
+        doorsOpenTime: true,
+        ageGuidance: true,
+        endTimeNote: true,
+        accessibility: true,
+        tags: true,
+        additionalImages: true,
         usesAllocatedSeating: true,
         status: true,
         publishedAt: true,
         venue: { select: { id: true, name: true, city: true } },
-
         ticketTypes: {
-          select: { id: true, name: true, pricePence: true, available: true },
+          select: { id: true, name: true, pricePence: true, available: true, onSaleAt: true, offSaleAt: true },
           orderBy: { createdAt: "asc" },
         },
       },
