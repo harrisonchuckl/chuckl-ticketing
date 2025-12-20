@@ -5,6 +5,139 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 const router = Router();
 
+// --- Ticket suggestion helpers (last 6 months, fallback ladder) ---
+function normalizeTicketName(name: string) {
+  return String(name || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+function median(nums: number[]) {
+  if (!nums || nums.length === 0) return 0;
+  const sorted = [...nums].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function buildTicketSuggestions(
+  rows: Array<{ name: string; pricePence: number; available: number | null }>,
+  max = 6
+) {
+  const map = new Map<
+    string,
+    { display: string; count: number; prices: number[]; avails: number[] }
+  >();
+
+  for (const r of rows || []) {
+    const display = String(r.name || "").trim();
+    if (!display) continue;
+
+    const key = normalizeTicketName(display);
+    const cur = map.get(key) || { display, count: 0, prices: [], avails: [] };
+
+    cur.count += 1;
+    if (Number.isFinite(Number(r.pricePence))) cur.prices.push(Number(r.pricePence));
+    if (r.available != null && Number.isFinite(Number(r.available))) cur.avails.push(Number(r.available));
+
+    map.set(key, cur);
+  }
+
+  return Array.from(map.values())
+    .map((x) => ({
+      name: x.display,
+      pricePence: Math.round(median(x.prices) || 0),
+      available: x.avails.length ? Math.round(median(x.avails)) : null,
+      count: x.count,
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, max);
+}
+
+async function suggestTicketsForShow(show: any) {
+  const since = new Date(Date.now() - 183 * 24 * 60 * 60 * 1000); // ~6 months
+  const organiserId = show?.organiserId || null;
+  const venueId = show?.venueId || null;
+  const eventType = show?.eventType || null;       // category
+  const eventCategory = show?.eventCategory || null; // subcategory
+
+  const ladder: Array<{ label: string; showWhere: any }> = [];
+
+  // 1) organiser + venue + category/subcategory
+  if (organiserId && venueId && (eventType || eventCategory)) {
+    ladder.push({
+      label: "organiser+venue+category",
+      showWhere: {
+        organiserId,
+        venueId,
+        ...(eventType ? { eventType } : {}),
+        ...(eventCategory ? { eventCategory } : {}),
+      },
+    });
+  }
+
+  // 2) organiser + category/subcategory (ignore venue)
+  if (organiserId && (eventType || eventCategory)) {
+    ladder.push({
+      label: "organiser+category",
+      showWhere: {
+        organiserId,
+        ...(eventType ? { eventType } : {}),
+        ...(eventCategory ? { eventCategory } : {}),
+      },
+    });
+  }
+
+  // 3) organiser-any
+  if (organiserId) {
+    ladder.push({
+      label: "organiser-any",
+      showWhere: { organiserId },
+    });
+  }
+
+  // 4) global-any (never blank)
+  ladder.push({
+    label: "global-any",
+    showWhere: {},
+  });
+
+  const MIN = 3;
+  let bestLabel = "global-any";
+  let best: Array<{ name: string; pricePence: number; available: number | null; count: number }> = [];
+
+  for (const step of ladder) {
+    const rows = await prisma.ticketType.findMany({
+      where: {
+        createdAt: { gte: since },
+        show: step.showWhere,
+      },
+      select: { name: true, pricePence: true, available: true },
+      take: 500,
+    });
+
+    const suggestions = buildTicketSuggestions(rows, 6);
+
+    if (suggestions.length > best.length) {
+      best = suggestions;
+      bestLabel = step.label;
+    }
+
+    if (suggestions.length >= MIN) {
+      best = suggestions;
+      bestLabel = step.label;
+      break;
+    }
+  }
+
+  return {
+    basedOn: bestLabel,
+    since,
+    suggestions: best.map(({ count, ...rest }) => rest),
+  };
+}
+
+
 function escapeHtml(str: string | null | undefined) {
   if (!str) return "";
   return String(str)
@@ -883,14 +1016,45 @@ router.get("/seating/unallocated/:showId", async (req, res) => {
       return res.status(404).send("Show not found");
     }
 
-    const initialTickets = (show.ticketTypes || []).map((t) => ({
-      id: t.id,
-      name: t.name,
-      price: (t.pricePence || 0) / 100,
-      available: t.available == null ? "" : String(t.available),
-      onSaleAt: t.onSaleAt ? new Date(t.onSaleAt).toISOString() : "",
-      offSaleAt: t.offSaleAt ? new Date(t.offSaleAt).toISOString() : "",
-    }));
+    let initialTickets = (show.ticketTypes || []).map((t) => ({
+  id: t.id,
+  name: t.name,
+  price: (t.pricePence || 0) / 100,
+  available: t.available == null ? "" : String(t.available),
+  onSaleAt: t.onSaleAt ? new Date(t.onSaleAt).toISOString() : "",
+  offSaleAt: t.offSaleAt ? new Date(t.offSaleAt).toISOString() : "",
+}));
+
+let prefillInfo: { used: boolean; basedOn?: string; since?: string } = { used: false };
+
+// If no tickets exist yet, prefill from “most common” tickets in the last 6 months (fallback ladder)
+if (!initialTickets.length) {
+  try {
+    const suggested = await suggestTicketsForShow(show);
+
+    const defaultAllocationStr =
+      show?.venue?.capacity != null ? String(show.venue.capacity) : "";
+
+    if (suggested.suggestions && suggested.suggestions.length) {
+      initialTickets = suggested.suggestions.map((s) => ({
+        // No id -> user must click “Save tickets” to create these
+        name: s.name,
+        price: (Number(s.pricePence || 0) / 100),
+        available: defaultAllocationStr, // prefill allocation to venue capacity when known
+        onSaleAt: "",
+        offSaleAt: "",
+      }));
+
+      prefillInfo = {
+        used: true,
+        basedOn: suggested.basedOn,
+        since: suggested.since.toISOString(),
+      };
+    }
+  } catch (e) {
+    console.error("ticket suggestion prefill failed", e);
+  }
+}
 
     const showMeta = {
       id: show.id,
@@ -935,6 +1099,7 @@ router.get("/seating/unallocated/:showId", async (req, res) => {
           var showId = ${JSON.stringify(showId)};
           var initialTickets = ${JSON.stringify(initialTickets)};
           var showMeta = ${JSON.stringify(showMeta)};
+          var prefillInfo = ${JSON.stringify(prefillInfo)};
 
           var tickets = (initialTickets || []).map(function (t) {
             return Object.assign({}, t);
@@ -1112,12 +1277,25 @@ router.get("/seating/unallocated/:showId", async (req, res) => {
           }
 
           var saveBtn = document.getElementById('save-tickets');
-          if (saveBtn) saveBtn.addEventListener('click', function () { saveTickets(); });
-          var publishBtn = document.getElementById('publish');
-          if (publishBtn) publishBtn.addEventListener('click', function () { publishShow(); });
+if (saveBtn) saveBtn.addEventListener('click', function () { saveTickets(); });
+var publishBtn = document.getElementById('publish');
+if (publishBtn) publishBtn.addEventListener('click', function () { publishShow(); });
 
-          renderTickets();
-        })();
+renderTickets();
+
+// NOTE: this runs only if you have set `var prefillInfo = ...` earlier in the same script.
+// If prefillInfo isn't defined yet, this safely does nothing.
+if (typeof prefillInfo !== 'undefined' && prefillInfo && prefillInfo.used) {
+  var label = prefillInfo.basedOn ? (" (" + prefillInfo.basedOn + ")") : "";
+  showStatus(
+    "We've prefilled your most common ticket types/prices from the last 6 months" + label +
+      " — please review and click “Save tickets”.",
+    "success"
+  );
+}
+
+})();
+
       </script>
     `;
 
