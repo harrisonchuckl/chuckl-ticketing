@@ -729,9 +729,10 @@ function renderShell(options: {
       padding-bottom: 2px;
     }
 
-   .table-row {
+  .table-row {
       display: grid;
-      grid-template-columns: 1.35fr 0.75fr 0.85fr 0.95fr 0.95fr 110px;
+      /* Name | Price | On sale | Off sale | Allocation | Remove */
+      grid-template-columns: 1.35fr 0.75fr 0.95fr 0.95fr 0.85fr 110px;
       gap: 10px;
       align-items: center;
       padding: 12px 12px;
@@ -790,7 +791,7 @@ function renderShell(options: {
 
     .action-spacer { flex: 1; }
 
-   .primary-button {
+  .primary-button {
       border-radius: var(--radius-pill);
       border: none;
       padding: 10px 16px;
@@ -798,7 +799,7 @@ function renderShell(options: {
       color: #fff;
       font-weight: 650;
       cursor: pointer;
-      box-shadow: 0 14px 26px rgba(2, 25, 41, 0.22);
+      box-shadow: none; /* removed per request */
     }
 
 .primary-button:hover { background: var(--accent-strong); }
@@ -1228,7 +1229,7 @@ if (!initialTickets.length) {
             table.innerHTML = '';
             var header = document.createElement('div');
             header.className = 'table-row table-head';
-header.innerHTML = '<div>Name</div><div>Price (£)</div><div>Allocation (qty)</div><div>On sale</div><div>Off sale</div><div></div>';
+header.innerHTML = '<div>Name</div><div>Price (£)</div><div>On sale</div><div>Off sale</div><div>Allocation (qty)</div><div></div>';
             table.appendChild(header);
 
             tickets.forEach(function (t, idx) {
@@ -1238,9 +1239,21 @@ header.innerHTML = '<div>Name</div><div>Price (£)</div><div>Allocation (qty)</d
               row.innerHTML = \`
                 <div><input class="input" value="\${t.name || ''}" data-field="name" data-idx="\${idx}" placeholder="Ticket name" /></div>
                 <div><input class="input" value="\${t.price ?? ''}" data-field="price" data-idx="\${idx}" type="number" min="0" step="0.01" placeholder="0.00" /></div>
-                <div><input class="input" value="\${t.available ?? ''}" data-field="available" data-idx="\${idx}" type="number" min="0" placeholder="Auto" /></div>
                 <div><input class="input" value="\${isoToInput(t.onSaleAt)}" data-field="onSaleAt" data-idx="\${idx}" type="datetime-local" /></div>
                 <div><input class="input" value="\${isoToInput(t.offSaleAt)}" data-field="offSaleAt" data-idx="\${idx}" type="datetime-local" /></div>
+                <div>
+                  <input
+                    class="input"
+                    value="\${t.available ?? ''}"
+                    data-field="available"
+                    data-idx="\${idx}"
+                    type="number"
+                    min="0"
+                    placeholder="Qty"
+                    title="Allocation (quantity available). Leave blank for unlimited."
+                    aria-label="Allocation quantity"
+                  />
+                </div>
                 <div class="row-actions">
                   <button class="ghost-button" data-action="delete" data-idx="\${idx}" type="button">Remove</button>
                 </div>
