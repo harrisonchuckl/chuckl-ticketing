@@ -200,20 +200,31 @@ function renderShell(options: {
   <title>${title}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    :root {
-      --bg: #f3f6fb;
-      --card-bg: #ffffff;
-      --card-border: #e1e7f3;
-      --card-border-active: #3b82f6;
-      --card-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+:root {
+      /* Brand */
+      --bg: #0f9cdf;            /* TixAll blue */
+      --accent: #0f9cdf;
+      --accent-strong: #0b7fb6;
+
+      /* Surfaces */
+      --card-bg: rgba(255, 255, 255, 0.96);
+      --card-border: rgba(255, 255, 255, 0.28);
+      --card-border-active: rgba(255, 255, 255, 0.55);
+      --card-shadow: 0 18px 55px rgba(2, 25, 41, 0.22);
+
+      /* Text */
       --text-main: #0f172a;
-      --text-muted: #64748b;
-      --pill-bg: #e0edff;
-      --pill-text: #2563eb;
-      --accent: #2563eb;
-      --accent-soft: #e0edff;
+      --text-muted: #5b6b7f;
+      --header-text: #ffffff;
+
+      /* Pills */
+      --pill-bg: rgba(255, 255, 255, 0.18);
+      --pill-text: #ffffff;
+
+      --accent-soft: rgba(255, 255, 255, 0.18);
+
       --radius-xl: 24px;
-      --radius-lg: 20px;
+      --radius-lg: 18px;
       --radius-pill: 999px;
     }
 
@@ -221,7 +232,7 @@ function renderShell(options: {
       box-sizing: border-box;
     }
 
-    html, body {
+   html, body {
       margin: 0;
       padding: 0;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
@@ -230,6 +241,7 @@ function renderShell(options: {
       color: var(--text-main);
       height: 100%;
     }
+
 
     body {
       display: flex;
@@ -260,6 +272,28 @@ function renderShell(options: {
       flex-direction: column;
       gap: 8px;
     }
+
+    /* Header text sits on blue background */
+.headline { color: var(--header-text); }
+.subhead { color: rgba(255,255,255,0.85); }
+
+/* Make the header area feel intentional */
+.page-header {
+  padding: 6px 4px;
+}
+
+.step-pill {
+  background: var(--pill-bg);
+  color: var(--pill-text);
+  border: 1px solid rgba(255,255,255,0.25);
+}
+
+/* Give the centre column a bit more presence */
+.cards-wrapper {
+  width: 100%;
+  max-width: 920px;
+}
+
 
     .step-pill {
       display: inline-flex;
@@ -616,12 +650,25 @@ function renderShell(options: {
 
     /* --- Unallocated ticket editor --- */
     .tickets-card {
-      background: #ffffff;
+      background: var(--card-bg);
       border: 1px solid var(--card-border);
       border-radius: var(--radius-xl);
-      padding: 24px;
+      padding: 26px 26px 22px;
       box-shadow: var(--card-shadow);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      position: relative;
+      overflow: hidden;
+      color: var(--text-main);
     }
+
+.tickets-card:before {
+      content: "";
+      position: absolute;
+      inset: -2px -2px auto -2px;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.35);
+}
 
     .tickets-header {
       display: flex;
@@ -672,23 +719,33 @@ function renderShell(options: {
       color: var(--text-muted);
     }
 
-    .tickets-table {
+   .tickets-table {
       width: 100%;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 10px;
       margin-bottom: 16px;
+      overflow-x: auto;             /* stops columns collapsing */
+      padding-bottom: 2px;
     }
 
-    .table-row {
+   .table-row {
       display: grid;
-      grid-template-columns: 1.2fr 0.6fr 0.6fr 0.8fr 0.8fr 120px;
+      grid-template-columns: 1.35fr 0.75fr 0.85fr 0.95fr 0.95fr 110px;
       gap: 10px;
       align-items: center;
-      padding: 10px 12px;
-      border: 1px solid var(--card-border);
+      padding: 12px 12px;
+      border: 1px solid rgba(148, 163, 184, 0.35);
       border-radius: var(--radius-lg);
-      background: #f8fbff;
+      background: rgba(255, 255, 255, 0.78);
+      min-width: 820px;             /* key: prevents squashed inputs */
+      transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+    }
+
+.table-row:not(.table-head):hover {
+      border-color: rgba(15, 156, 223, 0.45);
+      box-shadow: 0 10px 28px rgba(2, 25, 41, 0.12);
+      transform: translateY(-1px);
     }
 
     .table-head {
@@ -704,11 +761,18 @@ function renderShell(options: {
 
     .input {
       width: 100%;
-      padding: 9px 10px;
-      border-radius: 10px;
-      border: 1px solid #d7dfef;
+      padding: 10px 11px;
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.45);
       font-size: 14px;
-      background: #fff;
+      background: rgba(255, 255, 255, 0.95);
+      outline: none;
+      transition: border-color 120ms ease, box-shadow 120ms ease;
+    }
+
+.input:focus {
+      border-color: rgba(15, 156, 223, 0.9);
+      box-shadow: 0 0 0 4px rgba(15, 156, 223, 0.18);
     }
 
     .row-actions {
@@ -726,18 +790,18 @@ function renderShell(options: {
 
     .action-spacer { flex: 1; }
 
-    .primary-button {
+   .primary-button {
       border-radius: var(--radius-pill);
       border: none;
       padding: 10px 16px;
-      background: #2563eb;
+      background: var(--accent);
       color: #fff;
       font-weight: 650;
       cursor: pointer;
-      box-shadow: 0 10px 20px rgba(37, 99, 235, 0.25);
+      box-shadow: 0 14px 26px rgba(2, 25, 41, 0.22);
     }
 
-    .primary-button:hover { background: #1d4ed8; }
+.primary-button:hover { background: var(--accent-strong); }
 
     .status-row {
       margin-top: 10px;
@@ -1164,7 +1228,7 @@ if (!initialTickets.length) {
             table.innerHTML = '';
             var header = document.createElement('div');
             header.className = 'table-row table-head';
-            header.innerHTML = '<div>Name</div><div>Price (£)</div><div>Allocation</div><div>On sale</div><div>Off sale</div><div></div>';
+header.innerHTML = '<div>Name</div><div>Price (£)</div><div>Allocation (qty)</div><div>On sale</div><div>Off sale</div><div></div>';
             table.appendChild(header);
 
             tickets.forEach(function (t, idx) {
