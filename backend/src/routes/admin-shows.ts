@@ -115,7 +115,10 @@ router.get("/shows", requireAdminOrOrganiser, async (req, res) => {
       }),
       prisma.ticket.groupBy({
         by: ["showId"],
-        where: { showId: { in: showIds }, order: { status: OrderStatus.PAID } },
+        where: {
+          showId: { in: showIds },
+          order: { status: { in: [OrderStatus.PAID, OrderStatus.PENDING] } },
+        },
         _sum: { quantity: true },
       }),
       prisma.externalAllocation.groupBy({
@@ -198,12 +201,18 @@ router.get("/shows", requireAdminOrOrganiser, async (req, res) => {
       const estCapNum = Number(estCapRaw);
       const estCap = Number.isFinite(estCapNum) ? estCapNum : 0;
 
-      const totalFromSeats = seatTotal || estCap;
-      const totalFromTickets = capacityByShow.get(s.id) ?? 0;
-      const total = Math.max(totalFromSeats, totalFromTickets, 0);
+      const soldFromTickets = soldByShow.get(s.id) ?? 0;
+      const holdsFromAllocations = holdsByShow.get(s.id) ?? 0;
 
-      const sold = Math.max(soldByShow.get(s.id) ?? 0, seatSold);
-      const hold = Math.max(holdsByShow.get(s.id) ?? 0, seatHeld);
+      const totalFromSeats = seatTotal || estCap;
+
+      const totalFromTickets =
+        (capacityByShow.get(s.id) ?? 0) + soldFromTickets + holdsFromAllocations;
+
+      const total = totalFromSeats || totalFromTickets;
+
+      const sold = seatTotal ? Math.max(seatSold, soldFromTickets) : soldFromTickets;
+      const hold = seatHeld + holdsFromAllocations;
 
       return {
         ...s,
