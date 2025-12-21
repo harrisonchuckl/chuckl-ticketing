@@ -6,7 +6,6 @@ const prisma = new PrismaClient();
 const router = Router();
 
 // --- Ticket suggestion helpers (last 6 months, fallback ladder) ---
-
 function normalizeTicketName(name: string) {
   return String(name || "")
     .trim()
@@ -21,38 +20,13 @@ function median(nums: number[]) {
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
-// Most common value (mode). If tie, pick the median of the tied values.
-function mode(nums: number[]) {
-  if (!nums || nums.length === 0) return 0;
-
-  const counts = new Map<number, number>();
-  for (const n of nums) {
-    const v = Number(n);
-    if (!Number.isFinite(v)) continue;
-    counts.set(v, (counts.get(v) ?? 0) + 1);
-  }
-  if (counts.size === 0) return 0;
-
-  let bestCount = -1;
-  let tied: number[] = [];
-  for (const [v, c] of counts.entries()) {
-    if (c > bestCount) {
-      bestCount = c;
-      tied = [v];
-    } else if (c === bestCount) {
-      tied.push(v);
-    }
-  }
-  if (tied.length === 1) return tied[0];
-  return Math.round(median(tied));
-}
-
-type TicketRow = { name: string; pricePence: number; available: number | null };
-
-function buildTicketStats(rows: TicketRow[]) {
+function buildTicketSuggestions(
+  rows: Array<{ name: string; pricePence: number; available: number | null; createdAt: Date }>,
+  max = 4
+) {
   const map = new Map<
     string,
-    { display: string; count: number; prices: number[]; avails: number[] }
+    { display: string; count: number; prices: number[]; avails: number[]; lastSeenAt: number }
   >();
 
   for (const r of rows || []) {
@@ -60,88 +34,70 @@ function buildTicketStats(rows: TicketRow[]) {
     if (!display) continue;
 
     const key = normalizeTicketName(display);
-    const cur = map.get(key) || { display, count: 0, prices: [], avails: [] };
+    const seenAt = r.createdAt ? new Date(r.createdAt).getTime() : 0;
+
+    const cur =
+      map.get(key) || { display, count: 0, prices: [], avails: [], lastSeenAt: 0 };
 
     cur.count += 1;
+    cur.lastSeenAt = Math.max(cur.lastSeenAt, seenAt);
 
-    const pp = Number(r.pricePence);
-    if (Number.isFinite(pp)) cur.prices.push(pp);
-
-    const av = r.available == null ? null : Number(r.available);
-    if (av != null && Number.isFinite(av)) cur.avails.push(av);
+    if (Number.isFinite(Number(r.pricePence))) cur.prices.push(Number(r.pricePence));
+    if (r.available != null && Number.isFinite(Number(r.available))) cur.avails.push(Number(r.available));
 
     map.set(key, cur);
   }
 
-  return map;
+  return Array.from(map.values())
+    .map((x) => ({
+      name: x.display,
+      pricePence: Math.round(median(x.prices) || 0),
+      available: x.avails.length ? Math.round(median(x.avails)) : null,
+      count: x.count,
+      lastSeenAt: x.lastSeenAt,
+    }))
+    .sort((a, b) => (b.count - a.count) || (b.lastSeenAt - a.lastSeenAt))
+    .slice(0, max);
 }
 
-function topTicketKeys(stats: Map<string, { display: string; count: number }>, max = 6) {
-  return Array.from(stats.entries())
-    .sort((a, b) => (b[1].count ?? 0) - (a[1].count ?? 0))
-    .slice(0, max)
-    .map(([key]) => key);
-}
+async function suggestTicketsForShow(show: any) {
+  const since = new Date();
+  since.setMonth(since.getMonth() - 6);
 
-function pickPricePenceForKey(
-  key: string,
-  statsByStep: Array<Map<string, { prices: number[] }>>,
-  startIdx: number
-) {
-  for (let i = startIdx; i < statsByStep.length; i++) {
-    const entry = statsByStep[i].get(key);
-    if (entry?.prices?.length) {
-      const p = mode(entry.prices);
-      if (Number.isFinite(p) && p > 0) return p;
-      // if mode comes out 0 for some reason, fallback to median of that step’s prices
-      const m = Math.round(median(entry.prices));
-      if (Number.isFinite(m) && m > 0) return m;
-    }
-  }
-  return 0;
-}
-
-function pickAvailableForKey(
-  key: string,
-  statsByStep: Array<Map<string, { avails: number[] }>>,
-  startIdx: number
-) {
-  for (let i = startIdx; i < statsByStep.length; i++) {
-    const entry: any = statsByStep[i].get(key);
-    if (entry?.avails?.length) {
-      const a = Math.round(median(entry.avails));
-      return Number.isFinite(a) ? a : null;
-    }
-  }
-  return null;
-}
-
-async function suggestTicketsForShow(show: any, fallbackOrganiserId?: string | null) {
-  const since = new Date(Date.now() - 183 * 24 * 60 * 60 * 1000); // ~6 months
-
-const organiserId = show?.organiserId || fallbackOrganiserId || null;
-
+  const organiserId = show?.organiserId || null;
   const venueId = show?.venueId || null;
-  const eventType = show?.eventType || null; // category
-  const eventCategory = show?.eventCategory || null; // subcategory
 
-// If we still can’t attribute to an organiser, we cannot infer “your most common” tickets safely.
-if (!organiserId) {
-  return {
-    basedOn: "none",
-    since,
-    suggestions: [] as Array<{ name: string; pricePence: number; available: number | null }>,
+  // Note: your schema uses eventType + eventCategory
+  const eventType = show?.eventType || null;
+  const eventCategory = show?.eventCategory || null;
+
+  // If we can’t scope to an organiser, never “global-any” across all users — use safe defaults.
+  if (!organiserId) {
+    return {
+      basedOn: "defaults",
+      since,
+      suggestions: [
+        { name: "General Admission", pricePence: 0, available: null },
+        { name: "VIP", pricePence: 0, available: null },
+      ].slice(0, 2),
+    };
+  }
+
+  const baseShowWhere: any = {
+    organiserId,
+    // don’t use current show’s own ticketTypes as history
+    id: { not: show.id },
+    createdAt: { gte: since },
   };
-}
 
   const ladder: Array<{ label: string; showWhere: any }> = [];
 
-  // 1) organiser + venue + category/subcategory
+  // Tier 1) Same venue + same category/subcategory (when present)
   if (venueId && (eventType || eventCategory)) {
     ladder.push({
       label: "organiser+venue+category",
       showWhere: {
-        organiserId,
+        ...baseShowWhere,
         venueId,
         ...(eventType ? { eventType } : {}),
         ...(eventCategory ? { eventCategory } : {}),
@@ -149,102 +105,66 @@ if (!organiserId) {
     });
   }
 
-  // 2) organiser + venue
+  // Tier 2) Same venue (even if category/subcategory missing)
   if (venueId) {
     ladder.push({
       label: "organiser+venue",
-      showWhere: { organiserId, venueId },
+      showWhere: {
+        ...baseShowWhere,
+        venueId,
+      },
     });
   }
 
-  // 3) organiser + category/subcategory (ignore venue)
+  // Tier 3) Same category/subcategory (ignore venue)
   if (eventType || eventCategory) {
     ladder.push({
       label: "organiser+category",
       showWhere: {
-        organiserId,
+        ...baseShowWhere,
         ...(eventType ? { eventType } : {}),
         ...(eventCategory ? { eventCategory } : {}),
       },
     });
   }
 
-  // 4) organiser-any
+  // Tier 4) Organiser-any (last 6 months)
   ladder.push({
     label: "organiser-any",
-    showWhere: { organiserId },
+    showWhere: { ...baseShowWhere },
   });
 
-const MAX = 4;
-  const MIN = 2; // you usually only need 2-4 suggestions
-
-  // Pre-fetch rows for each step once (so price fallback is cheap)
-  const statsByStep: Array<Map<string, any>> = [];
-  const keysByStep: string[][] = [];
+  const MIN = 2; // if we can find 2 sensible ticket types, stop
+  let bestLabel = "organiser-any";
+  let best: Array<{ name: string; pricePence: number; available: number | null; count: number; lastSeenAt: number }> = [];
 
   for (const step of ladder) {
-  const rows = await prisma.ticketType.findMany({
-  where: {
-    show: {
-      ...step.showWhere,
-      ...(show?.id ? { id: { not: show.id } } : {}),
-      // ✅ “last 6 months” based on the event itself (more reliable than TicketType.createdAt)
-      date: { gte: since },
-    },
-  },
-  select: { name: true, pricePence: true, available: true },
-  orderBy: { createdAt: "desc" },
-  take: 1000,
-});
+    const rows = await prisma.ticketType.findMany({
+      where: {
+        show: step.showWhere,
+      },
+      select: { name: true, pricePence: true, available: true, createdAt: true },
+      take: 500,
+    });
 
-  const stats = buildTicketStats(rows as TicketRow[]);
-const keys = topTicketKeys(stats as any, MAX);
+    const suggestions = buildTicketSuggestions(rows, 4);
 
-statsByStep.push(stats);
-keysByStep.push(keys);
-
-// ✅ Debug: view in Railway logs
-console.log("[ticket-suggest]", step.label, {
-  rows: rows.length,
-  uniqueNames: stats.size,
-  top: keys.slice(0, 4),
-});
-}
-
-  // Choose which step “wins” for NAME discovery (same logic you already had)
-  let bestIdx = ladder.length - 1;
-  let bestKeys: string[] = [];
-
-  for (let i = 0; i < ladder.length; i++) {
-    const keys = keysByStep[i] || [];
-    if (keys.length > bestKeys.length) {
-      bestKeys = keys;
-      bestIdx = i;
+    if (suggestions.length > best.length) {
+      best = suggestions as any;
+      bestLabel = step.label;
     }
-    if (keys.length >= MIN) {
-      bestKeys = keys;
-      bestIdx = i;
+
+    if (suggestions.length >= MIN) {
+      best = suggestions as any;
+      bestLabel = step.label;
       break;
     }
   }
 
-  const bestLabel = ladder[bestIdx]?.label ?? "organiser-any";
-
-  // For each NAME we picked, now compute PRICE using the same ladder starting point
-  const suggestions = bestKeys.map((key) => {
-    const entry = statsByStep[bestIdx].get(key);
-    const displayName = entry?.display || key;
-
-    const pricePence = pickPricePenceForKey(key, statsByStep as any, bestIdx);
-    const available = pickAvailableForKey(key, statsByStep as any, bestIdx);
-
-    return { name: displayName, pricePence, available };
-  });
-
   return {
     basedOn: bestLabel,
     since,
-    suggestions,
+    suggestions: best.map(({ count, lastSeenAt, ...rest }) => rest),
   };
 }
 
@@ -1147,10 +1067,7 @@ let prefillInfo: { used: boolean; basedOn?: string; since?: string } = { used: f
 // If no tickets exist yet, prefill from “most common” tickets in the last 6 months (fallback ladder)
 if (!initialTickets.length) {
   try {
-const fallbackOrganiserId =
-  (req as any)?.user?.id ? String((req as any).user.id) : null;
-
-const suggested = await suggestTicketsForShow(show, fallbackOrganiserId);
+    const suggested = await suggestTicketsForShow(show);
 
     const defaultAllocationStr =
       show?.venue?.capacity != null ? String(show.venue.capacity) : "";
