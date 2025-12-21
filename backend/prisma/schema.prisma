@@ -81,6 +81,15 @@ model Venue {
   postcode String?
   capacity Int?
 
+  imageUrl        String?
+  contactName     String?
+  contactEmail    String?
+  contactPhone    String?
+  ticketContraBps Int?
+  bookingFeeBps   Int?
+  spaces          String[] @default([])
+  seatingMaps     String[] @default([])
+
   shows    Show[]
   seatMaps SeatMap[]
 
