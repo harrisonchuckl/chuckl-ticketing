@@ -183,20 +183,33 @@ const MAX = 4;
   const keysByStep: string[][] = [];
 
   for (const step of ladder) {
-    const rows = await prisma.ticketType.findMany({
-      where: {
-        createdAt: { gte: since },
-        show: step.showWhere,
-      },
-      select: { name: true, pricePence: true, available: true },
-      orderBy: { createdAt: "desc" },
-      take: 1000,
-    });
+  const rows = await prisma.ticketType.findMany({
+  where: {
+    show: {
+      ...step.showWhere,
+      ...(show?.id ? { id: { not: show.id } } : {}),
+      // ✅ “last 6 months” based on the event itself (more reliable than TicketType.createdAt)
+      date: { gte: since },
+    },
+  },
+  select: { name: true, pricePence: true, available: true },
+  orderBy: { createdAt: "desc" },
+  take: 1000,
+});
 
-    const stats = buildTicketStats(rows as TicketRow[]);
-    statsByStep.push(stats);
-    keysByStep.push(topTicketKeys(stats as any, MAX));
-  }
+  const stats = buildTicketStats(rows as TicketRow[]);
+const keys = topTicketKeys(stats as any, MAX);
+
+statsByStep.push(stats);
+keysByStep.push(keys);
+
+// ✅ Debug: view in Railway logs
+console.log("[ticket-suggest]", step.label, {
+  rows: rows.length,
+  uniqueNames: stats.size,
+  top: keys.slice(0, 4),
+});
+}
 
   // Choose which step “wins” for NAME discovery (same logic you already had)
   let bestIdx = ladder.length - 1;
