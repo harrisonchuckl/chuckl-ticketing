@@ -116,18 +116,23 @@ function pickAvailableForKey(
   return null;
 }
 
-async function suggestTicketsForShow(show: any) {
+async function suggestTicketsForShow(show: any, fallbackOrganiserId?: string | null) {
   const since = new Date(Date.now() - 183 * 24 * 60 * 60 * 1000); // ~6 months
 
-  const organiserId = show?.organiserId || null;
+const organiserId = show?.organiserId || fallbackOrganiserId || null;
+
   const venueId = show?.venueId || null;
   const eventType = show?.eventType || null; // category
   const eventCategory = show?.eventCategory || null; // subcategory
 
-  // If we can’t attribute to an organiser, don’t attempt global inference.
-  if (!organiserId) {
-    return { basedOn: "none", since, suggestions: [] as Array<{ name: string; pricePence: number; available: number | null }> };
-  }
+// If we still can’t attribute to an organiser, we cannot infer “your most common” tickets safely.
+if (!organiserId) {
+  return {
+    basedOn: "none",
+    since,
+    suggestions: [] as Array<{ name: string; pricePence: number; available: number | null }>,
+  };
+}
 
   const ladder: Array<{ label: string; showWhere: any }> = [];
 
@@ -170,7 +175,7 @@ async function suggestTicketsForShow(show: any) {
     showWhere: { organiserId },
   });
 
-  const MAX = 6;
+const MAX = 4;
   const MIN = 2; // you usually only need 2-4 suggestions
 
   // Pre-fetch rows for each step once (so price fallback is cheap)
@@ -1129,7 +1134,10 @@ let prefillInfo: { used: boolean; basedOn?: string; since?: string } = { used: f
 // If no tickets exist yet, prefill from “most common” tickets in the last 6 months (fallback ladder)
 if (!initialTickets.length) {
   try {
-    const suggested = await suggestTicketsForShow(show);
+const fallbackOrganiserId =
+  (req as any)?.user?.id ? String((req as any).user.id) : null;
+
+const suggested = await suggestTicketsForShow(show, fallbackOrganiserId);
 
     const defaultAllocationStr =
       show?.venue?.capacity != null ? String(show.venue.capacity) : "";
