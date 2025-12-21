@@ -228,6 +228,44 @@ router.get("/shows", requireAdminOrOrganiser, async (req, res) => {
   }
 });
 
+/** DELETE /admin/shows/:id — only if no tickets sold */
+router.delete("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
+  try {
+    const showId = String(req.params.id);
+    const show = await ensureShowAccessible(req, showId);
+
+    if (!show) return res.status(404).json({ ok: false, error: "Show not found" });
+
+    const soldCount = await prisma.ticket.count({
+      where: { showId, order: { status: { in: [OrderStatus.PAID, OrderStatus.PENDING] } } },
+    });
+
+    if (soldCount > 0) {
+      return res
+        .status(400)
+        .json({ ok: false, error: "Cannot delete events that have sold tickets" });
+    }
+
+    await prisma.$transaction([
+      prisma.refund.deleteMany({ where: { order: { showId } } }),
+      prisma.ticket.deleteMany({ where: { showId } }),
+      prisma.order.deleteMany({ where: { showId } }),
+      prisma.allocationSeat.deleteMany({ where: { allocation: { showId } } }),
+      prisma.seat.deleteMany({ where: { seatMap: { showId } } }),
+      prisma.zone.deleteMany({ where: { seatMap: { showId } } }),
+      prisma.externalAllocation.deleteMany({ where: { showId } }),
+      prisma.seatMap.deleteMany({ where: { showId } }),
+      prisma.ticketType.deleteMany({ where: { showId } }),
+      prisma.show.delete({ where: { id: showId } }),
+    ]);
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("DELETE /admin/shows/:id failed", e);
+    res.status(500).json({ ok: false, error: "Failed to delete show" });
+  }
+});
+
 /** POST /admin/shows — create (auto-creates venue if needed) */
 router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
     try {

@@ -2604,6 +2604,7 @@ async function listShows(){
                 +'<a href="#" data-seating="'+s.id+'">Seating map</a>'
                 +'<a href="#" data-tickets="'+s.id+'">Tickets</a>'
                 +'<a href="#" data-dup="'+s.id+'">Duplicate</a>'
+                +(sold === 0 ? '<a href="#" data-delete="'+s.id+'">Delete</a>' : '')
               +'</div>'
             +'</div>'
           +'</td>'
@@ -2669,6 +2670,21 @@ async function listShows(){
           }
         }catch(err){
           alert('Duplicate failed: ' + (err.message || err));
+        }
+      });
+    });
+
+    $$('[data-delete]').forEach(function(a){
+      a.addEventListener('click', async function(e){
+        e.preventDefault();
+        var id = a.getAttribute('data-delete');
+        if (!id) return;
+        if (!confirm('Delete this event? This cannot be undone.')) return;
+        try{
+          await j('/admin/shows/' + id, { method:'DELETE' });
+          await load();
+        }catch(err){
+          alert('Delete failed: ' + (err.message || err));
         }
       });
     });
