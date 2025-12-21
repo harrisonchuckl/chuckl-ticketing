@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { ShowStatus } from "@prisma/client";
+import { OrderStatus, SeatStatus, ShowStatus } from "@prisma/client";
 import prisma from "../lib/prisma.js";
 import { requireAdminOrOrganiser } from "../lib/authz.js";
 
@@ -72,30 +72,145 @@ async function ensureVenue(venueId?: string | null, venueText?: string | null): 
 /** GET /admin/shows — list */
 router.get("/shows", requireAdminOrOrganiser, async (req, res) => {
   try {
-const items = await prisma.show.findMany({
-  where: showWhereForList(req),
-  orderBy: [{ date: "asc" }],
-   select: {
-          id: true,
-          title: true,
-          description: true,
-          imageUrl: true,
+    const items = await prisma.show.findMany({
+      where: showWhereForList(req),
+      orderBy: [{ date: "asc" }],
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        imageUrl: true,
         date: true,
         eventType: true,
         eventCategory: true,
         status: true,
         publishedAt: true,
         usesAllocatedSeating: true,
-     
+        activeSeatMapId: true,
         venue: { select: { id: true, name: true, city: true } },
       },
     });
 
-    const enriched = items.map((s) => ({
-      ...s,
-      _alloc: { total: 0, sold: 0, hold: 0 },
-      _revenue: { grossFace: 0 },
-    }));
+    const showIds = items.map((s) => s.id);
+
+    if (!showIds.length) {
+      return res.json({ ok: true, items: [] });
+    }
+
+    const [
+      seatMaps,
+      seatStatusCounts,
+      paidTicketTotals,
+      allocationTotals,
+      ticketCapacityTotals,
+    ] = await Promise.all([
+      prisma.seatMap.findMany({
+        where: { showId: { in: showIds } },
+        select: { id: true, showId: true, layout: true, updatedAt: true },
+      }),
+      prisma.seat.groupBy({
+        by: ["seatMapId", "status"],
+        where: { seatMap: { showId: { in: showIds } } },
+        _count: { _all: true },
+      }),
+      prisma.ticket.groupBy({
+        by: ["showId"],
+        where: { showId: { in: showIds }, order: { status: OrderStatus.PAID } },
+        _sum: { quantity: true },
+      }),
+      prisma.externalAllocation.groupBy({
+        by: ["showId"],
+        where: { showId: { in: showIds } },
+        _sum: { quantity: true },
+      }),
+      prisma.ticketType.groupBy({
+        by: ["showId"],
+        where: { showId: { in: showIds }, available: { not: null } },
+        _sum: { available: true },
+      }),
+    ]);
+
+    type SeatMapSummary = {
+      id: string;
+      showId: string;
+      layout: unknown;
+      updatedAt: Date;
+    };
+
+    const seatMapsByShow = seatMaps.reduce<Map<string, SeatMapSummary[]>>(
+      (acc, sm) => {
+        const list = acc.get(sm.showId) || [];
+        list.push(sm);
+        return acc.set(sm.showId, list);
+      },
+      new Map()
+    );
+
+    const seatStatusByMap = seatStatusCounts.reduce<
+      Map<string, { total: number; sold: number; held: number }>
+    >((acc, row) => {
+      const current = acc.get(row.seatMapId) || { total: 0, sold: 0, held: 0 };
+      const count = row._count._all ?? 0;
+
+      current.total += count;
+      if (row.status === SeatStatus.SOLD) current.sold += count;
+      if (row.status === SeatStatus.HELD) current.held += count;
+
+      return acc.set(row.seatMapId, current);
+    }, new Map());
+
+    const soldByShow = paidTicketTotals.reduce<Map<string, number>>((acc, row) => {
+      acc.set(row.showId, Number(row._sum.quantity ?? 0));
+      return acc;
+    }, new Map());
+
+    const holdsByShow = allocationTotals.reduce<Map<string, number>>((acc, row) => {
+      acc.set(row.showId, Number(row._sum.quantity ?? 0));
+      return acc;
+    }, new Map());
+
+    const capacityByShow = ticketCapacityTotals.reduce<Map<string, number>>(
+      (acc, row) => {
+        acc.set(row.showId, Number(row._sum.available ?? 0));
+        return acc;
+      },
+      new Map()
+    );
+
+    const enriched = items.map((s) => {
+      const seatMapsForShow = seatMapsByShow.get(s.id) || [];
+      seatMapsForShow.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+
+      const activeSeatMap =
+        seatMapsForShow.find((m) => m.id === s.activeSeatMapId) ||
+        seatMapsForShow[0] ||
+        null;
+
+      const seatStats = activeSeatMap
+        ? seatStatusByMap.get(activeSeatMap.id)
+        : null;
+
+      const seatTotal = seatStats?.total ?? 0;
+      const seatSold = seatStats?.sold ?? 0;
+      const seatHeld = seatStats?.held ?? 0;
+
+      const estCapRaw = activeSeatMap ? (activeSeatMap.layout as any)?.estimatedCapacity : null;
+      const estCapNum = Number(estCapRaw);
+      const estCap = Number.isFinite(estCapNum) ? estCapNum : 0;
+
+      const totalFromSeats = seatTotal || estCap;
+      const totalFromTickets = capacityByShow.get(s.id) ?? 0;
+      const total = Math.max(totalFromSeats, totalFromTickets, 0);
+
+      const sold = Math.max(soldByShow.get(s.id) ?? 0, seatSold);
+      const hold = Math.max(holdsByShow.get(s.id) ?? 0, seatHeld);
+
+      return {
+        ...s,
+        _alloc: { total, sold, hold },
+        _revenue: { grossFace: 0 },
+      };
+    });
 
     res.json({ ok: true, items: enriched });
   } catch (e) {
