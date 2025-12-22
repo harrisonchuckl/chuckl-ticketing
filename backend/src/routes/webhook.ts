@@ -1,12 +1,19 @@
 // backend/src/routes/webhook.ts
-import { Router } from 'express';
+import express, { Router } from 'express';
 import prisma from '../lib/prisma.js';
 import Stripe from 'stripe';
 import { calcFeesForShow } from '../services/fees.js';
 import { sendTicketsEmail } from '../services/email.js';
 
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, { apiVersion: '2024-06-20' });
+const stripeSecret = process.env.STRIPE_SECRET_KEY;
+
+// Safer ES Module interop with Stripe
+const StripeClient = (Stripe as any)?.default || Stripe;
+
+const stripe = stripeSecret
+  ? new StripeClient(stripeSecret, { apiVersion: '2024-06-20' })
+  : null;
 const router = Router();
 
 function markSeatsSold(layout: any, seatIds: string[]): any {
@@ -64,13 +71,17 @@ function markSeatsSold(layout: any, seatIds: string[]): any {
 /**
  * Stripe webhook
  */
-router.post('/webhooks/stripe', async (req, res) => {
+router.post('/webhooks/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
   try {
+    if (!stripe) return res.status(500).send('Stripe not configured');
     const sig = req.headers['stripe-signature'] as string | undefined;
     if (!sig) return res.status(400).send('No signature');
 
-const rawBody = (req as any).rawBody || req.body;
-const event = stripe.webhooks.constructEvent(rawBody, sig, process.env.STRIPE_WEBHOOK_SECRET as string);
+const event = stripe.webhooks.constructEvent(
+  req.body,
+  sig,
+  process.env.STRIPE_WEBHOOK_SECRET as string
+);
 
 
         if (event.type === 'checkout.session.completed') {
