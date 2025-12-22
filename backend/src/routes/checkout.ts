@@ -29,8 +29,16 @@ router.post('/session', async (req, res) => {
     console.debug('checkout/session request body (RAW):', DEBUG_REQ_BODY);
     // --- DEBUG END: RAW REQUEST LOG ---
   try {
-    const { showId, quantity, unitPricePence, seats } = DEBUG_REQ_BODY;
+const { showId, quantity, unitPricePence, seats, ticketTypeId } = DEBUG_REQ_BODY;
     const seatIds: string[] = Array.isArray(seats) ? seats.map((s: any) => String(s)) : [];
+      const hasSeats = seatIds.length > 0;
+
+// GA checkout MUST include ticketTypeId so we can create Ticket rows later
+if (!hasSeats && !ticketTypeId) {
+  console.warn('checkout/session missing ticketTypeId for GA purchase', { showId, qty: quantity });
+  return res.status(400).json({ ok: false, message: 'ticketTypeId is required for General Admission checkout' });
+}
+
     console.debug('checkout/session extracted data:', { showId, quantity, unitPricePence, headers: req.headers });
     const qty = Number(quantity);
     const unitPence = Number(unitPricePence);
@@ -86,68 +94,87 @@ console.debug('checkout/session fees result:', fees);
 
 
 
-   const order = await prisma.order.create({
+ // --- Create Order FIRST (without stripe session id), then create Stripe session, then update Order ---
+if (!stripe) {
+  console.error('checkout/session error: STRIPE_SECRET_KEY is not configured');
+  return res.status(500).json({ ok: false, message: 'Payment processing unavailable' });
+}
+
+const seatsCsv = seatIds.length ? seatIds.join(',') : null;
+
+// Create the order in PENDING state (email will be known after Stripe completes)
+const order = await prisma.order.create({
   data: {
-    showId,
-    email,
-    status: "PENDING",
+    showId: String(showId),
+    email: null,
+    status: OrderStatus.PENDING,
     amountPence,
-    quantity,
-    ticketTypeId: ticketTypeId ? String(ticketTypeId) : null,
-    stripeCheckoutSessionId: session.id,
+    quantity: Math.round(qty),
+
+    // Only store ticketTypeId for GA (non-seated). Seated orders can be inferred from SeatMap later.
+    ticketTypeId: (!hasSeats && ticketTypeId) ? String(ticketTypeId) : null,
+
     seatsCsv,
   },
 });
-    console.debug('checkout/session order created', { orderId: order.id, status: order.status, amountPence, qty });
 
-    const candidateOrigin = process.env.PUBLIC_BASE_URL || (req.get('host') ? `${req.protocol}://${req.get('host')}` : '');
-    let origin = 'http://localhost:3000';
-    try {
-      if (candidateOrigin) origin = new URL(candidateOrigin).origin;
-    } catch (err) {
-      console.warn('checkout/session origin fallback', candidateOrigin, err);
-    }
-    console.debug('checkout/session origin', { candidateOrigin, origin });
+console.debug('checkout/session order created', { orderId: order.id, status: order.status, amountPence, qty });
 
-    if (!stripe) {
-      console.error('checkout/session error: STRIPE_SECRET_KEY is not configured');
-      return res.status(500).json({ ok: false, message: 'Payment processing unavailable' });
-    }
+const candidateOrigin =
+  process.env.PUBLIC_BASE_URL ||
+  (req.get('host') ? `${req.protocol}://${req.get('host')}` : '');
 
-   const successUrl = new URL(`/public/checkout/success?orderId=${order.id}`, origin).toString();
+let origin = 'http://localhost:3000';
+try {
+  if (candidateOrigin) origin = new URL(candidateOrigin).origin;
+} catch (err) {
+  console.warn('checkout/session origin fallback', candidateOrigin, err);
+}
+console.debug('checkout/session origin', { candidateOrigin, origin });
+
+const successUrl = new URL(`/public/checkout/success?orderId=${order.id}`, origin).toString();
 const cancelUrl = new URL(`/public/event/${show.id}?status=cancelled`, origin).toString();
 console.debug('checkout/session redirect urls', { successUrl, cancelUrl });
 
-    // --- DEBUG START: STRIPE SESSION CREATION ---
-    const lineItems = [
-        {
-          price_data: {
-            currency: 'gbp',
-            product_data: { name: showTitle },
-            unit_amount: Math.round(unitPence),
-          },
-          quantity: Math.round(qty),
-        },
-    ];
-    console.debug('checkout/session Stripe line_items:', JSON.stringify(lineItems));
-    
-     const session = await stripe.checkout.sessions.create({
-      mode: 'payment',
-      line_items: lineItems,
-      success_url: successUrl,
-      cancel_url: cancelUrl,
-      metadata: {
-        orderId: order.id,
-        showId: show.id,
-        seatIds: seatIds.join(','),
-      },
-    });
+// --- DEBUG START: STRIPE SESSION CREATION ---
+const lineItems = [
+  {
+    price_data: {
+      currency: 'gbp',
+      product_data: { name: showTitle },
+      unit_amount: Math.round(unitPence),
+    },
+    quantity: Math.round(qty),
+  },
+];
 
-    console.debug('checkout/session created Stripe session (ID):', session.id);
-    // --- DEBUG END: STRIPE SESSION CREATION ---
-    console.debug('checkout/session success: returning URL');
-    return res.json({ ok: true, url: session.url });
- } catch (err: any) {
+console.debug('checkout/session Stripe line_items:', JSON.stringify(lineItems));
+
+const session = await stripe.checkout.sessions.create({
+  mode: 'payment',
+  line_items: lineItems,
+  success_url: successUrl,
+  cancel_url: cancelUrl,
+  metadata: {
+    orderId: order.id,
+    showId: show.id,
+    seatIds: seatIds.join(','),
+    ...(ticketTypeId ? { ticketTypeId: String(ticketTypeId) } : {}),
+  },
+});
+
+console.debug('checkout/session created Stripe session (ID):', session.id);
+
+// Now store the Stripe session id on the order
+await prisma.order.update({
+  where: { id: order.id },
+  data: { stripeCheckoutSessionId: session.id },
+});
+
+console.debug('checkout/session success: returning URL');
+return res.json({ ok: true, url: session.url });
+// --- DEBUG END: STRIPE SESSION CREATION ---
+
     // --- DEBUG START: FINAL CATCH LOG ---
     console.error('checkout/session CRITICAL ERROR', {
       requestBody: DEBUG_REQ_BODY, // Use the new variable for consistency
@@ -334,7 +361,8 @@ router.get('/', async (req, res) => {
                         const res = await fetch('/checkout/session', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ showId, quantity, unitPricePence })
+                            const ticketTypeId = selectedOption.value;
+                            body: JSON.stringify({ showId, quantity, unitPricePence, ticketTypeId })
                         });
                         const data = await res.json();
 
