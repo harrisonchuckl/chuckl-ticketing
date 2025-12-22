@@ -2,7 +2,7 @@ import "./env.js";
 import express from "express";
 import cors from "cors";
 import morgan from "morgan";
-import rateLimit from "express-rate-limit";
+import { rateLimit } from "express-rate-limit";
 import cookieParser from "cookie-parser";
 import path from "path";
 import { fileURLToPath } from "url";
