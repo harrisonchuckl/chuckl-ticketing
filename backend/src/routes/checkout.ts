@@ -24,24 +24,23 @@ function pFmt(p: number | null | undefined) {
 }
 
 router.post('/session', async (req, res) => {
-    // --- DEBUG START: RAW REQUEST LOG (Moved out of try/catch to ensure logging) ---
-    const DEBUG_REQ_BODY = req.body || {};
-    console.debug('checkout/session request body (RAW):', DEBUG_REQ_BODY);
-    // --- DEBUG END: RAW REQUEST LOG ---
-  try {
-const { showId, quantity, unitPricePence, seats, ticketTypeId } = DEBUG_REQ_BODY;
+  const DEBUG_REQ_BODY = req.body || {};
+  console.debug('checkout/session request body (RAW):', DEBUG_REQ_BODY);
+
+  try {
+    const { showId, quantity, unitPricePence, seats, ticketTypeId } = DEBUG_REQ_BODY;
+
     const seatIds: string[] = Array.isArray(seats) ? seats.map((s: any) => String(s)) : [];
-      const hasSeats = seatIds.length > 0;
+    const hasSeats = seatIds.length > 0;
 
-// GA checkout MUST include ticketTypeId so we can create Ticket rows later
-if (!hasSeats && !ticketTypeId) {
-  console.warn('checkout/session missing ticketTypeId for GA purchase', { showId, qty: quantity });
-  return res.status(400).json({ ok: false, message: 'ticketTypeId is required for General Admission checkout' });
-}
+    // GA checkout MUST include ticketTypeId so we can create Ticket rows later
+    if (!hasSeats && !ticketTypeId) {
+      console.warn('checkout/session missing ticketTypeId for GA purchase', { showId, qty: quantity });
+      return res.status(400).json({ ok: false, message: 'ticketTypeId is required for General Admission checkout' });
+    }
 
-    console.debug('checkout/session extracted data:', { showId, quantity, unitPricePence, headers: req.headers });
-    const qty = Number(quantity);
-    const unitPence = Number(unitPricePence);
+    const qty = Number(quantity);
+    const unitPence = Number(unitPricePence);
 
     if (!showId || !Number.isFinite(qty) || !Number.isFinite(unitPence) || qty <= 0 || unitPence <= 0) {
       console.warn('checkout/session validation failed', { showId, qty, unitPence });
@@ -53,41 +52,101 @@ if (!hasSeats && !ticketTypeId) {
       console.warn('checkout/session missing show', { showId });
       return res.status(404).json({ ok: false, message: 'Event not found' });
     }
+
     const showTitle = show.title ?? 'Event ticket';
 
-  const amountPence = Math.round(unitPence) * Math.round(qty);
-    console.debug('checkout/session computed totals', { qty, unitPence: Math.round(unitPence), amountPence });
-    
-// --- DEBUG START: FEE CALCULATION ---
-console.debug('checkout/session calling calcFeesForShow with:', {
-  showId: show.id,
-  qty,
-  amountPence,
+    // ⚠️ NOTE: see “Tiered pricing” section below — this calculation is only safe if all seats have same price
+    const amountPence = Math.round(unitPence) * Math.round(qty);
+
+    if (!stripe) {
+      console.error('checkout/session error: STRIPE_SECRET_KEY is not configured');
+      return res.status(500).json({ ok: false, message: 'Payment processing unavailable' });
+    }
+
+    let fees;
+    try {
+      fees = await calcFeesForShow(show.id, amountPence, qty, null);
+    } catch (feeErr: any) {
+      console.error('checkout/session fee calc error', {
+        showId: show.id,
+        qty,
+        amountPence,
+        feeErrorMessage: feeErr?.message,
+        feeErrorStack: feeErr?.stack,
+      });
+      return res.status(500).json({ ok: false, message: 'Fee calculation error', detail: feeErr?.message });
+    }
+
+    const seatsCsv = seatIds.length ? seatIds.join(',') : null;
+
+    const order = await prisma.order.create({
+      data: {
+        showId: String(showId),
+        email: null,
+        status: OrderStatus.PENDING,
+        amountPence,
+        quantity: Math.round(qty),
+        ticketTypeId: (!hasSeats && ticketTypeId) ? String(ticketTypeId) : null,
+        seatsCsv,
+      },
+    });
+
+    const candidateOrigin =
+      process.env.PUBLIC_BASE_URL ||
+      (req.get('host') ? `${req.protocol}://${req.get('host')}` : '');
+
+    let origin = 'http://localhost:3000';
+    try {
+      if (candidateOrigin) origin = new URL(candidateOrigin).origin;
+    } catch (e) {
+      console.warn('checkout/session origin fallback', candidateOrigin, e);
+    }
+
+    const successUrl = new URL(`/public/checkout/success?orderId=${order.id}`, origin).toString();
+    const cancelUrl = new URL(`/public/event/${show.id}?status=cancelled`, origin).toString();
+
+    const lineItems = [
+      {
+        price_data: {
+          currency: 'gbp',
+          product_data: { name: showTitle },
+          unit_amount: Math.round(unitPence),
+        },
+        quantity: Math.round(qty),
+      },
+    ];
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: lineItems,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      metadata: {
+        orderId: order.id,
+        showId: show.id,
+        seatIds: seatIds.join(','),
+        ...(ticketTypeId ? { ticketTypeId: String(ticketTypeId) } : {}),
+      },
+    });
+
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { stripeCheckoutSessionId: session.id },
+    });
+
+    return res.json({ ok: true, url: session.url });
+
+  } catch (err: any) {
+    console.error('checkout/session CRITICAL ERROR', {
+      requestBody: DEBUG_REQ_BODY,
+      errorMessage: err?.message,
+      errorName: err?.name,
+      errorStack: err?.stack,
+      rawError: err,
+    });
+    return res.status(500).json({ ok: false, message: 'Checkout error', detail: err?.message });
+  }
 });
-
-let fees;
-try {
-  // Match the fees service signature:
-  // calcFeesForShow(showId, amountPence, quantity, organiserSplitBps?)
-  fees = await calcFeesForShow(
-    show.id,
-    amountPence,
-    qty,
-    null // organiserSplitBps – public checkout, so no organiser override here
-  );
-} catch (feeErr: any) {
-  console.error('checkout/session fee calc error', {
-    showId: show.id,
-    qty,
-    amountPence,
-    feeErrorMessage: feeErr?.message,
-    feeErrorStack: feeErr?.stack,
-  });
-
-  return res
-    .status(500)
-    .json({ ok: false, message: 'Fee calculation error', detail: feeErr?.message });
-}
 
 console.debug('checkout/session fees result:', fees);
 // --- DEBUG END: FEE CALCULATION ---
@@ -358,12 +417,14 @@ router.get('/', async (req, res) => {
                     }
 
                     try {
-                        const res = await fetch('/checkout/session', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            const ticketTypeId = selectedOption.value;
-                            body: JSON.stringify({ showId, quantity, unitPricePence, ticketTypeId })
-                        });
+const ticketTypeId = selectedOption.value;
+
+const res = await fetch('/checkout/session', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ showId, quantity, unitPricePence, ticketTypeId })
+});
+
                         const data = await res.json();
 
                         if (data.ok && data.url) {
