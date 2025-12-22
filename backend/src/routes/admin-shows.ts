@@ -15,14 +15,9 @@ function isOrganiser(req: any) {
   return String(req.user?.role || "").toUpperCase() === "ORGANISER";
 }
 
-async function ensureShowAccessible(req: any, showId: string) {
-  return prisma.show.findFirst({ where: showWhereForRead(req, showId), select: { id: true } });
-}
-
-
 function showWhereForRead(req: any, showId: string) {
   if (isOrganiser(req)) {
-return { id: showId, organiserId: requireUserId(req) };
+    return { id: showId, organiserId: requireUserId(req) };
   }
   return { id: showId };
 }
@@ -34,7 +29,12 @@ function showWhereForList(req: any) {
   return {};
 }
 
-
+async function ensureShowAccessible(req: any, showId: string) {
+  return prisma.show.findFirst({
+    where: showWhereForRead(req, showId),
+    select: { id: true },
+  });
+}
 
 function asNullableString(value: unknown) {
   if (value === null || value === undefined) return null;
@@ -47,7 +47,10 @@ function isNonEmptyString(val: string | null | undefined): val is string {
 }
 
 /** Utility: find existing venue (by exact name+city) or create one from text */
-async function ensureVenue(venueId?: string | null, venueText?: string | null): Promise<string | null> {
+async function ensureVenue(
+  venueId?: string | null,
+  venueText?: string | null
+): Promise<string | null> {
   if (venueId) {
     const v = await prisma.venue.findUnique({ where: { id: venueId } });
     if (v) return v.id;
@@ -97,76 +100,77 @@ router.get("/shows", requireAdminOrOrganiser, async (req, res) => {
       return res.json({ ok: true, items: [] });
     }
 
-const activeSeatMapIds = items
-  .map((s) => s.activeSeatMapId)
-  .filter((id): id is string => !!id);
+    const activeSeatMapIds = items
+      .map((s) => s.activeSeatMapId)
+      .filter((id): id is string => !!id);
 
-const [
-  seatMaps,
-  seatStatusCounts,
-  paidTicketTotals,
-  allocations,
-  ticketCapacityTotals,
-  heldSeats,
-  grossFaceTotals,
-] = await Promise.all([
-  prisma.seatMap.findMany({
-    where: { showId: { in: showIds } },
-    select: { id: true, showId: true, layout: true, updatedAt: true },
-  }),
+    const [
+      seatMaps,
+      seatStatusCounts,
+      paidTicketTotals,
+      allocations,
+      ticketCapacityTotals,
+      heldSeats,
+      grossFaceTotals,
+    ] = await Promise.all([
+      prisma.seatMap.findMany({
+        where: { showId: { in: showIds } },
+        select: { id: true, showId: true, layout: true, updatedAt: true },
+      }),
 
-  prisma.seat.groupBy({
-    by: ["seatMapId", "status"],
-    where: { seatMap: { showId: { in: showIds } } },
-    _count: { _all: true },
-  }),
+      prisma.seat.groupBy({
+        by: ["seatMapId", "status"],
+        where: { seatMap: { showId: { in: showIds } } },
+        _count: { _all: true },
+      }),
 
-  // SOLD should mean PAID only (not pending checkouts)
-  prisma.ticket.groupBy({
-    by: ["showId"],
-    where: {
-      showId: { in: showIds },
-      order: { status: OrderStatus.PAID },
-    },
-    _sum: { quantity: true },
-  }),
+      // SOLD should mean PAID only (not pending checkouts)
+      prisma.ticket.groupBy({
+        by: ["showId"],
+        where: {
+          showId: { in: showIds },
+          order: { status: OrderStatus.PAID },
+        },
+        _sum: { quantity: true },
+      }),
 
-  // Need allocation seatIds to avoid double-counting holds
-  prisma.externalAllocation.findMany({
-    where: { showId: { in: showIds } },
-    select: {
-      id: true,
-      showId: true,
-      seatMapId: true,
-      quantity: true,
-      seats: { select: { seatId: true } }, // AllocationSeat rows
-    },
-  }),
+      // Need allocation seatIds to avoid double-counting holds
+      prisma.externalAllocation.findMany({
+        where: { showId: { in: showIds } },
+        select: {
+          id: true,
+          showId: true,
+          seatMapId: true,
+          quantity: true,
+          seats: { select: { seatId: true } }, // AllocationSeat rows
+        },
+      }),
 
-  // Treat TicketType.available as the configured capacity (cap), not "remaining"
-  prisma.ticketType.groupBy({
-    by: ["showId"],
-    where: { showId: { in: showIds }, available: { not: null } },
-    _sum: { available: true },
-  }),
+      // Treat TicketType.available as the configured capacity (cap), not "remaining"
+      prisma.ticketType.groupBy({
+        by: ["showId"],
+        where: { showId: { in: showIds }, available: { not: null } },
+        _sum: { available: true },
+      }),
 
-  // HELD seat IDs for active maps (to de-dupe with allocation seats)
-  prisma.seat.findMany({
-    where: {
-      seatMapId: { in: activeSeatMapIds.length ? activeSeatMapIds : ["__none__"] },
-      status: SeatStatus.HELD,
-    },
-    select: { seatMapId: true, id: true },
-  }),
+      // HELD seat IDs for active maps (to de-dupe with allocation seats)
+      prisma.seat.findMany({
+        where: {
+          seatMapId: {
+            in: activeSeatMapIds.length ? activeSeatMapIds : ["__none__"],
+          },
+          status: SeatStatus.HELD,
+        },
+        select: { seatMapId: true, id: true },
+      }),
 
-  // Gross face (optional but nice to have)
-  prisma.order.groupBy({
-    by: ["showId"],
-    where: { showId: { in: showIds }, status: OrderStatus.PAID },
-    _sum: { amountPence: true },
-  }),
-]);
-
+      // Gross face (optional but nice to have)
+      prisma.order.groupBy({
+        by: ["showId"],
+        where: { showId: { in: showIds }, status: OrderStatus.PAID },
+        _sum: { amountPence: true },
+      }),
+    ]);
 
     type SeatMapSummary = {
       id: string;
@@ -179,129 +183,38 @@ const [
       (acc, sm) => {
         const list = acc.get(sm.showId) || [];
         list.push(sm);
-        return acc.set(sm.showId, list);
+        acc.set(sm.showId, list);
+        return acc;
       },
       new Map()
     );
 
     const seatStatusByMap = seatStatusCounts.reduce<
-  Map<string, { total: number; sold: number; held: number; blocked: number }>
->((acc, row) => {
-  const current = acc.get(row.seatMapId) || { total: 0, sold: 0, held: 0, blocked: 0 };
-  const count = row._count._all ?? 0;
+      Map<string, { total: number; sold: number; held: number; blocked: number }>
+    >((acc, row) => {
+      const current = acc.get(row.seatMapId) || {
+        total: 0,
+        sold: 0,
+        held: 0,
+        blocked: 0,
+      };
+      const count = row._count._all ?? 0;
 
-  current.total += count;
-  if (row.status === SeatStatus.SOLD) current.sold += count;
-  if (row.status === SeatStatus.HELD) current.held += count;
+      current.total += count;
+      if (row.status === SeatStatus.SOLD) current.sold += count;
+      if (row.status === SeatStatus.HELD) current.held += count;
 
-  // Only if BLOCKED exists in your SeatStatus enum, otherwise remove this line:
-  if ((row.status as any) === "BLOCKED") current.blocked += count;
+      // Only if BLOCKED exists in your SeatStatus enum (safe-cast so it compiles either way)
+      if ((row.status as any) === "BLOCKED") current.blocked += count;
 
-  return acc.set(row.seatMapId, current);
-}, new Map());
-
+      acc.set(row.seatMapId, current);
+      return acc;
+    }, new Map());
 
     const soldByShow = paidTicketTotals.reduce<Map<string, number>>((acc, row) => {
       acc.set(row.showId, Number(row._sum.quantity ?? 0));
       return acc;
     }, new Map());
-
- const allocationsByShow = allocations.reduce<Map<string, typeof allocations>>((acc, a) => {
-  const list = acc.get(a.showId) || [];
-  list.push(a);
-  acc.set(a.showId, list);
-  return acc;
-}, new Map());
-
-const heldSeatIdsByMap = heldSeats.reduce<Map<string, Set<string>>>((acc, s) => {
-  const set = acc.get(s.seatMapId) || new Set<string>();
-  set.add(s.id);
-  acc.set(s.seatMapId, set);
-  return acc;
-}, new Map());
-
-const grossByShow = grossFaceTotals.reduce<Map<string, number>>((acc, row) => {
-  acc.set(row.showId, Number(row._sum.amountPence ?? 0));
-  return acc;
-}, new Map());
-
-const enriched = items.map((s) => {
-  const seatMapsForShow = seatMapsByShow.get(s.id) || [];
-  seatMapsForShow.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-
-  const activeSeatMap =
-    seatMapsForShow.find((m) => m.id === s.activeSeatMapId) ||
-    seatMapsForShow[0] ||
-    null;
-
-  const seatStats = activeSeatMap ? seatStatusByMap.get(activeSeatMap.id) : null;
-
-  // Sellable seat capacity = total - blocked
-  const seatTotalSellable = seatStats ? Math.max((seatStats.total ?? 0) - (seatStats.blocked ?? 0), 0) : 0;
-  const seatSold = seatStats?.sold ?? 0;
-
-  const estCapRaw = activeSeatMap ? (activeSeatMap.layout as any)?.estimatedCapacity : null;
-  const estCapNum = Number(estCapRaw);
-  const estCap = Number.isFinite(estCapNum) ? estCapNum : 0;
-
-  const soldFromTickets = soldByShow.get(s.id) ?? 0;
-
-  const allocs = allocationsByShow.get(s.id) || [];
-
-  const isAllocated = !!s.usesAllocatedSeating && !!activeSeatMap?.id;
-
-  let total = 0;
-  let sold = 0;
-  let hold = 0;
-
-  if (isAllocated) {
-    const mapId = activeSeatMap!.id;
-
-    // Total capacity from seat map if we can, otherwise estimatedCapacity
-    total = seatTotalSellable || estCap;
-
-    // Sold seats are authoritative, but fallback to ticket sales if needed
-    sold = seatSold || soldFromTickets;
-
-    // HOLD = (unique HELD seats ∪ allocation seats) + any unassigned allocation quantity
-    const heldIds = heldSeatIdsByMap.get(mapId) || new Set<string>();
-    const holdIds = new Set<string>(heldIds);
-
-    let unassigned = 0;
-
-    for (const a of allocs) {
-      // If allocation is tied to a different map, ignore it
-      if (a.seatMapId && a.seatMapId !== mapId) continue;
-
-      const seatIds = (a.seats || []).map((x) => x.seatId);
-      for (const id of seatIds) holdIds.add(id);
-
-      const qty = Number(a.quantity ?? 0);
-      const assigned = seatIds.length;
-      unassigned += Math.max(qty - assigned, 0);
-    }
-
-    hold = holdIds.size + unassigned;
-  } else {
-    // General admission:
-    // Treat TicketType.available as the configured cap
-    const cap = capacityByShow.get(s.id) ?? 0;
-
-    sold = soldFromTickets;
-
-    // Holds are allocation quantities (GA allocations reserve ticket capacity)
-    hold = allocs.reduce((sum, a) => sum + Number(a.quantity ?? 0), 0);
-
-    // If cap isn't set but we have sold/hold, show something sensible
-    total = cap > 0 ? cap : Math.max(sold + hold, 0);
-  }
-
-  return {
-    ...s,
-    _alloc: { total, sold, hold },
-    _revenue: { grossFace: (grossByShow.get(s.id) ?? 0) / 100 },
-  };
-});
 
     const capacityByShow = ticketCapacityTotals.reduce<Map<string, number>>(
       (acc, row) => {
@@ -310,6 +223,27 @@ const enriched = items.map((s) => {
       },
       new Map()
     );
+
+    const allocationsByShow = allocations.reduce<
+      Map<string, Array<(typeof allocations)[number]>>
+    >((acc, a) => {
+      const list = acc.get(a.showId) || [];
+      list.push(a);
+      acc.set(a.showId, list);
+      return acc;
+    }, new Map());
+
+    const heldSeatIdsByMap = heldSeats.reduce<Map<string, Set<string>>>((acc, s) => {
+      const set = acc.get(s.seatMapId) || new Set<string>();
+      set.add(s.id);
+      acc.set(s.seatMapId, set);
+      return acc;
+    }, new Map());
+
+    const grossByShow = grossFaceTotals.reduce<Map<string, number>>((acc, row) => {
+      acc.set(row.showId, Number(row._sum.amountPence ?? 0));
+      return acc;
+    }, new Map());
 
     const enriched = items.map((s) => {
       const seatMapsForShow = seatMapsByShow.get(s.id) || [];
@@ -320,35 +254,77 @@ const enriched = items.map((s) => {
         seatMapsForShow[0] ||
         null;
 
-      const seatStats = activeSeatMap
-        ? seatStatusByMap.get(activeSeatMap.id)
-        : null;
+      const seatStats = activeSeatMap ? seatStatusByMap.get(activeSeatMap.id) : null;
 
-      const seatTotal = seatStats?.total ?? 0;
+      // Sellable seat capacity = total - blocked
+      const seatTotalSellable = seatStats
+        ? Math.max((seatStats.total ?? 0) - (seatStats.blocked ?? 0), 0)
+        : 0;
+
       const seatSold = seatStats?.sold ?? 0;
-      const seatHeld = seatStats?.held ?? 0;
 
-      const estCapRaw = activeSeatMap ? (activeSeatMap.layout as any)?.estimatedCapacity : null;
+      const estCapRaw = activeSeatMap
+        ? (activeSeatMap.layout as any)?.estimatedCapacity
+        : null;
       const estCapNum = Number(estCapRaw);
       const estCap = Number.isFinite(estCapNum) ? estCapNum : 0;
 
       const soldFromTickets = soldByShow.get(s.id) ?? 0;
-      const holdsFromAllocations = holdsByShow.get(s.id) ?? 0;
 
-      const totalFromSeats = seatTotal || estCap;
+      const allocs = allocationsByShow.get(s.id) || [];
 
-      const totalFromTickets =
-        (capacityByShow.get(s.id) ?? 0) + soldFromTickets + holdsFromAllocations;
+      const isAllocated = !!s.usesAllocatedSeating && !!activeSeatMap?.id;
 
-      const total = totalFromSeats || totalFromTickets;
+      let total = 0;
+      let sold = 0;
+      let hold = 0;
 
-      const sold = seatTotal ? Math.max(seatSold, soldFromTickets) : soldFromTickets;
-      const hold = seatHeld + holdsFromAllocations;
+      if (isAllocated) {
+        const mapId = activeSeatMap!.id;
+
+        // Total capacity from seat map if we can, otherwise estimatedCapacity
+        total = seatTotalSellable || estCap;
+
+        // Sold seats are authoritative, but fallback to ticket sales if needed
+        sold = seatSold || soldFromTickets;
+
+        // HOLD = (unique HELD seats ∪ allocation seats) + any unassigned allocation quantity
+        const heldIds = heldSeatIdsByMap.get(mapId) || new Set<string>();
+        const holdIds = new Set<string>(heldIds);
+
+        let unassigned = 0;
+
+        for (const a of allocs) {
+          // If allocation is tied to a different map, ignore it
+          if (a.seatMapId && a.seatMapId !== mapId) continue;
+
+          const seatIds = (a.seats || []).map((x) => x.seatId);
+          for (const id of seatIds) holdIds.add(id);
+
+          const qty = Number(a.quantity ?? 0);
+          const assigned = seatIds.length;
+          unassigned += Math.max(qty - assigned, 0);
+        }
+
+        hold = holdIds.size + unassigned;
+      } else {
+        // General admission:
+        // TicketType.available is your configured cap
+        const cap = capacityByShow.get(s.id) ?? 0;
+
+        sold = soldFromTickets;
+
+        // Holds are allocation quantities (GA allocations reserve ticket capacity)
+        hold = allocs.reduce((sum, a) => sum + Number(a.quantity ?? 0), 0);
+
+        // If cap isn't set but we have sold/hold, show something sensible
+        total = cap > 0 ? cap : Math.max(sold + hold, 0);
+      }
 
       return {
         ...s,
         _alloc: { total, sold, hold },
-        _revenue: { grossFace: 0 },
+        _revenue: { grossFace: (grossByShow.get(s.id) ?? 0) / 100 },
       };
     });
 
@@ -368,7 +344,10 @@ router.delete("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
     if (!show) return res.status(404).json({ ok: false, error: "Show not found" });
 
     const soldCount = await prisma.ticket.count({
-      where: { showId, order: { status: { in: [OrderStatus.PAID, OrderStatus.PENDING] } } },
+      where: {
+        showId,
+        order: { status: { in: [OrderStatus.PAID, OrderStatus.PENDING] } },
+      },
     });
 
     if (soldCount > 0) {
@@ -399,7 +378,7 @@ router.delete("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
 
 /** POST /admin/shows — create (auto-creates venue if needed) */
 router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
-    try {
+  try {
     const {
       title,
       date,
@@ -418,7 +397,7 @@ router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
       additionalImages,
       usesAllocatedSeating,
     } = req.body || {};
-      
+
     if (!title || !date || !(venueId || venueText) || !descriptionHtml) {
       return res.status(400).json({ ok: false, error: "Missing required fields" });
     }
@@ -435,15 +414,13 @@ router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
 
     const created = await prisma.show.create({
       data: {
-   title: String(title),
+        title: String(title),
         date: new Date(date),
 
-        // If organiser is creating, force ownership to them.
-        // Admin can still create without organiserId (or you can allow passing organiserId later if you want).
         organiserId: isOrganiser(req) ? requireUserId(req) : null,
         ...(endDate ? { endDate: new Date(endDate) } : {}),
         imageUrl: imageUrl ?? null,
-       description: descriptionHtml ?? null,
+        description: descriptionHtml ?? null,
         venueId: finalVenueId,
         usesAllocatedSeating: !!usesAllocatedSeating,
         status: ShowStatus.DRAFT,
@@ -491,7 +468,14 @@ router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
         publishedAt: true,
         venue: { select: { id: true, name: true, city: true } },
         ticketTypes: {
-          select: { id: true, name: true, pricePence: true, available: true, onSaleAt: true, offSaleAt: true },
+          select: {
+            id: true,
+            name: true,
+            pricePence: true,
+            available: true,
+            onSaleAt: true,
+            offSaleAt: true,
+          },
           orderBy: { createdAt: "asc" },
         },
       },
@@ -610,7 +594,7 @@ router.delete("/ticket-types/:ttId", requireAdminOrOrganiser, async (req, res) =
 /** PATCH /admin/shows/:id */
 router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
   try {
-   const {
+    const {
       title,
       date,
       endDate,
@@ -620,23 +604,20 @@ router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
       venueText,
       status,
       eventType,
-         eventCategory,
-        doorsOpenTime,
-        ageGuidance,
-        endTimeNote,
-        accessibility,
-        tags,
-        additionalImages,
-        usesAllocatedSeating,
-      } = req.body || {};
+      eventCategory,
+      doorsOpenTime,
+      ageGuidance,
+      endTimeNote,
+      accessibility,
+      tags,
+      additionalImages,
+      usesAllocatedSeating,
+    } = req.body || {};
 
-  
-        // Ownership check: organisers can only edit their own shows
     const where = showWhereForRead(req, String(req.params.id));
     const existing = await prisma.show.findFirst({ where, select: { id: true } });
     if (!existing) return res.status(404).json({ ok: false, error: "Not found" });
 
-    
     const finalVenueId = (await ensureVenue(venueId, venueText)) || undefined;
     const parsedTags = Array.isArray(tags)
       ? tags.map((t: unknown) => asNullableString(t)).filter(isNonEmptyString)
@@ -648,15 +629,19 @@ router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
       accessibility && typeof accessibility === "object" ? accessibility : undefined;
 
     const updated = await prisma.show.update({
-  where: { id: existing.id },
+      where: { id: existing.id },
       data: {
         ...(title != null ? { title: String(title) } : {}),
         ...(date != null ? { date: new Date(date) } : {}),
         ...(endDate != null ? { endDate: endDate ? new Date(endDate) : null } : {}),
         ...(imageUrl !== undefined ? { imageUrl: imageUrl ?? null } : {}),
         ...(descriptionHtml !== undefined ? { description: descriptionHtml ?? null } : {}),
-        ...(venueId !== undefined || venueText !== undefined ? { venueId: finalVenueId ?? null } : {}),
-        ...(usesAllocatedSeating !== undefined ? { usesAllocatedSeating: !!usesAllocatedSeating } : {}),
+        ...(venueId !== undefined || venueText !== undefined
+          ? { venueId: finalVenueId ?? null }
+          : {}),
+        ...(usesAllocatedSeating !== undefined
+          ? { usesAllocatedSeating: !!usesAllocatedSeating }
+          : {}),
         ...(eventType !== undefined ? { eventType: asNullableString(eventType) } : {}),
         ...(eventCategory !== undefined ? { eventCategory: asNullableString(eventCategory) } : {}),
         ...(doorsOpenTime !== undefined ? { doorsOpenTime: asNullableString(doorsOpenTime) } : {}),
@@ -685,28 +670,26 @@ router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
 /** POST /admin/shows/:id/duplicate */
 router.post("/shows/:id/duplicate", requireAdminOrOrganiser, async (req, res) => {
   try {
-   const src = await prisma.show.findFirst({
-  where: showWhereForRead(req, String(req.params.id)),
-  select: { title: true, description: true, imageUrl: true, date: true, venueId: true },
-});
+    const src = await prisma.show.findFirst({
+      where: showWhereForRead(req, String(req.params.id)),
+      select: { title: true, description: true, imageUrl: true, date: true, venueId: true },
+    });
 
     if (!src) return res.status(404).json({ ok: false, error: "Not found" });
 
-   const newShow = await prisma.show.create({
-  data: {
-    title: (src.title || "") + " (Copy)",
-    description: src.description,
-    imageUrl: src.imageUrl,
-    date: src.date, // you’ll likely change date in the editor
-    venueId: src.venueId,
-
-organiserId: isOrganiser(req) ? requireUserId(req) : (req.body.organiserId ?? null),
-    status: ShowStatus.DRAFT,
-    publishedAt: null,
-  },
-  select: { id: true },
-});
-
+    const newShow = await prisma.show.create({
+      data: {
+        title: (src.title || "") + " (Copy)",
+        description: src.description,
+        imageUrl: src.imageUrl,
+        date: src.date,
+        venueId: src.venueId,
+        organiserId: isOrganiser(req) ? requireUserId(req) : (req.body.organiserId ?? null),
+        status: ShowStatus.DRAFT,
+        publishedAt: null,
+      },
+      select: { id: true },
+    });
 
     res.json({ ok: true, newId: newShow.id });
   } catch (e) {
