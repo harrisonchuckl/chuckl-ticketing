@@ -148,8 +148,8 @@ router.post("/session", async (req, res) => {
     // Pick URLs that exist in your system.
     // - success: you can point to a "thank you" page (or order lookup)
     // - cancel: send them back to the checkout page
-   const successUrl =
-  `${baseUrl}/checkout?showId=${show.id}&checkout=success&orderId=${order.id}&session_id={CHECKOUT_SESSION_ID}`;
+const successUrl =
+  `${baseUrl}/checkout/success?orderId=${order.id}&session_id={CHECKOUT_SESSION_ID}`;
 
 const cancelUrl =
   `${baseUrl}/checkout?showId=${show.id}&checkout=cancel`;
@@ -196,7 +196,88 @@ const cancelUrl =
   }
 });
 
+// ✅ Payment success page (lives inside checkout.ts as /checkout/success)
+router.get("/success", async (req, res) => {
+  const orderId = String(req.query.orderId || "").trim();
+  if (!orderId) return res.status(400).send("Missing orderId");
+
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        status: true,
+        amountPence: true,
+        quantity: true,
+        email: true,
+        showId: true,
+        createdAt: true,
+      },
+    });
+
+    if (!order) return res.status(404).send("Order not found");
+
+    const show = await prisma.show.findUnique({
+      where: { id: order.showId },
+      select: { id: true, title: true, date: true },
+    });
+
+    const gbp = (pence?: number | null) => `£${(((pence ?? 0) as number) / 100).toFixed(2)}`;
+    const isPaid = order.status === "PAID";
+
+    return res
+      .status(200)
+      .setHeader("Content-Type", "text/html; charset=utf-8")
+      .send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Order ${isPaid ? "Confirmed" : "Received"} | Chuckl.</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; background:#f6f7fb; margin:0; padding:24px;}
+    .card{max-width:720px; margin:0 auto; background:#fff; border-radius:16px; padding:22px; box-shadow:0 10px 30px rgba(0,0,0,.08);}
+    h1{margin:0 0 10px; font-size:22px;}
+    .muted{color:#64748b;}
+    .row{display:flex; gap:12px; flex-wrap:wrap; margin-top:14px;}
+    .pill{background:#eef2ff; color:#1e3a8a; padding:8px 12px; border-radius:999px; font-weight:600;}
+    a.btn{display:inline-block; margin-top:18px; background:#0074d4; color:#fff; text-decoration:none; padding:12px 16px; border-radius:12px; font-weight:700;}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>${isPaid ? "✅ Payment confirmed" : "⏳ Payment received (processing)"} </h1>
+    <div class="muted">${show?.title || "Your event"}${show?.date ? ` • ${new Date(show.date).toLocaleString("en-GB", { dateStyle: "full" })}` : ""}</div>
+
+    <div class="row">
+      <div class="pill">Order: ${order.id}</div>
+      <div class="pill">Qty: ${order.quantity ?? 0}</div>
+      <div class="pill">Total: ${gbp(order.amountPence)}</div>
+      <div class="pill">Status: ${order.status}</div>
+    </div>
+
+    <p class="muted" style="margin-top:14px;">
+      ${isPaid
+        ? "Your tickets will be emailed shortly (check junk/spam just in case)."
+        : "If this doesn’t update within a minute, refresh this page."}
+    </p>
+
+    <a class="btn" href="/checkout?showId=${encodeURIComponent(order.showId)}">Back to event</a>
+  </div>
+</body>
+</html>`);
+  } catch (err: any) {
+    console.error("[checkout/success] error", err);
+    return res.status(500).send("Server error");
+  }
+});
+
 router.get('/', async (req, res) => {
+  // ✅ Backwards compatible: old Stripe success URL redirects to new success route
+  if (req.query.checkout === "success" && req.query.orderId) {
+    return res.redirect(`/checkout/success?orderId=${encodeURIComponent(String(req.query.orderId))}`);
+  }
+
   const showId = String(req.query.showId || '');
   if (!showId) return res.status(404).send('Show ID is required');
 
