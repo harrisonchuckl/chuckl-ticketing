@@ -197,6 +197,160 @@ function countSellableSeatsFromLayout(layoutRaw: unknown): number {
   return count;
 }
 
+/**
+ * Derive SOLD/HELD/BLOCKED + total sellable from SeatMap.layout (Konva JSON or similar).
+ * Used as a fallback when Seat rows are not persisted.
+ */
+function seatStatsFromLayout(layoutRaw: unknown): {
+  totalSellable: number;
+  sold: number;
+  held: number;
+  blocked: number;
+  seatIds: {
+    sold: Set<string>;
+    held: Set<string>;
+    blocked: Set<string>;
+    allSellable: Set<string>;
+  };
+} {
+  const layout = parseLayoutMaybe(layoutRaw);
+  const empty = {
+    totalSellable: 0,
+    sold: 0,
+    held: 0,
+    blocked: 0,
+    seatIds: {
+      sold: new Set<string>(),
+      held: new Set<string>(),
+      blocked: new Set<string>(),
+      allSellable: new Set<string>(),
+    },
+  };
+
+  if (!layout || typeof layout !== "object") return empty;
+
+  const statusOf = (node: any) => {
+    const raw =
+      node?.status ??
+      node?.seatStatus ??
+      node?.attrs?.status ??
+      node?.attrs?.seatStatus ??
+      "";
+    return String(raw).toUpperCase();
+  };
+
+  const isBlocked = (node: any) => {
+    const s = statusOf(node);
+    const blockedFlags =
+      node?.blocked === true ||
+      node?.isBlocked === true ||
+      node?.disabled === true ||
+      node?.attrs?.blocked === true ||
+      node?.attrs?.isBlocked === true ||
+      node?.attrs?.disabled === true;
+
+    return blockedFlags || s === "BLOCKED" || s === "DISABLED";
+  };
+
+  const looksLikeSeat = (node: any) => {
+    if (!node || typeof node !== "object") return false;
+
+    const type = String(
+      node.type ?? node.kind ?? node.objectType ?? node.className ?? node.name ?? ""
+    ).toLowerCase();
+
+    const attrs = node.attrs && typeof node.attrs === "object" ? node.attrs : null;
+
+    const directHints =
+      type === "seat" ||
+      type.includes("seat") ||
+      node.isSeat === true ||
+      node.seat === true;
+
+    const idHints =
+      node.seatId != null ||
+      (attrs && attrs.seatId != null) ||
+      node.ticketTypeId != null ||
+      (attrs && attrs.ticketTypeId != null) ||
+      (node.row != null && (node.number != null || node.seatNumber != null)) ||
+      (attrs && attrs.row != null && (attrs.number != null || attrs.seatNumber != null));
+
+    return directHints || idHints;
+  };
+
+  const seatKey = (node: any) => {
+    const attrs = node?.attrs && typeof node.attrs === "object" ? node.attrs : null;
+    return String(
+      node?.seatId ??
+        attrs?.seatId ??
+        node?.id ??
+        attrs?.id ??
+        attrs?.name ??
+        ""
+    );
+  };
+
+  const seen = new Set<string>();
+
+  const visit = (node: any) => {
+    if (!node || typeof node !== "object") return;
+
+    if (looksLikeSeat(node)) {
+      const key = seatKey(node) || "";
+      const uniqueKey = key || JSON.stringify(node).slice(0, 80);
+
+      if (!seen.has(uniqueKey)) {
+        seen.add(uniqueKey);
+
+        const s = statusOf(node);
+        const blocked = isBlocked(node);
+
+        if (blocked) {
+          empty.blocked += 1;
+          if (key) empty.seatIds.blocked.add(key);
+        } else {
+          empty.totalSellable += 1;
+          if (key) empty.seatIds.allSellable.add(key);
+
+          // SOLD
+          if (
+            s === "SOLD" ||
+            node?.sold === true ||
+            node?.isSold === true ||
+            node?.attrs?.sold === true ||
+            node?.attrs?.isSold === true
+          ) {
+            empty.sold += 1;
+            if (key) empty.seatIds.sold.add(key);
+          }
+
+          // HELD / HOLD / RESERVED
+          if (
+            s === "HELD" ||
+            s === "HOLD" ||
+            s === "RESERVED" ||
+            node?.held === true ||
+            node?.isHeld === true ||
+            node?.attrs?.held === true ||
+            node?.attrs?.isHeld === true
+          ) {
+            empty.held += 1;
+            if (key) empty.seatIds.held.add(key);
+          }
+        }
+      }
+    }
+
+    for (const v of Object.values(node)) {
+      if (Array.isArray(v)) v.forEach(visit);
+      else if (v && typeof v === "object") visit(v);
+    }
+  };
+
+  visit(layout);
+  return empty;
+}
+
 
 /** GET /admin/shows — list */
 router.get("/shows", requireAdminOrOrganiser, async (req, res) => {
@@ -230,15 +384,16 @@ router.get("/shows", requireAdminOrOrganiser, async (req, res) => {
       .map((s) => s.activeSeatMapId)
       .filter((id): id is string => !!id);
 
-    const [
-      seatMaps,
-      seatStatusCounts,
-      paidTicketTotals,
-      allocations,
-      ticketCapacityTotals,
-      heldSeats,
-      grossFaceTotals,
-    ] = await Promise.all([
+const [
+  seatMaps,
+  seatStatusCounts,
+  paidTicketTotals,
+  allocations,
+  ticketCapacityTotals,
+  heldSeats,
+  soldSeats,
+  grossFaceTotals,
+] = await Promise.all([
       prisma.seatMap.findMany({
         where: { showId: { in: showIds } },
         select: { id: true, showId: true, layout: true, updatedAt: true },
@@ -290,6 +445,18 @@ prisma.ticket.groupBy({
         },
         select: { seatMapId: true, id: true },
       }),
+
+  // SOLD seat IDs for active maps (to de-dupe holds vs sold)
+prisma.seat.findMany({
+  where: {
+    seatMapId: {
+      in: activeSeatMapIds.length ? activeSeatMapIds : ["__none__"],
+    },
+    status: SeatStatus.SOLD,
+  },
+  select: { seatMapId: true, id: true },
+}),
+
 
       // Gross face (optional but nice to have)
       prisma.order.groupBy({
@@ -371,6 +538,14 @@ prisma.ticket.groupBy({
       return acc;
     }, new Map());
 
+    const soldSeatIdsByMap = soldSeats.reduce<Map<string, Set<string>>>((acc, s) => {
+  const set = acc.get(s.seatMapId) || new Set<string>();
+  set.add(s.id);
+  acc.set(s.seatMapId, set);
+  return acc;
+}, new Map());
+
+
     const grossByShow = grossFaceTotals.reduce<Map<string, number>>((acc, row) => {
       acc.set(row.showId, Number(row._sum.amountPence ?? 0));
       return acc;
@@ -410,41 +585,53 @@ prisma.ticket.groupBy({
       let sold = 0;
       let hold = 0;
 
-      if (isAllocated) {
-        const mapId = activeSeatMap!.id;
+    if (isAllocated) {
+  const mapId = activeSeatMap!.id;
 
-       const layoutSeatCount = activeSeatMap ? countSellableSeatsFromLayout(activeSeatMap.layout) : 0;
+  const layoutStats = activeSeatMap ? seatStatsFromLayout(activeSeatMap.layout) : null;
 
-// Total capacity priority:
-// 1) Seat rows (if you persist seats)
-// 2) Layout-derived seat count (if seats aren't persisted yet)
-// 3) estimatedCapacity fallback
-total = seatTotalSellable || layoutSeatCount || estCap;
+  // Total capacity priority:
+  // 1) Seat rows totalSellable (if seats are persisted)
+  // 2) Layout-derived totalSellable (if seats aren't persisted)
+  // 3) estimatedCapacity fallback
+  const layoutTotalSellable = layoutStats ? layoutStats.totalSellable : 0;
+  total = seatTotalSellable || layoutTotalSellable || estCap;
 
+  // Sold priority:
+  // 1) Seat rows SOLD count
+  // 2) Layout-derived SOLD count
+  // 3) Paid ticket totals fallback
+  const layoutSold = layoutStats ? layoutStats.sold : 0;
+  sold = seatSold || layoutSold || soldFromTickets;
 
-        // Sold seats are authoritative, but fallback to ticket sales if needed
-        sold = seatSold || soldFromTickets;
+  // HOLD:
+  // Start with HELD seats from DB (if present) + HELD from layout (if present)
+  const heldDb = heldSeatIdsByMap.get(mapId) || new Set<string>();
+  const heldLayout = layoutStats ? layoutStats.seatIds.held : new Set<string>();
+  const holdIds = new Set<string>([...heldDb, ...heldLayout]);
 
-        // HOLD = (unique HELD seats ∪ allocation seats) + any unassigned allocation quantity
-        const heldIds = heldSeatIdsByMap.get(mapId) || new Set<string>();
-        const holdIds = new Set<string>(heldIds);
+  // Add allocation seatIds (de-dupe)
+  let unassigned = 0;
+  for (const a of allocs) {
+    if (a.seatMapId && a.seatMapId !== mapId) continue;
 
-        let unassigned = 0;
+    const seatIds = (a.seats || []).map((x) => x.seatId).filter(Boolean);
+    for (const id of seatIds) holdIds.add(id);
 
-        for (const a of allocs) {
-          // If allocation is tied to a different map, ignore it
-          if (a.seatMapId && a.seatMapId !== mapId) continue;
+    const qty = Number(a.quantity ?? 0);
+    const assigned = seatIds.length;
+    unassigned += Math.max(qty - assigned, 0);
+  }
 
-          const seatIds = (a.seats || []).map((x) => x.seatId);
-          for (const id of seatIds) holdIds.add(id);
+  // Remove SOLD seats from holds (avoid “Held” including sold seats)
+  const soldDb = soldSeatIdsByMap.get(mapId) || new Set<string>();
+  const soldLayout = layoutStats ? layoutStats.seatIds.sold : new Set<string>();
+  for (const id of soldDb) holdIds.delete(id);
+  for (const id of soldLayout) holdIds.delete(id);
 
-          const qty = Number(a.quantity ?? 0);
-          const assigned = seatIds.length;
-          unassigned += Math.max(qty - assigned, 0);
-        }
-
-        hold = holdIds.size + unassigned;
-      } else {
+  hold = holdIds.size + unassigned;
+}
+ else {
         // General admission:
         // TicketType.available is your configured cap
         const cap = capacityByShow.get(s.id) ?? 0;
