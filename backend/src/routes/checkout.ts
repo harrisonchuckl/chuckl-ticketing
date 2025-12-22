@@ -148,8 +148,11 @@ router.post("/session", async (req, res) => {
     // Pick URLs that exist in your system.
     // - success: you can point to a "thank you" page (or order lookup)
     // - cancel: send them back to the checkout page
-    const successUrl = `${baseUrl}/public/orders/success?orderId=${order.id}`;
-    const cancelUrl = `${baseUrl}/checkout?showId=${show.id}`;
+   const successUrl =
+  `${baseUrl}/checkout?showId=${show.id}&checkout=success&orderId=${order.id}&session_id={CHECKOUT_SESSION_ID}`;
+
+const cancelUrl =
+  `${baseUrl}/checkout?showId=${show.id}&checkout=cancel`;
 
     // WARNING: Stripe metadata values have length limits.
     // If you ever sell lots of seats in one order, consider storing seatIds on the Order in DB
