@@ -149,7 +149,8 @@ router.post("/session", async (req, res) => {
     // - success: you can point to a "thank you" page (or order lookup)
     // - cancel: send them back to the checkout page
 const successUrl =
-  `${baseUrl}/checkout/success?orderId=${order.id}&session_id={CHECKOUT_SESSION_ID}`;
+  `${baseUrl}/public/checkout/success?orderId=${order.id}&session_id={CHECKOUT_SESSION_ID}`;
+
 
 
 
@@ -197,14 +198,27 @@ const cancelUrl =
     return res.status(500).json({ ok: false, message: "Checkout error", detail: err?.message });
   }
 });
-
-// ✅ Stripe return page (SSR) — shows order summary + status
+// ✅ Stripe return page
+// - If hit via /checkout/success (old sessions), redirect to the public SSR URL
+// - If hit via /public/checkout/success, render the SSR HTML (no redirect loop)
 router.get("/success", async (req, res) => {
   const orderId = String(req.query.orderId || "").trim();
   const sessionId = String(req.query.session_id || "").trim();
 
   if (!orderId) return res.status(400).send("Missing orderId");
 
+  const qs =
+    `orderId=${encodeURIComponent(orderId)}` +
+    (sessionId ? `&session_id=${encodeURIComponent(sessionId)}` : "");
+
+  // If this router is mounted at BOTH /checkout and /public/checkout,
+  // req.baseUrl tells us which mount path was used for this request.
+  // Redirect ONLY from /checkout to /public/checkout to avoid loops.
+  if (req.baseUrl === "/checkout") {
+    return res.redirect(302, `/public/checkout/success?${qs}`);
+  }
+
+  // Otherwise (e.g. req.baseUrl === "/public/checkout"), render the SSR page here.
   try {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
@@ -274,6 +288,7 @@ router.get("/success", async (req, res) => {
     return res.status(500).send("Server error");
   }
 });
+
 
 router.get('/', async (req, res) => {
   // ✅ Backwards compatible: old Stripe success URL redirects to SSR success route
