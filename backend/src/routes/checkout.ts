@@ -159,12 +159,20 @@ router.post("/session", async (req, res) => {
       line_items: lineItems,
       success_url: successUrl,
       cancel_url: cancelUrl,
-      metadata: {
-        orderId: order.id,
-        showId: show.id,
-        seatIds: seatIds.join(","),
-        ...(ticketTypeId ? { ticketTypeId: String(ticketTypeId) } : {}),
-      },
+     metadata: {
+  orderId: order.id,
+  showId: show.id,
+  seatIds: seatIds.join(","),
+
+  // GA purchases (no seats) still rely on ticketTypeId
+  ...(ticketTypeId ? { ticketTypeId: String(ticketTypeId) } : {}),
+
+  // Tiered seat mapping (if present)
+  ...(((req as any).__seatGroups && String((req as any).__seatGroups).length)
+    ? { seatGroups: String((req as any).__seatGroups) }
+    : {}),
+},
+
     });
 
     await prisma.order.update({
@@ -2536,7 +2544,12 @@ function renderLegendAndTicketTable(){
   }
 
   // Build legend: ticket colours + prices, plus Selected + Unavailable
-const usedTickets = sortedTickets.filter(t => __seatAssignedTicketIdsResolved.has(String(t.id)));
+const usedIdSet = new Set();
+for (const m of seatMeta.values()) {
+  const id = String(m && m.ticketId ? m.ticketId : '').trim();
+  if (id) usedIdSet.add(id);
+}
+const usedTickets = sortedTickets.filter(t => usedIdSet.has(String(t.id)));
   const legendBits = [];
 
   usedTickets.forEach(t => {
