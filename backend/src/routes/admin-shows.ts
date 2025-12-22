@@ -96,14 +96,51 @@ function countSellableSeatsFromLayout(layoutRaw: unknown): number {
   if (!layout || typeof layout !== "object") return 0;
 
   const isBlockedSeat = (s: any) => {
-    const status = String(s?.status ?? "").toUpperCase();
-    return (
+    const status = String(s?.status ?? s?.attrs?.status ?? "").toUpperCase();
+    const blocked =
       s?.blocked === true ||
       s?.isBlocked === true ||
       s?.disabled === true ||
-      status === "BLOCKED" ||
-      status === "DISABLED"
-    );
+      s?.attrs?.blocked === true ||
+      s?.attrs?.isBlocked === true ||
+      s?.attrs?.disabled === true;
+
+    return blocked || status === "BLOCKED" || status === "DISABLED";
+  };
+
+  // Helper to detect a seat-ish node (including Konva JSON objects)
+  const looksLikeSeatNode = (node: any) => {
+    if (!node || typeof node !== "object") return false;
+
+    const type = String(
+      node.type ?? node.kind ?? node.objectType ?? node.className ?? node.name ?? ""
+    ).toLowerCase();
+
+    const attrs = node.attrs && typeof node.attrs === "object" ? node.attrs : null;
+
+    // Common direct flags/fields you might store
+    const directSeatHints =
+      type === "seat" ||
+      type.includes("seat") ||
+      node.isSeat === true ||
+      node.seat === true;
+
+    // Common seat identifiers (direct)
+    const directIdHints =
+      node.seatId != null ||
+      node.ticketTypeId != null ||
+      (node.row != null && (node.number != null || node.seatNumber != null));
+
+    // Konva-style identifiers (attrs)
+    const konvaHints =
+      !!attrs &&
+      (attrs.seatId != null ||
+        attrs.ticketTypeId != null ||
+        attrs.ticketTypeName != null ||
+        (attrs.row != null && (attrs.number != null || attrs.seatNumber != null)) ||
+        (attrs.label != null && attrs.x != null && attrs.y != null));
+
+    return directSeatHints || directIdHints || konvaHints;
   };
 
   // 1) Direct seats array
@@ -119,31 +156,33 @@ function countSellableSeatsFromLayout(layoutRaw: unknown): number {
     if (seats.length) return seats.filter((s: any) => s && !isBlockedSeat(s)).length;
   }
 
-  // 3) Generic recursive scan (seat-like objects)
+  // 3) Generic recursive scan
   let count = 0;
   const seen = new Set<string>();
+
+  const seatKey = (node: any) => {
+    const attrs = node?.attrs && typeof node.attrs === "object" ? node.attrs : null;
+    return String(
+      node?.id ??
+        node?.seatId ??
+        attrs?.id ??
+        attrs?.seatId ??
+        attrs?.name ??
+        ""
+    );
+  };
 
   const visit = (node: any) => {
     if (!node || typeof node !== "object") return;
 
-    // seat-ish detector (common keys)
-    const type = String((node as any).type ?? (node as any).kind ?? (node as any).objectType ?? "")
-      .toLowerCase();
-
-    const looksLikeSeat =
-      type === "seat" ||
-      ((node as any).row !== undefined && ((node as any).number !== undefined || (node as any).seatNumber !== undefined)) ||
-      ((node as any).label !== undefined && (node as any).x !== undefined && (node as any).y !== undefined);
-
-    if (looksLikeSeat && !isBlockedSeat(node)) {
-      const id = String((node as any).id ?? (node as any).seatId ?? "");
-      if (id) {
-        if (!seen.has(id)) {
-          seen.add(id);
+    if (looksLikeSeatNode(node) && !isBlockedSeat(node)) {
+      const key = seatKey(node);
+      if (key) {
+        if (!seen.has(key)) {
+          seen.add(key);
           count += 1;
         }
       } else {
-        // no id, still count it (best-effort)
         count += 1;
       }
     }
@@ -211,15 +250,16 @@ router.get("/shows", requireAdminOrOrganiser, async (req, res) => {
         _count: { _all: true },
       }),
 
-      // SOLD should mean PAID only (not pending checkouts)
-      prisma.ticket.groupBy({
-        by: ["showId"],
-        where: {
-          showId: { in: showIds },
-          order: { status: OrderStatus.PAID },
-        },
-        _sum: { quantity: true },
-      }),
+     // SOLD should mean PAID only (not pending checkouts)
+prisma.ticket.groupBy({
+  by: ["showId"],
+  where: {
+    showId: { in: showIds },
+    order: { status: OrderStatus.PAID },
+  },
+  _sum: { quantity: true },
+  _count: { _all: true },
+}),
 
       // Need allocation seatIds to avoid double-counting holds
       prisma.externalAllocation.findMany({
@@ -298,10 +338,14 @@ router.get("/shows", requireAdminOrOrganiser, async (req, res) => {
       return acc;
     }, new Map());
 
-    const soldByShow = paidTicketTotals.reduce<Map<string, number>>((acc, row) => {
-      acc.set(row.showId, Number(row._sum.quantity ?? 0));
-      return acc;
-    }, new Map());
+   const soldByShow = paidTicketTotals.reduce<Map<string, number>>((acc, row) => {
+  const sumQty = Number(row._sum.quantity ?? 0);
+  const rowCount = Number((row as any)._count?._all ?? 0);
+
+  // If quantity is used, trust it. Otherwise fall back to counting Ticket rows.
+  acc.set(row.showId, sumQty > 0 ? sumQty : rowCount);
+  return acc;
+}, new Map());
 
     const capacityByShow = ticketCapacityTotals.reduce<Map<string, number>>(
       (acc, row) => {
