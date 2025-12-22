@@ -65,8 +65,9 @@ function formatTimeUK(d?: Date | string | null) {
   return dt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
-function escapeHtml(s: string) {
-  return s
+function escapeHtml(s: string | null | undefined) {
+  const safe = s ?? "";
+  return safe
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
@@ -303,8 +304,9 @@ async function buildAttachments(order: NonNullable<OrderDeep>) {
   // Map ticketTypeId -> ticketType (if your Ticket model has ticketTypeId)
   const ticketTypes = s?.ticketTypes || [];
 
-  const tickets = (order.tickets || []).map((t) => {
-    const anyT = t as any;
+const tickets = (order.tickets || []).filter(t => !!t.serial).map((t) => {
+
+  const anyT = t as any;
 
     const ticketTypeId = anyT.ticketTypeId as string | undefined;
     const linkedType = ticketTypeId
@@ -324,7 +326,7 @@ async function buildAttachments(order: NonNullable<OrderDeep>) {
       undefined;
 
     return {
-      serial: t.serial,
+serial: t.serial!,
       ticketType: ticketTypeName,
       price: ticketPrice,
       seatLabel,
