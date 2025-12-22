@@ -2,7 +2,6 @@
 import { Resend } from 'resend';
 import { prisma } from '../lib/db.js';
 import PDFDocument from 'pdfkit';
-import { qrPngBuffer } from './qrcode.js';
 
 const RESEND_KEY = process.env.RESEND_API_KEY || '';
 const EMAIL_FROM = process.env.EMAIL_FROM || 'noreply@chuckl.co.uk';
@@ -80,7 +79,6 @@ async function buildAttachments(order: NonNullable<OrderDeep>) {
 
   for (const t of order.tickets || []) {
     try {
-      const serial = t.serial || '';
       const doc = new PDFDocument({ size: 'A4', margin: 36 });
       const chunks: Buffer[] = [];
       doc.on('data', (c: Buffer) => chunks.push(c));
@@ -97,16 +95,14 @@ async function buildAttachments(order: NonNullable<OrderDeep>) {
 
       doc.fontSize(14).text('Ticket', { underline: true });
       doc.moveDown(0.25);
-      doc.fontSize(12).text(`Serial: ${serial || '—'}`);
+      doc.fontSize(12).text(`Serial: ${t.serial}`);
       doc.text(`Holder: ${t.holderName || '—'}`);
       doc.text(`Status: ${t.status}`);
 
-      if (serial) {
-        const qr = await qrPngBuffer(`chuckl:${serial}`, 180);
-        doc.moveDown(1);
-        doc.text('Show this QR at the door:', { continued: false });
-        doc.image(qr, { width: 140, height: 140 });
-      }
+      // Placeholder QR box (actual QR can be added later)
+      doc.moveDown(1);
+      doc.rect(doc.x, doc.y, 120, 120).stroke();
+      doc.text('QR placeholder', doc.x + 10, doc.y + 10);
 
       doc.end();
       const pdf = await done;
