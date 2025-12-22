@@ -66,6 +66,7 @@ router.post('/session', async (req, res) => {
     let fees;
     try {
       fees = await calcFeesForShow(show.id, amountPence, qty, null);
+        console.debug('checkout/session fees result:', fees);
     } catch (feeErr: any) {
       console.error('checkout/session fee calc error', {
         showId: show.id,
@@ -145,105 +146,6 @@ router.post('/session', async (req, res) => {
       rawError: err,
     });
     return res.status(500).json({ ok: false, message: 'Checkout error', detail: err?.message });
-  }
-});
-
-console.debug('checkout/session fees result:', fees);
-// --- DEBUG END: FEE CALCULATION ---
-
-
-
- // --- Create Order FIRST (without stripe session id), then create Stripe session, then update Order ---
-if (!stripe) {
-  console.error('checkout/session error: STRIPE_SECRET_KEY is not configured');
-  return res.status(500).json({ ok: false, message: 'Payment processing unavailable' });
-}
-
-const seatsCsv = seatIds.length ? seatIds.join(',') : null;
-
-// Create the order in PENDING state (email will be known after Stripe completes)
-const order = await prisma.order.create({
-  data: {
-    showId: String(showId),
-    email: null,
-    status: OrderStatus.PENDING,
-    amountPence,
-    quantity: Math.round(qty),
-
-    // Only store ticketTypeId for GA (non-seated). Seated orders can be inferred from SeatMap later.
-    ticketTypeId: (!hasSeats && ticketTypeId) ? String(ticketTypeId) : null,
-
-    seatsCsv,
-  },
-});
-
-console.debug('checkout/session order created', { orderId: order.id, status: order.status, amountPence, qty });
-
-const candidateOrigin =
-  process.env.PUBLIC_BASE_URL ||
-  (req.get('host') ? `${req.protocol}://${req.get('host')}` : '');
-
-let origin = 'http://localhost:3000';
-try {
-  if (candidateOrigin) origin = new URL(candidateOrigin).origin;
-} catch (err) {
-  console.warn('checkout/session origin fallback', candidateOrigin, err);
-}
-console.debug('checkout/session origin', { candidateOrigin, origin });
-
-const successUrl = new URL(`/public/checkout/success?orderId=${order.id}`, origin).toString();
-const cancelUrl = new URL(`/public/event/${show.id}?status=cancelled`, origin).toString();
-console.debug('checkout/session redirect urls', { successUrl, cancelUrl });
-
-// --- DEBUG START: STRIPE SESSION CREATION ---
-const lineItems = [
-  {
-    price_data: {
-      currency: 'gbp',
-      product_data: { name: showTitle },
-      unit_amount: Math.round(unitPence),
-    },
-    quantity: Math.round(qty),
-  },
-];
-
-console.debug('checkout/session Stripe line_items:', JSON.stringify(lineItems));
-
-const session = await stripe.checkout.sessions.create({
-  mode: 'payment',
-  line_items: lineItems,
-  success_url: successUrl,
-  cancel_url: cancelUrl,
-  metadata: {
-    orderId: order.id,
-    showId: show.id,
-    seatIds: seatIds.join(','),
-    ...(ticketTypeId ? { ticketTypeId: String(ticketTypeId) } : {}),
-  },
-});
-
-console.debug('checkout/session created Stripe session (ID):', session.id);
-
-// Now store the Stripe session id on the order
-await prisma.order.update({
-  where: { id: order.id },
-  data: { stripeCheckoutSessionId: session.id },
-});
-
-console.debug('checkout/session success: returning URL');
-return res.json({ ok: true, url: session.url });
-// --- DEBUG END: STRIPE SESSION CREATION ---
-
-    // --- DEBUG START: FINAL CATCH LOG ---
-    console.error('checkout/session CRITICAL ERROR', {
-      requestBody: DEBUG_REQ_BODY, // Use the new variable for consistency
-      errorMessage: err?.message,
-      errorName: err?.name,
-      errorStack: err?.stack,
-      rawError: err,
-    });
-    // --- DEBUG END: FINAL CATCH LOG ---
-    return res.status(500).json({ ok: false, message: 'Checkout error', detail: err?.message });
   }
 });
 
