@@ -1,122 +1,168 @@
-// backend/src/routes/checkout.ts
-import { Router } from 'express';
-import { OrderStatus } from '@prisma/client';
-import prisma from '../lib/prisma.js';
-import { calcFeesForShow } from '../services/fees.js';
-import Stripe from 'stripe';
+import { Router } from "express";
+import { OrderStatus } from "@prisma/client";
+import prisma from "../lib/prisma.js";
+import Stripe from "stripe";
 
+const router = Router();
 
 // --- ROBUST STRIPE INITIALIZATION ---
 const stripeSecret = process.env.STRIPE_SECRET_KEY;
-
-// Check for the .default property for safer ES Module interop with Stripe
 const StripeClient = (Stripe as any)?.default || Stripe;
 
-const stripe = stripeSecret
-    ? new StripeClient(stripeSecret, { apiVersion: '2024-06-20' })
-    : null;
-// ------------------------------------
-const router = Router();
+const stripe: Stripe | null = stripeSecret
+  ? new StripeClient(stripeSecret, { apiVersion: "2024-06-20" })
+  : null;
 
 // --- formatting helper (Required for List View HTML) ---
 function pFmt(p: number | null | undefined) {
-    return '£' + (Number(p || 0) / 100).toFixed(2);
+  return "£" + (Number(p || 0) / 100).toFixed(2);
 }
 
-router.post('/session', async (req, res) => {
+function getPublicBaseUrl(req: any) {
+  // Prefer env if set (best for Railway)
+  const envBase =
+    process.env.PUBLIC_BASE_URL ||
+    process.env.APP_BASE_URL ||
+    process.env.BASE_URL ||
+    "";
+
+  if (envBase) return envBase.replace(/\/+$/, "");
+
+  // Fallback: build from request headers (trust proxy enabled in app.ts)
+  const proto = (req.headers["x-forwarded-proto"] || req.protocol || "https").toString();
+  const host = (req.headers["x-forwarded-host"] || req.headers.host || "").toString();
+  return `${proto}://${host}`.replace(/\/+$/, "");
+}
+
+router.post("/session", async (req, res) => {
   const DEBUG_REQ_BODY = req.body || {};
-  console.debug('checkout/session request body (RAW):', DEBUG_REQ_BODY);
+  console.debug("checkout/session request body (RAW):", DEBUG_REQ_BODY);
 
   try {
-const { showId, quantity, unitPricePence, seats, ticketTypeId, items } = DEBUG_REQ_BODY;
+    if (!stripe) {
+      return res.status(500).json({ ok: false, message: "Stripe is not configured (missing STRIPE_SECRET_KEY)" });
+    }
+
+    const { showId, quantity, unitPricePence, seats, ticketTypeId, items } = DEBUG_REQ_BODY;
 
     const seatIds: string[] = Array.isArray(seats) ? seats.map((s: any) => String(s)) : [];
     const hasSeats = seatIds.length > 0;
 
-    // GA checkout MUST include ticketTypeId so we can create Ticket rows later
-    if (!hasSeats && !ticketTypeId) {
-      console.warn('checkout/session missing ticketTypeId for GA purchase', { showId, qty: quantity });
-      return res.status(400).json({ ok: false, message: 'ticketTypeId is required for General Admission checkout' });
-    }
-
-    const qty = Number(quantity);
-    const unitPence = Number(unitPricePence);
-
-    if (!showId || !Number.isFinite(qty) || !Number.isFinite(unitPence) || qty <= 0 || unitPence <= 0) {
-      console.warn('checkout/session validation failed', { showId, qty, unitPence });
-      return res.status(400).json({ ok: false, message: 'showId, quantity and unitPricePence are required' });
-    }
-
-    const show = await prisma.show.findUnique({ where: { id: String(showId) }, select: { id: true, title: true } });
-    if (!show) {
-      console.warn('checkout/session missing show', { showId });
-      return res.status(404).json({ ok: false, message: 'Event not found' });
-    }
-
-    const showTitle = show.title ?? 'Event ticket';
-
-    // ⚠️ NOTE: see “Tiered pricing” section below — this calculation is only safe if all seats have same price
-   let amountPence = 0;
-let totalQty = 0;
-
-// If tiered items are provided, build multi-line-item checkout
-let lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
-
-if (Array.isArray(items) && items.length > 0) {
-  for (const it of items) {
-    const itQty = Number(it?.quantity || 0);
-    const itUnit = Number(it?.unitPricePence || 0);
-
-    if (!Number.isFinite(itQty) || !Number.isFinite(itUnit) || itQty <= 0 || itUnit <= 0) {
-      return res.status(400).json({ ok: false, message: 'Invalid tiered items' });
-    }
-
-    totalQty += itQty;
-    amountPence += Math.round(itUnit) * Math.round(itQty);
-
-    lineItems.push({
-      price_data: {
-        currency: 'gbp',
-        product_data: { name: showTitle },
-        unit_amount: Math.round(itUnit),
-      },
-      quantity: Math.round(itQty),
+    const show = await prisma.show.findUnique({
+      where: { id: String(showId) },
+      select: { id: true, title: true },
     });
-  }
-} else {
-  // GA / single-price fallback
-  const qtyLocal = Number(quantity);
-  const unitLocal = Number(unitPricePence);
 
-  if (!showId || !Number.isFinite(qtyLocal) || !Number.isFinite(unitLocal) || qtyLocal <= 0 || unitLocal <= 0) {
-    console.warn('checkout/session validation failed', { showId, qtyLocal, unitLocal });
-    return res.status(400).json({ ok: false, message: 'showId, quantity and unitPricePence are required' });
-  }
+    if (!show) {
+      console.warn("checkout/session missing show", { showId });
+      return res.status(404).json({ ok: false, message: "Event not found" });
+    }
 
-  totalQty = Math.round(qtyLocal);
-  amountPence = Math.round(unitLocal) * totalQty;
+    const showTitle = show.title ?? "Event ticket";
 
-  lineItems = [
-    {
-      price_data: {
-        currency: 'gbp',
-        product_data: { name: showTitle },
-        unit_amount: Math.round(unitLocal),
+    // Build line items
+    let amountPence = 0;
+    let totalQty = 0;
+
+    let lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
+
+    if (Array.isArray(items) && items.length > 0) {
+      // Tiered / multi-band checkout
+      for (const it of items) {
+        const itQty = Number(it?.quantity || 0);
+        const itUnit = Number(it?.unitPricePence || 0);
+
+        if (!Number.isFinite(itQty) || !Number.isFinite(itUnit) || itQty <= 0 || itUnit <= 0) {
+          return res.status(400).json({ ok: false, message: "Invalid tiered items" });
+        }
+
+        totalQty += Math.round(itQty);
+        amountPence += Math.round(itUnit) * Math.round(itQty);
+
+        lineItems.push({
+          price_data: {
+            currency: "gbp",
+            product_data: { name: showTitle },
+            unit_amount: Math.round(itUnit),
+          },
+          quantity: Math.round(itQty),
+        });
+      }
+
+      // (Optional sanity check) seat count should match quantity in tiered mode
+      if (hasSeats) {
+        const seatCount = seatIds.length;
+        if (seatCount !== totalQty) {
+          console.warn("tiered checkout mismatch seats vs qty", { seatCount, totalQty });
+          // Don’t hard fail if you sometimes don’t pass seats, but if seats are present, mismatch is usually a bug.
+          return res.status(400).json({ ok: false, message: "Seat selection mismatch. Please refresh and try again." });
+        }
+      }
+    } else {
+      // GA / single-price fallback
+      const qty = Number(quantity);
+      const unitPence = Number(unitPricePence);
+
+      if (!Number.isFinite(qty) || !Number.isFinite(unitPence) || qty <= 0 || unitPence <= 0) {
+        console.warn("checkout/session validation failed", { showId, qty, unitPence });
+        return res.status(400).json({ ok: false, message: "showId, quantity and unitPricePence are required" });
+      }
+
+      // GA checkout MUST include ticketTypeId so we can create Ticket rows later
+      if (!hasSeats && !ticketTypeId) {
+        console.warn("checkout/session missing ticketTypeId for GA purchase", { showId, qty });
+        return res.status(400).json({
+          ok: false,
+          message: "ticketTypeId is required for General Admission checkout",
+        });
+      }
+
+      totalQty = Math.round(qty);
+      amountPence = Math.round(unitPence) * totalQty;
+
+      lineItems = [
+        {
+          price_data: {
+            currency: "gbp",
+            product_data: { name: showTitle },
+            unit_amount: Math.round(unitPence),
+          },
+          quantity: totalQty,
+        },
+      ];
+    }
+
+    // Create Order (PENDING)
+    const order = await prisma.order.create({
+      data: {
+        showId: show.id,
+        quantity: totalQty,
+        amountPence: amountPence,
+        status: OrderStatus.PENDING,
       },
-      quantity: totalQty,
-    },
-  ];
-}
+      select: { id: true },
+    });
 
+    const baseUrl = getPublicBaseUrl(req);
+
+    // Pick URLs that exist in your system.
+    // - success: you can point to a "thank you" page (or order lookup)
+    // - cancel: send them back to the checkout page
+    const successUrl = `${baseUrl}/public/orders/success?orderId=${order.id}`;
+    const cancelUrl = `${baseUrl}/checkout?showId=${show.id}`;
+
+    // WARNING: Stripe metadata values have length limits.
+    // If you ever sell lots of seats in one order, consider storing seatIds on the Order in DB
+    // and only passing orderId/showId in metadata.
     const session = await stripe.checkout.sessions.create({
-      mode: 'payment',
+      mode: "payment",
       line_items: lineItems,
       success_url: successUrl,
       cancel_url: cancelUrl,
       metadata: {
         orderId: order.id,
         showId: show.id,
-        seatIds: seatIds.join(','),
+        seatIds: seatIds.join(","),
         ...(ticketTypeId ? { ticketTypeId: String(ticketTypeId) } : {}),
       },
     });
@@ -127,16 +173,15 @@ if (Array.isArray(items) && items.length > 0) {
     });
 
     return res.json({ ok: true, url: session.url });
-
   } catch (err: any) {
-    console.error('checkout/session CRITICAL ERROR', {
+    console.error("checkout/session CRITICAL ERROR", {
       requestBody: DEBUG_REQ_BODY,
       errorMessage: err?.message,
       errorName: err?.name,
       errorStack: err?.stack,
       rawError: err,
     });
-    return res.status(500).json({ ok: false, message: 'Checkout error', detail: err?.message });
+    return res.status(500).json({ ok: false, message: "Checkout error", detail: err?.message });
   }
 });
 
