@@ -86,18 +86,18 @@ console.debug('checkout/session fees result:', fees);
 
 
 
-    const order = await prisma.order.create({
-      data: {
-        showId: show.id,
-        amountPence,
-        quantity: qty,
-        status: OrderStatus.PENDING,
-        platformFeePence: fees.platformFeePence,
-        organiserSharePence: fees.organiserSharePence,
-        paymentFeePence: fees.paymentFeePence,
-        netPayoutPence: fees.netPayoutPence,
-      },
-    });
+   const order = await prisma.order.create({
+  data: {
+    showId,
+    email,
+    status: "PENDING",
+    amountPence,
+    quantity,
+    ticketTypeId: ticketTypeId ? String(ticketTypeId) : null,
+    stripeCheckoutSessionId: session.id,
+    seatsCsv,
+  },
+});
     console.debug('checkout/session order created', { orderId: order.id, status: order.status, amountPence, qty });
 
     const candidateOrigin = process.env.PUBLIC_BASE_URL || (req.get('host') ? `${req.protocol}://${req.get('host')}` : '');
