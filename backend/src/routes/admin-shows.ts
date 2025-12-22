@@ -72,6 +72,93 @@ async function ensureVenue(
   return created.id;
 }
 
+function parseLayoutMaybe(layout: unknown): any {
+  if (!layout) return null;
+  if (typeof layout === "string") {
+    try {
+      return JSON.parse(layout);
+    } catch {
+      return null;
+    }
+  }
+  return layout;
+}
+
+/**
+ * Best-effort seat counter for SeatMap.layout.
+ * Supports common shapes:
+ * - { seats: [...] }
+ * - { zones: [{ seats: [...] }] }
+ * - deeply nested objects containing seat-like nodes
+ */
+function countSellableSeatsFromLayout(layoutRaw: unknown): number {
+  const layout = parseLayoutMaybe(layoutRaw);
+  if (!layout || typeof layout !== "object") return 0;
+
+  const isBlockedSeat = (s: any) => {
+    const status = String(s?.status ?? "").toUpperCase();
+    return (
+      s?.blocked === true ||
+      s?.isBlocked === true ||
+      s?.disabled === true ||
+      status === "BLOCKED" ||
+      status === "DISABLED"
+    );
+  };
+
+  // 1) Direct seats array
+  if (Array.isArray((layout as any).seats)) {
+    const seats = (layout as any).seats;
+    return seats.filter((s: any) => s && !isBlockedSeat(s)).length;
+  }
+
+  // 2) Zones -> seats
+  if (Array.isArray((layout as any).zones)) {
+    const zones = (layout as any).zones;
+    const seats = zones.flatMap((z: any) => (Array.isArray(z?.seats) ? z.seats : []));
+    if (seats.length) return seats.filter((s: any) => s && !isBlockedSeat(s)).length;
+  }
+
+  // 3) Generic recursive scan (seat-like objects)
+  let count = 0;
+  const seen = new Set<string>();
+
+  const visit = (node: any) => {
+    if (!node || typeof node !== "object") return;
+
+    // seat-ish detector (common keys)
+    const type = String((node as any).type ?? (node as any).kind ?? (node as any).objectType ?? "")
+      .toLowerCase();
+
+    const looksLikeSeat =
+      type === "seat" ||
+      ((node as any).row !== undefined && ((node as any).number !== undefined || (node as any).seatNumber !== undefined)) ||
+      ((node as any).label !== undefined && (node as any).x !== undefined && (node as any).y !== undefined);
+
+    if (looksLikeSeat && !isBlockedSeat(node)) {
+      const id = String((node as any).id ?? (node as any).seatId ?? "");
+      if (id) {
+        if (!seen.has(id)) {
+          seen.add(id);
+          count += 1;
+        }
+      } else {
+        // no id, still count it (best-effort)
+        count += 1;
+      }
+    }
+
+    for (const v of Object.values(node)) {
+      if (Array.isArray(v)) v.forEach(visit);
+      else if (v && typeof v === "object") visit(v);
+    }
+  };
+
+  visit(layout);
+  return count;
+}
+
+
 /** GET /admin/shows — list */
 router.get("/shows", requireAdminOrOrganiser, async (req, res) => {
   try {
@@ -282,8 +369,14 @@ router.get("/shows", requireAdminOrOrganiser, async (req, res) => {
       if (isAllocated) {
         const mapId = activeSeatMap!.id;
 
-        // Total capacity from seat map if we can, otherwise estimatedCapacity
-        total = seatTotalSellable || estCap;
+       const layoutSeatCount = activeSeatMap ? countSellableSeatsFromLayout(activeSeatMap.layout) : 0;
+
+// Total capacity priority:
+// 1) Seat rows (if you persist seats)
+// 2) Layout-derived seat count (if seats aren't persisted yet)
+// 3) estimatedCapacity fallback
+total = seatTotalSellable || layoutSeatCount || estCap;
+
 
         // Sold seats are authoritative, but fallback to ticket sales if needed
         sold = seatSold || soldFromTickets;
