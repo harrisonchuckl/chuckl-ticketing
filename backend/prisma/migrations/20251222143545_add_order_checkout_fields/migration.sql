@@ -1,0 +1,5 @@
+ALTER TABLE "Order"
+  ADD COLUMN IF NOT EXISTS "seatsCsv" TEXT;
+
+ALTER TABLE "Order"
+  ADD COLUMN IF NOT EXISTS "stripeCheckoutSessionId" VARCHAR(255);
