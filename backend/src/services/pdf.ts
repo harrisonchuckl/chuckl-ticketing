@@ -2,7 +2,7 @@
 import PDFDocument from "pdfkit";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { qrPngBuffer } from "./qrcode";
+import { qrPngBuffer } from "./qrcode.js";
 
 const TIXALL_BLUE = "#0f9cdf";
 const LOGO_FILENAME = "TixAll on White Background.png";
@@ -89,7 +89,7 @@ export async function buildTicketsPdf(serial: string, showTitle: string) {
 /* ----------------------------- Drawing helpers ---------------------------- */
 
 function drawTicketPage(
-  doc: PDFDocument,
+doc: InstanceType<typeof PDFDocument>,
   args: {
     meta: OrderPdfMeta;
     ticket: TicketPdfItem;
@@ -246,7 +246,7 @@ function drawTicketPage(
 }
 
 function drawSummaryPage(
-  doc: PDFDocument,
+doc: InstanceType<typeof PDFDocument>,
   args: { meta: OrderPdfMeta; ticketsCount: number; logo?: Buffer | null }
 ) {
   const { meta, ticketsCount, logo } = args;
