@@ -3217,92 +3217,83 @@ if (isMobileView) {
 }
 
     }
+document.getElementById('btn-next').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-next');
+  if (!btn.classList.contains('active')) return;
 
-    document.getElementById('btn-next').addEventListener('click', async () => {
-      const btn = document.getElementById('btn-next');
-      if (!btn.classList.contains('active')) return;
+  btn.innerText = 'Processing...';
 
-      btn.innerText = 'Processing...';
-           // Validate single-seat gaps ONLY at Continue time
-const badRowGroups = findSingleGapGroups();
-const badTableGroups = findTableSingleGapGroups();
+  try {
+    // Validate single-seat gaps ONLY at Continue time
+    const badRowGroups = findSingleGapGroups();
+    const badTableGroups = findTableSingleGapGroups();
 
-if (badRowGroups.length || badTableGroups.length) {
-  if (badTableGroups.length && !badRowGroups.length) {
-    alert("Almost there — that selection would leave a single isolated seat at a table. Please tweak your seats (or add the neighbouring seat) so we don’t strand one seat on its own.");
-  } else if (badRowGroups.length && !badTableGroups.length) {
-    alert("Almost there — those seats would leave a single isolated seat on its own in that row. Please choose a different pair (or add the neighbouring seat) so we don’t strand a lone seat.");
-  } else {
-    alert("Almost there — that selection would leave a single isolated seat in a row and/or at a table. Please tweak your seats (or add the neighbouring seat) so we don’t strand a lone seat.");
-  }
-
-  btn.innerText = 'Continue';
-  return;
-}
-
-
-
-      let totalPence = 0;
-      const seatIds = [];
-
-      selectedSeats.forEach(id => {
-        totalPence += (seatPrices.get(id) || 0);
-        const stableId = seatIdMap.get(id);
-        if (stableId) seatIds.push(stableId);
-      });
-
-      // Build grouped line-items by ticket type (band)
-const groups = new Map(); // key -> { ticketTypeId, unitPricePence, seatIds: [] }
-
-selectedSeats.forEach((id) => {
-  const meta = seatMeta.get(id);
-  const stableId = seatIdMap.get(id);
-  if (!meta || !stableId) return;
-
-  const ticketTypeId = String(meta.ticketId || '');
-  const unitPricePence = Number(meta.price || 0);
-
-  const key = ticketTypeId + '|' + unitPricePence;
-
-  if (!groups.has(key)) {
-    groups.set(key, { ticketTypeId, unitPricePence, seatIds: [] });
-  }
-  groups.get(key).seatIds.push(stableId);
-});
-
-const items = Array.from(groups.values()).map(g => ({
-  ticketTypeId: g.ticketTypeId,
-  unitPricePence: g.unitPricePence,
-  quantity: g.seatIds.length,
-  seatIds: g.seatIds
-}));
-
-const allSeatIds = items.flatMap(i => i.seatIds);
-
-const res = await fetch('/checkout/session', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    showId,
-    seats: allSeatIds,
-    items
-  })
-});
-        const data = await res.json();
-
-        if (data.ok && data.url) {
-          window.location.href = data.url;
-        } else {
-          alert("Error: " + (data.message || "Unknown"));
-          btn.innerText = 'Continue';
-        }
-      } catch (e) {
-        alert("Connection error");
-        btn.innerText = 'Continue';
+    if (badRowGroups.length || badTableGroups.length) {
+      if (badTableGroups.length && !badRowGroups.length) {
+        alert("Almost there — that selection would leave a single isolated seat at a table. Please tweak your seats (or add the neighbouring seat) so we don’t strand one seat on its own.");
+      } else if (badRowGroups.length && !badTableGroups.length) {
+        alert("Almost there — those seats would leave a single isolated seat on its own in that row. Please choose a different pair (or add the neighbouring seat) so we don’t strand a lone seat.");
+      } else {
+        alert("Almost there — that selection would leave a single isolated seat in a row and/or at a table. Please tweak your seats (or add the neighbouring seat) so we don’t strand a lone seat.");
       }
-    
-    
+
+      btn.innerText = 'Continue';
+      return;
+    }
+
+    // Build grouped line-items by ticket type (band)
+    const groups = new Map(); // key -> { ticketTypeId, unitPricePence, seatIds: [] }
+
+    selectedSeats.forEach((id) => {
+      const meta = seatMeta.get(id);
+      const stableId = seatIdMap.get(id);
+      if (!meta || !stableId) return;
+
+      const ticketTypeId = String(meta.ticketId || '');
+      const unitPricePence = Number(meta.price || 0);
+
+      const key = ticketTypeId + '|' + unitPricePence;
+
+      if (!groups.has(key)) {
+        groups.set(key, { ticketTypeId, unitPricePence, seatIds: [] });
+      }
+      groups.get(key).seatIds.push(stableId);
     });
+
+    const items = Array.from(groups.values()).map(g => ({
+      ticketTypeId: g.ticketTypeId,
+      unitPricePence: g.unitPricePence,
+      quantity: g.seatIds.length,
+      seatIds: g.seatIds
+    }));
+
+    const allSeatIds = items.flatMap(i => i.seatIds);
+
+    const res = await fetch('/checkout/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        showId,
+        seats: allSeatIds,
+        items
+      })
+    });
+
+    const data = await res.json();
+
+    if (data.ok && data.url) {
+      window.location.href = data.url;
+    } else {
+      alert("Error: " + (data.message || "Unknown"));
+      btn.innerText = 'Continue';
+    }
+  } catch (e) {
+    console.error('[checkout] Continue click error', e);
+    alert("Connection error");
+    btn.innerText = 'Continue';
+  }
+});
+
 
 </script>
 </body>
