@@ -1,6 +1,5 @@
 // backend/src/services/pdf.ts
 import PDFDocument from 'pdfkit';
-import { qrPngBuffer } from './qrcode.js';
 
 /**
  * Lightweight PDF generator for tickets.
@@ -20,10 +19,8 @@ export async function buildTicketsPdf(serial: string, showTitle: string) {
   doc.moveDown();
   doc.fontSize(14).text(`Ticket Serial: ${serial}`);
   doc.moveDown();
-
-  const qr = await qrPngBuffer(`chuckl:${serial}`, 180);
-  doc.text('Show this QR at the door:', { continued: false });
-  doc.image(qr, 100, doc.y, { width: 140, height: 140 });
+  doc.rect(100, doc.y, 120, 120).stroke();
+  doc.text('QR Placeholder', 110, doc.y + 50);
 
   doc.end();
   return done;
