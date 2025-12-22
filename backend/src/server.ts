@@ -39,7 +39,20 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ---------- Core middleware ----------
-app.use(cors({ origin: "*", credentials: true }));
+// IMPORTANT: If you need cookies/auth cross-site, you can't use "*" with credentials.
+// This will reflect the request origin unless you set CORS_ORIGIN (comma-separated).
+const corsOrigins = (process.env.CORS_ORIGIN || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin: corsOrigins.length ? corsOrigins : true,
+    credentials: true,
+  })
+);
+
 app.use(morgan("dev"));
 
 // ✅ Stripe webhook MUST be mounted before express.json()
@@ -49,8 +62,6 @@ app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 app.use(cookieParser());
 app.use(attachUser);
-
-
 
 // ---------- Static assets ----------
 app.use("/static", express.static(path.join(__dirname, "..", "public", "static")));
@@ -76,7 +87,7 @@ app.use("/bootstrap", bootstrapRouter);
 app.use("/checkout", checkoutRouter);
 app.use("/public/orders", publicOrdersRouter);
 
-// *** MOUNT THE NEW ROUTER HERE ***
+// Public SSR/event pages
 app.use("/public", publicEventRouter);
 
 app.use("/uploads", uploadsRouter);
