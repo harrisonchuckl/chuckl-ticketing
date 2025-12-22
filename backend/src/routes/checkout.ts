@@ -149,7 +149,8 @@ router.post("/session", async (req, res) => {
     // - success: you can point to a "thank you" page (or order lookup)
     // - cancel: send them back to the checkout page
 const successUrl =
-  `${baseUrl}/checkout/success?orderId=${order.id}&session_id={CHECKOUT_SESSION_ID}`;
+  `${baseUrl}/public/checkout/success?orderId=${order.id}&session_id={CHECKOUT_SESSION_ID}`;
+
 
 const cancelUrl =
   `${baseUrl}/checkout?showId=${show.id}&checkout=cancel`;
@@ -196,24 +197,19 @@ const cancelUrl =
   }
 });
 
-// ✅ Payment success page (lives inside checkout.ts as /checkout/success)
-router.get("/success", async (req, res) => {
+// ✅ Back-compat: old success route now redirects to SSR success page
+router.get("/success", (req, res) => {
   const orderId = String(req.query.orderId || "").trim();
+  const sessionId = String(req.query.session_id || "").trim();
+
   if (!orderId) return res.status(400).send("Missing orderId");
 
-  try {
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      select: {
-        id: true,
-        status: true,
-        amountPence: true,
-        quantity: true,
-        email: true,
-        showId: true,
-        createdAt: true,
-      },
-    });
+  const qs =
+    `orderId=${encodeURIComponent(orderId)}` +
+    (sessionId ? `&session_id=${encodeURIComponent(sessionId)}` : "");
+
+  return res.redirect(302, `/public/checkout/success?${qs}`);
+});
 
     if (!order) return res.status(404).send("Order not found");
 
@@ -273,9 +269,9 @@ router.get("/success", async (req, res) => {
 });
 
 router.get('/', async (req, res) => {
-  // ✅ Backwards compatible: old Stripe success URL redirects to new success route
+  // ✅ Backwards compatible: old Stripe success URL redirects to SSR success route
   if (req.query.checkout === "success" && req.query.orderId) {
-    return res.redirect(`/checkout/success?orderId=${encodeURIComponent(String(req.query.orderId))}`);
+    return res.redirect(`/public/checkout/success?orderId=${encodeURIComponent(String(req.query.orderId))}`);
   }
 
   const showId = String(req.query.showId || '');
