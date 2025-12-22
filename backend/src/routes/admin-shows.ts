@@ -406,17 +406,18 @@ const [
       }),
 
      // SOLD should mean PAID only (not pending checkouts)
-prisma.ticket.groupBy({
-  by: ["showId"],
-  where: {
-    showId: { in: showIds },
-    order: { status: OrderStatus.PAID },
-  },
-  _sum: { quantity: true },
-  _count: { _all: true },
-}),
+      // SOLD should mean PAID only (use Order.quantity because Ticket rows may not exist)
+      prisma.order.groupBy({
+        by: ["showId"],
+        where: {
+          showId: { in: showIds },
+          status: OrderStatus.PAID,
+        },
+        _sum: { quantity: true },
+        _count: { _all: true },
+      }),
 
-      // Need allocation seatIds to avoid double-counting holds
+  // Need allocation seatIds to avoid double-counting holds
       prisma.externalAllocation.findMany({
         where: { showId: { in: showIds } },
         select: {
@@ -590,12 +591,15 @@ prisma.seat.findMany({
 
   const layoutStats = activeSeatMap ? seatStatsFromLayout(activeSeatMap.layout) : null;
 
-  // Total capacity priority:
+        // Total capacity priority:
   // 1) Seat rows totalSellable (if seats are persisted)
   // 2) Layout-derived totalSellable (if seats aren't persisted)
-  // 3) estimatedCapacity fallback
+  // 3) estimatedCapacity in layout
+  // 4) Venue.capacity as a last-resort fallback (prevents 0/0/0 UI)
   const layoutTotalSellable = layoutStats ? layoutStats.totalSellable : 0;
-  total = seatTotalSellable || layoutTotalSellable || estCap;
+  const venueCap = Number((s as any)?.venue?.capacity ?? 0);
+  total = seatTotalSellable || layoutTotalSellable || estCap || venueCap;
+
 
   // Sold priority:
   // 1) Seat rows SOLD count
@@ -641,8 +645,10 @@ prisma.seat.findMany({
         // Holds are allocation quantities (GA allocations reserve ticket capacity)
         hold = allocs.reduce((sum, a) => sum + Number(a.quantity ?? 0), 0);
 
-        // If cap isn't set but we have sold/hold, show something sensible
-        total = cap > 0 ? cap : Math.max(sold + hold, 0);
+      // If cap isn't set, fall back to venue capacity, otherwise show something sensible
+const venueCap = Number((s as any)?.venue?.capacity ?? 0);
+total = cap > 0 ? cap : (venueCap > 0 ? venueCap : Math.max(sold + hold, 0));
+
       }
 
       return {
@@ -667,12 +673,12 @@ router.delete("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
 
     if (!show) return res.status(404).json({ ok: false, error: "Show not found" });
 
-    const soldCount = await prisma.ticket.count({
-      where: {
-        showId,
-        order: { status: { in: [OrderStatus.PAID, OrderStatus.PENDING] } },
-      },
-    });
+   const soldCount = await prisma.order.count({
+  where: {
+    showId,
+    status: { in: [OrderStatus.PAID, OrderStatus.PENDING] },
+  },
+});
 
     if (soldCount > 0) {
       return res
@@ -790,7 +796,7 @@ router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
         usesAllocatedSeating: true,
         status: true,
         publishedAt: true,
-        venue: { select: { id: true, name: true, city: true } },
+        venue: { select: { id: true, name: true, city: true, capacity: true } },
         ticketTypes: {
           select: {
             id: true,
