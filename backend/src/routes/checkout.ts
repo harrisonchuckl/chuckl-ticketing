@@ -149,7 +149,8 @@ router.post("/session", async (req, res) => {
     // - success: you can point to a "thank you" page (or order lookup)
     // - cancel: send them back to the checkout page
 const successUrl =
-  `${baseUrl}/public/checkout/success?orderId=${order.id}&session_id={CHECKOUT_SESSION_ID}`;
+  `${baseUrl}/checkout/success?orderId=${order.id}&session_id={CHECKOUT_SESSION_ID}`;
+
 
 
 const cancelUrl =
@@ -197,19 +198,25 @@ const cancelUrl =
   }
 });
 
-// ✅ Back-compat: old success route now redirects to SSR success page
-router.get("/success", (req, res) => {
+// ✅ Stripe return page (SSR) — shows order summary + status
+router.get("/success", async (req, res) => {
   const orderId = String(req.query.orderId || "").trim();
   const sessionId = String(req.query.session_id || "").trim();
 
   if (!orderId) return res.status(400).send("Missing orderId");
 
-  const qs =
-    `orderId=${encodeURIComponent(orderId)}` +
-    (sessionId ? `&session_id=${encodeURIComponent(sessionId)}` : "");
-
-  return res.redirect(302, `/public/checkout/success?${qs}`);
-});
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        showId: true,
+        quantity: true,
+        amountPence: true,
+        status: true,
+        stripeCheckoutSessionId: true,
+      },
+    });
 
     if (!order) return res.status(404).send("Order not found");
 
