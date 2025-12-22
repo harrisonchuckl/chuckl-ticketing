@@ -241,6 +241,9 @@ model Order {
 
   tickets Ticket[]
   refunds Refund[]
+
+  seatsCsv               String?  @db.Text
+  stripeCheckoutSessionId String?  @db.VarChar(255)
 }
 
 model Refund {
