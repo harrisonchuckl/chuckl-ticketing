@@ -28,7 +28,7 @@ router.post('/session', async (req, res) => {
   console.debug('checkout/session request body (RAW):', DEBUG_REQ_BODY);
 
   try {
-    const { showId, quantity, unitPricePence, seats, ticketTypeId } = DEBUG_REQ_BODY;
+const { showId, quantity, unitPricePence, seats, ticketTypeId, items } = DEBUG_REQ_BODY;
 
     const seatIds: string[] = Array.isArray(seats) ? seats.map((s: any) => String(s)) : [];
     const hasSeats = seatIds.length > 0;
@@ -56,66 +56,57 @@ router.post('/session', async (req, res) => {
     const showTitle = show.title ?? 'Event ticket';
 
     // ⚠️ NOTE: see “Tiered pricing” section below — this calculation is only safe if all seats have same price
-    const amountPence = Math.round(unitPence) * Math.round(qty);
+   let amountPence = 0;
+let totalQty = 0;
 
-    if (!stripe) {
-      console.error('checkout/session error: STRIPE_SECRET_KEY is not configured');
-      return res.status(500).json({ ok: false, message: 'Payment processing unavailable' });
+// If tiered items are provided, build multi-line-item checkout
+let lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
+
+if (Array.isArray(items) && items.length > 0) {
+  for (const it of items) {
+    const itQty = Number(it?.quantity || 0);
+    const itUnit = Number(it?.unitPricePence || 0);
+
+    if (!Number.isFinite(itQty) || !Number.isFinite(itUnit) || itQty <= 0 || itUnit <= 0) {
+      return res.status(400).json({ ok: false, message: 'Invalid tiered items' });
     }
 
-    let fees;
-    try {
-      fees = await calcFeesForShow(show.id, amountPence, qty, null);
-        console.debug('checkout/session fees result:', fees);
-    } catch (feeErr: any) {
-      console.error('checkout/session fee calc error', {
-        showId: show.id,
-        qty,
-        amountPence,
-        feeErrorMessage: feeErr?.message,
-        feeErrorStack: feeErr?.stack,
-      });
-      return res.status(500).json({ ok: false, message: 'Fee calculation error', detail: feeErr?.message });
-    }
+    totalQty += itQty;
+    amountPence += Math.round(itUnit) * Math.round(itQty);
 
-    const seatsCsv = seatIds.length ? seatIds.join(',') : null;
-
-    const order = await prisma.order.create({
-      data: {
-        showId: String(showId),
-        email: null,
-        status: OrderStatus.PENDING,
-        amountPence,
-        quantity: Math.round(qty),
-        ticketTypeId: (!hasSeats && ticketTypeId) ? String(ticketTypeId) : null,
-        seatsCsv,
+    lineItems.push({
+      price_data: {
+        currency: 'gbp',
+        product_data: { name: showTitle },
+        unit_amount: Math.round(itUnit),
       },
+      quantity: Math.round(itQty),
     });
+  }
+} else {
+  // GA / single-price fallback
+  const qtyLocal = Number(quantity);
+  const unitLocal = Number(unitPricePence);
 
-    const candidateOrigin =
-      process.env.PUBLIC_BASE_URL ||
-      (req.get('host') ? `${req.protocol}://${req.get('host')}` : '');
+  if (!showId || !Number.isFinite(qtyLocal) || !Number.isFinite(unitLocal) || qtyLocal <= 0 || unitLocal <= 0) {
+    console.warn('checkout/session validation failed', { showId, qtyLocal, unitLocal });
+    return res.status(400).json({ ok: false, message: 'showId, quantity and unitPricePence are required' });
+  }
 
-    let origin = 'http://localhost:3000';
-    try {
-      if (candidateOrigin) origin = new URL(candidateOrigin).origin;
-    } catch (e) {
-      console.warn('checkout/session origin fallback', candidateOrigin, e);
-    }
+  totalQty = Math.round(qtyLocal);
+  amountPence = Math.round(unitLocal) * totalQty;
 
-    const successUrl = new URL(`/public/checkout/success?orderId=${order.id}`, origin).toString();
-    const cancelUrl = new URL(`/public/event/${show.id}?status=cancelled`, origin).toString();
-
-    const lineItems = [
-      {
-        price_data: {
-          currency: 'gbp',
-          product_data: { name: showTitle },
-          unit_amount: Math.round(unitPence),
-        },
-        quantity: Math.round(qty),
+  lineItems = [
+    {
+      price_data: {
+        currency: 'gbp',
+        product_data: { name: showTitle },
+        unit_amount: Math.round(unitLocal),
       },
-    ];
+      quantity: totalQty,
+    },
+  ];
+}
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
@@ -3215,15 +3206,43 @@ if (badRowGroups.length || badTableGroups.length) {
         if (stableId) seatIds.push(stableId);
       });
 
-      const quantity = selectedSeats.size;
-      const unitPricePence = Math.round(totalPence / quantity);
+      // Build grouped line-items by ticket type (band)
+const groups = new Map(); // key -> { ticketTypeId, unitPricePence, seatIds: [] }
 
-      try {
-        const res = await fetch('/checkout/session', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ showId, quantity, unitPricePence, seats: seatIds })
-        });
+selectedSeats.forEach((id) => {
+  const meta = seatMeta.get(id);
+  const stableId = seatIdMap.get(id);
+  if (!meta || !stableId) return;
+
+  const ticketTypeId = String(meta.ticketId || '');
+  const unitPricePence = Number(meta.price || 0);
+
+  const key = ticketTypeId + '|' + unitPricePence;
+
+  if (!groups.has(key)) {
+    groups.set(key, { ticketTypeId, unitPricePence, seatIds: [] });
+  }
+  groups.get(key).seatIds.push(stableId);
+});
+
+const items = Array.from(groups.values()).map(g => ({
+  ticketTypeId: g.ticketTypeId,
+  unitPricePence: g.unitPricePence,
+  quantity: g.seatIds.length,
+  seatIds: g.seatIds
+}));
+
+const allSeatIds = items.flatMap(i => i.seatIds);
+
+const res = await fetch('/checkout/session', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    showId,
+    seats: allSeatIds,
+    items
+  })
+});
         const data = await res.json();
 
         if (data.ok && data.url) {
