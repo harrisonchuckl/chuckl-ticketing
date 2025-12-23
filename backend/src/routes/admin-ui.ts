@@ -3459,90 +3459,9 @@ async function summaryPage(id){
     var currency = new Intl.NumberFormat('en-GB', { style:'currency', currency:'GBP' });
     var dayMs = 24 * 60 * 60 * 1000;
 
-    var customersData = [
-      {
-        id: 'CST-1048',
-        name: 'Amelia Brown',
-        email: 'amelia.brown@example.com',
-        phone: '+44 7700 900111',
-        totalOrders: 5,
-        totalTickets: 12,
-        totalSpend: 420,
-        lastPurchase: '2024-07-12',
-        showsBought: 4,
-        lastShow: 'Late Laughs',
-        loyalty: 'VIP',
-        marketingConsent: true,
-        notes: 'Always books front row for gala nights.',
-        tags: ['VIP', 'Local Legend', 'Corporate Booker'],
-        orders: [
-          { ref: 'ORD-1843', show: 'Late Laughs', date: '2024-07-12', qty: 4, total: 110, status: 'PAID', isLive: true },
-          { ref: 'ORD-1762', show: 'Friday Night Comedy', date: '2024-06-20', qty: 3, total: 78, status: 'PAID', isLive: true },
-          { ref: 'ORD-1655', show: 'Summer Showcase', date: '2024-05-04', qty: 3, total: 72, status: 'REFUNDED', isLive: false },
-          { ref: 'ORD-1501', show: 'Winter Warmers', date: '2023-12-02', qty: 2, total: 60, status: 'PAID', isLive: false },
-        ],
-      },
-      {
-        id: 'CST-1172',
-        name: 'Leo Martin',
-        email: 'leo.martin@example.com',
-        phone: '+44 7700 900222',
-        totalOrders: 3,
-        totalTickets: 9,
-        totalSpend: 186,
-        lastPurchase: '2024-06-28',
-        showsBought: 3,
-        lastShow: 'City Lights Comedy',
-        loyalty: 'Repeat',
-        marketingConsent: true,
-        notes: 'Brings groups of friends; happy with bundle offers.',
-        tags: ['Repeat buyer', 'Group organiser'],
-        orders: [
-          { ref: 'ORD-1777', show: 'City Lights Comedy', date: '2024-06-28', qty: 4, total: 96, status: 'PAID', isLive: true },
-          { ref: 'ORD-1620', show: 'Festival Preview', date: '2024-04-12', qty: 3, total: 54, status: 'PAID', isLive: true },
-          { ref: 'ORD-1498', show: 'Neighbourhood Laughs', date: '2023-11-18', qty: 2, total: 36, status: 'CANCELLED', isLive: false },
-        ],
-      },
-      {
-        id: 'CST-1289',
-        name: 'Priya Singh',
-        email: 'priya.singh@example.com',
-        phone: '+44 7700 900333',
-        totalOrders: 2,
-        totalTickets: 4,
-        totalSpend: 84,
-        lastPurchase: '2024-07-05',
-        showsBought: 2,
-        lastShow: 'Late Laughs',
-        loyalty: 'New',
-        marketingConsent: false,
-        notes: 'Prefers Saturday early shows; asks about accessibility.',
-        tags: ['Accessibility'],
-        orders: [
-          { ref: 'ORD-1820', show: 'Late Laughs', date: '2024-07-05', qty: 2, total: 48, status: 'PAID', isLive: true },
-          { ref: 'ORD-1732', show: 'Family Friendly Matinee', date: '2024-05-26', qty: 2, total: 36, status: 'PAID', isLive: true },
-        ],
-      },
-      {
-        id: 'CST-1320',
-        name: 'Samira Khan',
-        email: 'samira.khan@example.com',
-        phone: '+44 7700 900444',
-        totalOrders: 1,
-        totalTickets: 2,
-        totalSpend: 38,
-        lastPurchase: '2024-04-30',
-        showsBought: 1,
-        lastShow: 'Festival Preview',
-        loyalty: 'Single',
-        marketingConsent: false,
-        notes: 'First timer; interested in TV headliners.',
-        tags: ['New'],
-        orders: [
-          { ref: 'ORD-1604', show: 'Festival Preview', date: '2024-04-30', qty: 2, total: 38, status: 'PAID', isLive: true },
-        ],
-      },
-    ];
+ var customersData = [];
+var liveShows = [];
+var loadingCustomers = true;
 
       function computeLiveShows(data){
       try{
