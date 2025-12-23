@@ -25,17 +25,6 @@ router.get("/ui/login", (req, res) => {
 
   const error = typeof req.query.error === "string" ? req.query.error : "";
 
-  const csp = [
-    "default-src 'self'",
-    "script-src 'self' 'unsafe-inline'",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' https://fonts.gstatic.com",
-    "img-src 'self' data: https:",
-    "connect-src 'self'",
-    "form-action 'self'",
-  ].join('; ');
-
-  res.set("Content-Security-Policy", csp);
   res.type("html").send(`<!doctype html>
 <html lang="en">
 <head>
@@ -335,18 +324,7 @@ router.get(
   requireAdminOrOrganiser,
   (_req, res) => {
 
-  const csp = [
-    "default-src 'self'",
-    "script-src 'self' 'unsafe-inline'",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' https://fonts.gstatic.com",
-    "img-src 'self' data: https:",
-    "connect-src 'self'",
-    "form-action 'self'",
-  ].join('; ');
-
-  res.set("Cache-Control", "no-store");
-  res.set("Content-Security-Policy", csp);
+    res.set("Cache-Control", "no-store");
     res.type("html").send(`<!doctype html>
 <html lang="en">
 <head>
@@ -4037,47 +4015,41 @@ var loadingCustomers = true;
       if (drawer) drawer.setAttribute('aria-hidden', 'true');
     }
 
-    async function reissueTicketsEmail(
-      orderId: string,
-      btn?: HTMLButtonElement
-    ) {
-      const originalText = btn?.textContent;
+    async function reissueTicketsEmail(orderId: string, btn?: HTMLButtonElement) {
+  const originalText = btn?.textContent;
 
-      if (btn) {
-        btn.disabled = true;
-        btn.textContent = "Sending…";
-      }
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Sending…";
+  }
 
-      try {
-        // ✅ Your backend path (because router is mounted at /admin)
-        const url =
-          "/admin/orders/" + encodeURIComponent(orderId) + "/reissue-email";
+  try {
+    // ✅ Your backend path (because router is mounted at /admin)
+    const url = `/admin/orders/${encodeURIComponent(orderId)}/reissue-email`;
 
-        const resp = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
-          credentials: "same-origin",
-        });
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+      credentials: "same-origin",
+    });
 
-        const data = await resp.json().catch(() => ({} as any));
+    const data = await resp.json().catch(() => ({} as any));
 
-        if (!resp.ok || !data?.ok) {
-          throw new Error(data?.message || "Failed (" + resp.status + ")");
-        }
-
-        alert(data?.message || "Reissue email sent.");
-      } catch (err: any) {
-        alert(
-          "Reissue failed: " + (err?.message || "Unknown error")
-        );
-      } finally {
-        if (btn) {
-          btn.disabled = false;
-          btn.textContent = originalText || "Reissue tickets email";
-        }
-      }
+    if (!resp.ok || !data?.ok) {
+      throw new Error(data?.message || `Failed (${resp.status})`);
     }
+
+    alert(data?.message || "Reissue email sent.");
+  } catch (err: any) {
+    alert(`Reissue failed: ${err?.message || "Unknown error"}`);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = originalText || "Reissue tickets email";
+    }
+  }
+}
 
 
   if (drawerBody) {
