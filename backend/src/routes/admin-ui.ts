@@ -3554,15 +3554,18 @@ var loadingCustomers = true;
           var totalVal = (o.total != null ? o.total : (o.amount != null ? o.amount : (o.gross != null ? o.gross : 0)));
           var statusVal = o.status || o.orderStatus || '';
           var isLiveVal = (o.isLive != null) ? o.isLive : (o.showStatus ? (String(o.showStatus).toUpperCase() === 'LIVE') : !!o.live);
-          return {
-            ref: o.ref || o.reference || o.id || o.orderRef || '',
-            show: showTitle,
-            date: dateVal,
-            qty: qtyVal,
-            total: totalVal,
-            status: statusVal,
-            isLive: isLiveVal,
-          };
+        return {
+  ref: o.ref || o.reference || o.id || o.orderRef || '',
+  showId: o.showId || o.showID || o.eventId || '',
+  show: showTitle,
+  date: dateVal,
+  qty: qtyVal,
+  total: totalVal,
+  status: statusVal,
+  isLive: isLiveVal,
+  eventType: o.eventType || o.type || '',
+  eventCategory: o.eventCategory || o.category || '',
+};
         });
 
         var totalOrders = (c.totalOrders != null) ? c.totalOrders : ((c.ordersCount != null) ? c.ordersCount : orders.length);
@@ -3920,6 +3923,68 @@ var loadingCustomers = true;
       return '<span class="loyalty '+cls+'">'+label+'</span>';
     }
 
+    function humaniseKey(s){
+  s = String(s || '').trim();
+  if (!s) return '';
+  return s
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, function(m){ return m.toUpperCase(); });
+}
+
+function computeInterestCounts(customer){
+  var orders = (customer && customer.orders) ? customer.orders : [];
+  var seen = Object.create(null);
+  var counts = Object.create(null);
+
+  orders.forEach(function(o){
+    if (!o) return;
+
+    var t = String(o.eventType || '').trim();
+    var c = String(o.eventCategory || '').trim();
+    if (!t && !c) return;
+
+    // count unique shows (not multiple orders) where possible
+    var sid = String(o.showId || '').trim();
+    var uniq = (sid || String(o.ref || '')) + '|' + t + '|' + c;
+    if (seen[uniq]) return;
+    seen[uniq] = true;
+
+    var key = (t || 'Other') + '|' + (c || 'Other');
+    counts[key] = (counts[key] || 0) + 1;
+  });
+
+  return Object.keys(counts).map(function(key){
+    var parts = key.split('|');
+    return { eventType: parts[0], eventCategory: parts[1], count: counts[key] };
+  }).sort(function(a,b){
+    return (b.count || 0) - (a.count || 0);
+  });
+}
+
+function renderInterests(customer){
+  var items = computeInterestCounts(customer);
+  if (!items.length) return '';
+
+  var rows = items.map(function(x, idx){
+    var label = humaniseKey(x.eventType) + ' · ' + humaniseKey(x.eventCategory);
+    var border = (idx === items.length - 1) ? '' : 'border-bottom:1px solid var(--border);';
+    return ''
+      + '<div style="display:flex;justify-content:space-between;gap:12px;padding:8px 0;'+border+'">'
+      +   '<div style="font-weight:650;">'+label+'</div>'
+      +   '<div class="muted" style="font-weight:700;">'+(x.count || 0)+'</div>'
+      + '</div>';
+  }).join('');
+
+  return ''
+    + '<div class="mini-card">'
+    +   '<div class="muted" style="margin-bottom:6px;">Category / sub-category breakdown</div>'
+    +   rows
+    + '</div>';
+}
+
+
     function renderOrder(o){
       var statusClass = (o.status || '').toLowerCase();
       return ''
@@ -3972,12 +4037,16 @@ var loadingCustomers = true;
         +   '</div>'
         +   '<div class="mini-grid" style="margin-top:8px;">'
         +     '<div class="mini-card"><div class="muted">First purchase</div><div style="font-weight:700;">'+fmtDate(first)+'</div></div>'
-        +     '<div class="mini-card"><div class="muted">Last purchase</div><div style="font-weight:700;">'+fmtDate(last)+'</div></div>'
-        +     '<div class="mini-card"><div class="muted">Last show</div><div style="font-weight:700;">'+(customer.lastShow || '-')+'</div></div>'
-        +   '</div>'
-        + '</div>'
+        +   +     '<div class="mini-card"><div class="muted">Last show</div><div style="font-weight:700;">'+(customer.lastShow || '-')+'</div></div>'
++   '</div>'
++ '</div>'
 
-    + '<div id="drawerRecentPurchases" class="drawer-section">'
++ '<div class="drawer-section">'
++   '<div class="title" style="margin-bottom:6px;">Event interests</div>'
++   + (renderInterests(customer) || '<div class="muted">No event categories captured yet.</div>')
++ '</div>'
+
++ '<div id="drawerRecentPurchases" class="drawer-section">'
 +   '<div class="title">Recent purchases</div>'
 
         +   '<div class="muted" style="margin-bottom:6px;">Orders list with quick actions.</div>'
