@@ -669,6 +669,108 @@ router.get(
       cursor:pointer;
     }
     .opt:hover{background:#f8fafc;}
+    .table-wrap{overflow:auto;}
+    .mini-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+      gap:10px;
+    }
+    .mini-card{
+      padding:10px;
+      border:1px solid var(--border);
+      border-radius:10px;
+      background:#f8fafc;
+    }
+    .tag{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:4px 10px;
+      border-radius:999px;
+      border:1px solid var(--border);
+      background:#f8fafc;
+      color:#334155;
+      font-weight:700;
+      font-size:12px;
+    }
+    .loyalty{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:4px 12px;
+      border-radius:999px;
+      font-weight:800;
+      background:#ecfeff;
+      color:#0e7490;
+      border:1px solid #a5f3fc;
+      text-transform:uppercase;
+      letter-spacing:0.05em;
+      font-size:12px;
+    }
+    .loyalty.vip{background:#fef9c3;color:#854d0e;border-color:#fcd34d;}
+    .loyalty.repeat{background:#ecfdf3;color:#15803d;border-color:#bbf7d0;}
+    .loyalty.new{background:#eef2ff;color:#4f46e5;border-color:#c7d2fe;}
+    .status-badge{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:4px 8px;
+      border-radius:10px;
+      font-weight:700;
+      border:1px solid var(--border);
+      background:#f8fafc;
+      text-transform:uppercase;
+      font-size:12px;
+      letter-spacing:0.02em;
+    }
+    .status-badge.paid{color:#166534;background:#ecfdf3;border-color:#bbf7d0;}
+    .status-badge.refunded{color:#7c2d12;background:#fef2f2;border-color:#fecaca;}
+    .status-badge.cancelled{color:#4338ca;background:#eef2ff;border-color:#c7d2fe;}
+    .drawer-overlay{
+      position:fixed;
+      top:var(--header-h);
+      left:0;
+      right:0;
+      bottom:0;
+      background:rgba(15,23,42,0.25);
+      display:none;
+      z-index:24;
+    }
+    .drawer-overlay.open{display:block;}
+    .drawer{
+      position:fixed;
+      top:var(--header-h);
+      right:-540px;
+      bottom:0;
+      width:min(540px,100%);
+      background:#ffffff;
+      border-left:1px solid var(--border);
+      box-shadow:-14px 0 32px rgba(0,0,0,.12);
+      transition:right .18s ease;
+      z-index:25;
+      overflow-y:auto;
+      padding:18px;
+    }
+    .drawer.open{right:0;}
+    .drawer-header{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:10px;
+      position:sticky;
+      top:0;
+      background:#ffffff;
+      padding-bottom:10px;
+    }
+    .drawer-section{margin-top:12px;}
+    .drawer-section .title{margin:0 0 6px;}
+    .drawer-close{
+      background:none;
+      border:1px solid var(--border);
+      border-radius:10px;
+      padding:6px 8px;
+      cursor:pointer;
+    }
   </style>
 </head>
 <body>
@@ -721,6 +823,7 @@ router.get(
       </div>
 
       </div>
+      <a class="sb-link" href="/admin/ui/customers" data-view="/admin/ui/customers">Customers</a>
       <a class="sb-link" href="/admin/ui/venues" data-view="/admin/ui/venues">Venues</a>
       <a class="sb-link" href="/admin/ui/orders" data-view="/admin/ui/orders">Orders</a>
 
@@ -3349,6 +3452,440 @@ async function summaryPage(id){
     }
   }
 
+  // --- CUSTOMERS (MVP structure) ---
+  function customers(){
+    if (!main) return;
+
+    var currency = new Intl.NumberFormat('en-GB', { style:'currency', currency:'GBP' });
+    var dayMs = 24 * 60 * 60 * 1000;
+
+    var customersData = [
+      {
+        id: 'CST-1048',
+        name: 'Amelia Brown',
+        email: 'amelia.brown@example.com',
+        phone: '+44 7700 900111',
+        totalOrders: 5,
+        totalTickets: 12,
+        totalSpend: 420,
+        lastPurchase: '2024-07-12',
+        showsBought: 4,
+        lastShow: 'Late Laughs',
+        loyalty: 'VIP',
+        marketingConsent: true,
+        notes: 'Always books front row for gala nights.',
+        tags: ['VIP', 'Local Legend', 'Corporate Booker'],
+        orders: [
+          { ref: 'ORD-1843', show: 'Late Laughs', date: '2024-07-12', qty: 4, total: 110, status: 'PAID', isLive: true },
+          { ref: 'ORD-1762', show: 'Friday Night Comedy', date: '2024-06-20', qty: 3, total: 78, status: 'PAID', isLive: true },
+          { ref: 'ORD-1655', show: 'Summer Showcase', date: '2024-05-04', qty: 3, total: 72, status: 'REFUNDED', isLive: false },
+          { ref: 'ORD-1501', show: 'Winter Warmers', date: '2023-12-02', qty: 2, total: 60, status: 'PAID', isLive: false },
+        ],
+      },
+      {
+        id: 'CST-1172',
+        name: 'Leo Martin',
+        email: 'leo.martin@example.com',
+        phone: '+44 7700 900222',
+        totalOrders: 3,
+        totalTickets: 9,
+        totalSpend: 186,
+        lastPurchase: '2024-06-28',
+        showsBought: 3,
+        lastShow: 'City Lights Comedy',
+        loyalty: 'Repeat',
+        marketingConsent: true,
+        notes: 'Brings groups of friends; happy with bundle offers.',
+        tags: ['Repeat buyer', 'Group organiser'],
+        orders: [
+          { ref: 'ORD-1777', show: 'City Lights Comedy', date: '2024-06-28', qty: 4, total: 96, status: 'PAID', isLive: true },
+          { ref: 'ORD-1620', show: 'Festival Preview', date: '2024-04-12', qty: 3, total: 54, status: 'PAID', isLive: true },
+          { ref: 'ORD-1498', show: 'Neighbourhood Laughs', date: '2023-11-18', qty: 2, total: 36, status: 'CANCELLED', isLive: false },
+        ],
+      },
+      {
+        id: 'CST-1289',
+        name: 'Priya Singh',
+        email: 'priya.singh@example.com',
+        phone: '+44 7700 900333',
+        totalOrders: 2,
+        totalTickets: 4,
+        totalSpend: 84,
+        lastPurchase: '2024-07-05',
+        showsBought: 2,
+        lastShow: 'Late Laughs',
+        loyalty: 'New',
+        marketingConsent: false,
+        notes: 'Prefers Saturday early shows; asks about accessibility.',
+        tags: ['Accessibility'],
+        orders: [
+          { ref: 'ORD-1820', show: 'Late Laughs', date: '2024-07-05', qty: 2, total: 48, status: 'PAID', isLive: true },
+          { ref: 'ORD-1732', show: 'Family Friendly Matinee', date: '2024-05-26', qty: 2, total: 36, status: 'PAID', isLive: true },
+        ],
+      },
+      {
+        id: 'CST-1320',
+        name: 'Samira Khan',
+        email: 'samira.khan@example.com',
+        phone: '+44 7700 900444',
+        totalOrders: 1,
+        totalTickets: 2,
+        totalSpend: 38,
+        lastPurchase: '2024-04-30',
+        showsBought: 1,
+        lastShow: 'Festival Preview',
+        loyalty: 'Single',
+        marketingConsent: false,
+        notes: 'First timer; interested in TV headliners.',
+        tags: ['New'],
+        orders: [
+          { ref: 'ORD-1604', show: 'Festival Preview', date: '2024-04-30', qty: 2, total: 38, status: 'PAID', isLive: true },
+        ],
+      },
+    ];
+
+    var liveShows = Array.from(new Set(customersData.flatMap(function(c){
+      return (c.orders || []).filter(function(o){ return o && o.isLive; }).map(function(o){ return o.show; });
+    })));
+
+    var state = { search:'', show:'', range:'30', status:'any' };
+
+    main.innerHTML = ''
+      + '<div class="card" id="customersCard">'
+      +   '<div class="header" style="align-items:flex-start;gap:12px;">'
+      +     '<div>'
+      +       '<div class="title">Customers</div>'
+      +       '<div class="muted">Relationship-focused overview of people who keep coming back.</div>'
+      +     '</div>'
+      +     '<div class="row" style="gap:8px;flex-wrap:wrap;justify-content:flex-end;">'
+      +       '<input id="customerSearch" class="ctl" placeholder="Search name, email, order ref, customer ID" style="min-width:220px;" />'
+      +       '<select id="customerShowFilter" class="ctl" style="min-width:190px;"><option value="">All live shows</option></select>'
+      +       '<select id="customerDateRange" class="ctl" style="min-width:150px;">'
+      +         '<option value="30">Last 30 days</option>'
+      +         '<option value="90">Last 90 days</option>'
+      +         '<option value="365">Last 365 days</option>'
+      +         '<option value="any">All time</option>'
+      +       '</select>'
+      +       '<select id="customerStatus" class="ctl" style="min-width:170px;">'
+      +         '<option value="any">Any status</option>'
+      +         '<option value="PAID">Paid</option>'
+      +         '<option value="REFUNDED">Refunded</option>'
+      +         '<option value="CANCELLED">Cancelled</option>'
+      +       '</select>'
+      +     '</div>'
+      +   '</div>'
+      +   '<div class="muted" style="margin:6px 0 10px;">One row per customer, grouped across orders.</div>'
+      +   '<div class="table-wrap">'
+      +     '<table>'
+      +       '<thead><tr>'
+      +         '<th>Customer</th>'
+      +         '<th>Customer ID</th>'
+      +         '<th>Contact</th>'
+      +         '<th>Total orders</th>'
+      +         '<th>Total tickets</th>'
+      +         '<th>Total spend</th>'
+      +         '<th>Last purchase</th>'
+      +         '<th>Shows bought</th>'
+      +         '<th></th>'
+      +       '</tr></thead>'
+      +       '<tbody id="customerTableBody"></tbody>'
+      +     '</table>'
+      +   '</div>'
+      +   '<div id="customerEmpty" class="muted" style="display:none;margin-top:10px;">No customers match your filters yet.</div>'
+      + '</div>'
+      + '<div class="drawer-overlay" id="customerDrawerOverlay"></div>'
+      + '<aside class="drawer" id="customerDrawer" aria-hidden="true">'
+      +   '<div class="drawer-header">'
+      +     '<div>'
+      +       '<div class="title" id="drawerName">Customer</div>'
+      +       '<div class="muted" id="drawerMeta"></div>'
+      +     '</div>'
+      +     '<button class="drawer-close" id="drawerClose" aria-label="Close profile">Close</button>'
+      +   '</div>'
+      +   '<div id="customerDrawerBody"></div>'
+      + '</aside>';
+
+    var search = $('#customerSearch');
+    var showFilter = $('#customerShowFilter');
+    var dateRange = $('#customerDateRange');
+    var statusFilter = $('#customerStatus');
+    var tableBody = $('#customerTableBody');
+    var empty = $('#customerEmpty');
+    var drawer = $('#customerDrawer');
+    var drawerBody = $('#customerDrawerBody');
+    var drawerName = $('#drawerName');
+    var drawerMeta = $('#drawerMeta');
+    var drawerClose = $('#drawerClose');
+    var overlay = $('#customerDrawerOverlay');
+
+    liveShows.forEach(function(show){
+      if (!showFilter) return;
+      var opt = document.createElement('option');
+      opt.value = show;
+      opt.textContent = show;
+      showFilter.appendChild(opt);
+    });
+
+    if (search){
+      search.addEventListener('input', function(){ state.search = search.value || ''; renderTable(); });
+    }
+    if (showFilter){
+      showFilter.addEventListener('change', function(){ state.show = showFilter.value || ''; renderTable(); });
+    }
+    if (dateRange){
+      dateRange.addEventListener('change', function(){ state.range = dateRange.value || 'any'; renderTable(); });
+    }
+    if (statusFilter){
+      statusFilter.addEventListener('change', function(){ state.status = statusFilter.value || 'any'; renderTable(); });
+    }
+    if (drawerClose){
+      drawerClose.addEventListener('click', function(){ closeDrawer(); });
+    }
+    if (overlay){
+      overlay.addEventListener('click', function(){ closeDrawer(); });
+    }
+
+    function fmtDate(str){
+      if (!str) return '-';
+      var d = new Date(str);
+      if (isNaN(d.getTime())) return '-';
+      return d.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+    }
+
+    function lastPurchaseDate(c){
+      if (!c) return null;
+      if (c.lastPurchase) return new Date(c.lastPurchase);
+      var dates = (c.orders || []).map(function(o){ return new Date(o.date); }).filter(function(d){ return !isNaN(d.getTime()); });
+      if (!dates.length) return null;
+      return new Date(Math.max.apply(null, dates.map(function(d){ return d.getTime(); })));
+    }
+
+    function firstPurchaseDate(c){
+      var dates = (c.orders || []).map(function(o){ return new Date(o.date); }).filter(function(d){ return !isNaN(d.getTime()); });
+      if (!dates.length) return null;
+      return new Date(Math.min.apply(null, dates.map(function(d){ return d.getTime(); })));
+    }
+
+    function countShows(c){
+      return new Set((c.orders || []).map(function(o){ return o.show; }).filter(Boolean)).size || (c.showsBought || 0);
+    }
+
+    function matchSearch(c){
+      if (!state.search) return true;
+      var q = state.search.toLowerCase();
+      var haystack = [
+        c.name,
+        c.email,
+        c.phone,
+        c.id,
+        (c.orders || []).map(function(o){ return o.ref + ' ' + o.show; }).join(' '),
+      ].join(' ').toLowerCase();
+      return haystack.indexOf(q) !== -1;
+    }
+
+    function matchShow(c){
+      if (!state.show) return true;
+      return (c.orders || []).some(function(o){ return o.show === state.show && o.isLive; });
+    }
+
+    function matchDateRange(c){
+      if (state.range === 'any') return true;
+      var last = lastPurchaseDate(c);
+      if (!last) return true;
+      var days = (Date.now() - last.getTime()) / dayMs;
+      return days <= Number(state.range);
+    }
+
+    function matchStatus(c){
+      if (state.status === 'any') return true;
+      return (c.orders || []).some(function(o){ return o.status === state.status; });
+    }
+
+    function renderTable(){
+      if (!tableBody) return;
+      closeMenus();
+      var filtered = customersData.filter(function(c){
+        return matchSearch(c) && matchShow(c) && matchDateRange(c) && matchStatus(c);
+      });
+      if (!filtered.length){
+        tableBody.innerHTML = '';
+        if (empty) empty.style.display = 'block';
+        return;
+      }
+      if (empty) empty.style.display = 'none';
+      tableBody.innerHTML = filtered.map(renderRow).join('');
+      attachRowHandlers();
+    }
+
+    function renderRow(c){
+      var shows = countShows(c);
+      var last = lastPurchaseDate(c);
+      var loyaltyClass = (c.loyalty || '').toLowerCase();
+      return ''
+        + '<tr>'
+        +   '<td>'
+        +     '<div style="font-weight:700;">'+c.name+'</div>'
+        +     '<div class="muted" style="font-size:12px;">'+(c.loyalty ? '<span class="loyalty '+loyaltyClass+'">'+c.loyalty+'</span>' : '')+'</div>'
+        +   '</td>'
+        +   '<td>'+c.id+'</td>'
+        +   '<td>'+(c.email || '-')+'<br/><span class="muted" style="font-size:12px;">'+(c.phone || '')+'</span></td>'
+        +   '<td>'+c.totalOrders+'</td>'
+        +   '<td>'+c.totalTickets+'</td>'
+        +   '<td>'+currency.format(c.totalSpend || 0)+'</td>'
+        +   '<td>'+fmtDate(last)+'<br/><span class="muted" style="font-size:12px;">'+(c.lastShow || '-')+'</span></td>'
+        +   '<td>'+shows+' show'+(shows === 1 ? '' : 's')+'</td>'
+        +   '<td>'
+        +     '<div class="kebab">'
+        +       '<button class="btn p" data-kebab="'+c.id+'" aria-haspopup="menu" aria-expanded="false" title="Actions">⋯</button>'
+        +       '<div class="menu" data-menu="'+c.id+'">'
+        +         '<a href="#" data-open-profile="'+c.id+'">Open profile</a>'
+        +         '<a href="#" data-open-profile="'+c.id+'">View recent orders</a>'
+        +       '</div>'
+        +     '</div>'
+        +   '</td>'
+        + '</tr>';
+    }
+
+    function closeMenus(){
+      $$('.menu', tableBody).forEach(function(menu){ menu.classList.remove('open'); });
+    }
+
+    function attachRowHandlers(){
+      $$('[data-kebab]', tableBody).forEach(function(btn){
+        btn.addEventListener('click', function(e){
+          e.preventDefault();
+          e.stopPropagation();
+          var id = btn.getAttribute('data-kebab');
+          var menu = tableBody && tableBody.querySelector('[data-menu="'+id+'"]');
+          if (menu){
+            var open = menu.classList.contains('open');
+            closeMenus();
+            menu.classList.toggle('open', !open);
+          }
+        });
+      });
+
+      $$('[data-open-profile]', tableBody).forEach(function(link){
+        link.addEventListener('click', function(e){
+          e.preventDefault();
+          var id = link.getAttribute('data-open-profile');
+          var customer = customersData.find(function(c){ return c.id === id; });
+          closeMenus();
+          if (customer) openDrawer(customer);
+        });
+      });
+    }
+
+    function loyaltyLabel(c){
+      var cls = (c.loyalty || '').toLowerCase();
+      var label = c.loyalty || 'New';
+      return '<span class="loyalty '+cls+'">'+label+'</span>';
+    }
+
+    function renderOrder(o){
+      var statusClass = (o.status || '').toLowerCase();
+      return ''
+        + '<div class="mini-card">'
+        +   '<div class="row" style="justify-content:space-between;align-items:flex-start;">'
+        +     '<div>'
+        +       '<div style="font-weight:700;">'+o.show+'</div>'
+        +       '<div class="muted" style="font-size:12px;">'+fmtDate(o.date)+' · '+(o.qty || 0)+' tickets</div>'
+        +       '<div class="muted" style="font-size:12px;">Order '+o.ref+'</div>'
+        +     '</div>'
+        +     '<div style="text-align:right;">'
+        +       '<div>'+currency.format(o.total || 0)+'</div>'
+        +       '<div><span class="status-badge '+statusClass+'">'+(o.status || '').toLowerCase()+'</span></div>'
+        +     '</div>'
+        +   '</div>'
+        +   '<div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap;">'
+        +     '<button class="btn p" data-order-action="reissue" data-order-ref="'+o.ref+'">Reissue tickets email</button>'
+        +     '<button class="btn p" data-order-action="refund" data-order-ref="'+o.ref+'">Refund</button>'
+        +     '<button class="btn" data-order-action="view" data-order-ref="'+o.ref+'">View order</button>'
+        +   '</div>'
+        + '</div>';
+    }
+
+    function renderDrawer(customer){
+      if (!drawerBody || !drawer || !drawerName || !drawerMeta) return;
+      var first = firstPurchaseDate(customer);
+      var last = lastPurchaseDate(customer);
+      var orders = (customer.orders || []).slice().sort(function(a,b){
+        return new Date(b.date).getTime() - new Date(a.date).getTime();
+      });
+
+      drawerName.textContent = customer.name;
+      drawerMeta.innerHTML = '' + customer.id + ' · ' + (customer.email || '') + (customer.phone ? ' · ' + customer.phone : '');
+
+      var shows = countShows(customer);
+      var orderList = orders.map(renderOrder).join('');
+      var tags = (customer.tags || []).map(function(t){ return '<span class="tag">'+t+'</span>'; }).join(' ');
+
+      drawerBody.innerHTML = ''
+        + '<div class="drawer-section">'
+        +   '<div class="row" style="justify-content:space-between;align-items:center;">'
+        +     '<div class="title" style="margin:0;">Overview</div>'
+        +     loyaltyLabel(customer)
+        +   '</div>'
+        +   '<div class="mini-grid" style="margin-top:8px;">'
+        +     '<div class="mini-card"><div class="muted">Total spend</div><div style="font-weight:800;">'+currency.format(customer.totalSpend || 0)+'</div></div>'
+        +     '<div class="mini-card"><div class="muted">Orders</div><div style="font-weight:800;">'+customer.totalOrders+'</div></div>'
+        +     '<div class="mini-card"><div class="muted">Tickets</div><div style="font-weight:800;">'+customer.totalTickets+'</div></div>'
+        +     '<div class="mini-card"><div class="muted">Shows bought</div><div style="font-weight:800;">'+shows+'</div></div>'
+        +   '</div>'
+        +   '<div class="mini-grid" style="margin-top:8px;">'
+        +     '<div class="mini-card"><div class="muted">First purchase</div><div style="font-weight:700;">'+fmtDate(first)+'</div></div>'
+        +     '<div class="mini-card"><div class="muted">Last purchase</div><div style="font-weight:700;">'+fmtDate(last)+'</div></div>'
+        +     '<div class="mini-card"><div class="muted">Last show</div><div style="font-weight:700;">'+(customer.lastShow || '-')+'</div></div>'
+        +   '</div>'
+        + '</div>'
+
+        + '<div class="drawer-section">'
+        +   '<div class="title">Recent purchases</div>'
+        +   '<div class="muted" style="margin-bottom:6px;">Orders list with quick actions.</div>'
+        +   (orderList || '<div class="muted">No orders yet.</div>')
+        + '</div>'
+
+        + '<div class="drawer-section">'
+        +   '<div class="title" style="margin-bottom:6px;">Notes & tags</div>'
+        +   (customer.notes ? '<div class="mini-card">'+customer.notes+'</div>' : '<div class="muted">No notes captured yet.</div>')
+        +   (tags ? '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">'+tags+'</div>' : '')
+        + '</div>'
+
+        + '<div class="drawer-section">'
+        +   '<div class="title" style="margin-bottom:6px;">Purchase history</div>'
+        +   '<div class="mini-card">'
+        +     '<div class="muted">Shows attended / purchased over time</div>'
+        +     '<div style="margin-top:6px;">'+orders.map(function(o){ return '<div style="display:flex;justify-content:space-between;gap:6px;">'
+        +       '<div>'+o.show+'</div><div class="muted" style="font-size:12px;">'+fmtDate(o.date)+'</div>'
+        +     '</div>'; }).join('')+'</div>'
+        +   '</div>'
+        + '</div>';
+
+      drawer.classList.add('open');
+      if (overlay) overlay.classList.add('open');
+      drawer.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeDrawer(){
+      if (drawer) drawer.classList.remove('open');
+      if (overlay) overlay.classList.remove('open');
+      if (drawer) drawer.setAttribute('aria-hidden', 'true');
+    }
+
+    if (drawerBody){
+      drawerBody.addEventListener('click', function(e){
+        var btn = e.target && e.target.closest('[data-order-action]');
+        if (!btn) return;
+        e.preventDefault();
+        var action = btn.getAttribute('data-order-action');
+        var ref = btn.getAttribute('data-order-ref');
+        alert((action ? action.toUpperCase() : 'Action') + ' for ' + (ref || 'order') + ' coming soon.');
+      });
+    }
+
+    renderTable();
+  }
+
   // --- OTHER SIMPLE PAGES ---
   function orders(){
     if (!main) return;
@@ -3851,6 +4388,7 @@ async function summaryPage(id){
       if (path === '/admin/ui/shows/create-ai') return createShowAI();
       if (path === '/admin/ui/shows/create') return createShow();
       if (path === '/admin/ui/shows/current')  return listShows();
+      if (path === '/admin/ui/customers')     return customers();
       if (path === '/admin/ui/orders')         return orders();
       if (path === '/admin/ui/venues')         return venues();
       if (path === '/admin/ui/analytics')      return analytics();

@@ -18,6 +18,7 @@
   - ✅ Notes (create/edit/delete, timestamped, author)
   - ✅ Refunds (full/partial via Stripe)
   - ✅ Ticket list with scan status
+- ✅ Customers: navigation tab with per-customer rollups, search/filter controls, and profile drawer (orders, loyalty, notes/tags)
 - ✅ Venues: create + search
 
 ## Analytics
