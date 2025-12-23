@@ -1,7 +1,7 @@
 import express, { Router } from "express";
+import crypto from "node:crypto";
 import prisma from "../lib/prisma.js";
 import Stripe from "stripe";
-import { randomBytes, randomUUID } from "node:crypto";
 import { calcFeesForShow } from "../services/fees.js";
 import { sendTicketsEmail } from "../services/email.js";
 
@@ -15,9 +15,9 @@ const stripe: Stripe | null = stripeSecret
 
 const router = Router();
 
-// 20-char, scan-friendly serial
 function makeTicketSerial() {
-  return randomBytes(10).toString("hex").toUpperCase();
+  // Short, scan-friendly serial (20 chars)
+  return crypto.randomBytes(10).toString("hex").toUpperCase();
 }
 
 function markSeatsSold(layout: any, seatIds: string[]): any {
@@ -144,16 +144,17 @@ router.post("/stripe", express.raw({ type: "application/json" }), async (req, re
     }
 
     // Load order to compute fees precisely
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      select: {
-        id: true,
-        amountPence: true,
-        quantity: true,
-        userId: true,
-        status: true,
-      },
-    });
+ const order = await prisma.order.findUnique({
+  where: { id: orderId },
+  select: {
+    id: true,
+    amountPence: true,
+    quantity: true,
+    userId: true,
+    status: true,
+    ticketTypeId: true, // ✅ fallback if Stripe metadata ticketTypeId is missing
+  },
+});
 
     if (!order) {
       console.warn("webhook: order not found", { orderId });
@@ -193,122 +194,121 @@ router.post("/stripe", express.raw({ type: "application/json" }), async (req, re
       },
     });
 
-         // -----------------------------
-    // CREATE TICKETS (idempotent)
     // -----------------------------
-    try {
-      const ticketTable = await getTableNameCaseInsensitive("Ticket");
+// CREATE TICKETS (idempotent)
+// -----------------------------
+try {
+  const existing = await prisma.ticket.count({ where: { orderId } });
 
-      if (!ticketTable) {
-        console.warn("[webhook] Ticket table not found in DB (skipping ticket creation)");
-      } else {
-        const ticketCols = await getTableCols(ticketTable);
+  if (existing > 0) {
+    console.info("[webhook] tickets already exist, skipping", { orderId, existing });
+  } else {
+    const seatGroupsRaw = session.metadata?.seatGroups || "";
 
-        // If tickets already exist for this order, don’t recreate (webhooks retry)
-        const existing = await countByOrderId(ticketTable, ticketCols, orderId);
-        if (existing > 0) {
-          console.info("[webhook] tickets already exist, skipping", { orderId, existing });
-        } else {
-          const seatGroupsRaw = session.metadata?.seatGroups || "";
-          const gaTicketTypeId = (session.metadata?.ticketTypeId || "").trim();
+    // Prefer Stripe metadata; fall back to order.ticketTypeId if present
+    const gaTicketTypeId =
+      (session.metadata?.ticketTypeId || "").trim() || (order.ticketTypeId || "").trim();
 
-          let created = 0;
+    const qty = Number(order.quantity ?? 1) || 1;
+    const total = Number(order.amountPence ?? 0) || 0;
+    const unitFromOrder = Math.max(0, Math.round(total / Math.max(1, qty)));
 
-          // Tiered seating mode: seatGroups contains [{ticketTypeId, unitPricePence, seatIds[]}]
-          if (seatGroupsRaw) {
-            let seatGroups: Array<{ ticketTypeId: string; unitPricePence: number; seatIds: string[] }> = [];
-            try {
-              seatGroups = JSON.parse(seatGroupsRaw);
-            } catch {
-              console.warn("[webhook] invalid seatGroups JSON (cannot create tiered tickets)", { orderId });
-              seatGroups = [];
-            }
+    const ticketsToCreate: Array<{
+      serial: string;
+      holderName?: string | null;
+      status?: string | null;
+      orderId: string;
+      showId: string;
+      ticketTypeId: string;
+      seatId?: string | null;
+      amountPence: number;
+      quantity: number;
+    }> = [];
 
-            for (const g of seatGroups) {
-              const ttId = String(g.ticketTypeId || "").trim();
-              const unit = Number(g.unitPricePence || 0);
-              const ids = Array.isArray(g.seatIds) ? g.seatIds.map(s => String(s).trim()).filter(Boolean) : [];
+    // Tiered seating mode: seatGroups contains [{ticketTypeId, unitPricePence, seatIds[]}]
+    if (seatGroupsRaw) {
+      let seatGroups: Array<{ ticketTypeId: string; unitPricePence: number; seatIds: string[] }> = [];
+      try {
+        seatGroups = JSON.parse(seatGroupsRaw);
+      } catch {
+        console.warn("[webhook] invalid seatGroups JSON (cannot create tiered tickets)", { orderId });
+        seatGroups = [];
+      }
 
-              for (const sbSeatId of ids) {
-                await insertRow(ticketTable, ticketCols, {
-                  id: randomUUID(),
-                  serial: makeTicketSerial(),
-                  holderName: null,
-                  orderId,
-                  showId,
-                  ticketTypeId: ttId || undefined,
-                  seatId: sbSeatId,
-                  sbSeatId: sbSeatId,
-                  pricePence: unit,
-                  unitPricePence: unit,
-                  amountPence: unit,
-                  quantity: 1,
-                  status: "SOLD",
-                });
-                created++;
-              }
-            }
+      for (const g of seatGroups) {
+        const ttId = String(g.ticketTypeId || "").trim();
+        const unit = Number(g.unitPricePence || 0);
+        const ids = Array.isArray(g.seatIds) ? g.seatIds.map(s => String(s).trim()).filter(Boolean) : [];
 
-            console.info("[webhook] created tiered tickets", { orderId, created });
-          }
+        for (const seatId of ids) {
+          if (!ttId || !unit) continue;
 
-          // GA mode: ALWAYS create 1 ticket row per ticket (so every ticket has its own serial + QR)
-          else if (gaTicketTypeId) {
-            const qty = Number(order.quantity || 0);
-
-            if (seatIds.length > 0) {
-              // Seating GA: one ticket per seat
-              for (const sid of seatIds) {
-                await insertRow(ticketTable, ticketCols, {
-                  id: randomUUID(),
-                  serial: makeTicketSerial(),
-                  holderName: null,
-                  orderId,
-                  showId,
-                  ticketTypeId: gaTicketTypeId,
-                  seatId: sid,
-                  sbSeatId: sid,
-                  quantity: 1,
-                  status: "SOLD",
-                });
-                created++;
-              }
-
-              console.info("[webhook] created GA tickets (per-seat)", { orderId, created });
-            } else if (qty > 0) {
-              // Non-seated GA: one ticket row per quantity
-              for (let i = 0; i < qty; i++) {
-                await insertRow(ticketTable, ticketCols, {
-                  id: randomUUID(),
-                  serial: makeTicketSerial(),
-                  holderName: null,
-                  orderId,
-                  showId,
-                  ticketTypeId: gaTicketTypeId,
-                  quantity: 1,
-                  status: "SOLD",
-                });
-                created++;
-              }
-
-              console.info("[webhook] created GA tickets (per-ticket)", { orderId, created });
-            } else {
-              console.warn("[webhook] GA mode but qty=0 and no seatIds (cannot create tickets)", { orderId });
-            }
-          } else {
-            console.warn("[webhook] no seatGroups + no ticketTypeId metadata (cannot create tickets)", { orderId });
-          }
-
-          console.info("[webhook] tickets created total", { orderId, created });
+          ticketsToCreate.push({
+            serial: makeTicketSerial(),
+            holderName: null,
+            status: "SOLD",
+            orderId,
+            showId,
+            ticketTypeId: ttId,
+            seatId,
+            amountPence: unit,
+            quantity: 1,
+          });
         }
       }
-    } catch (ticketErr: any) {
-      console.error("[webhook] ticket creation failed", {
-        orderId,
-        message: ticketErr?.message,
-        stack: ticketErr?.stack,
-      });
     }
+
+    // GA mode: create 1 ticket per seat (if seats exist) else 1 per quantity
+    else if (gaTicketTypeId) {
+      if (seatIds.length > 0) {
+        // One per seat
+        for (const seatId of seatIds) {
+          ticketsToCreate.push({
+            serial: makeTicketSerial(),
+            holderName: null,
+            status: "SOLD",
+            orderId,
+            showId,
+            ticketTypeId: gaTicketTypeId,
+            seatId,
+            amountPence: unitFromOrder,
+            quantity: 1,
+          });
+        }
+      } else {
+        // One per quantity
+        for (let i = 0; i < qty; i++) {
+          ticketsToCreate.push({
+            serial: makeTicketSerial(),
+            holderName: null,
+            status: "SOLD",
+            orderId,
+            showId,
+            ticketTypeId: gaTicketTypeId,
+            seatId: null,
+            amountPence: unitFromOrder,
+            quantity: 1,
+          });
+        }
+      }
+    } else {
+      console.warn("[webhook] no seatGroups + no ticketTypeId metadata (cannot create tickets)", { orderId });
+    }
+
+    if (ticketsToCreate.length) {
+      await prisma.ticket.createMany({ data: ticketsToCreate });
+    }
+
+    console.info("[webhook] tickets created", { orderId, count: ticketsToCreate.length });
+  }
+} catch (ticketErr: any) {
+  console.error("[webhook] ticket creation failed", {
+    orderId,
+    message: ticketErr?.message,
+    stack: ticketErr?.stack,
+  });
+}
+
 
 
 
