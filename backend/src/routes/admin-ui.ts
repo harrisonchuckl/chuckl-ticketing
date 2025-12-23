@@ -4015,41 +4015,47 @@ var loadingCustomers = true;
       if (drawer) drawer.setAttribute('aria-hidden', 'true');
     }
 
-    async function reissueTicketsEmail(orderId: string, btn?: HTMLButtonElement) {
-  const originalText = btn?.textContent;
+    async function reissueTicketsEmail(
+      orderId: string,
+      btn?: HTMLButtonElement
+    ) {
+      const originalText = btn?.textContent;
 
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = "Sending…";
-  }
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "Sending…";
+      }
 
-  try {
-    // ✅ Your backend path (because router is mounted at /admin)
-    const url = `/admin/orders/${encodeURIComponent(orderId)}/reissue-email`;
+      try {
+        // ✅ Your backend path (because router is mounted at /admin)
+        const url =
+          "/admin/orders/" + encodeURIComponent(orderId) + "/reissue-email";
 
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-      credentials: "same-origin",
-    });
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+          credentials: "same-origin",
+        });
 
-    const data = await resp.json().catch(() => ({} as any));
+        const data = await resp.json().catch(() => ({} as any));
 
-    if (!resp.ok || !data?.ok) {
-      throw new Error(data?.message || `Failed (${resp.status})`);
+        if (!resp.ok || !data?.ok) {
+          throw new Error(data?.message || "Failed (" + resp.status + ")");
+        }
+
+        alert(data?.message || "Reissue email sent.");
+      } catch (err: any) {
+        alert(
+          "Reissue failed: " + (err?.message || "Unknown error")
+        );
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = originalText || "Reissue tickets email";
+        }
+      }
     }
-
-    alert(data?.message || "Reissue email sent.");
-  } catch (err: any) {
-    alert(`Reissue failed: ${err?.message || "Unknown error"}`);
-  } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = originalText || "Reissue tickets email";
-    }
-  }
-}
 
 
   if (drawerBody) {
