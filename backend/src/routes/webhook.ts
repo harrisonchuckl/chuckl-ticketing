@@ -138,6 +138,28 @@ router.post("/stripe", express.raw({ type: "application/json" }), async (req, re
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
 
+    // Seat ids coming from the frontend/metadata may NOT be Seat.id (cuid).
+// Only set Ticket.seatId if it exists in the Seat table, else use null.
+const validSeatIdSet = new Set<string>();
+if (seatIds.length > 0) {
+  const seatRows = await prisma.seat.findMany({
+    where: { id: { in: seatIds } },
+    select: { id: true },
+  });
+  for (const r of seatRows) validSeatIdSet.add(r.id);
+
+  const missing = seatIds.filter((id) => !validSeatIdSet.has(id));
+  if (missing.length) {
+    console.warn("[webhook] seatIds not found in Seat table (will store tickets with seatId=null)", {
+      orderId: session.metadata?.orderId,
+      showId: session.metadata?.showId,
+      missingCount: missing.length,
+      sample: missing.slice(0, 10),
+    });
+  }
+}
+
+
     if (!orderId || !showId) {
       console.warn("webhook: missing orderId/showId metadata", { orderId, showId });
       return res.json({ received: true });
@@ -250,7 +272,7 @@ try {
             orderId,
             showId,
             ticketTypeId: ttId,
-            seatId,
+seatId: validSeatIdSet.has(seatId) ? seatId : null,
             amountPence: unit,
             quantity: 1,
           });
@@ -270,7 +292,7 @@ try {
             orderId,
             showId,
             ticketTypeId: gaTicketTypeId,
-            seatId,
+seatId: validSeatIdSet.has(seatId) ? seatId : null,
             amountPence: unitFromOrder,
             quantity: 1,
           });
