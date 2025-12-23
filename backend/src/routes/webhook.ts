@@ -20,6 +20,78 @@ function makeTicketSerial() {
   return crypto.randomBytes(10).toString("hex").toUpperCase();
 }
 
+function buildSeatDisplayName(seatAttrs: any, parentAttrs: any): string {
+  const row = String(seatAttrs?.sbSeatRowLabel || "");
+  const num = String(seatAttrs?.sbSeatLabel || "");
+  const type = String(parentAttrs?.shapeType || parentAttrs?.name || "");
+
+  if (type === "circular-table" || type === "rect-table") {
+    return row && num ? `T${row}-${num}` : "";
+  }
+  return row ? `${row}${num}` : num;
+}
+
+function buildSeatRefMapFromKonva(konvaJson: any): Map<string, string> {
+  const map = new Map<string, string>();
+
+  const walk = (node: any, parentAttrs: any) => {
+    if (!node || typeof node !== "object") return;
+
+    const attrs = node.attrs || {};
+    const isSeat = attrs.isSeat === true || attrs.isSeat === "true";
+
+    if (isSeat) {
+      const sid = String(attrs.sbSeatId || attrs.id || "").trim();
+      if (sid) {
+        const display = buildSeatDisplayName(attrs, parentAttrs);
+        const ref = String(attrs.sbSeatRef || "").trim();
+        map.set(sid, display || ref || sid);
+      }
+    }
+
+    if (Array.isArray(node.children)) {
+      for (const child of node.children) walk(child, attrs);
+    }
+  };
+
+  walk(konvaJson, null);
+  return map;
+}
+
+async function loadSeatRefMapForShow(showId: string): Promise<Map<string, string>> {
+  const show = await prisma.show.findUnique({
+    where: { id: showId },
+    select: { activeSeatMapId: true },
+  });
+
+  const seatMap =
+    show?.activeSeatMapId
+      ? await prisma.seatMap.findUnique({ where: { id: show.activeSeatMapId } })
+      : await prisma.seatMap.findFirst({ where: { showId }, orderBy: { updatedAt: "desc" } });
+
+  if (!seatMap?.layout) return new Map();
+
+  const layout: any = seatMap.layout as any;
+
+  // Your code already treats layout as either { konvaJson: "..." } or raw JSON/string
+  const konvaRaw =
+    typeof layout === "string"
+      ? layout
+      : typeof layout?.konvaJson === "string"
+        ? layout.konvaJson
+        : null;
+
+  if (!konvaRaw) return new Map();
+
+  try {
+    const parsed = typeof konvaRaw === "string" ? JSON.parse(konvaRaw) : konvaRaw;
+    return buildSeatRefMapFromKonva(parsed);
+  } catch {
+    return new Map();
+  }
+}
+
+
 function markSeatsSold(layout: any, seatIds: string[]): any {
   const seatSet = new Set(seatIds);
 
@@ -138,28 +210,6 @@ router.post("/stripe", express.raw({ type: "application/json" }), async (req, re
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
 
-    // Seat ids coming from the frontend/metadata may NOT be Seat.id (cuid).
-// Only set Ticket.seatId if it exists in the Seat table, else use null.
-const validSeatIdSet = new Set<string>();
-if (seatIds.length > 0) {
-  const seatRows = await prisma.seat.findMany({
-    where: { id: { in: seatIds } },
-    select: { id: true },
-  });
-  for (const r of seatRows) validSeatIdSet.add(r.id);
-
-  const missing = seatIds.filter((id) => !validSeatIdSet.has(id));
-  if (missing.length) {
-    console.warn("[webhook] seatIds not found in Seat table (will store tickets with seatId=null)", {
-      orderId: session.metadata?.orderId,
-      showId: session.metadata?.showId,
-      missingCount: missing.length,
-      sample: missing.slice(0, 10),
-    });
-  }
-}
-
-
     if (!orderId || !showId) {
       console.warn("webhook: missing orderId/showId metadata", { orderId, showId });
       return res.json({ received: true });
@@ -234,8 +284,9 @@ try {
     const qty = Number(order.quantity ?? 1) || 1;
     const total = Number(order.amountPence ?? 0) || 0;
     const unitFromOrder = Math.max(0, Math.round(total / Math.max(1, qty)));
+        const seatRefMap = await loadSeatRefMapForShow(showId);
 
-    const ticketsToCreate: Array<{
+        const ticketsToCreate: Array<{
       serial: string;
       holderName?: string | null;
       status?: string | null;
@@ -243,6 +294,7 @@ try {
       showId: string;
       ticketTypeId: string;
       seatId?: string | null;
+      seatRef?: string | null;
       amountPence: number;
       quantity: number;
     }> = [];
@@ -272,7 +324,8 @@ try {
             orderId,
             showId,
             ticketTypeId: ttId,
-seatId: validSeatIdSet.has(seatId) ? seatId : null,
+            seatId: seatId,
+            seatRef: seatRefMap.get(seatId) || null,
             amountPence: unit,
             quantity: 1,
           });
@@ -292,7 +345,8 @@ seatId: validSeatIdSet.has(seatId) ? seatId : null,
             orderId,
             showId,
             ticketTypeId: gaTicketTypeId,
-seatId: validSeatIdSet.has(seatId) ? seatId : null,
+            seatId: seatId,
+            seatRef: seatRefMap.get(seatId) || null,
             amountPence: unitFromOrder,
             quantity: 1,
           });
