@@ -5,7 +5,7 @@ import path from "node:path";
 import { qrPngBuffer } from "./qrcode.js";
 
 const TIXALL_BLUE = "#0f9cdf";
-const LOGO_FILENAME = "TixAll on White Background.png";
+const LOGO_FILENAME = "TixAll BW on Blue Background.png";
 
 export type TicketPdfItem = {
   serial: string;
