@@ -4011,13 +4011,51 @@ var loadingCustomers = true;
       if (drawer) drawer.setAttribute('aria-hidden', 'true');
     }
 
-    if (drawerBody){
-      drawerBody.addEventListener('click', function(e){
+        if (drawerBody){
+      drawerBody.addEventListener('click', async function(e){
         var btn = e.target && e.target.closest('[data-order-action]');
         if (!btn) return;
+
         e.preventDefault();
+
         var action = btn.getAttribute('data-order-action');
         var ref = btn.getAttribute('data-order-ref');
+
+        if (!action || !ref){
+          alert('Missing order reference.');
+          return;
+        }
+
+        // --- REISSUE ---
+        if (action === 'reissue'){
+          if (!confirm('Reissue tickets email for order ' + ref + '?')) return;
+
+          var prevText = btn.textContent;
+          btn.disabled = true;
+          btn.textContent = 'Sending…';
+
+          try{
+            var r = await j(
+              '/admin/orders/' + encodeURIComponent(ref) + '/reissue-email',
+              {
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({})
+              }
+            );
+
+            alert((r && r.message) ? r.message : 'Reissue email sent.');
+          }catch(err){
+            alert('Reissue failed: ' + (err.message || err));
+          }finally{
+            btn.disabled = false;
+            btn.textContent = prevText;
+          }
+
+          return;
+        }
+
+        // Keep other actions as placeholders for now
         alert((action ? action.toUpperCase() : 'Action') + ' for ' + (ref || 'order') + ' coming soon.');
       });
     }
