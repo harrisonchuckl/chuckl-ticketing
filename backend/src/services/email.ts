@@ -27,7 +27,11 @@ async function fetchOrderDeep(orderId: string) {
       show: {
         include: { venue: true, ticketTypes: true },
       },
-      tickets: true,
+tickets: {
+  include: {
+    seat: true,
+  },
+},
       user: true,
     },
   });
@@ -117,11 +121,13 @@ function renderTicketsHtml(order: NonNullable<OrderDeep>) {
   const ticketRows = (order.tickets || [])
     .map((t) => {
       const anyT = t as any;
-      const seat =
-        (anyT.seatLabel as string | undefined) ||
-        (anyT.seatCode as string | undefined) ||
-        (anyT.seatName as string | undefined) ||
-        "";
+     const seat =
+  (anyT.seatLabel as string | undefined) ||
+  (anyT.seatCode as string | undefined) ||
+  (anyT.seatName as string | undefined) ||
+  (anyT.seat?.label as string | undefined) ||
+  (anyT.seat?.row && typeof anyT.seat?.number === "number" ? `${anyT.seat.row}${anyT.seat.number}` : "") ||
+  "";
 
       return `
         <tr>
