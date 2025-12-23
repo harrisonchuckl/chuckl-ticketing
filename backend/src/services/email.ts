@@ -1,6 +1,8 @@
 // backend/src/services/email.ts
 import { Resend } from "resend";
-import { prisma } from "../lib/db.js";
+import fs from "node:fs";
+import path from "node:path";
+import prisma from "../lib/prisma.js";
 import { buildOrderTicketsPdf } from "./pdf.js";
 
 const RESEND_KEY = process.env.RESEND_API_KEY || "";
@@ -10,7 +12,36 @@ const ATTACH_PDFS = String(process.env.PDF_ATTACHMENTS ?? "true").toLowerCase() 
 
 // Branding / links
 const BRAND_COLOR = process.env.EMAIL_BRAND_COLOR || "#0f9cdf";
-const LOGO_URL = (process.env.EMAIL_LOGO_URL || "").trim(); // must be absolute https URL
+const LOGO_URL = (process.env.EMAIL_LOGO_URL || "").trim(); // can be absolute https URL (preferred)
+
+const LOCAL_LOGO_FILENAME = "TixAll BW on Blue Background.png";
+let _cachedLocalLogoDataUri: string | null = null;
+
+function getEmailLogoUrl(): string {
+  // If you provide a public URL, use it (best for all email clients)
+  if (LOGO_URL) return LOGO_URL;
+
+  // Otherwise, embed the local PNG as a data URI (works well in Apple Mail)
+  if (_cachedLocalLogoDataUri !== null) return _cachedLocalLogoDataUri;
+
+  const candidates = [
+    path.join(process.cwd(), "public", LOCAL_LOGO_FILENAME),
+    path.join(process.cwd(), "backend", "public", LOCAL_LOGO_FILENAME),
+  ];
+
+  for (const p of candidates) {
+    try {
+      const buf = fs.readFileSync(p);
+      _cachedLocalLogoDataUri = `data:image/png;base64,${buf.toString("base64")}`;
+      return _cachedLocalLogoDataUri;
+    } catch {
+      // try next
+    }
+  }
+
+  _cachedLocalLogoDataUri = "";
+  return "";
+}
 const MY_TICKETS_URL_BASE = (process.env.MY_TICKETS_URL_BASE || "").trim(); // optional, e.g. https://chuckl.club/my-tickets?order=
 
 const INCLUDE_SUMMARY_PAGE =
@@ -24,13 +55,8 @@ async function fetchOrderDeep(orderId: string) {
   return prisma.order.findUnique({
     where: { id: orderId },
     include: {
-      show: {
-        include: { venue: true, ticketTypes: true },
-      },
-tickets: {
-  include: {
-  },
-},
+      show: { include: { venue: true, ticketTypes: true } },
+      tickets: true,
       user: true,
     },
   });
@@ -167,9 +193,9 @@ function renderTicketsHtml(order: NonNullable<OrderDeep>) {
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                   <tr>
                     <td align="left" style="vertical-align:middle;">
-                      ${
-                        LOGO_URL
-                          ? `<img src="${escapeHtml(LOGO_URL)}" alt="TixAll" height="34" style="display:block;height:34px;max-width:220px;">`
+                                           ${
+                        getEmailLogoUrl()
+                          ? `<img src="${escapeHtml(getEmailLogoUrl())}" alt="TixAll" height="34" style="display:block;height:34px;max-width:220px;">`
                           : `<div style="font-family:Arial,Helvetica,sans-serif;font-size:22px;font-weight:700;color:#ffffff;">TixAll</div>`
                       }
                     </td>
