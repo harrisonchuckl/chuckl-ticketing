@@ -624,19 +624,26 @@ router.get(
       padding:2px 6px;
     }
     .kebab{position:relative;}
-    .menu{
-      position:absolute;
-      right:0;
-      top:28px;
-      background:#ffffff;
-      border:1px solid var(--border);
-      border-radius:8px;
-      box-shadow:0 8px 24px rgba(0,0,0,.08);
-      display:none;
-      min-width:160px;
-      z-index:20;
-    }
-    .menu.open{display:block;}
+.menu{
+  position:absolute;
+  right:0;
+  top:28px;
+  display:none;
+  flex-direction:column;
+  min-width:180px;
+  background:#fff;
+  border:1px solid #e5e7eb;
+  border-radius:10px;
+  box-shadow:0 10px 30px rgba(0,0,0,.12);
+  padding:6px;
+  z-index:999; /* ensure it’s always above the table */
+}
+.menu.open{display:flex;}
+.menu.up{
+  top:auto;
+  bottom:28px; /* flips the menu above the dots */
+}
+
     .menu a{
       display:block;
       padding:8px 10px;
@@ -669,7 +676,12 @@ router.get(
       cursor:pointer;
     }
     .opt:hover{background:#f8fafc;}
-    .table-wrap{overflow:auto;}
+.table-wrap{
+  overflow-x:auto;     /* keep horizontal scroll for tables */
+  overflow-y:visible;  /* allow dropdown menus to escape */
+  padding-bottom:72px; /* gives the last row enough breathing room */
+  position:relative;
+}
     .mini-grid{
       display:grid;
       grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
@@ -3805,10 +3817,12 @@ var loadingCustomers = true;
         +   '<td>'
         +     '<div class="kebab">'
         +       '<button class="btn p" data-kebab="'+c.id+'" aria-haspopup="menu" aria-expanded="false" title="Actions">⋯</button>'
-        +       '<div class="menu" data-menu="'+c.id+'">'
-        +         '<a href="#" data-open-profile="'+c.id+'">Open profile</a>'
-        +         '<a href="#" data-open-profile="'+c.id+'">View recent orders</a>'
-        +       '</div>'
++       '<div class="menu" data-menu="'+c.id+'">'
++         '<a href="#" data-open-profile="'+c.id+'">Open profile</a>'
++         '<a href="#" data-view-orders="'+c.id+'">3 recent orders</a>'
++       '</div>'
+
+        
         +     '</div>'
         +   '</td>'
         + '</tr>';
@@ -3818,31 +3832,87 @@ var loadingCustomers = true;
       $$('.menu', tableBody).forEach(function(menu){ menu.classList.remove('open'); });
     }
 
-    function attachRowHandlers(){
-      $$('[data-kebab]', tableBody).forEach(function(btn){
-        btn.addEventListener('click', function(e){
-          e.preventDefault();
-          e.stopPropagation();
-          var id = btn.getAttribute('data-kebab');
-          var menu = tableBody && tableBody.querySelector('[data-menu="'+id+'"]');
-          if (menu){
-            var open = menu.classList.contains('open');
-            closeMenus();
-            menu.classList.toggle('open', !open);
-          }
-        });
-      });
+  function attachRowHandlers(){
 
-      $$('[data-open-profile]', tableBody).forEach(function(link){
-        link.addEventListener('click', function(e){
-          e.preventDefault();
-          var id = link.getAttribute('data-open-profile');
-          var customer = customersData.find(function(c){ return c.id === id; });
-          closeMenus();
-          if (customer) openDrawer(customer);
+  // kebab open + flip up near bottom
+  $$('[data-kebab]', tableBody).forEach(function(btn){
+    btn.addEventListener('click', function(e){
+      e.preventDefault();
+      e.stopPropagation();
+
+      var id = btn.getAttribute('data-kebab');
+      var menu = tableBody && tableBody.querySelector('[data-menu="'+id+'"]');
+      if (!menu) return;
+
+      var wasOpen = menu.classList.contains('open');
+      closeMenus();
+
+      if (!wasOpen){
+        menu.classList.add('open');
+        btn.setAttribute('aria-expanded', 'true');
+
+        // flip up if we’re near the bottom
+        requestAnimationFrame(function(){
+          var btnRect = btn.getBoundingClientRect();
+          var menuHeight = menu.offsetHeight || 160;
+          var spaceBelow = window.innerHeight - btnRect.bottom;
+          var spaceAbove = btnRect.top;
+
+          menu.classList.toggle('up', spaceBelow < menuHeight && spaceAbove > menuHeight);
         });
-      });
-    }
+      } else {
+        btn.setAttribute('aria-expanded', 'false');
+      }
+    });
+  });
+
+  // Open profile -> MUST call renderDrawer (openDrawer isn't in this page)
+  $$('[data-open-profile]', tableBody).forEach(function(link){
+    link.addEventListener('click', function(e){
+      e.preventDefault();
+
+      var id = link.getAttribute('data-open-profile') || '';
+      var customer = customersData.find(function(c){ return c.id === id; });
+
+      closeMenus();
+      if (customer) renderDrawer(customer);
+    });
+  });
+
+  // 3 recent orders -> open drawer then jump to Recent purchases section
+  $$('[data-view-orders]', tableBody).forEach(function(link){
+    link.addEventListener('click', function(e){
+      e.preventDefault();
+
+      var id = link.getAttribute('data-view-orders') || '';
+      var customer = customersData.find(function(c){ return c.id === id; });
+
+      closeMenus();
+      if (!customer) return;
+
+      renderDrawer(customer);
+
+      setTimeout(function(){
+        var el = document.getElementById('drawerRecentPurchases');
+        if (el) el.scrollIntoView({ behavior:'smooth', block:'start' });
+      }, 0);
+    });
+  });
+
+  // Close menus when clicking elsewhere (bind once)
+  if (!window.__customersMenuCloserBound){
+    window.__customersMenuCloserBound = true;
+
+    document.addEventListener('click', function(e){
+      var t = e.target;
+      if (!t || !t.closest || !t.closest('.kebab')) closeMenus();
+    });
+
+    document.addEventListener('scroll', function(){ closeMenus(); }, true);
+    window.addEventListener('resize', function(){ closeMenus(); });
+  }
+
+}
 
     function loyaltyLabel(c){
       var cls = (c.loyalty || '').toLowerCase();
@@ -3907,8 +3977,9 @@ var loadingCustomers = true;
         +   '</div>'
         + '</div>'
 
-        + '<div class="drawer-section">'
-        +   '<div class="title">Recent purchases</div>'
+    + '<div id="drawerRecentPurchases" class="drawer-section">'
++   '<div class="title">Recent purchases</div>'
+
         +   '<div class="muted" style="margin-bottom:6px;">Orders list with quick actions.</div>'
         +   (orderList || '<div class="muted">No orders yet.</div>')
         + '</div>'
