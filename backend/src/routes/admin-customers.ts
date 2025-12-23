@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
 import { requireAdminOrOrganiser } from "../lib/authz.js";
+import { sendTicketsEmail } from "../services/email.js";
 
 const router = Router();
 const prisma = new PrismaClient();
