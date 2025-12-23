@@ -160,24 +160,37 @@ const cancelUrl =
     // WARNING: Stripe metadata values have length limits.
     // If you ever sell lots of seats in one order, consider storing seatIds on the Order in DB
     // and only passing orderId/showId in metadata.
+
+        // Build seatGroups mapping for webhook (tiered seating)
+    // Note: your UI caps at 10 seats, so this comfortably fits Stripe metadata limits.
+    let seatGroupsJson = "";
+
+    if (Array.isArray(items) && items.length > 0) {
+      const seatGroups = items.map((it: any) => ({
+        ticketTypeId: String(it.ticketTypeId || ""),
+        unitPricePence: Number(it.unitPricePence || 0),
+        seatIds: Array.isArray(it.seatIds) ? it.seatIds.map((x: any) => String(x)) : [],
+      }));
+
+      seatGroupsJson = JSON.stringify(seatGroups);
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       line_items: lineItems,
       success_url: successUrl,
       cancel_url: cancelUrl,
-     metadata: {
-  orderId: order.id,
-  showId: show.id,
-  seatIds: seatIds.join(","),
+   metadata: {
+        orderId: order.id,
+        showId: show.id,
+        seatIds: seatIds.join(","),
 
-  // GA purchases (no seats) still rely on ticketTypeId
-  ...(ticketTypeId ? { ticketTypeId: String(ticketTypeId) } : {}),
+        // GA purchases (no seats) still rely on ticketTypeId
+        ...(ticketTypeId ? { ticketTypeId: String(ticketTypeId) } : {}),
 
-  // Tiered seat mapping (if present)
-  ...(((req as any).__seatGroups && String((req as any).__seatGroups).length)
-    ? { seatGroups: String((req as any).__seatGroups) }
-    : {}),
-},
+        // Tiered seat mapping (ticketTypeId per seat)
+        ...(seatGroupsJson ? { seatGroups: seatGroupsJson } : {}),
+      },
 
     });
 
