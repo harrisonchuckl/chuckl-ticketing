@@ -30,6 +30,7 @@ import adminSeatMapsRouter from "./routes/admin-seatmaps.js";
 import seatMapsRouter from "./routes/seatmaps.js";
 import seatingChoiceRouter from "./routes/seating-choice.js";
 import adminSeatingBuilderRouter from "./routes/admin-seating-builder.js";
+import adminCustomersRouter from "./routes/admin-customers.js";
 
 const app = express();
 
@@ -103,6 +104,7 @@ app.use("/admin/seatmaps", adminSeatMapsRouter);
 app.use("/seatmaps", seatMapsRouter);
 app.use("/admin/seating", adminSeatingBuilderRouter);
 app.use("/admin", seatingChoiceRouter);
+app.use("/admin", adminCustomersRouter);
 app.use("/admin", adminUiRouter);
 
 // 404
