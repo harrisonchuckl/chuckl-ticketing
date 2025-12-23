@@ -4011,20 +4011,68 @@ var loadingCustomers = true;
       if (drawer) drawer.setAttribute('aria-hidden', 'true');
     }
 
-    if (drawerBody){
-      drawerBody.addEventListener('click', function(e){
-        var btn = e.target && e.target.closest('[data-order-action]');
-        if (!btn) return;
-        e.preventDefault();
-        var action = btn.getAttribute('data-order-action');
-        var ref = btn.getAttribute('data-order-ref');
-        alert((action ? action.toUpperCase() : 'Action') + ' for ' + (ref || 'order') + ' coming soon.');
-      });
+    async function reissueTicketsEmail(orderId: string, btn?: HTMLButtonElement) {
+  const originalText = btn?.textContent;
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Sending…";
+  }
+
+  try {
+    // ✅ Your backend path (because router is mounted at /admin)
+    const url = `/admin/orders/${encodeURIComponent(orderId)}/reissue-email`;
+
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+      credentials: "same-origin",
+    });
+
+    const data = await resp.json().catch(() => ({} as any));
+
+    if (!resp.ok || !data?.ok) {
+      throw new Error(data?.message || `Failed (${resp.status})`);
     }
 
-    renderTable();
-    hydrateCustomers();
+    alert(data?.message || "Reissue email sent.");
+  } catch (err: any) {
+    alert(`Reissue failed: ${err?.message || "Unknown error"}`);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = originalText || "Reissue tickets email";
+    }
   }
+}
+
+
+  if (drawerBody) {
+  drawerBody.addEventListener("click", async function (e) {
+    var btn = e.target && (e.target as any).closest('[data-order-action]');
+    if (!btn) return;
+
+    e.preventDefault();
+
+    var action = btn.getAttribute("data-order-action");
+    var ref = btn.getAttribute("data-order-ref");
+
+    if (!action || !ref) {
+      alert("Missing action or order reference on this button.");
+      return;
+    }
+
+    // ✅ Reissue tickets email
+    if (action === "reissue") {
+      await reissueTicketsEmail(ref, btn as HTMLButtonElement);
+      return;
+    }
+
+    // Keep “coming soon” for everything else for now
+    alert(action.toUpperCase() + " for " + ref + " coming soon.");
+  });
+}
 
   // --- OTHER SIMPLE PAGES ---
   function orders(){
