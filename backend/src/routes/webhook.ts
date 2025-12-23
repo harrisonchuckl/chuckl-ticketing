@@ -59,6 +59,46 @@ function markSeatsSold(layout: any, seatIds: string[]): any {
   return wasString ? JSON.stringify(root) : root;
 }
 
+async function getTableNameCaseInsensitive(target: string): Promise<string | null> {
+  const rows = await prisma.$queryRaw<
+    Array<{ table_name: string }>
+  >`SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND lower(table_name)=lower(${target}) LIMIT 1`;
+  return rows?.[0]?.table_name ?? null;
+}
+
+async function getTableCols(tableName: string): Promise<Set<string>> {
+  const rows = await prisma.$queryRaw<Array<{ column_name: string }>>`
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema='public' AND table_name=${tableName}
+  `;
+  return new Set((rows || []).map(r => r.column_name));
+}
+
+async function countByOrderId(tableName: string, cols: Set<string>, orderId: string): Promise<number> {
+  if (!cols.has("orderId")) return 0; // can't check idempotency safely
+  const rows = await prisma.$queryRawUnsafe<Array<{ c: any }>>(
+    `SELECT COUNT(*)::int as c FROM "${tableName}" WHERE "orderId"=$1`,
+    orderId
+  );
+  return Number(rows?.[0]?.c ?? 0);
+}
+
+async function insertRow(tableName: string, cols: Set<string>, row: Record<string, any>) {
+  // Only insert keys that actually exist on the table
+  const keys = Object.keys(row).filter(k => cols.has(k) && row[k] !== undefined);
+
+  if (!keys.length) return;
+
+  const colSql = keys.map(k => `"${k}"`).join(", ");
+  const placeholders = keys.map((_, i) => `$${i + 1}`).join(", ");
+  const values = keys.map(k => row[k]);
+
+  const sql = `INSERT INTO "${tableName}" (${colSql}) VALUES (${placeholders})`;
+  await prisma.$executeRawUnsafe(sql, ...values);
+}
+
+
 /**
  * Stripe webhook endpoint:
  * Mounted in app.ts as: app.use("/webhook", webhookRouter)
@@ -145,6 +185,107 @@ router.post("/stripe", express.raw({ type: "application/json" }), async (req, re
         email: payerEmail,
       },
     });
+
+        // -----------------------------
+    // CREATE TICKETS (idempotent)
+    // -----------------------------
+    try {
+      const ticketTable = await getTableNameCaseInsensitive("Ticket");
+
+      if (!ticketTable) {
+        console.warn("[webhook] Ticket table not found in DB (skipping ticket creation)");
+      } else {
+        const ticketCols = await getTableCols(ticketTable);
+
+        // If tickets already exist for this order, don’t recreate (webhooks retry)
+        const existing = await countByOrderId(ticketTable, ticketCols, orderId);
+        if (existing > 0) {
+          console.info("[webhook] tickets already exist, skipping", { orderId, existing });
+        } else {
+          const seatGroupsRaw = session.metadata?.seatGroups || "";
+          const gaTicketTypeId = session.metadata?.ticketTypeId || "";
+
+          // Tiered seating mode: seatGroups contains [{ticketTypeId, unitPricePence, seatIds[]}]
+          if (seatGroupsRaw) {
+            let seatGroups: Array<{ ticketTypeId: string; unitPricePence: number; seatIds: string[] }> = [];
+            try {
+              seatGroups = JSON.parse(seatGroupsRaw);
+            } catch {
+              console.warn("[webhook] invalid seatGroups JSON (skipping tiered ticket mapping)", { orderId });
+            }
+
+            let created = 0;
+
+            for (const g of seatGroups) {
+              const ttId = String(g.ticketTypeId || "").trim();
+              const unit = Number(g.unitPricePence || 0);
+              const ids = Array.isArray(g.seatIds) ? g.seatIds.map(s => String(s)) : [];
+
+              for (const sbSeatId of ids) {
+                await insertRow(ticketTable, ticketCols, {
+                  orderId,
+                  showId,
+                  ticketTypeId: ttId || undefined,
+                  // some schemas use seatId, some use sbSeatId — we set both if they exist
+                  seatId: sbSeatId,
+                  sbSeatId: sbSeatId,
+                  pricePence: unit,
+                  unitPricePence: unit,
+                  amountPence: unit,
+                  status: "SOLD",
+                });
+                created++;
+              }
+            }
+
+            console.info("[webhook] created tiered tickets", { orderId, created });
+          }
+
+          // GA mode: 1 ticket row per seat OR single row w/ quantity (depends on your schema)
+          else if (gaTicketTypeId) {
+            const qty = Number(order.quantity || 0);
+
+            // Try “quantity column exists” approach first, else fall back to 1 row per ticket
+            if (ticketCols.has("quantity")) {
+              await insertRow(ticketTable, ticketCols, {
+                orderId,
+                showId,
+                ticketTypeId: String(gaTicketTypeId),
+                quantity: qty,
+                pricePence: undefined,
+                unitPricePence: undefined,
+                amountPence: undefined,
+                status: "SOLD",
+              });
+
+              console.info("[webhook] created GA ticket row (quantity)", { orderId, qty });
+            } else {
+              let created = 0;
+              for (let i = 0; i < qty; i++) {
+                await insertRow(ticketTable, ticketCols, {
+                  orderId,
+                  showId,
+                  ticketTypeId: String(gaTicketTypeId),
+                  status: "SOLD",
+                });
+                created++;
+              }
+
+              console.info("[webhook] created GA ticket rows (per-ticket)", { orderId, created });
+            }
+          } else {
+            console.warn("[webhook] no seatGroups + no ticketTypeId metadata (cannot create tickets)", { orderId });
+          }
+        }
+      }
+    } catch (ticketErr: any) {
+      console.error("[webhook] ticket creation failed", {
+        orderId,
+        message: ticketErr?.message,
+        stack: ticketErr?.stack,
+      });
+    }
+
 
     // Only send the email the first time we flip to PAID (webhooks retry)
     if (order.status !== "PAID") {
