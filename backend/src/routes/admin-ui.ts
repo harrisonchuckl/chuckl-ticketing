@@ -4043,7 +4043,7 @@ function renderInterests(customer){
 
 + '<div class="drawer-section">'
 +   '<div class="title" style="margin-bottom:6px;">Event interests</div>'
-+   + (renderInterests(customer) || '<div class="muted">No event categories captured yet.</div>')
++   (renderInterests(customer) || '<div class="muted">No event categories captured yet.</div>')
 + '</div>'
 
 + '<div id="drawerRecentPurchases" class="drawer-section">'
