@@ -301,12 +301,23 @@ function formatGBPFromPence(pence?: number | null) {
 
 async function buildAttachments(order: NonNullable<OrderDeep>) {
   if (!ATTACH_PDFS) return [];
+    console.log("[email] PDF_ATTACHMENTS enabled?", { ATTACH_PDFS });
 
   const s = order.show;
   const v = s?.venue;
 
   // Map ticketTypeId -> ticketType (if your Ticket model has ticketTypeId)
   const ticketTypes = s?.ticketTypes || [];
+
+    const rawCount = (order.tickets || []).length;
+  const nullSerialCount = (order.tickets || []).filter(t => !t.serial).length;
+
+  console.log("[email] ticket rows for order", {
+    orderId: order.id,
+    rawTicketRows: rawCount,
+    nullSerialCount,
+  });
+
 
 const tickets = (order.tickets || []).filter(t => !!t.serial).map((t) => {
 
@@ -337,6 +348,11 @@ serial: t.serial!,
     };
   });
 
+   console.log("[email] tickets going into PDF", {
+    pdfTicketCount: tickets.length,
+    exampleSerial: tickets[0]?.serial,
+  });
+  
   if (tickets.length === 0) return [];
 
   const anyShow = s as any;
@@ -363,14 +379,19 @@ serial: t.serial!,
     includeSummaryPage: INCLUDE_SUMMARY_PAGE,
   };
 
+ try {
   const pdf = await buildOrderTicketsPdf(meta, tickets);
 
+  console.log("[email] pdf built", { bytes: pdf.length });
+
   return [
-    {
-      filename: `tixall-tickets-${orderRef}.pdf`,
-      content: pdf,
-    },
+    { filename: `tixall-tickets-${orderRef}.pdf`, content: pdf },
   ];
+} catch (err) {
+  console.error("[email] pdf build failed", err);
+  return [];
+}
+
 }
 
 export async function sendTicketsEmail(orderId: string, to?: string) {
@@ -404,14 +425,14 @@ export async function sendTicketsEmail(orderId: string, to?: string) {
     to: recipient,
     subject,
     html,
-    attachments:
-      attachments.length > 0
-        ? attachments.map((a) => ({
-            filename: a.filename,
-            content: a.content.toString("base64"),
-            contentType: "application/pdf",
-          }))
-        : undefined,
+  attachments:
+  attachments.length > 0
+    ? attachments.map((a) => ({
+        filename: a.filename,
+        content: a.content, // Buffer (supported by Resend)
+      }))
+    : undefined,
+
   });
 
   return { ok: true };
