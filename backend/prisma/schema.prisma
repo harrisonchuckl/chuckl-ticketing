@@ -278,6 +278,7 @@ model Ticket {
 
   status     String?
   seatId     String?
+  seatRef    String?
   serial     String?   @unique
   scannedAt  DateTime?
   holderName String?
@@ -285,8 +286,6 @@ model Ticket {
   show       Show       @relation(fields: [showId], references: [id])
   order      Order      @relation(fields: [orderId], references: [id])
   ticketType TicketType @relation(fields: [ticketTypeId], references: [id])
-  seat       Seat?      @relation(fields: [seatId], references: [id])
-
   userId String?
   user   User?   @relation(fields: [userId], references: [id])
 }
@@ -337,7 +336,6 @@ model Seat {
 
   seatMapId       String
   seatMap         SeatMap          @relation(fields: [seatMapId], references: [id])
-  tickets         Ticket[]
   allocationSeats AllocationSeat[]
 
   /// Basic coordinates
