@@ -3370,53 +3370,57 @@ async function summaryPage(id){
       }
     }
 
-    $('#tt_save').addEventListener('click', async function(){
-      var errEl = $('#tt_err');
-      errEl.textContent = '';
-      var name = $('#tt_name').value.trim();
-      var priceStr = $('#tt_price').value.trim();
-      var availStr = $('#tt_available').value.trim();
+   $('#tt_save').addEventListener('click', async function(){
+  var errEl = $('#tt_err');
+  errEl.textContent = '';
 
-      if (!name){
-        errEl.textContent = 'Name is required';
-        return;
-      }
+  var name = $('#tt_name').value.trim();
+  var priceStr = $('#tt_price').value.trim();
+  var availStr = $('#tt_available').value.trim();
 
-      var pricePence = 0;
-      if (priceStr){
-        var p = Number(priceStr);
-        if (!Number.isFinite(p) || p < 0){
-          errEl.textContent = 'Price must be a non-negative number';
-          return;
-        }
-        pricePence = Math.round(p * 100);
-      }
+  if (!name){
+    errEl.textContent = 'Please enter a ticket name.';
+    return;
+  }
 
-      var available = null;
-      if (availStr){
-        var a = Number(availStr);
-        if (!Number.isFinite(a) || a < 0){
-          errEl.textContent = 'Available must be a non-negative number';
-          return;
-        }
-        available = a;
-      }
+  var price = Number(priceStr);
+  if (!Number.isFinite(price) || price < 0){
+    errEl.textContent = 'Please enter a valid price (0 or more).';
+    return;
+  }
 
-      try{
-        await j('/admin/shows/' + id + '/ticket-types', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ name:name, pricePence:pricePence, available:available })
-        });
-        $('#tt_name').value = '';
-        $('#tt_price').value = '';
-        $('#tt_available').value = '';
-        addTypeForm.style.display = 'none';
-        loadTicketTypes();
-      }catch(err){
-        errEl.textContent = err.message || String(err);
-      }
+  var available = null;
+  if (availStr){
+    var n = Number(availStr);
+    if (!Number.isFinite(n) || n < 0){
+      errEl.textContent = 'Available must be a whole number (or left blank).';
+      return;
+    }
+    available = Math.floor(n);
+  }
+
+  try{
+    await j('/admin/shows/' + id + '/ticket-types', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        name: name,
+        pricePence: Math.round(price * 100),
+        available: available
+      })
     });
+
+    // reset + hide form
+    $('#tt_name').value = '';
+    $('#tt_price').value = '';
+    $('#tt_available').value = '';
+    addTypeForm.style.display = 'none';
+
+    await loadTicketTypes();
+  }catch(e){
+    errEl.textContent = (e && e.message) ? e.message : String(e);
+  }
+});
 
     loadTicketTypes();
 
