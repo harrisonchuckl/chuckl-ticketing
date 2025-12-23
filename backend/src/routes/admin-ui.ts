@@ -25,6 +25,17 @@ router.get("/ui/login", (req, res) => {
 
   const error = typeof req.query.error === "string" ? req.query.error : "";
 
+  const csp = [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data: https:",
+    "connect-src 'self'",
+    "form-action 'self'",
+  ].join('; ');
+
+  res.set("Content-Security-Policy", csp);
   res.type("html").send(`<!doctype html>
 <html lang="en">
 <head>
@@ -324,7 +335,18 @@ router.get(
   requireAdminOrOrganiser,
   (_req, res) => {
 
-    res.set("Cache-Control", "no-store");
+  const csp = [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data: https:",
+    "connect-src 'self'",
+    "form-action 'self'",
+  ].join('; ');
+
+  res.set("Cache-Control", "no-store");
+  res.set("Content-Security-Policy", csp);
     res.type("html").send(`<!doctype html>
 <html lang="en">
 <head>
