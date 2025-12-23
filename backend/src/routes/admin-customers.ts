@@ -50,6 +50,38 @@ router.get("/customers", requireAdminOrOrganiser, async (_req, res) => {
       },
     });
 
+    router.post("/orders/:orderId/reissue-email", requireAdminOrOrganiser, async (req, res) => {
+  try {
+    const orderId = String(req.params.orderId);
+
+    // Optional override if you ever want to send to a different address:
+    const to =
+      typeof (req.body as any)?.to === "string" && (req.body as any).trim()
+        ? String((req.body as any).to).trim()
+        : undefined;
+
+    const result = await sendTicketsEmail(orderId, to);
+
+    if (!result?.ok) {
+      return res.status(400).json({
+        ok: false,
+        message: result?.message || "Failed to reissue email.",
+      });
+    }
+
+    return res.json({
+      ok: true,
+      message: result?.message || "Reissue email sent.",
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      ok: false,
+      message: err?.message || "Server error reissuing email.",
+    });
+  }
+});
+
+
     // Group orders into "customers"
     type CustomerAgg = {
       id: string;
