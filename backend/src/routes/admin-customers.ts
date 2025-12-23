@@ -70,15 +70,17 @@ router.get("/customers", requireAdminOrOrganiser, async (_req, res) => {
         showId: true,
         stripeId: true,
         stripeCheckoutSessionId: true,
-        show: {
-          select: {
-            id: true,
-            title: true,
-            status: true,
-            date: true,
-          },
-        },
-        user: {
+      show: {
+  select: {
+    id: true,
+    title: true,
+    status: true,
+    date: true,
+    eventType: true,
+    eventCategory: true,
+  },
+},
+  user: {
           select: {
             id: true,
             email: true,
@@ -106,14 +108,17 @@ router.get("/customers", requireAdminOrOrganiser, async (_req, res) => {
       notes: string;
       tags: string[];
       orders: Array<{
-        ref: string;
-        show: string;
-        date: string;
-        qty: number;
-        total: number; // pounds
-        status: string;
-        isLive: boolean;
-      }>;
+  ref: string;
+  showId: string;
+  show: string;
+  date: string;
+  qty: number;
+  total: number; // pounds
+  status: string;
+  isLive: boolean;
+  eventType: string | null;
+  eventCategory: string | null;
+}>;
     };
 
     const map = new Map<string, CustomerAgg>();
@@ -189,14 +194,17 @@ router.get("/customers", requireAdminOrOrganiser, async (_req, res) => {
       }
 
       c.orders.push({
-        ref: o.id,
-        show: showTitle,
-        date: dIso,
-        qty,
-        total,
-        status: String(o.status || "PENDING"),
-        isLive,
-      });
+  ref: o.id,
+  showId: String(o.showId || o.show?.id || ""),
+  show: showTitle,
+  date: dIso,
+  qty,
+  total,
+  status: String(o.status || "PENDING"),
+  isLive,
+  eventType: (o.show?.eventType != null) ? String(o.show.eventType) : null,
+  eventCategory: (o.show?.eventCategory != null) ? String(o.show.eventCategory) : null,
+});
     }
 
     // Finalise derived fields
