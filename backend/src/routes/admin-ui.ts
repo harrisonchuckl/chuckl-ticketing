@@ -3370,57 +3370,53 @@ async function summaryPage(id){
       }
     }
 
-   $('#tt_save').addEventListener('click', async function(){
-  var errEl = $('#tt_err');
-  errEl.textContent = '';
+    $('#tt_save').addEventListener('click', async function(){
+      var errEl = $('#tt_err');
+      errEl.textContent = '';
+      var name = $('#tt_name').value.trim();
+      var priceStr = $('#tt_price').value.trim();
+      var availStr = $('#tt_available').value.trim();
 
-  var name = $('#tt_name').value.trim();
-  var priceStr = $('#tt_price').value.trim();
-  var availStr = $('#tt_available').value.trim();
+      if (!name){
+        errEl.textContent = 'Name is required';
+        return;
+      }
 
-  if (!name){
-    errEl.textContent = 'Please enter a ticket name.';
-    return;
-  }
+      var pricePence = 0;
+      if (priceStr){
+        var p = Number(priceStr);
+        if (!Number.isFinite(p) || p < 0){
+          errEl.textContent = 'Price must be a non-negative number';
+          return;
+        }
+        pricePence = Math.round(p * 100);
+      }
 
-  var price = Number(priceStr);
-  if (!Number.isFinite(price) || price < 0){
-    errEl.textContent = 'Please enter a valid price (0 or more).';
-    return;
-  }
+      var available = null;
+      if (availStr){
+        var a = Number(availStr);
+        if (!Number.isFinite(a) || a < 0){
+          errEl.textContent = 'Available must be a non-negative number';
+          return;
+        }
+        available = a;
+      }
 
-  var available = null;
-  if (availStr){
-    var n = Number(availStr);
-    if (!Number.isFinite(n) || n < 0){
-      errEl.textContent = 'Available must be a whole number (or left blank).';
-      return;
-    }
-    available = Math.floor(n);
-  }
-
-  try{
-    await j('/admin/shows/' + id + '/ticket-types', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        name: name,
-        pricePence: Math.round(price * 100),
-        available: available
-      })
+      try{
+        await j('/admin/shows/' + id + '/ticket-types', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ name:name, pricePence:pricePence, available:available })
+        });
+        $('#tt_name').value = '';
+        $('#tt_price').value = '';
+        $('#tt_available').value = '';
+        addTypeForm.style.display = 'none';
+        loadTicketTypes();
+      }catch(err){
+        errEl.textContent = err.message || String(err);
+      }
     });
-
-    // reset + hide form
-    $('#tt_name').value = '';
-    $('#tt_price').value = '';
-    $('#tt_available').value = '';
-    addTypeForm.style.display = 'none';
-
-    await loadTicketTypes();
-  }catch(e){
-    errEl.textContent = (e && e.message) ? e.message : String(e);
-  }
-});
 
     loadTicketTypes();
 
@@ -4015,68 +4011,20 @@ var loadingCustomers = true;
       if (drawer) drawer.setAttribute('aria-hidden', 'true');
     }
 
-    async function reissueTicketsEmail(orderId: string, btn?: HTMLButtonElement) {
-  const originalText = btn?.textContent;
+    if (drawerBody){
+      drawerBody.addEventListener('click', function(e){
+        var btn = e.target && e.target.closest('[data-order-action]');
+        if (!btn) return;
+        e.preventDefault();
+        var action = btn.getAttribute('data-order-action');
+        var ref = btn.getAttribute('data-order-ref');
+        alert((action ? action.toUpperCase() : 'Action') + ' for ' + (ref || 'order') + ' coming soon.');
+      });
+    }
 
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = "Sending…";
+    renderTable();
+    hydrateCustomers();
   }
-
-  try {
-    // ✅ Your backend path (because router is mounted at /admin)
-    const url = `/admin/orders/${encodeURIComponent(orderId)}/reissue-email`;
-
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-      credentials: "same-origin",
-    });
-
-    const data = await resp.json().catch(() => ({} as any));
-
-    if (!resp.ok || !data?.ok) {
-      throw new Error(data?.message || `Failed (${resp.status})`);
-    }
-
-    alert(data?.message || "Reissue email sent.");
-  } catch (err: any) {
-    alert(`Reissue failed: ${err?.message || "Unknown error"}`);
-  } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = originalText || "Reissue tickets email";
-    }
-  }
-}
-
-
-  if (drawerBody) {
-  drawerBody.addEventListener("click", async function (e) {
-    var btn = e.target && (e.target as any).closest('[data-order-action]');
-    if (!btn) return;
-
-    e.preventDefault();
-
-    var action = btn.getAttribute("data-order-action");
-    var ref = btn.getAttribute("data-order-ref");
-
-    if (!action || !ref) {
-      alert("Missing action or order reference on this button.");
-      return;
-    }
-
-    // ✅ Reissue tickets email
-    if (action === "reissue") {
-      await reissueTicketsEmail(ref, btn as HTMLButtonElement);
-      return;
-    }
-
-    // Keep “coming soon” for everything else for now
-    alert(action.toUpperCase() + " for " + ref + " coming soon.");
-  });
-}
 
   // --- OTHER SIMPLE PAGES ---
   function orders(){
