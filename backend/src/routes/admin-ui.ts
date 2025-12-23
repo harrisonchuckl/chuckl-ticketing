@@ -3544,9 +3544,87 @@ async function summaryPage(id){
       },
     ];
 
-    var liveShows = Array.from(new Set(customersData.flatMap(function(c){
-      return (c.orders || []).filter(function(o){ return o && o.isLive; }).map(function(o){ return o.show; });
-    })));
+      function computeLiveShows(data){
+      try{
+        return Array.from(new Set((data || []).flatMap(function(c){
+          return (c.orders || []).filter(function(o){ return o && o.isLive; }).map(function(o){ return o.show; });
+        }).filter(Boolean)));
+      }catch(e){
+        return [];
+      }
+    }
+
+    function normaliseCustomers(items){
+      return (items || []).map(function(c){
+        var rawOrders = (c.orders || c.orderHistory || c.purchases || []);
+        var orders = (rawOrders || []).map(function(o){
+          var showTitle = o.show || o.showTitle || (o.event && o.event.title) || o.eventTitle || '';
+          var dateVal = o.date || o.createdAt || o.purchasedAt || '';
+          var qtyVal = (o.qty != null ? o.qty : (o.quantity != null ? o.quantity : (o.tickets != null ? o.tickets : 0)));
+          var totalVal = (o.total != null ? o.total : (o.amount != null ? o.amount : (o.gross != null ? o.gross : 0)));
+          var statusVal = o.status || o.orderStatus || '';
+          var isLiveVal = (o.isLive != null) ? o.isLive : (o.showStatus ? (String(o.showStatus).toUpperCase() === 'LIVE') : !!o.live);
+          return {
+            ref: o.ref || o.reference || o.id || o.orderRef || '',
+            show: showTitle,
+            date: dateVal,
+            qty: qtyVal,
+            total: totalVal,
+            status: statusVal,
+            isLive: isLiveVal,
+          };
+        });
+
+        var totalOrders = (c.totalOrders != null) ? c.totalOrders : ((c.ordersCount != null) ? c.ordersCount : orders.length);
+        var totalTickets = (c.totalTickets != null) ? c.totalTickets : ((c.ticketsCount != null) ? c.ticketsCount : orders.reduce(function(s,o){ return s + (o.qty || 0); }, 0));
+        var totalSpend = (c.totalSpend != null) ? c.totalSpend : ((c.spendTotal != null) ? c.spendTotal : orders.reduce(function(s,o){ return s + (o.total || 0); }, 0));
+
+        var lastPurchase = c.lastPurchase || c.lastPurchaseDate || null;
+        if (!lastPurchase && orders.length){
+          var dates = orders.map(function(o){ return new Date(o.date); }).filter(function(d){ return !isNaN(d.getTime()); });
+          if (dates.length) lastPurchase = new Date(Math.max.apply(null, dates.map(function(d){ return d.getTime(); }))).toISOString().slice(0,10);
+        }
+
+        var name = c.name || [c.firstName, c.lastName].filter(Boolean).join(' ');
+        return {
+          id: c.id || c.customerId || c.publicId || '',
+          name: name || 'Customer',
+          email: c.email || '',
+          phone: c.phone || c.telephone || '',
+          totalOrders: totalOrders,
+          totalTickets: totalTickets,
+          totalSpend: totalSpend,
+          lastPurchase: lastPurchase,
+          showsBought: c.showsBought,
+          lastShow: c.lastShow || c.lastShowTitle,
+          loyalty: c.loyalty || c.segment || '',
+          marketingConsent: (c.marketingConsent != null) ? c.marketingConsent : !!c.marketingOptIn,
+          notes: c.notes || c.note || '',
+          tags: c.tags || c.labels || [],
+          orders: orders,
+        };
+      });
+    }
+
+    var liveShows = computeLiveShows(customersData);
+
+    async function hydrateCustomers(){
+      try{
+        var res = await j('/admin/customers');
+        var items = (res && (res.items || res.customers || res.data)) || [];
+        if (!Array.isArray(items)) items = [];
+        if (items.length){
+          customersData = normaliseCustomers(items);
+          liveShows = computeLiveShows(customersData);
+          populateShowFilter();
+          renderTable();
+        }
+      }catch(e){
+        // Keep mock customersData as a fallback until the endpoint is live
+        console.warn('[admin-ui][customers] hydrate failed', e);
+      }
+    }
+
 
     var state = { search:'', show:'', range:'30', status:'any' };
 
@@ -3618,13 +3696,25 @@ async function summaryPage(id){
     var drawerClose = $('#drawerClose');
     var overlay = $('#customerDrawerOverlay');
 
-    liveShows.forEach(function(show){
+       function populateShowFilter(){
       if (!showFilter) return;
-      var opt = document.createElement('option');
-      opt.value = show;
-      opt.textContent = show;
-      showFilter.appendChild(opt);
-    });
+      var current = showFilter.value || '';
+      showFilter.innerHTML = '<option value="">All live shows</option>';
+      liveShows.forEach(function(show){
+        var opt = document.createElement('option');
+        opt.value = show;
+        opt.textContent = show;
+        showFilter.appendChild(opt);
+      });
+      if (current && liveShows.indexOf(current) !== -1){
+        showFilter.value = current;
+      }else if (current){
+        state.show = '';
+        showFilter.value = '';
+      }
+    }
+
+    populateShowFilter();
 
     if (search){
       search.addEventListener('input', function(){ state.search = search.value || ''; renderTable(); });
@@ -3884,6 +3974,7 @@ async function summaryPage(id){
     }
 
     renderTable();
+    hydrateCustomers();
   }
 
   // --- OTHER SIMPLE PAGES ---
