@@ -2590,6 +2590,27 @@ async function listShows(){
 
   function norm(s){ return String(s || '').toLowerCase(); }
 
+  function num(v){
+  var n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function sumTicketTypeCap(tts){
+  if (!Array.isArray(tts)) return null;
+  var total = 0;
+  var any = false;
+  for (var i=0; i<tts.length; i++){
+    var a = tts[i] && tts[i].available;
+    if (a == null) continue;          // null/undefined means "unlimited" -> can't infer total
+    var n = Number(a);
+    if (!Number.isFinite(n)) continue;
+    total += n;
+    any = true;
+  }
+  return any ? total : null;
+}
+
+
   function parseISO(d){
     var dt = d ? new Date(d) : null;
     return (dt && !isNaN(dt.getTime())) ? dt : null;
@@ -2675,15 +2696,45 @@ async function listShows(){
         ? new Date(s.date).toLocaleString('en-GB', { dateStyle:'short', timeStyle:'short' })
         : '';
 
-      var total = (s._alloc && s._alloc.total) || 0;
-      var sold  = (s._alloc && s._alloc.sold) || 0;
-      var hold  = (s._alloc && s._alloc.hold) || 0;
-      var avail = Math.max(total - sold - hold, 0);
-      var pct   = total ? Math.round((sold / total) * 100) : 0;
+           // Allocation counts (support multiple backend shapes)
+      var sold = num(
+        (s._alloc && (s._alloc.sold ?? s._alloc.soldCount)) ??
+        s.sold ??
+        s.soldCount ??
+        0
+      );
 
-      var bar   = '<div style="background:#e5e7eb;height:6px;border-radius:999px;overflow:hidden;width:140px">'
-                +'<div style="background:#111827;height:6px;width:'+pct+'%"></div>'
-                +'</div>';
+      // "hold" in your UI should represent HELD seats
+      var held = num(
+        (s._alloc && (s._alloc.held ?? s._alloc.hold ?? s._alloc.heldCount ?? s._alloc.holdCount)) ??
+        s.held ??
+        s.heldCount ??
+        0
+      );
+
+      // BLOCKED seats (your Prisma enum supports this)
+      var blocked = num(
+        (s._alloc && (s._alloc.blocked ?? s._alloc.blockedCount)) ??
+        s.blocked ??
+        s.blockedCount ??
+        0
+      );
+
+      // Try hard to derive TOTAL capacity if backend didn't supply it
+      var total =
+        ((s._alloc && (s._alloc.total ?? s._alloc.capacity)) != null) ? num(s._alloc.total ?? s._alloc.capacity)
+        : ((s._alloc && s._alloc.available != null) ? num(s._alloc.available) + sold + held + blocked
+        : (s.capacity != null ? num(s.capacity)
+        : (sumTicketTypeCap(s.ticketTypes))));
+
+      // If total is still null/undefined, we can't compute available reliably
+      var available = (total == null) ? null : Math.max(num(total) - sold - held - blocked, 0);
+
+      var pct = (total && total > 0) ? Math.round((sold / total) * 100) : 0;
+
+      var bar = '<div style="background:#e5e7eb;height:6px;border-radius:999px;overflow:hidden;width:140px">'
+              + '<div style="background:#111827;height:6px;width:'+pct+'%"></div>'
+              + '</div>';
 
       var statusLabel = (s.status || 'DRAFT');
       var venueLabel = (s.venue
@@ -2696,7 +2747,13 @@ async function listShows(){
           +'<td>'+(s.title || '')+'</td>'
           +'<td>'+when+'</td>'
           +'<td>'+venueLabel+'</td>'
-          +'<td><span class="muted">Sold '+sold+' · Hold '+hold+' · Avail '+avail+'</span> '+bar+'</td>'
+          +'<td><span class="muted">'
+            +'Sold '+sold
+            +' · Held '+held
+            +' · Blocked '+blocked
+            +' · Avail '+(available == null ? '—' : available)
+            +(total == null ? '' : (' / '+total))
+            +'</span> '+bar+'</td>'
           +'<td>£'+(((s._revenue && s._revenue.grossFace) || 0).toFixed(2))+'</td>'
           +'<td>'+statusBadgeHTML(statusLabel)+'</td>'
           +'<td>'
@@ -2837,6 +2894,8 @@ async function listShows(){
     try{
       var data = await j('/admin/shows');
       allItems = data.items || [];
+      console.log('[Admin UI][shows] sample _alloc:', allItems[0] && allItems[0]._alloc);
+
       if (!allItems.length){
         tb.innerHTML = '<tr><td colspan="7" class="muted">No shows yet</td></tr>';
         if (countEl) countEl.textContent = 'Showing 0 of 0 events';
