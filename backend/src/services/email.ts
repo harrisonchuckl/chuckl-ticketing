@@ -29,7 +29,6 @@ async function fetchOrderDeep(orderId: string) {
       },
 tickets: {
   include: {
-    seat: true,
   },
 },
       user: true,
@@ -121,13 +120,13 @@ function renderTicketsHtml(order: NonNullable<OrderDeep>) {
   const ticketRows = (order.tickets || [])
     .map((t) => {
       const anyT = t as any;
-     const seat =
-  (anyT.seatLabel as string | undefined) ||
-  (anyT.seatCode as string | undefined) ||
-  (anyT.seatName as string | undefined) ||
-  (anyT.seat?.label as string | undefined) ||
-  (anyT.seat?.row && typeof anyT.seat?.number === "number" ? `${anyT.seat.row}${anyT.seat.number}` : "") ||
-  "";
+         const seat =
+        (anyT.seatRef as string | undefined) ||
+        (anyT.seatLabel as string | undefined) ||
+        (anyT.seatCode as string | undefined) ||
+        (anyT.seatName as string | undefined) ||
+        (anyT.seatId as string | undefined) ||
+        "";
 
       return `
         <tr>
@@ -340,7 +339,8 @@ const tickets = (order.tickets || []).filter(t => !!t.serial).map((t) => {
     const ticketPrice =
       linkedType?.pricePence != null ? formatGBPFromPence(linkedType.pricePence) : undefined;
 
-    const seatLabel =
+       const seatLabel =
+      (anyT.seatRef as string | undefined) ||
       (anyT.seatLabel as string | undefined) ||
       (anyT.seatCode as string | undefined) ||
       (anyT.seatName as string | undefined) ||
