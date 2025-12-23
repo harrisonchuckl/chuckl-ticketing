@@ -5,7 +5,8 @@ import { buildOrderTicketsPdf } from "./pdf.js";
 
 const RESEND_KEY = process.env.RESEND_API_KEY || "";
 const EMAIL_FROM = process.env.EMAIL_FROM || "noreply@chuckl.co.uk";
-const ATTACH_PDFS = String(process.env.PDF_ATTACHMENTS || "").toLowerCase() === "true";
+// Default ON (so you always get PDF attachments unless you explicitly disable them)
+const ATTACH_PDFS = String(process.env.PDF_ATTACHMENTS ?? "true").toLowerCase() === "true";
 
 // Branding / links
 const BRAND_COLOR = process.env.EMAIL_BRAND_COLOR || "#0f9cdf";
@@ -153,7 +154,8 @@ function renderTicketsHtml(order: NonNullable<OrderDeep>) {
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f4f6;padding:24px 0;">
       <tr>
         <td align="center" style="padding:0 12px;">
-          <table role="presentation" width="640" cellspacing="0" cellpadding="0" style="width:640px;max-width:640px;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+       style="width:100%;max-width:640px;margin:0 auto;">
             <!-- Header bar -->
             <tr>
               <td style="background:${BRAND_COLOR};border-radius:14px 14px 0 0;padding:18px 18px 16px 18px;">
@@ -228,17 +230,19 @@ function renderTicketsHtml(order: NonNullable<OrderDeep>) {
                             : ""
                         }
 
-                        <div style="display:flex;gap:10px;flex-wrap:wrap;">
-                          <span style="display:inline-block;padding:6px 10px;border-radius:999px;background:#eef2ff;color:#1e3a8a;font-size:12px;font-weight:700;">
-                            ${ticketCount} × Ticket${ticketCount === 1 ? "" : "s"}
-                          </span>
-                          ${
-                            ticketTypeSummary
-                              ? `<span style="display:inline-block;padding:6px 10px;border-radius:999px;background:#f1f5f9;color:#0f172a;font-size:12px;">
-                                   ${escapeHtml(ticketTypeSummary)}
-                                 </span>`
-                              : ""
-                          }
+                     <div style="margin-top:10px;">
+  <span style="display:inline-block;padding:6px 10px;border-radius:999px;background:#eef2ff;color:#1e3a8a;font-size:12px;font-weight:700;margin:0 8px 8px 0;">
+    ${ticketCount} × Ticket${ticketCount === 1 ? "" : "s"}
+  </span>
+  ${
+    ticketTypeSummary
+      ? `<span style="display:inline-block;padding:6px 10px;border-radius:999px;background:#f1f5f9;color:#0f172a;font-size:12px;margin:0 8px 8px 0;">
+           ${escapeHtml(ticketTypeSummary)}
+         </span>`
+      : ""
+  }
+</div>
+
                         </div>
                       </td>
                     </tr>
@@ -386,6 +390,14 @@ export async function sendTicketsEmail(orderId: string, to?: string) {
   const subject =
     `Your tickets for ${order.show?.title ?? "your event"} – ` +
     (order.show?.date ? new Date(order.show.date).toLocaleDateString("en-GB") : "");
+
+  console.log("[email] sendTicketsEmail", {
+  orderId,
+  recipient,
+  attachPdfs: ATTACH_PDFS,
+  tickets: order.tickets?.length ?? 0,
+  attachments: attachments.length,
+});
 
   await resend.emails.send({
     from: EMAIL_FROM,
