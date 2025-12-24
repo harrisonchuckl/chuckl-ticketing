@@ -58,4 +58,29 @@ router.post("/venues", requireAdminOrOrganiser, async (req, res) => {
   }
 });
 
+/** PATCH /admin/venues/:venueId — update booking fee */
+router.patch("/venues/:venueId", requireAdminOrOrganiser, async (req, res) => {
+  try {
+    const venueId = String(req.params.venueId);
+    const { bookingFeeBps } = req.body || {};
+    const parsed = Number(bookingFeeBps);
+    if (!Number.isFinite(parsed)) {
+      return res.status(400).json({ ok: false, error: "bookingFeeBps must be a number" });
+    }
+
+    const nextBookingFeeBps = Math.max(1000, Math.round(parsed));
+
+    const updated = await prisma.venue.update({
+      where: { id: venueId },
+      data: { bookingFeeBps: nextBookingFeeBps },
+      select: { id: true, bookingFeeBps: true },
+    });
+
+    res.json({ ok: true, venue: updated });
+  } catch (e) {
+    console.error("PATCH /admin/venues/:venueId failed", e);
+    res.status(500).json({ ok: false, error: "Failed to update venue" });
+  }
+});
+
 export default router;

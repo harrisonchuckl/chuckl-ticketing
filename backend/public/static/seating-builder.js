@@ -343,6 +343,24 @@ let holdReportSettings = {
     maxPerOrder: "15",
   };
 
+  let bookingFeePercent = 10;
+
+  function normalizeBookingFeePercent(value) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return 10;
+    const rounded = Math.round(parsed * 10) / 10;
+    return Math.max(10, rounded);
+  }
+
+  function formatBookingFeePercent(value) {
+    if (!Number.isFinite(value)) return "10";
+    return value % 1 === 0 ? String(Math.round(value)) : String(value);
+  }
+
+  function getBookingFeeBps() {
+    return Math.round(normalizeBookingFeePercent(bookingFeePercent) * 100);
+  }
+
   let ticketFormAutoOffSale = true;
 
   window.__TIXALL_COMPLETION_STATUS__ = {
@@ -4748,6 +4766,9 @@ function applyAccessibilityVisualsOverride(seatCircle, group) {
     if (!data || !data.show) return;
     showMeta = data.show;
     deriveVenueCurrency();
+    if (showMeta && showMeta.venue && showMeta.venue.bookingFeeBps != null) {
+      bookingFeePercent = normalizeBookingFeePercent(showMeta.venue.bookingFeeBps / 100);
+    }
     const showDateValue = showMeta && showMeta.date ? formatDateTimeLocal(showMeta.date) : "";
     if (showDateValue && (ticketFormAutoOffSale || !ticketFormState.offSale)) {
       ticketFormState.offSale = showDateValue;
@@ -5466,19 +5487,6 @@ function renderTicketingPanel() {
   };
   ensureActiveTicket();
 
-  // --- Ticket List Container ---
-  const ticketsContainer = document.createElement("div");
-  ticketsContainer.className = "sb-ticket-stack";
-  el.appendChild(ticketsContainer);
-
-  // --- Empty State ---
-  if (!ticketTypes.length) {
-    const empty = document.createElement("div");
-    empty.className = "sb-inspector-empty";
-    empty.textContent = "No tickets created yet.";
-    ticketsContainer.appendChild(empty);
-  }
-
   // --- Helper to make input fields ---
   const makeField = (labelText, inputEl, helperText) => {
     const wrapper = document.createElement("div");
@@ -5499,6 +5507,56 @@ function renderTicketingPanel() {
     }
     return wrapper;
   };
+
+  const bookingFeeCard = document.createElement("div");
+  bookingFeeCard.className = "sb-ticket-card";
+  const bookingFeeBody = document.createElement("div");
+  bookingFeeBody.className = "sb-ticket-card-body";
+  bookingFeeBody.style.borderTop = "none";
+
+  const bookingFeeGrid = document.createElement("div");
+  bookingFeeGrid.className = "sb-form-grid";
+
+  const bookingFeeInput = document.createElement("input");
+  bookingFeeInput.type = "number";
+  bookingFeeInput.className = "sb-input";
+  bookingFeeInput.min = "10";
+  bookingFeeInput.step = "0.5";
+  bookingFeeInput.value = formatBookingFeePercent(bookingFeePercent);
+
+  const commitBookingFee = () => {
+    bookingFeePercent = normalizeBookingFeePercent(bookingFeeInput.value);
+    bookingFeeInput.value = formatBookingFeePercent(bookingFeePercent);
+    if (showMeta && showMeta.venue) {
+      showMeta.venue.bookingFeeBps = Math.round(bookingFeePercent * 100);
+    }
+  };
+  bookingFeeInput.addEventListener("blur", commitBookingFee);
+  bookingFeeInput.addEventListener("change", commitBookingFee);
+
+  bookingFeeGrid.appendChild(
+    makeField(
+      "Booking fee (%)",
+      bookingFeeInput,
+      "Minimum 10%. This is added on top of the face value at checkout."
+    )
+  );
+  bookingFeeBody.appendChild(bookingFeeGrid);
+  bookingFeeCard.appendChild(bookingFeeBody);
+  el.appendChild(bookingFeeCard);
+
+  // --- Ticket List Container ---
+  const ticketsContainer = document.createElement("div");
+  ticketsContainer.className = "sb-ticket-stack";
+  el.appendChild(ticketsContainer);
+
+  // --- Empty State ---
+  if (!ticketTypes.length) {
+    const empty = document.createElement("div");
+    empty.className = "sb-inspector-empty";
+    empty.textContent = "No tickets created yet.";
+    ticketsContainer.appendChild(empty);
+  }
 
   // --- Render Each Ticket Card ---
   ticketTypes.forEach((ticket) => {
@@ -8517,6 +8575,7 @@ function handleStageMouseMove() {
         layoutType: initialLayoutKey,
         seatMapId: seatMapIdForSave,
         name: nameForSave,
+        bookingFeeBps: getBookingFeeBps(),
         tickets: ticketTypes, // Send the array of tickets to backend
       };
         const res = await fetch(
@@ -8603,6 +8662,7 @@ function saveShowWithStatus(status, redirectUrl) {
       // New fields for Phase 1:
       showStatus: status, // "DRAFT" or "LIVE"
       completionStatus: window.__TIXALL_COMPLETION_STATUS__,
+      bookingFeeBps: getBookingFeeBps(),
       tickets: ticketTypes, // Send the array of tickets to backend
     };
   // UI Feedback

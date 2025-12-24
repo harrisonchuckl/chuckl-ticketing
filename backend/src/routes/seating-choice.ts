@@ -699,6 +699,32 @@ function renderShell(options: {
       font-size: 13px;
     }
 
+    .booking-fee-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .booking-fee-field {
+      min-width: 180px;
+    }
+
+    .booking-fee-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .booking-fee-helper {
+      font-size: 12px;
+      color: var(--text-muted);
+      max-width: 360px;
+    }
+
     .show-chip {
       padding: 10px 14px;
       background: var(--accent-soft);
@@ -1102,7 +1128,7 @@ router.get("/seating/unallocated/:showId", async (req, res) => {
     const show = await prisma.show.findUnique({
       where: { id: showId },
       include: {
-        venue: { select: { name: true, city: true, capacity: true } },
+        venue: { select: { id: true, name: true, city: true, capacity: true, bookingFeeBps: true } },
         ticketTypes: { orderBy: { createdAt: "asc" } },
       },
     });
@@ -1164,9 +1190,11 @@ if (!initialTickets.length) {
       date: show.date ? new Date(show.date).toISOString() : null,
       venue: show.venue
         ? {
+            id: show.venue.id,
             name: show.venue.name,
             city: show.venue.city,
             capacity: show.venue.capacity ?? null,
+            bookingFeeBps: show.venue.bookingFeeBps ?? null,
           }
         : null,
     };
@@ -1184,6 +1212,16 @@ if (!initialTickets.length) {
             ${show.venue ? `<span class="chip-meta">${escapeHtml(show.venue.name)}${show.venue.city ? " · " + escapeHtml(show.venue.city) : ""}</span>` : ""}
           </div>
         </header>
+
+        <div class="booking-fee-row">
+          <div class="booking-fee-field">
+            <label class="booking-fee-label" for="booking-fee-input">Booking fee (%)</label>
+            <input class="input" id="booking-fee-input" type="number" min="10" step="0.5" />
+          </div>
+          <div class="booking-fee-helper">
+            Minimum 10%. This is added on top of the ticket face value at checkout.
+          </div>
+        </div>
 
         <div class="tickets-table" id="tickets-table"></div>
 
@@ -1209,6 +1247,39 @@ if (!initialTickets.length) {
           var table = document.getElementById("tickets-table");
           var statusRow = document.getElementById("status-row");
           var defaultAllocation = (showMeta && showMeta.venue && showMeta.venue.capacity) || "";
+          var bookingFeeInput = document.getElementById("booking-fee-input");
+          var bookingFeePercent = (showMeta && showMeta.venue && typeof showMeta.venue.bookingFeeBps === "number")
+            ? (showMeta.venue.bookingFeeBps / 100)
+            : 10;
+
+          function normalizeBookingFeePercent(value) {
+            var parsed = Number(value);
+            if (!Number.isFinite(parsed)) return 10;
+            var rounded = Math.round(parsed * 10) / 10;
+            return Math.max(10, rounded);
+          }
+
+          function formatBookingFeePercent(value) {
+            if (!Number.isFinite(value)) return "10";
+            return value % 1 === 0 ? String(Math.round(value)) : String(value);
+          }
+
+          function syncBookingFeeInput() {
+            if (!bookingFeeInput) return;
+            bookingFeeInput.value = formatBookingFeePercent(bookingFeePercent);
+          }
+
+          if (bookingFeeInput) {
+            syncBookingFeeInput();
+            bookingFeeInput.addEventListener("change", function () {
+              bookingFeePercent = normalizeBookingFeePercent(bookingFeeInput.value);
+              syncBookingFeeInput();
+            });
+            bookingFeeInput.addEventListener("blur", function () {
+              bookingFeePercent = normalizeBookingFeePercent(bookingFeeInput.value);
+              syncBookingFeeInput();
+            });
+          }
 
           function isoToInput(val) {
             if (!val) return "";
@@ -1325,9 +1396,21 @@ header.innerHTML = '<div>Name</div><div>Price (£)</div><div>On sale</div><div>O
             };
           }
 
+          async function updateBookingFee() {
+            if (!showMeta || !showMeta.venue || !showMeta.venue.id) return;
+            var bookingFeeBps = Math.round(normalizeBookingFeePercent(bookingFeePercent) * 100);
+            await jsonRequest('/admin/venues/' + showMeta.venue.id, {
+              method: 'PATCH',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ bookingFeeBps: bookingFeeBps }),
+            });
+          }
+
           async function saveTickets() {
             showStatus('Saving tickets…');
             try {
+              await updateBookingFee();
               for (var i = 0; i < tickets.length; i++) {
                 var t = tickets[i];
                 var payload = toPayload(t);
