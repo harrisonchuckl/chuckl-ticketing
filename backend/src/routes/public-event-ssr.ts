@@ -563,7 +563,7 @@ router.get('/event/:id', async (req, res) => {
       where: { id },
       include: {
         venue: {
-          select: { id: true, name: true, address: true, city: true, postcode: true, bookingFeeBps: true },
+          select: { id: true, name: true, address: true, city: true, postcode: true },
         },
         ticketTypes: {
           select: { id: true, name: true, pricePence: true, available: true },
@@ -584,9 +584,6 @@ router.get('/event/:id', async (req, res) => {
 
     const venue = (show.venue || {}) as any;
     const ticketTypes = (show.ticketTypes || []) as any[];
-    const bookingFeeBps = typeof venue.bookingFeeBps === 'number' ? venue.bookingFeeBps : 0;
-    const bookingFeeForPrice = (pricePence: number) =>
-      bookingFeeBps > 0 ? Math.round((pricePence || 0) * bookingFeeBps / 10000) : 0;
 
     // --- DATE VARIABLES ---
     const dateObj = show.date ? new Date(show.date) : null;
@@ -726,10 +723,6 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
         return ticketTypes.map(t => {
              const avail = (t.available === null || t.available > 0);
              const rowClass = isMainColumn ? 'ticket-row main-col-row' : 'ticket-row widget-row';
-             const feePence = bookingFeeForPrice(t.pricePence || 0);
-             const feeLabel = feePence > 0
-               ? ` <span class="t-fee">+ ${esc(pFmt(feePence))} b.f.</span>`
-               : '';
              
              return `
              <a href="${avail ? `/checkout?showId=${encodeURIComponent(show.id)}&ticketId=${t.id}` : '#'}" class="${rowClass}" ${!avail ? 'style="pointer-events:none; opacity:0.6;"' : ''}>
@@ -738,7 +731,7 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
                  <div class="t-desc">${avail ? 'Available' : 'Sold Out'}</div>
                </div>
                <div class="t-action">
-                 <span class="t-price"><span class="t-price-amount">${esc(pFmt(t.pricePence))}</span>${feeLabel}</span>
+                 <span class="t-price">${esc(pFmt(t.pricePence))}</span>
                  <span class="${avail ? 'btn-buy' : 'btn-sold'}">${avail ? 'BOOK TICKETS' : 'Sold Out'}</span>
                </div>
              </a>
@@ -1195,9 +1188,7 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
     .t-name { font-weight: 700; color: var(--primary); font-size: 1rem; }
     .t-desc { font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
     .t-action { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px;}
-    .t-price { color: var(--primary); font-size: 1.1rem; }
-    .t-price-amount { font-weight: 700; }
-    .t-fee { font-weight: 400; font-size: 0.95rem; color: var(--text-main); }
+    .t-price { font-weight: 700; color: var(--primary); font-size: 1.1rem; }
     .btn-buy {
       background: var(--brand); color: white; font-size: 0.85rem; font-weight: 700;
       padding: 8px 16px; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.05em;
