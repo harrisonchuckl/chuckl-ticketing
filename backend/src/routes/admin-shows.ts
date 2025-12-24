@@ -2,7 +2,6 @@ import { Router } from "express";
 import { OrderStatus, SeatStatus, ShowStatus } from "@prisma/client";
 import prisma from "../lib/prisma.js";
 import { requireAdminOrOrganiser } from "../lib/authz.js";
-import { clampBookingFeePence } from "../lib/booking-fee.js";
 
 const router = Router();
 
@@ -803,7 +802,6 @@ router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
             id: true,
             name: true,
             pricePence: true,
-            bookingFeePence: true,
             available: true,
             onSaleAt: true,
             offSaleAt: true,
@@ -829,7 +827,7 @@ router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
 router.post("/shows/:id/ticket-types", requireAdminOrOrganiser, async (req, res) => {
   try {
     const showId = String(req.params.id);
-    const { name, pricePence, bookingFeePence, available, onSaleAt, offSaleAt } = req.body || {};
+    const { name, pricePence, available, onSaleAt, offSaleAt } = req.body || {};
 
     if (!name || pricePence == null || Number.isNaN(Number(pricePence))) {
       return res.status(400).json({ ok: false, error: "name and pricePence required" });
@@ -838,13 +836,10 @@ router.post("/shows/:id/ticket-types", requireAdminOrOrganiser, async (req, res)
     const show = await ensureShowAccessible(req, showId);
     if (!show) return res.status(404).json({ ok: false, error: "Show not found" });
 
-    const bookingFeePenceValue = clampBookingFeePence(Number(pricePence), bookingFeePence);
-
     const ticketType = await prisma.ticketType.create({
       data: {
         name: String(name),
         pricePence: Number(pricePence),
-        bookingFeePence: bookingFeePenceValue,
         available: available === "" || available === undefined ? null : Number(available),
         onSaleAt: onSaleAt ? new Date(onSaleAt) : null,
         offSaleAt: offSaleAt ? new Date(offSaleAt) : null,
@@ -864,11 +859,11 @@ router.post("/shows/:id/ticket-types", requireAdminOrOrganiser, async (req, res)
 router.put("/ticket-types/:ttId", requireAdminOrOrganiser, async (req, res) => {
   try {
     const { ttId } = req.params;
-    const { name, pricePence, bookingFeePence, available, onSaleAt, offSaleAt } = req.body || {};
+    const { name, pricePence, available, onSaleAt, offSaleAt } = req.body || {};
 
     const ticketType = await prisma.ticketType.findUnique({
       where: { id: String(ttId) },
-      select: { id: true, pricePence: true, show: { select: { organiserId: true, id: true } } },
+      select: { id: true, show: { select: { organiserId: true, id: true } } },
     });
 
     if (!ticketType || !ticketType.show) {
@@ -879,18 +874,11 @@ router.put("/ticket-types/:ttId", requireAdminOrOrganiser, async (req, res) => {
       return res.status(404).json({ ok: false, error: "Ticket type not found" });
     }
 
-    const nextPricePence = pricePence !== undefined ? Number(pricePence) : ticketType.pricePence;
-    const nextBookingFeePence =
-      bookingFeePence !== undefined
-        ? clampBookingFeePence(nextPricePence, bookingFeePence)
-        : undefined;
-
     const updated = await prisma.ticketType.update({
       where: { id: String(ttId) },
       data: {
         ...(name !== undefined ? { name: String(name) } : {}),
         ...(pricePence !== undefined ? { pricePence: Number(pricePence) } : {}),
-        ...(bookingFeePence !== undefined ? { bookingFeePence: nextBookingFeePence } : {}),
         ...(available !== undefined
           ? { available: available === "" || available === undefined ? null : Number(available) }
           : {}),
