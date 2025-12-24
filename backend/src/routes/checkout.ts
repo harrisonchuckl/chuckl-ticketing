@@ -432,7 +432,7 @@ const ticketTypes = (show.ticketTypes || []).map((t: any) => {
         // NOTE: pFmt is now defined above to fix the TypeScript error.
 const ticketOptions = ticketTypes.map((t: any) => {
   const bf = Number(t.bookingFeePenceEffective || 0);
-  const bfText = bf > 0 ? ` + ${pFmt(bf)} b.f.` : '';
+const bfText = bf > 0 ? ` + ${pFmt(bf)} booking fee` : '';
   return `<option value="${t.id}" data-price="${t.pricePence}" data-fee="${bf}">${t.name} - ${pFmt(t.pricePence)}${bfText}</option>`;
 }).join('');
         
@@ -531,7 +531,7 @@ const ticketOptions = ticketTypes.map((t: any) => {
 
                     totalPriceSpan.innerHTML =
                       '<strong>' + baseText + '</strong>' +
-                      (feeTotalPence > 0 ? ' <span style="font-weight:400;">+ ' + feeText + ' b.f.</span>' : '');
+(feeTotalPence > 0 ? ' <span style="font-weight:400;">+ ' + feeText + ' booking fee</span>' : '');
 
                     buyButton.disabled = quantity === 0 || pricePence === 0;
                 }
@@ -2411,7 +2411,7 @@ if (!pos) {
 const baseStr = '£' + ((meta.price || 0) / 100).toFixed(2);
 const bfStr = '£' + ((meta.bookingFeePence || 0) / 100).toFixed(2);
 const priceStr = (meta.bookingFeePence && Number(meta.bookingFeePence) > 0)
-  ? (baseStr + ' + ' + bfStr + ' b.f.')
+? (baseStr + ' + ' + bfStr + ' booking fee')
   : baseStr;
 
   let html =
@@ -2767,7 +2767,7 @@ const usedTickets = sortedTickets.filter(t => usedIdSet.has(String(t.id)));
 (() => {
   const bf = Number(t.bookingFeePenceEffective || 0);
   const feeHtml = bf > 0
-    ? (' <span style="font-weight:400;color:var(--muted);">+ ' + escHtml(pFmtLocal(bf)) + ' b.f.</span>')
+? (' <span style="font-weight:400;color:var(--muted);">+ ' + escHtml(pFmtLocal(bf)) + ' booking fee</span>')
     : '';
   return escHtml(t.name) + ' • ' +
     '<span style="font-weight:800;">' + escHtml(pFmtLocal(t.pricePence)) + '</span>' +
@@ -2804,7 +2804,7 @@ const usedTickets = sortedTickets.filter(t => usedIdSet.has(String(t.id)));
 (() => {
   const bf = Number(t.bookingFeePenceEffective || 0);
   const feeHtml = bf > 0
-    ? (' <span style="font-weight:400;color:var(--muted);">+ ' + escHtml(pFmtLocal(bf)) + ' b.f.</span>')
+? (' <span style="font-weight:400;color:var(--muted);">+ ' + escHtml(pFmtLocal(bf)) + ' booking fee</span>')
     : '';
   return '<td><span style="font-weight:800;">' + escHtml(pFmtLocal(t.pricePence)) + '</span>' + feeHtml + '</td>';
 })() +
@@ -3429,7 +3429,7 @@ const feeText = '£' + (feeTotalPence / 100).toFixed(2);
 const totalEl = document.getElementById('ui-total');
 totalEl.innerHTML =
   '<span class="basket-amt">' + baseText + '</span>' +
-  (feeTotalPence > 0 ? '<span class="basket-fee"> + ' + feeText + ' b.f.</span>' : '');
+  (feeTotalPence > 0 ? '<span class="basket-fee"> + ' + feeText + ' booking fee</span>' : '');
 
 document.getElementById('ui-count').innerText = count + (count === 1 ? ' ticket' : ' tickets');
         const btn = document.getElementById('btn-next');
