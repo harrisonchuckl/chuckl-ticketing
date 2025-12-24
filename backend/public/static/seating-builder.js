@@ -5541,14 +5541,32 @@ function renderTicketingPanel() {
     return wrapper;
   };
 
-  // Booking fee is now per-ticket (TicketType.bookingFeePence). No global booking fee control.
+   // Booking fee is now per-ticket (TicketType.bookingFeePence). No global booking fee control.
+
+
+
+  // --- Ticket List Container ---
+
+  const ticketsContainer = document.createElement("div");
+
+  ticketsContainer.className = "sb-ticket-stack";
+
+  el.appendChild(ticketsContainer);
+
+
 
   // --- Empty State ---
+
   if (!ticketTypes.length) {
+
     const empty = document.createElement("div");
+
     empty.className = "sb-inspector-empty";
+
     empty.textContent = "No tickets created yet.";
+
     ticketsContainer.appendChild(empty);
+
   }
 
   // --- Render Each Ticket Card ---
