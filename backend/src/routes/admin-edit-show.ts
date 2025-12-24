@@ -2,6 +2,7 @@
 // (Kept minimal: show read/update, ticket-type listing/CRUD where needed by UI)
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { clampBookingFeePence } from '../lib/booking-fee.js';
 
 const prisma = new PrismaClient();
 const router = Router();
@@ -35,16 +36,19 @@ router.get('/shows/:id/summary', async (req, res) => {
 router.post('/shows/:id/ticket-types', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, pricePence, available, onSaleAt, offSaleAt } = req.body || {};
+    const { name, pricePence, bookingFeePence, available, onSaleAt, offSaleAt } = req.body || {};
 
     if (!name || pricePence == null) {
       return res.status(400).json({ ok: false, message: 'name and pricePence required' });
     }
 
+    const bookingFeePenceValue = clampBookingFeePence(Number(pricePence), bookingFeePence);
+
     const tt = await prisma.ticketType.create({
       data: {
         name: String(name),
         pricePence: Number(pricePence),
+        bookingFeePence: bookingFeePenceValue,
         available: available === '' || available === undefined ? null : Number(available),
         onSaleAt: onSaleAt ? new Date(onSaleAt) : null,
         offSaleAt: offSaleAt ? new Date(offSaleAt) : null,
@@ -63,13 +67,21 @@ router.post('/shows/:id/ticket-types', async (req, res) => {
 router.patch('/ticket-types/:ttId', async (req, res) => {
   try {
     const { ttId } = req.params;
-    const { name, pricePence, available, onSaleAt, offSaleAt } = req.body || {};
+    const { name, pricePence, bookingFeePence, available, onSaleAt, offSaleAt } = req.body || {};
+
+    const nextBookingFeePence =
+      bookingFeePence !== undefined && pricePence !== undefined
+        ? clampBookingFeePence(Number(pricePence), bookingFeePence)
+        : bookingFeePence !== undefined
+          ? Math.max(0, Math.round(Number(bookingFeePence)))
+          : undefined;
 
     const updated = await prisma.ticketType.update({
       where: { id: String(ttId) },
       data: {
         ...(name !== undefined ? { name: String(name) } : {}),
         ...(pricePence !== undefined ? { pricePence: Number(pricePence) } : {}),
+        ...(bookingFeePence !== undefined ? { bookingFeePence: nextBookingFeePence } : {}),
         ...(available !== undefined
           ? { available: available === '' || available === undefined ? null : Number(available) }
           : {}),

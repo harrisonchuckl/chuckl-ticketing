@@ -197,6 +197,7 @@ model TicketType {
 
   name       String
   pricePence Int
+  bookingFeePence Int?
 
   /// When this ticket should first be available to buy
   onSaleAt  DateTime?

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { Prisma, PrismaClient, ShowStatus } from "@prisma/client";
 import { verifyJwt } from "../utils/security.js";
+import { clampBookingFeePence } from "../lib/booking-fee.js";
 
 const prisma = new PrismaClient();
 const router = Router();
@@ -325,9 +326,14 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
       for (const t of tickets) {
         if (!t.name) continue;
         const pricePence = Math.round(Number(t.price || 0) * 100);
+        const bookingFeePence = clampBookingFeePence(pricePence, t.bookingFeePence);
         await prisma.ticketType.create({
           data: {
-            showId, name: t.name, pricePence, available: null,
+            showId,
+            name: t.name,
+            pricePence,
+            bookingFeePence,
+            available: null,
           },
         });
       }

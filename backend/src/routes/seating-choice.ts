@@ -699,30 +699,31 @@ function renderShell(options: {
       font-size: 13px;
     }
 
-    .booking-fee-row {
+    .price-cell {
       display: flex;
-      flex-wrap: wrap;
-      align-items: flex-end;
-      gap: 12px;
-      margin-bottom: 16px;
+      flex-direction: column;
+      gap: 6px;
     }
 
-    .booking-fee-field {
-      min-width: 180px;
+    .booking-fee-note {
+      font-size: 12px;
+      color: var(--text-muted);
     }
 
-    .booking-fee-label {
-      display: block;
+    .booking-fee-inline-label {
       font-size: 12px;
       font-weight: 600;
       color: var(--text-muted);
-      margin-bottom: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 4px;
     }
 
-    .booking-fee-helper {
-      font-size: 12px;
+    .booking-fee-inline-helper {
+      font-size: 11px;
       color: var(--text-muted);
-      max-width: 360px;
+      line-height: 1.4;
     }
 
     .show-chip {
@@ -758,14 +759,14 @@ function renderShell(options: {
   .table-row {
       display: grid;
       /* Name | Price | On sale | Off sale | Allocation | Remove */
-      grid-template-columns: 1.35fr 0.75fr 0.95fr 0.95fr 0.85fr 110px;
+      grid-template-columns: 1.35fr 1.4fr 0.95fr 0.95fr 0.85fr 110px;
       gap: 10px;
       align-items: center;
       padding: 12px 12px;
       border: 1px solid rgba(148, 163, 184, 0.35);
       border-radius: var(--radius-lg);
       background: rgba(255, 255, 255, 0.78);
-      min-width: 820px;             /* key: prevents squashed inputs */
+      min-width: 980px;             /* key: prevents squashed inputs */
       transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
     }
 
@@ -1141,6 +1142,7 @@ router.get("/seating/unallocated/:showId", async (req, res) => {
         id?: string;
         name: string;
         price: number;
+        bookingFeePence?: number;
         available: string;
         onSaleAt: string;
         offSaleAt: string;
@@ -1148,6 +1150,7 @@ router.get("/seating/unallocated/:showId", async (req, res) => {
         id: t.id,
         name: t.name,
         price: (t.pricePence || 0) / 100,
+        bookingFeePence: t.bookingFeePence ?? null,
         available: t.available == null ? "" : String(t.available),
         onSaleAt: t.onSaleAt ? new Date(t.onSaleAt).toISOString() : "",
         offSaleAt: t.offSaleAt ? new Date(t.offSaleAt).toISOString() : "",
@@ -1213,16 +1216,6 @@ if (!initialTickets.length) {
           </div>
         </header>
 
-        <div class="booking-fee-row">
-          <div class="booking-fee-field">
-            <label class="booking-fee-label" for="booking-fee-input">Booking fee (%)</label>
-            <input class="input" id="booking-fee-input" type="number" min="10" step="0.5" />
-          </div>
-          <div class="booking-fee-helper">
-            Minimum 10%. This is added on top of the ticket face value at checkout.
-          </div>
-        </div>
-
         <div class="tickets-table" id="tickets-table"></div>
 
         <div class="tickets-actions">
@@ -1247,38 +1240,54 @@ if (!initialTickets.length) {
           var table = document.getElementById("tickets-table");
           var statusRow = document.getElementById("status-row");
           var defaultAllocation = (showMeta && showMeta.venue && showMeta.venue.capacity) || "";
-          var bookingFeeInput = document.getElementById("booking-fee-input");
-          var bookingFeePercent = (showMeta && showMeta.venue && typeof showMeta.venue.bookingFeeBps === "number")
-            ? (showMeta.venue.bookingFeeBps / 100)
-            : 10;
+          var bookingFeeBands = [
+            { minPricePence: 5000, feePercent: 11, minFeePence: 550, maxFeePence: 900 },
+            { minPricePence: 4000, feePercent: 11, minFeePence: 440, maxFeePence: 640 },
+            { minPricePence: 3000, feePercent: 11, minFeePence: 330, maxFeePence: 530 },
+            { minPricePence: 2500, feePercent: 12.5, minFeePence: 313, maxFeePence: 430 },
+            { minPricePence: 2000, feePercent: 12.5, minFeePence: 250, maxFeePence: 330 },
+            { minPricePence: 1500, feePercent: 14, minFeePence: 210, maxFeePence: 330 },
+            { minPricePence: 1250, feePercent: 14, minFeePence: 175, maxFeePence: 290 },
+            { minPricePence: 1000, feePercent: 15.5, minFeePence: 155, maxFeePence: 250 },
+            { minPricePence: 750, feePercent: 17.7, minFeePence: 133, maxFeePence: 230 },
+            { minPricePence: 500, feePercent: 22.6, minFeePence: 113, maxFeePence: 230 },
+            { minPricePence: 250, feePercent: 45, minFeePence: 113, maxFeePence: 170 },
+            { minPricePence: 200, feePercent: 50, minFeePence: 100, maxFeePence: 170 },
+            { minPricePence: 100, feePercent: 79, minFeePence: 79, maxFeePence: 170 },
+            { minPricePence: 0, feePercent: 0, minFeePence: 0, maxFeePence: 0 },
+          ];
 
-          function normalizeBookingFeePercent(value) {
+          function getBookingFeeBand(pricePence) {
+            var price = Number(pricePence || 0);
+            for (var i = 0; i < bookingFeeBands.length; i++) {
+              if (price >= bookingFeeBands[i].minPricePence) return bookingFeeBands[i];
+            }
+            return bookingFeeBands[bookingFeeBands.length - 1];
+          }
+
+          function formatPence(pence) {
+            return "£" + (Number(pence || 0) / 100).toFixed(2);
+          }
+
+          function parsePriceToPence(value) {
             var parsed = Number(value);
-            if (!Number.isFinite(parsed)) return 10;
-            var rounded = Math.round(parsed * 10) / 10;
-            return Math.max(10, rounded);
+            if (!Number.isFinite(parsed)) return 0;
+            return Math.round(parsed * 100);
           }
 
-          function formatBookingFeePercent(value) {
-            if (!Number.isFinite(value)) return "10";
-            return value % 1 === 0 ? String(Math.round(value)) : String(value);
-          }
-
-          function syncBookingFeeInput() {
-            if (!bookingFeeInput) return;
-            bookingFeeInput.value = formatBookingFeePercent(bookingFeePercent);
-          }
-
-          if (bookingFeeInput) {
-            syncBookingFeeInput();
-            bookingFeeInput.addEventListener("change", function () {
-              bookingFeePercent = normalizeBookingFeePercent(bookingFeeInput.value);
-              syncBookingFeeInput();
-            });
-            bookingFeeInput.addEventListener("blur", function () {
-              bookingFeePercent = normalizeBookingFeePercent(bookingFeeInput.value);
-              syncBookingFeeInput();
-            });
+          function ensureTicketBookingFee(ticket) {
+            var pricePence = parsePriceToPence(ticket.price);
+            if (!pricePence || pricePence <= 0) {
+              ticket.bookingFeePence = 0;
+              return { band: bookingFeeBands[bookingFeeBands.length - 1], pricePence: 0 };
+            }
+            var band = getBookingFeeBand(pricePence);
+            var minFeePence = band.minFeePence;
+            var current = Number(ticket.bookingFeePence);
+            if (!Number.isFinite(current) || current < minFeePence) {
+              ticket.bookingFeePence = minFeePence;
+            }
+            return { band: band, pricePence: pricePence };
           }
 
           function isoToInput(val) {
@@ -1307,9 +1316,38 @@ header.innerHTML = '<div>Name</div><div>Price (£)</div><div>On sale</div><div>O
               var row = document.createElement('div');
               row.className = 'table-row';
 
+              var feeMeta = ensureTicketBookingFee(t);
+              var band = feeMeta.band;
+              var pricePence = feeMeta.pricePence;
+              var feePence = Number(t.bookingFeePence || 0);
+              var feeNote = pricePence > 0
+                ? ('Booking fee: ' + formatPence(feePence) + ' per ticket.')
+                : 'Booking fee: £0.00 per ticket.';
+              var feeHelper = pricePence > 0
+                ? ('You receive 50% of the net booking fee on every ticket sold. At this price we recommend ' +
+                  formatPence(band.minFeePence) + ' - ' + formatPence(band.maxFeePence) + ' per ticket.')
+                : 'Free tickets have no booking fee.';
+
               row.innerHTML = \`
                 <div><input class="input" value="\${t.name || ''}" data-field="name" data-idx="\${idx}" placeholder="Ticket name" /></div>
-                <div><input class="input" value="\${t.price ?? ''}" data-field="price" data-idx="\${idx}" type="number" min="0" step="0.01" placeholder="0.00" /></div>
+                <div class="price-cell">
+                  <input class="input" value="\${t.price ?? ''}" data-field="price" data-idx="\${idx}" type="number" min="0" step="0.01" placeholder="0.00" />
+                  <div class="booking-fee-note">\${feeNote}</div>
+                  <label class="booking-fee-inline-label">
+                    Increase booking fee (£)
+                    <input
+                      class="input"
+                      value="\${(feePence / 100).toFixed(2)}"
+                      data-field="bookingFeePence"
+                      data-idx="\${idx}"
+                      type="number"
+                      min="\${((pricePence > 0 ? band.minFeePence : 0) / 100).toFixed(2)}"
+                      step="0.01"
+                      \${pricePence > 0 ? "" : "disabled"}
+                    />
+                  </label>
+                  <div class="booking-fee-inline-helper">\${feeHelper}</div>
+                </div>
                 <div><input class="input" value="\${isoToInput(t.onSaleAt)}" data-field="onSaleAt" data-idx="\${idx}" type="datetime-local" /></div>
                 <div><input class="input" value="\${isoToInput(t.offSaleAt)}" data-field="offSaleAt" data-idx="\${idx}" type="datetime-local" /></div>
                 <div>
@@ -1335,9 +1373,37 @@ header.innerHTML = '<div>Name</div><div>Price (£)</div><div>On sale</div><div>O
                   var index = Number(input.getAttribute('data-idx'));
                   var field = input.getAttribute('data-field');
                   if (!field || Number.isNaN(index)) return;
+                  if (field === 'bookingFeePence') {
+                    var parsed = Number(input.value);
+                    if (!Number.isFinite(parsed)) return;
+                    tickets[index].bookingFeePence = Math.round(parsed * 100);
+                    return;
+                  }
                   tickets[index][field] = input.value;
                 });
               });
+
+              var priceInput = row.querySelector('input[data-field="price"]');
+              if (priceInput) {
+                priceInput.addEventListener('blur', function () {
+                  ensureTicketBookingFee(tickets[idx]);
+                  renderTickets();
+                });
+              }
+
+              var feeInput = row.querySelector('input[data-field="bookingFeePence"]');
+              if (feeInput) {
+                feeInput.addEventListener('blur', function () {
+                  var parsed = Number(feeInput.value);
+                  var priceForFee = parsePriceToPence(tickets[idx].price);
+                  var bandForFee = getBookingFeeBand(priceForFee);
+                  var minFee = priceForFee > 0 ? bandForFee.minFeePence : 0;
+                  var nextFee = Number.isFinite(parsed) ? Math.round(parsed * 100) : minFee;
+                  if (nextFee < minFee) nextFee = minFee;
+                  tickets[idx].bookingFeePence = nextFee;
+                  renderTickets();
+                });
+              }
 
               var delBtn = row.querySelector('[data-action="delete"]');
               if (delBtn) {
@@ -1386,31 +1452,22 @@ header.innerHTML = '<div>Name</div><div>Price (£)</div><div>On sale</div><div>O
 
           function toPayload(t) {
             var pricePence = Math.round(Number(t.price || 0) * 100);
+            var bookingFeePence = Number(t.bookingFeePence || 0);
             var available = t.available === '' || t.available == null ? null : Number(t.available);
             return {
               name: (t.name || '').trim(),
               pricePence: pricePence,
+              bookingFeePence: bookingFeePence,
               available: Number.isFinite(available) ? available : null,
               onSaleAt: t.onSaleAt ? new Date(t.onSaleAt).toISOString() : null,
               offSaleAt: t.offSaleAt ? new Date(t.offSaleAt).toISOString() : null,
             };
           }
 
-          async function updateBookingFee() {
-            if (!showMeta || !showMeta.venue || !showMeta.venue.id) return;
-            var bookingFeeBps = Math.round(normalizeBookingFeePercent(bookingFeePercent) * 100);
-            await jsonRequest('/admin/venues/' + showMeta.venue.id, {
-              method: 'PATCH',
-              credentials: 'include',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ bookingFeeBps: bookingFeeBps }),
-            });
-          }
-
           async function saveTickets() {
             showStatus('Saving tickets…');
             try {
-              await updateBookingFee();
+              tickets.forEach(function (t) { ensureTicketBookingFee(t); });
               for (var i = 0; i < tickets.length; i++) {
                 var t = tickets[i];
                 var payload = toPayload(t);
