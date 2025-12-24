@@ -18,10 +18,12 @@ const LOCAL_LOGO_FILENAME = "TixAll BW on Blue Background.png";
 let _cachedLocalLogoDataUri: string | null = null;
 
 function getEmailLogoUrl(): string {
-  // Cache (so we don't re-read the file per render)
+  // If you provide a public URL, use it (best for all email clients)
+  if (LOGO_URL) return LOGO_URL;
+
+  // Otherwise, embed the local PNG as a data URI (works well in Apple Mail)
   if (_cachedLocalLogoDataUri !== null) return _cachedLocalLogoDataUri;
 
-  // 1) Prefer local logo if present (so we always use the repo branding)
   const candidates = [
     path.join(process.cwd(), "public", LOCAL_LOGO_FILENAME),
     path.join(process.cwd(), "backend", "public", LOCAL_LOGO_FILENAME),
@@ -37,16 +39,9 @@ function getEmailLogoUrl(): string {
     }
   }
 
-  // 2) Fallback: use public URL if supplied (useful for clients that block data URIs)
-  if (LOGO_URL) {
-    _cachedLocalLogoDataUri = LOGO_URL;
-    return _cachedLocalLogoDataUri;
-  }
-
   _cachedLocalLogoDataUri = "";
   return "";
 }
-
 const MY_TICKETS_URL_BASE = (process.env.MY_TICKETS_URL_BASE || "").trim(); // optional, e.g. https://chuckl.club/my-tickets?order=
 
 const INCLUDE_SUMMARY_PAGE =
