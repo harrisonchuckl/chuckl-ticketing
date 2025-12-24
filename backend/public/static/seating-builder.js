@@ -5634,15 +5634,27 @@ function renderTicketingPanel() {
       priceInput.placeholder = "0.00";
       priceInput.value = ticket.price === null || ticket.price === undefined ? "" : String(ticket.price);
       
-      const commitPrice = () => {
-        const raw = (priceInput.value || "").replace(/[^0-9.,-]/g, "").replace(/,/g, ".");
-        if (!raw) ticket.price = null;
-        else {
-            const p = parseFloat(raw);
-            ticket.price = Number.isFinite(p) ? p : 0;
-        }
-        renderTicketingPanel();
-      };
+const commitPrice = () => {
+  const raw = (priceInput.value || "").replace(/[^0-9.,-]/g, "").replace(/,/g, ".");
+  if (!raw) {
+    ticket.price = null;
+    ticket.bookingFeePence = 0;
+  } else {
+    const p = parseFloat(raw);
+    ticket.price = Number.isFinite(p) ? p : 0;
+
+    // IMPORTANT: whenever price changes, reset booking fee to the MIN for that price band
+    const pricePence = poundsToPence(ticket.price);
+    if (pricePence <= 0) {
+      ticket.bookingFeePence = 0;
+    } else {
+      const band = getBandForPricePence(pricePence);
+      ticket.bookingFeePence = band.minFeePence;
+    }
+  }
+
+  renderTicketingPanel();
+};
       priceInput.addEventListener("blur", commitPrice);
       priceInput.addEventListener("keydown", (ev) => { if(ev.key === "Enter") { ev.preventDefault(); priceInput.blur(); }});
 
