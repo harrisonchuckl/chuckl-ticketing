@@ -195,8 +195,12 @@ model TicketType {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  name       String
+   name       String
   pricePence Int
+
+  /// Booking fee charged on top of face value (per ticket, in pence).
+  /// Must be >= tier minimum for this ticket price (enforced server-side).
+  bookingFeePence Int?
 
   /// When this ticket should first be available to buy
   onSaleAt  DateTime?
