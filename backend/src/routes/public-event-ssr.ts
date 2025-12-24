@@ -582,8 +582,25 @@ ticketTypes: {
        return res.status(404).send(`Event is not LIVE (Status: ${status})`);
     }
 
-    const venue = (show.venue || {}) as any;
-    const ticketTypes = (show.ticketTypes || []) as any[];
+   const venue = (show.venue || {}) as any;
+const ticketTypes = (show.ticketTypes || []) as any[];
+
+// Booking fee helper (used by ticket list + mobile bar)
+const venueBps = Number((venue as any)?.bookingFeeBps || 0);
+
+// Prefer explicit per-ticket fee in pence if present, otherwise use bps, otherwise venue bps.
+const bookingFeePenceFor = (t: any) => {
+  const base = Number(t?.pricePence || 0);
+
+  const direct = Number(t?.bookingFeePence);
+  if (Number.isFinite(direct) && direct >= 0) return Math.round(direct);
+
+  const bps = Number(t?.bookingFeeBps);
+  const useBps = (Number.isFinite(bps) && bps > 0) ? bps : venueBps;
+  if (Number.isFinite(useBps) && useBps > 0) return Math.round((base * useBps) / 10000);
+
+  return 0;
+};
 
     // --- DATE VARIABLES ---
     const dateObj = show.date ? new Date(show.date) : null;
@@ -727,22 +744,6 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
   if (!ticketTypes.length) {
     return '<div style="padding:20px; text-align:center; font-size:0.9rem; color:var(--text-muted);">Tickets coming soon</div>';
   }
-
-  const venueBps = Number((venue as any)?.bookingFeeBps || 0);
-
-  // Prefer explicit per-ticket fee in pence if present, otherwise use bps, otherwise venue bps.
-  const bookingFeePenceFor = (t: any) => {
-    const base = Number(t?.pricePence || 0);
-
-    const direct = Number(t?.bookingFeePence);
-    if (Number.isFinite(direct) && direct >= 0) return Math.round(direct);
-
-    const bps = Number(t?.bookingFeeBps);
-    const useBps = (Number.isFinite(bps) && bps > 0) ? bps : venueBps;
-    if (Number.isFinite(useBps) && useBps > 0) return Math.round((base * useBps) / 10000);
-
-    return 0;
-  };
 
   return ticketTypes.map((t: any) => {
     const avail = (t.available === null || t.available > 0);
