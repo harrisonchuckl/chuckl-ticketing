@@ -38,7 +38,6 @@ function htmlShell() {
   @media (max-width:880px){ .hero{grid-template-columns:1fr} .hero img{width:100%} }
   .hero img{width:360px;border-radius:14px;border:1px solid var(--border);background:#0b1220}
   .divider{height:1px;background:var(--border);margin:16px 0}
-  .price-fee{font-weight:400;font-size:0.95rem;color:var(--muted);margin-left:6px}
   .sr-only{position:absolute!important;height:1px;width:1px;overflow:hidden;clip:rect(1px,1px,1px,1px);white-space:nowrap}
 </style>
 </head>
@@ -124,11 +123,6 @@ function htmlShell() {
 
       const firstTicket = (it.ticketTypes && it.ticketTypes[0]) ? it.ticketTypes[0] : null;
       const priceStr = firstTicket ? ('£' + ( (firstTicket.pricePence||0) / 100 ).toFixed(2)) : '';
-      const bookingFeeBps = it.venue && typeof it.venue.bookingFeeBps === 'number' ? it.venue.bookingFeeBps : 0;
-      const bookingFeePence = firstTicket && bookingFeeBps > 0
-        ? Math.round((firstTicket.pricePence || 0) * bookingFeeBps / 10000)
-        : 0;
-      const bookingFeeStr = bookingFeePence > 0 ? (' + £' + (bookingFeePence / 100).toFixed(2) + ' b.f.') : '';
 
       app.innerHTML =
         '<section class="hero">' +
@@ -136,7 +130,7 @@ function htmlShell() {
           '<div>' +
             '<h1 class="title" style="font-size:28px;margin:0 0 6px">' + (it.title || 'Event') + '</h1>' +
             '<div class="sub">' + [when, where].filter(Boolean).join(' • ') + '</div>' +
-            (priceStr ? ('<div style="margin-top:8px">From <strong>' + priceStr + '</strong>' + (bookingFeeStr ? '<span class="price-fee">' + bookingFeeStr + '</span>' : '') + '</div>') : '') +
+            (priceStr ? ('<div style="margin-top:8px">From <strong>' + priceStr + '</strong></div>') : '') +
             '<div class="divider"></div>' +
             (it.description ? ('<p style="line-height:1.6;margin:0 0 10px">' + it.description + '</p>') : '') +
             '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">' +
