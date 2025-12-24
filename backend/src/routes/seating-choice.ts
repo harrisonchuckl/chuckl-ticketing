@@ -1290,7 +1290,12 @@ function clampBookingFeePenceClient(pricePence, bookingFeePence) {
 function bookingFeeMetaText(pricePence) {
   const band = getBandForPricePence(pricePence);
   if (band.maxFeePence === 0) return "";
-  return `Recommended £${penceToPoundsStr(band.minFeePence)}–£${penceToPoundsStr(band.maxFeePence)}. Minimum £${penceToPoundsStr(band.minFeePence)}. You receive 50% of the net booking fee.`;
+  return (
+    "Recommended £" + penceToPoundsStr(band.minFeePence) +
+    "–£" + penceToPoundsStr(band.maxFeePence) +
+    ". Minimum £" + penceToPoundsStr(band.minFeePence) +
+    ". You receive 50% of the net booking fee."
+  );
 }
 
 function ensureTicketBookingFee(t) {
@@ -1402,23 +1407,25 @@ header.innerHTML = '<div>Name</div><div>Price (£)</div><div>On sale</div><div>O
 
               injectBookingFeeUI(row, t);
               row.querySelectorAll('input').forEach(function (input) {
-                input.addEventListener('input', function () {
-  const field = input.getAttribute('data-field');
-  tickets[index][field] = input.value;
+  input.addEventListener('input', function () {
+    var field = input.getAttribute('data-field');
+    if (!field) return;
 
-  if (field === "price" || field === "bookingFee") {
-    ensureTicketBookingFee(tickets[index]);
+    tickets[idx][field] = input.value;
 
-    const meta = row.querySelector(".fee-meta");
-    if (meta) meta.textContent = bookingFeeMetaText(poundsToPence(tickets[index].price));
+    if (field === "price" || field === "bookingFee") {
+      ensureTicketBookingFee(tickets[idx]);
 
-    // keep the fee input visually clamped
-    const feeInput = row.querySelector('input[data-field="bookingFee"]');
-    if (feeInput) feeInput.value = String(tickets[index].bookingFee ?? "");
-  }
+      var meta = row.querySelector(".fee-meta");
+      if (meta) meta.textContent = bookingFeeMetaText(poundsToPence(tickets[idx].price));
+
+      // keep the fee input visually clamped
+      var feeInput = row.querySelector('input[data-field="bookingFee"]');
+      if (feeInput) feeInput.value = String(tickets[idx].bookingFee ?? "");
+    }
+  });
 });
 
-              });
 
               var delBtn = row.querySelector('[data-action="delete"]');
               if (delBtn) {
