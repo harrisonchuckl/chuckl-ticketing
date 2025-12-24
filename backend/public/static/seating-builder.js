@@ -343,23 +343,58 @@ let holdReportSettings = {
     maxPerOrder: "15",
   };
 
-  let bookingFeePercent = 10;
+ // --- Booking fee tiers (min enforced; max is recommended range, NOT a cap) ---
+const BOOKING_FEE_BANDS = [
+  { minPricePence: 5000, minFeePence: 550, maxFeePence: 900 },
+  { minPricePence: 4000, minFeePence: 440, maxFeePence: 640 },
+  { minPricePence: 3000, minFeePence: 330, maxFeePence: 530 },
+  { minPricePence: 2500, minFeePence: 313, maxFeePence: 430 },
+  { minPricePence: 2000, minFeePence: 250, maxFeePence: 330 },
+  { minPricePence: 1500, minFeePence: 210, maxFeePence: 330 },
+  { minPricePence: 1250, minFeePence: 175, maxFeePence: 290 },
+  { minPricePence: 1000, minFeePence: 155, maxFeePence: 250 },
+  { minPricePence: 750,  minFeePence: 133, maxFeePence: 230 },
+  { minPricePence: 500,  minFeePence: 113, maxFeePence: 230 },
+  { minPricePence: 250,  minFeePence: 113, maxFeePence: 170 },
+  { minPricePence: 200,  minFeePence: 100, maxFeePence: 170 },
+  { minPricePence: 100,  minFeePence: 79,  maxFeePence: 170 },
+  { minPricePence: 0,    minFeePence: 0,   maxFeePence: 0   },
+];
 
-  function normalizeBookingFeePercent(value) {
-    const parsed = Number(value);
-    if (!Number.isFinite(parsed)) return 10;
-    const rounded = Math.round(parsed * 10) / 10;
-    return Math.max(10, rounded);
-  }
+function poundsToPence(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.round(n * 100);
+}
 
-  function formatBookingFeePercent(value) {
-    if (!Number.isFinite(value)) return "10";
-    return value % 1 === 0 ? String(Math.round(value)) : String(value);
-  }
+function penceToPoundsStr(p) {
+  const n = Number(p || 0);
+  return (n / 100).toFixed(2);
+}
 
-  function getBookingFeeBps() {
-    return Math.round(normalizeBookingFeePercent(bookingFeePercent) * 100);
+function getBandForPricePence(pricePence) {
+  const p = Math.max(0, Math.round(Number(pricePence) || 0));
+  for (const b of BOOKING_FEE_BANDS) {
+    if (p >= b.minPricePence) return b;
   }
+  return BOOKING_FEE_BANDS[BOOKING_FEE_BANDS.length - 1];
+}
+
+function clampBookingFeePenceClient(pricePence, bookingFeePence) {
+  const band = getBandForPricePence(pricePence);
+  const fee = Math.max(0, Math.round(Number(bookingFeePence) || 0));
+  return Math.max(band.minFeePence, fee);
+}
+
+function bookingFeeMetaText(pricePence) {
+  const band = getBandForPricePence(pricePence);
+  if (!band.maxFeePence) return "";
+  return `Recommended £${penceToPoundsStr(band.minFeePence)}–£${penceToPoundsStr(
+    band.maxFeePence
+  )} booking fee per ticket. Minimum £${penceToPoundsStr(
+    band.minFeePence
+  )}. You receive 50% of the net booking fee.`;
+}
 
   let ticketFormAutoOffSale = true;
 
@@ -4766,9 +4801,7 @@ function applyAccessibilityVisualsOverride(seatCircle, group) {
     if (!data || !data.show) return;
     showMeta = data.show;
     deriveVenueCurrency();
-    if (showMeta && showMeta.venue && showMeta.venue.bookingFeeBps != null) {
-      bookingFeePercent = normalizeBookingFeePercent(showMeta.venue.bookingFeeBps / 100);
-    }
+  // Booking fee is now per-ticket (TicketType.bookingFeePence), not venue-level.
     const showDateValue = showMeta && showMeta.date ? formatDateTimeLocal(showMeta.date) : "";
     if (showDateValue && (ticketFormAutoOffSale || !ticketFormState.offSale)) {
       ticketFormState.offSale = showDateValue;
@@ -5508,47 +5541,7 @@ function renderTicketingPanel() {
     return wrapper;
   };
 
-  const bookingFeeCard = document.createElement("div");
-  bookingFeeCard.className = "sb-ticket-card";
-  const bookingFeeBody = document.createElement("div");
-  bookingFeeBody.className = "sb-ticket-card-body";
-  bookingFeeBody.style.borderTop = "none";
-
-  const bookingFeeGrid = document.createElement("div");
-  bookingFeeGrid.className = "sb-form-grid";
-
-  const bookingFeeInput = document.createElement("input");
-  bookingFeeInput.type = "number";
-  bookingFeeInput.className = "sb-input";
-  bookingFeeInput.min = "10";
-  bookingFeeInput.step = "0.5";
-  bookingFeeInput.value = formatBookingFeePercent(bookingFeePercent);
-
-  const commitBookingFee = () => {
-    bookingFeePercent = normalizeBookingFeePercent(bookingFeeInput.value);
-    bookingFeeInput.value = formatBookingFeePercent(bookingFeePercent);
-    if (showMeta && showMeta.venue) {
-      showMeta.venue.bookingFeeBps = Math.round(bookingFeePercent * 100);
-    }
-  };
-  bookingFeeInput.addEventListener("blur", commitBookingFee);
-  bookingFeeInput.addEventListener("change", commitBookingFee);
-
-  bookingFeeGrid.appendChild(
-    makeField(
-      "Booking fee (%)",
-      bookingFeeInput,
-      "Minimum 10%. This is added on top of the face value at checkout."
-    )
-  );
-  bookingFeeBody.appendChild(bookingFeeGrid);
-  bookingFeeCard.appendChild(bookingFeeBody);
-  el.appendChild(bookingFeeCard);
-
-  // --- Ticket List Container ---
-  const ticketsContainer = document.createElement("div");
-  ticketsContainer.className = "sb-ticket-stack";
-  el.appendChild(ticketsContainer);
+  // Booking fee is now per-ticket (TicketType.bookingFeePence). No global booking fee control.
 
   // --- Empty State ---
   if (!ticketTypes.length) {
@@ -5694,7 +5687,76 @@ function renderTicketingPanel() {
 
       // Append Fields to Grid
 formGrid.appendChild(makeField("Ticket Name *", nameInput));
-      formGrid.appendChild(makeField(`Price (${venueCurrencyCode})`, priceInput));
+// --- Price + booking fee (tiered, per ticket type) ---
+const priceWrap = document.createElement("div");
+priceWrap.style.display = "flex";
+priceWrap.style.flexDirection = "column";
+priceWrap.style.gap = "6px";
+
+// keep existing price input
+priceWrap.appendChild(priceInput);
+
+const feeMeta = document.createElement("div");
+feeMeta.className = "sb-helper";
+feeMeta.style.marginTop = "2px";
+
+const feeRow = document.createElement("div");
+feeRow.style.display = "flex";
+feeRow.style.gap = "10px";
+feeRow.style.alignItems = "center";
+
+const feeLabel = document.createElement("div");
+feeLabel.className = "sb-helper";
+feeLabel.textContent = "Booking fee (£)";
+
+const feeInput = document.createElement("input");
+feeInput.type = "number";
+feeInput.className = "sb-input";
+feeInput.step = "0.01";
+feeInput.inputMode = "decimal";
+
+const syncFeeUI = () => {
+  const pricePence = poundsToPence(ticket.price);
+  const band = getBandForPricePence(pricePence);
+
+  // enforce minimum (no ceiling)
+  const clamped = clampBookingFeePenceClient(pricePence, ticket.bookingFeePence);
+  ticket.bookingFeePence = pricePence <= 0 ? 0 : clamped;
+
+  feeInput.value = ticket.bookingFeePence ? penceToPoundsStr(ticket.bookingFeePence) : "";
+  feeInput.placeholder = penceToPoundsStr(band.minFeePence);
+  feeMeta.textContent = bookingFeeMetaText(pricePence);
+};
+
+// ensure we always have a valid fee once price exists
+if (ticket.bookingFeePence == null) {
+  const pricePence = poundsToPence(ticket.price);
+  ticket.bookingFeePence = pricePence <= 0 ? 0 : clampBookingFeePenceClient(pricePence, 0);
+}
+syncFeeUI();
+
+feeInput.addEventListener("blur", () => {
+  const pricePence = poundsToPence(ticket.price);
+  const feePenceIn = poundsToPence(feeInput.value);
+  const clamped = clampBookingFeePenceClient(pricePence, feePenceIn);
+  ticket.bookingFeePence = pricePence <= 0 ? 0 : clamped;
+  syncFeeUI();
+});
+
+feeInput.addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter") {
+    ev.preventDefault();
+    feeInput.blur();
+  }
+});
+
+feeRow.appendChild(feeLabel);
+feeRow.appendChild(feeInput);
+
+priceWrap.appendChild(feeMeta);
+priceWrap.appendChild(feeRow);
+
+formGrid.appendChild(makeField(`Price (${venueCurrencyCode})`, priceWrap));
       formGrid.appendChild(makeField("Seat Color", colorWrap, "Color used on the map"));
       formGrid.appendChild(makeField("On Sale Time", onSaleInput));
       formGrid.appendChild(makeField("Off Sale Time", offSaleInput));
@@ -5870,6 +5932,7 @@ addBtn.style.marginTop = "24px"; // Adds space between the last ticket card and 
       id: `ticket-${Date.now()}-${ticketTypes.length + 1}`,
       name: "", // Start blank
       price: 0,
+      bookingFeePence: 0,
       currency: venueCurrencyCode,
       color: colorForNewTicket,
       onSale: nowValue,
@@ -8575,7 +8638,6 @@ function handleStageMouseMove() {
         layoutType: initialLayoutKey,
         seatMapId: seatMapIdForSave,
         name: nameForSave,
-        bookingFeeBps: getBookingFeeBps(),
         tickets: ticketTypes, // Send the array of tickets to backend
       };
         const res = await fetch(
@@ -8662,7 +8724,6 @@ function saveShowWithStatus(status, redirectUrl) {
       // New fields for Phase 1:
       showStatus: status, // "DRAFT" or "LIVE"
       completionStatus: window.__TIXALL_COMPLETION_STATUS__,
-      bookingFeeBps: getBookingFeeBps(),
       tickets: ticketTypes, // Send the array of tickets to backend
     };
   // UI Feedback
