@@ -339,6 +339,7 @@ router.get('/', async (req, res) => {
     }
 
     const venueName = show.venue?.name || 'Venue TBC';
+    const bookingFeeBps = typeof show.venue?.bookingFeeBps === 'number' ? show.venue.bookingFeeBps : 0;
     const ticketTypes = show.ticketTypes || [];
     const dateObj = new Date(show.date);
     const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -381,6 +382,7 @@ router.get('/', async (req, res) => {
                 button { padding: 10px 20px; background: #0056D2; color: white; border: none; border-radius: 4px; font-size: 1rem; cursor: pointer; }
                 button:disabled { background: #9E9E9E; cursor: not-allowed; }
                 .total { font-size: 1.2rem; font-weight: bold; margin-top: 10px; }
+                .total-fee { font-size: 1rem; font-weight: 400; color: #374151; }
                 .error { color: red; margin-top: 10px; }
                 /* ZOOM CONTROLS */
 .zoom-controls{
@@ -434,7 +436,7 @@ router.get('/', async (req, res) => {
                 </select>
                 <label for="quantity">Quantity:</label>
                 <input type="number" id="quantity" name="quantity" value="1" min="1" max="10" required />
-                <div class="total">Total: <span id="total-price">£0.00</span></div>
+                <div class="total">Total: <span id="total-price">£0.00</span> <span class="total-fee" id="total-fee">+ £0.00 b.f.</span></div>
                 <button type="submit" id="btn-buy">Continue to Payment</button>
                 <div class="error" id="error-message"></div>
             </form>
@@ -447,12 +449,22 @@ router.get('/', async (req, res) => {
                 const buyButton = document.getElementById('btn-buy');
                 const errorMessage = document.getElementById('error-message');
 
+                const bookingFeeBps = ${bookingFeeBps};
+                const bookingFeeForPrice = (pricePence) => bookingFeeBps > 0 ? Math.round(pricePence * bookingFeeBps / 10000) : 0;
+
                 function updatePrice() {
                     const selectedOption = ticketTypeSelect.options[ticketTypeSelect.selectedIndex];
                     const pricePence = Number(selectedOption.getAttribute('data-price')) || 0;
                     const quantity = Number(quantityInput.value) || 0;
+                    const feePerTicket = bookingFeeForPrice(pricePence);
+                    const totalFee = feePerTicket * quantity;
                     const total = (pricePence * quantity) / 100;
                     totalPriceSpan.innerText = '£' + total.toFixed(2);
+                    if (bookingFeeBps > 0) {
+                        document.getElementById('total-fee').innerText = '+ £' + (totalFee / 100).toFixed(2) + ' b.f.';
+                    } else {
+                        document.getElementById('total-fee').innerText = '';
+                    }
                     buyButton.disabled = quantity === 0 || pricePence === 0;
                 }
 
@@ -671,7 +683,9 @@ const res = await fetch('/checkout/session', {
     footer { background:var(--surface); border-top:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; box-shadow:0 -4px 10px rgba(0,0,0,0.03); z-index:4000; position:relative; }
   .basket-info { display:flex; flex-direction:column; }
     .basket-label { font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em; font-weight:600; color:var(--muted); }
-    .basket-total { font-family:'Outfit',sans-serif; font-size:1.5rem; font-weight:800; color:var(--primary); }
+    .basket-total { font-family:'Outfit',sans-serif; font-size:1.5rem; color:var(--primary); }
+    .basket-total-amount { font-weight:800; }
+    .basket-fee { font-weight:400; font-size:1rem; color:var(--text); margin-left:6px; }
     .basket-detail { font-size:0.85rem; color:var(--text); margin-top:2px; }
     
     .btn-checkout { background:var(--success); color:white; border:none; padding:12px 32px; border-radius:99px; font-size:1rem; font-weight:700; font-family:'Outfit',sans-serif; text-transform:uppercase; letter-spacing:0.05em; cursor:pointer; transition:all 0.2s; opacity:0.5; pointer-events:none; }
@@ -774,7 +788,7 @@ const res = await fetch('/checkout/session', {
       <div class="basket-seatinfo" id="ui-seatinfo"></div>
 
       <div class="basket-label">Total</div>
-      <div class="basket-total" id="ui-total">£0.00</div>
+      <div class="basket-total" id="ui-total"><span class="basket-total-amount">£0.00</span><span class="basket-fee" id="ui-fee"></span></div>
       <div class="basket-detail" id="ui-count">0 tickets selected</div>
     </div>
 
@@ -807,6 +821,8 @@ const res = await fetch('/checkout/session', {
 
   const rawLayout = ${mapData};
 const ticketTypes = ${ticketsData};
+const bookingFeeBps = ${bookingFeeBps};
+const bookingFeeForPrice = (pricePence) => bookingFeeBps > 0 ? Math.round(pricePence * bookingFeeBps / 10000) : 0;
 const showId = ${showIdStr};
 const heldSeatIds = new Set(${heldSeatsArray});
 
@@ -3310,9 +3326,16 @@ function findTableSingleGapGroups() {
 
 
     function updateBasket() {
-        let totalPence = 0; let count = 0;
-        selectedSeats.forEach(id => { totalPence += (seatPrices.get(id) || 0); count++; });
-        document.getElementById('ui-total').innerText = '£' + (totalPence / 100).toFixed(2);
+        let totalPence = 0; let count = 0; let bookingFeePence = 0;
+        selectedSeats.forEach(id => {
+          const pricePence = seatPrices.get(id) || 0;
+          totalPence += pricePence;
+          bookingFeePence += bookingFeeForPrice(pricePence);
+          count++;
+        });
+        document.querySelector('#ui-total .basket-total-amount').innerText = '£' + (totalPence / 100).toFixed(2);
+        const feeEl = document.getElementById('ui-fee');
+        feeEl.innerText = bookingFeePence > 0 ? ` + £${(bookingFeePence / 100).toFixed(2)} b.f.` : '';
         document.getElementById('ui-count').innerText = count + (count === 1 ? ' ticket' : ' tickets');
         const btn = document.getElementById('btn-next');
         if (count > 0) btn.classList.add('active'); else btn.classList.remove('active');
