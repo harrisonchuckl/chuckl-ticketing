@@ -1,7 +1,6 @@
 // backend/src/routes/admin-show-detail.ts
 import { Router } from 'express';
 import prisma from '../lib/db.js';
-import { clampBookingFeePence } from '../lib/booking-fee.js';
 import { OrderStatus } from '@prisma/client';
 
 const router = Router();
@@ -70,7 +69,7 @@ router.get('/shows/:id', async (req, res) => {
 router.post('/shows/:id/ticket-types', async (req, res) => {
   try {
     const showId = String(req.params.id);
-    const { name, pricePence, bookingFeePence, available, onSaleAt, offSaleAt } = req.body || {};
+    const { name, pricePence, available, onSaleAt, offSaleAt } = req.body || {};
 
     if (!name || pricePence == null || Number.isNaN(Number(pricePence))) {
       return res
@@ -78,13 +77,10 @@ router.post('/shows/:id/ticket-types', async (req, res) => {
         .json({ ok: false, message: 'name and pricePence are required' });
     }
 
-    const bookingFeePenceValue = clampBookingFeePence(Number(pricePence), bookingFeePence);
-
     const ticketType = await prisma.ticketType.create({
       data: {
         name: String(name),
         pricePence: Number(pricePence),
-        bookingFeePence: bookingFeePenceValue,
         available: available === '' || available === undefined ? null : Number(available),
         onSaleAt: onSaleAt ? new Date(onSaleAt) : null,
         offSaleAt: offSaleAt ? new Date(offSaleAt) : null,
@@ -106,19 +102,11 @@ router.post('/shows/:id/ticket-types', async (req, res) => {
 router.patch('/ticket-types/:ttid', async (req, res) => {
   try {
     const id = String(req.params.ttid);
-    const { name, pricePence, bookingFeePence, available, onSaleAt, offSaleAt } = req.body || {};
+    const { name, pricePence, available, onSaleAt, offSaleAt } = req.body || {};
 
     const data: any = {};
     if (name !== undefined) data.name = String(name);
     if (pricePence !== undefined) data.pricePence = Number(pricePence);
-    if (bookingFeePence !== undefined) {
-      const priceForFee = pricePence !== undefined ? Number(pricePence) : undefined;
-      if (priceForFee !== undefined) {
-        data.bookingFeePence = clampBookingFeePence(priceForFee, bookingFeePence);
-      } else {
-        data.bookingFeePence = Math.max(0, Math.round(Number(bookingFeePence)));
-      }
-    }
     if (available !== undefined) {
       data.available = available === '' || available === undefined ? null : Number(available);
     }
