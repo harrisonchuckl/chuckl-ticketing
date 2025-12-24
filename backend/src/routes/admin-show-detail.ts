@@ -93,7 +93,7 @@ const created = await prisma.ticketType.create({
   },
 });
 
-    return res.json({ ok: true, ticketType });
+return res.json({ ok: true, ticketType: created });
   } catch (e: any) {
     return res.status(500).json({ ok: false, message: e?.message ?? 'Failed to add ticket type' });
   }
