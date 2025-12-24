@@ -662,7 +662,25 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
 
     const baseEventType = (show as any).eventType || null;
 
-   // --- PRICE VARIABLES ---
+  // --- PRICE VARIABLES ---
+
+    // Booking fee helper (used by ticket list + mobile bar)
+    const venueBps = Number((venue as any)?.bookingFeeBps || 0);
+
+    // Prefer explicit per-ticket fee in pence if present, otherwise use bps, otherwise venue bps.
+    const bookingFeePenceFor = (t: any) => {
+      const base = Number(t?.pricePence || 0);
+
+      const direct = Number(t?.bookingFeePence);
+      if (Number.isFinite(direct) && direct >= 0) return Math.round(direct);
+
+      const useBps = Number(t?.bookingFeeBps || 0);
+      if (Number.isFinite(useBps) && useBps > 0) return Math.round((base * useBps) / 10000);
+
+      if (Number.isFinite(venueBps) && venueBps > 0) return Math.round((base * venueBps) / 10000);
+
+      return 0;
+    };
 
     const cheapest = ticketTypes[0];
     const fromPrice = cheapest ? pFmt(cheapest.pricePence) : undefined;
@@ -670,7 +688,7 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
     // Mobile bar needs the same "+ £x.xx b.f." as the other price displays
     // (assumes bookingFeePenceFor(t) already exists in your file from the earlier changes)
     const fromFeePence = cheapest ? bookingFeePenceFor(cheapest) : 0;
-    const fromFeeText = fromFeePence > 0 ? `+ ${pFmt(fromFeePence)} b.f.` : '';
+const fromFeeText = fromFeePence > 0 ? `+ ${pFmt(fromFeePence)}*` : '';
 
 
     // Schema.org
@@ -750,7 +768,7 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
     const rowClass = isMainColumn ? 'ticket-row main-col-row' : 'ticket-row widget-row';
 
     const bfPence = bookingFeePenceFor(t);
-    const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))} b.f.</span>` : '';
+const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}*</span>` : '';
 
     return `
       <a href="${avail ? `/checkout?showId=${encodeURIComponent(String(id))}&ticketId=${encodeURIComponent(String(t.id))}` : '#'}" class="${rowClass}" ${!avail ? 'style="pointer-events:none; opacity:0.6;"' : ''}>
@@ -1223,6 +1241,7 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
 .t-price-line { display:flex; gap:8px; align-items:baseline; justify-content:flex-end; flex-wrap:wrap; }
 .t-price { font-weight: 700; color: var(--primary); font-size: 1.1rem; }
 .t-fee { font-weight: 400; color: var(--text-muted); font-size: 0.95rem; }
+.fee-disclaimer { margin-top: 10px; font-size: 0.9rem; color: var(--text-muted); }
     .btn-buy {
       background: var(--brand); color: white; font-size: 0.85rem; font-weight: 700;
       padding: 8px 16px; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.05em;
@@ -1312,10 +1331,12 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
       
       <div>
           <span class="section-label">Overview</span>
-         <div class="rich-text">
+        <div class="rich-text">
   ${renderDescriptionHTML(show.description)}
 </div>
+<div class="fee-disclaimer">*All ticket prices are subject to booking fees.</div>
        ${doorTimeDisplay || ageGuidance || endTimeNote ? `
+
 <div class="info-inline">
   ${doorTimeDisplay ? `<div class="info-inline-item"><span class="info-inline-label">Doors open</span><span class="info-inline-value">${esc(doorTimeDisplay)}</span></div>` : ''}
   ${ageGuidance ? `<div class="info-inline-item"><span class="info-inline-label">Age guidance</span><span class="info-inline-value">${esc(ageGuidance)}</span></div>` : ''}
