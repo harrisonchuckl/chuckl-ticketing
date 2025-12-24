@@ -7,6 +7,13 @@ import { clampBookingFeePence } from "../lib/booking-fee.js";
 
 const router = Router();
 
+function toIntOrNull(v: any): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  return Math.trunc(n);
+}
+
 function requireUserId(req: any): string {
   const id = req?.user?.id;
   if (!id) throw new Error("Auth middleware did not attach req.user");
