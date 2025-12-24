@@ -55,11 +55,8 @@ function isNonEmptyString(val: string | null | undefined): val is string {
   return typeof val === "string" && val.length > 0;
 }
 
-function toIntOrNull(v: any): number | null {
-  if (v === null || v === undefined || v === "") return null;
-  const n = Number(v);
-  if (!Number.isFinite(n)) return null;
-  return Math.trunc(n);
+function isNonEmptyString(val: string | null | undefined): val is string {
+  return typeof val === "string" && val.length > 0;
 }
 
 
