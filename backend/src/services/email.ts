@@ -161,7 +161,7 @@ function renderTicketsHtml(order: NonNullable<OrderDeep>) {
             ${t.holderName ? `<div style="color:#64748b;font-size:12px;margin-top:2px;">${escapeHtml(t.holderName)}</div>` : ""}
           </td>
           <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px;color:#0f172a; text-align:right;">
-            ${seat ? `<span style="display:inline-block;padding:4px 10px;border-radius:999px;background:#f1f5f9;color:#0f172a;font-size:12px;">${escapeHtml(seat)}</span>` : `<span style="color:#94a3b8;font-size:12px;">—</span>`}
+            ${seat ? `<span style="display:inline-block;padding:4px 10px;border-radius:999px;:#f1f5f9;color:#0f172a;font-size:12px;">${escapeHtml(seat)}</span>` : `<span style="color:#94a3b8;font-size:12px;">—</span>`}
           </td>
         </tr>
       `;
@@ -181,15 +181,15 @@ function renderTicketsHtml(order: NonNullable<OrderDeep>) {
     ${escapeHtml(preheader)}
   </div>
 
-  <div style="margin:0;padding:0;background:#f3f4f6;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f4f6;padding:24px 0;">
+  <div style="margin:0;padding:0;:#f3f4f6;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style=":#f3f4f6;padding:24px 0;">
       <tr>
         <td align="center" style="padding:0 12px;">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
        style="width:100%;max-width:640px;margin:0 auto;">
             <!-- Header bar -->
             <tr>
-              <td style="background:${BRAND_COLOR};border-radius:14px 14px 0 0;padding:18px 18px 16px 18px;">
+              <td style=":${BRAND_COLOR};border-radius:14px 14px 0 0;padding:18px 18px 16px 18px;">
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                   <tr>
                     <td align="left" style="vertical-align:middle;">
@@ -211,7 +211,7 @@ function renderTicketsHtml(order: NonNullable<OrderDeep>) {
 
             <!-- Main card -->
             <tr>
-              <td style="background:#ffffff;border-radius:0 0 14px 14px;padding:22px 18px;border:1px solid #e5e7eb;border-top:none;">
+              <td style=":#ffffff;border-radius:0 0 14px 14px;padding:22px 18px;border:1px solid #e5e7eb;border-top:none;">
                 <div style="font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
                   <div style="font-size:22px;font-weight:800;line-height:1.2;margin:0 0 6px;">
                     ${customerName ? `${escapeHtml(customerName)}, ` : ""}you’ve got tickets!
@@ -225,7 +225,7 @@ function renderTicketsHtml(order: NonNullable<OrderDeep>) {
                       ? `
                     <div style="margin:0 0 18px;">
                       <a href="${escapeHtml(myTicketsUrl)}"
-                         style="display:inline-block;background:${BRAND_COLOR};color:#ffffff;text-decoration:none;font-weight:700;
+                         style="display:inline-block;:${BRAND_COLOR};color:#ffffff;text-decoration:none;font-weight:700;
                                 padding:12px 16px;border-radius:10px;font-size:14px;">
                         Go to My Tickets
                       </a>
@@ -240,7 +240,7 @@ function renderTicketsHtml(order: NonNullable<OrderDeep>) {
                       showImageUrl
                         ? `
                       <tr>
-                        <td style="background:#0b1220;">
+                        <td style=":#0b1220;">
                           <img src="${escapeHtml(showImageUrl)}" alt="${escapeHtml(showTitle)}"
                                style="display:block;width:100%;max-width:640px;height:auto;">
                         </td>
@@ -262,12 +262,12 @@ function renderTicketsHtml(order: NonNullable<OrderDeep>) {
                         }
 
                      <div style="margin-top:10px;">
-  <span style="display:inline-block;padding:6px 10px;border-radius:999px;background:#eef2ff;color:#1e3a8a;font-size:12px;font-weight:700;margin:0 8px 8px 0;">
+  <span style="display:inline-block;padding:6px 10px;border-radius:999px;:#eef2ff;color:#1e3a8a;font-size:12px;font-weight:700;margin:0 8px 8px 0;">
     ${ticketCount} × Ticket${ticketCount === 1 ? "" : "s"}
   </span>
   ${
     ticketTypeSummary
-      ? `<span style="display:inline-block;padding:6px 10px;border-radius:999px;background:#f1f5f9;color:#0f172a;font-size:12px;margin:0 8px 8px 0;">
+      ? `<span style="display:inline-block;padding:6px 10px;border-radius:999px;:#f1f5f9;color:#0f172a;font-size:12px;margin:0 8px 8px 0;">
            ${escapeHtml(ticketTypeSummary)}
          </span>`
       : ""
@@ -285,10 +285,10 @@ function renderTicketsHtml(order: NonNullable<OrderDeep>) {
                         <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
                                style="border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">
                           <tr>
-                            <th align="left" style="padding:10px 12px;background:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:12px;color:#64748b;font-weight:700;">
+                            <th align="left" style="padding:10px 12px;:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:12px;color:#64748b;font-weight:700;">
                               Serial / Name
                             </th>
-                            <th align="right" style="padding:10px 12px;background:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:12px;color:#64748b;font-weight:700;">
+                            <th align="right" style="padding:10px 12px;:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:12px;color:#64748b;font-weight:700;">
                               Seat
                             </th>
                           </tr>
