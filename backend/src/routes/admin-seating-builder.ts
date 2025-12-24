@@ -195,6 +195,7 @@ router.get("/builder/api/seatmaps/:showId", async (req, res) => {
           name: show.venue.name,
           city: show.venue.city,
           capacity: show.venue.capacity,
+          bookingFeeBps: (show.venue as any).bookingFeeBps ?? null,
         } : null,
       },
       activeSeatMap: activeSeatMap ? {
@@ -228,7 +229,7 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
     const showId = req.params.showId;
     const {
       seatMapId, saveAsTemplate, name, layoutType, config,
-      estimatedCapacity, konvaJson, showStatus, completionStatus, tickets,
+      estimatedCapacity, konvaJson, showStatus, completionStatus, tickets, bookingFeeBps,
     } = req.body ?? {};
 
     const showRow = await prisma.show.findUnique({ where: { id: showId } });
@@ -255,6 +256,14 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
 
     let saved;
     let existingSeatMap: { id: string } | null = null;
+    let nextBookingFeeBps: number | null = null;
+
+    if (bookingFeeBps !== undefined && bookingFeeBps !== null) {
+      const parsed = Number(bookingFeeBps);
+      if (Number.isFinite(parsed)) {
+        nextBookingFeeBps = Math.max(1000, Math.round(parsed));
+      }
+    }
 
     if (seatMapId) {
         // Look for map by ID
@@ -302,6 +311,13 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
             status: showStatus === "LIVE" ? "LIVE" : undefined
         }
     });
+
+    if (nextBookingFeeBps !== null && showRow.venueId) {
+      await prisma.venue.update({
+        where: { id: showRow.venueId },
+        data: { bookingFeeBps: nextBookingFeeBps },
+      });
+    }
 
     // --- Sync Ticket Types ---
     if (Array.isArray(tickets)) {
