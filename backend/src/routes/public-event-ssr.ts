@@ -645,9 +645,16 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
 
     const baseEventType = (show as any).eventType || null;
 
-    // --- PRICE VARIABLES ---
+   // --- PRICE VARIABLES ---
+
     const cheapest = ticketTypes[0];
     const fromPrice = cheapest ? pFmt(cheapest.pricePence) : undefined;
+
+    // Mobile bar needs the same "+ £x.xx b.f." as the other price displays
+    // (assumes bookingFeePenceFor(t) already exists in your file from the earlier changes)
+    const fromFeePence = cheapest ? bookingFeePenceFor(cheapest) : 0;
+    const fromFeeText = fromFeePence > 0 ? `+ ${pFmt(fromFeePence)} b.f.` : '';
+
 
     // Schema.org
     const offers = ticketTypes.map((t) => ({
@@ -1232,9 +1239,13 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
       background: white; padding: 16px 20px; box-shadow: 0 -4px 20px rgba(0,0,0,0.1); z-index: 100;
       align-items: center; justify-content: space-between; border-top: 1px solid var(--border);
     }
-    .mob-price { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; }
-    .mob-val { font-size: 1.2rem; font-weight: 800; color: var(--primary); }
-    .btn-mob-cta {
+   .mob-price { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; }
+
+.mob-line{ display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
+.mob-val { font-size: 1.2rem; font-weight: 800; color: var(--primary); }
+.mob-fee { font-size: 0.95rem; font-weight: 400; color: var(--text-muted); }
+
+.btn-mob-cta {
       background: var(--brand); color: white; padding: 12px 24px; border-radius: 8px; font-weight: 700; font-size: 1rem;
     }
 
@@ -1388,10 +1399,13 @@ ${accessibilityReasons
 
   ${renderRelatedShows()}
 
-  <div class="mobile-bar">
+   <div class="mobile-bar">
     <div>
       <div class="mob-price">From</div>
-      <div class="mob-val">${fromPrice ? esc(fromPrice) : '£0.00'}</div>
+      <div class="mob-line">
+        <div class="mob-val">${fromPrice ? esc(fromPrice) : '£0.00'}</div>
+        ${fromFeeText ? `<div class="mob-fee">${esc(fromFeeText)}</div>` : ''}
+      </div>
     </div>
     <a href="#main-tickets" class="btn-mob-cta">BOOK TICKETS</a>
   </div>
