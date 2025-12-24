@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { Prisma, PrismaClient, ShowStatus } from "@prisma/client";
 import { verifyJwt } from "../utils/security.js";
+import { clampBookingFeePence } from "../lib/booking-fee.js";
 
 const prisma = new PrismaClient();
 const router = Router();
@@ -228,9 +229,18 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
   try {
     const showId = req.params.showId;
     const {
-      seatMapId, saveAsTemplate, name, layoutType, config,
-      estimatedCapacity, konvaJson, showStatus, completionStatus, tickets, bookingFeeBps,
-    } = req.body ?? {};
+  seatMapId,
+  saveAsTemplate,
+  name,
+  layoutType,
+  config,
+  estimatedCapacity,
+  konvaJson,
+  showStatus,
+  completionStatus,
+  tickets,
+} = req.body ?? {};
+
 
     const showRow = await prisma.show.findUnique({ where: { id: showId } });
     if (!showRow) return res.status(404).json({ error: "Show not found" });
@@ -256,15 +266,8 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
 
     let saved;
     let existingSeatMap: { id: string } | null = null;
-    let nextBookingFeeBps: number | null = null;
 
-    if (bookingFeeBps !== undefined && bookingFeeBps !== null) {
-      const parsed = Number(bookingFeeBps);
-      if (Number.isFinite(parsed)) {
-        nextBookingFeeBps = Math.max(1000, Math.round(parsed));
-      }
-    }
-
+    
     if (seatMapId) {
         // Look for map by ID
         const scope: any[] = [{ showId }];
@@ -313,10 +316,8 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
     });
 
     if (nextBookingFeeBps !== null && showRow.venueId) {
-      await prisma.venue.update({
-        where: { id: showRow.venueId },
-        data: { bookingFeeBps: nextBookingFeeBps },
-      });
+      // Booking fee is now stored per ticket type (TicketType.bookingFeePence).
+
     }
 
     // --- Sync Ticket Types ---
@@ -325,11 +326,18 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
       for (const t of tickets) {
         if (!t.name) continue;
         const pricePence = Math.round(Number(t.price || 0) * 100);
-        await prisma.ticketType.create({
-          data: {
-            showId, name: t.name, pricePence, available: null,
-          },
-        });
+       const bookingFeePence = clampBookingFeePence(pricePence, (t as any).bookingFeePence);
+
+await prisma.ticketType.create({
+  data: {
+    showId,
+    name: String(t.name),
+    pricePence,
+    bookingFeePence,
+    available: null,
+  },
+});
+
       }
     }
 
