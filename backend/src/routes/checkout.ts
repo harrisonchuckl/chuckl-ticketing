@@ -49,9 +49,9 @@ router.post("/session", async (req, res) => {
     const hasSeats = seatIds.length > 0;
 
     const show = await prisma.show.findUnique({
-      where: { id: String(showId) },
-      select: { id: true, title: true },
-    });
+  where: { id: String(showId) },
+  include: { venue: true },
+});
 
     if (!show) {
       console.warn("checkout/session missing show", { showId });
@@ -59,6 +59,33 @@ router.post("/session", async (req, res) => {
     }
 
     const showTitle = show.title ?? "Event ticket";
+    const venueBookingFeeBps = Number((show as any)?.venue?.bookingFeeBps || 0);
+
+const ticketTypeIds = Array.from(new Set(
+  (Array.isArray(items) && items.length)
+    ? items.map((it: any) => String(it.ticketTypeId || '')).filter(Boolean)
+    : [String(ticketTypeId || '')].filter(Boolean)
+));
+
+const ticketTypeRows = ticketTypeIds.length
+  ? await prisma.ticketType.findMany({ where: { id: { in: ticketTypeIds }, showId: String(show.id) } })
+  : [];
+
+const ticketTypeById = new Map<string, any>(ticketTypeRows.map((t: any) => [String(t.id), t]));
+
+const bookingFeePenceFor = (tt: any) => {
+  const base = Number(tt?.pricePence || 0);
+
+  const direct = Number(tt?.bookingFeePence);
+  if (Number.isFinite(direct) && direct >= 0) return Math.round(direct);
+
+  const bps = Number(tt?.bookingFeeBps);
+  const useBps = (Number.isFinite(bps) && bps > 0) ? bps : venueBookingFeeBps;
+  if (Number.isFinite(useBps) && useBps > 0) return Math.round((base * useBps) / 10000);
+
+  return 0;
+};
+
 
     // Build line items
     let amountPence = 0;
@@ -69,12 +96,18 @@ router.post("/session", async (req, res) => {
     if (Array.isArray(items) && items.length > 0) {
       // Tiered / multi-band checkout
       for (const it of items) {
-        const itQty = Number(it?.quantity || 0);
-        const itUnit = Number(it?.unitPricePence || 0);
+        const itQty = Number(it.quantity || 0);
+const itTicketTypeId = String(it.ticketTypeId || '').trim();
+const tt = ticketTypeById.get(itTicketTypeId);
 
-        if (!Number.isFinite(itQty) || !Number.isFinite(itUnit) || itQty <= 0 || itUnit <= 0) {
-          return res.status(400).json({ ok: false, message: "Invalid tiered items" });
-        }
+const baseUnit = Number(tt?.pricePence || 0);
+const bfUnit = tt ? bookingFeePenceFor(tt) : 0;
+const itUnit = baseUnit + bfUnit;
+
+if (!itQty || itQty < 1 || !itUnit || itUnit < 1) {
+  return res.status(400).json({ ok: false, message: "Invalid ticket quantity or ticket type" });
+}
+
 
         totalQty += Math.round(itQty);
         amountPence += Math.round(itUnit) * Math.round(itQty);
@@ -101,11 +134,10 @@ router.post("/session", async (req, res) => {
     } else {
       // GA / single-price fallback
       const qty = Number(quantity);
-      const unitPence = Number(unitPricePence);
 
-      if (!Number.isFinite(qty) || !Number.isFinite(unitPence) || qty <= 0 || unitPence <= 0) {
-        console.warn("checkout/session validation failed", { showId, qty, unitPence });
-        return res.status(400).json({ ok: false, message: "showId, quantity and unitPricePence are required" });
+      if (!Number.isFinite(qty) || qty <= 0) {
+        console.warn("checkout/session validation failed", { showId, qty });
+        return res.status(400).json({ ok: false, message: "showId and quantity are required" });
       }
 
       // GA checkout MUST include ticketTypeId so we can create Ticket rows later
@@ -115,6 +147,23 @@ router.post("/session", async (req, res) => {
           ok: false,
           message: "ticketTypeId is required for General Admission checkout",
         });
+      }
+
+      // Ignore client unitPricePence; compute from real ticket type + booking fee
+      const tt = ticketTypeById.get(String(ticketTypeId || ""));
+      const baseUnit = Number(tt?.pricePence || 0);
+      const bfUnit = tt ? bookingFeePenceFor(tt) : 0;
+      const unitPence = baseUnit + bfUnit;
+
+      if (!Number.isFinite(unitPence) || unitPence <= 0) {
+        console.warn("checkout/session invalid ticketTypeId or price", {
+          showId,
+          ticketTypeId,
+          baseUnit,
+          bfUnit,
+          unitPence,
+        });
+        return res.status(400).json({ ok: false, message: "Invalid ticketTypeId" });
       }
 
       totalQty = Math.round(qty);
@@ -131,6 +180,7 @@ router.post("/session", async (req, res) => {
         },
       ];
     }
+
 
     // Create Order (PENDING)
     const order = await prisma.order.create({
@@ -339,7 +389,23 @@ router.get('/', async (req, res) => {
     }
 
     const venueName = show.venue?.name || 'Venue TBC';
-    const ticketTypes = show.ticketTypes || [];
+const venueBookingFeeBps = Number((show.venue as any)?.bookingFeeBps || 0);
+
+// Attach an "effective" per-ticket booking fee in pence (prefer explicit pence if present)
+const ticketTypes = (show.ticketTypes || []).map((t: any) => {
+  const base = Number(t.pricePence || 0);
+
+  const directPence = Number((t as any).bookingFeePence);
+  if (Number.isFinite(directPence) && directPence >= 0) {
+    return { ...t, bookingFeePenceEffective: Math.round(directPence) };
+  }
+
+  const bps = Number((t as any).bookingFeeBps);
+  const useBps = (Number.isFinite(bps) && bps > 0) ? bps : venueBookingFeeBps;
+
+  const calc = (Number.isFinite(useBps) && useBps > 0) ? Math.round((base * useBps) / 10000) : 0;
+  return { ...t, bookingFeePenceEffective: Math.max(0, calc) };
+});
     const dateObj = new Date(show.date);
     const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -364,7 +430,11 @@ router.get('/', async (req, res) => {
     if (!konvaData) {
         const showIdStr = JSON.stringify(show.id);
         // NOTE: pFmt is now defined above to fix the TypeScript error.
-        const ticketOptions = ticketTypes.map(t => `<option value="${t.id}" data-price="${t.pricePence}">${t.name} - ${pFmt(t.pricePence)}</option>`).join('');
+const ticketOptions = ticketTypes.map((t: any) => {
+  const bf = Number(t.bookingFeePenceEffective || 0);
+  const bfText = bf > 0 ? ` + ${pFmt(bf)} b.f.` : '';
+  return `<option value="${t.id}" data-price="${t.pricePence}" data-fee="${bf}">${t.name} - ${pFmt(t.pricePence)}${bfText}</option>`;
+}).join('');
         
         // Fallback HTML page with a basic form for GA purchase
         res.type('html').send(`<!doctype html>
@@ -448,13 +518,23 @@ router.get('/', async (req, res) => {
                 const errorMessage = document.getElementById('error-message');
 
                 function updatePrice() {
-                    const selectedOption = ticketTypeSelect.options[ticketTypeSelect.selectedIndex];
-                    const pricePence = Number(selectedOption.getAttribute('data-price')) || 0;
-                    const quantity = Number(quantityInput.value) || 0;
-                    const total = (pricePence * quantity) / 100;
-                    totalPriceSpan.innerText = '£' + total.toFixed(2);
-                    buyButton.disabled = quantity === 0 || pricePence === 0;
-                }
+                    const selectedOption = ticketTypeSelect.options[ticketTypeSelect.selectedIndex];
+                    const pricePence = Number(selectedOption.getAttribute('data-price')) || 0;
+                    const feePence = Number(selectedOption.getAttribute('data-fee')) || 0;
+                    const quantity = Number(quantityInput.value) || 0;
+
+                    const baseTotalPence = pricePence * quantity;
+                    const feeTotalPence = feePence * quantity;
+
+                    const baseText = '£' + (baseTotalPence / 100).toFixed(2);
+                    const feeText = '£' + (feeTotalPence / 100).toFixed(2);
+
+                    totalPriceSpan.innerHTML =
+                      '<strong>' + baseText + '</strong>' +
+                      (feeTotalPence > 0 ? ' <span style="font-weight:400;">+ ' + feeText + ' b.f.</span>' : '');
+
+                    buyButton.disabled = quantity === 0 || pricePence === 0;
+                }
 
                 ticketTypeSelect.addEventListener('change', updatePrice);
                 quantityInput.addEventListener('input', updatePrice);
@@ -672,6 +752,8 @@ const res = await fetch('/checkout/session', {
   .basket-info { display:flex; flex-direction:column; }
     .basket-label { font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em; font-weight:600; color:var(--muted); }
     .basket-total { font-family:'Outfit',sans-serif; font-size:1.5rem; font-weight:800; color:var(--primary); }
+    .basket-amt { font-weight:800; }
+.basket-fee { font-family:'Inter',sans-serif; font-size:0.95rem; font-weight:400; color:var(--muted); margin-left:8px; }
     .basket-detail { font-size:0.85rem; color:var(--text); margin-top:2px; }
     
     .btn-checkout { background:var(--success); color:white; border:none; padding:12px 32px; border-radius:99px; font-size:1rem; font-weight:700; font-family:'Outfit',sans-serif; text-transform:uppercase; letter-spacing:0.05em; cursor:pointer; transition:all 0.2s; opacity:0.5; pointer-events:none; }
@@ -852,7 +934,8 @@ let IS_TIERED_PRICING = false;
 
     
     const selectedSeats = new Set();
-const seatPrices = new Map();
+const seatPrices = new Map(); // base ticket price (pence)
+const seatFees = new Map();   // booking fee (pence) per ticket
 const seatMeta = new Map();
 // rowKey -> [{ id, x, y, unavailable, node }]
 const rowMap = new Map();
@@ -2086,8 +2169,11 @@ const ticketIdResolved =
 
 const ticketColor = getTicketColor(ticketIdResolved);
 
-const price = tType ? tType.pricePence : 0;
+const price = tType ? Number(tType.pricePence || 0) : 0;
+const bookingFeePence = tType ? Number(tType.bookingFeePenceEffective || 0) : 0;
+
 seatPrices.set(seat._id, price);
+seatFees.set(seat._id, bookingFeePence);
 
   
                const label = seat.getAttr('label') || seat.name() || 'Seat';
@@ -2140,12 +2226,14 @@ const viewImg =
 }
 
 
-                        seatMeta.set(seat._id, {
+                       seatMeta.set(seat._id, {
   label,
   info,
   viewImg,
   price,
+  bookingFeePence,
   ticketIdRaw: rawTicketId,
+
   ticketId: ticketIdResolved,
   ticketColor,
   ticketName: tType ? tType.name : 'Standard',
@@ -2320,7 +2408,11 @@ if (!pos) {
     pos = { x: p.x, y: p.y };
   }
 
-  const priceStr = '£' + ((meta.price || 0) / 100).toFixed(2);
+const baseStr = '£' + ((meta.price || 0) / 100).toFixed(2);
+const bfStr = '£' + ((meta.bookingFeePence || 0) / 100).toFixed(2);
+const priceStr = (meta.bookingFeePence && Number(meta.bookingFeePence) > 0)
+  ? (baseStr + ' + ' + bfStr + ' b.f.')
+  : baseStr;
 
   let html =
     '<span class="tt-title">' + meta.label + '</span>' +
@@ -2672,7 +2764,15 @@ const usedTickets = sortedTickets.filter(t => usedIdSet.has(String(t.id)));
     legendBits.push(
       '<div class="legend-item">' +
         '<div class="dot" style="background:' + c + ';border-color:' + c + ';"></div>' +
-        escHtml(t.name) + ' • ' + escHtml(pFmtLocal(t.pricePence)) +
+(() => {
+  const bf = Number(t.bookingFeePenceEffective || 0);
+  const feeHtml = bf > 0
+    ? (' <span style="font-weight:400;color:var(--muted);">+ ' + escHtml(pFmtLocal(bf)) + ' b.f.</span>')
+    : '';
+  return escHtml(t.name) + ' • ' +
+    '<span style="font-weight:800;">' + escHtml(pFmtLocal(t.pricePence)) + '</span>' +
+    feeHtml;
+})() +
       '</div>'
     );
   });
@@ -2701,7 +2801,13 @@ const usedTickets = sortedTickets.filter(t => usedIdSet.has(String(t.id)));
         '<tr>' +
           '<td><span class="tpp-swatch" style="background:' + c + ';"></span></td>' +
           '<td>' + escHtml(t.name) + '</td>' +
-          '<td>' + escHtml(pFmtLocal(t.pricePence)) + '</td>' +
+(() => {
+  const bf = Number(t.bookingFeePenceEffective || 0);
+  const feeHtml = bf > 0
+    ? (' <span style="font-weight:400;color:var(--muted);">+ ' + escHtml(pFmtLocal(bf)) + ' b.f.</span>')
+    : '';
+  return '<td><span style="font-weight:800;">' + escHtml(pFmtLocal(t.pricePence)) + '</span>' + feeHtml + '</td>';
+})() +
         '</tr>'
       );
     }).join('');
@@ -3310,10 +3416,22 @@ function findTableSingleGapGroups() {
 
 
     function updateBasket() {
-        let totalPence = 0; let count = 0;
-        selectedSeats.forEach(id => { totalPence += (seatPrices.get(id) || 0); count++; });
-        document.getElementById('ui-total').innerText = '£' + (totalPence / 100).toFixed(2);
-        document.getElementById('ui-count').innerText = count + (count === 1 ? ' ticket' : ' tickets');
+      let baseTotalPence = 0; let feeTotalPence = 0; let count = 0;
+selectedSeats.forEach(id => {
+  baseTotalPence += (seatPrices.get(id) || 0);
+  feeTotalPence += (seatFees.get(id) || 0);
+  count++;
+});
+
+const baseText = '£' + (baseTotalPence / 100).toFixed(2);
+const feeText = '£' + (feeTotalPence / 100).toFixed(2);
+
+const totalEl = document.getElementById('ui-total');
+totalEl.innerHTML =
+  '<span class="basket-amt">' + baseText + '</span>' +
+  (feeTotalPence > 0 ? '<span class="basket-fee"> + ' + feeText + ' b.f.</span>' : '');
+
+document.getElementById('ui-count').innerText = count + (count === 1 ? ' ticket' : ' tickets');
         const btn = document.getElementById('btn-next');
         if (count > 0) btn.classList.add('active'); else btn.classList.remove('active');
         // Mobile: show seat "info" (lowercase i) as a line above Total
