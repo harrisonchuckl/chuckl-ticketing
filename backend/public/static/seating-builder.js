@@ -380,19 +380,49 @@ function getBandForPricePence(pricePence) {
   return BOOKING_FEE_BANDS[BOOKING_FEE_BANDS.length - 1];
 }
 
+function minRecommendedFeePenceForPrice(pricePence) {
+  const p = Math.max(0, Math.round(Number(pricePence) || 0));
+  if (p <= 0) return 0;
+
+  const band = getBandForPricePence(p);
+  if (!band || !band.minPricePence) return 0;
+
+  // Derive min % from the band base (e.g. 550/5000 = 11%)
+  const minPct = band.minFeePence / band.minPricePence;
+  return Math.round(p * minPct);
+}
+
+function maxRecommendedFeePenceForPrice(pricePence) {
+  const p = Math.max(0, Math.round(Number(pricePence) || 0));
+  if (p <= 0) return 0;
+
+  const band = getBandForPricePence(p);
+  if (!band || !band.minPricePence || !band.maxFeePence) return 0;
+
+  // Derive max % from the band base (e.g. 900/5000 = 18%)
+  const maxPct = band.maxFeePence / band.minPricePence;
+  return Math.round(p * maxPct);
+}
+
 function clampBookingFeePenceClient(pricePence, bookingFeePence) {
-  const band = getBandForPricePence(pricePence);
+  const p = Math.max(0, Math.round(Number(pricePence) || 0));
   const fee = Math.max(0, Math.round(Number(bookingFeePence) || 0));
-  return Math.max(band.minFeePence, fee);
+  const minFee = minRecommendedFeePenceForPrice(p);
+  return Math.max(minFee, fee);
 }
 
 function bookingFeeMetaText(pricePence) {
-  const band = getBandForPricePence(pricePence);
-  if (!band.maxFeePence) return "";
-  return `Recommended £${penceToPoundsStr(band.minFeePence)}–£${penceToPoundsStr(
-    band.maxFeePence
+  const p = Math.max(0, Math.round(Number(pricePence) || 0));
+  const band = getBandForPricePence(p);
+  if (!band || !band.maxFeePence) return "";
+
+  const minFee = minRecommendedFeePenceForPrice(p);
+  const maxFee = maxRecommendedFeePenceForPrice(p);
+
+  return `Recommended £${penceToPoundsStr(minFee)}–£${penceToPoundsStr(
+    maxFee
   )} booking fee per ticket. Minimum £${penceToPoundsStr(
-    band.minFeePence
+    minFee
   )}. You receive 50% of the net booking fee.`;
 }
 
@@ -5643,14 +5673,9 @@ const commitPrice = () => {
     const p = parseFloat(raw);
     ticket.price = Number.isFinite(p) ? p : 0;
 
-    // IMPORTANT: whenever price changes, reset booking fee to the MIN for that price band
     const pricePence = poundsToPence(ticket.price);
-    if (pricePence <= 0) {
-      ticket.bookingFeePence = 0;
-    } else {
-      const band = getBandForPricePence(pricePence);
-      ticket.bookingFeePence = band.minFeePence;
-    }
+    // Always snap to the new minimum whenever price changes
+    ticket.bookingFeePence = pricePence <= 0 ? 0 : clampBookingFeePenceClient(pricePence, 0);
   }
 
   renderTicketingPanel();
@@ -5754,7 +5779,7 @@ const syncFeeUI = () => {
   ticket.bookingFeePence = pricePence <= 0 ? 0 : clamped;
 
   feeInput.value = ticket.bookingFeePence ? penceToPoundsStr(ticket.bookingFeePence) : "";
-  feeInput.placeholder = penceToPoundsStr(band.minFeePence);
+feeInput.placeholder = penceToPoundsStr(minRecommendedFeePenceForPrice(pricePence));
   feeMeta.textContent = bookingFeeMetaText(pricePence);
 };
 
