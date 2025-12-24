@@ -18,9 +18,6 @@ const LOCAL_LOGO_FILENAME = "TixAll BW on Blue Background.png";
 let _cachedLocalLogoDataUri: string | null = null;
 
 function getEmailLogoUrl(): string {
-  // If you provide a public URL, use it (best for all email clients)
-  if (LOGO_URL) return LOGO_URL;
-
   // Otherwise, embed the local PNG as a data URI (works well in Apple Mail)
   if (_cachedLocalLogoDataUri !== null) return _cachedLocalLogoDataUri;
 
@@ -39,9 +36,13 @@ function getEmailLogoUrl(): string {
     }
   }
 
+  // Fallback to public URL only if local file isn't available
+  if (LOGO_URL) return LOGO_URL;
+
   _cachedLocalLogoDataUri = "";
   return "";
 }
+
 const MY_TICKETS_URL_BASE = (process.env.MY_TICKETS_URL_BASE || "").trim(); // optional, e.g. https://chuckl.club/my-tickets?order=
 
 const INCLUDE_SUMMARY_PAGE =
@@ -189,7 +190,7 @@ function renderTicketsHtml(order: NonNullable<OrderDeep>) {
        style="width:100%;max-width:640px;margin:0 auto;">
             <!-- Header bar -->
             <tr>
-              <td style=":${BRAND_COLOR};border-radius:14px 14px 0 0;padding:18px 18px 16px 18px;">
+<td style="background:${BRAND_COLOR};border-radius:14px 14px 0 0;padding:18px 18px 16px 18px;">
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                   <tr>
                     <td align="left" style="vertical-align:middle;">
