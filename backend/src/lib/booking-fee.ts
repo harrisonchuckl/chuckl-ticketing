@@ -38,8 +38,12 @@ export function clampBookingFeePence(
   if (!Number.isFinite(safePrice) || safePrice <= 0) return 0;
 
   const band = getBookingFeeBand(safePrice);
-  const minFee = band.minFeePence;
+
+  // IMPORTANT: min is % of the actual ticket price, not the band's base value
+  const minFee = Math.round((safePrice * Number(band.feePercent || 0)) / 100);
+
   const parsed = Number(bookingFeePence);
   if (!Number.isFinite(parsed)) return minFee;
+
   return Math.max(minFee, Math.round(parsed));
 }
