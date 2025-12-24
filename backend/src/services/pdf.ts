@@ -146,56 +146,78 @@ doc: InstanceType<typeof PDFDocument>,
   const leftX = cardX + 24;
   let y = cardY + 22;
 
-  // Title
-  doc.fillColor("#111").font("Helvetica-Bold").fontSize(20).text(meta.showTitle, leftX, y, {
-    width: cardW - 24 - 220,
-  });
-  y += 30;
+  const contentW = cardW - 24 - 220; // leaves room for QR on the right
+  const stripTopY = cardY + cardH - 86; // where the bottom strip starts
+  const maxTopContentY = stripTopY - 14; // safety gap before the strip
 
-  // Ticket type + price line
+  // Title (auto-fit + never overlap)
+  doc.fillColor("#111").font("Helvetica-Bold");
+
+  const titleSizes = [20, 18, 16, 14, 12];
+  let chosenTitleSize = 20;
+
+  for (const sz of titleSizes) {
+    doc.fontSize(sz);
+    const h = doc.heightOfString(meta.showTitle, { width: contentW });
+    if (y + h <= maxTopContentY) {
+      chosenTitleSize = sz;
+      break;
+    }
+    chosenTitleSize = sz;
+  }
+
+  doc.fontSize(chosenTitleSize).text(meta.showTitle, leftX, y, { width: contentW });
+  y = doc.y + 10;
+
+  // Ticket type + price line (uses doc.y so it never prints on top of the title)
   const tt = ticket.ticketType ?? "Ticket";
   const price = ticket.price ? ` – ${ticket.price}` : "";
   doc.fillColor("#111").font("Helvetica-Bold").fontSize(13).text(`${tt}${price}`, leftX, y, {
-    width: cardW - 24 - 220,
+    width: contentW,
   });
-  y += 22;
+  y = doc.y + 10;
 
-  // Venue + date/time lines
+  // Venue + date/time lines (also safe for wrapping)
   doc.fillColor("#222").font("Helvetica").fontSize(11);
 
   if (meta.venueName || meta.venueAddress) {
     const venueLine = [meta.venueName, meta.venueAddress].filter(Boolean).join(", ");
-    doc.text(venueLine, leftX, y, { width: cardW - 24 - 220 });
-    y += 16;
+    doc.text(venueLine, leftX, y, { width: contentW });
+    y = doc.y + 6;
   }
 
   const dateBits = [meta.dateText, meta.timeText].filter(Boolean).join(" at ");
   if (dateBits) {
-    doc.text(dateBits, leftX, y, { width: cardW - 24 - 220 });
-    y += 16;
+    doc.text(dateBits, leftX, y, { width: contentW });
+    y = doc.y + 6;
   }
 
   if (meta.doorsOpenText) {
-    doc.text(`Doors open: ${meta.doorsOpenText}`, leftX, y, { width: cardW - 24 - 220 });
-    y += 16;
+    doc.text(`Doors open: ${meta.doorsOpenText}`, leftX, y, { width: contentW });
+    y = doc.y + 6;
   }
 
   if (meta.additionalInfoLines?.length) {
     for (const line of meta.additionalInfoLines) {
-      doc.text(line, leftX, y, { width: cardW - 24 - 220 });
-      y += 16;
+      doc.text(line, leftX, y, { width: contentW });
+      y = doc.y + 6;
     }
   }
 
   // Booking line (optional)
   if (meta.bookedBy || meta.bookedAtText) {
-    y += 10;
-    const booked = [meta.bookedBy ? `Booked by ${meta.bookedBy}` : null, meta.bookedAtText ? `on ${meta.bookedAtText}` : null]
+    y += 6;
+    const booked = [
+      meta.bookedBy ? `Booked by ${meta.bookedBy}` : null,
+      meta.bookedAtText ? `on ${meta.bookedAtText}` : null,
+    ]
       .filter(Boolean)
       .join(" ");
-    doc.fillColor("#666").fontSize(9).text(booked, leftX, y, { width: cardW - 24 - 220 });
-    doc.fillColor("#222").fontSize(11);
-    y += 16;
+
+    doc.fillColor("#666").fontSize(9).text(booked, leftX, y, { width: contentW });
+    y = doc.y + 6;
+
+    doc.fillColor("#222").font("Helvetica").fontSize(11);
   }
 
   // Ticket details strip
