@@ -563,12 +563,12 @@ router.get('/event/:id', async (req, res) => {
       where: { id },
       include: {
         venue: {
-          select: { id: true, name: true, address: true, city: true, postcode: true },
-        },
-        ticketTypes: {
-          select: { id: true, name: true, pricePence: true, available: true },
-          orderBy: { pricePence: 'asc' },
-        },
+  select: { id: true, name: true, address: true, city: true, postcode: true, bookingFeeBps: true },
+},
+ticketTypes: {
+  // IMPORTANT: include ALL fields so any saved booking-fee fields come through
+  orderBy: { pricePence: 'asc' },
+},
       },
     });
 
@@ -717,27 +717,51 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
 
     // Helper to generate ticket list HTML
     const renderTicketList = (isMainColumn = false) => {
-        if (!ticketTypes.length) {
-            return '<div style="padding:20px; text-align:center; font-size:0.9rem; color:var(--text-muted);">Tickets coming soon</div>';
-        }
-        return ticketTypes.map(t => {
-             const avail = (t.available === null || t.available > 0);
-             const rowClass = isMainColumn ? 'ticket-row main-col-row' : 'ticket-row widget-row';
-             
-             return `
-             <a href="${avail ? `/checkout?showId=${encodeURIComponent(show.id)}&ticketId=${t.id}` : '#'}" class="${rowClass}" ${!avail ? 'style="pointer-events:none; opacity:0.6;"' : ''}>
-               <div class="t-main">
-                 <div class="t-name">${esc(t.name)}</div>
-                 <div class="t-desc">${avail ? 'Available' : 'Sold Out'}</div>
-               </div>
-               <div class="t-action">
-                 <span class="t-price">${esc(pFmt(t.pricePence))}</span>
-                 <span class="${avail ? 'btn-buy' : 'btn-sold'}">${avail ? 'BOOK TICKETS' : 'Sold Out'}</span>
-               </div>
-             </a>
-             `;
-          }).join('');
-    };
+  if (!ticketTypes.length) {
+    return '<div style="padding:20px; text-align:center; font-size:0.9rem; color:var(--text-muted);">Tickets coming soon</div>';
+  }
+
+  const venueBps = Number((venue as any)?.bookingFeeBps || 0);
+
+  // Prefer explicit per-ticket fee in pence if present, otherwise use bps, otherwise venue bps.
+  const bookingFeePenceFor = (t: any) => {
+    const base = Number(t?.pricePence || 0);
+
+    const direct = Number(t?.bookingFeePence);
+    if (Number.isFinite(direct) && direct >= 0) return Math.round(direct);
+
+    const bps = Number(t?.bookingFeeBps);
+    const useBps = (Number.isFinite(bps) && bps > 0) ? bps : venueBps;
+    if (Number.isFinite(useBps) && useBps > 0) return Math.round((base * useBps) / 10000);
+
+    return 0;
+  };
+
+  return ticketTypes.map((t: any) => {
+    const avail = (t.available === null || t.available > 0);
+    const rowClass = isMainColumn ? 'ticket-row main-col-row' : 'ticket-row widget-row';
+
+    const bfPence = bookingFeePenceFor(t);
+    const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))} b.f.</span>` : '';
+
+    return `
+      <a href="${avail ? `/checkout?showId=${encodeURIComponent(String(id))}&ticketId=${encodeURIComponent(String(t.id))}` : '#'}" class="${rowClass}" ${!avail ? 'style="pointer-events:none; opacity:0.6;"' : ''}>
+        <div class="t-main">
+          <div class="t-name">${esc(t.name)}</div>
+          <div class="t-availability">${avail ? 'Available' : 'Unavailable'}</div>
+        </div>
+
+        <div class="t-action">
+          <div class="t-price-line">
+            <span class="t-price">${esc(pFmt(t.pricePence))}</span>
+            ${bfHtml}
+          </div>
+          <div class="btn-buy">Book tickets</div>
+        </div>
+      </a>
+    `;
+  }).join('');
+};
 
     const renderRelatedShows = () => {
       if (!relatedShows.length) return '';
@@ -1188,7 +1212,9 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
     .t-name { font-weight: 700; color: var(--primary); font-size: 1rem; }
     .t-desc { font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
     .t-action { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px;}
-    .t-price { font-weight: 700; color: var(--primary); font-size: 1.1rem; }
+.t-price-line { display:flex; gap:8px; align-items:baseline; justify-content:flex-end; flex-wrap:wrap; }
+.t-price { font-weight: 700; color: var(--primary); font-size: 1.1rem; }
+.t-fee { font-weight: 400; color: var(--text-muted); font-size: 0.95rem; }
     .btn-buy {
       background: var(--brand); color: white; font-size: 0.85rem; font-weight: 700;
       padding: 8px 16px; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.05em;
