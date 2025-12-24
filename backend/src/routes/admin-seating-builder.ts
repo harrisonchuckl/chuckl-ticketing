@@ -196,7 +196,7 @@ router.get("/builder/api/seatmaps/:showId", async (req, res) => {
           name: show.venue.name,
           city: show.venue.city,
           capacity: show.venue.capacity,
-          bookingFeeBps: (show.venue as any).bookingFeeBps ?? null,
+          // booking fee is now per ticket type (TicketType.bookingFeePence)
         } : null,
       },
       activeSeatMap: activeSeatMap ? {
@@ -315,28 +315,27 @@ router.post("/builder/api/seatmaps/:showId", async (req, res) => {
         }
     });
 
-    if (nextBookingFeeBps !== null && showRow.venueId) {
-      // Booking fee is now stored per ticket type (TicketType.bookingFeePence).
-
-    }
+        // Booking fee is now stored per ticket type (TicketType.bookingFeePence).
 
     // --- Sync Ticket Types ---
     if (Array.isArray(tickets)) {
       await prisma.ticketType.deleteMany({ where: { showId } });
       for (const t of tickets) {
         if (!t.name) continue;
-        const pricePence = Math.round(Number(t.price || 0) * 100);
-       const bookingFeePence = clampBookingFeePence(pricePence, (t as any).bookingFeePence);
+               const pricePence = Math.round(Number(t.price || 0) * 100);
+        const feeInput = (t as any).bookingFeePence;
+        const bookingFeePence = clampBookingFeePence(pricePence, feeInput);
 
-await prisma.ticketType.create({
-  data: {
-    showId,
-    name: String(t.name),
-    pricePence,
-    bookingFeePence,
-    available: null,
-  },
-});
+        await prisma.ticketType.create({
+          data: {
+            showId,
+            name: String(t.name),
+            pricePence,
+            bookingFeePence,
+            available: null,
+          },
+        });
+
 
       }
     }
