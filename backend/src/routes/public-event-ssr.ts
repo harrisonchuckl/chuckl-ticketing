@@ -670,7 +670,7 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
     // Mobile bar needs the same "+ £x.xx b.f." as the other price displays
     // (assumes bookingFeePenceFor(t) already exists in your file from the earlier changes)
     const fromFeePence = cheapest ? bookingFeePenceFor(cheapest) : 0;
-const fromFeeText = fromFeePence > 0 ? `+ ${pFmt(fromFeePence)}*` : '';
+const fromFeeHtml = fromFeePence > 0 ? `+ ${esc(pFmt(fromFeePence))}<sup class="fee-asterisk">*</sup>` : '';
 
 
     // Schema.org
@@ -750,7 +750,7 @@ const fromFeeText = fromFeePence > 0 ? `+ ${pFmt(fromFeePence)}*` : '';
     const rowClass = isMainColumn ? 'ticket-row main-col-row' : 'ticket-row widget-row';
 
     const bfPence = bookingFeePenceFor(t);
-const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}*</span>` : '';
+const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup class="fee-asterisk">*</sup></span>` : '';
 
     return `
       <a href="${avail ? `/checkout?showId=${encodeURIComponent(String(id))}&ticketId=${encodeURIComponent(String(t.id))}` : '#'}" class="${rowClass}" ${!avail ? 'style="pointer-events:none; opacity:0.6;"' : ''}>
@@ -1224,6 +1224,14 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}*</span
 .t-price { font-weight: 700; color: var(--primary); font-size: 1.1rem; }
 .t-fee { font-weight: 400; color: var(--text-muted); font-size: 0.95rem; }
 .fee-disclaimer { margin-top: 10px; font-size: 0.9rem; color: var(--text-muted); }
+
+.fee-asterisk{
+  font-size: 0.75em;
+  line-height: 0;
+  vertical-align: super;
+  position: relative;
+  top: -0.1em; /* tiny extra lift so it sits higher */
+}
     .btn-buy {
       background: var(--brand); color: white; font-size: 0.85rem; font-weight: 700;
       padding: 8px 16px; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.05em;
@@ -1316,7 +1324,7 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}*</span
          <div class="rich-text">
   ${renderDescriptionHTML(show.description)}
 </div>
-<div class="fee-disclaimer">*All ticket prices are subject to booking fees.</div>
+<div class="fee-disclaimer"><sup class="fee-asterisk">*</sup>All ticket prices are subject to booking fees.</div>
        ${doorTimeDisplay || ageGuidance || endTimeNote ? `
 <div class="info-inline">
   ${doorTimeDisplay ? `<div class="info-inline-item"><span class="info-inline-label">Doors open</span><span class="info-inline-value">${esc(doorTimeDisplay)}</span></div>` : ''}
@@ -1407,7 +1415,7 @@ ${accessibilityReasons
       <div class="mob-price">From</div>
       <div class="mob-line">
         <div class="mob-val">${fromPrice ? esc(fromPrice) : '£0.00'}</div>
-        ${fromFeeText ? `<div class="mob-fee">${esc(fromFeeText)}</div>` : ''}
+${fromFeeHtml ? `<div class="mob-fee">${fromFeeHtml}</div>` : ''}
       </div>
     </div>
     <a href="#main-tickets" class="btn-mob-cta">BOOK TICKETS</a>
