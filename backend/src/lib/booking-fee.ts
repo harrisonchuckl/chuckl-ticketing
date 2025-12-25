@@ -88,7 +88,30 @@ export function getBookingFeeRange(pricePence: number): { minFeePence: number; m
  * - blank/invalid => MIN
  * - otherwise clamp between MIN and MAX
  */
-export function clampBookingFeePence(pricePence: number, bookingFeePence?: number | null): number {
+export function clampBookingFeePence(
+  pricePence: number,
+  bookingFeePence?: number | string | null
+): number {
+  const price = Math.max(0, Math.round(Number(pricePence) || 0));
+  if (!Number.isFinite(price) || price <= 0) return 0;
+
+  const { minFeePence, maxFeePence } = getBookingFeeRange(price);
+
+  // default (blank) = minimum fee
+  if (bookingFeePence === null || bookingFeePence === undefined) {
+    return minFeePence;
+  }
+  if (typeof bookingFeePence === "string" && bookingFeePence.trim() === "") {
+    return minFeePence;
+  }
+
+  const fee = Math.max(0, Math.round(Number(bookingFeePence) || 0));
+  if (!Number.isFinite(fee)) return minFeePence;
+
+  // Clamp between min and max (if max is 0, just enforce min)
+  if (maxFeePence > 0) return Math.min(Math.max(fee, minFeePence), maxFeePence);
+  return Math.max(fee, minFeePence);
+}
   const price = Math.max(0, Math.round(Number(pricePence) || 0));
   if (!Number.isFinite(price) || price <= 0) return 0;
 
