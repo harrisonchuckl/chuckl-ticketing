@@ -51,9 +51,6 @@ function asNullableString(value: unknown) {
   return str.length ? str : null;
 }
 
-function isNonEmptyString(val: string | null | undefined): val is string {
-  return typeof val === "string" && val.length > 0;
-}
 
 function isNonEmptyString(val: string | null | undefined): val is string {
   return typeof val === "string" && val.length > 0;
