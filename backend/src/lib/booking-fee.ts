@@ -79,6 +79,13 @@ export function getBookingFeeRange(
   const price = Math.max(0, Math.round(Number(pricePence) || 0));
   if (!Number.isFinite(price) || price <= 0) return { minFeePence: 0, maxFeePence: 0 };
 
+  // ✅ Special case: 1p–99p
+  // Minimum booking fee = 79p
+  // Recommended range = 79p–£1.20
+  if (price < 100) {
+    return { minFeePence: 79, maxFeePence: 120 };
+  }
+
   const band = getBookingFeeBand(price);
   const minFeePence = Math.max(0, Math.round(price * band.minPct));
   const maxFeePence = Math.max(0, Math.round(price * band.maxPct));
