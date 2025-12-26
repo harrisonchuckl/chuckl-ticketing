@@ -727,7 +727,7 @@ const bfText = bf > 0 ? ` + ${pFmt(bf)} booking fee` : '';
     <a class="brand" href="/public" aria-label="TixAll">
   <img
     class="brand-logo"
-    src="/public/TixAll%20on%20White%20Background.png"
+    src="/IMG_2374.jpeg"
     alt="TixAll"
   />
 </a>
