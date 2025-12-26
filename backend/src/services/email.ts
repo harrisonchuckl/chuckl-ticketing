@@ -143,6 +143,26 @@ function renderTicketsHtml(order: NonNullable<OrderDeep>) {
     ((order as any).customerName as string | undefined) ||
     (order.user as any)?.name ||
     "";
+  const venueName = v?.name ? escapeHtml(String(v.name)) : "";
+  const venueAddressHtml = [v?.address, v?.city, v?.postcode]
+    .filter(Boolean)
+    .map((x) => escapeHtml(String(x)))
+    .join("<br>");
+
+  const venueDetailsHtml =
+    venueName || venueAddressHtml || customerName
+      ? `
+        <div style="font-size:14px;color:#64748b;margin:0 0 10px;line-height:1.45;">
+          ${venueName ? `<div style="font-weight:700;color:#0f172a;">${venueName}</div>` : ""}
+          ${venueAddressHtml ? `<div>${venueAddressHtml}</div>` : ""}
+          ${
+            customerName
+              ? `<div style="margin-top:8px;"><span style="color:#94a3b8;">Ticket holder:</span> <span style="font-weight:700;color:#0f172a;">${escapeHtml(customerName)}</span></div>`
+              : ""
+          }
+        </div>
+      `
+      : "";
 
     // --- Order summary (replaces Serial/Seat table) ---
   const fmtGBP = (pence: number) => `£${(pence / 100).toFixed(2)}`;
@@ -336,20 +356,8 @@ ${customerName ? `${escapeHtml(customerName)}, ` : ""}You’ve got tickets!
                           <span style="font-weight:700;">${escapeHtml(formatDateUK(s?.date ?? null) || "—")}</span>
                           ${formatTimeUK(s?.date ?? null) ? ` at <span style="font-weight:700;">${escapeHtml(formatTimeUK(s?.date ?? null)!)}</span>` : ""}
                         </div>
-                        ${
-                          ${
-  (v?.name || v?.address || v?.city || v?.postcode || customerName)
-    ? `
-      <div style="font-size:14px;color:#64748b;margin:0 0 10px;line-height:1.45;">
-        ${v?.name ? `<div style="font-weight:700;color:#0f172a;">${escapeHtml(v.name)}</div>` : ""}
-        <div>
-          ${[v?.address, v?.city, v?.postcode].filter(Boolean).map(x => escapeHtml(String(x))).join("<br>")}
-        </div>
-        ${customerName ? `<div style="margin-top:8px;"><span style="color:#94a3b8;">Ticket holder:</span> <span style="font-weight:700;color:#0f172a;">${escapeHtml(customerName)}</span></div>` : ""}
-      </div>
-    `
-    : ""
-}
+                                               ${venueDetailsHtml}
+
 
                     <div style="height:6px;line-height:6px;font-size:6px;">&nbsp;</div>
 
