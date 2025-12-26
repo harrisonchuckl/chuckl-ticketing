@@ -7,7 +7,14 @@ const router = Router();
 
 function getPublicBrand() {
   const name = String(process.env.PUBLIC_BRAND_NAME || 'TixAll').trim();
-  const logoUrl = String(process.env.PUBLIC_BRAND_LOGO_URL || '').trim();
+
+  // Default to the local file in backend/public/
+  // (served by your Express static as "/TixAll BW on Blue Background.png")
+  const defaultLocalLogo = '/TixAll%20BW%20on%20Blue%20Background.png';
+
+  const logoUrl =
+    String(process.env.PUBLIC_BRAND_LOGO_URL ?? '').trim() || defaultLocalLogo;
+
   const homeHref = String(process.env.PUBLIC_BRAND_HOME_HREF || '/public').trim();
   return { name, logoUrl, homeHref };
 }
@@ -409,7 +416,7 @@ background: rgba(15,156,223,0.18); border: 1px solid rgba(15,156,223,0.35);
   padding: 0 16px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+justify-content: flex-start;
   gap: 18px;
 }
 
@@ -470,20 +477,12 @@ background: rgba(15,156,223,0.18); border: 1px solid rgba(15,156,223,0.35);
   </style>
 </head><body>
   <header class="app-header">
-    <div class="app-header-inner">
-      <a class="app-brand" href="${escAttr(brand.homeHref)}" aria-label="${escAttr(brand.name)} home">
-        ${brand.logoUrl
-          ? `<img class="app-brand-logo" src="${escAttr(brand.logoUrl)}" alt="${escAttr(brand.name)}" />`
-          : `<span class="app-brand-text">${esc(brand.name)}</span>`}
-      </a>
-
-      <nav class="app-nav" aria-label="Page navigation">
-        <a class="app-nav-link" href="${escAttr(brand.homeHref)}">All events</a>
-        <span class="app-nav-sep">/</span>
-        <span class="app-nav-current">${esc(title)}</span>
-      </nav>
-    </div>
-  </header>
+  <div class="app-header-inner">
+    <a class="app-brand" href="${escAttr(brand.homeHref)}" aria-label="${escAttr(brand.name)} home">
+      <img class="app-brand-logo" src="${escAttr(brand.logoUrl)}" alt="${escAttr(brand.name)}" />
+    </a>
+  </div>
+</header>
 
   <div class="wrap">
 
@@ -1282,21 +1281,13 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 </head>
 <body>
 
-  <header class="app-header">
-    <div class="app-header-inner">
-      <a class="app-brand" href="${escAttr(brand.homeHref)}" aria-label="${escAttr(brand.name)} home">
-        ${brand.logoUrl
-          ? `<img class="app-brand-logo" src="${escAttr(brand.logoUrl)}" alt="${escAttr(brand.name)}" />`
-          : `<span class="app-brand-text">${esc(brand.name)}</span>`}
-      </a>
-
-      <nav class="app-nav" aria-label="Page navigation">
-        <a class="app-nav-link" href="${escAttr(brand.homeHref)}">All events</a>
-        <span class="app-nav-sep">/</span>
-        <span class="app-nav-current">${esc(show.title)}</span>
-      </nav>
-    </div>
-  </header>
+ <header class="app-header">
+  <div class="app-header-inner">
+    <a class="app-brand" href="${escAttr(brand.homeHref)}" aria-label="${escAttr(brand.name)} home">
+      <img class="app-brand-logo" src="${escAttr(brand.logoUrl)}" alt="${escAttr(brand.name)}" />
+    </a>
+  </div>
+</header>
 
   <header class="hero">
     <div class="hero-bg"></div>
