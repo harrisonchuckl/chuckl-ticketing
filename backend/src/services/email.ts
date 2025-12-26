@@ -283,10 +283,8 @@ function renderTicketsHtml(order: NonNullable<OrderDeep>) {
                       }
                     </td>
                     <td align="right" style="vertical-align:middle;">
-                      <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#e6f6ff;">
-                        Order <span style="font-weight:700;color:#ffffff;">#${escapeHtml(orderRef)}</span>
-                      </div>
-                    </td>
+  &nbsp;
+</td>
                   </tr>
                 </table>
               </td>
@@ -297,7 +295,7 @@ function renderTicketsHtml(order: NonNullable<OrderDeep>) {
               <td style=":#ffffff;border-radius:0 0 14px 14px;padding:22px 18px;border:1px solid #e5e7eb;border-top:none;">
                 <div style="font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
                   <div style="font-size:22px;font-weight:800;line-height:1.2;margin:0 0 6px;">
-                    ${customerName ? `${escapeHtml(customerName)}, ` : ""}you’ve got tickets!
+${customerName ? `${escapeHtml(customerName)}, ` : ""}You’ve got tickets!
                   </div>
                   <div style="font-size:14px;color:#64748b;margin:0 0 18px;">
                     Keep your tickets handy — your e-tickets are attached as a PDF (one page per ticket).
@@ -339,10 +337,19 @@ function renderTicketsHtml(order: NonNullable<OrderDeep>) {
                           ${formatTimeUK(s?.date ?? null) ? ` at <span style="font-weight:700;">${escapeHtml(formatTimeUK(s?.date ?? null)!)}</span>` : ""}
                         </div>
                         ${
-                          venueLine
-                            ? `<div style="font-size:14px;color:#64748b;margin:0 0 10px;">${escapeHtml(venueLine)}</div>`
-                            : ""
-                        }
+                          ${
+  (v?.name || v?.address || v?.city || v?.postcode || customerName)
+    ? `
+      <div style="font-size:14px;color:#64748b;margin:0 0 10px;line-height:1.45;">
+        ${v?.name ? `<div style="font-weight:700;color:#0f172a;">${escapeHtml(v.name)}</div>` : ""}
+        <div>
+          ${[v?.address, v?.city, v?.postcode].filter(Boolean).map(x => escapeHtml(String(x))).join("<br>")}
+        </div>
+        ${customerName ? `<div style="margin-top:8px;"><span style="color:#94a3b8;">Ticket holder:</span> <span style="font-weight:700;color:#0f172a;">${escapeHtml(customerName)}</span></div>` : ""}
+      </div>
+    `
+    : ""
+}
 
                     <div style="height:6px;line-height:6px;font-size:6px;">&nbsp;</div>
 
