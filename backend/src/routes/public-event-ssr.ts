@@ -821,6 +821,49 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@400;700;800;900&display=swap" rel="stylesheet">
 
   <script type="application/ld+json">${escJSON(jsonLd)}</script>
+<script>
+(function () {
+  try {
+    // Stop Safari restoring scroll position on refresh / back-forward cache
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+
+    function toTop() { window.scrollTo(0, 0); }
+
+    // If the URL ever contains #main-tickets, remove it so refresh won't jump down
+    function stripTicketsHash() {
+      if (location.hash === '#main-tickets') {
+        history.replaceState(null, '', location.pathname + location.search);
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+      stripTicketsHash();
+
+      // Always start from the top
+      requestAnimationFrame(toTop);
+      setTimeout(toTop, 0);
+      setTimeout(toTop, 60);
+      setTimeout(toTop, 250);
+
+      // Smooth-scroll buttons without changing the URL
+      document.querySelectorAll('[data-scroll-to]').forEach(function (el) {
+        el.addEventListener('click', function () {
+          var id = el.getAttribute('data-scroll-to');
+          var target = id ? document.getElementById(id) : null;
+          if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      });
+    });
+
+    // iOS Safari pageshow (bfcache) can restore old scroll after load
+    window.addEventListener('pageshow', function () {
+      stripTicketsHash();
+      setTimeout(toTop, 0);
+      setTimeout(toTop, 60);
+    });
+  } catch (e) {}
+})();
+</script>
 
   <style>
     :root {
@@ -1405,7 +1448,7 @@ ${accessibilityReasons
 ${fromFeeHtml ? `<div class="mob-fee">${fromFeeHtml}</div>` : ''}
       </div>
     </div>
-    <a href="#main-tickets" class="btn-mob-cta">BOOK TICKETS</a>
+<a href="javascript:void(0)" class="btn-mob-cta" data-scroll-to="main-tickets">BOOK TICKETS</a>
   </div>
 
   <script>
