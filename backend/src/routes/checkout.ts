@@ -8,7 +8,6 @@ const router = Router();
 // --- ROBUST STRIPE INITIALIZATION ---
 const stripeSecret = process.env.STRIPE_SECRET_KEY;
 const StripeClient = (Stripe as any)?.default || Stripe;
-
 const stripe: Stripe | null = stripeSecret
   ? new StripeClient(stripeSecret, { apiVersion: "2024-06-20" })
   : null;
@@ -440,11 +439,59 @@ const ticketTypes = (show.ticketTypes || []).map((t: any) => {
     if (!konvaData) {
         const showIdStr = JSON.stringify(show.id);
         // NOTE: pFmt is now defined above to fix the TypeScript error.
-const ticketOptions = ticketTypes.map((t: any) => {
+// ----- NEW: helper to read a per-ticket cap if your model has one -----
+function readTicketMax(t: any) {
+  // Try common field names (adjust/add your real field if different)
+  const raw =
+    t?.maxPerOrder ??
+    t?.maxPerPurchase ??
+    t?.maxTickets ??
+    t?.maxQuantity ??
+    t?.maxPerCustomer;
+
+  const n = Number(raw);
+  if (Number.isFinite(n) && n > 0) return Math.max(1, Math.floor(n));
+  return null; // means "no explicit cap"
+}
+
+const ticketRowsHtml = ticketTypes.map((t: any) => {
   const bf = Number(t.bookingFeePenceEffective || 0);
-const bfText = bf > 0 ? ` + ${pFmt(bf)} booking fee` : '';
-  return `<option value="${t.id}" data-price="${t.pricePence}" data-fee="${bf}">${t.name} - ${pFmt(t.pricePence)}${bfText}</option>`;
-}).join('');
+
+  // Default to 20 unless ticket cap is set; always clamp to 20 max in UI
+  const cap = readTicketMax(t);
+  const maxQty = Math.min(20, cap ?? 20);
+
+  const qtyOptions = Array.from({ length: maxQty + 1 }, (_, i) => {
+    // i = 0 allows "none" so user can mix ticket types in one order
+    return `<option value="${i}">${i}</option>`;
+  }).join("");
+
+  const bfText = bf > 0 ? `+ ${pFmt(bf)} booking fee` : "No booking fee";
+
+  return `
+    <div class="ticket-row"
+      data-ticket-id="${escAttr(t.id)}"
+      data-price="${escAttr(t.pricePence)}"
+      data-fee="${escAttr(bf)}"
+      data-max="${escAttr(maxQty)}"
+    >
+      <div class="ticket-left">
+        <div class="ticket-name">${escAttr(t.name)}</div>
+        <div class="ticket-meta">
+          <span class="ticket-price">${pFmt(t.pricePence)}</span>
+          <span class="ticket-fee">${escAttr(bfText)}</span>
+        </div>
+      </div>
+
+      <div class="ticket-right">
+        <label class="qty-label" for="qty-${escAttr(t.id)}">Qty</label>
+        <select class="qty-select" id="qty-${escAttr(t.id)}" aria-label="Quantity for ${escAttr(t.name)}">
+          ${qtyOptions}
+        </select>
+      </div>
+    </div>
+  `;
+}).join("");
         
              // Fallback HTML page with a polished GA checkout (no seat map)
         res.type('html').send(`<!doctype html>
@@ -669,10 +716,10 @@ const bfText = bf > 0 ? ` + ${pFmt(bf)} booking fee` : '';
       letter-spacing:-0.01em;
     }
 
-    .btn{
+        .btn{
       width:100%;
       border:none;
-      border-radius:999px;
+      border-radius:12px;           /* ✅ less rounded */
       padding:14px 16px;
       font-size:1rem;
       font-weight:900;
@@ -681,16 +728,81 @@ const bfText = bf > 0 ? ` + ${pFmt(bf)} booking fee` : '';
       text-transform:uppercase;
       cursor:pointer;
     }
+
     .btn-primary{
       background:var(--brand);
       color:#fff;
-      box-shadow:0 12px 24px rgba(15,156,223,0.28);
+      box-shadow:none;              /* ✅ remove blue shadow */
     }
-    .btn-primary:hover{background:var(--brand-hover)}
+
+    .btn-primary:hover{ background:var(--brand-hover); }
+
     .btn:disabled{
       opacity:0.55;
       cursor:not-allowed;
       box-shadow:none;
+    }
+
+    .ticket-list{
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+
+    .ticket-row{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      padding:12px;
+      border:1px solid var(--border);
+      border-radius:14px;
+      background:#fff;
+    }
+
+    .ticket-left{ min-width:0; }
+    .ticket-name{
+      font-weight:900;
+      color:var(--primary);
+      margin-bottom:4px;
+    }
+
+    .ticket-meta{
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+      color:var(--text-muted);
+      font-size:0.9rem;
+    }
+
+    .ticket-price{ font-weight:800; color:var(--primary); }
+
+    .ticket-right{
+      display:flex;
+      flex-direction:column;
+      align-items:flex-end;
+      gap:6px;
+      flex-shrink:0;
+    }
+
+    .qty-label{
+      font-size:0.75rem;
+      font-weight:800;
+      color:var(--text-muted);
+      margin:0;
+    }
+
+    .qty-select{
+      width:88px;
+      padding:10px 10px;
+      border:1px solid var(--border);
+      border-radius:12px;
+      font-size:1rem;
+      background:#fff;
+      outline:none;
+    }
+    .qty-select:focus{
+      border-color:rgba(15,156,223,0.55);
+      box-shadow:0 0 0 4px rgba(15,156,223,0.12);
     }
 
     .notice{
@@ -752,27 +864,17 @@ const bfText = bf > 0 ? ` + ${pFmt(bf)} booking fee` : '';
         <h2>Choose your tickets</h2>
         <p class="muted small" style="margin:0 0 12px;">Select a ticket type and quantity. You’ll be taken to secure Stripe checkout.</p>
 
-        <form id="ga-checkout-form">
-          <div class="field">
-            <label for="ticketType">Ticket type</label>
-            <select id="ticketType" name="ticketType">
-              ${ticketOptions}
-            </select>
-          </div>
+       <form id="ga-checkout-form">
+  <div class="ticket-list">
+    ${ticketRowsHtml}
+  </div>
 
-          <div class="field">
-            <label for="quantity">Quantity</label>
-            <input type="number" id="quantity" name="quantity" value="1" min="1" max="10" required />
-          </div>
+  <div class="error" id="error-message"></div>
 
-          <div class="error" id="error-message"></div>
-
-          <div style="margin-top:14px;">
-            <button type="submit" id="btn-buy" class="btn btn-primary">Continue to payment</button>
-          </div>
-
-
-        </form>
+  <div style="margin-top:14px;">
+    <button type="submit" id="btn-buy" class="btn btn-primary" disabled>Continue to payment</button>
+  </div>
+</form>
       </div>
 
       <div class="card">
@@ -794,99 +896,122 @@ const bfText = bf > 0 ? ` + ${pFmt(bf)} booking fee` : '';
     </div>
   </div>
 
-  <script>
-    const showId = ${showIdStr};
-    const form = document.getElementById('ga-checkout-form');
-    const ticketTypeSelect = document.getElementById('ticketType');
-    const quantityInput = document.getElementById('quantity');
+<script>
+  const showId = ${showIdStr};
 
-    const sumBase = document.getElementById('sum-base');
-    const sumFee = document.getElementById('sum-fee');
-    const sumTotal = document.getElementById('sum-total');
-    const sumDetail = document.getElementById('sum-detail');
+  const form = document.getElementById('ga-checkout-form');
+  const ticketRows = Array.from(document.querySelectorAll('.ticket-row'));
 
-    const buyButton = document.getElementById('btn-buy');
-    const errorMessage = document.getElementById('error-message');
+  const sumBase = document.getElementById('sum-base');
+  const sumFee = document.getElementById('sum-fee');
+  const sumTotal = document.getElementById('sum-total');
+  const sumDetail = document.getElementById('sum-detail');
 
-    function money(pence){
-      return '£' + ((Number(pence || 0) / 100).toFixed(2));
+  const buyButton = document.getElementById('btn-buy');
+  const errorMessage = document.getElementById('error-message');
+
+  function money(pence){
+    return '£' + ((Number(pence || 0) / 100).toFixed(2));
+  }
+
+  function setError(msg){
+    if (!errorMessage) return;
+    if (!msg){
+      errorMessage.style.display = 'none';
+      errorMessage.textContent = '';
+      return;
     }
+    errorMessage.style.display = 'block';
+    errorMessage.textContent = msg;
+  }
 
-    function setError(msg){
-      if (!errorMessage) return;
-      if (!msg){
-        errorMessage.style.display = 'none';
-        errorMessage.textContent = '';
-        return;
+  function getSelections(){
+    const items = [];
+    let totalQty = 0;
+    let baseTotal = 0;
+    let feeTotal = 0;
+
+    for (const row of ticketRows){
+      const ticketTypeId = row.getAttribute('data-ticket-id');
+      const pricePence = Number(row.getAttribute('data-price')) || 0;
+      const feePence = Number(row.getAttribute('data-fee')) || 0;
+      const maxQty = Number(row.getAttribute('data-max')) || 20;
+
+      const sel = row.querySelector('.qty-select');
+      const qty = Math.max(0, Number(sel && sel.value) || 0);
+
+      if (qty > maxQty){
+        if (sel) sel.value = String(maxQty);
       }
-      errorMessage.style.display = 'block';
-      errorMessage.textContent = msg;
+
+      if (qty > 0){
+        items.push({ ticketTypeId, quantity: qty });
+        totalQty += qty;
+        baseTotal += pricePence * qty;
+        feeTotal += feePence * qty;
+      }
     }
 
-    function updatePrice() {
-      const selectedOption = ticketTypeSelect.options[ticketTypeSelect.selectedIndex];
-      const pricePence = Number(selectedOption.getAttribute('data-price')) || 0;
-      const feePence = Number(selectedOption.getAttribute('data-fee')) || 0;
-      const quantity = Math.max(0, Number(quantityInput.value) || 0);
+    return { items, totalQty, baseTotal, feeTotal, grandTotal: baseTotal + feeTotal };
+  }
 
-      const baseTotalPence = pricePence * quantity;
-      const feeTotalPence = feePence * quantity;
-      const totalPence = baseTotalPence + feeTotalPence;
+  function updateSummary(){
+    const { totalQty, baseTotal, feeTotal, grandTotal } = getSelections();
 
-      sumBase.textContent = money(baseTotalPence);
-      sumFee.textContent = money(feeTotalPence);
-      sumTotal.textContent = money(totalPence);
+    sumBase.textContent = money(baseTotal);
+    sumFee.textContent = money(feeTotal);
+    sumTotal.textContent = money(grandTotal);
 
-      sumDetail.textContent = quantity + (quantity === 1 ? ' ticket selected' : ' tickets selected');
+    sumDetail.textContent = totalQty + (totalQty === 1 ? ' ticket selected' : ' tickets selected');
 
-      buyButton.disabled = (quantity < 1) || (pricePence < 1);
+    buyButton.disabled = (totalQty < 1);
+  }
+
+  ticketRows.forEach(row => {
+    const sel = row.querySelector('.qty-select');
+    if (sel) sel.addEventListener('change', updateSummary);
+  });
+
+  updateSummary();
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    setError('');
+
+    const { items, totalQty } = getSelections();
+
+    if (!items.length || totalQty < 1){
+      setError('Please choose at least 1 ticket.');
+      return;
     }
 
-    ticketTypeSelect.addEventListener('change', updatePrice);
-    quantityInput.addEventListener('input', updatePrice);
-    updatePrice();
+    buyButton.disabled = true;
+    buyButton.textContent = 'Processing...';
 
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      setError('');
-      buyButton.disabled = true;
-      buyButton.textContent = 'Processing...';
+    try {
+      const res = await fetch('/checkout/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ showId, items })
+      });
 
-      const quantity = Number(quantityInput.value);
-      const selectedOption = ticketTypeSelect.options[ticketTypeSelect.selectedIndex];
-      const unitPricePence = Number(selectedOption.getAttribute('data-price')) || 0;
-      const ticketTypeId = selectedOption.value;
+      const data = await res.json();
 
-      if (!quantity || quantity < 1 || !unitPricePence || unitPricePence < 1 || !ticketTypeId) {
-        setError('Please select a valid ticket type and quantity.');
+      if (data.ok && data.url) {
+        window.location.href = data.url;
+      } else {
+        setError(data.message || 'Unknown checkout error. Please try again.');
         buyButton.disabled = false;
         buyButton.textContent = 'Continue to payment';
-        return;
       }
+    } catch (err) {
+      setError('Connection error. Please try again.');
+      buyButton.disabled = false;
+      buyButton.textContent = 'Continue to payment';
+    }
+  });
+</script>
 
-      try {
-        const res = await fetch('/checkout/session', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ showId, quantity, unitPricePence, ticketTypeId })
-        });
-
-        const data = await res.json();
-
-        if (data.ok && data.url) {
-          window.location.href = data.url;
-        } else {
-          setError(data.message || 'Unknown checkout error. Please try again.');
-          buyButton.disabled = false;
-          buyButton.textContent = 'Continue to payment';
-        }
-      } catch (err) {
-        setError('Connection error. Please try again.');
-        buyButton.disabled = false;
-        buyButton.textContent = 'Continue to payment';
-      }
-    });
-  </script>
 </body>
 </html>`);
         return;
