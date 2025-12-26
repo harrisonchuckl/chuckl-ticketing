@@ -517,17 +517,44 @@ serial: t.serial!,
     ((order as any).reference as string | undefined) ||
     order.id;
 
+    const venueAddress =
+    [v?.address, v?.city, v?.postcode].filter(Boolean).join(", ") || undefined;
+
+  // Build a TicketSource-style tickets line (e.g. "2 x Standard, 1 x VIP")
+  const typeCounts = new Map<string, number>();
+  for (const t of tickets) {
+    const key = t.ticketType || "Ticket";
+    typeCounts.set(key, (typeCounts.get(key) || 0) + 1);
+  }
+  const ticketsLine =
+    Array.from(typeCounts.entries()).map(([name, count]) => `${count} x ${name}`).join(", ") ||
+    `${tickets.length} x Ticket`;
+
+  const feePence = typeof order.platformFeePence === "number" ? order.platformFeePence : undefined;
+  const subtotalPence =
+    typeof feePence === "number" ? Math.max(order.amountPence - feePence, 0) : undefined;
+
   const meta = {
     orderRef,
     showTitle: s?.title ?? "Event",
     venueName: v?.name ?? undefined,
-    venueAddress: v?.city ?? undefined,
+    venueAddress,
     dateText: formatDateUK(s?.date ?? null),
     timeText: formatTimeUK(s?.date ?? null),
     doorsOpenText,
     bookedBy: ((order as any).customerName as string | undefined) ?? undefined,
     bookedAtText: order.createdAt ? formatDateUK(order.createdAt) : undefined,
+
     includeSummaryPage: INCLUDE_SUMMARY_PAGE,
+    summary: INCLUDE_SUMMARY_PAGE
+      ? {
+          ticketsLine,
+          subtotal: typeof subtotalPence === "number" ? formatGBPFromPence(subtotalPence) : undefined,
+          fees: typeof feePence === "number" ? formatGBPFromPence(feePence) : undefined,
+          total: formatGBPFromPence(order.amountPence) || undefined,
+          statusLine: (order.status as any) === "PAID" ? "CONFIRMED" : String(order.status || ""),
+        }
+      : undefined,
   };
 
  try {
