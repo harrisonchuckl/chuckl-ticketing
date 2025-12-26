@@ -18,6 +18,16 @@ function pFmt(p: number | null | undefined) {
   return "£" + (Number(p || 0) / 100).toFixed(2);
 }
 
+// Escape values used inside HTML attributes (href="", value="", etc.)
+function escAttr(v: any) {
+  return String(v ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/'/g, "&#39;");
+}
+
 function getPublicBaseUrl(req: any) {
   // Prefer env if set (best for Railway)
   const envBase =
