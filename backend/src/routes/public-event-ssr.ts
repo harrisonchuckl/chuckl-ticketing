@@ -668,7 +668,33 @@ const isDisabledFriendly = accessibilityReasons.length > 0 || hasAccessibleFeatu
     // (assumes bookingFeePenceFor(t) already exists in your file from the earlier changes)
     const fromFeePence = cheapest ? bookingFeePenceFor(cheapest) : 0;
 const fromFeeHtml = fromFeePence > 0 ? `+ ${esc(pFmt(fromFeePence))}<sup class="fee-asterisk">*</sup>` : '';
+// --- MOBILE CTA LOGIC ---
+// We only scroll to the SSR ticket list when:
+// - show is allocated (has a seating map)
+// - AND there are multiple ticket types (General/OAP/Student etc)
+// Because those are different "entry points" into the SAME map.
+const showIdEnc = encodeURIComponent(String(id));
 
+const seatMapKey = (t: any) =>
+  t?.seatMapId ??
+  t?.seatmapId ??
+  t?.seatingMapId ??
+  t?.seatTemplateId ??
+  t?.mapId ??
+  null;
+
+const seatMapIds = (ticketTypes || []).map(seatMapKey).filter(Boolean);
+const isAllocatedSeating = seatMapIds.length > 0;
+const hasMultipleTicketTypes = (ticketTypes || []).length > 1;
+
+const shouldScrollToTicketList = isAllocatedSeating && hasMultipleTicketTypes;
+
+const mobileCtaHtml =
+  !ticketTypes.length
+    ? `<a href="javascript:void(0)" class="btn-mob-cta" data-scroll-to="main-tickets">BOOK TICKETS</a>`
+    : shouldScrollToTicketList
+      ? `<a href="javascript:void(0)" class="btn-mob-cta" data-scroll-to="main-tickets">BOOK TICKETS</a>`
+      : `<a href="/checkout?showId=${showIdEnc}" class="btn-mob-cta">BOOK TICKETS</a>`;
 
     // Schema.org
     const offers = ticketTypes.map((t) => ({
@@ -1448,7 +1474,7 @@ ${accessibilityReasons
 ${fromFeeHtml ? `<div class="mob-fee">${fromFeeHtml}</div>` : ''}
       </div>
     </div>
-<a href="javascript:void(0)" class="btn-mob-cta" data-scroll-to="main-tickets">BOOK TICKETS</a>
+${mobileCtaHtml}
   </div>
 
   <script>
