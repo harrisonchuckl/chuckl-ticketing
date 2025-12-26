@@ -253,9 +253,7 @@ function renderTicketsHtml(order: NonNullable<OrderDeep>) {
       `;
     })
     .join("");
-  const ticketTypeSummary = (s?.ticketTypes || [])
-    .map((tt) => `${tt.name} (£${(tt.pricePence / 100).toFixed(2)})`)
-    .join(" · ");
+  // const ticketTypeSummary = ...
 
   const preheader = `Your TixAll e-tickets for ${showTitle} are ready.`;
   const showImageUrl = pickShowImageUrl(order);
@@ -346,18 +344,7 @@ function renderTicketsHtml(order: NonNullable<OrderDeep>) {
                             : ""
                         }
 
-                     <div style="margin-top:10px;">
-  <span style="display:inline-block;padding:6px 10px;border-radius:999px;:#eef2ff;color:#1e3a8a;font-size:12px;font-weight:700;margin:0 8px 8px 0;">
-    ${ticketCount} × Ticket${ticketCount === 1 ? "" : "s"}
-  </span>
-  ${
-    ticketTypeSummary
-      ? `<span style="display:inline-block;padding:6px 10px;border-radius:999px;:#f1f5f9;color:#0f172a;font-size:12px;margin:0 8px 8px 0;">
-           ${escapeHtml(ticketTypeSummary)}
-         </span>`
-      : ""
-  }
-</div>
+                    <div style="height:6px;line-height:6px;font-size:6px;">&nbsp;</div>
 
                         </div>
                       </td>
@@ -366,7 +353,7 @@ function renderTicketsHtml(order: NonNullable<OrderDeep>) {
                                         <!-- Order summary (replaces Serial/Seat table) -->
                     <tr>
                       <td style="padding:0 16px 16px 16px;">
-                        <div style="font-size:13px;font-weight:800;margin:10px 0 8px;color:#0f172a;">Order summary</div>
+<div style="font-size:13px;font-weight:800;margin:6px 0 8px;color:#0f172a;">Order summary</div>
 
                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
        style="width:100%;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;border-collapse:separate;border-spacing:0;table-layout:auto;">
