@@ -528,6 +528,13 @@ const bfText = bf > 0 ? ` + ${pFmt(bf)} booking fee` : '';
       letter-spacing:-0.01em;
       color:var(--primary);
     }
+.brand-logo{
+  height:34px;
+  width:auto;
+  display:block;
+  border-radius:10px;
+}
+
     .topbar-actions{
       display:flex;
       align-items:center;
@@ -717,10 +724,13 @@ const bfText = bf > 0 ? ` + ${pFmt(bf)} booking fee` : '';
 <body>
   <div class="topbar">
     <div class="topbar-inner">
-      <a class="brand" href="/public">
-        <div class="brand-badge">T</div>
-        <div class="brand-name">TixAll</div>
-      </a>
+    <a class="brand" href="/public" aria-label="TixAll">
+  <img
+    class="brand-logo"
+    src="/public/TixAll%20on%20White%20Background.png"
+    alt="TixAll"
+  />
+</a>
       <div class="topbar-actions">
         <a class="btn-link" href="/public/event/${escAttr(show.id)}">Back to event</a>
       </div>
