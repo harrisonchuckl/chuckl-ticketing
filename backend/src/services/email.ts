@@ -219,26 +219,35 @@ function renderTicketsHtml(order: NonNullable<OrderDeep>) {
         ? bookingFeeFromTypesPence
         : Math.max((order.amountPence || 0) - faceTotalPence, 0);
 
-  const orderSummaryRows = groupList
+    const orderSummaryRows = groupList
     .map((g) => {
-      const seatsText = g.seats.length ? g.seats.join(", ") : "";
+      const seatsText = g.seats.length ? g.seats.join(", ") : "—";
       const lineSubtotal = g.unitPence * g.qty;
 
       return `
         <tr>
-          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px;color:#0f172a;">
-            <div style="font-weight:700;">${escapeHtml(g.name)}</div>
+          <td style="padding:14px 14px;border-bottom:1px solid #e5e7eb;vertical-align:top;">
+            <div style="font-size:15px;font-weight:800;line-height:1.2;color:#0f172a;">
+              ${escapeHtml(g.name)}
+            </div>
           </td>
-          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px;color:#0f172a;text-align:right;">
-            <div style="font-weight:700;">${g.qty} × ${escapeHtml(fmtGBP(g.unitPence))}</div>
-            ${
-              seatsText
-                ? `<div style="color:#64748b;font-size:12px;margin-top:2px;">Seats: ${escapeHtml(seatsText)}</div>`
-                : `<div style="color:#94a3b8;font-size:12px;margin-top:2px;">Seats: —</div>`
-            }
+
+          <td style="padding:14px 14px;border-bottom:1px solid #e5e7eb;vertical-align:top;text-align:center;">
+            <div style="font-size:15px;font-weight:800;line-height:1.2;color:#0f172a;">
+              ${g.qty} × ${escapeHtml(fmtGBP(g.unitPence))}
+            </div>
+            <div style="margin-top:6px;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#94a3b8;">
+              Seats
+            </div>
+            <div style="margin-top:2px;font-size:13px;font-weight:700;color:#0f172a;word-break:break-word;">
+              ${escapeHtml(seatsText)}
+            </div>
           </td>
-          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px;color:#0f172a;text-align:right;font-weight:700;">
-            ${escapeHtml(fmtGBP(lineSubtotal))}
+
+          <td style="padding:14px 14px;border-bottom:1px solid #e5e7eb;vertical-align:top;text-align:right;">
+            <div style="font-size:15px;font-weight:800;line-height:1.2;color:#0f172a;">
+              ${escapeHtml(fmtGBP(lineSubtotal))}
+            </div>
           </td>
         </tr>
       `;
@@ -359,19 +368,24 @@ function renderTicketsHtml(order: NonNullable<OrderDeep>) {
                       <td style="padding:0 16px 16px 16px;">
                         <div style="font-size:13px;font-weight:800;margin:10px 0 8px;color:#0f172a;">Order summary</div>
 
-                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
-                               style="border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">
-                          <tr>
-                            <th align="left" style="padding:10px 12px;:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:12px;color:#64748b;font-weight:700;">
-                              Tickets
-                            </th>
-                            <th align="right" style="padding:10px 12px;:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:12px;color:#64748b;font-weight:700;">
-                              Qty × Face value (Seats)
-                            </th>
-                            <th align="right" style="padding:10px 12px;:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:12px;color:#64748b;font-weight:700;">
-                              Subtotal
-                            </th>
-                          </tr>
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+       style="width:100%;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;border-collapse:separate;border-spacing:0;table-layout:fixed;">
+  <colgroup>
+    <col style="width:44%;">
+    <col style="width:36%;">
+    <col style="width:20%;">
+  </colgroup>
+<tr>
+  <th align="left" style="padding:12px 14px;background:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:11px;color:#64748b;font-weight:800;letter-spacing:.06em;text-transform:uppercase;">
+    Tickets
+  </th>
+  <th align="center" style="padding:12px 14px;background:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:11px;color:#64748b;font-weight:800;letter-spacing:.06em;text-transform:uppercase;">
+    Qty × Face value
+  </th>
+  <th align="right" style="padding:12px 14px;background:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:11px;color:#64748b;font-weight:800;letter-spacing:.06em;text-transform:uppercase;">
+    Subtotal
+  </th>
+</tr>
 
                           ${orderSummaryRows || ""}
 
