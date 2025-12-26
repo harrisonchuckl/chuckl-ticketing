@@ -368,24 +368,28 @@ function renderTicketsHtml(order: NonNullable<OrderDeep>) {
                       <td style="padding:0 16px 16px 16px;">
                         <div style="font-size:13px;font-weight:800;margin:10px 0 8px;color:#0f172a;">Order summary</div>
 
-                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+                   <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
        style="width:100%;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;border-collapse:separate;border-spacing:0;table-layout:auto;">
   <colgroup>
     <col style="width:44%;">
     <col style="width:36%;">
     <col style="width:20%;">
   </colgroup>
-<tr>
-style="padding:10px 12px;background:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:12px;color:#64748b;font-weight:600;white-space:nowrap;"
-    Tickets
-  </th>
-style="padding:10px 12px;background:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:12px;color:#64748b;font-weight:600;white-space:nowrap;"
-    Qty × Face value
-  </th>
-style="padding:10px 12px;background:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:12px;color:#64748b;font-weight:600;white-space:nowrap;"
-    Subtotal
-  </th>
-</tr>
+
+  <tr>
+    <th align="left"
+        style="padding:10px 12px;background:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:12px;color:#64748b;font-weight:600;white-space:nowrap;">
+      Tickets
+    </th>
+    <th align="center"
+        style="padding:10px 12px;background:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:12px;color:#64748b;font-weight:600;white-space:nowrap;">
+      Qty × Face
+    </th>
+    <th align="right"
+        style="padding:10px 12px;background:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:12px;color:#64748b;font-weight:600;white-space:nowrap;">
+      Subtotal
+    </th>
+  </tr>
 
                           ${orderSummaryRows || ""}
 
@@ -393,7 +397,7 @@ style="padding:10px 12px;background:#f8fafc;border-bottom:1px solid #e5e7eb;font
                             <td colspan="2" style="padding:10px 12px;border-top:1px solid #e5e7eb;font-size:13px;color:#64748b;text-align:right;">
                               Booking fee
                             </td>
-                            <td style="padding:10px 12px;border-top:1px solid #e5e7eb;font-size:13px;color:#0f172a;text-align:right;font-weight:700;">
+<td style="padding:10px 12px;border-top:1px solid #e5e7eb;font-size:13px;color:#0f172a;text-align:right;font-weight:700;white-space:nowrap;">
                               £${(bookingFeePence / 100).toFixed(2)}
                             </td>
                           </tr>
