@@ -471,6 +471,15 @@ function drawSummaryPage(
   );
 }
 
+// ✅ ADD THIS HERE
+function buildDirectionsUrl(meta: OrderPdfMeta): string | undefined {
+  const q = [meta.venueName, meta.venueAddress].filter(Boolean).join(", ").trim();
+  if (!q) return undefined;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+}
+
+/* -------------------------
+
 /* ----------------------------- Asset loading ----------------------------- */
 
 async function tryLoadTixAllLogo(): Promise<Buffer | null> {
