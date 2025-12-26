@@ -429,47 +429,7 @@ function drawSummaryPage(
     { width: pageWidth - margin * 2 }
   );
 }
-  const { meta, ticketsCount, logo } = args;
 
-  const pageWidth = doc.page.width;
-
-  // Header
-  doc.save();
-  doc.rect(0, 0, pageWidth, 72).fill(TIXALL_BLUE);
-  doc.restore();
-
-  if (logo) doc.image(logo, 36, 18, { height: 36 });
-  else doc.fillColor("white").fontSize(20).text("TixAll", 36, 18);
-
-  doc.fillColor("#111").font("Helvetica-Bold").fontSize(18).text("Booking Summary", 36, 110);
-
-  doc.fillColor("#222").font("Helvetica").fontSize(11);
-  doc.text(`Show: ${meta.showTitle}`, 36, 145);
-
-  if (meta.orderRef) doc.text(`Order: #${meta.orderRef}`, 36, 162);
-  doc.text(`Tickets: ${ticketsCount}`, 36, 179);
-
-  if (meta.summary) {
-    const { ticketsLine, subtotal, fees, total, statusLine } = meta.summary;
-    let y = 220;
-
-    doc.roundedRect(36, y, pageWidth - 72, 160, 10).stroke("#D9D9D9");
-    y += 18;
-
-    if (ticketsLine) doc.text(`Tickets: ${ticketsLine}`, 56, y), (y += 18);
-    if (subtotal) doc.text(`Subtotal: ${subtotal}`, 56, y), (y += 18);
-    if (fees) doc.text(`Fees: ${fees}`, 56, y), (y += 18);
-    if (total) doc.font("Helvetica-Bold").text(`Total: ${total}`, 56, y), (y += 22), doc.font("Helvetica");
-    if (statusLine) doc.text(`Status: ${statusLine}`, 56, y), (y += 18);
-  }
-
-  doc.fillColor("#666").fontSize(8).text(
-    "Need help? Reply to your confirmation email and our team will get back to you.",
-    36,
-    doc.page.height - 72,
-    { width: pageWidth - 72 }
-  );
-}
 
 // ✅ ADD THIS HERE
 function buildDirectionsUrl(meta: OrderPdfMeta): string | undefined {
@@ -478,7 +438,7 @@ function buildDirectionsUrl(meta: OrderPdfMeta): string | undefined {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
 }
 
-/* -------------------------
+
 
 /* ----------------------------- Asset loading ----------------------------- */
 
