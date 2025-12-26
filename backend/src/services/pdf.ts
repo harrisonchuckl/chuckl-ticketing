@@ -67,10 +67,19 @@ export async function buildOrderTicketsPdf(meta: OrderPdfMeta, tickets: TicketPd
     drawTicketPage(doc, { meta, ticket: t, qrPng, logo, index: i + 1, total: tickets.length });
   }
 
-  // Optional summary page at the end (similar idea to TicketSource page 5)
-  if (meta.includeSummaryPage && meta.summary) {
+    // Optional venue / booking info page at the end
+  if (meta.includeSummaryPage) {
+    const directionsUrl = buildDirectionsUrl(meta);
+    const directionsQrPng = directionsUrl ? await qrPngBuffer(directionsUrl, 512) : undefined;
+
     doc.addPage();
-    drawSummaryPage(doc, { meta, ticketsCount: tickets.length, logo });
+    drawSummaryPage(doc, {
+      meta,
+      ticketsCount: tickets.length,
+      logo,
+      directionsUrl,
+      directionsQrPng,
+    });
   }
 
   doc.end();
@@ -268,9 +277,158 @@ doc: InstanceType<typeof PDFDocument>,
 }
 
 function drawSummaryPage(
-doc: InstanceType<typeof PDFDocument>,
-  args: { meta: OrderPdfMeta; ticketsCount: number; logo?: Buffer | null }
+  doc: InstanceType<typeof PDFDocument>,
+  args: {
+    meta: OrderPdfMeta;
+    ticketsCount: number;
+    logo?: Buffer | null;
+    directionsUrl?: string;
+    directionsQrPng?: Buffer;
+  }
 ) {
+  const { meta, ticketsCount, logo, directionsUrl, directionsQrPng } = args;
+
+  const pageWidth = doc.page.width;
+  const pageHeight = doc.page.height;
+  const margin = 36;
+
+  // Header
+  doc.save();
+  doc.rect(0, 0, pageWidth, 72).fill(TIXALL_BLUE);
+  doc.restore();
+
+  if (logo) doc.image(logo, margin, 18, { height: 36 });
+  else doc.fillColor("white").fontSize(20).text("TixAll", margin, 18);
+
+  // Title
+  doc.fillColor("#111").font("Helvetica-Bold").fontSize(18).text("Venue & booking information", margin, 105);
+
+  // Layout: left details + right QR
+  const qrSize = 150;
+  const gap = 18;
+  const rightX = pageWidth - margin - qrSize;
+  const leftW = pageWidth - margin * 2 - qrSize - gap;
+
+  let y = 140;
+
+  // Directions QR box (right)
+  if (directionsQrPng) {
+    doc.save();
+    doc.roundedRect(rightX - 10, y - 10, qrSize + 20, qrSize + 54, 10).lineWidth(1).stroke("#D9D9D9");
+    doc.restore();
+
+    doc.image(directionsQrPng, rightX, y, { width: qrSize, height: qrSize });
+
+    doc.fillColor("#111").font("Helvetica-Bold").fontSize(10).text("Scan for directions", rightX - 10, y + qrSize + 10, {
+      width: qrSize + 20,
+      align: "center",
+    });
+
+    if (directionsUrl) {
+      doc.fillColor("#666").font("Helvetica").fontSize(8).text("Opens Google Maps", rightX - 10, y + qrSize + 26, {
+        width: qrSize + 20,
+        align: "center",
+      });
+    }
+  }
+
+  // Left: venue + show details
+  doc.fillColor("#111").font("Helvetica-Bold").fontSize(12).text(meta.venueName || "Venue", margin, y, { width: leftW });
+  y = doc.y + 6;
+
+  if (meta.venueAddress) {
+    doc.fillColor("#333").font("Helvetica").fontSize(10).text(meta.venueAddress, margin, y, { width: leftW });
+    y = doc.y + 10;
+  }
+
+  const dtLine = [meta.dateText, meta.timeText].filter(Boolean).join(" at ");
+  if (dtLine) {
+    doc.fillColor("#111").font("Helvetica-Bold").fontSize(10).text(dtLine, margin, y, { width: leftW });
+    y = doc.y + 6;
+  }
+
+  if (meta.doorsOpenText) {
+    doc.fillColor("#444").font("Helvetica").fontSize(10).text(`Doors open: ${meta.doorsOpenText}`, margin, y, { width: leftW });
+    y = doc.y + 6;
+  }
+
+  if (meta.bookedBy) {
+    doc.fillColor("#444").font("Helvetica").fontSize(10).text(`Ticket holder: ${meta.bookedBy}`, margin, y, { width: leftW });
+    y = doc.y + 8;
+  }
+
+  // Booking summary card
+  y += 8;
+  const cardY = y;
+  const cardH = 175;
+
+  doc.save();
+  doc.roundedRect(margin, cardY, pageWidth - margin * 2, cardH, 10).lineWidth(1).stroke("#D9D9D9");
+  doc.restore();
+
+  let cy = cardY + 16;
+  const cx = margin + 18;
+  const cw = pageWidth - margin * 2 - 36;
+
+  doc.fillColor("#111").font("Helvetica-Bold").fontSize(12).text("Booking summary", cx, cy, { width: cw });
+  cy += 18;
+
+  doc.fillColor("#222").font("Helvetica").fontSize(10).text(`Show: ${meta.showTitle}`, cx, cy, { width: cw });
+  cy += 14;
+
+  if (meta.orderRef) {
+    doc.text(`Order reference: ${meta.orderRef}`, cx, cy, { width: cw });
+    cy += 14;
+  }
+
+  doc.text(`Tickets: ${ticketsCount}`, cx, cy, { width: cw });
+  cy += 14;
+
+  if (meta.summary?.ticketsLine) {
+    doc.text(`Tickets line: ${meta.summary.ticketsLine}`, cx, cy, { width: cw });
+    cy += 14;
+  }
+
+  if (meta.summary?.subtotal) {
+    doc.text(`Subtotal: ${meta.summary.subtotal}`, cx, cy, { width: cw });
+    cy += 14;
+  }
+  if (meta.summary?.fees) {
+    doc.text(`Fees: ${meta.summary.fees}`, cx, cy, { width: cw });
+    cy += 14;
+  }
+  if (meta.summary?.total) {
+    doc.font("Helvetica-Bold").text(`Total: ${meta.summary.total}`, cx, cy, { width: cw });
+    doc.font("Helvetica");
+    cy += 16;
+  }
+  if (meta.summary?.statusLine) {
+    doc.text(`Status: ${meta.summary.statusLine}`, cx, cy, { width: cw });
+    cy += 14;
+  }
+
+  // About TixAll (short, original)
+  const aboutY = cardY + cardH + 18;
+  doc.save();
+  doc.roundedRect(margin, aboutY, pageWidth - margin * 2, 92, 10).lineWidth(1).stroke("#D9D9D9");
+  doc.restore();
+
+  doc.fillColor("#111").font("Helvetica-Bold").fontSize(12).text("About TixAll", margin + 18, aboutY + 16);
+  doc.fillColor("#444").font("Helvetica").fontSize(9).text(
+    "TixAll is the ticketing platform for your event. Keep your PDF safe — each QR code is unique.\nFor support, reply to your confirmation email or contact the organiser/venue.",
+    margin + 18,
+    aboutY + 36,
+    { width: pageWidth - margin * 2 - 36, lineGap: 2 }
+  );
+
+  // Footer
+  doc.fillColor("#666").fontSize(8).text(
+    "Powered by TixAll",
+    margin,
+    pageHeight - 60,
+    { width: pageWidth - margin * 2 }
+  );
+}
   const { meta, ticketsCount, logo } = args;
 
   const pageWidth = doc.page.width;
