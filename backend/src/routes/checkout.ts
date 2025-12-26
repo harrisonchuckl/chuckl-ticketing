@@ -436,155 +436,445 @@ const bfText = bf > 0 ? ` + ${pFmt(bf)} booking fee` : '';
   return `<option value="${t.id}" data-price="${t.pricePence}" data-fee="${bf}">${t.name} - ${pFmt(t.pricePence)}${bfText}</option>`;
 }).join('');
         
-        // Fallback HTML page with a basic form for GA purchase
-        res.type('html').send(`<!doctype html>
-            <html lang="en"><head>
-            <meta charset="utf-8" />
-            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-            <title>General Admission | ${show.title}</title>
-            <style>
-                body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
-                h1 { font-size: 1.5rem; }
-                form { display: flex; flex-direction: column; gap: 15px; background: #f9f9f9; padding: 20px; border-radius: 8px; border: 1px solid #ddd; }
-                label { font-weight: bold; margin-bottom: 5px; }
-                select, input[type="number"] { padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
-                button { padding: 10px 20px; background: #0056D2; color: white; border: none; border-radius: 4px; font-size: 1rem; cursor: pointer; }
-                button:disabled { background: #9E9E9E; cursor: not-allowed; }
-                .total { font-size: 1.2rem; font-weight: bold; margin-top: 10px; }
-                .error { color: red; margin-top: 10px; }
-                /* ZOOM CONTROLS */
-.zoom-controls{
-  position:absolute;
-  right:16px;
-  top:90px;
-  z-index:4200;
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-}
+             // Fallback HTML page with a polished GA checkout (no seat map)
+        res.type('html').send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Checkout | ${show.title}</title>
 
-.zoom-btn{
-  width:46px;
-  height:46px;
-  border-radius:14px;
-  border:1px solid rgba(15,23,42,0.18);
-  background:rgba(255,255,255,0.98);
-  box-shadow:0 6px 18px rgba(0,0,0,0.14);
-  font-size:22px;
-  font-weight:800;
-  line-height:1;
-  color:#0F172A;
-  cursor:pointer;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@600;700;800;900&display=swap" rel="stylesheet">
 
-.zoom-btn:active{
-  transform: translateY(1px);
-}
+  <style>
+    :root{
+      --bg-page:#F3F4F6;
+      --bg-surface:#FFFFFF;
+      --primary:#0F172A;
+      --brand:#0f9cdf;
+      --brand-hover:#0b86c6;
+      --text-main:#111827;
+      --text-muted:#6B7280;
+      --border:#E5E7EB;
+      --success:#10B981;
+      --radius-lg:16px;
+      --radius-md:12px;
+      --shadow-float:0 20px 25px -5px rgba(0,0,0,0.10), 0 10px 10px -5px rgba(0,0,0,0.04);
+      --shadow-card:0 2px 10px rgba(0,0,0,0.06);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      background:var(--bg-page);
+      color:var(--text-main);
+    }
+    h1,h2,.font-heading{font-family:'Outfit',sans-serif; margin:0; line-height:1.1;}
+    a{color:inherit}
 
-@media (max-width: 820px), (pointer: coarse), (hover: none) {
-  .zoom-controls{
-    top:auto;
-    bottom:110px; /* keeps it above the footer */
-    right:14px;
-  }
-}
+    /* Top bar */
+    .topbar{
+      position:sticky;
+      top:0;
+      z-index:20;
+      background:rgba(255,255,255,0.95);
+      backdrop-filter:saturate(180%) blur(10px);
+      border-bottom:1px solid var(--border);
+    }
+    .topbar-inner{
+      max-width:980px;
+      margin:0 auto;
+      padding:14px 16px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+    }
+    .brand{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      text-decoration:none;
+    }
+    .brand-badge{
+      width:36px;
+      height:36px;
+      border-radius:10px;
+      background:var(--brand);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      color:white;
+      font-weight:900;
+      font-family:'Outfit',sans-serif;
+      box-shadow:0 10px 18px rgba(15,156,223,0.25);
+      flex-shrink:0;
+    }
+    .brand-name{
+      font-family:'Outfit',sans-serif;
+      font-weight:900;
+      letter-spacing:-0.01em;
+      color:var(--primary);
+    }
+    .topbar-actions{
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }
+    .btn-link{
+      text-decoration:none;
+      color:var(--text-muted);
+      font-weight:700;
+      padding:10px 12px;
+      border-radius:999px;
+      border:1px solid transparent;
+    }
+    .btn-link:hover{
+      color:var(--primary);
+      background:#fff;
+      border-color:var(--border);
+    }
 
-            </style>
-            </head><body>
-            <h1>${show.title}</h1>
-            <p>${dateStr} • ${timeStr} • ${venueName}</p>
-            <h2>Select Tickets</h2>
-            <form id="ga-checkout-form">
-                <label for="ticketType">Ticket Type:</label>
-                <select id="ticketType" name="ticketType">
-                    ${ticketOptions}
-                </select>
-                <label for="quantity">Quantity:</label>
-                <input type="number" id="quantity" name="quantity" value="1" min="1" max="10" required />
-                <div class="total">Total: <span id="total-price">£0.00</span></div>
-                <button type="submit" id="btn-buy">Continue to Payment</button>
-                <div class="error" id="error-message"></div>
-            </form>
-            <script>
-                const showId = ${showIdStr};
-                const form = document.getElementById('ga-checkout-form');
-                const ticketTypeSelect = document.getElementById('ticketType');
-                const quantityInput = document.getElementById('quantity');
-                const totalPriceSpan = document.getElementById('total-price');
-                const buyButton = document.getElementById('btn-buy');
-                const errorMessage = document.getElementById('error-message');
+    /* Layout */
+    .wrap{
+      max-width:980px;
+      margin:0 auto;
+      padding:18px 16px 70px;
+    }
 
-                function updatePrice() {
-                    const selectedOption = ticketTypeSelect.options[ticketTypeSelect.selectedIndex];
-                    const pricePence = Number(selectedOption.getAttribute('data-price')) || 0;
-                    const feePence = Number(selectedOption.getAttribute('data-fee')) || 0;
-                    const quantity = Number(quantityInput.value) || 0;
+    .hero{
+      border-radius:var(--radius-lg);
+      background:linear-gradient(135deg, rgba(15,156,223,0.18), rgba(15,23,42,0.05));
+      border:1px solid rgba(15,23,42,0.06);
+      box-shadow:var(--shadow-card);
+      padding:18px;
+      overflow:hidden;
+    }
+    .hero h1{
+      font-size:1.5rem;
+      color:var(--primary);
+      margin-bottom:8px;
+    }
+    .hero-meta{
+      color:var(--text-muted);
+      font-size:0.95rem;
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      align-items:center;
+    }
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:8px 12px;
+      background:rgba(255,255,255,0.9);
+      border:1px solid rgba(15,23,42,0.08);
+      border-radius:999px;
+      font-weight:700;
+      font-size:0.85rem;
+      color:var(--primary);
+    }
 
-                    const baseTotalPence = pricePence * quantity;
-                    const feeTotalPence = feePence * quantity;
+    .grid{
+      display:grid;
+      grid-template-columns: 1.35fr 0.9fr;
+      gap:16px;
+      margin-top:16px;
+      align-items:start;
+    }
 
-                    const baseText = '£' + (baseTotalPence / 100).toFixed(2);
-                    const feeText = '£' + (feeTotalPence / 100).toFixed(2);
+    .card{
+      background:var(--bg-surface);
+      border:1px solid var(--border);
+      border-radius:var(--radius-lg);
+      box-shadow:var(--shadow-card);
+      padding:16px;
+    }
 
-                    totalPriceSpan.innerHTML =
-                      '<strong>' + baseText + '</strong>' +
-(feeTotalPence > 0 ? ' <span style="font-weight:400;">+ ' + feeText + ' booking fee</span>' : '');
+    .card h2{
+      font-size:1.1rem;
+      margin-bottom:10px;
+      color:var(--primary);
+    }
 
-                    buyButton.disabled = quantity === 0 || pricePence === 0;
-                }
+    .muted{color:var(--text-muted)}
+    .small{font-size:0.9rem}
 
-                ticketTypeSelect.addEventListener('change', updatePrice);
-                quantityInput.addEventListener('input', updatePrice);
-                updatePrice(); // Initial calculation
+    label{
+      display:block;
+      font-weight:800;
+      color:var(--primary);
+      margin-bottom:8px;
+    }
 
-                form.addEventListener('submit', async (e) => {
-                    e.preventDefault();
-                    errorMessage.innerText = '';
-                    buyButton.disabled = true;
-                    buyButton.innerText = 'Processing...';
+    select, input[type="number"]{
+      width:100%;
+      padding:12px 12px;
+      border:1px solid var(--border);
+      border-radius:12px;
+      font-size:1rem;
+      background:#fff;
+      outline:none;
+    }
+    select:focus, input[type="number"]:focus{
+      border-color:rgba(15,156,223,0.55);
+      box-shadow:0 0 0 4px rgba(15,156,223,0.12);
+    }
 
-                    const quantity = Number(quantityInput.value);
-                    const selectedOption = ticketTypeSelect.options[ticketTypeSelect.selectedIndex];
-                    const unitPricePence = Number(selectedOption.getAttribute('data-price'));
+    .field{
+      margin-top:12px;
+    }
 
-                    if (quantity <= 0 || unitPricePence <= 0) {
-                        errorMessage.innerText = 'Please select a valid quantity and ticket type.';
-                        buyButton.disabled = false;
-                        buyButton.innerText = 'Continue to Payment';
-                        return;
-                    }
+    .two-col{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:12px;
+    }
 
-                    try {
-const ticketTypeId = selectedOption.value;
+    .summary-row{
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      padding:10px 0;
+      border-bottom:1px solid rgba(229,231,235,0.8);
+      font-size:0.95rem;
+    }
+    .summary-row:last-child{border-bottom:none}
+    .summary-row strong{font-weight:900}
+    .summary-total{
+      font-family:'Outfit',sans-serif;
+      font-size:1.5rem;
+      font-weight:900;
+      color:var(--primary);
+      letter-spacing:-0.01em;
+    }
 
-const res = await fetch('/checkout/session', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ showId, quantity, unitPricePence, ticketTypeId })
-});
+    .btn{
+      width:100%;
+      border:none;
+      border-radius:999px;
+      padding:14px 16px;
+      font-size:1rem;
+      font-weight:900;
+      font-family:'Outfit',sans-serif;
+      letter-spacing:0.03em;
+      text-transform:uppercase;
+      cursor:pointer;
+    }
+    .btn-primary{
+      background:var(--brand);
+      color:#fff;
+      box-shadow:0 12px 24px rgba(15,156,223,0.28);
+    }
+    .btn-primary:hover{background:var(--brand-hover)}
+    .btn:disabled{
+      opacity:0.55;
+      cursor:not-allowed;
+      box-shadow:none;
+    }
 
-                        const data = await res.json();
+    .notice{
+      margin-top:12px;
+      padding:12px 12px;
+      border-radius:12px;
+      background:#F8FAFC;
+      border:1px solid rgba(15,23,42,0.08);
+      color:var(--text-muted);
+      font-size:0.9rem;
+      line-height:1.35;
+    }
 
-                        if (data.ok && data.url) {
-                            window.location.href = data.url;
-                        } else {
-                            alert("Error: " + (data.message || 'Unknown checkout error.'));
-                            buyButton.disabled = false;
-                            buyButton.innerText = 'Continue to Payment';
-                        }
-                    } catch (error) {
-                        alert("Connection error. Please try again.");
-                        buyButton.disabled = false;
-                        buyButton.innerText = 'Continue to Payment';
-                    }
-                });
-            </script>
-            </body></html>`);
-        return;
-    }
+    .error{
+      display:none;
+      margin-top:12px;
+      padding:12px;
+      border-radius:12px;
+      border:1px solid rgba(220,38,38,0.25);
+      background:rgba(220,38,38,0.06);
+      color:#991B1B;
+      font-weight:700;
+    }
+
+    @media (max-width: 900px){
+      .grid{grid-template-columns:1fr}
+      .topbar-inner{padding:12px 14px}
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/public">
+        <div class="brand-badge">T</div>
+        <div class="brand-name">TixAll</div>
+      </a>
+      <div class="topbar-actions">
+        <a class="btn-link" href="/public/event/${escAttr(show.id)}">Back to event</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="hero">
+      <h1>${show.title}</h1>
+      <div class="hero-meta">
+        <span class="pill">${dateStr}</span>
+        <span class="pill">${timeStr}</span>
+        <span class="pill">${venueName}</span>
+        <span class="pill">Unallocated seating</span>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>Choose your tickets</h2>
+        <p class="muted small" style="margin:0 0 12px;">Select a ticket type and quantity. You’ll be taken to secure Stripe checkout.</p>
+
+        <form id="ga-checkout-form">
+          <div class="field">
+            <label for="ticketType">Ticket type</label>
+            <select id="ticketType" name="ticketType">
+              ${ticketOptions}
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="quantity">Quantity</label>
+            <input type="number" id="quantity" name="quantity" value="1" min="1" max="10" required />
+          </div>
+
+          <div class="error" id="error-message"></div>
+
+          <div style="margin-top:14px;">
+            <button type="submit" id="btn-buy" class="btn btn-primary">Continue to payment</button>
+          </div>
+
+          <div class="notice">
+            <strong style="color:var(--primary);">Secure checkout:</strong>
+            payments are processed by Stripe. Tickets will be emailed after payment.
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Order summary</h2>
+        <div class="summary-row">
+          <span class="muted">Tickets</span>
+          <span id="sum-base">£0.00</span>
+        </div>
+        <div class="summary-row">
+          <span class="muted">Booking fee</span>
+          <span id="sum-fee">£0.00</span>
+        </div>
+        <div class="summary-row" style="align-items:baseline;">
+          <span class="muted">Total</span>
+          <span class="summary-total" id="sum-total">£0.00</span>
+        </div>
+        <p class="muted small" id="sum-detail" style="margin:10px 0 0;">0 tickets selected</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const showId = ${showIdStr};
+    const form = document.getElementById('ga-checkout-form');
+    const ticketTypeSelect = document.getElementById('ticketType');
+    const quantityInput = document.getElementById('quantity');
+
+    const sumBase = document.getElementById('sum-base');
+    const sumFee = document.getElementById('sum-fee');
+    const sumTotal = document.getElementById('sum-total');
+    const sumDetail = document.getElementById('sum-detail');
+
+    const buyButton = document.getElementById('btn-buy');
+    const errorMessage = document.getElementById('error-message');
+
+    function money(pence){
+      return '£' + ((Number(pence || 0) / 100).toFixed(2));
+    }
+
+    function setError(msg){
+      if (!errorMessage) return;
+      if (!msg){
+        errorMessage.style.display = 'none';
+        errorMessage.textContent = '';
+        return;
+      }
+      errorMessage.style.display = 'block';
+      errorMessage.textContent = msg;
+    }
+
+    function updatePrice() {
+      const selectedOption = ticketTypeSelect.options[ticketTypeSelect.selectedIndex];
+      const pricePence = Number(selectedOption.getAttribute('data-price')) || 0;
+      const feePence = Number(selectedOption.getAttribute('data-fee')) || 0;
+      const quantity = Math.max(0, Number(quantityInput.value) || 0);
+
+      const baseTotalPence = pricePence * quantity;
+      const feeTotalPence = feePence * quantity;
+      const totalPence = baseTotalPence + feeTotalPence;
+
+      sumBase.textContent = money(baseTotalPence);
+      sumFee.textContent = money(feeTotalPence);
+      sumTotal.textContent = money(totalPence);
+
+      sumDetail.textContent = quantity + (quantity === 1 ? ' ticket selected' : ' tickets selected');
+
+      buyButton.disabled = (quantity < 1) || (pricePence < 1);
+    }
+
+    ticketTypeSelect.addEventListener('change', updatePrice);
+    quantityInput.addEventListener('input', updatePrice);
+    updatePrice();
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      setError('');
+      buyButton.disabled = true;
+      buyButton.textContent = 'Processing...';
+
+      const quantity = Number(quantityInput.value);
+      const selectedOption = ticketTypeSelect.options[ticketTypeSelect.selectedIndex];
+      const unitPricePence = Number(selectedOption.getAttribute('data-price')) || 0;
+      const ticketTypeId = selectedOption.value;
+
+      if (!quantity || quantity < 1 || !unitPricePence || unitPricePence < 1 || !ticketTypeId) {
+        setError('Please select a valid ticket type and quantity.');
+        buyButton.disabled = false;
+        buyButton.textContent = 'Continue to payment';
+        return;
+      }
+
+      try {
+        const res = await fetch('/checkout/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ showId, quantity, unitPricePence, ticketTypeId })
+        });
+
+        const data = await res.json();
+
+        if (data.ok && data.url) {
+          window.location.href = data.url;
+        } else {
+          setError(data.message || 'Unknown checkout error. Please try again.');
+          buyButton.disabled = false;
+          buyButton.textContent = 'Continue to payment';
+        }
+      } catch (err) {
+        setError('Connection error. Please try again.');
+        buyButton.disabled = false;
+        buyButton.textContent = 'Continue to payment';
+      }
+    });
+  </script>
+</body>
+</html>`);
+        return;
+    }
     // --- MODE B: MAP VIEW ---
     const mapData = JSON.stringify(konvaData);
     const ticketsData = JSON.stringify(ticketTypes);
