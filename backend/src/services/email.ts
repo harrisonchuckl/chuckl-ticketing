@@ -144,31 +144,106 @@ function renderTicketsHtml(order: NonNullable<OrderDeep>) {
     (order.user as any)?.name ||
     "";
 
-  const ticketRows = (order.tickets || [])
-    .map((t) => {
-      const anyT = t as any;
-         const seat =
-        (anyT.seatRef as string | undefined) ||
-        (anyT.seatLabel as string | undefined) ||
-        (anyT.seatCode as string | undefined) ||
-        (anyT.seatName as string | undefined) ||
-        (anyT.seatId as string | undefined) ||
-        "";
+    // --- Order summary (replaces Serial/Seat table) ---
+  const fmtGBP = (pence: number) => `£${(pence / 100).toFixed(2)}`;
+
+  const ttById = new Map((s?.ticketTypes || []).map((tt) => [tt.id, tt] as const));
+
+  const groups = new Map<
+    string,
+    { typeId: string; name: string; unitPence: number; qty: number; seats: string[] }
+  >();
+
+  for (const t of order.tickets || []) {
+    const anyT = t as any;
+
+    const typeId =
+      (anyT.ticketTypeId as string | undefined) ||
+      (t as any).ticketTypeId ||
+      "unknown";
+
+    const linked = typeId !== "unknown" ? ttById.get(typeId) : undefined;
+
+    const name =
+      linked?.name ??
+      (anyT.ticketTypeName as string | undefined) ??
+      "Ticket";
+
+    // Prefer TicketType.pricePence; fallback to Ticket.amountPence if needed
+    const unitPence =
+      typeof linked?.pricePence === "number"
+        ? linked.pricePence
+        : typeof (t as any).amountPence === "number"
+          ? (t as any).amountPence
+          : 0;
+
+    const seat =
+      (anyT.seatRef as string | undefined) ||
+      (anyT.seatLabel as string | undefined) ||
+      (anyT.seatCode as string | undefined) ||
+      (anyT.seatName as string | undefined) ||
+      (anyT.seatId as string | undefined) ||
+      "";
+
+    const key = typeId + "|" + name + "|" + String(unitPence);
+    const existing = groups.get(key);
+
+    if (!existing) {
+      groups.set(key, {
+        typeId,
+        name,
+        unitPence,
+        qty: 1,
+        seats: seat ? [seat] : [],
+      });
+    } else {
+      existing.qty += 1;
+      if (seat) existing.seats.push(seat);
+    }
+  }
+
+  const groupList = Array.from(groups.values());
+
+  const faceTotalPence = groupList.reduce((sum, g) => sum + g.unitPence * g.qty, 0);
+
+  const bookingFeeFromTypesPence = groupList.reduce((sum, g) => {
+    const tt = ttById.get(g.typeId);
+    const perTicket = typeof tt?.bookingFeePence === "number" ? tt.bookingFeePence : 0;
+    return sum + perTicket * g.qty;
+  }, 0);
+
+  const bookingFeePence =
+    typeof (order as any).platformFeePence === "number"
+      ? (order as any).platformFeePence
+      : bookingFeeFromTypesPence > 0
+        ? bookingFeeFromTypesPence
+        : Math.max((order.amountPence || 0) - faceTotalPence, 0);
+
+  const orderSummaryRows = groupList
+    .map((g) => {
+      const seatsText = g.seats.length ? g.seats.join(", ") : "";
+      const lineSubtotal = g.unitPence * g.qty;
 
       return `
         <tr>
           <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px;color:#0f172a;">
-            <div style="font-weight:600;">${escapeHtml(t.serial)}</div>
-            ${t.holderName ? `<div style="color:#64748b;font-size:12px;margin-top:2px;">${escapeHtml(t.holderName)}</div>` : ""}
+            <div style="font-weight:700;">${escapeHtml(g.name)}</div>
           </td>
-          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px;color:#0f172a; text-align:right;">
-            ${seat ? `<span style="display:inline-block;padding:4px 10px;border-radius:999px;:#f1f5f9;color:#0f172a;font-size:12px;">${escapeHtml(seat)}</span>` : `<span style="color:#94a3b8;font-size:12px;">—</span>`}
+          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px;color:#0f172a;text-align:right;">
+            <div style="font-weight:700;">${g.qty} × ${escapeHtml(fmtGBP(g.unitPence))}</div>
+            ${
+              seatsText
+                ? `<div style="color:#64748b;font-size:12px;margin-top:2px;">Seats: ${escapeHtml(seatsText)}</div>`
+                : `<div style="color:#94a3b8;font-size:12px;margin-top:2px;">Seats: —</div>`
+            }
+          </td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px;color:#0f172a;text-align:right;font-weight:700;">
+            ${escapeHtml(fmtGBP(lineSubtotal))}
           </td>
         </tr>
       `;
     })
     .join("");
-
   const ticketTypeSummary = (s?.ticketTypes || [])
     .map((tt) => `${tt.name} (£${(tt.pricePence / 100).toFixed(2)})`)
     .join(" · ");
@@ -279,21 +354,44 @@ function renderTicketsHtml(order: NonNullable<OrderDeep>) {
                       </td>
                     </tr>
 
-                    <!-- Ticket list -->
+                                        <!-- Order summary (replaces Serial/Seat table) -->
                     <tr>
                       <td style="padding:0 16px 16px 16px;">
-                        <div style="font-size:13px;font-weight:800;margin:10px 0 8px;color:#0f172a;">Your ticket serials</div>
+                        <div style="font-size:13px;font-weight:800;margin:10px 0 8px;color:#0f172a;">Order summary</div>
+
                         <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
                                style="border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">
                           <tr>
                             <th align="left" style="padding:10px 12px;:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:12px;color:#64748b;font-weight:700;">
-                              Serial / Name
+                              Tickets
                             </th>
                             <th align="right" style="padding:10px 12px;:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:12px;color:#64748b;font-weight:700;">
-                              Seat
+                              Qty × Face value (Seats)
+                            </th>
+                            <th align="right" style="padding:10px 12px;:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:12px;color:#64748b;font-weight:700;">
+                              Subtotal
                             </th>
                           </tr>
-                          ${ticketRows || ""}
+
+                          ${orderSummaryRows || ""}
+
+                          <tr>
+                            <td colspan="2" style="padding:10px 12px;border-top:1px solid #e5e7eb;font-size:13px;color:#64748b;text-align:right;">
+                              Booking fee
+                            </td>
+                            <td style="padding:10px 12px;border-top:1px solid #e5e7eb;font-size:13px;color:#0f172a;text-align:right;font-weight:700;">
+                              £${(bookingFeePence / 100).toFixed(2)}
+                            </td>
+                          </tr>
+
+                          <tr>
+                            <td colspan="2" style="padding:12px;border-top:1px solid #e5e7eb;font-size:14px;color:#0f172a;text-align:right;font-weight:800;">
+                              Total paid
+                            </td>
+                            <td style="padding:12px;border-top:1px solid #e5e7eb;font-size:14px;color:#0f172a;text-align:right;font-weight:800;">
+                              £${(order.amountPence / 100).toFixed(2)}
+                            </td>
+                          </tr>
                         </table>
 
                         <div style="font-size:12px;color:#64748b;margin-top:12px;line-height:1.5;">
