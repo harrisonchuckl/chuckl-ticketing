@@ -227,13 +227,13 @@ function renderTicketsHtml(order: NonNullable<OrderDeep>) {
       return `
         <tr>
           <td style="padding:14px 14px;border-bottom:1px solid #e5e7eb;vertical-align:top;">
-            <div style="font-size:15px;font-weight:800;line-height:1.2;color:#0f172a;">
+<div style="font-size:13px;font-weight:600;line-height:1.25;color:#0f172a;">
               ${escapeHtml(g.name)}
             </div>
           </td>
 
           <td style="padding:14px 14px;border-bottom:1px solid #e5e7eb;vertical-align:top;text-align:center;">
-            <div style="font-size:15px;font-weight:800;line-height:1.2;color:#0f172a;">
+<div style="font-size:13px;font-weight:600;line-height:1.25;color:#0f172a;">
               ${g.qty} × ${escapeHtml(fmtGBP(g.unitPence))}
             </div>
             <div style="margin-top:6px;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#94a3b8;">
@@ -244,8 +244,8 @@ function renderTicketsHtml(order: NonNullable<OrderDeep>) {
             </div>
           </td>
 
-          <td style="padding:14px 14px;border-bottom:1px solid #e5e7eb;vertical-align:top;text-align:right;">
-            <div style="font-size:15px;font-weight:800;line-height:1.2;color:#0f172a;">
+<td style="padding:14px 14px;border-bottom:1px solid #e5e7eb;vertical-align:top;text-align:right;white-space:nowrap;">
+<div style="font-size:13px;font-weight:600;line-height:1.25;color:#0f172a;">
               ${escapeHtml(fmtGBP(lineSubtotal))}
             </div>
           </td>
@@ -368,21 +368,21 @@ function renderTicketsHtml(order: NonNullable<OrderDeep>) {
                       <td style="padding:0 16px 16px 16px;">
                         <div style="font-size:13px;font-weight:800;margin:10px 0 8px;color:#0f172a;">Order summary</div>
 
-                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
-       style="width:100%;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;border-collapse:separate;border-spacing:0;table-layout:fixed;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+       style="width:100%;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;border-collapse:separate;border-spacing:0;table-layout:auto;">
   <colgroup>
     <col style="width:44%;">
     <col style="width:36%;">
     <col style="width:20%;">
   </colgroup>
 <tr>
-  <th align="left" style="padding:12px 14px;background:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:11px;color:#64748b;font-weight:800;letter-spacing:.06em;text-transform:uppercase;">
+style="padding:10px 12px;background:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:12px;color:#64748b;font-weight:600;white-space:nowrap;"
     Tickets
   </th>
-  <th align="center" style="padding:12px 14px;background:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:11px;color:#64748b;font-weight:800;letter-spacing:.06em;text-transform:uppercase;">
+style="padding:10px 12px;background:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:12px;color:#64748b;font-weight:600;white-space:nowrap;"
     Qty × Face value
   </th>
-  <th align="right" style="padding:12px 14px;background:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:11px;color:#64748b;font-weight:800;letter-spacing:.06em;text-transform:uppercase;">
+style="padding:10px 12px;background:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:12px;color:#64748b;font-weight:600;white-space:nowrap;"
     Subtotal
   </th>
 </tr>
