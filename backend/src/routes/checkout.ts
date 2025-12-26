@@ -744,7 +744,6 @@ const bfText = bf > 0 ? ` + ${pFmt(bf)} booking fee` : '';
         <span class="pill">${dateStr}</span>
         <span class="pill">${timeStr}</span>
         <span class="pill">${venueName}</span>
-        <span class="pill">Unallocated seating</span>
       </div>
     </div>
 
@@ -772,10 +771,7 @@ const bfText = bf > 0 ? ` + ${pFmt(bf)} booking fee` : '';
             <button type="submit" id="btn-buy" class="btn btn-primary">Continue to payment</button>
           </div>
 
-          <div class="notice">
-            <strong style="color:var(--primary);">Secure checkout:</strong>
-            payments are processed by Stripe. Tickets will be emailed after payment.
-          </div>
+
         </form>
       </div>
 
