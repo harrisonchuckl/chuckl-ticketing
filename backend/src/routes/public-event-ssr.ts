@@ -8,9 +8,9 @@ const router = Router();
 function getPublicBrand() {
   const name = String(process.env.PUBLIC_BRAND_NAME || 'TixAll').trim();
 
-  // Default to the local file in backend/public/
-  // (served by your Express static as "/TixAll BW on Blue Background.png")
-  const defaultLocalLogo = '/TixAll%20BW%20on%20Blue%20Background.png';
+    // Default to the same local logo used on the checkout topbar
+  // (served by your Express static as "/IMG_2374.jpeg")
+  const defaultLocalLogo = '/IMG_2374.jpeg';
 
   const logoUrl =
     String(process.env.PUBLIC_BRAND_LOGO_URL ?? '').trim() || defaultLocalLogo;
@@ -399,14 +399,16 @@ background: rgba(15,156,223,0.18); border: 1px solid rgba(15,156,223,0.35);
     a.ghost { background: #fff; border: 2px solid var(--border); color: var(--primary); }
     a.ghost:hover { border-color: var(--brand); color: var(--brand); }
     .small { margin-top: 10px; color: var(--text-muted); font-size: 0.95rem; line-height: 1.5; }
-    /* --- FIXED TOP HEADER (white-label) --- */
+    /* --- FIXED TOP HEADER (white, like checkout) --- */
 .app-header{
   position: fixed;
   top: 0; left: 0; right: 0;
   height: var(--app-header-h);
-  background: var(--brand); /* TixAll blue */
+  background: rgba(255,255,255,0.95);
+  backdrop-filter: saturate(180%) blur(10px);
+  -webkit-backdrop-filter: saturate(180%) blur(10px);
   z-index: 500;
-  border-bottom: 1px solid rgba(255,255,255,0.22);
+  border-bottom: 1px solid var(--border);
 }
 
 .app-header-inner{
@@ -416,7 +418,7 @@ background: rgba(15,156,223,0.18); border: 1px solid rgba(15,156,223,0.35);
   padding: 0 16px;
   display: flex;
   align-items: center;
-justify-content: flex-start;
+  justify-content: flex-start;
   gap: 18px;
 }
 
@@ -428,16 +430,17 @@ justify-content: flex-start;
 }
 
 .app-brand-logo{
-  height: 30px;
+  height: 34px;
   width: auto;
   display: block;
+  border-radius: 10px;
 }
 
 .app-brand-text{
   font-family: 'Outfit', sans-serif;
   font-weight: 900;
   letter-spacing: 0.02em;
-  color: #fff;
+  color: var(--primary);
   text-transform: uppercase;
   font-size: 1.05rem;
   line-height: 1;
@@ -448,26 +451,21 @@ justify-content: flex-start;
   align-items: center;
   gap: 10px;
   min-width: 0;
-  color: rgba(255,255,255,0.95);
+  color: var(--text-muted);
   font-weight: 700;
   letter-spacing: 0.02em;
 }
 
-.app-nav a{
-  color: rgba(255,255,255,0.95);
-}
-
-.app-nav a:hover{
-  color: #fff;
-}
+.app-nav a{ color: var(--text-muted); }
+.app-nav a:hover{ color: var(--primary); }
 
 .app-nav-sep{
-  color: rgba(255,255,255,0.35);
+  color: rgba(107,114,128,0.6);
   font-weight: 800;
 }
 
 .app-nav-current{
-  color: rgba(255,255,255,0.98);
+  color: var(--primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -870,24 +868,26 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
       background: linear-gradient(to right, rgba(15,23,42,0.9) 0%, rgba(15,23,42,0.4) 50%, transparent 100%),
                   linear-gradient(to top, rgba(15,23,42,0.9) 0%, transparent 40%);
     }
-   /* --- FIXED TOP HEADER (white-label) --- */
+   /* --- FIXED TOP HEADER (white, like checkout) --- */
 .app-header{
   position: fixed;
   top: 0; left: 0; right: 0;
   height: var(--app-header-h);
-  background: var(--brand); /* TixAll blue */
+  background: rgba(255,255,255,0.95);
+  backdrop-filter: saturate(180%) blur(10px);
+  -webkit-backdrop-filter: saturate(180%) blur(10px);
   z-index: 500;
-  border-bottom: 1px solid rgba(255,255,255,0.22);
+  border-bottom: 1px solid var(--border);
 }
 
 .app-header-inner{
-  max-width: 1200px;
+  max-width: 980px; /* match success page wrap width */
   height: 100%;
   margin: 0 auto;
-  padding: 0 24px;
+  padding: 0 16px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 18px;
 }
 
@@ -899,16 +899,17 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 }
 
 .app-brand-logo{
-  height: 30px;
+  height: 34px;
   width: auto;
   display: block;
+  border-radius: 10px;
 }
 
 .app-brand-text{
   font-family: 'Outfit', sans-serif;
   font-weight: 900;
   letter-spacing: 0.02em;
-  color: #fff;
+  color: var(--primary);
   text-transform: uppercase;
   font-size: 1.05rem;
   line-height: 1;
@@ -919,26 +920,21 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
   align-items: center;
   gap: 10px;
   min-width: 0;
-  color: rgba(255,255,255,0.9);
+  color: var(--text-muted);
   font-weight: 700;
   letter-spacing: 0.02em;
 }
 
-.app-nav a{
-  color: rgba(255,255,255,0.9);
-}
-
-.app-nav a:hover{
-  color: #fff;
-}
+.app-nav a{ color: var(--text-muted); }
+.app-nav a:hover{ color: var(--primary); }
 
 .app-nav-sep{
-  color: rgba(255,255,255,0.35);
+  color: rgba(107,114,128,0.6);
   font-weight: 800;
 }
 
 .app-nav-current{
-  color: rgba(255,255,255,0.95);
+  color: var(--primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
