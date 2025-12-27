@@ -1329,11 +1329,10 @@ setupHeroMetaWatcher();
     .venue-map-header {
       position: relative; height: 220px; /* Taller for better map view */ background: #E2E8F0;
     }
-    .venue-map-iframe {
-        position: absolute; top:0; left:0; width:100%; height:100%; border:0;
-        filter: grayscale(100%); transition: filter 0.3s; /* Grayscale until hover */
-    }
-    .venue-map-header:hover .venue-map-iframe { filter: grayscale(0%); }
+  .venue-map-iframe {
+  position: absolute; top:0; left:0; width:100%; height:100%; border:0;
+  filter: none;
+}
 
     .venue-details { padding: 20px; background: #fff; position: relative; z-index: 2;}
     .venue-name { font-size: 1.3rem; margin-bottom: 4px; font-family: 'Outfit', sans-serif; }
