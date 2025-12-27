@@ -606,10 +606,13 @@ prisma.seat.findMany({
   // 1) Seat rows totalSellable (if seats are persisted)
   // 2) Layout-derived totalSellable (if seats aren't persisted)
   // 3) estimatedCapacity in layout
-  // 4) Venue.capacity as a last-resort fallback (prevents 0/0/0 UI)
-  const layoutTotalSellable = layoutStats ? layoutStats.totalSellable : 0;
-  const venueCap = Number((s as any)?.venue?.capacity ?? 0);
-  total = seatTotalSellable || layoutTotalSellable || estCap || venueCap;
+ // Total capacity priority:
+// 1) Seat rows totalSellable (if seats are persisted)
+// 2) Layout-derived totalSellable (if seats aren't persisted)
+// 3) estimatedCapacity in layout
+const layoutTotalSellable = layoutStats ? layoutStats.totalSellable : 0;
+total = seatTotalSellable || layoutTotalSellable || estCap || 0;
+
 
 
   // Sold priority:
@@ -656,9 +659,9 @@ prisma.seat.findMany({
         // Holds are allocation quantities (GA allocations reserve ticket capacity)
         hold = allocs.reduce((sum, a) => sum + Number(a.quantity ?? 0), 0);
 
-      // If cap isn't set, fall back to venue capacity, otherwise show something sensible
-const venueCap = Number((s as any)?.venue?.capacity ?? 0);
-total = cap > 0 ? cap : (venueCap > 0 ? venueCap : Math.max(sold + hold, 0));
+     // General admission capacity is ALWAYS the configured cap from TicketType.available (sum across ticket types).
+// No fallbacks (no venue capacity, no sold/hold derived totals).
+total = cap;
 
       }
 
