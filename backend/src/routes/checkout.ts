@@ -1489,6 +1489,32 @@ function setHoverSeat(seat) {
   draggable: true // ✅ customer checkout: map CAN pan/drag (Stage only)
 });
 
+function lockCheckoutMapNodes() {
+  try {
+    // Keep stage pannable
+    stage.draggable(true);
+
+    // Kill any transformer tools that might be embedded in saved layouts
+    mainLayer.find('Transformer').forEach(tr => tr.destroy());
+    uiLayer.find('Transformer').forEach(tr => tr.destroy());
+
+    // Ensure NOTHING inside the map can be dragged
+    const lock = (node) => {
+      if (!node) return;
+      if (typeof node.draggable === 'function') node.draggable(false);
+
+      // Also remove any drag-bound behaviour if it exists
+      if (typeof node.dragBoundFunc === 'function') node.dragBoundFunc(null);
+    };
+
+    mainLayer.find('*').forEach(lock);
+    uiLayer.find('*').forEach(lock);
+  } catch (e) {
+    console.warn('[checkout] lockCheckoutMapNodes failed', e);
+  }
+}
+
+
 
 // Make “accidental micro-drags” not steal clicks
 stage.dragDistance(8);
@@ -1633,6 +1659,20 @@ function ensureMinSeatTapSize(nativeEvt) {
 }
 
 // Cursor feel during pan
+// ✅ Pan even when dragging non-seat shapes (prevents “dead” drag areas)
+mainLayer.on('mousedown touchstart pointerdown', (e) => {
+  const t = e.target;
+
+  // Don't hijack seats (they need to click/select)
+  if (t && t.getAttr && t.getAttr('isSeat')) return;
+
+  // Start dragging the stage
+  try {
+    stage.startDrag(e.evt);
+  } catch (_) {}
+});
+
+
 stage.on('dragstart', () => {
   hideSeatTooltip();
   clearHoverSeat();
@@ -2549,11 +2589,25 @@ console.log("[DEBUG] Loading Layout summary:", {
 });
 
         // --- 2. PROCESS NODES ---
-        function processNode(node, parentGroup) {
-            const nodeType = node.getClassName();
-            const groupType = node.getAttr('shapeType') || node.name();
-            const isSeatGroup = nodeType === 'Group' && ['row-seats', 'circular-table', 'rect-table', 'single-seat'].includes(groupType);
-            
+       function processNode(node, parentGroup) {
+  const nodeType = node.getClassName();
+
+  // ✅ HARD BLOCK: remove builder tooling + stop any draggable nodes immediately
+  if (nodeType === 'Transformer') {
+    node.destroy();
+    return;
+  }
+  if (node && typeof node.draggable === 'function') {
+    node.draggable(false);
+  }
+  if (node && typeof node.dragBoundFunc === 'function') {
+    node.dragBoundFunc(null);
+  }
+
+  const groupType = node.getAttr('shapeType') || node.name();
+  const isSeatGroup = nodeType === 'Group' && ['row-seats', 'circular-table', 'rect-table', 'single-seat'].includes(groupType);
+
+     
             if (isSeatGroup) {
                 // CLEANUP: Hide Numbers (Digits only), keep Labels (A, B, C)
                 node.find('Text').forEach(t => {
@@ -3444,19 +3498,8 @@ grp.on('click tap', (e) => {
 
         uiLayer.batchDraw();
 
-// After building the map, lock all NODES so customers can't drag blocks, tables, seats etc.
-// But keep the STAGE draggable so customers can pan the map.
-try {
-  stage.draggable(true); // ✅ Stage pans (whole map)
-
-  stage.find('*').forEach((node) => {
-    if (node && typeof node.draggable === 'function') {
-      node.draggable(false); // ✅ seats/tables/labels/blocks cannot be dragged
-    }
-  });
-} catch (lockErr) {
-  console.warn('[checkout] failed to lock nodes', lockErr);
-}
+// ✅ Always re-lock after rebuilding UI icons
+lockCheckoutMapNodes();
 
 
 }
