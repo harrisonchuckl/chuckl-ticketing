@@ -764,38 +764,62 @@ const mobileCtaHtml =
    const mapLink = `https://maps.google.com/maps?q=${mapQuery}`;
 
    const organiserId = (show as any).organiserId as string | null;
-   let relatedShows: any[] = [];
+let relatedShows: any[] = [];
 
-   if (organiserId) {
-     const others = await prisma.show.findMany({
-       where: {
-         organiserId,
-         id: { not: show.id },
-         status: ShowStatus.LIVE,
-       },
-       include: {
-         venue: { select: { id: true, name: true, address: true, city: true, postcode: true } },
-         ticketTypes: {
-           select: { pricePence: true, available: true },
-           orderBy: { pricePence: 'asc' },
-         },
-       },
-       orderBy: { date: 'asc' },
-       take: 20,
-     });
+// We use these to prioritise "same category/type" before going further afield
+const baseCategory = ((show as any).eventCategory || null) as string | null;
+const baseType = ((show as any).eventType || null) as string | null;
 
-     relatedShows = others
-       .map((o) => ({
-         ...o,
-         _locScore: scoreVenueProximity(venue, o.venue),
-         _typeScore: baseEventType && o.eventType === baseEventType ? 1 : 0,
-         _dateVal: o.date ? new Date(o.date).getTime() : Number.MAX_SAFE_INTEGER,
-       }))
-       .sort((a, b) =>
-         b._locScore - a._locScore || b._typeScore - a._typeScore || a._dateVal - b._dateVal
-       )
-       .slice(0, 5);
-   }
+if (organiserId) {
+  const now = new Date();
+
+  const others = await prisma.show.findMany({
+    where: {
+      organiserId,
+      id: { not: show.id },
+      status: ShowStatus.LIVE,
+      // Only suggest upcoming shows
+      date: { gte: now },
+    },
+    include: {
+      venue: { select: { id: true, name: true, address: true, city: true, postcode: true } },
+    },
+    orderBy: { date: 'asc' },
+    take: 50, // fetch more, then rank intelligently
+  });
+
+  relatedShows = others
+    .map((o: any) => {
+      const locScore = scoreVenueProximity(venue, o.venue);
+
+      // Category > type (you’ve got both fields on Show)
+      const catScore = baseCategory && o.eventCategory === baseCategory ? 2 : 0;
+      const typeScore = baseType && o.eventType === baseType ? 1 : 0;
+
+      const dateVal = o.date ? new Date(o.date).getTime() : Number.MAX_SAFE_INTEGER;
+
+      return {
+        ...o,
+        _locScore: locScore,
+        _catScore: catScore,
+        _typeScore: typeScore,
+        _dateVal: dateVal,
+      };
+    })
+    .sort((a: any, b: any) => {
+      // 1) same venue / same outward code / same city etc
+      // 2) same category
+      // 3) same type
+      // 4) soonest date
+      return (
+        (b._locScore - a._locScore) ||
+        (b._catScore - a._catScore) ||
+        (b._typeScore - a._typeScore) ||
+        (a._dateVal - b._dateVal)
+      );
+    })
+    .slice(0, 10); // carousel feels better with more than 5
+}
 
    // Helper to generate ticket list HTML
    const renderTicketList = (isMainColumn = false) => {
@@ -830,40 +854,37 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 };
 
    const renderRelatedShows = () => {
-     if (!relatedShows.length) return '';
-     return `
-     <div class="related-section">
-       <span class="section-label">Other events you may be interested in</span>
-       <div class="related-grid">
-         ${relatedShows
-           .map((ev) => {
-             const v = (ev.venue || {}) as any;
-             const rDate = ev.date ? new Date(ev.date) : null;
-             const rDatePretty = rDate
-               ? rDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-               : 'Date TBC';
-             const rTimePretty = rDate
-               ? rDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-               : '';
-             const cityLine = [v.name, v.city].filter(Boolean).join(' • ');
-             const cheapestRel = (ev.ticketTypes || [])[0];
-             const priceStr = cheapestRel ? pFmt(cheapestRel.pricePence) : '';
-             const img = ev.imageUrl || poster;
-             return `
-             <a class="related-card" href="/public/event/${escAttr(ev.id)}">
-               <img src="${escAttr(img || '')}" alt="${escAttr(ev.title || 'Event poster')}" class="related-card-img" />
-               <div class="related-card-body">
-                 <div class="related-card-title">${esc(ev.title || 'Event')}</div>
-                 <div class="related-card-meta">${esc(rDatePretty)}${rTimePretty ? ' · ' + esc(rTimePretty) : ''}</div>
-                 <div class="related-card-meta">${esc(cityLine)}</div>
-                 ${priceStr ? `<div class="related-card-cta">From ${esc(priceStr)}</div>` : ''}
-               </div>
-             </a>`;
-           })
-           .join('')}
-       </div>
-     </div>`;
-   };
+  if (!relatedShows.length) return '';
+
+  return `
+  <div class="related-carousel">
+    <span class="section-label">Other shows you may be interested in</span>
+
+    <div class="related-strip" aria-label="Other shows you may be interested in">
+      ${relatedShows
+        .map((ev: any) => {
+          const v = (ev.venue || {}) as any;
+          const rDate = ev.date ? new Date(ev.date) : null;
+          const rDatePretty = rDate ? formatShortDate(rDate) : 'Date TBC';
+
+          const locLine = [v.name, v.city].filter(Boolean).join(', ');
+          const img = ev.imageUrl || '';
+
+          return `
+          <a class="related-item" href="/public/event/${escAttr(ev.id)}" aria-label="${escAttr(ev.title || 'Event')}">
+            <div class="related-imgWrap">
+              ${img ? `<img class="related-img" src="${escAttr(img)}" alt="${escAttr(ev.title || 'Event poster')}" loading="lazy" />` : `<div class="related-imgPh"></div>`}
+            </div>
+            <div class="related-meta">
+              <div class="related-title">${esc(ev.title || 'Event')}</div>
+              <div class="related-sub">${esc(locLine)}${locLine ? ' • ' : ''}${esc(rDatePretty)}</div>
+            </div>
+          </a>`;
+        })
+        .join('')}
+    </div>
+  </div>`;
+};
 
    const brand = getPublicBrand();
 
@@ -1629,17 +1650,72 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
      background: var(--brand); color: white; padding: 12px 24px; border-radius: 8px; font-weight: 700; font-size: 1rem;
    }
 
-   /* Related events */
-   .related-section { max-width: 1200px; margin: 0 auto; padding: 0 24px 100px; }
-   .related-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
-   .related-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow-card); display: flex; flex-direction: column; height: 100%; }
-   .related-card-img { width: 100%; aspect-ratio: 16/9; object-fit: cover; background: #e2e8f0; }
-   .related-card-body { padding: 14px; display: grid; gap: 6px; flex: 1; }
-   .related-card-title { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.05rem; }
-   .related-card-meta { color: var(--text-muted); font-size: 0.9rem; }
-   .related-card-cta { color: var(--brand); font-weight: 700; font-size: 0.95rem; margin-top: 4px; }
-   .related-section .section-label { margin-bottom: 12px; display: inline-block; }
+   /* Related shows carousel (beneath tickets) */
+.related-carousel{
+  margin-top: 28px;
+}
 
+.related-strip{
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding: 6px 2px 2px;
+  scrollbar-width: none; /* Firefox */
+}
+.related-strip::-webkit-scrollbar{ display:none; }
+
+.related-item{
+  flex: 0 0 auto;
+  width: 260px;
+  scroll-snap-align: start;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+}
+
+@media (min-width: 720px){
+  .related-item{ width: 300px; }
+}
+
+.related-imgWrap{
+  width: 100%;
+  aspect-ratio: 16/9;
+  background: #e2e8f0;
+}
+.related-img{
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.related-imgPh{
+  width: 100%;
+  height: 100%;
+  background: #e2e8f0;
+}
+
+.related-meta{
+  padding: 12px 12px 14px;
+  display: grid;
+  gap: 6px;
+}
+
+.related-title{
+  font-family: 'Outfit', sans-serif;
+  font-weight: 900;
+  font-size: 1.02rem;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.related-sub{
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  font-weight: 600;
+}
 @media (max-width: 960px) {
   /* IMPORTANT: remove forced height that creates dead space */
   .hero { min-height: 0; }
@@ -1769,7 +1845,7 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
              ${renderTicketList(true)}
          </div>
      </div>
-
+${renderRelatedShows()}
    </div>
 
 
@@ -1804,8 +1880,6 @@ ${accessibilityReasons
    </div>
 
  </div>
-
- ${renderRelatedShows()}
 
   <div class="mobile-bar">
    <div>
