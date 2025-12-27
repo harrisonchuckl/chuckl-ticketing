@@ -987,6 +987,8 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 .hero-media{
   position: relative;
   z-index: 1;           /* ensures strip z-index wins cleanly */
+  line-height: 0;       /* prevents tiny baseline gaps */
+  background: var(--primary);
 }
 
 .hero-bg{
@@ -1139,15 +1141,18 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 }
 
 /* --- MOBILE HERO STRIP (full-width, under the image) --- */
+/* --- MOBILE HERO STRIP (full-width, under the image) --- */
 .hero-strip{
   display: none;          /* default off (desktop) */
   width: 100%;
-  background: #0F172A;    /* FULLY OPAQUE (no gradient bleed-through) */
-  border-top: 1px solid rgba(255,255,255,0.08);
+  background: #0F172A;    /* FULLY OPAQUE */
+  border-top: 1px solid rgba(255,255,255,0.004); /* ~95% more subtle */
   position: relative;
-  z-index: 50;            /* belt + braces */
-}
+  z-index: 50;
 
+  /* kill any faint seam by overlapping into the image */
+  margin-top: -2px;
+}
 .hero-strip-inner{
   max-width: 1200px;
   margin: 0 auto;
