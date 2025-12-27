@@ -1092,7 +1092,7 @@ setupHeroMetaWatcher();
 .app-nav-sep{
   color: rgba(107,114,128,0.6);
   font-weight: 800;
-}
+}x
 
 .app-nav-current{
   color: var(--primary);
@@ -1106,17 +1106,18 @@ setupHeroMetaWatcher();
   .app-header-inner{ padding: 0 16px; }
   .app-nav-current{ max-width: 45vw; }
 }
-    .hero-content{
+.hero-content{
   position: absolute;
   left: 0; right: 0; bottom: 0;
   z-index: 10;
   width: 100%;
   max-width: 1200px;
   margin: 0 auto;
-  padding: 24px 24px 18px;
-  display: grid;
-  gap: 16px;
+
+  /* tighter: no extra top padding, no grid/gap */
+  padding: 0 24px 16px;
 }
+
 
     .hero-title {
       font-size: clamp(2.5rem, 5vw, 4.5rem); font-weight: 800; line-height: 1; text-transform: uppercase;
@@ -1465,8 +1466,12 @@ setupHeroMetaWatcher();
     .related-section .section-label { margin-bottom: 12px; display: inline-block; }
 
 @media (max-width: 960px) {
-      .hero { min-height: 45vh; }
+      .hero { min-height: 0; }
       .hero-title { font-size: 2.8rem; text-align: left; }
+      /* always use abbreviated date on mobile */
+.hero-date .meta-full{ display:none; }
+.hero-date .meta-short{ display:inline; }
+
       .layout { display: block; margin-top: -20px; gap: 40px; }
       .content-area { padding-top: 40px; }
       .booking-area { display: none; }
@@ -1474,7 +1479,7 @@ setupHeroMetaWatcher();
 .hero-meta{
   background: rgba(15,23,42,0.72);
   border: 1px solid rgba(255,255,255,0.12);
-  padding: 12px 14px;
+  padding: 10px 12px;
   border-radius: 14px;
   width: fit-content;
   max-width: 100%;
