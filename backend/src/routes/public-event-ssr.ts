@@ -1150,11 +1150,11 @@ setupHeroMetaWatcher();
 /* Box styling (applied by JS when needed; always on small screens) */
 .hero-meta.is-box{
   background: rgba(15,23,42,0.72);
-  border: 1px solid rgba(255,255,255,0.12);
-  padding: 12px 14px;
-  border-radius: 14px;
+  padding: 8px 10px;          /* tighter hug */
+  border-radius: 10px;        /* less “pill” */
   width: fit-content;
   max-width: 100%;
+  justify-self: start;        /* IMPORTANT: don’t stretch in the grid */
   backdrop-filter: blur(10px) saturate(140%);
   -webkit-backdrop-filter: blur(10px) saturate(140%);
 }
@@ -1477,13 +1477,16 @@ setupHeroMetaWatcher();
       .booking-area { display: none; }
       .mobile-bar { display: flex; }
 .hero-meta{
+  font-size: 0.98rem;
+}
+
+/* fallback if JS hasn’t run yet (still tight, not “pill”) */
+.hero-meta{
   background: rgba(15,23,42,0.72);
-  border: 1px solid rgba(255,255,255,0.12);
-  padding: 10px 12px;
-  border-radius: 14px;
+  padding: 8px 10px;
+  border-radius: 10px;
   width: fit-content;
   max-width: 100%;
-  font-size: 0.98rem;
 }
     }
   </style>
