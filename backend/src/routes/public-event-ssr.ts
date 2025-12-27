@@ -983,13 +983,40 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
  .hero-bg{ object-position: center; }
 }
 
+.hero-media{
+  position: relative;   /* overlay is now confined to image area */
+}
+
+.hero-bg{
+  position: relative;
+  z-index: 1;
+}
+
 .hero-overlay{
- position: absolute;
- inset: 0;
- pointer-events: none;
- background:
-   linear-gradient(to right, rgba(15,23,42,0.9) 0%, rgba(15,23,42,0.4) 50%, transparent 100%),
-   linear-gradient(to top, rgba(15,23,42,0.9) 0%, transparent 40%);
+  position: absolute;
+  inset: 0;
+  z-index: 2;           /* sits above image */
+  pointer-events: none;
+  background:
+    linear-gradient(to right, rgba(15,23,42,0.9) 0%, rgba(15,23,42,0.4) 50%, transparent 100%),
+    linear-gradient(to top, rgba(15,23,42,0.9) 0%, transparent 40%);
+}
+
+/* Desktop meta must be above overlay */
+.hero-content{
+  z-index: 3;
+}
+
+/* Strip + its text must sit above everything (and not be affected by overlay) */
+.hero-strip{
+  position: relative;
+  z-index: 10;
+}
+
+.hero-strip-inner,
+.hero-strip *{
+  position: relative;
+  z-index: 11; /* belt + braces: text always on top */
 }
   /* --- FIXED TOP HEADER (white, like checkout) --- */
 .app-header{
@@ -1502,36 +1529,40 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
  </div>
 </header>
 
- <header class="hero">
- ${poster ? `<img class="hero-bg" src="${escAttr(poster)}" alt="${escAttr(show.title || 'Event poster')}" loading="eager" />` : ''}
- <div class="hero-overlay"></div>
+<header class="hero">
 
- <!-- Desktop overlay meta (hidden on mobile) -->
- <div class="hero-content hero-content--desktop">
-   <div class="hero-meta">
-     <div class="hero-meta-item"><span>${esc(prettyDate)}</span></div>
-     <div class="hero-meta-item"><span>${esc(venue.name)}</span></div>
-     <div class="hero-meta-item"><span>${esc(timeStr)}</span></div>
-   </div>
- </div>
+  <div class="hero-media">
+    ${poster ? `<img class="hero-bg" src="${escAttr(poster)}" alt="${escAttr(show.title || 'Event poster')}" loading="eager" />` : ''}
+    <div class="hero-overlay"></div>
 
- <!-- Mobile full-width strip (shown on mobile only) -->
-<div class="hero-strip" aria-label="Event details">
-  <div class="hero-strip-inner">
-    <!-- Long date (bigger screens) -->
-    <span class="hs-item hs-date hs-date--long">${esc(prettyDate)}</span>
-    <!-- Short date (when we'd otherwise wrap) -->
-    <span class="hs-item hs-date hs-date--short">${esc(prettyDateShort)}</span>
-
-    <span class="hs-sep hs-sep--1" aria-hidden="true"></span>
-
-    <span class="hs-item hs-venue">${esc(venue.name)}</span>
-
-    <span class="hs-sep hs-sep--2" aria-hidden="true"></span>
-
-    <span class="hs-item hs-time">${esc(timeStr)}</span>
+    <!-- Desktop overlay meta (hidden on mobile) -->
+    <div class="hero-content hero-content--desktop">
+      <div class="hero-meta">
+        <div class="hero-meta-item"><span>${esc(prettyDate)}</span></div>
+        <div class="hero-meta-item"><span>${esc(venue.name)}</span></div>
+        <div class="hero-meta-item"><span>${esc(timeStr)}</span></div>
+      </div>
+    </div>
   </div>
-</div>
+
+  <!-- Mobile full-width strip (shown on mobile only) -->
+  <div class="hero-strip" aria-label="Event details">
+    <div class="hero-strip-inner">
+      <!-- Long date (bigger screens) -->
+      <span class="hs-item hs-date hs-date--long">${esc(prettyDate)}</span>
+      <!-- Short date (when we'd otherwise wrap) -->
+      <span class="hs-item hs-date hs-date--short">${esc(prettyDateShort)}</span>
+
+      <span class="hs-sep hs-sep--1" aria-hidden="true"></span>
+
+      <span class="hs-item hs-venue">${esc(venue.name)}</span>
+
+      <span class="hs-sep hs-sep--2" aria-hidden="true"></span>
+
+      <span class="hs-item hs-time">${esc(timeStr)}</span>
+    </div>
+  </div>
+
 </header>
 
  <div class="layout">
