@@ -1205,26 +1205,34 @@ body {
   pointer-events:auto;
 }
 
-    .zoom-btn{
-      width:46px;
-      height:46px;
-      border-radius:14px;
-      border:1px solid rgba(15,23,42,0.18);
-      background:rgba(255,255,255,0.98);
-      box-shadow:0 6px 18px rgba(0,0,0,0.14);
-      font-size:22px;
-      font-weight:800;
-      line-height:1;
-      color:#0F172A;
-      cursor:pointer;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-    }
+   .zoom-btn{
+  width:46px;
+  height:46px;
+  border-radius:14px;
+  border:1px solid rgba(15,23,42,0.18);
+  background:rgba(255,255,255,0.98);
 
-    .zoom-btn:active{
-      transform: translateY(1px);
-    }
+  box-shadow:none;              /* ✅ remove shadow */
+
+  font-size:22px;
+  font-weight:800;
+  line-height:1;
+  color:#0F172A;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  -webkit-appearance:none;      /* ✅ iOS/Safari: prevent default styling */
+  appearance:none;
+}
+
+.zoom-btn:focus,
+.zoom-btn:focus-visible,
+.zoom-btn:active{
+  box-shadow:none;              /* ✅ ensure no shadow reappears */
+  outline:none;                 /* optional */
+}
 
 .checkoutBar { background:var(--surface); border-top:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; box-shadow:0 -4px 10px rgba(0,0,0,0.03); z-index:4000; position:relative; }
 
