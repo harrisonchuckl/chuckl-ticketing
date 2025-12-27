@@ -1082,7 +1082,7 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 
 /* --- MOBILE HERO STRIP (full-width, under the image) --- */
 .hero-strip{
-  display: none; /* default off (desktop) */
+  display: none;          /* default off (desktop) */
   width: 100%;
   background: rgba(15,23,42,0.92);
   border-top: 1px solid rgba(255,255,255,0.08);
@@ -1092,8 +1092,8 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
   max-width: 1200px;
   margin: 0 auto;
 
-  /* 👇 equal top/bottom padding (fixes the “big bottom gap”) */
-  padding: 10px 16px;
+  /* default (larger) padding */
+  padding: 12px 16px;
 
   display: flex;
   align-items: center;
@@ -1102,32 +1102,62 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
   color: rgba(255,255,255,0.95);
   font-weight: 700;
   font-size: 0.95rem;
-  line-height: 1.15;
+  line-height: 1.1;
 
   white-space: nowrap;
-  overflow: hidden;
+  overflow: hidden; /* keep the bar tidy */
 }
 
-/* Critical for Safari flex-ellipsis */
+/* IMPORTANT: no ellipses at all — we change content instead */
 .hs-item{
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: inline-block;
   white-space: nowrap;
 }
 
-/* Make the venue take the “squeeze” so it truncates nicely */
-.hs-date{ flex: 0 1 auto; max-width: 38vw; }
-.hs-venue{ flex: 1 1 auto; }
-.hs-time{ flex: 0 0 auto; max-width: 18vw; text-align: right; }
+/* date variants */
+.hs-date--short{ display: none; }
+.hs-date--long{ display: inline-block; }
 
+/* keep time stable on the right */
+.hs-time{
+  margin-left: auto;
+  text-align: right;
+}
+
+/* separators */
 .hs-sep{
   width: 4px;
   height: 18px;
   border-radius: 999px;
   background: var(--brand);
   flex: 0 0 auto;
+}
+
+/* 1) When screen shrinks enough that we'd wrap: switch to abbreviated date */
+@media (max-width: 720px){
+  .hs-date--long{ display: none; }
+  .hs-date--short{ display: inline-block; }
+
+  /* tighten the bar so it doesn't feel "gappy" */
+  .hero-strip-inner{
+    padding: 10px 14px;
+    font-size: 0.92rem;
+    gap: 10px;
+  }
+}
+
+/* 2) Even smaller: drop venue entirely, leaving "Sat 20th Dec 2025" + time */
+@media (max-width: 520px){
+  .hs-venue{ display: none; }
+  .hs-sep--1{ display: none; } /* separator before venue */
+  .hs-sep--2{ display: none; } /* separator after venue */
+
+  /* even tighter on tiny screens */
+  .hero-strip-inner{
+    padding: 9px 12px;
+    font-size: 0.9rem;
+    gap: 8px;
+  }
 }
 
    .hero-title {
@@ -1488,10 +1518,17 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
  <!-- Mobile full-width strip (shown on mobile only) -->
 <div class="hero-strip" aria-label="Event details">
   <div class="hero-strip-inner">
-    <span class="hs-item hs-date">${esc(prettyDateShort)}</span>
-    <span class="hs-sep" aria-hidden="true"></span>
+    <!-- Long date (bigger screens) -->
+    <span class="hs-item hs-date hs-date--long">${esc(prettyDate)}</span>
+    <!-- Short date (when we'd otherwise wrap) -->
+    <span class="hs-item hs-date hs-date--short">${esc(prettyDateShort)}</span>
+
+    <span class="hs-sep hs-sep--1" aria-hidden="true"></span>
+
     <span class="hs-item hs-venue">${esc(venue.name)}</span>
-    <span class="hs-sep" aria-hidden="true"></span>
+
+    <span class="hs-sep hs-sep--2" aria-hidden="true"></span>
+
     <span class="hs-item hs-time">${esc(timeStr)}</span>
   </div>
 </div>
