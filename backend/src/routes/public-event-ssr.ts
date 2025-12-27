@@ -1726,7 +1726,7 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 ` : ''}
 
 
-      ${imageList.length ? `
+          ${imageList.length ? `
  <div class="gallery-wrap" data-gallery>
    <button class="gallery-nav gallery-left" type="button" aria-label="Previous images">‹</button>
    <div class="gallery-strip" data-gallery-strip>
@@ -1738,6 +1738,7 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
              <img src="${escAttr(src)}" class="gallery-strip-img" alt="Event image ${idx + 1}" />
            </button>
          </div>
+         `
        )
        .join('')}
    </div>
