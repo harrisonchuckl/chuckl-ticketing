@@ -166,6 +166,24 @@ function getAccessibilityReasons(accessibility: any): string[] {
  return Array.from(labels);
 }
 
+function ordinalSuffix(n: number) {
+  const j = n % 10;
+  const k = n % 100;
+  if (k >= 11 && k <= 13) return 'th';
+  if (j === 1) return 'st';
+  if (j === 2) return 'nd';
+  if (j === 3) return 'rd';
+  return 'th';
+}
+
+function formatShortDate(d: Date | null) {
+  if (!d) return '';
+  const wd = d.toLocaleDateString('en-GB', { weekday: 'short' });
+  const day = d.getDate();
+  const mon = d.toLocaleDateString('en-GB', { month: 'short' });
+  const yr = d.getFullYear();
+  return `${wd} ${day}${ordinalSuffix(day)} ${mon} ${yr}`;
+}
 
 function formatTimeHHMM(raw: any) {
  if (raw === null || raw === undefined) return '';
@@ -612,6 +630,7 @@ const bookingFeePenceFor = (t: any) => {
 
    const fullDate = dateObj ? dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Date TBC';
 const prettyDate = `${dayName} ${dayNum} ${monthName} ${yearNum}`;
+const shortDate = dateObj ? formatShortDate(dateObj) : fullDate;
 
 // --- condensed mobile line (e.g. "Sat 20th Dec 2025") ---
 const ordinal = (n: number) => {
@@ -945,6 +964,54 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
  background: var(--primary);
  color: white;
  overflow: hidden;
+}
+
+.hero-media{
+  position: relative;
+}
+
+/* Full-width strip UNDER the image (mobile) */
+.hero-strip{
+  display: none; /* enabled on mobile */
+  width: 100%;
+  background: rgba(15,23,42,0.92);
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.hero-strip-inner{
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 14px 24px; /* top + bottom MATCHED (fixes your gap) */
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.strip-item{
+  min-width: 0;
+  color: rgba(255,255,255,0.95);
+  font-weight: 700;
+  font-size: 0.98rem;
+}
+
+.strip-item > span{
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis; /* THIS is the real “condense” */
+}
+
+.strip-date{ flex: 0 0 auto; max-width: 42vw; }
+.strip-venue{ flex: 1 1 auto; } /* takes remaining space and ellipses */
+.strip-time{ flex: 0 0 auto; max-width: 18vw; }
+
+.strip-sep{
+  width: 4px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--brand);
+  flex: 0 0 auto;
 }
 
 /* hero poster is now an IMG so it can keep aspect ratio */
@@ -1410,18 +1477,19 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
    .related-section .section-label { margin-bottom: 12px; display: inline-block; }
 
 @media (max-width: 960px) {
- .hero { min-height: 45vh; }
- .hero-title { font-size: 2.8rem; text-align: left; }
- .layout { display: block; margin-top: -20px; gap: 40px; }
- .content-area { padding-top: 40px; }
- .booking-area { display: none; }
- .mobile-bar { display: flex; }
+  /* IMPORTANT: remove forced height that creates dead space */
+  .hero { min-height: 0; }
 
- /* remove the “pill/meta overlay” entirely on mobile */
- .hero-content--desktop { display: none; }
+  /* Hide the overlay meta on mobile (kills the “pill” look entirely) */
+  .hero-content { display: none; }
 
- /* show the full-width dark strip under the image */
- .hero-strip { display: block; }
+  /* Show the under-image strip */
+  .hero-strip { display: block; }
+
+  .layout { display: block; margin-top: 0; gap: 40px; }
+  .content-area { padding-top: 28px; }
+  .booking-area { display: none; }
+  .mobile-bar { display: flex; }
 }
  </style>
 </head>
