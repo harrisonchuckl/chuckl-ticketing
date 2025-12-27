@@ -1482,12 +1482,13 @@ function setHoverSeat(seat) {
 
     // --- SETUP STAGE ---
     const container = document.getElementById('stage-container');
-   const stage = new Konva.Stage({
+  const stage = new Konva.Stage({
   container: 'stage-container',
   width: container.offsetWidth,
   height: container.offsetHeight,
-  draggable: true // customer view: allow pan
+  draggable: true // ✅ customer checkout: map CAN pan/drag (Stage only)
 });
+
 
 // Make “accidental micro-drags” not steal clicks
 stage.dragDistance(8);
@@ -1718,7 +1719,7 @@ stage.container().addEventListener('touchmove', (e) => {
 stage.container().addEventListener('touchend', (e) => {
   if (__pinching && (!e.touches || e.touches.length < 2)) {
     __pinching = false;
-    stage.draggable(true);
+    stage.draggable(true); // ✅ re-enable drag after pinch
     stage.container().style.cursor = 'grab';
   }
 }, { passive: true });
@@ -3446,11 +3447,11 @@ grp.on('click tap', (e) => {
 // After building the map, lock all NODES so customers can't drag blocks, tables, seats etc.
 // But keep the STAGE draggable so customers can pan the map.
 try {
-  stage.draggable(true);
+  stage.draggable(true); // ✅ Stage pans (whole map)
 
   stage.find('*').forEach((node) => {
     if (node && typeof node.draggable === 'function') {
-      node.draggable(false);
+      node.draggable(false); // ✅ seats/tables/labels/blocks cannot be dragged
     }
   });
 } catch (lockErr) {
