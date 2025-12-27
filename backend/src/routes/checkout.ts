@@ -1191,16 +1191,19 @@ body {
     .view-toggle input { accent-color: var(--brand); transform:scale(1.2); cursor:pointer; }
 
     /* ZOOM CONTROLS (bottom-right, vertical) */
-    .zoom-controls{
-      position:absolute;
-      right:16px;
-      bottom:16px;
-      z-index:4200;
-      display:flex;
-      flex-direction:column;
-      gap:10px;
-      pointer-events:auto;
-    }
+.zoom-controls{
+  position:absolute;
+  right:16px;
+  bottom:16px;
+
+  /* ✅ ensure it can sit above the fixed footer */
+  z-index:6000;
+
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  pointer-events:auto;
+}
 
     .zoom-btn{
       width:46px;
@@ -1234,6 +1237,12 @@ body {
     bottom: 0;
     z-index: 5000;
     padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  }
+
+  /* ✅ Move zoom controls above the fixed footer (and iOS safe area) */
+  .zoom-controls{
+    bottom: calc(84px + env(safe-area-inset-bottom) + 12px);
+    right: 14px;
   }
 }
   .basket-info { display:flex; flex-direction:column; }
