@@ -923,20 +923,37 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
     a { color: inherit; text-decoration: none; transition: opacity 0.2s; }
     a:hover { opacity: 0.8; }
 
-    /* --- HERO SECTION --- */
-    .hero {
-      position: relative; background: var(--primary); color: white; min-height: 50vh;
-      display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden;
-    }
-    .hero-bg {
-      position: absolute; inset: 0; background-image: url('${escAttr(poster)}');
-      background-size: cover; background-position: center center; opacity: 1; 
-    }
-    .hero-overlay {
-      position: absolute; inset: 0;
-      background: linear-gradient(to right, rgba(15,23,42,0.9) 0%, rgba(15,23,42,0.4) 50%, transparent 100%),
-                  linear-gradient(to top, rgba(15,23,42,0.9) 0%, transparent 40%);
-    }
+    /* --- HERO SECTION (NO CROP: image always fully visible) --- */
+.hero{
+  position: relative;
+  background: var(--primary);
+  color: white;
+  overflow: hidden;
+}
+
+/* hero poster is now an IMG so it can keep aspect ratio */
+.hero-bg{
+  display: block;
+  width: 100%;
+  height: auto;           /* <-- height changes with width */
+  max-height: 75vh;       /* optional safety so super-tall posters don’t take over desktop */
+  object-fit: contain;    /* never crop */
+  background: var(--primary);
+}
+
+/* if max-height ever kicks in, keep the full image visible */
+@media (min-width: 960px){
+  .hero-bg{ object-position: center; }
+}
+
+.hero-overlay{
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(to right, rgba(15,23,42,0.9) 0%, rgba(15,23,42,0.4) 50%, transparent 100%),
+    linear-gradient(to top, rgba(15,23,42,0.9) 0%, transparent 40%);
+}
    /* --- FIXED TOP HEADER (white, like checkout) --- */
 .app-header{
   position: fixed;
@@ -1014,9 +1031,16 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
   .app-header-inner{ padding: 0 16px; }
   .app-nav-current{ max-width: 45vw; }
 }
-    .hero-content {
-  position: relative; z-index: 10; width: 100%; max-width: 1200px; margin: 0 auto;
-  padding: 24px 24px 18px; display: grid; gap: 16px; /* bottom gap matches .layout top padding */
+    .hero-content{
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  z-index: 10;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px 24px 18px;
+  display: grid;
+  gap: 16px;
 }
 
     .hero-title {
@@ -1334,7 +1358,7 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
     .related-card-cta { color: var(--brand); font-weight: 700; font-size: 0.95rem; margin-top: 4px; }
     .related-section .section-label { margin-bottom: 12px; display: inline-block; }
 
-    @media (max-width: 960px) {
+@media (max-width: 960px) {
       .hero { min-height: 45vh; }
       .hero-title { font-size: 2.8rem; text-align: left; }
       .layout { display: block; margin-top: -20px; gap: 40px; }
@@ -1355,16 +1379,16 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 </header>
 
   <header class="hero">
-    <div class="hero-bg"></div>
-    <div class="hero-overlay"></div>
+  ${poster ? `<img class="hero-bg" src="${escAttr(poster)}" alt="${escAttr(show.title || 'Event poster')}" loading="eager" />` : ''}
+  <div class="hero-overlay"></div>
 
-    <div class="hero-content">
-  <div class="hero-meta">
-    <div class="hero-meta-item"><span>${esc(prettyDate)}</span></div>
-    <div class="hero-meta-item"><span>${esc(venue.name)}</span></div>
-    <div class="hero-meta-item"><span>${esc(timeStr)}</span></div>
+  <div class="hero-content">
+    <div class="hero-meta">
+      <div class="hero-meta-item"><span>${esc(prettyDate)}</span></div>
+      <div class="hero-meta-item"><span>${esc(venue.name)}</span></div>
+      <div class="hero-meta-item"><span>${esc(timeStr)}</span></div>
+    </div>
   </div>
-</div>
 </header>
 
   <div class="layout">
