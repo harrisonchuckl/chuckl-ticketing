@@ -966,53 +966,7 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
  overflow: hidden;
 }
 
-.hero-media{
-  position: relative;
-}
 
-/* Full-width strip UNDER the image (mobile) */
-.hero-strip{
-  display: none; /* enabled on mobile */
-  width: 100%;
-  background: rgba(15,23,42,0.92);
-  border-top: 1px solid rgba(255,255,255,0.06);
-}
-
-.hero-strip-inner{
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 14px 24px; /* top + bottom MATCHED (fixes your gap) */
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-}
-
-.strip-item{
-  min-width: 0;
-  color: rgba(255,255,255,0.95);
-  font-weight: 700;
-  font-size: 0.98rem;
-}
-
-.strip-item > span{
-  display: block;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis; /* THIS is the real “condense” */
-}
-
-.strip-date{ flex: 0 0 auto; max-width: 42vw; }
-.strip-venue{ flex: 1 1 auto; } /* takes remaining space and ellipses */
-.strip-time{ flex: 0 0 auto; max-width: 18vw; }
-
-.strip-sep{
-  width: 4px;
-  height: 18px;
-  border-radius: 999px;
-  background: var(--brand);
-  flex: 0 0 auto;
-}
 
 /* hero poster is now an IMG so it can keep aspect ratio */
 .hero-bg{
@@ -1128,37 +1082,52 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 
 /* --- MOBILE HERO STRIP (full-width, under the image) --- */
 .hero-strip{
- display: none;          /* default off (desktop) */
- width: 100%;
- background: rgba(15,23,42,0.92);
- border-top: 1px solid rgba(255,255,255,0.08);
+  display: none; /* default off (desktop) */
+  width: 100%;
+  background: rgba(15,23,42,0.92);
+  border-top: 1px solid rgba(255,255,255,0.08);
 }
 
 .hero-strip-inner{
- max-width: 1200px;
- margin: 0 auto;
- padding: 12px 16px;
- display: flex;
- align-items: center;
- gap: 12px;
- color: rgba(255,255,255,0.95);
- font-weight: 700;
- font-size: 0.95rem;
- white-space: nowrap;
- overflow: hidden;
+  max-width: 1200px;
+  margin: 0 auto;
+
+  /* 👇 equal top/bottom padding (fixes the “big bottom gap”) */
+  padding: 10px 16px;
+
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  color: rgba(255,255,255,0.95);
+  font-weight: 700;
+  font-size: 0.95rem;
+  line-height: 1.15;
+
+  white-space: nowrap;
+  overflow: hidden;
 }
 
+/* Critical for Safari flex-ellipsis */
 .hs-item{
- overflow: hidden;
- text-overflow: ellipsis;
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+
+/* Make the venue take the “squeeze” so it truncates nicely */
+.hs-date{ flex: 0 1 auto; max-width: 38vw; }
+.hs-venue{ flex: 1 1 auto; }
+.hs-time{ flex: 0 0 auto; max-width: 18vw; text-align: right; }
 
 .hs-sep{
- width: 4px;
- height: 18px;
- border-radius: 999px;
- background: var(--brand);
- flex: 0 0 auto;
+  width: 4px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--brand);
+  flex: 0 0 auto;
 }
 
    .hero-title {
@@ -1517,15 +1486,15 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
  </div>
 
  <!-- Mobile full-width strip (shown on mobile only) -->
- <div class="hero-strip" aria-label="Event details">
-   <div class="hero-strip-inner">
-     <span class="hs-item">${esc(prettyDateShort)}</span>
-     <span class="hs-sep" aria-hidden="true"></span>
-     <span class="hs-item">${esc(venue.name)}</span>
-     <span class="hs-sep" aria-hidden="true"></span>
-     <span class="hs-item">${esc(timeStr)}</span>
-   </div>
- </div>
+<div class="hero-strip" aria-label="Event details">
+  <div class="hero-strip-inner">
+    <span class="hs-item hs-date">${esc(prettyDateShort)}</span>
+    <span class="hs-sep" aria-hidden="true"></span>
+    <span class="hs-item hs-venue">${esc(venue.name)}</span>
+    <span class="hs-sep" aria-hidden="true"></span>
+    <span class="hs-item hs-time">${esc(timeStr)}</span>
+  </div>
+</div>
 </header>
 
  <div class="layout">
