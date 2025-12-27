@@ -960,10 +960,11 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 
    /* --- HERO SECTION (NO CROP: image always fully visible) --- */
 .hero{
- position: relative;
- background: var(--primary);
- color: white;
- overflow: hidden;
+  position: relative;
+  background: var(--primary);
+  color: white;
+  overflow: hidden;
+  isolation: isolate;   /* creates a clean stacking context */
 }
 
 
@@ -984,7 +985,8 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 }
 
 .hero-media{
-  position: relative;   /* overlay is now confined to image area */
+  position: relative;
+  z-index: 1;           /* ensures strip z-index wins cleanly */
 }
 
 .hero-bg{
@@ -1111,8 +1113,10 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 .hero-strip{
   display: none;          /* default off (desktop) */
   width: 100%;
-  background: rgba(15,23,42,0.92);
+  background: #0F172A;    /* FULLY OPAQUE (no gradient bleed-through) */
   border-top: 1px solid rgba(255,255,255,0.08);
+  position: relative;
+  z-index: 50;            /* belt + braces */
 }
 
 .hero-strip-inner{
