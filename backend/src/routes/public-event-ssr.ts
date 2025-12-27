@@ -1001,14 +1001,14 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
   pointer-events: none;
   background:
     linear-gradient(to right,
-      rgba(15,23,42,0.78) 0%,
-      rgba(15,23,42,0.28) 55%,
-      rgba(15,23,42,0.06) 100%
+      rgba(15,23,42,0.10) 0%,
+      rgba(15,23,42,0.05) 55%,
+      rgba(15,23,42,0.00) 100%
     ),
     linear-gradient(to top,
-      rgba(15,23,42,0.68) 0%,
-      rgba(15,23,42,0.18) 45%,
-      rgba(15,23,42,0.00) 78%
+      rgba(15,23,42,0.12) 0%,
+      rgba(15,23,42,0.04) 45%,
+      rgba(15,23,42,0.00) 80%
     );
 }
 
