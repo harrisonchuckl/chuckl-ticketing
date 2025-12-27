@@ -331,6 +331,24 @@ router.get("/success", async (req, res) => {
     .row{display:flex; gap:12px; flex-wrap:wrap; margin-top:14px;}
     .pill{background:#eef2ff; color:#1e3a8a; padding:8px 12px; border-radius:999px; font-weight:600;}
     a.btn{display:inline-block; margin-top:18px; background:#0074d4; color:#fff; text-decoration:none; padding:12px 16px; border-radius:12px; font-weight:700;}
+ /* --- Mobile checkout footer (Total + Continue) --- */
+@media (max-width: 820px), (pointer: coarse), (hover: none) {
+  .checkoutBar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9999;
+
+    background: rgba(255, 255, 255, 0.98);
+    border-top: 1px solid rgba(0,0,0,0.08);
+    backdrop-filter: blur(8px);
+
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  }
+}
+
+  
   </style>
 </head>
 <body>
@@ -1119,13 +1137,18 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
 
 /* Mobile-only: reserve space under the legend so it doesn't block map interactions */
 @media (max-width: 820px), (pointer: coarse), (hover: none) {
-  #map-wrapper { --legend-safe: 0px; }
+  /* Reserve room for legend + fixed checkout bar so the map remains tappable */
+  #map-wrapper { 
+    --legend-safe: 0px;
+    --checkout-safe: calc(84px + env(safe-area-inset-bottom));
+  }
 
   #stage-container{
-    height: calc(100% - var(--legend-safe));
+    height: calc(100% - var(--legend-safe) - var(--checkout-safe));
     margin-top: var(--legend-safe);
   }
 }
+
     #stage-container.visible { opacity:1; }
     
     /* LEGEND */
@@ -1179,7 +1202,7 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
       transform: translateY(1px);
     }
 
-    footer { background:var(--surface); border-top:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; box-shadow:0 -4px 10px rgba(0,0,0,0.03); z-index:4000; position:relative; }
+.checkoutBar { background:var(--surface); border-top:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; box-shadow:0 -4px 10px rgba(0,0,0,0.03); z-index:4000; position:relative; }
   .basket-info { display:flex; flex-direction:column; }
     .basket-label { font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em; font-weight:600; color:var(--muted); }
     .basket-total { font-family:'Outfit',sans-serif; font-size:1.5rem; font-weight:800; color:var(--primary); }
@@ -1281,7 +1304,7 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
     <div id="tooltip"></div>
     <div id="loader"><div class="spinner"></div><div>Loading seating plan...</div></div>
   </div> <!-- /#map-wrapper -->
-<footer>
+<footer class="checkoutBar">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;">
     <div class="basket-info">
       <div class="basket-seatinfo" id="ui-seatinfo"></div>
