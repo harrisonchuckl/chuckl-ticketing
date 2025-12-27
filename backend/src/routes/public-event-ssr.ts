@@ -181,6 +181,26 @@ function formatTimeHHMM(raw: any) {
   return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
 
+function ordinalDay(n: number) {
+  const v = n % 100;
+  if (v >= 11 && v <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1: return `${n}st`;
+    case 2: return `${n}nd`;
+    case 3: return `${n}rd`;
+    default: return `${n}th`;
+  }
+}
+
+function formatShortDateWithOrdinal(d: Date | null) {
+  if (!d) return '';
+  const wk = d.toLocaleDateString('en-GB', { weekday: 'short' }); // Sat
+  const mon = d.toLocaleDateString('en-GB', { month: 'short' });  // Dec
+  const day = ordinalDay(d.getDate());                             // 20th
+  const yr = d.getFullYear();
+  return `${wk} ${day} ${mon} ${yr}`;
+}
+
 function isTruthyFeature(val: any) {
   if (val === true) return true;
   if (typeof val === 'number') return val > 0;
@@ -610,8 +630,8 @@ const bookingFeePenceFor = (t: any) => {
     const timeStr = dateObj ? dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '';
     
     const fullDate = dateObj ? dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Date TBC';
-    const prettyDate = `${dayName} ${dayNum} ${monthName} ${yearNum}`;
-
+const prettyDate = `${dayName} ${dayNum} ${monthName} ${yearNum}`;
+const shortDate = dateObj ? formatShortDateWithOrdinal(dateObj) : fullDate;
     const venueLine = [venue.name, venue.city].filter(Boolean).join(', ');
     const fullAddress = [venue.address, venue.city, venue.postcode].filter(Boolean).join(', ');
 
@@ -862,6 +882,58 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
       }
     }
 
+function adjustHeroMeta() {
+  var meta = document.querySelector('[data-hero-meta]');
+  if (!meta) return;
+
+  var wrap = document.querySelector('[data-hero-meta-wrap]') || meta.parentElement;
+  if (!wrap) return;
+
+  // reset to “large screen” state
+  meta.classList.remove('is-box', 'is-compact', 'drop-venue');
+
+  var available = wrap.getBoundingClientRect().width || 0;
+  if (!available) return;
+
+  // On small screens: always boxed (per your requirement)
+  var smallScreen = window.matchMedia && window.matchMedia('(max-width: 960px)').matches;
+
+  // Phase 1: does FULL date overflow?
+  // (meta is nowrap, so scrollWidth reflects the needed width)
+  var needFull = meta.scrollWidth;
+
+  if (needFull > available + 1) {
+    // Add box + switch to short date
+    meta.classList.add('is-box', 'is-compact');
+    void meta.offsetWidth;
+
+    // Phase 2: still too wide? drop venue
+    var needShort = meta.scrollWidth;
+    if (needShort > available + 1) {
+      meta.classList.add('drop-venue');
+      void meta.offsetWidth;
+    }
+  } else if (smallScreen) {
+    // Fits, but on small screens we still want the box
+    meta.classList.add('is-box');
+  }
+}
+
+function setupHeroMetaWatcher() {
+  adjustHeroMeta();
+
+  // ResizeObserver handles “browser dragged wider/narrower”
+  try {
+    var wrap = document.querySelector('[data-hero-meta-wrap]');
+    if (wrap && 'ResizeObserver' in window) {
+      var ro = new ResizeObserver(function () { adjustHeroMeta(); });
+      ro.observe(wrap);
+    }
+  } catch (e) {}
+
+  window.addEventListener('resize', function () { adjustHeroMeta(); }, { passive: true });
+}
+
     document.addEventListener('DOMContentLoaded', function () {
       stripTicketsHash();
 
@@ -870,6 +942,9 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
       setTimeout(toTop, 0);
       setTimeout(toTop, 60);
       setTimeout(toTop, 250);
+
+setupHeroMetaWatcher();
+
 
       // Smooth-scroll buttons without changing the URL
       document.querySelectorAll('[data-scroll-to]').forEach(function (el) {
@@ -1047,9 +1122,40 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
       font-size: clamp(2.5rem, 5vw, 4.5rem); font-weight: 800; line-height: 1; text-transform: uppercase;
       letter-spacing: -0.02em; max-width: 800px; text-shadow: 0 4px 30px rgba(0,0,0,0.6);
     }
-   .hero-meta {
-  display: flex; flex-wrap: wrap; gap: 18px; margin-top: 8px; font-size: 1.05rem; font-weight: 500;
-  color: rgba(255,255,255,0.95); text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+.hero-meta{
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 8px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.95);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+
+  /* critical: keep it ONE line */
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* Short date is hidden until we need it */
+.meta-short{ display:none; }
+.hero-meta.is-compact .meta-full{ display:none; }
+.hero-meta.is-compact .meta-short{ display:inline; }
+
+/* Drop venue when we really run out of space */
+.hero-meta.drop-venue .hero-venue{ display:none; }
+
+/* Box styling (applied by JS when needed; always on small screens) */
+.hero-meta.is-box{
+  background: rgba(15,23,42,0.72);
+  border: 1px solid rgba(255,255,255,0.12);
+  padding: 12px 14px;
+  border-radius: 14px;
+  width: fit-content;
+  max-width: 100%;
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
 }
 
 .hero-meta-item{
@@ -1365,6 +1471,15 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
       .content-area { padding-top: 40px; }
       .booking-area { display: none; }
       .mobile-bar { display: flex; }
+.hero-meta{
+  background: rgba(15,23,42,0.72);
+  border: 1px solid rgba(255,255,255,0.12);
+  padding: 12px 14px;
+  border-radius: 14px;
+  width: fit-content;
+  max-width: 100%;
+  font-size: 0.98rem;
+}
     }
   </style>
 </head>
@@ -1382,13 +1497,16 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
   ${poster ? `<img class="hero-bg" src="${escAttr(poster)}" alt="${escAttr(show.title || 'Event poster')}" loading="eager" />` : ''}
   <div class="hero-overlay"></div>
 
-  <div class="hero-content">
-    <div class="hero-meta">
-      <div class="hero-meta-item"><span>${esc(prettyDate)}</span></div>
-      <div class="hero-meta-item"><span>${esc(venue.name)}</span></div>
-      <div class="hero-meta-item"><span>${esc(timeStr)}</span></div>
+  <div class="hero-content" data-hero-meta-wrap>
+  <div class="hero-meta" data-hero-meta>
+    <div class="hero-meta-item hero-date">
+      <span class="meta-full">${esc(prettyDate)}</span>
+      <span class="meta-short">${esc(shortDate)}</span>
     </div>
+    <div class="hero-meta-item hero-venue"><span>${esc(venue.name)}</span></div>
+    <div class="hero-meta-item hero-time"><span>${esc(timeStr)}</span></div>
   </div>
+</div>
 </header>
 
   <div class="layout">
