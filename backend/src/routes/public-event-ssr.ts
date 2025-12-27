@@ -1231,6 +1231,8 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
  margin: 0 0 22px;
 }
 
+  .page-title-row{ margin: 0 0 12px; }
+
 .page-title{
  font-family: 'Outfit', sans-serif;
  font-weight: 900;
@@ -1516,8 +1518,8 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
   /* Show the under-image strip */
   .hero-strip { display: block; }
 
-  .layout { display: block; margin-top: 0; gap: 40px; }
-  .content-area { padding-top: 28px; }
+  .layout { display: block; margin-top: 0; gap: 28px; }
+  .content-area { padding-top: 14px; gap: 28px; }
   .booking-area { display: none; }
   .mobile-bar { display: flex; }
 }
