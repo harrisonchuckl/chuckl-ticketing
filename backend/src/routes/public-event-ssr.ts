@@ -1401,6 +1401,105 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 .gallery-right{ right: -12px; }
 .gallery-nav[hidden]{ display:none; }
 
+/* Make gallery images clickable (no default button styling) */
+.gallery-strip-btn{
+  width: 100%;
+  height: 100%;
+  display: block;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+.gallery-strip-btn:focus{ outline: none; }
+.gallery-strip-btn:focus-visible{
+  outline: 3px solid rgba(15,156,223,0.55);
+  outline-offset: 3px;
+  border-radius: 12px;
+}
+
+/* --- LIGHTBOX (tap/click image to open full size) --- */
+.lightbox{
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+.lightbox[hidden]{ display:none; }
+
+.lightbox-backdrop{
+  position: absolute;
+  inset: 0;
+  background: rgba(15,23,42,0.72);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+.lightbox-dialog{
+  position: relative;
+  z-index: 1;
+  max-width: min(1100px, 92vw);
+  max-height: 86vh;
+  display: grid;
+  place-items: center;
+}
+
+.lightbox-img{
+  max-width: 100%;
+  max-height: 86vh;
+  width: auto;
+  height: auto;
+  border-radius: 14px;
+  box-shadow: 0 25px 60px rgba(0,0,0,0.35);
+  background: #0F172A;
+}
+
+.lightbox-close{
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.22);
+  background: rgba(15,23,42,0.75);
+  color: #fff;
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.lightbox-nav{
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.22);
+  background: rgba(15,23,42,0.62);
+  color: #fff;
+  font-size: 28px;
+  font-weight: 900;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.lightbox-prev{ left: -14px; }
+.lightbox-next{ right: -14px; }
+
+@media (max-width: 520px){
+  .lightbox{ padding: 12px; }
+  .lightbox-prev{ left: -6px; }
+  .lightbox-next{ right: -6px; }
+}
+
+
+
    /* Venue Map Styles (Updated for Iframe) */
    .venue-map-container { margin-top: 24px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
    .venue-map-header {
@@ -1635,8 +1734,10 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
        .map(
          (src, idx) => `
          <div class="gallery-strip-item">
-           <img src="${escAttr(src)}" class="gallery-strip-img" alt="Event image ${idx + 1}" />
-         </div>`
+           <button class="gallery-strip-btn" type="button" data-lightbox-src="${escAttr(src)}" aria-label="View image ${idx + 1}">
+             <img src="${escAttr(src)}" class="gallery-strip-img" alt="Event image ${idx + 1}" />
+           </button>
+         </div>
        )
        .join('')}
    </div>
@@ -1712,41 +1813,184 @@ ${fromFeeHtml ? `<div class="mob-fee">${fromFeeHtml}</div>` : ''}
      </div>
    </div>
 ${mobileCtaHtml}
- </div>
+ </div> 
 
- <script>
- (function () {
-   const root = document.querySelector('[data-gallery]');
-   if (!root) return;
+<!-- Lightbox (full size gallery image preview) -->
+<div class="lightbox" data-lightbox hidden aria-hidden="true">
+  <div class="lightbox-backdrop" data-lightbox-close></div>
 
-   const strip = root.querySelector('[data-gallery-strip]');
-   const left = root.querySelector('.gallery-left');
-   const right = root.querySelector('.gallery-right');
-   if (!strip || !left || !right) return;
+  <div class="lightbox-dialog" role="dialog" aria-modal="true" aria-label="Image preview">
+    <button class="lightbox-close" type="button" data-lightbox-close aria-label="Close">×</button>
+    <button class="lightbox-nav lightbox-prev" type="button" data-lightbox-prev aria-label="Previous image">‹</button>
 
-   function update() {
-     const maxScroll = strip.scrollWidth - strip.clientWidth;
-     const atStart = strip.scrollLeft <= 1;
-     const atEnd = strip.scrollLeft >= maxScroll - 1;
-     left.hidden = atStart;
-     right.hidden = atEnd || maxScroll <= 1;
-   }
+    <img class="lightbox-img" data-lightbox-img src="" alt="Image preview" />
 
-   function scrollByCard(dir) {
-     const firstCard = strip.querySelector('.gallery-strip-item');
-     const step = firstCard ? firstCard.getBoundingClientRect().width + 12 : 320;
-     strip.scrollBy({ left: dir * step, behavior: 'smooth' });
-   }
+    <button class="lightbox-nav lightbox-next" type="button" data-lightbox-next aria-label="Next image">›</button>
+  </div>
+</div>
 
-   left.addEventListener('click', () => scrollByCard(-1));
-   right.addEventListener('click', () => scrollByCard(1));
-   strip.addEventListener('scroll', update, { passive: true });
 
-   window.addEventListener('resize', update);
-   update();
- })();
+
+<script>
+(function () {
+  const root = document.querySelector('[data-gallery]');
+  if (!root) return;
+
+  const strip = root.querySelector('[data-gallery-strip]');
+  const left = root.querySelector('.gallery-left');
+  const right = root.querySelector('.gallery-right');
+  if (!strip || !left || !right) return;
+
+  function update() {
+    const maxScroll = strip.scrollWidth - strip.clientWidth;
+    const atStart = strip.scrollLeft <= 1;
+    const atEnd = strip.scrollLeft >= maxScroll - 1;
+    left.hidden = atStart;
+    right.hidden = atEnd || maxScroll <= 1;
+  }
+
+  function scrollByCard(dir) {
+    const firstCard = strip.querySelector('.gallery-strip-item');
+    const step = firstCard ? firstCard.getBoundingClientRect().width + 12 : 320;
+    strip.scrollBy({ left: dir * step, behavior: 'smooth' });
+  }
+
+  left.addEventListener('click', () => scrollByCard(-1));
+  right.addEventListener('click', () => scrollByCard(1));
+  strip.addEventListener('scroll', update, { passive: true });
+  window.addEventListener('resize', update);
+  update();
+
+  // ---- Lightbox ----
+  const lb = document.querySelector('[data-lightbox]');
+  const lbImg = lb ? lb.querySelector('[data-lightbox-img]') : null;
+  const btnPrev = lb ? lb.querySelector('[data-lightbox-prev]') : null;
+  const btnNext = lb ? lb.querySelector('[data-lightbox-next]') : null;
+
+  if (!lb || !lbImg || !btnPrev || !btnNext) return;
+
+  const items = Array.from(root.querySelectorAll('[data-lightbox-src]'));
+  const srcs = items.map((el) => el.getAttribute('data-lightbox-src')).filter(Boolean);
+
+  let current = 0;
+  let prevOverflow = '';
+
+  function setOpen(open) {
+    if (open) {
+      lb.hidden = false;
+      lb.setAttribute('aria-hidden', 'false');
+      prevOverflow = document.documentElement.style.overflow || '';
+      document.documentElement.style.overflow = 'hidden';
+      document.body.style.overflow = 'hidden';
+    } else {
+      lb.hidden = true;
+      lb.setAttribute('aria-hidden', 'true');
+      document.documentElement.style.overflow = prevOverflow;
+      document.body.style.overflow = '';
+    }
+  }
+
+  function render() {
+    const src = srcs[current] || '';
+    lbImg.src = src;
+
+    // hide nav if only 1 image
+    const many = srcs.length > 1;
+    btnPrev.style.display = many ? '' : 'none';
+    btnNext.style.display = many ? '' : 'none';
+  }
+
+  function openAt(idx) {
+    if (!srcs.length) return;
+    current = Math.max(0, Math.min(idx, srcs.length - 1));
+    render();
+    setOpen(true);
+  }
+
+  function close() {
+    setOpen(false);
+    lbImg.src = '';
+  }
+
+  function next() {
+    if (srcs.length < 2) return;
+    current = (current + 1) % srcs.length;
+    render();
+  }
+
+  function prev() {
+    if (srcs.length < 2) return;
+    current = (current - 1 + srcs.length) % srcs.length;
+    render();
+  }
+
+  // Click image in gallery => open lightbox
+  strip.addEventListener('click', function (e) {
+    const target = e.target;
+    const btn = target && target.closest ? target.closest('[data-lightbox-src]') : null;
+    if (!btn) return;
+
+    e.preventDefault();
+    const idx = items.indexOf(btn);
+    openAt(idx >= 0 ? idx : 0);
+  });
+
+  // Close when clicking backdrop OR close button
+  lb.addEventListener('click', function (e) {
+    const t = e.target;
+    if (t && t.closest && t.closest('[data-lightbox-close]')) {
+      e.preventDefault();
+      close();
+      return;
+    }
+    // If you clicked outside the image/dialog, close
+    if (t === lb) close();
+  });
+
+  btnNext.addEventListener('click', function (e) { e.preventDefault(); next(); });
+  btnPrev.addEventListener('click', function (e) { e.preventDefault(); prev(); });
+
+  // Keyboard controls
+  document.addEventListener('keydown', function (e) {
+    if (lb.hidden) return;
+    if (e.key === 'Escape') { e.preventDefault(); close(); }
+    if (e.key === 'ArrowRight') { e.preventDefault(); next(); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); prev(); }
+  });
+
+  // Simple swipe on mobile (left/right)
+  let startX = 0;
+  let startY = 0;
+  let tracking = false;
+
+  lbImg.addEventListener('touchstart', function (e) {
+    if (lb.hidden) return;
+    const t = e.touches && e.touches[0];
+    if (!t) return;
+    tracking = true;
+    startX = t.clientX;
+    startY = t.clientY;
+  }, { passive: true });
+
+  lbImg.addEventListener('touchend', function (e) {
+    if (!tracking || lb.hidden) return;
+    tracking = false;
+
+    const t = e.changedTouches && e.changedTouches[0];
+    if (!t) return;
+
+    const dx = t.clientX - startX;
+    const dy = t.clientY - startY;
+
+    // horizontal swipe only
+    if (Math.abs(dx) > 45 && Math.abs(dy) < 40) {
+      if (dx < 0) next();
+      else prev();
+    }
+  }, { passive: true });
+
+})();
 </script>
-
 
 </body>
 </html>`);
