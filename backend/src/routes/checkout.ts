@@ -1044,7 +1044,7 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>Select Seats | ${show.title}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@700&display=swap" rel="stylesheet">
@@ -1111,7 +1111,17 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
 }
 
     :root { --bg:#F3F4F6; --surface:#FFFFFF; --primary:#0F172A; --brand:#0056D2; --text-main:#111827; --text-muted:#6B7280; --border:#E5E7EB; --success:#10B981; --blocked:#334155; }
-html, body { height: 100%; overflow: hidden; }
+html, body {
+  height: 100%;
+  overflow: hidden;
+
+  /* ✅ stop Safari/Chrome from trying to scroll/zoom the PAGE */
+  overscroll-behavior: none;
+  touch-action: none;
+
+  /* ✅ avoid accidental selection zoom weirdness */
+  -webkit-text-size-adjust: 100%;
+}
 
 body {
   margin: 0;
@@ -1139,6 +1149,10 @@ body {
   background: #E2E8F0;
   overflow: hidden;
   width: 100%;
+
+touch-action: none;
+  -ms-touch-action: none;
+  overscroll-behavior: none;
 }
 #stage-container {
   width: 100%;
@@ -1880,6 +1894,36 @@ stage.container().addEventListener('pointerdown', (e) => {
   (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ||
   (window.matchMedia && window.matchMedia('(hover: none)').matches) ||
   ('ontouchstart' in window);
+
+// ✅ Prevent *browser* pinch-zoom / double-tap zoom from scaling the page (iOS Safari)
+(function stopBrowserZoom(){
+  if (!isMobileView) return;
+
+  const prevent = (e) => {
+    try { e.preventDefault(); } catch (_) {}
+  };
+
+  // iOS Safari: these fire for page zoom gestures
+  document.addEventListener('gesturestart', prevent, { passive: false });
+  document.addEventListener('gesturechange', prevent, { passive: false });
+  document.addEventListener('gestureend', prevent, { passive: false });
+
+  // Block 2-finger page scrolling/zooming while still allowing our Konva pinch handler
+  const mw = document.getElementById('map-wrapper');
+  if (mw) {
+    mw.addEventListener('touchmove', (e) => {
+      if (e.touches && e.touches.length > 1) prevent(e);
+    }, { passive: false });
+  }
+
+  // Double-tap zoom guard (prevents Safari zooming the page)
+  let lastTouchEnd = 0;
+  document.addEventListener('touchend', (e) => {
+    const now = Date.now();
+    if (now - lastTouchEnd <= 300) prevent(e);
+    lastTouchEnd = now;
+  }, { passive: false });
+})();
 
 // --- Tooltip dismiss on mobile (tap anywhere else) ---
 let __ttLastOpenAt = 0;
@@ -3446,11 +3490,21 @@ setTimeout(() => {
         // Watch for resizes
        const ro = new ResizeObserver(() => {
   clearHoverSeat();
+
+  // ✅ If the browser is page-zoomed (iOS VisualViewport scale != 1),
+  // do NOT auto-fit/reset the stage — it looks like the map "breaks".
+  const vv = window.visualViewport;
+  const isPageZoomed = !!(vv && Number.isFinite(vv.scale) && Math.abs(vv.scale - 1) > 0.01);
+
   applyMobileLegendSafeArea();
 
   stage.width(container.offsetWidth);
   stage.height(container.offsetHeight);
-  fitStageToContent();
+
+  if (!isPageZoomed) {
+    fitStageToContent();
+  }
+
   updateIcons();
 });
 ro.observe(container);
