@@ -10,7 +10,7 @@ function getPublicBrand() {
  const name = String(process.env.PUBLIC_BRAND_NAME || 'TixAll').trim();
 
    // Default to the same local logo used on the checkout topbar
- // (served by your Express static as "/IMG_2374.jpeg")
+ // (served by your Express swqatic as "/IMG_2374.jpeg")
  const defaultLocalLogo = '/IMG_2374.jpeg';
 
  const logoUrl =
@@ -997,11 +997,19 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 .hero-overlay{
   position: absolute;
   inset: 0;
-  z-index: 2;           /* sits above image */
+  z-index: 2;
   pointer-events: none;
   background:
-    linear-gradient(to right, rgba(15,23,42,0.9) 0%, rgba(15,23,42,0.4) 50%, transparent 100%),
-    linear-gradient(to top, rgba(15,23,42,0.9) 0%, transparent 40%);
+    linear-gradient(to right,
+      rgba(15,23,42,0.78) 0%,
+      rgba(15,23,42,0.28) 55%,
+      rgba(15,23,42,0.06) 100%
+    ),
+    linear-gradient(to top,
+      rgba(15,23,42,0.68) 0%,
+      rgba(15,23,42,0.18) 45%,
+      rgba(15,23,42,0.00) 78%
+    );
 }
 
 /* Desktop meta must be above overlay */
@@ -1011,8 +1019,29 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 
 /* Strip + its text must sit above everything (and not be affected by overlay) */
 .hero-strip{
+  display: none;          /* default off (desktop) */
+  width: 100%;
+  background: rgba(15,23,42,0.92);
+  border-top: 0;          /* remove hairline */
+
+  /* hide sub-pixel seams by overlapping the image by 1px */
   position: relative;
-  z-index: 10;
+  top: -1px;
+}
+
+/* soft blend from image into strip */
+.hero-strip::before{
+  content:'';
+  position:absolute;
+  left:0; right:0;
+  top:-14px;
+  height:14px;
+  pointer-events:none;
+  background: linear-gradient(
+    to bottom,
+    rgba(15,23,42,0.00) 0%,
+    rgba(15,23,42,0.92) 100%
+  );
 }
 
 .hero-strip-inner,
