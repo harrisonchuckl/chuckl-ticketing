@@ -1111,14 +1111,35 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
 }
 
     :root { --bg:#F3F4F6; --surface:#FFFFFF; --primary:#0F172A; --brand:#0056D2; --text-main:#111827; --text-muted:#6B7280; --border:#E5E7EB; --success:#10B981; --blocked:#334155; }
-    body { margin:0; font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+html, body { height: 100%; overflow: hidden; }
+
+body {
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+
+  /* ✅ iOS-safe viewport */
+  height: calc(var(--vh, 1vh) * 100);
+  overflow: hidden;
+
+  display: flex;
+  flex-direction: column;
+}
     
     header { background:var(--surface); border-bottom:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; z-index:4000; position:relative; }
     .header-info h1 { font-family:'Outfit',sans-serif; font-size:1.25rem; margin:0; font-weight:700; color:var(--primary); }
     .header-meta { font-size:0.9rem; color:var(--muted); margin-top:4px; }
     .btn-close { text-decoration:none; font-size:1.5rem; color:var(--muted); width:40px; height:40px; display:flex; align-items:center; justify-content:center; border-radius:50%; }
     
-    #map-wrapper { flex:1; position:relative; background:#E2E8F0; overflow:hidden; width:100%; height:100%; }
+#map-wrapper {
+  flex: 1;
+  min-height: 0;          /* ✅ critical: stops flex child forcing extra height */
+  position: relative;
+  background: #E2E8F0;
+  overflow: hidden;
+  width: 100%;
+}
 #stage-container {
   width: 100%;
   height: 100%;
@@ -1138,13 +1159,13 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
 /* Mobile-only: reserve space under the legend so it doesn't block map interactions */
 @media (max-width: 820px), (pointer: coarse), (hover: none) {
   /* Reserve room for legend + fixed checkout bar so the map remains tappable */
-  #map-wrapper { 
+  #map-wrapper {
     --legend-safe: 0px;
-    --checkout-safe: calc(84px + env(safe-area-inset-bottom));
+    padding-bottom: calc(84px + env(safe-area-inset-bottom));
   }
 
   #stage-container{
-    height: calc(100% - var(--legend-safe) - var(--checkout-safe));
+    height: calc(100% - var(--legend-safe));
     margin-top: var(--legend-safe);
   }
 }
@@ -1203,6 +1224,18 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
     }
 
 .checkoutBar { background:var(--surface); border-top:1px solid var(--border); padding:16px 24px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; box-shadow:0 -4px 10px rgba(0,0,0,0.03); z-index:4000; position:relative; }
+
+/* ✅ Fixed footer only on mobile (iOS toolbar-safe) */
+@media (max-width: 820px), (pointer: coarse), (hover: none) {
+  footer.checkoutBar{
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 5000;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  }
+}
   .basket-info { display:flex; flex-direction:column; }
     .basket-label { font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em; font-weight:600; color:var(--muted); }
     .basket-total { font-family:'Outfit',sans-serif; font-size:1.5rem; font-weight:800; color:var(--primary); }
@@ -1339,7 +1372,13 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
   </div>
 </section>
 
-  <script>
+    <script>
+
+  function setViewportUnit() {
+    document.documentElement.style.setProperty('--vh', (window.innerHeight * 0.01) + 'px');
+  }
+  setViewportUnit();
+  window.addEventListener('resize', setViewportUnit, { passive: true });
 
   const rawLayout = ${mapData};
 const ticketTypes = ${ticketsData};
