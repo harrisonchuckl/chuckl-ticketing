@@ -1031,18 +1031,18 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
   top: -1px;
 }
 
-/* soft blend from image into strip */
+/* soft blend from image into strip (reduced ~95%) */
 .hero-strip::before{
   content:'';
   position:absolute;
   left:0; right:0;
-  top:-14px;
-  height:14px;
+  top:-6px;
+  height:6px;
   pointer-events:none;
   background: linear-gradient(
     to bottom,
     rgba(15,23,42,0.00) 0%,
-    rgba(15,23,42,0.92) 100%
+    rgba(15,23,42,0.05) 100%
   );
 }
 
@@ -1649,6 +1649,8 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 
   /* Show the under-image strip */
   .hero-strip { display: block; }
+
+  .hero-overlay{ background: none !important; }
 
   .layout { display: block; margin-top: 0; gap: 28px; }
   .content-area { padding-top: 14px; gap: 28px; }
