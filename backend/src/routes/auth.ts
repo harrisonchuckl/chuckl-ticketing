@@ -368,7 +368,20 @@ router.get("/me", requireAuth, async (req, res) => {
       email: true,
       name: true,
       role: true,
-      // add more fields here later (phone/company/etc)
+
+      // Business & Storefront
+      storefrontSlug: true,
+      companyName: true,
+      tradingName: true,
+      companyNumber: true,
+      vatNumber: true,
+      phone: true,
+      addressLine1: true,
+      addressLine2: true,
+      city: true,
+      county: true,
+      postcode: true,
+      country: true,
     },
   });
 
@@ -376,21 +389,69 @@ router.get("/me", requireAuth, async (req, res) => {
   return res.json({ ok: true, user });
 });
 
-// PUT /auth/me - update profile fields
+// PUT /auth/me - update profile + business/storefront fields
 router.put("/me", requireAuth, async (req, res) => {
   const userId = req.user!.id;
-  const { name, email } = req.body ?? {};
 
-  const updated = await prisma.user.update({
-    where: { id: userId },
-    data: {
-      name: typeof name === "string" ? name.trim() : undefined,
-      email: typeof email === "string" ? email.trim().toLowerCase() : undefined,
-    },
-    select: { id: true, email: true, name: true, role: true },
-  });
+  const storefrontSlug =
+    req.body?.storefrontSlug === undefined
+      ? undefined
+      : normaliseStorefrontSlug(req.body.storefrontSlug);
 
-  return res.json({ ok: true, user: updated });
+  try {
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        name: typeof req.body?.name === "string" ? req.body.name.trim() : undefined,
+        email: typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : undefined,
+
+        companyName: req.body?.companyName ?? null,
+        tradingName: req.body?.tradingName ?? null,
+        companyNumber: req.body?.companyNumber ?? null,
+        vatNumber: req.body?.vatNumber ?? null,
+        phone: req.body?.phone ?? null,
+        addressLine1: req.body?.addressLine1 ?? null,
+        addressLine2: req.body?.addressLine2 ?? null,
+        city: req.body?.city ?? null,
+        county: req.body?.county ?? null,
+        postcode: req.body?.postcode ?? null,
+        country: req.body?.country ?? null,
+
+        storefrontSlug: storefrontSlug || null,
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+
+        storefrontSlug: true,
+        companyName: true,
+        tradingName: true,
+        companyNumber: true,
+        vatNumber: true,
+        phone: true,
+        addressLine1: true,
+        addressLine2: true,
+        city: true,
+        county: true,
+        postcode: true,
+        country: true,
+      },
+    });
+
+    return res.json({ ok: true, user: updated });
+  } catch (e: any) {
+    // Prisma unique violation (storefrontSlug unique)
+    if (e?.code === "P2002") {
+      return res.status(409).json({
+        ok: false,
+        message: "That storefront name is already taken. Please choose another.",
+      });
+    }
+    console.error("auth/me update failed", e);
+    return res.status(500).json({ ok: false, message: "Internal error" });
+  }
 });
 
 // POST /auth/change-password
