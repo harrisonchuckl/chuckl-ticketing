@@ -7,6 +7,65 @@ import { clampBookingFeePence } from "../lib/booking-fee.js";
 
 const router = Router();
 
+function slugify(input: string) {
+  return String(input || "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function dateSlug(d: Date) {
+  const day = d.getDate();
+  const month = d.toLocaleString("en-GB", { month: "long" }).toLowerCase();
+  const year = d.getFullYear();
+  return `${day}-${month}-${year}`;
+}
+
+async function allocateUniqueShowSlug(opts: {
+  organiserId: string;
+  title: string;
+  date: Date;
+  excludeShowId: string;
+}) {
+  const base = slugify(opts.title) || "event";
+
+  const exists = async (candidate: string) => {
+    const hit1 = await prisma.show.findFirst({
+      where: {
+        organiserId: opts.organiserId,
+        slug: candidate,
+        id: { not: opts.excludeShowId },
+      },
+      select: { id: true },
+    });
+    if (hit1) return true;
+
+    const hit2 = await prisma.showSlugHistory.findFirst({
+      where: { organiserId: opts.organiserId, slug: candidate },
+      select: { id: true },
+    });
+    return !!hit2;
+  };
+
+  let candidate = base;
+
+  if (await exists(candidate)) {
+    candidate = `${base}-${dateSlug(opts.date)}`;
+  }
+
+  let n = 2;
+  while (await exists(candidate)) {
+    candidate = `${base}-${dateSlug(opts.date)}-${n++}`;
+  }
+
+  return candidate;
+}
+
+
 function toIntOrNull(v: any): number | null {
   if (v === null || v === undefined || v === "") return null;
   const n = Number(v);
@@ -379,6 +438,8 @@ router.get("/shows", requireAdminOrOrganiser, async (req, res) => {
   eventCategory: true,
   status: true,
   publishedAt: true,
+     slug: true,
+organiser: { select: { id: true, storefrontSlug: true } },
   usesAllocatedSeating: true,
   activeSeatMapId: true,
   venueId: true,
@@ -1036,7 +1097,17 @@ router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
     } = req.body || {};
 
     const where = showWhereForRead(req, String(req.params.id));
-    const existing = await prisma.show.findFirst({ where, select: { id: true } });
+const existing = await prisma.show.findFirst({
+  where,
+  select: {
+    id: true,
+    title: true,
+    date: true,
+    status: true,
+    organiserId: true,
+    slug: true,
+  },
+});
     if (!existing) return res.status(404).json({ ok: false, error: "Not found" });
 
     const finalVenueId = (await ensureVenue(venueId, venueText)) || undefined;
@@ -1049,9 +1120,61 @@ router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
     const parsedAccessibility =
       accessibility && typeof accessibility === "object" ? accessibility : undefined;
 
+    let slugToSet: string | undefined;
+
+const incomingTitle =
+  title !== undefined && title !== null ? String(title).trim() : undefined;
+
+const titleChanged =
+  incomingTitle !== undefined && incomingTitle !== existing.title;
+
+const nextStatus =
+  status !== undefined && status !== null ? String(status) : undefined;
+
+const willBeLive = nextStatus ? nextStatus === "LIVE" : existing.status === ShowStatus.LIVE;
+const publishingNow = nextStatus === "LIVE" && existing.status !== ShowStatus.LIVE;
+
+if ((publishingNow || (willBeLive && (titleChanged || !existing.slug))) && existing.organiserId) {
+  const organiser = await prisma.user.findUnique({
+    where: { id: existing.organiserId },
+    select: { storefrontSlug: true },
+  });
+
+  if (!organiser?.storefrontSlug) {
+    return res.status(400).json({
+      ok: false,
+      message:
+        "Set a unique Storefront name in Account settings before publishing (or renaming) a live show.",
+    });
+  }
+
+  const desiredTitle = incomingTitle ?? existing.title ?? "event";
+
+  slugToSet = await allocateUniqueShowSlug({
+    organiserId: existing.organiserId,
+    title: desiredTitle,
+    date: existing.date,
+    excludeShowId: existing.id,
+  });
+
+  if (existing.slug && existing.slug !== slugToSet) {
+    await prisma.showSlugHistory
+      .create({
+        data: {
+          organiserId: existing.organiserId,
+          showId: existing.id,
+          slug: existing.slug,
+        },
+      })
+      .catch(() => {});
+  }
+}
+
+    
     const updated = await prisma.show.update({
       where: { id: existing.id },
       data: {
+        ...(slugToSet ? { slug: slugToSet } : {}),
         ...(title != null ? { title: String(title) } : {}),
         ...(date != null ? { date: new Date(date) } : {}),
         ...(endDate != null ? { endDate: endDate ? new Date(endDate) : null } : {}),
