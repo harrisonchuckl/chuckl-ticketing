@@ -2060,6 +2060,12 @@ mountVenuePicker($('#venue_input'), $('#sh_dt'), { requireApproval: true });
    const eventTypeSelect = $('#event_type_select');
 const categorySelect = $('#event_category_select');
 
+const existingShowId = (() => {
+  try { return new URLSearchParams(window.location.search).get('showId') || ''; }
+  catch { return ''; }
+})();
+
+
 // Cache ALL sub-category options once (from the original HTML)
 const allCategoryOptions = Array.from(categorySelect.querySelectorAll('option[data-parent]'));
 
@@ -2451,7 +2457,144 @@ updateCategoryOptions();
           : 'Save Show and Add Unallocated Seating';
       }
     }
-    setSeatingMode('UNALLOCATED');
+setSeatingMode('UNALLOCATED');
+
+// If we were sent here from seating pages, we may have ?showId=... (edit mode)
+if (existingShowId) {
+  (async function () {
+    try {
+      const d = await j('/admin/shows/' + existingShowId);
+      const s = (d && (d.item || d.show || d)) || null;
+      if (!s) return;
+
+      function isoToLocalInput(iso) {
+        if (!iso) return '';
+        const dt = new Date(iso);
+        if (isNaN(dt.getTime())) return '';
+        const pad = (n) => String(n).padStart(2, '0');
+        return (
+          dt.getFullYear() + '-' +
+          pad(dt.getMonth() + 1) + '-' +
+          pad(dt.getDate()) + 'T' +
+          pad(dt.getHours()) + ':' +
+          pad(dt.getMinutes())
+        );
+      }
+
+      // Core fields
+      if ($('#sh_title')) $('#sh_title').value = s.title || '';
+      if ($('#sh_dt')) $('#sh_dt').value = isoToLocalInput(s.date);
+      if ($('#sh_dt_end')) $('#sh_dt_end').value = isoToLocalInput(s.endDate);
+
+      // Venue (mark as approved so Save works without re-approving)
+      const vIn = $('#venue_input');
+      if (vIn) {
+        vIn.value = s.venueText || '';
+        if (s.venueId) vIn.dataset.venueId = s.venueId;
+        vIn.dataset.venueApproved = '1';
+      }
+      if ($('#venueApproved')) $('#venueApproved').style.display = 'inline-flex';
+
+      // Type / category
+      if (eventTypeSelect) eventTypeSelect.value = s.eventType || '';
+      updateCategoryOptions();
+      if (categorySelect) categorySelect.value = s.eventCategory || '';
+
+      // Other fields
+      if ($('#doors_open_time')) $('#doors_open_time').value = s.doorsOpenTime || '';
+      if ($('#age_guidance')) $('#age_guidance').value = s.ageGuidance || '';
+      if ($('#end_time_note')) $('#end_time_note').value = s.endTimeNote || '';
+
+      // Tags
+      if ($('#tags')) {
+        const tagsVal = Array.isArray(s.tags) ? s.tags.join(', ') : (s.tags || '');
+        $('#tags').value = tagsVal;
+      }
+
+      // Accessibility
+      let acc = s.accessibility;
+      try { if (typeof acc === 'string') acc = JSON.parse(acc); } catch {}
+      if (acc && typeof acc === 'object') {
+        const setChk = (id, val) => {
+          const el = document.getElementById(id);
+          if (el) el.checked = !!val;
+        };
+        setChk('acc_wheelchair', acc.wheelchair);
+        setChk('acc_stepfree', acc.stepFree);
+        setChk('acc_hearingloop', acc.hearingLoop);
+        setChk('acc_toilet', acc.accessibleToilet);
+        const more = document.getElementById('acc_more');
+        if (more && acc.notes) more.value = String(acc.notes);
+      }
+
+      // Description
+      if (desc) desc.innerHTML = s.descriptionHtml || '';
+
+      // Main image
+      if (s.imageUrl) {
+        mainImageUrl = s.imageUrl;
+        if (prevMain) { prevMain.src = s.imageUrl; prevMain.style.display = 'block'; }
+        if (mainImageInput) mainImageInput.value = s.imageUrl;
+      }
+
+      // Additional images
+      if (Array.isArray(s.additionalImages) && addPreviews) {
+        addPreviews.innerHTML = '';
+        s.additionalImages.forEach(function (url) {
+          if (!url) return;
+
+          const imgContainer = document.createElement('div');
+          imgContainer.style.position = 'relative';
+          imgContainer.style.display = 'inline-block';
+          imgContainer.dataset.url = url;
+
+          const img = document.createElement('img');
+          img.src = url;
+          img.style.width = '86px';
+          img.style.height = '64px';
+          img.style.objectFit = 'cover';
+          img.style.borderRadius = '10px';
+          img.style.border = '1px solid rgba(148, 163, 184, 0.4)';
+
+          const delBtn = document.createElement('button');
+          delBtn.type = 'button';
+          delBtn.textContent = '×';
+          delBtn.style.position = 'absolute';
+          delBtn.style.top = '4px';
+          delBtn.style.right = '4px';
+          delBtn.style.width = '22px';
+          delBtn.style.height = '22px';
+          delBtn.style.borderRadius = '999px';
+          delBtn.style.border = '1px solid rgba(148, 163, 184, 0.6)';
+          delBtn.style.background = 'rgba(255,255,255,0.95)';
+          delBtn.style.cursor = 'pointer';
+          delBtn.style.fontWeight = '800';
+          delBtn.style.lineHeight = '1';
+
+          delBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            imgContainer.remove();
+            updateAllImageUrls();
+          });
+
+          imgContainer.appendChild(img);
+          imgContainer.appendChild(delBtn);
+          addPreviews.appendChild(imgContainer);
+        });
+
+        updateAllImageUrls();
+      }
+
+      // Seating mode (so the CTA matches the show)
+      if (typeof s.usesAllocatedSeating === 'boolean') {
+        setSeatingMode(s.usesAllocatedSeating ? 'ALLOCATED' : 'UNALLOCATED');
+      }
+    } catch (e) {
+      console.error('createShow: failed to load showId', existingShowId, e);
+    }
+  })();
+}
 
     (function bindSaveDropdown(){
       var ddBtn = $('#save_dd_btn');
@@ -2544,47 +2687,52 @@ if (allImageUrls && allImageUrls.value) {
             // The logic for first ticket payload is now REMOVED
             // var firstTicketPayload = null; 
             
-            var showRes = await j('/admin/shows', {
-                method:'POST',
-                headers:{'Content-Type':'application/json'},
-               body: JSON.stringify({
-  title: title,
-  date: dateIso,
-  endDate: endDateIso,
-  venueText: venueText,
-  venueId: venueId,
-  imageUrl: imageUrl,
-  descriptionHtml: descHtml,
-  eventType: eventType,
-  eventCategory: eventCategory,
-  additionalImages: additionalImages,
+            var saveUrl = existingShowId ? ('/admin/shows/' + existingShowId) : '/admin/shows';
+var saveMethod = existingShowId ? 'PATCH' : 'POST';
 
-  // NEW: capture which flow they chose
-  usesAllocatedSeating: seatingMode === 'ALLOCATED',
+var showRes = await j(saveUrl, {
+  method: saveMethod,
+  headers:{'Content-Type':'application/json'},
+  body: JSON.stringify({
+    title: title,
+    date: dateIso,
+    endDate: endDateIso,
+    venueText: venueText,
+    venueId: venueId,
+    imageUrl: imageUrl,
+    descriptionHtml: descHtml,
+    eventType: eventType,
+    eventCategory: eventCategory,
+    additionalImages: additionalImages,
 
-  // NEW fields
-  doorsOpenTime: doorsOpenTime || null,
-  ageGuidance: ageGuidance || null,
-  endTimeNote: endTimeNote || null,
-  accessibility: accessibility,
-  tags: tags
-})
+    // capture which flow they chose
+    usesAllocatedSeating: seatingMode === 'ALLOCATED',
 
-            });
+    // extra fields
+    doorsOpenTime: doorsOpenTime || null,
+    ageGuidance: ageGuidance || null,
+    endTimeNote: endTimeNote || null,
+    accessibility: accessibility,
+    tags: tags
+  })
+});
 
             if (showRes && showRes.error){
                 throw new Error(showRes.error);
             }
-            var showId =
-                (showRes &&
-                ( showRes.id
-                || (showRes.show && showRes.show.id)
-                || (showRes.item && showRes.item.id)
-                )) || null;
+         var showId =
+  existingShowId ||
+  (showRes && (
+    showRes.showId ||
+    showRes.id ||
+    (showRes.show && showRes.show.id) ||
+    (showRes.item && showRes.item.id)
+  )) || null;
 
-            if (!showId){
-                throw new Error('Failed to create show (no id returned from server)');
-            }
+if (!showId){
+  throw new Error('Failed to save show (no id returned from server)');
+}
+
             
            // NEW: Skip seating-choice page and go straight where the organiser chose
 if (seatingMode === 'ALLOCATED'){
