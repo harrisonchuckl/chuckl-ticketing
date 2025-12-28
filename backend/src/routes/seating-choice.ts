@@ -1625,17 +1625,17 @@ var capacityAuto = !(capacityCap !== "" && capacityCap != null);
             ? "Total allocations: Unlimited (blank allocation detected)."
             : ("Total allocations: " + total);
 
-         drawerBody.innerHTML = `
+         drawerBody.innerHTML = \`
   <div>
     <div class="field-label">Event capacity (total tickets to sell overall)</div>
-    <input class="input" id="cap_value" type="number" min="0" step="1" value="${capacityCap || ""}" placeholder="e.g. 200" />
-    <div style="margin-top:8px;" class="fee-meta" id="cap_summary">${summary}</div>
+    <input class="input" id="cap_value" type="number" min="0" step="1" value="\${capacityCap || ""}" placeholder="e.g. 200" />
+    <div style="margin-top:8px;" class="fee-meta" id="cap_summary">\${summary}</div>
     <div style="margin-top:10px;" class="fee-meta">
       Ticket allocations can be higher than the event capacity — the overall capacity is the hard stop for total tickets sold.
       Leave blank to use venue capacity (if set) or auto-calc from allocations.
     </div>
   </div>
-`;
+\`;
 
           return;
         }
