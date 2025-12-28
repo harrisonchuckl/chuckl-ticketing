@@ -1392,6 +1392,11 @@ document.addEventListener('click', function(e){
     });
   }
 
+  // --- Create Show (AI) shared refs ---
+// addFiles() can be called from event handlers, so keep refs in shared scope.
+var drop, fileInput, list, btn, err, status, result, state;
+
+
  async function createShowAI(){
   if (!main) return;
 
@@ -1422,11 +1427,16 @@ document.addEventListener('click', function(e){
 
   + '</div>';
 
-  const drop = $('#ai_drop');
-  const fileInput = $('#ai_files');
-  const list = $('#ai_list');
-  const btn = $('#ai_analyse');
-    // Rotating status messages while analysing
+   drop = $('#ai_drop');
+  fileInput = $('#ai_files');
+  list = $('#ai_list');
+  btn = $('#ai_analyse');
+  err = $('#ai_err');
+  status = $('#ai_status');
+  result = $('#ai_result');
+
+  // Rotating status messages while analysing
+
   const analysingMessages = [
     'TixAll is doing its magic…',
     'TixAll AI is building your event page…',
@@ -1454,7 +1464,8 @@ document.addEventListener('click', function(e){
     }
   }
 
-   const state = {
+  state = {
+
     images: [], // { file, name, type, size, url, w, h, ratio, score23 }
     docs: [],   // { file, name, type, size, dataUrl }
   };
@@ -1614,7 +1625,11 @@ document.addEventListener('click', function(e){
   }
 
 
-  async function addFiles(fileList){
+   async function addFiles(fileList){
+
+    // If the view hasn't initialised properly yet, fail silently rather than crashing the whole UI
+    if (!err || !status || !state) return;
+
     err.textContent = '';
     status.textContent = '';
 
