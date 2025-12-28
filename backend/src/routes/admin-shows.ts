@@ -369,7 +369,7 @@ router.get("/shows", requireAdminOrOrganiser, async (req, res) => {
     const items = await prisma.show.findMany({
       where: showWhereForList(req),
       orderBy: [{ date: "asc" }],
-    select: {
+   select: {
   id: true,
   title: true,
   description: true,
@@ -381,13 +381,30 @@ router.get("/shows", requireAdminOrOrganiser, async (req, res) => {
   publishedAt: true,
   usesAllocatedSeating: true,
   activeSeatMapId: true,
-  showCapacityInt: true,
-  venue: { select: { id: true, name: true, city: true } },
+  venueId: true,
+  showCapacity: true,
 },
 
     });
 
     const showIds = items.map((s) => s.id);
+
+    const venueIds = items
+  .map((s) => s.venueId)
+  .filter((id): id is string => !!id);
+
+const venues = venueIds.length
+  ? await prisma.venue.findMany({
+      where: { id: { in: venueIds } },
+      select: { id: true, name: true, city: true, capacity: true },
+    })
+  : [];
+
+const venueById = venues.reduce<Map<string, (typeof venues)[number]>>((acc, v) => {
+  acc.set(v.id, v);
+  return acc;
+}, new Map());
+
 
     if (!showIds.length) {
       return res.json({ ok: true, items: [] });
@@ -616,9 +633,9 @@ const layoutTotalSellable = layoutStats ? layoutStats.totalSellable : 0;
 total = seatTotalSellable || layoutTotalSellable || estCap || 0;
 
 // If a show-level capacity override exists, cap the map capacity to it
-const showCapInt = Number((s as any).showCapacityInt ?? 0);
-if (Number.isFinite(showCapInt) && showCapInt > 0) {
-  total = Math.min(total, showCapInt);
+const showCap = Number((s as any).showCapacity ?? 0);
+if (Number.isFinite(showCap) && showCap > 0) {
+  total = Math.min(total, showCap);
 }
 
 
@@ -659,11 +676,11 @@ if (Number.isFinite(showCapInt) && showCapInt > 0) {
 } else {
         // General admission:
         // Capacity source of truth: Show.showCapacityInt
-        const showCapInt = Number((s as any).showCapacityInt ?? 0);
-        const hasShowCap = Number.isFinite(showCapInt) && showCapInt > 0;
+        const showCap = Number((s as any).showCapacity ?? 0);
+const hasShowCap = Number.isFinite(showCap) && showCap > 0;
 
-        // Fallback only if showCapacityInt isn't set (keeps older shows working)
-        const cap = hasShowCap ? showCapInt : (capacityByShow.get(s.id) ?? 0);
+// Fallback only if showCapacity isn't set (keeps older shows working)
+const cap = hasShowCap ? showCap : (capacityByShow.get(s.id) ?? 0);
 
         sold = soldFromTickets;
 
@@ -674,11 +691,12 @@ if (Number.isFinite(showCapInt) && showCapInt > 0) {
         total = cap;
       }
 
-      return {
-        ...s,
-        _alloc: { total, sold, hold },
-        _revenue: { grossFace: (grossByShow.get(s.id) ?? 0) / 100 },
-      };
+     return {
+  ...s,
+  venue: s.venueId ? venueById.get(s.venueId) ?? null : null,
+  _alloc: { total, sold, hold },
+  _revenue: { grossFace: (grossByShow.get(s.id) ?? 0) / 100 },
+};
     });
 
     res.json({ ok: true, items: enriched });
@@ -819,10 +837,10 @@ router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
         additionalImages: true,
         usesAllocatedSeating: true,
         status: true,
-        publishedAt: true,
-          showCapacityInt: true,
-        venue: { select: { id: true, name: true, city: true, capacity: true } },
-        ticketTypes: {
+       publishedAt: true,
+venueId: true,
+showCapacity: true,
+ticketTypes: {
   select: {
     id: true,
     name: true,
@@ -840,7 +858,14 @@ router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
 
     if (!s) return res.status(404).json({ ok: false, error: "Not found" });
 
-    res.json({ ok: true, item: { ...s, venueText: s.venue?.name ?? "" } });
+const venue = s.venueId
+  ? await prisma.venue.findUnique({
+      where: { id: s.venueId },
+      select: { id: true, name: true, city: true, capacity: true },
+    })
+  : null;
+
+res.json({ ok: true, item: { ...s, venue, venueText: venue?.name ?? "" } });
   } catch (e) {
     console.error("GET /admin/shows/:id failed", e);
     res.status(500).json({ ok: false, error: "Failed to load show" });
