@@ -473,6 +473,19 @@ router.get(
       background:#f1f5f9;
     }
     .sb-sub{margin-left:10px;}
+
+    /* Keeps "Create Show" + AI badge on one line */
+.sb-link-row{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  white-space:nowrap;
+}
+.ai-badge{
+  white-space:nowrap;
+}
+
+
   .ai-badge{
   display:inline-block;
   margin-left:8px;
@@ -832,8 +845,8 @@ router.get(
         <div class="sb-sub" id="showsSub">
         <a class="sb-link sub" href="/admin/ui/shows/create" data-view="/admin/ui/shows/create">Create Show</a>
 
-       <a class="sb-link sub" href="/admin/ui/shows/create-ai" data-view="/admin/ui/shows/create-ai">
-  <span class="sb-link-row">Create Show <span class="ai-badge" title="AI assisted">TixAll Ai</span></span>
+   <a class="sb-link sub" href="/admin/ui/shows/create-ai" data-view="/admin/ui/shows/create-ai">
+  <span class="sb-link-row">Create Show <span class="ai-badge" title="AI assisted">AI</span></span>
 </a>
 
         <a class="sb-link sub" href="/admin/ui/shows/current" data-view="/admin/ui/shows/current">All Events</a>
