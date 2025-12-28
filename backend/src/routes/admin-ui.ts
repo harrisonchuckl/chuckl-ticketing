@@ -1070,7 +1070,7 @@ document.addEventListener('click', function(e){
 
   var selectedVenue = null;
     // Allow programmatic AI prefill (select existing venue or open create form with address)
-  input._venuePicker = {
+   input._venuePicker = {
     selectExisting: async function(v){
       if (!v) return;
       input.value = v.name || input.value || '';
@@ -1081,6 +1081,24 @@ document.addEventListener('click', function(e){
       setApproved(false);
       renderDetails();
     },
+
+    // ✅ New: hydrate picker state from an already-saved show (so it is truly "selected", not just typed)
+    hydrateFromShow: async function(v, approved){
+      if (!v) return;
+      input.value = v.name || input.value || '';
+      input.dataset.venueId = v.id || input.dataset.venueId || '';
+      createPanel.style.display = 'none';
+      close();
+
+      selectedVenue = await tryFetchVenueDetails(v);
+
+      if (requireApproval){
+        input.dataset.venueApproved = approved ? '1' : '';
+      }
+
+      renderDetails();
+    },
+
     openCreate: function(name, address){
       resetSelection();
       openCreateForm(name || '', address || '');
@@ -2528,58 +2546,87 @@ if (existingShowId) {
       }
 
       // Description
-      if (desc) desc.innerHTML = s.descriptionHtml || '';
+          // ✅ Venue (hydrate the picker so it is truly selected + approved)
+      const vIn = $('#venue_input');
+      if (vIn) {
+        const venueName = (s.venue && s.venue.name) || s.venueText || '';
+        vIn.value = venueName;
 
-      // Main image
-      if (s.imageUrl) {
-        mainImageUrl = s.imageUrl;
-        if (prevMain) { prevMain.src = s.imageUrl; prevMain.style.display = 'block'; }
-        if (mainImageInput) mainImageInput.value = s.imageUrl;
+        if (s.venueId) vIn.dataset.venueId = s.venueId;
+        vIn.dataset.venueApproved = '1';
+
+        // If the picker exists, hydrate its internal selectedVenue state too
+        if (vIn._venuePicker && typeof vIn._venuePicker.hydrateFromShow === 'function' && s.venueId) {
+          try {
+            await vIn._venuePicker.hydrateFromShow({ id: s.venueId, name: venueName }, true);
+          } catch (e) {
+            // fallback: keep dataset values (still allows saving)
+            console.warn('[venue hydrateFromShow] failed', e);
+          }
+        }
       }
 
-      // Additional images
-      if (Array.isArray(s.additionalImages) && addPreviews) {
+      // ✅ Description (no undefined variable)
+      var descEl = $('#desc');
+      if (descEl) descEl.innerHTML = s.descriptionHtml || '';
+
+      // ✅ Main image (remove undefined vars that were crashing the whole restore)
+      if (s.imageUrl && prevMain) {
+        prevMain.src = s.imageUrl;
+        prevMain.style.display = 'block';
+      }
+
+      // ✅ Additional images (support array OR JSON string OR alternative key)
+      if (addPreviews) {
+        let imgs = s.additionalImages || s.additionalImageUrls || [];
+        try {
+          if (typeof imgs === 'string') imgs = JSON.parse(imgs);
+        } catch {}
+        if (!Array.isArray(imgs)) imgs = [];
+
         addPreviews.innerHTML = '';
-        s.additionalImages.forEach(function (url) {
+        imgs.forEach(function (url) {
           if (!url) return;
 
           const imgContainer = document.createElement('div');
           imgContainer.style.position = 'relative';
-          imgContainer.style.display = 'inline-block';
+          imgContainer.style.width = '100px';
+          imgContainer.style.height = '100px';
+          imgContainer.style.overflow = 'hidden';
+          imgContainer.style.borderRadius = '6px';
           imgContainer.dataset.url = url;
 
           const img = document.createElement('img');
           img.src = url;
-          img.style.width = '86px';
-          img.style.height = '64px';
+          img.alt = 'Additional Image';
+          img.style.width = '100%';
+          img.style.height = '100%';
           img.style.objectFit = 'cover';
-          img.style.borderRadius = '10px';
-          img.style.border = '1px solid rgba(148, 163, 184, 0.4)';
 
-          const delBtn = document.createElement('button');
-          delBtn.type = 'button';
-          delBtn.textContent = '×';
-          delBtn.style.position = 'absolute';
-          delBtn.style.top = '4px';
-          delBtn.style.right = '4px';
-          delBtn.style.width = '22px';
-          delBtn.style.height = '22px';
-          delBtn.style.borderRadius = '999px';
-          delBtn.style.border = '1px solid rgba(148, 163, 184, 0.6)';
-          delBtn.style.background = 'rgba(255,255,255,0.95)';
-          delBtn.style.cursor = 'pointer';
-          delBtn.style.fontWeight = '800';
-          delBtn.style.lineHeight = '1';
+          const deleteBtn = document.createElement('button');
+          deleteBtn.textContent = 'x';
+          deleteBtn.className = 'btn';
+          deleteBtn.style.position = 'absolute';
+          deleteBtn.style.top = '4px';
+          deleteBtn.style.right = '4px';
+          deleteBtn.style.width = '24px';
+          deleteBtn.style.height = '24px';
+          deleteBtn.style.padding = '0';
+          deleteBtn.style.borderRadius = '50%';
+          deleteBtn.style.lineHeight = '24px';
+          deleteBtn.style.fontSize = '12px';
+          deleteBtn.style.fontWeight = 'bold';
+          deleteBtn.style.background = 'rgba(255, 255, 255, 0.8)';
+          deleteBtn.style.borderColor = 'rgba(0, 0, 0, 0.1)';
+          deleteBtn.style.cursor = 'pointer';
 
-          delBtn.addEventListener('click', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
+          deleteBtn.addEventListener('click', function() {
             imgContainer.remove();
             updateAllImageUrls();
           });
 
           imgContainer.appendChild(img);
-          imgContainer.appendChild(delBtn);
+          imgContainer.appendChild(deleteBtn);
           addPreviews.appendChild(imgContainer);
         });
 
