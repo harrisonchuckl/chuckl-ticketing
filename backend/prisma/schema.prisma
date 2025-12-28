@@ -69,6 +69,10 @@ model User {
   invitedVenueMembers VenueMember[] @relation("VenueInviter")
   venueInvitesCreated VenueInvite[] @relation("VenueInviteCreatedBy")
 
+  // Slug history for organiser show URLs
+  showSlugHistory ShowSlugHistory[]
+}
+
   // --- organiser business details (optional) ---
   companyName     String?
   tradingName     String?
@@ -212,9 +216,13 @@ model Show {
   ticketTypes TicketType[]
   tickets     Ticket[]
   orders      Order[]
-  seatMaps    SeatMap[]
+   seatMaps    SeatMap[]
   allocations ExternalAllocation[]
+
+  // Slug history for public URL redirects
+  slugHistory ShowSlugHistory[]
 }
+
 
 model ShowSlugHistory {
   id         String   @id @default(cuid())
