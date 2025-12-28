@@ -846,7 +846,9 @@ router.get(
         <a class="sb-link sub" href="/admin/ui/shows/create" data-view="/admin/ui/shows/create">Create Show</a>
 
    <a class="sb-link sub" href="/admin/ui/shows/create-ai" data-view="/admin/ui/shows/create-ai">
-  <span class="sb-link-row">Create Show <span class="ai-badge" title="AI assisted">AI</span></span>
+  <span class="sb-link-row">
+    Create Show <span class="ai-badge" title="AI assisted">TixAll Ai</span>
+  </span>
 </a>
 
         <a class="sb-link sub" href="/admin/ui/shows/current" data-view="/admin/ui/shows/current">All Events</a>
