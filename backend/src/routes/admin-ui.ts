@@ -4904,6 +4904,26 @@ function renderInterests(customer){
     }
   });
 
+$('#biz_companyName').value = me.companyName || '';
+$('#biz_phone').value = me.phone || '';
+$('#biz_storefrontSlug').value = me.storefrontSlug || '';
+
+const updatePreview = () => {
+  const raw = ($('#biz_storefrontSlug').value || '').trim();
+  const slug = raw
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/['’]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+  $('#biz_storefrontPreview').textContent = slug
+    ? `${window.location.origin}/public/${slug}`
+    : 'Preview: (set a storefront name to enable your organiser page)';
+};
+$('#biz_storefrontSlug').addEventListener('input', updatePreview);
+updatePreview();
+
   $('#pw_save').addEventListener('click', async function(){
     $('#pw_err').textContent = '';
     try{
