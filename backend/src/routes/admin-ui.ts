@@ -3340,7 +3340,7 @@ async function summaryPage(id){
           ticketTypesBody.innerHTML = items.map(function(tt){
             var price = (tt.pricePence || 0) / 100;
             var priceLabel = price === 0 ? 'Free' : '£' + price.toFixed(2);
-            var availLabel = tt.available == null ? 'Unlimited' : String(tt.available);
+var availLabel = tt.available == null ? 'NOT SET' : String(tt.available);
             return ''
               +'<tr>'
                 +'<td>'+(tt.name || '')+'</td>'
@@ -3377,30 +3377,18 @@ async function summaryPage(id){
       var priceStr = $('#tt_price').value.trim();
       var availStr = $('#tt_available').value.trim();
 
-      if (!name){
-        errEl.textContent = 'Name is required';
-        return;
-      }
+if (!availStr){
+  errEl.textContent = 'Available is required (this is your show capacity)';
+  return;
+}
 
-      var pricePence = 0;
-      if (priceStr){
-        var p = Number(priceStr);
-        if (!Number.isFinite(p) || p < 0){
-          errEl.textContent = 'Price must be a non-negative number';
-          return;
-        }
-        pricePence = Math.round(p * 100);
-      }
+var a = Number(availStr);
+if (!Number.isFinite(a) || a < 1){
+  errEl.textContent = 'Available must be a whole number of 1 or more';
+  return;
+}
 
-      var available = null;
-      if (availStr){
-        var a = Number(availStr);
-        if (!Number.isFinite(a) || a < 0){
-          errEl.textContent = 'Available must be a non-negative number';
-          return;
-        }
-        available = a;
-      }
+var available = Math.trunc(a);
 
       try{
         await j('/admin/shows/' + id + '/ticket-types', {
