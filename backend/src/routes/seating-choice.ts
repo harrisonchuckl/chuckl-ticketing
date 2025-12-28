@@ -1626,9 +1626,8 @@ var capacityAuto = !(capacityCap !== "" && capacityCap != null);
         if (drawerMode === "capacity") {
           drawerTitle.textContent = "Event capacity";
           var total = calcTotalAllocations();
-          var summary = (total == null)
-            ? "Total allocations: Unlimited (blank allocation detected)."
-            : ("Total allocations: " + total);
+              var summary = "Total allocations: " + total;
+
 
          drawerBody.innerHTML = \`
   <div>
@@ -1637,7 +1636,7 @@ var capacityAuto = !(capacityCap !== "" && capacityCap != null);
     <div style="margin-top:8px;" class="fee-meta" id="cap_summary">\${summary}</div>
     <div style="margin-top:10px;" class="fee-meta">
       Ticket allocations can be higher than the event capacity — the overall capacity is the hard stop for total tickets sold.
-      Leave blank to use venue capacity (if set) or auto-calc from allocations.
+      Leave blank to return to auto capacity (sum of allocations).
     </div>
   </div>
 \`;
@@ -1673,7 +1672,7 @@ var capacityAuto = !(capacityCap !== "" && capacityCap != null);
 
           <div>
             <div class="field-label">Allocation (qty)</div>
-            <input class="input" id="t_avail" type="number" min="0" step="1" value="\${t.available ?? ""}" placeholder="Leave blank for unlimited" />
+            <input class="input" id="t_avail" type="number" min="0" step="1" value="\${t.available ?? ""}" placeholder="e.g. 200" />
           </div>
 
           <div>
