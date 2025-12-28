@@ -865,7 +865,12 @@ const ticketType = await prisma.ticketType.create({
     name: String(name),
     pricePence: pricePenceInt,
     bookingFeePence: bookingFeePenceClamped,
-    available: toIntOrNull(available),
+const capInt = toIntOrNull(available);
+if (capInt === null || capInt < 1) {
+  return res.status(400).json({ ok: false, error: "available_required" });
+}
+...
+available: capInt,
     onSaleAt: onSaleAt ? new Date(onSaleAt) : null,
     offSaleAt: offSaleAt ? new Date(offSaleAt) : null,
   },
@@ -921,9 +926,15 @@ const bookingFeePenceClamped = clampBookingFeePence(effectivePricePence, effecti
         ...(name !== undefined ? { name: String(name) } : {}),
 ...(hasPrice ? { pricePence: effectivePricePence } : {}),
 ...((hasFee || hasPrice) ? { bookingFeePence: bookingFeePenceClamped } : {}),
-        ...(available !== undefined
-          ? { available: available === "" || available === undefined ? null : Number(available) }
-          : {}),
+       ...(available !== undefined
+  ? (() => {
+      const capInt = toIntOrNull(available);
+      if (capInt === null || capInt < 1) {
+        throw new Error("available_required");
+      }
+      return { available: capInt };
+    })()
+  : {}),
         ...(onSaleAt !== undefined ? { onSaleAt: onSaleAt ? new Date(onSaleAt) : null } : {}),
         ...(offSaleAt !== undefined ? { offSaleAt: offSaleAt ? new Date(offSaleAt) : null } : {}),
       },
