@@ -67,6 +67,66 @@ router.post("/session", async (req, res) => {
       return res.status(404).json({ ok: false, message: "Event not found" });
     }
 
+        // --- SHOW-LEVEL CAPACITY (overall cap across all ticket types) ---
+    // Explicit cap (admin-editable on unallocated tickets page)
+    const explicitCapRaw = (show as any).showCapacity;
+    let effectiveCap: number | null =
+      explicitCapRaw === null || explicitCapRaw === undefined || explicitCapRaw === ""
+        ? null
+        : Number(explicitCapRaw);
+
+    if (effectiveCap !== null && !Number.isFinite(effectiveCap)) {
+      effectiveCap = null;
+    }
+
+    // If no explicit cap set, derive from ticket allocations:
+    // - unlimited if ANY ticket allocation is blank (available = null)
+    // - otherwise cap = sum(available)
+    if (effectiveCap == null) {
+      const nullAvailCount = await prisma.ticketType.count({
+        where: { showId: show.id, available: null },
+      });
+
+      if (nullAvailCount === 0) {
+        const sumAvail = await prisma.ticketType.aggregate({
+          where: { showId: show.id, available: { not: null } },
+          _sum: { available: true },
+        });
+
+        const sum = Number(sumAvail?._sum?.available ?? 0);
+        if (sum > 0) effectiveCap = sum;
+      }
+    }
+
+    // Compute requested qty (supports multi-ticket "items", single qty, or seats)
+    const totalQtyRequested =
+      Array.isArray(items) && items.length
+        ? items.reduce((acc: number, it: any) => acc + (Number(it.quantity) || 0), 0)
+        : hasSeats
+        ? seatIds.length
+        : Number(quantity || 0) || 0;
+
+    // Reserve counts: treat PENDING + PAID as consuming capacity to avoid oversells
+    if (effectiveCap != null && totalQtyRequested > 0) {
+      const reservedAgg = await prisma.order.aggregate({
+        where: {
+          showId: show.id,
+          status: { in: [OrderStatus.PENDING, OrderStatus.PAID] },
+        },
+        _sum: { quantity: true },
+      });
+
+      const alreadyReserved = Number(reservedAgg?._sum?.quantity ?? 0);
+
+      if (alreadyReserved + totalQtyRequested > effectiveCap) {
+        return res.status(409).json({
+          ok: false,
+          message: "Sorry — this event has reached its capacity.",
+        });
+      }
+    }
+
+
     const showTitle = show.title ?? "Event ticket";
     const venueBookingFeeBps = Number((show as any)?.venue?.bookingFeeBps || 0);
 
