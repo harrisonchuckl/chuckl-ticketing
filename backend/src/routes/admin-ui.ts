@@ -472,31 +472,43 @@ router.get(
     .sb-link:hover{
       background:#f1f5f9;
     }
-    .sb-sub{margin-left:10px;}
+.sb-sub{margin-left:6px;}
 
     /* Keeps "Create Show" + AI badge on one line */
 .sb-link-row{
-  display:inline-flex;
+  display:flex;
   align-items:center;
+  justify-content:space-between;
   gap:8px;
-  white-space:nowrap;
+  width:100%;
+  min-width:0;
 }
+
+.sb-link-label{
+  flex:1;
+  min-width:0;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
 .ai-badge{
   white-space:nowrap;
 }
 
 
-  .ai-badge{
+ .ai-badge{
   display:inline-block;
-  margin-left:8px;
-  font-size:10px;
+  font-size:9px;
   font-weight:800;
-  padding:2px 8px;
+  padding:2px 6px;
   border-radius:999px;
   border:1px solid #0f9cdf;
   background:#e6f7fd;
   color:#0f9cdf;
   line-height:1.2;
+  white-space:nowrap;
+  flex:0 0 auto;
 }
 
     .content{
@@ -845,9 +857,10 @@ router.get(
         <div class="sb-sub" id="showsSub">
         <a class="sb-link sub" href="/admin/ui/shows/create" data-view="/admin/ui/shows/create">Create Show</a>
 
-   <a class="sb-link sub" href="/admin/ui/shows/create-ai" data-view="/admin/ui/shows/create-ai">
+<a class="sb-link sub" href="/admin/ui/shows/create-ai" data-view="/admin/ui/shows/create-ai">
   <span class="sb-link-row">
-    Create Show <span class="ai-badge" title="AI assisted">TixAll Ai</span>
+    <span class="sb-link-label">Create Show</span>
+    <span class="ai-badge" title="AI assisted">TixAll AI</span>
   </span>
 </a>
 
