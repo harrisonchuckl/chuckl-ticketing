@@ -1,0 +1,2 @@
+ALTER TABLE "Show"
+ADD COLUMN IF NOT EXISTS "showCapacity" INTEGER;
