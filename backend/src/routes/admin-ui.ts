@@ -2686,14 +2686,15 @@ function sumTicketTypeCap(tts){
     return true;
   }
 
-  function statusBadgeHTML(statusLabel){
-    statusLabel = statusLabel || 'DRAFT';
-    return '<span class="pill" style="background:'
-      +(statusLabel === 'LIVE' ? '#ecfdf3' : '#f8fafc')
-      +';color:'+(statusLabel === 'LIVE' ? '#166534' : '#475569')
-      +';border:1px solid '+(statusLabel === 'LIVE' ? '#bbf7d0' : '#e2e8f0')
-      +';">'+statusLabel+'</span>';
-  }
+ function statusBadgeHTML(statusLabel){
+  statusLabel = statusLabel || 'DRAFT';
+  return '<span class="pill" style="background:'
+    +(statusLabel === 'LIVE' ? '#e6f7fd' : '#f8fafc')
+    +';color:'+(statusLabel === 'LIVE' ? '#0f9cdf' : '#475569')
+    +';border:1px solid '+(statusLabel === 'LIVE' ? '#0f9cdf' : '#e2e8f0')
+    +';">'+statusLabel+'</span>';
+}
+
 
   function render(items){
     if (!tb) return;
@@ -2744,9 +2745,9 @@ function sumTicketTypeCap(tts){
 
       var pct = (total && total > 0) ? Math.round((sold / total) * 100) : 0;
 
-      var bar = '<div style="background:#e5e7eb;height:6px;border-radius:999px;overflow:hidden;width:140px">'
-              + '<div style="background:#111827;height:6px;width:'+pct+'%"></div>'
-              + '</div>';
+     var bar = '<div style="background:#e5e7eb;height:6px;border-radius:999px;overflow:hidden;width:140px">'
+        + '<div style="background:#0f9cdf;height:6px;width:'+pct+'%"></div>'
+        + '</div>';
 
       var statusLabel = (s.status || 'DRAFT');
       var venueLabel = (s.venue
