@@ -187,12 +187,20 @@ function renderShell(options: {
   body: string;
   stepLabel?: string;
   showId: string;
+  pageClass?: string;
+  hideHeaderText?: boolean;
 }) {
-  const { title, body, stepLabel, showId } = options;
+  const { title, body, stepLabel, showId, pageClass, hideHeaderText } = options;
 
-  const stepText = stepLabel
+   const stepText = stepLabel
     ? `<div class="step-pill">${stepLabel}</div>`
     : "";
+
+  const brandLogo = `<img class="brand-logo" src="/IMG_2374.jpeg" alt="TixAll" />`;
+
+  const headerLeftHtml = hideHeaderText
+    ? `${brandLogo}`
+    : `${brandLogo}${stepText}<div class="headline">${title}</div>`;
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -232,16 +240,19 @@ function renderShell(options: {
     * {
       box-sizing: border-box;
     }
-
    html, body {
       margin: 0;
       padding: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
-        "Helvetica Neue", Arial, sans-serif;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
       background: var(--bg);
       color: var(--text-main);
       height: 100%;
     }
+
 
 
     body {
@@ -273,6 +284,13 @@ function renderShell(options: {
       flex-direction: column;
       gap: 8px;
     }
+
+    .brand-logo {
+  height: 34px;
+  width: auto;
+  display: block;
+}
+
 
   /* Admin-style header (white background) */
 .headline { color: var(--text-main); }
@@ -723,13 +741,11 @@ function renderShell(options: {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  transition: box-shadow 120ms ease, border-color 120ms ease, transform 120ms ease;
+  transition: border-color 120ms ease;
 }
 
 .ticket-row:hover {
   border-color: rgba(15, 156, 223, 0.45);
-  box-shadow: 0 12px 28px rgba(2, 25, 41, 0.10);
-  transform: translateY(-1px);
 }
 
 .ticket-left {
@@ -792,7 +808,7 @@ function renderShell(options: {
   border-radius: 12px;
   box-shadow: 0 18px 45px rgba(15, 23, 42, 0.14);
   padding: 6px;
-  z-index: 20;
+  z-index: 9999;
 }
 
 .menu button {
@@ -832,6 +848,18 @@ function renderShell(options: {
 }
 
 .primary-button:hover { background: var(--accent-strong); }
+
+/* Unallocated page: make buttons subtly rounded (not pill-shaped) */
+.unallocated-page .ghost-button,
+.unallocated-page .primary-button {
+  border-radius: 10px;
+}
+
+.unallocated-page .kebab,
+.unallocated-page .drawer-close {
+  border-radius: 10px;
+}
+
 
 .status-row {
   margin-top: 10px;
@@ -950,14 +978,13 @@ function renderShell(options: {
   </style>
 </head>
 <body>
-  <div class="page">
+  <div class="page ${pageClass || ""}">
     <header class="page-header">
       <div class="page-header-left">
-        ${stepText}
-        <div class="headline">${title}</div>
+        ${headerLeftHtml}
       </div>
       <div class="page-header-right">
-        <a class="ghost-button" href="/admin/ui/shows/${showId}/edit">
+        <a class="ghost-button" href="javascript:history.back()">
           <span class="ghost-button-icon">←</span>
           <span>Back to event details</span>
         </a>
@@ -1333,7 +1360,7 @@ if (!initialTickets.length) {
     <div class="tickets-list" id="tickets-list"></div>
 
     <div class="tickets-actions">
-      <button class="ghost-button" type="button" id="edit-capacity">Edit capacity</button>
+<button class="ghost-button" type="button" id="edit-capacity">Capacity: <span id="cap_label">—</span></button>
       <div class="action-spacer"></div>
       <button class="ghost-button" type="button" id="save-tickets">Save tickets</button>
       <button class="primary-button" type="button" id="publish">Create &amp; publish show</button>
@@ -1370,6 +1397,8 @@ if (!initialTickets.length) {
 
       var listEl = document.getElementById("tickets-list");
       var statusRow = document.getElementById("status-row");
+            var capLabelEl = document.getElementById("cap_label");
+
 
       var drawer = document.getElementById("drawer");
       var drawerBackdrop = document.getElementById("drawer-backdrop");
@@ -1643,6 +1672,8 @@ if (!initialTickets.length) {
       function renderList() {
         if (!listEl) return;
 
+        if (capLabelEl) capLabelEl.textContent = (capacityCap !== "" && capacityCap != null) ? String(capacityCap) : "—";
+
         if (!tickets.length) {
           listEl.innerHTML = '<div class="empty">No tickets yet. Click “Add ticket”.</div>';
           return;
@@ -1895,11 +1926,13 @@ if (!initialTickets.length) {
 `;
 
 
-    const html = renderShell({
+       const html = renderShell({
       title: "Create unallocated tickets",
       body,
       stepLabel: "Step 2 of 2 · Unallocated tickets",
       showId,
+      pageClass: "unallocated-page",
+      hideHeaderText: true,
     });
 
     res.status(200).send(html);
