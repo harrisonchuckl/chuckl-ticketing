@@ -1321,7 +1321,7 @@ if (!initialTickets.length) {
   try {
     const suggested = await suggestTicketsForShow(show);
 
-    const defaultAllocationStr =
+     const defaultAllocationStr =
       show?.venue?.capacity != null ? String(show.venue.capacity) : "";
 
     if (suggested.suggestions && suggested.suggestions.length) {
@@ -1329,7 +1329,8 @@ if (!initialTickets.length) {
         // No id -> user must click “Save tickets” to create these
         name: s.name,
         price: (Number(s.pricePence || 0) / 100),
-        available: defaultAllocationStr, // prefill allocation to venue capacity when known
+        // Allocation is REQUIRED: use historic allocation if present; else fall back to venue capacity (if known)
+        available: (s.available != null ? String(s.available) : defaultAllocationStr),
         onSaleAt: "",
         offSaleAt: "",
       }));
@@ -1444,7 +1445,10 @@ if (!initialTickets.length) {
       var drawerTitle = document.getElementById("drawer-title");
       var drawerBody = document.getElementById("drawer-body");
 
-     var defaultAllocation = (showMeta && showMeta.venue && showMeta.venue.capacity) || "";
+      var defaultAllocation =
+        (showMeta && showMeta.venue && showMeta.venue.capacity != null)
+          ? String(showMeta.venue.capacity)
+          : "";
 
 // Capacity rules:
 // - If venue capacity exists, default to that (but user can override).
@@ -1573,11 +1577,12 @@ var capacityAuto = !(capacityCap !== "" && capacityCap != null);
         try { return await res.json(); } catch (e) { return null; }
       }
 
-      function calcTotalAllocations() {
+        function calcTotalAllocations() {
         var sum = 0;
         for (var i=0;i<tickets.length;i++){
           var v = tickets[i].available;
-          if (v === "" || v == null) return null; // unlimited present
+          // Allocation is required — if blank, treat as 0 for display maths (save will block anyway)
+          if (v === "" || v == null) v = 0;
           var n = Number(v);
           if (!Number.isFinite(n) || n < 0) n = 0;
           sum += n;
@@ -1716,18 +1721,15 @@ var capacityAuto = !(capacityCap !== "" && capacityCap != null);
 
 var totalNow = calcTotalAllocations();
 
-// Auto-update capacity when venue capacity isn't set AND user hasn't overridden it
+// Auto-update capacity until the user overrides it.
+// Default behaviour: capacity = sum of allocations
 if (capacityAuto) {
-  if (totalNow == null) {
-    capacityCap = ""; // unlimited (blank allocation detected)
-  } else {
-    capacityCap = String(totalNow);
-  }
+  capacityCap = String(totalNow);
 }
 
 var capLabel = (capacityCap !== "" && capacityCap != null)
   ? String(capacityCap)
-  : (totalNow == null ? "Unlimited" : "—");
+  : "—";
 
 if (capLabelEl) capLabelEl.textContent = capLabel;
 
@@ -1743,7 +1745,7 @@ if (capLabelEl) capLabelEl.textContent = capLabel;
 
           var name = (t.name && String(t.name).trim()) ? String(t.name).trim() : "Untitled ticket";
           var price = fmtMoney(t.price);
-          var alloc = (t.available === "" || t.available == null) ? "Unlimited" : (String(t.available) + " allocated");
+          var alloc = (t.available === "" || t.available == null) ? "0 allocated" : (String(t.available) + " allocated");
           var onTxt = "On sale: " + fmtDT(t.onSaleAt);
           var offTxt = "Off sale: " + fmtDT(t.offSaleAt);
 
@@ -1863,8 +1865,19 @@ if (capacityCap !== "" && capacityCap != null) {
             var t = tickets[i];
             var payload = toPayload(t);
 
-            if (!payload.name) {
+                       if (!payload.name) {
               showStatus("Ticket name is required for all tickets.", "error");
+              return false;
+            }
+
+            // Allocation is REQUIRED (no unlimited / blank allowed)
+            if (t.available === "" || t.available == null) {
+              showStatus("Allocation is required for every ticket (cannot be blank).", "error");
+              return false;
+            }
+            var allocNum = Number(t.available);
+            if (!Number.isFinite(allocNum) || allocNum < 0) {
+              showStatus("Allocation must be a valid number (0 or more).", "error");
               return false;
             }
 
