@@ -788,25 +788,25 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
     .summary-row:last-child{border-bottom:none}
     .summary-row strong{font-weight:900}
     .summary-total{
-      font-family:'Outfit',sans-serif;
-      font-size:1.5rem;
-      font-weight:900;
-      color:var(--primary);
-      letter-spacing:-0.01em;
-    }
+  font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Arial;
+  font-size:1.4rem;
+  font-weight:500;     /* ✅ not bold */
+  color:var(--primary);
+  letter-spacing:0;
+}
 
-        .btn{
-      width:100%;
-      border:none;
-      border-radius:12px;           /* ✅ less rounded */
-      padding:14px 16px;
-      font-size:1rem;
-      font-weight:900;
-      font-family:'Outfit',sans-serif;
-      letter-spacing:0.03em;
-      text-transform:uppercase;
-      cursor:pointer;
-    }
+       .btn{
+  width:100%;
+  border:none;
+  border-radius:12px;
+  padding:14px 16px;
+  font-size:1rem;
+  font-weight:600; /* ✅ not bold */
+  font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Arial;
+  letter-spacing:0;       /* ✅ no “tacky” spacing */
+  text-transform:none;    /* ✅ no uppercase */
+  cursor:pointer;
+}
 
     .btn-primary{
       background:var(--brand);
@@ -929,14 +929,9 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
   </div>
 
   <div class="wrap">
-    <div class="hero">
-      <h1>${show.title}</h1>
-      <div class="hero-meta">
-        <span class="pill">${dateStr}</span>
-        <span class="pill">${timeStr}</span>
-        <span class="pill">${venueName}</span>
-      </div>
-    </div>
+  <div class="page-head">
+  <h1 class="event-title">${escAttr(show.title)}</h1>
+</div>
 
     <div class="grid">
       <div class="card">
