@@ -832,9 +832,9 @@ router.get(
         <div class="sb-sub" id="showsSub">
         <a class="sb-link sub" href="/admin/ui/shows/create" data-view="/admin/ui/shows/create">Create Show</a>
 
-        <a class="sb-link sub" href="/admin/ui/shows/create-ai" data-view="/admin/ui/shows/create-ai">
-Create Show <span class="ai-badge" title="AI assisted">TixAll Ai</span>
-        </a>
+       <a class="sb-link sub" href="/admin/ui/shows/create-ai" data-view="/admin/ui/shows/create-ai">
+  <span class="sb-link-row">Create Show <span class="ai-badge" title="AI assisted">TixAll Ai</span></span>
+</a>
 
         <a class="sb-link sub" href="/admin/ui/shows/current" data-view="/admin/ui/shows/current">All Events</a>
       </div>
