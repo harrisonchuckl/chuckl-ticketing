@@ -687,12 +687,13 @@ router.delete("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
 
     if (!show) return res.status(404).json({ ok: false, error: "Show not found" });
 
-   const soldCount = await prisma.order.count({
+const soldCount = await prisma.order.count({
   where: {
     showId,
-    status: { in: [OrderStatus.PAID, OrderStatus.PENDING] },
+    status: OrderStatus.PAID,
   },
 });
+
 
     if (soldCount > 0) {
       return res
