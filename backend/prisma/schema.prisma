@@ -73,20 +73,20 @@ model User {
   showSlugHistory ShowSlugHistory[]
 
   // --- organiser business details (optional) ---
-  companyName     String?
-  tradingName     String?
-  companyNumber   String?
-  vatNumber       String?
-  phone           String?
-  addressLine1    String?
-  addressLine2    String?
-  city            String?
-  county          String?
-  postcode        String?
-  country         String?
+  companyName   String?
+  tradingName   String?
+  companyNumber String?
+  vatNumber     String?
+  phone         String?
+  addressLine1  String?
+  addressLine2  String?
+  city          String?
+  county        String?
+  postcode      String?
+  country       String?
 
   // --- storefront (must be unique per organiser) ---
-  storefrontSlug  String? @unique
+  storefrontSlug String? @unique
 }
 
 model Venue {
@@ -191,19 +191,18 @@ model Show {
   tags             String[] @default([])
   accessibility    Json?
 
-  status          ShowStatus @default(DRAFT)
-  publishedAt     DateTime?
+  status      ShowStatus @default(DRAFT)
+  publishedAt DateTime?
   // --- pretty URL slug (generated on publish / title change) ---
-  slug            String?
+  slug        String?
 
   usesAllocatedSeating Boolean?
-  activeSeatMapId String?
+  activeSeatMapId      String?
 
   /// Overall show capacity across all ticket types.
   /// If set, checkout will never allow more than this total quantity sold/reserved.
   /// If null, capacity is derived from ticket allocations (unlimited if any allocation is blank).
   showCapacity Int?
-
 
   venueId     String?
   organiserId String?
@@ -214,17 +213,16 @@ model Show {
   ticketTypes TicketType[]
   tickets     Ticket[]
   orders      Order[]
-   seatMaps    SeatMap[]
+  seatMaps    SeatMap[]
   allocations ExternalAllocation[]
 
   // Slug history for public URL redirects
   slugHistory ShowSlugHistory[]
 }
 
-
 model ShowSlugHistory {
-  id         String   @id @default(cuid())
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
 
   organiserId String
   showId      String
@@ -237,13 +235,12 @@ model ShowSlugHistory {
   @@index([showId])
 }
 
-
 model TicketType {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-   name       String
+  name       String
   pricePence Int
 
   /// Booking fee charged on top of face value (per ticket, in pence).
@@ -294,8 +291,8 @@ model Order {
   tickets Ticket[]
   refunds Refund[]
 
-  seatsCsv               String?  @db.Text
-  stripeCheckoutSessionId String?  @db.VarChar(255)
+  seatsCsv                String? @db.Text
+  stripeCheckoutSessionId String? @db.VarChar(255)
 }
 
 model Refund {
@@ -338,8 +335,8 @@ model Ticket {
   show       Show       @relation(fields: [showId], references: [id])
   order      Order      @relation(fields: [orderId], references: [id])
   ticketType TicketType @relation(fields: [ticketTypeId], references: [id])
-  userId String?
-  user   User?   @relation(fields: [userId], references: [id])
+  userId     String?
+  user       User?      @relation(fields: [userId], references: [id])
 }
 
 model SeatMap {
