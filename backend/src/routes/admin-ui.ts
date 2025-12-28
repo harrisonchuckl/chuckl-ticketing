@@ -1490,7 +1490,8 @@ var drop, fileInput, list, btn, err, status, result, state;
     idx,
     name: f.name,
     size: f.size,
-    extra: f.url ? 'Uploaded' : 'Pending upload'
+    bad: !!f.tooBig,
+    extra: f.tooBig ? 'File too big' : (f.url ? 'Uploaded' : 'Pending upload')
   }));
 
   const docRows = state.docs.map((f, idx) => ({
@@ -1499,7 +1500,8 @@ var drop, fileInput, list, btn, err, status, result, state;
     idx,
     name: f.name,
     size: f.size,
-    extra: f.dataUrl ? 'Ready' : 'Pending read'
+    bad: !!f.tooBig,
+    extra: f.tooBig ? 'File too big' : (f.dataUrl ? 'Ready' : 'Pending read')
   }));
 
   const rows = imgRows.concat(docRows);
@@ -1517,7 +1519,9 @@ var drop, fileInput, list, btn, err, status, result, state;
   +   rows.map(r =>
         '<div style="display:grid; grid-template-columns: 110px 1fr 90px 120px 52px; gap:10px; padding:10px 12px; border-top:1px solid var(--border); font-size:13px; align-items:center;">'
       +   '<div>'+esc(r.kind)+'</div>'
-      +   '<div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">'+esc(r.name)+'</div>'
+      +   '<div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;'
+      +     (r.bad ? 'color:#b91c1c; font-weight:700;' : '')
+      +   '">'+esc(r.name)+'</div>'
       +   '<div>'+esc(bytes(r.size))+'</div>'
       +   '<div class="muted">'+esc(r.extra)+'</div>'
       +   '<div style="text-align:right;">'
@@ -1533,31 +1537,21 @@ var drop, fileInput, list, btn, err, status, result, state;
       +     '</button>'
       +   '</div>'
       + '</div>'
-      ).join('')
+    ).join('')
   + '</div>';
 
-  // Wire delete buttons
-  list.querySelectorAll('[data-remove-kind][data-remove-idx]').forEach(function(btn){
+  // Remove handlers
+  $$('.btn[data-remove-kind]', list).forEach(function(btn){
     btn.addEventListener('click', function(){
       const kind = btn.getAttribute('data-remove-kind');
-      const idxStr = btn.getAttribute('data-remove-idx');
-      const idx = Number(idxStr);
-
-      if (!Number.isFinite(idx) || idx < 0) return;
-
-      if (kind === 'image'){
-        if (idx >= 0 && idx < state.images.length) state.images.splice(idx, 1);
-      } else if (kind === 'doc'){
-        if (idx >= 0 && idx < state.docs.length) state.docs.splice(idx, 1);
-      }
-
-      // Clear any old messages and redraw
-      err.textContent = '';
-      status.textContent = '';
+      const idx = Number(btn.getAttribute('data-remove-idx'));
+      if (kind === 'image') state.images.splice(idx, 1);
+      if (kind === 'doc') state.docs.splice(idx, 1);
       renderList();
     });
   });
 }
+
   function readAsDataURL(file){
     return new Promise((resolve, reject) => {
       const fr = new FileReader();
@@ -1633,6 +1627,8 @@ var drop, fileInput, list, btn, err, status, result, state;
     err.textContent = '';
     status.textContent = '';
 
+    const MAX_BYTES = 13 * 1024 * 1024; // 13MB
+
     const files = Array.from(fileList || []);
     if (!files.length) return;
 
@@ -1642,16 +1638,33 @@ var drop, fileInput, list, btn, err, status, result, state;
 
     // Upload images immediately (re-uses your existing /admin/uploads endpoint)
     for (const f of imgs){
-     const item = { file: f, name: f.name, type: f.type, size: f.size, url: '', w:0, h:0, ratio:0, diff:999 };
+      const tooBig = (f.size || 0) > MAX_BYTES;
+
+      const item = {
+        file: f,
+        name: f.name,
+        type: f.type,
+        size: f.size,
+        url: '',
+        w:0, h:0, ratio:0, diff:999,
+        tooBig
+      };
+
       state.images.push(item);
       renderList();
+
+      if (tooBig){
+        err.textContent = 'File size is too big, please upload a file under 13MB in size.';
+        continue;
+      }
 
       try{
         status.textContent = 'Uploading images…';
         const out = await uploadPoster(f);
         item.url = out.url;
         renderList();
-                // capture real image dimensions for poster selection + send to AI
+
+        // capture real image dimensions for poster selection + send to AI
         const meta = await getImageMeta(item.url);
         item.w = meta.w; item.h = meta.h; item.ratio = meta.ratio; item.diff = meta.diff;
         renderList();
@@ -1663,9 +1676,24 @@ var drop, fileInput, list, btn, err, status, result, state;
 
     // Read docs as data URLs (sent to server for AI extraction)
     for (const f of docs){
-      const item = { file: f, name: f.name, type: f.type, size: f.size, dataUrl: '' };
+      const tooBig = (f.size || 0) > MAX_BYTES;
+
+      const item = {
+        file: f,
+        name: f.name,
+        type: f.type,
+        size: f.size,
+        dataUrl: '',
+        tooBig
+      };
+
       state.docs.push(item);
       renderList();
+
+      if (tooBig){
+        err.textContent = 'File size is too big, please upload a file under 13MB in size.';
+        continue;
+      }
 
       try{
         status.textContent = 'Reading documents…';
