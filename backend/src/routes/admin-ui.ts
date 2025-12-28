@@ -4869,77 +4869,129 @@ function renderInterests(customer){
 
   +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">'
     +'<div>'
-      +'<label class="muted">Company name</label>'
-      +'<input id="biz_companyName" class="input" placeholder="e.g. Chuckl Ltd" />'
+           +'<label class="muted">Company name</label>'
+      +'<input id="biz_companyName" class="input" placeholder="" />'
     +'</div>'
     +'<div>'
       +'<label class="muted">Phone</label>'
-      +'<input id="biz_phone" class="input" placeholder="+44..." />'
+      +'<input id="biz_phone" class="input" placeholder="+44" />'
     +'</div>'
   +'</div>'
 
+
+
   +'<div style="margin-top:10px">'
     +'<label class="muted">Storefront name (unique)</label>'
-    +'<input id="biz_storefrontSlug" class="input" placeholder="e.g. chuckl" />'
+    +'<input id="biz_storefrontSlug" class="input" placeholder="" />'
     +'<div id="biz_storefrontPreview" class="muted" style="margin-top:6px"></div>'
     +'<div class="muted" style="margin-top:6px">Your show URLs will become: /public/&lt;storefront&gt;/&lt;show-title&gt;</div>'
+    +'<div class="row" style="margin-top:10px;gap:8px">'
+      +'<button class="btn p" id="biz_save">Save business details</button>'
+      +'<div id="biz_err" class="error"></div>'
+    +'</div>'
   +'</div>'
 +'</div>'
     +'</div>';
 
   // Load user
+  let u:any = {};
+
   try{
     const me = await j('/auth/me');
-    const u = (me && me.user) || {};
+    u = (me && me.user) || {};
     $('#acc_name').value = u.name || '';
     $('#acc_email').value = u.email || '';
-  }catch(e){
+  }catch(e:any){
     $('#acc_err').textContent = e.message || String(e);
   }
 
+  // Prefill business fields
+  $('#biz_companyName').value = u.companyName || '';
+  $('#biz_phone').value = u.phone || '';
+  $('#biz_storefrontSlug').value = u.storefrontSlug || '';
+
+  function normaliseStorefront(raw:any){
+    return String(raw || '')
+      .trim()
+      .toLowerCase()
+      .replace(/&/g, 'and')
+      .replace(/['’]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+  }
+
+  const updatePreview = () => {
+    const raw = ($('#biz_storefrontSlug').value || '');
+    const slug = normaliseStorefront(raw);
+    $('#biz_storefrontPreview').textContent = slug
+      ? (window.location.origin + '/public/' + slug)
+      : 'Preview: (set a storefront name to enable your organiser page)';
+  };
+
+  $('#biz_storefrontSlug').addEventListener('input', updatePreview);
+  $('#biz_storefrontSlug').addEventListener('blur', function(){
+    const slug = normaliseStorefront($('#biz_storefrontSlug').value || '');
+    $('#biz_storefrontSlug').value = slug;
+    updatePreview();
+  });
+  updatePreview();
+
+  // Save PROFILE only
   $('#acc_save').addEventListener('click', async function(){
     $('#acc_err').textContent = '';
     try{
       const name = $('#acc_name').value.trim();
       const email = $('#acc_email').value.trim();
-      const r = await j('/auth/me', {
-  method:'PUT',
-  headers:{'Content-Type':'application/json'},
-  body: JSON.stringify({
-    name,
-    email,
 
-    companyName: ($('#biz_companyName').value || '').trim() || null,
-    phone: ($('#biz_phone').value || '').trim() || null,
-    storefrontSlug: ($('#biz_storefrontSlug').value || '').trim() || null,
-  })
-});
+      const r = await j('/auth/me', {
+        method:'PUT',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ name, email })
+      });
+
       if (r && r.ok) alert('Profile updated');
-else throw new Error((r && (r.message || r.error)) || 'Failed to update');
-    }catch(e){
+      else throw new Error((r && (r.message || r.error)) || 'Failed to update');
+    }catch(e:any){
       $('#acc_err').textContent = e.message || String(e);
     }
   });
 
-$('#biz_companyName').value = u.companyName || '';
-$('#biz_phone').value = u.phone || '';
-$('#biz_storefrontSlug').value = u.storefrontSlug || '';
+  // Save BUSINESS + STOREFRONT only
+  $('#biz_save').addEventListener('click', async function(){
+    $('#biz_err').textContent = '';
+    try{
+      const companyName = ($('#biz_companyName').value || '').trim() || null;
+      const phone = ($('#biz_phone').value || '').trim() || null;
 
-const updatePreview = () => {
-  const raw = ($('#biz_storefrontSlug').value || '').trim();
-  const slug = raw
-    .toLowerCase()
-    .replace(/&/g, 'and')
-    .replace(/['’]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
-  $('#biz_storefrontPreview').textContent = slug
-    ? (window.location.origin + '/public/' + slug)
-    : 'Preview: (set a storefront name to enable your organiser page)';
-};
-$('#biz_storefrontSlug').addEventListener('input', updatePreview);
-updatePreview();
+      const slug = normaliseStorefront($('#biz_storefrontSlug').value || '');
+      $('#biz_storefrontSlug').value = slug;
+      const storefrontSlug = slug ? slug : null;
+
+      const r = await j('/auth/me', {
+        method:'PUT',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ companyName, phone, storefrontSlug })
+      });
+
+      if (r && r.ok){
+        alert('Business details updated');
+        updatePreview();
+      }else{
+        const msg = (r && (r.message || r.error)) || 'Failed to update';
+
+        // If DB unique constraint triggers on storefrontSlug, show friendly message
+        const m = String(msg || '').toLowerCase();
+        if (m.includes('storefront') && (m.includes('unique') || m.includes('p2002') || m.includes('duplicate'))){
+          throw new Error('That storefront name is already taken. Please choose another.');
+        }
+
+        throw new Error(msg);
+      }
+    }catch(e:any){
+      $('#biz_err').textContent = e.message || String(e);
+    }
+  });
 
   $('#pw_save').addEventListener('click', async function(){
     $('#pw_err').textContent = '';
