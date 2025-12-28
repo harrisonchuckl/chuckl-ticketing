@@ -21,6 +21,17 @@ function sign(user: { id: string; email: string; role: string | null }) {
    );
 }
 
+function normaliseStorefrontSlug(input: string) {
+  return String(input || "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
 function sha256(input: string) {
   return crypto.createHash("sha256").update(input).digest("hex");
 }
