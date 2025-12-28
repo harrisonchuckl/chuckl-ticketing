@@ -1923,7 +1923,8 @@ if (capacityCap !== "" && capacityCap != null) {
             body: JSON.stringify({ status: "LIVE" }),
           });
 
-          showStatus("Show published with unallocated tickets.", "success");
+          showStatus("Show published. Redirecting…", "success");
+          window.location.href = "/admin/ui/shows/" + showId + "/summary";
         } catch (err) {
           showStatus(err && err.message ? err.message : "Publish failed", "error");
           console.error(err);
