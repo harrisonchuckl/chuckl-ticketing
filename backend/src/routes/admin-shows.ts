@@ -859,18 +859,18 @@ if (!Number.isFinite(pricePenceInt) || pricePenceInt < 0) {
 
 const bookingFeePenceClamped = clampBookingFeePence(pricePenceInt, bookingFeePence);
 
+const capInt = toIntOrNull(available);
+if (capInt === null || capInt < 1) {
+  return res.status(400).json({ ok: false, error: "available_required" });
+}
+
 const ticketType = await prisma.ticketType.create({
   data: {
     showId: show.id,
     name: String(name),
     pricePence: pricePenceInt,
     bookingFeePence: bookingFeePenceClamped,
-const capInt = toIntOrNull(available);
-if (capInt === null || capInt < 1) {
-  return res.status(400).json({ ok: false, error: "available_required" });
-}
-...
-available: capInt,
+    available: capInt,
     onSaleAt: onSaleAt ? new Date(onSaleAt) : null,
     offSaleAt: offSaleAt ? new Date(offSaleAt) : null,
   },
