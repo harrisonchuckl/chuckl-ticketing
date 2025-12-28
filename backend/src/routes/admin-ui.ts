@@ -3425,6 +3425,16 @@ async function summaryPage(id){
   // --- Links Configuration ---
   // 1. SSR Checkout URL (Backend route)
   const publicBookingUrl = window.location.origin + '/public/event/' + id;
+  const storefront = show.organiser?.storefrontSlug || '';
+const showSlug = show.slug || '';
+const prettyUrl = (storefront && showSlug)
+  ? (window.location.origin + '/public/' + storefront + '/' + showSlug)
+  : publicBookingUrl;
+
+const storefrontUrl = storefront
+  ? (window.location.origin + '/public/' + storefront)
+  : '';
+
   // 2. Frontend Next.js URL (Adjust domain if frontend is hosted separately)
   const publicFrontendUrl = 'https://chuckl-ticketing-production.up.railway.app/events/' + id;
 
