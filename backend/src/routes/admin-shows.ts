@@ -877,44 +877,85 @@ router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
 });
 
 /** GET /admin/shows/:id */
+
 router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
+
   try {
+
     const s = await prisma.show.findFirst({
+
       where: showWhereForRead(req, String(req.params.id)),
+
       select: {
+
         id: true,
+
         title: true,
+
         description: true,
+
         imageUrl: true,
+
         date: true,
+
         endDate: true,
+
         eventType: true,
+
         eventCategory: true,
+
         doorsOpenTime: true,
+
         ageGuidance: true,
+
         endTimeNote: true,
+
         accessibility: true,
+
         tags: true,
+
         additionalImages: true,
+
         usesAllocatedSeating: true,
+
         status: true,
-       publishedAt: true,
-venueId: true,
-showCapacity: true,
-ticketTypes: {
-  select: {
-    id: true,
-    name: true,
-    pricePence: true,
-    bookingFeePence: true,
-    available: true,
-    onSaleAt: true,
-    offSaleAt: true,
-  },
-  orderBy: { createdAt: "asc" },
-},
+
+        publishedAt: true,
+
+        venueId: true,
+
+        showCapacity: true,
+
+        // ✅ required for /public/<storefront>/<slug>
+        slug: true,
+        organiser: { select: { id: true, storefrontSlug: true } },
+
+        ticketTypes: {
+
+          select: {
+
+            id: true,
+
+            name: true,
+
+            pricePence: true,
+
+            bookingFeePence: true,
+
+            available: true,
+
+            onSaleAt: true,
+
+            offSaleAt: true,
+
+          },
+
+          orderBy: { createdAt: "asc" },
+
+        },
 
       },
+
     });
 
     if (!s) return res.status(404).json({ ok: false, error: "Not found" });
