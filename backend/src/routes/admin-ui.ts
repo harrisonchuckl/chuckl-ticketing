@@ -1106,6 +1106,7 @@ document.addEventListener('click', function(e){
   };
 
 
+
   function close(){ pop.classList.remove('open'); }
 
   function fmtDate(){
@@ -2545,8 +2546,7 @@ if (existingShowId) {
         if (more && acc.notes) more.value = String(acc.notes);
       }
 
-      // Description
-          // ✅ Venue (hydrate the picker so it is truly selected + approved)
+            // ✅ Venue (hydrate the picker so it is truly selected + approved)
       const vIn = $('#venue_input');
       if (vIn) {
         const venueName = (s.venue && s.venue.name) || s.venueText || '';
