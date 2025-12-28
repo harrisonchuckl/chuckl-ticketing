@@ -4854,9 +4854,27 @@ function renderInterests(customer){
         +'</div>'
       +'</div>'
       +'<div class="card" style="margin-top:12px">'
-        +'<div class="title">Coming next</div>'
-        +'<div class="muted">Company details, payout settings, and permissions can live here later (safe behind login).</div>'
-      +'</div>'
+  +'<div class="title">Business & Storefront</div>'
+  +'<div class="muted">This controls your public organiser page and event URLs.</div>'
+
+  +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">'
+    +'<div>'
+      +'<label class="muted">Company name</label>'
+      +'<input id="biz_companyName" class="input" placeholder="e.g. Chuckl Ltd" />'
+    +'</div>'
+    +'<div>'
+      +'<label class="muted">Phone</label>'
+      +'<input id="biz_phone" class="input" placeholder="+44..." />'
+    +'</div>'
+  +'</div>'
+
+  +'<div style="margin-top:10px">'
+    +'<label class="muted">Storefront name (unique)</label>'
+    +'<input id="biz_storefrontSlug" class="input" placeholder="e.g. chuckl" />'
+    +'<div id="biz_storefrontPreview" class="muted" style="margin-top:6px"></div>'
+    +'<div class="muted" style="margin-top:6px">Your show URLs will become: /public/&lt;storefront&gt;/&lt;show-title&gt;</div>'
+  +'</div>'
++'</div>'
     +'</div>';
 
   // Load user
