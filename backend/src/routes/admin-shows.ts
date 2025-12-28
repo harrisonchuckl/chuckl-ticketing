@@ -369,20 +369,22 @@ router.get("/shows", requireAdminOrOrganiser, async (req, res) => {
     const items = await prisma.show.findMany({
       where: showWhereForList(req),
       orderBy: [{ date: "asc" }],
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        imageUrl: true,
-        date: true,
-        eventType: true,
-        eventCategory: true,
-        status: true,
-        publishedAt: true,
-        usesAllocatedSeating: true,
-        activeSeatMapId: true,
-        venue: { select: { id: true, name: true, city: true } },
-      },
+    select: {
+  id: true,
+  title: true,
+  description: true,
+  imageUrl: true,
+  date: true,
+  eventType: true,
+  eventCategory: true,
+  status: true,
+  publishedAt: true,
+  usesAllocatedSeating: true,
+  activeSeatMapId: true,
+  showCapacityInt: true,
+  venue: { select: { id: true, name: true, city: true } },
+},
+
     });
 
     const showIds = items.map((s) => s.id);
@@ -613,6 +615,12 @@ prisma.seat.findMany({
 const layoutTotalSellable = layoutStats ? layoutStats.totalSellable : 0;
 total = seatTotalSellable || layoutTotalSellable || estCap || 0;
 
+// If a show-level capacity override exists, cap the map capacity to it
+const showCapInt = Number((s as any).showCapacityInt ?? 0);
+if (Number.isFinite(showCapInt) && showCapInt > 0) {
+  total = Math.min(total, showCapInt);
+}
+
 
 
   // Sold priority:
@@ -648,21 +656,22 @@ total = seatTotalSellable || layoutTotalSellable || estCap || 0;
   for (const id of soldLayout) holdIds.delete(id);
 
   hold = holdIds.size + unassigned;
-}
- else {
+} else {
         // General admission:
-        // TicketType.available is your configured cap
-        const cap = capacityByShow.get(s.id) ?? 0;
+        // Capacity source of truth: Show.showCapacityInt
+        const showCapInt = Number((s as any).showCapacityInt ?? 0);
+        const hasShowCap = Number.isFinite(showCapInt) && showCapInt > 0;
+
+        // Fallback only if showCapacityInt isn't set (keeps older shows working)
+        const cap = hasShowCap ? showCapInt : (capacityByShow.get(s.id) ?? 0);
 
         sold = soldFromTickets;
 
         // Holds are allocation quantities (GA allocations reserve ticket capacity)
         hold = allocs.reduce((sum, a) => sum + Number(a.quantity ?? 0), 0);
 
-     // General admission capacity is ALWAYS the configured cap from TicketType.available (sum across ticket types).
-// No fallbacks (no venue capacity, no sold/hold derived totals).
-total = cap;
-
+        // Total capacity for GA = show capacity (not sum of ticket capacities)
+        total = cap;
       }
 
       return {
@@ -811,6 +820,7 @@ router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
         usesAllocatedSeating: true,
         status: true,
         publishedAt: true,
+          showCapacityInt: true,
         venue: { select: { id: true, name: true, city: true, capacity: true } },
         ticketTypes: {
   select: {
