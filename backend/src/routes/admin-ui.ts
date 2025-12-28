@@ -473,16 +473,16 @@ router.get(
       background:#f1f5f9;
     }
     .sb-sub{margin-left:10px;}
-    .ai-badge{
+  .ai-badge{
   display:inline-block;
   margin-left:8px;
-  font-size:11px;
-  font-weight:700;
-  padding:2px 7px;
+  font-size:10px;
+  font-weight:800;
+  padding:2px 8px;
   border-radius:999px;
-  border:1px solid var(--border);
-  background:#eef2ff;
-  color:#3730a3;
+  border:1px solid #0f9cdf;
+  background:#e6f7fd;
+  color:#0f9cdf;
   line-height:1.2;
 }
 
@@ -517,10 +517,15 @@ router.get(
     }
     .btn:hover{background:#f9fafb;}
     .btn.p{
-      background:#111827;
-      color:#ffffff;
-      border-color:#111827;
-    }
+  background:#0f9cdf;
+  color:#ffffff;
+  border-color:#0f9cdf;
+}
+.btn.p:hover{
+  background:#0f9cdf;
+  border-color:#0f9cdf;
+  filter:brightness(0.95);
+}
     .grid{display:grid;gap:8px;}
     .grid-2{grid-template-columns:repeat(2,1fr);}
     .grid-3{grid-template-columns:repeat(3,1fr);}
@@ -828,7 +833,7 @@ router.get(
         <a class="sb-link sub" href="/admin/ui/shows/create" data-view="/admin/ui/shows/create">Create Show</a>
 
         <a class="sb-link sub" href="/admin/ui/shows/create-ai" data-view="/admin/ui/shows/create-ai">
-          Create Show <span class="ai-badge" title="AI assisted">AI</span>
+Create Show <span class="ai-badge" title="AI assisted">TixAll Ai</span>
         </a>
 
         <a class="sb-link sub" href="/admin/ui/shows/current" data-view="/admin/ui/shows/current">All Events</a>
@@ -1380,7 +1385,7 @@ document.addEventListener('click', function(e){
   +   '<div id="ai_list" style="margin-top:12px;"></div>'
 
   +   '<div class="row" style="margin-top:12px; gap:10px; align-items:center; justify-content:flex-end;">'
-  +     '<div id="ai_status" class="muted" style="flex:1; font-size:13px;"></div>'
++     '<div id="ai_status" class="muted" style="flex:1; font-size:15px; font-weight:700;"></div>'
   +     '<button id="ai_analyse" class="btn p">Analyse &amp; Pre-fill</button>'
   +   '</div>'
 
@@ -1393,15 +1398,32 @@ document.addEventListener('click', function(e){
   const fileInput = $('#ai_files');
   const list = $('#ai_list');
   const btn = $('#ai_analyse');
-  const err = $('#ai_err');
-  const status = $('#ai_status');
-  const result = $('#ai_result');
+    // Rotating status messages while analysing
+  const analysingMessages = [
+    'TixAll is doing its magic…',
+    'TixAll AI is building your event page…',
+    'Extracting key details from your files…',
+    'Picking the best artwork + layout…',
+    'Almost there — preparing your draft…'
+  ];
 
-  if (!drop || !fileInput || !status || !btn || !err || !list || !result) {
-    throw new Error(
-      'Create Show AI view is missing expected elements. ' +
-      'Check main.innerHTML ids: ai_drop, ai_files, ai_status, ai_analyse, ai_err, ai_list, ai_result.'
-    );
+  let analysingTimer = null;
+
+  function startAnalysingStatus(){
+    stopAnalysingStatus();
+    let i = 0;
+    status.textContent = analysingMessages[i];
+    analysingTimer = setInterval(function(){
+      i = (i + 1) % analysingMessages.length;
+      status.textContent = analysingMessages[i];
+    }, 5000);
+  }
+
+  function stopAnalysingStatus(){
+    if (analysingTimer){
+      clearInterval(analysingTimer);
+      analysingTimer = null;
+    }
   }
 
    const state = {
@@ -1642,10 +1664,10 @@ document.addEventListener('click', function(e){
       return;
     }
 
-    btn.disabled = true;
-    btn.textContent = 'Analysing…';
-    status.textContent = 'TixAll is doing its magic…';
-    try{
+  btn.disabled = true;
+btn.textContent = 'Analysing…';
+startAnalysingStatus();
+try{
            const best = pickBestMainPoster(state.images);
 
       const payload = {
@@ -1683,6 +1705,8 @@ document.addEventListener('click', function(e){
       if (!data.ok || !data.draft) throw new Error('Unexpected AI response');
 
       const draft = data.draft;
+stopAnalysingStatus();
+status.textContent = '';
 
       // Show a quick preview
       result.innerHTML =
@@ -1713,10 +1737,11 @@ document.addEventListener('click', function(e){
     }catch(e){
       err.textContent = 'AI analyse failed: ' + (e.message || e);
       status.textContent = '';
-    }finally{
-      btn.disabled = false;
-      btn.textContent = 'Analyse & Pre-fill';
-    }
+  }finally{
+  stopAnalysingStatus();
+  btn.disabled = false;
+  btn.textContent = 'Analyse & Pre-fill';
+}
   });
 }
 
