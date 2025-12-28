@@ -1464,11 +1464,32 @@ var drop, fileInput, list, btn, err, status, result, state;
     }
   }
 
-  state = {
+   state = {
 
-    images: [], // { file, name, type, size, url, w, h, ratio, score23 }
-    docs: [],   // { file, name, type, size, dataUrl }
+    images: [], // { file, name, type, size, url, w, h, ratio, diff, tooBig }
+
+    docs: [],   // { file, name, type, size, dataUrl, tooBig }
+
   };
+
+  // --- Oversize UX helpers (13MB cap message + auto-clear when resolved) ---
+  const OVERSIZE_MSG = 'File size is too big, please upload a file under 13MB in size.';
+
+  function hasOversizeFiles(){
+    return (state.images || []).some(f => f && f.tooBig) || (state.docs || []).some(f => f && f.tooBig);
+  }
+
+  function showOversizeError(){
+    if (err) err.textContent = OVERSIZE_MSG;
+  }
+
+  function clearOversizeErrorIfResolved(){
+    // Only clear OUR oversize message (don’t wipe other errors)
+    if (!err) return;
+    if (!hasOversizeFiles() && err.textContent === OVERSIZE_MSG){
+      err.textContent = '';
+    }
+  }
 
 
 
@@ -1506,9 +1527,15 @@ var drop, fileInput, list, btn, err, status, result, state;
 
   const rows = imgRows.concat(docRows);
 
-  if (!rows.length){
+    if (!rows.length){
+
     list.innerHTML = '<div class="muted">No files added yet.</div>';
+
+    // If the only error showing was the oversize message, clear it now the file is gone
+    clearOversizeErrorIfResolved();
+
     return;
+
   }
 
   list.innerHTML =
@@ -1541,13 +1568,21 @@ var drop, fileInput, list, btn, err, status, result, state;
   + '</div>';
 
   // Remove handlers
+  // Remove handlers
   $$('.btn[data-remove-kind]', list).forEach(function(btn){
     btn.addEventListener('click', function(){
       const kind = btn.getAttribute('data-remove-kind');
       const idx = Number(btn.getAttribute('data-remove-idx'));
-      if (kind === 'image') state.images.splice(idx, 1);
-      if (kind === 'doc') state.docs.splice(idx, 1);
+
+      if (!Number.isFinite(idx) || idx < 0) return;
+
+      if (kind === 'image' && idx < state.images.length) state.images.splice(idx, 1);
+      if (kind === 'doc' && idx < state.docs.length) state.docs.splice(idx, 1);
+
       renderList();
+
+      // ✅ Remove the oversize banner ONLY if no oversize files remain
+      clearOversizeErrorIfResolved();
     });
   });
 }
@@ -1653,10 +1688,14 @@ var drop, fileInput, list, btn, err, status, result, state;
       state.images.push(item);
       renderList();
 
-      if (tooBig){
-        err.textContent = 'File size is too big, please upload a file under 13MB in size.';
+           if (tooBig){
+
+        showOversizeError();
+
         continue;
+
       }
+
 
       try{
         status.textContent = 'Uploading images…';
@@ -1669,8 +1708,21 @@ var drop, fileInput, list, btn, err, status, result, state;
         item.w = meta.w; item.h = meta.h; item.ratio = meta.ratio; item.diff = meta.diff;
         renderList();
 
-      }catch(e){
-        err.textContent = 'Image upload failed for "' + f.name + '": ' + (e.message || e);
+          }catch(e){
+
+        const msg = String(e && e.message ? e.message : e).toLowerCase();
+
+        // If backend rejected the file (often shows as 413 / too large / "upload error"),
+        // treat it as oversize so the row turns red + message is friendly.
+        if (msg.includes('413') || msg.includes('too large') || msg.includes('file too big') || msg.includes('upload error')){
+          item.tooBig = true;
+          renderList();
+          showOversizeError();
+        } else {
+          // Don’t print raw JSON back to the organiser
+          err.textContent = 'Image upload failed for "' + f.name + '".';
+        }
+
       }
     }
 
@@ -1690,9 +1742,12 @@ var drop, fileInput, list, btn, err, status, result, state;
       state.docs.push(item);
       renderList();
 
-      if (tooBig){
-        err.textContent = 'File size is too big, please upload a file under 13MB in size.';
+          if (tooBig){
+
+        showOversizeError();
+
         continue;
+
       }
 
       try{
