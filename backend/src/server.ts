@@ -8,6 +8,10 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { attachUser } from "./middleware/requireAuth.js";
 
+import publicSlugs from "./routes/public-slugs.js";
+
+
+
 // ---- Existing routers ----
 import authRouter from "./routes/auth.js";
 import bootstrapRouter from "./routes/bootstrap.js";
@@ -81,6 +85,10 @@ app.use(
 // ---------- Health checks ----------
 app.get("/healthz", (_req, res) => res.status(200).send("ok"));
 app.get("/readyz", (_req, res) => res.status(200).send("ready"));
+
+app.use("/public", publicSlugs);
+app.use("/public", publicEventRouter);
+
 
 // ---------- Routes ----------
 app.use("/auth", authRouter);
