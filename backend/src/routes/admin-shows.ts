@@ -859,6 +859,7 @@ if (!Number.isFinite(pricePenceInt) || pricePenceInt < 0) {
 
 const bookingFeePenceClamped = clampBookingFeePence(pricePenceInt, bookingFeePence);
 
+// Capacity MUST be provided and must be >= 1
 const capInt = toIntOrNull(available);
 if (capInt === null || capInt < 1) {
   return res.status(400).json({ ok: false, error: "available_required" });
@@ -875,6 +876,7 @@ const ticketType = await prisma.ticketType.create({
     offSaleAt: offSaleAt ? new Date(offSaleAt) : null,
   },
 });
+
 
     res.json({ ok: true, ticketType });
   } catch (e: any) {
