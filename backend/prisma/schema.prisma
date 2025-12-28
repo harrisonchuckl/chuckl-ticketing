@@ -68,6 +68,23 @@ model User {
   venueMemberships    VenueMember[]
   invitedVenueMembers VenueMember[] @relation("VenueInviter")
   venueInvitesCreated VenueInvite[] @relation("VenueInviteCreatedBy")
+
+  // --- organiser business details (optional) ---
+  companyName     String?
+  tradingName     String?
+  companyNumber   String?
+  vatNumber       String?
+  phone           String?
+  addressLine1    String?
+  addressLine2    String?
+  city            String?
+  county          String?
+  postcode        String?
+  country         String?
+
+  // --- storefront (must be unique per organiser) ---
+  storefrontSlug  String? @unique
+
 }
 
 model Venue {
@@ -174,6 +191,9 @@ model Show {
 
   status          ShowStatus @default(DRAFT)
   publishedAt     DateTime?
+  // --- pretty URL slug (generated on publish / title change) ---
+  slug            String?
+
   usesAllocatedSeating Boolean?
   activeSeatMapId String?
 
@@ -195,6 +215,22 @@ model Show {
   seatMaps    SeatMap[]
   allocations ExternalAllocation[]
 }
+
+model ShowSlugHistory {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+
+  organiserId String
+  showId      String
+  slug        String
+
+  organiser User @relation(fields: [organiserId], references: [id])
+  show      Show @relation(fields: [showId], references: [id])
+
+  @@unique([organiserId, slug])
+  @@index([showId])
+}
+
 
 model TicketType {
   id        String   @id @default(cuid())
