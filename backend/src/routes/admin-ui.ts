@@ -4903,20 +4903,27 @@ function renderInterests(customer){
       const name = $('#acc_name').value.trim();
       const email = $('#acc_email').value.trim();
       const r = await j('/auth/me', {
-        method:'PUT',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ name, email })
-      });
+  method:'PUT',
+  headers:{'Content-Type':'application/json'},
+  body: JSON.stringify({
+    name,
+    email,
+
+    companyName: ($('#biz_companyName').value || '').trim() || null,
+    phone: ($('#biz_phone').value || '').trim() || null,
+    storefrontSlug: ($('#biz_storefrontSlug').value || '').trim() || null,
+  })
+});
       if (r && r.ok) alert('Profile updated');
-      else throw new Error((r && r.error) || 'Failed to update');
+else throw new Error((r && (r.message || r.error)) || 'Failed to update');
     }catch(e){
       $('#acc_err').textContent = e.message || String(e);
     }
   });
 
-$('#biz_companyName').value = me.companyName || '';
-$('#biz_phone').value = me.phone || '';
-$('#biz_storefrontSlug').value = me.storefrontSlug || '';
+$('#biz_companyName').value = u.companyName || '';
+$('#biz_phone').value = u.phone || '';
+$('#biz_storefrontSlug').value = u.storefrontSlug || '';
 
 const updatePreview = () => {
   const raw = ($('#biz_storefrontSlug').value || '').trim();
