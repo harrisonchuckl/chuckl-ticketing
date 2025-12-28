@@ -3422,21 +3422,29 @@ async function summaryPage(id){
   const statusLabel = show.status || 'DRAFT';
   const isLive = statusLabel === 'LIVE';
 
-  // --- Links Configuration ---
-  // 1. SSR Checkout URL (Backend route)
-  const publicBookingUrl = window.location.origin + '/public/event/' + id;
+    // --- Links Configuration ---
+
   const storefront = show.organiser?.storefrontSlug || '';
-const showSlug = show.slug || '';
-const prettyUrl = (storefront && showSlug)
-  ? (window.location.origin + '/public/' + storefront + '/' + showSlug)
-  : publicBookingUrl;
+  const showSlug = show.slug || '';
 
-const storefrontUrl = storefront
-  ? (window.location.origin + '/public/' + storefront)
-  : '';
+  // Preferred pretty URL: /public/<storefront>/<slug>
+  const prettyUrl = (storefront && showSlug)
+    ? (window.location.origin + '/public/' + storefront + '/' + showSlug)
+    : '';
 
-  // 2. Frontend Next.js URL (Adjust domain if frontend is hosted separately)
-  const publicFrontendUrl = 'https://chuckl-ticketing-production.up.railway.app/events/' + id;
+  // Fallback (only used if pretty URL cannot be formed)
+  const legacyUrl = window.location.origin + '/public/event/' + id;
+
+  // The URL we actually show + open
+  const publicBookingUrl = prettyUrl || legacyUrl;
+
+  // Storefront landing page (optional extra link)
+  const storefrontUrl = storefront
+    ? (window.location.origin + '/public/' + storefront)
+    : '';
+
+  // Remove broken /events/<id> Next.js link — point to the working public URL instead
+  const publicFrontendUrl = publicBookingUrl;
 
   let linksHtml = '';
   
@@ -3451,7 +3459,7 @@ const storefrontUrl = storefront
     +     '</div>'
     +   '</div>'
     +   '<div>'
-    +     '<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;color:#64748b">Public Next.js page</label>'
++     '<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;color:#64748b">Public booking page (same link)</label>'
     +     '<div style="display:flex;gap:8px">'
     +       '<input readonly value="'+publicFrontendUrl+'" style="flex:1;background:#f8fafc;color:#334155;border:1px solid #e2e8f0;border-radius:6px;padding:8px" onclick="this.select()">'
     +       '<a href="'+publicFrontendUrl+'" target="_blank" class="btn" style="color:#0284c7;border-color:#0284c7;text-decoration:none">Open ↗</a>'
