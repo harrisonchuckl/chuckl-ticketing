@@ -285,11 +285,12 @@ function renderShell(options: {
       gap: 8px;
     }
 
-    .brand-logo {
-  height: 34px;
+   .brand-logo {
+  height: 68px; /* was 34px – double size */
   width: auto;
   display: block;
 }
+
 
 
   /* Admin-style header (white background) */
@@ -860,6 +861,39 @@ function renderShell(options: {
   border-radius: 10px;
 }
 
+/* ✅ Readability boost (~80% bigger) for the unallocated tickets page + drawer */
+.unallocated-page .tickets-card { padding: 30px; }
+
+.unallocated-page .eyebrow { font-size: 20px; }
+.unallocated-page .tickets-header h2 { font-size: 36px; }
+.unallocated-page .subtext { font-size: 23px; }
+
+.unallocated-page .chip-title { font-size: 25px; }
+.unallocated-page .chip-meta { font-size: 22px; }
+
+.unallocated-page .ghost-button { font-size: 22px; padding: 12px 18px; }
+.unallocated-page .primary-button { font-size: 22px; padding: 12px 18px; }
+
+.unallocated-page .ticket-name { font-size: 25px; }
+.unallocated-page .ticket-meta { font-size: 22px; }
+.unallocated-page .ticket-price { font-size: 25px; }
+
+.unallocated-page .kebab {
+  width: 52px;
+  height: 48px;
+  font-size: 26px;
+}
+
+.unallocated-page .menu { width: 260px; }
+.unallocated-page .menu button { font-size: 23px; padding: 12px 12px; }
+
+.unallocated-page .drawer-title { font-size: 29px; }
+.unallocated-page .field-label { font-size: 22px; }
+.unallocated-page .input { font-size: 25px; padding: 14px 14px; }
+
+.unallocated-page .status-row { font-size: 23px; }
+.unallocated-page .fee-meta { font-size: 20px; }
+
 
 .status-row {
   margin-top: 10px;
@@ -984,10 +1018,10 @@ function renderShell(options: {
         ${headerLeftHtml}
       </div>
       <div class="page-header-right">
-        <a class="ghost-button" href="javascript:history.back()">
-          <span class="ghost-button-icon">←</span>
-          <span>Back to event details</span>
-        </a>
+      <a class="ghost-button" href="/admin/ui/shows/create?showId=${showId}">
+  <span class="ghost-button-icon">←</span>
+  <span>Back to event details</span>
+</a>
       </div>
     </header>
     <main class="page-body">
@@ -1360,7 +1394,9 @@ if (!initialTickets.length) {
     <div class="tickets-list" id="tickets-list"></div>
 
     <div class="tickets-actions">
-<button class="ghost-button" type="button" id="edit-capacity">Capacity: <span id="cap_label">—</span></button>
+<button class="ghost-button" type="button" id="edit-capacity">
+  Capacity: <span id="cap_label">—</span> <span aria-hidden="true">✎</span>
+</button>
       <div class="action-spacer"></div>
       <button class="ghost-button" type="button" id="save-tickets">Save tickets</button>
       <button class="primary-button" type="button" id="publish">Create &amp; publish show</button>
@@ -1408,8 +1444,13 @@ if (!initialTickets.length) {
       var drawerTitle = document.getElementById("drawer-title");
       var drawerBody = document.getElementById("drawer-body");
 
-      var defaultAllocation = (showMeta && showMeta.venue && showMeta.venue.capacity) || "";
-      var capacityCap = (showMeta && showMeta.venue && showMeta.venue.capacity) || ""; // UI cap (enforced vs allocations)
+     var defaultAllocation = (showMeta && showMeta.venue && showMeta.venue.capacity) || "";
+
+// Capacity rules:
+// - If venue capacity exists, default to that (but user can override).
+// - If venue capacity is blank, default to SUM of ticket allocations (auto-updates until user overrides).
+var capacityCap = (showMeta && showMeta.venue && showMeta.venue.capacity) || "";
+var capacityAuto = !(capacityCap !== "" && capacityCap != null);
 
       // --- Booking fee tiers (min enforced; max is recommended range, NOT a cap) ---
       const BOOKING_FEE_BANDS = [
@@ -1584,16 +1625,17 @@ if (!initialTickets.length) {
             ? "Total allocations: Unlimited (blank allocation detected)."
             : ("Total allocations: " + total);
 
-          drawerBody.innerHTML = \`
-            <div>
-              <div class="field-label">Capacity cap (max tickets sold across all ticket types)</div>
-              <input class="input" id="cap_value" type="number" min="0" step="1" value="\${capacityCap || ""}" placeholder="e.g. 200" />
-              <div style="margin-top:8px;" class="fee-meta" id="cap_summary">\${summary}</div>
-              <div style="margin-top:10px;" class="fee-meta">
-                If you set a cap, all tickets must have numeric allocations (no blanks), and the total must be ≤ the cap.
-              </div>
-            </div>
-          \`;
+         drawerBody.innerHTML = `
+  <div>
+    <div class="field-label">Event capacity (total tickets to sell overall)</div>
+    <input class="input" id="cap_value" type="number" min="0" step="1" value="${capacityCap || ""}" placeholder="e.g. 200" />
+    <div style="margin-top:8px;" class="fee-meta" id="cap_summary">${summary}</div>
+    <div style="margin-top:10px;" class="fee-meta">
+      Ticket allocations can be higher than the event capacity — the overall capacity is the hard stop for total tickets sold.
+      Leave blank to use venue capacity (if set) or auto-calc from allocations.
+    </div>
+  </div>
+`;
 
           return;
         }
@@ -1672,7 +1714,22 @@ if (!initialTickets.length) {
       function renderList() {
         if (!listEl) return;
 
-        if (capLabelEl) capLabelEl.textContent = (capacityCap !== "" && capacityCap != null) ? String(capacityCap) : "—";
+var totalNow = calcTotalAllocations();
+
+// Auto-update capacity when venue capacity isn't set AND user hasn't overridden it
+if (capacityAuto) {
+  if (totalNow == null) {
+    capacityCap = ""; // unlimited (blank allocation detected)
+  } else {
+    capacityCap = String(totalNow);
+  }
+}
+
+var capLabel = (capacityCap !== "" && capacityCap != null)
+  ? String(capacityCap)
+  : (totalNow == null ? "Unlimited" : "—");
+
+if (capLabelEl) capLabelEl.textContent = capLabel;
 
         if (!tickets.length) {
           listEl.innerHTML = '<div class="empty">No tickets yet. Click “Add ticket”.</div>';
@@ -1790,19 +1847,15 @@ if (!initialTickets.length) {
       }
 
       async function saveTickets() {
-        // Capacity enforcement (UI cap)
-        var capNum = Number(capacityCap);
-        if (capacityCap !== "" && Number.isFinite(capNum) && capNum > 0) {
-          var total = calcTotalAllocations();
-          if (total == null) {
-            showStatus("Capacity cap is set, but at least one ticket has a blank allocation. Set allocations for all tickets (no blanks) to enforce the cap.", "error");
-            return false;
-          }
-          if (total > capNum) {
-            showStatus("Total allocations (" + total + ") exceed capacity cap (" + capNum + "). Reduce allocations or increase the cap.", "error");
-            return false;
-          }
-        }
+       // Capacity validation only (we ALLOW cap < total allocations).
+// The cap is the total tickets you want to sell overall.
+if (capacityCap !== "" && capacityCap != null) {
+  var capNum = Number(capacityCap);
+  if (!Number.isFinite(capNum) || capNum < 0) {
+    showStatus("Capacity must be a positive number (or leave blank).", "error");
+    return false;
+  }
+}
 
         showStatus("Saving tickets…");
         try {
@@ -1894,11 +1947,23 @@ if (!initialTickets.length) {
 
       // Drawer close handlers
       function doneHandler(){
-        if (drawerMode === "capacity") {
-          var capEl = document.getElementById("cap_value");
-          capacityCap = capEl ? capEl.value : capacityCap;
-          renderList();
-        }
+      if (drawerMode === "capacity") {
+  var capEl = document.getElementById("cap_value");
+  var v = capEl ? String(capEl.value || "") : "";
+
+  if (v === "") {
+    // Clearing capacity:
+    // - if venue capacity exists, revert to it
+    // - otherwise return to auto (sum of allocations)
+    capacityCap = (showMeta && showMeta.venue && showMeta.venue.capacity) || "";
+    capacityAuto = !(capacityCap !== "" && capacityCap != null);
+  } else {
+    capacityCap = v;
+    capacityAuto = false; // user override
+  }
+
+  renderList();
+}
         closeDrawer();
       }
 
