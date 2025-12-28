@@ -71,7 +71,6 @@ model User {
 
   // Slug history for organiser show URLs
   showSlugHistory ShowSlugHistory[]
-}
 
   // --- organiser business details (optional) ---
   companyName     String?
@@ -88,7 +87,6 @@ model User {
 
   // --- storefront (must be unique per organiser) ---
   storefrontSlug  String? @unique
-
 }
 
 model Venue {
