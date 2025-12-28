@@ -250,33 +250,7 @@ if (!itQty || itQty < 1 || !itUnit || itUnit < 1) {
       ];
     }
 
-    // --- Show-level capacity guard (supports showCapacity override) ---
-// If show.showCapacity is set, use it.
-// Otherwise, if ALL ticket types have an allocation, default to sum(available).
-// Otherwise, treat as unlimited (null cap).
-const showCap =
-  (show as any).showCapacity != null
-    ? Number((show as any).showCapacity)
-    : ((ticketTypes || []).length && (ticketTypes || []).every((t: any) => t.available != null))
-      ? (ticketTypes || []).reduce((sum: number, t: any) => sum + Number(t.available || 0), 0)
-      : null;
-
-if (showCap != null && Number.isFinite(showCap)) {
-  const soldAgg = await prisma.order.aggregate({
-    where: { showId: show.id, status: OrderStatus.PAID },
-    _sum: { quantity: true },
-  });
-
-  const soldQty = Number(soldAgg?._sum?.quantity || 0);
-
-  if (soldQty + Number(totalQty || 0) > showCap) {
-    return res.status(409).json({
-      ok: false,
-      message: "Sorry — this event has sold out.",
-    });
-  }
-}
-
+  // (removed duplicate capacity guard — enforced earlier via effectiveCap + PENDING+PAID)
 
     // Create Order (PENDING)
     const order = await prisma.order.create({
