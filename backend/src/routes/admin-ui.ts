@@ -4935,7 +4935,7 @@ const updatePreview = () => {
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '');
   $('#biz_storefrontPreview').textContent = slug
-    ? `${window.location.origin}/public/${slug}`
+    ? (window.location.origin + '/public/' + slug)
     : 'Preview: (set a storefront name to enable your organiser page)';
 };
 $('#biz_storefrontSlug').addEventListener('input', updatePreview);
