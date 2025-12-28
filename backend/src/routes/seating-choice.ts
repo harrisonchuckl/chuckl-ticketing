@@ -861,38 +861,38 @@ function renderShell(options: {
   border-radius: 10px;
 }
 
-/* ✅ Readability boost (~80% bigger) for the unallocated tickets page + drawer */
-.unallocated-page .tickets-card { padding: 30px; }
+/* Unallocated page: subtle sizing (keep it readable, not massive) */
+.unallocated-page .tickets-card { padding: 22px; }
 
-.unallocated-page .eyebrow { font-size: 20px; }
-.unallocated-page .tickets-header h2 { font-size: 36px; }
-.unallocated-page .subtext { font-size: 23px; }
+.unallocated-page .eyebrow { font-size: 11px; }
+.unallocated-page .tickets-header h2 { font-size: 22px; }
+.unallocated-page .subtext { font-size: 13px; }
 
-.unallocated-page .chip-title { font-size: 25px; }
-.unallocated-page .chip-meta { font-size: 22px; }
+.unallocated-page .chip-title { font-size: 14px; }
+.unallocated-page .chip-meta { font-size: 12px; }
 
-.unallocated-page .ghost-button { font-size: 22px; padding: 12px 18px; }
-.unallocated-page .primary-button { font-size: 22px; padding: 12px 18px; }
+.unallocated-page .ghost-button { font-size: 12px; padding: 8px 14px; }
+.unallocated-page .primary-button { font-size: 12px; padding: 10px 16px; }
 
-.unallocated-page .ticket-name { font-size: 25px; }
-.unallocated-page .ticket-meta { font-size: 22px; }
-.unallocated-page .ticket-price { font-size: 25px; }
+.unallocated-page .ticket-name { font-size: 14px; }
+.unallocated-page .ticket-meta { font-size: 12px; }
+.unallocated-page .ticket-price { font-size: 14px; }
 
 .unallocated-page .kebab {
-  width: 52px;
-  height: 48px;
-  font-size: 26px;
+  width: 38px;
+  height: 34px;
+  font-size: 18px;
 }
 
-.unallocated-page .menu { width: 260px; }
-.unallocated-page .menu button { font-size: 23px; padding: 12px 12px; }
+.unallocated-page .menu { width: 200px; }
+.unallocated-page .menu button { font-size: 13px; padding: 10px 10px; }
 
-.unallocated-page .drawer-title { font-size: 29px; }
-.unallocated-page .field-label { font-size: 22px; }
-.unallocated-page .input { font-size: 25px; padding: 14px 14px; }
+.unallocated-page .drawer-title { font-size: 16px; }
+.unallocated-page .field-label { font-size: 12px; }
+.unallocated-page .input { font-size: 14px; padding: 10px 11px; }
 
-.unallocated-page .status-row { font-size: 23px; }
-.unallocated-page .fee-meta { font-size: 20px; }
+.unallocated-page .status-row { font-size: 13px; }
+.unallocated-page .fee-meta { font-size: 12px; }
 
 
 .status-row {
