@@ -177,6 +177,12 @@ model Show {
   usesAllocatedSeating Boolean?
   activeSeatMapId String?
 
+  /// Overall show capacity across all ticket types.
+  /// If set, checkout will never allow more than this total quantity sold/reserved.
+  /// If null, capacity is derived from ticket allocations (unlimited if any allocation is blank).
+  showCapacity Int?
+
+
   venueId     String?
   organiserId String?
 
