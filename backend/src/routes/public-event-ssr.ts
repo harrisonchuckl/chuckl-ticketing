@@ -997,18 +997,48 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 
 /* hero poster is now an IMG so it can keep aspect ratio */
 .hero-bg{
- display: block;
- width: 100%;
- height: auto;           /* <-- height changes with width */
- max-height: 75vh;       /* optional safety so super-tall posters don’t take over desktop */
- object-fit: contain;    /* never crop */
- background: var(--primary);
+  display: block;
+  width: 100%;
+  height: auto;            /* grows naturally until max-height kicks in */
+  max-height: 75vh;        /* your cap */
+  object-fit: contain;     /* no crop while it can still grow */
+  background: var(--primary);
+
+  /* for the “slow zoom” behaviour on wide screens */
+  transform: none;
+  transform-origin: center;
+  transition: transform 280ms ease;
 }
+
 
 /* if max-height ever kicks in, keep the full image visible */
 @media (min-width: 960px){
  .hero-bg{ object-position: center; }
 }
+
+/* Wide screens: once the image would otherwise pillarbox, switch to cover and gently zoom */
+@media (min-width: 1100px){
+  .hero-bg{
+    width: 100%;
+    height: 75vh;          /* stop growing taller */
+    max-height: 75vh;
+    object-fit: cover;     /* fill width, no side bars */
+    object-position: center;
+    transform: scale(1.03); /* start gentle zoom */
+  }
+}
+
+/* progressively zoom a touch more on very wide viewports */
+@media (min-width: 1400px){
+  .hero-bg{ transform: scale(1.07); }
+}
+@media (min-width: 1700px){
+  .hero-bg{ transform: scale(1.12); }
+}
+@media (min-width: 2000px){
+  .hero-bg{ transform: scale(1.16); }
+}
+
 
 .hero-media{
   position: relative;
@@ -1761,15 +1791,7 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
     ${poster ? `<img class="hero-bg" src="${escAttr(poster)}" alt="${escAttr(show.title || 'Event poster')}" loading="eager" />` : ''}
     <div class="hero-overlay"></div>
 
-    <!-- Desktop overlay meta (hidden on mobile) -->
-    <div class="hero-content hero-content--desktop">
-      <div class="hero-meta">
-        <div class="hero-meta-item"><span>${esc(prettyDate)}</span></div>
-        <div class="hero-meta-item"><span>${esc(venue.name)}</span></div>
-        <div class="hero-meta-item"><span>${esc(timeStr)}</span></div>
-      </div>
-    </div>
-  </div>
+</div>
 
   <!-- Mobile full-width strip (shown on mobile only) -->
   <div class="hero-strip" aria-label="Event details">
