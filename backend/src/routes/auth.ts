@@ -322,7 +322,25 @@ router.post("/login", async (req, res) => {
     const ok = await bcrypt.compare(String(password), user.passwordHash);
     if (!ok) return res.status(401).json({ error: "invalid credentials" });
 
-    const token = sign({ id: user.id, email: user.email, role: user.role ?? null });
+    let role = user.role ?? null;
+
+    if (!role) {
+      const approvedRequest = await prisma.accessRequest.findUnique({
+        where: { email: user.email },
+        select: { approvedAt: true },
+      });
+
+      if (approvedRequest?.approvedAt) {
+        const updated = await prisma.user.update({
+          where: { id: user.id },
+          data: { role: "ORGANISER" },
+          select: { role: true },
+        });
+        role = updated.role;
+      }
+    }
+
+    const token = sign({ id: user.id, email: user.email, role });
 
     res.cookie("auth", token, {
       httpOnly: true,
