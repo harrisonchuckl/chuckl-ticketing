@@ -815,6 +815,32 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
     }
 
     .btn-primary:hover{ background:var(--brand-hover); }
+    /* ✅ Secure payment (under CTA) */
+    .secure-powered{
+      margin-top:10px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      flex-wrap:wrap;
+      color:var(--text-muted);
+      font-size:0.85rem;
+      font-weight:700;
+      text-align:center;
+      user-select:none;
+    }
+    .secure-lock{
+      width:14px;
+      height:14px;
+      opacity:0.9;
+      display:block;
+    }
+    .secure-powered-logo{
+      height:18px;
+      width:auto;
+      display:block;
+      border-radius:6px;
+    }
 
     .btn:disabled{
       opacity:0.55;
@@ -955,10 +981,20 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
 
   <div class="error" id="error-message"></div>
 
-  <div style="margin-top:14px;">
+   <div style="margin-top:14px;">
     <button type="submit" id="btn-buy" class="btn btn-primary" disabled>Continue to payment</button>
+
+    <!-- ✅ Secure payment line (centred, inside the panel) -->
+    <div class="secure-powered" aria-label="Secure payment powered by TIXL">
+      <svg class="secure-lock" viewBox="0 0 24 24" aria-hidden="true">
+        <path fill="currentColor" d="M17 9h-1V7a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2Zm-7-2a2 2 0 1 1 4 0v2h-4V7Zm7 12H7v-8h10v8Z"/>
+      </svg>
+      <span>Secure payment powered by</span>
+      <img class="secure-powered-logo" src="/IMG_2374.jpeg" alt="TIXL" />
+    </div>
   </div>
 </form>
+
       </div>
 
       <div class="card">
@@ -1343,6 +1379,24 @@ touch-action: none;
     .btn-checkout { background:var(--success); color:white; border:none; padding:12px 32px; border-radius:99px; font-size:1rem; font-weight:700; font-family:'Outfit',sans-serif; text-transform:uppercase; letter-spacing:0.05em; cursor:pointer; transition:all 0.2s; opacity:0.5; pointer-events:none; }
     .btn-checkout.active { opacity:1; pointer-events:auto; box-shadow:0 4px 12px rgba(16, 185, 129, 0.3); }
     .btn-checkout:hover { background:#059669; }
+        /* ✅ Footer CTA stack (button + secure line) */
+    .checkout-action{
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:8px;
+    }
+    .secure-powered--footer{
+      margin-top:0;
+      font-size:0.78rem;
+      font-weight:700;
+      opacity:0.95;
+    }
+    .secure-powered--footer .secure-powered-logo{
+      height:16px;
+      border-radius:6px;
+    }
+
     
     /* LOADER - Visible by default */
     #loader { position:absolute; top:0; left:0; right:0; bottom:0; background:rgba(255,255,255,1); z-index:5000; display:flex; flex-direction:column; gap:10px; align-items:center; justify-content:center; font-weight:600; color:var(--primary); transition: opacity 0.5s; }
@@ -1444,8 +1498,17 @@ touch-action: none;
       <div class="basket-detail" id="ui-count">0 tickets selected</div>
     </div>
 
-    <div style="display:flex;gap:10px;align-items:center;">
+       <div class="checkout-action">
       <button class="btn-checkout" id="btn-next">Continue</button>
+
+      <!-- ✅ Secure payment line (centred, inside footer panel) -->
+      <div class="secure-powered secure-powered--footer" aria-label="Secure payment powered by TIXL">
+        <svg class="secure-lock" viewBox="0 0 24 24" aria-hidden="true">
+          <path fill="currentColor" d="M17 9h-1V7a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2Zm-7-2a2 2 0 1 1 4 0v2h-4V7Zm7 12H7v-8h10v8Z"/>
+        </svg>
+        <span>Secure payment powered by</span>
+        <img class="secure-powered-logo" src="/IMG_2374.jpeg" alt="TIXL" />
+      </div>
     </div>
   </div>
 </footer>
