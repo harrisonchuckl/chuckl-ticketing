@@ -86,18 +86,22 @@ app.use(
 app.get("/healthz", (_req, res) => res.status(200).send("ok"));
 app.get("/readyz", (_req, res) => res.status(200).send("ready"));
 
+// Public routes (order matters)
+// 1) /public/orders must come first so slug router can't hijack it
+app.use("/public/orders", publicOrdersRouter);
+
+// 2) Slug rewrites + redirects
 app.use("/public", publicSlugs);
+
+// 3) SSR public event pages (legacy + internal rewrite target)
 app.use("/public", publicEventRouter);
+
 
 
 // ---------- Routes ----------
 app.use("/auth", authRouter);
 app.use("/bootstrap", bootstrapRouter);
 app.use("/checkout", checkoutRouter);
-app.use("/public/orders", publicOrdersRouter);
-
-// Public SSR/event pages
-app.use("/public", publicEventRouter);
 
 app.use("/uploads", uploadsRouter);
 app.use("/image-proxy", imageProxyRouter);
