@@ -431,10 +431,10 @@ background: rgba(15,156,223,0.18); border: 1px solid rgba(15,156,223,0.35);
 }
 
 .app-header-inner{
- max-width: 1200px; /* align with event content width */
+ max-width: 980px; /* match success page wrap width */
  height: 100%;
  margin: 0 auto;
- padding: 0 24px;
+ padding: 0 16px;
  display: flex;
  align-items: center;
  justify-content: flex-start;
