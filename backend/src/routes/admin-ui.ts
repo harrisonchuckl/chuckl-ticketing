@@ -379,7 +379,7 @@ router.get(
   text-decoration:none;
 }
 .hdr-logo{
-  height:28px;
+  height:36.4px;
   width:auto;
   display:block;
 }

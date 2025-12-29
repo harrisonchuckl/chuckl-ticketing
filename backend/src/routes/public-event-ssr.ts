@@ -449,7 +449,7 @@ background: rgba(15,156,223,0.18); border: 1px solid rgba(15,156,223,0.35);
 }
 
 .app-brand-logo{
- height: 34px;
+ height: 44.2px;
  width: auto;
  display: block;
  border-radius: 10px;
@@ -1103,7 +1103,7 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 }
 
 .app-brand-logo{
- height: 34px;
+ height: 44.2px;
  width: auto;
  display: block;
  border-radius: 10px;
