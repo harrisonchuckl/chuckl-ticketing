@@ -789,23 +789,45 @@ const soldCount = await prisma.order.count({
         .json({ ok: false, error: "Cannot delete events that have sold tickets" });
     }
 
-    await prisma.$transaction([
-      prisma.refund.deleteMany({ where: { order: { showId } } }),
-      prisma.ticket.deleteMany({ where: { showId } }),
-      prisma.order.deleteMany({ where: { showId } }),
-      prisma.allocationSeat.deleteMany({ where: { allocation: { showId } } }),
-      prisma.seat.deleteMany({ where: { seatMap: { showId } } }),
-      prisma.zone.deleteMany({ where: { seatMap: { showId } } }),
-      prisma.externalAllocation.deleteMany({ where: { showId } }),
-      prisma.seatMap.deleteMany({ where: { showId } }),
-      prisma.ticketType.deleteMany({ where: { showId } }),
-      prisma.show.delete({ where: { id: showId } }),
-    ]);
+       await prisma.$transaction(async (tx) => {
+      // 1) Break FK from Show -> SeatMap (activeSeatMapId) so seat maps can be deleted safely
+      await tx.show.update({
+        where: { id: showId },
+        data: { activeSeatMapId: null },
+        select: { id: true },
+      }).catch(() => {
+        // If show already deleted or field doesn't exist, don't hard-fail here
+      });
+
+      // 2) Delete slug history first (prevents FK failure on show.delete)
+      await (tx as any).showSlugHistory?.deleteMany?.({
+        where: { showId },
+      });
+
+      // 3) Now delete everything else
+      await tx.refund.deleteMany({ where: { order: { showId } } });
+      await tx.ticket.deleteMany({ where: { showId } });
+      await tx.order.deleteMany({ where: { showId } });
+
+      await tx.allocationSeat.deleteMany({ where: { allocation: { showId } } });
+
+      await tx.seat.deleteMany({ where: { seatMap: { showId } } });
+      await tx.zone.deleteMany({ where: { seatMap: { showId } } });
+
+      await tx.externalAllocation.deleteMany({ where: { showId } });
+      await tx.seatMap.deleteMany({ where: { showId } });
+
+      await tx.ticketType.deleteMany({ where: { showId } });
+
+      await tx.show.delete({ where: { id: showId } });
+    });
 
     res.json({ ok: true });
   } catch (e) {
     console.error("DELETE /admin/shows/:id failed", e);
-    res.status(500).json({ ok: false, error: "Failed to delete show" });
+const msg = (e as any)?.message || "Failed to delete show";
+    const code = (e as any)?.code;
+    res.status(500).json({ ok: false, error: msg, code });
   }
 });
 
