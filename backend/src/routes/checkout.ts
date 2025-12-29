@@ -285,15 +285,18 @@ const cancelUrl =
     // Note: your UI caps at 10 seats, so this comfortably fits Stripe metadata limits.
     let seatGroupsJson = "";
 
-    if (Array.isArray(items) && items.length > 0) {
-      const seatGroups = items.map((it: any) => ({
-        ticketTypeId: String(it.ticketTypeId || ""),
-        unitPricePence: Number(it.unitPricePence || 0),
-        seatIds: Array.isArray(it.seatIds) ? it.seatIds.map((x: any) => String(x)) : [],
-      }));
+if (Array.isArray(items) && items.length > 0) {
+  const seatGroups = items
+    .map((it: any) => ({
+      ticketTypeId: String(it.ticketTypeId || "").trim(),
+      unitPricePence: Number(it.unitPricePence || 0),
+      seatIds: Array.isArray(it.seatIds) ? it.seatIds.map((x: any) => String(x).trim()).filter(Boolean) : [],
+    }))
+    // ✅ only keep groups that actually have seats
+    .filter((g) => g.ticketTypeId && g.seatIds.length > 0 && Number.isFinite(g.unitPricePence) && g.unitPricePence > 0);
 
-      seatGroupsJson = JSON.stringify(seatGroups);
-    }
+  seatGroupsJson = seatGroups.length ? JSON.stringify(seatGroups) : "";
+}
 
    const session = await stripe.checkout.sessions.create({
   mode: "payment",
@@ -335,7 +338,7 @@ const cancelUrl =
     ...(ticketTypeId ? { ticketTypeId: String(ticketTypeId) } : {}),
 
     // Tiered seat mapping (ticketTypeId per seat)
-    ...(seatGroupsJson ? { seatGroups: seatGroupsJson } : {}),
+  ...(seatGroupsJson && seatIds.length > 0 ? { seatGroups: seatGroupsJson } : {}),
   },
 });
 
