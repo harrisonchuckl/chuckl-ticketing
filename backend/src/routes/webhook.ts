@@ -290,7 +290,6 @@ const payerPostcode = String(session.customer_details?.address?.postal_code || "
     buyerPostcode: payerPostcode,
   },
 });
-
 // -----------------------------
 // CREATE TICKETS (idempotent)
 // -----------------------------
@@ -311,16 +310,41 @@ try {
 
     const qtyOrder = Number(order.quantity ?? 1) || 1;
     const total = Number(order.amountPence ?? 0) || 0;
+
+    // Best-effort unit price from order total (used if we can't look up ticket type prices)
     const unitFromOrder = Math.max(0, Math.round(total / Math.max(1, qtyOrder)));
 
     const seatRefMap = await loadSeatRefMapForShow(showId);
 
-    // Optional: price lookup so ticket.amountPence is sensible for multi-type orders
-    const tts = await prisma.ticketType.findMany({
-      where: { showId },
-      select: { id: true, pricePence: true },
-    });
-    const priceByTtId = new Map(tts.map((t) => [t.id, Number(t.pricePence ?? 0)]));
+    // Look up ticket type prices for any ticketTypeIds present in seatGroups
+    const priceByTtId = new Map<string, number>();
+
+    if (seatGroupsRaw) {
+      try {
+        const parsed = JSON.parse(seatGroupsRaw);
+        const ids = Array.isArray(parsed)
+          ? Array.from(
+              new Set(
+                parsed
+                  .map((g: any) => String(g?.ticketTypeId || "").trim())
+                  .filter(Boolean)
+              )
+            )
+          : [];
+
+        if (ids.length) {
+          const tts = await prisma.ticketType.findMany({
+            where: { id: { in: ids } },
+            select: { id: true, pricePence: true },
+          });
+          for (const tt of tts) {
+            priceByTtId.set(tt.id, Number(tt.pricePence ?? 0) || 0);
+          }
+        }
+      } catch {
+        // ignore; we'll fall back to unitFromOrder
+      }
+    }
 
     const ticketsToCreate: Array<{
       serial: string;
@@ -335,20 +359,23 @@ try {
       quantity: number;
     }> = [];
 
+    // -----------------------------
+    // seatGroups mode (allocated + unallocated)
+    // seatGroups format: [{ ticketTypeId, quantity?, seatIds? }]
+    // -----------------------------
     let usedSeatGroups = false;
 
     if (seatGroupsRaw) {
-      type SeatGroup = { ticketTypeId: string; quantity?: number; seatIds?: string[] };
-
-      let seatGroups: SeatGroup[] = [];
+      let seatGroups: Array<{ ticketTypeId: string; quantity?: number; seatIds?: string[] }> = [];
       try {
         seatGroups = JSON.parse(seatGroupsRaw);
       } catch {
-        console.warn("[webhook] invalid seatGroups JSON", { orderId });
+        console.warn("[webhook] invalid seatGroups JSON (cannot create grouped tickets)", { orderId });
         seatGroups = [];
       }
 
-      // Only treat as “seatGroups mode” if there is at least 1 purchasable ticket in it
+      // ✅ Treat seatGroups as usable if it represents at least 1 ticket,
+      // either via seatIds (allocated) OR quantity (unallocated)
       const totalQty = (seatGroups || []).reduce((acc, g) => {
         const ids = Array.isArray(g?.seatIds) ? g.seatIds.length : 0;
         const q = Number(g?.quantity ?? 0) || 0;
@@ -370,10 +397,9 @@ try {
           const q = Number.isFinite(qRaw) ? Math.max(0, Math.floor(qRaw)) : 0;
           if (q < 1) continue;
 
-          const amountPence =
-            priceByTtId.get(ttId) ?? unitFromOrder;
+          const amountPence = priceByTtId.get(ttId) ?? unitFromOrder;
 
-          // If we have seatIds, 1 ticket per seat (allocated)
+          // Allocated: 1 ticket per seatId
           if (ids.length > 0) {
             for (const seatId of ids) {
               ticketsToCreate.push({
@@ -390,7 +416,7 @@ try {
               });
             }
           } else {
-            // No seatIds: unallocated/GA — create 1 ticket row per quantity
+            // ✅ Unallocated/GA: 1 ticket row per quantity
             for (let i = 0; i < q; i++) {
               ticketsToCreate.push({
                 serial: makeTicketSerial(),
@@ -408,12 +434,15 @@ try {
           }
         }
       } else {
-        console.warn("[webhook] seatGroups metadata present but empty; falling back", { orderId });
+        console.warn("[webhook] seatGroups metadata present but empty; falling back to GA mode", { orderId });
       }
     }
 
-    // Final fallback: GA single ticket type (older flow)
+    // -----------------------------
+    // GA fallback (single ticket type orders)
+    // -----------------------------
     if (!usedSeatGroups && gaTicketTypeId) {
+      // If seatIds exist, create 1 per seat, else 1 per quantity
       if (seatIds.length > 0) {
         for (const seatId of seatIds) {
           ticketsToCreate.push({
@@ -425,7 +454,7 @@ try {
             ticketTypeId: gaTicketTypeId,
             seatId,
             seatRef: seatRefMap.get(seatId) || null,
-            amountPence: priceByTtId.get(gaTicketTypeId) ?? unitFromOrder,
+            amountPence: unitFromOrder,
             quantity: 1,
           });
         }
@@ -440,11 +469,13 @@ try {
             ticketTypeId: gaTicketTypeId,
             seatId: null,
             seatRef: null,
-            amountPence: priceByTtId.get(gaTicketTypeId) ?? unitFromOrder,
+            amountPence: unitFromOrder,
             quantity: 1,
           });
         }
       }
+    } else if (!usedSeatGroups && !gaTicketTypeId) {
+      console.warn("[webhook] no usable seatGroups + no ticketTypeId metadata (cannot create tickets)", { orderId });
     }
 
     if (ticketsToCreate.length) {
@@ -466,6 +497,7 @@ try {
     stack: ticketErr?.stack,
   });
 }
+
 
 
 
