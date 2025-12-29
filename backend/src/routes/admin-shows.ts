@@ -813,24 +813,27 @@ const soldCount = await prisma.order.count({
 
 router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
   try {
-    const {
-      title,
-      date,
-      endDate,
-      imageUrl,
-      descriptionHtml,
-      venueId,
-      venueText,
-      eventType,
-      eventCategory,
-      doorsOpenTime,
-      ageGuidance,
-      endTimeNote,
-      accessibility,
-      tags,
-      additionalImages,
-      usesAllocatedSeating,
-    } = req.body || {};
+   const {
+  title,
+  date,
+  endDate,
+  imageUrl,
+  descriptionHtml,
+  venueId,
+  venueText,
+  status,
+  eventType,
+  eventCategory,
+  doorsOpenTime,
+  ageGuidance,
+  endTimeNote,
+  accessibility,
+  tags,
+  additionalImages,
+  usesAllocatedSeating,
+  showCapacity,
+} = req.body || {};
+
 
     if (!title || !date || !(venueId || venueText) || !descriptionHtml) {
       return res.status(400).json({ ok: false, error: "Missing required fields" });
@@ -1246,6 +1249,16 @@ organiserId: effectiveOrganiserId,
         ...(usesAllocatedSeating !== undefined
           ? { usesAllocatedSeating: !!usesAllocatedSeating }
           : {}),
+      ...(showCapacity !== undefined
+  ? {
+      showCapacity: (() => {
+        const n = toIntOrNull(showCapacity);
+        // Treat 0/blank/invalid as “clear override”
+        return n && n > 0 ? n : null;
+      })(),
+    }
+  : {}),
+
         ...(eventType !== undefined ? { eventType: asNullableString(eventType) } : {}),
         ...(eventCategory !== undefined ? { eventCategory: asNullableString(eventCategory) } : {}),
         ...(doorsOpenTime !== undefined ? { doorsOpenTime: asNullableString(doorsOpenTime) } : {}),
