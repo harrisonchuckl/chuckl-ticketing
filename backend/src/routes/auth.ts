@@ -50,6 +50,13 @@ function appOriginFromRequest(req: any) {
   return "http://localhost:4000";
 }
 
+function adminApprovalEmail() {
+  return String(process.env.ADMIN_APPROVAL_EMAIL || "harrison@chuckl.co.uk").trim();
+}
+
+function accountActivationTtlHours() {
+  return Number(process.env.ACCOUNT_ACTIVATION_TTL_HOURS || "72");
+}
 
 // POST /auth/register
 router.post("/register", async (req, res) => {
@@ -86,6 +93,211 @@ router.post("/register", async (req, res) => {
     console.error("register failed", err);
     return res.status(500).json({ error: "internal error" });
   }
+});
+
+// POST /auth/request-access
+router.post("/request-access", async (req, res) => {
+  try {
+    const name = String(req.body?.name || "").trim();
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const companyName = String(req.body?.companyName || "").trim();
+
+    if (!name || !email || !companyName) {
+      return res.status(400).json({ error: "name, email, and company name are required" });
+    }
+
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      return res.status(409).json({ error: "An account already exists for this email." });
+    }
+
+    const token = crypto.randomBytes(32).toString("hex");
+    const tokenHash = sha256(token);
+
+    const existingRequest = await prisma.accessRequest.findUnique({ where: { email } });
+    if (existingRequest) {
+      await prisma.accessRequest.update({
+        where: { email },
+        data: {
+          name,
+          companyName,
+          tokenHash,
+          approvedAt: null,
+          approvedBy: null,
+        },
+      });
+    } else {
+      await prisma.accessRequest.create({
+        data: {
+          name,
+          email,
+          companyName,
+          tokenHash,
+        },
+      });
+    }
+
+    const origin = appOriginFromRequest(req);
+    const approveLink = `${origin}/auth/approve-request?token=${encodeURIComponent(token)}`;
+
+    sendMail({
+      to: adminApprovalEmail(),
+      subject: "New organiser access request",
+      text:
+        `A new organiser has requested access.\n\n` +
+        `Name: ${name}\n` +
+        `Email: ${email}\n` +
+        `Company: ${companyName}\n\n` +
+        `Approve: ${approveLink}\n`,
+      html:
+        `<p>A new organiser has requested access.</p>` +
+        `<ul>` +
+        `<li><strong>Name:</strong> ${name}</li>` +
+        `<li><strong>Email:</strong> ${email}</li>` +
+        `<li><strong>Company:</strong> ${companyName}</li>` +
+        `</ul>` +
+        `<p><a href="${approveLink}">Approve this request</a></p>`,
+    }).catch((e) => console.error("[mailer] send failed", e));
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("request-access failed", err);
+    return res.status(500).json({ error: "internal error" });
+  }
+});
+
+// GET /auth/approve-request?token=...
+router.get("/approve-request", async (req, res) => {
+  try {
+    const token = String(req.query?.token || "").trim();
+    if (!token) return res.status(400).send("Missing approval token.");
+
+    const tokenHash = sha256(token);
+    const request = await prisma.accessRequest.findUnique({ where: { tokenHash } });
+    if (!request) return res.status(404).send("Request not found.");
+
+    if (request.approvedAt) {
+      return res.type("html").send("<p>This request has already been approved.</p>");
+    }
+
+    let user = await prisma.user.findUnique({ where: { email: request.email } });
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          email: request.email,
+          name: request.name ?? null,
+          companyName: request.companyName ?? null,
+        },
+      });
+    }
+
+    const activationToken = crypto.randomBytes(32).toString("hex");
+    const activationTokenHash = sha256(activationToken);
+    const expiresAt = new Date(Date.now() + accountActivationTtlHours() * 60 * 60 * 1000);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetTokenHash: activationTokenHash,
+        resetTokenExpiresAt: expiresAt,
+        resetTokenRequestedAt: new Date(),
+        resetTokenUsedAt: null,
+      },
+    });
+
+    await prisma.accessRequest.update({
+      where: { id: request.id },
+      data: {
+        approvedAt: new Date(),
+        approvedBy: adminApprovalEmail(),
+      },
+    });
+
+    const origin = appOriginFromRequest(req);
+    const activateLink = `${origin}/auth/activate?token=${encodeURIComponent(
+      activationToken
+    )}`;
+
+    await sendMail({
+      to: request.email,
+      subject: "Your organiser account is approved",
+      text:
+        `Your organiser account has been approved.\n\n` +
+        `Set your password here: ${activateLink}\n`,
+      html:
+        `<p>Your organiser account has been approved.</p>` +
+        `<p><a href="${activateLink}">Set your password and open your account</a></p>`,
+    });
+
+    return res.type("html").send("<p>Approved. The organiser has been emailed.</p>");
+  } catch (err) {
+    console.error("approve-request failed", err);
+    return res.status(500).send("Something went wrong.");
+  }
+});
+
+// GET /auth/activate?token=...
+router.get("/activate", (req, res) => {
+  const token = String(req.query?.token || "");
+  res.type("html").send(`<!doctype html>
+<html><head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Activate account</title>
+<style>
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:0;background:#f7f8fb}
+.card{max-width:440px;margin:40px auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:18px}
+label{display:block;font-size:12px;font-weight:700;margin:10px 0 6px;color:#334155}
+input{width:100%;padding:10px;border:1px solid #e5e7eb;border-radius:10px}
+button{margin-top:12px;width:100%;padding:10px;border:0;border-radius:10px;background:#111827;color:#fff;font-weight:700;cursor:pointer}
+.muted{color:#64748b;font-size:13px;line-height:1.4}
+.err{color:#b91c1c;font-size:13px;margin-top:10px}
+.ok{color:#166534;font-size:13px;margin-top:10px}
+</style>
+</head>
+<body>
+  <div class="card">
+    <h2 style="margin:0 0 6px">Create your password</h2>
+    <div class="muted">Set a password to access the organiser console.</div>
+
+    <label>Password</label>
+    <input id="pw" type="password" autocomplete="new-password" />
+
+    <button id="btn">Create password</button>
+    <div id="msg" class="muted" style="margin-top:10px"></div>
+  </div>
+
+<script>
+const token = ${JSON.stringify(token)};
+document.getElementById('btn').addEventListener('click', async () => {
+  const password = document.getElementById('pw').value;
+  const msg = document.getElementById('msg');
+  msg.textContent = 'Saving…';
+  try{
+    const res = await fetch('/auth/activate', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      credentials:'include',
+      body: JSON.stringify({ token, password })
+    });
+    const txt = await res.text();
+    if(!res.ok){
+      let e = 'Activation failed';
+      try{ e = (JSON.parse(txt).error) || e; }catch{}
+      msg.textContent = e;
+      msg.className = 'err';
+      return;
+    }
+    msg.textContent = 'Password created. Redirecting…';
+    msg.className = 'ok';
+    setTimeout(() => location.href = '/admin/ui/account', 800);
+  }catch(e){
+    msg.textContent = 'Something went wrong. Please try again.';
+    msg.className = 'err';
+  }
+});
+</script>
+</body></html>`);
 });
 
 // POST /auth/login
@@ -213,6 +425,61 @@ router.post("/reset-password", async (req, res) => {
     return res.json({ ok: true });
   } catch (err) {
     console.error("reset-password failed", err);
+    return res.status(500).json({ error: "internal error" });
+  }
+});
+
+// POST /auth/activate
+router.post("/activate", async (req, res) => {
+  try {
+    const token = String(req.body?.token || "").trim();
+    const newPassword = String(req.body?.password || "");
+
+    if (!token || !newPassword) {
+      return res.status(400).json({ error: "token and password are required" });
+    }
+    if (newPassword.length < 10) {
+      return res.status(400).json({ error: "password must be at least 10 characters" });
+    }
+
+    const tokenHash = sha256(token);
+
+    const user = await prisma.user.findFirst({
+      where: {
+        resetTokenHash: tokenHash,
+        resetTokenUsedAt: null,
+        resetTokenExpiresAt: { gt: new Date() },
+      },
+    });
+
+    if (!user) return res.status(400).json({ error: "invalid or expired token" });
+
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(String(newPassword), salt);
+
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        resetTokenUsedAt: new Date(),
+        resetTokenHash: null,
+        resetTokenExpiresAt: null,
+      },
+      select: { id: true, email: true, role: true },
+    });
+
+    const authToken = sign(updated);
+    res.cookie("auth", authToken, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: Number(process.env.AUTH_SESSION_MS || 60 * 60 * 1000),
+      path: "/",
+    });
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("activate failed", err);
     return res.status(500).json({ error: "internal error" });
   }
 });
