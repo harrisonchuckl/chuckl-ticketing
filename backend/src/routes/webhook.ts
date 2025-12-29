@@ -318,42 +318,89 @@ try {
       quantity: number;
     }> = [];
 
-    // Tiered seating mode: seatGroups contains [{ticketTypeId, unitPricePence, seatIds[]}]
-    if (seatGroupsRaw) {
-      let seatGroups: Array<{ ticketTypeId: string; unitPricePence: number; seatIds: string[] }> = [];
-      try {
-        seatGroups = JSON.parse(seatGroupsRaw);
-      } catch {
-        console.warn("[webhook] invalid seatGroups JSON (cannot create tiered tickets)", { orderId });
-        seatGroups = [];
-      }
+   // Tiered seating mode: seatGroups contains [{ticketTypeId, unitPricePence, seatIds[]}]
+// ✅ BUT: ignore it if it contains no seatIds (GA orders must fall back to qty mode)
+let usedSeatGroups = false;
 
-      for (const g of seatGroups) {
-        const ttId = String(g.ticketTypeId || "").trim();
-        const unit = Number(g.unitPricePence || 0);
-        const ids = Array.isArray(g.seatIds) ? g.seatIds.map(s => String(s).trim()).filter(Boolean) : [];
+if (seatGroupsRaw) {
+  let seatGroups: Array<{ ticketTypeId: string; unitPricePence: number; seatIds: string[] }> = [];
+  try {
+    seatGroups = JSON.parse(seatGroupsRaw);
+  } catch {
+    console.warn("[webhook] invalid seatGroups JSON (cannot create tiered tickets)", { orderId });
+    seatGroups = [];
+  }
 
-        for (const seatId of ids) {
-          if (!ttId || !unit) continue;
+  const totalSeatIds = seatGroups.reduce((acc, g) => {
+    const ids = Array.isArray(g?.seatIds) ? g.seatIds.length : 0;
+    return acc + ids;
+  }, 0);
 
-          ticketsToCreate.push({
-            serial: makeTicketSerial(),
-            holderName: null,
-            status: "SOLD",
-            orderId,
-            showId,
-            ticketTypeId: ttId,
-            seatId: seatId,
-            seatRef: seatRefMap.get(seatId) || null,
-            amountPence: unit,
-            quantity: 1,
-          });
-        }
+  if (totalSeatIds > 0) {
+    usedSeatGroups = true;
+
+    for (const g of seatGroups) {
+      const ttId = String(g.ticketTypeId || "").trim();
+      const unit = Number(g.unitPricePence || 0);
+      const ids = Array.isArray(g.seatIds) ? g.seatIds.map(s => String(s).trim()).filter(Boolean) : [];
+
+      for (const seatId of ids) {
+        if (!ttId || !unit) continue;
+
+        ticketsToCreate.push({
+          serial: makeTicketSerial(),
+          holderName: null,
+          status: "SOLD",
+          orderId,
+          showId,
+          ticketTypeId: ttId,
+          seatId: seatId,
+          seatRef: seatRefMap.get(seatId) || null,
+          amountPence: unit,
+          quantity: 1,
+        });
       }
     }
+  } else {
+    console.warn("[webhook] seatGroups metadata present but empty; falling back to GA qty mode", { orderId });
+  }
+}
 
-    // GA mode: create 1 ticket per seat (if seats exist) else 1 per quantity
-    else if (gaTicketTypeId) {
+// GA mode: create 1 ticket per seat (if seats exist) else 1 per quantity
+if (!usedSeatGroups && gaTicketTypeId) {
+  if (seatIds.length > 0) {
+    for (const seatId of seatIds) {
+      ticketsToCreate.push({
+        serial: makeTicketSerial(),
+        holderName: null,
+        status: "SOLD",
+        orderId,
+        showId,
+        ticketTypeId: gaTicketTypeId,
+        seatId: seatId,
+        seatRef: seatRefMap.get(seatId) || null,
+        amountPence: unitFromOrder,
+        quantity: 1,
+      });
+    }
+  } else {
+    for (let i = 0; i < qty; i++) {
+      ticketsToCreate.push({
+        serial: makeTicketSerial(),
+        holderName: null,
+        status: "SOLD",
+        orderId,
+        showId,
+        ticketTypeId: gaTicketTypeId,
+        seatId: null,
+        amountPence: unitFromOrder,
+        quantity: 1,
+      });
+    }
+  }
+} else if (!usedSeatGroups && !gaTicketTypeId) {
+  console.warn("[webhook] no usable seatGroups + no ticketTypeId metadata (cannot create tickets)", { orderId });
+}
       if (seatIds.length > 0) {
         // One per seat
         for (const seatId of seatIds) {
