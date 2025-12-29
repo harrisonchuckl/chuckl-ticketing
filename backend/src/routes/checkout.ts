@@ -295,24 +295,50 @@ const cancelUrl =
       seatGroupsJson = JSON.stringify(seatGroups);
     }
 
-    const session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      line_items: lineItems,
-      success_url: successUrl,
-      cancel_url: cancelUrl,
-   metadata: {
-        orderId: order.id,
-        showId: show.id,
-        seatIds: seatIds.join(","),
+   const session = await stripe.checkout.sessions.create({
+  mode: "payment",
+  line_items: lineItems,
+  success_url: successUrl,
+  cancel_url: cancelUrl,
 
-        // GA purchases (no seats) still rely on ticketTypeId
-        ...(ticketTypeId ? { ticketTypeId: String(ticketTypeId) } : {}),
+  // ✅ Collect extra customer info on Stripe Checkout
+  custom_fields: [
+    {
+      key: "first_name",
+      label: { type: "custom", custom: "First name" },
+      type: "text",
+      optional: false,
+      text: { minimum_length: 1 },
+    },
+    {
+      key: "last_name",
+      label: { type: "custom", custom: "Last name" },
+      type: "text",
+      optional: false,
+      text: { minimum_length: 1 },
+    },
+    {
+      key: "postcode",
+      label: { type: "custom", custom: "Postcode" },
+      type: "text",
+      optional: false,
+      text: { minimum_length: 3 },
+    },
+  ],
 
-        // Tiered seat mapping (ticketTypeId per seat)
-        ...(seatGroupsJson ? { seatGroups: seatGroupsJson } : {}),
-      },
+  metadata: {
+    orderId: order.id,
+    showId: show.id,
+    seatIds: seatIds.join(","),
 
-    });
+    // GA purchases (no seats) still rely on ticketTypeId
+    ...(ticketTypeId ? { ticketTypeId: String(ticketTypeId) } : {}),
+
+    // Tiered seat mapping (ticketTypeId per seat)
+    ...(seatGroupsJson ? { seatGroups: seatGroupsJson } : {}),
+  },
+});
+
 
     await prisma.order.update({
       where: { id: order.id },
