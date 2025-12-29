@@ -16,7 +16,7 @@ function escHtml(v: any) {
  *    /public/event/:id  ->  /public/:storefront/:slug
  */
 router.get("/event/:showId", async (req, res, next) => {
-  if (String(req.query?._internal || "") === "1") return next();
+if (String(req.query?._internal || "") === "1") return next("router");
 
   const showId = String(req.params.showId || "");
   const show = await prisma.show.findUnique({
@@ -29,7 +29,7 @@ router.get("/event/:showId", async (req, res, next) => {
   });
 
   // If not published / no slug yet, let existing handler render as fallback
-  if (!show?.slug || !show.organiser?.storefrontSlug) return next();
+if (!show?.slug || !show.organiser?.storefrontSlug) return next("router");
 
   return res.redirect(301, `/public/${show.organiser.storefrontSlug}/${show.slug}`);
 });
