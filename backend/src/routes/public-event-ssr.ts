@@ -448,6 +448,14 @@ background: rgba(15,156,223,0.18); border: 1px solid rgba(15,156,223,0.35);
  min-width: 120px;
 }
 
+.app-brand{
+  cursor: default;
+  pointer-events: none;
+}
+.app-brand *{
+  pointer-events: none;
+}
+
 .app-brand-logo{
  height: 44.2px;
  width: auto;
@@ -1821,9 +1829,10 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 
 <header class="app-header">
  <div class="app-header-inner">
-   <a class="app-brand" href="${escAttr(brand.homeHref)}" aria-label="${escAttr(brand.name)} home">
-     <img class="app-brand-logo" src="${escAttr(brand.logoUrl)}" alt="${escAttr(brand.name)}" />
-   </a>
+  <div class="app-brand" aria-label="${escAttr(brand.name)}">
+  <img class="app-brand-logo" src="${escAttr(brand.logoUrl)}" alt="${escAttr(brand.name)}" />
+</div>
+
  </div>
 </header>
 
