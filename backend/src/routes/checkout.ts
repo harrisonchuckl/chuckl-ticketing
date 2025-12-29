@@ -674,18 +674,18 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
       border-radius:999px;
       border:1px solid transparent;
     }
-    .btn-link:hover{
-      color:var(--primary);
-      background:#fff;
-      border-color:var(--border);
-    }
+.btn-link:hover{
+  color: var(--primary);      /* ✅ just go darker/black */
+  background: transparent;    /* ✅ no pill fill */
+  border-color: transparent;  /* ✅ no “peel” outline */
+}
 
     /* Layout */
     .wrap{
-      max-width:980px;
-      margin:0 auto;
-      padding:18px 16px 70px;
-    }
+  max-width:980px;
+  margin:0 auto;
+  padding:28px 16px 70px; /* ✅ +10px down */
+}
 
     .hero{
       border-radius:var(--radius-lg);
@@ -863,22 +863,32 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
       flex-shrink:0;
     }
 
-    .qty-label{
-      font-size:0.75rem;
-      font-weight:800;
-      color:var(--text-muted);
-      margin:0;
-    }
+   .qty-label{
+  font-size:0.75rem;
+  font-weight:800;
+  color:var(--text-muted);
+  margin:0;
+  transform: translateX(-4px); /* ✅ shift label left ~4px */
+}
 
-    .qty-select{
-      width:88px;
-      padding:10px 10px;
-      border:1px solid var(--border);
-      border-radius:12px;
-      font-size:1rem;
-      background:#fff;
-      outline:none;
-    }
+.qty-select{
+  width:88px;
+  padding:10px 36px 10px 10px;   /* ✅ room for custom arrow */
+  border:1px solid var(--border);
+  border-radius:12px;
+  font-size:1rem;
+  background-color:#fff;
+  outline:none;
+
+  -webkit-appearance:none;
+  appearance:none;
+
+  /* ✅ custom arrow so we can control position */
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M6 8l4 4 4-4' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;
+  background-size:12px 12px;
+  background-position: right 14px center; /* ✅ arrow moved left a few px */
+}
     .qty-select:focus{
       border-color:rgba(15,156,223,0.55);
       box-shadow:0 0 0 4px rgba(15,156,223,0.12);
