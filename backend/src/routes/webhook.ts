@@ -249,22 +249,41 @@ router.post("/stripe", express.raw({ type: "application/json" }), async (req, re
       organiserSplitBps ?? undefined
     );
 
-    const payerEmail =
-      session.customer_details?.email || session.customer_email || undefined;
+   const payerEmail =
+  session.customer_details?.email || session.customer_email || undefined;
+
+// ✅ Pull custom fields submitted on Stripe Checkout
+const customFields = (session as any).custom_fields as any[] | undefined;
+
+function getCustomField(key: string): string | null {
+  const f = customFields?.find((x) => x?.key === key);
+  const v = f?.text?.value;
+  return typeof v === "string" ? v.trim() : null;
+}
+
+const payerFirstName = getCustomField("first_name");
+const payerLastName = getCustomField("last_name");
+const payerPostcode = getCustomField("postcode");
+
 
     // Update order -> PAID + store fee breakdown
-    await prisma.order.update({
-      where: { id: orderId },
-      data: {
-        status: "PAID",
-        platformFeePence: fees.platformFeePence,
-        organiserSharePence: fees.organiserSharePence,
-        paymentFeePence: fees.paymentFeePence,
-        netPayoutPence: fees.netPayoutPence,
-        stripeId: session.payment_intent as string,
-        email: payerEmail,
-      },
-    });
+ await prisma.order.update({
+  where: { id: orderId },
+  data: {
+    status: "PAID",
+    platformFeePence: fees.platformFeePence,
+    organiserSharePence: fees.organiserSharePence,
+    paymentFeePence: fees.paymentFeePence,
+    netPayoutPence: fees.netPayoutPence,
+    stripeId: session.payment_intent as string,
+    email: payerEmail,
+
+    // ✅ new captured customer fields
+    buyerFirstName: payerFirstName,
+    buyerLastName: payerLastName,
+    buyerPostcode: payerPostcode,
+  },
+});
 
     // -----------------------------
 // CREATE TICKETS (idempotent)
