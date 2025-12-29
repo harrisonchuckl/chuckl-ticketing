@@ -338,7 +338,8 @@ if (Array.isArray(items) && items.length > 0) {
     ...(ticketTypeId ? { ticketTypeId: String(ticketTypeId) } : {}),
 
     // Tiered seat mapping (ticketTypeId per seat)
-    ...(seatGroupsJson && seatIds.length > 0 ? { seatGroups: seatGroupsJson } : {}),
+// Seat-group mapping for webhook (allocated + unallocated)
+...(seatGroupsJson ? { seatGroups: seatGroupsJson } : {}),
   },
 });
 
