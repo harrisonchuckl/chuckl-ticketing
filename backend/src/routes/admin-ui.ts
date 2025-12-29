@@ -59,20 +59,18 @@ router.get("/ui/login", (req, res) => {
     .wrap{
       min-height:100vh;
       display:flex;
+      flex-direction:column;
       align-items:center;
       justify-content:center;
       padding: 28px 16px;
+      gap: 14px;
       position:relative;
     }
-    .topbar{
-      position:absolute;
-      top: 18px;
-      left: 18px;
-      right: 18px;
+    .brand-center{
       display:flex;
       align-items:center;
-      justify-content:space-between;
-      gap: 12px;
+      justify-content:center;
+      padding: 0 16px;
     }
     .brand{
       display:inline-flex;
@@ -80,7 +78,7 @@ router.get("/ui/login", (req, res) => {
       gap:10px;
       color: var(--ink);
     }
-    .brand img{ height:32px; width:auto; display:block; }
+    .brand img{ height:36px; width:auto; display:block; }
     .brand .name{
       font-family:'Outfit', sans-serif;
       font-weight:900;
@@ -199,7 +197,7 @@ router.get("/ui/login", (req, res) => {
 </head>
 <body>
   <div class="wrap">
-    <div class="topbar">
+    <div class="brand-center">
       <div class="brand">
         ${logoUrl ? `<img src="${logoUrl}" alt="${brandName}" />` : `<span class="name">${brandName}</span>`}
       </div>
@@ -224,7 +222,7 @@ router.get("/ui/login", (req, res) => {
           <button id="btn" type="submit">Log in</button>
           <div id="msg" class="msg ${error ? "err" : ""}">${error ? String(error) : ""}</div>
 
-          <div class="footer">🔒 Secure sign-in powered by ${brandName}.</div>
+          <div class="footer">🔒 Secure ticketing powered by TixAll.</div>
           <button id="btnCreateAccount" type="button" class="btn-secondary">Create account</button>
         </form>
       </div>
