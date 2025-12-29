@@ -41,6 +41,7 @@ if (!show?.slug || !show.organiser?.storefrontSlug) return next("router");
 router.get("/:storefront/:slug", async (req, res, next) => {
   const storefront = String(req.params.storefront || "");
   const slug = String(req.params.slug || "");
+  if (storefront === "checkout") return next("router");
 
   const organiser = await prisma.user.findUnique({
     where: { storefrontSlug: storefront },
@@ -86,6 +87,7 @@ router.get("/:storefront/:slug", async (req, res, next) => {
  */
 router.get("/:storefront", async (req, res) => {
   const storefront = String(req.params.storefront || "");
+  if (storefront === "checkout") return res.status(404).send("Not found");
 
   const organiser = await prisma.user.findUnique({
     where: { storefrontSlug: storefront },
