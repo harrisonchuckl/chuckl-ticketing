@@ -59,20 +59,18 @@ router.get("/ui/login", (req, res) => {
     .wrap{
       min-height:100vh;
       display:flex;
+      flex-direction:column;
       align-items:center;
       justify-content:center;
       padding: 28px 16px;
       position:relative;
     }
     .brand-center{
-      position:absolute;
-      top: 24px;
-      left: 0;
-      right: 0;
       display:flex;
       align-items:center;
       justify-content:center;
       padding: 0 16px;
+      margin-bottom: 14px;
     }
     .brand{
       display:inline-flex;
@@ -96,7 +94,6 @@ router.get("/ui/login", (req, res) => {
       border-radius: var(--radius);
       box-shadow: var(--shadow);
       padding: 20px;
-      margin-top: 52px;
       backdrop-filter: blur(10px);
     }
     .title{
