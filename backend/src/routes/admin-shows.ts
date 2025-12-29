@@ -837,7 +837,8 @@ router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
     }
 
     const finalVenueId = (await ensureVenue(venueId, venueText)) || undefined;
-    const organiserId = isOrganiser(req) ? requireUserId(req) : null; // Capture this early
+// ✅ Always attach an organiserId. If admin, default to the current user unless a specific organiserId was provided.
+const organiserId = isOrganiser(req) ? requireUserId(req) : String(req.body?.organiserId || requireUserId(req));
 
     // --- FIX START: Generate Slug ---
     let slug = null;
@@ -1283,7 +1284,7 @@ router.post("/shows/:id/duplicate", requireAdminOrOrganiser, async (req, res) =>
         imageUrl: src.imageUrl,
         date: src.date,
         venueId: src.venueId,
-        organiserId: isOrganiser(req) ? requireUserId(req) : (req.body.organiserId ?? null),
+organiserId: isOrganiser(req) ? requireUserId(req) : String(req.body?.organiserId || requireUserId(req)),
         status: ShowStatus.DRAFT,
         publishedAt: null,
       },
