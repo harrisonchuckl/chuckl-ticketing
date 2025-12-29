@@ -187,7 +187,13 @@ router.get("/approve-request", async (req, res) => {
           email: request.email,
           name: request.name ?? null,
           companyName: request.companyName ?? null,
+          role: "ORGANISER",
         },
+      });
+    } else if (!user.role) {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { role: "ORGANISER" },
       });
     }
 
@@ -464,6 +470,7 @@ router.post("/activate", async (req, res) => {
         resetTokenUsedAt: new Date(),
         resetTokenHash: null,
         resetTokenExpiresAt: null,
+        role: user.role ?? "ORGANISER",
       },
       select: { id: true, email: true, role: true },
     });
