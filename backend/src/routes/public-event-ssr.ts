@@ -1047,9 +1047,9 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 
 /* Strip + its text must sit above everything (and not be affected by overlay) */
 .hero-strip{
-  display: none;          /* default off (desktop) */
+  display: block;         /* ALWAYS ON */
   width: 100%;
-  background: rgba(15,23,42,0.92);
+  background: #1d1c1a;    /* REQUIRED COLOUR */
   border-top: 0;          /* remove hairline */
 
   /* hide sub-pixel seams by overlapping the image by 1px */
@@ -1169,10 +1169,10 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 /* --- MOBILE HERO STRIP (full-width, under the image) --- */
 /* --- MOBILE HERO STRIP (full-width, under the image) --- */
 .hero-strip{
-  display: none;          /* default off (desktop) */
+  display: block;         /* ALWAYS ON */
   width: 100%;
-  background: #0F172A;    /* FULLY OPAQUE */
-  border-top: 1px solid rgba(255,255,255,0.004); /* ~95% more subtle */
+  background: #1d1c1a;    /* REQUIRED COLOUR */
+  border-top: 1px solid rgba(255,255,255,0.004); /* keep your subtle line */
   position: relative;
   z-index: 50;
 
