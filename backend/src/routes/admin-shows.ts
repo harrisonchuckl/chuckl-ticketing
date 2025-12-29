@@ -1201,12 +1201,14 @@ router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
     const missingSlug = !existing.slug;
 
     // We update slug if: Title changed OR Date changed OR Slug is missing completely
-    if (existing.organiserId && (titleChanged || dateChanged || missingSlug)) {
+const effectiveOrganiserId = existing.organiserId || requireUserId(req);
+
+if (effectiveOrganiserId && (titleChanged || dateChanged || missingSlug)) {
       const desiredTitle = incomingTitle ?? existing.title ?? "event";
       const desiredDate = incomingDate ?? existing.date;
 
       slugToSet = await allocateUniqueShowSlug({
-        organiserId: existing.organiserId,
+organiserId: effectiveOrganiserId,
         title: desiredTitle,
         date: desiredDate,
         excludeShowId: existing.id,
@@ -1214,14 +1216,14 @@ router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
 
       // If we are changing the slug (and one existed before), save to history
       if (existing.slug && existing.slug !== slugToSet) {
-        await prisma.showSlugHistory
-          .create({
-            data: {
-              organiserId: existing.organiserId,
-              showId: existing.id,
-              slug: existing.slug,
-            },
-          })
+     await prisma.showSlugHistory
+  .create({
+    data: {
+      organiserId: effectiveOrganiserId,
+      showId: existing.id,
+      slug: existing.slug,
+    },
+  })
           .catch((e) => console.error("Failed to save slug history", e));
       }
     }
@@ -1229,8 +1231,10 @@ router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
 
     const updated = await prisma.show.update({
       where: { id: existing.id },
-      data: {
-        ...(slugToSet ? { slug: slugToSet } : {}),
+    data: {
+  ...(existing.organiserId ? {} : { organiserId: effectiveOrganiserId }),
+  ...(slugToSet ? { slug: slugToSet } : {}),
+
         ...(title != null ? { title: String(title) } : {}),
         ...(date != null ? { date: new Date(date) } : {}),
         ...(endDate != null ? { endDate: endDate ? new Date(endDate) : null } : {}),
