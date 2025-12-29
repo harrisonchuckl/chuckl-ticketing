@@ -285,7 +285,7 @@ const payerPostcode = getCustomField("postcode");
   },
 });
 
-    // -----------------------------
+// -----------------------------
 // CREATE TICKETS (idempotent)
 // -----------------------------
 try {
@@ -303,9 +303,10 @@ try {
     const qty = Number(order.quantity ?? 1) || 1;
     const total = Number(order.amountPence ?? 0) || 0;
     const unitFromOrder = Math.max(0, Math.round(total / Math.max(1, qty)));
-        const seatRefMap = await loadSeatRefMapForShow(showId);
 
-        const ticketsToCreate: Array<{
+    const seatRefMap = await loadSeatRefMapForShow(showId);
+
+    const ticketsToCreate: Array<{
       serial: string;
       holderName?: string | null;
       status?: string | null;
@@ -318,91 +319,57 @@ try {
       quantity: number;
     }> = [];
 
-   // Tiered seating mode: seatGroups contains [{ticketTypeId, unitPricePence, seatIds[]}]
-// ✅ BUT: ignore it if it contains no seatIds (GA orders must fall back to qty mode)
-let usedSeatGroups = false;
+    // Tiered seating mode: seatGroups contains [{ticketTypeId, unitPricePence, seatIds[]}]
+    // ✅ BUT: ignore it if it contains no seatIds (GA orders must fall back to qty mode)
+    let usedSeatGroups = false;
 
-if (seatGroupsRaw) {
-  let seatGroups: Array<{ ticketTypeId: string; unitPricePence: number; seatIds: string[] }> = [];
-  try {
-    seatGroups = JSON.parse(seatGroupsRaw);
-  } catch {
-    console.warn("[webhook] invalid seatGroups JSON (cannot create tiered tickets)", { orderId });
-    seatGroups = [];
-  }
+    if (seatGroupsRaw) {
+      let seatGroups: Array<{ ticketTypeId: string; unitPricePence: number; seatIds: string[] }> = [];
+      try {
+        seatGroups = JSON.parse(seatGroupsRaw);
+      } catch {
+        console.warn("[webhook] invalid seatGroups JSON (cannot create tiered tickets)", { orderId });
+        seatGroups = [];
+      }
 
-  const totalSeatIds = seatGroups.reduce((acc, g) => {
-    const ids = Array.isArray(g?.seatIds) ? g.seatIds.length : 0;
-    return acc + ids;
-  }, 0);
+      const totalSeatIds = seatGroups.reduce((acc, g) => {
+        const ids = Array.isArray(g?.seatIds) ? g.seatIds.length : 0;
+        return acc + ids;
+      }, 0);
 
-  if (totalSeatIds > 0) {
-    usedSeatGroups = true;
+      if (totalSeatIds > 0) {
+        usedSeatGroups = true;
 
-    for (const g of seatGroups) {
-      const ttId = String(g.ticketTypeId || "").trim();
-      const unit = Number(g.unitPricePence || 0);
-      const ids = Array.isArray(g.seatIds) ? g.seatIds.map(s => String(s).trim()).filter(Boolean) : [];
+        for (const g of seatGroups) {
+          const ttId = String(g.ticketTypeId || "").trim();
+          const unit = Number(g.unitPricePence || 0);
+          const ids = Array.isArray(g.seatIds) ? g.seatIds.map(s => String(s).trim()).filter(Boolean) : [];
 
-      for (const seatId of ids) {
-        if (!ttId || !unit) continue;
+          for (const seatId of ids) {
+            if (!ttId || !unit) continue;
 
-        ticketsToCreate.push({
-          serial: makeTicketSerial(),
-          holderName: null,
-          status: "SOLD",
-          orderId,
-          showId,
-          ticketTypeId: ttId,
-          seatId: seatId,
-          seatRef: seatRefMap.get(seatId) || null,
-          amountPence: unit,
-          quantity: 1,
-        });
+            ticketsToCreate.push({
+              serial: makeTicketSerial(),
+              holderName: null,
+              status: "SOLD",
+              orderId,
+              showId,
+              ticketTypeId: ttId,
+              seatId,
+              seatRef: seatRefMap.get(seatId) || null,
+              amountPence: unit,
+              quantity: 1,
+            });
+          }
+        }
+      } else {
+        console.warn("[webhook] seatGroups metadata present but empty; falling back to GA qty mode", { orderId });
       }
     }
-  } else {
-    console.warn("[webhook] seatGroups metadata present but empty; falling back to GA qty mode", { orderId });
-  }
-}
 
-// GA mode: create 1 ticket per seat (if seats exist) else 1 per quantity
-if (!usedSeatGroups && gaTicketTypeId) {
-  if (seatIds.length > 0) {
-    for (const seatId of seatIds) {
-      ticketsToCreate.push({
-        serial: makeTicketSerial(),
-        holderName: null,
-        status: "SOLD",
-        orderId,
-        showId,
-        ticketTypeId: gaTicketTypeId,
-        seatId: seatId,
-        seatRef: seatRefMap.get(seatId) || null,
-        amountPence: unitFromOrder,
-        quantity: 1,
-      });
-    }
-  } else {
-    for (let i = 0; i < qty; i++) {
-      ticketsToCreate.push({
-        serial: makeTicketSerial(),
-        holderName: null,
-        status: "SOLD",
-        orderId,
-        showId,
-        ticketTypeId: gaTicketTypeId,
-        seatId: null,
-        amountPence: unitFromOrder,
-        quantity: 1,
-      });
-    }
-  }
-} else if (!usedSeatGroups && !gaTicketTypeId) {
-  console.warn("[webhook] no usable seatGroups + no ticketTypeId metadata (cannot create tickets)", { orderId });
-}
+    // GA mode: create 1 ticket per seat (if seats exist) else 1 per quantity
+    if (!usedSeatGroups && gaTicketTypeId) {
       if (seatIds.length > 0) {
-        // One per seat
         for (const seatId of seatIds) {
           ticketsToCreate.push({
             serial: makeTicketSerial(),
@@ -411,14 +378,13 @@ if (!usedSeatGroups && gaTicketTypeId) {
             orderId,
             showId,
             ticketTypeId: gaTicketTypeId,
-            seatId: seatId,
+            seatId,
             seatRef: seatRefMap.get(seatId) || null,
             amountPence: unitFromOrder,
             quantity: 1,
           });
         }
       } else {
-        // One per quantity
         for (let i = 0; i < qty; i++) {
           ticketsToCreate.push({
             serial: makeTicketSerial(),
@@ -428,13 +394,14 @@ if (!usedSeatGroups && gaTicketTypeId) {
             showId,
             ticketTypeId: gaTicketTypeId,
             seatId: null,
+            seatRef: null,
             amountPence: unitFromOrder,
             quantity: 1,
           });
         }
       }
-    } else {
-      console.warn("[webhook] no seatGroups + no ticketTypeId metadata (cannot create tickets)", { orderId });
+    } else if (!usedSeatGroups && !gaTicketTypeId) {
+      console.warn("[webhook] no usable seatGroups + no ticketTypeId metadata (cannot create tickets)", { orderId });
     }
 
     if (ticketsToCreate.length) {
