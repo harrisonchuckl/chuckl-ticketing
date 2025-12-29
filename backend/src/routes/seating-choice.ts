@@ -1894,7 +1894,7 @@ await jsonRequest("/admin/shows/" + showId, {
 
             if (t.id) {
               await jsonRequest("/admin/ticket-types/" + t.id, {
-                method: "PATCH",
+method: "PUT",
                 credentials: "include",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),
