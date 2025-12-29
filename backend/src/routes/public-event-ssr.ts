@@ -1645,20 +1645,36 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 /* Footer “powered by” line */
 .secure-powered{
   display: inline-flex;
-  align-items: center;
+  align-items: center;           /* vertical centring */
   justify-content: center;
   gap: 8px;
-  line-height: 1;
   white-space: nowrap;
+
+  /* make baseline + spacing consistent */
+  line-height: 1;
+}
+
+.secure-lock{
+  font-size: 0.9rem;
+  line-height: 1;
+  position: relative;
+  top: 1px;                      /* tiny nudge to centre visually */
+}
+
+.secure-text{
+  line-height: 1;
+  display: inline-block;
 }
 
 .secure-logo{
-  height: 18px;          /* tweak if you want slightly bigger/smaller */
+  height: 16px;                  /* slightly smaller = better baseline match */
   width: auto;
-  display: block;
+  display: inline-block;         /* IMPORTANT: don’t use block here */
+  vertical-align: middle;
+  position: relative;
+  top: 1px;                      /* tiny nudge to centre visually */
   border-radius: 4px;
 }
-
    /* --- TICKET LIST STYLES --- */
    .ticket-list-container { padding: 8px; }
    .ticket-row {
