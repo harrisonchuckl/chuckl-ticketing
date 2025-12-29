@@ -948,8 +948,13 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 </script>
 
  <style>
-   :root {
+ :root {
    --app-header-h: 64px;
+
+   /* Keep header + content perfectly aligned */
+   --page-max: 1200px;
+   --page-pad: 24px;
+
      /* TiXALL Blue Palette */
      --bg-page: #F3F4F6;
      --bg-surface: #FFFFFF;
@@ -1085,10 +1090,10 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 }
 
 .app-header-inner{
- max-width: 980px; /* match success page wrap width */
+ max-width: var(--page-max);
  height: 100%;
  margin: 0 auto;
- padding: 0 16px;
+ padding: 0 var(--page-pad);
  display: flex;
  align-items: center;
  justify-content: flex-start;
@@ -1149,14 +1154,14 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
  .app-header-inner{ padding: 0 16px; }
  .app-nav-current{ max-width: 45vw; }
 }
-   .hero-content{
+ .hero-content{
  position: absolute;
  left: 0; right: 0; bottom: 0;
  z-index: 10;
  width: 100%;
- max-width: 1200px;
+ max-width: var(--page-max);
  margin: 0 auto;
- padding: 24px 24px 18px;
+ padding: 24px var(--page-pad) 18px;
  display: grid;
  gap: 16px;
 }
@@ -1314,8 +1319,13 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 
 /* --- LAYOUT CONTAINER --- */
 .layout {
- max-width: 1200px; margin: 0 auto; padding: 18px 24px 80px; /* gap under hero */
- display: grid; gap: 48px; position: relative; z-index: 20;
+ max-width: var(--page-max);
+ margin: 0 auto;
+ padding: 18px var(--page-pad) 80px; /* gap under hero */
+ display: grid;
+ gap: 48px;
+ position: relative;
+ z-index: 20;
 }
 
 @media (min-width: 960px) {
