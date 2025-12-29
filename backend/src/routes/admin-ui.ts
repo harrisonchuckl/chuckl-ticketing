@@ -21,7 +21,6 @@ router.get("/ui/login", (req, res) => {
   const logoUrl = String(
     process.env.PUBLIC_BRAND_LOGO_URL || "/admin/ui/brand-logo"
   ).trim();
-  const homeHref = String(process.env.PUBLIC_BRAND_HOME_HREF || "/public").trim();
 
   const error = typeof req.query.error === "string" ? req.query.error : "";
 
@@ -43,9 +42,9 @@ router.get("/ui/login", (req, res) => {
       --brand-deep: #007fb6;
       --ink: #0F172A;
       --muted: rgba(15,23,42,0.72);
-      --card: rgba(255,255,255,0.96);
-      --border: rgba(255,255,255,0.28);
-      --shadow: 0 30px 60px rgba(0,0,0,0.25);
+      --card: #ffffff;
+      --border: #e2e8f0;
+      --shadow: 0 12px 24px rgba(15,23,42,0.08);
       --radius: 18px;
     }
     *{ box-sizing:border-box; }
@@ -54,17 +53,8 @@ router.get("/ui/login", (req, res) => {
       min-height:100vh;
       font-family: 'Inter', sans-serif;
       color: var(--ink);
-      background: var(--brand);
+      background: #ffffff;
       overflow-x:hidden;
-    }
-    .bg{
-      position:fixed; inset:0;
-      background:
-        radial-gradient(900px 450px at 20% 10%, rgba(255,255,255,0.26), transparent 60%),
-        radial-gradient(700px 420px at 80% 30%, rgba(0,0,0,0.16), transparent 55%),
-        radial-gradient(700px 500px at 30% 85%, rgba(0,0,0,0.12), transparent 60%),
-        linear-gradient(180deg, rgba(0,0,0,0.10), rgba(0,0,0,0.20));
-      pointer-events:none;
     }
     .wrap{
       min-height:100vh;
@@ -88,8 +78,7 @@ router.get("/ui/login", (req, res) => {
       display:inline-flex;
       align-items:center;
       gap:10px;
-      text-decoration:none;
-      color:#fff;
+      color: var(--ink);
     }
     .brand img{ height:32px; width:auto; display:block; }
     .brand .name{
@@ -100,17 +89,10 @@ router.get("/ui/login", (req, res) => {
       font-size:1.05rem;
       line-height:1;
     }
-    .toplink{
-      color: rgba(255,255,255,0.92);
-      text-decoration:none;
-      font-weight:700;
-      font-size:0.95rem;
-    }
-    .toplink:hover{ color:#fff; }
     .card{
       width: min(420px, 100%);
       background: var(--card);
-      border: 1px solid rgba(255,255,255,0.55);
+      border: 1px solid var(--border);
       border-radius: var(--radius);
       box-shadow: var(--shadow);
       padding: 20px;
@@ -184,6 +166,11 @@ router.get("/ui/login", (req, res) => {
     }
     button:active{ transform: translateY(1px); }
     button[disabled]{ opacity:0.65; cursor:not-allowed; }
+    .btn-secondary{
+      background:#fff;
+      color:#0B1220;
+      border:1px solid #0B1220;
+    }
     .msg{
       margin-top: 12px;
       font-weight:700;
@@ -199,40 +186,68 @@ router.get("/ui/login", (req, res) => {
       text-align:center;
       font-weight:700;
     }
+    .hidden{ display:none; }
+    .btn-row{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .btn-row button{
+      flex:1;
+    }
   </style>
 </head>
 <body>
-  <div class="bg"></div>
-
   <div class="wrap">
     <div class="topbar">
-      <a class="brand" href="${homeHref}">
+      <div class="brand">
         ${logoUrl ? `<img src="${logoUrl}" alt="${brandName}" />` : `<span class="name">${brandName}</span>`}
-        ${logoUrl ? `<span class="name">${brandName}</span>` : ``}
-      </a>
-      <a class="toplink" href="${homeHref}">All events</a>
+      </div>
     </div>
 
     <div class="card">
-      <div class="title">Organiser Console</div>
-      <div class="subtitle">Log in to manage your events.</div>
+      <div id="loginPane">
+        <div class="title">Organiser Console</div>
+        <div class="subtitle">Log in to manage your events.</div>
 
-      <form id="loginForm">
-        <label for="email">Email</label>
-        <input id="email" name="email" type="email" autocomplete="email" required />
+        <form id="loginForm">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" autocomplete="email" required />
 
-        <label for="password">Password</label>
-        <input id="password" name="password" type="password" autocomplete="current-password" required />
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required />
 
-        <div class="row">
-          <a class="link" href="/auth/forgot">Forgot password?</a>
-        </div>
+          <div class="row">
+            <a class="link" href="/auth/forgot">Forgot password?</a>
+          </div>
 
-        <button id="btn" type="submit">Log in</button>
-        <div id="msg" class="msg ${error ? "err" : ""}">${error ? String(error) : ""}</div>
+          <button id="btn" type="submit">Log in</button>
+          <div id="msg" class="msg ${error ? "err" : ""}">${error ? String(error) : ""}</div>
 
-        <div class="footer">🔒 Secure sign-in powered by ${brandName}.</div>
-      </form>
+          <div class="footer">🔒 Secure sign-in powered by ${brandName}.</div>
+          <button id="btnCreateAccount" type="button" class="btn-secondary">Create account</button>
+        </form>
+      </div>
+
+      <div id="requestPane" class="hidden">
+        <div class="title">Create account</div>
+        <div class="subtitle">Request access to the organiser console.</div>
+
+        <form id="requestForm">
+          <label for="req-name">Name</label>
+          <input id="req-name" name="name" type="text" autocomplete="name" required />
+
+          <label for="req-email">Email</label>
+          <input id="req-email" name="email" type="email" autocomplete="email" required />
+
+          <label for="req-company">Company name</label>
+          <input id="req-company" name="company" type="text" autocomplete="organization" required />
+
+          <button id="btnRequest" type="submit">Submit request</button>
+          <button id="btnBackToLogin" type="button" class="btn-secondary">Back to login</button>
+          <div id="requestMsg" class="msg"></div>
+        </form>
+      </div>
     </div>
   </div>
 
@@ -243,6 +258,16 @@ router.get("/ui/login", (req, res) => {
   const msg = document.getElementById("msg");
   const emailEl = document.getElementById("email");
   const pwEl = document.getElementById("password");
+  const loginPane = document.getElementById("loginPane");
+  const requestPane = document.getElementById("requestPane");
+  const createBtn = document.getElementById("btnCreateAccount");
+  const backBtn = document.getElementById("btnBackToLogin");
+  const requestForm = document.getElementById("requestForm");
+  const requestMsg = document.getElementById("requestMsg");
+  const requestBtn = document.getElementById("btnRequest");
+  const requestName = document.getElementById("req-name");
+  const requestEmail = document.getElementById("req-email");
+  const requestCompany = document.getElementById("req-company");
 
   // If already logged in, skip login
   (async function(){
@@ -290,6 +315,65 @@ router.get("/ui/login", (req, res) => {
     }finally{
       btn.disabled = false;
       btn.textContent = "Log in";
+    }
+  });
+
+  function showRequestForm(){
+    loginPane.classList.add("hidden");
+    requestPane.classList.remove("hidden");
+    requestMsg.textContent = "";
+    requestMsg.className = "msg";
+  }
+
+  function showLoginForm(){
+    requestPane.classList.add("hidden");
+    loginPane.classList.remove("hidden");
+  }
+
+  createBtn?.addEventListener("click", showRequestForm);
+  backBtn?.addEventListener("click", showLoginForm);
+
+  requestForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    requestMsg.textContent = "";
+    requestMsg.className = "msg";
+    requestBtn.disabled = true;
+    requestBtn.textContent = "Sending…";
+
+    const payload = {
+      name: (requestName.value || "").trim(),
+      email: (requestEmail.value || "").trim().toLowerCase(),
+      companyName: (requestCompany.value || "").trim(),
+    };
+
+    try{
+      const res = await fetch("/auth/request-access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+
+      const txt = await res.text();
+      let data = null;
+      try{ data = JSON.parse(txt); }catch{}
+
+      if(!res.ok){
+        const err = (data && data.error) ? data.error : "Request failed";
+        requestMsg.textContent = err;
+        requestMsg.className = "msg err";
+        return;
+      }
+
+      requestMsg.textContent = "Thanks! We'll review your request and email you once approved.";
+      requestMsg.className = "msg ok";
+      requestForm.reset();
+    }catch(err){
+      requestMsg.textContent = "Something went wrong. Please try again.";
+      requestMsg.className = "msg err";
+    }finally{
+      requestBtn.disabled = false;
+      requestBtn.textContent = "Submit request";
     }
   });
 })();

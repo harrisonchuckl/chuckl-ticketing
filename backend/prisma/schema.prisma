@@ -89,6 +89,20 @@ model User {
   storefrontSlug String? @unique
 }
 
+model AccessRequest {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  name        String?
+  email       String   @unique
+  companyName String?
+
+  tokenHash String   @unique @db.Text
+  approvedAt DateTime?
+  approvedBy String?
+}
+
 model Venue {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
