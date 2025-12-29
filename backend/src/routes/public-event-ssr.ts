@@ -457,7 +457,7 @@ background: rgba(15,156,223,0.18); border: 1px solid rgba(15,156,223,0.35);
 }
 
 .app-brand-logo{
- height: 44.2px;
+ height: 31px;
  width: auto;
  display: block;
  border-radius: 10px;
