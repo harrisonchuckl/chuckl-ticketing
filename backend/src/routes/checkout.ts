@@ -297,37 +297,15 @@ if (Array.isArray(items) && items.length > 0) {
 
   seatGroupsJson = seatGroups.length ? JSON.stringify(seatGroups) : "";
 }
-
    const session = await stripe.checkout.sessions.create({
   mode: "payment",
   line_items: lineItems,
   success_url: successUrl,
   cancel_url: cancelUrl,
 
-  // ✅ Collect extra customer info on Stripe Checkout
-  custom_fields: [
-    {
-      key: "first_name",
-      label: { type: "custom", custom: "First name" },
-      type: "text",
-      optional: false,
-      text: { minimum_length: 1 },
-    },
-    {
-      key: "last_name",
-      label: { type: "custom", custom: "Last name" },
-      type: "text",
-      optional: false,
-      text: { minimum_length: 1 },
-    },
-    {
-      key: "postcode",
-      label: { type: "custom", custom: "Postcode" },
-      type: "text",
-      optional: false,
-      text: { minimum_length: 3 },
-    },
-  ],
+  // ✅ Use Stripe’s built-in billing details (avoids duplicate “name” + “postcode”)
+  // Forces Stripe to always collect postcode (and country).
+  billing_address_collection: "required",
 
   metadata: {
     orderId: order.id,
@@ -338,9 +316,10 @@ if (Array.isArray(items) && items.length > 0) {
     ...(ticketTypeId ? { ticketTypeId: String(ticketTypeId) } : {}),
 
     // Tiered seat mapping (ticketTypeId per seat)
-  ...(seatGroupsJson && seatIds.length > 0 ? { seatGroups: seatGroupsJson } : {}),
+    ...(seatGroupsJson && seatIds.length > 0 ? { seatGroups: seatGroupsJson } : {}),
   },
 });
+
 
 
     await prisma.order.update({
