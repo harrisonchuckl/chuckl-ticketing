@@ -1863,10 +1863,11 @@ await jsonRequest("/admin/shows/" + showId, {
   method: "PATCH",
   credentials: "include",
   headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    showCapacity:
-      (capacityCap !== "" && capacityCap != null) ? Number(capacityCap) : null,
-  }),
+body: JSON.stringify({
+  showCapacity: capacityAuto
+    ? null
+    : ((capacityCap !== "" && capacityCap != null) ? Number(capacityCap) : null),
+}),
 });
 
 
