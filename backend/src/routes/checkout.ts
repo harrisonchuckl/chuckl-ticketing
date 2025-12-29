@@ -283,20 +283,42 @@ const cancelUrl =
 
         // Build seatGroups mapping for webhook (tiered seating)
     // Note: your UI caps at 10 seats, so this comfortably fits Stripe metadata limits.
-    let seatGroupsJson = "";
+  let seatGroupsJson = "";
 
+// seatGroups is used by the webhook to create 1 Ticket row per ticket purchased.
+// IMPORTANT: include quantity for unallocated (no seatIds) orders.
 if (Array.isArray(items) && items.length > 0) {
   const seatGroups = items
-    .map((it: any) => ({
-      ticketTypeId: String(it.ticketTypeId || "").trim(),
-      unitPricePence: Number(it.unitPricePence || 0),
-      seatIds: Array.isArray(it.seatIds) ? it.seatIds.map((x: any) => String(x).trim()).filter(Boolean) : [],
-    }))
-    // ✅ only keep groups that actually have seats
-    .filter((g) => g.ticketTypeId && g.seatIds.length > 0 && Number.isFinite(g.unitPricePence) && g.unitPricePence > 0);
+    .map((it: any) => {
+      const ticketTypeId = String(it.ticketTypeId || "").trim();
+      if (!ticketTypeId) return null;
 
-  seatGroupsJson = seatGroups.length ? JSON.stringify(seatGroups) : "";
+      const seatIdsArr = Array.isArray(it.seatIds)
+        ? it.seatIds.map((x: any) => String(x).trim()).filter(Boolean)
+        : [];
+
+      // If seats exist, quantity should match seats.
+      // If no seats (unallocated/GA), quantity comes from the item quantity picker.
+      const qtyRaw =
+        seatIdsArr.length > 0 ? seatIdsArr.length : Number(it.quantity ?? 0);
+
+      const quantity = Number.isFinite(qtyRaw) ? Math.max(0, Math.floor(qtyRaw)) : 0;
+      if (quantity < 1) return null;
+
+      // Do NOT trust client unit price; webhook can look up price if needed.
+      return {
+        ticketTypeId,
+        quantity,
+        seatIds: seatIdsArr,
+      };
+    })
+    .filter(Boolean);
+
+  if (seatGroups.length) {
+    seatGroupsJson = JSON.stringify(seatGroups);
+  }
 }
+
    const session = await stripe.checkout.sessions.create({
   mode: "payment",
   line_items: lineItems,
