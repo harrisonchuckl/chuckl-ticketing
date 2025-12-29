@@ -1147,24 +1147,26 @@ router.delete("/ticket-types/:ttId", requireAdminOrOrganiser, async (req, res) =
 router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
   try {
     const {
-      title,
-      date,
-      endDate,
-      imageUrl,
-      descriptionHtml,
-      venueId,
-      venueText,
-      status,
-      eventType,
-      eventCategory,
-      doorsOpenTime,
-      ageGuidance,
-      endTimeNote,
-      accessibility,
-      tags,
-      additionalImages,
-      usesAllocatedSeating,
-    } = req.body || {};
+  title,
+  date,
+  endDate,
+  imageUrl,
+  descriptionHtml,
+  venueId,
+  venueText,
+  status,
+  eventType,
+  eventCategory,
+  doorsOpenTime,
+  ageGuidance,
+  endTimeNote,
+  accessibility,
+  tags,
+  additionalImages,
+  usesAllocatedSeating,
+  showCapacity,
+} = req.body || {};
+
 
     const where = showWhereForRead(req, String(req.params.id));
     const existing = await prisma.show.findFirst({
