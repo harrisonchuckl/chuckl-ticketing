@@ -1422,6 +1422,12 @@ touch-action: none;
       font-size:0.78rem;
       font-weight:700;
       opacity:0.95;
+      align-items:center;
+    }
+    .secure-powered--footer .secure-lock{
+      width:12px;
+      height:12px;
+      flex:0 0 auto;
     }
     .secure-powered--footer .secure-powered-logo{
       height:16px;
