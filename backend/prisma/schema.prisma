@@ -276,6 +276,10 @@ model Order {
   stripeId String?
   status   OrderStatus @default(PENDING)
   email    String?
+  // ✅ Captured from Stripe Checkout custom_fields
+  buyerFirstName String?
+  buyerLastName  String?
+  buyerPostcode  String?
 
   /// Some routes read a top-level quantity directly on the order
   quantity Int?
