@@ -809,7 +809,8 @@ const soldCount = await prisma.order.count({
   }
 });
 
-/** POST /admin/shows — create (auto-creates venue if needed) */
+// [In admin shows.docx]
+
 router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
   try {
     const {
@@ -836,6 +837,20 @@ router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
     }
 
     const finalVenueId = (await ensureVenue(venueId, venueText)) || undefined;
+    const organiserId = isOrganiser(req) ? requireUserId(req) : null; // Capture this early
+
+    // --- FIX START: Generate Slug ---
+    let slug = null;
+    if (organiserId) {
+      slug = await allocateUniqueShowSlug({
+        organiserId,
+        title: String(title),
+        date: new Date(date),
+        excludeShowId: "", // New show, no ID to exclude
+      });
+    }
+    // --- FIX END ---
+
     const parsedTags = Array.isArray(tags)
       ? tags.map((t: unknown) => asNullableString(t)).filter(isNonEmptyString)
       : [];
@@ -849,8 +864,8 @@ router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
       data: {
         title: String(title),
         date: new Date(date),
-
-        organiserId: isOrganiser(req) ? requireUserId(req) : null,
+        organiserId, // Use the variable we defined above
+        slug,        // <--- SAVE THE SLUG HERE
         ...(endDate ? { endDate: new Date(endDate) } : {}),
         imageUrl: imageUrl ?? null,
         description: descriptionHtml ?? null,
@@ -869,13 +884,23 @@ router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
       select: { id: true },
     });
 
+    // Optional: Save initial slug to history immediately (good for redundancy)
+    if (organiserId && slug) {
+      await prisma.showSlugHistory.create({
+        data: {
+          organiserId,
+          showId: created.id,
+          slug,
+        },
+      });
+    }
+
     res.json({ ok: true, id: created.id });
   } catch (e) {
     console.error("POST /admin/shows failed", e);
     res.status(500).json({ ok: false, error: "Failed to create show" });
   }
 });
-
 /** GET /admin/shows/:id */
 
 router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
@@ -1138,20 +1163,22 @@ router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
     } = req.body || {};
 
     const where = showWhereForRead(req, String(req.params.id));
-const existing = await prisma.show.findFirst({
-  where,
-  select: {
-    id: true,
-    title: true,
-    date: true,
-    status: true,
-    organiserId: true,
-    slug: true,
-  },
-});
+    const existing = await prisma.show.findFirst({
+      where,
+      select: {
+        id: true,
+        title: true,
+        date: true,
+        status: true,
+        organiserId: true,
+        slug: true,
+      },
+    });
+
     if (!existing) return res.status(404).json({ ok: false, error: "Not found" });
 
     const finalVenueId = (await ensureVenue(venueId, venueText)) || undefined;
+
     const parsedTags = Array.isArray(tags)
       ? tags.map((t: unknown) => asNullableString(t)).filter(isNonEmptyString)
       : undefined;
@@ -1161,57 +1188,44 @@ const existing = await prisma.show.findFirst({
     const parsedAccessibility =
       accessibility && typeof accessibility === "object" ? accessibility : undefined;
 
+    // --- UPDATED SLUG LOGIC ---
     let slugToSet: string | undefined;
-
-const incomingTitle =
-  title !== undefined && title !== null ? String(title).trim() : undefined;
-
-const titleChanged =
-  incomingTitle !== undefined && incomingTitle !== existing.title;
-
-const nextStatus =
-  status !== undefined && status !== null ? String(status) : undefined;
-
-const willBeLive = nextStatus ? nextStatus === "LIVE" : existing.status === ShowStatus.LIVE;
-const publishingNow = nextStatus === "LIVE" && existing.status !== ShowStatus.LIVE;
-
-if ((publishingNow || (willBeLive && (titleChanged || !existing.slug))) && existing.organiserId) {
-  const organiser = await prisma.user.findUnique({
-    where: { id: existing.organiserId },
-    select: { storefrontSlug: true },
-  });
-
-  if (!organiser?.storefrontSlug) {
-    return res.status(400).json({
-      ok: false,
-      message:
-        "Set a unique Storefront name in Account settings before publishing (or renaming) a live show.",
-    });
-  }
-
-  const desiredTitle = incomingTitle ?? existing.title ?? "event";
-
-  slugToSet = await allocateUniqueShowSlug({
-    organiserId: existing.organiserId,
-    title: desiredTitle,
-    date: existing.date,
-    excludeShowId: existing.id,
-  });
-
-  if (existing.slug && existing.slug !== slugToSet) {
-    await prisma.showSlugHistory
-      .create({
-        data: {
-          organiserId: existing.organiserId,
-          showId: existing.id,
-          slug: existing.slug,
-        },
-      })
-      .catch(() => {});
-  }
-}
-
+    const incomingTitle =
+      title !== undefined && title !== null ? String(title).trim() : undefined;
+    const incomingDate = date ? new Date(date) : undefined;
     
+    // Check if critical fields changed
+    const titleChanged = incomingTitle !== undefined && incomingTitle !== existing.title;
+    const dateChanged = incomingDate && existing.date && incomingDate.getTime() !== existing.date.getTime();
+    const missingSlug = !existing.slug;
+
+    // We update slug if: Title changed OR Date changed OR Slug is missing completely
+    if (existing.organiserId && (titleChanged || dateChanged || missingSlug)) {
+      const desiredTitle = incomingTitle ?? existing.title ?? "event";
+      const desiredDate = incomingDate ?? existing.date;
+
+      slugToSet = await allocateUniqueShowSlug({
+        organiserId: existing.organiserId,
+        title: desiredTitle,
+        date: desiredDate,
+        excludeShowId: existing.id,
+      });
+
+      // If we are changing the slug (and one existed before), save to history
+      if (existing.slug && existing.slug !== slugToSet) {
+        await prisma.showSlugHistory
+          .create({
+            data: {
+              organiserId: existing.organiserId,
+              showId: existing.id,
+              slug: existing.slug,
+            },
+          })
+          .catch((e) => console.error("Failed to save slug history", e));
+      }
+    }
+    // --------------------------
+
     const updated = await prisma.show.update({
       where: { id: existing.id },
       data: {
@@ -1280,6 +1294,73 @@ router.post("/shows/:id/duplicate", requireAdminOrOrganiser, async (req, res) =>
   } catch (e) {
     console.error("duplicate show failed", e);
     res.status(500).json({ ok: false, error: "Failed to duplicate" });
+  }
+});
+
+/** DEBUG: View Slug Data & History */
+router.get("/debug/slugs", requireAdminOrOrganiser, async (req, res) => {
+  try {
+    const organiserId = requireUserId(req);
+    
+    // 1. Get User Storefront Info
+    const user = await prisma.user.findUnique({
+      where: { id: organiserId },
+      select: { email: true, storefrontSlug: true }
+    });
+
+    // 2. Get All Shows for Organiser
+    const shows = await prisma.show.findMany({
+      where: { organiserId },
+      select: { id: true, title: true, slug: true, status: true, createdAt: true },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    // 3. Get Slug History
+    const history = await prisma.showSlugHistory.findMany({
+      where: { organiserId },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.send(`
+      <html>
+      <body style="font-family:monospace; padding: 20px; max-width: 800px; margin: 0 auto;">
+        <h1>Debug: Storefront & Slugs</h1>
+        
+        <h3>Organiser</h3>
+        <pre>${JSON.stringify(user, null, 2)}</pre>
+
+        <h3>Shows (Current Slugs)</h3>
+        <table border="1" cellpadding="5" style="border-collapse:collapse; width: 100%;">
+          <tr><th>Title</th><th>Status</th><th>Slug (DB Column)</th><th>Show ID</th></tr>
+          ${shows.map(s => `
+            <tr>
+              <td>${s.title}</td>
+              <td>${s.status}</td>
+              <td style="${!s.slug ? 'background:#ffcccc;color:#990000;font-weight:bold;' : 'color:green'}">
+                ${s.slug || 'NULL (Missing!)'}
+              </td>
+              <td><small>${s.id}</small></td>
+            </tr>
+          `).join('')}
+        </table>
+
+        <h3>Slug History (Redirects)</h3>
+        <p><em>These are the "old slugs" that should redirect to the Show ID.</em></p>
+        <table border="1" cellpadding="5" style="border-collapse:collapse; width: 100%;">
+          <tr><th>Old Slug</th><th>Redirects To Show ID</th><th>Recorded At</th></tr>
+          ${history.map(h => `
+            <tr>
+              <td>${h.slug}</td>
+              <td>${h.showId}</td>
+              <td>${h.createdAt.toISOString()}</td>
+            </tr>
+          `).join('')}
+        </table>
+      </body>
+      </html>
+    `);
+  } catch (e: any) {
+    res.status(500).send("Debug failed: " + e.message);
   }
 });
 
