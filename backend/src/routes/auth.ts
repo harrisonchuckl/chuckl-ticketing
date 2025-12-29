@@ -187,7 +187,13 @@ router.get("/approve-request", async (req, res) => {
           email: request.email,
           name: request.name ?? null,
           companyName: request.companyName ?? null,
+          role: "ORGANISER",
         },
+      });
+    } else if (!user.role) {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { role: "ORGANISER" },
       });
     }
 
@@ -316,7 +322,25 @@ router.post("/login", async (req, res) => {
     const ok = await bcrypt.compare(String(password), user.passwordHash);
     if (!ok) return res.status(401).json({ error: "invalid credentials" });
 
-    const token = sign({ id: user.id, email: user.email, role: user.role ?? null });
+    let role = user.role ?? null;
+
+    if (!role) {
+      const approvedRequest = await prisma.accessRequest.findUnique({
+        where: { email: user.email },
+        select: { approvedAt: true },
+      });
+
+      if (approvedRequest?.approvedAt) {
+        const updated = await prisma.user.update({
+          where: { id: user.id },
+          data: { role: "ORGANISER" },
+          select: { role: true },
+        });
+        role = updated.role;
+      }
+    }
+
+    const token = sign({ id: user.id, email: user.email, role });
 
     res.cookie("auth", token, {
       httpOnly: true,
@@ -464,6 +488,7 @@ router.post("/activate", async (req, res) => {
         resetTokenUsedAt: new Date(),
         resetTokenHash: null,
         resetTokenExpiresAt: null,
+        role: user.role ?? "ORGANISER",
       },
       select: { id: true, email: true, role: true },
     });
