@@ -249,21 +249,27 @@ router.post("/stripe", express.raw({ type: "application/json" }), async (req, re
       organiserSplitBps ?? undefined
     );
 
-   const payerEmail =
+const payerEmail =
   session.customer_details?.email || session.customer_email || undefined;
 
-// ✅ Pull custom fields submitted on Stripe Checkout
-const customFields = (session as any).custom_fields as any[] | undefined;
+// ✅ Stripe no longer provides custom_fields (after your change)
+// Pull name + postcode from customer_details instead.
+const fullName = String(session.customer_details?.name || "").trim();
 
-function getCustomField(key: string): string | null {
-  const f = customFields?.find((x) => x?.key === key);
-  const v = f?.text?.value;
-  return typeof v === "string" ? v.trim() : null;
+function splitName(name: string): { firstName: string | null; lastName: string | null } {
+  const parts = String(name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (parts.length === 0) return { firstName: null, lastName: null };
+  if (parts.length === 1) return { firstName: parts[0], lastName: null };
+  return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
 }
 
-const payerFirstName = getCustomField("first_name");
-const payerLastName = getCustomField("last_name");
-const payerPostcode = getCustomField("postcode");
+const { firstName: payerFirstName, lastName: payerLastName } = splitName(fullName);
+
+const payerPostcode = String(session.customer_details?.address?.postal_code || "").trim() || null;
 
 
     // Update order -> PAID + store fee breakdown
