@@ -1858,6 +1858,18 @@ if (capacityCap !== "" && capacityCap != null) {
   }
 }
 
+// Persist show-level capacity override so “All events” uses the correct value
+await jsonRequest("/admin/shows/" + showId, {
+  method: "PATCH",
+  credentials: "include",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    showCapacity:
+      (capacityCap !== "" && capacityCap != null) ? Number(capacityCap) : null,
+  }),
+});
+
+
         showStatus("Saving tickets…");
         try {
           for (var i = 0; i < tickets.length; i++) {
