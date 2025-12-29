@@ -294,23 +294,33 @@ const payerPostcode = String(session.customer_details?.address?.postal_code || "
 // -----------------------------
 // CREATE TICKETS (idempotent)
 // -----------------------------
+let finalTicketCount = 0;
+
 try {
   const existing = await prisma.ticket.count({ where: { orderId } });
 
   if (existing > 0) {
     console.info("[webhook] tickets already exist, skipping", { orderId, existing });
+    finalTicketCount = existing;
   } else {
     const seatGroupsRaw = session.metadata?.seatGroups || "";
 
-    // Prefer Stripe metadata; fall back to order.ticketTypeId if present
+    // Fallback (single ticket type orders only)
     const gaTicketTypeId =
       (session.metadata?.ticketTypeId || "").trim() || (order.ticketTypeId || "").trim();
 
-    const qty = Number(order.quantity ?? 1) || 1;
+    const qtyOrder = Number(order.quantity ?? 1) || 1;
     const total = Number(order.amountPence ?? 0) || 0;
-    const unitFromOrder = Math.max(0, Math.round(total / Math.max(1, qty)));
+    const unitFromOrder = Math.max(0, Math.round(total / Math.max(1, qtyOrder)));
 
     const seatRefMap = await loadSeatRefMapForShow(showId);
+
+    // Optional: price lookup so ticket.amountPence is sensible for multi-type orders
+    const tts = await prisma.ticketType.findMany({
+      where: { showId },
+      select: { id: true, pricePence: true },
+    });
+    const priceByTtId = new Map(tts.map((t) => [t.id, Number(t.pricePence ?? 0)]));
 
     const ticketsToCreate: Array<{
       serial: string;
@@ -325,55 +335,84 @@ try {
       quantity: number;
     }> = [];
 
-    // Tiered seating mode: seatGroups contains [{ticketTypeId, unitPricePence, seatIds[]}]
-    // ✅ BUT: ignore it if it contains no seatIds (GA orders must fall back to qty mode)
     let usedSeatGroups = false;
 
     if (seatGroupsRaw) {
-      let seatGroups: Array<{ ticketTypeId: string; unitPricePence: number; seatIds: string[] }> = [];
+      type SeatGroup = { ticketTypeId: string; quantity?: number; seatIds?: string[] };
+
+      let seatGroups: SeatGroup[] = [];
       try {
         seatGroups = JSON.parse(seatGroupsRaw);
       } catch {
-        console.warn("[webhook] invalid seatGroups JSON (cannot create tiered tickets)", { orderId });
+        console.warn("[webhook] invalid seatGroups JSON", { orderId });
         seatGroups = [];
       }
 
-      const totalSeatIds = seatGroups.reduce((acc, g) => {
+      // Only treat as “seatGroups mode” if there is at least 1 purchasable ticket in it
+      const totalQty = (seatGroups || []).reduce((acc, g) => {
         const ids = Array.isArray(g?.seatIds) ? g.seatIds.length : 0;
-        return acc + ids;
+        const q = Number(g?.quantity ?? 0) || 0;
+        return acc + (ids > 0 ? ids : q);
       }, 0);
 
-      if (totalSeatIds > 0) {
+      if (totalQty > 0) {
         usedSeatGroups = true;
 
         for (const g of seatGroups) {
-          const ttId = String(g.ticketTypeId || "").trim();
-          const unit = Number(g.unitPricePence || 0);
-          const ids = Array.isArray(g.seatIds) ? g.seatIds.map(s => String(s).trim()).filter(Boolean) : [];
+          const ttId = String(g?.ticketTypeId || "").trim();
+          if (!ttId) continue;
 
-          for (const seatId of ids) {
-            if (!ttId || !unit) continue;
+          const ids = Array.isArray(g?.seatIds)
+            ? g.seatIds.map((s) => String(s).trim()).filter(Boolean)
+            : [];
 
-            ticketsToCreate.push({
-              serial: makeTicketSerial(),
-              holderName: null,
-              status: "SOLD",
-              orderId,
-              showId,
-              ticketTypeId: ttId,
-              seatId,
-              seatRef: seatRefMap.get(seatId) || null,
-              amountPence: unit,
-              quantity: 1,
-            });
+          const qRaw = ids.length > 0 ? ids.length : Number(g?.quantity ?? 0);
+          const q = Number.isFinite(qRaw) ? Math.max(0, Math.floor(qRaw)) : 0;
+          if (q < 1) continue;
+
+          const amountPence =
+            priceByTtId.get(ttId) ?? unitFromOrder;
+
+          // If we have seatIds, 1 ticket per seat (allocated)
+          if (ids.length > 0) {
+            for (const seatId of ids) {
+              ticketsToCreate.push({
+                serial: makeTicketSerial(),
+                holderName: null,
+                status: "SOLD",
+                orderId,
+                showId,
+                ticketTypeId: ttId,
+                seatId,
+                seatRef: seatRefMap.get(seatId) || null,
+                amountPence,
+                quantity: 1,
+              });
+            }
+          } else {
+            // No seatIds: unallocated/GA — create 1 ticket row per quantity
+            for (let i = 0; i < q; i++) {
+              ticketsToCreate.push({
+                serial: makeTicketSerial(),
+                holderName: null,
+                status: "SOLD",
+                orderId,
+                showId,
+                ticketTypeId: ttId,
+                seatId: null,
+                seatRef: null,
+                amountPence,
+                quantity: 1,
+              });
+            }
           }
         }
       } else {
-        console.warn("[webhook] seatGroups metadata present but empty; falling back to GA qty mode", { orderId });
+        console.warn("[webhook] seatGroups metadata present but empty; falling back", { orderId });
       }
     }
 
-    // GA mode: create 1 ticket per seat (if seats exist) else 1 per quantity
+    // Final fallback: GA single ticket type (older flow)
     if (!usedSeatGroups && gaTicketTypeId) {
       if (seatIds.length > 0) {
         for (const seatId of seatIds) {
@@ -386,12 +425,12 @@ try {
             ticketTypeId: gaTicketTypeId,
             seatId,
             seatRef: seatRefMap.get(seatId) || null,
-            amountPence: unitFromOrder,
+            amountPence: priceByTtId.get(gaTicketTypeId) ?? unitFromOrder,
             quantity: 1,
           });
         }
       } else {
-        for (let i = 0; i < qty; i++) {
+        for (let i = 0; i < qtyOrder; i++) {
           ticketsToCreate.push({
             serial: makeTicketSerial(),
             holderName: null,
@@ -401,20 +440,24 @@ try {
             ticketTypeId: gaTicketTypeId,
             seatId: null,
             seatRef: null,
-            amountPence: unitFromOrder,
+            amountPence: priceByTtId.get(gaTicketTypeId) ?? unitFromOrder,
             quantity: 1,
           });
         }
       }
-    } else if (!usedSeatGroups && !gaTicketTypeId) {
-      console.warn("[webhook] no usable seatGroups + no ticketTypeId metadata (cannot create tickets)", { orderId });
     }
 
     if (ticketsToCreate.length) {
       await prisma.ticket.createMany({ data: ticketsToCreate });
     }
 
-    console.info("[webhook] tickets created", { orderId, count: ticketsToCreate.length });
+    finalTicketCount = await prisma.ticket.count({ where: { orderId } });
+
+    console.info("[webhook] tickets created", {
+      orderId,
+      intended: ticketsToCreate.length,
+      finalTicketCount,
+    });
   }
 } catch (ticketErr: any) {
   console.error("[webhook] ticket creation failed", {
@@ -427,21 +470,27 @@ try {
 
 
 
+
     // Only send the email the first time we flip to PAID (webhooks retry)
-    if (order.status !== "PAID") {
-      try {
-        await sendTicketsEmail(orderId);
-        console.info("webhook: tickets email sent", { orderId });
-      } catch (emailErr: any) {
-        console.error("webhook: confirmation email failed", {
-          orderId,
-          message: emailErr?.message,
-          stack: emailErr?.stack,
-        });
-      }
+   if (order.status !== "PAID") {
+  try {
+    if ((finalTicketCount || 0) > 0) {
+      await sendTicketsEmail(orderId);
+      console.info("webhook: tickets email sent", { orderId });
     } else {
-      console.info("webhook: order already PAID, skipping email", { orderId });
+      console.warn("[webhook] skipping email send because no tickets exist", { orderId });
     }
+  } catch (emailErr: any) {
+    console.error("webhook: confirmation email failed", {
+      orderId,
+      message: emailErr?.message,
+      stack: emailErr?.stack,
+    });
+  }
+} else {
+  console.info("webhook: order already PAID, skipping email", { orderId });
+}
+
 
     // Mark sold seats on active seatmap (best-effort)
     if (seatIds.length > 0) {
