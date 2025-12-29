@@ -1633,7 +1633,31 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
    .widget-header { padding: 24px; border-bottom: 1px solid var(--border); background: #fff; }
    .widget-title { font-size: 1.25rem; font-weight: 800; color: var(--primary); }
    .widget-subtitle { font-size: 0.9rem; color: var(--text-muted); margin-top: 4px; font-weight: 500;}
-   .widget-footer { background: #F8FAFC; padding: 16px; border-top: 1px solid var(--border); text-align: center; font-size: 0.8rem; color: var(--text-muted); }
+.widget-footer{
+  background: #F8FAFC;
+  padding: 16px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* Footer “powered by” line */
+.secure-powered{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.secure-logo{
+  height: 18px;          /* tweak if you want slightly bigger/smaller */
+  width: auto;
+  display: block;
+  border-radius: 4px;
+}
 
    /* --- TICKET LIST STYLES --- */
    .ticket-list-container { padding: 8px; }
@@ -1905,9 +1929,13 @@ ${accessibilityReasons
        <div class="ticket-list-container">
          ${renderTicketList(false)}
        </div>
-       <div class="widget-footer">
-         🔒 Secure checkout powered by TixAll.
-       </div>
+    <div class="widget-footer">
+  <span class="secure-powered">
+    <span class="secure-lock" aria-hidden="true">🔒</span>
+    <span class="secure-text">Secure checkout powered by</span>
+    <img class="secure-logo" src="/IMG_2374.jpeg" alt="TixAll" loading="lazy" />
+  </span>
+</div>
      </div>
    </div>
 
