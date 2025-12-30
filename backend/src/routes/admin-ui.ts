@@ -681,6 +681,36 @@ router.get(
       gap:16px;
       align-items:start;
     }
+    .chart-layout{
+      display:flex;
+      gap:12px;
+      align-items:stretch;
+    }
+    .chart-y-axis{
+      display:flex;
+      flex-direction:column;
+      justify-content:space-between;
+      font-size:12px;
+      color:var(--muted);
+      padding-top:4px;
+      min-width:64px;
+    }
+    .chart-y-axis .tick{
+      display:flex;
+      align-items:center;
+      gap:6px;
+    }
+    .chart-y-axis .tick::after{
+      content:"";
+      flex:1;
+      height:1px;
+      background:var(--border);
+      opacity:0.6;
+    }
+    .chart-plot{
+      flex:1;
+      min-width:0;
+    }
     .chart-wrap{
       height:220px;
       display:flex;
@@ -1562,7 +1592,7 @@ document.addEventListener('click', function(e){
       +    '<div class="card" id="heroCard">'
       +      '<div class="header">'
       +        '<div>'
-      +          '<div class="title">Weekly Performance</div>'
+      +          '<div class="title">Daily Performance</div>'
       +          '<div class="muted">Last 30 days · Europe/London</div>'
       +        '</div>'
       +        '<div class="row chart-toggles" id="chartToggles"></div>'
@@ -1709,6 +1739,23 @@ document.addEventListener('click', function(e){
   var timeseriesCache = {};
   var chartMetric = 'tickets';
 
+  function isMoneyMetric(metric){
+    return metric === 'gross' || metric === 'net' || metric === 'refunds';
+  }
+
+  function getNiceStep(maxValue, steps){
+    if (!maxValue || maxValue <= 0) return 1;
+    var rough = maxValue / steps;
+    var pow10 = Math.pow(10, Math.floor(Math.log10(rough)));
+    var normalized = rough / pow10;
+    var step;
+    if (normalized <= 1) step = 1;
+    else if (normalized <= 2) step = 2;
+    else if (normalized <= 5) step = 5;
+    else step = 10;
+    return step * pow10;
+  }
+
   function renderChart(series, metric){
     var chartBody = $('#chartBody');
     if (!chartBody) return;
@@ -1719,10 +1766,13 @@ document.addEventListener('click', function(e){
     }
 
     var maxValue = Math.max.apply(null, series.map(function(d){ return d.value || 0; })) || 1;
+    var axisSteps = 4;
+    var step = getNiceStep(maxValue, axisSteps);
+    var maxTick = step * axisSteps;
     var barsHtml = series.map(function(point, idx){
-      var height = Math.max(4, Math.round((point.value / maxValue) * 100));
+      var height = Math.max(4, Math.round((point.value / maxTick) * 100));
       var isActive = idx === series.length - 1 ? ' active' : '';
-      var labelValue = metric === 'gross' || metric === 'net' || metric === 'refunds'
+      var labelValue = isMoneyMetric(metric)
         ? formatMoney(point.value)
         : fmtNumber.format(point.value || 0);
       return '<div class="chart-bar' + isActive + '" style="height:' + height + '%;" title="'
@@ -1731,10 +1781,23 @@ document.addEventListener('click', function(e){
 
     var startLabel = fmtDate.format(new Date(series[0].date));
     var endLabel = fmtDate.format(new Date(series[series.length - 1].date));
+    var ticksHtml = '';
+    for (var i = axisSteps; i >= 0; i -= 1){
+      var tickValue = Math.round(step * i);
+      var tickLabel = isMoneyMetric(metric)
+        ? formatMoney(tickValue)
+        : fmtNumber.format(tickValue);
+      ticksHtml += '<div class="tick"><span>' + tickLabel + '</span></div>';
+    }
 
     chartBody.innerHTML =
-      '<div class="chart-wrap">' + barsHtml + '</div>'
-      + '<div class="chart-axis"><span>' + startLabel + '</span><span>' + endLabel + '</span></div>';
+      '<div class="chart-layout">'
+      + '<div class="chart-y-axis">' + ticksHtml + '</div>'
+      + '<div class="chart-plot">'
+      + '<div class="chart-wrap">' + barsHtml + '</div>'
+      + '<div class="chart-axis"><span>' + startLabel + '</span><span>' + endLabel + '</span></div>'
+      + '</div>'
+      + '</div>';
   }
 
   function renderChartToggles(){
