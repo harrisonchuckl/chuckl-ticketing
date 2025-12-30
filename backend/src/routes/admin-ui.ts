@@ -1207,6 +1207,14 @@ router.get(
 
   function $(sel, root){ return (root || document).querySelector(sel); }
   function $$(sel, root){ return Array.from((root || document).querySelectorAll(sel)); }
+  function escapeHtml(s){
+    return String(s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
     // --- AI field highlighting ---
   function markAi(el, kind){
     if (!el) return;
