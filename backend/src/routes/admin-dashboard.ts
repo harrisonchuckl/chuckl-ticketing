@@ -363,6 +363,40 @@ router.get("/dashboard/timeseries", requireAdminOrOrganiser, async (req, res) =>
 
       let rows: Array<{ day: Date; value: number }> = [];
 
+      const tooltipRows: Array<{
+        day: Date;
+        tickets: number;
+        gross: number;
+        platformFees: number;
+        organiserShare: number;
+      }> = await prisma.$queryRaw`
+        SELECT o_day.day as day,
+               COALESCE(SUM(o_day."amountPence"), 0)::int as gross,
+               COALESCE(SUM(o_day."platformFeePence"), 0)::int as "platformFees",
+               COALESCE(SUM(o_day."organiserSharePence"), 0)::int as "organiserShare",
+               COALESCE(SUM(tickets.tickets), 0)::int as tickets
+        FROM (
+          SELECT o."id",
+                 date_trunc('day', o."createdAt")::date as day,
+                 o."amountPence",
+                 o."platformFeePence",
+                 o."organiserSharePence"
+          FROM "Order" o
+          JOIN "Show" s ON s."id" = o."showId"
+          WHERE o."status" = 'PAID'
+            AND o."createdAt" >= ${start}
+            AND o."createdAt" < ${end}
+            ${organiserFilterSql}
+        ) o_day
+        LEFT JOIN (
+          SELECT "orderId", COALESCE(SUM("quantity"), 0)::int as tickets
+          FROM "Ticket"
+          GROUP BY "orderId"
+        ) tickets ON tickets."orderId" = o_day."id"
+        GROUP BY o_day.day
+        ORDER BY o_day.day ASC
+      `;
+
       if (metric === "tickets") {
         rows = await prisma.$queryRaw`
           SELECT date_trunc('day', o."createdAt")::date as day,
@@ -458,13 +492,45 @@ router.get("/dashboard/timeseries", requireAdminOrOrganiser, async (req, res) =>
         throw new Error("Invalid metric");
       }
 
-      const output: { date: string; value: number }[] = [];
+      const tooltipMap = new Map(
+        tooltipRows.map((row) => [
+          new Date(row.day).toISOString().slice(0, 10),
+          {
+            tickets: Number(row.tickets) || 0,
+            gross: Number(row.gross) || 0,
+            platformFees: Number(row.platformFees) || 0,
+            organiserShare: Number(row.organiserShare) || 0,
+          },
+        ])
+      );
+
+      const output: {
+        date: string;
+        value: number;
+        tickets: number;
+        gross: number;
+        platformFees: number;
+        organiserShare: number;
+      }[] = [];
       for (let i = days - 1; i >= 0; i -= 1) {
         const day = new Date(end);
         day.setDate(end.getDate() - i);
         const key = day.toISOString().slice(0, 10);
         const match = rows.find((r) => new Date(r.day).toISOString().slice(0, 10) === key);
-        output.push({ date: key, value: match ? Number(match.value) : 0 });
+        const tooltip = tooltipMap.get(key) || {
+          tickets: 0,
+          gross: 0,
+          platformFees: 0,
+          organiserShare: 0,
+        };
+        output.push({
+          date: key,
+          value: match ? Number(match.value) : 0,
+          tickets: tooltip.tickets,
+          gross: tooltip.gross,
+          platformFees: tooltip.platformFees,
+          organiserShare: tooltip.organiserShare,
+        });
       }
 
       return { ok: true, metric, days, series: output };
