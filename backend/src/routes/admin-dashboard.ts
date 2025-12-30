@@ -491,16 +491,25 @@ router.get("/dashboard/top-shows", requireAdminOrOrganiser, async (req, res) => 
       const showFilter: Prisma.ShowWhereInput = isOrganiser(req)
         ? { organiserId: String(req.user?.id || "") }
         : {};
+      const orderFilter: Prisma.OrderWhereInput = {
+        status: "PAID",
+        createdAt: { gte: start, lt: end },
+        ...organiserFilter(req),
+      };
+      const totalOrderFilter: Prisma.OrderWhereInput = {
+        status: "PAID",
+        ...organiserFilter(req),
+      };
 
       const ticketsByShow = await prisma.ticket.groupBy({
         by: ["showId"],
-        where: { order: { is: { status: "PAID", createdAt: { gte: start, lt: end }, ...showFilter } } },
+        where: { order: { is: orderFilter } },
         _sum: { quantity: true },
       });
 
       const orderByShow = await prisma.order.groupBy({
         by: ["showId"],
-        where: { status: "PAID", createdAt: { gte: start, lt: end }, ...showFilter },
+        where: orderFilter,
         _sum: { amountPence: true },
       });
 
@@ -522,18 +531,18 @@ router.get("/dashboard/top-shows", requireAdminOrOrganiser, async (req, res) => 
 
       const totalTickets = await prisma.ticket.groupBy({
         by: ["showId"],
-        where: { order: { is: { status: "PAID", ...showFilter } }, showId: { in: showIds } },
+        where: { order: { is: totalOrderFilter }, showId: { in: showIds } },
         _sum: { quantity: true },
       });
 
       const ticketMap = new Map(
-        ticketsByShow.map((row) => [row.showId, toNumber(row._sum.quantity)])
+        ticketsByShow.map((row) => [row.showId, toNumber(row._sum?.quantity)])
       );
       const grossMap = new Map(
-        orderByShow.map((row) => [row.showId, toNumber(row._sum.amountPence)])
+        orderByShow.map((row) => [row.showId, toNumber(row._sum?.amountPence)])
       );
       const totalMap = new Map(
-        totalTickets.map((row) => [row.showId, toNumber(row._sum.quantity)])
+        totalTickets.map((row) => [row.showId, toNumber(row._sum?.quantity)])
       );
 
       const enriched = shows.map((show) => {
@@ -582,6 +591,11 @@ router.get("/dashboard/alerts", requireAdminOrOrganiser, async (req, res) => {
       const showFilter: Prisma.ShowWhereInput = isOrganiser(req)
         ? { organiserId: String(req.user?.id || "") }
         : {};
+      const orderFilter: Prisma.OrderWhereInput = {
+        status: "PAID",
+        createdAt: { gte: start7, lt: now },
+        ...organiserFilter(req),
+      };
 
       const upcomingEnd = new Date(now);
       upcomingEnd.setDate(now.getDate() + 14);
@@ -599,14 +613,14 @@ router.get("/dashboard/alerts", requireAdminOrOrganiser, async (req, res) => {
             by: ["showId"],
             where: {
               showId: { in: showIds },
-              order: { is: { status: "PAID", createdAt: { gte: start7, lt: now }, ...showFilter } },
+              order: { is: orderFilter },
             },
             _sum: { quantity: true },
           })
         : [];
 
       const salesMap = new Map(
-        salesByShow.map((row) => [row.showId, toNumber(row._sum.quantity)])
+        salesByShow.map((row) => [row.showId, toNumber(row._sum?.quantity)])
       );
 
       const alerts: Array<{
