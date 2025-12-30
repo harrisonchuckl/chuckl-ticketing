@@ -43,7 +43,7 @@ router.get('/marketing/contacts', requireAdminOrOrganiser, async (req, res) => {
           }
         : {}),
     },
-    include: { consent: true, tags: { include: { tag: true } } },
+    include: { consents: true, tags: { include: { tag: true } } },
     orderBy: { createdAt: 'desc' },
     take: 500,
   });
@@ -53,7 +53,7 @@ router.get('/marketing/contacts', requireAdminOrOrganiser, async (req, res) => {
     email: contact.email,
     firstName: contact.firstName,
     lastName: contact.lastName,
-    status: contact.consent?.status || MarketingConsentStatus.TRANSACTIONAL_ONLY,
+    status: contact.consents[0]?.status || MarketingConsentStatus.TRANSACTIONAL_ONLY,
     tags: contact.tags.map((t) => t.tag.name),
     createdAt: contact.createdAt,
   }));
