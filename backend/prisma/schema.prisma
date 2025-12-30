@@ -238,6 +238,23 @@ model User {
   marketingPreferenceTopics MarketingPreferenceTopic[]
   marketingCheckoutEvents MarketingCheckoutEvent[]
   marketingAuditLogs MarketingAuditLog[]
+  dashboardWidgetPreferences DashboardWidgetPreference[]
+}
+
+model DashboardWidgetPreference {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId    String
+  widgetKey String
+  enabled   Boolean  @default(true)
+  order     Int?
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, widgetKey])
+  @@index([userId])
 }
 
 model AccessRequest {
