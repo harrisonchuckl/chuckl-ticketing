@@ -282,6 +282,9 @@ router.get("/dashboard/summary", requireAdminOrOrganiser, async (req, res) => {
           aov: current.aov,
           refunds: current.refunds,
           refundsCount: current.refundsCount,
+          paymentFees: current.paymentFees,
+          platformFees: current.platformFees,
+          organiserShare: current.organiserShare,
           newCustomers,
           returningCustomers,
         },
@@ -747,6 +750,130 @@ router.get("/dashboard/alerts", requireAdminOrOrganiser, async (req, res) => {
   } catch (err) {
     console.error("dashboard/alerts failed", err);
     res.status(500).json({ ok: false, error: "Failed to load alerts" });
+  }
+});
+
+router.get("/dashboard/home-widgets", requireAdminOrOrganiser, async (req, res) => {
+  const key = getCacheKey(req);
+  try {
+    const data = await withCache(key, async () => {
+      const now = new Date();
+      const start7 = new Date(now);
+      start7.setDate(now.getDate() - 7);
+
+      const upcomingEnd = new Date(now);
+      upcomingEnd.setDate(now.getDate() + 30);
+
+      const showFilter: Prisma.ShowWhereInput = isOrganiser(req)
+        ? { organiserId: String(req.user?.id || "") }
+        : {};
+
+      const upcomingShows = await prisma.show.findMany({
+        where: { date: { gte: now, lte: upcomingEnd }, ...showFilter },
+        select: {
+          id: true,
+          title: true,
+          date: true,
+          showCapacity: true,
+          venue: { select: { name: true } },
+        },
+        orderBy: { date: "asc" },
+      });
+
+      const showIds = upcomingShows.map((show) => show.id);
+
+      const paidOrderFilter: Prisma.OrderWhereInput = {
+        status: "PAID",
+        ...organiserFilter(req),
+      };
+
+      const soldByShow = showIds.length
+        ? await prisma.ticket.groupBy({
+            by: ["showId"],
+            where: { showId: { in: showIds }, order: { is: paidOrderFilter } },
+            _sum: { quantity: true },
+            _count: { _all: true },
+          })
+        : [];
+
+      const capacityByShow = showIds.length
+        ? await prisma.ticketType.groupBy({
+            by: ["showId"],
+            where: { showId: { in: showIds } },
+            _sum: { available: true },
+          })
+        : [];
+
+      const soldMap = new Map(
+        soldByShow.map((row) => {
+          const sumQty = Number(row._sum.quantity ?? 0);
+          const rowCount = Number((row as any)._count?._all ?? 0);
+          return [row.showId, sumQty > 0 ? sumQty : rowCount];
+        })
+      );
+
+      const capacityMap = new Map(
+        capacityByShow.map((row) => [row.showId, Number(row._sum.available ?? 0)])
+      );
+
+      const upcoming = upcomingShows.map((show) => {
+        const fallbackCapacity = capacityMap.get(show.id) || 0;
+        const capacity = show.showCapacity ?? fallbackCapacity;
+        const sold = soldMap.get(show.id) || 0;
+        const capacityPct = capacity > 0 ? (sold / capacity) * 100 : null;
+        return {
+          id: show.id,
+          title: show.title || "Untitled show",
+          venue: show.venue?.name || "",
+          date: show.date,
+          capacity,
+          sold,
+          capacityPct,
+        };
+      });
+
+      const totalCapacity = upcoming.reduce((sum, show) => sum + (show.capacity || 0), 0);
+      const totalSold = upcoming.reduce((sum, show) => sum + (show.sold || 0), 0);
+
+      const daysAheadLimit = 21;
+      const atRisk = upcoming
+        .filter((show) => {
+          if (!show.date || !show.capacity) return false;
+          const diffMs = new Date(show.date).getTime() - now.getTime();
+          const daysUntil = diffMs / (1000 * 60 * 60 * 24);
+          const pct = show.capacityPct ?? 0;
+          return daysUntil <= daysAheadLimit && pct < 25;
+        })
+        .slice(0, 10);
+
+      const abandonedCutoff = new Date(now);
+      abandonedCutoff.setMinutes(now.getMinutes() - 30);
+
+      const abandonedCheckouts = await prisma.order.count({
+        where: {
+          status: "PENDING",
+          createdAt: { gte: start7, lt: abandonedCutoff },
+          ...organiserFilter(req),
+        },
+      });
+
+      return {
+        ok: true,
+        capacitySoldNext30: {
+          sold: totalSold,
+          capacity: totalCapacity,
+        },
+        upcomingShowsAtRisk: atRisk,
+        abandonedCheckouts: { count: abandonedCheckouts },
+        referralSources: { trackingEnabled: false },
+      };
+    });
+
+    res.set("Cache-Control", "private, max-age=60");
+    res.json(data);
+  } catch (err) {
+    console.error("dashboard/home-widgets failed", err);
+    res.status(500).json({ ok: false, error: "Failed to load home widgets" });
   }
 });
 

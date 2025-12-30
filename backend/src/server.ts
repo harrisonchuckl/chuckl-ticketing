@@ -41,6 +41,7 @@ import adminCustomersRouter from "./routes/admin-customers.js";
 import adminOrdersApiRouter from "./routes/admin-orders-api.js";
 import adminMarketingRouter from "./routes/admin-marketing.js";
 import adminDashboardRouter from "./routes/admin-dashboard.js";
+import adminHomeWidgetsRouter from "./routes/admin-home-widgets.js";
 import sendgridWebhookRouter from "./routes/webhooks-sendgrid.js";
 
 const app = express();
@@ -130,6 +131,7 @@ app.use("/admin", adminCustomersRouter);
 app.use("/admin", adminUiRouter);
 app.use("/admin/api", adminOrdersApiRouter);
 app.use("/admin/api", adminDashboardRouter);
+app.use("/admin-ui", adminHomeWidgetsRouter);
 app.use("/admin", adminMarketingRouter);
 app.use("/webhooks", sendgridWebhookRouter);
 

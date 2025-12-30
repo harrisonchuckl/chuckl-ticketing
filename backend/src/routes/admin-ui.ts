@@ -3,6 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { Router, json } from "express";
 import { requireAdminOrOrganiser } from "../lib/authz.js";
+import { getSafeHomeWidgetRegistry, HOME_WIDGET_CATEGORIES } from "../lib/home-widgets.js";
 
 const router = Router();
 
@@ -250,6 +251,8 @@ router.get("/ui/login", (req, res) => {
   </div>
 
 <script>
+window.__HOME_WIDGET_REGISTRY = ${JSON.stringify(homeWidgetRegistry)};
+window.__HOME_WIDGET_CATEGORIES = ${JSON.stringify(homeWidgetCategories)};
 (function(){
   const form = document.getElementById("loginForm");
   const btn = document.getElementById("btn");
@@ -405,6 +408,9 @@ router.get(
   },
   requireAdminOrOrganiser,
   (_req, res) => {
+
+    const homeWidgetRegistry = getSafeHomeWidgetRegistry();
+    const homeWidgetCategories = HOME_WIDGET_CATEGORIES;
 
     res.set("Cache-Control", "no-store");
     res.type("html").send(`<!doctype html>
@@ -647,6 +653,22 @@ router.get(
       flex-direction:column;
       gap:6px;
       min-height:110px;
+    }
+    .kpi-card.add-widget-card{
+      align-items:center;
+      justify-content:center;
+      text-align:center;
+      gap:8px;
+      cursor:pointer;
+      font-weight:700;
+      color:#0f172a;
+    }
+    .kpi-card.add-widget-card .plus{
+      font-size:32px;
+      line-height:1;
+    }
+    .kpi-card.add-widget-card .muted{
+      font-size:12px;
     }
     .kpi-label{
       font-size:11px;
@@ -1157,6 +1179,46 @@ router.get(
       padding:6px 8px;
       cursor:pointer;
     }
+    .widget-group{
+      margin-top:14px;
+      border-top:1px solid var(--border);
+      padding-top:12px;
+    }
+    .widget-group:first-child{
+      border-top:none;
+      padding-top:0;
+    }
+    .widget-group-title{
+      font-weight:800;
+      font-size:13px;
+      text-transform:uppercase;
+      letter-spacing:0.08em;
+      color:#1f2937;
+      margin-bottom:8px;
+    }
+    .widget-toggle{
+      display:flex;
+      align-items:flex-start;
+      gap:10px;
+      padding:8px 10px;
+      border:1px solid var(--border);
+      border-radius:10px;
+      background:#f8fafc;
+      margin-bottom:8px;
+    }
+    .widget-toggle input{ margin-top:3px; }
+    .widget-toggle-title{
+      font-weight:700;
+      font-size:14px;
+    }
+    .widget-toggle-status{
+      font-size:12px;
+      color:var(--muted);
+      margin-top:4px;
+    }
+    .widget-toggle.is-loading{
+      opacity:0.7;
+    }
     .orders-toolbar{
       display:flex;
       flex-wrap:wrap;
@@ -1607,62 +1669,334 @@ document.addEventListener('click', function(e){
 
   window.addEventListener('popstate', route);
 
+  var homeWidgetRegistry = window.__HOME_WIDGET_REGISTRY || [];
+  var homeWidgetCategories = window.__HOME_WIDGET_CATEGORIES || [];
+  var homeWidgetState = [];
+  var homeWidgetLoading = new Set();
+  var homeWidgetError = '';
+
+  function buildDefaultWidgets(){
+    return homeWidgetRegistry.map(function(widget){
+      return {
+        key: widget.key,
+        title: widget.title,
+        category: widget.category,
+        slot: widget.slot,
+        enabled: widget.defaultEnabled,
+        order: widget.defaultOrder,
+        defaultOrder: widget.defaultOrder
+      };
+    });
+  }
+
+  function sortWidgetsByCategory(widgets){
+    var orderMap = new Map(homeWidgetCategories.map(function(cat, idx){ return [cat, idx]; }));
+    return widgets.slice().sort(function(a, b){
+      var catA = orderMap.get(a.category);
+      var catB = orderMap.get(b.category);
+      if (catA !== catB) return (catA ?? 999) - (catB ?? 999);
+      var orderA = a.order ?? a.defaultOrder ?? 0;
+      var orderB = b.order ?? b.defaultOrder ?? 0;
+      if (orderA !== orderB) return orderA - orderB;
+      return a.title.localeCompare(b.title);
+    });
+  }
+
+  function sortWidgetsByOrder(widgets){
+    return widgets.slice().sort(function(a, b){
+      var orderA = a.order ?? a.defaultOrder ?? 0;
+      var orderB = b.order ?? b.defaultOrder ?? 0;
+      return orderA - orderB;
+    });
+  }
+
+  function getWidgetByKey(key){
+    return homeWidgetState.find(function(widget){ return widget.key === key; });
+  }
+
+  function isWidgetEnabled(key){
+    var widget = getWidgetByKey(key);
+    return widget ? !!widget.enabled : false;
+  }
+
+  function hasEnabledWidgets(keys){
+    return keys.some(function(key){ return isWidgetEnabled(key); });
+  }
+
+  function getWidgetsBySlot(slot){
+    return homeWidgetState.filter(function(widget){ return widget.slot === slot; });
+  }
+
+  function ensureWidgetDrawer(){
+    if ($('#widgetDrawer')) return;
+
+    var overlay = document.createElement('div');
+    overlay.className = 'drawer-overlay';
+    overlay.id = 'widgetDrawerOverlay';
+
+    var drawer = document.createElement('div');
+    drawer.className = 'drawer';
+    drawer.id = 'widgetDrawer';
+    drawer.setAttribute('role', 'dialog');
+    drawer.setAttribute('aria-modal', 'true');
+    drawer.innerHTML =
+      '<div class="drawer-header">'
+        + '<div>'
+          + '<div class="title">Home screen widgets</div>'
+          + '<div class="muted" style="font-size:13px;">Tick to show a widget. Untick to hide it.</div>'
+        + '</div>'
+        + '<button class="drawer-close" id="widgetDrawerClose" aria-label="Close widgets panel">✕</button>'
+      + '</div>'
+      + '<div id="widgetDrawerError" class="error-inline" style="display:none;"></div>'
+      + '<div id="widgetDrawerBody"></div>';
+
+    document.body.appendChild(overlay);
+    document.body.appendChild(drawer);
+
+    overlay.addEventListener('click', function(){ closeWidgetDrawer(); });
+    $('#widgetDrawerClose').addEventListener('click', function(){ closeWidgetDrawer(); });
+
+    document.addEventListener('keydown', function(e){
+      if (e.key === 'Escape') closeWidgetDrawer();
+    });
+  }
+
+  function openWidgetDrawer(){
+    ensureWidgetDrawer();
+    var overlay = $('#widgetDrawerOverlay');
+    var drawer = $('#widgetDrawer');
+    if (overlay) overlay.classList.add('open');
+    if (drawer) drawer.classList.add('open');
+  }
+
+  function closeWidgetDrawer(){
+    var overlay = $('#widgetDrawerOverlay');
+    var drawer = $('#widgetDrawer');
+    if (overlay) overlay.classList.remove('open');
+    if (drawer) drawer.classList.remove('open');
+  }
+
+  function renderWidgetDrawer(){
+    var body = $('#widgetDrawerBody');
+    if (!body) return;
+
+    var errorEl = $('#widgetDrawerError');
+    if (errorEl){
+      if (homeWidgetError){
+        errorEl.textContent = homeWidgetError;
+        errorEl.style.display = 'block';
+      }else{
+        errorEl.textContent = '';
+        errorEl.style.display = 'none';
+      }
+    }
+
+    var grouped = sortWidgetsByCategory(homeWidgetState).reduce(function(acc, widget){
+      if (!acc[widget.category]) acc[widget.category] = [];
+      acc[widget.category].push(widget);
+      return acc;
+    }, {});
+
+    body.innerHTML = homeWidgetCategories.map(function(category){
+      var items = grouped[category] || [];
+      if (!items.length) return '';
+      var rows = items.map(function(widget){
+        var isLoading = homeWidgetLoading.has(widget.key);
+        var checked = widget.enabled ? 'checked' : '';
+        var status = isLoading ? '<div class="widget-toggle-status">Saving…</div>' : '';
+        return (
+          '<label class="widget-toggle' + (isLoading ? ' is-loading' : '') + '" data-widget-key="' + widget.key + '">'
+          + '<input type="checkbox" ' + checked + ' ' + (isLoading ? 'disabled' : '') + ' />'
+          + '<div>'
+          + '<div class="widget-toggle-title">' + widget.title + '</div>'
+          + status
+          + '</div>'
+          + '</label>'
+        );
+      }).join('');
+
+      return (
+        '<div class="widget-group">'
+        + '<div class="widget-group-title">' + category + '</div>'
+        + rows
+        + '</div>'
+      );
+    }).join('');
+
+    $$('#widgetDrawerBody .widget-toggle input').forEach(function(input){
+      input.addEventListener('change', function(){
+        var row = input.closest('.widget-toggle');
+        if (!row) return;
+        var key = row.getAttribute('data-widget-key');
+        if (!key) return;
+        var enabled = !!input.checked;
+        updateHomeWidgetPreference(key, enabled);
+      });
+    });
+  }
+
+  function renderDashboardLayout(){
+    if (!main) return;
+    var dashboard = $('#dashboardRoot');
+    if (!dashboard) return;
+
+    var heroCards = '';
+    if (isWidgetEnabled('daily_performance_chart')){
+      heroCards += ''
+        + '<div class="card" id="heroCard">'
+        +   '<div class="header">'
+        +     '<div>'
+        +       '<div class="title">Daily Performance</div>'
+        +       '<div class="muted">Last 30 days · Europe/London</div>'
+        +     '</div>'
+        +     '<div class="row chart-toggles" id="chartToggles"></div>'
+        +   '</div>'
+        +   '<div id="chartBody">'
+        +     '<div class="skeleton skeleton-line" style="height:200px;"></div>'
+        +   '</div>'
+        + '</div>';
+    }
+    if (isWidgetEnabled('early_warnings')){
+      heroCards += ''
+        + '<div class="card" id="alertsCard">'
+        +   '<div class="header"><div class="title">Early Warnings</div></div>'
+        +   '<div id="alertsBody">'
+        +     '<div class="skeleton skeleton-line"></div>'
+        +     '<div class="skeleton skeleton-line" style="margin-top:8px;"></div>'
+        +   '</div>'
+        + '</div>';
+    }
+
+    var heroSection = heroCards
+      ? '<section class="hero-grid" id="heroGrid">' + heroCards + '</section>'
+      : '';
+
+    var showCards = '';
+    if (isWidgetEnabled('top_performing_shows')){
+      showCards += ''
+        + '<div class="card" id="topShowsCard">'
+        +   '<div class="header"><div class="title">Top Performing Shows (7 days)</div></div>'
+        +   '<div id="topShowsBody"><div class="skeleton skeleton-line"></div></div>'
+        + '</div>';
+    }
+    if (isWidgetEnabled('needs_attention')){
+      showCards += ''
+        + '<div class="card" id="bottomShowsCard">'
+        +   '<div class="header"><div class="title">Needs Attention (7 days)</div></div>'
+        +   '<div id="bottomShowsBody"><div class="skeleton skeleton-line"></div></div>'
+        + '</div>';
+    }
+
+    var showsSection = showCards
+      ? '<section class="grid grid-2" id="showsGrid">' + showCards + '</section>'
+      : '';
+
+    var extraCards = '';
+    if (isWidgetEnabled('upcoming_shows_at_risk')){
+      extraCards += ''
+        + '<div class="card" id="riskShowsCard">'
+        +   '<div class="header"><div class="title">Upcoming shows at risk</div></div>'
+        +   '<div id="riskShowsBody"><div class="skeleton skeleton-line"></div></div>'
+        + '</div>';
+    }
+    if (isWidgetEnabled('top_referral_sources')){
+      extraCards += ''
+        + '<div class="card" id="referralSourcesCard">'
+        +   '<div class="header"><div class="title">Top referral sources (30 days)</div></div>'
+        +   '<div id="referralSourcesBody"><div class="skeleton skeleton-line"></div></div>'
+        + '</div>';
+    }
+
+    var extraSection = extraCards
+      ? '<section class="grid grid-2" id="extraWidgetsGrid">' + extraCards + '</section>'
+      : '';
+
+    var customerSection = isWidgetEnabled('customer_snapshot')
+      ? '<section class="card" id="customerCard">'
+          + '<div class="header"><div class="title">Customer Behaviour Snapshot</div></div>'
+          + '<div id="customerBody">'
+          +   '<div class="skeleton skeleton-line"></div>'
+          +   '<div class="skeleton skeleton-line" style="margin-top:8px;"></div>'
+          + '</div>'
+        + '</section>'
+      : '';
+
+    dashboard.innerHTML =
+      '<section class="kpi-grid" id="kpiGrid"></section>'
+      + heroSection
+      + showsSection
+      + extraSection
+      + customerSection;
+
+    renderKpiSkeletons();
+  }
+
+  function renderKpiSkeletons(){
+    var grid = $('#kpiGrid');
+    if (!grid) return;
+    var tiles = sortWidgetsByOrder(getWidgetsBySlot('tile')).filter(function(widget){ return widget.enabled; });
+    var skeletons = tiles.map(function(){ return '<div class="kpi-card skeleton skeleton-tile"></div>'; }).join('');
+    grid.innerHTML = skeletons + renderAddWidgetTile();
+    bindAddWidgetTile();
+  }
+
+  async function updateHomeWidgetPreference(widgetKey, enabled){
+    homeWidgetLoading.add(widgetKey);
+    var widget = getWidgetByKey(widgetKey);
+    if (widget) widget.enabled = enabled;
+    renderDashboardLayout();
+    renderWidgetDrawer();
+    renderDashboardData();
+
+    try{
+      var res = await j('/admin-ui/api/home-widgets', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ widgetKey: widgetKey, enabled: enabled })
+      });
+      if (res && res.widgets){
+        homeWidgetRegistry = res.registry || homeWidgetRegistry;
+        homeWidgetState = res.widgets;
+        homeWidgetError = '';
+      }else{
+        throw new Error('Failed to save widget settings');
+      }
+    }catch(e){
+      homeWidgetError = 'Could not save that change. Please try again.';
+      if (widget) widget.enabled = !enabled;
+    }finally{
+      homeWidgetLoading.delete(widgetKey);
+      renderDashboardLayout();
+      renderWidgetDrawer();
+      renderDashboardData();
+    }
+  }
+
+  async function loadHomeWidgets(){
+    try{
+      var data = await j('/admin-ui/api/home-widgets');
+      if (data && data.widgets){
+        homeWidgetRegistry = data.registry || homeWidgetRegistry;
+        homeWidgetState = data.widgets;
+        homeWidgetError = '';
+      }else{
+        throw new Error('Failed to load widgets');
+      }
+    }catch(e){
+      homeWidgetError = 'Could not load widget preferences. Showing defaults.';
+      homeWidgetState = sortWidgetsByCategory(buildDefaultWidgets());
+    }
+  }
+
   function home(){
     if (!main) return;
-    main.innerHTML =
-      '<div class="dashboard">'
-      +  '<section class="kpi-grid" id="kpiGrid">'
-      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
-      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
-      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
-      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
-      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
-      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
-      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
-      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
-      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
-      +  '</section>'
-      +  '<section class="hero-grid">'
-      +    '<div class="card" id="heroCard">'
-      +      '<div class="header">'
-      +        '<div>'
-      +          '<div class="title">Daily Performance</div>'
-      +          '<div class="muted">Last 30 days · Europe/London</div>'
-      +        '</div>'
-      +        '<div class="row chart-toggles" id="chartToggles"></div>'
-      +      '</div>'
-      +      '<div id="chartBody">'
-      +        '<div class="skeleton skeleton-line" style="height:200px;"></div>'
-      +      '</div>'
-      +    '</div>'
-      +    '<div class="card" id="alertsCard">'
-      +      '<div class="header"><div class="title">Early Warnings</div></div>'
-      +      '<div id="alertsBody">'
-      +        '<div class="skeleton skeleton-line"></div>'
-      +        '<div class="skeleton skeleton-line" style="margin-top:8px;"></div>'
-      +      '</div>'
-      +    '</div>'
-      +  '</section>'
-      +  '<section class="grid grid-2" id="showsGrid">'
-      +    '<div class="card" id="topShowsCard">'
-      +      '<div class="header"><div class="title">Top Performing Shows (7 days)</div></div>'
-      +      '<div id="topShowsBody"><div class="skeleton skeleton-line"></div></div>'
-      +    '</div>'
-      +    '<div class="card" id="bottomShowsCard">'
-      +      '<div class="header"><div class="title">Needs Attention (7 days)</div></div>'
-      +      '<div id="bottomShowsBody"><div class="skeleton skeleton-line"></div></div>'
-      +    '</div>'
-      +  '</section>'
-      +  '<section class="card" id="customerCard">'
-      +    '<div class="header"><div class="title">Customer Behaviour Snapshot</div></div>'
-      +    '<div id="customerBody">'
-      +      '<div class="skeleton skeleton-line"></div>'
-      +      '<div class="skeleton skeleton-line" style="margin-top:8px;"></div>'
-      +    '</div>'
-      +  '</section>'
-      +'</div>';
-
-    renderDashboard();
+    main.innerHTML = '<div class="dashboard" id="dashboardRoot"></div>';
+    ensureWidgetDrawer();
+    loadHomeWidgets().then(function(){
+      renderDashboardLayout();
+      renderWidgetDrawer();
+      renderDashboardData();
+    });
   }
 
   const fmtMoney = new Intl.NumberFormat('en-GB', {
@@ -1698,76 +2032,158 @@ document.addEventListener('click', function(e){
     return fmtMoney.format((pence || 0) / 100);
   }
 
-  function renderKpiTiles(summary, kickback){
+  function renderAddWidgetTile(){
+    return (
+      '<button class="kpi-card add-widget-card" id="openWidgetDrawer" type="button">'
+      + '<div class="plus">＋</div>'
+      + '<div>Add or edit widgets on your home screen</div>'
+      + '</button>'
+    );
+  }
+
+  function bindAddWidgetTile(){
+    var tile = $('#openWidgetDrawer');
+    if (!tile) return;
+    tile.addEventListener('click', function(){ openWidgetDrawer(); });
+  }
+
+  function renderKpiTiles(summary, kickback, extras){
     var grid = $('#kpiGrid');
     if (!grid) return;
 
-    var tiles = [
-      {
-        label: 'Tickets sold (7d)',
-        value: fmtNumber.format(summary.current.tickets || 0),
-        delta: summary.comparisons.tickets
-      },
-      {
-        label: 'Orders (7d)',
-        value: fmtNumber.format(summary.current.orders || 0),
-        delta: summary.comparisons.orders
-      },
-      {
-        label: 'Gross revenue (7d)',
-        value: formatMoney(summary.current.gross || 0),
-        delta: summary.comparisons.gross
-      },
-      {
-        label: 'Net revenue (7d)',
-        value: formatMoney(summary.current.net || 0),
-        delta: summary.comparisons.net
-      },
-      {
-        label: 'Average order value',
-        value: formatMoney(summary.current.aov || 0),
-        delta: summary.comparisons.aov
-      },
-      {
-        label: 'New customers (7d)',
-        value: fmtNumber.format(summary.current.newCustomers || 0),
-        delta: summary.comparisons.newCustomers
-      },
-      {
-        label: 'Returning customers (7d)',
-        value: fmtNumber.format(summary.current.returningCustomers || 0),
-        delta: summary.comparisons.returningCustomers
-      },
-      {
-        label: 'Refunds (7d)',
-        value: formatMoney(summary.current.refunds || 0),
-        sub: fmtNumber.format(summary.current.refundsCount || 0) + ' refunds',
-        delta: summary.comparisons.refunds
-      }
-    ];
+    var safeSummary = summary || { current: {}, comparisons: {} };
+    var safeExtras = extras || {};
 
-    var html = tiles.map(function(tile){
+    function baseTile(opts){
+      var metaHtml = '';
+      if (opts.delta !== undefined && opts.delta !== null){
+        metaHtml = '<div class="kpi-meta">vs prev 7d ' + renderDelta(opts.delta) + '</div>';
+      }else if (opts.meta){
+        metaHtml = '<div class="kpi-meta">' + opts.meta + '</div>';
+      }
       return (
         '<div class="kpi-card">'
-        + '<div class="kpi-label">' + tile.label + '</div>'
-        + '<div class="kpi-value">' + tile.value + '</div>'
-        + (tile.sub ? '<div class="muted" style="font-size:12px;">' + tile.sub + '</div>' : '')
-        + '<div class="kpi-meta">vs prev 7d ' + renderDelta(tile.delta) + '</div>'
+        + '<div class="kpi-label">' + opts.label + '</div>'
+        + '<div class="kpi-value">' + opts.value + '</div>'
+        + (opts.sub ? '<div class="muted" style="font-size:12px;">' + opts.sub + '</div>' : '')
+        + metaHtml
         + '</div>'
       );
-    }).join('');
+    }
 
-    var kick = kickback || { last7: 0, mtd: 0, last52w: 0 };
-    html += (
-      '<div class="kpi-card booking-kickback">'
-      + '<div class="kpi-label">Booking Fee Kickback</div>'
-      + '<div class="kick-row"><span>7 days</span><strong>' + formatMoney(kick.last7 || 0) + '</strong></div>'
-      + '<div class="kick-row"><span>This month</span><strong>' + formatMoney(kick.mtd || 0) + '</strong></div>'
-      + '<div class="kick-row"><span>52 weeks</span><strong>' + formatMoney(kick.last52w || 0) + '</strong></div>'
-      + '</div>'
-    );
+    function bookingFeeTile(){
+      var kick = kickback || { last7: 0, mtd: 0, last52w: 0 };
+      return (
+        '<div class="kpi-card booking-kickback">'
+        + '<div class="kpi-label">Booking Fee Kickback</div>'
+        + '<div class="kick-row"><span>7 days</span><strong>' + formatMoney(kick.last7 || 0) + '</strong></div>'
+        + '<div class="kick-row"><span>This month</span><strong>' + formatMoney(kick.mtd || 0) + '</strong></div>'
+        + '<div class="kick-row"><span>52 weeks</span><strong>' + formatMoney(kick.last52w || 0) + '</strong></div>'
+        + '</div>'
+      );
+    }
 
-    grid.innerHTML = html;
+    var tilesHtml = '';
+    var tileWidgets = sortWidgetsByOrder(getWidgetsBySlot('tile'));
+
+    tileWidgets.forEach(function(widget){
+      if (!widget.enabled) return;
+      if (widget.key === 'tickets_sold_7d'){
+        tilesHtml += baseTile({
+          label: 'Tickets sold (7d)',
+          value: fmtNumber.format(safeSummary.current.tickets || 0),
+          delta: safeSummary.comparisons.tickets
+        });
+      }else if (widget.key === 'orders_7d'){
+        tilesHtml += baseTile({
+          label: 'Orders (7d)',
+          value: fmtNumber.format(safeSummary.current.orders || 0),
+          delta: safeSummary.comparisons.orders
+        });
+      }else if (widget.key === 'gross_revenue_7d'){
+        tilesHtml += baseTile({
+          label: 'Gross revenue (7d)',
+          value: formatMoney(safeSummary.current.gross || 0),
+          delta: safeSummary.comparisons.gross
+        });
+      }else if (widget.key === 'net_revenue_7d'){
+        tilesHtml += baseTile({
+          label: 'Net revenue (7d)',
+          value: formatMoney(safeSummary.current.net || 0),
+          delta: safeSummary.comparisons.net
+        });
+      }else if (widget.key === 'average_order_value'){
+        tilesHtml += baseTile({
+          label: 'Average order value',
+          value: formatMoney(safeSummary.current.aov || 0),
+          delta: safeSummary.comparisons.aov
+        });
+      }else if (widget.key === 'new_customers_7d'){
+        tilesHtml += baseTile({
+          label: 'New customers (7d)',
+          value: fmtNumber.format(safeSummary.current.newCustomers || 0),
+          delta: safeSummary.comparisons.newCustomers
+        });
+      }else if (widget.key === 'returning_customers_7d'){
+        tilesHtml += baseTile({
+          label: 'Returning customers (7d)',
+          value: fmtNumber.format(safeSummary.current.returningCustomers || 0),
+          delta: safeSummary.comparisons.returningCustomers
+        });
+      }else if (widget.key === 'refunds_7d'){
+        tilesHtml += baseTile({
+          label: 'Refunds (7d)',
+          value: formatMoney(safeSummary.current.refunds || 0),
+          sub: fmtNumber.format(safeSummary.current.refundsCount || 0) + ' refunds',
+          delta: safeSummary.comparisons.refunds
+        });
+      }else if (widget.key === 'capacity_sold_next_30'){
+        var capData = safeExtras.capacitySoldNext30 || { sold: 0, capacity: 0 };
+        var pct = capData.capacity ? (capData.sold / capData.capacity) * 100 : null;
+        tilesHtml += baseTile({
+          label: 'Capacity sold (next 30 days)',
+          value: pct === null ? '—' : fmtPercent.format(pct) + '%',
+          sub: capData.capacity
+            ? fmtNumber.format(capData.sold || 0) + ' of ' + fmtNumber.format(capData.capacity) + ' tickets'
+            : 'Capacity not set',
+          meta: 'Next 30 days'
+        });
+      }else if (widget.key === 'sales_velocity_7d'){
+        var tickets = safeSummary.current.tickets || 0;
+        var perDay = tickets / 7;
+        tilesHtml += baseTile({
+          label: 'Sales velocity (7 days)',
+          value: fmtNumber.format(Math.round(perDay * 10) / 10) + ' / day',
+          delta: safeSummary.comparisons.tickets
+        });
+      }else if (widget.key === 'fees_breakdown_7d'){
+        var bookingFees = safeSummary.current.platformFees || 0;
+        var processingFees = safeSummary.current.paymentFees || 0;
+        tilesHtml += baseTile({
+          label: 'Fees breakdown (7 days)',
+          value: formatMoney(bookingFees),
+          sub: 'Processing ' + formatMoney(processingFees),
+          meta: 'Net ' + formatMoney(safeSummary.current.net || 0)
+        });
+      }else if (widget.key === 'abandoned_checkouts_7d'){
+        var abandon = safeExtras.abandonedCheckouts || { count: 0 };
+        tilesHtml += baseTile({
+          label: 'Abandoned checkouts (7 days)',
+          value: fmtNumber.format(abandon.count || 0),
+          meta: 'Pending > 30 mins'
+        });
+      }else if (widget.key === 'booking_fee_kickback'){
+        tilesHtml += bookingFeeTile();
+        tilesHtml += renderAddWidgetTile();
+      }
+    });
+
+    if (!tilesHtml.includes('add-widget-card')){
+      tilesHtml += renderAddWidgetTile();
+    }
+
+    grid.innerHTML = tilesHtml;
+    bindAddWidgetTile();
   }
 
   var timeseriesCache = {};
@@ -2032,45 +2448,188 @@ document.addEventListener('click', function(e){
       + '</div>';
   }
 
-  async function renderDashboard(){
-    renderChartToggles();
-    loadTimeseries(chartMetric);
+  function renderUpcomingShowsAtRisk(shows){
+    var body = $('#riskShowsBody');
+    if (!body) return;
+
+    if (!shows || !shows.length){
+      body.innerHTML = '<div class="empty-state">No at-risk shows in the next few weeks.</div>';
+      return;
+    }
+
+    var head = '<div class="table-row head">'
+      + '<div>Show</div><div>Date</div><div>Sold</div><div>% sold</div>'
+      + '</div>';
+
+    var rows = shows.map(function(show){
+      var dateLabel = show.date ? fmtDateTime.format(new Date(show.date)) : 'TBC';
+      var soldLabel = show.capacity
+        ? fmtNumber.format(show.sold || 0) + ' / ' + fmtNumber.format(show.capacity)
+        : '—';
+      var pctLabel = show.capacityPct === null || show.capacityPct === undefined
+        ? '—'
+        : fmtPercent.format(show.capacityPct) + '%';
+      return (
+        '<div class="table-row">'
+        + '<div><div>' + escapeHtml(show.title) + '</div>'
+        + (show.venue ? '<div class="muted" style="font-size:11px;">' + escapeHtml(show.venue) + '</div>' : '')
+        + '</div>'
+        + '<div>' + dateLabel + '</div>'
+        + '<div>' + soldLabel + '</div>'
+        + '<div>' + pctLabel + '</div>'
+        + '</div>'
+      );
+    }).join('');
+
+    body.innerHTML = '<div class="table-list">' + head + rows + '</div>';
+  }
+
+  function renderReferralSources(data){
+    var body = $('#referralSourcesBody');
+    if (!body) return;
+
+    if (!data || data.trackingEnabled === false){
+      body.innerHTML = '<div class="empty-state">Tracking not enabled yet.</div>';
+      return;
+    }
+
+    var sources = data.sources || data.items || [];
+    if (!sources.length){
+      body.innerHTML = '<div class="empty-state">No referral sources yet.</div>';
+      return;
+    }
+
+    var head = '<div class="table-row head"><div>Source</div><div>Orders</div></div>';
+    var rows = sources.map(function(item){
+      return (
+        '<div class="table-row">'
+        + '<div>' + escapeHtml(item.source || 'Unknown') + '</div>'
+        + '<div>' + fmtNumber.format(item.orders || 0) + '</div>'
+        + '</div>'
+      );
+    }).join('');
+
+    body.innerHTML = '<div class="table-list">' + head + rows + '</div>';
+  }
+
+  async function renderDashboardData(){
+    var needsChart = isWidgetEnabled('daily_performance_chart');
+    var needsAlerts = isWidgetEnabled('early_warnings');
+    var needsShows = isWidgetEnabled('top_performing_shows') || isWidgetEnabled('needs_attention');
+    var needsCustomer = isWidgetEnabled('customer_snapshot');
+    var needsSummary = hasEnabledWidgets([
+      'tickets_sold_7d',
+      'orders_7d',
+      'gross_revenue_7d',
+      'net_revenue_7d',
+      'average_order_value',
+      'new_customers_7d',
+      'returning_customers_7d',
+      'refunds_7d',
+      'sales_velocity_7d',
+      'fees_breakdown_7d',
+      'customer_snapshot'
+    ]);
+    var needsKickback = isWidgetEnabled('booking_fee_kickback');
+    var needsExtras = hasEnabledWidgets([
+      'capacity_sold_next_30',
+      'upcoming_shows_at_risk',
+      'abandoned_checkouts_7d',
+      'top_referral_sources'
+    ]);
+
+    if (needsChart){
+      renderChartToggles();
+      loadTimeseries(chartMetric);
+    }
+
+    var fetches = {};
+    if (needsSummary) fetches.summary = j('/admin/api/dashboard/summary?range=7d');
+    if (needsKickback) fetches.kickback = j('/admin/api/dashboard/booking-fee-kickback');
+    if (needsShows) fetches.topShows = j('/admin/api/dashboard/top-shows?range=7d');
+    if (needsAlerts) fetches.alerts = j('/admin/api/dashboard/alerts');
+    if (needsExtras) fetches.extras = j('/admin/api/dashboard/home-widgets');
+
+    var keys = Object.keys(fetches);
+    if (!keys.length){
+      renderKpiTiles(null, null, null);
+      return;
+    }
 
     try{
-      var results = await Promise.allSettled([
-        j('/admin/api/dashboard/summary?range=7d'),
-        j('/admin/api/dashboard/booking-fee-kickback'),
-        j('/admin/api/dashboard/top-shows?range=7d'),
-        j('/admin/api/dashboard/alerts')
-      ]);
+      var results = await Promise.allSettled(keys.map(function(key){ return fetches[key]; }));
+      var data = {};
+      keys.forEach(function(key, idx){
+        if (results[idx].status === 'fulfilled') data[key] = results[idx].value;
+      });
 
-      var summary = results[0].status === 'fulfilled' ? results[0].value : null;
-      var kickback = results[1].status === 'fulfilled' ? results[1].value : null;
-      var topShows = results[2].status === 'fulfilled' ? results[2].value : null;
-      var alerts = results[3].status === 'fulfilled' ? results[3].value : null;
+      var summary = data.summary;
+      var kickback = data.kickback;
+      var extras = data.extras;
 
-      if (!summary || !summary.ok){
-        $('#kpiGrid').innerHTML = '<div class="error-inline">Summary failed to load.</div>';
+      if (needsSummary){
+        if (!summary || !summary.ok){
+          var grid = $('#kpiGrid');
+          if (grid) grid.innerHTML = '<div class="error-inline">Summary failed to load.</div>';
+        }else{
+          renderKpiTiles(summary, kickback, extras);
+          if (needsCustomer) renderCustomerSnapshot(summary.customerSnapshot);
+        }
       }else{
-        renderKpiTiles(summary, kickback);
-        renderCustomerSnapshot(summary.customerSnapshot);
+        renderKpiTiles(summary && summary.ok ? summary : null, kickback, extras);
       }
 
-      if (!topShows || !topShows.ok){
-        $('#topShowsBody').innerHTML = '<div class="error-inline">Top shows failed to load.</div>';
-        $('#bottomShowsBody').innerHTML = '<div class="error-inline">Shows failed to load.</div>';
-      }else{
-        renderShows('topShowsBody', topShows.top);
-        renderShows('bottomShowsBody', topShows.bottom);
+      if (needsShows){
+        if (!data.topShows || !data.topShows.ok){
+          if (isWidgetEnabled('top_performing_shows')){
+            var topBody = $('#topShowsBody');
+            if (topBody) topBody.innerHTML = '<div class="error-inline">Top shows failed to load.</div>';
+          }
+          if (isWidgetEnabled('needs_attention')){
+            var bottomBody = $('#bottomShowsBody');
+            if (bottomBody) bottomBody.innerHTML = '<div class="error-inline">Shows failed to load.</div>';
+          }
+        }else{
+          if (isWidgetEnabled('top_performing_shows')){
+            renderShows('topShowsBody', data.topShows.top);
+          }
+          if (isWidgetEnabled('needs_attention')){
+            renderShows('bottomShowsBody', data.topShows.bottom);
+          }
+        }
       }
 
-      if (!alerts || !alerts.ok){
-        $('#alertsBody').innerHTML = '<div class="error-inline">Alerts failed to load.</div>';
-      }else{
-        renderAlerts(alerts);
+      if (needsAlerts){
+        if (!data.alerts || !data.alerts.ok){
+          var alertsBody = $('#alertsBody');
+          if (alertsBody) alertsBody.innerHTML = '<div class="error-inline">Alerts failed to load.</div>';
+        }else{
+          renderAlerts(data.alerts);
+        }
+      }
+
+      if (needsExtras){
+        if (!extras || !extras.ok){
+          if (isWidgetEnabled('upcoming_shows_at_risk')){
+            var riskBody = $('#riskShowsBody');
+            if (riskBody) riskBody.innerHTML = '<div class="error-inline">Shows failed to load.</div>';
+          }
+          if (isWidgetEnabled('top_referral_sources')){
+            var referralBody = $('#referralSourcesBody');
+            if (referralBody) referralBody.innerHTML = '<div class="error-inline">Sources failed to load.</div>';
+          }
+        }else{
+          if (isWidgetEnabled('upcoming_shows_at_risk')){
+            renderUpcomingShowsAtRisk(extras.upcomingShowsAtRisk);
+          }
+          if (isWidgetEnabled('top_referral_sources')){
+            renderReferralSources(extras.referralSources);
+          }
+        }
       }
     }catch(e){
-      $('#kpiGrid').innerHTML = '<div class="error-inline">Dashboard failed to load.</div>';
+      var grid = $('#kpiGrid');
+      if (grid) grid.innerHTML = '<div class="error-inline">Dashboard failed to load.</div>';
     }
   }
 
