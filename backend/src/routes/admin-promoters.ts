@@ -1,22 +1,23 @@
 import { Router } from "express";
 import Busboy from "busboy";
 import crypto from "node:crypto";
+import { Prisma, PromoterDocumentType } from "@prisma/client";
 import prisma from "../lib/prisma.js";
 import { requireAdminOrOrganiser } from "../lib/authz.js";
 import { uploadToR2 } from "../lib/upload-r2.js";
 
 const router = Router();
 
-const DOC_TYPES = new Set([
-  "PRS_CERTIFICATE",
-  "PPL_MUSIC_LICENSING",
-  "PUBLIC_LIABILITY_INSURANCE",
-  "RISK_ASSESSMENT",
-  "TECH_SPEC",
-  "MARKETING_SPEC",
-  "ACCESSIBILITY_INFO",
-  "BRANDING_GUIDELINES",
-  "OTHER",
+const DOC_TYPES = new Set<PromoterDocumentType>([
+  PromoterDocumentType.PRS_CERTIFICATE,
+  PromoterDocumentType.PPL_MUSIC_LICENSING,
+  PromoterDocumentType.PUBLIC_LIABILITY_INSURANCE,
+  PromoterDocumentType.RISK_ASSESSMENT,
+  PromoterDocumentType.TECH_SPEC,
+  PromoterDocumentType.MARKETING_SPEC,
+  PromoterDocumentType.ACCESSIBILITY_INFO,
+  PromoterDocumentType.BRANDING_GUIDELINES,
+  PromoterDocumentType.OTHER,
 ]);
 const STATUS_VALUES = new Set(["PROSPECT", "ACTIVE", "DORMANT", "BLOCKED"]);
 
@@ -34,17 +35,25 @@ function normaliseStatus(value: unknown): "PROSPECT" | "ACTIVE" | "DORMANT" | "B
   return "PROSPECT";
 }
 
+function parseDocType(value: unknown): PromoterDocumentType | null {
+  const type = String(value || PromoterDocumentType.OTHER).toUpperCase();
+  if (DOC_TYPES.has(type as PromoterDocumentType)) {
+    return type as PromoterDocumentType;
+  }
+  return null;
+}
+
 async function logActivity(
   promoterId: string,
   type: "CREATED" | "UPDATED" | "CONTACT_ADDED" | "CONTACT_UPDATED" | "CONTACT_REMOVED" | "DOCUMENT_UPLOADED" | "DOCUMENT_UPDATED" | "DOCUMENT_REMOVED",
-  metadata: Record<string, unknown> | null,
+  metadata: Prisma.InputJsonValue | null,
   actorId: string | null
 ) {
   await prisma.promoterActivity.create({
     data: {
       promoterId,
       type,
-      metadata: metadata || undefined,
+      metadata: metadata ?? undefined,
       createdByUserId: actorId,
     },
   });
@@ -278,14 +287,14 @@ router.post("/promoters/:promoterId/documents", requireAdminOrOrganiser, async (
     const promoterId = String(req.params.promoterId);
     const title = toNullableString(req.body?.title);
     const fileUrl = toNullableString(req.body?.fileUrl);
-    const type = String(req.body?.type || "OTHER");
+    const type = parseDocType(req.body?.type);
     if (!title) {
       return res.status(400).json({ ok: false, error: "Document title is required" });
     }
     if (!fileUrl) {
       return res.status(400).json({ ok: false, error: "File URL is required" });
     }
-    if (!DOC_TYPES.has(type)) {
+    if (!type) {
       return res.status(400).json({ ok: false, error: "Document type is invalid" });
     }
 
@@ -386,7 +395,8 @@ router.post("/promoters/documents/upload", requireAdminOrOrganiser, async (req, 
     const dd = String(date.getUTCDate()).padStart(2, "0");
     const key = `promoters/documents/${yyyy}-${mm}-${dd}/${crypto.randomUUID()}-${safeBase}`;
 
-    const put = await uploadToR2(key, rawBuffer, {
+    const buffer: Buffer = rawBuffer ?? Buffer.alloc(0);
+    const put = await uploadToR2(key, buffer, {
       contentType: mimeType,
       cacheControl: "public, max-age=31536000, immutable",
     });
@@ -400,7 +410,7 @@ router.post("/promoters/documents/upload", requireAdminOrOrganiser, async (req, 
       url: `${put.publicBase}/${key}`,
       name: filename,
       mime: mimeType,
-      size: rawBuffer.length,
+      size: buffer.length,
     });
   } catch (err: any) {
     console.error("promoter document upload failed", err);
