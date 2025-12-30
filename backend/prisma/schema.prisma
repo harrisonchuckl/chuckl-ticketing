@@ -555,7 +555,7 @@ model MarketingContact {
 
   tenant    User @relation(fields: [tenantId], references: [id])
 
-  consent    MarketingConsent?
+  consents   MarketingConsent[]
   tags       MarketingContactTag[]
   recipients MarketingCampaignRecipient[]
   events     MarketingEmailEvent[]
