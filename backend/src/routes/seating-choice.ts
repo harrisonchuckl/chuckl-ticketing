@@ -1361,12 +1361,18 @@ if (!initialTickets.length) {
         : null,
     };
 
+  const isEditMode = Boolean(
+    show.status === "LIVE" ||
+    show.publishedAt ||
+    (show.ticketTypes && show.ticketTypes.length)
+  );
+
   const body = `
   <section class="tickets-card">
     <header class="tickets-header">
       <div>
         <div class="eyebrow">Unallocated seating</div>
-        <h2>Create tickets</h2>
+        <h2>${isEditMode ? "Edit tickets" : "Create tickets"}</h2>
         <p class="subtext">Add ticket types, then click a ticket to edit details in a side panel.</p>
       </div>
 
@@ -1400,7 +1406,9 @@ if (!initialTickets.length) {
 </button>
       <div class="action-spacer"></div>
       <button class="ghost-button" type="button" id="save-tickets">Save tickets</button>
-      <button class="primary-button" type="button" id="publish">Create &amp; publish show</button>
+      <button class="primary-button" type="button" id="publish">${
+        isEditMode ? "Save and update tickets" : "Create &amp; publish show"
+      }</button>
     </div>
 
     <div class="status-row" id="status-row"></div>
@@ -1428,6 +1436,7 @@ if (!initialTickets.length) {
   <script>
     (function () {
       var showId = ${JSON.stringify(showId)};
+      var isEditMode = ${JSON.stringify(isEditMode)};
       var initialTickets = ${JSON.stringify(initialTickets)};
       var showMeta = ${JSON.stringify(showMeta)};
       var prefillInfo = ${JSON.stringify(prefillInfo)};
@@ -1944,6 +1953,18 @@ method: "PUT",
         }
       }
 
+      async function updateTicketsAndExit() {
+        try {
+          var ok = await saveTickets();
+          if (!ok) return;
+          showStatus("Tickets updated. Redirecting…", "success");
+          window.location.href = "/admin/ui/shows/" + showId + "/summary";
+        } catch (err) {
+          showStatus(err && err.message ? err.message : "Update failed", "error");
+          console.error(err);
+        }
+      }
+
       // Buttons
       var addBtn = document.getElementById("add-ticket");
       if (addBtn) {
@@ -1969,7 +1990,13 @@ method: "PUT",
       if (saveBtn) saveBtn.addEventListener("click", function(){ saveTickets(); });
 
       var publishBtn = document.getElementById("publish");
-      if (publishBtn) publishBtn.addEventListener("click", function(){ publishShow(); });
+      if (publishBtn) publishBtn.addEventListener("click", function(){
+        if (isEditMode) {
+          updateTicketsAndExit();
+          return;
+        }
+        publishShow();
+      });
 
       // Drawer close handlers
       function doneHandler(){
@@ -2018,9 +2045,9 @@ method: "PUT",
 
 
        const html = renderShell({
-      title: "Create unallocated tickets",
+      title: isEditMode ? "Edit tickets" : "Create unallocated tickets",
       body,
-      stepLabel: "Step 2 of 2 · Unallocated tickets",
+      stepLabel: isEditMode ? "Edit tickets" : "Step 2 of 2 · Unallocated tickets",
       showId,
       pageClass: "unallocated-page",
       hideHeaderText: true,

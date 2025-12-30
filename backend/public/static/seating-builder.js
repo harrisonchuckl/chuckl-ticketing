@@ -4838,10 +4838,18 @@ function applyAccessibilityVisualsOverride(seatCircle, group) {
       ticketFormAutoOffSale = true;
     }
     ensureTicketFormDefaults();
+    updatePublishButtonLabel();
 
     if (activeMainTab === "tickets") {
       renderTicketingPanel();
     }
+  }
+
+  function updatePublishButtonLabel() {
+    const btnPublish = document.getElementById("tb-btn-publish");
+    if (!btnPublish) return;
+    const isLive = showMeta && showMeta.status === "LIVE";
+    btnPublish.textContent = isLive ? "Update Show" : "Publish Show";
   }
 
   async function ensureShowMetaLoaded() {
@@ -8841,6 +8849,13 @@ function hookPhase1Buttons() {
 
   if (btnPublish) {
     btnPublish.addEventListener('click', () => {
+      const isLive = showMeta && showMeta.status === "LIVE";
+      if (isLive) {
+        const ok = confirm("Update this live show with your latest changes?");
+        if (!ok) return;
+        saveShowWithStatus('LIVE', `/admin/ui/shows/${showId}/summary`);
+        return;
+      }
       if (confirm("Are you sure you want to go LIVE? This will generate a public link.")) {
         // Save as Live -> Redirect to Summary
         // Redirect to admin summary page
@@ -9150,6 +9165,16 @@ function hookPhase1Buttons() {
   hookPhase1Buttons(); // Phase 1 Draft/Publish
   hookDeleteButton();
   syncDeleteButtonState();
+  updatePublishButtonLabel();
+
+  (async function () {
+    try {
+      await loadExistingLayout();
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("Error auto-loading seat map", err);
+    }
+  })();
 
   // Allow the top-bar dropdown (populated server-side) to trigger a layout load.
   // eslint-disable-next-line no-underscore-dangle
