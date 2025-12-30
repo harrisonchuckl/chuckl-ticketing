@@ -341,7 +341,7 @@ export async function applySuppression(
   });
 
   if (contact) {
-    let status = MarketingConsentStatus.UNSUBSCRIBED;
+    let status: MarketingConsentStatus = MarketingConsentStatus.UNSUBSCRIBED;
     if (type === MarketingSuppressionType.HARD_BOUNCE) status = MarketingConsentStatus.BOUNCED;
     if (type === MarketingSuppressionType.SPAM_COMPLAINT) status = MarketingConsentStatus.COMPLAINED;
 
