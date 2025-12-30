@@ -51,7 +51,7 @@ function compileMjml(mjmlBody: string): { html: string; errors: string[] } {
   let html = mjmlBody;
   html = html.replace(/<mjml[^>]*>/gi, '<html>');
   html = html.replace(/<\/mjml>/gi, '</html>');
-  html = html.replace(/<mj-head[^>]*>[\\s\\S]*?<\\/mj-head>/gi, '');
+  html = html.replace(/<mj-head[^>]*>[\s\S]*?<\/mj-head>/gi, '');
   html = html.replace(/<mj-body[^>]*>/gi, '<body>');
   html = html.replace(/<\/mj-body>/gi, '</body>');
   html = html.replace(/<mj-section[^>]*>/gi, '<div>');
