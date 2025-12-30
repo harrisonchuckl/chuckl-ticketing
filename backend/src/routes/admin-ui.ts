@@ -6727,15 +6727,17 @@ function renderInterests(customer){
     if (!main) return;
     main.innerHTML = '<div class="card"><div class="title">Audiences</div><div class="muted">Audience tools coming soon.</div></div>';
   }
-  function marketingPage(){
+  function marketingPage(options){
     if (!main) return;
+    var headerTitle = (options && options.title) || 'Marketing';
+    var headerSubtitle = (options && options.subtitle) || 'Build segments, templates, and campaigns.';
 
     main.innerHTML = ''
       + '<div class="card">'
       +   '<div class="header" style="gap:12px;align-items:center;">'
       +     '<div>'
-      +       '<div class="title">Marketing</div>'
-      +       '<div class="muted">Build segments, templates, and campaigns.</div>'
+      +       '<div class="title">' + escapeHtml(headerTitle) + '</div>'
+      +       '<div class="muted">' + escapeHtml(headerSubtitle) + '</div>'
       +     '</div>'
       +   '</div>'
       +   '<div class="row" style="gap:8px;margin-top:12px;flex-wrap:wrap;">'
@@ -7088,8 +7090,10 @@ function renderInterests(customer){
     loadCampaigns().catch(function(err){ sections.campaigns.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load campaigns') + '</div>'; });
   }
   function emailPage(){
-    if (!main) return;
-    main.innerHTML = '<div class="card"><div class="title">Email Campaigns</div><div class="muted">Email tools will plug into your marketing automation stack.</div></div>';
+    marketingPage({
+      title: 'Email Campaigns',
+      subtitle: 'Mailer-style journeys with contacts, segments, templates, and campaign sends.'
+    });
   }
   function finance(){
   if (!main) return;
