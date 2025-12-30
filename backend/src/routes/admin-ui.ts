@@ -895,6 +895,227 @@ router.get(
       padding:6px 8px;
       cursor:pointer;
     }
+    .orders-toolbar{
+      display:flex;
+      flex-wrap:wrap;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+    }
+    .orders-filters{
+      margin-top:12px;
+      display:grid;
+      gap:10px;
+      grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+    }
+    .orders-filters label{
+      font-size:12px;
+      font-weight:700;
+      color:var(--muted);
+      display:grid;
+      gap:4px;
+    }
+    .orders-filters input,
+    .orders-filters select{
+      padding:8px 10px;
+      border-radius:10px;
+      border:1px solid var(--border);
+      font-size:13px;
+      background:#ffffff;
+    }
+    .orders-kpis{
+      margin-top:14px;
+      display:grid;
+      gap:10px;
+      grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    }
+    .orders-kpi{
+      background:#f8fafc;
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:10px;
+      display:grid;
+      gap:4px;
+    }
+    .orders-kpi .label{
+      font-size:12px;
+      color:var(--muted);
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:.04em;
+    }
+    .orders-kpi .value{
+      font-size:18px;
+      font-weight:800;
+      color:var(--ink);
+    }
+    .orders-actions{
+      margin-top:12px;
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      align-items:center;
+    }
+    .orders-columns{
+      position:relative;
+    }
+    .orders-columns-panel{
+      position:absolute;
+      right:0;
+      top:40px;
+      background:#ffffff;
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:10px;
+      min-width:200px;
+      box-shadow:0 10px 20px rgba(15,23,42,0.12);
+      display:none;
+      z-index:5;
+    }
+    .orders-columns-panel.open{display:block;}
+    .orders-actions .bulk-input{
+      min-width:220px;
+    }
+    .orders-table-wrap{
+      margin-top:12px;
+      overflow:auto;
+      border:1px solid var(--border);
+      border-radius:12px;
+      background:#ffffff;
+    }
+    .orders-table{
+      width:100%;
+      border-collapse:collapse;
+      font-size:13px;
+      min-width:980px;
+    }
+    .orders-table th,
+    .orders-table td{
+      padding:10px 12px;
+      border-bottom:1px solid var(--border);
+      text-align:left;
+      vertical-align:top;
+    }
+    .orders-table th{
+      font-size:12px;
+      text-transform:uppercase;
+      letter-spacing:.04em;
+      color:var(--muted);
+      cursor:pointer;
+      position:sticky;
+      top:0;
+      background:#f9fafb;
+      z-index:1;
+    }
+    .orders-table tr:hover{background:#f9fafb;}
+    .orders-table .col-hidden{display:none;}
+    .orders-tag{
+      display:inline-flex;
+      align-items:center;
+      padding:2px 8px;
+      border-radius:999px;
+      background:#e0f2fe;
+      border:1px solid #bae6fd;
+      color:#0369a1;
+      font-size:11px;
+      font-weight:700;
+      margin-right:4px;
+      margin-bottom:4px;
+    }
+    .orders-status{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:3px 8px;
+      border-radius:999px;
+      border:1px solid var(--border);
+      font-weight:700;
+      text-transform:uppercase;
+      font-size:11px;
+    }
+    .orders-status.paid{background:#ecfdf3;color:#166534;border-color:#bbf7d0;}
+    .orders-status.refunded{background:#fef2f2;color:#b91c1c;border-color:#fecaca;}
+    .orders-status.cancelled{background:#eef2ff;color:#4338ca;border-color:#c7d2fe;}
+    .orders-status.pending{background:#f8fafc;color:#475569;border-color:#e2e8f0;}
+    .orders-delivery{
+      display:flex;
+      gap:6px;
+      align-items:center;
+      font-size:12px;
+    }
+    .orders-delivery .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:4px;
+      padding:2px 6px;
+      border-radius:999px;
+      border:1px solid var(--border);
+      background:#f8fafc;
+      font-weight:700;
+      font-size:11px;
+    }
+    .pill.sent{color:#166534;background:#ecfdf3;border-color:#bbf7d0;}
+    .pill.failed{color:#b91c1c;background:#fef2f2;border-color:#fecaca;}
+    .pill.skipped{color:#475569;background:#f8fafc;border-color:#e2e8f0;}
+    .pill.unknown{color:#7c3aed;background:#ede9fe;border-color:#ddd6fe;}
+    .pill.good{color:#166534;background:#ecfdf3;border-color:#bbf7d0;}
+    .pill.bad{color:#b91c1c;background:#fef2f2;border-color:#fecaca;}
+    .orders-pagination{
+      margin-top:12px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .orders-drawer-backdrop{
+      position:fixed;
+      top:var(--header-h);
+      left:0;
+      right:0;
+      bottom:0;
+      background:rgba(15,23,42,0.35);
+      opacity:0;
+      pointer-events:none;
+      transition:opacity .2s ease;
+      z-index:30;
+    }
+    .orders-drawer-backdrop.open{
+      opacity:1;
+      pointer-events:auto;
+    }
+    .orders-drawer{
+      position:fixed;
+      top:var(--header-h);
+      right:-520px;
+      bottom:0;
+      width:min(520px,100%);
+      background:#ffffff;
+      border-left:1px solid var(--border);
+      box-shadow:-18px 0 32px rgba(15,23,42,.18);
+      padding:18px;
+      overflow-y:auto;
+      transition:right .2s ease;
+      z-index:31;
+    }
+    .orders-drawer.open{right:0;}
+    .orders-drawer h3{margin:0 0 6px;font-size:18px;}
+    .orders-drawer .section{margin-top:14px;}
+    .orders-drawer .section-title{
+      font-size:12px;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.05em;
+      color:var(--muted);
+      margin-bottom:6px;
+    }
+    .orders-drawer .close-btn{
+      background:#ffffff;
+      border:1px solid var(--border);
+      border-radius:10px;
+      padding:6px 10px;
+      cursor:pointer;
+    }
   </style>
 </head>
 <body>
@@ -4524,7 +4745,873 @@ function renderInterests(customer){
   // --- OTHER SIMPLE PAGES ---
   function orders(){
     if (!main) return;
-    main.innerHTML = '<div class="card"><div class="title">Orders</div><div class="muted">Orders view coming soon.</div></div>';
+    main.innerHTML = ''
+      + '<div class="card">'
+      +   '<div class="orders-toolbar">'
+      +     '<div>'
+      +       '<div class="title">Orders</div>'
+      +       '<div class="muted">All orders across your shows with server-side filters, KPIs, and bulk actions.</div>'
+      +     '</div>'
+      +     '<div class="row" style="gap:8px;align-items:center;">'
+      +       '<button class="btn" id="ordersRefreshBtn">Refresh</button>'
+      +       '<div class="orders-columns">'
+      +         '<button class="btn" id="ordersColumnsBtn">Columns</button>'
+      +         '<div class="orders-columns-panel" id="ordersColumnsPanel"></div>'
+      +       '</div>'
+      +     '</div>'
+      +   '</div>'
+
+      +   '<div class="orders-filters">'
+      +     '<label>Show<select id="ordersFilterShow"><option value="">All shows</option></select></label>'
+      +     '<label>Venue<select id="ordersFilterVenue"><option value="">All venues</option></select></label>'
+      +     '<label>Order date from<input id="ordersFilterOrderFrom" type="date" /></label>'
+      +     '<label>Order date to<input id="ordersFilterOrderTo" type="date" /></label>'
+      +     '<label>Show date from<input id="ordersFilterShowFrom" type="date" /></label>'
+      +     '<label>Show date to<input id="ordersFilterShowTo" type="date" /></label>'
+      +     '<label>Status<select id="ordersFilterStatus">'
+      +       '<option value="">All statuses</option>'
+      +       '<option value="PENDING">Pending</option>'
+      +       '<option value="PAID">Paid</option>'
+      +       '<option value="REFUNDED">Refunded</option>'
+      +       '<option value="CANCELLED">Cancelled</option>'
+      +     '</select></label>'
+      +     '<label>Email delivery<select id="ordersFilterEmail">'
+      +       '<option value="">Any</option>'
+      +       '<option value="SENT">Sent</option>'
+      +       '<option value="FAILED">Failed</option>'
+      +       '<option value="SKIPPED">Skipped</option>'
+      +       '<option value="UNKNOWN">Unknown</option>'
+      +     '</select></label>'
+      +     '<label>PDF attached<select id="ordersFilterPdf">'
+      +       '<option value="">Any</option>'
+      +       '<option value="attached">Attached</option>'
+      +       '<option value="missing">Missing</option>'
+      +     '</select></label>'
+      +     '<label>Ticket type<select id="ordersFilterTicketType"><option value="">All ticket types</option></select></label>'
+      +     '<label>Search<input id="ordersFilterSearch" placeholder="Name, email, order ref, Stripe ref" /></label>'
+      +     '<label>Per page<select id="ordersFilterTake">'
+      +       '<option value="10">10</option>'
+      +       '<option value="25" selected>25</option>'
+      +       '<option value="50">50</option>'
+      +       '<option value="100">100</option>'
+      +     '</select></label>'
+      +   '</div>'
+
+      +   '<div class="orders-kpis" id="ordersKpis"></div>'
+
+      +   '<div class="orders-actions">'
+      +     '<label style="display:flex;align-items:center;gap:6px;font-weight:700;">'
+      +       '<input type="checkbox" id="ordersSelectAll" /> Select page'
+      +     '</label>'
+      +     '<select id="ordersBulkAction">'
+      +       '<option value="">Bulk actions</option>'
+      +       '<option value="resend_emails">Resend emails</option>'
+      +       '<option value="apply_tags">Apply tags</option>'
+      +       '<option value="add_note">Add internal note</option>'
+      +     '</select>'
+      +     '<input id="ordersBulkTags" class="bulk-input" placeholder="Tags (comma-separated)" style="display:none;" />'
+      +     '<input id="ordersBulkNote" class="bulk-input" placeholder="Internal note" style="display:none;" />'
+      +     '<button class="btn p" id="ordersBulkApply">Apply</button>'
+      +     '<button class="btn" id="ordersExportDoor">Export door list</button>'
+      +     '<button class="btn" id="ordersExportFinance">Export finance CSV</button>'
+      +   '</div>'
+
+      +   '<div class="orders-table-wrap">'
+      +     '<table class="orders-table" id="ordersTable">'
+      +       '<thead>'
+      +         '<tr>'
+      +           '<th data-col="select" class="col-select"></th>'
+      +           '<th data-col="order" data-sort="createdAt">Order</th>'
+      +           '<th data-col="buyer" data-sort="email">Buyer</th>'
+      +           '<th data-col="show" data-sort="showDate">Show</th>'
+      +           '<th data-col="venue">Venue</th>'
+      +           '<th data-col="showDate" data-sort="showDate">Show date</th>'
+      +           '<th data-col="createdAt" data-sort="createdAt">Ordered</th>'
+      +           '<th data-col="status" data-sort="status">Status</th>'
+      +           '<th data-col="delivery">Delivery</th>'
+      +           '<th data-col="tickets">Tickets</th>'
+      +           '<th data-col="gross" data-sort="amount">Gross</th>'
+      +           '<th data-col="fees">Fees</th>'
+      +           '<th data-col="net">Net</th>'
+      +           '<th data-col="tags">Tags</th>'
+      +         '</tr>'
+      +       '</thead>'
+      +       '<tbody id="ordersTbody"></tbody>'
+      +     '</table>'
+      +   '</div>'
+
+      +   '<div class="orders-pagination" id="ordersPagination"></div>'
+      + '</div>'
+      + '<div class="orders-drawer-backdrop" id="ordersDrawerBackdrop"></div>'
+      + '<div class="orders-drawer" id="ordersDrawer"></div>';
+
+    var filters = {
+      showId: '',
+      venueId: '',
+      orderFrom: '',
+      orderTo: '',
+      showFrom: '',
+      showTo: '',
+      status: '',
+      emailStatus: '',
+      pdfStatus: '',
+      ticketTypeId: '',
+      q: '',
+      take: 25,
+    };
+
+    var state = {
+      page: 1,
+      sortBy: 'createdAt',
+      sortDir: 'desc',
+      total: 0,
+      items: [],
+      selected: new Set(),
+      filterOptionsLoaded: false,
+    };
+
+    var columnDefaults = [
+      'select',
+      'order',
+      'buyer',
+      'show',
+      'venue',
+      'showDate',
+      'createdAt',
+      'status',
+      'delivery',
+      'tickets',
+      'gross',
+      'fees',
+      'net',
+      'tags',
+    ];
+
+    var columnLabels = {
+      order: 'Order',
+      buyer: 'Buyer',
+      show: 'Show',
+      venue: 'Venue',
+      showDate: 'Show date',
+      createdAt: 'Ordered',
+      status: 'Status',
+      delivery: 'Delivery',
+      tickets: 'Tickets',
+      gross: 'Gross',
+      fees: 'Fees',
+      net: 'Net',
+      tags: 'Tags',
+    };
+
+    function loadColumns(){
+      try{
+        var raw = localStorage.getItem('ordersColumns');
+        var parsed = raw ? JSON.parse(raw) : null;
+        if (Array.isArray(parsed) && parsed.length) return parsed;
+      }catch(e){}
+      return columnDefaults.slice();
+    }
+
+    function saveColumns(cols){
+      try{ localStorage.setItem('ordersColumns', JSON.stringify(cols || [])); }catch(e){}
+    }
+
+    var visibleColumns = loadColumns();
+
+    var els = {
+      show: $('#ordersFilterShow'),
+      venue: $('#ordersFilterVenue'),
+      orderFrom: $('#ordersFilterOrderFrom'),
+      orderTo: $('#ordersFilterOrderTo'),
+      showFrom: $('#ordersFilterShowFrom'),
+      showTo: $('#ordersFilterShowTo'),
+      status: $('#ordersFilterStatus'),
+      emailStatus: $('#ordersFilterEmail'),
+      pdfStatus: $('#ordersFilterPdf'),
+      ticketType: $('#ordersFilterTicketType'),
+      search: $('#ordersFilterSearch'),
+      take: $('#ordersFilterTake'),
+      refresh: $('#ordersRefreshBtn'),
+      tbody: $('#ordersTbody'),
+      kpis: $('#ordersKpis'),
+      pagination: $('#ordersPagination'),
+      selectAll: $('#ordersSelectAll'),
+      bulkAction: $('#ordersBulkAction'),
+      bulkTags: $('#ordersBulkTags'),
+      bulkNote: $('#ordersBulkNote'),
+      bulkApply: $('#ordersBulkApply'),
+      exportDoor: $('#ordersExportDoor'),
+      exportFinance: $('#ordersExportFinance'),
+      columnsBtn: $('#ordersColumnsBtn'),
+      columnsPanel: $('#ordersColumnsPanel'),
+      drawer: $('#ordersDrawer'),
+      drawerBackdrop: $('#ordersDrawerBackdrop'),
+    };
+
+    function fmtMoney(pence){
+      var val = typeof pence === 'number' ? pence : 0;
+      return '£' + (val / 100).toFixed(2);
+    }
+
+    function fmtDateTime(value){
+      if (!value) return '—';
+      var d = new Date(value);
+      if (isNaN(d.getTime())) return '—';
+      return d.toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+    }
+
+    function fmtDate(value){
+      if (!value) return '—';
+      var d = new Date(value);
+      if (isNaN(d.getTime())) return '—';
+      return d.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
+    }
+
+    function toCsvParam(obj){
+      var params = new URLSearchParams();
+      Object.keys(obj || {}).forEach(function(key){
+        var val = obj[key];
+        if (val === undefined || val === null || val === '') return;
+        params.set(key, String(val));
+      });
+      return params.toString();
+    }
+
+    function applyVisibleColumns(){
+      var cols = visibleColumns;
+      $$('#ordersTable [data-col]').forEach(function(cell){
+        var col = cell.getAttribute('data-col');
+        if (!col) return;
+        var hidden = cols.indexOf(col) === -1;
+        cell.classList.toggle('col-hidden', hidden);
+      });
+    }
+
+    function renderColumnChooser(){
+      if (!els.columnsPanel) return;
+      var html = '';
+      columnDefaults.forEach(function(col){
+        if (col === 'select') return;
+        var checked = visibleColumns.indexOf(col) !== -1 ? 'checked' : '';
+        html += '<label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-weight:600;">'
+          + '<input type="checkbox" data-col="' + col + '" ' + checked + ' />'
+          + escapeHtml(columnLabels[col] || col)
+          + '</label>';
+      });
+      els.columnsPanel.innerHTML = html;
+      $$('input[data-col]', els.columnsPanel).forEach(function(input){
+        input.addEventListener('change', function(){
+          var col = input.getAttribute('data-col');
+          if (!col) return;
+          var idx = visibleColumns.indexOf(col);
+          if (input.checked){
+            if (idx === -1) visibleColumns.push(col);
+          }else{
+            if (idx !== -1) visibleColumns.splice(idx, 1);
+          }
+          saveColumns(visibleColumns);
+          applyVisibleColumns();
+        });
+      });
+    }
+
+    function toggleColumnsPanel(show){
+      if (!els.columnsPanel) return;
+      var open = els.columnsPanel.classList.contains('open');
+      if (typeof show === 'boolean') open = !show;
+      els.columnsPanel.classList.toggle('open', !open);
+    }
+
+    if (els.columnsBtn && els.columnsPanel){
+      els.columnsBtn.addEventListener('click', function(e){
+        e.stopPropagation();
+        toggleColumnsPanel();
+      });
+      document.addEventListener('click', function(e){
+        if (!els.columnsPanel || !els.columnsPanel.classList.contains('open')) return;
+        if (els.columnsPanel.contains(e.target) || els.columnsBtn.contains(e.target)) return;
+        els.columnsPanel.classList.remove('open');
+      });
+    }
+
+    function syncFilters(){
+      if (els.show) els.show.value = filters.showId || '';
+      if (els.venue) els.venue.value = filters.venueId || '';
+      if (els.orderFrom) els.orderFrom.value = filters.orderFrom || '';
+      if (els.orderTo) els.orderTo.value = filters.orderTo || '';
+      if (els.showFrom) els.showFrom.value = filters.showFrom || '';
+      if (els.showTo) els.showTo.value = filters.showTo || '';
+      if (els.status) els.status.value = filters.status || '';
+      if (els.emailStatus) els.emailStatus.value = filters.emailStatus || '';
+      if (els.pdfStatus) els.pdfStatus.value = filters.pdfStatus || '';
+      if (els.ticketType) els.ticketType.value = filters.ticketTypeId || '';
+      if (els.search) els.search.value = filters.q || '';
+      if (els.take) els.take.value = String(filters.take || 25);
+    }
+
+    function buildQuery(includeFilters){
+      var params = {
+        page: state.page,
+        take: filters.take || 25,
+        sortBy: state.sortBy,
+        sortDir: state.sortDir,
+        showId: filters.showId,
+        venueId: filters.venueId,
+        orderFrom: filters.orderFrom,
+        orderTo: filters.orderTo,
+        showFrom: filters.showFrom,
+        showTo: filters.showTo,
+        status: filters.status,
+        emailStatus: filters.emailStatus,
+        pdfStatus: filters.pdfStatus,
+        ticketTypeId: filters.ticketTypeId,
+        q: filters.q,
+        includeFilters: includeFilters ? '1' : '',
+      };
+      return toCsvParam(params);
+    }
+
+    function renderKpis(kpis){
+      if (!els.kpis) return;
+      var data = kpis || {};
+      var items = [
+        { label:'Orders', value: data.orders || 0 },
+        { label:'Tickets sold', value: data.ticketsSold || 0 },
+        { label:'Gross', value: fmtMoney(data.gross || 0) },
+        { label:'Fees', value: fmtMoney(data.fees || 0) },
+        { label:'Net', value: fmtMoney(data.net || 0) },
+        { label:'Refunds', value: fmtMoney(data.refunds || 0) },
+      ];
+      els.kpis.innerHTML = items.map(function(item){
+        return '<div class="orders-kpi">'
+          + '<div class="label">' + escapeHtml(item.label) + '</div>'
+          + '<div class="value">' + escapeHtml(String(item.value)) + '</div>'
+          + '</div>';
+      }).join('');
+    }
+
+    function renderTable(items){
+      if (!els.tbody) return;
+      els.tbody.innerHTML = '';
+      if (!items || !items.length){
+        els.tbody.innerHTML = '<tr><td colspan="14" class="muted">No orders found.</td></tr>';
+        return;
+      }
+      var rows = items.map(function(order){
+        var buyerName = [order.buyerFirstName, order.buyerLastName].filter(Boolean).join(' ').trim();
+        var buyerDisplay = buyerName || order.email || '—';
+        var showTitle = order.show && order.show.title ? order.show.title : 'Untitled show';
+        var showDate = order.show && order.show.date ? order.show.date : null;
+        var venueName = order.show && order.show.venue && order.show.venue.name ? order.show.venue.name : '—';
+        var status = String(order.status || 'PENDING').toLowerCase();
+        var deliveryStatus = String(order.emailDeliveryStatus || 'UNKNOWN').toLowerCase();
+        var pdfAttached = order.emailPdfAttached === true;
+        var ticketCount = order.ticketCount || 0;
+        var tags = Array.isArray(order.tags) ? order.tags : [];
+        var fees = (order.platformFeePence || 0) + (order.paymentFeePence || 0);
+        var net = typeof order.netPayoutPence === 'number'
+          ? order.netPayoutPence
+          : (order.amountPence || 0) - fees;
+
+        var tagHtml = tags.length
+          ? tags.map(function(tag){ return '<span class="orders-tag">' + escapeHtml(tag) + '</span>'; }).join('')
+          : '<span class="muted">—</span>';
+
+        return ''
+          + '<tr data-order-id="' + escapeHtml(order.id) + '">'
+          +   '<td data-col="select"><input type="checkbox" class="order-select" data-id="' + escapeHtml(order.id) + '" /></td>'
+          +   '<td data-col="order"><div style="font-weight:700;">' + escapeHtml(order.id) + '</div></td>'
+          +   '<td data-col="buyer"><div style="font-weight:700;">' + escapeHtml(buyerDisplay) + '</div>'
+          +     (order.email && buyerName ? '<div class="muted">' + escapeHtml(order.email) + '</div>' : '') + '</td>'
+          +   '<td data-col="show"><div style="font-weight:700;">' + escapeHtml(showTitle) + '</div>'
+          +     '<div class="muted">' + escapeHtml(order.show && order.show.id ? order.show.id : '') + '</div></td>'
+          +   '<td data-col="venue">' + escapeHtml(venueName) + '</td>'
+          +   '<td data-col="showDate">' + escapeHtml(fmtDate(showDate)) + '</td>'
+          +   '<td data-col="createdAt">' + escapeHtml(fmtDateTime(order.createdAt)) + '</td>'
+          +   '<td data-col="status"><span class="orders-status ' + escapeHtml(status) + '">' + escapeHtml(order.status || '') + '</span></td>'
+          +   '<td data-col="delivery">'
+          +     '<div class="orders-delivery">'
+          +       '<span class="pill ' + escapeHtml(deliveryStatus) + '">📧 ' + escapeHtml((order.emailDeliveryStatus || 'UNKNOWN')) + '</span>'
+          +       '<span class="pill ' + (pdfAttached ? 'good' : 'bad') + '">PDF ' + (pdfAttached ? 'Attached' : 'Missing') + '</span>'
+          +     '</div>'
+          +   '</td>'
+          +   '<td data-col="tickets">' + escapeHtml(String(ticketCount)) + '</td>'
+          +   '<td data-col="gross">' + escapeHtml(fmtMoney(order.amountPence || 0)) + '</td>'
+          +   '<td data-col="fees">' + escapeHtml(fmtMoney(fees)) + '</td>'
+          +   '<td data-col="net">' + escapeHtml(fmtMoney(net)) + '</td>'
+          +   '<td data-col="tags">' + tagHtml + '</td>'
+          + '</tr>';
+      }).join('');
+      els.tbody.innerHTML = rows;
+
+      $$('.order-select', els.tbody).forEach(function(input){
+        input.addEventListener('change', function(e){
+          var id = input.getAttribute('data-id');
+          if (!id) return;
+          if (input.checked) state.selected.add(id);
+          else state.selected.delete(id);
+        });
+      });
+
+      $$('#ordersTbody tr').forEach(function(row){
+        row.addEventListener('click', function(e){
+          if (e.target && (e.target.tagName === 'INPUT' || e.target.closest('button'))) return;
+          var id = row.getAttribute('data-order-id');
+          if (!id) return;
+          openDrawer(id);
+        });
+      });
+
+      if (els.selectAll){
+        els.selectAll.checked = false;
+      }
+
+      applyVisibleColumns();
+    }
+
+    function renderPagination(){
+      if (!els.pagination) return;
+      var total = state.total || 0;
+      var totalPages = Math.max(1, Math.ceil(total / (filters.take || 25)));
+      var canPrev = state.page > 1;
+      var canNext = state.page < totalPages;
+      els.pagination.innerHTML = ''
+        + '<div class="muted">Page ' + state.page + ' of ' + totalPages + ' • ' + total + ' orders</div>'
+        + '<div class="row" style="gap:8px;">'
+        +   '<button class="btn" id="ordersPrev" ' + (canPrev ? '' : 'disabled') + '>Prev</button>'
+        +   '<button class="btn" id="ordersNext" ' + (canNext ? '' : 'disabled') + '>Next</button>'
+        + '</div>';
+      var prevBtn = $('#ordersPrev');
+      var nextBtn = $('#ordersNext');
+      if (prevBtn){
+        prevBtn.addEventListener('click', function(){
+          if (!canPrev) return;
+          state.page -= 1;
+          loadOrders(false);
+        });
+      }
+      if (nextBtn){
+        nextBtn.addEventListener('click', function(){
+          if (!canNext) return;
+          state.page += 1;
+          loadOrders(false);
+        });
+      }
+    }
+
+    async function loadOrders(includeFilters){
+      if (!els.tbody) return;
+      els.tbody.innerHTML = '<tr><td colspan="14" class="muted">Loading orders…</td></tr>';
+      var qs = buildQuery(includeFilters);
+      try{
+        var res = await j('/admin/api/orders?' + qs);
+        state.items = (res && res.items) || [];
+        state.total = res.total || 0;
+        state.selected = new Set();
+        renderKpis(res.kpis);
+        renderTable(state.items);
+        renderPagination();
+        if (includeFilters && res.filters){
+          hydrateFilterOptions(res.filters);
+          state.filterOptionsLoaded = true;
+        }
+      }catch(e){
+        els.tbody.innerHTML = '<tr><td colspan="14" class="error">Failed to load orders: ' + escapeHtml(e.message || e) + '</td></tr>';
+      }
+    }
+
+    function hydrateFilterOptions(data){
+      if (!data) return;
+      if (els.show && Array.isArray(data.shows)){
+        els.show.innerHTML = '<option value="">All shows</option>'
+          + data.shows.map(function(show){
+            var label = (show.title || 'Untitled') + (show.date ? (' • ' + fmtDate(show.date)) : '');
+            return '<option value="' + escapeHtml(show.id) + '">' + escapeHtml(label) + '</option>';
+          }).join('');
+      }
+      if (els.venue && Array.isArray(data.venues)){
+        els.venue.innerHTML = '<option value="">All venues</option>'
+          + data.venues.map(function(venue){
+            var label = (venue.name || 'Venue') + (venue.city ? (' • ' + venue.city) : '');
+            return '<option value="' + escapeHtml(venue.id) + '">' + escapeHtml(label) + '</option>';
+          }).join('');
+      }
+      if (els.ticketType && Array.isArray(data.ticketTypes)){
+        els.ticketType.innerHTML = '<option value="">All ticket types</option>'
+          + data.ticketTypes.map(function(tt){
+            var label = tt.name || 'Ticket type';
+            if (tt.showTitle) label += ' • ' + tt.showTitle;
+            return '<option value="' + escapeHtml(tt.id) + '">' + escapeHtml(label) + '</option>';
+          }).join('');
+      }
+      syncFilters();
+    }
+
+    function onFilterChange(){
+      state.page = 1;
+      filters.showId = els.show && els.show.value || '';
+      filters.venueId = els.venue && els.venue.value || '';
+      filters.orderFrom = els.orderFrom && els.orderFrom.value || '';
+      filters.orderTo = els.orderTo && els.orderTo.value || '';
+      filters.showFrom = els.showFrom && els.showFrom.value || '';
+      filters.showTo = els.showTo && els.showTo.value || '';
+      filters.status = els.status && els.status.value || '';
+      filters.emailStatus = els.emailStatus && els.emailStatus.value || '';
+      filters.pdfStatus = els.pdfStatus && els.pdfStatus.value || '';
+      filters.ticketTypeId = els.ticketType && els.ticketType.value || '';
+      filters.q = els.search && els.search.value.trim() || '';
+      filters.take = els.take ? Number(els.take.value) : 25;
+      loadOrders(false);
+    }
+
+    function currentSelectedIds(){
+      return Array.from(state.selected || []);
+    }
+
+    async function applyBulkAction(){
+      var action = els.bulkAction && els.bulkAction.value;
+      if (!action) return alert('Select a bulk action');
+      var ids = currentSelectedIds();
+      if (!ids.length) return alert('Select at least one order');
+
+      var payload = { action: action, orderIds: ids };
+      if (action === 'apply_tags'){
+        var tags = els.bulkTags && els.bulkTags.value ? els.bulkTags.value.split(',').map(function(t){ return t.trim(); }).filter(Boolean) : [];
+        if (!tags.length) return alert('Enter at least one tag');
+        payload.tags = tags;
+        payload.mode = 'append';
+      }
+      if (action === 'add_note'){
+        var note = els.bulkNote && els.bulkNote.value ? els.bulkNote.value.trim() : '';
+        if (!note) return alert('Enter a note');
+        payload.note = note;
+      }
+
+      try{
+        await j('/admin/api/orders/bulk', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(payload)
+        });
+        state.selected = new Set();
+        if (els.bulkTags) els.bulkTags.value = '';
+        if (els.bulkNote) els.bulkNote.value = '';
+        loadOrders(false);
+      }catch(e){
+        alert('Bulk action failed: ' + (e.message || e));
+      }
+    }
+
+    function exportCsv(type){
+      var params = buildQuery(false);
+      var ids = currentSelectedIds();
+      if (ids.length){
+        params += (params ? '&' : '') + 'orderIds=' + encodeURIComponent(ids.join(','));
+      }
+      params += (params ? '&' : '') + 'type=' + encodeURIComponent(type);
+      window.location.href = '/admin/api/orders/export?' + params;
+    }
+
+    function updateBulkInputs(){
+      var action = els.bulkAction && els.bulkAction.value;
+      if (els.bulkTags) els.bulkTags.style.display = action === 'apply_tags' ? 'inline-flex' : 'none';
+      if (els.bulkNote) els.bulkNote.style.display = action === 'add_note' ? 'inline-flex' : 'none';
+    }
+
+    if (els.selectAll){
+      els.selectAll.addEventListener('change', function(){
+        var checked = els.selectAll.checked;
+        state.selected = new Set();
+        $$('.order-select', els.tbody).forEach(function(input){
+          input.checked = checked;
+          if (checked && input.getAttribute('data-id')) state.selected.add(input.getAttribute('data-id'));
+        });
+      });
+    }
+
+    if (els.bulkAction) els.bulkAction.addEventListener('change', updateBulkInputs);
+    if (els.bulkApply) els.bulkApply.addEventListener('click', applyBulkAction);
+    if (els.exportDoor) els.exportDoor.addEventListener('click', function(){ exportCsv('door'); });
+    if (els.exportFinance) els.exportFinance.addEventListener('click', function(){ exportCsv('finance'); });
+
+    if (els.refresh) els.refresh.addEventListener('click', function(){ loadOrders(false); });
+
+    var filterInputs = [
+      els.show, els.venue, els.orderFrom, els.orderTo,
+      els.showFrom, els.showTo, els.status, els.emailStatus,
+      els.pdfStatus, els.ticketType, els.take
+    ];
+    filterInputs.forEach(function(input){
+      if (!input) return;
+      input.addEventListener('change', onFilterChange);
+    });
+    if (els.search){
+      els.search.addEventListener('input', debounce(onFilterChange, 300));
+    }
+
+    $$('#ordersTable th[data-sort]').forEach(function(th){
+      th.addEventListener('click', function(){
+        var sortKey = th.getAttribute('data-sort');
+        if (!sortKey) return;
+        if (state.sortBy === sortKey){
+          state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+        }else{
+          state.sortBy = sortKey;
+          state.sortDir = 'desc';
+        }
+        loadOrders(false);
+      });
+    });
+
+    function openDrawer(orderId){
+      if (!els.drawer || !els.drawerBackdrop) return;
+      els.drawer.classList.add('open');
+      els.drawerBackdrop.classList.add('open');
+      renderDrawerLoading();
+      loadOrderDetail(orderId);
+    }
+
+    function closeDrawer(){
+      if (!els.drawer || !els.drawerBackdrop) return;
+      els.drawer.classList.remove('open');
+      els.drawerBackdrop.classList.remove('open');
+    }
+
+    function renderDrawerLoading(){
+      if (!els.drawer) return;
+      els.drawer.innerHTML = '<div class="row" style="justify-content:space-between;align-items:center;">'
+        + '<h3>Order</h3>'
+        + '<button class="close-btn" id="ordersDrawerClose">Close</button>'
+        + '</div>'
+        + '<div class="muted" style="margin-top:10px;">Loading order details…</div>';
+      var closeBtn = $('#ordersDrawerClose');
+      if (closeBtn) closeBtn.addEventListener('click', closeDrawer);
+    }
+
+    async function loadOrderDetail(orderId){
+      if (!els.drawer) return;
+      try{
+        var res = await j('/admin/api/orders/' + encodeURIComponent(orderId));
+        renderDrawer(res.order, res.timeline || []);
+      }catch(e){
+        els.drawer.innerHTML = '<div class="row" style="justify-content:space-between;align-items:center;">'
+          + '<h3>Order</h3>'
+          + '<button class="close-btn" id="ordersDrawerClose">Close</button>'
+          + '</div>'
+          + '<div class="error" style="margin-top:10px;">Failed to load order: ' + escapeHtml(e.message || e) + '</div>';
+        var closeBtn = $('#ordersDrawerClose');
+        if (closeBtn) closeBtn.addEventListener('click', closeDrawer);
+      }
+    }
+
+    function renderDrawer(order, timeline){
+      if (!els.drawer) return;
+      if (!order){
+        renderDrawerLoading();
+        return;
+      }
+      var buyerName = [order.buyerFirstName, order.buyerLastName].filter(Boolean).join(' ').trim();
+      var tags = Array.isArray(order.tags) ? order.tags : [];
+      var tickets = order.tickets || [];
+      var fees = (order.platformFeePence || 0) + (order.paymentFeePence || 0);
+      var net = typeof order.netPayoutPence === 'number'
+        ? order.netPayoutPence
+        : (order.amountPence || 0) - fees;
+
+      var ticketHtml = tickets.length
+        ? tickets.map(function(t){
+            var seat = t.seatRef || t.seatId || 'Unallocated';
+            var holder = t.holderName ? ' • ' + t.holderName : '';
+            var type = t.ticketType && t.ticketType.name ? t.ticketType.name : 'Ticket';
+            return '<div class="row" style="justify-content:space-between;gap:8px;">'
+              + '<div><strong>' + escapeHtml(type) + '</strong><div class="muted">Seat: ' + escapeHtml(seat) + holder + '</div></div>'
+              + '<div class="muted">#' + escapeHtml(t.serial || t.id || '') + '</div>'
+              + '</div>';
+          }).join('')
+        : '<div class="muted">No tickets on this order.</div>';
+
+      var refunds = order.refunds || [];
+      var refundHtml = refunds.length
+        ? refunds.map(function(r){
+            var amt = fmtMoney(r.amountPence || r.amount || 0);
+            return '<div class="row" style="justify-content:space-between;gap:8px;">'
+              + '<div>' + escapeHtml(r.reason || 'Refund') + '</div>'
+              + '<div>' + escapeHtml(amt) + '</div>'
+              + '</div>';
+          }).join('')
+        : '<div class="muted">No refunds recorded.</div>';
+
+      var timelineHtml = timeline.length
+        ? timeline.map(function(item){
+            return '<div style="border-bottom:1px solid var(--border);padding:8px 0;">'
+              + '<div style="font-weight:700;">' + escapeHtml(item.title || item.action || 'Update') + '</div>'
+              + '<div class="muted">' + escapeHtml(item.detail || '') + '</div>'
+              + '<div class="muted" style="font-size:12px;">' + escapeHtml(fmtDateTime(item.createdAt)) + '</div>'
+              + '</div>';
+          }).join('')
+        : '<div class="muted">No activity yet.</div>';
+
+      var tagHtml = tags.length
+        ? tags.map(function(tag){ return '<span class="orders-tag">' + escapeHtml(tag) + '</span>'; }).join('')
+        : '<div class="muted">No tags yet.</div>';
+
+      els.drawer.innerHTML = ''
+        + '<div class="row" style="justify-content:space-between;align-items:center;">'
+        +   '<h3>Order ' + escapeHtml(order.id) + '</h3>'
+        +   '<button class="close-btn" id="ordersDrawerClose">Close</button>'
+        + '</div>'
+        + '<div class="muted">' + escapeHtml(order.show && order.show.title ? order.show.title : '') + '</div>'
+
+        + '<div class="section">'
+        +   '<div class="section-title">Customer</div>'
+        +   '<div><strong>' + escapeHtml(buyerName || order.email || '—') + '</strong></div>'
+        +   (order.email ? '<div class="muted">' + escapeHtml(order.email) + '</div>' : '')
+        + '</div>'
+
+        + '<div class="section">'
+        +   '<div class="section-title">Order details</div>'
+        +   '<div class="row" style="justify-content:space-between;gap:8px;">'
+        +     '<div>Status</div>'
+        +     '<div><span class="orders-status ' + escapeHtml(String(order.status || 'PENDING').toLowerCase()) + '">' + escapeHtml(order.status || '') + '</span></div>'
+        +   '</div>'
+        +   '<div class="row" style="justify-content:space-between;gap:8px;">'
+        +     '<div>Created</div>'
+        +     '<div>' + escapeHtml(fmtDateTime(order.createdAt)) + '</div>'
+        +   '</div>'
+        +   '<div class="row" style="justify-content:space-between;gap:8px;">'
+        +     '<div>Show date</div>'
+        +     '<div>' + escapeHtml(fmtDate(order.show && order.show.date)) + '</div>'
+        +   '</div>'
+        + '</div>'
+
+        + '<div class="section">'
+        +   '<div class="section-title">Payment</div>'
+        +   '<div class="row" style="justify-content:space-between;gap:8px;"><div>Gross</div><div>' + escapeHtml(fmtMoney(order.amountPence || 0)) + '</div></div>'
+        +   '<div class="row" style="justify-content:space-between;gap:8px;"><div>Platform fee</div><div>' + escapeHtml(fmtMoney(order.platformFeePence || 0)) + '</div></div>'
+        +   '<div class="row" style="justify-content:space-between;gap:8px;"><div>Payment fee</div><div>' + escapeHtml(fmtMoney(order.paymentFeePence || 0)) + '</div></div>'
+        +   '<div class="row" style="justify-content:space-between;gap:8px;"><div>Net</div><div>' + escapeHtml(fmtMoney(net)) + '</div></div>'
+        +   '<div class="muted" style="margin-top:6px;">Stripe ID: ' + escapeHtml(order.stripeId || '—') + '</div>'
+        +   '<div class="muted">Checkout session: ' + escapeHtml(order.stripeCheckoutSessionId || '—') + '</div>'
+        + '</div>'
+
+        + '<div class="section">'
+        +   '<div class="section-title">Tickets</div>'
+        +   ticketHtml
+        + '</div>'
+
+        + '<div class="section">'
+        +   '<div class="section-title">Refunds</div>'
+        +   refundHtml
+        + '</div>'
+
+        + '<div class="section">'
+        +   '<div class="section-title">Tags</div>'
+        +   '<div>' + tagHtml + '</div>'
+        +   '<div class="row" style="gap:8px;margin-top:8px;">'
+        +     '<input id="orderTagInput" placeholder="Add tags" style="flex:1;" />'
+        +     '<button class="btn" id="orderAddTags">Apply</button>'
+        +   '</div>'
+        + '</div>'
+
+        + '<div class="section">'
+        +   '<div class="section-title">Internal notes</div>'
+        +   '<div class="row" style="gap:8px;margin-bottom:6px;">'
+        +     '<input id="orderNoteInput" placeholder="Add a note" style="flex:1;" />'
+        +     '<button class="btn" id="orderAddNote">Save</button>'
+        +   '</div>'
+        + '</div>'
+
+        + '<div class="section">'
+        +   '<div class="section-title">Actions</div>'
+        +   '<div class="row" style="gap:8px;flex-wrap:wrap;">'
+        +     '<button class="btn p" id="orderResend">Resend confirmation</button>'
+        +     '<button class="btn" id="orderExportReceipt">Export receipt</button>'
+        +   '</div>'
+        + '</div>'
+
+        + '<div class="section">'
+        +   '<div class="section-title">Timeline</div>'
+        +   timelineHtml
+        + '</div>';
+
+      var closeBtn = $('#ordersDrawerClose');
+      if (closeBtn) closeBtn.addEventListener('click', closeDrawer);
+
+      var resendBtn = $('#orderResend');
+      if (resendBtn){
+        resendBtn.addEventListener('click', async function(){
+          resendBtn.disabled = true;
+          resendBtn.textContent = 'Sending…';
+          try{
+            await j('/admin/api/orders/' + encodeURIComponent(order.id) + '/resend', { method:'POST' });
+            loadOrders(false);
+            openDrawer(order.id);
+          }catch(e){
+            alert('Resend failed: ' + (e.message || e));
+          }finally{
+            resendBtn.disabled = false;
+            resendBtn.textContent = 'Resend confirmation';
+          }
+        });
+      }
+
+      var receiptBtn = $('#orderExportReceipt');
+      if (receiptBtn){
+        receiptBtn.addEventListener('click', function(){
+          window.location.href = '/admin/api/orders/export?type=receipt&orderIds=' + encodeURIComponent(order.id);
+        });
+      }
+
+      var addTagsBtn = $('#orderAddTags');
+      if (addTagsBtn){
+        addTagsBtn.addEventListener('click', async function(){
+          var input = $('#orderTagInput');
+          var tagsValue = input && input.value ? input.value.trim() : '';
+          if (!tagsValue) return;
+          var tags = tagsValue.split(',').map(function(t){ return t.trim(); }).filter(Boolean);
+          if (!tags.length) return;
+          try{
+            await j('/admin/api/orders/bulk', {
+              method:'POST',
+              headers:{'Content-Type':'application/json'},
+              body: JSON.stringify({ action:'apply_tags', orderIds:[order.id], tags: tags, mode:'append' })
+            });
+            if (input) input.value = '';
+            loadOrders(false);
+            openDrawer(order.id);
+          }catch(e){
+            alert('Failed to update tags: ' + (e.message || e));
+          }
+        });
+      }
+
+      var addNoteBtn = $('#orderAddNote');
+      if (addNoteBtn){
+        addNoteBtn.addEventListener('click', async function(){
+          var input = $('#orderNoteInput');
+          var note = input && input.value ? input.value.trim() : '';
+          if (!note) return;
+          try{
+            await j('/admin/api/orders/bulk', {
+              method:'POST',
+              headers:{'Content-Type':'application/json'},
+              body: JSON.stringify({ action:'add_note', orderIds:[order.id], note: note })
+            });
+            if (input) input.value = '';
+            loadOrders(false);
+            openDrawer(order.id);
+          }catch(e){
+            alert('Failed to add note: ' + (e.message || e));
+          }
+        });
+      }
+    }
+
+    if (els.drawerBackdrop) els.drawerBackdrop.addEventListener('click', closeDrawer);
+
+    renderColumnChooser();
+    syncFilters();
+    loadOrders(true);
   }
   function venues(){
     if (!main) return;
