@@ -2,6 +2,7 @@
 import path from "path";
 import { fileURLToPath } from "url";
 import { Router, json } from "express";
+import prisma from "../lib/prisma.js";
 import { requireAdminOrOrganiser } from "../lib/authz.js";
 
 const router = Router();
@@ -9,10 +10,229 @@ const router = Router();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const widgetRegistry = [
+  {
+    key: "tickets_sold_7d",
+    title: "Tickets sold (7d)",
+    category: "Sales",
+    defaultEnabled: true,
+    defaultOrder: 1,
+  },
+  {
+    key: "orders_7d",
+    title: "Orders (7d)",
+    category: "Sales",
+    defaultEnabled: true,
+    defaultOrder: 2,
+  },
+  {
+    key: "gross_revenue_7d",
+    title: "Gross revenue (7d)",
+    category: "Financial",
+    defaultEnabled: true,
+    defaultOrder: 3,
+  },
+  {
+    key: "net_revenue_7d",
+    title: "Net revenue (7d)",
+    category: "Financial",
+    defaultEnabled: true,
+    defaultOrder: 4,
+  },
+  {
+    key: "average_order_value",
+    title: "Average order value",
+    category: "Financial",
+    defaultEnabled: true,
+    defaultOrder: 5,
+  },
+  {
+    key: "new_customers_7d",
+    title: "New customers (7d)",
+    category: "Customers",
+    defaultEnabled: true,
+    defaultOrder: 6,
+  },
+  {
+    key: "returning_customers_7d",
+    title: "Returning customers (7d)",
+    category: "Customers",
+    defaultEnabled: true,
+    defaultOrder: 7,
+  },
+  {
+    key: "refunds_7d",
+    title: "Refunds (7d)",
+    category: "Financial",
+    defaultEnabled: true,
+    defaultOrder: 8,
+  },
+  {
+    key: "booking_fee_kickback",
+    title: "Booking Fee Kickback",
+    category: "Financial",
+    defaultEnabled: true,
+    defaultOrder: 9,
+  },
+  {
+    key: "daily_performance",
+    title: "Daily Performance",
+    category: "Sales",
+    defaultEnabled: true,
+    defaultOrder: 10,
+  },
+  {
+    key: "early_warnings",
+    title: "Early Warnings",
+    category: "Operations",
+    defaultEnabled: true,
+    defaultOrder: 11,
+  },
+  {
+    key: "top_performing_shows",
+    title: "Top Performing Shows",
+    category: "Sales",
+    defaultEnabled: true,
+    defaultOrder: 12,
+  },
+  {
+    key: "needs_attention",
+    title: "Needs Attention",
+    category: "Operations",
+    defaultEnabled: true,
+    defaultOrder: 13,
+  },
+  {
+    key: "customer_behaviour_snapshot",
+    title: "Customer Behaviour Snapshot",
+    category: "Customers",
+    defaultEnabled: true,
+    defaultOrder: 14,
+  },
+];
+
+const widgetCategoryOrder = [
+  "Sales",
+  "Customers",
+  "Financial",
+  "Operations",
+  "Marketing",
+];
+
+function mergeWidgetPreferences(preferences) {
+  const prefMap = new Map();
+  (preferences || []).forEach((pref) => {
+    if (!pref || !pref.widgetKey) return;
+    prefMap.set(pref.widgetKey, pref);
+  });
+
+  const merged = widgetRegistry.map((widget) => {
+    const pref = prefMap.get(widget.key);
+    return {
+      key: widget.key,
+      title: widget.title,
+      category: widget.category,
+      defaultOrder: widget.defaultOrder,
+      enabled: pref ? Boolean(pref.enabled) : Boolean(widget.defaultEnabled),
+      order:
+        pref && pref.order !== null && pref.order !== undefined
+          ? Number(pref.order)
+          : widget.defaultOrder,
+    };
+  });
+
+  const categoryIndex = new Map(
+    widgetCategoryOrder.map((category, index) => [category, index])
+  );
+
+  merged.sort((a, b) => {
+    const catA = categoryIndex.has(a.category)
+      ? categoryIndex.get(a.category)
+      : widgetCategoryOrder.length;
+    const catB = categoryIndex.has(b.category)
+      ? categoryIndex.get(b.category)
+      : widgetCategoryOrder.length;
+    if (catA !== catB) return catA - catB;
+    const orderA = a.order ?? a.defaultOrder ?? 0;
+    const orderB = b.order ?? b.defaultOrder ?? 0;
+    return orderA - orderB;
+  });
+
+  return merged;
+}
+
+function getRegistryWidget(key) {
+  return widgetRegistry.find((widget) => widget.key === key) || null;
+}
+
 // ✅ Serve the brand logo from the admin router (no guessing about /public mounting)
 router.get("/ui/brand-logo", (_req, res) => {
   res.set("Cache-Control", "public, max-age=86400");
   res.sendFile(path.join(__dirname, "../../public/TixAll on White Background.png"));
+});
+
+router.get("/ui/api/home-widgets", requireAdminOrOrganiser, async (req, res) => {
+  try {
+    const userId = String(req.user?.id || "");
+    if (!userId) {
+      return res.status(401).json({ ok: false, error: "Unauthorized" });
+    }
+
+    const preferences = await prisma.dashboardWidgetPreference.findMany({
+      where: { userId },
+    });
+
+    const merged = mergeWidgetPreferences(preferences);
+    return res.json({ ok: true, widgets: merged });
+  } catch (err) {
+    console.error("[admin-ui] home widgets fetch failed", err);
+    return res
+      .status(500)
+      .json({ ok: false, error: "Failed to load widget preferences" });
+  }
+});
+
+router.post("/ui/api/home-widgets", requireAdminOrOrganiser, async (req, res) => {
+  try {
+    const userId = String(req.user?.id || "");
+    if (!userId) {
+      return res.status(401).json({ ok: false, error: "Unauthorized" });
+    }
+
+    const { widgetKey, enabled, order } = req.body || {};
+    const registryWidget = getRegistryWidget(widgetKey);
+    if (!registryWidget) {
+      return res.status(400).json({ ok: false, error: "Unknown widget" });
+    }
+
+    const payload = {
+      enabled: Boolean(enabled),
+      order:
+        order !== null && order !== undefined ? Number(order) : undefined,
+    };
+
+    await prisma.dashboardWidgetPreference.upsert({
+      where: { userId_widgetKey: { userId, widgetKey } },
+      update: payload,
+      create: {
+        userId,
+        widgetKey,
+        enabled: payload.enabled,
+        order: payload.order,
+      },
+    });
+
+    const preferences = await prisma.dashboardWidgetPreference.findMany({
+      where: { userId },
+    });
+    const merged = mergeWidgetPreferences(preferences);
+    return res.json({ ok: true, widgets: merged });
+  } catch (err) {
+    console.error("[admin-ui] home widgets update failed", err);
+    return res
+      .status(500)
+      .json({ ok: false, error: "Failed to update widget preference" });
+  }
 });
 
 // ✅ Login page (must be inside a route so req/res exist)
@@ -647,6 +867,101 @@ router.get(
       flex-direction:column;
       gap:6px;
       min-height:110px;
+    }
+    .kpi-card.widget-add-card{
+      align-items:center;
+      justify-content:center;
+      text-align:center;
+      cursor:pointer;
+      border-style:dashed;
+      color:var(--muted);
+    }
+    .kpi-card.widget-add-card:hover{
+      border-color:#0f9cdf;
+      color:#0f9cdf;
+      background:#f8fbff;
+    }
+    .widget-add-icon{
+      width:36px;
+      height:36px;
+      border-radius:50%;
+      background:rgba(15,156,223,0.12);
+      color:#0f9cdf;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:22px;
+      font-weight:700;
+    }
+    .widget-drawer{
+      position:fixed;
+      inset:0;
+      display:none;
+      align-items:stretch;
+      justify-content:flex-end;
+      background:rgba(15,23,42,0.32);
+      z-index:50;
+    }
+    .widget-drawer.open{display:flex;}
+    .widget-drawer-panel{
+      width:min(360px, 92vw);
+      background:#ffffff;
+      border-left:1px solid var(--border);
+      padding:20px;
+      display:flex;
+      flex-direction:column;
+      gap:16px;
+      box-shadow:-12px 0 24px rgba(15,23,42,0.12);
+    }
+    .widget-drawer-header{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+    }
+    .widget-drawer-title{
+      font-size:16px;
+      font-weight:700;
+    }
+    .widget-drawer-helper{
+      font-size:12px;
+      color:var(--muted);
+    }
+    .widget-group{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      padding-bottom:12px;
+      border-bottom:1px solid var(--border);
+    }
+    .widget-group:last-child{border-bottom:none;padding-bottom:0;}
+    .widget-group-title{
+      font-size:12px;
+      font-weight:700;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      color:var(--muted);
+    }
+    .widget-item{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:8px 10px;
+      border-radius:8px;
+      border:1px solid transparent;
+    }
+    .widget-item.loading{
+      opacity:0.6;
+    }
+    .widget-item input{cursor:pointer;}
+    .widget-item-label{
+      font-size:13px;
+      font-weight:600;
+    }
+    .widget-item-status{
+      font-size:11px;
+      color:var(--muted);
     }
     .kpi-label{
       font-size:11px;
@@ -1660,9 +1975,45 @@ document.addEventListener('click', function(e){
       +      '<div class="skeleton skeleton-line" style="margin-top:8px;"></div>'
       +    '</div>'
       +  '</section>'
+      +'</div>'
+      +'<div class="widget-drawer" id="widgetDrawer" aria-hidden="true">'
+      +  '<div class="widget-drawer-panel" role="dialog" aria-modal="true">'
+      +    '<div class="widget-drawer-header">'
+      +      '<div class="widget-drawer-title">Home screen widgets</div>'
+      +      '<button class="btn" id="widgetDrawerClose" aria-label="Close">✕</button>'
+      +    '</div>'
+      +    '<div class="widget-drawer-helper">Tick to show a widget. Untick to hide it.</div>'
+      +    '<div id="widgetDrawerError" class="error" style="display:none;"></div>'
+      +    '<div id="widgetDrawerList" class="grid" style="gap:12px;"></div>'
+      +  '</div>'
       +'</div>';
 
-    renderDashboard();
+    var drawer = $('#widgetDrawer');
+    if (drawer && !widgetDrawerEventsBound){
+      var closeBtn = $('#widgetDrawerClose');
+      if (closeBtn){
+        closeBtn.addEventListener('click', function(){
+          closeWidgetDrawer();
+        });
+      }
+      drawer.addEventListener('click', function(e){
+        if (e.target === drawer){
+          closeWidgetDrawer();
+        }
+      });
+      document.addEventListener('keydown', function(e){
+        if (e.key === 'Escape'){
+          closeWidgetDrawer();
+        }
+      });
+      widgetDrawerEventsBound = true;
+    }
+
+    loadWidgetPreferences().then(function(){
+      applyWidgetVisibility();
+      renderDashboard();
+      renderWidgetDrawer();
+    });
   }
 
   const fmtMoney = new Intl.NumberFormat('en-GB', {
@@ -1698,47 +2049,136 @@ document.addEventListener('click', function(e){
     return fmtMoney.format((pence || 0) / 100);
   }
 
+  var widgetState = { list: [], byKey: {} };
+  var widgetLoading = {};
+  var dashboardCache = { summary: null, kickback: null, topShows: null, alerts: null };
+  var widgetDrawerEventsBound = false;
+
+  function setWidgetState(widgets){
+    widgetState.list = widgets || [];
+    widgetState.byKey = widgetState.list.reduce(function(acc, item){
+      acc[item.key] = item;
+      return acc;
+    }, {});
+  }
+
+  function isWidgetEnabled(key){
+    if (!key) return true;
+    if (!widgetState.list.length) return true;
+    var item = widgetState.byKey[key];
+    return item ? !!item.enabled : true;
+  }
+
+  async function loadWidgetPreferences(){
+    try{
+      var data = await j('/admin/ui/api/home-widgets');
+      if (data && data.ok){
+        setWidgetState(data.widgets || []);
+      }
+    }catch(e){
+      setWidgetState([]);
+    }
+  }
+
+  function applyWidgetVisibility(){
+    var heroCard = $('#heroCard');
+    var alertsCard = $('#alertsCard');
+    var topShowsCard = $('#topShowsCard');
+    var bottomShowsCard = $('#bottomShowsCard');
+    var customerCard = $('#customerCard');
+    var heroGrid = document.querySelector('.hero-grid');
+    var showsGrid = $('#showsGrid');
+
+    if (heroCard) heroCard.style.display = isWidgetEnabled('daily_performance') ? '' : 'none';
+    if (alertsCard) alertsCard.style.display = isWidgetEnabled('early_warnings') ? '' : 'none';
+    if (topShowsCard) topShowsCard.style.display = isWidgetEnabled('top_performing_shows') ? '' : 'none';
+    if (bottomShowsCard) bottomShowsCard.style.display = isWidgetEnabled('needs_attention') ? '' : 'none';
+    if (customerCard) customerCard.style.display = isWidgetEnabled('customer_behaviour_snapshot') ? '' : 'none';
+
+    if (heroGrid){
+      heroGrid.style.display = (isWidgetEnabled('daily_performance') || isWidgetEnabled('early_warnings')) ? '' : 'none';
+    }
+    if (showsGrid){
+      showsGrid.style.display = (isWidgetEnabled('top_performing_shows') || isWidgetEnabled('needs_attention')) ? '' : 'none';
+    }
+  }
+
+  function applyWidgetUpdate(updatedList){
+    setWidgetState(updatedList || []);
+    applyWidgetVisibility();
+    if (dashboardCache.summary && dashboardCache.summary.ok){
+      renderKpiTiles(dashboardCache.summary, dashboardCache.kickback);
+      if (isWidgetEnabled('customer_behaviour_snapshot')){
+        renderCustomerSnapshot(dashboardCache.summary.customerSnapshot);
+      }
+    }
+    if (dashboardCache.topShows && dashboardCache.topShows.ok){
+      if (isWidgetEnabled('top_performing_shows')){
+        renderShows('topShowsBody', dashboardCache.topShows.top);
+      }
+      if (isWidgetEnabled('needs_attention')){
+        renderShows('bottomShowsBody', dashboardCache.topShows.bottom);
+      }
+    }
+    if (dashboardCache.alerts && dashboardCache.alerts.ok && isWidgetEnabled('early_warnings')){
+      renderAlerts(dashboardCache.alerts);
+    }
+    if (isWidgetEnabled('daily_performance')){
+      renderChartToggles();
+      loadTimeseries(chartMetric);
+    }
+    renderWidgetDrawer();
+  }
+
   function renderKpiTiles(summary, kickback){
     var grid = $('#kpiGrid');
     if (!grid) return;
 
     var tiles = [
       {
+        key: 'tickets_sold_7d',
         label: 'Tickets sold (7d)',
         value: fmtNumber.format(summary.current.tickets || 0),
         delta: summary.comparisons.tickets
       },
       {
+        key: 'orders_7d',
         label: 'Orders (7d)',
         value: fmtNumber.format(summary.current.orders || 0),
         delta: summary.comparisons.orders
       },
       {
+        key: 'gross_revenue_7d',
         label: 'Gross revenue (7d)',
         value: formatMoney(summary.current.gross || 0),
         delta: summary.comparisons.gross
       },
       {
+        key: 'net_revenue_7d',
         label: 'Net revenue (7d)',
         value: formatMoney(summary.current.net || 0),
         delta: summary.comparisons.net
       },
       {
+        key: 'average_order_value',
         label: 'Average order value',
         value: formatMoney(summary.current.aov || 0),
         delta: summary.comparisons.aov
       },
       {
+        key: 'new_customers_7d',
         label: 'New customers (7d)',
         value: fmtNumber.format(summary.current.newCustomers || 0),
         delta: summary.comparisons.newCustomers
       },
       {
+        key: 'returning_customers_7d',
         label: 'Returning customers (7d)',
         value: fmtNumber.format(summary.current.returningCustomers || 0),
         delta: summary.comparisons.returningCustomers
       },
       {
+        key: 'refunds_7d',
         label: 'Refunds (7d)',
         value: formatMoney(summary.current.refunds || 0),
         sub: fmtNumber.format(summary.current.refundsCount || 0) + ' refunds',
@@ -1746,7 +2186,9 @@ document.addEventListener('click', function(e){
       }
     ];
 
-    var html = tiles.map(function(tile){
+    var html = tiles.filter(function(tile){
+      return isWidgetEnabled(tile.key);
+    }).map(function(tile){
       return (
         '<div class="kpi-card">'
         + '<div class="kpi-label">' + tile.label + '</div>'
@@ -1757,17 +2199,125 @@ document.addEventListener('click', function(e){
       );
     }).join('');
 
-    var kick = kickback || { last7: 0, mtd: 0, last52w: 0 };
+    if (isWidgetEnabled('booking_fee_kickback')){
+      var kick = kickback || { last7: 0, mtd: 0, last52w: 0 };
+      html += (
+        '<div class="kpi-card booking-kickback">'
+        + '<div class="kpi-label">Booking Fee Kickback</div>'
+        + '<div class="kick-row"><span>7 days</span><strong>' + formatMoney(kick.last7 || 0) + '</strong></div>'
+        + '<div class="kick-row"><span>This month</span><strong>' + formatMoney(kick.mtd || 0) + '</strong></div>'
+        + '<div class="kick-row"><span>52 weeks</span><strong>' + formatMoney(kick.last52w || 0) + '</strong></div>'
+        + '</div>'
+      );
+    }
+
     html += (
-      '<div class="kpi-card booking-kickback">'
-      + '<div class="kpi-label">Booking Fee Kickback</div>'
-      + '<div class="kick-row"><span>7 days</span><strong>' + formatMoney(kick.last7 || 0) + '</strong></div>'
-      + '<div class="kick-row"><span>This month</span><strong>' + formatMoney(kick.mtd || 0) + '</strong></div>'
-      + '<div class="kick-row"><span>52 weeks</span><strong>' + formatMoney(kick.last52w || 0) + '</strong></div>'
+      '<div class="kpi-card widget-add-card" id="widgetAddTile" role="button" tabindex="0">'
+      + '<div class="widget-add-icon">+</div>'
+      + '<div class="kpi-value" style="font-size:14px;font-weight:700;">Add or edit widgets</div>'
+      + '<div class="muted" style="font-size:12px;">on your home screen</div>'
       + '</div>'
     );
 
     grid.innerHTML = html;
+
+    var addTile = $('#widgetAddTile');
+    if (addTile){
+      addTile.addEventListener('click', function(){
+        openWidgetDrawer();
+      });
+      addTile.addEventListener('keydown', function(e){
+        if (e.key === 'Enter' || e.key === ' '){
+          e.preventDefault();
+          openWidgetDrawer();
+        }
+      });
+    }
+  }
+
+  function renderWidgetDrawer(){
+    var listEl = $('#widgetDrawerList');
+    if (!listEl) return;
+
+    var groups = {};
+    (widgetState.list || []).forEach(function(widget){
+      if (!groups[widget.category]) groups[widget.category] = [];
+      groups[widget.category].push(widget);
+    });
+
+    var orderedCategories = ['Sales', 'Customers', 'Financial', 'Operations', 'Marketing'];
+    listEl.innerHTML = orderedCategories.filter(function(cat){
+      return groups[cat] && groups[cat].length;
+    }).map(function(category){
+      var items = groups[category] || [];
+      var itemHtml = items.map(function(widget){
+        var isLoading = !!widgetLoading[widget.key];
+        var checked = widget.enabled ? 'checked' : '';
+        return (
+          '<label class="widget-item' + (isLoading ? ' loading' : '') + '">'
+          + '<span class="widget-item-label">' + widget.title + '</span>'
+          + '<span class="row" style="gap:8px;align-items:center;">'
+          +   (isLoading ? '<span class="widget-item-status">Saving…</span>' : '')
+          +   '<input type="checkbox" data-widget-key="' + widget.key + '" ' + checked + ' ' + (isLoading ? 'disabled' : '') + ' />'
+          + '</span>'
+          + '</label>'
+        );
+      }).join('');
+
+      return (
+        '<div class="widget-group">'
+        + '<div class="widget-group-title">' + category + '</div>'
+        + itemHtml
+        + '</div>'
+      );
+    }).join('');
+
+    $$('#widgetDrawerList input[type="checkbox"]').forEach(function(input){
+      input.addEventListener('change', async function(){
+        var key = input.getAttribute('data-widget-key');
+        if (!key) return;
+        var nextEnabled = input.checked;
+        widgetLoading[key] = true;
+        renderWidgetDrawer();
+        try{
+          var resp = await j('/admin/ui/api/home-widgets', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ widgetKey: key, enabled: nextEnabled })
+          });
+          if (resp && resp.ok){
+            widgetLoading[key] = false;
+            applyWidgetUpdate(resp.widgets || []);
+            var err = $('#widgetDrawerError');
+            if (err){ err.style.display = 'none'; err.textContent = ''; }
+          }else{
+            throw new Error((resp && resp.error) || 'Failed to update widget');
+          }
+        }catch(e){
+          widgetLoading[key] = false;
+          var errEl = $('#widgetDrawerError');
+          if (errEl){
+            errEl.textContent = 'Sorry, we could not save that change. Please try again.';
+            errEl.style.display = 'block';
+          }
+          renderWidgetDrawer();
+        }
+      });
+    });
+  }
+
+  function openWidgetDrawer(){
+    var drawer = $('#widgetDrawer');
+    if (!drawer) return;
+    drawer.classList.add('open');
+    drawer.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeWidgetDrawer(){
+    var drawer = $('#widgetDrawer');
+    if (!drawer) return;
+    drawer.classList.remove('open');
+    drawer.setAttribute('aria-hidden', 'true');
   }
 
   var timeseriesCache = {};
@@ -2033,8 +2583,10 @@ document.addEventListener('click', function(e){
   }
 
   async function renderDashboard(){
-    renderChartToggles();
-    loadTimeseries(chartMetric);
+    if (isWidgetEnabled('daily_performance')){
+      renderChartToggles();
+      loadTimeseries(chartMetric);
+    }
 
     try{
       var results = await Promise.allSettled([
@@ -2049,25 +2601,44 @@ document.addEventListener('click', function(e){
       var topShows = results[2].status === 'fulfilled' ? results[2].value : null;
       var alerts = results[3].status === 'fulfilled' ? results[3].value : null;
 
+      dashboardCache.summary = summary;
+      dashboardCache.kickback = kickback;
+      dashboardCache.topShows = topShows;
+      dashboardCache.alerts = alerts;
+
       if (!summary || !summary.ok){
         $('#kpiGrid').innerHTML = '<div class="error-inline">Summary failed to load.</div>';
       }else{
         renderKpiTiles(summary, kickback);
-        renderCustomerSnapshot(summary.customerSnapshot);
+        if (isWidgetEnabled('customer_behaviour_snapshot')){
+          renderCustomerSnapshot(summary.customerSnapshot);
+        }
       }
 
-      if (!topShows || !topShows.ok){
-        $('#topShowsBody').innerHTML = '<div class="error-inline">Top shows failed to load.</div>';
-        $('#bottomShowsBody').innerHTML = '<div class="error-inline">Shows failed to load.</div>';
-      }else{
-        renderShows('topShowsBody', topShows.top);
-        renderShows('bottomShowsBody', topShows.bottom);
+      if (isWidgetEnabled('top_performing_shows') || isWidgetEnabled('needs_attention')){
+        if (!topShows || !topShows.ok){
+          if (isWidgetEnabled('top_performing_shows')){
+            $('#topShowsBody').innerHTML = '<div class="error-inline">Top shows failed to load.</div>';
+          }
+          if (isWidgetEnabled('needs_attention')){
+            $('#bottomShowsBody').innerHTML = '<div class="error-inline">Shows failed to load.</div>';
+          }
+        }else{
+          if (isWidgetEnabled('top_performing_shows')){
+            renderShows('topShowsBody', topShows.top);
+          }
+          if (isWidgetEnabled('needs_attention')){
+            renderShows('bottomShowsBody', topShows.bottom);
+          }
+        }
       }
 
-      if (!alerts || !alerts.ok){
-        $('#alertsBody').innerHTML = '<div class="error-inline">Alerts failed to load.</div>';
-      }else{
-        renderAlerts(alerts);
+      if (isWidgetEnabled('early_warnings')){
+        if (!alerts || !alerts.ok){
+          $('#alertsBody').innerHTML = '<div class="error-inline">Alerts failed to load.</div>';
+        }else{
+          renderAlerts(alerts);
+        }
       }
     }catch(e){
       $('#kpiGrid').innerHTML = '<div class="error-inline">Dashboard failed to load.</div>';
