@@ -856,6 +856,30 @@ router.get(
     transform:translateX(0);
   }
 }
+@media (max-width: 720px){
+  .content{
+    padding:12px;
+  }
+  .card{
+    padding:12px;
+  }
+  .hero-grid{
+    grid-template-columns:1fr;
+  }
+  .grid-2{
+    grid-template-columns:1fr;
+  }
+  .kpi-grid{
+    grid-template-columns:repeat(2,minmax(140px,1fr));
+  }
+  .table-list{
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+  }
+  .table-row{
+    min-width:520px;
+  }
+}
     .card{
       background:var(--panel);
       border:1px solid var(--border);
