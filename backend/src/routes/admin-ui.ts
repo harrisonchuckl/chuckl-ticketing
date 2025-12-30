@@ -6857,7 +6857,7 @@ function renderInterests(customer){
         + '<div class="card" style="margin:0 0 12px 0;">'
         +   '<div class="title">Create segment</div>'
         +   '<input class="input" id="mk_segment_name" placeholder="Segment name" />'
-        +   '<textarea class="input" id="mk_segment_rules" placeholder=\'Rules JSON, e.g. {\"rules\":[{\"type\":\"HAS_TAG\",\"value\":\"vip\"}]}\' style="height:120px;margin-top:8px;"></textarea>'
+        +   '<textarea class="input" id="mk_segment_rules" placeholder="Rules JSON, e.g. {&quot;rules&quot;:[{&quot;type&quot;:&quot;HAS_TAG&quot;,&quot;value&quot;:&quot;vip&quot;}]}" style="height:120px;margin-top:8px;"></textarea>'
         +   '<div class="row" style="gap:8px;margin-top:10px;">'
         +     '<button class="btn p" id="mk_segment_add">Save segment</button>'
         +     '<div id="mk_segment_msg" class="muted"></div>'
