@@ -11,6 +11,7 @@ import {
   MarketingConsentStatus,
   MarketingLawfulBasis,
   MarketingRecipientStatus,
+  Prisma,
 } from '@prisma/client';
 import { evaluateSegmentContacts, estimateSegment } from '../services/marketing/segments.js';
 import { ensureDailyLimit } from '../services/marketing/campaigns.js';
@@ -38,7 +39,7 @@ async function logMarketingAudit(
   action: string,
   entityType: string,
   entityId?: string | null,
-  metadata?: Record<string, unknown>
+  metadata?: Prisma.InputJsonValue
 ) {
   await prisma.marketingAuditLog.create({
     data: {

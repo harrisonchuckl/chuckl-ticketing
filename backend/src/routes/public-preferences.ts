@@ -113,10 +113,13 @@ router.post('/preferences/:tenantSlug/:token', async (req, res) => {
     orderBy: { createdAt: 'asc' },
   });
 
-  const topicStates = topics.map((topic) => ({
-    topicId: topic.id,
-    status: req.body?.[`topic_${topic.id}`] ? 'SUBSCRIBED' : 'UNSUBSCRIBED',
-  }));
+  const topicStates = topics.map((topic) => {
+    const status = req.body?.[`topic_${topic.id}`] ? 'SUBSCRIBED' : 'UNSUBSCRIBED';
+    return {
+      topicId: topic.id,
+      status: status as 'SUBSCRIBED' | 'UNSUBSCRIBED',
+    };
+  });
 
   await updateContactPreferences({ tenantId: tenant.id, contactId: contact.id, topicStates });
   await recordPreferenceAudit(tenant.id, 'preferences.updated', contact.id, { email: payload.email });

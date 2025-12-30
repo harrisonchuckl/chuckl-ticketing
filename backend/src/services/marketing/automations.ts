@@ -6,6 +6,7 @@ import {
   MarketingConsentStatus,
   MarketingEmailEventType,
   MarketingRecipientStatus,
+  Prisma,
 } from '@prisma/client';
 import { getEmailProvider } from '../../lib/email-marketing/index.js';
 import { createUnsubscribeToken } from '../../lib/email-marketing/unsubscribe.js';
@@ -433,7 +434,12 @@ export async function markCheckoutCompleted(tenantId: string, orderId: string, e
   });
 }
 
-export async function recordAutomationAudit(tenantId: string, action: string, entityId: string, metadata?: Record<string, unknown>) {
+export async function recordAutomationAudit(
+  tenantId: string,
+  action: string,
+  entityId: string,
+  metadata?: Prisma.InputJsonValue
+) {
   await prisma.marketingAuditLog.create({
     data: {
       tenantId,
@@ -445,7 +451,12 @@ export async function recordAutomationAudit(tenantId: string, action: string, en
   });
 }
 
-export async function recordPreferenceAudit(tenantId: string, action: string, entityId: string | null, metadata?: Record<string, unknown>) {
+export async function recordPreferenceAudit(
+  tenantId: string,
+  action: string,
+  entityId: string | null,
+  metadata?: Prisma.InputJsonValue
+) {
   await prisma.marketingAuditLog.create({
     data: {
       tenantId,
@@ -457,7 +468,7 @@ export async function recordPreferenceAudit(tenantId: string, action: string, en
   });
 }
 
-export async function recordDeliverabilityAudit(tenantId: string, metadata?: Record<string, unknown>) {
+export async function recordDeliverabilityAudit(tenantId: string, metadata?: Prisma.InputJsonValue) {
   await prisma.marketingAuditLog.create({
     data: {
       tenantId,
