@@ -636,6 +636,177 @@ router.get(
     .grid{display:grid;gap:8px;}
     .grid-2{grid-template-columns:repeat(2,1fr);}
     .grid-3{grid-template-columns:repeat(3,1fr);}
+    .dashboard{display:grid;gap:16px;}
+    .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;}
+    .kpi-card{
+      background:#ffffff;
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:14px;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      min-height:110px;
+    }
+    .kpi-label{
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      color:var(--muted);
+      font-weight:700;
+    }
+    .kpi-value{
+      font-size:20px;
+      font-weight:700;
+    }
+    .kpi-meta{
+      display:flex;
+      align-items:center;
+      gap:6px;
+      font-size:12px;
+      color:var(--muted);
+    }
+    .kpi-change.up{color:#15803d;}
+    .kpi-change.down{color:#b91c1c;}
+    .booking-kickback .kick-row{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      font-size:13px;
+      padding:4px 0;
+    }
+    .hero-grid{
+      display:grid;
+      grid-template-columns:minmax(0,2.2fr) minmax(240px,1fr);
+      gap:16px;
+      align-items:start;
+    }
+    .chart-wrap{
+      height:220px;
+      display:flex;
+      align-items:flex-end;
+      gap:6px;
+      padding-top:10px;
+    }
+    .chart-bar{
+      flex:1;
+      background:rgba(15,156,223,0.2);
+      border-radius:6px 6px 0 0;
+      position:relative;
+      min-width:4px;
+    }
+    .chart-bar.active{
+      background:rgba(15,156,223,0.45);
+    }
+    .chart-axis{
+      display:flex;
+      justify-content:space-between;
+      font-size:12px;
+      color:var(--muted);
+      margin-top:8px;
+    }
+    .chart-toggles{
+      flex-wrap:wrap;
+      gap:6px;
+    }
+    .chart-toggle{
+      border:1px solid var(--border);
+      background:#ffffff;
+      border-radius:999px;
+      padding:6px 10px;
+      font-size:12px;
+      font-weight:600;
+      cursor:pointer;
+    }
+    .chart-toggle.active{
+      background:#0f9cdf;
+      border-color:#0f9cdf;
+      color:#ffffff;
+    }
+    .alert-item{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      padding:10px 0;
+      border-bottom:1px solid var(--border);
+    }
+    .alert-item:last-child{border-bottom:0;}
+    .alert-title{font-weight:600;}
+    .alert-action{
+      align-self:flex-start;
+      text-decoration:none;
+      font-size:12px;
+      font-weight:700;
+      color:#0f9cdf;
+    }
+    .table-list{
+      display:grid;
+      gap:8px;
+    }
+    .table-row{
+      display:grid;
+      grid-template-columns:2fr 1.5fr 1fr 1fr 1fr;
+      gap:8px;
+      font-size:13px;
+      align-items:center;
+    }
+    .table-row.head{
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      color:var(--muted);
+      font-weight:700;
+    }
+    .table-row a{
+      color:inherit;
+      text-decoration:none;
+      font-weight:600;
+    }
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:4px 8px;
+      border-radius:999px;
+      background:#f8fafc;
+      border:1px solid var(--border);
+      font-size:12px;
+      font-weight:600;
+    }
+    .snapshot-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+      gap:12px;
+      margin-top:8px;
+    }
+    .snapshot-block{
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:12px;
+      background:#ffffff;
+    }
+    .skeleton{
+      background:linear-gradient(90deg,#f1f5f9 25%,#e5e7eb 45%,#f1f5f9 65%);
+      background-size:200% 100%;
+      animation:shimmer 1.2s infinite;
+      border-radius:8px;
+    }
+    .skeleton-line{height:12px;width:100%;}
+    .skeleton-tile{height:76px;}
+    @keyframes shimmer{
+      0%{background-position:200% 0;}
+      100%{background-position:-200% 0;}
+    }
+    .empty-state{
+      color:var(--muted);
+      font-size:13px;
+      padding:8px 0;
+    }
+    .error-inline{
+      color:#b91c1c;
+      font-size:13px;
+      padding:6px 0;
+    }
         input,select,textarea{
       border:1px solid var(--border);
       border-radius:8px;
@@ -1375,10 +1546,385 @@ document.addEventListener('click', function(e){
   function home(){
     if (!main) return;
     main.innerHTML =
-      '<div class="card">'
-      +'<div class="title">Welcome</div>'
-      +'<div class="muted">Use the menu to manage shows, venues and orders.</div>'
+      '<div class="dashboard">'
+      +  '<section class="kpi-grid" id="kpiGrid">'
+      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
+      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
+      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
+      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
+      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
+      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
+      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
+      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
+      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
+      +  '</section>'
+      +  '<section class="hero-grid">'
+      +    '<div class="card" id="heroCard">'
+      +      '<div class="header">'
+      +        '<div>'
+      +          '<div class="title">Weekly Performance</div>'
+      +          '<div class="muted">Last 30 days · Europe/London</div>'
+      +        '</div>'
+      +        '<div class="row chart-toggles" id="chartToggles"></div>'
+      +      '</div>'
+      +      '<div id="chartBody">'
+      +        '<div class="skeleton skeleton-line" style="height:200px;"></div>'
+      +      '</div>'
+      +    '</div>'
+      +    '<div class="card" id="alertsCard">'
+      +      '<div class="header"><div class="title">Early Warnings</div></div>'
+      +      '<div id="alertsBody">'
+      +        '<div class="skeleton skeleton-line"></div>'
+      +        '<div class="skeleton skeleton-line" style="margin-top:8px;"></div>'
+      +      '</div>'
+      +    '</div>'
+      +  '</section>'
+      +  '<section class="grid grid-2" id="showsGrid">'
+      +    '<div class="card" id="topShowsCard">'
+      +      '<div class="header"><div class="title">Top Performing Shows (7 days)</div></div>'
+      +      '<div id="topShowsBody"><div class="skeleton skeleton-line"></div></div>'
+      +    '</div>'
+      +    '<div class="card" id="bottomShowsCard">'
+      +      '<div class="header"><div class="title">Needs Attention (7 days)</div></div>'
+      +      '<div id="bottomShowsBody"><div class="skeleton skeleton-line"></div></div>'
+      +    '</div>'
+      +  '</section>'
+      +  '<section class="card" id="customerCard">'
+      +    '<div class="header"><div class="title">Customer Behaviour Snapshot</div></div>'
+      +    '<div id="customerBody">'
+      +      '<div class="skeleton skeleton-line"></div>'
+      +      '<div class="skeleton skeleton-line" style="margin-top:8px;"></div>'
+      +    '</div>'
+      +  '</section>'
       +'</div>';
+
+    renderDashboard();
+  }
+
+  const fmtMoney = new Intl.NumberFormat('en-GB', {
+    style: 'currency',
+    currency: 'GBP',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+  const fmtNumber = new Intl.NumberFormat('en-GB');
+  const fmtPercent = new Intl.NumberFormat('en-GB', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1
+  });
+  const fmtDate = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London',
+    day: '2-digit',
+    month: 'short'
+  });
+  const fmtDateTime = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  });
+
+  function renderDelta(value){
+    var cls = value >= 0 ? 'up' : 'down';
+    var arrow = value >= 0 ? '▲' : '▼';
+    return '<span class="kpi-change ' + cls + '">' + arrow + ' ' + fmtPercent.format(Math.abs(value)) + '%</span>';
+  }
+
+  function formatMoney(pence){
+    return fmtMoney.format((pence || 0) / 100);
+  }
+
+  function renderKpiTiles(summary, kickback){
+    var grid = $('#kpiGrid');
+    if (!grid) return;
+
+    var tiles = [
+      {
+        label: 'Tickets sold (7d)',
+        value: fmtNumber.format(summary.current.tickets || 0),
+        delta: summary.comparisons.tickets
+      },
+      {
+        label: 'Orders (7d)',
+        value: fmtNumber.format(summary.current.orders || 0),
+        delta: summary.comparisons.orders
+      },
+      {
+        label: 'Gross revenue (7d)',
+        value: formatMoney(summary.current.gross || 0),
+        delta: summary.comparisons.gross
+      },
+      {
+        label: 'Net revenue (7d)',
+        value: formatMoney(summary.current.net || 0),
+        delta: summary.comparisons.net
+      },
+      {
+        label: 'Average order value',
+        value: formatMoney(summary.current.aov || 0),
+        delta: summary.comparisons.aov
+      },
+      {
+        label: 'New customers (7d)',
+        value: fmtNumber.format(summary.current.newCustomers || 0),
+        delta: summary.comparisons.newCustomers
+      },
+      {
+        label: 'Returning customers (7d)',
+        value: fmtNumber.format(summary.current.returningCustomers || 0),
+        delta: summary.comparisons.returningCustomers
+      },
+      {
+        label: 'Refunds (7d)',
+        value: formatMoney(summary.current.refunds || 0),
+        sub: fmtNumber.format(summary.current.refundsCount || 0) + ' refunds',
+        delta: summary.comparisons.refunds
+      }
+    ];
+
+    var html = tiles.map(function(tile){
+      return (
+        '<div class="kpi-card">'
+        + '<div class="kpi-label">' + tile.label + '</div>'
+        + '<div class="kpi-value">' + tile.value + '</div>'
+        + (tile.sub ? '<div class="muted" style="font-size:12px;">' + tile.sub + '</div>' : '')
+        + '<div class="kpi-meta">vs prev 7d ' + renderDelta(tile.delta) + '</div>'
+        + '</div>'
+      );
+    }).join('');
+
+    var kick = kickback || { last7: 0, mtd: 0, last52w: 0 };
+    html += (
+      '<div class="kpi-card booking-kickback">'
+      + '<div class="kpi-label">Booking Fee Kickback</div>'
+      + '<div class="kick-row"><span>7 days</span><strong>' + formatMoney(kick.last7 || 0) + '</strong></div>'
+      + '<div class="kick-row"><span>This month</span><strong>' + formatMoney(kick.mtd || 0) + '</strong></div>'
+      + '<div class="kick-row"><span>52 weeks</span><strong>' + formatMoney(kick.last52w || 0) + '</strong></div>'
+      + '</div>'
+    );
+
+    grid.innerHTML = html;
+  }
+
+  var timeseriesCache = {};
+  var chartMetric = 'tickets';
+
+  function renderChart(series, metric){
+    var chartBody = $('#chartBody');
+    if (!chartBody) return;
+
+    if (!series || !series.length){
+      chartBody.innerHTML = '<div class="empty-state">No orders in this period yet.</div>';
+      return;
+    }
+
+    var maxValue = Math.max.apply(null, series.map(function(d){ return d.value || 0; })) || 1;
+    var barsHtml = series.map(function(point, idx){
+      var height = Math.max(4, Math.round((point.value / maxValue) * 100));
+      var isActive = idx === series.length - 1 ? ' active' : '';
+      var labelValue = metric === 'gross' || metric === 'net' || metric === 'refunds'
+        ? formatMoney(point.value)
+        : fmtNumber.format(point.value || 0);
+      return '<div class="chart-bar' + isActive + '" style="height:' + height + '%;" title="'
+        + fmtDate.format(new Date(point.date)) + ': ' + labelValue + '"></div>';
+    }).join('');
+
+    var startLabel = fmtDate.format(new Date(series[0].date));
+    var endLabel = fmtDate.format(new Date(series[series.length - 1].date));
+
+    chartBody.innerHTML =
+      '<div class="chart-wrap">' + barsHtml + '</div>'
+      + '<div class="chart-axis"><span>' + startLabel + '</span><span>' + endLabel + '</span></div>';
+  }
+
+  function renderChartToggles(){
+    var toggles = $('#chartToggles');
+    if (!toggles) return;
+
+    var options = [
+      { key: 'tickets', label: 'Tickets sold' },
+      { key: 'orders', label: 'Orders' },
+      { key: 'gross', label: 'Gross £' },
+      { key: 'net', label: 'Net £' },
+      { key: 'refunds', label: 'Refund £' }
+    ];
+
+    toggles.innerHTML = options.map(function(opt){
+      var active = opt.key === chartMetric ? ' active' : '';
+      return '<button class="chart-toggle' + active + '" data-metric="' + opt.key + '">' + opt.label + '</button>';
+    }).join('');
+
+    $$('#chartToggles .chart-toggle').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var metric = btn.getAttribute('data-metric');
+        if (!metric || metric === chartMetric) return;
+        chartMetric = metric;
+        renderChartToggles();
+        loadTimeseries(metric);
+      });
+    });
+  }
+
+  async function loadTimeseries(metric){
+    var chartBody = $('#chartBody');
+    if (chartBody) chartBody.innerHTML = '<div class="skeleton skeleton-line" style="height:200px;"></div>';
+
+    try{
+      if (!timeseriesCache[metric]){
+        timeseriesCache[metric] = await j('/admin/api/dashboard/timeseries?metric=' + metric + '&days=30');
+      }
+      var data = timeseriesCache[metric];
+      if (!data || !data.ok) throw new Error('Failed to load chart');
+      renderChart(data.series || [], metric);
+    }catch(e){
+      if (chartBody) chartBody.innerHTML = '<div class="error-inline">Chart failed to load.</div>';
+    }
+  }
+
+  function renderAlerts(alertsData){
+    var body = $('#alertsBody');
+    if (!body) return;
+    if (!alertsData || !alertsData.alerts || !alertsData.alerts.length){
+      body.innerHTML = '<div class="empty-state">No early warnings right now.</div>'
+        + (alertsData && alertsData.milestonesTracked === false ? '<div class="muted" style="font-size:12px;margin-top:6px;">Operational milestones are not tracked yet.</div>' : '');
+      return;
+    }
+
+    body.innerHTML = alertsData.alerts.map(function(alert){
+      return (
+        '<div class="alert-item">'
+        + '<div class="alert-title">' + escapeHtml(alert.title) + '</div>'
+        + '<div class="muted" style="font-size:12px;">' + escapeHtml(alert.detail) + '</div>'
+        + '<a class="alert-action" href="' + alert.action.href + '" data-view="' + alert.action.href + '">' + alert.action.label + '</a>'
+        + '</div>'
+      );
+    }).join('');
+  }
+
+  function renderShows(containerId, shows){
+    var body = $('#' + containerId);
+    if (!body) return;
+
+    if (!shows || !shows.length){
+      body.innerHTML = '<div class="empty-state">No shows in this period yet.</div>';
+      return;
+    }
+
+    var head = '<div class="table-row head">'
+      + '<div>Show</div><div>Venue</div><div>Date</div><div>Tickets</div><div>Gross</div>'
+      + '</div>';
+
+    var rows = shows.map(function(show){
+      var dateLabel = show.date ? fmtDateTime.format(new Date(show.date)) : 'TBC';
+      var capacity = show.capacityPct !== null && show.capacityPct !== undefined
+        ? '<span class="muted" style="font-size:11px;">' + Math.round(show.capacityPct) + '% cap</span>'
+        : '';
+      return (
+        '<div class="table-row">'
+        + '<div><a href="/admin/ui/shows/' + show.id + '/edit" data-view="/admin/ui/shows/' + show.id + '/edit">' + escapeHtml(show.title) + '</a></div>'
+        + '<div>' + escapeHtml(show.venue || '-') + '</div>'
+        + '<div>' + dateLabel + '</div>'
+        + '<div>' + fmtNumber.format(show.tickets || 0) + '</div>'
+        + '<div>' + formatMoney(show.gross || 0) + '<div>' + capacity + '</div></div>'
+        + '</div>'
+      );
+    }).join('');
+
+    body.innerHTML = '<div class="table-list">' + head + rows + '</div>';
+  }
+
+  function renderCustomerSnapshot(snapshot){
+    var body = $('#customerBody');
+    if (!body) return;
+
+    if (!snapshot){
+      body.innerHTML = '<div class="empty-state">No customer data yet.</div>';
+      return;
+    }
+
+    var topTowns = (snapshot.topTowns || []).map(function(item){
+      return '<div class="badge">' + escapeHtml(item.town) + ' · ' + fmtNumber.format(item.customers) + '</div>';
+    }).join('');
+
+    var topVenues = (snapshot.topVenues || []).map(function(item){
+      return '<div class="badge">' + escapeHtml(item.venue) + ' · ' + fmtNumber.format(item.customers) + '</div>';
+    }).join('');
+
+    body.innerHTML =
+      '<div class="snapshot-grid">'
+      + '<div class="snapshot-block">'
+      +   '<div class="kpi-label">New vs Returning (7d)</div>'
+      +   '<div class="kpi-value">' + fmtNumber.format(snapshot.last7.newCustomers || 0) + ' / ' + fmtNumber.format(snapshot.last7.returningCustomers || 0) + '</div>'
+      +   '<div class="muted" style="font-size:12px;">New / returning customers</div>'
+      + '</div>'
+      + '<div class="snapshot-block">'
+      +   '<div class="kpi-label">New vs Returning (30d)</div>'
+      +   '<div class="kpi-value">' + fmtNumber.format(snapshot.last30.newCustomers || 0) + ' / ' + fmtNumber.format(snapshot.last30.returningCustomers || 0) + '</div>'
+      +   '<div class="muted" style="font-size:12px;">New / returning customers</div>'
+      + '</div>'
+      + '<div class="snapshot-block">'
+      +   '<div class="kpi-label">Repeat Purchase Rate (90d)</div>'
+      +   '<div class="kpi-value">' + fmtPercent.format(snapshot.repeatRate || 0) + '%</div>'
+      +   '<div class="muted" style="font-size:12px;">Customers with 2+ orders</div>'
+      + '</div>'
+      + '<div class="snapshot-block">'
+      +   '<div class="kpi-label">Lapsed Customers</div>'
+      +   '<div class="kpi-value">' + fmtNumber.format(snapshot.lapsedCount || 0) + '</div>'
+      +   '<div class="muted" style="font-size:12px;">90+ days since last purchase</div>'
+      + '</div>'
+      + '</div>'
+      + '<div class="snapshot-grid" style="margin-top:12px;">'
+      +   '<div class="snapshot-block">'
+      +     '<div class="kpi-label">Top towns</div>'
+      +     (topTowns ? topTowns : '<div class="empty-state">No customer towns yet.</div>')
+      +   '</div>'
+      +   '<div class="snapshot-block">'
+      +     '<div class="kpi-label">Top venues</div>'
+      +     (topVenues ? topVenues : '<div class="empty-state">No customer venues yet.</div>')
+      +   '</div>'
+      + '</div>';
+  }
+
+  async function renderDashboard(){
+    renderChartToggles();
+    loadTimeseries(chartMetric);
+
+    try{
+      var results = await Promise.allSettled([
+        j('/admin/api/dashboard/summary?range=7d'),
+        j('/admin/api/dashboard/booking-fee-kickback'),
+        j('/admin/api/dashboard/top-shows?range=7d'),
+        j('/admin/api/dashboard/alerts')
+      ]);
+
+      var summary = results[0].status === 'fulfilled' ? results[0].value : null;
+      var kickback = results[1].status === 'fulfilled' ? results[1].value : null;
+      var topShows = results[2].status === 'fulfilled' ? results[2].value : null;
+      var alerts = results[3].status === 'fulfilled' ? results[3].value : null;
+
+      if (!summary || !summary.ok){
+        $('#kpiGrid').innerHTML = '<div class="error-inline">Summary failed to load.</div>';
+      }else{
+        renderKpiTiles(summary, kickback);
+        renderCustomerSnapshot(summary.customerSnapshot);
+      }
+
+      if (!topShows || !topShows.ok){
+        $('#topShowsBody').innerHTML = '<div class="error-inline">Top shows failed to load.</div>';
+        $('#bottomShowsBody').innerHTML = '<div class="error-inline">Shows failed to load.</div>';
+      }else{
+        renderShows('topShowsBody', topShows.top);
+        renderShows('bottomShowsBody', topShows.bottom);
+      }
+
+      if (!alerts || !alerts.ok){
+        $('#alertsBody').innerHTML = '<div class="error-inline">Alerts failed to load.</div>';
+      }else{
+        renderAlerts(alerts);
+      }
+    }catch(e){
+      $('#kpiGrid').innerHTML = '<div class="error-inline">Dashboard failed to load.</div>';
+    }
   }
 
   // --- Venue search / inline create ---
