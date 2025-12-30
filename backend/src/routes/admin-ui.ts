@@ -643,6 +643,7 @@ router.get(
 
   /* Global fixed header height */
   --header-h:56px;
+  --sidebar-width:220px;
 
   /* TIXall AI highlight */
   --ai:#009fe3;
@@ -691,6 +692,19 @@ router.get(
   align-items:center;
   gap:10px;
 }
+.hdr-menu-toggle{
+  width:36px;
+  height:36px;
+  border:1px solid var(--border);
+  background:#ffffff;
+  border-radius:10px;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  padding:0;
+}
+.hdr-menu-toggle:hover{ background:#f9fafb; }
 .hdr-account{
   position:relative;
 }
@@ -744,7 +758,10 @@ router.get(
 }
 
 .sidebar{
-  width:220px;
+  width:var(--sidebar-width);
+  min-width:var(--sidebar-width);
+  max-width:var(--sidebar-width);
+  flex:0 0 var(--sidebar-width);
   background:#ffffff;
   border-right:1px solid var(--border);
   padding:16px 12px;
@@ -753,6 +770,7 @@ router.get(
   height:calc(100vh - var(--header-h));
   box-sizing:border-box;
   overflow:auto;
+  scrollbar-gutter:stable;
 }
     .sb-group{
       font-size:12px;
@@ -816,6 +834,28 @@ router.get(
       flex:1;
       padding:20px;
     }
+
+@media (max-width: 960px){
+  .hdr-menu-toggle{
+    display:inline-flex;
+  }
+  .wrap{
+    display:block;
+  }
+  .sidebar{
+    position:fixed;
+    left:0;
+    top:var(--header-h);
+    height:calc(100vh - var(--header-h));
+    transform:translateX(-100%);
+    transition:transform 0.2s ease;
+    z-index:150;
+    box-shadow:10px 0 30px rgba(15, 23, 42, 0.15);
+  }
+  body.sidebar-open .sidebar{
+    transform:translateX(0);
+  }
+}
     .card{
       background:var(--panel);
       border:1px solid var(--border);
@@ -1707,6 +1747,11 @@ router.get(
     </a>
 
     <div class="hdr-right">
+      <button class="hdr-menu-toggle" id="hdrMenuToggle" aria-label="Toggle menu" aria-expanded="false" aria-controls="adminSidebar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M4 6h16M4 12h16M4 18h16" stroke="#111827" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </button>
       <div class="hdr-account" id="hdrAccount">
         <button class="hdr-account-btn" id="hdrAccountBtn" aria-haspopup="menu" aria-expanded="false" title="Account">
           <!-- Simple person icon (inline SVG) -->
@@ -1727,11 +1772,11 @@ router.get(
   </header>
 
   <div class="wrap">
-    <aside class="sidebar">
+    <aside class="sidebar" id="adminSidebar">
       <div class="sb-group">Dashboard</div>
       <a class="sb-link" href="/admin/ui/home" data-view="/admin/ui/home">Home</a>
 
-      <div class="sb-group">Manage</div>
+      <div class="sb-group">Shows and Events</div>
       <div>
         <div class="sb-sub" id="showsSub">
         <a class="sb-link sub" href="/admin/ui/shows/create" data-view="/admin/ui/shows/create">Create Show</a>
@@ -1773,6 +1818,37 @@ router.get(
 <script>
 (function(){
   console.log('[Admin UI] booting');
+  var menuToggle = document.getElementById('hdrMenuToggle');
+  var sidebar = document.getElementById('adminSidebar');
+  if (menuToggle && sidebar) {
+    menuToggle.addEventListener('click', function(){
+      var isOpen = document.body.classList.toggle('sidebar-open');
+      menuToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    });
+
+    sidebar.addEventListener('click', function(event){
+      if (window.innerWidth > 960) return;
+      if (event.target && event.target.closest && event.target.closest('a')) {
+        document.body.classList.remove('sidebar-open');
+        menuToggle.setAttribute('aria-expanded', 'false');
+      }
+    });
+
+    document.addEventListener('click', function(event){
+      if (window.innerWidth > 960) return;
+      if (!document.body.classList.contains('sidebar-open')) return;
+      if (menuToggle.contains(event.target) || sidebar.contains(event.target)) return;
+      document.body.classList.remove('sidebar-open');
+      menuToggle.setAttribute('aria-expanded', 'false');
+    });
+
+    window.addEventListener('resize', function(){
+      if (window.innerWidth > 960) {
+        document.body.classList.remove('sidebar-open');
+        menuToggle.setAttribute('aria-expanded', 'false');
+      }
+    });
+  }
     // If the session has expired, force login (1 hour inactivity)
   (async function ensureAuth(){
     try{
