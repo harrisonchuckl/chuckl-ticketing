@@ -198,6 +198,7 @@ model User {
   showsOrganised Show[]   @relation("OrganiserShows")
   tickets        Ticket[]
   orderNotes     OrderNote[] @relation("OrderNoteAuthor")
+  dashboardWidgetPreferences DashboardWidgetPreference[]
   orderAuditLogs OrderAuditLog[] @relation("OrderAuditActor")
 
   venueMemberships    VenueMember[]
@@ -238,6 +239,21 @@ model User {
   marketingPreferenceTopics MarketingPreferenceTopic[]
   marketingCheckoutEvents MarketingCheckoutEvent[]
   marketingAuditLogs MarketingAuditLog[]
+}
+
+model DashboardWidgetPreference {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  userId    String
+  widgetKey String
+  enabled   Boolean  @default(true)
+  order     Int?
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@unique([userId, widgetKey])
 }
 
 model AccessRequest {
