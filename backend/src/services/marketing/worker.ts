@@ -1,10 +1,18 @@
 import { processScheduledCampaigns, processSendingCampaigns } from './campaigns.js';
+import {
+  processAbandonedCheckoutAutomations,
+  processAutomationSteps,
+  processNoPurchaseAutomations,
+} from './automations.js';
 
 let interval: NodeJS.Timeout | null = null;
 
 export async function runMarketingWorkerOnce() {
   await processScheduledCampaigns();
   await processSendingCampaigns();
+  await processNoPurchaseAutomations();
+  await processAbandonedCheckoutAutomations();
+  await processAutomationSteps();
 }
 
 export function startMarketingWorker() {

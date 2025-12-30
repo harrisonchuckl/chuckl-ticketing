@@ -10,6 +10,7 @@ import { attachUser } from "./middleware/requireAuth.js";
 
 import publicSlugs from "./routes/public-slugs.js";
 import publicUnsubscribeRouter from "./routes/public-unsubscribe.js";
+import publicPreferencesRouter from "./routes/public-preferences.js";
 
 
 
@@ -102,6 +103,7 @@ app.use("/public", publicSlugs);
 // 3) SSR public event pages (legacy + internal rewrite target)
 app.use("/public", publicEventRouter);
 app.use("/", publicUnsubscribeRouter);
+app.use("/", publicPreferencesRouter);
 
 
 

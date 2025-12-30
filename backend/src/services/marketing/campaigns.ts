@@ -1,6 +1,7 @@
 import prisma from '../../lib/prisma.js';
 import { getEmailProvider } from '../../lib/email-marketing/index.js';
 import { createUnsubscribeToken } from '../../lib/email-marketing/unsubscribe.js';
+import { createPreferencesToken } from '../../lib/email-marketing/preferences.js';
 import { renderMarketingTemplate } from '../../lib/email-marketing/rendering.js';
 import {
   MarketingCampaignStatus,
@@ -12,6 +13,7 @@ import {
   MarketingEmailEventType,
 } from '@prisma/client';
 import { evaluateSegmentContacts } from './segments.js';
+import { buildRecommendedShowsHtml } from './recommendations.js';
 
 const PUBLIC_BASE_URL =
   process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
@@ -136,9 +138,29 @@ async function buildUnsubscribeUrl(tenantId: string, email: string) {
   return `${baseUrl()}/u/${encodeURIComponent(slug)}/${encodeURIComponent(token)}`;
 }
 
+async function buildPreferencesUrl(tenantId: string, email: string) {
+  const tenant = await prisma.user.findUnique({
+    where: { id: tenantId },
+    select: { storefrontSlug: true, id: true },
+  });
+  if (!tenant) throw new Error('Tenant not found');
+  const token = createPreferencesToken({ tenantId, email });
+  const slug = tenantSlugFrom(tenant);
+  return `${baseUrl()}/preferences/${encodeURIComponent(slug)}/${encodeURIComponent(token)}`;
+}
+
 function isFromVerified(fromEmail: string) {
   if (!REQUIRE_VERIFIED_FROM || !VERIFIED_FROM_DOMAIN) return true;
-  return fromEmail.toLowerCase().endsWith(`@${VERIFIED_FROM_DOMAIN.toLowerCase()}`);
+  const effective = applyMarketingStream(fromEmail);
+  return effective.toLowerCase().endsWith(`@${VERIFIED_FROM_DOMAIN.toLowerCase()}`);
+}
+
+function applyMarketingStream(fromEmail: string) {
+  const streamDomain = String(process.env.MARKETING_STREAM_DOMAIN || '').trim();
+  if (!streamDomain) return fromEmail;
+  const at = fromEmail.indexOf('@');
+  if (at === -1) return fromEmail;
+  return `${fromEmail.slice(0, at)}@${streamDomain}`;
 }
 
 export async function ensureDailyLimit(tenantId: string, upcomingCount: number) {
@@ -190,6 +212,8 @@ export async function processCampaignSend(campaignId: string) {
         select: { firstName: true, lastName: true, email: true },
       });
       const unsubscribeUrl = await buildUnsubscribeUrl(campaign.tenantId, recipient.email);
+      const preferencesUrl = await buildPreferencesUrl(campaign.tenantId, recipient.email);
+      const recommendedShows = await buildRecommendedShowsHtml(campaign.tenantId, recipient.email);
 
       const { html, errors } = renderMarketingTemplate(campaign.template.mjmlBody, {
         firstName: contact?.firstName || '',
@@ -197,6 +221,8 @@ export async function processCampaignSend(campaignId: string) {
         email: recipient.email,
         tenantName: tenantNameFrom(tenant),
         unsubscribeUrl,
+        preferencesUrl,
+        recommendedShows: recommendedShows || '',
       });
 
       if (errors.length) {
@@ -221,7 +247,7 @@ export async function processCampaignSend(campaignId: string) {
           subject: campaign.template.subject,
           html,
           fromName: campaign.template.fromName,
-          fromEmail: campaign.template.fromEmail,
+          fromEmail: applyMarketingStream(campaign.template.fromEmail),
           replyTo: campaign.template.replyTo,
           headers,
           customArgs: {

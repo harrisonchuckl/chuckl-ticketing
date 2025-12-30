@@ -7291,11 +7291,17 @@ function renderInterests(customer){
       +     '<button class="btn tab-btn" data-tab="segments">Segments</button>'
       +     '<button class="btn tab-btn" data-tab="templates">Templates</button>'
       +     '<button class="btn tab-btn" data-tab="campaigns">Campaigns</button>'
+      +     '<button class="btn tab-btn" data-tab="automations">Automations</button>'
+      +     '<button class="btn tab-btn" data-tab="preferences">Preferences</button>'
+      +     '<button class="btn tab-btn" data-tab="deliverability">Deliverability</button>'
       +   '</div>'
       +   '<div id="marketing-contacts" class="marketing-tab" style="margin-top:16px;"></div>'
       +   '<div id="marketing-segments" class="marketing-tab" style="margin-top:16px;display:none;"></div>'
       +   '<div id="marketing-templates" class="marketing-tab" style="margin-top:16px;display:none;"></div>'
       +   '<div id="marketing-campaigns" class="marketing-tab" style="margin-top:16px;display:none;"></div>'
+      +   '<div id="marketing-automations" class="marketing-tab" style="margin-top:16px;display:none;"></div>'
+      +   '<div id="marketing-preferences" class="marketing-tab" style="margin-top:16px;display:none;"></div>'
+      +   '<div id="marketing-deliverability" class="marketing-tab" style="margin-top:16px;display:none;"></div>'
       + '</div>';
 
     var tabs = Array.prototype.slice.call(main.querySelectorAll('.tab-btn'));
@@ -7304,6 +7310,9 @@ function renderInterests(customer){
       segments: main.querySelector('#marketing-segments'),
       templates: main.querySelector('#marketing-templates'),
       campaigns: main.querySelector('#marketing-campaigns'),
+      automations: main.querySelector('#marketing-automations'),
+      preferences: main.querySelector('#marketing-preferences'),
+      deliverability: main.querySelector('#marketing-deliverability'),
     };
 
     function setTab(name){
@@ -7630,10 +7639,239 @@ function renderInterests(customer){
       renderCampaigns(data.items || [], templates.items || [], segments.items || []);
     }
 
+    function renderAutomations(items, templates){
+      var templateOptions = templates.map(function(t){
+        return '<option value=\"' + escapeHtml(t.id) + '\">' + escapeHtml(t.name) + '</option>';
+      }).join('');
+      var automationOptions = items.map(function(a){
+        return '<option value=\"' + escapeHtml(a.id) + '\">' + escapeHtml(a.name) + '</option>';
+      }).join('');
+      var triggerOptions = [
+        'AFTER_PURCHASE',
+        'NO_PURCHASE_DAYS',
+        'VIP_THRESHOLD',
+        'SHOW_CATEGORY_INTEREST',
+        'ABANDONED_CHECKOUT'
+      ].map(function(t){ return '<option value=\"' + t + '\">' + t.replace(/_/g, ' ') + '</option>'; }).join('');
+
+      var listHtml = items.map(function(a){
+        var steps = (a.steps || []).map(function(step){
+          return '<li>Step ' + step.stepOrder + ' — ' + escapeHtml(step.template?.name || '') + ' (' + step.delayMinutes + ' min delay)</li>';
+        }).join('');
+        return '<div class=\"card\" style=\"margin-bottom:12px;\">'
+          + '<div class=\"title\">' + escapeHtml(a.name) + '</div>'
+          + '<div class=\"muted\">Trigger: ' + escapeHtml(a.triggerType) + ' • ' + (a.isEnabled ? 'Enabled' : 'Disabled') + '</div>'
+          + '<ul style=\"margin:10px 0 0 18px;\">' + (steps || '<li>No steps yet.</li>') + '</ul>'
+          + '</div>';
+      }).join('');
+
+      var html = ''
+        + '<div class=\"card\" style=\"margin:0 0 12px 0;\">'
+        +   '<div class=\"title\">Create automation</div>'
+        +   '<div class=\"grid\" style=\"grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:10px;\">'
+        +     '<input class=\"input\" id=\"mk_auto_name\" placeholder=\"Automation name\" />'
+        +     '<select class=\"input\" id=\"mk_auto_trigger\">' + triggerOptions + '</select>'
+        +     '<select class=\"input\" id=\"mk_auto_enabled\">'
+        +       '<option value=\"true\">Enabled</option>'
+        +       '<option value=\"false\">Disabled</option>'
+        +     '</select>'
+        +   '</div>'
+        +   '<div class=\"row\" style=\"gap:8px;margin-top:10px;\">'
+        +     '<button class=\"btn p\" id=\"mk_auto_add\">Save automation</button>'
+        +     '<div id=\"mk_auto_msg\" class=\"muted\"></div>'
+        +   '</div>'
+        + '</div>'
+        + '<div class=\"card\" style=\"margin:0 0 12px 0;\">'
+        +   '<div class=\"title\">Add automation step</div>'
+        +   '<div class=\"grid\" style=\"grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:10px;\">'
+        +     '<select class=\"input\" id=\"mk_step_auto\">' + automationOptions + '</select>'
+        +     '<select class=\"input\" id=\"mk_step_template\">' + templateOptions + '</select>'
+        +     '<input class=\"input\" id=\"mk_step_order\" placeholder=\"Step order\" />'
+        +     '<input class=\"input\" id=\"mk_step_delay\" placeholder=\"Delay (minutes)\" />'
+        +   '</div>'
+        +   '<textarea class=\"input\" id=\"mk_step_rules\" placeholder=\"Condition rules JSON (optional)\" style=\"height:100px;margin-top:10px;\"></textarea>'
+        +   '<div class=\"row\" style=\"gap:8px;margin-top:10px;\">'
+        +     '<button class=\"btn p\" id=\"mk_step_add\">Save step</button>'
+        +     '<div id=\"mk_step_msg\" class=\"muted\"></div>'
+        +   '</div>'
+        + '</div>'
+        + '<div class=\"card\" style=\"margin:0;\">'
+        +   '<div class=\"title\">Automations</div>'
+        +   '<div style=\"margin-top:10px;\">' + (listHtml || '<div class=\"muted\">No automations yet.</div>') + '</div>'
+        + '</div>';
+
+      sections.automations.innerHTML = html;
+
+      var addAuto = sections.automations.querySelector('#mk_auto_add');
+      if (addAuto) {
+        addAuto.addEventListener('click', async function(){
+          var name = String(valueOf(sections.automations, 'mk_auto_name') || '').trim();
+          var trigger = String(valueOf(sections.automations, 'mk_auto_trigger') || '').trim();
+          var enabled = String(valueOf(sections.automations, 'mk_auto_enabled') || 'true') === 'true';
+          var msg = sections.automations.querySelector('#mk_auto_msg');
+          if (!name || !trigger) { if (msg) msg.textContent = 'Name + trigger required.'; return; }
+          try {
+            await fetchJson('/admin/marketing/automations', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({ name: name, triggerType: trigger, isEnabled: enabled })
+            });
+            if (msg) msg.textContent = 'Saved.';
+            await loadAutomations();
+          } catch (err) {
+            if (msg) msg.textContent = err.message || 'Failed.';
+          }
+        });
+      }
+
+      var addStep = sections.automations.querySelector('#mk_step_add');
+      if (addStep) {
+        addStep.addEventListener('click', async function(){
+          var automationId = String(valueOf(sections.automations, 'mk_step_auto') || '').trim();
+          var templateId = String(valueOf(sections.automations, 'mk_step_template') || '').trim();
+          var stepOrder = String(valueOf(sections.automations, 'mk_step_order') || '').trim();
+          var delayMinutes = String(valueOf(sections.automations, 'mk_step_delay') || '').trim();
+          var rulesRaw = String(valueOf(sections.automations, 'mk_step_rules') || '').trim();
+          var msg = sections.automations.querySelector('#mk_step_msg');
+          if (!automationId || !templateId || !stepOrder) { if (msg) msg.textContent = 'Automation, template, and order required.'; return; }
+          var rules = {};
+          if (rulesRaw) {
+            try { rules = JSON.parse(rulesRaw); } catch (err) { if (msg) msg.textContent = 'Invalid JSON.'; return; }
+          }
+          try {
+            await fetchJson('/admin/marketing/automations/' + encodeURIComponent(automationId) + '/steps', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({
+                templateId: templateId,
+                stepOrder: Number(stepOrder),
+                delayMinutes: Number(delayMinutes || 0),
+                conditionRules: rules
+              })
+            });
+            if (msg) msg.textContent = 'Saved.';
+            await loadAutomations();
+          } catch (err) {
+            if (msg) msg.textContent = err.message || 'Failed.';
+          }
+        });
+      }
+    }
+
+    async function loadAutomations(){
+      var data = await fetchJson('/admin/marketing/automations');
+      var templates = await fetchJson('/admin/marketing/templates');
+      renderAutomations(data.items || [], templates.items || []);
+    }
+
+    function renderPreferences(items){
+      var html = ''
+        + '<div class=\"card\" style=\"margin:0 0 12px 0;\">'
+        +   '<div class=\"title\">Add topic</div>'
+        +   '<div class=\"grid\" style=\"grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:10px;\">'
+        +     '<input class=\"input\" id=\"mk_topic_name\" placeholder=\"Topic name\" />'
+        +     '<input class=\"input\" id=\"mk_topic_desc\" placeholder=\"Description\" />'
+        +     '<select class=\"input\" id=\"mk_topic_default\">'
+        +       '<option value=\"true\">Default on</option>'
+        +       '<option value=\"false\">Default off</option>'
+        +     '</select>'
+        +   '</div>'
+        +   '<div class=\"row\" style=\"gap:8px;margin-top:10px;\">'
+        +     '<button class=\"btn p\" id=\"mk_topic_add\">Save topic</button>'
+        +     '<div id=\"mk_topic_msg\" class=\"muted\"></div>'
+        +   '</div>'
+        + '</div>'
+        + '<div class=\"card\" style=\"margin:0;\">'
+        +   '<div class=\"title\">Topics</div>'
+        +   '<div class=\"table-wrap\"><table class=\"table\">'
+        +     '<thead><tr><th>Name</th><th>Description</th><th>Default</th></tr></thead>'
+        +     '<tbody>'
+        +       items.map(function(topic){ return '<tr><td>' + escapeHtml(topic.name) + '</td><td>' + escapeHtml(topic.description || '') + '</td><td>' + (topic.isDefault ? 'Yes' : 'No') + '</td></tr>'; }).join('')
+        +     '</tbody></table></div>'
+        + '</div>';
+      sections.preferences.innerHTML = html;
+
+      var addBtn = sections.preferences.querySelector('#mk_topic_add');
+      if (addBtn) {
+        addBtn.addEventListener('click', async function(){
+          var name = String(valueOf(sections.preferences, 'mk_topic_name') || '').trim();
+          var description = String(valueOf(sections.preferences, 'mk_topic_desc') || '').trim();
+          var isDefault = String(valueOf(sections.preferences, 'mk_topic_default') || 'true') === 'true';
+          var msg = sections.preferences.querySelector('#mk_topic_msg');
+          if (!name) { if (msg) msg.textContent = 'Name required.'; return; }
+          try {
+            await fetchJson('/admin/marketing/preferences/topics', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({ name: name, description: description, isDefault: isDefault })
+            });
+            if (msg) msg.textContent = 'Saved.';
+            await loadPreferences();
+          } catch (err) {
+            if (msg) msg.textContent = err.message || 'Failed.';
+          }
+        });
+      }
+    }
+
+    async function loadPreferences(){
+      var data = await fetchJson('/admin/marketing/preferences/topics');
+      renderPreferences(data.items || []);
+    }
+
+    function renderDeliverability(summary, segments, warmup){
+      var summaryHtml = ''
+        + '<div class=\"grid\" style=\"grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;\">'
+        +   '<div class=\"card\"><div class=\"title\">Bounce rate</div><div>' + summary.bounceRate + '%</div></div>'
+        +   '<div class=\"card\"><div class=\"title\">Complaint rate</div><div>' + summary.complaintRate + '%</div></div>'
+        +   '<div class=\"card\"><div class=\"title\">Unsubscribe rate</div><div>' + summary.unsubscribeRate + '%</div></div>'
+        +   '<div class=\"card\"><div class=\"title\">Click rate</div><div>' + summary.clickRate + '%</div></div>'
+        + '</div>';
+
+      var segmentRows = (segments || []).map(function(seg){
+        return '<tr><td>' + escapeHtml(seg.name) + '</td><td>' + seg.engagementRate + '%</td><td>' + seg.sent + '</td></tr>';
+      }).join('');
+
+      var warmupRows = (warmup.presets || []).map(function(p){
+        return '<tr><td>' + escapeHtml(p.label) + '</td><td>' + p.dailyLimit + '</td><td>' + p.ratePerSecond + '/s</td><td>' + p.batchSize + '</td></tr>';
+      }).join('');
+
+      sections.deliverability.innerHTML = ''
+        + '<div class=\"card\" style=\"margin-bottom:12px;\">'
+        +   '<div class=\"title\">Sending health</div>'
+        +   '<div style=\"margin-top:10px;\">' + summaryHtml + '</div>'
+        + '</div>'
+        + '<div class=\"card\" style=\"margin-bottom:12px;\">'
+        +   '<div class=\"title\">Top segments by engagement</div>'
+        +   '<div class=\"table-wrap\"><table class=\"table\">'
+        +     '<thead><tr><th>Segment</th><th>Engagement rate</th><th>Sent</th></tr></thead>'
+        +     '<tbody>' + (segmentRows || '<tr><td colspan=\"3\" class=\"muted\">No data yet.</td></tr>') + '</tbody>'
+        +   '</table></div>'
+        + '</div>'
+        + '<div class=\"card\">'
+        +   '<div class=\"title\">Warm-up guidance</div>'
+        +   '<ul style=\"margin:10px 0 0 18px;\">' + (warmup.guidance || []).map(function(g){ return '<li>' + escapeHtml(g) + '</li>'; }).join('') + '</ul>'
+        +   '<div class=\"table-wrap\" style=\"margin-top:10px;\"><table class=\"table\">'
+        +     '<thead><tr><th>Preset</th><th>Daily limit</th><th>Rate</th><th>Batch size</th></tr></thead>'
+        +     '<tbody>' + (warmupRows || '') + '</tbody>'
+        +   '</table></div>'
+        + '</div>';
+    }
+
+    async function loadDeliverability(){
+      var summary = await fetchJson('/admin/marketing/deliverability/summary?days=30');
+      var segments = await fetchJson('/admin/marketing/deliverability/top-segments?days=30');
+      var warmup = await fetchJson('/admin/marketing/deliverability/warmup');
+      renderDeliverability(summary.summary || {}, segments.items || [], warmup.data || { guidance: [], presets: [] });
+    }
+
     loadContacts().catch(function(err){ sections.contacts.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load contacts') + '</div>'; });
     loadSegments().catch(function(err){ sections.segments.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load segments') + '</div>'; });
     loadTemplates().catch(function(err){ sections.templates.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load templates') + '</div>'; });
     loadCampaigns().catch(function(err){ sections.campaigns.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load campaigns') + '</div>'; });
+    loadAutomations().catch(function(err){ sections.automations.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load automations') + '</div>'; });
+    loadPreferences().catch(function(err){ sections.preferences.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load preferences') + '</div>'; });
+    loadDeliverability().catch(function(err){ sections.deliverability.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load deliverability') + '</div>'; });
   }
   function emailPage(){
     marketingPage({
