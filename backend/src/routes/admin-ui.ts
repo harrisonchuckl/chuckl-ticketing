@@ -684,7 +684,7 @@ router.get(
     .chart-layout{
       display:flex;
       gap:12px;
-      align-items:stretch;
+      align-items:flex-start;
     }
     .chart-y-axis{
       display:flex;
@@ -692,7 +692,8 @@ router.get(
       justify-content:space-between;
       font-size:12px;
       color:var(--muted);
-      padding-top:4px;
+      padding-top:2px;
+      height:220px;
       min-width:64px;
     }
     .chart-y-axis .tick{
@@ -700,16 +701,10 @@ router.get(
       align-items:center;
       gap:6px;
     }
-    .chart-y-axis .tick::after{
-      content:"";
-      flex:1;
-      height:1px;
-      background:var(--border);
-      opacity:0.6;
-    }
     .chart-plot{
       flex:1;
       min-width:0;
+      position:relative;
     }
     .chart-wrap{
       height:220px;
@@ -724,9 +719,12 @@ router.get(
       border-radius:6px 6px 0 0;
       position:relative;
       min-width:4px;
+      transition:background 0.2s ease;
     }
-    .chart-bar.active{
-      background:rgba(15,156,223,0.45);
+    .chart-bar.active,
+    .chart-bar:hover,
+    .chart-bar.is-hover{
+      background:rgba(15,156,223,0.5);
     }
     .chart-axis{
       display:flex;
@@ -752,6 +750,42 @@ router.get(
       background:#0f9cdf;
       border-color:#0f9cdf;
       color:#ffffff;
+    }
+    .chart-tooltip{
+      position:absolute;
+      top:0;
+      left:0;
+      transform:translate(-50%, -100%);
+      background:#111827;
+      color:#ffffff;
+      padding:10px 12px;
+      border-radius:10px;
+      font-size:12px;
+      line-height:1.4;
+      min-width:180px;
+      box-shadow:0 8px 20px rgba(15,23,42,0.25);
+      opacity:0;
+      pointer-events:none;
+      transition:opacity 0.15s ease;
+      z-index:2;
+    }
+    .chart-tooltip.visible{
+      opacity:1;
+    }
+    .chart-tooltip .tooltip-date{
+      font-weight:700;
+      margin-bottom:6px;
+    }
+    .chart-tooltip .tooltip-row{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+    }
+    .chart-tooltip .tooltip-row span{
+      color:rgba(255,255,255,0.7);
+    }
+    .chart-tooltip .tooltip-row strong{
+      font-weight:600;
     }
     .alert-item{
       display:flex;
@@ -1775,8 +1809,10 @@ document.addEventListener('click', function(e){
       var labelValue = isMoneyMetric(metric)
         ? formatMoney(point.value)
         : fmtNumber.format(point.value || 0);
-      return '<div class="chart-bar' + isActive + '" style="height:' + height + '%;" title="'
-        + fmtDate.format(new Date(point.date)) + ': ' + labelValue + '"></div>';
+      return '<div class="chart-bar' + isActive + '" style="height:' + height + '%;" data-date="'
+        + point.date + '" data-label="' + labelValue + '" data-tickets="'
+        + (point.tickets || 0) + '" data-gross="' + (point.gross || 0) + '" data-platform="'
+        + (point.platformFees || 0) + '" data-organiser="' + (point.organiserShare || 0) + '"></div>';
     }).join('');
 
     var startLabel = fmtDate.format(new Date(series[0].date));
@@ -1796,8 +1832,58 @@ document.addEventListener('click', function(e){
       + '<div class="chart-plot">'
       + '<div class="chart-wrap">' + barsHtml + '</div>'
       + '<div class="chart-axis"><span>' + startLabel + '</span><span>' + endLabel + '</span></div>'
+      + '<div class="chart-tooltip" id="chartTooltip" aria-hidden="true"></div>'
       + '</div>'
       + '</div>';
+
+    var tooltip = $('#chartTooltip');
+    var plot = chartBody.querySelector('.chart-plot');
+    if (!tooltip || !plot) return;
+
+    function showTooltip(bar){
+      var date = bar.getAttribute('data-date') || '';
+      var tickets = Number(bar.getAttribute('data-tickets') || 0);
+      var gross = Number(bar.getAttribute('data-gross') || 0);
+      var platform = Number(bar.getAttribute('data-platform') || 0);
+      var organiser = Number(bar.getAttribute('data-organiser') || 0);
+      var kickback = Math.max(0, platform - organiser);
+
+      tooltip.innerHTML =
+        '<div class="tooltip-date">' + fmtDateTime.format(new Date(date)) + '</div>'
+        + '<div class="tooltip-row"><span>Tickets sold</span><strong>' + fmtNumber.format(tickets) + '</strong></div>'
+        + '<div class="tooltip-row"><span>Revenue taken</span><strong>' + formatMoney(gross) + '</strong></div>'
+        + '<div class="tooltip-row"><span>Kickback from booking fee</span><strong>' + formatMoney(organiser) + '</strong></div>'
+        + '<div class="tooltip-row"><span>Booking fee kickback</span><strong>' + formatMoney(kickback) + '</strong></div>';
+
+      var barRect = bar.getBoundingClientRect();
+      var plotRect = plot.getBoundingClientRect();
+      var left = barRect.left - plotRect.left + barRect.width / 2;
+      var top = barRect.top - plotRect.top;
+      var clampLeft = Math.max(90, Math.min(left, plotRect.width - 90));
+
+      tooltip.style.left = clampLeft + 'px';
+      tooltip.style.top = top + 'px';
+      tooltip.classList.add('visible');
+      tooltip.setAttribute('aria-hidden', 'false');
+    }
+
+    function hideTooltip(){
+      tooltip.classList.remove('visible');
+      tooltip.setAttribute('aria-hidden', 'true');
+    }
+
+    var bars = chartBody.querySelectorAll('.chart-bar');
+    bars.forEach(function(bar){
+      bar.addEventListener('mouseenter', function(){
+        bars.forEach(function(other){ other.classList.remove('is-hover'); });
+        bar.classList.add('is-hover');
+        showTooltip(bar);
+      });
+      bar.addEventListener('mouseleave', function(){
+        bar.classList.remove('is-hover');
+        hideTooltip();
+      });
+    });
   }
 
   function renderChartToggles(){
