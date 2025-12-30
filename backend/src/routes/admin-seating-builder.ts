@@ -191,6 +191,8 @@ router.get("/builder/api/seatmaps/:showId", async (req, res) => {
         id: show.id,
         title: show.title,
         date: show.date,
+        status: show.status,
+        publishedAt: show.publishedAt,
         venue: show.venue ? {
           id: show.venue.id,
           name: show.venue.name,
