@@ -2,6 +2,7 @@
 import path from "path";
 import { fileURLToPath } from "url";
 import { Router, json } from "express";
+import type { DashboardWidgetPreference } from "@prisma/client";
 import prisma from "../lib/prisma.js";
 import { requireAdminOrOrganiser } from "../lib/authz.js";
 
@@ -119,8 +120,10 @@ const widgetCategoryOrder = [
   "Marketing",
 ];
 
-function mergeWidgetPreferences(preferences) {
-  const prefMap = new Map();
+function mergeWidgetPreferences(
+  preferences?: DashboardWidgetPreference[] | null
+) {
+  const prefMap = new Map<string, DashboardWidgetPreference>();
   (preferences || []).forEach((pref) => {
     if (!pref || !pref.widgetKey) return;
     prefMap.set(pref.widgetKey, pref);
@@ -146,12 +149,8 @@ function mergeWidgetPreferences(preferences) {
   );
 
   merged.sort((a, b) => {
-    const catA = categoryIndex.has(a.category)
-      ? categoryIndex.get(a.category)
-      : widgetCategoryOrder.length;
-    const catB = categoryIndex.has(b.category)
-      ? categoryIndex.get(b.category)
-      : widgetCategoryOrder.length;
+    const catA = categoryIndex.get(a.category) ?? widgetCategoryOrder.length;
+    const catB = categoryIndex.get(b.category) ?? widgetCategoryOrder.length;
     if (catA !== catB) return catA - catB;
     const orderA = a.order ?? a.defaultOrder ?? 0;
     const orderB = b.order ?? b.defaultOrder ?? 0;
@@ -161,7 +160,7 @@ function mergeWidgetPreferences(preferences) {
   return merged;
 }
 
-function getRegistryWidget(key) {
+function getRegistryWidget(key: string) {
   return widgetRegistry.find((widget) => widget.key === key) || null;
 }
 
