@@ -202,6 +202,7 @@ model User {
   marketingTemplates   MarketingTemplate[]
   marketingSegments    MarketingSegment[]
   marketingCampaigns   MarketingCampaign[] @relation("MarketingCampaignCreatedBy")
+  marketingCampaignsAsTenant MarketingCampaign[] @relation("MarketingCampaignTenant")
   marketingSuppressions MarketingSuppression[]
 }
 
@@ -553,7 +554,7 @@ model MarketingContact {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-tenant User @relation("MarketingCampaignTenant", fields: [tenantId], references: [id])
+  tenant    User @relation(fields: [tenantId], references: [id])
 
 
   consents   MarketingConsent[]
