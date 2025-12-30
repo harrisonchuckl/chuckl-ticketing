@@ -9,6 +9,7 @@ import { fileURLToPath } from "url";
 import { attachUser } from "./middleware/requireAuth.js";
 
 import publicSlugs from "./routes/public-slugs.js";
+import publicUnsubscribeRouter from "./routes/public-unsubscribe.js";
 
 
 
@@ -37,6 +38,8 @@ import seatingChoiceRouter from "./routes/seating-choice.js";
 import adminSeatingBuilderRouter from "./routes/admin-seating-builder.js";
 import adminCustomersRouter from "./routes/admin-customers.js";
 import adminOrdersApiRouter from "./routes/admin-orders-api.js";
+import adminMarketingRouter from "./routes/admin-marketing.js";
+import sendgridWebhookRouter from "./routes/webhooks-sendgrid.js";
 
 const app = express();
 
@@ -97,6 +100,7 @@ app.use("/public", publicSlugs);
 
 // 3) SSR public event pages (legacy + internal rewrite target)
 app.use("/public", publicEventRouter);
+app.use("/", publicUnsubscribeRouter);
 
 
 
@@ -122,6 +126,8 @@ app.use("/admin", seatingChoiceRouter);
 app.use("/admin", adminCustomersRouter);
 app.use("/admin", adminUiRouter);
 app.use("/admin/api", adminOrdersApiRouter);
+app.use("/admin", adminMarketingRouter);
+app.use("/webhooks", sendgridWebhookRouter);
 
 // 404
 app.use((_req, res) => res.status(404).json({ error: "Not found" }));

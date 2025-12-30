@@ -94,6 +94,57 @@ enum PromoterActivityType {
   DOCUMENT_REMOVED
 }
 
+enum MarketingConsentStatus {
+  SUBSCRIBED
+  UNSUBSCRIBED
+  TRANSACTIONAL_ONLY
+  BOUNCED
+  COMPLAINED
+}
+
+enum MarketingLawfulBasis {
+  EXPLICIT_OPT_IN
+  SOFT_OPT_IN
+  UNKNOWN
+}
+
+enum MarketingConsentSource {
+  CHECKOUT
+  MANUAL_IMPORT
+  ADMIN_EDIT
+  API
+}
+
+enum MarketingSuppressionType {
+  UNSUBSCRIBE
+  HARD_BOUNCE
+  SPAM_COMPLAINT
+}
+
+enum MarketingCampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  CANCELLED
+}
+
+enum MarketingRecipientStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED_SUPPRESSED
+}
+
+enum MarketingEmailEventType {
+  DELIVERED
+  BOUNCE
+  COMPLAINT
+  OPEN
+  CLICK
+  UNSUBSCRIBE
+}
+
 model User {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
@@ -145,6 +196,13 @@ model User {
 
   // --- storefront (must be unique per organiser) ---
   storefrontSlug String? @unique
+
+  marketingContacts    MarketingContact[]
+  marketingTags        MarketingTag[]
+  marketingTemplates   MarketingTemplate[]
+  marketingSegments    MarketingSegment[]
+  marketingCampaigns   MarketingCampaign[] @relation("MarketingCampaignCreatedBy")
+  marketingSuppressions MarketingSuppression[]
 }
 
 model AccessRequest {
@@ -482,6 +540,173 @@ model Order {
   @@index([stripeId])
   @@index([stripeCheckoutSessionId])
   @@index([emailDeliveryStatus])
+}
+
+model MarketingContact {
+  id        String   @id @default(cuid())
+  tenantId  String
+  email     String
+  firstName String?
+  lastName  String?
+  phone     String?
+  town      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    User @relation(fields: [tenantId], references: [id])
+
+  consent    MarketingConsent?
+  tags       MarketingContactTag[]
+  recipients MarketingCampaignRecipient[]
+  events     MarketingEmailEvent[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+}
+
+model MarketingConsent {
+  id                String                 @id @default(cuid())
+  tenantId          String
+  contactId         String
+  status            MarketingConsentStatus
+  lawfulBasis       MarketingLawfulBasis
+  source            MarketingConsentSource
+  capturedAt        DateTime
+  capturedIp        String?
+  capturedUserAgent String?
+
+  contact MarketingContact @relation(fields: [contactId], references: [id])
+
+  @@unique([tenantId, contactId])
+  @@index([tenantId])
+}
+
+model MarketingSuppression {
+  id        String                 @id @default(cuid())
+  tenantId  String
+  email     String
+  type      MarketingSuppressionType
+  reason    String?
+  createdAt DateTime               @default(now())
+
+  tenant User @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, email])
+  @@index([tenantId])
+}
+
+model MarketingTag {
+  id       String @id @default(cuid())
+  tenantId String
+  name     String
+
+  tenant   User @relation(fields: [tenantId], references: [id])
+  contacts MarketingContactTag[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model MarketingContactTag {
+  tenantId  String
+  contactId String
+  tagId     String
+
+  contact MarketingContact @relation(fields: [contactId], references: [id])
+  tag     MarketingTag     @relation(fields: [tagId], references: [id])
+
+  @@id([contactId, tagId])
+  @@index([tenantId])
+}
+
+model MarketingTemplate {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  subject   String
+  fromName  String
+  fromEmail String
+  replyTo   String?
+  mjmlBody  String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    User @relation(fields: [tenantId], references: [id])
+  campaigns MarketingCampaign[]
+
+  @@index([tenantId])
+}
+
+model MarketingSegment {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  description String?
+  rules       Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant    User @relation(fields: [tenantId], references: [id])
+  campaigns MarketingCampaign[]
+
+  @@index([tenantId])
+}
+
+model MarketingCampaign {
+  id              String                 @id @default(cuid())
+  tenantId        String
+  name            String
+  templateId      String
+  segmentId       String
+  status          MarketingCampaignStatus @default(DRAFT)
+  scheduledFor    DateTime?
+  createdByUserId String
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  tenant     User             @relation(fields: [tenantId], references: [id])
+  template   MarketingTemplate @relation(fields: [templateId], references: [id])
+  segment    MarketingSegment  @relation(fields: [segmentId], references: [id])
+  createdBy  User             @relation("MarketingCampaignCreatedBy", fields: [createdByUserId], references: [id])
+  recipients MarketingCampaignRecipient[]
+  events     MarketingEmailEvent[]
+
+  @@index([tenantId])
+}
+
+model MarketingCampaignRecipient {
+  id         String                  @id @default(cuid())
+  tenantId   String
+  campaignId String
+  contactId  String
+  email      String
+  status     MarketingRecipientStatus @default(PENDING)
+  errorText  String?
+  sentAt     DateTime?
+  createdAt  DateTime               @default(now())
+
+  campaign MarketingCampaign @relation(fields: [campaignId], references: [id])
+  contact  MarketingContact  @relation(fields: [contactId], references: [id])
+
+  @@unique([tenantId, campaignId, contactId])
+  @@index([tenantId, campaignId])
+}
+
+model MarketingEmailEvent {
+  id         String                 @id @default(cuid())
+  tenantId   String
+  campaignId String
+  contactId  String?
+  email      String
+  type       MarketingEmailEventType
+  meta       Json?
+  createdAt  DateTime               @default(now())
+
+  campaign MarketingCampaign @relation(fields: [campaignId], references: [id])
+  contact  MarketingContact? @relation(fields: [contactId], references: [id])
+
+  @@index([tenantId, campaignId])
+  @@index([tenantId])
 }
 
 model OrderNote {

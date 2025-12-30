@@ -1207,6 +1207,7 @@ router.get(
       <a class="sb-link" href="/admin/ui/analytics" data-view="/admin/ui/analytics">Analytics</a>
 
       <div class="sb-group">Marketing</div>
+      <a class="sb-link" href="/admin/ui/marketing" data-view="/admin/ui/marketing">Marketing</a>
       <a class="sb-link" href="/admin/ui/audiences" data-view="/admin/ui/audiences">Audiences</a>
       <a class="sb-link" href="/admin/ui/email" data-view="/admin/ui/email">Email Campaigns</a>
 
@@ -6726,6 +6727,366 @@ function renderInterests(customer){
     if (!main) return;
     main.innerHTML = '<div class="card"><div class="title">Audiences</div><div class="muted">Audience tools coming soon.</div></div>';
   }
+  function marketingPage(){
+    if (!main) return;
+
+    main.innerHTML = ''
+      + '<div class="card">'
+      +   '<div class="header" style="gap:12px;align-items:center;">'
+      +     '<div>'
+      +       '<div class="title">Marketing</div>'
+      +       '<div class="muted">Build segments, templates, and campaigns.</div>'
+      +     '</div>'
+      +   '</div>'
+      +   '<div class="row" style="gap:8px;margin-top:12px;flex-wrap:wrap;">'
+      +     '<button class="btn tab-btn active" data-tab="contacts">Contacts</button>'
+      +     '<button class="btn tab-btn" data-tab="segments">Segments</button>'
+      +     '<button class="btn tab-btn" data-tab="templates">Templates</button>'
+      +     '<button class="btn tab-btn" data-tab="campaigns">Campaigns</button>'
+      +   '</div>'
+      +   '<div id="marketing-contacts" class="marketing-tab" style="margin-top:16px;"></div>'
+      +   '<div id="marketing-segments" class="marketing-tab" style="margin-top:16px;display:none;"></div>'
+      +   '<div id="marketing-templates" class="marketing-tab" style="margin-top:16px;display:none;"></div>'
+      +   '<div id="marketing-campaigns" class="marketing-tab" style="margin-top:16px;display:none;"></div>'
+      + '</div>';
+
+    var tabs = Array.prototype.slice.call(main.querySelectorAll('.tab-btn'));
+    var sections = {
+      contacts: main.querySelector('#marketing-contacts'),
+      segments: main.querySelector('#marketing-segments'),
+      templates: main.querySelector('#marketing-templates'),
+      campaigns: main.querySelector('#marketing-campaigns'),
+    };
+
+    function setTab(name){
+      tabs.forEach(function(btn){
+        var active = btn.getAttribute('data-tab') === name;
+        btn.classList.toggle('active', active);
+      });
+      Object.keys(sections).forEach(function(key){
+        var el = sections[key];
+        if (!el) return;
+        el.style.display = (key === name) ? 'block' : 'none';
+      });
+    }
+
+    tabs.forEach(function(btn){
+      btn.addEventListener('click', function(){
+        setTab(btn.getAttribute('data-tab'));
+      });
+    });
+
+    async function fetchJson(url, opts){
+      var res = await fetch(url, Object.assign({ credentials:'include' }, opts || {}));
+      var data = {};
+      try { data = await res.json(); } catch(e){}
+      if (!res.ok || !data || data.ok === false) {
+        throw new Error((data && (data.message || data.error)) || 'Request failed');
+      }
+      return data;
+    }
+
+    function renderContacts(items){
+      var html = ''
+        + '<div class="card" style="margin:0 0 12px 0;">'
+        +   '<div class="title">Add contact</div>'
+        +   '<div class="grid" style="grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:10px;">'
+        +     '<input class="input" id="mk_contact_email" placeholder="Email" />'
+        +     '<input class="input" id="mk_contact_first" placeholder="First name" />'
+        +     '<input class="input" id="mk_contact_last" placeholder="Last name" />'
+        +     '<select class="input" id="mk_contact_status">'
+        +       '<option value="TRANSACTIONAL_ONLY">Transactional only</option>'
+        +       '<option value="SUBSCRIBED">Subscribed</option>'
+        +       '<option value="UNSUBSCRIBED">Unsubscribed</option>'
+        +     '</select>'
+        +   '</div>'
+        +   '<div class="row" style="gap:8px;margin-top:10px;">'
+        +     '<button class="btn p" id="mk_contact_add">Save contact</button>'
+        +     '<div id="mk_contact_msg" class="muted"></div>'
+        +   '</div>'
+        + '</div>'
+        + '<div class="card" style="margin:0;">'
+        +   '<div class="title">Contacts</div>'
+        +   '<div class="muted" style="margin-bottom:10px;">' + items.length + ' contacts</div>'
+        +   '<div class="table-wrap"><table class="table">'
+        +     '<thead><tr><th>Email</th><th>Name</th><th>Status</th><th>Tags</th><th>Created</th></tr></thead>'
+        +     '<tbody>'
+        +       items.map(function(c){ return '<tr><td>' + escapeHtml(c.email) + '</td><td>' + escapeHtml((c.firstName || '') + ' ' + (c.lastName || '')).trim() + '</td><td>' + escapeHtml(c.status) + '</td><td>' + escapeHtml((c.tags || []).join(', ')) + '</td><td>' + escapeHtml(formatDateTime(c.createdAt)) + '</td></tr>'; }).join('')
+        +     '</tbody></table></div>'
+        + '</div>';
+      sections.contacts.innerHTML = html;
+
+      var addBtn = sections.contacts.querySelector('#mk_contact_add');
+      if (addBtn) {
+        addBtn.addEventListener('click', async function(){
+          var email = String(valueOf(sections.contacts, 'mk_contact_email') || '').trim();
+          var firstName = String(valueOf(sections.contacts, 'mk_contact_first') || '').trim();
+          var lastName = String(valueOf(sections.contacts, 'mk_contact_last') || '').trim();
+          var status = String(valueOf(sections.contacts, 'mk_contact_status') || 'TRANSACTIONAL_ONLY');
+          var msg = sections.contacts.querySelector('#mk_contact_msg');
+          if (!email) { if (msg) msg.textContent = 'Email required.'; return; }
+          try {
+            await fetchJson('/admin/marketing/contacts', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({ email: email, firstName: firstName, lastName: lastName, status: status })
+            });
+            if (msg) msg.textContent = 'Saved.';
+            await loadContacts();
+          } catch (err) {
+            if (msg) msg.textContent = err.message || 'Failed.';
+          }
+        });
+      }
+    }
+
+    function valueOf(root, id){
+      var el = root.querySelector('#' + id);
+      return el ? el.value : '';
+    }
+
+    async function loadContacts(){
+      var data = await fetchJson('/admin/marketing/contacts');
+      renderContacts(data.items || []);
+    }
+
+    function renderSegments(items){
+      var html = ''
+        + '<div class="card" style="margin:0 0 12px 0;">'
+        +   '<div class="title">Create segment</div>'
+        +   '<input class="input" id="mk_segment_name" placeholder="Segment name" />'
+        +   '<textarea class="input" id="mk_segment_rules" placeholder=\'Rules JSON, e.g. {\"rules\":[{\"type\":\"HAS_TAG\",\"value\":\"vip\"}]}\' style="height:120px;margin-top:8px;"></textarea>'
+        +   '<div class="row" style="gap:8px;margin-top:10px;">'
+        +     '<button class="btn p" id="mk_segment_add">Save segment</button>'
+        +     '<div id="mk_segment_msg" class="muted"></div>'
+        +   '</div>'
+        + '</div>'
+        + '<div class="card" style="margin:0;">'
+        +   '<div class="title">Segments</div>'
+        +   '<div class="table-wrap"><table class="table">'
+        +     '<thead><tr><th>Name</th><th>Rules</th><th>Estimate</th></tr></thead>'
+        +     '<tbody>'
+        +       items.map(function(seg){ return '<tr><td>' + escapeHtml(seg.name) + '</td><td><code>' + escapeHtml(JSON.stringify(seg.rules || {})) + '</code></td><td><button class=\"btn\" data-estimate=\"' + seg.id + '\">Estimate</button></td></tr>'; }).join('')
+        +     '</tbody></table></div>'
+        + '</div>';
+      sections.segments.innerHTML = html;
+
+      var addBtn = sections.segments.querySelector('#mk_segment_add');
+      if (addBtn) {
+        addBtn.addEventListener('click', async function(){
+          var name = String(valueOf(sections.segments, 'mk_segment_name') || '').trim();
+          var rulesRaw = String(valueOf(sections.segments, 'mk_segment_rules') || '').trim();
+          var msg = sections.segments.querySelector('#mk_segment_msg');
+          if (!name || !rulesRaw) { if (msg) msg.textContent = 'Name + rules required.'; return; }
+          try {
+            var rules = JSON.parse(rulesRaw);
+            await fetchJson('/admin/marketing/segments', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({ name: name, rules: rules })
+            });
+            if (msg) msg.textContent = 'Saved.';
+            await loadSegments();
+          } catch (err) {
+            if (msg) msg.textContent = err.message || 'Failed.';
+          }
+        });
+      }
+
+      Array.prototype.slice.call(sections.segments.querySelectorAll('[data-estimate]')).forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          var id = btn.getAttribute('data-estimate');
+          try {
+            var data = await fetchJson('/admin/marketing/segments/' + encodeURIComponent(id) + '/estimate');
+            alert('Estimated recipients: ' + data.estimate.count + '\\nSample: ' + (data.estimate.sample || []).join(', '));
+          } catch (err) {
+            alert(err.message || 'Estimate failed');
+          }
+        });
+      });
+    }
+
+    async function loadSegments(){
+      var data = await fetchJson('/admin/marketing/segments');
+      renderSegments(data.items || []);
+      return data.items || [];
+    }
+
+    function renderTemplates(items){
+      var html = ''
+        + '<div class="card" style="margin:0 0 12px 0;">'
+        +   '<div class="title">Create template</div>'
+        +   '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px;">'
+        +     '<input class="input" id="mk_template_name" placeholder="Template name" />'
+        +     '<input class="input" id="mk_template_subject" placeholder="Subject" />'
+        +     '<input class="input" id="mk_template_fromName" placeholder="From name" />'
+        +     '<input class="input" id="mk_template_fromEmail" placeholder="From email" />'
+        +   '</div>'
+        +   '<textarea class="input" id="mk_template_mjml" placeholder=\"MJML body\" style="height:180px;margin-top:10px;"></textarea>'
+        +   '<div class="row" style="gap:8px;margin-top:10px;">'
+        +     '<button class="btn p" id="mk_template_add">Save template</button>'
+        +     '<div id="mk_template_msg" class="muted"></div>'
+        +   '</div>'
+        + '</div>'
+        + '<div class="card" style="margin:0;">'
+        +   '<div class="title">Templates</div>'
+        +   '<div class="table-wrap"><table class="table">'
+        +     '<thead><tr><th>Name</th><th>Subject</th><th>Preview</th></tr></thead>'
+        +     '<tbody>'
+        +       items.map(function(t){ return '<tr><td>' + escapeHtml(t.name) + '</td><td>' + escapeHtml(t.subject) + '</td><td><button class=\"btn\" data-preview=\"' + t.id + '\">Preview</button></td></tr>'; }).join('')
+        +     '</tbody></table></div>'
+        + '</div>';
+      sections.templates.innerHTML = html;
+
+      var addBtn = sections.templates.querySelector('#mk_template_add');
+      if (addBtn) {
+        addBtn.addEventListener('click', async function(){
+          var name = String(valueOf(sections.templates, 'mk_template_name') || '').trim();
+          var subject = String(valueOf(sections.templates, 'mk_template_subject') || '').trim();
+          var fromName = String(valueOf(sections.templates, 'mk_template_fromName') || '').trim();
+          var fromEmail = String(valueOf(sections.templates, 'mk_template_fromEmail') || '').trim();
+          var mjmlBody = String(valueOf(sections.templates, 'mk_template_mjml') || '').trim();
+          var msg = sections.templates.querySelector('#mk_template_msg');
+          if (!name || !subject || !fromName || !fromEmail || !mjmlBody) { if (msg) msg.textContent = 'All fields required.'; return; }
+          try {
+            await fetchJson('/admin/marketing/templates', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({ name: name, subject: subject, fromName: fromName, fromEmail: fromEmail, mjmlBody: mjmlBody })
+            });
+            if (msg) msg.textContent = 'Saved.';
+            await loadTemplates();
+          } catch (err) {
+            if (msg) msg.textContent = err.message || 'Failed.';
+          }
+        });
+      }
+
+      Array.prototype.slice.call(sections.templates.querySelectorAll('[data-preview]')).forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          var id = btn.getAttribute('data-preview');
+          try {
+            var data = await fetchJson('/admin/marketing/templates/' + encodeURIComponent(id) + '/preview', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({})
+            });
+            var win = window.open('', '_blank');
+            if (win) win.document.write(data.html || '');
+          } catch (err) {
+            alert(err.message || 'Preview failed');
+          }
+        });
+      });
+    }
+
+    async function loadTemplates(){
+      var data = await fetchJson('/admin/marketing/templates');
+      renderTemplates(data.items || []);
+      return data.items || [];
+    }
+
+    function renderCampaigns(items, templates, segments){
+      var templateOptions = templates.map(function(t){
+        return '<option value=\"' + escapeHtml(t.id) + '\">' + escapeHtml(t.name) + '</option>';
+      }).join('');
+      var segmentOptions = segments.map(function(s){
+        return '<option value=\"' + escapeHtml(s.id) + '\">' + escapeHtml(s.name) + '</option>';
+      }).join('');
+
+      var html = ''
+        + '<div class="card" style="margin:0 0 12px 0;">'
+        +   '<div class="title">Create campaign</div>'
+        +   '<input class="input" id="mk_campaign_name" placeholder="Campaign name" />'
+        +   '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px;">'
+        +     '<select class="input" id="mk_campaign_template">' + templateOptions + '</select>'
+        +     '<select class="input" id="mk_campaign_segment">' + segmentOptions + '</select>'
+        +   '</div>'
+        +   '<div class="row" style="gap:8px;margin-top:10px;">'
+        +     '<button class="btn p" id="mk_campaign_add">Save campaign</button>'
+        +     '<div id="mk_campaign_msg" class="muted"></div>'
+        +   '</div>'
+        + '</div>'
+        + '<div class="card" style="margin:0;">'
+        +   '<div class="title">Campaigns</div>'
+        +   '<div class="table-wrap"><table class="table">'
+        +     '<thead><tr><th>Name</th><th>Status</th><th>Template</th><th>Segment</th><th>Schedule</th><th>Preview</th></tr></thead>'
+        +     '<tbody>'
+        +       items.map(function(c){ return '<tr><td>' + escapeHtml(c.name) + '</td><td>' + escapeHtml(c.status) + '</td><td>' + escapeHtml((c.template || {}).name || '') + '</td><td>' + escapeHtml((c.segment || {}).name || '') + '</td><td><button class=\"btn\" data-send=\"' + c.id + '\">Send now</button></td><td><button class=\"btn\" data-cpreview=\"' + c.id + '\">Preview</button></td></tr>'; }).join('')
+        +     '</tbody></table></div>'
+        + '</div>';
+      sections.campaigns.innerHTML = html;
+
+      var addBtn = sections.campaigns.querySelector('#mk_campaign_add');
+      if (addBtn) {
+        addBtn.addEventListener('click', async function(){
+          var name = String(valueOf(sections.campaigns, 'mk_campaign_name') || '').trim();
+          var templateId = String(valueOf(sections.campaigns, 'mk_campaign_template') || '').trim();
+          var segmentId = String(valueOf(sections.campaigns, 'mk_campaign_segment') || '').trim();
+          var msg = sections.campaigns.querySelector('#mk_campaign_msg');
+          if (!name || !templateId || !segmentId) { if (msg) msg.textContent = 'All fields required.'; return; }
+          try {
+            await fetchJson('/admin/marketing/campaigns', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({ name: name, templateId: templateId, segmentId: segmentId })
+            });
+            if (msg) msg.textContent = 'Saved.';
+            await loadCampaigns();
+          } catch (err) {
+            if (msg) msg.textContent = err.message || 'Failed.';
+          }
+        });
+      }
+
+      Array.prototype.slice.call(sections.campaigns.querySelectorAll('[data-send]')).forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          var id = btn.getAttribute('data-send');
+          try {
+            await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(id) + '/schedule', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({ sendNow: true })
+            });
+            await loadCampaigns();
+            alert('Campaign scheduled for sending.');
+          } catch (err) {
+            alert(err.message || 'Schedule failed');
+          }
+        });
+      });
+
+      Array.prototype.slice.call(sections.campaigns.querySelectorAll('[data-cpreview]')).forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          var id = btn.getAttribute('data-cpreview');
+          try {
+            var data = await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(id) + '/preview', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({})
+            });
+            var win = window.open('', '_blank');
+            if (win) win.document.write(data.html || '');
+            alert('Estimated recipients: ' + data.estimate.count);
+          } catch (err) {
+            alert(err.message || 'Preview failed');
+          }
+        });
+      });
+    }
+
+    async function loadCampaigns(){
+      var data = await fetchJson('/admin/marketing/campaigns');
+      var templates = await fetchJson('/admin/marketing/templates');
+      var segments = await fetchJson('/admin/marketing/segments');
+      renderCampaigns(data.items || [], templates.items || [], segments.items || []);
+    }
+
+    loadContacts().catch(function(err){ sections.contacts.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load contacts') + '</div>'; });
+    loadSegments().catch(function(err){ sections.segments.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load segments') + '</div>'; });
+    loadTemplates().catch(function(err){ sections.templates.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load templates') + '</div>'; });
+    loadCampaigns().catch(function(err){ sections.campaigns.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load campaigns') + '</div>'; });
+  }
   function emailPage(){
     if (!main) return;
     main.innerHTML = '<div class="card"><div class="title">Email Campaigns</div><div class="muted">Email tools will plug into your marketing automation stack.</div></div>';
@@ -6947,6 +7308,7 @@ function renderInterests(customer){
       if (path === '/admin/ui/promoters')      return promotersList();
       if (path === '/admin/ui/promoters/new')  return promoterCreate();
       if (path === '/admin/ui/analytics')      return analytics();
+      if (path === '/admin/ui/marketing')      return marketingPage();
       if (path === '/admin/ui/audiences')      return audiences();
       if (path === '/admin/ui/email')          return emailPage();
       if (path === '/admin/ui/account')        return account();
