@@ -57,6 +57,43 @@ enum VenueRole {
   READ_ONLY
 }
 
+enum PromoterStatus {
+  PROSPECT
+  ACTIVE
+  DORMANT
+  BLOCKED
+}
+
+enum PromoterDocumentStatus {
+  MISSING
+  UPLOADED
+  EXPIRED
+  APPROVED
+}
+
+enum PromoterDocumentType {
+  PRS_CERTIFICATE
+  PPL_MUSIC_LICENSING
+  PUBLIC_LIABILITY_INSURANCE
+  RISK_ASSESSMENT
+  TECH_SPEC
+  MARKETING_SPEC
+  ACCESSIBILITY_INFO
+  BRANDING_GUIDELINES
+  OTHER
+}
+
+enum PromoterActivityType {
+  CREATED
+  UPDATED
+  CONTACT_ADDED
+  CONTACT_UPDATED
+  CONTACT_REMOVED
+  DOCUMENT_UPLOADED
+  DOCUMENT_UPDATED
+  DOCUMENT_REMOVED
+}
+
 model User {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
@@ -85,6 +122,10 @@ model User {
   venueMemberships    VenueMember[]
   invitedVenueMembers VenueMember[] @relation("VenueInviter")
   venueInvitesCreated VenueInvite[] @relation("VenueInviteCreatedBy")
+
+  promotersOwned            Promoter[]         @relation("PromoterOwner")
+  promoterDocumentsUploaded PromoterDocument[] @relation("PromoterDocumentUploader")
+  promoterActivities        PromoterActivity[] @relation("PromoterActivityAuthor")
 
   // Slug history for organiser show URLs
   showSlugHistory ShowSlugHistory[]
@@ -145,6 +186,98 @@ model Venue {
 
   members      VenueMember[]
   venueInvites VenueInvite[] @relation("VenueInviteVenue")
+}
+
+model Promoter {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  name        String @unique
+  tradingName String?
+  email       String?
+  phone       String?
+
+  companyNumber String?
+  vatNumber     String?
+
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  county       String?
+  postcode     String?
+  country      String?
+
+  status PromoterStatus @default(PROSPECT)
+  notes  String?
+
+  ownerId String?
+  owner   User? @relation("PromoterOwner", fields: [ownerId], references: [id])
+
+  contacts   PromoterContact[]
+  documents  PromoterDocument[]
+  activities PromoterActivity[]
+}
+
+model PromoterContact {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  promoterId String
+  promoter   Promoter @relation(fields: [promoterId], references: [id])
+
+  name  String
+  role  String?
+  email String?
+  phone String?
+  tags  String[] @default([])
+
+  isPrimaryFinance   Boolean @default(false)
+  isPrimaryMarketing Boolean @default(false)
+
+  @@index([promoterId])
+}
+
+model PromoterDocument {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  promoterId String
+  promoter   Promoter @relation(fields: [promoterId], references: [id])
+
+  venueId String?
+
+  type      PromoterDocumentType
+  title     String
+  fileUrl   String
+  fileName  String?
+  mime      String?
+  size      Int?
+  expiresAt DateTime?
+  status    PromoterDocumentStatus @default(UPLOADED)
+
+  uploadedByUserId String?
+  uploadedBy       User? @relation("PromoterDocumentUploader", fields: [uploadedByUserId], references: [id])
+
+  @@index([promoterId])
+}
+
+model PromoterActivity {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  promoterId String
+  promoter   Promoter @relation(fields: [promoterId], references: [id])
+
+  type     PromoterActivityType
+  metadata Json?
+
+  createdByUserId String?
+  createdBy       User? @relation("PromoterActivityAuthor", fields: [createdByUserId], references: [id])
+
+  @@index([promoterId])
 }
 
 model VenueInvite {
