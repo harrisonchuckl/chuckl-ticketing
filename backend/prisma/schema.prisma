@@ -513,7 +513,8 @@ model Show {
   allocations ExternalAllocation[]
 
   // Slug history for public URL redirects
-  slugHistory ShowSlugHistory[]
+  slugHistory     ShowSlugHistory[]
+  ProductShowLink ProductShowLink[]
 
   @@index([venueId])
   @@index([organiserId])
@@ -558,8 +559,9 @@ model TicketType {
   showId String
   show   Show   @relation(fields: [showId], references: [id])
 
-  tickets Ticket[]
-  orders  Order[]
+  tickets         Ticket[]
+  orders          Order[]
+  ProductShowLink ProductShowLink[]
 }
 
 model Order {
@@ -636,7 +638,7 @@ model Storefront {
 
   ownerUserId String
   name        String
-  slug        String @unique
+  slug        String  @unique
   logoUrl     String?
   bannerUrl   String?
 
@@ -655,19 +657,19 @@ model Product {
   storefrontId        String
   title               String
   slug                String
-  status              ProductStatus @default(DRAFT)
+  status              ProductStatus  @default(DRAFT)
   description         String?
   imageUrl            String?
   pricePence          Int
   compareAtPricePence Int?
-  inventoryEnabled    Boolean @default(false)
+  inventoryEnabled    Boolean        @default(false)
   stockQty            Int?
   fulfilmentType      FulfilmentType
   collectInstructions String?
   digitalDeliveryText String?
   variantConfigJson   Json?
 
-  storefront Storefront @relation(fields: [storefrontId], references: [id])
+  storefront Storefront         @relation(fields: [storefrontId], references: [id])
   showLinks  ProductShowLink[]
   orderItems ProductOrderItem[]
 
@@ -676,9 +678,9 @@ model Product {
 }
 
 model ProductShowLink {
-  id           String   @id @default(cuid())
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   productId    String
   showId       String
