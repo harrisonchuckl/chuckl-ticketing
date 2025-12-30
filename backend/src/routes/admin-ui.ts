@@ -4743,6 +4743,15 @@ function renderInterests(customer){
   }
 
   // --- OTHER SIMPLE PAGES ---
+  function debounce(fn, wait){
+    var t;
+    return function(){
+      var args = arguments;
+      clearTimeout(t);
+      t = setTimeout(function(){ fn.apply(null, args); }, wait);
+    };
+  }
+
   function orders(){
     if (!main) return;
     main.innerHTML = ''
@@ -5966,14 +5975,6 @@ function renderInterests(customer){
       });
     }
 
-    function debounce(fn, wait){
-      var t;
-      return function(){
-        var args = arguments;
-        clearTimeout(t);
-        t = setTimeout(function(){ fn.apply(null, args); }, wait);
-      };
-    }
   }
   function analytics(){
     if (!main) return;
