@@ -234,6 +234,10 @@ model User {
   marketingCampaigns   MarketingCampaign[] @relation("MarketingCampaignCreatedBy")
   marketingCampaignsAsTenant MarketingCampaign[] @relation("MarketingCampaignTenant")
   marketingSuppressions MarketingSuppression[]
+  marketingAutomations MarketingAutomation[]
+  marketingPreferenceTopics MarketingPreferenceTopic[]
+  marketingCheckoutEvents MarketingCheckoutEvent[]
+  marketingAuditLogs MarketingAuditLog[]
 }
 
 model AccessRequest {
@@ -593,6 +597,7 @@ model MarketingContact {
   events     MarketingEmailEvent[]
   preferences MarketingContactPreference[]
   automationStates MarketingAutomationState[]
+  automationStepExecutions MarketingAutomationStepExecution[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -756,6 +761,7 @@ model MarketingAutomation {
   tenant User @relation(fields: [tenantId], references: [id])
   steps  MarketingAutomationStep[]
   states MarketingAutomationState[]
+  stepExecutions MarketingAutomationStepExecution[]
 
   @@index([tenantId])
 }
