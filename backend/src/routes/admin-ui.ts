@@ -850,6 +850,33 @@ router.get(
     .status-badge.paid{color:#166534;background:#ecfdf3;border-color:#bbf7d0;}
     .status-badge.refunded{color:#7c2d12;background:#fef2f2;border-color:#fecaca;}
     .status-badge.cancelled{color:#4338ca;background:#eef2ff;border-color:#c7d2fe;}
+    .tabs{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      border-bottom:1px solid var(--border);
+      margin-top:14px;
+    }
+    .tab-btn{
+      padding:8px 12px;
+      border:1px solid var(--border);
+      border-bottom:none;
+      border-radius:10px 10px 0 0;
+      background:#f8fafc;
+      font-weight:700;
+      cursor:pointer;
+    }
+    .tab-btn.active{
+      background:#ffffff;
+      border-bottom:1px solid #ffffff;
+    }
+    .tab-panel{
+      display:none;
+      padding-top:12px;
+    }
+    .tab-panel.active{
+      display:block;
+    }
     .drawer-overlay{
       position:fixed;
       top:var(--header-h);
@@ -1173,6 +1200,7 @@ router.get(
       </div>
       <a class="sb-link" href="/admin/ui/customers" data-view="/admin/ui/customers">Customers</a>
       <a class="sb-link" href="/admin/ui/venues" data-view="/admin/ui/venues">Venues</a>
+      <a class="sb-link" href="/admin/ui/promoters" data-view="/admin/ui/promoters">Promoters</a>
       <a class="sb-link" href="/admin/ui/orders" data-view="/admin/ui/orders">Orders</a>
 
       <div class="sb-group">Insights</div>
@@ -1307,6 +1335,16 @@ router.get(
       return JSON.parse(text);
     }catch(e){
       return {};
+    }
+  }
+
+  function parseErr(e){
+    var msg = (e && e.message) ? e.message : String(e || '');
+    try{
+      var j = JSON.parse(msg);
+      return (j && (j.message || j.error)) ? (j.message || j.error) : msg;
+    }catch{
+      return msg;
     }
   }
 
@@ -5984,6 +6022,702 @@ function renderInterests(customer){
     }
 
   }
+  function promotersList(){
+    if (!main) return;
+
+    main.innerHTML = ''
+      + '<div class="card" id="promotersCard">'
+      +   '<div class="header">'
+      +     '<div>'
+      +       '<div class="title">Promoters</div>'
+      +       '<div class="muted">Promoters that we work with</div>'
+      +     '</div>'
+      +     '<div class="row" style="gap:8px;align-items:center;">'
+      +       '<input id="promoterSearch" placeholder="Search promoters" style="min-width:200px;" />'
+      +       '<button class="btn p" id="addPromoterBtn" title="Add new promoter">+ Add promoter</button>'
+      +     '</div>'
+      +   '</div>'
+      +   '<div class="error" id="promoterErr" style="margin-top:6px;"></div>'
+      +   '<div class="muted" id="promoterEmpty" style="display:none;margin-top:12px;">No promoters yet. Create one with the + button to get started.</div>'
+      +   '<div id="promoterGrid" class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px;margin-top:12px;"></div>'
+      + '</div>';
+
+    var search = $('#promoterSearch');
+    var grid = $('#promoterGrid');
+    var err = $('#promoterErr');
+    var empty = $('#promoterEmpty');
+    var addBtn = $('#addPromoterBtn');
+
+    function formatStatus(s){
+      var map = {
+        PROSPECT: 'Prospect',
+        ACTIVE: 'Active',
+        DORMANT: 'Dormant',
+        BLOCKED: 'Blocked'
+      };
+      return map[s] || 'Prospect';
+    }
+
+    function toggleEmpty(show){
+      if (empty) empty.style.display = show ? 'block' : 'none';
+    }
+
+    if (addBtn){
+      addBtn.addEventListener('click', function(){ go('/admin/ui/promoters/new'); });
+    }
+
+    var debouncedLoad = debounce(function(){
+      loadPromoters(search ? search.value : '');
+    }, 250);
+
+    if (search){
+      search.addEventListener('input', debouncedLoad);
+    }
+
+    loadPromoters('');
+
+    async function loadPromoters(q){
+      if (!grid) return;
+      grid.innerHTML = '<div class="muted">Loading promoters…</div>';
+      if (err) err.textContent = '';
+      try{
+        var res = await j('/admin/promoters?q=' + encodeURIComponent(q || ''));
+        var items = (res && res.items) || [];
+        renderPromoters(items);
+      }catch(e){
+        if (err) err.textContent = parseErr(e);
+        grid.innerHTML = '';
+      }
+    }
+
+    function renderPromoters(items){
+      if (!grid) return;
+      grid.innerHTML = '';
+      toggleEmpty(!(items && items.length));
+      (items || []).forEach(function(p){
+        var card = document.createElement('div');
+        card.className = 'card';
+        card.style.margin = '0';
+
+        var statusLabel = formatStatus(p.status);
+        card.innerHTML = ''
+          + '<div class="header">'
+          +   '<div>'
+          +     '<div class="title">' + escapeHtml(p.name || 'Untitled promoter') + '</div>'
+          +     '<div class="muted">' + escapeHtml(p.tradingName || p.email || '') + '</div>'
+          +   '</div>'
+          +   '<div class="row" style="gap:8px;align-items:center;">'
+          +     '<span class="status-badge">' + escapeHtml(statusLabel) + '</span>'
+          +     '<a class="btn" href="/admin/ui/promoters/' + encodeURIComponent(p.id) + '" data-view="/admin/ui/promoters/' + encodeURIComponent(p.id) + '">Open profile</a>'
+          +   '</div>'
+          + '</div>';
+
+        grid.appendChild(card);
+      });
+    }
+  }
+
+  function promoterCreate(){
+    if (!main) return;
+
+    main.innerHTML = ''
+      + '<div class="card">'
+      +   '<div class="header">'
+      +     '<div>'
+      +       '<div class="title">Add promoter</div>'
+      +       '<div class="muted">Capture the core details for a new promoter.</div>'
+      +     '</div>'
+      +     '<div class="row" style="gap:8px;">'
+      +       '<a class="btn" href="/admin/ui/promoters" data-view="/admin/ui/promoters">Cancel</a>'
+      +       '<button class="btn p" id="savePromoterCreate">Save promoter</button>'
+      +     '</div>'
+      +   '</div>'
+      +   '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">'
+      +     '<label style="display:grid;gap:6px;">Promoter name<input id="pc_name" required /></label>'
+      +     '<label style="display:grid;gap:6px;">Trading name<input id="pc_tradingName" /></label>'
+      +     '<label style="display:grid;gap:6px;">Email<input id="pc_email" type="email" /></label>'
+      +     '<label style="display:grid;gap:6px;">Phone<input id="pc_phone" /></label>'
+      +     '<label style="display:grid;gap:6px;">Status'
+      +       '<select id="pc_status">'
+      +         '<option value="PROSPECT">Prospect</option>'
+      +         '<option value="ACTIVE">Active</option>'
+      +         '<option value="DORMANT">Dormant</option>'
+      +         '<option value="BLOCKED">Blocked</option>'
+      +       '</select>'
+      +     '</label>'
+      +   '</div>'
+      +   '<div style="margin-top:10px;">'
+      +     '<label style="display:grid;gap:6px;">Notes<textarea id="pc_notes" rows="3" style="resize:vertical;"></textarea></label>'
+      +   '</div>'
+      +   '<div class="row" style="justify-content:flex-end;gap:8px;margin-top:10px;">'
+      +     '<div class="error" id="pc_error"></div>'
+      +   '</div>'
+      + '</div>';
+
+    var saveBtn = $('#savePromoterCreate');
+    if (saveBtn){
+      saveBtn.addEventListener('click', async function(){
+        var err = $('#pc_error');
+        if (err) err.textContent = '';
+        var payload = {
+          name: ($('#pc_name').value || '').trim(),
+          tradingName: ($('#pc_tradingName').value || '').trim() || null,
+          email: ($('#pc_email').value || '').trim() || null,
+          phone: ($('#pc_phone').value || '').trim() || null,
+          status: ($('#pc_status').value || 'PROSPECT'),
+          notes: ($('#pc_notes').value || '').trim() || null,
+        };
+        if (!payload.name){
+          if (err) err.textContent = 'Promoter name is required.';
+          return;
+        }
+        try{
+          var res = await j('/admin/promoters', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify(payload)
+          });
+          if (res && res.promoter && res.promoter.id){
+            go('/admin/ui/promoters/' + res.promoter.id);
+          }else{
+            throw new Error('Promoter created, but missing response data.');
+          }
+        }catch(e){
+          if (err) err.textContent = parseErr(e);
+        }
+      });
+    }
+  }
+
+  function promoterProfile(promoterId){
+    if (!main) return;
+    var activeTab = 'overview';
+
+    loadPromoter();
+
+    async function loadPromoter(){
+      main.innerHTML = '<div class="card"><div class="title">Loading promoter…</div></div>';
+      try{
+        var res = await j('/admin/promoters/' + encodeURIComponent(promoterId));
+        if (!res || !res.promoter) throw new Error('Promoter not found');
+        renderPromoter(res.promoter);
+      }catch(e){
+        main.innerHTML = '<div class="card"><div class="error">Failed to load promoter: ' + escapeHtml(parseErr(e)) + '</div></div>';
+      }
+    }
+
+    function renderPromoter(promoter){
+      var statusValue = promoter.status || 'PROSPECT';
+      main.innerHTML = ''
+        + '<div class="card" id="promoterProfileCard">'
+        +   '<div class="header">'
+        +     '<div>'
+        +       '<div class="title">' + escapeHtml(promoter.name || 'Promoter') + '</div>'
+        +       '<div class="muted">' + escapeHtml(promoter.tradingName || promoter.email || 'Promoter profile') + '</div>'
+        +     '</div>'
+        +     '<div class="row" style="gap:8px;align-items:center;">'
+        +       '<a class="btn" href="/admin/ui/promoters" data-view="/admin/ui/promoters">Back to list</a>'
+        +     '</div>'
+        +   '</div>'
+        +   '<div class="tabs" id="promoterTabs">'
+        +     '<button class="tab-btn" data-tab="overview">Overview</button>'
+        +     '<button class="tab-btn" data-tab="contacts">Contacts</button>'
+        +     '<button class="tab-btn" data-tab="documents">Documents</button>'
+        +     '<button class="tab-btn" data-tab="venues">Venues</button>'
+        +     '<button class="tab-btn" data-tab="shows">Shows</button>'
+        +     '<button class="tab-btn" data-tab="deals">Deals</button>'
+        +     '<button class="tab-btn" data-tab="invoicing">Invoicing</button>'
+        +     '<button class="tab-btn" data-tab="activity">Activity</button>'
+        +   '</div>'
+
+        +   '<div class="tab-panel" data-panel="overview">'
+        +     '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">'
+        +       '<label style="display:grid;gap:6px;">Promoter name<input id="po_name" value="' + escapeHtml(promoter.name || '') + '" required /></label>'
+        +       '<label style="display:grid;gap:6px;">Trading name<input id="po_tradingName" value="' + escapeHtml(promoter.tradingName || '') + '" /></label>'
+        +       '<label style="display:grid;gap:6px;">Email<input id="po_email" type="email" value="' + escapeHtml(promoter.email || '') + '" /></label>'
+        +       '<label style="display:grid;gap:6px;">Phone<input id="po_phone" value="' + escapeHtml(promoter.phone || '') + '" /></label>'
+        +       '<label style="display:grid;gap:6px;">Status'
+        +         '<select id="po_status">'
+        +           '<option value="PROSPECT"' + (statusValue === 'PROSPECT' ? ' selected' : '') + '>Prospect</option>'
+        +           '<option value="ACTIVE"' + (statusValue === 'ACTIVE' ? ' selected' : '') + '>Active</option>'
+        +           '<option value="DORMANT"' + (statusValue === 'DORMANT' ? ' selected' : '') + '>Dormant</option>'
+        +           '<option value="BLOCKED"' + (statusValue === 'BLOCKED' ? ' selected' : '') + '>Blocked</option>'
+        +         '</select>'
+        +       '</label>'
+        +     '</div>'
+        +     '<div style="margin-top:10px;">'
+        +       '<label style="display:grid;gap:6px;">Notes<textarea id="po_notes" rows="3" style="resize:vertical;">' + escapeHtml(promoter.notes || '') + '</textarea></label>'
+        +     '</div>'
+        +     '<div class="row" style="justify-content:flex-end;gap:8px;margin-top:10px;">'
+        +       '<button class="btn p" id="po_save">Save overview</button>'
+        +       '<div class="error" id="po_error"></div>'
+        +     '</div>'
+        +   '</div>'
+
+        +   '<div class="tab-panel" data-panel="contacts">'
+        +     '<div id="promoterContactsList"></div>'
+        +     '<div class="card" style="margin-top:12px;">'
+        +       '<div class="title">Add contact</div>'
+        +       '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:10px;">'
+        +         '<label style="display:grid;gap:6px;">Name<input id="pc_add_name" /></label>'
+        +         '<label style="display:grid;gap:6px;">Role<input id="pc_add_role" /></label>'
+        +         '<label style="display:grid;gap:6px;">Email<input id="pc_add_email" type="email" /></label>'
+        +         '<label style="display:grid;gap:6px;">Phone<input id="pc_add_phone" /></label>'
+        +         '<label style="display:grid;gap:6px;">Tags (comma separated)<input id="pc_add_tags" /></label>'
+        +       '</div>'
+        +       '<div class="row" style="gap:12px;margin-top:10px;flex-wrap:wrap;">'
+        +         '<label class="row" style="gap:6px;"><input type="checkbox" id="pc_add_finance" />Primary finance contact</label>'
+        +         '<label class="row" style="gap:6px;"><input type="checkbox" id="pc_add_marketing" />Primary marketing contact</label>'
+        +       '</div>'
+        +       '<div class="row" style="justify-content:flex-end;gap:8px;margin-top:10px;">'
+        +         '<button class="btn p" id="pc_add_save">Add contact</button>'
+        +         '<div class="error" id="pc_add_error"></div>'
+        +       '</div>'
+        +     '</div>'
+        +   '</div>'
+
+        +   '<div class="tab-panel" data-panel="documents">'
+        +     '<div class="card">'
+        +       '<div class="title">Upload document</div>'
+        +       '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:10px;">'
+        +         '<label style="display:grid;gap:6px;">Document type'
+        +           '<select id="pd_type">'
+        +             '<option value="PRS_CERTIFICATE">PRS certificate</option>'
+        +             '<option value="PPL_MUSIC_LICENSING">PPL / music licensing</option>'
+        +             '<option value="PUBLIC_LIABILITY_INSURANCE">Public liability insurance</option>'
+        +             '<option value="RISK_ASSESSMENT">Risk assessment</option>'
+        +             '<option value="TECH_SPEC">Tech spec</option>'
+        +             '<option value="MARKETING_SPEC">Marketing spec</option>'
+        +             '<option value="ACCESSIBILITY_INFO">Accessibility info</option>'
+        +             '<option value="BRANDING_GUIDELINES">Branding guidelines / logo pack</option>'
+        +             '<option value="OTHER">Other</option>'
+        +           '</select>'
+        +         '</label>'
+        +         '<label style="display:grid;gap:6px;">Title<input id="pd_title" /></label>'
+        +         '<label style="display:grid;gap:6px;">Expiry date<input id="pd_expiry" type="date" /></label>'
+        +         '<label style="display:grid;gap:6px;">File<input id="pd_file" type="file" /></label>'
+        +       '</div>'
+        +       '<div class="row" style="justify-content:flex-end;gap:8px;margin-top:10px;">'
+        +         '<button class="btn p" id="pd_upload">Upload document</button>'
+        +         '<div class="error" id="pd_error"></div>'
+        +       '</div>'
+        +     '</div>'
+        +     '<div id="promoterDocumentsList" style="margin-top:12px;"></div>'
+        +   '</div>'
+
+        +   '<div class="tab-panel" data-panel="venues">'
+        +     '<div class="card"><div class="title">Venues</div><div class="muted">Coming next.</div></div>'
+        +   '</div>'
+        +   '<div class="tab-panel" data-panel="shows">'
+        +     '<div class="card"><div class="title">Shows</div><div class="muted">Coming next.</div></div>'
+        +   '</div>'
+        +   '<div class="tab-panel" data-panel="deals">'
+        +     '<div class="card"><div class="title">Deals</div><div class="muted">Coming next.</div></div>'
+        +   '</div>'
+        +   '<div class="tab-panel" data-panel="invoicing">'
+        +     '<div class="card"><div class="title">Invoicing</div><div class="muted">Coming next.</div></div>'
+        +   '</div>'
+        +   '<div class="tab-panel" data-panel="activity">'
+        +     '<div id="promoterActivityList"></div>'
+        +   '</div>'
+        + '</div>';
+
+      setupTabs();
+      renderContacts(promoter);
+      renderDocuments(promoter);
+      renderActivity(promoter);
+      bindOverviewSave(promoter);
+      bindContactAdd();
+      bindDocumentUpload();
+    }
+
+    function setupTabs(){
+      var tabButtons = $$('#promoterTabs .tab-btn');
+      function activate(tabId){
+        activeTab = tabId;
+        tabButtons.forEach(function(btn){
+          btn.classList.toggle('active', btn.getAttribute('data-tab') === tabId);
+        });
+        $$('.tab-panel').forEach(function(panel){
+          panel.classList.toggle('active', panel.getAttribute('data-panel') === tabId);
+        });
+      }
+      tabButtons.forEach(function(btn){
+        btn.addEventListener('click', function(){
+          activate(btn.getAttribute('data-tab'));
+        });
+      });
+      activate(activeTab || 'overview');
+    }
+
+    function bindOverviewSave(){
+      var saveBtn = $('#po_save');
+      if (!saveBtn) return;
+      saveBtn.addEventListener('click', async function(){
+        var err = $('#po_error');
+        if (err) err.textContent = '';
+        var payload = {
+          name: ($('#po_name').value || '').trim(),
+          tradingName: ($('#po_tradingName').value || '').trim() || null,
+          email: ($('#po_email').value || '').trim() || null,
+          phone: ($('#po_phone').value || '').trim() || null,
+          status: ($('#po_status').value || 'PROSPECT'),
+          notes: ($('#po_notes').value || '').trim() || null,
+        };
+        if (!payload.name){
+          if (err) err.textContent = 'Promoter name is required.';
+          return;
+        }
+        try{
+          await j('/admin/promoters/' + encodeURIComponent(promoterId), {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify(payload)
+          });
+          await loadPromoter();
+        }catch(e){
+          if (err) err.textContent = parseErr(e);
+        }
+      });
+    }
+
+    function renderContacts(promoter){
+      var list = $('#promoterContactsList');
+      if (!list) return;
+      list.innerHTML = '';
+      var contacts = promoter.contacts || [];
+      if (!contacts.length){
+        list.innerHTML = '<div class="muted">No contacts yet.</div>';
+        return;
+      }
+      contacts.forEach(function(c){
+        var card = document.createElement('div');
+        card.className = 'card';
+        card.style.margin = '0 0 12px 0';
+        card.innerHTML = ''
+          + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;">'
+          +   '<label style="display:grid;gap:6px;">Name<input data-field="name" value="' + escapeHtml(c.name || '') + '" /></label>'
+          +   '<label style="display:grid;gap:6px;">Role<input data-field="role" value="' + escapeHtml(c.role || '') + '" /></label>'
+          +   '<label style="display:grid;gap:6px;">Email<input data-field="email" type="email" value="' + escapeHtml(c.email || '') + '" /></label>'
+          +   '<label style="display:grid;gap:6px;">Phone<input data-field="phone" value="' + escapeHtml(c.phone || '') + '" /></label>'
+          +   '<label style="display:grid;gap:6px;">Tags (comma separated)<input data-field="tags" value="' + escapeHtml((c.tags || []).join(', ')) + '" /></label>'
+          + '</div>'
+          + '<div class="row" style="gap:12px;margin-top:10px;flex-wrap:wrap;">'
+          +   '<label class="row" style="gap:6px;"><input type="checkbox" data-field="primaryFinance"' + (c.isPrimaryFinance ? ' checked' : '') + ' />Primary finance contact</label>'
+          +   '<label class="row" style="gap:6px;"><input type="checkbox" data-field="primaryMarketing"' + (c.isPrimaryMarketing ? ' checked' : '') + ' />Primary marketing contact</label>'
+          + '</div>'
+          + '<div class="row" style="justify-content:flex-end;gap:8px;margin-top:10px;">'
+          +   '<button class="btn p" data-action="save">Save</button>'
+          +   '<button class="btn" data-action="delete">Delete</button>'
+          + '</div>'
+          + '<div class="error" data-error></div>';
+
+        list.appendChild(card);
+
+        var saveBtn = card.querySelector('[data-action="save"]');
+        var deleteBtn = card.querySelector('[data-action="delete"]');
+        var err = card.querySelector('[data-error]');
+
+        if (saveBtn){
+          saveBtn.addEventListener('click', async function(){
+            if (err) err.textContent = '';
+            var payload = {
+              name: valueOf(card, 'name'),
+              role: valueOf(card, 'role') || null,
+              email: valueOf(card, 'email') || null,
+              phone: valueOf(card, 'phone') || null,
+              tags: parseTags(valueOf(card, 'tags')),
+              isPrimaryFinance: checkboxOf(card, 'primaryFinance'),
+              isPrimaryMarketing: checkboxOf(card, 'primaryMarketing'),
+            };
+            if (!payload.name){
+              if (err) err.textContent = 'Contact name is required.';
+              return;
+            }
+            try{
+              await j('/admin/promoters/' + encodeURIComponent(promoterId) + '/contacts/' + encodeURIComponent(c.id), {
+                method:'PATCH',
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify(payload)
+              });
+              await loadPromoter();
+            }catch(e){
+              if (err) err.textContent = parseErr(e);
+            }
+          });
+        }
+
+        if (deleteBtn){
+          deleteBtn.addEventListener('click', async function(){
+            if (!confirm('Delete this contact?')) return;
+            if (err) err.textContent = '';
+            try{
+              await j('/admin/promoters/' + encodeURIComponent(promoterId) + '/contacts/' + encodeURIComponent(c.id), {
+                method:'DELETE'
+              });
+              await loadPromoter();
+            }catch(e){
+              if (err) err.textContent = parseErr(e);
+            }
+          });
+        }
+      });
+    }
+
+    function bindContactAdd(){
+      var saveBtn = $('#pc_add_save');
+      if (!saveBtn) return;
+      saveBtn.addEventListener('click', async function(){
+        var err = $('#pc_add_error');
+        if (err) err.textContent = '';
+        var payload = {
+          name: ($('#pc_add_name').value || '').trim(),
+          role: ($('#pc_add_role').value || '').trim() || null,
+          email: ($('#pc_add_email').value || '').trim() || null,
+          phone: ($('#pc_add_phone').value || '').trim() || null,
+          tags: parseTags(($('#pc_add_tags').value || '').trim()),
+          isPrimaryFinance: $('#pc_add_finance').checked,
+          isPrimaryMarketing: $('#pc_add_marketing').checked,
+        };
+        if (!payload.name){
+          if (err) err.textContent = 'Contact name is required.';
+          return;
+        }
+        try{
+          await j('/admin/promoters/' + encodeURIComponent(promoterId) + '/contacts', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify(payload)
+          });
+          resetContactForm();
+          await loadPromoter();
+        }catch(e){
+          if (err) err.textContent = parseErr(e);
+        }
+      });
+    }
+
+    function resetContactForm(){
+      $('#pc_add_name').value = '';
+      $('#pc_add_role').value = '';
+      $('#pc_add_email').value = '';
+      $('#pc_add_phone').value = '';
+      $('#pc_add_tags').value = '';
+      $('#pc_add_finance').checked = false;
+      $('#pc_add_marketing').checked = false;
+    }
+
+    function renderDocuments(promoter){
+      var list = $('#promoterDocumentsList');
+      if (!list) return;
+      list.innerHTML = '';
+      var documents = promoter.documents || [];
+      if (!documents.length){
+        list.innerHTML = '<div class="muted">No documents uploaded yet.</div>';
+        return;
+      }
+      documents.forEach(function(doc){
+        var card = document.createElement('div');
+        card.className = 'card';
+        card.style.margin = '0 0 12px 0';
+        var statusLabel = documentStatus(doc);
+        card.innerHTML = ''
+          + '<div class="header">'
+          +   '<div>'
+          +     '<div class="title">' + escapeHtml(doc.title || 'Document') + '</div>'
+          +     '<div class="muted">' + escapeHtml(docTypeLabel(doc.type)) + (doc.expiresAt ? ' • Expires ' + escapeHtml(formatDate(doc.expiresAt)) : '') + '</div>'
+          +   '</div>'
+          +   '<div class="row" style="gap:8px;align-items:center;">'
+          +     '<span class="status-badge">' + escapeHtml(statusLabel) + '</span>'
+          +     '<a class="btn" href="' + escapeHtml(doc.fileUrl || '#') + '" target="_blank" rel="noreferrer">Open</a>'
+          +     '<button class="btn" data-action="delete">Remove</button>'
+          +   '</div>'
+          + '</div>';
+        list.appendChild(card);
+
+        var delBtn = card.querySelector('[data-action="delete"]');
+        if (delBtn){
+          delBtn.addEventListener('click', async function(){
+            if (!confirm('Remove this document?')) return;
+            try{
+              await j('/admin/promoters/' + encodeURIComponent(promoterId) + '/documents/' + encodeURIComponent(doc.id), {
+                method:'DELETE'
+              });
+              await loadPromoter();
+            }catch(e){
+              alert(parseErr(e));
+            }
+          });
+        }
+      });
+    }
+
+    function bindDocumentUpload(){
+      var uploadBtn = $('#pd_upload');
+      if (!uploadBtn) return;
+      uploadBtn.addEventListener('click', async function(){
+        var err = $('#pd_error');
+        if (err) err.textContent = '';
+        var fileInput = $('#pd_file');
+        var file = fileInput && fileInput.files ? fileInput.files[0] : null;
+        var title = ($('#pd_title').value || '').trim();
+        var type = ($('#pd_type').value || 'OTHER');
+        var expiry = ($('#pd_expiry').value || '').trim();
+        if (!title){
+          if (err) err.textContent = 'Document title is required.';
+          return;
+        }
+        if (!file){
+          if (err) err.textContent = 'Choose a file to upload.';
+          return;
+        }
+        try{
+          uploadBtn.disabled = true;
+          uploadBtn.textContent = 'Uploading…';
+          var upload = await uploadPromoterDocument(file);
+          await j('/admin/promoters/' + encodeURIComponent(promoterId) + '/documents', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({
+              type: type,
+              title: title,
+              fileUrl: upload.url,
+              fileName: upload.name,
+              mime: upload.mime,
+              size: upload.size,
+              expiresAt: expiry || null,
+            })
+          });
+          if (fileInput) fileInput.value = '';
+          $('#pd_title').value = '';
+          $('#pd_expiry').value = '';
+          await loadPromoter();
+        }catch(e){
+          if (err) err.textContent = parseErr(e);
+        }finally{
+          uploadBtn.disabled = false;
+          uploadBtn.textContent = 'Upload document';
+        }
+      });
+    }
+
+    function renderActivity(promoter){
+      var list = $('#promoterActivityList');
+      if (!list) return;
+      list.innerHTML = '';
+      var activities = promoter.activities || [];
+      if (!activities.length){
+        list.innerHTML = '<div class="muted">No activity yet.</div>';
+        return;
+      }
+      activities.forEach(function(a){
+        var card = document.createElement('div');
+        card.className = 'card';
+        card.style.margin = '0 0 12px 0';
+        var meta = a.metadata ? JSON.stringify(a.metadata) : '';
+        card.innerHTML = ''
+          + '<div class="row" style="justify-content:space-between;gap:12px;align-items:flex-start;">'
+          +   '<div>'
+          +     '<div style="font-weight:700;">' + escapeHtml(activityLabel(a.type)) + '</div>'
+          +     (meta ? '<div class="muted" style="margin-top:4px;">' + escapeHtml(meta) + '</div>' : '')
+          +   '</div>'
+          +   '<div class="muted" style="white-space:nowrap;">' + escapeHtml(formatDateTime(a.createdAt)) + '</div>'
+          + '</div>';
+        list.appendChild(card);
+      });
+    }
+
+    async function uploadPromoterDocument(file){
+      var form = new FormData();
+      form.append('file', file);
+      var res = await fetch('/admin/promoters/documents/upload', {
+        method:'POST',
+        body: form,
+        credentials:'include'
+      });
+      var data = {};
+      try{
+        data = await res.json();
+      }catch(e){}
+      if (!res.ok || !data || !data.url){
+        var message = (data && (data.error || data.message)) || 'Upload failed';
+        throw new Error(message);
+      }
+      return data;
+    }
+
+    function parseTags(value){
+      return (value || '').split(',').map(function(t){ return t.trim(); }).filter(Boolean);
+    }
+
+    function valueOf(root, field){
+      var el = root.querySelector('[data-field="' + field + '"]');
+      return el ? el.value.trim() : '';
+    }
+
+    function checkboxOf(root, field){
+      var el = root.querySelector('[data-field="' + field + '"]');
+      return el ? Boolean(el.checked) : false;
+    }
+
+    function docTypeLabel(type){
+      var map = {
+        PRS_CERTIFICATE: 'PRS certificate',
+        PPL_MUSIC_LICENSING: 'PPL / music licensing',
+        PUBLIC_LIABILITY_INSURANCE: 'Public liability insurance',
+        RISK_ASSESSMENT: 'Risk assessment',
+        TECH_SPEC: 'Tech spec',
+        MARKETING_SPEC: 'Marketing spec',
+        ACCESSIBILITY_INFO: 'Accessibility info',
+        BRANDING_GUIDELINES: 'Branding guidelines / logo pack',
+        OTHER: 'Other'
+      };
+      return map[type] || 'Other';
+    }
+
+    function activityLabel(type){
+      var map = {
+        CREATED: 'Promoter created',
+        UPDATED: 'Profile updated',
+        CONTACT_ADDED: 'Contact added',
+        CONTACT_UPDATED: 'Contact updated',
+        CONTACT_REMOVED: 'Contact removed',
+        DOCUMENT_UPLOADED: 'Document uploaded',
+        DOCUMENT_UPDATED: 'Document updated',
+        DOCUMENT_REMOVED: 'Document removed'
+      };
+      return map[type] || String(type || 'Activity');
+    }
+
+    function documentStatus(doc){
+      if (doc.expiresAt){
+        var expiry = new Date(doc.expiresAt);
+        if (!isNaN(expiry.getTime()) && expiry < new Date()){
+          return 'Expired';
+        }
+      }
+      var map = {
+        MISSING: 'Missing',
+        UPLOADED: 'Uploaded',
+        EXPIRED: 'Expired',
+        APPROVED: 'Approved'
+      };
+      return map[doc.status] || 'Uploaded';
+    }
+
+    function formatDate(value){
+      var d = new Date(value);
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleDateString('en-GB');
+    }
+
+    function formatDateTime(value){
+      var d = new Date(value);
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleString('en-GB');
+    }
+
+  }
   function analytics(){
     if (!main) return;
     main.innerHTML = '<div class="card"><div class="title">Analytics</div><div class="muted">Analytics dashboard coming soon.</div></div>';
@@ -6210,6 +6944,8 @@ function renderInterests(customer){
       if (path === '/admin/ui/customers')     return customers();
       if (path === '/admin/ui/orders')         return orders();
       if (path === '/admin/ui/venues')         return venues();
+      if (path === '/admin/ui/promoters')      return promotersList();
+      if (path === '/admin/ui/promoters/new')  return promoterCreate();
       if (path === '/admin/ui/analytics')      return analytics();
       if (path === '/admin/ui/audiences')      return audiences();
       if (path === '/admin/ui/email')          return emailPage();
@@ -6232,6 +6968,11 @@ function renderInterests(customer){
       if (path.startsWith('/admin/ui/shows/') && path.endsWith('/summary')){
         var id4 = path.split('/')[4];
         return summaryPage(id4);
+      }
+
+      if (path.startsWith('/admin/ui/promoters/')){
+        var pid = path.split('/')[4];
+        return promoterProfile(pid);
       }
 
       return home();
