@@ -50,7 +50,7 @@ export async function evaluateSegmentContacts(
     where: { tenantId },
     include: {
       tags: { include: { tag: true } },
-      consents: { orderBy: { capturedAt: 'desc' }, take: 1 },
+      consent: true,
     },
   });
 
@@ -59,7 +59,7 @@ export async function evaluateSegmentContacts(
     email: contact.email,
     firstName: contact.firstName,
     lastName: contact.lastName,
-    consentStatus: contact.consents[0]?.status || null,
+    consentStatus: contact.consent?.status || null,
     tags: contact.tags.map((t) => t.tag.name),
   }));
 
