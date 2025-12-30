@@ -5,7 +5,8 @@ import Stripe from "stripe";
 import { calcFeesForShow } from "../services/fees.js";
 import { sendTicketsEmail } from "../services/email.js";
 import { syncMarketingContactFromOrder } from "../services/marketing/contacts.js";
-import { MarketingConsentSource } from "@prisma/client";
+import { MarketingAutomationTriggerType, MarketingConsentSource } from "@prisma/client";
+import { enqueueAutomationForContact, markCheckoutCompleted } from "../services/marketing/automations.js";
 
 
 const stripeSecret = process.env.STRIPE_SECRET_KEY;
@@ -511,16 +512,26 @@ try {
     where: { id: showId },
     select: { organiserId: true },
   });
-  if (showForMarketing?.organiserId && payerEmail) {
-    await syncMarketingContactFromOrder({
-      tenantId: showForMarketing.organiserId,
-      email: payerEmail,
-      firstName: payerFirstName,
-      lastName: payerLastName,
-      source: MarketingConsentSource.CHECKOUT,
-      capturedIp: String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || ""),
-      capturedUserAgent: String(req.headers["user-agent"] || ""),
-    });
+  if (showForMarketing?.organiserId) {
+    if (payerEmail) {
+      const contact = await syncMarketingContactFromOrder({
+        tenantId: showForMarketing.organiserId,
+        email: payerEmail,
+        firstName: payerFirstName,
+        lastName: payerLastName,
+        source: MarketingConsentSource.CHECKOUT,
+        capturedIp: String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || ""),
+        capturedUserAgent: String(req.headers["user-agent"] || ""),
+      });
+      if (contact) {
+        await enqueueAutomationForContact(
+          showForMarketing.organiserId,
+          contact.id,
+          MarketingAutomationTriggerType.AFTER_PURCHASE
+        );
+      }
+    }
+    await markCheckoutCompleted(showForMarketing.organiserId, orderId, payerEmail);
   }
   try {
     if ((finalTicketCount || 0) > 0) {

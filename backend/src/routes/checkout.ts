@@ -2,6 +2,7 @@ import { Router } from "express";
 import { OrderStatus } from "@prisma/client";
 import prisma from "../lib/prisma.js";
 import Stripe from "stripe";
+import { recordAbandonedCheckoutEvent } from "../services/marketing/automations.js";
 
 const router = Router();
 
@@ -53,6 +54,7 @@ router.post("/session", async (req, res) => {
     }
 
     const { showId, quantity, unitPricePence, seats, ticketTypeId, items } = DEBUG_REQ_BODY;
+    const buyerEmail = String(DEBUG_REQ_BODY?.buyerEmail || "").trim().toLowerCase();
 
     const seatIds: string[] = Array.isArray(seats) ? seats.map((s: any) => String(s)) : [];
     const hasSeats = seatIds.length > 0;
@@ -259,6 +261,7 @@ if (!itQty || itQty < 1 || !itUnit || itUnit < 1) {
         quantity: totalQty,
         amountPence: amountPence,
         status: OrderStatus.PENDING,
+        email: buyerEmail || undefined,
       },
       select: { id: true },
     });
@@ -349,6 +352,15 @@ if (Array.isArray(items) && items.length > 0) {
       where: { id: order.id },
       data: { stripeCheckoutSessionId: session.id },
     });
+
+    if (show.organiserId) {
+      await recordAbandonedCheckoutEvent({
+        tenantId: show.organiserId,
+        orderId: order.id,
+        showId: show.id,
+        email: buyerEmail || null,
+      });
+    }
 
     return res.json({ ok: true, url: session.url });
   } catch (err: any) {

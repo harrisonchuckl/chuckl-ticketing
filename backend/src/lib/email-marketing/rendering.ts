@@ -4,6 +4,8 @@ export type MarketingTemplateVariables = {
   email?: string | null;
   tenantName?: string | null;
   unsubscribeUrl?: string | null;
+  preferencesUrl?: string | null;
+  recommendedShows?: string | null;
 };
 
 export function interpolateTemplate(template: string, variables: MarketingTemplateVariables): string {
@@ -16,19 +18,29 @@ export function interpolateTemplate(template: string, variables: MarketingTempla
   return output;
 }
 
-export function ensureUnsubscribeFooter(html: string, unsubscribeUrl: string): string {
+export function ensureUnsubscribeFooter(html: string, unsubscribeUrl: string, preferencesUrl?: string | null): string {
   if (html.includes(unsubscribeUrl)) {
     return html;
   }
 
+  const preferencesLink = preferencesUrl
+    ? `<span style="margin-left:12px;"><a href="${preferencesUrl}" style="color:#2563eb;">Manage preferences</a></span>`
+    : '';
+
   const footer = `
     <div style="margin-top:24px;font-size:12px;color:#6b7280;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;">
       <p style="margin:0 0 8px 0;">You are receiving this email because you opted in to marketing updates.</p>
-      <p style="margin:0;"><a href="${unsubscribeUrl}" style="color:#2563eb;">Unsubscribe</a></p>
+      <p style="margin:0;"><a href="${unsubscribeUrl}" style="color:#2563eb;">Unsubscribe</a>${preferencesLink}</p>
     </div>
   `;
 
   return `${html}${footer}`;
+}
+
+export function ensureRecommendationsBlock(html: string, recommendedShows?: string | null): string {
+  if (!recommendedShows) return html;
+  if (html.includes(recommendedShows)) return html;
+  return `${html}${recommendedShows}`;
 }
 
 export function renderMarketingTemplate(
@@ -40,8 +52,10 @@ export function renderMarketingTemplate(
   let html = compiled.html;
   html = interpolateTemplate(html, variables);
 
+  html = ensureRecommendationsBlock(html, variables.recommendedShows);
+
   if (variables.unsubscribeUrl) {
-    html = ensureUnsubscribeFooter(html, variables.unsubscribeUrl);
+    html = ensureUnsubscribeFooter(html, variables.unsubscribeUrl, variables.preferencesUrl);
   }
 
   return { html, errors: compiled.errors };

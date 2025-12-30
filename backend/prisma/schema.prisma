@@ -129,6 +129,26 @@ enum MarketingCampaignStatus {
   CANCELLED
 }
 
+enum MarketingAutomationTriggerType {
+  AFTER_PURCHASE
+  NO_PURCHASE_DAYS
+  VIP_THRESHOLD
+  SHOW_CATEGORY_INTEREST
+  ABANDONED_CHECKOUT
+}
+
+enum MarketingAutomationStateStatus {
+  ACTIVE
+  COMPLETED
+  STOPPED
+}
+
+enum MarketingAutomationStepStatus {
+  SENT
+  FAILED
+  SKIPPED
+}
+
 enum MarketingRecipientStatus {
   PENDING
   SENT
@@ -143,6 +163,16 @@ enum MarketingEmailEventType {
   OPEN
   CLICK
   UNSUBSCRIBE
+}
+
+enum MarketingPreferenceStatus {
+  SUBSCRIBED
+  UNSUBSCRIBED
+}
+
+enum MarketingCheckoutStatus {
+  STARTED
+  COMPLETED
 }
 
 model User {
@@ -561,6 +591,8 @@ model MarketingContact {
   tags       MarketingContactTag[]
   recipients MarketingCampaignRecipient[]
   events     MarketingEmailEvent[]
+  preferences MarketingContactPreference[]
+  automationStates MarketingAutomationState[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -635,6 +667,7 @@ model MarketingTemplate {
 
   tenant    User @relation(fields: [tenantId], references: [id])
   campaigns MarketingCampaign[]
+  automationSteps MarketingAutomationStep[]
 
   @@index([tenantId])
 }
@@ -709,6 +742,137 @@ model MarketingEmailEvent {
 
   @@index([tenantId, campaignId])
   @@index([tenantId])
+}
+
+model MarketingAutomation {
+  id          String                         @id @default(cuid())
+  tenantId    String
+  name        String
+  triggerType MarketingAutomationTriggerType
+  isEnabled   Boolean                        @default(true)
+  createdAt   DateTime                       @default(now())
+  updatedAt   DateTime                       @updatedAt
+
+  tenant User @relation(fields: [tenantId], references: [id])
+  steps  MarketingAutomationStep[]
+  states MarketingAutomationState[]
+
+  @@index([tenantId])
+}
+
+model MarketingAutomationStep {
+  id             String   @id @default(cuid())
+  tenantId       String
+  automationId   String
+  delayMinutes   Int
+  templateId     String
+  conditionRules Json
+  stepOrder      Int
+
+  automation MarketingAutomation @relation(fields: [automationId], references: [id])
+  template   MarketingTemplate   @relation(fields: [templateId], references: [id])
+  executions MarketingAutomationStepExecution[]
+
+  @@unique([tenantId, automationId, stepOrder])
+  @@index([tenantId])
+}
+
+model MarketingAutomationState {
+  id           String                       @id @default(cuid())
+  tenantId     String
+  contactId    String
+  automationId String
+  currentStep  Int                          @default(0)
+  nextRunAt    DateTime?
+  status       MarketingAutomationStateStatus @default(ACTIVE)
+  createdAt    DateTime                     @default(now())
+  updatedAt    DateTime                     @updatedAt
+
+  automation MarketingAutomation @relation(fields: [automationId], references: [id])
+  contact    MarketingContact    @relation(fields: [contactId], references: [id])
+
+  @@unique([tenantId, contactId, automationId])
+  @@index([tenantId, nextRunAt])
+}
+
+model MarketingAutomationStepExecution {
+  id           String                       @id @default(cuid())
+  tenantId     String
+  automationId String
+  stepId       String
+  contactId    String
+  status       MarketingAutomationStepStatus @default(SENT)
+  errorText    String?
+  sentAt       DateTime?
+  createdAt    DateTime                     @default(now())
+
+  automation MarketingAutomation @relation(fields: [automationId], references: [id])
+  step       MarketingAutomationStep @relation(fields: [stepId], references: [id])
+  contact    MarketingContact    @relation(fields: [contactId], references: [id])
+
+  @@unique([tenantId, contactId, stepId])
+  @@index([tenantId])
+}
+
+model MarketingPreferenceTopic {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  description String?
+  isDefault   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant User @relation(fields: [tenantId], references: [id])
+  preferences MarketingContactPreference[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model MarketingContactPreference {
+  id        String                  @id @default(cuid())
+  tenantId  String
+  contactId String
+  topicId   String
+  status    MarketingPreferenceStatus @default(SUBSCRIBED)
+  updatedAt DateTime                @updatedAt
+
+  contact MarketingContact @relation(fields: [contactId], references: [id])
+  topic   MarketingPreferenceTopic @relation(fields: [topicId], references: [id])
+
+  @@unique([tenantId, contactId, topicId])
+  @@index([tenantId])
+}
+
+model MarketingCheckoutEvent {
+  id          String                @id @default(cuid())
+  tenantId    String
+  orderId     String
+  showId      String?
+  email       String?
+  status      MarketingCheckoutStatus @default(STARTED)
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  tenant User @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, orderId])
+  @@index([tenantId, status])
+}
+
+model MarketingAuditLog {
+  id         String   @id @default(cuid())
+  tenantId   String
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  tenant User @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, createdAt])
 }
 
 model OrderNote {
