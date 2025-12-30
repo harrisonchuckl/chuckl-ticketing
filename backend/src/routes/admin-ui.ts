@@ -1852,8 +1852,7 @@ document.addEventListener('click', function(e){
         '<div class="tooltip-date">' + fmtDateTime.format(new Date(date)) + '</div>'
         + '<div class="tooltip-row"><span>Tickets sold</span><strong>' + fmtNumber.format(tickets) + '</strong></div>'
         + '<div class="tooltip-row"><span>Revenue taken</span><strong>' + formatMoney(gross) + '</strong></div>'
-        + '<div class="tooltip-row"><span>Kickback from booking fee</span><strong>' + formatMoney(organiser) + '</strong></div>'
-        + '<div class="tooltip-row"><span>Booking fee kickback</span><strong>' + formatMoney(kickback) + '</strong></div>';
+        + '<div class="tooltip-row"><span>Kickback from booking fee</span><strong>' + formatMoney(organiser) + '</strong></div>';
 
       var barRect = bar.getBoundingClientRect();
       var plotRect = plot.getBoundingClientRect();
@@ -1892,7 +1891,6 @@ document.addEventListener('click', function(e){
 
     var options = [
       { key: 'tickets', label: 'Tickets sold' },
-      { key: 'orders', label: 'Orders' },
       { key: 'gross', label: 'Gross £' },
       { key: 'net', label: 'Net £' },
       { key: 'refunds', label: 'Refund £' }
