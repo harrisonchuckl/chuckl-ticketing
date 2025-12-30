@@ -1500,45 +1500,63 @@ router.get("/builder/preview/:showId", (req, res) => {
         holds: document.getElementById("tb-tab-holds"),
         view: document.getElementById("tb-tab-view"), // <--- THIS LINE WAS MISSING
       };
-        // [Source: 10430] - Updated Tab Switch Logic
-tabs.forEach(function (tab) {
-  tab.addEventListener("click", function () {
-    var target = tab.getAttribute("data-tab");
-    if (!target || !panels[target]) return;
 
-    // --- NEW: First-time Guardrail Warning ---
-    // If moving AWAY from map for the first time, show warning
-    if (target !== "map") {
-      // @ts-ignore
-      if (!window.__TIXALL_HAS_SEEN_LOCK_WARNING__) {
-        var msg = "Once tickets, holds or information have been assigned to seats, " +
-                  "you can no longer change the configuration of any rows of seats or tables " +
-                  "without first unallocating the items added.";
-        
-        if (!confirm(msg)) {
-          return; // User cancelled, stay on Map tab
+      function activateTab(target, options) {
+        if (!target || !panels[target]) return;
+        var skipWarning = options && options.skipWarning;
+
+        // --- NEW: First-time Guardrail Warning ---
+        // If moving AWAY from map for the first time, show warning
+        if (target !== "map" && !skipWarning) {
+          // @ts-ignore
+          if (!window.__TIXALL_HAS_SEEN_LOCK_WARNING__) {
+            var msg = "Once tickets, holds or information have been assigned to seats, " +
+                      "you can no longer change the configuration of any rows of seats or tables " +
+                      "without first unallocating the items added.";
+
+            if (!confirm(msg)) {
+              return; // User cancelled, stay on Map tab
+            }
+            // @ts-ignore
+            window.__TIXALL_HAS_SEEN_LOCK_WARNING__ = true;
+          }
         }
-        // @ts-ignore
-        window.__TIXALL_HAS_SEEN_LOCK_WARNING__ = true;
-      }
-    }
-    // -----------------------------------------
+        // -----------------------------------------
 
-    tabs.forEach(function (t) {
-      t.classList.remove("is-active");
-    });
-    Object.keys(panels).forEach(function (key) {
-      if (key === "map") return;
-      panels[key].classList.remove("is-active");
-    });
-    tab.classList.add("is-active");
-    panels[target].classList.add("is-active");
-    panels.map.classList.add("is-active");
-    if (window.__TIXALL_SET_TAB_MODE__) {
-      window.__TIXALL_SET_TAB_MODE__(target);
-    }
-  });
-});
+        tabs.forEach(function (t) {
+          var isActive = t.getAttribute("data-tab") === target;
+          t.classList.toggle("is-active", isActive);
+        });
+        Object.keys(panels).forEach(function (key) {
+          if (key === "map") return;
+          panels[key].classList.remove("is-active");
+        });
+        panels[target].classList.add("is-active");
+        panels.map.classList.add("is-active");
+        if (window.__TIXALL_SET_TAB_MODE__) {
+          window.__TIXALL_SET_TAB_MODE__(target);
+        }
+      }
+
+      // [Source: 10430] - Updated Tab Switch Logic
+      tabs.forEach(function (tab) {
+        tab.addEventListener("click", function () {
+          var target = tab.getAttribute("data-tab");
+          activateTab(target);
+        });
+      });
+
+      var initialTab = (function () {
+        try {
+          var params = new URLSearchParams(window.location.search || "");
+          return params.get("tab");
+        } catch (e) {
+          return null;
+        }
+      })();
+      if (initialTab) {
+        activateTab(initialTab, { skipWarning: true });
+      }
         fetch("/admin/seating/builder/api/seatmaps/" + encodeURIComponent(showId))
           .then(function (res) {
             return res.ok ? res.json() : null;

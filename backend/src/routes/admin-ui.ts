@@ -5110,6 +5110,7 @@ async function summaryPage(id){
   
   const statusLabel = show.status || 'DRAFT';
   const isLive = statusLabel === 'LIVE';
+  const usesAllocatedSeating = show.usesAllocatedSeating === true;
 
     // --- Links Configuration ---
 
@@ -5132,9 +5133,6 @@ async function summaryPage(id){
     ? (window.location.origin + '/public/' + storefront)
     : '';
 
-  // Remove broken /events/<id> Next.js link — point to the working public URL instead
-  const publicFrontendUrl = publicBookingUrl;
-
   let linksHtml = '';
   
   if (isLive) {
@@ -5145,13 +5143,6 @@ async function summaryPage(id){
     +     '<div style="display:flex;gap:8px">'
     +       '<input readonly value="'+publicBookingUrl+'" style="flex:1;background:#f8fafc;color:#334155;border:1px solid #e2e8f0;border-radius:6px;padding:8px" onclick="this.select()">'
     +       '<a href="'+publicBookingUrl+'" target="_blank" class="btn" style="color:#0284c7;border-color:#0284c7;text-decoration:none">Open ↗</a>'
-    +     '</div>'
-    +   '</div>'
-    +   '<div>'
-+     '<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;color:#64748b">Public booking page (same link)</label>'
-    +     '<div style="display:flex;gap:8px">'
-    +       '<input readonly value="'+publicFrontendUrl+'" style="flex:1;background:#f8fafc;color:#334155;border:1px solid #e2e8f0;border-radius:6px;padding:8px" onclick="this.select()">'
-    +       '<a href="'+publicFrontendUrl+'" target="_blank" class="btn" style="color:#0284c7;border-color:#0284c7;text-decoration:none">Open ↗</a>'
     +     '</div>'
     +   '</div>'
     + '</div>'
@@ -5220,7 +5211,11 @@ async function summaryPage(id){
   }
   if (summaryTickets){
     summaryTickets.addEventListener('click', function(){
-      go('/admin/ui/shows/' + id + '/tickets');
+      if (usesAllocatedSeating){
+        window.location.href = '/admin/seating/builder/preview/' + id + '?tab=tickets';
+        return;
+      }
+      window.location.href = '/admin/seating-choice/' + id;
     });
   }
   if (linkToBuilder){
