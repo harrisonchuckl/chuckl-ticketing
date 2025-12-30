@@ -12,7 +12,9 @@
     "start": "node dist/start.js",
     "dev": "node --watch --loader ts-node/esm src/server.ts",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate deploy"
+    "prisma:migrate": "prisma migrate deploy",
+    "seed:marketing": "node --loader ts-node/esm src/scripts/seed-marketing.ts",
+    "test": "node --test --loader ts-node/esm src/tests/marketing.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.929.0",

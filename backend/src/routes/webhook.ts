@@ -4,6 +4,8 @@ import prisma from "../lib/prisma.js";
 import Stripe from "stripe";
 import { calcFeesForShow } from "../services/fees.js";
 import { sendTicketsEmail } from "../services/email.js";
+import { syncMarketingContactFromOrder } from "../services/marketing/contacts.js";
+import { MarketingConsentSource } from "@prisma/client";
 
 
 const stripeSecret = process.env.STRIPE_SECRET_KEY;
@@ -505,6 +507,21 @@ try {
 
     // Only send the email the first time we flip to PAID (webhooks retry)
    if (order.status !== "PAID") {
+  const showForMarketing = await prisma.show.findUnique({
+    where: { id: showId },
+    select: { organiserId: true },
+  });
+  if (showForMarketing?.organiserId && payerEmail) {
+    await syncMarketingContactFromOrder({
+      tenantId: showForMarketing.organiserId,
+      email: payerEmail,
+      firstName: payerFirstName,
+      lastName: payerLastName,
+      source: MarketingConsentSource.CHECKOUT,
+      capturedIp: String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || ""),
+      capturedUserAgent: String(req.headers["user-agent"] || ""),
+    });
+  }
   try {
     if ((finalTicketCount || 0) > 0) {
       await sendTicketsEmail(orderId);
