@@ -194,12 +194,12 @@ model User {
   resetTokenRequestedAt DateTime?
   resetTokenUsedAt      DateTime?
 
-  orders         Order[]
-  showsOrganised Show[]   @relation("OrganiserShows")
-  tickets        Ticket[]
-  orderNotes     OrderNote[] @relation("OrderNoteAuthor")
+  orders                     Order[]
+  showsOrganised             Show[]                      @relation("OrganiserShows")
+  tickets                    Ticket[]
+  orderNotes                 OrderNote[]                 @relation("OrderNoteAuthor")
   dashboardWidgetPreferences DashboardWidgetPreference[]
-  orderAuditLogs OrderAuditLog[] @relation("OrderAuditActor")
+  orderAuditLogs             OrderAuditLog[]             @relation("OrderAuditActor")
 
   venueMemberships    VenueMember[]
   invitedVenueMembers VenueMember[] @relation("VenueInviter")
@@ -228,17 +228,17 @@ model User {
   // --- storefront (must be unique per organiser) ---
   storefrontSlug String? @unique
 
-  marketingContacts    MarketingContact[]
-  marketingTags        MarketingTag[]
-  marketingTemplates   MarketingTemplate[]
-  marketingSegments    MarketingSegment[]
-  marketingCampaigns   MarketingCampaign[] @relation("MarketingCampaignCreatedBy")
-  marketingCampaignsAsTenant MarketingCampaign[] @relation("MarketingCampaignTenant")
-  marketingSuppressions MarketingSuppression[]
-  marketingAutomations MarketingAutomation[]
-  marketingPreferenceTopics MarketingPreferenceTopic[]
-  marketingCheckoutEvents MarketingCheckoutEvent[]
-  marketingAuditLogs MarketingAuditLog[]
+  marketingContacts          MarketingContact[]
+  marketingTags              MarketingTag[]
+  marketingTemplates         MarketingTemplate[]
+  marketingSegments          MarketingSegment[]
+  marketingCampaigns         MarketingCampaign[]        @relation("MarketingCampaignCreatedBy")
+  marketingCampaignsAsTenant MarketingCampaign[]        @relation("MarketingCampaignTenant")
+  marketingSuppressions      MarketingSuppression[]
+  marketingAutomations       MarketingAutomation[]
+  marketingPreferenceTopics  MarketingPreferenceTopic[]
+  marketingCheckoutEvents    MarketingCheckoutEvent[]
+  marketingAuditLogs         MarketingAuditLog[]
 }
 
 model DashboardWidgetPreference {
@@ -252,8 +252,8 @@ model DashboardWidgetPreference {
 
   user User @relation(fields: [userId], references: [id])
 
-  @@index([userId])
   @@unique([userId, widgetKey])
+  @@index([userId])
 }
 
 model AccessRequest {
@@ -262,10 +262,10 @@ model AccessRequest {
   updatedAt DateTime @updatedAt
 
   name        String?
-  email       String   @unique
+  email       String  @unique
   companyName String?
 
-  tokenHash String   @unique @db.Text
+  tokenHash  String    @unique @db.Text
   approvedAt DateTime?
   approvedBy String?
 }
@@ -302,7 +302,7 @@ model Promoter {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  name        String @unique
+  name        String  @unique
   tradingName String?
   email       String?
   phone       String?
@@ -321,7 +321,7 @@ model Promoter {
   notes  String?
 
   ownerId String?
-  owner   User? @relation("PromoterOwner", fields: [ownerId], references: [id])
+  owner   User?   @relation("PromoterOwner", fields: [ownerId], references: [id])
 
   contacts   PromoterContact[]
   documents  PromoterDocument[]
@@ -368,7 +368,7 @@ model PromoterDocument {
   status    PromoterDocumentStatus @default(UPLOADED)
 
   uploadedByUserId String?
-  uploadedBy       User? @relation("PromoterDocumentUploader", fields: [uploadedByUserId], references: [id])
+  uploadedBy       User?   @relation("PromoterDocumentUploader", fields: [uploadedByUserId], references: [id])
 
   @@index([promoterId])
 }
@@ -384,7 +384,7 @@ model PromoterActivity {
   metadata Json?
 
   createdByUserId String?
-  createdBy       User? @relation("PromoterActivityAuthor", fields: [createdByUserId], references: [id])
+  createdBy       User?   @relation("PromoterActivityAuthor", fields: [createdByUserId], references: [id])
 
   @@index([promoterId])
 }
@@ -550,9 +550,9 @@ model Order {
   paymentFeePence     Int?
   netPayoutPence      Int?
 
-  stripeId String?
-  status   OrderStatus @default(PENDING)
-  email    String?
+  stripeId       String?
+  status         OrderStatus @default(PENDING)
+  email          String?
   // ✅ Captured from Stripe Checkout custom_fields
   buyerFirstName String?
   buyerLastName  String?
@@ -561,7 +561,7 @@ model Order {
   /// Some routes read a top-level quantity directly on the order
   quantity Int?
 
-  tags               String[]         @default([])
+  tags                String[]          @default([])
   emailDeliveryStatus OrderEmailStatus?
   emailDeliveryAt     DateTime?
   emailDeliveryError  String?
@@ -575,9 +575,9 @@ model Order {
   user       User?       @relation(fields: [userId], references: [id])
   ticketType TicketType? @relation(fields: [ticketTypeId], references: [id])
 
-  tickets Ticket[]
-  refunds Refund[]
-  notes   OrderNote[]
+  tickets   Ticket[]
+  refunds   Refund[]
+  notes     OrderNote[]
   auditLogs OrderAuditLog[]
 
   seatsCsv                String? @db.Text
@@ -604,15 +604,14 @@ model MarketingContact {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant    User @relation(fields: [tenantId], references: [id])
+  tenant User @relation(fields: [tenantId], references: [id])
 
-
-  consents   MarketingConsent[]
-  tags       MarketingContactTag[]
-  recipients MarketingCampaignRecipient[]
-  events     MarketingEmailEvent[]
-  preferences MarketingContactPreference[]
-  automationStates MarketingAutomationState[]
+  consents                 MarketingConsent[]
+  tags                     MarketingContactTag[]
+  recipients               MarketingCampaignRecipient[]
+  events                   MarketingEmailEvent[]
+  preferences              MarketingContactPreference[]
+  automationStates         MarketingAutomationState[]
   automationStepExecutions MarketingAutomationStepExecution[]
 
   @@unique([tenantId, email])
@@ -637,12 +636,12 @@ model MarketingConsent {
 }
 
 model MarketingSuppression {
-  id        String                 @id @default(cuid())
+  id        String                   @id @default(cuid())
   tenantId  String
   email     String
   type      MarketingSuppressionType
   reason    String?
-  createdAt DateTime               @default(now())
+  createdAt DateTime                 @default(now())
 
   tenant User @relation(fields: [tenantId], references: [id])
 
@@ -655,7 +654,7 @@ model MarketingTag {
   tenantId String
   name     String
 
-  tenant   User @relation(fields: [tenantId], references: [id])
+  tenant   User                  @relation(fields: [tenantId], references: [id])
   contacts MarketingContactTag[]
 
   @@unique([tenantId, name])
@@ -686,8 +685,8 @@ model MarketingTemplate {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant    User @relation(fields: [tenantId], references: [id])
-  campaigns MarketingCampaign[]
+  tenant          User                      @relation(fields: [tenantId], references: [id])
+  campaigns       MarketingCampaign[]
   automationSteps MarketingAutomationStep[]
 
   @@index([tenantId])
@@ -702,14 +701,14 @@ model MarketingSegment {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  tenant    User @relation(fields: [tenantId], references: [id])
+  tenant    User                @relation(fields: [tenantId], references: [id])
   campaigns MarketingCampaign[]
 
   @@index([tenantId])
 }
 
 model MarketingCampaign {
-  id              String                 @id @default(cuid())
+  id              String                  @id @default(cuid())
   tenantId        String
   name            String
   templateId      String
@@ -717,13 +716,13 @@ model MarketingCampaign {
   status          MarketingCampaignStatus @default(DRAFT)
   scheduledFor    DateTime?
   createdByUserId String
-  createdAt       DateTime               @default(now())
-  updatedAt       DateTime               @updatedAt
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
 
-  tenant     User             @relation("MarketingCampaignTenant", fields: [tenantId], references: [id])
-  template   MarketingTemplate @relation(fields: [templateId], references: [id])
-  segment    MarketingSegment  @relation(fields: [segmentId], references: [id])
-  createdBy  User             @relation("MarketingCampaignCreatedBy", fields: [createdByUserId], references: [id])
+  tenant     User                         @relation("MarketingCampaignTenant", fields: [tenantId], references: [id])
+  template   MarketingTemplate            @relation(fields: [templateId], references: [id])
+  segment    MarketingSegment             @relation(fields: [segmentId], references: [id])
+  createdBy  User                         @relation("MarketingCampaignCreatedBy", fields: [createdByUserId], references: [id])
   recipients MarketingCampaignRecipient[]
   events     MarketingEmailEvent[]
 
@@ -731,7 +730,7 @@ model MarketingCampaign {
 }
 
 model MarketingCampaignRecipient {
-  id         String                  @id @default(cuid())
+  id         String                   @id @default(cuid())
   tenantId   String
   campaignId String
   contactId  String
@@ -739,7 +738,7 @@ model MarketingCampaignRecipient {
   status     MarketingRecipientStatus @default(PENDING)
   errorText  String?
   sentAt     DateTime?
-  createdAt  DateTime               @default(now())
+  createdAt  DateTime                 @default(now())
 
   campaign MarketingCampaign @relation(fields: [campaignId], references: [id])
   contact  MarketingContact  @relation(fields: [contactId], references: [id])
@@ -749,14 +748,14 @@ model MarketingCampaignRecipient {
 }
 
 model MarketingEmailEvent {
-  id         String                 @id @default(cuid())
+  id         String                  @id @default(cuid())
   tenantId   String
   campaignId String
   contactId  String?
   email      String
   type       MarketingEmailEventType
   meta       Json?
-  createdAt  DateTime               @default(now())
+  createdAt  DateTime                @default(now())
 
   campaign MarketingCampaign @relation(fields: [campaignId], references: [id])
   contact  MarketingContact? @relation(fields: [contactId], references: [id])
@@ -774,16 +773,16 @@ model MarketingAutomation {
   createdAt   DateTime                       @default(now())
   updatedAt   DateTime                       @updatedAt
 
-  tenant User @relation(fields: [tenantId], references: [id])
-  steps  MarketingAutomationStep[]
-  states MarketingAutomationState[]
+  tenant         User                               @relation(fields: [tenantId], references: [id])
+  steps          MarketingAutomationStep[]
+  states         MarketingAutomationState[]
   stepExecutions MarketingAutomationStepExecution[]
 
   @@index([tenantId])
 }
 
 model MarketingAutomationStep {
-  id             String   @id @default(cuid())
+  id             String @id @default(cuid())
   tenantId       String
   automationId   String
   delayMinutes   Int
@@ -791,8 +790,8 @@ model MarketingAutomationStep {
   conditionRules Json
   stepOrder      Int
 
-  automation MarketingAutomation @relation(fields: [automationId], references: [id])
-  template   MarketingTemplate   @relation(fields: [templateId], references: [id])
+  automation MarketingAutomation                @relation(fields: [automationId], references: [id])
+  template   MarketingTemplate                  @relation(fields: [templateId], references: [id])
   executions MarketingAutomationStepExecution[]
 
   @@unique([tenantId, automationId, stepOrder])
@@ -800,15 +799,15 @@ model MarketingAutomationStep {
 }
 
 model MarketingAutomationState {
-  id           String                       @id @default(cuid())
+  id           String                         @id @default(cuid())
   tenantId     String
   contactId    String
   automationId String
-  currentStep  Int                          @default(0)
+  currentStep  Int                            @default(0)
   nextRunAt    DateTime?
   status       MarketingAutomationStateStatus @default(ACTIVE)
-  createdAt    DateTime                     @default(now())
-  updatedAt    DateTime                     @updatedAt
+  createdAt    DateTime                       @default(now())
+  updatedAt    DateTime                       @updatedAt
 
   automation MarketingAutomation @relation(fields: [automationId], references: [id])
   contact    MarketingContact    @relation(fields: [contactId], references: [id])
@@ -818,7 +817,7 @@ model MarketingAutomationState {
 }
 
 model MarketingAutomationStepExecution {
-  id           String                       @id @default(cuid())
+  id           String                        @id @default(cuid())
   tenantId     String
   automationId String
   stepId       String
@@ -826,11 +825,11 @@ model MarketingAutomationStepExecution {
   status       MarketingAutomationStepStatus @default(SENT)
   errorText    String?
   sentAt       DateTime?
-  createdAt    DateTime                     @default(now())
+  createdAt    DateTime                      @default(now())
 
-  automation MarketingAutomation @relation(fields: [automationId], references: [id])
+  automation MarketingAutomation     @relation(fields: [automationId], references: [id])
   step       MarketingAutomationStep @relation(fields: [stepId], references: [id])
-  contact    MarketingContact    @relation(fields: [contactId], references: [id])
+  contact    MarketingContact        @relation(fields: [contactId], references: [id])
 
   @@unique([tenantId, contactId, stepId])
   @@index([tenantId])
@@ -845,7 +844,7 @@ model MarketingPreferenceTopic {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  tenant User @relation(fields: [tenantId], references: [id])
+  tenant      User                         @relation(fields: [tenantId], references: [id])
   preferences MarketingContactPreference[]
 
   @@unique([tenantId, name])
@@ -853,14 +852,14 @@ model MarketingPreferenceTopic {
 }
 
 model MarketingContactPreference {
-  id        String                  @id @default(cuid())
+  id        String                    @id @default(cuid())
   tenantId  String
   contactId String
   topicId   String
   status    MarketingPreferenceStatus @default(SUBSCRIBED)
-  updatedAt DateTime                @updatedAt
+  updatedAt DateTime                  @updatedAt
 
-  contact MarketingContact @relation(fields: [contactId], references: [id])
+  contact MarketingContact         @relation(fields: [contactId], references: [id])
   topic   MarketingPreferenceTopic @relation(fields: [topicId], references: [id])
 
   @@unique([tenantId, contactId, topicId])
@@ -868,14 +867,14 @@ model MarketingContactPreference {
 }
 
 model MarketingCheckoutEvent {
-  id          String                @id @default(cuid())
-  tenantId    String
-  orderId     String
-  showId      String?
-  email       String?
-  status      MarketingCheckoutStatus @default(STARTED)
-  createdAt   DateTime              @default(now())
-  updatedAt   DateTime              @updatedAt
+  id        String                  @id @default(cuid())
+  tenantId  String
+  orderId   String
+  showId    String?
+  email     String?
+  status    MarketingCheckoutStatus @default(STARTED)
+  createdAt DateTime                @default(now())
+  updatedAt DateTime                @updatedAt
 
   tenant User @relation(fields: [tenantId], references: [id])
 
@@ -917,7 +916,7 @@ model OrderAuditLog {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
 
-  action OrderAuditAction
+  action   OrderAuditAction
   metadata Json?
 
   orderId String
