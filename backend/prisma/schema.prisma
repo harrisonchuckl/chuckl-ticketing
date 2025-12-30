@@ -32,6 +32,28 @@ enum OrderAuditAction {
   BULK_TAGS_UPDATED
 }
 
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum FulfilmentType {
+  SHIPPING
+  COLLECT_AT_VENUE
+  DIGITAL
+}
+
+enum FulfilmentStatus {
+  PENDING
+  PREPARING
+  READY_FOR_COLLECTION
+  COLLECTED
+  DISPATCHED
+  DELIVERED
+  EMAILED
+}
+
 enum SeatStatus {
   AVAILABLE
   HELD
@@ -198,6 +220,7 @@ model User {
   showsOrganised             Show[]                      @relation("OrganiserShows")
   tickets                    Ticket[]
   orderNotes                 OrderNote[]                 @relation("OrderNoteAuthor")
+  storefronts                Storefront[]
   dashboardWidgetPreferences DashboardWidgetPreference[]
   orderAuditLogs             OrderAuditLog[]             @relation("OrderAuditActor")
 
@@ -558,6 +581,16 @@ model Order {
   buyerLastName  String?
   buyerPostcode  String?
 
+  storefrontId         String?
+  shippingName         String?
+  shippingEmail        String?
+  shippingPhone        String?
+  shippingAddressJson  Json?
+  containsProducts     Boolean @default(false)
+  containsTickets      Boolean @default(true)
+  productSubtotalPence Int     @default(0)
+  ticketSubtotalPence  Int     @default(0)
+
   /// Some routes read a top-level quantity directly on the order
   quantity Int?
 
@@ -574,11 +607,13 @@ model Order {
   show       Show        @relation(fields: [showId], references: [id])
   user       User?       @relation(fields: [userId], references: [id])
   ticketType TicketType? @relation(fields: [ticketTypeId], references: [id])
+  storefront Storefront? @relation(fields: [storefrontId], references: [id])
 
-  tickets   Ticket[]
-  refunds   Refund[]
-  notes     OrderNote[]
-  auditLogs OrderAuditLog[]
+  tickets      Ticket[]
+  productItems ProductOrderItem[]
+  refunds      Refund[]
+  notes        OrderNote[]
+  auditLogs    OrderAuditLog[]
 
   seatsCsv                String? @db.Text
   stripeCheckoutSessionId String? @db.VarChar(255)
@@ -591,6 +626,94 @@ model Order {
   @@index([stripeId])
   @@index([stripeCheckoutSessionId])
   @@index([emailDeliveryStatus])
+  @@index([storefrontId])
+}
+
+model Storefront {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ownerUserId String
+  name        String
+  slug        String @unique
+  logoUrl     String?
+  bannerUrl   String?
+
+  owner    User      @relation(fields: [ownerUserId], references: [id])
+  products Product[]
+  orders   Order[]
+
+  @@index([ownerUserId])
+}
+
+model Product {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  storefrontId        String
+  title               String
+  slug                String
+  status              ProductStatus @default(DRAFT)
+  description         String?
+  imageUrl            String?
+  pricePence          Int
+  compareAtPricePence Int?
+  inventoryEnabled    Boolean @default(false)
+  stockQty            Int?
+  fulfilmentType      FulfilmentType
+  collectInstructions String?
+  digitalDeliveryText String?
+  variantConfigJson   Json?
+
+  storefront Storefront @relation(fields: [storefrontId], references: [id])
+  showLinks  ProductShowLink[]
+  orderItems ProductOrderItem[]
+
+  @@unique([storefrontId, slug])
+  @@index([storefrontId, status])
+}
+
+model ProductShowLink {
+  id           String   @id @default(cuid())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  productId    String
+  showId       String
+  ticketTypeId String?
+  sortOrder    Int     @default(0)
+  maxPerOrder  Int?
+  maxPerTicket Int?
+  isActive     Boolean @default(true)
+
+  product    Product     @relation(fields: [productId], references: [id])
+  show       Show        @relation(fields: [showId], references: [id])
+  ticketType TicketType? @relation(fields: [ticketTypeId], references: [id])
+
+  @@unique([productId, showId, ticketTypeId])
+  @@index([showId, isActive, sortOrder])
+}
+
+model ProductOrderItem {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orderId                String
+  productId              String?
+  titleSnapshot          String
+  unitPricePenceSnapshot Int
+  qty                    Int
+  fulfilmentTypeSnapshot FulfilmentType
+  fulfilmentStatus       FulfilmentStatus @default(PENDING)
+  collectCode            String?
+
+  order   Order    @relation(fields: [orderId], references: [id])
+  product Product? @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
 }
 
 model MarketingContact {
