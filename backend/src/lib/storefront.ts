@@ -1,4 +1,6 @@
-import prisma from './prisma';
+import type { Prisma } from '@prisma/client';
+
+import prisma from './prisma.js';
 
 const slugifyPattern = /[^a-z0-9]+/g;
 
@@ -71,7 +73,7 @@ export async function decrementStockTransaction(productId: string, qty: number) 
     throw new Error('Quantity must be greater than zero.');
   }
 
-  return prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     console.info('[storefront] loading product for stock decrement', { productId, qty });
     const product = await tx.product.findUnique({ where: { id: productId } });
 
