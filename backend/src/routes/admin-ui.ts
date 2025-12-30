@@ -1829,6 +1829,9 @@ router.get(
       <a class="sb-link" href="/admin/ui/audiences" data-view="/admin/ui/audiences">Audiences</a>
       <a class="sb-link" href="/admin/ui/email" data-view="/admin/ui/email">Email Campaigns</a>
 
+      <div class="sb-group">Commerce</div>
+      <a class="sb-link" href="/admin/ui/product-store" data-view="/admin/ui/product-store">Product Store</a>
+
       <div class="sb-group">Settings</div>
       <a class="sb-link" href="/admin/ui/account" data-view="/admin/ui/account">Account</a>
 <a class="sb-link" href="/admin/ui/logout">Log out</a>
