@@ -35,6 +35,7 @@ import seatMapsRouter from "./routes/seatmaps.js";
 import seatingChoiceRouter from "./routes/seating-choice.js";
 import adminSeatingBuilderRouter from "./routes/admin-seating-builder.js";
 import adminCustomersRouter from "./routes/admin-customers.js";
+import adminOrdersApiRouter from "./routes/admin-orders-api.js";
 
 const app = express();
 
@@ -118,6 +119,7 @@ app.use("/admin/seating", adminSeatingBuilderRouter);
 app.use("/admin", seatingChoiceRouter);
 app.use("/admin", adminCustomersRouter);
 app.use("/admin", adminUiRouter);
+app.use("/admin/api", adminOrdersApiRouter);
 
 // 404
 app.use((_req, res) => res.status(404).json({ error: "Not found" }));

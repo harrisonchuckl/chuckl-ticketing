@@ -577,14 +577,39 @@ export async function sendTicketsEmail(orderId: string, to?: string) {
   if (!order) return { ok: false, message: "Order not found" };
 
   if (!resend) {
+    await prisma.order
+      .update({
+        where: { id: orderId },
+        data: {
+          emailDeliveryStatus: "SKIPPED",
+          emailDeliveryAt: new Date(),
+          emailDeliveryError: "RESEND_API_KEY not configured",
+          emailPdfAttached: null,
+        },
+      })
+      .catch(() => undefined);
     return { ok: true, message: "RESEND_API_KEY not configured – email skipped." };
   }
 
   const html = renderTicketsHtml(order);
   const attachments = await buildAttachments(order);
+  const pdfAttached = attachments.length > 0;
 
   const recipient = (to || order.email || "").trim();
-  if (!recipient) return { ok: false, message: "No recipient email on order" };
+  if (!recipient) {
+    await prisma.order
+      .update({
+        where: { id: orderId },
+        data: {
+          emailDeliveryStatus: "FAILED",
+          emailDeliveryAt: new Date(),
+          emailDeliveryError: "No recipient email on order",
+          emailPdfAttached: pdfAttached,
+        },
+      })
+      .catch(() => undefined);
+    return { ok: false, message: "No recipient email on order" };
+  }
 
   const subject =
     `Your tickets for ${order.show?.title ?? "your event"} – ` +
@@ -598,22 +623,49 @@ export async function sendTicketsEmail(orderId: string, to?: string) {
   attachments: attachments.length,
 });
 
-  await resend.emails.send({
-    from: EMAIL_FROM,
-    to: recipient,
-    subject,
-    html,
-  attachments:
-  attachments.length > 0
-    ? attachments.map((a) => ({
-        filename: a.filename,
-        content: a.content, // Buffer (supported by Resend)
-      }))
-    : undefined,
+  try {
+    await resend.emails.send({
+      from: EMAIL_FROM,
+      to: recipient,
+      subject,
+      html,
+    attachments:
+    attachments.length > 0
+      ? attachments.map((a) => ({
+          filename: a.filename,
+          content: a.content, // Buffer (supported by Resend)
+        }))
+      : undefined,
 
-  });
+    });
 
-  return { ok: true };
+    await prisma.order
+      .update({
+        where: { id: orderId },
+        data: {
+          emailDeliveryStatus: "SENT",
+          emailDeliveryAt: new Date(),
+          emailDeliveryError: null,
+          emailPdfAttached: pdfAttached,
+        },
+      })
+      .catch(() => undefined);
+
+    return { ok: true };
+  } catch (err: any) {
+    await prisma.order
+      .update({
+        where: { id: orderId },
+        data: {
+          emailDeliveryStatus: "FAILED",
+          emailDeliveryAt: new Date(),
+          emailDeliveryError: err?.message || "Email send failed",
+          emailPdfAttached: pdfAttached,
+        },
+      })
+      .catch(() => undefined);
+    throw err;
+  }
 }
 
 export async function sendTestEmail(to: string) {
