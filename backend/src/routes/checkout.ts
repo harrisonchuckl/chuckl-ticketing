@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { OrderStatus } from "@prisma/client";
+import { OrderStatus, Prisma } from "@prisma/client";
 import prisma from "../lib/prisma.js";
 import Stripe from "stripe";
 import { recordAbandonedCheckoutEvent } from "../services/marketing/automations.js";
@@ -59,8 +59,18 @@ router.post("/session", async (req, res) => {
     }
 
     const { showId, quantity, unitPricePence, seats, ticketTypeId, items } = DEBUG_REQ_BODY;
-    const upsellItems = Array.isArray(DEBUG_REQ_BODY?.upsellItems)
-      ? DEBUG_REQ_BODY.upsellItems
+    const upsellItems: Array<{
+      productId?: string;
+      variantId?: string | null;
+      qty?: number;
+      customAmount?: number;
+    }> = Array.isArray(DEBUG_REQ_BODY?.upsellItems)
+      ? DEBUG_REQ_BODY.upsellItems.map((item: any) => ({
+          productId: item?.productId,
+          variantId: item?.variantId ?? null,
+          qty: item?.qty,
+          customAmount: item?.customAmount,
+        }))
       : [];
     const buyerEmail = String(DEBUG_REQ_BODY?.buyerEmail || "").trim().toLowerCase();
 
@@ -281,7 +291,11 @@ if (!itQty || itQty < 1 || !itUnit || itUnit < 1) {
       );
 
       if (productIds.length) {
-        const rules = await prisma.upsellRule.findMany({
+        type UpsellRuleWithProduct = Prisma.UpsellRuleGetPayload<{
+          include: { product: { include: { variants: true } }; productVariant: true };
+        }>;
+
+        const rules: UpsellRuleWithProduct[] = await prisma.upsellRule.findMany({
           where: {
             storefrontId: storefront.id,
             active: true,

@@ -6,7 +6,7 @@ import { calcFeesForShow } from "../services/fees.js";
 import { sendTicketsEmail, sendDigitalProductEmail } from "../services/email.js";
 import { decrementStockTransaction } from "../lib/storefront.js";
 import { syncMarketingContactFromOrder } from "../services/marketing/contacts.js";
-import { MarketingAutomationTriggerType, MarketingConsentSource } from "@prisma/client";
+import { MarketingAutomationTriggerType, MarketingConsentSource, Prisma } from "@prisma/client";
 import { enqueueAutomationForContact, markCheckoutCompleted } from "../services/marketing/automations.js";
 
 
@@ -60,6 +60,18 @@ function buildSeatRefMapFromKonva(konvaJson: any): Map<string, string> {
 
   walk(konvaJson, null);
   return map;
+}
+
+function toAddressJson(address?: Stripe.Address | null): Prisma.InputJsonValue | typeof Prisma.DbNull {
+  if (!address) return Prisma.DbNull;
+  return {
+    line1: address.line1 ?? null,
+    line2: address.line2 ?? null,
+    city: address.city ?? null,
+    state: address.state ?? null,
+    postal_code: address.postal_code ?? null,
+    country: address.country ?? null,
+  };
 }
 
 function parseProductSelections(raw: string | undefined | null) {
@@ -163,7 +175,7 @@ async function handleProductOrderFromSession(session: Stripe.Checkout.Session) {
       customerName: customerDetails?.name || null,
       customerEmail: customerDetails?.email || null,
       customerPhone: customerDetails?.phone || null,
-      shippingAddressJson: shippingDetails?.address || null,
+      shippingAddressJson: toAddressJson(shippingDetails?.address),
       subtotalPence: subtotal,
       taxPence,
       shippingPence,
@@ -373,9 +385,17 @@ router.post("/stripe", express.raw({ type: "application/json" }), async (req, re
       await handleProductOrderFromSession(session);
     }
 
+    if (!orderId || !showId) {
+      console.warn("webhook: missing orderId/showId metadata", { orderId, showId });
+      return res.json({ received: true });
+    }
+
+    const orderIdValue = String(orderId);
+    const showIdValue = String(showId);
+
     // Load order to compute fees precisely
  const order = await prisma.order.findUnique({
-  where: { id: orderId },
+  where: { id: orderIdValue },
   select: {
     id: true,
     amountPence: true,
@@ -401,7 +421,7 @@ router.post("/stripe", express.raw({ type: "application/json" }), async (req, re
     }
 
     const fees = await calcFeesForShow(
-      showId,
+      showIdValue,
       Number(order.amountPence ?? 0),
       Number(order.quantity ?? 0),
       organiserSplitBps ?? undefined
@@ -433,8 +453,8 @@ const payerPostcode = String(session.customer_details?.address?.postal_code || "
     // Update order -> PAID + store fee breakdown
  const shippingDetails = session.shipping_details;
 
- await prisma.order.update({
-  where: { id: orderId },
+  await prisma.order.update({
+  where: { id: orderIdValue },
   data: {
     status: "PAID",
     platformFeePence: fees.platformFeePence,
@@ -451,7 +471,7 @@ const payerPostcode = String(session.customer_details?.address?.postal_code || "
     shippingName: shippingDetails?.name || payerFirstName || null,
     shippingEmail: payerEmail,
     shippingPhone: session.customer_details?.phone || null,
-    shippingAddressJson: shippingDetails?.address || null,
+    shippingAddressJson: toAddressJson(shippingDetails?.address),
   },
 });
 // -----------------------------
@@ -460,7 +480,7 @@ const payerPostcode = String(session.customer_details?.address?.postal_code || "
 let finalTicketCount = 0;
 
 try {
-  const existing = await prisma.ticket.count({ where: { orderId } });
+  const existing = await prisma.ticket.count({ where: { orderId: orderIdValue } });
 
   if (existing > 0) {
     console.info("[webhook] tickets already exist, skipping", { orderId, existing });
@@ -478,7 +498,7 @@ try {
     // Best-effort unit price from order total (used if we can't look up ticket type prices)
     const unitFromOrder = Math.max(0, Math.round(total / Math.max(1, qtyOrder)));
 
-    const seatRefMap = await loadSeatRefMapForShow(showId);
+    const seatRefMap = await loadSeatRefMapForShow(showIdValue);
 
     // Look up ticket type prices for any ticketTypeIds present in seatGroups
     const priceByTtId = new Map<string, number>();
@@ -570,8 +590,8 @@ try {
                 serial: makeTicketSerial(),
                 holderName: null,
                 status: "SOLD",
-                orderId,
-                showId,
+                orderId: orderIdValue,
+                showId: showIdValue,
                 ticketTypeId: ttId,
                 seatId,
                 seatRef: seatRefMap.get(seatId) || null,
@@ -586,8 +606,8 @@ try {
                 serial: makeTicketSerial(),
                 holderName: null,
                 status: "SOLD",
-                orderId,
-                showId,
+                orderId: orderIdValue,
+                showId: showIdValue,
                 ticketTypeId: ttId,
                 seatId: null,
                 seatRef: null,
@@ -613,8 +633,8 @@ try {
             serial: makeTicketSerial(),
             holderName: null,
             status: "SOLD",
-            orderId,
-            showId,
+            orderId: orderIdValue,
+            showId: showIdValue,
             ticketTypeId: gaTicketTypeId,
             seatId,
             seatRef: seatRefMap.get(seatId) || null,
@@ -628,8 +648,8 @@ try {
             serial: makeTicketSerial(),
             holderName: null,
             status: "SOLD",
-            orderId,
-            showId,
+            orderId: orderIdValue,
+            showId: showIdValue,
             ticketTypeId: gaTicketTypeId,
             seatId: null,
             seatRef: null,
@@ -646,7 +666,7 @@ try {
       await prisma.ticket.createMany({ data: ticketsToCreate });
     }
 
-    finalTicketCount = await prisma.ticket.count({ where: { orderId } });
+    finalTicketCount = await prisma.ticket.count({ where: { orderId: orderIdValue } });
 
     console.info("[webhook] tickets created", {
       orderId,
@@ -656,7 +676,7 @@ try {
   }
 } catch (ticketErr: any) {
   console.error("[webhook] ticket creation failed", {
-    orderId,
+    orderId: orderIdValue,
     message: ticketErr?.message,
     stack: ticketErr?.stack,
   });
@@ -670,7 +690,7 @@ try {
     // Only send the email the first time we flip to PAID (webhooks retry)
    if (order.status !== "PAID") {
   const showForMarketing = await prisma.show.findUnique({
-    where: { id: showId },
+    where: { id: showIdValue },
     select: { organiserId: true },
   });
   if (showForMarketing?.organiserId) {
@@ -692,31 +712,31 @@ try {
         );
       }
     }
-    await markCheckoutCompleted(showForMarketing.organiserId, orderId, payerEmail);
+    await markCheckoutCompleted(showForMarketing.organiserId, orderIdValue, payerEmail);
   }
   try {
     if ((finalTicketCount || 0) > 0) {
-      await sendTicketsEmail(orderId);
-      console.info("webhook: tickets email sent", { orderId });
+      await sendTicketsEmail(orderIdValue);
+      console.info("webhook: tickets email sent", { orderId: orderIdValue });
     } else {
-      console.warn("[webhook] skipping email send because no tickets exist", { orderId });
+      console.warn("[webhook] skipping email send because no tickets exist", { orderId: orderIdValue });
     }
   } catch (emailErr: any) {
     console.error("webhook: confirmation email failed", {
-      orderId,
+      orderId: orderIdValue,
       message: emailErr?.message,
       stack: emailErr?.stack,
     });
   }
 } else {
-  console.info("webhook: order already PAID, skipping email", { orderId });
+  console.info("webhook: order already PAID, skipping email", { orderId: orderIdValue });
 }
 
 
     // Mark sold seats on active seatmap (best-effort)
     if (seatIds.length > 0) {
       const show = await prisma.show.findUnique({
-        where: { id: showId },
+        where: { id: showIdValue },
         select: { activeSeatMapId: true },
       });
 
@@ -727,13 +747,13 @@ try {
 
       if (!seatMap) {
         seatMap = await prisma.seatMap.findFirst({
-          where: { showId },
+          where: { showId: showIdValue },
           orderBy: { updatedAt: "desc" },
         });
       }
 
       console.log("[webhook] seat sell update", {
-        showId,
+        showId: showIdValue,
         activeSeatMapId: show?.activeSeatMapId ?? null,
         seatMapIdUsed: seatMap?.id ?? null,
         seatIdsCount: seatIds.length,
