@@ -278,7 +278,12 @@ router.get("/store/:storeSlug/cart", async (req, res) => {
 router.post("/store/:storeSlug/cart/update", (req, res) => {
   const storeSlug = String(req.params.storeSlug || "");
   const count = Math.max(0, Number(req.body.count || 0));
-  const updated: Array<{ productId: string; variantId?: string | null; qty: number }> = [];
+  const updated: Array<{
+    productId: string;
+    variantId?: string | null;
+    qty: number;
+    customAmount?: number | null;
+  }> = [];
 
   for (let i = 0; i < count; i += 1) {
     const productId = String(req.body[`productId_${i}`] || "");
