@@ -2073,6 +2073,19 @@ router.get(
     return title + ' · ' + when + (venue ? (' · ' + venue) : '');
   }
 
+  function loadVenueExtrasFromStorage(){
+    try{
+      var saved = localStorage.getItem('adminVenueExtras');
+      return saved ? JSON.parse(saved) : {};
+    }catch(e){
+      return {};
+    }
+  }
+
+  function saveVenueExtrasToStorage(extras){
+    try{ localStorage.setItem('adminVenueExtras', JSON.stringify(extras || {})); }catch(e){}
+  }
+
   async function maybeSetupWeeklyReport(showId, promoter){
     if (!showId || !promoter || !promoter.id) return;
     var ok = confirm('Do you want to set up weekly reports for this promoter?');
@@ -2137,6 +2150,7 @@ router.get(
     var cachedPromoters = [];
 
     function close(){
+      document.removeEventListener('keydown', escHandler);
       if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
     }
 
@@ -2232,6 +2246,492 @@ router.get(
           if (errEl) errEl.textContent = parseErr(err);
         }
       });
+    }
+
+    load();
+  }
+
+  async function openVenuePanel(opts){
+    opts = opts || {};
+    var venueId = opts.venueId;
+    if (!venueId) return;
+
+    var overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.background = 'rgba(15,23,42,0.45)';
+    overlay.style.zIndex = '60';
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'flex-start';
+    overlay.style.justifyContent = 'center';
+    overlay.style.padding = '80px 16px 16px';
+
+    overlay.innerHTML = ''
+      + '<div style="background:#fff;border-radius:14px;max-width:980px;width:100%;padding:18px;border:1px solid var(--border);box-shadow:0 20px 40px rgba(15,23,42,0.2);max-height:calc(100vh - 140px);overflow:auto;">'
+      +   '<div class="header" style="margin-bottom:12px;">'
+      +     '<div>'
+      +       '<div class="title">Venue details</div>'
+      +       '<div class="muted" style="margin-top:4px;">'+escapeHtml(opts.venueLabel || 'Manage this venue without leaving all events')+'</div>'
+      +     '</div>'
+      +     '<button class="btn" id="venuePanelClose">Close</button>'
+      +   '</div>'
+      +   '<div id="venuePanelError" class="error" style="margin-bottom:8px;"></div>'
+      +   '<div id="venuePanelBody"></div>'
+      + '</div>';
+
+    document.body.appendChild(overlay);
+
+    var closeBtn = overlay.querySelector('#venuePanelClose');
+    var errEl = overlay.querySelector('#venuePanelError');
+    var body = overlay.querySelector('#venuePanelBody');
+    var extras = loadVenueExtrasFromStorage();
+
+    function close(){
+      if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    }
+
+    overlay.addEventListener('click', function(e){
+      if (e.target === overlay) close();
+    });
+    if (closeBtn) closeBtn.addEventListener('click', function(){ close(); });
+    function escHandler(e){
+      if (e.key === 'Escape') close();
+    }
+    document.addEventListener('keydown', escHandler);
+
+    async function load(){
+      if (!body) return;
+      body.innerHTML = '<div class="muted">Loading venue…</div>';
+      if (errEl) errEl.textContent = '';
+      try{
+        var res = await j('/admin/venues/' + encodeURIComponent(venueId));
+        var venue = (res && (res.venue || res.item)) || res || {};
+        renderVenueCard(venue);
+      }catch(e){
+        if (errEl) errEl.textContent = parseErr(e) || 'Failed to load venue.';
+        body.innerHTML = '';
+      }
+    }
+
+    function renderVenueCard(v){
+      if (!body) return;
+      body.innerHTML = '';
+      if (!v || !v.id){
+        body.innerHTML = '<div class="muted">Venue not found.</div>';
+        return;
+      }
+
+      var card = document.createElement('div');
+      card.className = 'card';
+      card.style.margin = '0';
+
+      var ext = extras && extras[v.id] ? extras[v.id] : {};
+      var spaces = Array.isArray(ext.spaces)
+        ? ext.spaces.map(function(space){
+            if (typeof space === 'string') return { name: space, capacity: null };
+            return {
+              name: space && space.name ? String(space.name) : '',
+              capacity: space && space.capacity != null ? Number(space.capacity) : null,
+            };
+          })
+        : [];
+      var maps = Array.isArray(ext.maps)
+        ? ext.maps.map(function(map){
+            if (typeof map === 'string') return { name: map, space: '' };
+            return {
+              name: map && map.name ? String(map.name) : '',
+              space: map && map.space ? String(map.space) : '',
+            };
+          })
+        : [];
+
+      card.innerHTML = ''
+        + '<div class="header">'
+        +   '<div>'
+        +     '<div class="title">' + escapeHtml(v.name || 'Untitled venue') + '</div>'
+        +     '<div class="muted">' + escapeHtml([v.city, v.postcode].filter(Boolean).join(' • ')) + '</div>'
+        +   '</div>'
+        +   '<div class="row" style="gap:6px;align-items:center;">'
+        +     '<div style="position:relative;">'
+        +       '<button class="btn" data-action="venueMenu" title="Venue actions" style="padding:6px 8px;">'
+        +         '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
+        +           '<line x1="3" y1="6" x2="21" y2="6"></line>'
+        +           '<line x1="3" y1="12" x2="21" y2="12"></line>'
+        +           '<line x1="3" y1="18" x2="21" y2="18"></line>'
+        +         '</svg>'
+        +       '</button>'
+        +       '<div data-menu="venueMenu" style="display:none;position:absolute;right:0;top:36px;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 6px 18px rgba(15,23,42,0.12);min-width:160px;z-index:10;">'
+        +         '<button class="btn" data-action="deleteVenue" style="width:100%;justify-content:flex-start;border:none;border-radius:8px;">Delete venue</button>'
+        +       '</div>'
+        +     '</div>'
+        +   '</div>'
+        + '</div>'
+
+        + '<div class="grid" style="gap:10px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));">'
+        +   '<div class="grid" style="gap:6px;">'
+        +     '<label style="margin:0;font-weight:600;font-size:13px;">Venue photo</label>'
+        +     '<div class="row" style="gap:12px;align-items:center;flex-wrap:wrap;">'
+        +       '<div class="venue-photo" style="border:1px solid var(--border);border-radius:999px;height:88px;width:88px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#f9fafb;">'
+        +         (ext.image ? '<img src="' + escapeHtml(ext.image) + '" alt="Preview" style="width:100%;height:100%;object-fit:cover;" />' : '<div class="muted" style="font-size:12px;">No image</div>')
+        +       '</div>'
+        +       '<div class="grid" style="gap:6px;">'
+        +         '<input type="file" accept="image/*" data-field="imageFile" />'
+        +         '<div class="row" style="gap:8px;align-items:center;">'
+        +           '<button class="btn" data-action="uploadImage">Upload photo</button>'
+        +           '<input type="hidden" data-field="image" value="' + escapeHtml(ext.image || '') + '" />'
+        +         '</div>'
+        +         '<div class="muted" style="font-size:12px;">Square images work best.</div>'
+        +         '<div class="error" data-error="image"></div>'
+        +       '</div>'
+        +     '</div>'
+        +   '</div>'
+
+        +   '<div class="grid" style="gap:6px;">'
+        +     '<label style="margin:0;font-weight:600;font-size:13px;">Contact name<input data-field="contactName" value="' + escapeHtml(ext.contactName || '') + '" placeholder="Venue manager" /></label>'
+        +     '<label style="margin:0;font-weight:600;font-size:13px;">Contact email<input data-field="contactEmail" type="email" value="' + escapeHtml(ext.contactEmail || '') + '" placeholder="manager@example.com" /></label>'
+        +     '<label style="margin:0;font-weight:600;font-size:13px;">Contact phone<input data-field="contactPhone" value="' + escapeHtml(ext.contactPhone || '') + '" placeholder="+44 20 1234 5678" /></label>'
+        +   '</div>'
+
+        +   '<div class="grid" style="gap:6px;">'
+        +     '<label style="margin:0;font-weight:600;font-size:13px;" data-capacity-row="true">Capacity<input type="number" min="1" data-field="capacity" value="' + escapeHtml(String(ext.capacity || v.capacity || '')) + '" /></label>'
+        +     '<label style="margin:0;font-weight:600;font-size:13px;">Ticket contra (£)<input type="number" min="0" step="0.01" data-field="contra" value="' + escapeHtml(ext.contra ? String(ext.contra) : '') + '" placeholder="e.g. 250" /></label>'
+        +     '<label style="margin:0;font-weight:600;font-size:13px;">Booking fee (%)<input type="number" min="10" step="0.5" data-field="fee" value="' + escapeHtml(ext.fee ? String(ext.fee) : '10') + '" /></label>'
+        +     '<div class="muted" style="font-size:12px;">Fees must be at least 10%. We recommend 10–15%.</div>'
+        +   '</div>'
+        + '</div>'
+
+        + '<div class="grid" style="gap:10px;margin-top:10px;">'
+        +   '<div class="grid" style="gap:6px;">'
+        +     '<div class="row" style="justify-content:space-between;align-items:center;gap:8px;">'
+        +       '<div style="font-weight:600;font-size:13px;">Spaces inside this venue</div>'
+        +       '<button class="btn" data-action="addSpace" style="padding:6px 10px;">+ Space</button>'
+        +     '</div>'
+        +     '<div class="muted" style="font-size:12px;">Add areas like studio, foyer or main room.</div>'
+        +     '<div class="grid" style="gap:6px;" data-list="spaces"></div>'
+        +     '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:6px;">'
+        +       '<input data-input="spaceName" placeholder="Space name" />'
+        +       '<input data-input="spaceCapacity" type="number" min="1" placeholder="Capacity" />'
+        +     '</div>'
+        +   '</div>'
+
+        +   '<div class="grid" style="gap:6px;">'
+        +     '<div class="row" style="justify-content:space-between;align-items:center;gap:8px;">'
+        +       '<div style="font-weight:600;font-size:13px;">Seating maps</div>'
+        +       '<button class="btn" data-action="addMap" style="padding:6px 10px;">+ Map</button>'
+        +     '</div>'
+        +     '<div class="muted" style="font-size:12px;">Create and link seating maps to specific spaces.</div>'
+        +     '<div class="grid" style="gap:6px;" data-list="maps"></div>'
+        +     '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:6px;">'
+        +       '<input data-input="mapName" placeholder="Seating map name" />'
+        +       '<select data-input="mapSpace"></select>'
+        +     '</div>'
+        +   '</div>'
+        + '</div>'
+
+        + '<div class="row" style="justify-content:space-between;align-items:center;margin-top:12px;gap:8px;">'
+        +   '<div class="muted" style="font-size:12px;">Save to keep booking fees, spaces and contacts linked to this venue.</div>'
+        +   '<div class="row" style="gap:8px;align-items:center;">'
+        +     '<div class="muted" data-status="' + escapeHtml(v.id) + '" style="font-size:12px;"></div>'
+        +     '<button class="btn p" data-save="' + escapeHtml(v.id) + '">Save details</button>'
+        +   '</div>'
+        + '</div>';
+
+      body.appendChild(card);
+
+      var imgInput = card.querySelector('input[data-field="image"]');
+      var imgFileInput = card.querySelector('input[data-field="imageFile"]');
+      var uploadBtn = card.querySelector('[data-action="uploadImage"]');
+      var imgErr = card.querySelector('[data-error="image"]');
+      var preview = card.querySelector('.venue-photo');
+      if (uploadBtn && imgFileInput && imgInput && preview){
+        uploadBtn.addEventListener('click', async function(){
+          if (imgErr) imgErr.textContent = '';
+          var file = imgFileInput.files && imgFileInput.files[0];
+          if (!file){
+            if (imgErr) imgErr.textContent = 'Choose an image to upload.';
+            return;
+          }
+          uploadBtn.disabled = true;
+          uploadBtn.textContent = 'Uploading…';
+          try{
+            var upload = await uploadPoster(file);
+            imgInput.value = upload.url || '';
+            preview.innerHTML = upload.url
+              ? '<img src="' + escapeHtml(upload.url) + '" alt="Preview" style="width:100%;height:100%;object-fit:cover;" />'
+              : '<div class="muted" style="font-size:12px;">No image</div>';
+          }catch(e){
+            if (imgErr) imgErr.textContent = parseErr(e);
+          }finally{
+            uploadBtn.disabled = false;
+            uploadBtn.textContent = 'Upload photo';
+          }
+        });
+      }
+
+      var spaceInput = card.querySelector('input[data-input="spaceName"]');
+      var spaceCapacityInput = card.querySelector('input[data-input="spaceCapacity"]');
+      var mapInput = card.querySelector('input[data-input="mapName"]');
+      var mapSpaceInput = card.querySelector('select[data-input="mapSpace"]');
+      var spaceList = card.querySelector('[data-list="spaces"]');
+      var mapList = card.querySelector('[data-list="maps"]');
+      var capacityRow = card.querySelector('[data-capacity-row="true"]');
+
+      function updateCapacityRow(){
+        if (!capacityRow) return;
+        capacityRow.style.display = spaces.length ? 'none' : '';
+      }
+
+      function renderMapSpaces(){
+        if (!mapSpaceInput) return;
+        var options = spaces.filter(function(space){ return space.name; });
+        mapSpaceInput.innerHTML = '<option value="">Link to space…</option>'
+          + options.map(function(space){
+            return '<option value="' + escapeHtml(space.name) + '">' + escapeHtml(space.name) + '</option>';
+          }).join('');
+      }
+
+      function renderMaps(){
+        if (!mapList) return;
+        mapList.innerHTML = '';
+        if (!maps.length){
+          var emptyMap = document.createElement('div');
+          emptyMap.className = 'muted';
+          emptyMap.style.fontSize = '12px';
+          emptyMap.textContent = 'Nothing added yet';
+          mapList.appendChild(emptyMap);
+          return;
+        }
+        maps.forEach(function(map, idx){
+          var row = document.createElement('div');
+          row.style.display = 'grid';
+          row.style.gridTemplateColumns = 'minmax(140px,1fr) minmax(140px,1fr) auto';
+          row.style.gap = '8px';
+          row.style.alignItems = 'center';
+          row.style.padding = '6px 0';
+          row.style.borderBottom = '1px solid var(--border)';
+          row.innerHTML = ''
+            + '<input data-map-name="' + idx + '" value="' + escapeHtml(map.name || '') + '" placeholder="Map name" />'
+            + '<select data-map-space="' + idx + '"></select>'
+            + '<button class="btn" data-map-remove="' + idx + '">Remove</button>';
+          mapList.appendChild(row);
+        });
+        $$('[data-map-name]', mapList).forEach(function(input){
+          input.addEventListener('input', function(){
+            var idx = Number(input.getAttribute('data-map-name'));
+            if (!isNaN(idx) && maps[idx]) maps[idx].name = input.value.trim();
+          });
+        });
+        $$('[data-map-space]', mapList).forEach(function(select){
+          var idx = Number(select.getAttribute('data-map-space'));
+          if (isNaN(idx) || !maps[idx]) return;
+          var options = spaces.filter(function(space){ return space.name; });
+          select.innerHTML = '<option value="">Link to space…</option>'
+            + options.map(function(space){
+              var selected = maps[idx].space === space.name ? ' selected' : '';
+              return '<option value="' + escapeHtml(space.name) + '"' + selected + '>' + escapeHtml(space.name) + '</option>';
+            }).join('');
+          select.addEventListener('change', function(){
+            maps[idx].space = select.value;
+          });
+        });
+        $$('[data-map-remove]', mapList).forEach(function(btn){
+          btn.addEventListener('click', function(){
+            var idx = Number(btn.getAttribute('data-map-remove'));
+            if (isNaN(idx)) return;
+            maps.splice(idx, 1);
+            renderMaps();
+          });
+        });
+      }
+
+      function renderSpaces(){
+        if (!spaceList) return;
+        spaceList.innerHTML = '';
+        if (!spaces.length){
+          var emptySpace = document.createElement('div');
+          emptySpace.className = 'muted';
+          emptySpace.style.fontSize = '12px';
+          emptySpace.textContent = 'Nothing added yet';
+          spaceList.appendChild(emptySpace);
+          updateCapacityRow();
+          renderMapSpaces();
+          renderMaps();
+          return;
+        }
+        spaces.forEach(function(space, idx){
+          var row = document.createElement('div');
+          row.style.display = 'grid';
+          row.style.gridTemplateColumns = 'minmax(120px,1fr) minmax(120px,140px) auto';
+          row.style.gap = '8px';
+          row.style.alignItems = 'center';
+          row.style.padding = '6px 0';
+          row.style.borderBottom = '1px solid var(--border)';
+          row.innerHTML = ''
+            + '<input data-space-name="' + idx + '" value="' + escapeHtml(space.name || '') + '" placeholder="Space name" />'
+            + '<input data-space-capacity="' + idx + '" type="number" min="1" placeholder="Capacity" value="' + (space.capacity != null ? escapeHtml(String(space.capacity)) : '') + '" />'
+            + '<button class="btn" data-space-remove="' + idx + '">Remove</button>';
+          spaceList.appendChild(row);
+        });
+
+        $$('[data-space-name]', spaceList).forEach(function(input){
+          input.addEventListener('input', function(){
+            var idx = Number(input.getAttribute('data-space-name'));
+            if (!isNaN(idx) && spaces[idx]) spaces[idx].name = input.value.trim();
+            renderMapSpaces();
+            renderMaps();
+          });
+        });
+        $$('[data-space-capacity]', spaceList).forEach(function(input){
+          input.addEventListener('input', function(){
+            var idx = Number(input.getAttribute('data-space-capacity'));
+            if (isNaN(idx) || !spaces[idx]) return;
+            var raw = input.value.trim();
+            spaces[idx].capacity = raw ? Number(raw) : null;
+          });
+        });
+        $$('[data-space-remove]', spaceList).forEach(function(btn){
+          btn.addEventListener('click', function(){
+            var idx = Number(btn.getAttribute('data-space-remove'));
+            if (isNaN(idx)) return;
+            spaces.splice(idx, 1);
+            renderSpaces();
+          });
+        });
+        updateCapacityRow();
+        renderMapSpaces();
+      }
+
+      renderSpaces();
+      renderMaps();
+
+      function addSpaceFromInputs(){
+        if (!spaceInput) return;
+        var name = (spaceInput.value || '').trim();
+        var capRaw = spaceCapacityInput ? (spaceCapacityInput.value || '').trim() : '';
+        if (!name) return;
+        var cap = capRaw ? Number(capRaw) : null;
+        spaces.push({ name: name, capacity: cap && !isNaN(cap) ? cap : null });
+        spaceInput.value = '';
+        if (spaceCapacityInput) spaceCapacityInput.value = '';
+        renderSpaces();
+      }
+
+      function addMapFromInputs(){
+        if (!mapInput) return;
+        var name = (mapInput.value || '').trim();
+        if (!name) return;
+        var space = mapSpaceInput ? mapSpaceInput.value : '';
+        maps.push({ name: name, space: space || '' });
+        mapInput.value = '';
+        if (mapSpaceInput) mapSpaceInput.value = '';
+        renderMaps();
+      }
+
+      if (spaceInput){
+        spaceInput.addEventListener('keydown', function(e){
+          if (e.key === 'Enter'){ e.preventDefault(); addSpaceFromInputs(); }
+        });
+      }
+      if (spaceCapacityInput){
+        spaceCapacityInput.addEventListener('keydown', function(e){
+          if (e.key === 'Enter'){ e.preventDefault(); addSpaceFromInputs(); }
+        });
+      }
+      if (mapInput){
+        mapInput.addEventListener('keydown', function(e){
+          if (e.key === 'Enter'){ e.preventDefault(); addMapFromInputs(); }
+        });
+      }
+
+      var addSpaceBtn = card.querySelector('[data-action="addSpace"]');
+      if (addSpaceBtn){
+        addSpaceBtn.addEventListener('click', function(){
+          addSpaceFromInputs();
+          if (spaceInput) spaceInput.focus();
+        });
+      }
+
+      var addMapBtn = card.querySelector('[data-action="addMap"]');
+      if (addMapBtn){
+        addMapBtn.addEventListener('click', function(){
+          addMapFromInputs();
+          if (mapInput) mapInput.focus();
+        });
+      }
+
+      var menuToggle = card.querySelector('[data-action="venueMenu"]');
+      var menu = card.querySelector('[data-menu="venueMenu"]');
+      if (menuToggle && menu){
+        menuToggle.addEventListener('click', function(e){
+          e.stopPropagation();
+          var open = menu.style.display === 'block';
+          menu.style.display = open ? 'none' : 'block';
+        });
+        document.addEventListener('click', function(){
+          menu.style.display = 'none';
+        });
+      }
+
+      card.querySelectorAll('[data-action="deleteVenue"]').forEach(function(btn){
+        btn.addEventListener('click', async function(e){
+          e.preventDefault();
+          e.stopPropagation();
+          if (!confirm('Delete this venue?')) return;
+          try{
+            await j('/admin/venues/' + encodeURIComponent(v.id), { method:'DELETE' });
+            close();
+          }catch(err){
+            if (errEl) errEl.textContent = 'Failed to delete venue: ' + parseErr(err);
+          }
+        });
+      });
+
+      var feeInput = card.querySelector('input[data-field="fee"]');
+      if (feeInput){
+        feeInput.addEventListener('change', function(){
+          var val = Number(feeInput.value || 0);
+          if (!val || val < 10){
+            feeInput.value = '10';
+          }
+        });
+      }
+
+      var saveBtn = card.querySelector('[data-save]');
+      if (saveBtn){
+        saveBtn.addEventListener('click', function(){
+          var data = {
+            image: imgInput ? imgInput.value.trim() : '',
+            contactName: valueOf('contactName'),
+            contactEmail: valueOf('contactEmail'),
+            contactPhone: valueOf('contactPhone'),
+            capacity: numberOf('capacity'),
+            contra: numberOf('contra'),
+            fee: Math.max(10, numberOf('fee') || 10),
+            spaces: spaces.slice(),
+            maps: maps.slice(),
+          };
+          extras = extras || {};
+          extras[v.id] = data;
+          saveVenueExtrasToStorage(extras);
+          var status = card.querySelector('[data-status="' + v.id + '"]');
+          if (status){
+            status.textContent = 'Saved';
+            status.style.color = '#059669';
+            setTimeout(function(){ status.textContent = ''; }, 2000);
+          }
+        });
+      }
+
+      function valueOf(field){
+        var el = card.querySelector('input[data-field="' + field + '"]');
+        return el ? el.value.trim() : '';
+      }
+      function numberOf(field){
+        var raw = valueOf(field);
+        if (!raw) return null;
+        var num = Number(raw);
+        return isNaN(num) ? null : num;
+      }
     }
 
     load();
@@ -5041,12 +5541,16 @@ function sumTicketTypeCap(tts){
         ? (s.venue.name + (s.venue.city ? ' – '+s.venue.city : ''))
         : (s.venueText || '')
       );
+      var venueId = s.venue && s.venue.id ? s.venue.id : '';
       var venueAvatar = s.venue ? venueAvatarHtml(s.venue, { size: 36 }) : '';
       var venueCell = venueLabel
         ? ('<div style="display:flex;align-items:center;gap:8px;">'
             + venueAvatar
             + '<span>' + escapeHtml(venueLabel) + '</span>'
           + '</div>')
+        : '';
+      var venueAttrs = venueId
+        ? ' data-venue-id="' + escapeHtml(venueId) + '" data-venue-label="' + escapeHtml(venueLabel) + '" style="cursor:pointer;"'
         : '';
 
       var promoters = s.promoters || [];
@@ -5057,7 +5561,7 @@ function sumTicketTypeCap(tts){
         +'<tr data-row="'+s.id+'" data-status="'+statusLabel+'">'
           +'<td>'+(s.title || '')+'</td>'
           +'<td>'+when+'</td>'
-          +'<td>'+venueCell+'</td>'
+          +'<td'+venueAttrs+'>'+venueCell+'</td>'
           +'<td><span class="muted">'
             +'Sold '+sold
             +' · Held '+held
@@ -5162,6 +5666,19 @@ function sumTicketTypeCap(tts){
       });
     });
 
+    $$('[data-venue-id]').forEach(function(cell){
+      cell.addEventListener('click', function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        var id = cell.getAttribute('data-venue-id');
+        if (!id) return;
+        openVenuePanel({
+          venueId: id,
+          venueLabel: cell.getAttribute('data-venue-label') || ''
+        });
+      });
+    });
+
     $$('[data-delete]').forEach(function(a){
       a.addEventListener('click', async function(e){
         e.preventDefault();
@@ -5182,13 +5699,8 @@ function sumTicketTypeCap(tts){
       row.addEventListener('click', function(e){
         if (e.target && (e.target.closest('a') || e.target.closest('button'))) return;
         var id = row.getAttribute('data-row');
-        var status = row.getAttribute('data-status');
         if (!id) return;
-        if (status === 'DRAFT') {
-          window.location.href = '/admin/seating/builder/preview/' + id;
-        } else {
-          go('/admin/ui/shows/' + id + '/summary');
-        }
+        go('/admin/ui/shows/' + id + '/summary');
       });
     });
   }
@@ -6175,7 +6687,7 @@ var loadingCustomers = true;
         +   '<td>'+shows+' show'+(shows === 1 ? '' : 's')+'</td>'
         +   '<td>'
         +     '<div class="kebab">'
-        +       '<button class="btn p" data-kebab="'+c.id+'" aria-haspopup="menu" aria-expanded="false" title="Actions">⋯</button>'
+        +       '<button class="btn" data-kebab="'+c.id+'" aria-haspopup="menu" aria-expanded="false" title="Actions">⋮</button>'
 +       '<div class="menu" data-menu="'+c.id+'">'
 +         '<a href="#" data-open-profile="'+c.id+'">Open profile</a>'
 +         '<a href="#" data-view-orders="'+c.id+'">3 recent orders</a>'
