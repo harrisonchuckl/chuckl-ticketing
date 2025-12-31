@@ -444,6 +444,13 @@ organiser: { select: { id: true, storefrontSlug: true } },
   activeSeatMapId: true,
   venueId: true,
   showCapacity: true,
+  promoterLinks: {
+    select: {
+      promoter: {
+        select: { id: true, name: true, tradingName: true, logoUrl: true },
+      },
+    },
+  },
 },
 
     });
@@ -755,6 +762,7 @@ const cap = hasShowCap ? showCap : (capacityByShow.get(s.id) ?? 0);
      return {
   ...s,
   venue: s.venueId ? venueById.get(s.venueId) ?? null : null,
+  promoters: (s.promoterLinks || []).map((link) => link.promoter),
   _alloc: { total, sold, hold },
   _revenue: { grossFace: (grossByShow.get(s.id) ?? 0) / 100 },
 };
@@ -983,7 +991,7 @@ router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
         promoterLinks: {
           select: {
             promoter: {
-              select: { id: true, name: true, tradingName: true, email: true },
+              select: { id: true, name: true, tradingName: true, email: true, logoUrl: true },
             },
           },
         },
@@ -1043,7 +1051,7 @@ router.get("/shows/:id/promoters", requireAdminOrOrganiser, async (req, res) => 
     const links = await prisma.showPromoter.findMany({
       where: { showId },
       include: {
-        promoter: { select: { id: true, name: true, tradingName: true, email: true } },
+        promoter: { select: { id: true, name: true, tradingName: true, email: true, logoUrl: true } },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -1088,6 +1096,49 @@ router.post("/shows/:id/promoters", requireAdminOrOrganiser, async (req, res) =>
     res.status(500).json({ ok: false, error: "Failed to link promoter" });
   }
 });
+
+/** POST /admin/shows/:id/promoters/:promoterId/weekly-report */
+router.post(
+  "/shows/:id/promoters/:promoterId/weekly-report",
+  requireAdminOrOrganiser,
+  async (req, res) => {
+    try {
+      const showId = String(req.params.id);
+      const promoterId = String(req.params.promoterId);
+      const reportEmail = String(req.body?.reportEmail || "").trim();
+      const reportTime = String(req.body?.reportTime || "").trim();
+
+      if (!reportEmail || !reportTime) {
+        return res.status(400).json({ ok: false, error: "reportEmail and reportTime are required" });
+      }
+
+      const show = await ensureShowAccessible(req, showId);
+      if (!show) return res.status(404).json({ ok: false, error: "Show not found" });
+
+      const link = await prisma.showPromoter.findUnique({
+        where: { showId_promoterId: { showId, promoterId } },
+        select: { id: true },
+      });
+      if (!link) {
+        return res.status(404).json({ ok: false, error: "Promoter link not found" });
+      }
+
+      await prisma.showPromoter.update({
+        where: { showId_promoterId: { showId, promoterId } },
+        data: {
+          weeklyReportEnabled: true,
+          weeklyReportEmail: reportEmail,
+          weeklyReportTime: reportTime,
+        },
+      });
+
+      res.json({ ok: true });
+    } catch (e) {
+      console.error("POST /admin/shows/:id/promoters/:promoterId/weekly-report failed", e);
+      res.status(500).json({ ok: false, error: "Failed to save weekly report settings" });
+    }
+  }
+);
 
 /** DELETE /admin/shows/:id/promoters/:promoterId */
 router.delete("/shows/:id/promoters/:promoterId", requireAdminOrOrganiser, async (req, res) => {

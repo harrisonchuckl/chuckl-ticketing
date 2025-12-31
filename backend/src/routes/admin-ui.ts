@@ -1896,6 +1896,32 @@ router.get(
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
   }
+  function promoterLabel(promoter){
+    return (promoter && (promoter.tradingName || promoter.name)) || '';
+  }
+  function promoterInitials(label){
+    var text = String(label || '').trim();
+    if (!text) return '';
+    var parts = text.split(/\s+/).filter(Boolean);
+    var first = parts[0] ? parts[0][0] : '';
+    var second = parts.length > 1 ? parts[1][0] : '';
+    return (first + second).toUpperCase();
+  }
+  function promoterAvatarHtml(promoter, opts){
+    opts = opts || {};
+    var size = opts.size || 48;
+    var label = promoterLabel(promoter) || (promoter ? 'Promoter' : 'Add promoter');
+    var initials = promoter ? promoterInitials(label) : '+';
+    var logoUrl = promoter && promoter.logoUrl;
+    var fontSize = Math.max(14, Math.round(size * 0.42));
+    var inner = logoUrl
+      ? '<img src="' + escapeHtml(logoUrl) + '" alt="' + escapeHtml(label) + ' logo" style="width:100%;height:100%;object-fit:cover;display:block;" />'
+      : '<span style="font-weight:700;color:#0f172a;font-size:' + fontSize + 'px;">' + escapeHtml(initials || '+') + '</span>';
+    return ''
+      + '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:999px;background:#f1f5f9;border:1px solid #e2e8f0;display:flex;align-items:center;justify-content:center;overflow:hidden;">'
+      + inner
+      + '</div>';
+  }
     // --- AI field highlighting ---
   function markAi(el, kind){
     if (!el) return;
@@ -2016,6 +2042,26 @@ router.get(
     return title + ' · ' + when + (venue ? (' · ' + venue) : '');
   }
 
+  async function maybeSetupWeeklyReport(showId, promoter){
+    if (!showId || !promoter || !promoter.id) return;
+    var ok = confirm('Do you want to set up weekly reports for this promoter?');
+    if (!ok) return;
+    var time = prompt('What time should the weekly report be sent? (HH:MM)', '09:00');
+    if (!time) return;
+    var email = prompt('What email address should receive the weekly report?', promoter.email || '');
+    if (!email) return;
+    try{
+      await j('/admin/shows/' + encodeURIComponent(showId) + '/promoters/' + encodeURIComponent(promoter.id) + '/weekly-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reportEmail: email, reportTime: time })
+      });
+      alert('Weekly report scheduled.');
+    }catch(err){
+      alert('Failed to save weekly report settings: ' + parseErr(err));
+    }
+  }
+
   async function openPromoterLinker(opts){
     opts = opts || {};
     var showId = opts.showId;
@@ -2057,6 +2103,7 @@ router.get(
     var listEl = overlay.querySelector('#promoterLinkList');
     var selectEl = overlay.querySelector('#promoterLinkSelect');
     var addBtn = overlay.querySelector('#promoterLinkAdd');
+    var cachedPromoters = [];
 
     function close(){
       if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
@@ -2079,6 +2126,7 @@ router.get(
         ]);
         var promoters = (res[0] && res[0].items) ? res[0].items : [];
         var linked = (res[1] && res[1].promoters) ? res[1].promoters : [];
+        cachedPromoters = promoters;
         var linkedIds = new Set(linked.map(function(p){ return p.id; }));
 
         if (listEl){
@@ -2137,15 +2185,18 @@ router.get(
     if (addBtn){
       addBtn.addEventListener('click', async function(){
         if (!selectEl || !selectEl.value) return;
+        var selectedId = selectEl.value;
         if (errEl) errEl.textContent = '';
         try{
           await j('/admin/shows/' + encodeURIComponent(showId) + '/promoters', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ promoterId: selectEl.value })
+            body: JSON.stringify({ promoterId: selectedId })
           });
           await load();
           if (typeof opts.onUpdated === 'function') opts.onUpdated();
+          var chosen = cachedPromoters.find(function(p){ return p.id === selectedId; });
+          await maybeSetupWeeklyReport(showId, chosen);
         }catch(err){
           if (errEl) errEl.textContent = parseErr(err);
         }
@@ -4752,7 +4803,7 @@ async function listShows(){
       +'<table>'
         +'<thead><tr>'
           +'<th>Title</th><th>When</th><th>Venue</th>'
-          +'<th>Total allocation</th><th>Gross face</th><th>Status</th><th></th>'
+          +'<th>Total allocation</th><th>Gross face</th><th>Status</th><th>Promoter</th><th></th>'
         +'</tr></thead>'
         +'<tbody id="tbody"></tbody>'
       +'</table>'
@@ -4869,7 +4920,7 @@ function sumTicketTypeCap(tts){
     if (!tb) return;
 
     if (!items.length){
-      tb.innerHTML = '<tr><td colspan="7" class="muted">No matching events</td></tr>';
+      tb.innerHTML = '<tr><td colspan="8" class="muted">No matching events</td></tr>';
       return;
     }
 
@@ -4924,6 +4975,10 @@ function sumTicketTypeCap(tts){
         : (s.venueText || '')
       );
 
+      var promoters = s.promoters || [];
+      var primaryPromoter = promoters[0] || null;
+      var promoterAvatar = promoterAvatarHtml(primaryPromoter, { size: 36 });
+
       return ''
         +'<tr data-row="'+s.id+'" data-status="'+statusLabel+'">'
           +'<td>'+(s.title || '')+'</td>'
@@ -4938,6 +4993,12 @@ function sumTicketTypeCap(tts){
             +'</span> '+bar+'</td>'
           +'<td>£'+(((s._revenue && s._revenue.grossFace) || 0).toFixed(2))+'</td>'
           +'<td>'+statusBadgeHTML(statusLabel)+'</td>'
+          +'<td>'
+            +'<button type="button" data-link-promoter="'+s.id+'"'
+              +' style="border:none;background:none;padding:0;cursor:pointer;">'
+              + promoterAvatar
+            +'</button>'
+          +'</td>'
           +'<td>'
             +'<div class="kebab">'
               +'<button class="btn" data-kebab="'+s.id+'">⋮</button>'
@@ -5020,6 +5081,7 @@ function sumTicketTypeCap(tts){
     $$('[data-link-promoter]').forEach(function(a){
       a.addEventListener('click', function(e){
         e.preventDefault();
+        e.stopPropagation();
         var id = a.getAttribute('data-link-promoter');
         if (!id) return;
         openPromoterLinker({ showId: id });
@@ -5080,7 +5142,7 @@ function sumTicketTypeCap(tts){
 
   async function load(){
     if (!tb) return;
-    tb.innerHTML = '<tr><td colspan="7" class="muted">Loading…</td></tr>';
+    tb.innerHTML = '<tr><td colspan="8" class="muted">Loading…</td></tr>';
     if (countEl) countEl.textContent = '';
 
     try{
@@ -5089,7 +5151,7 @@ function sumTicketTypeCap(tts){
       console.log('[Admin UI][shows] sample _alloc:', allItems[0] && allItems[0]._alloc);
 
       if (!allItems.length){
-        tb.innerHTML = '<tr><td colspan="7" class="muted">No shows yet</td></tr>';
+        tb.innerHTML = '<tr><td colspan="8" class="muted">No shows yet</td></tr>';
         if (countEl) countEl.textContent = 'Showing 0 of 0 events';
         return;
       }
@@ -7666,9 +7728,12 @@ function renderInterests(customer){
         var statusLabel = formatStatus(p.status);
         card.innerHTML = ''
           + '<div class="header">'
-          +   '<div>'
-          +     '<div class="title">' + escapeHtml(p.name || 'Untitled promoter') + '</div>'
-          +     '<div class="muted">' + escapeHtml(p.tradingName || p.email || '') + '</div>'
+          +   '<div class="row" style="gap:12px;align-items:center;">'
+          +     promoterAvatarHtml(p, { size: 56 })
+          +     '<div>'
+          +       '<div class="title">' + escapeHtml(p.name || 'Untitled promoter') + '</div>'
+          +       '<div class="muted">' + escapeHtml(p.tradingName || p.email || '') + '</div>'
+          +     '</div>'
           +   '</div>'
           +   '<div class="row" style="gap:8px;align-items:center;">'
           +     '<span class="status-badge">' + escapeHtml(statusLabel) + '</span>'
@@ -7795,6 +7860,18 @@ function renderInterests(customer){
         +   '</div>'
 
         +   '<div class="tab-panel" data-panel="overview">'
+        +     '<div class="row" style="gap:16px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">'
+        +       '<div id="po_logo_preview">' + promoterAvatarHtml(promoter, { size: 72 }) + '</div>'
+        +       '<div class="grid" style="gap:8px;">'
+        +         '<label style="display:grid;gap:6px;">Business logo<input id="po_logo_file" type="file" accept="image/*" /></label>'
+        +         '<div class="row" style="gap:8px;align-items:center;">'
+        +           '<button class="btn" id="po_logo_upload">Upload logo</button>'
+        +           '<input type="hidden" id="po_logoUrl" value="' + escapeHtml(promoter.logoUrl || '') + '" />'
+        +         '</div>'
+        +         '<div class="muted" style="font-size:12px;">Square images work best.</div>'
+        +         '<div class="error" id="po_logo_error"></div>'
+        +       '</div>'
+        +     '</div>'
         +     '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">'
         +       '<label style="display:grid;gap:6px;">Promoter name<input id="po_name" value="' + escapeHtml(promoter.name || '') + '" required /></label>'
         +       '<label style="display:grid;gap:6px;">Trading name<input id="po_tradingName" value="' + escapeHtml(promoter.tradingName || '') + '" /></label>'
@@ -7906,6 +7983,7 @@ function renderInterests(customer){
       renderShows();
       renderActivity(promoter);
       bindOverviewSave(promoter);
+      bindLogoUpload(promoter);
       bindContactAdd();
       bindDocumentUpload();
     }
@@ -7929,20 +8007,25 @@ function renderInterests(customer){
       activate(activeTab || 'overview');
     }
 
+    function buildOverviewPayload(){
+      return {
+        name: ($('#po_name').value || '').trim(),
+        tradingName: ($('#po_tradingName').value || '').trim() || null,
+        email: ($('#po_email').value || '').trim() || null,
+        phone: ($('#po_phone').value || '').trim() || null,
+        status: ($('#po_status').value || 'PROSPECT'),
+        notes: ($('#po_notes').value || '').trim() || null,
+        logoUrl: ($('#po_logoUrl') && ($('#po_logoUrl').value || '').trim()) || null,
+      };
+    }
+
     function bindOverviewSave(){
       var saveBtn = $('#po_save');
       if (!saveBtn) return;
       saveBtn.addEventListener('click', async function(){
         var err = $('#po_error');
         if (err) err.textContent = '';
-        var payload = {
-          name: ($('#po_name').value || '').trim(),
-          tradingName: ($('#po_tradingName').value || '').trim() || null,
-          email: ($('#po_email').value || '').trim() || null,
-          phone: ($('#po_phone').value || '').trim() || null,
-          status: ($('#po_status').value || 'PROSPECT'),
-          notes: ($('#po_notes').value || '').trim() || null,
-        };
+        var payload = buildOverviewPayload();
         if (!payload.name){
           if (err) err.textContent = 'Promoter name is required.';
           return;
@@ -7956,6 +8039,52 @@ function renderInterests(customer){
           await loadPromoter();
         }catch(e){
           if (err) err.textContent = parseErr(e);
+        }
+      });
+    }
+
+    function bindLogoUpload(promoter){
+      var uploadBtn = $('#po_logo_upload');
+      var fileInput = $('#po_logo_file');
+      if (!uploadBtn || !fileInput) return;
+      uploadBtn.addEventListener('click', async function(){
+        var err = $('#po_logo_error');
+        if (err) err.textContent = '';
+        var file = fileInput.files && fileInput.files[0];
+        if (!file){
+          if (err) err.textContent = 'Choose an image to upload.';
+          return;
+        }
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = 'Uploading…';
+        try{
+          var upload = await uploadPoster(file);
+          var logoInput = $('#po_logoUrl');
+          if (logoInput) logoInput.value = upload.url || '';
+          var preview = $('#po_logo_preview');
+          if (preview){
+            preview.innerHTML = promoterAvatarHtml({
+              name: $('#po_name').value || promoter.name,
+              tradingName: $('#po_tradingName').value || promoter.tradingName,
+              logoUrl: upload.url,
+            }, { size: 72 });
+          }
+          var payload = buildOverviewPayload();
+          if (!payload.name){
+            if (err) err.textContent = 'Promoter name is required.';
+            return;
+          }
+          await j('/admin/promoters/' + encodeURIComponent(promoterId), {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify(payload)
+          });
+          await loadPromoter();
+        }catch(e){
+          if (err) err.textContent = parseErr(e);
+        }finally{
+          uploadBtn.disabled = false;
+          uploadBtn.textContent = 'Upload logo';
         }
       });
     }
