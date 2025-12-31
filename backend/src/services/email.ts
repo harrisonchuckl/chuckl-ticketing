@@ -668,6 +668,44 @@ export async function sendTicketsEmail(orderId: string, to?: string) {
   }
 }
 
+export async function sendDigitalProductEmail(opts: {
+  email: string;
+  name?: string;
+  items: Array<{ titleSnapshot: string; qty: number }>;
+  storefront: { name: string; supportEmail?: string | null };
+  orderId: string;
+}) {
+  if (!resend) {
+    console.info("[email] digital products email skipped (RESEND_API_KEY missing)", {
+      orderId: opts.orderId,
+      email: opts.email,
+    });
+    return { ok: false, message: "RESEND_API_KEY not configured" };
+  }
+
+  const itemsHtml = opts.items
+    .map((item) => `<li>${escapeHtml(item.titleSnapshot)} × ${item.qty}</li>`)
+    .join("");
+
+  const html = `
+    <div style="font-family:Inter, Arial, sans-serif; color:#0f172a;">
+      <h2>Thanks for your purchase!</h2>
+      <p>Hi ${escapeHtml(opts.name || "there")}, your digital items are ready:</p>
+      <ul>${itemsHtml}</ul>
+      <p>If you need help, contact ${escapeHtml(opts.storefront.supportEmail || "support")}.</p>
+    </div>
+  `;
+
+  await resend.emails.send({
+    from: EMAIL_FROM,
+    to: opts.email,
+    subject: `Your digital items from ${opts.storefront.name}`,
+    html,
+  });
+
+  return { ok: true };
+}
+
 export async function sendTestEmail(to: string) {
   if (!resend) return { ok: false, message: "RESEND_API_KEY not configured" };
   await resend.emails.send({

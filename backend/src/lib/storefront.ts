@@ -68,46 +68,82 @@ export async function ensureStorefrontForUser(userId: string): Promise<
   });
 }
 
-export async function decrementStockTransaction(productId: string, qty: number) {
+export async function decrementStockTransaction(
+  productId: string,
+  qty: number,
+  variantId?: string | null
+) {
   if (qty <= 0) {
     throw new Error('Quantity must be greater than zero.');
   }
 
   return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    console.info('[storefront] loading product for stock decrement', { productId, qty });
-    const product = await tx.product.findUnique({ where: { id: productId } });
+    console.info('[storefront] loading product for stock decrement', {
+      productId,
+      qty,
+      variantId,
+    });
+
+    const product = await tx.product.findUnique({
+      where: { id: productId },
+      include: { variants: true },
+    });
 
     if (!product) {
       throw new Error('Product not found for stock decrement.');
     }
 
-    if (!product.inventoryEnabled || product.stockQty === null) {
-      console.info('[storefront] stock decrement skipped', {
+    if (product.inventoryMode !== 'TRACKED') {
+      console.info('[storefront] stock decrement skipped (unlimited inventory)', {
         productId,
-        inventoryEnabled: product.inventoryEnabled,
-        stockQty: product.stockQty,
       });
       return product;
     }
 
-    if (product.stockQty < qty) {
+    if (variantId) {
+      const variant = product.variants.find((v) => v.id === variantId);
+      if (!variant) throw new Error('Variant not found for stock decrement.');
+
+      if (variant.stockCountOverride !== null && variant.stockCountOverride !== undefined) {
+        const current = Number(variant.stockCountOverride ?? 0);
+        if (current < qty) {
+          throw new Error('Insufficient stock to fulfill order.');
+        }
+
+        await tx.productVariant.update({
+          where: { id: variantId },
+          data: { stockCountOverride: current - qty },
+        });
+
+        await tx.inventoryMovement.create({
+          data: {
+            productId,
+            variantId,
+            change: -qty,
+            reason: 'SALE',
+          },
+        });
+
+        return product;
+      }
+    }
+
+    const current = Number(product.stockCount ?? 0);
+    if (current < qty) {
       throw new Error('Insufficient stock to fulfill order.');
     }
 
-    console.info('[storefront] decrementing stock', {
-      productId,
-      from: product.stockQty,
-      qty,
-    });
-
     const updated = await tx.product.update({
       where: { id: productId },
-      data: { stockQty: { decrement: qty } },
+      data: { stockCount: current - qty },
     });
 
-    console.info('[storefront] stock decrement complete', {
-      productId,
-      to: updated.stockQty,
+    await tx.inventoryMovement.create({
+      data: {
+        productId,
+        change: -qty,
+        reason: 'SALE',
+      },
     });
 
     return updated;

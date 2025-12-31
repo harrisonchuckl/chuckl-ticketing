@@ -9400,25 +9400,30 @@ function renderInterests(customer){
       +       '<div class="muted">Build merch, add-ons, and digital products that sell alongside tickets.</div>'
       +     '</div>'
       +     '<div class="row" style="gap:8px;flex-wrap:wrap;">'
-      +       '<button class="btn p">Create product</button>'
-      +       '<button class="btn">View orders</button>'
-      +       '<button class="btn">Storefront settings</button>'
+      +       '<button class="btn p" id="ps_create">Create product</button>'
+      +       '<button class="btn" id="ps_orders">View orders</button>'
+      +       '<button class="btn" id="ps_settings">Storefront settings</button>'
       +     '</div>'
       +   '</div>'
-      +   '<div class="snapshot-grid">'
+      +   '<div id="ps_cta" class="card" style="margin-top:12px;display:none;">'
+      +     '<div class="title">Create your storefront</div>'
+      +     '<div class="muted" style="margin-top:6px;">Add a slug, branding, and tax/fulfilment defaults to start selling products.</div>'
+      +     '<button class="btn p" id="ps_create_store" style="margin-top:10px;">Set up storefront</button>'
+      +   '</div>'
+      +   '<div class="snapshot-grid" id="ps_snapshot">'
       +     '<div class="snapshot-block">'
       +       '<div class="muted" style="font-size:12px;">Storefront URL</div>'
-      +       '<div class="title" style="margin-top:6px;">/store/late-night-comedy</div>'
-      +       '<div class="muted" style="margin-top:6px;">Status: <span class="pill good">Live</span></div>'
+      +       '<div class="title" style="margin-top:6px;" id="ps_storefront_url">—</div>'
+      +       '<div class="muted" style="margin-top:6px;" id="ps_storefront_status">Status: —</div>'
       +     '</div>'
       +     '<div class="snapshot-block">'
       +       '<div class="muted" style="font-size:12px;">Product coverage</div>'
-      +       '<div class="title" style="margin-top:6px;">18 active products</div>'
-      +       '<div class="muted" style="margin-top:6px;">6 drafts · 4 archived</div>'
+      +       '<div class="title" style="margin-top:6px;" id="ps_product_counts">0 active products</div>'
+      +       '<div class="muted" style="margin-top:6px;" id="ps_product_counts_detail">0 drafts · 0 archived</div>'
       +     '</div>'
       +     '<div class="snapshot-block">'
       +       '<div class="muted" style="font-size:12px;">Add-on attach rate</div>'
-      +       '<div class="title" style="margin-top:6px;">14.8%</div>'
+      +       '<div class="title" style="margin-top:6px;" id="ps_attach_rate">0%</div>'
       +       '<div class="muted" style="margin-top:6px;">Last 30 days</div>'
       +     '</div>'
       +   '</div>'
@@ -9428,14 +9433,14 @@ function renderInterests(customer){
       +     '<div class="header">'
       +       '<div>'
       +         '<div class="title">Product catalogue</div>'
-      +         '<div class="muted">Merch, add-ons, vouchers, experiences, digital, and donations.</div>'
+      +         '<div class="muted">Merch, add-ons, vouchers, digital, and donations.</div>'
       +       '</div>'
       +       '<div class="row" style="gap:8px;">'
-      +         '<button class="btn">Filter</button>'
-      +         '<button class="btn">Search</button>'
+      +         '<input id="ps_search" class="input" placeholder="Search products" />'
+      +         '<button class="btn" id="ps_search_btn">Search</button>'
       +       '</div>'
       +     '</div>'
-      +     '<div class="table-list">'
+      +     '<div class="table-list" id="ps_products_table">'
       +       '<div class="table-row head">'
       +         '<div>Product</div>'
       +         '<div>Category</div>'
@@ -9443,179 +9448,684 @@ function renderInterests(customer){
       +         '<div>Inventory</div>'
       +         '<div>Status</div>'
       +       '</div>'
-      +       '<div class="table-row">'
-      +         '<div>'
-      +           '<div class="title">Tour T-shirt (Black)</div>'
-      +           '<div class="muted">Variants: XS–XXL · £25.00</div>'
-      +         '</div>'
-      +         '<div>Merch</div>'
-      +         '<div><span class="pill">Shipping</span></div>'
-      +         '<div>42 in stock</div>'
-      +         '<div><span class="status-badge paid">Active</span></div>'
-      +       '</div>'
-      +       '<div class="table-row">'
-      +         '<div>'
-      +           '<div class="title">VIP Meet &amp; Greet</div>'
-      +           '<div class="muted">Max 1 per ticket · £60.00</div>'
-      +         '</div>'
-      +         '<div>Show add-on</div>'
-      +         '<div><span class="pill">Collect</span></div>'
-      +         '<div>Limited to 25</div>'
-      +         '<div><span class="status-badge paid">Active</span></div>'
-      +       '</div>'
-      +       '<div class="table-row">'
-      +         '<div>'
-      +           '<div class="title">Digital programme</div>'
-      +           '<div class="muted">Auto email · £5.00</div>'
-      +         '</div>'
-      +         '<div>Digital</div>'
-      +         '<div><span class="pill">Email</span></div>'
-      +         '<div>Unlimited</div>'
-      +         '<div><span class="status-badge paid">Active</span></div>'
-      +       '</div>'
-      +       '<div class="table-row">'
-      +         '<div>'
-      +           '<div class="title">Support the artist</div>'
-      +           '<div class="muted">Custom amount</div>'
-      +         '</div>'
-      +         '<div>Donation</div>'
-      +         '<div><span class="pill">N/A</span></div>'
-      +         '<div>Open</div>'
-      +         '<div><span class="status-badge">Draft</span></div>'
-      +       '</div>'
       +     '</div>'
       +   '</div>'
       +   '<div class="card">'
       +     '<div class="title">Checkout add-ons &amp; upsells</div>'
       +     '<div class="muted" style="margin-top:6px;">Attach products to shows, ticket types, or both.</div>'
-      +     '<div class="grid" style="margin-top:12px;">'
-      +       '<div class="snapshot-block">'
-      +         '<div class="title">Tonight at The Apollo</div>'
-      +         '<div class="muted" style="margin-top:6px;">Add-ons shown at checkout</div>'
-      +         '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">'
-      +           '<span class="pill">Programme £6</span>'
-      +           '<span class="pill">Signed poster £20</span>'
-      +           '<span class="pill">Early entry £12</span>'
-      +         '</div>'
-      +         '<div class="muted" style="margin-top:8px;">Recommended order priority: 1, 2, 3</div>'
-      +       '</div>'
-      +       '<div class="snapshot-block">'
-      +         '<div class="title">Ticket type targeting</div>'
-      +         '<div class="muted" style="margin-top:6px;">Only show VIP lanyard for VIP ticket holders.</div>'
-      +         '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">'
-      +           '<span class="pill good">VIP only</span>'
-      +           '<span class="pill">Max 1 per ticket</span>'
-      +         '</div>'
-      +       '</div>'
-      +       '<div class="snapshot-block">'
-      +         '<div class="title">Upsell logic</div>'
-      +         '<div class="muted" style="margin-top:6px;">Optional vs recommended highlights.</div>'
-      +         '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">'
-      +           '<span class="pill good">Recommended</span>'
-      +           '<span class="pill">Limit 2 per order</span>'
-      +         '</div>'
-      +       '</div>'
-      +     '</div>'
+      +     '<div class="muted" style="margin-top:10px;">Manage rules in the upsells manager.</div>'
+      +     '<button class="btn" id="ps_upsells" style="margin-top:10px;">Manage upsells</button>'
+      +     '<div class="grid" style="margin-top:12px;" id="ps_top_products"></div>'
       +   '</div>'
       + '</div>'
-      + '<div class="grid grid-2" style="margin-top:16px;">'
-      +   '<div class="card">'
-      +     '<div class="title">Fulfilment options</div>'
-      +     '<div class="muted" style="margin-top:6px;">Manage how each product reaches the customer.</div>'
-      +     '<div class="grid" style="margin-top:12px;">'
-      +       '<div class="snapshot-block">'
-      +         '<div class="title">Ship to customer</div>'
-      +         '<div class="muted" style="margin-top:6px;">Collect address in Stripe checkout.</div>'
-      +         '<div style="margin-top:8px;">'
-      +           '<span class="pill">Dispatch date: 20 Sep</span>'
-      +           '<span class="pill" style="margin-left:6px;">Stock alerts on</span>'
-      +         '</div>'
-      +       '</div>'
-      +       '<div class="snapshot-block">'
-      +         '<div class="title">Collect at venue</div>'
-      +         '<div class="muted" style="margin-top:6px;">Generate pick lists for staff.</div>'
-      +         '<div style="margin-top:8px;">'
-      +           '<span class="pill">Collection list ready</span>'
-      +           '<span class="pill" style="margin-left:6px;">Scan to mark collected</span>'
-      +         '</div>'
-      +       '</div>'
-      +       '<div class="snapshot-block">'
-      +         '<div class="title">Digital delivery</div>'
-      +         '<div class="muted" style="margin-top:6px;">Auto email after payment.</div>'
-      +         '<div style="margin-top:8px;">'
-      +           '<span class="pill">Template: Digital programme</span>'
-      +         '</div>'
-      +       '</div>'
+      + '<div class="card" style="margin-top:16px;">'
+      +   '<div class="header">'
+      +     '<div>'
+      +       '<div class="title">Orders &amp; fulfilment</div>'
+      +       '<div class="muted">Export CSV, track fulfilment status, and keep one order for tickets + products.</div>'
       +     '</div>'
+      +     '<button class="btn" id="ps_orders_footer">View orders</button>'
       +   '</div>'
-      +   '<div class="card">'
-      +     '<div class="title">Sales controls &amp; inventory</div>'
-      +     '<div class="muted" style="margin-top:6px;">Keep stock tight and drop windows exclusive.</div>'
-      +     '<div class="grid" style="margin-top:12px;">'
-      +       '<div class="snapshot-block">'
-      +         '<div class="title">Limited drops / pre-orders</div>'
-      +         '<div class="muted" style="margin-top:6px;">Countdown + close date.</div>'
-      +         '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">'
-      +           '<span class="pill">Closes 30 Sep</span>'
-      +           '<span class="pill">Dispatch 10 Oct</span>'
-      +         '</div>'
-      +       '</div>'
-      +       '<div class="snapshot-block">'
-      +         '<div class="title">Discount codes</div>'
-      +         '<div class="muted" style="margin-top:6px;">Show, influencer, and VIP codes.</div>'
-      +         '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">'
-      +           '<span class="pill">VIP15</span>'
-      +           '<span class="pill">CREW10</span>'
-      +           '<span class="pill">APOLLO5</span>'
-      +         '</div>'
-      +       '</div>'
-      +       '<div class="snapshot-block">'
-      +         '<div class="title">Inventory alerts</div>'
-      +         '<div class="muted" style="margin-top:6px;">Warn when low or out of stock.</div>'
-      +         '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">'
-      +           '<span class="pill bad">Low stock: 5 items</span>'
-      +           '<span class="pill">Auto disable at 0</span>'
-      +         '</div>'
-      +       '</div>'
+      +   '<div class="grid grid-2" style="margin-top:12px;">'
+      +     '<div class="snapshot-block">'
+      +       '<div class="muted" style="font-size:12px;">Revenue</div>'
+      +       '<div class="title" style="margin-top:6px;" id="ps_revenue_7d">£0.00 (7d)</div>'
+      +       '<div class="muted" style="margin-top:6px;" id="ps_revenue_month">£0.00 this month</div>'
       +     '</div>'
-      +   '</div>'
-      + '</div>'
-      + '<div class="grid grid-2" style="margin-top:16px;">'
-      +   '<div class="card">'
-      +     '<div class="title">Operational wins</div>'
-      +     '<ul style="margin:12px 0 0 18px;line-height:1.7;">'
-      +       '<li>Pick list by show/date for collections on the night.</li>'
-      +       '<li>Stock consumed by show: “Show A sold 32 tees”.</li>'
-      +       '<li>Attach fulfilment to check-in so staff see “Collect: 2 items”.</li>'
-      +       '<li>Post-show remarketing: “Missed the merch? Shop still open for 48h”.</li>'
-      +     '</ul>'
-      +     '<div class="muted" style="margin-top:12px;">Export CSV, track fulfilment status, and keep one order for tickets + products.</div>'
-      +   '</div>'
-      +   '<div class="card">'
-      +     '<div class="title">MVP scope (fast + valuable)</div>'
-      +     '<div style="margin-top:12px;line-height:1.7;">'
-      +       '<div style="font-weight:600;">Now</div>'
-      +       '<ul style="margin:8px 0 0 18px;line-height:1.7;">'
-      +         '<li>Product CRUD (create/edit/archive)</li>'
-      +         '<li>Price, image, short description</li>'
-      +         '<li>Stock quantity (optional), variants (basic)</li>'
-      +         '<li>Fulfilment: ship vs collect vs digital</li>'
-      +         '<li>Standalone shop pages</li>'
-      +         '<li>Add-ons on checkout (show-level linking)</li>'
-      +         '<li>Orders contain both ticket line items + product line items</li>'
-      +         '<li>Basic fulfilment status + export CSV</li>'
-      +       '</ul>'
-      +       '<div style="font-weight:600;margin-top:12px;">Later</div>'
-      +       '<ul style="margin:8px 0 0 18px;line-height:1.7;">'
-      +         '<li>Bundles, discount codes, shipping rates by region/weight</li>'
-      +         '<li>Returns/refunds logic per line item</li>'
-      +         '<li>Staff scanning view shows merch collection</li>'
-      +         '<li>Multi-image carousel per product, reviews</li>'
-      +         '<li>Analytics dashboard (conversion rate, attach rate, AOV uplift)</li>'
-      +       '</ul>'
+      +     '<div class="snapshot-block">'
+      +       '<div class="muted" style="font-size:12px;">Stock alerts</div>'
+      +       '<div class="title" style="margin-top:6px;" id="ps_stock_alerts">0 low stock</div>'
+      +       '<div class="muted" style="margin-top:6px;" id="ps_stock_names">—</div>'
       +     '</div>'
       +   '</div>'
       + '</div>';
+
+    function money(pence){
+      return '£' + ((Number(pence || 0) / 100).toFixed(2));
+    }
+
+    var btnCreate = $('#ps_create');
+    var btnOrders = $('#ps_orders');
+    var btnOrdersFooter = $('#ps_orders_footer');
+    var btnSettings = $('#ps_settings');
+    var btnUpsells = $('#ps_upsells');
+    var btnCreateStore = $('#ps_create_store');
+
+    if (btnCreate) btnCreate.addEventListener('click', function(){ go('/admin/ui/product-store/products/new'); });
+    if (btnOrders) btnOrders.addEventListener('click', function(){ go('/admin/ui/product-store/orders'); });
+    if (btnOrdersFooter) btnOrdersFooter.addEventListener('click', function(){ go('/admin/ui/product-store/orders'); });
+    if (btnSettings) btnSettings.addEventListener('click', function(){ go('/admin/ui/product-store/settings'); });
+    if (btnUpsells) btnUpsells.addEventListener('click', function(){ go('/admin/ui/product-store/upsells'); });
+    if (btnCreateStore) btnCreateStore.addEventListener('click', function(){ go('/admin/ui/product-store/settings'); });
+
+    var searchBtn = $('#ps_search_btn');
+    if (searchBtn){
+      searchBtn.addEventListener('click', function(){ loadProducts(); });
+    }
+
+    async function loadSummary(){
+      try{
+        var data = await j('/admin/api/product-store/summary');
+        var summary = data && data.summary;
+        if (!summary || !summary.storefront){
+          $('#ps_cta').style.display = 'block';
+          $('#ps_snapshot').style.display = 'none';
+          return;
+        }
+        var storefront = summary.storefront;
+        $('#ps_storefront_url').textContent = '/store/' + storefront.slug;
+        $('#ps_storefront_status').innerHTML = 'Status: <span class="pill ' + (storefront.status === 'LIVE' ? 'good' : '') + '\">' + storefront.status + '</span>';
+        $('#ps_product_counts').textContent = summary.counts.active + ' active products';
+        $('#ps_product_counts_detail').textContent = summary.counts.draft + ' drafts · ' + summary.counts.archived + ' archived';
+        $('#ps_attach_rate').textContent = (summary.attachRate || 0).toFixed(1) + '%';
+        $('#ps_revenue_7d').textContent = money(summary.revenue.last7Days) + ' (7d)';
+        $('#ps_revenue_month').textContent = money(summary.revenue.thisMonth) + ' this month';
+        $('#ps_stock_alerts').textContent = (summary.lowStockAlerts || []).length + ' low stock';
+        $('#ps_stock_names').textContent = (summary.lowStockAlerts || []).map(function(p){ return p.title; }).join(', ') || '—';
+        var top = $('#ps_top_products');
+        if (top){
+          top.innerHTML = (summary.topProducts || []).map(function(p){
+            return '<div class="snapshot-block"><div class="title">' + p.title + '</div><div class="muted" style="margin-top:6px;">Revenue ' + money(p.revenuePence) + '</div></div>';
+          }).join('') || '<div class="muted">No upsells yet.</div>';
+        }
+      }catch(err){
+        console.error('product store summary failed', err);
+      }
+    }
+
+    async function loadProducts(){
+      try{
+        var q = ($('#ps_search').value || '').trim();
+        var url = '/admin/api/product-store/products' + (q ? ('?q=' + encodeURIComponent(q)) : '');
+        var data = await j(url);
+        var rows = (data.products || []).map(function(p){
+          var inventory = p.inventoryMode === 'TRACKED'
+            ? ((p.stockCount !== null && p.stockCount !== undefined) ? (p.stockCount + ' in stock') : 'Tracked')
+            : 'Unlimited';
+          return ''
+            + '<div class="table-row">'
+            +   '<div>'
+            +     '<div class="title">' + p.title + '</div>'
+            +     '<div class="muted">' + (p.variants && p.variants.length ? ('Variants: ' + p.variants.length) : 'Single') + '</div>'
+            +   '</div>'
+            +   '<div>' + p.category + '</div>'
+            +   '<div><span class="pill">' + p.fulfilmentType + '</span></div>'
+            +   '<div>' + inventory + '</div>'
+            +   '<div><span class="status-badge ' + (p.status === 'ACTIVE' ? 'paid' : '') + '\">' + p.status + '</span></div>'
+            + '</div>';
+        }).join('');
+
+        var table = $('#ps_products_table');
+        table.innerHTML = '<div class="table-row head"><div>Product</div><div>Category</div><div>Fulfilment</div><div>Inventory</div><div>Status</div></div>' + rows;
+
+        $$('#ps_products_table .table-row').forEach(function(row, idx){
+          if (idx === 0) return;
+          row.addEventListener('click', function(){
+            var product = (data.products || [])[idx-1];
+            if (product){
+              go('/admin/ui/product-store/products/' + product.id + '/edit');
+            }
+          });
+        });
+      }catch(err){
+        console.error('product store products failed', err);
+      }
+    }
+
+    loadSummary();
+    loadProducts();
+  }
+  function productStoreSettingsPage(){
+    if (!main) return;
+    main.innerHTML = ''
+      + '<div class="card">'
+      +   '<div class="title">Storefront settings</div>'
+      +   '<div class="muted">Manage your store slug, branding, and tax/fulfilment defaults.</div>'
+      +   '<div class="grid" style="margin-top:12px;">'
+      +     '<input id="ps_name" class="input" placeholder="Store name" />'
+      +     '<input id="ps_slug" class="input" placeholder="Store slug" />'
+      +     '<input id="ps_logo" class="input" placeholder="Logo URL" />'
+      +     '<input id="ps_brand" class="input" placeholder="Brand colour (hex)" />'
+      +     '<input id="ps_support" class="input" placeholder="Support email" />'
+      +     '<textarea id="ps_policies" class="input" placeholder="Policies / refund notes"></textarea>'
+      +     '<select id="ps_status" class="input">'
+      +       '<option value="DRAFT">Draft</option>'
+      +       '<option value="LIVE">Live</option>'
+      +     '</select>'
+      +     '<select id="ps_tax_mode" class="input">'
+      +       '<option value="NONE">No tax</option>'
+      +       '<option value="VAT">VAT %</option>'
+      +       '<option value="CUSTOM">Custom %</option>'
+      +     '</select>'
+      +     '<input id="ps_tax_percent" class="input" placeholder="Tax percent" type="number" />'
+      +     '<label><input type="checkbox" id="ps_ship_enabled" /> Shipping enabled</label>'
+      +     '<label><input type="checkbox" id="ps_collect_enabled" /> Collection enabled</label>'
+      +     '<label><input type="checkbox" id="ps_digital_enabled" /> Digital enabled</label>'
+      +     '<input id="ps_shipping_fee" class="input" placeholder="Shipping flat fee (pence)" type="number" />'
+      +   '</div>'
+      +   '<div class="row" style="gap:8px;margin-top:12px;">'
+      +     '<button class="btn p" id="ps_settings_save">Save settings</button>'
+      +     '<button class="btn" id="ps_settings_back">Back</button>'
+      +     '<div class="muted" id="ps_settings_msg"></div>'
+      +   '</div>'
+      + '</div>';
+
+    $('#ps_settings_back').addEventListener('click', function(){ go('/admin/ui/product-store'); });
+
+    async function loadSettings(){
+      try{
+        var data = await j('/admin/api/product-store/storefront');
+        var sf = data.storefront;
+        if (!sf) return;
+        $('#ps_name').value = sf.name || '';
+        $('#ps_slug').value = sf.slug || '';
+        $('#ps_logo').value = sf.logoUrl || '';
+        $('#ps_brand').value = sf.brandColour || '';
+        $('#ps_support').value = sf.supportEmail || '';
+        $('#ps_policies').value = sf.policiesText || '';
+        $('#ps_status').value = sf.status || 'DRAFT';
+        $('#ps_tax_mode').value = sf.taxMode || 'NONE';
+        $('#ps_tax_percent').value = (sf.taxPercent !== null && sf.taxPercent !== undefined) ? sf.taxPercent : '';
+        $('#ps_ship_enabled').checked = !!sf.shippingEnabled;
+        $('#ps_collect_enabled').checked = !!sf.collectionEnabled;
+        $('#ps_digital_enabled').checked = !!sf.digitalEnabled;
+        $('#ps_shipping_fee').value = (sf.shippingFlatFeePence !== null && sf.shippingFlatFeePence !== undefined) ? sf.shippingFlatFeePence : '';
+      }catch(err){
+        console.error('storefront settings load failed', err);
+      }
+    }
+
+    $('#ps_settings_save').addEventListener('click', async function(){
+      $('#ps_settings_msg').textContent = '';
+      try{
+        var payload = {
+          name: ($('#ps_name').value || '').trim(),
+          slug: ($('#ps_slug').value || '').trim(),
+          logoUrl: ($('#ps_logo').value || '').trim(),
+          brandColour: ($('#ps_brand').value || '').trim(),
+          supportEmail: ($('#ps_support').value || '').trim(),
+          policiesText: ($('#ps_policies').value || '').trim(),
+          status: $('#ps_status').value,
+          taxMode: $('#ps_tax_mode').value,
+          taxPercent: $('#ps_tax_percent').value,
+          shippingEnabled: $('#ps_ship_enabled').checked,
+          collectionEnabled: $('#ps_collect_enabled').checked,
+          digitalEnabled: $('#ps_digital_enabled').checked,
+          shippingFlatFeePence: $('#ps_shipping_fee').value,
+        };
+        var data = await j('/admin/api/product-store/storefront', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(payload)
+        });
+        if (data && data.ok){
+          $('#ps_settings_msg').textContent = 'Settings saved';
+        }
+      }catch(err){
+        $('#ps_settings_msg').textContent = parseErr(err);
+      }
+    });
+
+    loadSettings();
+  }
+
+  function productStoreProductForm(productId){
+    if (!main) return;
+    var isEdit = !!productId;
+    main.innerHTML = ''
+      + '<div class="card">'
+      +   '<div class="title">' + (isEdit ? 'Edit product' : 'Create product') + '</div>'
+      +   '<div class="grid" style="margin-top:12px;">'
+      +     '<input id="ps_prod_title" class="input" placeholder="Title" />'
+      +     '<input id="ps_prod_slug" class="input" placeholder="Slug" />'
+      +     '<textarea id="ps_prod_desc" class="input" placeholder="Description"></textarea>'
+      +     '<select id="ps_prod_category" class="input">'
+      +       '<option value="MERCH">Merch</option>'
+      +       '<option value="ADDON">Add-on</option>'
+      +       '<option value="DIGITAL">Digital</option>'
+      +       '<option value="DONATION">Donation</option>'
+      +       '<option value="VOUCHER">Voucher</option>'
+      +     '</select>'
+      +     '<select id="ps_prod_fulfilment" class="input">'
+      +       '<option value="NONE">None</option>'
+      +       '<option value="SHIPPING">Shipping</option>'
+      +       '<option value="COLLECT">Collect</option>'
+      +       '<option value="EMAIL">Email</option>'
+      +     '</select>'
+      +     '<select id="ps_prod_status" class="input">'
+      +       '<option value="DRAFT">Draft</option>'
+      +       '<option value="ACTIVE">Active</option>'
+      +       '<option value="ARCHIVED">Archived</option>'
+      +     '</select>'
+      +     '<input id="ps_prod_price" class="input" placeholder="Price (pence)" type="number" />'
+      +     '<label><input type="checkbox" id="ps_prod_custom" /> Allow custom amount</label>'
+      +     '<select id="ps_prod_inventory" class="input">'
+      +       '<option value="UNLIMITED">Unlimited</option>'
+      +       '<option value="TRACKED">Tracked</option>'
+      +     '</select>'
+      +     '<input id="ps_prod_stock" class="input" placeholder="Stock count" type="number" />'
+      +     '<input id="ps_prod_low_stock" class="input" placeholder="Low stock threshold" type="number" />'
+      +     '<label><input type="checkbox" id="ps_prod_preorder" /> Preorder enabled</label>'
+      +     '<input id="ps_prod_preorder_close" class="input" placeholder="Preorder close (YYYY-MM-DD)" />'
+      +     '<input id="ps_prod_max_order" class="input" placeholder="Max per order" type="number" />'
+      +     '<input id="ps_prod_max_ticket" class="input" placeholder="Max per ticket" type="number" />'
+      +   '</div>'
+      + '</div>'
+      + '<div class="card" style="margin-top:12px;">'
+      +   '<div class="title">Variants</div>'
+      +   '<div id="ps_variant_rows"></div>'
+      +   '<button class="btn" id="ps_add_variant" style="margin-top:8px;">Add variant</button>'
+      + '</div>'
+      + '<div class="card" style="margin-top:12px;">'
+      +   '<div class="title">Images</div>'
+      +   '<div id="ps_image_rows"></div>'
+      +   '<button class="btn" id="ps_add_image" style="margin-top:8px;">Add image</button>'
+      + '</div>'
+      + '<div class="row" style="gap:8px;margin-top:12px;">'
+      +   '<button class="btn p" id="ps_prod_save">Save product</button>'
+      +   '<button class="btn" id="ps_prod_back">Back</button>'
+      +   '<div class="muted" id="ps_prod_msg"></div>'
+      + '</div>';
+
+    function slugifyLocal(value){
+      return String(value || '')
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .replace(/-{2,}/g, '-');
+    }
+
+    function addVariantRow(data){
+      var row = document.createElement('div');
+      row.className = 'row';
+      row.style.gap = '8px';
+      row.style.marginTop = '8px';
+      row.innerHTML = ''
+        + '<input class="input" placeholder="Title" data-field="title" />'
+        + '<input class="input" placeholder="SKU" data-field="sku" />'
+        + '<input class="input" placeholder="Price override" type="number" data-field="price" />'
+        + '<input class="input" placeholder="Stock override" type="number" data-field="stock" />'
+        + '<button class="btn" data-remove>Remove</button>';
+      $('#ps_variant_rows').appendChild(row);
+      if (data){
+        row.querySelector('[data-field="title"]').value = data.title || '';
+        row.querySelector('[data-field="sku"]').value = data.sku || '';
+        row.querySelector('[data-field="price"]').value = data.pricePenceOverride ?? '';
+        row.querySelector('[data-field="stock"]').value = data.stockCountOverride ?? '';
+      }
+      row.querySelector('[data-remove]').addEventListener('click', function(){ row.remove(); });
+    }
+
+    function addImageRow(data){
+      var row = document.createElement('div');
+      row.className = 'row';
+      row.style.gap = '8px';
+      row.style.marginTop = '8px';
+      row.innerHTML = ''
+        + '<input class="input" placeholder="Image URL" data-field="url" />'
+        + '<input class="input" placeholder="Sort order" type="number" data-field="sort" />'
+        + '<button class="btn" data-remove>Remove</button>';
+      $('#ps_image_rows').appendChild(row);
+      if (data){
+        row.querySelector('[data-field="url"]').value = data.url || '';
+        row.querySelector('[data-field="sort"]').value = data.sortOrder ?? '';
+      }
+      row.querySelector('[data-remove]').addEventListener('click', function(){ row.remove(); });
+    }
+
+    $('#ps_add_variant').addEventListener('click', function(){ addVariantRow(); });
+    $('#ps_add_image').addEventListener('click', function(){ addImageRow(); });
+    $('#ps_prod_back').addEventListener('click', function(){ go('/admin/ui/product-store'); });
+
+    $('#ps_prod_title').addEventListener('input', function(){
+      if (!$('#ps_prod_slug').value){
+        $('#ps_prod_slug').value = slugifyLocal($('#ps_prod_title').value);
+      }
+    });
+
+    function collectVariants(){
+      return Array.prototype.slice.call($('#ps_variant_rows').children).map(function(row, index){
+        return {
+          title: row.querySelector('[data-field="title"]').value.trim(),
+          sku: row.querySelector('[data-field="sku"]').value.trim() || null,
+          pricePenceOverride: row.querySelector('[data-field="price"]').value,
+          stockCountOverride: row.querySelector('[data-field="stock"]').value,
+          sortOrder: index,
+        };
+      }).filter(function(v){ return v.title; });
+    }
+
+    function collectImages(){
+      return Array.prototype.slice.call($('#ps_image_rows').children).map(function(row, index){
+        return {
+          url: row.querySelector('[data-field="url"]').value.trim(),
+          sortOrder: row.querySelector('[data-field="sort"]').value || index,
+        };
+      }).filter(function(i){ return i.url; });
+    }
+
+    async function loadProduct(){
+      if (!productId) return;
+      try{
+        var data = await j('/admin/api/product-store/products/' + productId);
+        var p = data.product;
+        if (!p) return;
+        $('#ps_prod_title').value = p.title || '';
+        $('#ps_prod_slug').value = p.slug || '';
+        $('#ps_prod_desc').value = p.description || '';
+        $('#ps_prod_category').value = p.category || 'MERCH';
+        $('#ps_prod_fulfilment').value = p.fulfilmentType || 'NONE';
+        $('#ps_prod_status').value = p.status || 'DRAFT';
+        $('#ps_prod_price').value = p.pricePence ?? '';
+        $('#ps_prod_custom').checked = !!p.allowCustomAmount;
+        $('#ps_prod_inventory').value = p.inventoryMode || 'UNLIMITED';
+        $('#ps_prod_stock').value = p.stockCount ?? '';
+        $('#ps_prod_low_stock').value = p.lowStockThreshold ?? '';
+        $('#ps_prod_preorder').checked = !!p.preorderEnabled;
+        $('#ps_prod_preorder_close').value = p.preorderCloseAt ? p.preorderCloseAt.split('T')[0] : '';
+        $('#ps_prod_max_order').value = p.maxPerOrder ?? '';
+        $('#ps_prod_max_ticket').value = p.maxPerTicket ?? '';
+        (p.variants || []).forEach(addVariantRow);
+        (p.images || []).forEach(addImageRow);
+      }catch(err){
+        console.error('load product failed', err);
+      }
+    }
+
+    $('#ps_prod_save').addEventListener('click', async function(){
+      $('#ps_prod_msg').textContent = '';
+      try{
+        var payload = {
+          title: ($('#ps_prod_title').value || '').trim(),
+          slug: ($('#ps_prod_slug').value || '').trim(),
+          description: ($('#ps_prod_desc').value || '').trim(),
+          category: $('#ps_prod_category').value,
+          fulfilmentType: $('#ps_prod_fulfilment').value,
+          status: $('#ps_prod_status').value,
+          pricePence: $('#ps_prod_price').value,
+          allowCustomAmount: $('#ps_prod_custom').checked,
+          inventoryMode: $('#ps_prod_inventory').value,
+          stockCount: $('#ps_prod_stock').value,
+          lowStockThreshold: $('#ps_prod_low_stock').value,
+          preorderEnabled: $('#ps_prod_preorder').checked,
+          preorderCloseAt: $('#ps_prod_preorder_close').value,
+          maxPerOrder: $('#ps_prod_max_order').value,
+          maxPerTicket: $('#ps_prod_max_ticket').value,
+          variants: collectVariants(),
+          images: collectImages(),
+        };
+        var url = '/admin/api/product-store/products' + (productId ? '/' + productId : '');
+        var method = productId ? 'PUT' : 'POST';
+        var data = await j(url, {
+          method: method,
+          headers: { 'Content-Type':'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (data && data.ok){
+          $('#ps_prod_msg').textContent = 'Saved';
+          if (!productId && data.product && data.product.id){
+            go('/admin/ui/product-store/products/' + data.product.id + '/edit');
+          }
+        }
+      }catch(err){
+        $('#ps_prod_msg').textContent = parseErr(err);
+      }
+    });
+
+    loadProduct();
+  }
+
+  function productStoreOrdersPage(){
+    if (!main) return;
+    main.innerHTML = ''
+      + '<div class="card">'
+      +   '<div class="header">'
+      +     '<div>'
+      +       '<div class="title">Product orders</div>'
+      +       '<div class="muted">Track fulfilment and export data.</div>'
+      +     '</div>'
+      +     '<button class="btn" id="ps_orders_back">Back</button>'
+      +   '</div>'
+      +   '<div class="table-list" id="ps_orders_table">'
+      +     '<div class="table-row head">'
+      +       '<div>Date</div>'
+      +       '<div>Customer</div>'
+      +       '<div>Source</div>'
+      +       '<div>Total</div>'
+      +       '<div>Fulfilment</div>'
+      +     '</div>'
+      +   '</div>'
+      + '</div>';
+
+    $('#ps_orders_back').addEventListener('click', function(){ go('/admin/ui/product-store'); });
+
+    function money(pence){
+      return '£' + ((Number(pence || 0) / 100).toFixed(2));
+    }
+
+    async function loadOrders(){
+      try{
+        var data = await j('/admin/api/product-store/orders');
+        var rows = (data.orders || []).map(function(o){
+          var date = o.createdAt ? new Date(o.createdAt).toLocaleDateString('en-GB') : '';
+          return ''
+            + '<div class="table-row">'
+            +   '<div>' + date + '</div>'
+            +   '<div>' + (o.customerEmail || o.customerName || 'Guest') + '</div>'
+            +   '<div>' + o.source + '</div>'
+            +   '<div>' + money(o.totalPence) + '</div>'
+            +   '<div><span class="pill">' + o.fulfilmentStatus + '</span></div>'
+            + '</div>';
+        }).join('');
+        $('#ps_orders_table').innerHTML = '<div class="table-row head"><div>Date</div><div>Customer</div><div>Source</div><div>Total</div><div>Fulfilment</div></div>' + rows;
+        $$('#ps_orders_table .table-row').forEach(function(row, idx){
+          if (idx === 0) return;
+          row.addEventListener('click', function(){
+            var order = (data.orders || [])[idx-1];
+            if (order){ go('/admin/ui/product-store/orders/' + order.id); }
+          });
+        });
+      }catch(err){
+        console.error('product orders load failed', err);
+      }
+    }
+
+    loadOrders();
+  }
+
+  function productStoreOrderDetailPage(orderId){
+    if (!main) return;
+    main.innerHTML = ''
+      + '<div class="card">'
+      +   '<div class="header">'
+      +     '<div>'
+      +       '<div class="title">Order detail</div>'
+      +       '<div class="muted" id="ps_order_meta">Loading...</div>'
+      +     '</div>'
+      +     '<button class="btn" id="ps_order_back">Back</button>'
+      +   '</div>'
+      +   '<div id="ps_order_items"></div>'
+      + '</div>';
+
+    $('#ps_order_back').addEventListener('click', function(){ go('/admin/ui/product-store/orders'); });
+
+    function money(pence){
+      return '£' + ((Number(pence || 0) / 100).toFixed(2));
+    }
+
+    async function loadOrder(){
+      try{
+        var data = await j('/admin/api/product-store/orders/' + orderId);
+        var order = data.order;
+        if (!order) return;
+        $('#ps_order_meta').textContent = (order.customerEmail || 'Guest') + ' · ' + money(order.totalPence);
+        var html = (order.items || []).map(function(item){
+          return ''
+            + '<div class="card" style="margin-top:12px;">'
+            +   '<div class="title">' + item.titleSnapshot + '</div>'
+            +   '<div class="muted">Qty ' + item.qty + ' · ' + money(item.lineTotalPence) + '</div>'
+            +   '<div class="muted">Fulfilment: ' + item.fulfilmentTypeSnapshot + '</div>'
+            +   '<div class="row" style="gap:8px;margin-top:8px;">'
+            +     '<input class="input" data-tracking placeholder="Tracking number" />'
+            +     '<input class="input" data-dispatch placeholder="Dispatch date" />'
+            +     '<input class="input" data-notes placeholder="Notes" />'
+            +     '<button class="btn" data-fulfil>Mark fulfilled</button>'
+            +   '</div>'
+            + '</div>';
+        }).join('');
+        $('#ps_order_items').innerHTML = html || '<div class="muted">No items.</div>';
+        $$('#ps_order_items [data-fulfil]').forEach(function(btn, idx){
+          btn.addEventListener('click', async function(){
+            var wrap = btn.closest('.card');
+            var item = (order.items || [])[idx];
+            if (!item) return;
+            var metadata = {
+              trackingNumber: wrap.querySelector('[data-tracking]').value,
+              dispatchDate: wrap.querySelector('[data-dispatch]').value,
+              notes: wrap.querySelector('[data-notes]').value,
+            };
+            await j('/admin/api/product-store/orders/' + orderId + '/fulfil', {
+              method:'POST',
+              headers:{'Content-Type':'application/json'},
+              body: JSON.stringify({ itemId: item.id, status: 'FULFILLED', metadata: metadata })
+            });
+            loadOrder();
+          });
+        });
+      }catch(err){
+        console.error('order detail load failed', err);
+      }
+    }
+
+    loadOrder();
+  }
+
+  function productStoreUpsellsPage(){
+    if (!main) return;
+    main.innerHTML = ''
+      + '<div class="card">'
+      +   '<div class="header">'
+      +     '<div>'
+      +       '<div class="title">Upsell rules</div>'
+      +       '<div class="muted">Attach products to shows and ticket types.</div>'
+      +     '</div>'
+      +     '<button class="btn" id="ps_upsells_back">Back</button>'
+      +   '</div>'
+      +   '<div class="grid" style="margin-top:12px;">'
+      +     '<select id="ps_upsell_show" class="input"></select>'
+      +     '<select id="ps_upsell_ticket" class="input"></select>'
+      +     '<select id="ps_upsell_product" class="input"></select>'
+      +     '<select id="ps_upsell_variant" class="input"></select>'
+      +     '<input id="ps_upsell_priority" class="input" placeholder="Priority" type="number" value="1" />'
+      +     '<label><input type="checkbox" id="ps_upsell_recommended" checked /> Recommended</label>'
+      +     '<button class="btn p" id="ps_upsell_add">Add rule</button>'
+      +   '</div>'
+      +   '<div id="ps_upsell_list" style="margin-top:12px;"></div>'
+      + '</div>';
+
+    $('#ps_upsells_back').addEventListener('click', function(){ go('/admin/ui/product-store'); });
+
+    var state = { shows: [], products: [] };
+
+    function renderShows(){
+      var sel = $('#ps_upsell_show');
+      sel.innerHTML = '<option value="">Select show</option>' + state.shows.map(function(s){
+        return '<option value="' + s.id + '">' + (s.title || 'Untitled') + '</option>';
+      }).join('');
+    }
+
+    function renderTicketTypes(showId){
+      var sel = $('#ps_upsell_ticket');
+      var show = state.shows.find(function(s){ return s.id === showId; });
+      var tickets = (show && show.ticketTypes) ? show.ticketTypes : [];
+      sel.innerHTML = '<option value="">All ticket types</option>' + tickets.map(function(t){
+        return '<option value="' + t.id + '">' + t.name + '</option>';
+      }).join('');
+    }
+
+    function renderProducts(){
+      var sel = $('#ps_upsell_product');
+      sel.innerHTML = '<option value="">Select product</option>' + state.products.map(function(p){
+        return '<option value="' + p.id + '">' + p.title + '</option>';
+      }).join('');
+    }
+
+    function renderVariants(productId){
+      var sel = $('#ps_upsell_variant');
+      var product = state.products.find(function(p){ return p.id === productId; });
+      var variants = (product && product.variants) ? product.variants : [];
+      sel.innerHTML = '<option value="">All variants</option>' + variants.map(function(v){
+        return '<option value="' + v.id + '">' + v.title + '</option>';
+      }).join('');
+    }
+
+    async function loadOptions(){
+      try{
+        var data = await j('/admin/api/product-store/options');
+        state.shows = data.shows || [];
+        state.products = data.products || [];
+        renderShows();
+        renderProducts();
+      }catch(err){
+        console.error('upsell options load failed', err);
+      }
+    }
+
+    async function loadRules(){
+      var showId = $('#ps_upsell_show').value;
+      if (!showId){
+        $('#ps_upsell_list').innerHTML = '<div class="muted">Select a show to view upsells.</div>';
+        return;
+      }
+      try{
+        var data = await j('/admin/api/product-store/upsells?showId=' + encodeURIComponent(showId));
+        $('#ps_upsell_list').innerHTML = (data.rules || []).map(function(rule){
+          return ''
+            + '<div class="snapshot-block" style="margin-bottom:10px;">'
+            +   '<div class="title">' + rule.product.title + '</div>'
+            +   '<div class="muted">Priority ' + rule.priority + ' · ' + (rule.active ? 'Active' : 'Inactive') + '</div>'
+            +   '<button class="btn" data-delete="' + rule.id + '">Delete</button>'
+            + '</div>';
+        }).join('') || '<div class="muted">No rules yet.</div>';
+        $$('#ps_upsell_list [data-delete]').forEach(function(btn){
+          btn.addEventListener('click', async function(){
+            await j('/admin/api/product-store/upsells/' + btn.getAttribute('data-delete'), { method:'DELETE' });
+            loadRules();
+          });
+        });
+      }catch(err){
+        console.error('upsell rules load failed', err);
+      }
+    }
+
+    $('#ps_upsell_show').addEventListener('change', function(){
+      renderTicketTypes($('#ps_upsell_show').value);
+      loadRules();
+    });
+    $('#ps_upsell_product').addEventListener('change', function(){
+      renderVariants($('#ps_upsell_product').value);
+    });
+
+    $('#ps_upsell_add').addEventListener('click', async function(){
+      var payload = {
+        showId: $('#ps_upsell_show').value,
+        ticketTypeId: $('#ps_upsell_ticket').value,
+        productId: $('#ps_upsell_product').value,
+        productVariantId: $('#ps_upsell_variant').value,
+        priority: Number($('#ps_upsell_priority').value || 1),
+        recommended: $('#ps_upsell_recommended').checked,
+      };
+      if (!payload.showId || !payload.productId) return;
+      await j('/admin/api/product-store/upsells', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+      });
+      loadRules();
+    });
+
+    loadOptions().then(loadRules);
   }
   function analytics(){
     if (!main) return;
@@ -10452,6 +10962,10 @@ function renderInterests(customer){
       if (path === '/admin/ui/audiences')      return audiences();
       if (path === '/admin/ui/email')          return emailPage();
       if (path === '/admin/ui/product-store')  return productStorePage();
+      if (path === '/admin/ui/product-store/settings') return productStoreSettingsPage();
+      if (path === '/admin/ui/product-store/upsells') return productStoreUpsellsPage();
+      if (path === '/admin/ui/product-store/orders') return productStoreOrdersPage();
+      if (path === '/admin/ui/product-store/products/new') return productStoreProductForm();
       if (path === '/admin/ui/account')        return account();
       if (path === '/admin/ui/finance')        return finance();
 
@@ -10471,6 +10985,16 @@ function renderInterests(customer){
       if (path.startsWith('/admin/ui/shows/') && path.endsWith('/summary')){
         var id4 = path.split('/')[4];
         return summaryPage(id4);
+      }
+
+      if (path.startsWith('/admin/ui/product-store/products/') && path.endsWith('/edit')){
+        var prodId = path.split('/')[5];
+        return productStoreProductForm(prodId);
+      }
+
+      if (path.startsWith('/admin/ui/product-store/orders/')){
+        var orderId = path.split('/')[5];
+        return productStoreOrderDetailPage(orderId);
       }
 
       if (path.startsWith('/admin/ui/promoters/')){
