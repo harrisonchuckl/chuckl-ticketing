@@ -1131,6 +1131,7 @@ router.post(
       const promoterId = String(req.params.promoterId);
       const reportEmail = String(req.body?.reportEmail || "").trim();
       const reportTime = String(req.body?.reportTime || "").trim();
+      const reportDay = String(req.body?.reportDay || "").trim();
 
       if (!reportEmail || !reportTime) {
         return res.status(400).json({ ok: false, error: "reportEmail and reportTime are required" });
@@ -1153,6 +1154,7 @@ router.post(
           weeklyReportEnabled: true,
           weeklyReportEmail: reportEmail,
           weeklyReportTime: reportTime,
+          weeklyReportDay: reportDay || null,
         },
       });
 

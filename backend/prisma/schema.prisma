@@ -379,6 +379,9 @@ model Promoter {
   email       String?
   phone       String?
   logoUrl     String?
+  weeklyReportEmail String?
+  weeklyReportTime  String?
+  weeklyReportDay   String?
 
   companyNumber String?
   vatNumber     String?
@@ -584,6 +587,7 @@ model ShowPromoter {
   weeklyReportEnabled Boolean  @default(false)
   weeklyReportEmail   String?
   weeklyReportTime    String?
+  weeklyReportDay     String?
 
   show     Show     @relation(fields: [showId], references: [id])
   promoter Promoter @relation(fields: [promoterId], references: [id])

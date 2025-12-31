@@ -2216,17 +2216,46 @@ router.get(
 
   async function maybeSetupWeeklyReport(showId, promoter){
     if (!showId || !promoter || !promoter.id) return;
-    var ok = confirm('Do you want to set up weekly reports for this promoter?');
-    if (!ok) return;
-    var time = prompt('What time should the weekly report be sent? (HH:MM)', '09:00');
-    if (!time) return;
-    var email = prompt('What email address should receive the weekly report?', promoter.email || '');
-    if (!email) return;
+    var wants = confirm('Do you want to add a weekly box office report for this promoter?');
+    if (!wants) return;
+    var defaults = {
+      email: (promoter.weeklyReportEmail || promoter.email || '').trim(),
+      time: (promoter.weeklyReportTime || '').trim(),
+      day: (promoter.weeklyReportDay || '').trim(),
+    };
+    var hasDefaults = !!(promoter.weeklyReportEmail && promoter.weeklyReportTime && promoter.weeklyReportDay);
+    var email = defaults.email;
+    var time = defaults.time || '09:00';
+    var day = defaults.day || 'Monday';
+
+    if (hasDefaults){
+      var confirmText = 'Weekly report details:\n'
+        + 'Email: ' + email + '\n'
+        + 'Day: ' + day + '\n'
+        + 'Time: ' + time + '\n\n'
+        + 'Press OK to use these details, or Cancel to edit.';
+      var useDefaults = confirm(confirmText);
+      if (!useDefaults){
+        day = prompt('Which day of the week should the report be sent?', day);
+        if (!day) return;
+        time = prompt('What time should the weekly report be sent? (HH:MM)', time);
+        if (!time) return;
+        email = prompt('What email address should receive the weekly report?', email);
+        if (!email) return;
+      }
+    } else {
+      day = prompt('Which day of the week should the report be sent?', day);
+      if (!day) return;
+      time = prompt('What time should the weekly report be sent? (HH:MM)', time);
+      if (!time) return;
+      email = prompt('What email address should receive the weekly report?', email);
+      if (!email) return;
+    }
     try{
       await j('/admin/shows/' + encodeURIComponent(showId) + '/promoters/' + encodeURIComponent(promoter.id) + '/weekly-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reportEmail: email, reportTime: time })
+        body: JSON.stringify({ reportEmail: email, reportTime: time, reportDay: day })
       });
       alert('Weekly report scheduled.');
     }catch(err){
@@ -8303,6 +8332,7 @@ function renderInterests(customer){
         var card = document.createElement('div');
         card.className = 'card';
         card.style.margin = '0';
+        card.style.minWidth = '0';
 
         var ext = extras && extras[v.id] ? extras[v.id] : {};
         var spaces = Array.isArray(ext.spaces)
@@ -8363,32 +8393,29 @@ function renderInterests(customer){
           +   '</div>'
           + '</div>'
 
-          + '<div class="grid" style="gap:10px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));">'
-          +   '<div class="grid" style="gap:6px;">'
+          + '<div class="grid" style="gap:10px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));min-width:0;">'
+          +   '<div class="grid" style="gap:6px;min-width:0;">'
           +     '<label style="margin:0;font-weight:600;font-size:13px;">Venue photo</label>'
-          +     '<div class="row" style="gap:12px;align-items:center;flex-wrap:wrap;">'
-          +       '<div class="venue-photo" style="border:1px solid var(--border);border-radius:999px;height:88px;width:88px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#f9fafb;">'
+          +     '<div class="row" style="gap:12px;align-items:center;flex-wrap:wrap;min-width:0;">'
+          +       '<button type="button" class="venue-photo" data-action="chooseImage" style="border:1px solid var(--border);border-radius:999px;height:88px;width:88px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#f9fafb;cursor:pointer;padding:0;">'
           +         (ext.image ? '<img src="' + escapeHtml(ext.image) + '" alt="Preview" style="width:100%;height:100%;object-fit:cover;" />' : '<div class="muted" style="font-size:12px;">No image</div>')
-          +       '</div>'
-          +       '<div class="grid" style="gap:6px;">'
-          +         '<input type="file" accept="image/*" data-field="imageFile" />'
-          +         '<div class="row" style="gap:8px;align-items:center;">'
-          +           '<button class="btn" data-action="uploadImage">Upload photo</button>'
-          +           '<input type="hidden" data-field="image" value="' + escapeHtml(ext.image || '') + '" />'
-          +         '</div>'
+          +       '</button>'
+          +       '<div class="grid" style="gap:6px;min-width:0;">'
+          +         '<input type="file" accept="image/*" data-field="imageFile" style="max-width:100%;width:100%;min-width:0;" />'
+          +         '<input type="hidden" data-field="image" value="' + escapeHtml(ext.image || '') + '" />'
           +         '<div class="muted" style="font-size:12px;">Square images work best.</div>'
           +         '<div class="error" data-error="image"></div>'
           +       '</div>'
           +     '</div>'
           +   '</div>'
 
-          +   '<div class="grid" style="gap:6px;">'
+          +   '<div class="grid" style="gap:6px;min-width:0;">'
           +     '<label style="margin:0;font-weight:600;font-size:13px;">Contact name<input data-field="contactName" value="' + escapeHtml(ext.contactName || '') + '" placeholder="Venue manager" /></label>'
           +     '<label style="margin:0;font-weight:600;font-size:13px;">Contact email<input data-field="contactEmail" type="email" value="' + escapeHtml(ext.contactEmail || '') + '" placeholder="manager@example.com" /></label>'
           +     '<label style="margin:0;font-weight:600;font-size:13px;">Contact phone<input data-field="contactPhone" value="' + escapeHtml(ext.contactPhone || '') + '" placeholder="+44 20 1234 5678" /></label>'
           +   '</div>'
 
-          +   '<div class="grid" style="gap:6px;">'
+          +   '<div class="grid" style="gap:6px;min-width:0;">'
           +     '<label style="margin:0;font-weight:600;font-size:13px;" data-capacity-row="true">Capacity<input type="number" min="1" data-field="capacity" value="' + escapeHtml(String(ext.capacity || v.capacity || '')) + '" /></label>'
           +     '<label style="margin:0;font-weight:600;font-size:13px;">Ticket contra (£)<input type="number" min="0" step="0.01" data-field="contra" value="' + escapeHtml(ext.contra ? String(ext.contra) : '') + '" placeholder="e.g. 250" /></label>'
           +     '<label style="margin:0;font-weight:600;font-size:13px;">Booking fee (%)<input type="number" min="10" step="0.5" data-field="fee" value="' + escapeHtml(ext.fee ? String(ext.fee) : '10') + '" /></label>'
@@ -8436,31 +8463,77 @@ function renderInterests(customer){
 
         var imgInput = card.querySelector('input[data-field="image"]');
         var imgFileInput = card.querySelector('input[data-field="imageFile"]');
-        var uploadBtn = card.querySelector('[data-action="uploadImage"]');
+        var chooseBtn = card.querySelector('[data-action="chooseImage"]');
         var imgErr = card.querySelector('[data-error="image"]');
         var preview = card.querySelector('.venue-photo');
-        if (uploadBtn && imgFileInput && imgInput && preview){
-          uploadBtn.addEventListener('click', async function(){
-            if (imgErr) imgErr.textContent = '';
-            var file = imgFileInput.files && imgFileInput.files[0];
-            if (!file){
-              if (imgErr) imgErr.textContent = 'Choose an image to upload.';
-              return;
+        function valueOf(field){
+          var el = card.querySelector('input[data-field="' + field + '"]');
+          return el ? el.value.trim() : '';
+        }
+        function numberOf(field){
+          var raw = valueOf(field);
+          if (!raw) return null;
+          var num = Number(raw);
+          return isNaN(num) ? null : num;
+        }
+        function persistVenue(showStatus){
+          var data = {
+            image: imgInput ? imgInput.value.trim() : '',
+            contactName: valueOf('contactName'),
+            contactEmail: valueOf('contactEmail'),
+            contactPhone: valueOf('contactPhone'),
+            capacity: numberOf('capacity'),
+            contra: numberOf('contra'),
+            fee: Math.max(10, numberOf('fee') || 10),
+            spaces: spaces.slice(),
+            maps: maps.slice(),
+          };
+          extras = extras || {};
+          extras[v.id] = data;
+          saveVenueExtras();
+          if (showStatus){
+            var status = card.querySelector('[data-status="' + v.id + '"]');
+            if (status){
+              status.textContent = 'Saved';
+              status.style.color = '#059669';
+              setTimeout(function(){ status.textContent = ''; }, 2000);
             }
-            uploadBtn.disabled = true;
-            uploadBtn.textContent = 'Uploading…';
-            try{
-              var upload = await uploadPoster(file);
-              imgInput.value = upload.url || '';
-              preview.innerHTML = upload.url
-                ? '<img src="' + escapeHtml(upload.url) + '" alt="Preview" style="width:100%;height:100%;object-fit:cover;" />'
-                : '<div class="muted" style="font-size:12px;">No image</div>';
-            }catch(e){
-              if (imgErr) imgErr.textContent = parseErr(e);
-            }finally{
-              uploadBtn.disabled = false;
-              uploadBtn.textContent = 'Upload photo';
-            }
+          }
+        }
+        async function handleImageUpload(){
+          if (!imgFileInput || !imgInput || !preview) return;
+          if (imgErr) imgErr.textContent = '';
+          var file = imgFileInput.files && imgFileInput.files[0];
+          if (!file){
+            if (imgErr) imgErr.textContent = 'Choose an image to upload.';
+            return;
+          }
+          if (chooseBtn) chooseBtn.disabled = true;
+          if (imgFileInput) imgFileInput.disabled = true;
+          if (chooseBtn) chooseBtn.style.opacity = '0.6';
+          try{
+            var upload = await uploadPoster(file);
+            imgInput.value = upload.url || '';
+            preview.innerHTML = upload.url
+              ? '<img src="' + escapeHtml(upload.url) + '" alt="Preview" style="width:100%;height:100%;object-fit:cover;" />'
+              : '<div class="muted" style="font-size:12px;">No image</div>';
+            persistVenue(true);
+          }catch(e){
+            if (imgErr) imgErr.textContent = parseErr(e);
+          }finally{
+            if (chooseBtn) chooseBtn.disabled = false;
+            if (imgFileInput) imgFileInput.disabled = false;
+            if (chooseBtn) chooseBtn.style.opacity = '';
+          }
+        }
+        if (chooseBtn && imgFileInput){
+          chooseBtn.addEventListener('click', function(){
+            imgFileInput.click();
+          });
+        }
+        if (imgFileInput){
+          imgFileInput.addEventListener('change', function(){
+            handleImageUpload();
           });
         }
 
@@ -8694,38 +8767,8 @@ function renderInterests(customer){
         var saveBtn = card.querySelector('[data-save]');
         if (saveBtn){
           saveBtn.addEventListener('click', function(){
-            var data = {
-              image: imgInput ? imgInput.value.trim() : '',
-              contactName: valueOf('contactName'),
-              contactEmail: valueOf('contactEmail'),
-              contactPhone: valueOf('contactPhone'),
-              capacity: numberOf('capacity'),
-              contra: numberOf('contra'),
-              fee: Math.max(10, numberOf('fee') || 10),
-              spaces: spaces.slice(),
-              maps: maps.slice(),
-            };
-            extras = extras || {};
-            extras[v.id] = data;
-            saveVenueExtras();
-            var status = card.querySelector('[data-status="' + v.id + '"]');
-            if (status){
-              status.textContent = 'Saved';
-              status.style.color = '#059669';
-              setTimeout(function(){ status.textContent = ''; }, 2000);
-            }
+            persistVenue(true);
           });
-        }
-
-        function valueOf(field){
-          var el = card.querySelector('input[data-field="' + field + '"]');
-          return el ? el.value.trim() : '';
-        }
-        function numberOf(field){
-          var raw = valueOf(field);
-          if (!raw) return null;
-          var num = Number(raw);
-          return isNaN(num) ? null : num;
         }
       });
     }
@@ -8935,6 +8978,7 @@ function renderInterests(customer){
         +     '<button class="tab-btn" data-tab="overview">Overview</button>'
         +     '<button class="tab-btn" data-tab="contacts">Contacts</button>'
         +     '<button class="tab-btn" data-tab="documents">Documents</button>'
+        +     '<button class="tab-btn" data-tab="weekly-reports">Weekly box office reports</button>'
         +     '<button class="tab-btn" data-tab="venues">Venues</button>'
         +     '<button class="tab-btn" data-tab="shows">Shows</button>'
         +     '<button class="tab-btn" data-tab="deals">Deals</button>'
@@ -9029,6 +9073,33 @@ function renderInterests(customer){
         +     '<div id="promoterDocumentsList" style="margin-top:12px;"></div>'
         +   '</div>'
 
+        +   '<div class="tab-panel" data-panel="weekly-reports">'
+        +     '<div class="card">'
+        +       '<div class="title">Weekly box office reports</div>'
+        +       '<div class="muted">Use these defaults when linking promoters to shows.</div>'
+        +       '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:10px;">'
+        +         '<label style="display:grid;gap:6px;">Report email<input id="po_weekly_email" type="email" value="' + escapeHtml(promoter.weeklyReportEmail || '') + '" placeholder="boxoffice@example.com" /></label>'
+        +         '<label style="display:grid;gap:6px;">Day of week'
+        +           '<select id="po_weekly_day">'
+        +             '<option value="">Select day</option>'
+        +             '<option value="Monday"' + (promoter.weeklyReportDay === 'Monday' ? ' selected' : '') + '>Monday</option>'
+        +             '<option value="Tuesday"' + (promoter.weeklyReportDay === 'Tuesday' ? ' selected' : '') + '>Tuesday</option>'
+        +             '<option value="Wednesday"' + (promoter.weeklyReportDay === 'Wednesday' ? ' selected' : '') + '>Wednesday</option>'
+        +             '<option value="Thursday"' + (promoter.weeklyReportDay === 'Thursday' ? ' selected' : '') + '>Thursday</option>'
+        +             '<option value="Friday"' + (promoter.weeklyReportDay === 'Friday' ? ' selected' : '') + '>Friday</option>'
+        +             '<option value="Saturday"' + (promoter.weeklyReportDay === 'Saturday' ? ' selected' : '') + '>Saturday</option>'
+        +             '<option value="Sunday"' + (promoter.weeklyReportDay === 'Sunday' ? ' selected' : '') + '>Sunday</option>'
+        +           '</select>'
+        +         '</label>'
+        +         '<label style="display:grid;gap:6px;">Send time<input id="po_weekly_time" type="time" value="' + escapeHtml(promoter.weeklyReportTime || '') + '" /></label>'
+        +       '</div>'
+        +       '<div class="row" style="justify-content:flex-end;gap:8px;margin-top:10px;">'
+        +         '<button class="btn p" id="po_weekly_save">Save weekly report defaults</button>'
+        +         '<div class="error" id="po_weekly_error"></div>'
+        +       '</div>'
+        +     '</div>'
+        +   '</div>'
+
         +   '<div class="tab-panel" data-panel="venues">'
         +     '<div class="card"><div class="title">Venues</div><div class="muted">Coming next.</div></div>'
         +   '</div>'
@@ -9063,6 +9134,7 @@ function renderInterests(customer){
       setupTabs();
       renderContacts(promoter);
       renderDocuments(promoter);
+      bindWeeklyReportSave();
       renderShows();
       renderActivity(promoter);
       bindOverviewSave(promoter);
@@ -9099,30 +9171,43 @@ function renderInterests(customer){
         status: ($('#po_status').value || 'PROSPECT'),
         notes: ($('#po_notes').value || '').trim() || null,
         logoUrl: ($('#po_logoUrl') && ($('#po_logoUrl').value || '').trim()) || null,
+        weeklyReportEmail: ($('#po_weekly_email') && ($('#po_weekly_email').value || '').trim()) || null,
+        weeklyReportTime: ($('#po_weekly_time') && ($('#po_weekly_time').value || '').trim()) || null,
+        weeklyReportDay: ($('#po_weekly_day') && ($('#po_weekly_day').value || '').trim()) || null,
       };
+    }
+
+    async function savePromoter(payload, errEl){
+      if (errEl) errEl.textContent = '';
+      if (!payload.name){
+        if (errEl) errEl.textContent = 'Promoter name is required.';
+        return;
+      }
+      try{
+        await j('/admin/promoters/' + encodeURIComponent(promoterId), {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(payload)
+        });
+        await loadPromoter();
+      }catch(e){
+        if (errEl) errEl.textContent = parseErr(e);
+      }
     }
 
     function bindOverviewSave(){
       var saveBtn = $('#po_save');
       if (!saveBtn) return;
       saveBtn.addEventListener('click', async function(){
-        var err = $('#po_error');
-        if (err) err.textContent = '';
-        var payload = buildOverviewPayload();
-        if (!payload.name){
-          if (err) err.textContent = 'Promoter name is required.';
-          return;
-        }
-        try{
-          await j('/admin/promoters/' + encodeURIComponent(promoterId), {
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body: JSON.stringify(payload)
-          });
-          await loadPromoter();
-        }catch(e){
-          if (err) err.textContent = parseErr(e);
-        }
+        await savePromoter(buildOverviewPayload(), $('#po_error'));
+      });
+    }
+
+    function bindWeeklyReportSave(){
+      var saveBtn = $('#po_weekly_save');
+      if (!saveBtn) return;
+      saveBtn.addEventListener('click', async function(){
+        await savePromoter(buildOverviewPayload(), $('#po_weekly_error'));
       });
     }
 
@@ -9152,17 +9237,7 @@ function renderInterests(customer){
               logoUrl: upload.url,
             }, { size: 72 });
           }
-          var payload = buildOverviewPayload();
-          if (!payload.name){
-            if (err) err.textContent = 'Promoter name is required.';
-            return;
-          }
-          await j('/admin/promoters/' + encodeURIComponent(promoterId), {
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body: JSON.stringify(payload)
-          });
-          await loadPromoter();
+          await savePromoter(buildOverviewPayload(), err);
         }catch(e){
           if (err) err.textContent = parseErr(e);
         }finally{
