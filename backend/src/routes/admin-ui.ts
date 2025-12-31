@@ -4658,6 +4658,13 @@ async function createShow(){
 
         // --- COL 2: Image Uploads ---
         +'<div style="flex: 1;">'
+
+        // Backup / External ticket link
+        +'<div class="grid" style="margin-bottom: 24px; background: #f8fafc; padding: 16px; border-radius: 10px; border: 1px solid var(--border);">'
+        +'<label style="font-size: 14px; font-weight: 600;">Backup / External ticket link</label>'
+        +'<input id="external_ticket_url" class="ctl" type="url" placeholder="https://tickets.example.com/show" />'
+        +'<div class="tip">Optional. If set, we can publish using this link or redirect once tickets sell out.</div>'
+        +'</div>'
         
         // Main Poster Image
         +'<div class="grid" style="margin-bottom: 24px; background: #f9fafb; padding: 16px; border-radius: 10px; border: 1px solid var(--border);">'
@@ -4706,6 +4713,7 @@ async function createShow(){
 +    '<div id="save_dd" style="display:none; position:absolute; right:0; top:44px; background:#fff; border:1px solid var(--border); border-radius:12px; box-shadow: var(--shadow); overflow:hidden; min-width:320px; z-index:50;">'
 +      '<button type="button" data-mode="UNALLOCATED" class="btn" style="width:100%; justify-content:flex-start; border:0; border-bottom:1px solid var(--border); border-radius:0; padding:12px 14px;">Save Show and Add Unallocated Seating</button>'
 +      '<button type="button" data-mode="ALLOCATED" class="btn" style="width:100%; justify-content:flex-start; border:0; border-radius:0; padding:12px 14px;">Save Show and Add Allocated Seating</button>'
++      '<button type="button" data-mode="EXTERNAL" id="save_dd_external" class="btn" style="width:100%; justify-content:flex-start; border:0; border-top:1px solid var(--border); border-radius:0; padding:12px 14px; display:none;">Publish show using backup / external ticket link</button>'
 +    '</div>'
 
 +    '<div id="err" class="error"></div>'
@@ -4722,6 +4730,8 @@ mountVenuePicker($('#venue_input'), $('#sh_dt'), { requireApproval: true });
     // --- Category Filtering Logic ---
    const eventTypeSelect = $('#event_type_select');
 const categorySelect = $('#event_category_select');
+const externalTicketInput = $('#external_ticket_url');
+const externalSaveOption = $('#save_dd_external');
 
 const existingShowId = (() => {
   try { return new URLSearchParams(window.location.search).get('showId') || ''; }
@@ -5109,18 +5119,37 @@ updateCategoryOptions();
 // --- Save Logic (Updated to remove ticket-specific fields and include new fields) ---
 
     // Seating mode chooser (defaults to UNALLOCATED)
-    var seatingMode = 'UNALLOCATED';
+    var saveMode = 'UNALLOCATED';
 
-    function setSeatingMode(mode){
-      seatingMode = (mode === 'ALLOCATED') ? 'ALLOCATED' : 'UNALLOCATED';
+    function setSaveMode(mode){
+      saveMode = (mode === 'ALLOCATED') ? 'ALLOCATED' : (mode === 'EXTERNAL' ? 'EXTERNAL' : 'UNALLOCATED');
       var saveBtn = $('#save');
       if (saveBtn){
-        saveBtn.textContent = (seatingMode === 'ALLOCATED')
+        saveBtn.textContent = (saveMode === 'ALLOCATED')
           ? 'Save Show and Add Allocated Seating'
-          : 'Save Show and Add Unallocated Seating';
+          : (saveMode === 'EXTERNAL')
+            ? 'Publish show using backup / external ticket link'
+            : 'Save Show and Add Unallocated Seating';
       }
     }
-setSeatingMode('UNALLOCATED');
+setSaveMode('UNALLOCATED');
+
+    function externalTicketUrlValue(){
+      return externalTicketInput ? externalTicketInput.value.trim() : '';
+    }
+
+    function updateExternalSaveOption(){
+      if (!externalSaveOption) return;
+      var hasUrl = !!externalTicketUrlValue();
+      externalSaveOption.style.display = hasUrl ? 'block' : 'none';
+      if (!hasUrl && saveMode === 'EXTERNAL') setSaveMode('UNALLOCATED');
+    }
+
+    if (externalTicketInput) {
+      externalTicketInput.addEventListener('input', updateExternalSaveOption);
+      externalTicketInput.addEventListener('blur', updateExternalSaveOption);
+    }
+    updateExternalSaveOption();
 
 // If we were sent here from seating pages, we may have ?showId=... (edit mode)
 if (existingShowId) {
@@ -5167,6 +5196,9 @@ if (existingShowId) {
       if ($('#doors_open_time')) $('#doors_open_time').value = s.doorsOpenTime || '';
       if ($('#age_guidance')) $('#age_guidance').value = s.ageGuidance || '';
       if ($('#end_time_note')) $('#end_time_note').value = s.endTimeNote || '';
+      if (externalTicketInput) {
+        externalTicketInput.value = s.externalTicketUrl || '';
+      }
 
       // Tags
       if ($('#tags')) {
@@ -5251,8 +5283,12 @@ if (existingShowId) {
 
       // Seating mode (so the CTA matches the show)
       if (typeof s.usesAllocatedSeating === 'boolean') {
-        setSeatingMode(s.usesAllocatedSeating ? 'ALLOCATED' : 'UNALLOCATED');
+        setSaveMode(s.usesAllocatedSeating ? 'ALLOCATED' : 'UNALLOCATED');
       }
+      if (s.usesExternalTicketing === true) {
+        setSaveMode('EXTERNAL');
+      }
+      updateExternalSaveOption();
     } catch (e) {
       console.error('createShow: failed to load showId', existingShowId, e);
     }
@@ -5272,7 +5308,7 @@ if (existingShowId) {
       dd.querySelectorAll('[data-mode]').forEach(function(b){
         b.addEventListener('click', function(e){
           e.preventDefault();
-          setSeatingMode(b.getAttribute('data-mode'));
+          setSaveMode(b.getAttribute('data-mode'));
           dd.style.display = 'none';
         });
       });
@@ -5309,6 +5345,7 @@ if (venueInput.dataset.venueApproved !== '1'){
 
             var imageUrl = prevMain.src || null;
             var descHtml = $('#desc').innerHTML.trim();
+            var externalTicketUrl = externalTicketInput ? externalTicketInput.value.trim() : '';
             
             // New fields
            var eventType = eventTypeSelect ? eventTypeSelect.value : '';
@@ -5340,6 +5377,18 @@ if (allImageUrls && allImageUrls.value) {
   try { additionalImages = JSON.parse(allImageUrls.value); } catch(e){}
 }
 
+if (externalTicketUrl) {
+  try {
+    new URL(externalTicketUrl);
+  } catch (err) {
+    throw new Error('Backup / external ticket link must be a valid URL.');
+  }
+}
+
+if (saveMode === 'EXTERNAL' && !externalTicketUrl) {
+  throw new Error('Backup / external ticket link is required to publish using the external link.');
+}
+
 
             if (!title || !dtRaw || !venueText || !descHtml || !eventType || !eventCategory || !imageUrl){
                 throw new Error('Title, date/time, venue, description, event type, category, and a main image are required.');
@@ -5369,7 +5418,10 @@ var showRes = await j(saveUrl, {
     additionalImages: additionalImages,
 
     // capture which flow they chose
-    usesAllocatedSeating: seatingMode === 'ALLOCATED',
+    usesAllocatedSeating: saveMode === 'ALLOCATED',
+    usesExternalTicketing: saveMode === 'EXTERNAL',
+    externalTicketUrl: externalTicketUrl || null,
+    status: saveMode === 'EXTERNAL' ? 'LIVE' : undefined,
 
     // extra fields
     doorsOpenTime: doorsOpenTime || null,
@@ -5398,8 +5450,10 @@ if (!showId){
 
             
            // NEW: Skip seating-choice page and go straight where the organiser chose
-if (seatingMode === 'ALLOCATED'){
+if (saveMode === 'ALLOCATED'){
   window.location.href = '/admin/seating/builder/preview/' + showId + '?layout=blank';
+} else if (saveMode === 'EXTERNAL') {
+  window.location.href = '/admin/ui/shows/' + showId + '/summary';
 } else {
   window.location.href = '/admin/seating/unallocated/' + showId;
 }
@@ -5684,19 +5738,23 @@ function sumTicketTypeCap(tts){
       var promoters = s.promoters || [];
       var primaryPromoter = promoters[0] || null;
       var promoterAvatar = promoterAvatarHtml(primaryPromoter, { size: 36 });
+      var usesExternalTicketing = s.usesExternalTicketing === true;
+      var allocationHtml = usesExternalTicketing
+        ? '<span class="muted">External ticket URL</span>'
+        : ('<span class="muted">'
+            +'Sold '+sold
+            +' · Held '+held
+            +' · Blocked '+blocked
+            +' · Avail '+(available == null ? '—' : available)
+            +(total == null ? '' : (' / '+total))
+          +'</span> '+bar);
 
       return ''
         +'<tr data-row="'+s.id+'" data-status="'+statusLabel+'">'
           +'<td>'+(s.title || '')+'</td>'
           +'<td>'+when+'</td>'
           +'<td'+venueAttrs+'>'+venueCell+'</td>'
-          +'<td><span class="muted">'
-            +'Sold '+sold
-            +' · Held '+held
-            +' · Blocked '+blocked
-            +' · Avail '+(available == null ? '—' : available)
-            +(total == null ? '' : (' / '+total))
-            +'</span> '+bar+'</td>'
+          +'<td>'+allocationHtml+'</td>'
           +'<td>£'+(((s._revenue && s._revenue.grossFace) || 0).toFixed(2))+'</td>'
           +'<td>'+statusBadgeHTML(statusLabel)+'</td>'
           +'<td class="promoter-col">'
@@ -5712,6 +5770,7 @@ function sumTicketTypeCap(tts){
                 +'<a href="#" data-edit="'+s.id+'">Edit</a>'
                 +'<a href="#" data-seating="'+s.id+'">Seating map</a>'
                 +'<a href="#" data-tickets="'+s.id+'">Tickets</a>'
+                +'<a href="#" data-external-link="'+s.id+'">Switch to external link</a>'
                 +'<a href="#" data-link-promoter="'+s.id+'">Link promoter</a>'
                 +'<a href="#" data-dup="'+s.id+'">Duplicate</a>'
                 +(sold === 0 ? '<a href="#" data-delete="'+s.id+'">Delete</a>' : '')
@@ -5765,6 +5824,40 @@ function sumTicketTypeCap(tts){
         e.preventDefault();
         var id = a.getAttribute('data-tickets');
         if (id) go('/admin/ui/shows/'+id+'/tickets');
+      });
+    });
+
+    $$('[data-external-link]').forEach(function(a){
+      a.addEventListener('click', async function(e){
+        e.preventDefault();
+        var id = a.getAttribute('data-external-link');
+        if (!id) return;
+        var showItem = (allItems || []).find(function(item){ return item.id === id; });
+        var currentUrl = showItem && showItem.externalTicketUrl ? String(showItem.externalTicketUrl) : '';
+        var nextUrl = prompt('External ticket link', currentUrl || 'https://');
+        if (nextUrl === null) return;
+        nextUrl = nextUrl.trim();
+        if (!nextUrl) return;
+        try{
+          new URL(nextUrl);
+        }catch(err){
+          alert('Please enter a valid URL (including https://).');
+          return;
+        }
+
+        try{
+          await j('/admin/shows/' + id, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              externalTicketUrl: nextUrl,
+              usesExternalTicketing: true
+            })
+          });
+          await load();
+        }catch(err){
+          alert('Failed to switch to external link: ' + (err.message || err));
+        }
       });
     });
 
@@ -6084,6 +6177,8 @@ async function summaryPage(id){
 
   const storefront = show.organiser?.storefrontSlug || '';
   const showSlug = show.slug || '';
+  const externalTicketUrl = (show.externalTicketUrl || '').trim();
+  const usesExternalTicketing = show.usesExternalTicketing === true;
 
   // Preferred pretty URL: /public/<storefront>/<slug>
   const prettyUrl = (storefront && showSlug)
@@ -6094,7 +6189,12 @@ async function summaryPage(id){
   const legacyUrl = window.location.origin + '/public/event/' + id;
 
   // The URL we actually show + open
-  const publicBookingUrl = prettyUrl || legacyUrl;
+  const publicBookingUrl = (usesExternalTicketing && externalTicketUrl)
+    ? externalTicketUrl
+    : (prettyUrl || legacyUrl);
+  const bookingLabel = (usesExternalTicketing && externalTicketUrl)
+    ? 'External ticket link'
+    : 'Public booking page';
 
   // Storefront landing page (optional extra link)
   const storefrontUrl = storefront
@@ -6107,7 +6207,7 @@ async function summaryPage(id){
     linksHtml = ''
     + '<div class="grid">'
     +   '<div style="margin-bottom:8px">'
-    +     '<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;color:#64748b">Public booking page</label>'
+    +     '<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;color:#64748b">'+bookingLabel+'</label>'
     +     '<div style="display:flex;gap:8px">'
     +       '<input readonly value="'+publicBookingUrl+'" style="flex:1;background:#f8fafc;color:#334155;border:1px solid #e2e8f0;border-radius:6px;padding:8px" onclick="this.select()">'
     +       '<a href="'+publicBookingUrl+'" target="_blank" class="btn" style="color:#0284c7;border-color:#0284c7;text-decoration:none">Open ↗</a>'

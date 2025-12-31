@@ -441,6 +441,8 @@ router.get("/shows", requireAdminOrOrganiser, async (req, res) => {
   date: true,
   eventType: true,
   eventCategory: true,
+  externalTicketUrl: true,
+  usesExternalTicketing: true,
   status: true,
   publishedAt: true,
      slug: true,
@@ -867,6 +869,8 @@ router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
   additionalImages,
   usesAllocatedSeating,
   showCapacity,
+  externalTicketUrl,
+  usesExternalTicketing,
 } = req.body || {};
 
 
@@ -922,6 +926,14 @@ const organiserId = isOrganiser(req) ? requireUserId(req) : String(req.body?.org
         accessibility: parsedAccessibility,
         tags: parsedTags,
         additionalImages: parsedAdditionalImages,
+        externalTicketUrl: asNullableString(externalTicketUrl),
+        usesExternalTicketing: !!usesExternalTicketing,
+        ...(status
+          ? {
+              status: status === "LIVE" ? ShowStatus.LIVE : ShowStatus.DRAFT,
+              publishedAt: status === "LIVE" ? new Date() : null,
+            }
+          : {}),
       },
       select: { id: true },
     });
@@ -982,6 +994,10 @@ router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
         tags: true,
 
         additionalImages: true,
+
+        externalTicketUrl: true,
+
+        usesExternalTicketing: true,
 
         usesAllocatedSeating: true,
 
@@ -1329,6 +1345,8 @@ router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
   additionalImages,
   usesAllocatedSeating,
   showCapacity,
+  externalTicketUrl,
+  usesExternalTicketing,
 } = req.body || {};
 
 
@@ -1436,6 +1454,12 @@ organiserId: effectiveOrganiserId,
         ...(parsedAccessibility !== undefined ? { accessibility: parsedAccessibility ?? null } : {}),
         ...(parsedTags !== undefined ? { tags: parsedTags } : {}),
         ...(parsedAdditionalImages !== undefined ? { additionalImages: parsedAdditionalImages } : {}),
+        ...(externalTicketUrl !== undefined
+          ? { externalTicketUrl: asNullableString(externalTicketUrl) }
+          : {}),
+        ...(usesExternalTicketing !== undefined
+          ? { usesExternalTicketing: !!usesExternalTicketing }
+          : {}),
         ...(status
           ? {
               status: status === "LIVE" ? ShowStatus.LIVE : ShowStatus.DRAFT,

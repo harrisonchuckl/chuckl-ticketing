@@ -1,0 +1,3 @@
+ALTER TABLE "Show"
+ADD COLUMN IF NOT EXISTS "externalTicketUrl" TEXT,
+ADD COLUMN IF NOT EXISTS "usesExternalTicketing" BOOLEAN NOT NULL DEFAULT false;
