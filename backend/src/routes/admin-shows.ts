@@ -118,11 +118,13 @@ function isNonEmptyString(val: string | null | undefined): val is string {
 
 /** Utility: find existing venue (by exact name+city) or create one from text */
 async function ensureVenue(
+  req: any,
   venueId?: string | null,
   venueText?: string | null
 ): Promise<string | null> {
+  const ownerScope = isOrganiser(req) ? { ownerId: requireUserId(req) } : {};
   if (venueId) {
-    const v = await prisma.venue.findUnique({ where: { id: venueId } });
+    const v = await prisma.venue.findFirst({ where: { id: venueId, ...ownerScope } });
     if (v) return v.id;
   }
   const name = (venueText || "").trim();
@@ -130,13 +132,16 @@ async function ensureVenue(
 
   // Try a soft match by name
   const existing = await prisma.venue.findFirst({
-    where: { name: { equals: name, mode: "insensitive" } },
+    where: {
+      name: { equals: name, mode: "insensitive" },
+      ...ownerScope,
+    },
     select: { id: true },
   });
   if (existing) return existing.id;
 
   const created = await prisma.venue.create({
-    data: { name },
+    data: { name, ...ownerScope },
     select: { id: true },
   });
   return created.id;
@@ -869,7 +874,10 @@ router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
       return res.status(400).json({ ok: false, error: "Missing required fields" });
     }
 
-    const finalVenueId = (await ensureVenue(venueId, venueText)) || undefined;
+    const finalVenueId = (await ensureVenue(req, venueId, venueText)) || undefined;
+    if (venueId && !finalVenueId) {
+      return res.status(404).json({ ok: false, error: "Venue not found" });
+    }
 // ✅ Always attach an organiserId. If admin, default to the current user unless a specific organiserId was provided.
 const organiserId = isOrganiser(req) ? requireUserId(req) : String(req.body?.organiserId || requireUserId(req));
 
@@ -1339,7 +1347,10 @@ router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
 
     if (!existing) return res.status(404).json({ ok: false, error: "Not found" });
 
-    const finalVenueId = (await ensureVenue(venueId, venueText)) || undefined;
+    const finalVenueId = (await ensureVenue(req, venueId, venueText)) || undefined;
+    if (venueId && !finalVenueId) {
+      return res.status(404).json({ ok: false, error: "Venue not found" });
+    }
 
     const parsedTags = Array.isArray(tags)
       ? tags.map((t: unknown) => asNullableString(t)).filter(isNonEmptyString)

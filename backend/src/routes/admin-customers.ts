@@ -6,6 +6,16 @@ import { sendTicketsEmail } from "../services/email.js";
 const router = Router();
 const prisma = new PrismaClient();
 
+function isOrganiser(req: any) {
+  return String(req.user?.role || "").toUpperCase() === "ORGANISER";
+}
+
+function requireUserId(req: any): string {
+  const id = req?.user?.id;
+  if (!id) throw new Error("Auth middleware did not attach req.user");
+  return String(id);
+}
+
 /**
  * GET /admin/customers
  * Returns 1 row per customer, grouped from Orders.
@@ -55,9 +65,14 @@ router.post(
 );
 
 
-router.get("/customers", requireAdminOrOrganiser, async (_req, res) => {
+router.get("/customers", requireAdminOrOrganiser, async (req, res) => {
   try {
+    const organiserFilter = isOrganiser(req)
+      ? { show: { organiserId: requireUserId(req) } }
+      : undefined;
+
     const orders = await prisma.order.findMany({
+      where: organiserFilter,
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
