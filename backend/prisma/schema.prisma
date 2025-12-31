@@ -349,6 +349,7 @@ model Promoter {
   contacts   PromoterContact[]
   documents  PromoterDocument[]
   activities PromoterActivity[]
+  showLinks  ShowPromoter[]
 }
 
 model PromoterContact {
@@ -515,10 +516,25 @@ model Show {
   // Slug history for public URL redirects
   slugHistory     ShowSlugHistory[]
   ProductShowLink ProductShowLink[]
+  promoterLinks   ShowPromoter[]
 
   @@index([venueId])
   @@index([organiserId])
   @@index([date])
+}
+
+model ShowPromoter {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  showId    String
+  promoterId String
+
+  show     Show     @relation(fields: [showId], references: [id])
+  promoter Promoter @relation(fields: [promoterId], references: [id])
+
+  @@unique([showId, promoterId])
+  @@index([showId])
+  @@index([promoterId])
 }
 
 model ShowSlugHistory {

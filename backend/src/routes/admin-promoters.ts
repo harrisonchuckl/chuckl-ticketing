@@ -43,6 +43,17 @@ function parseDocType(value: unknown): PromoterDocumentType | null {
   return null;
 }
 
+function isOrganiser(req: any) {
+  return String(req.user?.role || "").toUpperCase() === "ORGANISER";
+}
+
+function showWhereForRead(req: any, showId: string) {
+  if (isOrganiser(req)) {
+    return { id: showId, organiserId: String(req.user?.id || "") };
+  }
+  return { id: showId };
+}
+
 async function logActivity(
   promoterId: string,
   type: "CREATED" | "UPDATED" | "CONTACT_ADDED" | "CONTACT_UPDATED" | "CONTACT_REMOVED" | "DOCUMENT_UPLOADED" | "DOCUMENT_UPDATED" | "DOCUMENT_REMOVED",
@@ -151,6 +162,99 @@ router.get("/promoters/:promoterId", requireAdminOrOrganiser, async (req, res) =
   } catch (e) {
     console.error("GET /admin/promoters/:id failed", e);
     res.status(500).json({ ok: false, error: "Failed to load promoter" });
+  }
+});
+
+/** GET /admin/promoters/:promoterId/shows — linked shows */
+router.get("/promoters/:promoterId/shows", requireAdminOrOrganiser, async (req, res) => {
+  try {
+    const promoterId = String(req.params.promoterId);
+    const promoter = await prisma.promoter.findUnique({
+      where: { id: promoterId },
+      select: { id: true },
+    });
+    if (!promoter) {
+      return res.status(404).json({ ok: false, error: "Promoter not found" });
+    }
+
+    const showFilter = isOrganiser(req)
+      ? { organiserId: String(req.user?.id || "") }
+      : {};
+
+    const links = await prisma.showPromoter.findMany({
+      where: { promoterId, show: showFilter },
+      include: {
+        show: {
+          select: {
+            id: true,
+            title: true,
+            date: true,
+            status: true,
+            venue: { select: { name: true, city: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const shows = links.map((link) => link.show);
+    res.json({ ok: true, shows });
+  } catch (e) {
+    console.error("GET /admin/promoters/:id/shows failed", e);
+    res.status(500).json({ ok: false, error: "Failed to load promoter shows" });
+  }
+});
+
+/** POST /admin/promoters/:promoterId/shows — link a show */
+router.post("/promoters/:promoterId/shows", requireAdminOrOrganiser, async (req, res) => {
+  try {
+    const promoterId = String(req.params.promoterId);
+    const showId = String(req.body?.showId || "").trim();
+    if (!showId) {
+      return res.status(400).json({ ok: false, error: "showId is required" });
+    }
+
+    const promoter = await prisma.promoter.findUnique({
+      where: { id: promoterId },
+      select: { id: true },
+    });
+    if (!promoter) {
+      return res.status(404).json({ ok: false, error: "Promoter not found" });
+    }
+
+    const show = await prisma.show.findFirst({
+      where: showWhereForRead(req, showId),
+      select: { id: true },
+    });
+    if (!show) {
+      return res.status(404).json({ ok: false, error: "Show not found" });
+    }
+
+    await prisma.showPromoter.upsert({
+      where: { showId_promoterId: { showId, promoterId } },
+      update: {},
+      create: { showId, promoterId },
+    });
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("POST /admin/promoters/:id/shows failed", e);
+    res.status(500).json({ ok: false, error: "Failed to link show" });
+  }
+});
+
+/** DELETE /admin/promoters/:promoterId/shows/:showId — unlink */
+router.delete("/promoters/:promoterId/shows/:showId", requireAdminOrOrganiser, async (req, res) => {
+  try {
+    const promoterId = String(req.params.promoterId);
+    const showId = String(req.params.showId);
+    await prisma.showPromoter.deleteMany({
+      where: { promoterId, showId },
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("DELETE /admin/promoters/:id/shows/:showId failed", e);
+    res.status(500).json({ ok: false, error: "Failed to unlink show" });
   }
 });
 

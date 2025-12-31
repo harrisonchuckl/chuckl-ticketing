@@ -980,6 +980,13 @@ router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
         // ✅ required for /public/<storefront>/<slug>
         slug: true,
         organiser: { select: { id: true, storefrontSlug: true } },
+        promoterLinks: {
+          select: {
+            promoter: {
+              select: { id: true, name: true, tradingName: true, email: true },
+            },
+          },
+        },
 
         ticketTypes: {
 
@@ -1018,10 +1025,86 @@ const venue = s.venueId
     })
   : null;
 
-res.json({ ok: true, item: { ...s, venue, venueText: venue?.name ?? "" } });
+const promoters = (s.promoterLinks || []).map((link) => link.promoter);
+res.json({ ok: true, item: { ...s, venue, venueText: venue?.name ?? "", promoters } });
   } catch (e) {
     console.error("GET /admin/shows/:id failed", e);
     res.status(500).json({ ok: false, error: "Failed to load show" });
+  }
+});
+
+/** GET /admin/shows/:id/promoters */
+router.get("/shows/:id/promoters", requireAdminOrOrganiser, async (req, res) => {
+  try {
+    const showId = String(req.params.id);
+    const show = await ensureShowAccessible(req, showId);
+    if (!show) return res.status(404).json({ ok: false, error: "Show not found" });
+
+    const links = await prisma.showPromoter.findMany({
+      where: { showId },
+      include: {
+        promoter: { select: { id: true, name: true, tradingName: true, email: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const promoters = links.map((link) => link.promoter);
+    res.json({ ok: true, promoters });
+  } catch (e) {
+    console.error("GET /admin/shows/:id/promoters failed", e);
+    res.status(500).json({ ok: false, error: "Failed to load promoters" });
+  }
+});
+
+/** POST /admin/shows/:id/promoters */
+router.post("/shows/:id/promoters", requireAdminOrOrganiser, async (req, res) => {
+  try {
+    const showId = String(req.params.id);
+    const promoterId = String(req.body?.promoterId || "").trim();
+    if (!promoterId) {
+      return res.status(400).json({ ok: false, error: "promoterId is required" });
+    }
+
+    const show = await ensureShowAccessible(req, showId);
+    if (!show) return res.status(404).json({ ok: false, error: "Show not found" });
+
+    const promoter = await prisma.promoter.findUnique({
+      where: { id: promoterId },
+      select: { id: true },
+    });
+    if (!promoter) {
+      return res.status(404).json({ ok: false, error: "Promoter not found" });
+    }
+
+    await prisma.showPromoter.upsert({
+      where: { showId_promoterId: { showId, promoterId } },
+      update: {},
+      create: { showId, promoterId },
+    });
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("POST /admin/shows/:id/promoters failed", e);
+    res.status(500).json({ ok: false, error: "Failed to link promoter" });
+  }
+});
+
+/** DELETE /admin/shows/:id/promoters/:promoterId */
+router.delete("/shows/:id/promoters/:promoterId", requireAdminOrOrganiser, async (req, res) => {
+  try {
+    const showId = String(req.params.id);
+    const promoterId = String(req.params.promoterId);
+    const show = await ensureShowAccessible(req, showId);
+    if (!show) return res.status(404).json({ ok: false, error: "Show not found" });
+
+    await prisma.showPromoter.deleteMany({
+      where: { showId, promoterId },
+    });
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("DELETE /admin/shows/:id/promoters/:promoterId failed", e);
+    res.status(500).json({ ok: false, error: "Failed to unlink promoter" });
   }
 });
 

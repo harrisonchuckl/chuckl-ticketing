@@ -2001,6 +2001,160 @@ router.get(
     }
   }
 
+  function formatVenueLabel(venue){
+    if (!venue) return '';
+    var name = venue.name || '';
+    var city = venue.city || '';
+    return name && city ? (name + ' – ' + city) : (name || city || '');
+  }
+
+  function formatShowLabel(show){
+    if (!show) return '';
+    var title = show.title || 'Untitled show';
+    var when = show.date ? new Date(show.date).toLocaleDateString('en-GB', { dateStyle:'medium' }) : 'TBC';
+    var venue = formatVenueLabel(show.venue);
+    return title + ' · ' + when + (venue ? (' · ' + venue) : '');
+  }
+
+  async function openPromoterLinker(opts){
+    opts = opts || {};
+    var showId = opts.showId;
+    if (!showId) return;
+
+    var overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.background = 'rgba(15,23,42,0.45)';
+    overlay.style.zIndex = '60';
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'flex-start';
+    overlay.style.justifyContent = 'center';
+    overlay.style.padding = '80px 16px 16px';
+
+    overlay.innerHTML = ''
+      + '<div style="background:#fff;border-radius:14px;max-width:520px;width:100%;padding:18px;border:1px solid var(--border);box-shadow:0 20px 40px rgba(15,23,42,0.2)">'
+      +   '<div class="header" style="margin-bottom:12px;">'
+      +     '<div>'
+      +       '<div class="title">Link promoters</div>'
+      +       '<div class="muted" style="margin-top:4px;">'+escapeHtml(opts.showTitle || 'Select promoters for this show')+'</div>'
+      +     '</div>'
+      +     '<button class="btn" id="promoterLinkClose">Close</button>'
+      +   '</div>'
+      +   '<div id="promoterLinkErr" class="error" style="margin-bottom:8px;"></div>'
+      +   '<div id="promoterLinkList" style="display:grid;gap:8px;margin-bottom:12px;"></div>'
+      +   '<div class="grid" style="gap:8px;">'
+      +     '<label style="display:grid;gap:6px;">Add promoter'
+      +       '<select id="promoterLinkSelect" class="ctl"></select>'
+      +     '</label>'
+      +     '<button class="btn p" id="promoterLinkAdd">Add promoter</button>'
+      +   '</div>'
+      + '</div>';
+
+    document.body.appendChild(overlay);
+
+    var closeBtn = overlay.querySelector('#promoterLinkClose');
+    var errEl = overlay.querySelector('#promoterLinkErr');
+    var listEl = overlay.querySelector('#promoterLinkList');
+    var selectEl = overlay.querySelector('#promoterLinkSelect');
+    var addBtn = overlay.querySelector('#promoterLinkAdd');
+
+    function close(){
+      if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    }
+
+    overlay.addEventListener('click', function(e){
+      if (e.target === overlay) close();
+    });
+    if (closeBtn) closeBtn.addEventListener('click', function(){ close(); });
+
+    async function load(){
+      if (errEl) errEl.textContent = '';
+      if (listEl) listEl.innerHTML = '<div class="muted">Loading promoters…</div>';
+      if (selectEl) selectEl.innerHTML = '';
+
+      try{
+        var res = await Promise.all([
+          j('/admin/promoters'),
+          j('/admin/shows/' + encodeURIComponent(showId) + '/promoters'),
+        ]);
+        var promoters = (res[0] && res[0].items) ? res[0].items : [];
+        var linked = (res[1] && res[1].promoters) ? res[1].promoters : [];
+        var linkedIds = new Set(linked.map(function(p){ return p.id; }));
+
+        if (listEl){
+          if (!linked.length){
+            listEl.innerHTML = '<div class="muted">No promoters linked yet.</div>';
+          }else{
+            listEl.innerHTML = linked.map(function(p){
+              var label = p.tradingName || p.name || 'Promoter';
+              var meta = p.email ? (' · ' + p.email) : '';
+              return ''
+                + '<div class="row" style="justify-content:space-between;border:1px solid var(--border);border-radius:10px;padding:8px 10px;background:#f8fafc;">'
+                +   '<div><strong>'+escapeHtml(label)+'</strong><span class="muted" style="font-size:12px;">'+escapeHtml(meta)+'</span></div>'
+                +   '<button class="btn" data-remove-promoter="'+escapeHtml(p.id)+'">Remove</button>'
+                + '</div>';
+            }).join('');
+          }
+        }
+
+        if (selectEl){
+          var options = promoters.filter(function(p){ return !linkedIds.has(p.id); });
+          selectEl.innerHTML = '<option value="">Select promoter…</option>'
+            + options.map(function(p){
+              var label = p.tradingName || p.name || 'Promoter';
+              var suffix = p.email ? (' · ' + p.email) : '';
+              return '<option value="'+escapeHtml(p.id)+'">'+escapeHtml(label + suffix)+'</option>';
+            }).join('');
+          if (!options.length){
+            selectEl.innerHTML = '<option value="">No additional promoters available</option>';
+          }
+        }
+
+        if (listEl){
+          $$('[data-remove-promoter]', listEl).forEach(function(btn){
+            btn.addEventListener('click', async function(e){
+              e.preventDefault();
+              var pid = btn.getAttribute('data-remove-promoter');
+              if (!pid) return;
+              try{
+                await j('/admin/shows/' + encodeURIComponent(showId) + '/promoters/' + encodeURIComponent(pid), {
+                  method: 'DELETE',
+                });
+                await load();
+                if (typeof opts.onUpdated === 'function') opts.onUpdated();
+              }catch(err){
+                if (errEl) errEl.textContent = parseErr(err);
+              }
+            });
+          });
+        }
+      }catch(e){
+        if (listEl) listEl.innerHTML = '';
+        if (errEl) errEl.textContent = parseErr(e) || 'Failed to load promoters.';
+      }
+    }
+
+    if (addBtn){
+      addBtn.addEventListener('click', async function(){
+        if (!selectEl || !selectEl.value) return;
+        if (errEl) errEl.textContent = '';
+        try{
+          await j('/admin/shows/' + encodeURIComponent(showId) + '/promoters', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ promoterId: selectEl.value })
+          });
+          await load();
+          if (typeof opts.onUpdated === 'function') opts.onUpdated();
+        }catch(err){
+          if (errEl) errEl.textContent = parseErr(err);
+        }
+      });
+    }
+
+    load();
+  }
+
   function go(path){
     history.pushState(null, '', path);
     route();
@@ -4791,6 +4945,7 @@ function sumTicketTypeCap(tts){
                 +'<a href="#" data-edit="'+s.id+'">Edit</a>'
                 +'<a href="#" data-seating="'+s.id+'">Seating map</a>'
                 +'<a href="#" data-tickets="'+s.id+'">Tickets</a>'
+                +'<a href="#" data-link-promoter="'+s.id+'">Link promoter</a>'
                 +'<a href="#" data-dup="'+s.id+'">Duplicate</a>'
                 +(sold === 0 ? '<a href="#" data-delete="'+s.id+'">Delete</a>' : '')
               +'</div>'
@@ -4859,6 +5014,15 @@ function sumTicketTypeCap(tts){
         }catch(err){
           alert('Duplicate failed: ' + (err.message || err));
         }
+      });
+    });
+
+    $$('[data-link-promoter]').forEach(function(a){
+      a.addEventListener('click', function(e){
+        e.preventDefault();
+        var id = a.getAttribute('data-link-promoter');
+        if (!id) return;
+        openPromoterLinker({ showId: id });
       });
     });
 
@@ -5225,11 +5389,42 @@ async function summaryPage(id){
         }).join('')
       +'</tbody></table>')
     +'</div>'
+    +'<div class="card" style="margin:0">'
+    +  '<div class="header">'
+    +    '<div class="title">Promoters</div>'
+    +    '<button class="btn" id="showPromotersManage">Manage promoters</button>'
+    +  '</div>'
+    +  '<div id="showPromotersList" class="muted">Loading promoters…</div>'
+    +'</div>'
     +'</div>';
 
   var summarySeating = $('#summarySeating');
   var summaryTickets = $('#summaryTickets');
   var linkToBuilder = $('#linkToBuilder');
+  var promotersList = $('#showPromotersList');
+  var promotersManage = $('#showPromotersManage');
+
+  async function loadShowPromoters(){
+    if (!promotersList) return;
+    promotersList.innerHTML = '<div class="muted">Loading promoters…</div>';
+    try{
+      var res = await j('/admin/shows/' + encodeURIComponent(id) + '/promoters');
+      var items = (res && res.promoters) ? res.promoters : [];
+      if (!items.length){
+        promotersList.innerHTML = '<div class="muted">No promoters linked yet.</div>';
+        return;
+      }
+      promotersList.innerHTML = items.map(function(p){
+        var label = p.tradingName || p.name || 'Promoter';
+        var meta = p.email ? (' · ' + p.email) : '';
+        return '<div style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>'
+          + escapeHtml(label) + '</strong><span class="muted" style="font-size:12px;">'
+          + escapeHtml(meta) + '</span></div>';
+      }).join('');
+    }catch(e){
+      promotersList.innerHTML = '<div class="error">Failed to load promoters: ' + escapeHtml(parseErr(e)) + '</div>';
+    }
+  }
 
   if (summarySeating){
     summarySeating.addEventListener('click', function(){
@@ -5251,6 +5446,13 @@ async function summaryPage(id){
       window.location.href = '/admin/seating/builder/preview/' + id;
     });
   }
+  if (promotersManage){
+    promotersManage.addEventListener('click', function(){
+      openPromoterLinker({ showId: id, showTitle: show.title, onUpdated: loadShowPromoters });
+    });
+  }
+
+  loadShowPromoters();
 }
 
   // --- TICKETS PAGE ---
@@ -7671,7 +7873,21 @@ function renderInterests(customer){
         +     '<div class="card"><div class="title">Venues</div><div class="muted">Coming next.</div></div>'
         +   '</div>'
         +   '<div class="tab-panel" data-panel="shows">'
-        +     '<div class="card"><div class="title">Shows</div><div class="muted">Coming next.</div></div>'
+        +     '<div class="card">'
+        +       '<div class="header">'
+        +         '<div class="title">Linked shows</div>'
+        +         '<button class="btn" id="promoterShowsRefresh">Refresh</button>'
+        +       '</div>'
+        +       '<div id="promoterShowsList" class="muted">Loading shows…</div>'
+        +     '</div>'
+        +     '<div class="card" style="margin-top:12px;">'
+        +       '<div class="title">Add to show</div>'
+        +       '<div class="row" style="gap:8px;flex-wrap:wrap;margin-top:8px;">'
+        +         '<select id="promoterShowSelect" class="ctl" style="min-width:240px;"></select>'
+        +         '<button class="btn p" id="promoterShowAdd">Link show</button>'
+        +       '</div>'
+        +       '<div class="error" id="promoterShowErr" style="margin-top:6px;"></div>'
+        +     '</div>'
         +   '</div>'
         +   '<div class="tab-panel" data-panel="deals">'
         +     '<div class="card"><div class="title">Deals</div><div class="muted">Coming next.</div></div>'
@@ -7687,6 +7903,7 @@ function renderInterests(customer){
       setupTabs();
       renderContacts(promoter);
       renderDocuments(promoter);
+      renderShows();
       renderActivity(promoter);
       bindOverviewSave(promoter);
       bindContactAdd();
@@ -7912,6 +8129,115 @@ function renderInterests(customer){
           });
         }
       });
+    }
+
+    function renderShows(){
+      var list = $('#promoterShowsList');
+      var select = $('#promoterShowSelect');
+      var addBtn = $('#promoterShowAdd');
+      var err = $('#promoterShowErr');
+      var refreshBtn = $('#promoterShowsRefresh');
+
+      if (!list || !select) return;
+
+      var allShows = [];
+      var linkedShows = [];
+
+      function renderLinked(){
+        if (!list) return;
+        if (!linkedShows.length){
+          list.innerHTML = '<div class="muted">No shows linked yet.</div>';
+          return;
+        }
+        list.innerHTML = linkedShows.map(function(s){
+          return ''
+            + '<div class="row" style="justify-content:space-between;border-bottom:1px solid var(--border);padding:6px 0;">'
+            +   '<div>'
+            +     '<strong>' + escapeHtml(formatShowLabel(s)) + '</strong>'
+            +   '</div>'
+            +   '<button class="btn" data-unlink-show="'+escapeHtml(s.id)+'">Remove</button>'
+            + '</div>';
+        }).join('');
+
+        $$('[data-unlink-show]', list).forEach(function(btn){
+          btn.addEventListener('click', async function(e){
+            e.preventDefault();
+            var showId = btn.getAttribute('data-unlink-show');
+            if (!showId) return;
+            if (err) err.textContent = '';
+            try{
+              await j('/admin/promoters/' + encodeURIComponent(promoterId) + '/shows/' + encodeURIComponent(showId), {
+                method:'DELETE',
+              });
+              await refresh();
+            }catch(e){
+              if (err) err.textContent = parseErr(e);
+            }
+          });
+        });
+      }
+
+      function renderSelect(){
+        var linkedIds = new Set(linkedShows.map(function(s){ return s.id; }));
+        var options = allShows.filter(function(s){ return !linkedIds.has(s.id); });
+        select.innerHTML = '<option value="">Select a show…</option>'
+          + options.map(function(s){
+            var label = formatShowLabel(s);
+            return '<option value="'+escapeHtml(s.id)+'">'+escapeHtml(label)+'</option>';
+          }).join('');
+
+        if (!options.length){
+          select.innerHTML = '<option value="">No available shows</option>';
+        }
+      }
+
+      async function loadShows(){
+        var res = await j('/admin/shows');
+        allShows = (res && res.items) ? res.items : [];
+      }
+
+      async function loadLinked(){
+        var res = await j('/admin/promoters/' + encodeURIComponent(promoterId) + '/shows');
+        linkedShows = (res && res.shows) ? res.shows : [];
+      }
+
+      async function refresh(){
+        if (err) err.textContent = '';
+        if (list) list.innerHTML = '<div class="muted">Loading shows…</div>';
+        try{
+          await Promise.all([loadShows(), loadLinked()]);
+          renderLinked();
+          renderSelect();
+        }catch(e){
+          if (list) list.innerHTML = '';
+          if (err) err.textContent = parseErr(e);
+        }
+      }
+
+      if (addBtn){
+        addBtn.addEventListener('click', async function(){
+          if (!select.value) return;
+          if (err) err.textContent = '';
+          try{
+            await j('/admin/promoters/' + encodeURIComponent(promoterId) + '/shows', {
+              method:'POST',
+              headers:{'Content-Type':'application/json'},
+              body: JSON.stringify({ showId: select.value })
+            });
+            await refresh();
+          }catch(e){
+            if (err) err.textContent = parseErr(e);
+          }
+        });
+      }
+
+      if (refreshBtn){
+        refreshBtn.addEventListener('click', function(){
+          refresh();
+        });
+      }
+
+      refresh();
     }
 
     function bindDocumentUpload(){
