@@ -560,6 +560,7 @@ model Show {
   // Slug history for public URL redirects
   slugHistory   ShowSlugHistory[]
   promoterLinks ShowPromoter[]
+  upsellRules   UpsellRule[]
 
   @@index([venueId])
   @@index([organiserId])
@@ -621,8 +622,10 @@ model TicketType {
   showId String
   show   Show   @relation(fields: [showId], references: [id])
 
-  tickets         Ticket[]
-  orders          Order[]
+  tickets Ticket[]
+  orders  Order[]
+
+  upsellRules UpsellRule[]
 }
 
 model Order {
@@ -672,13 +675,14 @@ model Order {
   ticketType TicketType? @relation(fields: [ticketTypeId], references: [id])
   storefront Storefront? @relation(fields: [storefrontId], references: [id])
 
-  tickets      Ticket[]
-  refunds      Refund[]
-  notes        OrderNote[]
-  auditLogs    OrderAuditLog[]
+  tickets   Ticket[]
+  refunds   Refund[]
+  notes     OrderNote[]
+  auditLogs OrderAuditLog[]
 
-  seatsCsv                String? @db.Text
-  stripeCheckoutSessionId String? @db.VarChar(255)
+  seatsCsv                String?        @db.Text
+  stripeCheckoutSessionId String?        @db.VarChar(255)
+  productOrders           ProductOrder[]
 
   @@index([createdAt])
   @@index([status])
@@ -696,27 +700,27 @@ model Storefront {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  ownerUserId String
-  name        String
-  slug        String  @unique
-  status      StorefrontStatus @default(DRAFT)
-  logoUrl     String?
-  brandColour String?
+  ownerUserId  String
+  name         String
+  slug         String           @unique
+  status       StorefrontStatus @default(DRAFT)
+  logoUrl      String?
+  brandColour  String?
   supportEmail String?
   policiesText String?
 
   taxMode    TaxMode @default(NONE)
   taxPercent Int?
 
-  shippingEnabled  Boolean @default(false)
-  collectionEnabled Boolean @default(false)
-  digitalEnabled   Boolean @default(false)
+  shippingEnabled      Boolean @default(false)
+  collectionEnabled    Boolean @default(false)
+  digitalEnabled       Boolean @default(false)
   shippingFlatFeePence Int?
 
-  owner    User      @relation(fields: [ownerUserId], references: [id])
-  products Product[]
-  orders   Order[]
-  upsellRules UpsellRule[]
+  owner         User           @relation(fields: [ownerUserId], references: [id])
+  products      Product[]
+  orders        Order[]
+  upsellRules   UpsellRule[]
   productOrders ProductOrder[]
 
   @@index([ownerUserId])
@@ -727,29 +731,29 @@ model Product {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  storefrontId        String
-  title               String
-  slug                String
-  status              ProductStatus  @default(DRAFT)
-  category            ProductCategory @default(MERCH)
-  description         String?
-  fulfilmentType      ProductFulfilmentType @default(NONE)
-  pricePence          Int?
-  currency            String @default("gbp")
-  allowCustomAmount   Boolean @default(false)
-  inventoryMode       InventoryMode @default(UNLIMITED)
-  stockCount          Int?
-  lowStockThreshold   Int?
-  preorderEnabled     Boolean @default(false)
-  preorderCloseAt     DateTime?
-  maxPerOrder         Int?
-  maxPerTicket        Int?
+  storefrontId      String
+  title             String
+  slug              String
+  status            ProductStatus         @default(DRAFT)
+  category          ProductCategory       @default(MERCH)
+  description       String?
+  fulfilmentType    ProductFulfilmentType @default(NONE)
+  pricePence        Int?
+  currency          String                @default("gbp")
+  allowCustomAmount Boolean               @default(false)
+  inventoryMode     InventoryMode         @default(UNLIMITED)
+  stockCount        Int?
+  lowStockThreshold Int?
+  preorderEnabled   Boolean               @default(false)
+  preorderCloseAt   DateTime?
+  maxPerOrder       Int?
+  maxPerTicket      Int?
 
-  storefront Storefront         @relation(fields: [storefrontId], references: [id])
-  variants   ProductVariant[]
-  images     ProductImage[]
-  upsellRules UpsellRule[]
-  orderItems ProductOrderItem[]
+  storefront         Storefront          @relation(fields: [storefrontId], references: [id])
+  variants           ProductVariant[]
+  images             ProductImage[]
+  upsellRules        UpsellRule[]
+  orderItems         ProductOrderItem[]
   inventoryMovements InventoryMovement[]
 
   @@unique([storefrontId, slug])
@@ -766,11 +770,12 @@ model ProductVariant {
   sku                String?
   pricePenceOverride Int?
   stockCountOverride Int?
-  sortOrder          Int @default(0)
+  sortOrder          Int     @default(0)
 
-  product Product @relation(fields: [productId], references: [id])
-  orderItems ProductOrderItem[]
+  product            Product             @relation(fields: [productId], references: [id])
+  orderItems         ProductOrderItem[]
   inventoryMovements InventoryMovement[]
+  upsellRules        UpsellRule[]
 
   @@index([productId])
 }
@@ -782,7 +787,7 @@ model ProductImage {
 
   productId String
   url       String
-  sortOrder Int @default(0)
+  sortOrder Int    @default(0)
 
   product Product @relation(fields: [productId], references: [id])
 
@@ -794,22 +799,22 @@ model UpsellRule {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  storefrontId String
-  productId    String
-  productVariantId String?
-  showId       String?
-  ticketTypeId String?
-  priority     Int     @default(1)
-  recommended  Boolean @default(true)
-  active       Boolean @default(true)
+  storefrontId         String
+  productId            String
+  productVariantId     String?
+  showId               String?
+  ticketTypeId         String?
+  priority             Int     @default(1)
+  recommended          Boolean @default(true)
+  active               Boolean @default(true)
   maxPerOrderOverride  Int?
   maxPerTicketOverride Int?
 
-  storefront Storefront @relation(fields: [storefrontId], references: [id])
-  product    Product    @relation(fields: [productId], references: [id])
+  storefront     Storefront      @relation(fields: [storefrontId], references: [id])
+  product        Product         @relation(fields: [productId], references: [id])
   productVariant ProductVariant? @relation(fields: [productVariantId], references: [id])
-  show       Show?      @relation(fields: [showId], references: [id])
-  ticketType TicketType? @relation(fields: [ticketTypeId], references: [id])
+  show           Show?           @relation(fields: [showId], references: [id])
+  ticketType     TicketType?     @relation(fields: [ticketTypeId], references: [id])
 
   @@index([storefrontId])
   @@index([showId, active, priority])
@@ -820,15 +825,15 @@ model ProductOrder {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  storefrontId String
-  orderId      String?
-  source       ProductOrderSource
+  storefrontId            String
+  orderId                 String?
+  source                  ProductOrderSource
   stripeCheckoutSessionId String?
   stripePaymentIntentId   String?
 
-  customerName  String?
-  customerEmail String?
-  customerPhone String?
+  customerName        String?
+  customerEmail       String?
+  customerPhone       String?
   shippingAddressJson Json?
 
   subtotalPence Int
@@ -840,8 +845,8 @@ model ProductOrder {
   status           ProductOrderStatus
   fulfilmentStatus ProductOrderFulfilmentStatus @default(UNFULFILLED)
 
-  storefront Storefront @relation(fields: [storefrontId], references: [id])
-  order      Order?      @relation(fields: [orderId], references: [id])
+  storefront Storefront         @relation(fields: [storefrontId], references: [id])
+  order      Order?             @relation(fields: [orderId], references: [id])
   items      ProductOrderItem[]
 
   @@index([storefrontId])
@@ -865,8 +870,8 @@ model ProductOrderItem {
   fulfilmentStatus       ProductOrderItemStatus @default(UNFULFILLED)
   metadataJson           Json?
 
-  productOrder ProductOrder @relation(fields: [productOrderId], references: [id])
-  product      Product      @relation(fields: [productId], references: [id])
+  productOrder ProductOrder    @relation(fields: [productOrderId], references: [id])
+  product      Product         @relation(fields: [productId], references: [id])
   variant      ProductVariant? @relation(fields: [variantId], references: [id])
 
   @@index([productOrderId])
@@ -882,7 +887,7 @@ model InventoryMovement {
   reason    InventoryMovementReason
   refId     String?
 
-  product Product @relation(fields: [productId], references: [id])
+  product Product         @relation(fields: [productId], references: [id])
   variant ProductVariant? @relation(fields: [variantId], references: [id])
 
   @@index([productId])
