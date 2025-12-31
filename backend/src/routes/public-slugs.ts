@@ -136,9 +136,14 @@ router.get("/:storefront", async (req, res) => {
   });
 
   const title = organiser.companyName || organiser.name || organiser.storefrontSlug;
+  const brand = getPublicBrand();
 
   const visibleShows = shows.filter(show => !!show.slug);
   const featuredShows = visibleShows.slice(0, 6);
+  const heroImage = featuredShows[0]?.imageUrl
+    ? `/img/fetch?src=${encodeURIComponent(featuredShows[0].imageUrl)}&w=1600`
+    : "";
+  const heroBackground = heroImage ? `url('${heroImage}')` : "none";
 
   const cards = visibleShows
     .map(show => {
@@ -330,7 +335,7 @@ body {
   position: absolute;
   inset: 0;
   opacity: 0.3;
-  background-image: url('${heroImage}');
+  background-image: ${heroBackground};
   background-size: cover;
   background-position: center;
   filter: blur(20px);
