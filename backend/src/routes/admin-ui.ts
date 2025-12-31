@@ -4850,6 +4850,7 @@ async function listShows(){
 
   var allItems = [];
   var searchTimer = null;
+  var venueExtras = loadVenueExtras();
 
   function norm(s){ return String(s || '').toLowerCase(); }
 
@@ -4857,6 +4858,41 @@ async function listShows(){
   var n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
+
+  function loadVenueExtras(){
+    try{
+      var saved = localStorage.getItem('adminVenueExtras');
+      return saved ? JSON.parse(saved) : {};
+    }catch(e){
+      return {};
+    }
+  }
+
+  function venueInitials(label){
+    var text = String(label || '').trim();
+    if (!text) return '';
+    var parts = text.split(/\s+/).filter(Boolean);
+    var first = parts[0] ? parts[0][0] : '';
+    var second = parts.length > 1 ? parts[1][0] : '';
+    return (first + second).toUpperCase();
+  }
+
+  function venueAvatarHtml(venue, opts){
+    opts = opts || {};
+    var size = opts.size || 36;
+    var label = (venue && venue.name) || 'Venue';
+    var extras = (venue && venue.id && venueExtras && venueExtras[venue.id]) ? venueExtras[venue.id] : null;
+    var imageUrl = extras && extras.image;
+    var fontSize = Math.max(12, Math.round(size * 0.42));
+    var initials = venueInitials(label);
+    var inner = imageUrl
+      ? '<img src="' + escapeHtml(imageUrl) + '" alt="' + escapeHtml(label) + ' photo" style="width:100%;height:100%;object-fit:cover;display:block;" />'
+      : '<span style="font-weight:700;color:#0f172a;font-size:' + fontSize + 'px;">' + escapeHtml(initials || '') + '</span>';
+    return ''
+      + '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:999px;background:#f1f5f9;border:1px solid #e2e8f0;display:flex;align-items:center;justify-content:center;overflow:hidden;">'
+      + inner
+      + '</div>';
+  }
 
 function sumTicketTypeCap(tts){
   if (!Array.isArray(tts)) return null;
@@ -5005,6 +5041,13 @@ function sumTicketTypeCap(tts){
         ? (s.venue.name + (s.venue.city ? ' – '+s.venue.city : ''))
         : (s.venueText || '')
       );
+      var venueAvatar = s.venue ? venueAvatarHtml(s.venue, { size: 36 }) : '';
+      var venueCell = venueLabel
+        ? ('<div style="display:flex;align-items:center;gap:8px;">'
+            + venueAvatar
+            + '<span>' + escapeHtml(venueLabel) + '</span>'
+          + '</div>')
+        : '';
 
       var promoters = s.promoters || [];
       var primaryPromoter = promoters[0] || null;
@@ -5014,7 +5057,7 @@ function sumTicketTypeCap(tts){
         +'<tr data-row="'+s.id+'" data-status="'+statusLabel+'">'
           +'<td>'+(s.title || '')+'</td>'
           +'<td>'+when+'</td>'
-          +'<td>'+venueLabel+'</td>'
+          +'<td>'+venueCell+'</td>'
           +'<td><span class="muted">'
             +'Sold '+sold
             +' · Held '+held
