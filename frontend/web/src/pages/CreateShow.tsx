@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
+import "./CreateShow.css";
 
 type Venue = { id: string; name: string; city?: string | null };
 
@@ -50,12 +51,27 @@ export default function CreateShow() {
   };
 
   return (
-    <main style={{ maxWidth: 860, margin: "2rem auto", padding: "1rem" }}>
-      <h1>Create a New Show</h1>
-      <form onSubmit={onSubmit}>
-        <div style={{ display: "grid", gap: "1rem" }}>
-          <label>
-            Show title
+    <main className="create-show-page">
+      <header className="create-show-header">
+        <p className="header-eyebrow">Create listing</p>
+        <h1>Sell tickets faster with a clean listing</h1>
+        <p className="header-subtitle">
+          Add the basics, pick the venue, and publish. You can fine-tune ticket settings after saving.
+        </p>
+      </header>
+
+      <form onSubmit={onSubmit} className="create-show-form">
+        <section className="section-card">
+          <div className="section-title">
+            <div>
+              <h2>Listing basics</h2>
+              <p>Clear titles and descriptions help buyers trust your event.</p>
+            </div>
+            <span className="section-chip">Step 1</span>
+          </div>
+
+          <label className="field">
+            <span>Title</span>
             <input
               type="text"
               value={title}
@@ -65,31 +81,60 @@ export default function CreateShow() {
             />
           </label>
 
-          <div>
-            <label>
-              Find venue
-              <input
-                type="text"
-                value={venueQ}
-                onChange={e => setVenueQ(e.target.value)}
-                placeholder="Type to search name/city/postcode…"
-              />
-            </label>
-            <label style={{ display: "block", marginTop: 6 }}>
-              Select venue
-              <select value={venueId} onChange={e => setVenueId(e.target.value)} required>
-                <option value="">— Select —</option>
-                {venues.map(v => (
-                  <option key={v.id} value={v.id}>
-                    {v.name}{v.city ? ` (${v.city})` : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
+          <label className="field">
+            <span>Describe your show</span>
+            <textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              rows={4}
+              placeholder="Give buyers a quick reason to attend (optional)."
+            />
+          </label>
+        </section>
+
+        <section className="section-card">
+          <div className="section-title">
+            <div>
+              <h2>Venue & location</h2>
+              <p>Search once, then choose the exact venue from the list.</p>
+            </div>
+            <span className="section-chip">Step 2</span>
           </div>
 
-          <label>
-            Date (UK format shown by your browser)
+          <label className="field field-search">
+            <span>Find a venue</span>
+            <input
+              type="text"
+              value={venueQ}
+              onChange={e => setVenueQ(e.target.value)}
+              placeholder="Type to search name, city, or postcode"
+            />
+          </label>
+
+          <label className="field">
+            <span>Select venue</span>
+            <select value={venueId} onChange={e => setVenueId(e.target.value)} required>
+              <option value="">— Select —</option>
+              {venues.map(v => (
+                <option key={v.id} value={v.id}>
+                  {v.name}{v.city ? ` (${v.city})` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+        </section>
+
+        <section className="section-card">
+          <div className="section-title">
+            <div>
+              <h2>Schedule</h2>
+              <p>Pick the date buyers should see on their tickets.</p>
+            </div>
+            <span className="section-chip">Step 3</span>
+          </div>
+
+          <label className="field">
+            <span>Date</span>
             <input
               type="date"
               value={date}
@@ -97,22 +142,23 @@ export default function CreateShow() {
               required
             />
           </label>
+        </section>
 
-          <label>
-            Description (optional)
-            <textarea
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              rows={4}
-              placeholder="Internal notes / blurb"
-            />
-          </label>
+        <section className="info-card">
+          <div>
+            <p className="info-title">Tip: Add a clear title & venue name</p>
+            <p className="info-text">Listings with specific venues and dates get booked faster.</p>
+          </div>
+          <span className="info-link">Learn more</span>
+        </section>
 
-          {err && <p style={{ color: "crimson" }}>{err}</p>}
+        {err && <p className="error-text">{err}</p>}
 
-          <button type="submit" disabled={!canSave || saving}>
-            {saving ? "Saving…" : "Save Show and Add Tickets"}
+        <div className="action-bar">
+          <button type="submit" className="primary-button" disabled={!canSave || saving}>
+            {saving ? "Saving…" : "Save and add tickets"}
           </button>
+          <p className="action-hint">You can edit details later.</p>
         </div>
       </form>
     </main>
