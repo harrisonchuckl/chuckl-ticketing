@@ -7307,6 +7307,21 @@ function renderInterests(customer){
       +     '<div class="row" style="gap:8px;align-items:center;">'
       +       '<input id="venueSearch" placeholder="Search venues" style="min-width:200px;" />'
       +       '<button class="btn p" id="addVenueBtn" title="Add new venue">+ Add venue</button>'
+      +       '<div class="row" style="gap:4px;align-items:center;">'
+      +         '<button class="btn" id="venueViewGrid" title="Grid view" style="padding:6px 8px;">'
+      +           '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
+      +             '<rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect>'
+      +             '<rect x="3" y="14" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect>'
+      +           '</svg>'
+      +         '</button>'
+      +         '<button class="btn" id="venueViewRows" title="Row view" style="padding:6px 8px;">'
+      +           '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
+      +             '<rect x="3" y="4" width="18" height="4"></rect>'
+      +             '<rect x="3" y="10" width="18" height="4"></rect>'
+      +             '<rect x="3" y="16" width="18" height="4"></rect>'
+      +           '</svg>'
+      +         '</button>'
+      +       '</div>'
       +     '</div>'
       +   '</div>'
       +   '<div class="error" id="venueErr" style="margin-top:6px;"></div>'
@@ -7344,6 +7359,10 @@ function renderInterests(customer){
     var form = $('#newVenueForm');
     var formErr = $('#newVenueError');
     var extras = loadVenueExtras();
+    var viewGridBtn = $('#venueViewGrid');
+    var viewRowsBtn = $('#venueViewRows');
+    var venueView = (localStorage.getItem('adminVenuesView') === 'rows') ? 'rows' : 'grid';
+    var currentItems = [];
 
     var formFields = {
       name: $('#nv_name'),
@@ -7370,8 +7389,28 @@ function renderInterests(customer){
 
     function toggleForm(show){ if (form) form.style.display = show ? 'block' : 'none'; }
 
+    function updateVenueViewControls(){
+      if (viewGridBtn) viewGridBtn.style.background = venueView === 'grid' ? '#111827' : '';
+      if (viewGridBtn) viewGridBtn.style.color = venueView === 'grid' ? '#ffffff' : '';
+      if (viewRowsBtn) viewRowsBtn.style.background = venueView === 'rows' ? '#111827' : '';
+      if (viewRowsBtn) viewRowsBtn.style.color = venueView === 'rows' ? '#ffffff' : '';
+    }
+
+    function setVenueView(next){
+      venueView = next === 'rows' ? 'rows' : 'grid';
+      try{ localStorage.setItem('adminVenuesView', venueView); }catch(e){}
+      updateVenueViewControls();
+      renderVenues(currentItems || []);
+    }
+
     if (addBtn){
       addBtn.addEventListener('click', function(){ toggleForm(true); if (formFields.name) formFields.name.focus(); });
+    }
+    if (viewGridBtn){
+      viewGridBtn.addEventListener('click', function(){ setVenueView('grid'); });
+    }
+    if (viewRowsBtn){
+      viewRowsBtn.addEventListener('click', function(){ setVenueView('rows'); });
     }
     if (formFields.cancel){
       formFields.cancel.addEventListener('click', function(){ toggleForm(false); });
@@ -7418,6 +7457,7 @@ function renderInterests(customer){
       search.addEventListener('input', debouncedLoad);
     }
 
+    updateVenueViewControls();
     loadVenues('');
 
     async function loadVenues(q){
@@ -7427,6 +7467,7 @@ function renderInterests(customer){
       try{
         var res = await j('/admin/venues?q=' + encodeURIComponent(q || ''));
         var items = (res && res.items) || [];
+        currentItems = items;
         renderVenues(items);
       }catch(e){
         if (err) err.textContent = e.message || 'Failed to load venues';
@@ -7437,6 +7478,10 @@ function renderInterests(customer){
     function renderVenues(items){
       if (!grid) return;
       grid.innerHTML = '';
+      grid.setAttribute('data-view', venueView);
+      grid.style.gridTemplateColumns = venueView === 'rows'
+        ? 'minmax(0, 1fr)'
+        : 'repeat(auto-fit,minmax(340px,1fr))';
       if (empty) empty.style.display = items && items.length ? 'none' : 'block';
       (items || []).forEach(function(v){
         var card = document.createElement('div');
@@ -7444,8 +7489,51 @@ function renderInterests(customer){
         card.style.margin = '0';
 
         var ext = extras && extras[v.id] ? extras[v.id] : {};
-        var spaces = Array.isArray(ext.spaces) ? ext.spaces.slice() : [];
-        var maps = Array.isArray(ext.maps) ? ext.maps.slice() : [];
+        var spaces = Array.isArray(ext.spaces)
+          ? ext.spaces.map(function(space){
+              if (typeof space === 'string') return { name: space, capacity: null };
+              return {
+                name: space && space.name ? String(space.name) : '',
+                capacity: space && space.capacity != null ? Number(space.capacity) : null,
+              };
+            })
+          : [];
+        var maps = Array.isArray(ext.maps)
+          ? ext.maps.map(function(map){
+              if (typeof map === 'string') return { name: map, space: '' };
+              return {
+                name: map && map.name ? String(map.name) : '',
+                space: map && map.space ? String(map.space) : '',
+              };
+            })
+          : [];
+
+        var deleteBtnHtml = venueView === 'grid'
+          ? '<button class="btn" data-action="deleteVenue" title="Delete venue" style="padding:6px 8px;">'
+            + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
+              + '<polyline points="3 6 5 6 21 6"></polyline>'
+              + '<path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>'
+              + '<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>'
+              + '<line x1="10" y1="11" x2="10" y2="17"></line>'
+              + '<line x1="14" y1="11" x2="14" y2="17"></line>'
+            + '</svg>'
+          + '</button>'
+          : '';
+
+        var menuHtml = venueView === 'rows'
+          ? '<div style="position:relative;">'
+            + '<button class="btn" data-action="venueMenu" title="Venue actions" style="padding:6px 8px;">'
+              + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
+                + '<line x1="3" y1="6" x2="21" y2="6"></line>'
+                + '<line x1="3" y1="12" x2="21" y2="12"></line>'
+                + '<line x1="3" y1="18" x2="21" y2="18"></line>'
+              + '</svg>'
+            + '</button>'
+            + '<div data-menu="venueMenu" style="display:none;position:absolute;right:0;top:36px;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 6px 18px rgba(15,23,42,0.12);min-width:160px;z-index:10;">'
+              + '<button class="btn" data-action="deleteVenue" style="width:100%;justify-content:flex-start;border:none;border-radius:8px;">Delete venue</button>'
+            + '</div>'
+          + '</div>'
+          : '';
 
         card.innerHTML = ''
           + '<div class="header">'
@@ -7453,15 +7541,28 @@ function renderInterests(customer){
           +     '<div class="title">' + escapeHtml(v.name || 'Untitled venue') + '</div>'
           +     '<div class="muted">' + escapeHtml([v.city, v.postcode].filter(Boolean).join(' • ')) + '</div>'
           +   '</div>'
+          +   '<div class="row" style="gap:6px;align-items:center;">'
+          +     deleteBtnHtml
+          +     menuHtml
+          +   '</div>'
           + '</div>'
 
           + '<div class="grid" style="gap:10px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));">'
           +   '<div class="grid" style="gap:6px;">'
           +     '<label style="margin:0;font-weight:600;font-size:13px;">Venue photo</label>'
-          +     '<input type="url" placeholder="https://image-url" data-field="image" value="' + escapeHtml(ext.image || '') + '" />'
-          +     '<div class="muted" style="font-size:12px;">Paste an image URL to show this venue in decks.</div>'
-          +     '<div class="venue-photo" style="border:1px solid var(--border);border-radius:8px;height:140px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#f9fafb;">'
-          +       (ext.image ? '<img src="' + escapeHtml(ext.image) + '" alt="Preview" style="width:100%;height:100%;object-fit:cover;" />' : '<div class="muted">No image yet</div>')
+          +     '<div class="row" style="gap:12px;align-items:center;flex-wrap:wrap;">'
+          +       '<div class="venue-photo" style="border:1px solid var(--border);border-radius:999px;height:88px;width:88px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#f9fafb;">'
+          +         (ext.image ? '<img src="' + escapeHtml(ext.image) + '" alt="Preview" style="width:100%;height:100%;object-fit:cover;" />' : '<div class="muted" style="font-size:12px;">No image</div>')
+          +       '</div>'
+          +       '<div class="grid" style="gap:6px;">'
+          +         '<input type="file" accept="image/*" data-field="imageFile" />'
+          +         '<div class="row" style="gap:8px;align-items:center;">'
+          +           '<button class="btn" data-action="uploadImage">Upload photo</button>'
+          +           '<input type="hidden" data-field="image" value="' + escapeHtml(ext.image || '') + '" />'
+          +         '</div>'
+          +         '<div class="muted" style="font-size:12px;">Square images work best.</div>'
+          +         '<div class="error" data-error="image"></div>'
+          +       '</div>'
           +     '</div>'
           +   '</div>'
 
@@ -7472,8 +7573,8 @@ function renderInterests(customer){
           +   '</div>'
 
           +   '<div class="grid" style="gap:6px;">'
-          +     '<label style="margin:0;font-weight:600;font-size:13px;">Capacity<input type="number" min="1" data-field="capacity" value="' + escapeHtml(String(ext.capacity || v.capacity || '')) + '" /></label>'
-          +     '<label style="margin:0;font-weight:600;font-size:13px;">Ticket contra (%)<input type="number" min="0" max="100" step="0.5" data-field="contra" value="' + escapeHtml(ext.contra ? String(ext.contra) : '') + '" placeholder="e.g. 20" /></label>'
+          +     '<label style="margin:0;font-weight:600;font-size:13px;" data-capacity-row="true">Capacity<input type="number" min="1" data-field="capacity" value="' + escapeHtml(String(ext.capacity || v.capacity || '')) + '" /></label>'
+          +     '<label style="margin:0;font-weight:600;font-size:13px;">Ticket contra (£)<input type="number" min="0" step="0.01" data-field="contra" value="' + escapeHtml(ext.contra ? String(ext.contra) : '') + '" placeholder="e.g. 250" /></label>'
           +     '<label style="margin:0;font-weight:600;font-size:13px;">Booking fee (%)<input type="number" min="10" step="0.5" data-field="fee" value="' + escapeHtml(ext.fee ? String(ext.fee) : '10') + '" /></label>'
           +     '<div class="muted" style="font-size:12px;">Fees must be at least 10%. We recommend 10–15%.</div>'
           +   '</div>'
@@ -7486,8 +7587,11 @@ function renderInterests(customer){
           +       '<button class="btn" data-action="addSpace" style="padding:6px 10px;">+ Space</button>'
           +     '</div>'
           +     '<div class="muted" style="font-size:12px;">Add areas like studio, foyer or main room.</div>'
-          +     '<div class="row" style="flex-wrap:wrap;gap:6px;" data-list="spaces"></div>'
-          +     '<input data-input="spaceName" placeholder="Add a space and press Enter" />'
+          +     '<div class="grid" style="gap:6px;" data-list="spaces"></div>'
+          +     '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:6px;">'
+          +       '<input data-input="spaceName" placeholder="Space name" />'
+          +       '<input data-input="spaceCapacity" type="number" min="1" placeholder="Capacity" />'
+          +     '</div>'
           +   '</div>'
 
           +   '<div class="grid" style="gap:6px;">'
@@ -7495,9 +7599,12 @@ function renderInterests(customer){
           +       '<div style="font-weight:600;font-size:13px;">Seating maps</div>'
           +       '<button class="btn" data-action="addMap" style="padding:6px 10px;">+ Map</button>'
           +     '</div>'
-          +     '<div class="muted" style="font-size:12px;">Keep versions for different rooms or configurations.</div>'
-          +     '<div class="row" style="flex-wrap:wrap;gap:6px;" data-list="maps"></div>'
-          +     '<input data-input="mapName" placeholder="Name a seating map and press Enter" />'
+          +     '<div class="muted" style="font-size:12px;">Create and link seating maps to specific spaces.</div>'
+          +     '<div class="grid" style="gap:6px;" data-list="maps"></div>'
+          +     '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:6px;">'
+          +       '<input data-input="mapName" placeholder="Seating map name" />'
+          +       '<select data-input="mapSpace"></select>'
+          +     '</div>'
           +   '</div>'
           + '</div>'
 
@@ -7512,91 +7619,251 @@ function renderInterests(customer){
         grid.appendChild(card);
 
         var imgInput = card.querySelector('input[data-field="image"]');
+        var imgFileInput = card.querySelector('input[data-field="imageFile"]');
+        var uploadBtn = card.querySelector('[data-action="uploadImage"]');
+        var imgErr = card.querySelector('[data-error="image"]');
         var preview = card.querySelector('.venue-photo');
-        if (imgInput && preview){
-          imgInput.addEventListener('input', function(){
-            var url = imgInput.value.trim();
-            preview.innerHTML = url
-              ? '<img src="' + escapeHtml(url) + '" alt="Preview" style="width:100%;height:100%;object-fit:cover;" />'
-              : '<div class="muted">No image yet</div>';
+        if (uploadBtn && imgFileInput && imgInput && preview){
+          uploadBtn.addEventListener('click', async function(){
+            if (imgErr) imgErr.textContent = '';
+            var file = imgFileInput.files && imgFileInput.files[0];
+            if (!file){
+              if (imgErr) imgErr.textContent = 'Choose an image to upload.';
+              return;
+            }
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = 'Uploading…';
+            try{
+              var upload = await uploadPoster(file);
+              imgInput.value = upload.url || '';
+              preview.innerHTML = upload.url
+                ? '<img src="' + escapeHtml(upload.url) + '" alt="Preview" style="width:100%;height:100%;object-fit:cover;" />'
+                : '<div class="muted" style="font-size:12px;">No image</div>';
+            }catch(e){
+              if (imgErr) imgErr.textContent = parseErr(e);
+            }finally{
+              uploadBtn.disabled = false;
+              uploadBtn.textContent = 'Upload photo';
+            }
           });
         }
 
         var spaceInput = card.querySelector('input[data-input="spaceName"]');
+        var spaceCapacityInput = card.querySelector('input[data-input="spaceCapacity"]');
         var mapInput = card.querySelector('input[data-input="mapName"]');
+        var mapSpaceInput = card.querySelector('select[data-input="mapSpace"]');
         var spaceList = card.querySelector('[data-list="spaces"]');
         var mapList = card.querySelector('[data-list="maps"]');
+        var capacityRow = card.querySelector('[data-capacity-row="true"]');
 
-        function renderChips(listEl, items){
-          if (!listEl) return;
-          listEl.innerHTML = '';
-          if (!items.length){
-            var emptyChip = document.createElement('div');
-            emptyChip.className = 'muted';
-            emptyChip.style.fontSize = '12px';
-            emptyChip.textContent = 'Nothing added yet';
-            listEl.appendChild(emptyChip);
+        function updateCapacityRow(){
+          if (!capacityRow) return;
+          capacityRow.style.display = spaces.length ? 'none' : '';
+        }
+
+        function renderSpaces(){
+          if (!spaceList) return;
+          spaceList.innerHTML = '';
+          if (!spaces.length){
+            var emptySpace = document.createElement('div');
+            emptySpace.className = 'muted';
+            emptySpace.style.fontSize = '12px';
+            emptySpace.textContent = 'Nothing added yet';
+            spaceList.appendChild(emptySpace);
+            updateCapacityRow();
+            renderMapSpaces();
             return;
           }
-          items.forEach(function(name, idx){
-            var chip = document.createElement('div');
-            chip.style.display = 'inline-flex';
-            chip.style.alignItems = 'center';
-            chip.style.gap = '6px';
-            chip.style.padding = '6px 10px';
-            chip.style.border = '1px solid var(--border)';
-            chip.style.borderRadius = '999px';
-            chip.style.background = '#f9fafb';
-            chip.style.fontSize = '12px';
-            chip.innerHTML = '<span>' + escapeHtml(name) + '</span>';
-            var remove = document.createElement('button');
-            remove.textContent = '×';
-            remove.style.border = 'none';
-            remove.style.background = 'transparent';
-            remove.style.cursor = 'pointer';
-            remove.style.fontSize = '14px';
-            remove.setAttribute('aria-label', 'Remove');
-            remove.addEventListener('click', function(){
-              items.splice(idx, 1);
-              renderChips(listEl, items);
+          spaces.forEach(function(space, idx){
+            var row = document.createElement('div');
+            row.style.display = 'grid';
+            row.style.gridTemplateColumns = 'minmax(120px,1fr) minmax(120px,140px) auto';
+            row.style.gap = '8px';
+            row.style.alignItems = 'center';
+            row.style.padding = '6px 0';
+            row.style.borderBottom = '1px solid var(--border)';
+            row.innerHTML = ''
+              + '<input data-space-name="' + idx + '" value="' + escapeHtml(space.name || '') + '" placeholder="Space name" />'
+              + '<input data-space-capacity="' + idx + '" type="number" min="1" placeholder="Capacity" value="' + (space.capacity != null ? escapeHtml(String(space.capacity)) : '') + '" />'
+              + '<button class="btn" data-space-remove="' + idx + '">Remove</button>';
+            spaceList.appendChild(row);
+          });
+
+          $$('[data-space-name]', spaceList).forEach(function(input){
+            input.addEventListener('input', function(){
+              var idx = Number(input.getAttribute('data-space-name'));
+              if (!isNaN(idx) && spaces[idx]) spaces[idx].name = input.value.trim();
+              renderMapSpaces();
+              renderMaps();
             });
-            chip.appendChild(remove);
-            listEl.appendChild(chip);
+          });
+          $$('[data-space-capacity]', spaceList).forEach(function(input){
+            input.addEventListener('input', function(){
+              var idx = Number(input.getAttribute('data-space-capacity'));
+              if (isNaN(idx) || !spaces[idx]) return;
+              var raw = input.value.trim();
+              spaces[idx].capacity = raw ? Number(raw) : null;
+            });
+          });
+          $$('[data-space-remove]', spaceList).forEach(function(btn){
+            btn.addEventListener('click', function(){
+              var idx = Number(btn.getAttribute('data-space-remove'));
+              if (isNaN(idx)) return;
+              spaces.splice(idx, 1);
+              renderSpaces();
+            });
+          });
+          updateCapacityRow();
+          renderMapSpaces();
+        }
+
+        function renderMapSpaces(){
+          if (!mapSpaceInput) return;
+          var options = spaces.filter(function(space){ return space.name; });
+          mapSpaceInput.innerHTML = '<option value="">Link to space…</option>'
+            + options.map(function(space){
+              return '<option value="' + escapeHtml(space.name) + '">' + escapeHtml(space.name) + '</option>';
+            }).join('');
+        }
+
+        function renderMaps(){
+          if (!mapList) return;
+          mapList.innerHTML = '';
+          if (!maps.length){
+            var emptyMap = document.createElement('div');
+            emptyMap.className = 'muted';
+            emptyMap.style.fontSize = '12px';
+            emptyMap.textContent = 'Nothing added yet';
+            mapList.appendChild(emptyMap);
+            return;
+          }
+          maps.forEach(function(map, idx){
+            var row = document.createElement('div');
+            row.style.display = 'grid';
+            row.style.gridTemplateColumns = 'minmax(140px,1fr) minmax(140px,1fr) auto';
+            row.style.gap = '8px';
+            row.style.alignItems = 'center';
+            row.style.padding = '6px 0';
+            row.style.borderBottom = '1px solid var(--border)';
+            row.innerHTML = ''
+              + '<input data-map-name="' + idx + '" value="' + escapeHtml(map.name || '') + '" placeholder="Map name" />'
+              + '<select data-map-space="' + idx + '"></select>'
+              + '<button class="btn" data-map-remove="' + idx + '">Remove</button>';
+            mapList.appendChild(row);
+          });
+          $$('[data-map-name]', mapList).forEach(function(input){
+            input.addEventListener('input', function(){
+              var idx = Number(input.getAttribute('data-map-name'));
+              if (!isNaN(idx) && maps[idx]) maps[idx].name = input.value.trim();
+            });
+          });
+          $$('[data-map-space]', mapList).forEach(function(select){
+            var idx = Number(select.getAttribute('data-map-space'));
+            if (isNaN(idx) || !maps[idx]) return;
+            var options = spaces.filter(function(space){ return space.name; });
+            select.innerHTML = '<option value="">Link to space…</option>'
+              + options.map(function(space){
+                var selected = maps[idx].space === space.name ? ' selected' : '';
+                return '<option value="' + escapeHtml(space.name) + '"' + selected + '>' + escapeHtml(space.name) + '</option>';
+              }).join('');
+            select.addEventListener('change', function(){
+              maps[idx].space = select.value;
+            });
+          });
+          $$('[data-map-remove]', mapList).forEach(function(btn){
+            btn.addEventListener('click', function(){
+              var idx = Number(btn.getAttribute('data-map-remove'));
+              if (isNaN(idx)) return;
+              maps.splice(idx, 1);
+              renderMaps();
+            });
           });
         }
 
-        renderChips(spaceList, spaces);
-        renderChips(mapList, maps);
+        renderSpaces();
+        renderMaps();
 
-        function addFromInput(inputEl, arr, listEl){
-          if (!inputEl) return;
-          var value = (inputEl.value || '').trim();
-          if (!value) return;
-          arr.push(value);
-          inputEl.value = '';
-          renderChips(listEl, arr);
+        function addSpaceFromInputs(){
+          if (!spaceInput) return;
+          var name = (spaceInput.value || '').trim();
+          var capRaw = spaceCapacityInput ? (spaceCapacityInput.value || '').trim() : '';
+          if (!name) return;
+          var cap = capRaw ? Number(capRaw) : null;
+          spaces.push({ name: name, capacity: cap && !isNaN(cap) ? cap : null });
+          spaceInput.value = '';
+          if (spaceCapacityInput) spaceCapacityInput.value = '';
+          renderSpaces();
+        }
+
+        function addMapFromInputs(){
+          if (!mapInput) return;
+          var name = (mapInput.value || '').trim();
+          if (!name) return;
+          var space = mapSpaceInput ? mapSpaceInput.value : '';
+          maps.push({ name: name, space: space || '' });
+          mapInput.value = '';
+          if (mapSpaceInput) mapSpaceInput.value = '';
+          renderMaps();
         }
 
         if (spaceInput){
           spaceInput.addEventListener('keydown', function(e){
-            if (e.key === 'Enter'){ e.preventDefault(); addFromInput(spaceInput, spaces, spaceList); }
+            if (e.key === 'Enter'){ e.preventDefault(); addSpaceFromInputs(); }
+          });
+        }
+        if (spaceCapacityInput){
+          spaceCapacityInput.addEventListener('keydown', function(e){
+            if (e.key === 'Enter'){ e.preventDefault(); addSpaceFromInputs(); }
           });
         }
         if (mapInput){
           mapInput.addEventListener('keydown', function(e){
-            if (e.key === 'Enter'){ e.preventDefault(); addFromInput(mapInput, maps, mapList); }
+            if (e.key === 'Enter'){ e.preventDefault(); addMapFromInputs(); }
           });
         }
 
         var addSpaceBtn = card.querySelector('[data-action="addSpace"]');
         if (addSpaceBtn){
-          addSpaceBtn.addEventListener('click', function(){ addFromInput(spaceInput, spaces, spaceList); if (spaceInput) spaceInput.focus(); });
+          addSpaceBtn.addEventListener('click', function(){
+            addSpaceFromInputs();
+            if (spaceInput) spaceInput.focus();
+          });
         }
 
         var addMapBtn = card.querySelector('[data-action="addMap"]');
         if (addMapBtn){
-          addMapBtn.addEventListener('click', function(){ addFromInput(mapInput, maps, mapList); if (mapInput) mapInput.focus(); });
+          addMapBtn.addEventListener('click', function(){
+            addMapFromInputs();
+            if (mapInput) mapInput.focus();
+          });
         }
+
+        var menuToggle = card.querySelector('[data-action="venueMenu"]');
+        var menu = card.querySelector('[data-menu="venueMenu"]');
+        if (menuToggle && menu){
+          menuToggle.addEventListener('click', function(e){
+            e.stopPropagation();
+            var open = menu.style.display === 'block';
+            menu.style.display = open ? 'none' : 'block';
+          });
+          document.addEventListener('click', function(){
+            menu.style.display = 'none';
+          });
+        }
+
+        card.querySelectorAll('[data-action="deleteVenue"]').forEach(function(btn){
+          btn.addEventListener('click', async function(e){
+            e.preventDefault();
+            e.stopPropagation();
+            if (!confirm('Delete this venue?')) return;
+            try{
+              await j('/admin/venues/' + encodeURIComponent(v.id), { method:'DELETE' });
+              loadVenues(search && search.value ? search.value : '');
+            }catch(err){
+              alert('Failed to delete venue: ' + parseErr(err));
+            }
+          });
+        });
 
         var feeInput = card.querySelector('input[data-field="fee"]');
         if (feeInput){
