@@ -3,7 +3,8 @@ import crypto from "node:crypto";
 import prisma from "../lib/prisma.js";
 import Stripe from "stripe";
 import { calcFeesForShow } from "../services/fees.js";
-import { sendTicketsEmail } from "../services/email.js";
+import { sendTicketsEmail, sendDigitalProductEmail } from "../services/email.js";
+import { decrementStockTransaction } from "../lib/storefront.js";
 import { syncMarketingContactFromOrder } from "../services/marketing/contacts.js";
 import { MarketingAutomationTriggerType, MarketingConsentSource } from "@prisma/client";
 import { enqueueAutomationForContact, markCheckoutCompleted } from "../services/marketing/automations.js";
@@ -59,6 +60,149 @@ function buildSeatRefMapFromKonva(konvaJson: any): Map<string, string> {
 
   walk(konvaJson, null);
   return map;
+}
+
+function parseProductSelections(raw: string | undefined | null) {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => ({
+        productId: String(item.productId || ""),
+        variantId: item.variantId ? String(item.variantId) : null,
+        qty: Number(item.qty || 0),
+        unitAmount: Number(item.unitAmount || 0),
+        customAmount: item.customAmount ? Number(item.customAmount) : null,
+      }))
+      .filter((item) => item.productId && item.qty > 0);
+  } catch {
+    return [];
+  }
+}
+
+async function handleProductOrderFromSession(session: Stripe.Checkout.Session) {
+  const productSelectionRaw = session.metadata?.productSelection;
+  const selections = parseProductSelections(productSelectionRaw);
+  const storefrontId = session.metadata?.storefrontId;
+
+  if (!storefrontId || !selections.length) return null;
+
+  const existing = await prisma.productOrder.findFirst({
+    where: { stripeCheckoutSessionId: session.id },
+  });
+  if (existing) return existing;
+
+  const storefront = await prisma.storefront.findUnique({ where: { id: storefrontId } });
+  if (!storefront) return null;
+
+  const productIds = Array.from(new Set(selections.map((s) => s.productId)));
+  const products = await prisma.product.findMany({
+    where: { id: { in: productIds } },
+    include: { variants: true },
+  });
+  const productMap = new Map(products.map((product) => [product.id, product]));
+
+  const itemsToCreate: Array<{
+    productId: string;
+    variantId?: string | null;
+    titleSnapshot: string;
+    variantSnapshot?: string | null;
+    unitPricePence: number;
+    qty: number;
+    lineTotalPence: number;
+    fulfilmentTypeSnapshot: any;
+    metadataJson?: any;
+  }> = [];
+
+  let subtotal = 0;
+
+  for (const selection of selections) {
+    const product = productMap.get(selection.productId);
+    if (!product) continue;
+    const variant = selection.variantId
+      ? product.variants.find((v) => v.id === selection.variantId)
+      : null;
+    let unitPrice = variant?.pricePenceOverride ?? product.pricePence ?? 0;
+    if (product.allowCustomAmount && selection.unitAmount) {
+      unitPrice = Math.max(100, Number(selection.unitAmount || 0));
+    }
+    const qty = Math.max(1, Math.floor(selection.qty));
+    const lineTotal = unitPrice * qty;
+    subtotal += lineTotal;
+
+    itemsToCreate.push({
+      productId: product.id,
+      variantId: variant?.id || null,
+      titleSnapshot: product.title,
+      variantSnapshot: variant?.title || null,
+      unitPricePence: unitPrice,
+      qty,
+      lineTotalPence: lineTotal,
+      fulfilmentTypeSnapshot: product.fulfilmentType,
+    });
+  }
+
+  const taxPence = Number(session.metadata?.productTaxPence || 0) || 0;
+  const shippingPence = Number(session.metadata?.productShippingPence || 0) || 0;
+  const totalPence = subtotal + taxPence + shippingPence;
+
+  const customerDetails = session.customer_details;
+  const shippingDetails = session.shipping_details;
+
+  const source =
+    session.metadata?.source === "STOREFRONT_ONLY" ? "STOREFRONT_ONLY" : "TICKET_CHECKOUT";
+
+  const order = await prisma.productOrder.create({
+    data: {
+      storefrontId,
+      orderId: session.metadata?.orderId || null,
+      source,
+      stripeCheckoutSessionId: session.id,
+      stripePaymentIntentId: session.payment_intent as string,
+      customerName: customerDetails?.name || null,
+      customerEmail: customerDetails?.email || null,
+      customerPhone: customerDetails?.phone || null,
+      shippingAddressJson: shippingDetails?.address || null,
+      subtotalPence: subtotal,
+      taxPence,
+      shippingPence,
+      totalPence,
+      currency: session.currency || "gbp",
+      status: "PAID",
+    },
+  });
+
+  for (const item of itemsToCreate) {
+    await prisma.productOrderItem.create({
+      data: {
+        productOrderId: order.id,
+        productId: item.productId,
+        variantId: item.variantId || null,
+        titleSnapshot: item.titleSnapshot,
+        variantSnapshot: item.variantSnapshot || null,
+        unitPricePence: item.unitPricePence,
+        qty: item.qty,
+        lineTotalPence: item.lineTotalPence,
+        fulfilmentTypeSnapshot: item.fulfilmentTypeSnapshot,
+      },
+    });
+
+    await decrementStockTransaction(item.productId, item.qty, item.variantId || null);
+  }
+
+  const digitalItems = itemsToCreate.filter((item) => item.fulfilmentTypeSnapshot === "EMAIL");
+  if (digitalItems.length && customerDetails?.email) {
+    await sendDigitalProductEmail({
+      email: customerDetails.email,
+      name: customerDetails.name || "",
+      items: digitalItems,
+      storefront,
+      orderId: order.id,
+    });
+  }
+
+  return order;
 }
 
 async function loadSeatRefMapForShow(showId: string): Promise<Map<string, string>> {
@@ -206,6 +350,8 @@ router.post("/stripe", express.raw({ type: "application/json" }), async (req, re
     const session = event.data.object as Stripe.Checkout.Session;
     const orderId = session.metadata?.orderId;
     const showId = session.metadata?.showId;
+    const hasTicketOrder = Boolean(orderId && showId);
+    const hasProductOrder = Boolean(session.metadata?.productSelection && session.metadata?.storefrontId);
 
     const seatIdsRaw = session.metadata?.seatIds || "";
     const seatIds = seatIdsRaw
@@ -213,9 +359,18 @@ router.post("/stripe", express.raw({ type: "application/json" }), async (req, re
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
 
-    if (!orderId || !showId) {
+    if (!hasTicketOrder && !hasProductOrder) {
       console.warn("webhook: missing orderId/showId metadata", { orderId, showId });
       return res.json({ received: true });
+    }
+
+    if (hasProductOrder && !hasTicketOrder) {
+      await handleProductOrderFromSession(session);
+      return res.json({ received: true });
+    }
+
+    if (hasProductOrder) {
+      await handleProductOrderFromSession(session);
     }
 
     // Load order to compute fees precisely
@@ -276,6 +431,8 @@ const payerPostcode = String(session.customer_details?.address?.postal_code || "
 
 
     // Update order -> PAID + store fee breakdown
+ const shippingDetails = session.shipping_details;
+
  await prisma.order.update({
   where: { id: orderId },
   data: {
@@ -291,6 +448,10 @@ const payerPostcode = String(session.customer_details?.address?.postal_code || "
     buyerFirstName: payerFirstName,
     buyerLastName: payerLastName,
     buyerPostcode: payerPostcode,
+    shippingName: shippingDetails?.name || payerFirstName || null,
+    shippingEmail: payerEmail,
+    shippingPhone: session.customer_details?.phone || null,
+    shippingAddressJson: shippingDetails?.address || null,
   },
 });
 // -----------------------------

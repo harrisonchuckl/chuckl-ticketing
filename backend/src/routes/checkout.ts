@@ -44,6 +44,11 @@ function getPublicBaseUrl(req: any) {
   return `${proto}://${host}`.replace(/\/+$/, "");
 }
 
+function toInt(value: any) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.round(n) : 0;
+}
+
 router.post("/session", async (req, res) => {
   const DEBUG_REQ_BODY = req.body || {};
   console.debug("checkout/session request body (RAW):", DEBUG_REQ_BODY);
@@ -54,6 +59,9 @@ router.post("/session", async (req, res) => {
     }
 
     const { showId, quantity, unitPricePence, seats, ticketTypeId, items } = DEBUG_REQ_BODY;
+    const upsellItems = Array.isArray(DEBUG_REQ_BODY?.upsellItems)
+      ? DEBUG_REQ_BODY.upsellItems
+      : [];
     const buyerEmail = String(DEBUG_REQ_BODY?.buyerEmail || "").trim().toLowerCase();
 
     const seatIds: string[] = Array.isArray(seats) ? seats.map((s: any) => String(s)) : [];
@@ -254,14 +262,143 @@ if (!itQty || itQty < 1 || !itUnit || itUnit < 1) {
 
   // (removed duplicate capacity guard — enforced earlier via effectiveCap + PENDING+PAID)
 
+    const ticketSubtotalPence = amountPence;
+
+    // --- Upsells / add-ons ---
+    let productSubtotalPence = 0;
+    let productTaxPence = 0;
+    let productShippingPence = 0;
+    let requiresShipping = false;
+    const productSelections: any[] = [];
+
+    const storefront = show.organiserId
+      ? await prisma.storefront.findFirst({ where: { ownerUserId: show.organiserId } })
+      : null;
+
+    if (storefront && upsellItems.length) {
+      const productIds = Array.from(
+        new Set(upsellItems.map((item: any) => String(item.productId || "")).filter(Boolean))
+      );
+
+      if (productIds.length) {
+        const rules = await prisma.upsellRule.findMany({
+          where: {
+            storefrontId: storefront.id,
+            active: true,
+            productId: { in: productIds },
+            AND: [
+              { OR: [{ showId: show.id }, { showId: null }] },
+              { OR: [{ ticketTypeId: null }, { ticketTypeId: { in: ticketTypeIds } }] },
+            ],
+          },
+          include: { product: { include: { variants: true } }, productVariant: true },
+        });
+
+        for (const item of upsellItems) {
+          const productId = String(item.productId || "");
+          const variantId = item.variantId ? String(item.variantId) : null;
+          const qty = Math.max(0, toInt(item.qty || 0));
+          if (!productId || qty < 1) continue;
+
+          const rule = rules.find((r) => {
+            if (r.productId !== productId) return false;
+            if (r.productVariantId && variantId && r.productVariantId !== variantId) return false;
+            if (r.productVariantId && !variantId) return false;
+            return true;
+          });
+
+          if (!rule || !rule.product || rule.product.status !== "ACTIVE") continue;
+
+          const product = rule.product;
+          const variant = variantId ? product.variants.find((v) => v.id === variantId) : null;
+
+          const maxPerOrder = rule.maxPerOrderOverride ?? product.maxPerOrder;
+          const maxPerTicket = rule.maxPerTicketOverride ?? product.maxPerTicket;
+          const maxByTicket = maxPerTicket && totalQty ? maxPerTicket * totalQty : null;
+          const allowedMax = maxByTicket ? Math.min(maxByTicket, maxPerOrder || maxByTicket) : maxPerOrder;
+          if (allowedMax && qty > allowedMax) {
+            return res.status(400).json({ ok: false, message: "Upsell quantity exceeds limit" });
+          }
+
+          if (product.inventoryMode === "TRACKED") {
+            const stock = variant?.stockCountOverride ?? product.stockCount ?? 0;
+            if (stock < qty) {
+              return res.status(409).json({ ok: false, message: `Insufficient stock for ${product.title}` });
+            }
+          }
+
+          let unitAmount = variant?.pricePenceOverride ?? product.pricePence ?? 0;
+          if (product.allowCustomAmount) {
+            const customAmount = Math.max(100, toInt(item.customAmount || 0));
+            unitAmount = customAmount;
+          }
+
+          productSubtotalPence += unitAmount * qty;
+          if (product.fulfilmentType === "SHIPPING") requiresShipping = true;
+
+          productSelections.push({
+            productId,
+            variantId,
+            qty,
+            unitAmount,
+          });
+
+          lineItems.push({
+            price_data: {
+              currency: product.currency || "gbp",
+              product_data: {
+                name: product.title,
+                metadata: { productId, variantId: variantId || "" },
+              },
+              unit_amount: Math.round(unitAmount),
+            },
+            quantity: Math.round(qty),
+          });
+        }
+      }
+    }
+
+    if (productSubtotalPence > 0 && storefront) {
+      if (storefront.taxMode !== "NONE" && storefront.taxPercent) {
+        productTaxPence = Math.round((productSubtotalPence * storefront.taxPercent) / 100);
+        if (productTaxPence > 0) {
+          lineItems.push({
+            price_data: {
+              currency: "gbp",
+              product_data: { name: "Tax" },
+              unit_amount: productTaxPence,
+            },
+            quantity: 1,
+          });
+        }
+      }
+
+      if (requiresShipping && storefront.shippingFlatFeePence) {
+        productShippingPence = storefront.shippingFlatFeePence;
+        lineItems.push({
+          price_data: {
+            currency: "gbp",
+            product_data: { name: "Shipping" },
+            unit_amount: productShippingPence,
+          },
+          quantity: 1,
+        });
+      }
+    }
+
     // Create Order (PENDING)
     const order = await prisma.order.create({
       data: {
         showId: show.id,
         quantity: totalQty,
-        amountPence: amountPence,
+        amountPence: ticketSubtotalPence,
         status: OrderStatus.PENDING,
         email: buyerEmail || undefined,
+        storefrontId: storefront?.id || undefined,
+        containsProducts: productSubtotalPence > 0,
+        containsTickets: totalQty > 0,
+        productSubtotalPence: productSubtotalPence,
+        ticketSubtotalPence: ticketSubtotalPence,
       },
       select: { id: true },
     });
@@ -331,11 +468,17 @@ if (Array.isArray(items) && items.length > 0) {
   // ✅ Use Stripe’s built-in billing details (avoids duplicate “name” + “postcode”)
   // Forces Stripe to always collect postcode (and country).
   billing_address_collection: "required",
+  shipping_address_collection: requiresShipping ? { allowed_countries: ["GB"] } : undefined,
 
   metadata: {
     orderId: order.id,
     showId: show.id,
     seatIds: seatIds.join(","),
+    ...(storefront ? { storefrontId: storefront.id } : {}),
+    ...(productSelections.length ? { productSelection: JSON.stringify(productSelections).slice(0, 4500) } : {}),
+    ...(productSubtotalPence ? { productSubtotalPence: String(productSubtotalPence) } : {}),
+    ...(productTaxPence ? { productTaxPence: String(productTaxPence) } : {}),
+    ...(productShippingPence ? { productShippingPence: String(productShippingPence) } : {}),
 
     // GA purchases (no seats) still rely on ticketTypeId
     ...(ticketTypeId ? { ticketTypeId: String(ticketTypeId) } : {}),
@@ -345,6 +488,8 @@ if (Array.isArray(items) && items.length > 0) {
 ...(seatGroupsJson ? { seatGroups: seatGroupsJson } : {}),
   },
 });
+
+    console.debug("checkout/session stripe response (RAW):", session);
 
 
 
@@ -556,6 +701,70 @@ const ticketTypes = (show.ticketTypes || []).map((t: any) => {
         if (layoutObj.konvaJson) konvaData = layoutObj.konvaJson;
         else if (layoutObj.attrs || layoutObj.className) konvaData = layoutObj;
     }
+
+    const storefront = show.organiserId
+      ? await prisma.storefront.findFirst({ where: { ownerUserId: show.organiserId } })
+      : null;
+
+    const upsellRules = storefront
+      ? await prisma.upsellRule.findMany({
+          where: {
+            storefrontId: storefront.id,
+            active: true,
+            AND: [
+              { OR: [{ showId: show.id }, { showId: null }] },
+              { OR: [{ ticketTypeId: null }, { ticketTypeId: { in: show.ticketTypes.map((t) => t.id) } }] },
+            ],
+          },
+          include: { product: { include: { variants: true } }, productVariant: true },
+          orderBy: [{ recommended: "desc" }, { priority: "asc" }],
+        })
+      : [];
+
+    const upsellItems = upsellRules
+      .filter((rule) => rule.product && rule.product.status === "ACTIVE")
+      .map((rule) => {
+        const variant = rule.productVariant || null;
+        return {
+          id: rule.id,
+          productId: rule.productId,
+          variantId: rule.productVariantId || null,
+          title: rule.product.title,
+          variantTitle: variant?.title || null,
+          unitAmount: variant?.pricePenceOverride ?? rule.product.pricePence ?? 0,
+          allowCustomAmount: rule.product.allowCustomAmount,
+          fulfilmentType: rule.product.fulfilmentType,
+          maxPerOrder: rule.maxPerOrderOverride ?? rule.product.maxPerOrder ?? null,
+          maxPerTicket: rule.maxPerTicketOverride ?? rule.product.maxPerTicket ?? null,
+          recommended: rule.recommended,
+        };
+      });
+
+    const upsellRowsHtml = upsellItems
+      .map((item) => {
+        const label = item.variantTitle ? `${item.title} (${item.variantTitle})` : item.title;
+        return `
+          <div class="upsell-row"
+            data-product-id="${escAttr(item.productId)}"
+            data-variant-id="${escAttr(item.variantId || "")}"
+            data-price="${escAttr(item.unitAmount || 0)}"
+            data-max-order="${escAttr(item.maxPerOrder || "")}"
+            data-max-ticket="${escAttr(item.maxPerTicket || "")}"
+            data-allow-custom="${item.allowCustomAmount ? "true" : "false"}"
+          >
+            <div>
+              <div class="title">${escAttr(label)}</div>
+              <div class="muted">${item.allowCustomAmount ? "Choose amount" : pFmt(item.unitAmount)}</div>
+            </div>
+            <div>
+              ${item.allowCustomAmount ? '<input class="upsell-amount" type="number" min="100" placeholder="Amount (pence)" />' : ''}
+              <input class="upsell-qty" type="number" min="0" value="0" />
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+
 
  // --- MODE A: LIST VIEW (General Admission) ---
     if (!konvaData) {
@@ -907,6 +1116,26 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
       background:#fff;
     }
 
+    .upsell-list{
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+
+    .upsell-row{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      padding:12px;
+      border:1px dashed var(--border);
+      border-radius:12px;
+      background:#fff;
+    }
+
+    .upsell-row input{
+      max-width:120px;
+    }
+
     .ticket-left{ min-width:0; }
     .ticket-name{
       font-weight:900;
@@ -1022,6 +1251,13 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
     ${ticketRowsHtml}
   </div>
 
+  <div class="card" style="margin-top:16px;">
+    <h3>Add-ons</h3>
+    <div class="upsell-list">
+      ${upsellRowsHtml || '<div class="muted">No add-ons available for this show.</div>'}
+    </div>
+  </div>
+
   <div class="error" id="error-message"></div>
 
    <div style="margin-top:14px;">
@@ -1050,6 +1286,10 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
           <span class="muted">Booking fee</span>
           <span id="sum-fee">£0.00</span>
         </div>
+        <div class="summary-row">
+          <span class="muted">Add-ons</span>
+          <span id="sum-addons">£0.00</span>
+        </div>
         <div class="summary-row" style="align-items:baseline;">
           <span class="muted">Total</span>
           <span class="summary-total" id="sum-total">£0.00</span>
@@ -1067,11 +1307,13 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
 
   const sumBase = document.getElementById('sum-base');
   const sumFee = document.getElementById('sum-fee');
+  const sumAddons = document.getElementById('sum-addons');
   const sumTotal = document.getElementById('sum-total');
   const sumDetail = document.getElementById('sum-detail');
 
   const buyButton = document.getElementById('btn-buy');
   const errorMessage = document.getElementById('error-message');
+  const upsellRows = Array.from(document.querySelectorAll('.upsell-row'));
 
   function money(pence){
     return '£' + ((Number(pence || 0) / 100).toFixed(2));
@@ -1086,6 +1328,45 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
     }
     errorMessage.style.display = 'block';
     errorMessage.textContent = msg;
+  }
+
+  function getUpsellSelections(totalTickets){
+    const selections = [];
+    let total = 0;
+    upsellRows.forEach(row => {
+      const productId = row.getAttribute('data-product-id');
+      const variantId = row.getAttribute('data-variant-id') || null;
+      const price = Number(row.getAttribute('data-price')) || 0;
+      const maxOrder = Number(row.getAttribute('data-max-order')) || 0;
+      const maxTicket = Number(row.getAttribute('data-max-ticket')) || 0;
+      const allowCustom = row.getAttribute('data-allow-custom') === 'true';
+
+      const qtyInput = row.querySelector('.upsell-qty');
+      let qty = Math.max(0, Number(qtyInput && qtyInput.value) || 0);
+      let maxAllowed = maxOrder || null;
+      if (maxTicket && totalTickets){
+        const ticketCap = maxTicket * totalTickets;
+        maxAllowed = maxAllowed ? Math.min(maxAllowed, ticketCap) : ticketCap;
+      }
+      if (maxAllowed && qty > maxAllowed){
+        qty = maxAllowed;
+        if (qtyInput) qtyInput.value = String(maxAllowed);
+      }
+
+      if (qty > 0){
+        let unitAmount = price;
+        let customAmount = null;
+        if (allowCustom){
+          const amountInput = row.querySelector('.upsell-amount');
+          const amt = Math.max(100, Number(amountInput && amountInput.value) || 0);
+          unitAmount = amt;
+          customAmount = amt;
+        }
+        total += unitAmount * qty;
+        selections.push({ productId, variantId, qty, customAmount });
+      }
+    });
+    return { selections, total };
   }
 
   function getSelections(){
@@ -1115,14 +1396,25 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
       }
     }
 
-    return { items, totalQty, baseTotal, feeTotal, grandTotal: baseTotal + feeTotal };
+    const upsells = getUpsellSelections(totalQty);
+
+    return {
+      items,
+      totalQty,
+      baseTotal,
+      feeTotal,
+      addonsTotal: upsells.total,
+      upsellItems: upsells.selections,
+      grandTotal: baseTotal + feeTotal + upsells.total
+    };
   }
 
   function updateSummary(){
-    const { totalQty, baseTotal, feeTotal, grandTotal } = getSelections();
+    const { totalQty, baseTotal, feeTotal, addonsTotal, grandTotal } = getSelections();
 
     sumBase.textContent = money(baseTotal);
     sumFee.textContent = money(feeTotal);
+    if (sumAddons) sumAddons.textContent = money(addonsTotal);
     sumTotal.textContent = money(grandTotal);
 
     sumDetail.textContent = totalQty + (totalQty === 1 ? ' ticket selected' : ' tickets selected');
@@ -1134,6 +1426,12 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
     const sel = row.querySelector('.qty-select');
     if (sel) sel.addEventListener('change', updateSummary);
   });
+  upsellRows.forEach(row => {
+    const qty = row.querySelector('.upsell-qty');
+    const amt = row.querySelector('.upsell-amount');
+    if (qty) qty.addEventListener('input', updateSummary);
+    if (amt) amt.addEventListener('input', updateSummary);
+  });
 
   updateSummary();
 
@@ -1141,7 +1439,7 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
     e.preventDefault();
     setError('');
 
-    const { items, totalQty } = getSelections();
+    const { items, totalQty, upsellItems } = getSelections();
 
     if (!items.length || totalQty < 1){
       setError('Please choose at least 1 ticket.');
@@ -1155,7 +1453,7 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
       const res = await fetch('/checkout/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ showId, items })
+        body: JSON.stringify({ showId, items, upsellItems })
       });
 
       const data = await res.json();
@@ -1244,6 +1542,27 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
   border: 1px solid rgba(15,23,42,0.25);
   display:inline-block;
   vertical-align: middle;
+}
+
+.upsell-list{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  margin-top:12px;
+}
+
+.upsell-row{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  padding:12px;
+  border:1px dashed var(--border);
+  border-radius:12px;
+  background:#fff;
+}
+
+.upsell-row input{
+  max-width:120px;
 }
 
 /* Make legend wrap nicely when we show multiple ticket bands */
@@ -1581,6 +1900,16 @@ touch-action: none;
   </div>
 </section>
 
+<!-- Add-ons (optional) -->
+<section id="upsell-panel" style="${upsellRowsHtml ? '' : 'display:none;'}">
+  <div class="tpp-inner">
+    <div class="tpp-title">Add-ons</div>
+    <div class="upsell-list">
+      ${upsellRowsHtml || '<div class="muted">No add-ons available for this show.</div>'}
+    </div>
+  </div>
+</section>
+
     <script>
 
   function setViewportUnit() {
@@ -1589,10 +1918,11 @@ touch-action: none;
   setViewportUnit();
   window.addEventListener('resize', setViewportUnit, { passive: true });
 
-  const rawLayout = ${mapData};
+const rawLayout = ${mapData};
 const ticketTypes = ${ticketsData};
 const showId = ${showIdStr};
 const heldSeatIds = new Set(${heldSeatsArray});
+const upsellRows = Array.from(document.querySelectorAll('.upsell-row'));
 
 /* -----------------------------
    Tiered pricing (banded seats)
@@ -4200,6 +4530,45 @@ function findTableSingleGapGroups() {
   updateBasket();
 }
 
+    function getUpsellSelections(totalTickets){
+      const selections = [];
+      let total = 0;
+      upsellRows.forEach(row => {
+        const productId = row.getAttribute('data-product-id');
+        const variantId = row.getAttribute('data-variant-id') || null;
+        const price = Number(row.getAttribute('data-price')) || 0;
+        const maxOrder = Number(row.getAttribute('data-max-order')) || 0;
+        const maxTicket = Number(row.getAttribute('data-max-ticket')) || 0;
+        const allowCustom = row.getAttribute('data-allow-custom') === 'true';
+
+        const qtyInput = row.querySelector('.upsell-qty');
+        let qty = Math.max(0, Number(qtyInput && qtyInput.value) || 0);
+        let maxAllowed = maxOrder || null;
+        if (maxTicket && totalTickets){
+          const ticketCap = maxTicket * totalTickets;
+          maxAllowed = maxAllowed ? Math.min(maxAllowed, ticketCap) : ticketCap;
+        }
+        if (maxAllowed && qty > maxAllowed){
+          qty = maxAllowed;
+          if (qtyInput) qtyInput.value = String(maxAllowed);
+        }
+
+        if (qty > 0){
+          let unitAmount = price;
+          let customAmount = null;
+          if (allowCustom){
+            const amountInput = row.querySelector('.upsell-amount');
+            const amt = Math.max(100, Number(amountInput && amountInput.value) || 0);
+            unitAmount = amt;
+            customAmount = amt;
+          }
+          total += unitAmount * qty;
+          selections.push({ productId, variantId, qty, customAmount });
+        }
+      });
+      return { selections, total };
+    }
+
 
     function updateBasket() {
       let baseTotalPence = 0; let feeTotalPence = 0; let count = 0;
@@ -4209,13 +4578,16 @@ selectedSeats.forEach(id => {
   count++;
 });
 
+const upsell = getUpsellSelections(count);
 const baseText = '£' + (baseTotalPence / 100).toFixed(2);
 const feeText = '£' + (feeTotalPence / 100).toFixed(2);
+const upsellText = '£' + (upsell.total / 100).toFixed(2);
 
 const totalEl = document.getElementById('ui-total');
 totalEl.innerHTML =
   '<span class="basket-amt">' + baseText + '</span>' +
-  (feeTotalPence > 0 ? '<span class="basket-fee"> + ' + feeText + ' booking fee</span>' : '');
+  (feeTotalPence > 0 ? '<span class="basket-fee"> + ' + feeText + ' booking fee</span>' : '') +
+  (upsell.total > 0 ? '<span class="basket-fee"> + ' + upsellText + ' add-ons</span>' : '');
 
 document.getElementById('ui-count').innerText = count + (count === 1 ? ' ticket' : ' tickets');
         const btn = document.getElementById('btn-next');
@@ -4248,7 +4620,14 @@ if (isMobileView) {
   setSeatInfoLine('');
 }
 
-    }
+}
+    upsellRows.forEach(row => {
+      const qty = row.querySelector('.upsell-qty');
+      const amt = row.querySelector('.upsell-amount');
+      if (qty) qty.addEventListener('input', updateBasket);
+      if (amt) amt.addEventListener('input', updateBasket);
+    });
+
 document.getElementById('btn-next').addEventListener('click', async () => {
   const btn = document.getElementById('btn-next');
   if (!btn.classList.contains('active')) return;
@@ -4300,6 +4679,7 @@ document.getElementById('btn-next').addEventListener('click', async () => {
     }));
 
     const allSeatIds = items.flatMap(i => i.seatIds);
+    const upsell = getUpsellSelections(allSeatIds.length);
 
     const res = await fetch('/checkout/session', {
       method: 'POST',
@@ -4307,7 +4687,8 @@ document.getElementById('btn-next').addEventListener('click', async () => {
       body: JSON.stringify({
         showId,
         seats: allSeatIds,
-        items
+        items,
+        upsellItems: upsell.selections
       })
     });
 
