@@ -1787,6 +1787,134 @@ router.get(
       padding:6px 10px;
       cursor:pointer;
     }
+    .ps-create-page{
+      max-width:980px;
+      margin:0 auto;
+      display:flex;
+      flex-direction:column;
+      gap:16px;
+    }
+    .ps-create-hero{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:16px;
+    }
+    .ps-eyebrow{
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      font-size:11px;
+      font-weight:700;
+      color:var(--muted);
+      margin-bottom:6px;
+    }
+    .ps-section{
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+    .ps-section-header{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:12px;
+    }
+    .ps-section-header .section-title{
+      font-weight:700;
+      font-size:16px;
+      margin-bottom:4px;
+    }
+    .ps-chip{
+      background:#e6f6f4;
+      color:#0f766e;
+      font-size:11px;
+      font-weight:700;
+      border-radius:999px;
+      padding:4px 10px;
+      white-space:nowrap;
+    }
+    .ps-upload-card{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:12px;
+      border:1px dashed var(--border);
+      border-radius:12px;
+      background:#f8fafc;
+      flex-wrap:wrap;
+    }
+    .ps-row-list{
+      display:grid;
+      gap:8px;
+    }
+    .ps-form-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+      gap:12px;
+    }
+    .ps-field{
+      display:grid;
+      gap:6px;
+      font-size:13px;
+      font-weight:600;
+      color:var(--text);
+    }
+    .ps-field span{
+      font-size:12px;
+      color:var(--muted);
+      text-transform:uppercase;
+      letter-spacing:.04em;
+    }
+    .ps-field-wide{
+      grid-column:1 / -1;
+    }
+    .ps-check{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      font-size:14px;
+      font-weight:600;
+      color:var(--text);
+      padding-top:8px;
+    }
+    .ps-tip-card{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:12px 16px;
+      border-radius:14px;
+      background:#e6f6f4;
+      color:#0f766e;
+    }
+    .ps-tip-title{
+      font-weight:700;
+      margin-bottom:4px;
+    }
+    .ps-tip-text{
+      font-size:13px;
+    }
+    .ps-tip-link{
+      font-weight:700;
+      white-space:nowrap;
+    }
+    .ps-action-bar{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+    @media (max-width:720px){
+      .ps-create-hero{
+        flex-direction:column;
+        align-items:flex-start;
+      }
+      .ps-tip-card{
+        flex-direction:column;
+        align-items:flex-start;
+      }
+    }
   </style>
 </head>
 <body>
@@ -9673,58 +9801,149 @@ function renderInterests(customer){
     if (!main) return;
     var isEdit = !!productId;
     main.innerHTML = ''
-      + '<div class="card">'
-      +   '<div class="title">' + (isEdit ? 'Edit product' : 'Create product') + '</div>'
-      +   '<div class="grid" style="margin-top:12px;">'
-      +     '<input id="ps_prod_title" class="input" placeholder="Title" />'
-      +     '<input id="ps_prod_slug" class="input" placeholder="Slug" />'
-      +     '<textarea id="ps_prod_desc" class="input" placeholder="Description"></textarea>'
-      +     '<select id="ps_prod_category" class="input">'
-      +       '<option value="MERCH">Merch</option>'
-      +       '<option value="ADDON">Add-on</option>'
-      +       '<option value="DIGITAL">Digital</option>'
-      +       '<option value="DONATION">Donation</option>'
-      +       '<option value="VOUCHER">Voucher</option>'
-      +     '</select>'
-      +     '<select id="ps_prod_fulfilment" class="input">'
-      +       '<option value="NONE">None</option>'
-      +       '<option value="SHIPPING">Shipping</option>'
-      +       '<option value="COLLECT">Collect</option>'
-      +       '<option value="EMAIL">Email</option>'
-      +     '</select>'
-      +     '<select id="ps_prod_status" class="input">'
-      +       '<option value="DRAFT">Draft</option>'
-      +       '<option value="ACTIVE">Active</option>'
-      +       '<option value="ARCHIVED">Archived</option>'
-      +     '</select>'
-      +     '<input id="ps_prod_price" class="input" placeholder="Price (pence)" type="number" />'
-      +     '<label><input type="checkbox" id="ps_prod_custom" /> Allow custom amount</label>'
-      +     '<select id="ps_prod_inventory" class="input">'
-      +       '<option value="UNLIMITED">Unlimited</option>'
-      +       '<option value="TRACKED">Tracked</option>'
-      +     '</select>'
-      +     '<input id="ps_prod_stock" class="input" placeholder="Stock count" type="number" />'
-      +     '<input id="ps_prod_low_stock" class="input" placeholder="Low stock threshold" type="number" />'
-      +     '<label><input type="checkbox" id="ps_prod_preorder" /> Preorder enabled</label>'
-      +     '<input id="ps_prod_preorder_close" class="input" placeholder="Preorder close (YYYY-MM-DD)" />'
-      +     '<input id="ps_prod_max_order" class="input" placeholder="Max per order" type="number" />'
-      +     '<input id="ps_prod_max_ticket" class="input" placeholder="Max per ticket" type="number" />'
+      + '<div class="ps-create-page">'
+      +   '<div class="card ps-create-hero">'
+      +     '<div>'
+      +       '<div class="ps-eyebrow">Product store</div>'
+      +       '<div class="title">' + (isEdit ? 'Edit product' : 'Create product') + '</div>'
+      +       '<div class="muted">Keep it simple: add photos, a clear title, and pricing. You can refine details anytime.</div>'
+      +     '</div>'
+      +     '<button class="btn" id="ps_prod_back">Back</button>'
       +   '</div>'
-      + '</div>'
-      + '<div class="card" style="margin-top:12px;">'
-      +   '<div class="title">Variants</div>'
-      +   '<div id="ps_variant_rows"></div>'
-      +   '<button class="btn" id="ps_add_variant" style="margin-top:8px;">Add variant</button>'
-      + '</div>'
-      + '<div class="card" style="margin-top:12px;">'
-      +   '<div class="title">Images</div>'
-      +   '<div id="ps_image_rows"></div>'
-      +   '<button class="btn" id="ps_add_image" style="margin-top:8px;">Add image</button>'
-      + '</div>'
-      + '<div class="row" style="gap:8px;margin-top:12px;">'
-      +   '<button class="btn p" id="ps_prod_save">Save product</button>'
-      +   '<button class="btn" id="ps_prod_back">Back</button>'
-      +   '<div class="muted" id="ps_prod_msg"></div>'
+      +   '<div class="card ps-section">'
+      +     '<div class="ps-section-header">'
+      +       '<div>'
+      +         '<div class="section-title">Photos</div>'
+      +         '<div class="muted">First photo becomes the cover image.</div>'
+      +       '</div>'
+      +       '<span class="ps-chip">Step 1</span>'
+      +     '</div>'
+      +     '<div class="ps-upload-card">'
+      +       '<button class="btn p" id="ps_add_image">+ Add photos</button>'
+      +       '<div class="muted">Use bright, square images for best results.</div>'
+      +     '</div>'
+      +     '<div id="ps_image_rows" class="ps-row-list"></div>'
+      +   '</div>'
+      +   '<div class="card ps-section">'
+      +     '<div class="ps-section-header">'
+      +       '<div>'
+      +         '<div class="section-title">Listing details</div>'
+      +         '<div class="muted">Help buyers understand what they’re getting.</div>'
+      +       '</div>'
+      +       '<span class="ps-chip">Step 2</span>'
+      +     '</div>'
+      +     '<div class="ps-form-grid">'
+      +       '<label class="ps-field">'
+      +         '<span>Title</span>'
+      +         '<input id="ps_prod_title" class="input" placeholder="Title" />'
+      +       '</label>'
+      +       '<label class="ps-field">'
+      +         '<span>Slug</span>'
+      +         '<input id="ps_prod_slug" class="input" placeholder="Slug" />'
+      +       '</label>'
+      +       '<label class="ps-field ps-field-wide">'
+      +         '<span>Description</span>'
+      +         '<textarea id="ps_prod_desc" class="input" placeholder="Describe the product"></textarea>'
+      +       '</label>'
+      +       '<label class="ps-field">'
+      +         '<span>Category</span>'
+      +         '<select id="ps_prod_category" class="input">'
+      +           '<option value="MERCH">Merch</option>'
+      +           '<option value="ADDON">Add-on</option>'
+      +           '<option value="DIGITAL">Digital</option>'
+      +           '<option value="DONATION">Donation</option>'
+      +           '<option value="VOUCHER">Voucher</option>'
+      +         '</select>'
+      +       '</label>'
+      +       '<label class="ps-field">'
+      +         '<span>Fulfilment</span>'
+      +         '<select id="ps_prod_fulfilment" class="input">'
+      +           '<option value="NONE">None</option>'
+      +           '<option value="SHIPPING">Shipping</option>'
+      +           '<option value="COLLECT">Collect</option>'
+      +           '<option value="EMAIL">Email</option>'
+      +         '</select>'
+      +       '</label>'
+      +       '<label class="ps-field">'
+      +         '<span>Status</span>'
+      +         '<select id="ps_prod_status" class="input">'
+      +           '<option value="DRAFT">Draft</option>'
+      +           '<option value="ACTIVE">Active</option>'
+      +           '<option value="ARCHIVED">Archived</option>'
+      +         '</select>'
+      +       '</label>'
+      +     '</div>'
+      +   '</div>'
+      +   '<div class="card ps-section">'
+      +     '<div class="ps-section-header">'
+      +       '<div>'
+      +         '<div class="section-title">Pricing & inventory</div>'
+      +         '<div class="muted">Set a simple price or allow custom amounts.</div>'
+      +       '</div>'
+      +       '<span class="ps-chip">Step 3</span>'
+      +     '</div>'
+      +     '<div class="ps-form-grid">'
+      +       '<label class="ps-field">'
+      +         '<span>Price (pence)</span>'
+      +         '<input id="ps_prod_price" class="input" placeholder="Price (pence)" type="number" />'
+      +       '</label>'
+      +       '<label class="ps-check">'
+      +         '<input type="checkbox" id="ps_prod_custom" /> Allow custom amount'
+      +       '</label>'
+      +       '<label class="ps-field">'
+      +         '<span>Inventory mode</span>'
+      +         '<select id="ps_prod_inventory" class="input">'
+      +           '<option value="UNLIMITED">Unlimited</option>'
+      +           '<option value="TRACKED">Tracked</option>'
+      +         '</select>'
+      +       '</label>'
+      +       '<label class="ps-field">'
+      +         '<span>Stock count</span>'
+      +         '<input id="ps_prod_stock" class="input" placeholder="Stock count" type="number" />'
+      +       '</label>'
+      +       '<label class="ps-field">'
+      +         '<span>Low stock threshold</span>'
+      +         '<input id="ps_prod_low_stock" class="input" placeholder="Low stock threshold" type="number" />'
+      +       '</label>'
+      +       '<label class="ps-check">'
+      +         '<input type="checkbox" id="ps_prod_preorder" /> Preorder enabled'
+      +       '</label>'
+      +       '<label class="ps-field">'
+      +         '<span>Preorder close (YYYY-MM-DD)</span>'
+      +         '<input id="ps_prod_preorder_close" class="input" placeholder="Preorder close (YYYY-MM-DD)" />'
+      +       '</label>'
+      +       '<label class="ps-field">'
+      +         '<span>Max per order</span>'
+      +         '<input id="ps_prod_max_order" class="input" placeholder="Max per order" type="number" />'
+      +       '</label>'
+      +       '<label class="ps-field">'
+      +         '<span>Max per ticket</span>'
+      +         '<input id="ps_prod_max_ticket" class="input" placeholder="Max per ticket" type="number" />'
+      +       '</label>'
+      +     '</div>'
+      +   '</div>'
+      +   '<div class="card ps-section">'
+      +     '<div class="ps-section-header">'
+      +       '<div>'
+      +         '<div class="section-title">Variants</div>'
+      +         '<div class="muted">Add options like sizes or bundles.</div>'
+      +       '</div>'
+      +       '<span class="ps-chip">Optional</span>'
+      +     '</div>'
+      +     '<div id="ps_variant_rows" class="ps-row-list"></div>'
+      +     '<button class="btn" id="ps_add_variant">Add variant</button>'
+      +   '</div>'
+      +   '<div class="ps-tip-card">'
+      +     '<div>'
+      +       '<div class="ps-tip-title">Tip: Keep it punchy</div>'
+      +       '<div class="ps-tip-text">Short titles and clear pricing help buyers check out faster.</div>'
+      +     '</div>'
+      +     '<span class="ps-tip-link">Learn more</span>'
+      +   '</div>'
+      +   '<div class="ps-action-bar">'
+      +     '<button class="btn p" id="ps_prod_save">Save product</button>'
+      +     '<div class="muted" id="ps_prod_msg"></div>'
+      +   '</div>'
       + '</div>';
 
     function slugifyLocal(value){
