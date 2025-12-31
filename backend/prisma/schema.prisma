@@ -270,6 +270,7 @@ model User {
   venueMemberships    VenueMember[]
   invitedVenueMembers VenueMember[] @relation("VenueInviter")
   venueInvitesCreated VenueInvite[] @relation("VenueInviteCreatedBy")
+  venuesOwned         Venue[]       @relation("VenueOwner")
 
   promotersOwned            Promoter[]         @relation("PromoterOwner")
   promoterDocumentsUploaded PromoterDocument[] @relation("PromoterDocumentUploader")
@@ -359,8 +360,13 @@ model Venue {
   shows    Show[]
   seatMaps SeatMap[]
 
+  ownerId String?
+  owner   User?   @relation("VenueOwner", fields: [ownerId], references: [id])
+
   members      VenueMember[]
   venueInvites VenueInvite[] @relation("VenueInviteVenue")
+
+  @@index([ownerId])
 }
 
 model Promoter {

@@ -4,20 +4,41 @@ import { requireAdminOrOrganiser } from "../lib/authz.js";
 
 const router = Router();
 
+function isOrganiser(req: any) {
+  return String(req.user?.role || "").toUpperCase() === "ORGANISER";
+}
+
+function requireUserId(req: any): string {
+  const id = req?.user?.id;
+  if (!id) throw new Error("Auth middleware did not attach req.user");
+  return String(id);
+}
+
+function venueScope(req: any) {
+  return isOrganiser(req) ? { ownerId: requireUserId(req) } : {};
+}
+
 /** GET /admin/venues?q= — search name/city/postcode */
 router.get("/venues", requireAdminOrOrganiser, async (req, res) => {
   try {
     const q = (String(req.query.q || "").trim()) || null;
 
+    const scope = venueScope(req);
+    const baseWhere = Object.keys(scope).length ? scope : undefined;
     const where = q
       ? {
-          OR: [
-            { name: { contains: q, mode: "insensitive" as const } },
-            { city: { contains: q, mode: "insensitive" as const } },
-            { postcode: { contains: q, mode: "insensitive" as const } },
+          AND: [
+            ...(baseWhere ? [baseWhere] : []),
+            {
+              OR: [
+                { name: { contains: q, mode: "insensitive" as const } },
+                { city: { contains: q, mode: "insensitive" as const } },
+                { postcode: { contains: q, mode: "insensitive" as const } },
+              ],
+            },
           ],
         }
-      : undefined;
+      : baseWhere;
 
     const items = await prisma.venue.findMany({
       where,
@@ -47,6 +68,7 @@ router.post("/venues", requireAdminOrOrganiser, async (req, res) => {
         city: city ? String(city).trim() : null,
         postcode: postcode ? String(postcode).trim() : null,
         capacity: capacity != null ? Number(capacity) : null,
+        ...(isOrganiser(req) ? { ownerId: requireUserId(req) } : {}),
       },
       select: { id: true, name: true, address: true, city: true, postcode: true, capacity: true },
     });
@@ -69,6 +91,13 @@ router.patch("/venues/:venueId", requireAdminOrOrganiser, async (req, res) => {
     }
 
     const nextBookingFeeBps = Math.max(1000, Math.round(parsed));
+    const existing = await prisma.venue.findFirst({
+      where: { id: venueId, ...venueScope(req) },
+      select: { id: true },
+    });
+    if (!existing) {
+      return res.status(404).json({ ok: false, error: "Venue not found" });
+    }
 
     const updated = await prisma.venue.update({
       where: { id: venueId },
@@ -87,6 +116,13 @@ router.patch("/venues/:venueId", requireAdminOrOrganiser, async (req, res) => {
 router.delete("/venues/:venueId", requireAdminOrOrganiser, async (req, res) => {
   try {
     const venueId = String(req.params.venueId);
+    const existing = await prisma.venue.findFirst({
+      where: { id: venueId, ...venueScope(req) },
+      select: { id: true },
+    });
+    if (!existing) {
+      return res.status(404).json({ ok: false, error: "Venue not found" });
+    }
     await prisma.venue.delete({ where: { id: venueId } });
     res.json({ ok: true });
   } catch (e: any) {

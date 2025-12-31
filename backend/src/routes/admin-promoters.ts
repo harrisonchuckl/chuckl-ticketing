@@ -47,6 +47,27 @@ function isOrganiser(req: any) {
   return String(req.user?.role || "").toUpperCase() === "ORGANISER";
 }
 
+function requireUserId(req: any): string {
+  const id = req?.user?.id;
+  if (!id) throw new Error("Auth middleware did not attach req.user");
+  return String(id);
+}
+
+function promoterScope(req: any) {
+  return isOrganiser(req) ? { ownerId: requireUserId(req) } : {};
+}
+
+function promoterWhere(req: any, promoterId: string) {
+  return { id: promoterId, ...promoterScope(req) };
+}
+
+async function ensurePromoterAccess(req: any, promoterId: string) {
+  return prisma.promoter.findFirst({
+    where: promoterWhere(req, promoterId),
+    select: { id: true },
+  });
+}
+
 function showWhereForRead(req: any, showId: string) {
   if (isOrganiser(req)) {
     return { id: showId, organiserId: String(req.user?.id || "") };
@@ -74,15 +95,22 @@ async function logActivity(
 router.get("/promoters", requireAdminOrOrganiser, async (req, res) => {
   try {
     const q = toNullableString(req.query.q);
+    const scope = promoterScope(req);
+    const baseWhere = Object.keys(scope).length ? scope : undefined;
     const where = q
       ? {
-          OR: [
-            { name: { contains: q, mode: "insensitive" as const } },
-            { tradingName: { contains: q, mode: "insensitive" as const } },
-            { email: { contains: q, mode: "insensitive" as const } },
+          AND: [
+            ...(baseWhere ? [baseWhere] : []),
+            {
+              OR: [
+                { name: { contains: q, mode: "insensitive" as const } },
+                { tradingName: { contains: q, mode: "insensitive" as const } },
+                { email: { contains: q, mode: "insensitive" as const } },
+              ],
+            },
           ],
         }
-      : undefined;
+      : baseWhere;
 
     const items = await prisma.promoter.findMany({
       where,
@@ -131,6 +159,7 @@ router.post("/promoters", requireAdminOrOrganiser, async (req, res) => {
         logoUrl: toNullableString(req.body?.logoUrl),
         status: normaliseStatus(req.body?.status),
         notes: toNullableString(req.body?.notes),
+        ...(isOrganiser(req) ? { ownerId: requireUserId(req) } : {}),
       },
     });
 
@@ -147,8 +176,8 @@ router.post("/promoters", requireAdminOrOrganiser, async (req, res) => {
 router.get("/promoters/:promoterId", requireAdminOrOrganiser, async (req, res) => {
   try {
     const promoterId = String(req.params.promoterId);
-    const promoter = await prisma.promoter.findUnique({
-      where: { id: promoterId },
+    const promoter = await prisma.promoter.findFirst({
+      where: promoterWhere(req, promoterId),
       include: {
         contacts: { orderBy: { createdAt: "asc" } },
         documents: { orderBy: { createdAt: "desc" } },
@@ -171,10 +200,7 @@ router.get("/promoters/:promoterId", requireAdminOrOrganiser, async (req, res) =
 router.get("/promoters/:promoterId/shows", requireAdminOrOrganiser, async (req, res) => {
   try {
     const promoterId = String(req.params.promoterId);
-    const promoter = await prisma.promoter.findUnique({
-      where: { id: promoterId },
-      select: { id: true },
-    });
+    const promoter = await ensurePromoterAccess(req, promoterId);
     if (!promoter) {
       return res.status(404).json({ ok: false, error: "Promoter not found" });
     }
@@ -216,10 +242,7 @@ router.post("/promoters/:promoterId/shows", requireAdminOrOrganiser, async (req,
       return res.status(400).json({ ok: false, error: "showId is required" });
     }
 
-    const promoter = await prisma.promoter.findUnique({
-      where: { id: promoterId },
-      select: { id: true },
-    });
+    const promoter = await ensurePromoterAccess(req, promoterId);
     if (!promoter) {
       return res.status(404).json({ ok: false, error: "Promoter not found" });
     }
@@ -250,6 +273,10 @@ router.delete("/promoters/:promoterId/shows/:showId", requireAdminOrOrganiser, a
   try {
     const promoterId = String(req.params.promoterId);
     const showId = String(req.params.showId);
+    const promoter = await ensurePromoterAccess(req, promoterId);
+    if (!promoter) {
+      return res.status(404).json({ ok: false, error: "Promoter not found" });
+    }
     await prisma.showPromoter.deleteMany({
       where: { promoterId, showId },
     });
@@ -267,6 +294,11 @@ router.post("/promoters/:promoterId", requireAdminOrOrganiser, async (req, res) 
     const name = toNullableString(req.body?.name);
     if (!name) {
       return res.status(400).json({ ok: false, error: "Name is required" });
+    }
+
+    const promoter = await ensurePromoterAccess(req, promoterId);
+    if (!promoter) {
+      return res.status(404).json({ ok: false, error: "Promoter not found" });
     }
 
     const existing = await prisma.promoter.findFirst({
@@ -311,6 +343,11 @@ router.post("/promoters/:promoterId/contacts", requireAdminOrOrganiser, async (r
       return res.status(400).json({ ok: false, error: "Contact name is required" });
     }
 
+    const promoter = await ensurePromoterAccess(req, promoterId);
+    if (!promoter) {
+      return res.status(404).json({ ok: false, error: "Promoter not found" });
+    }
+
     const contact = await prisma.promoterContact.create({
       data: {
         promoterId,
@@ -338,6 +375,10 @@ router.patch("/promoters/:promoterId/contacts/:contactId", requireAdminOrOrganis
   try {
     const promoterId = String(req.params.promoterId);
     const contactId = String(req.params.contactId);
+    const promoter = await ensurePromoterAccess(req, promoterId);
+    if (!promoter) {
+      return res.status(404).json({ ok: false, error: "Promoter not found" });
+    }
     const existing = await prisma.promoterContact.findFirst({
       where: { id: contactId, promoterId },
     });
@@ -372,6 +413,10 @@ router.delete("/promoters/:promoterId/contacts/:contactId", requireAdminOrOrgani
   try {
     const promoterId = String(req.params.promoterId);
     const contactId = String(req.params.contactId);
+    const promoter = await ensurePromoterAccess(req, promoterId);
+    if (!promoter) {
+      return res.status(404).json({ ok: false, error: "Promoter not found" });
+    }
     const deleted = await prisma.promoterContact.deleteMany({
       where: { id: contactId, promoterId },
     });
@@ -403,6 +448,11 @@ router.post("/promoters/:promoterId/documents", requireAdminOrOrganiser, async (
     }
     if (!type) {
       return res.status(400).json({ ok: false, error: "Document type is invalid" });
+    }
+
+    const promoter = await ensurePromoterAccess(req, promoterId);
+    if (!promoter) {
+      return res.status(404).json({ ok: false, error: "Promoter not found" });
     }
 
     const expiresAt = req.body?.expiresAt ? new Date(String(req.body.expiresAt)) : null;
@@ -438,6 +488,10 @@ router.delete("/promoters/:promoterId/documents/:documentId", requireAdminOrOrga
   try {
     const promoterId = String(req.params.promoterId);
     const documentId = String(req.params.documentId);
+    const promoter = await ensurePromoterAccess(req, promoterId);
+    if (!promoter) {
+      return res.status(404).json({ ok: false, error: "Promoter not found" });
+    }
     const deleted = await prisma.promoterDocument.deleteMany({
       where: { id: documentId, promoterId },
     });
