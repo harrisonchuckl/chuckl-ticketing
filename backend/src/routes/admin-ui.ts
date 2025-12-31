@@ -1300,6 +1300,10 @@ router.get(
       padding:10px;
       border-bottom:1px solid var(--border);
     }
+    th.promoter-col,
+    td.promoter-col{
+      text-align:center;
+    }
     th{
       font-weight:600;
       color:#334155;
@@ -4830,7 +4834,7 @@ async function listShows(){
       +'<table>'
         +'<thead><tr>'
           +'<th>Title</th><th>When</th><th>Venue</th>'
-          +'<th>Total allocation</th><th>Gross face</th><th>Status</th><th>Promoter</th><th></th>'
+          +'<th>Total allocation</th><th>Gross face</th><th>Status</th><th class="promoter-col">Promoter</th><th></th>'
         +'</tr></thead>'
         +'<tbody id="tbody"></tbody>'
       +'</table>'
@@ -5020,7 +5024,7 @@ function sumTicketTypeCap(tts){
             +'</span> '+bar+'</td>'
           +'<td>£'+(((s._revenue && s._revenue.grossFace) || 0).toFixed(2))+'</td>'
           +'<td>'+statusBadgeHTML(statusLabel)+'</td>'
-          +'<td>'
+          +'<td class="promoter-col">'
             +'<button type="button" data-link-promoter="'+s.id+'"'
               +' style="border:none;background:none;padding:0;cursor:pointer;">'
               + promoterAvatar
