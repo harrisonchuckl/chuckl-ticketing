@@ -8808,18 +8808,20 @@ function renderInterests(customer){
         card.className = 'card';
         card.style.margin = '0';
 
+        var isShared = p.accessLevel && p.accessLevel !== 'owner';
         var statusLabel = formatStatus(p.status);
+        var metaLine = isShared ? (p.website || '') : (p.tradingName || p.email || '');
         card.innerHTML = ''
           + '<div class="header">'
           +   '<div class="row" style="gap:12px;align-items:center;">'
           +     promoterAvatarHtml(p, { size: 56 })
           +     '<div>'
           +       '<div class="title">' + escapeHtml(p.name || 'Untitled promoter') + '</div>'
-          +       '<div class="muted">' + escapeHtml(p.tradingName || p.email || '') + '</div>'
+          +       '<div class="muted">' + escapeHtml(metaLine) + '</div>'
           +     '</div>'
           +   '</div>'
           +   '<div class="row" style="gap:8px;align-items:center;">'
-          +     '<span class="status-badge">' + escapeHtml(statusLabel) + '</span>'
+          +     (isShared ? '' : '<span class="status-badge">' + escapeHtml(statusLabel) + '</span>')
           +     '<a class="btn" href="/admin/ui/promoters/' + encodeURIComponent(p.id) + '" data-view="/admin/ui/promoters/' + encodeURIComponent(p.id) + '">Open profile</a>'
           +   '</div>'
           + '</div>';
@@ -8847,6 +8849,7 @@ function renderInterests(customer){
       +   '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">'
       +     '<label style="display:grid;gap:6px;">Promoter name<input id="pc_name" required /></label>'
       +     '<label style="display:grid;gap:6px;">Trading name<input id="pc_tradingName" /></label>'
+      +     '<label style="display:grid;gap:6px;">Website<input id="pc_website" required placeholder="https://promoter.com" /></label>'
       +     '<label style="display:grid;gap:6px;">Email<input id="pc_email" type="email" /></label>'
       +     '<label style="display:grid;gap:6px;">Phone<input id="pc_phone" /></label>'
       +     '<label style="display:grid;gap:6px;">Status'
@@ -8861,6 +8864,7 @@ function renderInterests(customer){
       +   '<div style="margin-top:10px;">'
       +     '<label style="display:grid;gap:6px;">Notes<textarea id="pc_notes" rows="3" style="resize:vertical;"></textarea></label>'
       +   '</div>'
+      +   '<div id="pc_existing" style="margin-top:12px;"></div>'
       +   '<div class="row" style="justify-content:flex-end;gap:8px;margin-top:10px;">'
       +     '<div class="error" id="pc_error"></div>'
       +   '</div>'
@@ -8874,6 +8878,7 @@ function renderInterests(customer){
         var payload = {
           name: ($('#pc_name').value || '').trim(),
           tradingName: ($('#pc_tradingName').value || '').trim() || null,
+          website: ($('#pc_website').value || '').trim(),
           email: ($('#pc_email').value || '').trim() || null,
           phone: ($('#pc_phone').value || '').trim() || null,
           status: ($('#pc_status').value || 'PROSPECT'),
@@ -8883,12 +8888,20 @@ function renderInterests(customer){
           if (err) err.textContent = 'Promoter name is required.';
           return;
         }
+        if (!payload.website){
+          if (err) err.textContent = 'Promoter website is required.';
+          return;
+        }
         try{
           var res = await j('/admin/promoters', {
             method:'POST',
             headers:{'Content-Type':'application/json'},
             body: JSON.stringify(payload)
           });
+          if (res && res.existing && res.promoter){
+            renderExistingPromoter(res.promoter, res.linkable);
+            return;
+          }
           if (res && res.promoter && res.promoter.id){
             go('/admin/ui/promoters/' + res.promoter.id);
           }else{
@@ -8898,6 +8911,47 @@ function renderInterests(customer){
           if (err) err.textContent = parseErr(e);
         }
       });
+    }
+
+    function renderExistingPromoter(promoter, linkable){
+      var existing = $('#pc_existing');
+      if (!existing) return;
+      existing.innerHTML = '';
+      var card = document.createElement('div');
+      card.className = 'card';
+      card.style.margin = '0';
+      var website = promoter.website || '';
+      card.innerHTML = ''
+        + '<div class="header">'
+        +   '<div class="row" style="gap:12px;align-items:center;">'
+        +     promoterAvatarHtml(promoter, { size: 56 })
+        +     '<div>'
+        +       '<div class="title">' + escapeHtml(promoter.name || 'Promoter') + '</div>'
+        +       '<div class="muted">' + escapeHtml(website) + '</div>'
+        +     '</div>'
+        +   '</div>'
+        +   '<div class="row" style="gap:8px;align-items:center;">'
+        +     '<button class="btn p" id="pc_link_existing"' + (linkable ? '' : ' disabled') + '>'
+        +       (linkable ? 'Add promoter' : 'Already in your list')
+        +     '</button>'
+        +     '<a class="btn" href="/admin/ui/promoters/' + encodeURIComponent(promoter.id) + '" data-view="/admin/ui/promoters/' + encodeURIComponent(promoter.id) + '">Open profile</a>'
+        +   '</div>'
+        + '</div>';
+      existing.appendChild(card);
+      var linkBtn = $('#pc_link_existing');
+      if (linkBtn && linkable){
+        linkBtn.addEventListener('click', async function(){
+          if (linkBtn) linkBtn.disabled = true;
+          try{
+            await j('/admin/promoters/' + encodeURIComponent(promoter.id) + '/link', { method:'POST' });
+            go('/admin/ui/promoters/' + promoter.id);
+          }catch(e){
+            var err = $('#pc_error');
+            if (err) err.textContent = parseErr(e);
+            if (linkBtn) linkBtn.disabled = false;
+          }
+        });
+      }
     }
   }
 
@@ -8912,13 +8966,32 @@ function renderInterests(customer){
       try{
         var res = await j('/admin/promoters/' + encodeURIComponent(promoterId));
         if (!res || !res.promoter) throw new Error('Promoter not found');
-        renderPromoter(res.promoter);
+        renderPromoter(res.promoter, res.accessLevel || 'owner');
       }catch(e){
         main.innerHTML = '<div class="card"><div class="error">Failed to load promoter: ' + escapeHtml(parseErr(e)) + '</div></div>';
       }
     }
 
-    function renderPromoter(promoter){
+    function renderPromoter(promoter, accessLevel){
+      if (accessLevel !== 'owner'){
+        main.innerHTML = ''
+          + '<div class="card">'
+          +   '<div class="header">'
+          +     '<div class="row" style="gap:12px;align-items:center;">'
+          +       promoterAvatarHtml(promoter, { size: 72 })
+          +       '<div>'
+          +         '<div class="title">' + escapeHtml(promoter.name || 'Promoter') + '</div>'
+          +         '<div class="muted">' + escapeHtml(promoter.website || '') + '</div>'
+          +       '</div>'
+          +     '</div>'
+          +     '<div class="row" style="gap:8px;align-items:center;">'
+          +       '<a class="btn" href="/admin/ui/promoters" data-view="/admin/ui/promoters">Back to list</a>'
+          +     '</div>'
+          +   '</div>'
+          +   '<div class="muted">This promoter is shared. Only the logo and website are visible.</div>'
+          + '</div>';
+        return;
+      }
       var statusValue = promoter.status || 'PROSPECT';
       main.innerHTML = ''
         + '<div class="card" id="promoterProfileCard">'
@@ -8958,6 +9031,7 @@ function renderInterests(customer){
         +     '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">'
         +       '<label style="display:grid;gap:6px;">Promoter name<input id="po_name" value="' + escapeHtml(promoter.name || '') + '" required /></label>'
         +       '<label style="display:grid;gap:6px;">Trading name<input id="po_tradingName" value="' + escapeHtml(promoter.tradingName || '') + '" /></label>'
+        +       '<label style="display:grid;gap:6px;">Website<input id="po_website" value="' + escapeHtml(promoter.website || '') + '" required /></label>'
         +       '<label style="display:grid;gap:6px;">Email<input id="po_email" type="email" value="' + escapeHtml(promoter.email || '') + '" /></label>'
         +       '<label style="display:grid;gap:6px;">Phone<input id="po_phone" value="' + escapeHtml(promoter.phone || '') + '" /></label>'
         +       '<label style="display:grid;gap:6px;">Status'
@@ -9094,6 +9168,7 @@ function renderInterests(customer){
       return {
         name: ($('#po_name').value || '').trim(),
         tradingName: ($('#po_tradingName').value || '').trim() || null,
+        website: ($('#po_website').value || '').trim(),
         email: ($('#po_email').value || '').trim() || null,
         phone: ($('#po_phone').value || '').trim() || null,
         status: ($('#po_status').value || 'PROSPECT'),
@@ -9111,6 +9186,10 @@ function renderInterests(customer){
         var payload = buildOverviewPayload();
         if (!payload.name){
           if (err) err.textContent = 'Promoter name is required.';
+          return;
+        }
+        if (!payload.website){
+          if (err) err.textContent = 'Promoter website is required.';
           return;
         }
         try{
@@ -9155,6 +9234,10 @@ function renderInterests(customer){
           var payload = buildOverviewPayload();
           if (!payload.name){
             if (err) err.textContent = 'Promoter name is required.';
+            return;
+          }
+          if (!payload.website){
+            if (err) err.textContent = 'Promoter website is required.';
             return;
           }
           await j('/admin/promoters/' + encodeURIComponent(promoterId), {

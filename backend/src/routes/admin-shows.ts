@@ -1075,7 +1075,7 @@ router.get("/shows/:id/promoters", requireAdminOrOrganiser, async (req, res) => 
     const links = await prisma.showPromoter.findMany({
       where: { showId },
       include: {
-        promoter: { select: { id: true, name: true, tradingName: true, email: true, logoUrl: true } },
+        promoter: { select: { id: true, name: true, tradingName: true, logoUrl: true, website: true } },
       },
       orderBy: { createdAt: "desc" },
     });

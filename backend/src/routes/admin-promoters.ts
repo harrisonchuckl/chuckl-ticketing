@@ -20,6 +20,23 @@ const DOC_TYPES = new Set<PromoterDocumentType>([
   PromoterDocumentType.OTHER,
 ]);
 const STATUS_VALUES = new Set(["PROSPECT", "ACTIVE", "DORMANT", "BLOCKED"]);
+const MULTIPART_TLDS = new Set([
+  "co.uk",
+  "org.uk",
+  "gov.uk",
+  "ac.uk",
+  "com.au",
+  "net.au",
+  "org.au",
+  "com.nz",
+  "co.nz",
+  "org.nz",
+  "com.br",
+  "com.mx",
+  "co.jp",
+  "co.kr",
+  "co.in",
+]);
 
 function toNullableString(value: unknown): string | null {
   if (value == null) return null;
@@ -33,6 +50,40 @@ function normaliseStatus(value: unknown): "PROSPECT" | "ACTIVE" | "DORMANT" | "B
     return status as "PROSPECT" | "ACTIVE" | "DORMANT" | "BLOCKED";
   }
   return "PROSPECT";
+}
+
+function normaliseHostname(hostname: string): string {
+  return hostname.replace(/^www\./i, "").toLowerCase();
+}
+
+function mainDomain(hostname: string): string {
+  const parts = hostname.split(".").filter(Boolean);
+  if (parts.length <= 2) return hostname;
+  const tail = parts.slice(-2).join(".");
+  const tail3 = parts.slice(-3).join(".");
+  if (MULTIPART_TLDS.has(tail) && parts.length >= 3) {
+    return tail3;
+  }
+  if (MULTIPART_TLDS.has(tail3) && parts.length >= 4) {
+    return parts.slice(-4).join(".");
+  }
+  return tail;
+}
+
+function parseWebsite(value: unknown): { website: string; domain: string } | null {
+  const input = toNullableString(value);
+  if (!input) return null;
+  const withScheme = /^https?:\/\//i.test(input) ? input : `https://${input}`;
+  try {
+    const url = new URL(withScheme);
+    if (!url.hostname) return null;
+    const hostname = normaliseHostname(url.hostname);
+    if (!hostname.includes(".")) return null;
+    const domain = mainDomain(hostname);
+    return { website: url.origin, domain };
+  } catch {
+    return null;
+  }
 }
 
 function parseDocType(value: unknown): PromoterDocumentType | null {
@@ -54,18 +105,89 @@ function requireUserId(req: any): string {
 }
 
 function promoterScope(req: any) {
-  return isOrganiser(req) ? { ownerId: requireUserId(req) } : {};
+  if (!isOrganiser(req)) return {};
+  const userId = requireUserId(req);
+  return {
+    OR: [
+      { ownerId: userId },
+      { members: { some: { userId } } },
+    ],
+  };
 }
 
 function promoterWhere(req: any, promoterId: string) {
   return { id: promoterId, ...promoterScope(req) };
 }
 
-async function ensurePromoterAccess(req: any, promoterId: string) {
+async function ensurePromoterOwner(req: any, promoterId: string) {
+  if (!isOrganiser(req)) {
+    return prisma.promoter.findUnique({
+      where: { id: promoterId },
+      select: { id: true },
+    });
+  }
   return prisma.promoter.findFirst({
-    where: promoterWhere(req, promoterId),
+    where: { id: promoterId, ownerId: requireUserId(req) },
     select: { id: true },
   });
+}
+
+async function getPromoterAccess(req: any, promoterId: string) {
+  const promoter = await prisma.promoter.findUnique({
+    where: { id: promoterId },
+    select: {
+      id: true,
+      ownerId: true,
+      name: true,
+      tradingName: true,
+      email: true,
+      phone: true,
+      logoUrl: true,
+      website: true,
+      status: true,
+      notes: true,
+    },
+  });
+  if (!promoter) return null;
+  if (!isOrganiser(req)) {
+    return { promoter, accessLevel: "owner" as const };
+  }
+  const userId = requireUserId(req);
+  if (promoter.ownerId === userId) {
+    return { promoter, accessLevel: "owner" as const };
+  }
+  const membership = await prisma.promoterMember.findUnique({
+    where: { promoterId_userId: { promoterId, userId } },
+    select: { id: true },
+  });
+  if (membership) {
+    return { promoter, accessLevel: "member" as const };
+  }
+  return null;
+}
+
+function sanitizePromoter(promoter: any, accessLevel: "owner" | "member") {
+  if (accessLevel === "owner") {
+    return {
+      id: promoter.id,
+      name: promoter.name,
+      tradingName: promoter.tradingName,
+      email: promoter.email,
+      phone: promoter.phone,
+      logoUrl: promoter.logoUrl,
+      status: promoter.status,
+      website: promoter.website,
+      notes: promoter.notes,
+      accessLevel,
+    };
+  }
+  return {
+    id: promoter.id,
+    name: promoter.name,
+    logoUrl: promoter.logoUrl,
+    website: promoter.website,
+    accessLevel,
+  };
 }
 
 function showWhereForRead(req: any, showId: string) {
@@ -106,6 +228,7 @@ router.get("/promoters", requireAdminOrOrganiser, async (req, res) => {
                 { name: { contains: q, mode: "insensitive" as const } },
                 { tradingName: { contains: q, mode: "insensitive" as const } },
                 { email: { contains: q, mode: "insensitive" as const } },
+                { website: { contains: q, mode: "insensitive" as const } },
               ],
             },
           ],
@@ -124,10 +247,25 @@ router.get("/promoters", requireAdminOrOrganiser, async (req, res) => {
         logoUrl: true,
         status: true,
         updatedAt: true,
+        website: true,
+        ownerId: true,
       },
     });
 
-    res.json({ ok: true, items });
+    if (!isOrganiser(req)) {
+      return res.json({
+        ok: true,
+        items: items.map((item) => sanitizePromoter(item, "owner")),
+      });
+    }
+
+    const userId = requireUserId(req);
+    const mapped = items.map((item) => {
+      const accessLevel = item.ownerId === userId ? "owner" : "member";
+      return sanitizePromoter(item, accessLevel);
+    });
+
+    res.json({ ok: true, items: mapped });
   } catch (e) {
     console.error("GET /admin/promoters failed", e);
     res.status(500).json({ ok: false, error: "Failed to load promoters" });
@@ -141,13 +279,58 @@ router.post("/promoters", requireAdminOrOrganiser, async (req, res) => {
     if (!name) {
       return res.status(400).json({ ok: false, error: "Name is required" });
     }
+    const websiteInfo = parseWebsite(req.body?.website);
+    if (!websiteInfo) {
+      return res.status(400).json({ ok: false, error: "Website is required and must be valid." });
+    }
 
     const existing = await prisma.promoter.findFirst({
-      where: { name: { equals: name, mode: "insensitive" } },
-      select: { id: true },
+      where: { websiteDomain: websiteInfo.domain },
+      select: {
+        id: true,
+        ownerId: true,
+        name: true,
+        tradingName: true,
+        email: true,
+        phone: true,
+        logoUrl: true,
+        website: true,
+        status: true,
+        notes: true,
+      },
     });
     if (existing) {
-      return res.status(409).json({ ok: false, error: "Promoter name already exists." });
+      if (!isOrganiser(req)) {
+        return res.json({
+          ok: true,
+          existing: true,
+          promoter: sanitizePromoter(existing, "owner"),
+          accessLevel: "owner",
+          linkable: false,
+        });
+      }
+      const userId = requireUserId(req);
+      if (existing.ownerId === userId) {
+        return res.json({
+          ok: true,
+          existing: true,
+          promoter: sanitizePromoter(existing, "owner"),
+          accessLevel: "owner",
+          linkable: false,
+        });
+      }
+      const membership = await prisma.promoterMember.findUnique({
+        where: { promoterId_userId: { promoterId: existing.id, userId } },
+        select: { id: true },
+      });
+      const accessLevel = membership ? "member" : "member";
+      return res.json({
+        ok: true,
+        existing: true,
+        promoter: sanitizePromoter(existing, accessLevel),
+        accessLevel,
+        linkable: !membership,
+      });
     }
 
     const created = await prisma.promoter.create({
@@ -159,6 +342,8 @@ router.post("/promoters", requireAdminOrOrganiser, async (req, res) => {
         logoUrl: toNullableString(req.body?.logoUrl),
         status: normaliseStatus(req.body?.status),
         notes: toNullableString(req.body?.notes),
+        website: websiteInfo.website,
+        websiteDomain: websiteInfo.domain,
         ...(isOrganiser(req) ? { ownerId: requireUserId(req) } : {}),
       },
     });
@@ -172,10 +357,64 @@ router.post("/promoters", requireAdminOrOrganiser, async (req, res) => {
   }
 });
 
+/** POST /admin/promoters/:promoterId/link — link existing promoter to organiser */
+router.post("/promoters/:promoterId/link", requireAdminOrOrganiser, async (req, res) => {
+  try {
+    if (!isOrganiser(req)) {
+      return res.status(403).json({ ok: false, error: "Only organisers can link promoters." });
+    }
+    const promoterId = String(req.params.promoterId);
+    const promoter = await prisma.promoter.findUnique({
+      where: { id: promoterId },
+      select: {
+        id: true,
+        ownerId: true,
+        name: true,
+        tradingName: true,
+        email: true,
+        phone: true,
+        logoUrl: true,
+        website: true,
+        status: true,
+        notes: true,
+      },
+    });
+    if (!promoter) {
+      return res.status(404).json({ ok: false, error: "Promoter not found" });
+    }
+    const userId = requireUserId(req);
+    if (promoter.ownerId === userId) {
+      return res.json({ ok: true, promoter: sanitizePromoter(promoter, "owner"), accessLevel: "owner" });
+    }
+    await prisma.promoterMember.upsert({
+      where: { promoterId_userId: { promoterId, userId } },
+      update: {},
+      create: { promoterId, userId },
+    });
+    res.json({ ok: true, promoter: sanitizePromoter(promoter, "member"), accessLevel: "member" });
+  } catch (e) {
+    console.error("POST /admin/promoters/:id/link failed", e);
+    res.status(500).json({ ok: false, error: "Failed to link promoter" });
+  }
+});
+
 /** GET /admin/promoters/:promoterId — profile */
 router.get("/promoters/:promoterId", requireAdminOrOrganiser, async (req, res) => {
   try {
     const promoterId = String(req.params.promoterId);
+    const access = await getPromoterAccess(req, promoterId);
+    if (!access) {
+      return res.status(404).json({ ok: false, error: "Promoter not found" });
+    }
+
+    if (access.accessLevel !== "owner") {
+      return res.json({
+        ok: true,
+        promoter: sanitizePromoter(access.promoter, access.accessLevel),
+        accessLevel: access.accessLevel,
+      });
+    }
+
     const promoter = await prisma.promoter.findFirst({
       where: promoterWhere(req, promoterId),
       include: {
@@ -189,7 +428,7 @@ router.get("/promoters/:promoterId", requireAdminOrOrganiser, async (req, res) =
       return res.status(404).json({ ok: false, error: "Promoter not found" });
     }
 
-    res.json({ ok: true, promoter });
+    res.json({ ok: true, promoter, accessLevel: "owner" });
   } catch (e) {
     console.error("GET /admin/promoters/:id failed", e);
     res.status(500).json({ ok: false, error: "Failed to load promoter" });
@@ -200,7 +439,7 @@ router.get("/promoters/:promoterId", requireAdminOrOrganiser, async (req, res) =
 router.get("/promoters/:promoterId/shows", requireAdminOrOrganiser, async (req, res) => {
   try {
     const promoterId = String(req.params.promoterId);
-    const promoter = await ensurePromoterAccess(req, promoterId);
+    const promoter = await ensurePromoterOwner(req, promoterId);
     if (!promoter) {
       return res.status(404).json({ ok: false, error: "Promoter not found" });
     }
@@ -242,7 +481,7 @@ router.post("/promoters/:promoterId/shows", requireAdminOrOrganiser, async (req,
       return res.status(400).json({ ok: false, error: "showId is required" });
     }
 
-    const promoter = await ensurePromoterAccess(req, promoterId);
+    const promoter = await ensurePromoterOwner(req, promoterId);
     if (!promoter) {
       return res.status(404).json({ ok: false, error: "Promoter not found" });
     }
@@ -273,7 +512,7 @@ router.delete("/promoters/:promoterId/shows/:showId", requireAdminOrOrganiser, a
   try {
     const promoterId = String(req.params.promoterId);
     const showId = String(req.params.showId);
-    const promoter = await ensurePromoterAccess(req, promoterId);
+    const promoter = await ensurePromoterOwner(req, promoterId);
     if (!promoter) {
       return res.status(404).json({ ok: false, error: "Promoter not found" });
     }
@@ -295,21 +534,25 @@ router.post("/promoters/:promoterId", requireAdminOrOrganiser, async (req, res) 
     if (!name) {
       return res.status(400).json({ ok: false, error: "Name is required" });
     }
+    const websiteInfo = parseWebsite(req.body?.website);
+    if (!websiteInfo) {
+      return res.status(400).json({ ok: false, error: "Website is required and must be valid." });
+    }
 
-    const promoter = await ensurePromoterAccess(req, promoterId);
+    const promoter = await ensurePromoterOwner(req, promoterId);
     if (!promoter) {
       return res.status(404).json({ ok: false, error: "Promoter not found" });
     }
 
     const existing = await prisma.promoter.findFirst({
       where: {
-        name: { equals: name, mode: "insensitive" },
+        websiteDomain: websiteInfo.domain,
         NOT: { id: promoterId },
       },
       select: { id: true },
     });
     if (existing) {
-      return res.status(409).json({ ok: false, error: "Promoter name already exists." });
+      return res.status(409).json({ ok: false, error: "Promoter website already exists." });
     }
 
     const updated = await prisma.promoter.update({
@@ -322,6 +565,8 @@ router.post("/promoters/:promoterId", requireAdminOrOrganiser, async (req, res) 
         logoUrl: toNullableString(req.body?.logoUrl),
         status: normaliseStatus(req.body?.status),
         notes: toNullableString(req.body?.notes),
+        website: websiteInfo.website,
+        websiteDomain: websiteInfo.domain,
       },
     });
 
@@ -343,7 +588,7 @@ router.post("/promoters/:promoterId/contacts", requireAdminOrOrganiser, async (r
       return res.status(400).json({ ok: false, error: "Contact name is required" });
     }
 
-    const promoter = await ensurePromoterAccess(req, promoterId);
+    const promoter = await ensurePromoterOwner(req, promoterId);
     if (!promoter) {
       return res.status(404).json({ ok: false, error: "Promoter not found" });
     }
@@ -375,7 +620,7 @@ router.patch("/promoters/:promoterId/contacts/:contactId", requireAdminOrOrganis
   try {
     const promoterId = String(req.params.promoterId);
     const contactId = String(req.params.contactId);
-    const promoter = await ensurePromoterAccess(req, promoterId);
+    const promoter = await ensurePromoterOwner(req, promoterId);
     if (!promoter) {
       return res.status(404).json({ ok: false, error: "Promoter not found" });
     }
@@ -413,7 +658,7 @@ router.delete("/promoters/:promoterId/contacts/:contactId", requireAdminOrOrgani
   try {
     const promoterId = String(req.params.promoterId);
     const contactId = String(req.params.contactId);
-    const promoter = await ensurePromoterAccess(req, promoterId);
+    const promoter = await ensurePromoterOwner(req, promoterId);
     if (!promoter) {
       return res.status(404).json({ ok: false, error: "Promoter not found" });
     }
@@ -450,7 +695,7 @@ router.post("/promoters/:promoterId/documents", requireAdminOrOrganiser, async (
       return res.status(400).json({ ok: false, error: "Document type is invalid" });
     }
 
-    const promoter = await ensurePromoterAccess(req, promoterId);
+    const promoter = await ensurePromoterOwner(req, promoterId);
     if (!promoter) {
       return res.status(404).json({ ok: false, error: "Promoter not found" });
     }
@@ -488,7 +733,7 @@ router.delete("/promoters/:promoterId/documents/:documentId", requireAdminOrOrga
   try {
     const promoterId = String(req.params.promoterId);
     const documentId = String(req.params.documentId);
-    const promoter = await ensurePromoterAccess(req, promoterId);
+    const promoter = await ensurePromoterOwner(req, promoterId);
     if (!promoter) {
       return res.status(404).json({ ok: false, error: "Promoter not found" });
     }
