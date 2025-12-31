@@ -83,4 +83,22 @@ router.patch("/venues/:venueId", requireAdminOrOrganiser, async (req, res) => {
   }
 });
 
+/** DELETE /admin/venues/:venueId — remove a venue */
+router.delete("/venues/:venueId", requireAdminOrOrganiser, async (req, res) => {
+  try {
+    const venueId = String(req.params.venueId);
+    await prisma.venue.delete({ where: { id: venueId } });
+    res.json({ ok: true });
+  } catch (e: any) {
+    if (e?.code === "P2003") {
+      return res.status(409).json({
+        ok: false,
+        error: "Venue cannot be deleted because it is linked to existing records.",
+      });
+    }
+    console.error("DELETE /admin/venues/:venueId failed", e);
+    res.status(500).json({ ok: false, error: "Failed to delete venue" });
+  }
+});
+
 export default router;
