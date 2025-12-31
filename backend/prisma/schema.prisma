@@ -525,11 +525,11 @@ model Show {
 }
 
 model ShowPromoter {
-  id        String   @id @default(cuid())
-  createdAt DateTime @default(now())
-  showId    String
-  promoterId String
-  weeklyReportEnabled Boolean @default(false)
+  id                  String   @id @default(cuid())
+  createdAt           DateTime @default(now())
+  showId              String
+  promoterId          String
+  weeklyReportEnabled Boolean  @default(false)
   weeklyReportEmail   String?
   weeklyReportTime    String?
 
