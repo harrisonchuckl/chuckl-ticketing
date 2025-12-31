@@ -1,44 +1,103 @@
 -- Create new enums
-CREATE TYPE "StorefrontStatus" AS ENUM ('DRAFT', 'LIVE');
-CREATE TYPE "TaxMode" AS ENUM ('NONE', 'VAT', 'CUSTOM');
-CREATE TYPE "ProductCategory" AS ENUM ('MERCH', 'ADDON', 'DIGITAL', 'DONATION', 'VOUCHER');
-CREATE TYPE "ProductFulfilmentType" AS ENUM ('SHIPPING', 'COLLECT', 'EMAIL', 'NONE');
-CREATE TYPE "InventoryMode" AS ENUM ('UNLIMITED', 'TRACKED');
-CREATE TYPE "ProductOrderSource" AS ENUM ('TICKET_CHECKOUT', 'STOREFRONT_ONLY');
-CREATE TYPE "ProductOrderStatus" AS ENUM ('PAID', 'REFUNDED', 'CANCELLED');
-CREATE TYPE "ProductOrderFulfilmentStatus" AS ENUM ('UNFULFILLED', 'PARTIAL', 'FULFILLED');
-CREATE TYPE "ProductOrderItemStatus" AS ENUM ('UNFULFILLED', 'FULFILLED');
-CREATE TYPE "InventoryMovementReason" AS ENUM ('SALE', 'ADJUSTMENT', 'REFUND');
+DO $$
+BEGIN
+  CREATE TYPE "StorefrontStatus" AS ENUM ('DRAFT', 'LIVE');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  CREATE TYPE "TaxMode" AS ENUM ('NONE', 'VAT', 'CUSTOM');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  CREATE TYPE "ProductCategory" AS ENUM ('MERCH', 'ADDON', 'DIGITAL', 'DONATION', 'VOUCHER');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  CREATE TYPE "ProductFulfilmentType" AS ENUM ('SHIPPING', 'COLLECT', 'EMAIL', 'NONE');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  CREATE TYPE "InventoryMode" AS ENUM ('UNLIMITED', 'TRACKED');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  CREATE TYPE "ProductOrderSource" AS ENUM ('TICKET_CHECKOUT', 'STOREFRONT_ONLY');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  CREATE TYPE "ProductOrderStatus" AS ENUM ('PAID', 'REFUNDED', 'CANCELLED');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  CREATE TYPE "ProductOrderFulfilmentStatus" AS ENUM ('UNFULFILLED', 'PARTIAL', 'FULFILLED');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  CREATE TYPE "ProductOrderItemStatus" AS ENUM ('UNFULFILLED', 'FULFILLED');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  CREATE TYPE "InventoryMovementReason" AS ENUM ('SALE', 'ADJUSTMENT', 'REFUND');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
 
 -- Update Storefront table
 ALTER TABLE "Storefront"
-  ADD COLUMN "status" "StorefrontStatus" NOT NULL DEFAULT 'DRAFT',
-  ADD COLUMN "brandColour" TEXT,
-  ADD COLUMN "supportEmail" TEXT,
-  ADD COLUMN "policiesText" TEXT,
-  ADD COLUMN "taxMode" "TaxMode" NOT NULL DEFAULT 'NONE',
-  ADD COLUMN "taxPercent" INTEGER,
-  ADD COLUMN "shippingEnabled" BOOLEAN NOT NULL DEFAULT false,
-  ADD COLUMN "collectionEnabled" BOOLEAN NOT NULL DEFAULT false,
-  ADD COLUMN "digitalEnabled" BOOLEAN NOT NULL DEFAULT false,
-  ADD COLUMN "shippingFlatFeePence" INTEGER;
+  ADD COLUMN IF NOT EXISTS "status" "StorefrontStatus" NOT NULL DEFAULT 'DRAFT',
+  ADD COLUMN IF NOT EXISTS "brandColour" TEXT,
+  ADD COLUMN IF NOT EXISTS "supportEmail" TEXT,
+  ADD COLUMN IF NOT EXISTS "policiesText" TEXT,
+  ADD COLUMN IF NOT EXISTS "taxMode" "TaxMode" NOT NULL DEFAULT 'NONE',
+  ADD COLUMN IF NOT EXISTS "taxPercent" INTEGER,
+  ADD COLUMN IF NOT EXISTS "shippingEnabled" BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS "collectionEnabled" BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS "digitalEnabled" BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS "shippingFlatFeePence" INTEGER;
 
 ALTER TABLE "Storefront" DROP COLUMN IF EXISTS "bannerUrl";
 
 -- Update Product table
 ALTER TABLE "Product"
-  ADD COLUMN "category" "ProductCategory" NOT NULL DEFAULT 'MERCH',
-  ADD COLUMN "fulfilmentType" "ProductFulfilmentType" NOT NULL DEFAULT 'NONE',
-  ADD COLUMN "pricePence" INTEGER,
-  ADD COLUMN "currency" TEXT NOT NULL DEFAULT 'gbp',
-  ADD COLUMN "allowCustomAmount" BOOLEAN NOT NULL DEFAULT false,
-  ADD COLUMN "inventoryMode" "InventoryMode" NOT NULL DEFAULT 'UNLIMITED',
-  ADD COLUMN "stockCount" INTEGER,
-  ADD COLUMN "lowStockThreshold" INTEGER,
-  ADD COLUMN "preorderEnabled" BOOLEAN NOT NULL DEFAULT false,
-  ADD COLUMN "preorderCloseAt" TIMESTAMP(3),
-  ADD COLUMN "maxPerOrder" INTEGER,
-  ADD COLUMN "maxPerTicket" INTEGER;
+  ADD COLUMN IF NOT EXISTS "category" "ProductCategory" NOT NULL DEFAULT 'MERCH',
+  ADD COLUMN IF NOT EXISTS "pricePence" INTEGER,
+  ADD COLUMN IF NOT EXISTS "currency" TEXT NOT NULL DEFAULT 'gbp',
+  ADD COLUMN IF NOT EXISTS "allowCustomAmount" BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS "inventoryMode" "InventoryMode" NOT NULL DEFAULT 'UNLIMITED',
+  ADD COLUMN IF NOT EXISTS "stockCount" INTEGER,
+  ADD COLUMN IF NOT EXISTS "lowStockThreshold" INTEGER,
+  ADD COLUMN IF NOT EXISTS "preorderEnabled" BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS "preorderCloseAt" TIMESTAMP(3),
+  ADD COLUMN IF NOT EXISTS "maxPerOrder" INTEGER,
+  ADD COLUMN IF NOT EXISTS "maxPerTicket" INTEGER;
 
 ALTER TABLE "Product" ALTER COLUMN "pricePence" DROP NOT NULL;
 
@@ -57,7 +116,7 @@ DROP TABLE IF EXISTS "ProductShowLink";
 DROP TABLE IF EXISTS "ProductOrderItem";
 
 -- Create ProductVariant table
-CREATE TABLE "ProductVariant" (
+CREATE TABLE IF NOT EXISTS "ProductVariant" (
   "id" TEXT NOT NULL,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -71,10 +130,10 @@ CREATE TABLE "ProductVariant" (
   CONSTRAINT "ProductVariant_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "ProductVariant_productId_idx" ON "ProductVariant"("productId");
+CREATE INDEX IF NOT EXISTS "ProductVariant_productId_idx" ON "ProductVariant"("productId");
 
 -- Create ProductImage table
-CREATE TABLE "ProductImage" (
+CREATE TABLE IF NOT EXISTS "ProductImage" (
   "id" TEXT NOT NULL,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -85,10 +144,10 @@ CREATE TABLE "ProductImage" (
   CONSTRAINT "ProductImage_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "ProductImage_productId_idx" ON "ProductImage"("productId");
+CREATE INDEX IF NOT EXISTS "ProductImage_productId_idx" ON "ProductImage"("productId");
 
 -- Create UpsellRule table
-CREATE TABLE "UpsellRule" (
+CREATE TABLE IF NOT EXISTS "UpsellRule" (
   "id" TEXT NOT NULL,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -106,11 +165,11 @@ CREATE TABLE "UpsellRule" (
   CONSTRAINT "UpsellRule_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "UpsellRule_storefrontId_idx" ON "UpsellRule"("storefrontId");
-CREATE INDEX "UpsellRule_showId_active_priority_idx" ON "UpsellRule"("showId", "active", "priority");
+CREATE INDEX IF NOT EXISTS "UpsellRule_storefrontId_idx" ON "UpsellRule"("storefrontId");
+CREATE INDEX IF NOT EXISTS "UpsellRule_showId_active_priority_idx" ON "UpsellRule"("showId", "active", "priority");
 
 -- Create ProductOrder table
-CREATE TABLE "ProductOrder" (
+CREATE TABLE IF NOT EXISTS "ProductOrder" (
   "id" TEXT NOT NULL,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -134,11 +193,11 @@ CREATE TABLE "ProductOrder" (
   CONSTRAINT "ProductOrder_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "ProductOrder_storefrontId_idx" ON "ProductOrder"("storefrontId");
-CREATE INDEX "ProductOrder_stripeCheckoutSessionId_idx" ON "ProductOrder"("stripeCheckoutSessionId");
+CREATE INDEX IF NOT EXISTS "ProductOrder_storefrontId_idx" ON "ProductOrder"("storefrontId");
+CREATE INDEX IF NOT EXISTS "ProductOrder_stripeCheckoutSessionId_idx" ON "ProductOrder"("stripeCheckoutSessionId");
 
 -- Create ProductOrderItem table
-CREATE TABLE "ProductOrderItem" (
+CREATE TABLE IF NOT EXISTS "ProductOrderItem" (
   "id" TEXT NOT NULL,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -157,10 +216,10 @@ CREATE TABLE "ProductOrderItem" (
   CONSTRAINT "ProductOrderItem_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "ProductOrderItem_productOrderId_idx" ON "ProductOrderItem"("productOrderId");
+CREATE INDEX IF NOT EXISTS "ProductOrderItem_productOrderId_idx" ON "ProductOrderItem"("productOrderId");
 
 -- Create InventoryMovement table
-CREATE TABLE "InventoryMovement" (
+CREATE TABLE IF NOT EXISTS "InventoryMovement" (
   "id" TEXT NOT NULL,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "productId" TEXT NOT NULL,
@@ -172,8 +231,8 @@ CREATE TABLE "InventoryMovement" (
   CONSTRAINT "InventoryMovement_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "InventoryMovement_productId_idx" ON "InventoryMovement"("productId");
-CREATE INDEX "InventoryMovement_variantId_idx" ON "InventoryMovement"("variantId");
+CREATE INDEX IF NOT EXISTS "InventoryMovement_productId_idx" ON "InventoryMovement"("productId");
+CREATE INDEX IF NOT EXISTS "InventoryMovement_variantId_idx" ON "InventoryMovement"("variantId");
 
 -- Add foreign keys
 ALTER TABLE "ProductVariant"
