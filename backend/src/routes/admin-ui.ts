@@ -1305,6 +1305,33 @@ router.get(
       color:#334155;
       background:#f8fafc;
     }
+    .loading-strip{
+      position:relative;
+      height:6px;
+      border-radius:999px;
+      background:rgba(0,159,227,0.12);
+      overflow:hidden;
+    }
+    .loading-strip::before{
+      content:"";
+      position:absolute;
+      inset:0;
+      width:35%;
+      transform:translateX(-120%);
+      background:linear-gradient(
+        90deg,
+        rgba(0,159,227,0),
+        rgba(0,159,227,0.35),
+        rgba(0,159,227,0.85),
+        rgba(0,159,227,0.35),
+        rgba(0,159,227,0)
+      );
+      animation:loading-strip 1.2s ease-in-out infinite;
+    }
+    @keyframes loading-strip{
+      0%{transform:translateX(-120%);}
+      100%{transform:translateX(320%);}
+    }
     .error{color:#b91c1c;}
     .row{
       display:flex;
@@ -5142,7 +5169,8 @@ function sumTicketTypeCap(tts){
 
   async function load(){
     if (!tb) return;
-    tb.innerHTML = '<tr><td colspan="8" class="muted">Loading…</td></tr>';
+    tb.innerHTML =
+      '<tr><td colspan="8"><div class="loading-strip" aria-label="Loading"></div></td></tr>';
     if (countEl) countEl.textContent = '';
 
     try{
@@ -5588,7 +5616,7 @@ async function summaryPage(id){
           +'<div id="ticketTypesEmpty" class="muted" style="display:none">No ticket types yet. Use “Add ticket type” to create one.</div>'
           +'<table>'
             +'<thead><tr><th>Name</th><th>Price</th><th>Available</th><th></th></tr></thead>'
-            +'<tbody id="ticketTypesBody"><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>'
+            +'<tbody id="ticketTypesBody"><tr><td colspan="4"><div class="loading-strip" aria-label="Loading"></div></td></tr></tbody>'
           +'</table>'
           +'<div id="addTypeForm" style="margin-top:12px;display:none">'
             +'<div class="grid grid-3">'
@@ -6882,7 +6910,8 @@ function renderInterests(customer){
 
     async function loadOrders(includeFilters){
       if (!els.tbody) return;
-      els.tbody.innerHTML = '<tr><td colspan="14" class="muted">Loading orders…</td></tr>';
+      els.tbody.innerHTML =
+        '<tr><td colspan="14"><div class="loading-strip" aria-label="Loading orders"></div></td></tr>';
       var qs = buildQuery(includeFilters);
       try{
         var res = await j('/admin/api/orders?' + qs);
