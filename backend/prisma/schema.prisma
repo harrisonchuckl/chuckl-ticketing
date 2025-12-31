@@ -538,6 +538,9 @@ model Show {
   tags             String[] @default([])
   accessibility    Json?
 
+  externalTicketUrl   String?
+  usesExternalTicketing Boolean @default(false)
+
   status      ShowStatus @default(DRAFT)
   publishedAt DateTime?
   // --- pretty URL slug (generated on publish / title change) ---

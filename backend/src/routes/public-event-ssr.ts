@@ -608,6 +608,10 @@ ticketTypes: {
 
   const venue = (show.venue || {}) as any;
 const ticketTypes = (show.ticketTypes || []) as any[];
+const externalTicketUrl = String((show as any).externalTicketUrl || '').trim();
+const usesExternalTicketing = (show as any).usesExternalTicketing === true;
+const hasAvailableTickets = (ticketTypes || []).some((t) => t?.available === null || t?.available > 0);
+const shouldUseExternalTickets = !!externalTicketUrl && (usesExternalTicketing || !hasAvailableTickets);
 
 // Booking fee helper (used by ticket list + mobile bar)
 const venueBps = Number((venue as any)?.bookingFeeBps || 0);
@@ -733,11 +737,13 @@ const hasMultipleTicketTypes = (ticketTypes || []).length > 1;
 const shouldScrollToTicketList = isAllocatedSeating && hasMultipleTicketTypes;
 
 const mobileCtaHtml =
- !ticketTypes.length
-   ? `<a href="javascript:void(0)" class="btn-mob-cta" data-scroll-to="main-tickets">BOOK TICKETS</a>`
-   : shouldScrollToTicketList
+ shouldUseExternalTickets
+   ? `<a href="${escAttr(externalTicketUrl)}" class="btn-mob-cta" target="_blank" rel="noopener">BUY EXTERNAL</a>`
+   : !ticketTypes.length
      ? `<a href="javascript:void(0)" class="btn-mob-cta" data-scroll-to="main-tickets">BOOK TICKETS</a>`
-     : `<a href="/checkout?showId=${showIdEnc}" class="btn-mob-cta">BOOK TICKETS</a>`;
+     : shouldScrollToTicketList
+       ? `<a href="javascript:void(0)" class="btn-mob-cta" data-scroll-to="main-tickets">BOOK TICKETS</a>`
+       : `<a href="/checkout?showId=${showIdEnc}" class="btn-mob-cta">BOOK TICKETS</a>`;
 
    // Schema.org
    const offers = ticketTypes.map((t) => ({
@@ -831,6 +837,25 @@ if (organiserId) {
 
    // Helper to generate ticket list HTML
    const renderTicketList = (isMainColumn = false) => {
+ if (shouldUseExternalTickets) {
+   const label = usesExternalTicketing
+     ? 'Buy tickets on external site'
+     : 'Sold out here — buy on external site';
+   const rowClass = isMainColumn ? 'ticket-row main-col-row' : 'ticket-row widget-row';
+   return `
+     <a href="${escAttr(externalTicketUrl)}" class="${rowClass}" target="_blank" rel="noopener">
+       <div class="t-main">
+         <div class="t-name">External tickets</div>
+         <div class="t-availability">${esc(label)}</div>
+       </div>
+
+       <div class="t-action">
+         <div class="t-price-line"></div>
+         <div class="btn-buy">Buy tickets</div>
+       </div>
+     </a>
+   `;
+ }
  if (!ticketTypes.length) {
    return '<div style="padding:20px; text-align:center; font-size:0.9rem; color:var(--text-muted);">Tickets coming soon</div>';
  }
