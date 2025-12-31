@@ -287,6 +287,7 @@ router.post("/promoters/:promoterId", requireAdminOrOrganiser, async (req, res) 
         tradingName: toNullableString(req.body?.tradingName),
         email: toNullableString(req.body?.email),
         phone: toNullableString(req.body?.phone),
+        logoUrl: toNullableString(req.body?.logoUrl),
         status: normaliseStatus(req.body?.status),
         notes: toNullableString(req.body?.notes),
       },
