@@ -6250,8 +6250,6 @@ async function summaryPage(id){
 
   const storefront = show.organiser?.storefrontSlug || '';
   const showSlug = show.slug || '';
-  const externalTicketUrl = (show.externalTicketUrl || '').trim();
-  const usesExternalTicketing = show.usesExternalTicketing === true;
 
   // Preferred pretty URL: /public/<storefront>/<slug>
   const prettyUrl = (storefront && showSlug)
@@ -6261,13 +6259,9 @@ async function summaryPage(id){
   // Fallback (only used if pretty URL cannot be formed)
   const legacyUrl = window.location.origin + '/public/event/' + id;
 
-  // The URL we actually show + open
-  const publicBookingUrl = (usesExternalTicketing && externalTicketUrl)
-    ? externalTicketUrl
-    : (prettyUrl || legacyUrl);
-  const bookingLabel = (usesExternalTicketing && externalTicketUrl)
-    ? 'External ticket link'
-    : 'Public booking page';
+  // The URL we actually show + open (always the Tixall page)
+  const publicBookingUrl = prettyUrl || legacyUrl;
+  const bookingLabel = 'Public booking page';
 
   // Storefront landing page (optional extra link)
   const storefrontUrl = storefront
