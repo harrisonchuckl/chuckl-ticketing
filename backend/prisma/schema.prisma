@@ -307,6 +307,8 @@ model User {
   marketingPreferenceTopics  MarketingPreferenceTopic[]
   marketingCheckoutEvents    MarketingCheckoutEvent[]
   marketingAuditLogs         MarketingAuditLog[]
+  campaignDrafts             CampaignDraft[]
+  upsellBundles              UpsellBundle[]
 }
 
 model DashboardWidgetPreference {
@@ -588,10 +590,58 @@ model Show {
   slugHistory   ShowSlugHistory[]
   promoterLinks ShowPromoter[]
   upsellRules   UpsellRule[]
+  campaignDrafts CampaignDraft[]
+  upsellBundles  UpsellBundle[]
 
   @@index([venueId])
   @@index([organiserId])
   @@index([date])
+}
+
+model CampaignDraft {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  showId String
+
+  objective      String
+  riskLevel      String?
+  timeToShowDays Int?
+  audienceRules  Json?
+  schedule       Json?
+  copySkeleton   String?
+  notes          String?
+
+  createdByUserId String?
+
+  show      Show  @relation(fields: [showId], references: [id])
+  createdBy User? @relation(fields: [createdByUserId], references: [id])
+
+  @@index([showId])
+  @@index([createdByUserId])
+}
+
+model UpsellBundle {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  showId String
+
+  template          String?
+  title             String?
+  recommendedReason String?
+  items             Json?
+  status            String?
+
+  createdByUserId String?
+
+  show      Show  @relation(fields: [showId], references: [id])
+  createdBy User? @relation(fields: [createdByUserId], references: [id])
+
+  @@index([showId])
+  @@index([createdByUserId])
 }
 
 model ShowPromoter {
