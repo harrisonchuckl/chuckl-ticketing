@@ -957,8 +957,8 @@ router.get(
   gap:6px;
 }
 .ai-insights-logo{
-  width:22px;
-  height:22px;
+  width:1em;
+  height:1em;
   border-radius:6px;
   object-fit:contain;
 }
