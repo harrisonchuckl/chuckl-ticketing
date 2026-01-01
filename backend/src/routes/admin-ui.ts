@@ -1021,6 +1021,11 @@ router.get(
 .trend.up{ color:#15803d; }
 .trend.down{ color:#b91c1c; }
 .trend.flat{ color:#64748b; }
+.ai-risk-header img{
+  height:18px;
+  width:auto;
+  vertical-align:middle;
+}
 .show-expand{
   background:#f8fafc;
 }
@@ -1064,7 +1069,7 @@ router.get(
   border:none;
   background:transparent;
   cursor:pointer;
-  font-size:16px;
+  font-size:22px;
 }
 .modal-overlay{
   position:fixed;
@@ -6475,7 +6480,7 @@ async function listShows(){
           +'<th>Capacity %</th>'
           +'<th>Time</th>'
           +'<th>Trend</th>'
-          +'<th>AI Risk</th>'
+          +'<th class="ai-risk-header"><img src="/tixai.png" alt="TixAll AI" /></th>'
           +'<th>Total allocation</th><th>Gross face</th><th class="promoter-col">Promoter</th><th></th>'
         +'</tr></thead>'
         +'<tbody id="tbody"></tbody>'
