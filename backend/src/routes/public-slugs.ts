@@ -133,9 +133,11 @@ router.get("/:storefront", async (req, res) => {
       slug: true,
       imageUrl: true,
       eventCategory: true,
+      externalTicketUrl: true,
+      usesExternalTicketing: true,
       venue: { select: { name: true, city: true } },
       ticketTypes: {
-        select: { pricePence: true },
+        select: { pricePence: true, available: true },
         orderBy: { pricePence: 'asc' },
         take: 1
       }
@@ -172,6 +174,19 @@ router.get("/:storefront", async (req, res) => {
         minute: "2-digit",
       });
       const image = toPublicImageUrl(show.imageUrl, 800);
+      const externalTicketUrl = String(show.externalTicketUrl || "").trim();
+      const usesExternalTicketing = show.usesExternalTicketing === true;
+      const hasAvailableTickets = (show.ticketTypes || []).some(
+        ticket => ticket?.available === null || Number(ticket?.available ?? 0) > 0
+      );
+      const shouldUseExternalTickets =
+        !!externalTicketUrl && (usesExternalTicketing || !hasAvailableTickets);
+      const quickBookHref = shouldUseExternalTickets
+        ? externalTicketUrl
+        : `/checkout?showId=${escHtml(show.id)}`;
+      const quickBookAttrs = shouldUseExternalTickets
+        ? ' target="_blank" rel="noopener"'
+        : "";
       return `
         <article class="show-card" data-show
           data-date="${escHtml(show.date.toISOString())}"
@@ -196,7 +211,7 @@ router.get("/:storefront", async (req, res) => {
                 : ""
             }
             <div class="show-card__actions">
-              <a class="btn btn--primary" href="/checkout?showId=${escHtml(show.id)}">Quick book</a>
+              <a class="btn btn--primary" href="${escAttr(quickBookHref)}"${quickBookAttrs}>Quick book</a>
               <a class="btn btn--ghost" href="/public/${escHtml(storefront)}/${escHtml(show.slug)}">More info</a>
             </div>
           </div>
@@ -215,6 +230,19 @@ router.get("/:storefront", async (req, res) => {
         year: "numeric",
       });
       const image = toPublicImageUrl(show.imageUrl, 1400);
+      const externalTicketUrl = String(show.externalTicketUrl || "").trim();
+      const usesExternalTicketing = show.usesExternalTicketing === true;
+      const hasAvailableTickets = (show.ticketTypes || []).some(
+        ticket => ticket?.available === null || Number(ticket?.available ?? 0) > 0
+      );
+      const shouldUseExternalTickets =
+        !!externalTicketUrl && (usesExternalTicketing || !hasAvailableTickets);
+      const quickBookHref = shouldUseExternalTickets
+        ? externalTicketUrl
+        : `/checkout?showId=${escHtml(show.id)}`;
+      const quickBookAttrs = shouldUseExternalTickets
+        ? ' target="_blank" rel="noopener"'
+        : "";
       return `
         <div class="hero-slide${idx === 0 ? " is-active" : ""}" data-slide="${idx}">
           <div class="hero-media">
@@ -232,7 +260,7 @@ router.get("/:storefront", async (req, res) => {
               ${showVenueName ? ` • ${escHtml(show.venue?.name || "Venue TBC")}` : ""}
             </p>
             <div class="hero-actions">
-              <a class="btn btn--primary" href="/checkout?showId=${escHtml(show.id)}">Quick book</a>
+              <a class="btn btn--primary" href="${escAttr(quickBookHref)}"${quickBookAttrs}>Quick book</a>
               <a class="btn btn--ghost" href="/public/${escHtml(storefront)}/${escHtml(show.slug)}">More info</a>
             </div>
           </div>
