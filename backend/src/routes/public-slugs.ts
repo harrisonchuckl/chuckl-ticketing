@@ -15,6 +15,15 @@ function escAttr(v: any) {
   return escHtml(v).replace(/"/g, '"');
 }
 
+function toPublicImageUrl(imageUrl: string | null | undefined, width: number) {
+  const value = String(imageUrl ?? "").trim();
+  if (!value) return "";
+  if (/^https?:\/\//i.test(value)) {
+    return `/img/fetch?src=${encodeURIComponent(value)}&w=${width}`;
+  }
+  return value;
+}
+
 // Helper to match the SSR brand logic
 function getPublicBrand() {
   const name = String(process.env.PUBLIC_BRAND_NAME || 'TixAll').trim();
@@ -140,10 +149,8 @@ router.get("/:storefront", async (req, res) => {
 
   const visibleShows = shows.filter(show => !!show.slug);
   const featuredShows = visibleShows.slice(0, 6);
-  const heroImage = featuredShows[0]?.imageUrl
-    ? `/img/fetch?src=${encodeURIComponent(featuredShows[0].imageUrl)}&w=1600`
-    : "";
-  const heroBackground = heroImage ? `url('${heroImage}')` : "none";
+  const heroImage = toPublicImageUrl(featuredShows[0]?.imageUrl, 1600);
+  const heroBackground = heroImage ? `url('${escAttr(heroImage)}')` : "none";
 
   const cards = visibleShows
     .map(show => {
@@ -158,9 +165,7 @@ router.get("/:storefront", async (req, res) => {
         hour: "2-digit",
         minute: "2-digit",
       });
-      const image = show.imageUrl
-        ? `/img/fetch?src=${encodeURIComponent(show.imageUrl)}&w=800`
-        : "";
+      const image = toPublicImageUrl(show.imageUrl, 800);
       const tags = [show.eventType, show.eventCategory, ...(show.tags || [])]
         .filter(Boolean)
         .slice(0, 4);
@@ -173,7 +178,7 @@ router.get("/:storefront", async (req, res) => {
           <a class="show-card__image" href="/public/${escHtml(storefront)}/${escHtml(show.slug)}" aria-label="View ${escHtml(show.title)}">
             ${
               image
-                ? `<img src="${image}" alt="${escHtml(show.title)}" loading="lazy" />`
+                ? `<img src="${escAttr(image)}" alt="${escHtml(show.title)}" loading="lazy" />`
                 : `<div class="show-card__placeholder" aria-hidden="true"></div>`
             }
           </a>
@@ -213,15 +218,13 @@ router.get("/:storefront", async (req, res) => {
         month: "short",
         year: "numeric",
       });
-      const image = show.imageUrl
-        ? `/img/fetch?src=${encodeURIComponent(show.imageUrl)}&w=1400`
-        : "";
+      const image = toPublicImageUrl(show.imageUrl, 1400);
       return `
         <div class="hero-slide${idx === 0 ? " is-active" : ""}" data-slide="${idx}">
           <div class="hero-media">
             ${
               image
-                ? `<img src="${image}" alt="${escHtml(show.title)}" />`
+                ? `<img src="${escAttr(image)}" alt="${escHtml(show.title)}" />`
                 : `<div class="hero-placeholder" aria-hidden="true"></div>`
             }
           </div>
@@ -606,7 +609,6 @@ body {
     <div class="app-header-inner">
       <a href="${escAttr(brand.homeHref || '#')}" class="app-brand" aria-label="${escAttr(brand.name)}">
         <img class="app-brand-logo" src="${escAttr(brand.logoUrl)}" alt="${escAttr(brand.name)}" />
-        <span class="app-brand-text">${escHtml(brand.name)}</span>
       </a>
     </div>
   </header>
