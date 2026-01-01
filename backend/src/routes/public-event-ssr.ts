@@ -2249,6 +2249,30 @@ ${mobileCtaHtml}
 
 })();
 </script>
+<script>
+(function(){
+  var showId = ${escJSON(id)};
+  if (!showId) return;
+  function sendEvent(type){
+    fetch('/public/track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ showId: showId, type: type })
+    }).catch(function(){});
+  }
+  sendEvent('VIEW');
+  document.querySelectorAll('.ticket-row a, .ticket-row').forEach(function(el){
+    el.addEventListener('click', function(){
+      sendEvent('ADD_TO_CART');
+    });
+  });
+  document.querySelectorAll('a[href^=\"/checkout\"], a[href*=\"/checkout?\"]').forEach(function(el){
+    el.addEventListener('click', function(){
+      sendEvent('CHECKOUT_START');
+    });
+  });
+})();
+</script>
 
 </body>
 </html>`);
