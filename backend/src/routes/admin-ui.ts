@@ -937,6 +937,169 @@ router.get(
   border-color:#0f9cdf;
   filter:brightness(0.95);
 }
+.btn.subtle{
+  background:#f8fafc;
+  border-color:#e2e8f0;
+  color:#0f172a;
+}
+.btn.subtle:hover{
+  background:#eef2f7;
+}
+.ai-insights-header{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.ai-insights-logo{
+  width:22px;
+  height:22px;
+  border-radius:6px;
+  object-fit:contain;
+}
+.ai-insights-list{
+  list-style:none;
+  padding:0;
+  margin:0;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.ai-insights-item{
+  display:flex;
+  gap:8px;
+  align-items:flex-start;
+  font-size:13px;
+}
+.ai-insights-item::before{
+  content:'•';
+  color:#0f9cdf;
+  margin-top:2px;
+}
+.ai-insights-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:12px;
+}
+.risk-badge{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  border-radius:999px;
+  padding:4px 8px;
+  font-size:11px;
+  font-weight:700;
+  border:1px solid transparent;
+}
+.risk-badge.hot{
+  background:#ecfdf3;
+  color:#047857;
+  border-color:#6ee7b7;
+}
+.risk-badge.stable{
+  background:#f8fafc;
+  color:#475569;
+  border-color:#e2e8f0;
+}
+.risk-badge.risk{
+  background:#fef2f2;
+  color:#b91c1c;
+  border-color:#fecaca;
+}
+.trend{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  font-weight:600;
+}
+.trend.up{ color:#15803d; }
+.trend.down{ color:#b91c1c; }
+.trend.flat{ color:#64748b; }
+.show-expand{
+  background:#f8fafc;
+}
+.show-expand .expand-panel{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:12px;
+}
+.expand-panel .panel-block{
+  background:#ffffff;
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:12px;
+  min-height:90px;
+}
+.expand-panel .panel-title{
+  font-size:12px;
+  color:var(--muted);
+  margin-bottom:6px;
+  font-weight:600;
+}
+.quick-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:8px;
+}
+.bulk-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin:10px 0 16px 0;
+  align-items:center;
+}
+.bulk-actions .bulk-count{
+  font-size:12px;
+  color:var(--muted);
+  margin-left:auto;
+}
+.table-expand-toggle{
+  border:none;
+  background:transparent;
+  cursor:pointer;
+  font-size:16px;
+}
+.modal-overlay{
+  position:fixed;
+  inset:0;
+  background:rgba(15,23,42,0.4);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:200;
+  padding:20px;
+}
+.modal-overlay.open{ display:flex; }
+.modal-panel{
+  background:#ffffff;
+  border-radius:12px;
+  border:1px solid var(--border);
+  width:min(720px, 95vw);
+  max-height:90vh;
+  overflow:auto;
+  padding:18px;
+  box-shadow:0 20px 60px rgba(15,23,42,0.18);
+}
+.modal-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:12px;
+}
+.modal-body{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+.modal-actions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+  margin-top:8px;
+}
     .grid{display:grid;gap:8px;}
     .grid-2{grid-template-columns:repeat(2,1fr);}
     .grid-3{grid-template-columns:repeat(3,1fr);}
@@ -3081,6 +3244,22 @@ document.addEventListener('click', function(e){
       +      '</div>'
       +    '</div>'
       +  '</section>'
+      +  '<section class="card" id="aiInsightsCard">'
+      +    '<div class="header">'
+      +      '<div class="ai-insights-header">'
+      +        '<img src="/tixai.png" alt="TixAll AI" class="ai-insights-logo" />'
+      +        '<div>'
+      +          '<div class="title">AI Early Insights</div>'
+      +          '<div class="muted" style="font-size:12px;">Next 21 days · rule-based insights</div>'
+      +        '</div>'
+      +      '</div>'
+      +    '</div>'
+      +    '<div id="aiInsightsBody">'
+      +      '<div class="skeleton skeleton-line"></div>'
+      +      '<div class="skeleton skeleton-line" style="margin-top:8px;"></div>'
+      +    '</div>'
+      +    '<div class="ai-insights-actions" id="aiInsightsActions"></div>'
+      +  '</section>'
       +  '<section class="grid grid-2" id="showsGrid">'
       +    '<div class="card" id="topShowsCard">'
       +      '<div class="header"><div class="title">Top Performing Shows (7 days)</div></div>'
@@ -3174,7 +3353,7 @@ document.addEventListener('click', function(e){
 
   var widgetState = { list: [], byKey: {} };
   var widgetLoading = {};
-  var dashboardCache = { summary: null, kickback: null, topShows: null, alerts: null };
+  var dashboardCache = { summary: null, kickback: null, topShows: null, alerts: null, insights: null };
   var widgetDrawerEventsBound = false;
 
   function setWidgetState(widgets){
@@ -3705,6 +3884,557 @@ document.addEventListener('click', function(e){
       + '</div>';
   }
 
+  var analyticsCache = { shows: null, fetchedAt: 0 };
+
+  async function loadAnalyticsShows(range){
+    var ttl = 60 * 1000;
+    if (analyticsCache.shows && (Date.now() - analyticsCache.fetchedAt) < ttl){
+      return analyticsCache.shows;
+    }
+    try{
+      var data = await j('/admin/api/analytics/shows?range=' + (range || 60));
+      if (data && data.ok){
+        analyticsCache = { shows: data.shows || [], fetchedAt: Date.now() };
+        return analyticsCache.shows;
+      }
+    }catch(e){}
+    return null;
+  }
+
+  function analyticsMap(list){
+    var map = {};
+    (list || []).forEach(function(item){
+      if (item && item.showId) map[item.showId] = item;
+    });
+    return map;
+  }
+
+  function formatRiskBadge(risk){
+    if (!risk || !risk.level) return '<span class="risk-badge stable">Stable</span>';
+    var level = risk.level;
+    var cls = level === 'Hot' ? 'hot' : (level === 'At Risk' ? 'risk' : 'stable');
+    return '<span class="risk-badge ' + cls + '">' + escapeHtml(level) + '</span>';
+  }
+
+  function formatTrend(wowPct){
+    if (!Number.isFinite(wowPct)) return '<span class="trend flat">—</span>';
+    if (wowPct > 1){
+      return '<span class="trend up">▲ ' + fmtPercent.format(Math.abs(wowPct)) + '%</span>';
+    }
+    if (wowPct < -1){
+      return '<span class="trend down">▼ ' + fmtPercent.format(Math.abs(wowPct)) + '%</span>';
+    }
+    return '<span class="trend flat">—</span>';
+  }
+
+  function formatTDays(days){
+    if (!Number.isFinite(days)) return 'T-';
+    if (days >= 0) return 'T-' + days;
+    return 'T+' + Math.abs(days);
+  }
+
+  function ensureAdminModal(){
+    var overlay = $('#adminModal');
+    if (overlay) return overlay;
+
+    overlay = document.createElement('div');
+    overlay.id = 'adminModal';
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML =
+      '<div class="modal-panel" role="dialog" aria-modal="true">'
+      + '<div class="modal-header">'
+      +   '<div class="title" id="adminModalTitle"></div>'
+      +   '<button class="btn" id="adminModalClose">Close</button>'
+      + '</div>'
+      + '<div class="modal-body" id="adminModalBody"></div>'
+      + '<div class="modal-actions" id="adminModalActions"></div>'
+      + '</div>';
+
+    document.body.appendChild(overlay);
+
+    overlay.addEventListener('click', function(e){
+      if (e.target === overlay) closeAdminModal();
+    });
+
+    if (!window.__adminModalEsc){
+      window.__adminModalEsc = true;
+      document.addEventListener('keydown', function(e){
+        if (e.key === 'Escape') closeAdminModal();
+      });
+    }
+
+    overlay.querySelector('#adminModalClose').addEventListener('click', closeAdminModal);
+    return overlay;
+  }
+
+  function openAdminModal(opts){
+    var overlay = ensureAdminModal();
+    overlay.querySelector('#adminModalTitle').textContent = opts.title || '';
+    overlay.querySelector('#adminModalBody').innerHTML = opts.body || '';
+    overlay.querySelector('#adminModalActions').innerHTML = opts.actions || '';
+    overlay.classList.add('open');
+    if (typeof opts.onReady === 'function') opts.onReady(overlay);
+  }
+
+  function closeAdminModal(){
+    var overlay = $('#adminModal');
+    if (overlay) overlay.classList.remove('open');
+  }
+
+  function renderShowActionList(shows, actionKey, showMap){
+    if (!shows || !shows.length){
+      return '<div class="empty-state">No matching shows for this action.</div>';
+    }
+    return shows.map(function(show){
+      var date = show.date ? fmtDateTime.format(new Date(show.date)) : 'TBC';
+      var analytics = showMap ? showMap[show.id] : null;
+      var extraButton = '';
+      if (actionKey === 'schedule_email' || actionKey === 'campaign'){
+        extraButton = '<button class="btn" data-campaign-show="' + show.id + '">Create campaign draft</button>';
+      }
+      if (actionKey === 'upsell_bundle'){
+        extraButton = '<button class="btn" data-upsell-show="' + show.id + '">Create upsell bundle</button>';
+      }
+      return ''
+        + '<div class="row" style="gap:10px;align-items:center;justify-content:space-between;">'
+        +   '<div style="min-width:0;">'
+        +     '<a href="/admin/ui/shows/' + show.id + '/summary" data-view="/admin/ui/shows/' + show.id + '/summary" style="font-weight:600;">'
+        +       escapeHtml(show.title || 'Untitled show')
+        +     '</a>'
+        +     '<div class="muted" style="font-size:12px;">' + date + '</div>'
+        +     (analytics && analytics.risk ? '<div class="muted" style="font-size:12px;">' + escapeHtml(analytics.risk.reason || '') + '</div>' : '')
+        +   '</div>'
+        +   '<div class="row" style="gap:8px;">'
+        +     '<a class="btn" href="/admin/ui/shows/' + show.id + '/edit" data-view="/admin/ui/shows/' + show.id + '/edit">Open show</a>'
+        +     extraButton
+        +   '</div>'
+        + '</div>';
+    }).join('');
+  }
+
+  function openShowActionModal(action){
+    var shows = action.shows || [];
+    loadAnalyticsShows(60).then(function(analyticsList){
+      var showMap = analyticsMap(analyticsList || []);
+      openAdminModal({
+        title: action.label,
+        body: renderShowActionList(shows, action.key, showMap),
+        actions: '<button class="btn" id="actionModalClose">Close</button>',
+        onReady: function(){
+          var closeBtn = $('#actionModalClose');
+          if (closeBtn) closeBtn.addEventListener('click', closeAdminModal);
+          $$('[data-campaign-show]').forEach(function(btn){
+            btn.addEventListener('click', function(){
+              var showId = btn.getAttribute('data-campaign-show');
+              var analytics = showMap[showId] || null;
+              var show = (analyticsList || []).find(function(item){ return item.showId === showId; });
+              var fallbackShow = (shows || []).find(function(item){ return item.id === showId; });
+              var showSummary = show ? {
+                id: show.showId,
+                title: show.title,
+                date: show.date,
+                venue: show.venue,
+                venueId: show.venueId
+              } : (fallbackShow ? {
+                id: fallbackShow.id,
+                title: fallbackShow.title,
+                date: fallbackShow.date,
+                venue: fallbackShow.venue,
+                venueId: fallbackShow.venueId
+              } : null);
+              if (showSummary){
+                openCampaignWizard(showSummary, analytics);
+              }
+            });
+          });
+          $$('[data-upsell-show]').forEach(function(btn){
+            btn.addEventListener('click', function(){
+              var showId = btn.getAttribute('data-upsell-show');
+              var analytics = showMap[showId] || null;
+              var show = (analyticsList || []).find(function(item){ return item.showId === showId; });
+              var fallbackShow = (shows || []).find(function(item){ return item.id === showId; });
+              var showSummary = show ? {
+                id: show.showId,
+                title: show.title,
+                date: show.date,
+                venue: show.venue,
+                venueId: show.venueId
+              } : (fallbackShow ? {
+                id: fallbackShow.id,
+                title: fallbackShow.title,
+                date: fallbackShow.date,
+                venue: fallbackShow.venue,
+                venueId: fallbackShow.venueId
+              } : null);
+              if (showSummary){
+                openUpsellWizard(showSummary, analytics);
+              }
+            });
+          });
+        }
+      });
+    });
+  }
+
+  function renderAiInsights(insightsData){
+    var body = $('#aiInsightsBody');
+    var actionsEl = $('#aiInsightsActions');
+    if (!body || !actionsEl) return;
+
+    if (!insightsData || !insightsData.ok){
+      body.innerHTML = '<div class="error-inline">Insights failed to load.</div>';
+      actionsEl.innerHTML = '';
+      return;
+    }
+
+    var insights = insightsData.insights || [];
+    if (!insights.length){
+      body.innerHTML = '<div class="empty-state">No early insights yet. Check back after more sales activity.</div>';
+    }else{
+      body.innerHTML = '<ul class="ai-insights-list">'
+        + insights.map(function(item){
+          return '<li class="ai-insights-item">' + escapeHtml(item.text) + '</li>';
+        }).join('')
+        + '</ul>';
+    }
+
+    var actions = insightsData.actions || {};
+    var buttons = Object.keys(actions).map(function(key){
+      var action = actions[key];
+      if (!action || !action.shows || !action.shows.length) return '';
+      return '<button class="btn subtle" data-ai-action="' + key + '">' + escapeHtml(action.label) + '</button>';
+    }).filter(Boolean).join('');
+
+    actionsEl.innerHTML = buttons || '<div class="muted" style="font-size:12px;">No quick actions yet.</div>';
+
+    $$('[data-ai-action]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var key = btn.getAttribute('data-ai-action');
+        var action = actions[key];
+        if (action) openShowActionModal({ key: key, label: action.label, shows: action.shows });
+      });
+    });
+  }
+
+  function campaignObjectiveFromAnalytics(analytics){
+    if (!analytics || !analytics.risk) return 'Momentum Builder';
+    var risk = analytics.risk.level;
+    var tDays = analytics.metrics ? analytics.metrics.timeToShowDays : null;
+    if (risk === 'At Risk' && tDays != null && tDays <= 21) return 'Final Tickets Push';
+    if (risk === 'At Risk') return 'Boost Momentum';
+    if (risk === 'Hot') return 'Upsell Momentum';
+    return 'Momentum Builder';
+  }
+
+  function formatDateInput(date){
+    return date.toISOString().slice(0, 10);
+  }
+
+  function buildCampaignSchedule(analytics){
+    var base = new Date();
+    var tDays = analytics && analytics.metrics ? analytics.metrics.timeToShowDays : null;
+    var isAtRisk = analytics && analytics.risk && analytics.risk.level === 'At Risk';
+    if (isAtRisk && tDays != null && tDays <= 21){
+      var first = new Date(base);
+      first.setDate(base.getDate() + 2);
+      var second = new Date(base);
+      second.setDate(base.getDate() + 5);
+      return [first, second];
+    }
+    var single = new Date(base);
+    single.setDate(base.getDate() + 4);
+    return [single];
+  }
+
+  var productCache = { list: null, fetchedAt: 0 };
+  async function loadProducts(){
+    var ttl = 60 * 1000;
+    if (productCache.list && (Date.now() - productCache.fetchedAt) < ttl){
+      return productCache.list;
+    }
+    try{
+      var data = await j('/admin/api/product-store/products');
+      if (data && data.products){
+        productCache = { list: data.products, fetchedAt: Date.now() };
+        return productCache.list;
+      }
+    }catch(e){}
+    return [];
+  }
+
+  function openCampaignWizard(show, analytics){
+    var objective = campaignObjectiveFromAnalytics(analytics);
+    var suggestedSegments = [
+      {
+        label: 'VIP buyers (£50+)',
+        rules: { rules: [{ type: 'TOTAL_SPENT_AT_LEAST', amount: 50 }] }
+      },
+      {
+        label: 'Tagged VIPs',
+        rules: { rules: [{ type: 'HAS_TAG', value: 'vip' }] }
+      },
+      {
+        label: 'Lapsed 90+ days',
+        rules: { rules: [{ type: 'LAST_PURCHASE_OLDER_THAN', days: 90 }] }
+      }
+    ];
+    if (show.venueId){
+      suggestedSegments.unshift({
+        label: 'Attended this venue',
+        rules: { rules: [{ type: 'ATTENDED_VENUE', venueId: show.venueId }] }
+      });
+    }
+
+    var scheduleDates = buildCampaignSchedule(analytics).map(formatDateInput);
+    var copySkeleton =
+      'Subject: Final call for {{show_title}}\\n\\n'
+      + 'Hi {{first_name}},\\n\\n'
+      + 'Tickets are moving quickly for {{show_title}} on {{show_date}} at {{venue_name}}.\\n'
+      + 'Secure your seats now and join us for an unforgettable night.\\n\\n'
+      + 'Book now: {{booking_link}}\\n\\n'
+      + 'Thanks,\\n{{organiser_name}}';
+
+    openAdminModal({
+      title: 'Campaign draft · ' + (show.title || 'Show'),
+      body:
+        '<div class=\"grid\" style=\"gap:10px;\">'
+        + '<label class=\"grid\" style=\"gap:6px;\">'
+        +   '<span class=\"muted\">Objective</span>'
+        +   '<select class=\"input\" id=\"campaign_objective\">'
+        +     '<option>Final Tickets Push</option>'
+        +     '<option>Momentum Builder</option>'
+        +     '<option>Boost Momentum</option>'
+        +     '<option>Upsell Momentum</option>'
+        +   '</select>'
+        + '</label>'
+        + '<div class=\"panel-block\">'
+        +   '<div class=\"panel-title\">Suggested audience segments</div>'
+        +   '<div class=\"row\" style=\"gap:6px;flex-wrap:wrap;\" id=\"campaign_segment_buttons\"></div>'
+        + '</div>'
+        + '<label class=\"grid\" style=\"gap:6px;\">'
+        +   '<span class=\"muted\">Segment rules (JSON)</span>'
+        +   '<textarea class=\"input\" id=\"campaign_segment_rules\" style=\"min-height:120px;\"></textarea>'
+        + '</label>'
+        + '<div class=\"grid\" style=\"grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;\">'
+        +   '<label class=\"grid\" style=\"gap:6px;\">'
+        +     '<span class=\"muted\">Send date 1</span>'
+        +     '<input class=\"input\" type=\"date\" id=\"campaign_schedule_1\" />'
+        +   '</label>'
+        +   '<label class=\"grid\" style=\"gap:6px;\">'
+        +     '<span class=\"muted\">Send date 2 (optional)</span>'
+        +     '<input class=\"input\" type=\"date\" id=\"campaign_schedule_2\" />'
+        +   '</label>'
+        + '</div>'
+        + '<label class=\"grid\" style=\"gap:6px;\">'
+        +   '<span class=\"muted\">Copy skeleton</span>'
+        +   '<textarea class=\"input\" id=\"campaign_copy\" style=\"min-height:160px;\"></textarea>'
+        + '</label>'
+        + '<div id=\"campaign_msg\" class=\"muted\"></div>'
+        + '</div>',
+      actions:
+        '<button class=\"btn\" id=\"campaign_cancel\">Cancel</button>'
+        + '<button class=\"btn p\" id=\"campaign_save\">Save draft</button>',
+      onReady: function(){
+        $('#campaign_objective').value = objective;
+        $('#campaign_segment_rules').value = JSON.stringify(suggestedSegments[0].rules, null, 2);
+        $('#campaign_schedule_1').value = scheduleDates[0] || '';
+        $('#campaign_schedule_2').value = scheduleDates[1] || '';
+        $('#campaign_copy').value = copySkeleton;
+
+        var segmentButtons = $('#campaign_segment_buttons');
+        if (segmentButtons){
+          segmentButtons.innerHTML = suggestedSegments.map(function(seg, idx){
+            return '<button class=\"btn\" data-seg=\"' + idx + '\">' + escapeHtml(seg.label) + '</button>';
+          }).join('');
+          $$('#campaign_segment_buttons [data-seg]').forEach(function(btn){
+            btn.addEventListener('click', function(){
+              var idx = Number(btn.getAttribute('data-seg'));
+              var chosen = suggestedSegments[idx];
+              if (chosen){
+                $('#campaign_segment_rules').value = JSON.stringify(chosen.rules, null, 2);
+              }
+            });
+          });
+        }
+
+        $('#campaign_cancel').addEventListener('click', closeAdminModal);
+        $('#campaign_save').addEventListener('click', async function(){
+          var msg = $('#campaign_msg');
+          if (msg) msg.textContent = '';
+          var rulesRaw = $('#campaign_segment_rules').value || '{}';
+          var rules;
+          try{
+            rules = JSON.parse(rulesRaw);
+          }catch(err){
+            if (msg) msg.textContent = 'Segment rules must be valid JSON.';
+            return;
+          }
+
+          var schedule = [];
+          var s1 = $('#campaign_schedule_1').value;
+          var s2 = $('#campaign_schedule_2').value;
+          if (s1) schedule.push(s1);
+          if (s2) schedule.push(s2);
+
+          var payload = {
+            showId: show.id,
+            objective: $('#campaign_objective').value,
+            riskLevel: analytics && analytics.risk ? analytics.risk.level : null,
+            timeToShowDays: analytics && analytics.metrics ? analytics.metrics.timeToShowDays : null,
+            audienceRules: rules,
+            schedule: schedule,
+            copySkeleton: $('#campaign_copy').value,
+          };
+
+          try{
+            var resp = await j('/admin/api/campaign-drafts', {
+              method:'POST',
+              headers:{'Content-Type':'application/json'},
+              body: JSON.stringify(payload)
+            });
+            if (!resp || !resp.ok) throw new Error((resp && resp.error) || 'Failed to save draft');
+            if (msg) msg.textContent = 'Draft saved.';
+
+            var draftId = resp.draft && resp.draft.id;
+            var actions = $('#adminModalActions');
+            if (actions && draftId){
+              actions.innerHTML =
+                '<a class=\"btn\" href=\"/admin/ui/campaign-drafts/' + draftId + '\" data-view=\"/admin/ui/campaign-drafts/' + draftId + '\">Open draft page</a>'
+                + '<a class=\"btn\" href=\"/admin/api/campaign-drafts/' + draftId + '/export-recipients\" target=\"_blank\">Export recipients CSV</a>'
+                + '<button class=\"btn p\" id=\"campaign_schedule_send\">Schedule send</button>';
+              var scheduleBtn = $('#campaign_schedule_send');
+              if (scheduleBtn){
+                scheduleBtn.addEventListener('click', function(){
+                  go('/admin/ui/marketing');
+                  closeAdminModal();
+                });
+              }
+            }
+          }catch(err){
+            if (msg) msg.textContent = err.message || 'Failed to save draft.';
+          }
+        });
+      }
+    });
+  }
+
+  function openUpsellWizard(show, analytics){
+    var templateOptions = ['VIP', 'Merch', 'Group', 'Last-Minute Sweetener'];
+    var preferredTemplate = templateOptions[0];
+    if (analytics && analytics.risk && analytics.risk.level === 'Hot') preferredTemplate = 'VIP';
+    if (analytics && analytics.risk && analytics.risk.level === 'At Risk') preferredTemplate = 'Last-Minute Sweetener';
+    var recommendedReason = analytics && analytics.risk ? analytics.risk.reason : 'Momentum-based recommendation';
+
+    loadProducts().then(function(products){
+      var optionsHtml = '<option value="">Custom item</option>' + (products || []).map(function(p){
+        return '<option value="' + p.id + '">' + escapeHtml(p.title) + '</option>';
+      }).join('');
+
+      openAdminModal({
+        title: 'Upsell bundle · ' + (show.title || 'Show'),
+        body:
+          '<div class="grid" style="gap:10px;">'
+          + '<label class="grid" style="gap:6px;">'
+          +   '<span class="muted">Template</span>'
+          +   '<select class="input" id="upsell_template">'
+          +     templateOptions.map(function(t){ return '<option>' + t + '</option>'; }).join('')
+          +   '</select>'
+          + '</label>'
+          + '<label class="grid" style="gap:6px;">'
+          +   '<span class="muted">Recommended reason</span>'
+          +   '<input class="input" id="upsell_reason" />'
+          + '</label>'
+          + '<div class="panel-block">'
+          +   '<div class="panel-title">Bundle items</div>'
+          +   '<div id="upsell_items"></div>'
+          +   '<button class="btn" id="upsell_add_item" style="margin-top:8px;">Add item</button>'
+          + '</div>'
+          + '<div id="upsell_msg" class="muted"></div>'
+          + '</div>',
+        actions:
+          '<button class="btn" id="upsell_cancel">Cancel</button>'
+          + '<button class="btn p" id="upsell_save">Save bundle</button>',
+        onReady: function(){
+          $('#upsell_template').value = preferredTemplate;
+          $('#upsell_reason').value = recommendedReason || '';
+
+          function addItemRow(item){
+            var row = document.createElement('div');
+            row.className = 'row';
+            row.style.gap = '8px';
+            row.style.marginTop = '8px';
+            row.innerHTML = ''
+              + '<select class="input" data-product>' + optionsHtml + '</select>'
+              + '<input class="input" placeholder="Item name" data-name />'
+              + '<input class="input" placeholder="Price (pence)" type="number" data-price />'
+              + '<button class="btn" data-remove>Remove</button>';
+            $('#upsell_items').appendChild(row);
+
+            var productSelect = row.querySelector('[data-product]');
+            if (item && item.productId){
+              productSelect.value = item.productId;
+            }
+            if (item && item.name){
+              row.querySelector('[data-name]').value = item.name;
+            }
+            if (item && item.pricePence){
+              row.querySelector('[data-price]').value = item.pricePence;
+            }
+
+            productSelect.addEventListener('change', function(){
+              var chosen = (products || []).find(function(p){ return p.id === productSelect.value; });
+              if (chosen){
+                row.querySelector('[data-name]').value = chosen.title || '';
+                row.querySelector('[data-price]').value = chosen.pricePence || '';
+              }
+            });
+            row.querySelector('[data-remove]').addEventListener('click', function(){ row.remove(); });
+          }
+
+          addItemRow();
+          $('#upsell_add_item').addEventListener('click', function(){ addItemRow(); });
+
+          $('#upsell_cancel').addEventListener('click', closeAdminModal);
+          $('#upsell_save').addEventListener('click', async function(){
+            var msg = $('#upsell_msg');
+            if (msg) msg.textContent = '';
+            var items = Array.prototype.slice.call($('#upsell_items').children).map(function(row){
+              var productId = row.querySelector('[data-product]').value || null;
+              var name = row.querySelector('[data-name]').value.trim();
+              var pricePence = row.querySelector('[data-price]').value;
+              if (!productId && !name) return null;
+              return {
+                productId: productId || null,
+                name: name || null,
+                pricePence: pricePence ? Number(pricePence) : null,
+              };
+            }).filter(Boolean);
+
+            try{
+              var resp = await j('/admin/api/upsell-bundles', {
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({
+                  showId: show.id,
+                  template: $('#upsell_template').value,
+                  title: show.title || null,
+                  recommendedReason: $('#upsell_reason').value,
+                  items: items,
+                  status: 'DRAFT'
+                })
+              });
+              if (!resp || !resp.ok) throw new Error((resp && resp.error) || 'Failed to save bundle');
+              if (msg) msg.textContent = 'Upsell bundle saved.';
+            }catch(err){
+              if (msg) msg.textContent = err.message || 'Failed to save bundle.';
+            }
+          });
+        }
+      });
+    });
+  }
+
+
   async function renderDashboard(){
     if (isWidgetEnabled('daily_performance')){
       renderChartToggles();
@@ -3716,18 +4446,21 @@ document.addEventListener('click', function(e){
         j('/admin/api/dashboard/summary?range=7d'),
         j('/admin/api/dashboard/booking-fee-kickback'),
         j('/admin/api/dashboard/top-shows?range=7d'),
-        j('/admin/api/dashboard/alerts')
+        j('/admin/api/dashboard/alerts'),
+        j('/admin/api/analytics/early-insights?window=21')
       ]);
 
       var summary = results[0].status === 'fulfilled' ? results[0].value : null;
       var kickback = results[1].status === 'fulfilled' ? results[1].value : null;
       var topShows = results[2].status === 'fulfilled' ? results[2].value : null;
       var alerts = results[3].status === 'fulfilled' ? results[3].value : null;
+      var insights = results[4].status === 'fulfilled' ? results[4].value : null;
 
       dashboardCache.summary = summary;
       dashboardCache.kickback = kickback;
       dashboardCache.topShows = topShows;
       dashboardCache.alerts = alerts;
+      dashboardCache.insights = insights;
 
       if (!summary || !summary.ok){
         $('#kpiGrid').innerHTML = '<div class="error-inline">Summary failed to load.</div>';
@@ -3762,6 +4495,12 @@ document.addEventListener('click', function(e){
         }else{
           renderAlerts(alerts);
         }
+      }
+
+      if (!insights || !insights.ok){
+        renderAiInsights({ ok: false });
+      }else{
+        renderAiInsights(insights);
       }
     }catch(e){
       $('#kpiGrid').innerHTML = '<div class="error-inline">Dashboard failed to load.</div>';
@@ -5709,12 +6448,29 @@ async function listShows(){
         +'</div>'
       +'</div>'
 
+      +'<div class="bulk-actions">'
+        +'<button class="btn" data-bulk-action="featured">Add to Featured</button>'
+        +'<button class="btn" data-bulk-action="assets">Generate assets</button>'
+        +'<button class="btn" data-bulk-action="campaign">Create campaign</button>'
+        +'<button class="btn" data-bulk-action="upsell">Create upsell bundle</button>'
+        +'<div class="bulk-count" id="bulk_count">0 selected</div>'
+      +'</div>'
+
       +'<div id="shows_count" class="muted" style="margin-bottom:10px;font-size:13px;"></div>'
+      +'<div id="shows_analytics_notice" class="muted" style="margin-bottom:10px;font-size:12px;"></div>'
 
       +'<table>'
         +'<thead><tr>'
+          +'<th><input type="checkbox" id="shows_select_all" /></th>'
+          +'<th></th>'
           +'<th>Title</th><th>When</th><th>Venue</th>'
-          +'<th>Total allocation</th><th>Gross face</th><th>Status</th><th class="promoter-col">Promoter</th><th></th>'
+          +'<th>Status</th>'
+          +'<th>Sales</th>'
+          +'<th>Capacity %</th>'
+          +'<th>Time</th>'
+          +'<th>Trend</th>'
+          +'<th>AI Risk</th>'
+          +'<th>Total allocation</th><th>Gross face</th><th class="promoter-col">Promoter</th><th></th>'
         +'</tr></thead>'
         +'<tbody id="tbody"></tbody>'
       +'</table>'
@@ -5727,8 +6483,16 @@ async function listShows(){
   var toEl = $('#shows_to');
   var clearBtn = $('#shows_clear');
   var countEl = $('#shows_count');
+  var analyticsNoticeEl = $('#shows_analytics_notice');
+  var selectAllEl = $('#shows_select_all');
+  var bulkCountEl = $('#bulk_count');
 
   var allItems = [];
+  var analyticsList = [];
+  var analyticsById = {};
+  var selectedShowIds = new Set();
+  var selectAllBound = false;
+  var bulkActionsBound = false;
   var searchTimer = null;
   var venueExtras = loadVenueExtras();
 
@@ -5853,7 +6617,7 @@ function sumTicketTypeCap(tts){
     return true;
   }
 
- function statusBadgeHTML(statusLabel){
+function statusBadgeHTML(statusLabel){
   statusLabel = statusLabel || 'DRAFT';
   return '<span class="pill" style="background:'
     +(statusLabel === 'LIVE' ? '#e6f7fd' : '#f8fafc')
@@ -5862,14 +6626,89 @@ function sumTicketTypeCap(tts){
     +';">'+statusLabel+'</span>';
 }
 
+  var lastRenderedItems = [];
+
+  function updateBulkActions(){
+    var count = selectedShowIds.size;
+    if (bulkCountEl){
+      bulkCountEl.textContent = count + ' selected';
+    }
+
+    if (selectAllEl){
+      if (!lastRenderedItems.length){
+        selectAllEl.checked = false;
+        selectAllEl.indeterminate = false;
+        return;
+      }
+      var allSelected = lastRenderedItems.every(function(item){ return selectedShowIds.has(item.id); });
+      var anySelected = lastRenderedItems.some(function(item){ return selectedShowIds.has(item.id); });
+      selectAllEl.checked = allSelected;
+      selectAllEl.indeterminate = !allSelected && anySelected;
+    }
+  }
+
+  function selectedShowsList(){
+    return (allItems || []).filter(function(item){ return selectedShowIds.has(item.id); });
+  }
+
+  function toggleExpandRow(showId){
+    var row = $('[data-expand-row=\"' + showId + '\"]');
+    var btn = $('[data-expand=\"' + showId + '\"]');
+    if (!row || !btn) return;
+    var isOpen = row.style.display !== 'none';
+    row.style.display = isOpen ? 'none' : 'table-row';
+    btn.textContent = isOpen ? '▸' : '▾';
+  }
+
+  function showSummaryFromItem(item){
+    return {
+      id: item.id,
+      title: item.title,
+      date: item.date,
+      venue: item.venue || null,
+      venueId: item.venueId || null
+    };
+  }
+
+  function handleShowQuickAction(actionKey, showItem, analytics){
+    var summary = showSummaryFromItem(showItem);
+    var labelMap = {
+      generate_promo_pack: 'Generate promo pack',
+      schedule_email: 'Schedule email',
+      boost_featured_slot: 'Boost featured slot',
+      chase_venue_report: 'Chase venue report'
+    };
+
+    if (actionKey === 'schedule_email'){
+      openCampaignWizard(summary, analytics);
+      return;
+    }
+
+    var showMap = {};
+    showMap[summary.id] = analytics;
+    openAdminModal({
+      title: labelMap[actionKey] || 'Quick action',
+      body: renderShowActionList([summary], actionKey, showMap),
+      actions: '<button class=\"btn\" id=\"quickActionClose\">Close</button>',
+      onReady: function(){
+        var btn = $('#quickActionClose');
+        if (btn) btn.addEventListener('click', closeAdminModal);
+      }
+    });
+  }
+
 
   function render(items){
     if (!tb) return;
 
     if (!items.length){
-      tb.innerHTML = '<tr><td colspan="8" class="muted">No matching events</td></tr>';
+      tb.innerHTML = '<tr><td colspan="15" class="muted">No matching events</td></tr>';
+      lastRenderedItems = [];
+      updateBulkActions();
       return;
     }
+
+    lastRenderedItems = items.slice();
 
     tb.innerHTML = items.map(function(s){
       var when = s.date
@@ -5917,6 +6756,10 @@ function sumTicketTypeCap(tts){
         + '</div>';
 
       var statusLabel = (s.status || 'DRAFT');
+      var analytics = analyticsById[s.id] || null;
+      var metrics = analytics ? analytics.metrics : null;
+      var risk = analytics ? analytics.risk : null;
+      var recommendations = analytics ? (analytics.recommendations || []) : [];
       var venueLabel = (s.venue
         ? (s.venue.name + (s.venue.city ? ' – '+s.venue.city : ''))
         : (s.venueText || '')
@@ -5947,14 +6790,53 @@ function sumTicketTypeCap(tts){
             +(total == null ? '' : (' / '+total))
           +'</span> '+bar);
 
+      var salesCell = metrics ? fmtNumber.format(metrics.soldCount || 0) : '—';
+      var capacityCell = (metrics && metrics.capacityPct != null)
+        ? Math.round(metrics.capacityPct) + '%'
+        : '—';
+      var timeCell = metrics ? formatTDays(metrics.timeToShowDays) : '—';
+      var trendCell = metrics ? formatTrend(metrics.wowPct) : '<span class="trend flat">—</span>';
+      var riskCell = analytics ? formatRiskBadge(risk) : '<span class="risk-badge stable">—</span>';
+
+      var paceSummary = metrics
+        ? ('If sales stay the same, projected ' + fmtNumber.format(metrics.forecastSold || 0)
+          + (metrics.forecastCapacityPct != null ? (' tickets (' + Math.round(metrics.forecastCapacityPct) + '% capacity)') : ' tickets'))
+        : 'Analytics unavailable for this show yet.';
+
+      var wowSummary = metrics
+        ? (fmtNumber.format(metrics.last7 || 0) + ' tickets in last 7 days vs '
+          + fmtNumber.format(metrics.prev7 || 0) + ' prior · ' + fmtPercent.format(metrics.wowPct || 0) + '% WoW')
+        : '—';
+
+      var recList = recommendations.length
+        ? '<ul style="margin:0;padding-left:16px;">' + recommendations.map(function(rec){
+            return '<li>' + escapeHtml(rec.label) + '</li>';
+          }).join('') + '</ul>'
+        : '<div class="muted">No recommendations yet.</div>';
+
+      var quickActions = ''
+        + '<div class="quick-actions">'
+        +   '<button class="btn subtle" data-show-action="generate_promo_pack" data-show-id="' + s.id + '">Generate promo pack</button>'
+        +   '<button class="btn subtle" data-show-action="schedule_email" data-show-id="' + s.id + '">Schedule email</button>'
+        +   '<button class="btn subtle" data-show-action="boost_featured_slot" data-show-id="' + s.id + '">Boost featured slot</button>'
+        +   '<button class="btn subtle" data-show-action="chase_venue_report" data-show-id="' + s.id + '">Chase venue report</button>'
+        + '</div>';
+
       return ''
         +'<tr data-row="'+s.id+'" data-status="'+statusLabel+'">'
+          +'<td><input type="checkbox" data-select-show="'+s.id+'"'+(selectedShowIds.has(s.id) ? ' checked' : '')+' /></td>'
+          +'<td><button class="table-expand-toggle" data-expand="'+s.id+'" aria-label="Expand">▸</button></td>'
           +'<td>'+(s.title || '')+'</td>'
           +'<td>'+when+'</td>'
           +'<td'+venueAttrs+'>'+venueCell+'</td>'
+          +'<td>'+statusBadgeHTML(statusLabel)+'</td>'
+          +'<td>'+salesCell+'</td>'
+          +'<td>'+capacityCell+'</td>'
+          +'<td>'+timeCell+'</td>'
+          +'<td>'+trendCell+'</td>'
+          +'<td>'+riskCell+'</td>'
           +'<td>'+allocationHtml+'</td>'
           +'<td>£'+(((s._revenue && s._revenue.grossFace) || 0).toFixed(2))+'</td>'
-          +'<td>'+statusBadgeHTML(statusLabel)+'</td>'
           +'<td class="promoter-col">'
             +'<button type="button" data-link-promoter="'+s.id+'"'
               +' style="border:none;background:none;padding:0;cursor:pointer;">'
@@ -5972,6 +6854,29 @@ function sumTicketTypeCap(tts){
                 +'<a href="#" data-link-promoter="'+s.id+'">Link promoter</a>'
                 +'<a href="#" data-dup="'+s.id+'">Duplicate</a>'
                 +(sold === 0 ? '<a href="#" data-delete="'+s.id+'">Delete</a>' : '')
+              +'</div>'
+            +'</div>'
+          +'</td>'
+        +'</tr>'
+        +'<tr class="show-expand" data-expand-row="'+s.id+'" style="display:none;">'
+          +'<td colspan="15">'
+            +'<div class="expand-panel">'
+              +'<div class="panel-block">'
+                +'<div class="panel-title">Pace & forecast</div>'
+                +'<div>' + escapeHtml(paceSummary) + '</div>'
+                + (risk && risk.reason ? '<div class="muted" style="font-size:12px;margin-top:6px;">' + escapeHtml(risk.reason) + '</div>' : '')
+              +'</div>'
+              +'<div class="panel-block">'
+                +'<div class="panel-title">Week-over-week</div>'
+                +'<div>' + escapeHtml(wowSummary) + '</div>'
+              +'</div>'
+              +'<div class="panel-block">'
+                +'<div class="panel-title">Top recommendations</div>'
+                + recList
+              +'</div>'
+              +'<div class="panel-block">'
+                +'<div class="panel-title">Quick actions</div>'
+                + quickActions
               +'</div>'
             +'</div>'
           +'</td>'
@@ -6113,15 +7018,66 @@ function sumTicketTypeCap(tts){
       });
     });
 
+    $$('[data-expand]').forEach(function(btn){
+      btn.addEventListener('click', function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        var id = btn.getAttribute('data-expand');
+        if (id) toggleExpandRow(id);
+      });
+    });
+
+    $$('[data-select-show]').forEach(function(cb){
+      cb.addEventListener('click', function(e){
+        e.stopPropagation();
+      });
+      cb.addEventListener('change', function(){
+        var id = cb.getAttribute('data-select-show');
+        if (!id) return;
+        if (cb.checked) selectedShowIds.add(id);
+        else selectedShowIds.delete(id);
+        updateBulkActions();
+      });
+    });
+
+    if (selectAllEl && !selectAllBound){
+      selectAllBound = true;
+      selectAllEl.addEventListener('change', function(){
+        var shouldSelect = selectAllEl.checked;
+        (lastRenderedItems || []).forEach(function(item){
+          if (shouldSelect) selectedShowIds.add(item.id);
+          else selectedShowIds.delete(item.id);
+        });
+        render(lastRenderedItems);
+        updateBulkActions();
+      });
+    }
+
+    $$('[data-show-action]').forEach(function(btn){
+      btn.addEventListener('click', function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        var showId = btn.getAttribute('data-show-id');
+        var actionKey = btn.getAttribute('data-show-action');
+        if (!showId || !actionKey) return;
+        var analytics = analyticsById[showId] || null;
+        var show = (allItems || []).find(function(item){ return item.id === showId; });
+        if (!show) return;
+        handleShowQuickAction(actionKey, show, analytics);
+      });
+    });
+
     // row click behaviour (unchanged)
     $$('[data-row]').forEach(function(row){
       row.addEventListener('click', function(e){
-        if (e.target && (e.target.closest('a') || e.target.closest('button'))) return;
+        if (e.target && (e.target.closest('a') || e.target.closest('button') || e.target.closest('input'))) return;
         var id = row.getAttribute('data-row');
         if (!id) return;
         go('/admin/ui/shows/' + id + '/summary');
       });
     });
+
+    updateBulkActions();
   }
 
   function applyFilters(){
@@ -6148,22 +7104,40 @@ function sumTicketTypeCap(tts){
   async function load(){
     if (!tb) return;
     tb.innerHTML =
-      '<tr><td colspan="8"><div class="loading-strip" aria-label="Loading"></div></td></tr>';
+      '<tr><td colspan="15"><div class="loading-strip" aria-label="Loading"></div></td></tr>';
     if (countEl) countEl.textContent = '';
 
     try{
-      var data = await j('/admin/shows');
-      allItems = data.items || [];
-      console.log('[Admin UI][shows] sample _alloc:', allItems[0] && allItems[0]._alloc);
+      var results = await Promise.allSettled([
+        j('/admin/shows'),
+        j('/admin/api/analytics/shows?range=60')
+      ]);
+
+      var showsData = results[0].status === 'fulfilled' ? results[0].value : null;
+      var analyticsData = results[1].status === 'fulfilled' ? results[1].value : null;
+
+      if (!showsData || showsData.ok === false){
+        throw new Error((showsData && showsData.error) || 'Failed to load shows');
+      }
+
+      allItems = showsData.items || [];
+      analyticsList = (analyticsData && analyticsData.ok && analyticsData.shows) ? analyticsData.shows : [];
+      analyticsById = analyticsMap(analyticsList);
+
+      if (analyticsNoticeEl){
+        analyticsNoticeEl.textContent = analyticsData && analyticsData.ok
+          ? 'Smart Shows Analytics updated just now.'
+          : 'Smart Shows Analytics is unavailable right now.';
+      }
 
       if (!allItems.length){
-        tb.innerHTML = '<tr><td colspan="8" class="muted">No shows yet</td></tr>';
+        tb.innerHTML = '<tr><td colspan="15" class="muted">No shows yet</td></tr>';
         if (countEl) countEl.textContent = 'Showing 0 of 0 events';
         return;
       }
       applyFilters();
     }catch(e){
-      tb.innerHTML = '<tr><td colspan="7" class="error">Failed to load shows: '+(e.message||e)+'</td></tr>';
+      tb.innerHTML = '<tr><td colspan="15" class="error">Failed to load shows: '+(e.message||e)+'</td></tr>';
     }
   }
 
@@ -6191,6 +7165,83 @@ function sumTicketTypeCap(tts){
       if (fromEl) fromEl.value = '';
       if (toEl) toEl.value = '';
       applyFilters();
+    });
+  }
+
+  if (!bulkActionsBound){
+    bulkActionsBound = true;
+    $$('[data-bulk-action]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var action = btn.getAttribute('data-bulk-action');
+        var selected = selectedShowsList();
+        if (!selected.length){
+          alert('Select at least one show.');
+          return;
+        }
+
+        var summaries = selected.map(showSummaryFromItem);
+        var showMap = {};
+        selected.forEach(function(item){ showMap[item.id] = analyticsById[item.id]; });
+
+        if (action === 'campaign'){
+          if (summaries.length === 1){
+            openCampaignWizard(summaries[0], analyticsById[summaries[0].id]);
+            return;
+          }
+          openAdminModal({
+            title: 'Create campaign drafts',
+            body: renderShowActionList(summaries, 'campaign', showMap),
+            actions: '<button class=\"btn\" id=\"bulkClose\">Close</button>',
+            onReady: function(){
+              var closeBtn = $('#bulkClose');
+              if (closeBtn) closeBtn.addEventListener('click', closeAdminModal);
+              $$('[data-campaign-show]').forEach(function(actionBtn){
+                actionBtn.addEventListener('click', function(){
+                  var showId = actionBtn.getAttribute('data-campaign-show');
+                  var showItem = selected.find(function(item){ return item.id === showId; });
+                  if (showItem) openCampaignWizard(showSummaryFromItem(showItem), analyticsById[showId]);
+                });
+              });
+            }
+          });
+          return;
+        }
+
+        if (action === 'upsell'){
+          if (summaries.length === 1){
+            openUpsellWizard(summaries[0], analyticsById[summaries[0].id]);
+            return;
+          }
+          openAdminModal({
+            title: 'Create upsell bundles',
+            body: renderShowActionList(summaries, 'upsell_bundle', showMap),
+            actions: '<button class=\"btn\" id=\"bulkUpsellClose\">Close</button>',
+            onReady: function(){
+              var closeBtn = $('#bulkUpsellClose');
+              if (closeBtn) closeBtn.addEventListener('click', closeAdminModal);
+              $$('[data-upsell-show]').forEach(function(actionBtn){
+                actionBtn.addEventListener('click', function(){
+                  var showId = actionBtn.getAttribute('data-upsell-show');
+                  var showItem = selected.find(function(item){ return item.id === showId; });
+                  if (showItem) openUpsellWizard(showSummaryFromItem(showItem), analyticsById[showId]);
+                });
+              });
+            }
+          });
+          return;
+        }
+
+        var label = action === 'featured' ? 'Add to Featured' : 'Generate assets';
+        openAdminModal({
+          title: label,
+          body: renderShowActionList(summaries, action, showMap),
+          actions: '<button class=\"btn\" id=\"bulkGenericClose\">Close</button>',
+          onReady: function(){
+            var closeBtn = $('#bulkGenericClose');
+            if (closeBtn) closeBtn.addEventListener('click', closeAdminModal);
+          }
+        });
+      });
     });
   }
 
@@ -10973,6 +12024,64 @@ function renderInterests(customer){
 
     loadOptions().then(loadRules);
   }
+
+  async function campaignDraftPage(draftId){
+    if (!main) return;
+    main.innerHTML = '<div class="card"><div class="title">Loading campaign draft…</div></div>';
+    try{
+      var data = await j('/admin/api/campaign-drafts/' + encodeURIComponent(draftId));
+      var draft = data.draft;
+      if (!draft){
+        main.innerHTML = '<div class="card"><div class="error">Draft not found.</div></div>';
+        return;
+      }
+
+      var showTitle = (draft.show && draft.show.title) ? draft.show.title : 'Show';
+      var showDate = (draft.show && draft.show.date) ? fmtDateTime.format(new Date(draft.show.date)) : 'TBC';
+      var schedule = Array.isArray(draft.schedule) ? draft.schedule : [];
+
+      main.innerHTML = ''
+        + '<div class="card">'
+        +   '<div class="header">'
+        +     '<div>'
+        +       '<div class="title">Campaign draft · ' + escapeHtml(showTitle) + '</div>'
+        +       '<div class="muted">' + escapeHtml(showDate) + '</div>'
+        +     '</div>'
+        +     '<button class="btn" id="draft_back">Back</button>'
+        +   '</div>'
+        +   '<div class="grid" style="gap:12px;">'
+        +     '<div class="panel-block">'
+        +       '<div class="panel-title">Objective</div>'
+        +       '<div>' + escapeHtml(draft.objective || '') + '</div>'
+        +       (draft.riskLevel ? '<div class="muted" style="font-size:12px;margin-top:6px;">Risk: ' + escapeHtml(draft.riskLevel) + '</div>' : '')
+        +     '</div>'
+        +     '<div class="panel-block">'
+        +       '<div class="panel-title">Schedule</div>'
+        +       '<div>' + (schedule.length ? schedule.map(escapeHtml).join(', ') : 'Not scheduled') + '</div>'
+        +     '</div>'
+        +     '<div class="panel-block">'
+        +       '<div class="panel-title">Audience rules</div>'
+        +       '<pre style="white-space:pre-wrap;margin:0;">' + escapeHtml(JSON.stringify(draft.audienceRules || {}, null, 2)) + '</pre>'
+        +     '</div>'
+        +     '<div class="panel-block">'
+        +       '<div class="panel-title">Copy skeleton</div>'
+        +       '<pre style="white-space:pre-wrap;margin:0;">' + escapeHtml(draft.copySkeleton || '') + '</pre>'
+        +     '</div>'
+        +   '</div>'
+        +   '<div class="row" style="gap:8px;margin-top:12px;flex-wrap:wrap;">'
+        +     '<a class="btn" href="/admin/ui/shows/' + draft.showId + '/summary" data-view="/admin/ui/shows/' + draft.showId + '/summary">Open show</a>'
+        +     '<a class="btn" href="/admin/api/campaign-drafts/' + draft.id + '/export-recipients" target="_blank">Export recipients CSV</a>'
+        +     '<button class="btn p" id="draft_schedule">Schedule send</button>'
+        +   '</div>'
+        + '</div>';
+
+      $('#draft_back').addEventListener('click', function(){ go('/admin/ui/shows/current'); });
+      $('#draft_schedule').addEventListener('click', function(){ go('/admin/ui/marketing'); });
+    }catch(err){
+      main.innerHTML = '<div class="card"><div class="error">Failed to load draft: ' + (err.message || err) + '</div></div>';
+    }
+  }
+
   function analytics(){
     if (!main) return;
     main.innerHTML = '<div class="card"><div class="title">Analytics</div><div class="muted">Analytics dashboard coming soon.</div></div>';
@@ -11826,6 +12935,10 @@ function renderInterests(customer){
       if (path === '/admin/ui/product-store/settings') return productStoreSettingsPage();
       if (path === '/admin/ui/product-store/upsells') return productStoreUpsellsPage();
       if (path === '/admin/ui/product-store/orders') return productStoreOrdersPage();
+      if (path.startsWith('/admin/ui/campaign-drafts/')){
+        var draftId = path.split('/')[4];
+        return campaignDraftPage(draftId);
+      }
       if (path === '/admin/ui/product-store/products/new') return productStoreProductForm();
       if (path === '/admin/ui/account')        return account();
       if (path === '/admin/ui/finance')        return finance();
