@@ -793,7 +793,7 @@ router.get(
     }
 .sb-sub{margin-left:6px;}
 
-    /* Keeps "Create Show" + AI badge on one line */
+    /* Keeps "Create Show" + AI logo on one line */
 .sb-link-row{
   display:flex;
   align-items:center;
@@ -811,22 +811,9 @@ router.get(
   text-overflow:ellipsis;
 }
 
-.ai-badge{
-  white-space:nowrap;
-}
-
-
- .ai-badge{
-  display:inline-block;
-  font-size:9px;
-  font-weight:800;
-  padding:2px 6px;
-  border-radius:999px;
-  border:1px solid #0f9cdf;
-  background:#e6f7fd;
-  color:#0f9cdf;
-  line-height:1.2;
-  white-space:nowrap;
+.ai-menu-logo{
+  height:16px;
+  width:auto;
   flex:0 0 auto;
 }
 
@@ -1967,7 +1954,7 @@ router.get(
 <a class="sb-link sub" href="/admin/ui/shows/create-ai" data-view="/admin/ui/shows/create-ai">
   <span class="sb-link-row">
     <span class="sb-link-label">Create Show</span>
-    <span class="ai-badge" title="AI assisted">TixAll AI</span>
+    <img class="ai-menu-logo" src="/tixai.png" alt="TixAll AI" />
   </span>
 </a>
 
@@ -4130,21 +4117,33 @@ var drop, fileInput, list, btn, err, status, result, state;
 
   // --- Oversize UX helpers (13MB cap message + auto-clear when resolved) ---
   const OVERSIZE_MSG = 'File size is too big, please upload a file under 13MB in size.';
+  const PAGES_UNSUPPORTED_MSG = 'Pages documents are not supported, please upload .DOC, .DOCX or .PDF.';
 
   function hasOversizeFiles(){
     return (state.images || []).some(f => f && f.tooBig) || (state.docs || []).some(f => f && f.tooBig);
   }
 
-  function showOversizeError(){
-    if (err) err.textContent = OVERSIZE_MSG;
+  function hasUnsupportedDocs(){
+    return (state.docs || []).some(f => f && f.unsupported);
   }
 
-  function clearOversizeErrorIfResolved(){
-    // Only clear OUR oversize message (don’t wipe other errors)
+  function syncFileErrors(){
     if (!err) return;
-    if (!hasOversizeFiles() && err.textContent === OVERSIZE_MSG){
+    if (hasUnsupportedDocs()){
+      err.textContent = PAGES_UNSUPPORTED_MSG;
+      return;
+    }
+    if (hasOversizeFiles()){
+      err.textContent = OVERSIZE_MSG;
+      return;
+    }
+    if (err.textContent === OVERSIZE_MSG || err.textContent === PAGES_UNSUPPORTED_MSG){
       err.textContent = '';
     }
+  }
+
+  function showOversizeError(){
+    syncFileErrors();
   }
 
 
@@ -4177,8 +4176,9 @@ var drop, fileInput, list, btn, err, status, result, state;
     idx,
     name: f.name,
     size: f.size,
-    bad: !!f.tooBig,
-    extra: f.tooBig ? 'File too big' : (f.dataUrl ? 'Ready' : 'Pending read')
+    bad: !!f.tooBig || !!f.unsupported,
+    unsupported: !!f.unsupported,
+    extra: f.unsupported ? 'Pages not supported' : (f.tooBig ? 'File too big' : (f.dataUrl ? 'Ready' : 'Pending read'))
   }));
 
   const rows = imgRows.concat(docRows);
@@ -4187,8 +4187,7 @@ var drop, fileInput, list, btn, err, status, result, state;
 
     list.innerHTML = '<div class="muted">No files added yet.</div>';
 
-    // If the only error showing was the oversize message, clear it now the file is gone
-    clearOversizeErrorIfResolved();
+    syncFileErrors();
 
     return;
 
@@ -4237,10 +4236,11 @@ var drop, fileInput, list, btn, err, status, result, state;
 
       renderList();
 
-      // ✅ Remove the oversize banner ONLY if no oversize files remain
-      clearOversizeErrorIfResolved();
+      syncFileErrors();
     });
   });
+  updateAnalyseButtonState();
+  syncFileErrors();
 }
 
   function readAsDataURL(file){
@@ -4265,6 +4265,12 @@ var drop, fileInput, list, btn, err, status, result, state;
   function isLikelyPosterName(name){
     const n = String(name || '').toLowerCase();
     return n.includes('poster') || n.includes('artwork') || n.includes('a3') || n.includes('print');
+  }
+
+  function isPagesDocument(file){
+    const name = String(file && file.name ? file.name : '').toLowerCase();
+    const type = String(file && file.type ? file.type : '').toLowerCase();
+    return name.endsWith('.pages') || type.includes('pages');
   }
 
   async function getImageMeta(url){
@@ -4307,6 +4313,13 @@ var drop, fileInput, list, btn, err, status, result, state;
       .map(x => ({ ...x, _score: scoreForMainPoster(x) }))
       .sort((a,b) => a._score - b._score);
     return scored[0] || null;
+  }
+
+  function updateAnalyseButtonState(){
+    if (!btn) return;
+    const hasUnsupported = hasUnsupportedDocs();
+    btn.disabled = hasUnsupported;
+    btn.title = hasUnsupported ? PAGES_UNSUPPORTED_MSG : '';
   }
 
 
@@ -4385,6 +4398,7 @@ var drop, fileInput, list, btn, err, status, result, state;
     // Read docs as data URLs (sent to server for AI extraction)
     for (const f of docs){
       const tooBig = (f.size || 0) > MAX_BYTES;
+      const unsupported = isPagesDocument(f);
 
       const item = {
         file: f,
@@ -4392,11 +4406,17 @@ var drop, fileInput, list, btn, err, status, result, state;
         type: f.type,
         size: f.size,
         dataUrl: '',
-        tooBig
+        tooBig,
+        unsupported
       };
 
       state.docs.push(item);
       renderList();
+
+          if (unsupported){
+        syncFileErrors();
+        continue;
+      }
 
           if (tooBig){
 
@@ -4440,6 +4460,11 @@ var drop, fileInput, list, btn, err, status, result, state;
     err.textContent = '';
     result.innerHTML = '';
     status.textContent = '';
+
+    if (hasUnsupportedDocs()){
+      syncFileErrors();
+      return;
+    }
 
     if (!state.images.length && !state.docs.length){
       err.textContent = 'Please add at least one document or image.';
