@@ -12368,7 +12368,7 @@ if (!outText) {
       const now = new Date();
       const startAdjusted = moveIsoDateToFuture(draft.startDateTime, now);
       let yearsShifted = 0;
-      if (typeof startAdjusted === "object") {
+      if (startAdjusted && typeof startAdjusted === "object") {
         draft.startDateTime = startAdjusted.iso;
         yearsShifted = startAdjusted.yearsShifted;
       }
@@ -12389,7 +12389,7 @@ if (!outText) {
 
           if (end.getTime() < now.getTime()) {
             const endAdjusted = moveIsoDateToFuture(end.toISOString(), now);
-            if (typeof endAdjusted === "object") {
+            if (endAdjusted && typeof endAdjusted === "object") {
               draft.endDateTime = endAdjusted.iso;
             }
           } else {
