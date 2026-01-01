@@ -947,8 +947,14 @@ router.get(
 }
 .ai-insights-header{
   display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:4px;
+}
+.ai-insights-title{
+  display:flex;
   align-items:center;
-  gap:8px;
+  gap:6px;
 }
 .ai-insights-logo{
   width:22px;
@@ -3247,11 +3253,11 @@ document.addEventListener('click', function(e){
       +  '<section class="card" id="aiInsightsCard">'
       +    '<div class="header">'
       +      '<div class="ai-insights-header">'
-      +        '<img src="/tixai.png" alt="TixAll AI" class="ai-insights-logo" />'
-      +        '<div>'
-      +          '<div class="title">AI Early Insights</div>'
-      +          '<div class="muted" style="font-size:12px;">Next 21 days · rule-based insights</div>'
+      +        '<div class="title ai-insights-title">'
+      +          '<img src="/tixai.png" alt="TixAll AI" class="ai-insights-logo" />'
+      +          '<span>Insights</span>'
       +        '</div>'
+      +        '<div class="muted" style="font-size:12px;">Next 21 days · rule-based insights</div>'
       +      '</div>'
       +    '</div>'
       +    '<div id="aiInsightsBody">'
