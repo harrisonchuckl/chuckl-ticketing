@@ -24,6 +24,13 @@ function toPublicImageUrl(imageUrl: string | null | undefined, width: number) {
   return value;
 }
 
+function truncateText(value: string | null | undefined, max = 140) {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  if (text.length <= max) return text;
+  return `${text.slice(0, max).replace(/\s+\S*$/, "")}…`;
+}
+
 // Helper to match the SSR brand logic
 function getPublicBrand() {
   const name = String(process.env.PUBLIC_BRAND_NAME || 'TixAll').trim();
@@ -132,6 +139,7 @@ router.get("/:storefront", async (req, res) => {
       date: true,
       slug: true,
       imageUrl: true,
+      description: true,
       eventCategory: true,
       externalTicketUrl: true,
       usesExternalTicketing: true,
@@ -229,6 +237,9 @@ router.get("/:storefront", async (req, res) => {
         month: "short",
         year: "numeric",
       });
+      const summary =
+        truncateText(show.description, 160) ||
+        (show.eventCategory ? `${show.eventCategory} show.` : "Live event.");
       const image = toPublicImageUrl(show.imageUrl, 1400);
       const externalTicketUrl = String(show.externalTicketUrl || "").trim();
       const usesExternalTicketing = show.usesExternalTicketing === true;
@@ -252,13 +263,14 @@ router.get("/:storefront", async (req, res) => {
                 : `<div class="hero-placeholder" aria-hidden="true"></div>`
             }
           </div>
-          <div class="hero-content">
-            <span class="hero-eyebrow">Featured event</span>
+          <div class="featured-content">
+            <span class="hero-eyebrow">Featured show</span>
             <h2>${escHtml(show.title || "Featured show")}</h2>
-            <p>
+            <p class="hero-meta">
               ${escHtml(dateStr)}
               ${showVenueName ? ` • ${escHtml(show.venue?.name || "Venue TBC")}` : ""}
             </p>
+            <p class="hero-summary">${escHtml(summary)}</p>
             <div class="hero-actions">
               <a class="btn btn--primary" href="${escAttr(quickBookHref)}"${quickBookAttrs}>Quick book</a>
               <a class="btn btn--ghost" href="/public/${escHtml(storefront)}/${escHtml(show.slug)}">More info</a>
@@ -278,6 +290,7 @@ router.get("/:storefront", async (req, res) => {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escHtml(title)} – Events</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@700;800;900&display=swap" rel="stylesheet">
  <style>
 :root {
   --app-header-h: 64px;
@@ -350,10 +363,9 @@ body {
 .hero-section {
   background: var(--primary);
   color: white;
-  padding: 60px 20px 80px;
+  padding: 60px 20px 40px;
   position: relative;
   overflow: hidden;
-  margin-bottom: -40px; /* Overlap effect */
 }
 
 .hero-bg {
@@ -377,18 +389,143 @@ body {
 
 .hero-title {
   font-family: 'Outfit', sans-serif;
-  font-weight: 800;
-  font-size: clamp(2rem, 5vw, 3.5rem);
+  font-weight: 900;
+  font-size: clamp(2.6rem, 6vw, 4.5rem);
   margin: 0 0 10px;
   text-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
 
 .hero-subtitle {
-  font-size: 1.1rem;
+  font-size: 1.2rem;
   opacity: 0.9;
-  font-weight: 500;
+  font-weight: 600;
   max-width: 600px;
   margin: 0 auto;
+}
+
+/* --- FEATURED SLIDER --- */
+.featured-section {
+  max-width: 1200px;
+  margin: -30px auto 40px;
+  padding: 0 20px;
+}
+
+.featured-slider {
+  position: relative;
+  border-radius: 24px;
+  overflow: hidden;
+  background: #0b1120;
+  box-shadow: var(--shadow-float);
+}
+
+.featured-track {
+  display: flex;
+  transition: transform 0.6s ease;
+}
+
+.hero-slide {
+  min-width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 32px;
+  padding: 32px;
+  align-items: center;
+}
+
+.hero-media {
+  width: 100%;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #111827;
+  aspect-ratio: 16/9;
+}
+
+.hero-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.hero-placeholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #1f2937, #0f172a);
+}
+
+.featured-content {
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.hero-eyebrow {
+  font-size: 0.75rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: rgba(255,255,255,0.7);
+}
+
+.featured-content h2 {
+  font-family: 'Outfit', sans-serif;
+  font-size: clamp(1.8rem, 3vw, 2.8rem);
+  margin: 0;
+  font-weight: 800;
+}
+
+.hero-meta {
+  font-size: 0.95rem;
+  color: rgba(255,255,255,0.75);
+  margin: 0;
+}
+
+.hero-summary {
+  font-size: 1rem;
+  color: rgba(255,255,255,0.85);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.featured-nav {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  display: flex;
+  gap: 8px;
+}
+
+.featured-btn {
+  border: none;
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.featured-btn:hover {
+  background: rgba(255,255,255,0.3);
+}
+
+.section-heading {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
+  font-size: clamp(1.8rem, 3vw, 2.4rem);
+  margin: 0 0 16px;
+  color: var(--primary);
 }
 
 /* --- MAIN CONTENT --- */
@@ -631,6 +768,8 @@ body {
   .app-header-inner { padding: 0 16px; }
   .hero-section { padding: 40px 16px 60px; }
   .hero-title { font-size: 2.2rem; }
+  .hero-slide { grid-template-columns: 1fr; padding: 20px; }
+  .featured-section { margin-top: -10px; }
   .filters-bar { flex-direction: column; align-items: stretch; gap: 12px; }
   .card-actions { width: 100%; }
   .card-actions .btn { flex: 1; }
@@ -650,12 +789,29 @@ body {
   <section class="hero-section">
     <div class="hero-bg"></div>
     <div class="hero-content">
-      <h1 class="hero-title">${escHtml(title)}</h1>
-      <div class="hero-subtitle">Upcoming events and shows</div>
+      <h1 class="hero-title">What's On</h1>
+      <div class="hero-subtitle">${escHtml(title)} · Upcoming events and shows</div>
     </div>
   </section>
 
+  ${
+    featuredCards
+      ? `<section class="featured-section">
+          <div class="featured-slider" data-featured-slider>
+            <div class="featured-track">
+              ${featuredCards}
+            </div>
+            <div class="featured-nav">
+              <button class="featured-btn" type="button" data-featured-prev aria-label="Previous featured show">‹</button>
+              <button class="featured-btn" type="button" data-featured-next aria-label="Next featured show">›</button>
+            </div>
+          </div>
+        </section>`
+      : ""
+  }
+
   <div class="wrap">
+    <h2 class="section-heading">All shows</h2>
     <div class="filters-bar">
       <div class="filter-group">
         <label class="filter-label" for="filter-date">Date</label>
@@ -683,6 +839,52 @@ body {
   
   <script>
   (function(){
+    const slider = document.querySelector('[data-featured-slider]');
+    if (slider){
+      const track = slider.querySelector('.featured-track');
+      const slides = Array.from(slider.querySelectorAll('.hero-slide'));
+      const prevBtn = slider.querySelector('[data-featured-prev]');
+      const nextBtn = slider.querySelector('[data-featured-next]');
+      let index = 0;
+      let intervalId = null;
+
+      const update = (nextIndex) => {
+        if (!track) return;
+        index = (nextIndex + slides.length) % slides.length;
+        track.style.transform = 'translateX(' + (-index * 100) + '%)';
+        slides.forEach((slide, idx) => {
+          slide.classList.toggle('is-active', idx === index);
+        });
+      };
+
+      const start = () => {
+        if (slides.length <= 1) return;
+        intervalId = window.setInterval(() => {
+          update(index + 1);
+        }, 7000);
+      };
+
+      const stop = () => {
+        if (intervalId) window.clearInterval(intervalId);
+      };
+
+      if (prevBtn) prevBtn.addEventListener('click', () => {
+        stop();
+        update(index - 1);
+        start();
+      });
+      if (nextBtn) nextBtn.addEventListener('click', () => {
+        stop();
+        update(index + 1);
+        start();
+      });
+
+      slider.addEventListener('mouseenter', stop);
+      slider.addEventListener('mouseleave', start);
+      update(0);
+      start();
+    }
+
     const dateFilter = document.getElementById('filter-date');
     const typeFilter = document.getElementById('filter-type');
     const cards = Array.from(document.querySelectorAll('[data-show]'));
