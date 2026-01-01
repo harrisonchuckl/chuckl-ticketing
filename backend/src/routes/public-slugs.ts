@@ -157,9 +157,6 @@ router.get("/:storefront", async (req, res) => {
 
   const visibleShows = shows.filter(show => !!show.slug);
   const featuredShows = visibleShows.slice(0, 6);
-  const heroImage = toPublicImageUrl(featuredShows[0]?.imageUrl, 1600);
-  const heroBackground = heroImage ? `url('${escAttr(heroImage)}')` : "none";
-
   const unique = (values: string[]) =>
     Array.from(new Set(values.filter(Boolean).map(value => value.trim()))).sort();
 
@@ -361,30 +358,16 @@ body {
 
 /* --- HERO SECTION --- */
 .hero-section {
-  background: var(--primary);
-  color: white;
-  padding: 60px 20px 40px;
+  background: var(--bg-page);
+  color: var(--text-main);
+  padding: 28px 20px 18px;
   position: relative;
-  overflow: hidden;
-}
-
-.hero-bg {
-  position: absolute;
-  inset: 0;
-  opacity: 0.3;
-  background-image: ${heroBackground};
-  background-size: cover;
-  background-position: center;
-  filter: blur(20px);
-  transform: scale(1.1);
 }
 
 .hero-content {
-  position: relative;
-  z-index: 10;
   max-width: 1200px;
   margin: 0 auto;
-  text-align: center;
+  text-align: left;
 }
 
 .hero-title {
@@ -392,21 +375,13 @@ body {
   font-weight: 900;
   font-size: clamp(2.6rem, 6vw, 4.5rem);
   margin: 0 0 10px;
-  text-shadow: 0 4px 12px rgba(0,0,0,0.3);
-}
-
-.hero-subtitle {
-  font-size: 1.2rem;
-  opacity: 0.9;
-  font-weight: 600;
-  max-width: 600px;
-  margin: 0 auto;
+  color: var(--primary);
 }
 
 /* --- FEATURED SLIDER --- */
 .featured-section {
   max-width: 1200px;
-  margin: -30px auto 40px;
+  margin: -10px auto 40px;
   padding: 0 20px;
 }
 
@@ -766,7 +741,7 @@ body {
 
 @media (max-width: 768px) {
   .app-header-inner { padding: 0 16px; }
-  .hero-section { padding: 40px 16px 60px; }
+  .hero-section { padding: 24px 16px 20px; }
   .hero-title { font-size: 2.2rem; }
   .hero-slide { grid-template-columns: 1fr; padding: 20px; }
   .featured-section { margin-top: -10px; }
@@ -787,10 +762,8 @@ body {
   </header>
 
   <section class="hero-section">
-    <div class="hero-bg"></div>
     <div class="hero-content">
       <h1 class="hero-title">What's On</h1>
-      <div class="hero-subtitle">${escHtml(title)} · Upcoming events and shows</div>
     </div>
   </section>
 
