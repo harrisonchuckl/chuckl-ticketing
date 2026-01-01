@@ -279,20 +279,17 @@ router.post("/promoters", requireAdminOrOrganiser, async (req, res) => {
     if (!name) {
       return res.status(400).json({ ok: false, error: "Name is required" });
     }
-    const websiteInput = toNullableString(req.body?.website);
-    const websiteInfo = websiteInput ? parseWebsite(websiteInput) : null;
-    if (websiteInput && !websiteInfo) {
-      return res.status(400).json({ ok: false, error: "Website must be valid." });
+    const websiteInfo = parseWebsite(req.body?.website);
+    if (!websiteInfo) {
+      return res.status(400).json({ ok: false, error: "Website is required and must be valid." });
     }
 
     const tradingName = toNullableString(req.body?.tradingName);
     const matchers = [
+      { websiteDomain: websiteInfo.domain },
       { name: { contains: name, mode: "insensitive" as const } },
       { tradingName: { contains: name, mode: "insensitive" as const } },
     ];
-    if (websiteInfo) {
-      matchers.unshift({ websiteDomain: websiteInfo.domain });
-    }
     if (tradingName) {
       matchers.push({ name: { contains: tradingName, mode: "insensitive" as const } });
       matchers.push({ tradingName: { contains: tradingName, mode: "insensitive" as const } });
@@ -355,8 +352,8 @@ router.post("/promoters", requireAdminOrOrganiser, async (req, res) => {
         logoUrl: toNullableString(req.body?.logoUrl),
         status: normaliseStatus(req.body?.status ?? "ACTIVE"),
         notes: toNullableString(req.body?.notes),
-        website: websiteInfo?.website ?? null,
-        websiteDomain: websiteInfo?.domain ?? null,
+        website: websiteInfo.website,
+        websiteDomain: websiteInfo.domain,
         ...(isOrganiser(req) ? { ownerId: requireUserId(req) } : {}),
       },
     });
@@ -547,10 +544,9 @@ router.post("/promoters/:promoterId", requireAdminOrOrganiser, async (req, res) 
     if (!name) {
       return res.status(400).json({ ok: false, error: "Name is required" });
     }
-    const websiteInput = toNullableString(req.body?.website);
-    const websiteInfo = websiteInput ? parseWebsite(websiteInput) : null;
-    if (websiteInput && !websiteInfo) {
-      return res.status(400).json({ ok: false, error: "Website must be valid." });
+    const websiteInfo = parseWebsite(req.body?.website);
+    if (!websiteInfo) {
+      return res.status(400).json({ ok: false, error: "Website is required and must be valid." });
     }
 
     const promoter = await ensurePromoterOwner(req, promoterId);
@@ -558,17 +554,15 @@ router.post("/promoters/:promoterId", requireAdminOrOrganiser, async (req, res) 
       return res.status(404).json({ ok: false, error: "Promoter not found" });
     }
 
-    if (websiteInfo) {
-      const existing = await prisma.promoter.findFirst({
-        where: {
-          websiteDomain: websiteInfo.domain,
-          NOT: { id: promoterId },
-        },
-        select: { id: true },
-      });
-      if (existing) {
-        return res.status(409).json({ ok: false, error: "Promoter website already exists." });
-      }
+    const existing = await prisma.promoter.findFirst({
+      where: {
+        websiteDomain: websiteInfo.domain,
+        NOT: { id: promoterId },
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      return res.status(409).json({ ok: false, error: "Promoter website already exists." });
     }
 
     const updated = await prisma.promoter.update({
@@ -581,8 +575,8 @@ router.post("/promoters/:promoterId", requireAdminOrOrganiser, async (req, res) 
         logoUrl: toNullableString(req.body?.logoUrl),
         status: normaliseStatus(req.body?.status),
         notes: toNullableString(req.body?.notes),
-        website: websiteInfo?.website ?? null,
-        websiteDomain: websiteInfo?.domain ?? null,
+        website: websiteInfo.website,
+        websiteDomain: websiteInfo.domain,
       },
     });
 
