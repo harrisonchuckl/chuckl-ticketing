@@ -273,6 +273,9 @@ model User {
   storefronts                Storefront[]
   dashboardWidgetPreferences DashboardWidgetPreference[]
   orderAuditLogs             OrderAuditLog[]             @relation("OrderAuditActor")
+  marketingAiDraftsOrganised MarketingAiDraft[] @relation("MarketingAiDraftOrganiser")
+  marketingAiDraftsCreated   MarketingAiDraft[] @relation("MarketingAiDraftCreatedBy")
+
 
   venueMemberships    VenueMember[]
   invitedVenueMembers VenueMember[] @relation("VenueInviter")
