@@ -132,9 +132,7 @@ router.get("/:storefront", async (req, res) => {
       date: true,
       slug: true,
       imageUrl: true,
-      eventType: true,
       eventCategory: true,
-      tags: true,
       venue: { select: { name: true, city: true } },
       ticketTypes: {
         select: { pricePence: true },
@@ -152,6 +150,14 @@ router.get("/:storefront", async (req, res) => {
   const heroImage = toPublicImageUrl(featuredShows[0]?.imageUrl, 1600);
   const heroBackground = heroImage ? `url('${escAttr(heroImage)}')` : "none";
 
+  const unique = (values: string[]) =>
+    Array.from(new Set(values.filter(Boolean).map(value => value.trim()))).sort();
+
+  const venueLabels = unique(
+    visibleShows.map(show => show.venue?.name || "Venue TBC")
+  );
+  const showVenueName = venueLabels.length > 1;
+
   const cards = visibleShows
     .map(show => {
       const d = new Date(show.date);
@@ -166,15 +172,10 @@ router.get("/:storefront", async (req, res) => {
         minute: "2-digit",
       });
       const image = toPublicImageUrl(show.imageUrl, 800);
-      const tags = [show.eventType, show.eventCategory, ...(show.tags || [])]
-        .filter(Boolean)
-        .slice(0, 4);
       return `
         <article class="show-card" data-show
           data-date="${escHtml(show.date.toISOString())}"
-          data-type="${escHtml(show.eventType || "")}"
-          data-category="${escHtml(show.eventCategory || "")}"
-          data-tags="${escHtml((show.tags || []).join(","))}">
+          data-type="${escHtml(show.eventCategory || "")}">
           <a class="show-card__image" href="/public/${escHtml(storefront)}/${escHtml(show.slug)}" aria-label="View ${escHtml(show.title)}">
             ${
               image
@@ -189,16 +190,11 @@ router.get("/:storefront", async (req, res) => {
               <span>${escHtml(timeStr)}</span>
             </div>
             <h3 class="show-card__title">${escHtml(show.title || "Untitled show")}</h3>
-            <div class="show-card__details">
-              ${escHtml(show.venue?.name || "Venue TBC")}
-            </div>
-            <div class="show-card__tags">
-              ${
-                tags.length
-                  ? tags.map(tag => `<span class="pill">${escHtml(tag)}</span>`).join("")
-                  : `<span class="pill pill--muted">Live event</span>`
-              }
-            </div>
+            ${
+              showVenueName
+                ? `<div class="show-card__details">${escHtml(show.venue?.name || "Venue TBC")}</div>`
+                : ""
+            }
             <div class="show-card__actions">
               <a class="btn btn--primary" href="/checkout?showId=${escHtml(show.id)}">Quick book</a>
               <a class="btn btn--ghost" href="/public/${escHtml(storefront)}/${escHtml(show.slug)}">More info</a>
@@ -231,7 +227,10 @@ router.get("/:storefront", async (req, res) => {
           <div class="hero-content">
             <span class="hero-eyebrow">Featured event</span>
             <h2>${escHtml(show.title || "Featured show")}</h2>
-            <p>${escHtml(dateStr)} • ${escHtml(show.venue?.name || "Venue TBC")}</p>
+            <p>
+              ${escHtml(dateStr)}
+              ${showVenueName ? ` • ${escHtml(show.venue?.name || "Venue TBC")}` : ""}
+            </p>
             <div class="hero-actions">
               <a class="btn btn--primary" href="/checkout?showId=${escHtml(show.id)}">Quick book</a>
               <a class="btn btn--ghost" href="/public/${escHtml(storefront)}/${escHtml(show.slug)}">More info</a>
@@ -242,12 +241,7 @@ router.get("/:storefront", async (req, res) => {
     })
     .join("");
 
-  const unique = (values: string[]) =>
-    Array.from(new Set(values.filter(Boolean).map(value => value.trim()))).sort();
-
-  const typeOptions = unique(visibleShows.map(show => show.eventType || ""));
-  const categoryOptions = unique(visibleShows.map(show => show.eventCategory || ""));
-  const tagOptions = unique(visibleShows.flatMap(show => show.tags || []));
+  const typeOptions = unique(visibleShows.map(show => show.eventCategory || ""));
 
   res.type("html").send(`
 <!doctype html>
@@ -526,6 +520,18 @@ body {
   gap: 6px;
 }
 
+.show-card__actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: auto;
+}
+
+.show-card__actions .btn {
+  padding: 12px 22px;
+  font-size: 1rem;
+}
+
 .show-card__footer {
   margin-top: auto;
   padding-top: 16px;
@@ -634,27 +640,11 @@ body {
       </div>
       
       <div class="filter-group">
-        <label class="filter-label" for="filter-type">Type</label>
+        <label class="filter-label" for="filter-type">Category</label>
         <select id="filter-type" class="filter-select">
-          <option value="">All types</option>
+          <option value="">All categories</option>
           ${typeOptions.map(t => `<option value="${escHtml(t)}">${escHtml(t)}</option>`).join("")}
         </select>
-      </div>
-
-      <div class="filter-group">
-        <label class="filter-label" for="filter-category">Category</label>
-        <select id="filter-category" class="filter-select">
-          <option value="">All categories</option>
-          ${categoryOptions.map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join("")}
-        </select>
-      </div>
-      
-      <div class="filter-group">
-         <label class="filter-label" for="filter-tag">Tag</label>
-         <select id="filter-tag" class="filter-select">
-           <option value="">All tags</option>
-           ${tagOptions.map(t => `<option value="${escHtml(t)}">${escHtml(t)}</option>`).join("")}
-         </select>
       </div>
     </div>
 
@@ -667,8 +657,6 @@ body {
   (function(){
     const dateFilter = document.getElementById('filter-date');
     const typeFilter = document.getElementById('filter-type');
-    const categoryFilter = document.getElementById('filter-category');
-    const tagFilter = document.getElementById('filter-tag');
     const cards = Array.from(document.querySelectorAll('[data-show]'));
 
     function matchesDate(iso, filter){
@@ -694,22 +682,15 @@ body {
     function applyFilters(){
       const dateValue = dateFilter?.value || 'all';
       const typeValue = typeFilter?.value || '';
-      const categoryValue = categoryFilter?.value || '';
-      const tagValue = tagFilter?.value || '';
-
       let visibleCount = 0;
       
       cards.forEach(card => {
         const date = card.getAttribute('data-date') || '';
         const type = card.getAttribute('data-type') || '';
-        const category = card.getAttribute('data-category') || '';
-        const tags = card.getAttribute('data-tags') || '';
 
         const show = 
           matchesDate(date, dateValue) &&
-          (!typeValue || type === typeValue) &&
-          (!categoryValue || category === categoryValue) &&
-          (!tagValue || tags.split(',').includes(tagValue));
+          (!typeValue || type === typeValue);
 
         // Use 'flex' to maintain card height/structure
         card.style.display = show ? 'flex' : 'none'; 
@@ -730,7 +711,7 @@ body {
       }
     }
 
-    [dateFilter, typeFilter, categoryFilter, tagFilter].forEach(f => {
+    [dateFilter, typeFilter].forEach(f => {
       if(f) f.addEventListener('change', applyFilters);
     });
   })();
