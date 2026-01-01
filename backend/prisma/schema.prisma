@@ -699,10 +699,10 @@ model MarketingAiDraft {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  organiser User @relation(fields: [organiserId], references: [id])
+  organiser  User  @relation("MarketingAiDraftOrganiser", fields: [organiserId], references: [id])
   show      Show? @relation(fields: [showId], references: [id])
   sourceTemplate MarketingAiTemplate? @relation(fields: [sourceTemplateId], references: [id])
-  createdBy User? @relation(fields: [createdByUserId], references: [id])
+  createdBy  User? @relation("MarketingAiDraftCreatedBy", fields: [createdById], references: [id])
   performance MarketingAiDraftPerformance?
 
   @@index([organiserId])
