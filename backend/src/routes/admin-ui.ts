@@ -787,10 +787,31 @@ router.get(
       color:#111827;
       text-decoration:none;
     }
+    .sb-btn-link{
+      border:0;
+      background:transparent;
+      cursor:pointer;
+      font:inherit;
+      text-align:left;
+      width:100%;
+    }
     .sb-link.active,
     .sb-link:hover{
       background:#f1f5f9;
     }
+.sb-toggle-icon{
+  transition:transform 0.2s ease;
+}
+.sb-section.open .sb-toggle-icon{
+  transform:rotate(180deg);
+}
+.sb-submenu{
+  display:none;
+  margin-left:6px;
+}
+.sb-section.open .sb-submenu{
+  display:block;
+}
 .sb-sub{margin-left:6px;}
 
     /* Keeps "Create Show" + AI logo on one line */
@@ -815,6 +836,19 @@ router.get(
   height:16px;
   width:auto;
   flex:0 0 auto;
+}
+.ai-menu-logo-main{
+  height:18px;
+}
+.sr-only{
+  position:absolute;
+  width:1px;
+  height:1px;
+  padding:0;
+  margin:-1px;
+  overflow:hidden;
+  clip:rect(0,0,0,0);
+  border:0;
 }
 
     .content{
@@ -1943,44 +1977,92 @@ router.get(
 
   <div class="wrap">
     <aside class="sidebar" id="adminSidebar">
-      <div class="sb-group">Dashboard</div>
-      <a class="sb-link" href="/admin/ui/home" data-view="/admin/ui/home">Home</a>
+      <a class="sb-link" href="/admin/ui/home" data-view="/admin/ui/home">Dashboard</a>
 
-      <div class="sb-group">Shows and Events</div>
-      <div>
-        <div class="sb-sub" id="showsSub">
-        <a class="sb-link sub" href="/admin/ui/shows/create" data-view="/admin/ui/shows/create">Create Show</a>
-
-<a class="sb-link sub" href="/admin/ui/shows/create-ai" data-view="/admin/ui/shows/create-ai">
-  <span class="sb-link-row">
-    <span class="sb-link-label">Create Show</span>
-    <img class="ai-menu-logo" src="/tixai.png" alt="TixAll AI" />
-  </span>
-</a>
-
-        <a class="sb-link sub" href="/admin/ui/shows/current" data-view="/admin/ui/shows/current">All Events</a>
+      <div class="sb-section" data-section="tixel-ai">
+        <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="tixel-ai" aria-expanded="false">
+          <span class="sb-link-label">
+            <img class="ai-menu-logo ai-menu-logo-main" src="/tixai.png" alt="TIXEL AI" />
+            <span class="sr-only">TIXEL AI</span>
+          </span>
+          <svg class="sb-toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div class="sb-submenu" data-submenu="tixel-ai">
+          <a class="sb-link sub" href="/admin/ui/shows/create-ai" data-view="/admin/ui/shows/create-ai">
+            <span class="sb-link-row">
+              <span class="sb-link-label">Create Show</span>
+              <img class="ai-menu-logo" src="/tixai.png" alt="TIXEL AI" />
+            </span>
+          </a>
+          <a class="sb-link sub" href="/admin/ui/ai/smart-storefront" data-view="/admin/ui/ai/smart-storefront">Smart Storefront</a>
+          <a class="sb-link sub" href="/admin/ui/ai/whats-on" data-view="/admin/ui/ai/whats-on">What&#39;s On</a>
+          <a class="sb-link sub" href="/admin/ui/ai/customer-chatbot" data-view="/admin/ui/ai/customer-chatbot">Customer Chatbot</a>
+        </div>
       </div>
 
+      <div class="sb-section" data-section="shows">
+        <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="shows" aria-expanded="false">
+          <span class="sb-link-label">Shows and Events</span>
+          <svg class="sb-toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div class="sb-submenu" data-submenu="shows">
+          <a class="sb-link sub" href="/admin/ui/shows/create" data-view="/admin/ui/shows/create">Create Show</a>
+          <a class="sb-link sub" href="/admin/ui/shows/current" data-view="/admin/ui/shows/current">All Events</a>
+        </div>
       </div>
+
       <a class="sb-link" href="/admin/ui/customers" data-view="/admin/ui/customers">Customers</a>
       <a class="sb-link" href="/admin/ui/venues" data-view="/admin/ui/venues">Venues</a>
       <a class="sb-link" href="/admin/ui/promoters" data-view="/admin/ui/promoters">Promoters</a>
       <a class="sb-link" href="/admin/ui/orders" data-view="/admin/ui/orders">Orders</a>
+      <a class="sb-link" href="/admin/ui/analytics" data-view="/admin/ui/analytics">Insights</a>
 
-      <div class="sb-group">Insights</div>
-      <a class="sb-link" href="/admin/ui/analytics" data-view="/admin/ui/analytics">Analytics</a>
+      <div class="sb-section" data-section="marketing">
+        <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="marketing" aria-expanded="false">
+          <span class="sb-link-label">Marketing</span>
+          <svg class="sb-toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div class="sb-submenu" data-submenu="marketing">
+          <a class="sb-link sub" href="/admin/ui/marketing" data-view="/admin/ui/marketing">Marketing Overview</a>
+          <a class="sb-link sub" href="/admin/ui/audiences" data-view="/admin/ui/audiences">Audiences</a>
+          <a class="sb-link sub" href="/admin/ui/email" data-view="/admin/ui/email">Email Campaigns</a>
+        </div>
+      </div>
 
-      <div class="sb-group">Marketing</div>
-      <a class="sb-link" href="/admin/ui/marketing" data-view="/admin/ui/marketing">Marketing</a>
-      <a class="sb-link" href="/admin/ui/audiences" data-view="/admin/ui/audiences">Audiences</a>
-      <a class="sb-link" href="/admin/ui/email" data-view="/admin/ui/email">Email Campaigns</a>
+      <div class="sb-section" data-section="commerce">
+        <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="commerce" aria-expanded="false">
+          <span class="sb-link-label">Commerce</span>
+          <svg class="sb-toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div class="sb-submenu" data-submenu="commerce">
+          <a class="sb-link sub" href="/admin/ui/product-store" data-view="/admin/ui/product-store">Product Store</a>
+          <a class="sb-link sub" href="/admin/ui/product-store/orders" data-view="/admin/ui/product-store/orders">Orders</a>
+          <a class="sb-link sub" href="/admin/ui/product-store/settings" data-view="/admin/ui/product-store/settings">Settings</a>
+          <a class="sb-link sub" href="/admin/ui/product-store/upsells" data-view="/admin/ui/product-store/upsells">Upsells</a>
+        </div>
+      </div>
 
-      <div class="sb-group">Commerce</div>
-      <a class="sb-link" href="/admin/ui/product-store" data-view="/admin/ui/product-store">Product Store</a>
-
-      <div class="sb-group">Settings</div>
-      <a class="sb-link" href="/admin/ui/account" data-view="/admin/ui/account">Account</a>
-<a class="sb-link" href="/admin/ui/logout">Log out</a>
+      <div class="sb-section" data-section="settings">
+        <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="settings" aria-expanded="false">
+          <span class="sb-link-label">Settings</span>
+          <svg class="sb-toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div class="sb-submenu" data-submenu="settings">
+          <a class="sb-link sub" href="/admin/ui/account" data-view="/admin/ui/account">Account</a>
+          <a class="sb-link sub" href="/admin/ui/finance" data-view="/admin/ui/finance">Finance</a>
+          <a class="sb-link sub" href="/admin/ui/logout">Log out</a>
+        </div>
+      </div>
     </aside>
 
     <main class="content" id="main">
@@ -2133,18 +2215,33 @@ router.get(
 })();
 
 
-  var showsToggle = $('#showsToggle');
-  var showsSub = $('#showsSub');
-  if (showsToggle && showsSub){
-    showsToggle.addEventListener('click', function(e){
-      e.preventDefault();
-      showsSub.style.display = showsSub.style.display === 'none' ? 'block' : 'none';
+  function initSidebarToggles(){
+    $$('.sb-section [data-toggle]').forEach(function(btn){
+      btn.addEventListener('click', function(e){
+        e.preventDefault();
+        var section = btn.closest('.sb-section');
+        if (!section) return;
+        var isOpen = section.classList.toggle('open');
+        btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      });
     });
   }
+  initSidebarToggles();
 
   function setActive(path){
+    var normalized = (path === '/admin/ui' || path === '/admin/ui/index.html') ? '/admin/ui/home' : path;
     $$('.sb-link').forEach(function(a){
-      a.classList.toggle('active', a.getAttribute('data-view') === path);
+      a.classList.toggle('active', a.getAttribute('data-view') === normalized);
+    });
+    $$('.sb-section').forEach(function(section){
+      var toggle = section.querySelector('[data-toggle]');
+      var hasActive = section.querySelector('.sb-link.active');
+      if (hasActive){
+        section.classList.add('open');
+        if (toggle){
+          toggle.setAttribute('aria-expanded', 'true');
+        }
+      }
     });
   }
 
@@ -10884,6 +10981,18 @@ function renderInterests(customer){
     if (!main) return;
     main.innerHTML = '<div class="card"><div class="title">Audiences</div><div class="muted">Audience tools coming soon.</div></div>';
   }
+  function smartStorefront(){
+    if (!main) return;
+    main.innerHTML = '<div class="card"><div class="title">Smart Storefront</div><div class="muted">TIXEL AI will curate storefront layouts and product highlights here.</div></div>';
+  }
+  function whatsOn(){
+    if (!main) return;
+    main.innerHTML = '<div class="card"><div class="title">What&#39;s On</div><div class="muted">TIXEL AI will surface upcoming shows and recommendations here.</div></div>';
+  }
+  function customerChatbot(){
+    if (!main) return;
+    main.innerHTML = '<div class="card"><div class="title">Customer Chatbot</div><div class="muted">Set up automated support journeys and FAQs for customers.</div></div>';
+  }
   function marketingPage(options){
     if (!main) return;
     var headerTitle = (options && options.title) || 'Marketing';
@@ -11699,6 +11808,9 @@ function renderInterests(customer){
 
       if (path === '/admin/ui' || path === '/admin/ui/home' || path === '/admin/ui/index.html') return home();
       if (path === '/admin/ui/shows/create-ai') return createShowAI();
+      if (path === '/admin/ui/ai/smart-storefront') return smartStorefront();
+      if (path === '/admin/ui/ai/whats-on') return whatsOn();
+      if (path === '/admin/ui/ai/customer-chatbot') return customerChatbot();
       if (path === '/admin/ui/shows/create') return createShow();
       if (path === '/admin/ui/shows/current')  return listShows();
       if (path === '/admin/ui/customers')     return customers();
