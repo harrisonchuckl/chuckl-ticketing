@@ -11,6 +11,7 @@ import { attachUser } from "./middleware/requireAuth.js";
 import publicSlugs from "./routes/public-slugs.js";
 import publicUnsubscribeRouter from "./routes/public-unsubscribe.js";
 import publicPreferencesRouter from "./routes/public-preferences.js";
+import publicTrackRouter from "./routes/public-track.js";
 
 
 
@@ -45,6 +46,7 @@ import sendgridWebhookRouter from "./routes/webhooks-sendgrid.js";
 import adminProductStoreRouter from "./routes/admin-product-store.js";
 import storefrontRouter from "./routes/storefront.js";
 import adminSmartShowsRouter from "./routes/admin-smart-shows.js";
+import adminAiRouter from "./routes/admin-ai.js";
 
 const app = express();
 
@@ -100,10 +102,13 @@ app.get("/readyz", (_req, res) => res.status(200).send("ready"));
 // 1) /public/orders must come first so slug router can't hijack it
 app.use("/public/orders", publicOrdersRouter);
 
-// 2) Slug rewrites + redirects
+// 2) Event tracking endpoint
+app.use("/public", publicTrackRouter);
+
+// 3) Slug rewrites + redirects
 app.use("/public", publicSlugs);
 
-// 3) SSR public event pages (legacy + internal rewrite target)
+// 4) SSR public event pages (legacy + internal rewrite target)
 app.use("/public", publicEventRouter);
 app.use("/", publicUnsubscribeRouter);
 app.use("/", publicPreferencesRouter);
@@ -136,6 +141,7 @@ app.use("/admin/api", adminOrdersApiRouter);
 app.use("/admin/api", adminDashboardRouter);
 app.use("/admin/api", adminProductStoreRouter);
 app.use("/admin/api", adminSmartShowsRouter);
+app.use("/admin/api", adminAiRouter);
 app.use("/admin", adminMarketingRouter);
 app.use("/webhooks", sendgridWebhookRouter);
 

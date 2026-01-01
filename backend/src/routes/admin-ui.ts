@@ -645,7 +645,7 @@ router.get(
   --header-h:56px;
   --sidebar-width:220px;
 
-  /* TIXall AI highlight */
+  /* TixAll AI highlight */
   --ai:#009fe3;
 }
 
@@ -2110,6 +2110,25 @@ router.get(
         align-items:flex-start;
       }
     }
+    .toast{
+      position:fixed;
+      top:72px;
+      right:16px;
+      padding:10px 14px;
+      background:#111827;
+      color:#ffffff;
+      border-radius:10px;
+      font-size:13px;
+      box-shadow:0 10px 24px rgba(15,23,42,0.18);
+      opacity:0;
+      transform:translateY(-8px);
+      transition:opacity .2s ease, transform .2s ease;
+      z-index:999;
+    }
+    .toast.show{
+      opacity:1;
+      transform:translateY(0);
+    }
   </style>
 </head>
 <body>
@@ -2148,6 +2167,7 @@ router.get(
       </div>
     </div>
   </header>
+  <div id="adminToast" class="toast" role="status" aria-live="polite"></div>
 
   <div class="wrap">
     <aside class="sidebar" id="adminSidebar">
@@ -2155,10 +2175,7 @@ router.get(
 
       <div class="sb-section" data-section="tixel-ai">
         <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="tixel-ai" aria-expanded="false">
-          <span class="sb-link-label">
-            <img class="ai-menu-logo ai-menu-logo-main" src="/tixai.png" alt="TIXEL AI" />
-            <span class="sr-only">TIXEL AI</span>
-          </span>
+          <span class="sb-link-label">TixAll AI</span>
           <svg class="sb-toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
@@ -2167,12 +2184,14 @@ router.get(
           <a class="sb-link sub" href="/admin/ui/shows/create-ai" data-view="/admin/ui/shows/create-ai">
             <span class="sb-link-row">
               <span class="sb-link-label">Create Show</span>
-              <img class="ai-menu-logo" src="/tixai.png" alt="TIXEL AI" />
             </span>
           </a>
           <a class="sb-link sub" href="/admin/ui/ai/smart-storefront" data-view="/admin/ui/ai/smart-storefront">Smart Storefront</a>
           <a class="sb-link sub" href="/admin/ui/ai/whats-on" data-view="/admin/ui/ai/whats-on">What&#39;s On</a>
           <a class="sb-link sub" href="/admin/ui/ai/customer-chatbot" data-view="/admin/ui/ai/customer-chatbot">Customer Chatbot</a>
+          <a class="sb-link sub" href="/admin/ui/ai/featured" data-view="/admin/ui/ai/featured">Featured &amp; Discovery</a>
+          <a class="sb-link sub" href="/admin/ui/ai/insights" data-view="/admin/ui/ai/insights">AI Insights</a>
+          <a class="sb-link sub" href="/admin/ui/ai/marketing-studio" data-view="/admin/ui/ai/marketing-studio">Marketing Studio</a>
         </div>
       </div>
 
@@ -2297,6 +2316,18 @@ router.get(
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
+  }
+  var toastTimer = null;
+  function showToast(message, success){
+    var toast = $('#adminToast');
+    if (!toast) return;
+    toast.textContent = message;
+    toast.style.background = success === false ? '#b91c1c' : '#111827';
+    toast.classList.add('show');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){
+      toast.classList.remove('show');
+    }, 2400);
   }
   function promoterLabel(promoter){
     return (promoter && (promoter.tradingName || promoter.name)) || '';
@@ -2442,6 +2473,12 @@ router.get(
     }catch{
       return msg;
     }
+  }
+
+  function formatDateTime(value){
+    var d = new Date(value);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleString('en-GB');
   }
 
   function formatVenueLabel(venue){
@@ -12103,15 +12140,720 @@ function renderInterests(customer){
   }
   function smartStorefront(){
     if (!main) return;
-    main.innerHTML = '<div class="card"><div class="title">Smart Storefront</div><div class="muted">TIXEL AI will curate storefront layouts and product highlights here.</div></div>';
+    main.innerHTML = '<div class="card"><div class="title">Smart Storefront</div><div class="muted">TixAll AI will curate storefront layouts and product highlights here.</div></div>';
   }
   function whatsOn(){
     if (!main) return;
-    main.innerHTML = '<div class="card"><div class="title">What&#39;s On</div><div class="muted">TIXEL AI will surface upcoming shows and recommendations here.</div></div>';
+    main.innerHTML = '<div class="card"><div class="title">What&#39;s On</div><div class="muted">TixAll AI will surface upcoming shows and recommendations here.</div></div>';
   }
   function customerChatbot(){
     if (!main) return;
     main.innerHTML = '<div class="card"><div class="title">Customer Chatbot</div><div class="muted">Set up automated support journeys and FAQs for customers.</div></div>';
+  }
+  function aiFeaturedPage(){
+    if (!main) return;
+    main.innerHTML = ''
+      + '<div class="card">'
+      +   '<div class="header" style="gap:12px;align-items:center;">'
+      +     '<div>'
+      +       '<div class="title">Featured &amp; Discovery</div>'
+      +       '<div class="muted">Configure how TixAll AI selects featured shows by region.</div>'
+      +     '</div>'
+      +   '</div>'
+      +   '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:12px;">'
+      +     '<div class="panel-block">'
+      +       '<div class="panel-title">Mode</div>'
+      +       '<select class="input" id="ai_feat_mode">'
+      +         '<option value="AUTO">Auto</option>'
+      +         '<option value="HYBRID">Hybrid</option>'
+      +         '<option value="MANUAL">Manual</option>'
+      +       '</select>'
+      +     '</div>'
+      +     '<div class="panel-block">'
+      +       '<div class="panel-title">Featured slot count</div>'
+      +       '<input class="input" id="ai_feat_slots" type="number" min="1" max="20" />'
+      +     '</div>'
+      +   '</div>'
+      +   '<div class="panel-block" style="margin-top:16px;">'
+      +     '<div class="panel-title">Auto scoring weights</div>'
+      +     '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:10px;">'
+      +       '<label class="muted">Sales velocity <input class="input" type="range" id="ai_feat_w_velocity" min="0" max="2" step="0.1"></label>'
+      +       '<label class="muted">Urgency <input class="input" type="range" id="ai_feat_w_urgency" min="0" max="2" step="0.1"></label>'
+      +       '<label class="muted">Risk <input class="input" type="range" id="ai_feat_w_risk" min="0" max="2" step="0.1"></label>'
+      +       '<label class="muted">New show <input class="input" type="range" id="ai_feat_w_new" min="0" max="2" step="0.1"></label>'
+      +       '<label class="muted">Near sell-out <input class="input" type="range" id="ai_feat_w_near" min="0" max="2" step="0.1"></label>'
+      +     '</div>'
+      +   '</div>'
+      +   '<div class="panel-block" style="margin-top:16px;">'
+      +     '<div class="panel-title">Exclusions</div>'
+      +     '<div class="row" style="gap:12px;flex-wrap:wrap;margin-top:8px;">'
+      +       '<label class="ps-check"><input type="checkbox" id="ai_feat_ex_soldout" />Exclude sold out</label>'
+      +       '<label class="ps-check"><input type="checkbox" id="ai_feat_ex_notlive" />Exclude not live</label>'
+      +       '<label class="ps-check">Exclude within <input class="input" id="ai_feat_ex_hours" type="number" min="0" style="width:90px;"/> hours</label>'
+      +     '</div>'
+      +   '</div>'
+      +   '<div class="row" style="gap:8px;margin-top:12px;">'
+      +     '<button class="btn p" id="ai_feat_save">Save configuration</button>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:16px;">'
+      +   '<div class="card">'
+      +     '<div class="title">Manual pins</div>'
+      +     '<div class="muted">Pin 1–3 shows to the top of the list.</div>'
+      +     '<div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap;">'
+      +       '<select class="input" id="ai_feat_pin_show"></select>'
+      +       '<input class="input" id="ai_feat_pin_priority" type="number" min="1" placeholder="Priority" style="width:120px;" />'
+      +       '<input class="input" id="ai_feat_pin_county" placeholder="County (optional)" style="width:160px;" />'
+      +       '<button class="btn" id="ai_feat_pin_add">Add pin</button>'
+      +     '</div>'
+      +     '<div id="ai_feat_pin_list" style="margin-top:12px;"></div>'
+      +   '</div>'
+      +   '<div class="card">'
+      +     '<div class="title">Region rules</div>'
+      +     '<div class="muted">Override weights or exclusions per county.</div>'
+      +     '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px;">'
+      +       '<input class="input" id="ai_feat_rule_county" placeholder="County" />'
+      +       '<input class="input" id="ai_feat_rule_weights" placeholder="Weights JSON override" />'
+      +       '<input class="input" id="ai_feat_rule_exclusions" placeholder="Exclusions JSON override" />'
+      +       '<button class="btn" id="ai_feat_rule_add">Add rule</button>'
+      +     '</div>'
+      +     '<div id="ai_feat_rule_list" style="margin-top:12px;"></div>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="card" style="margin-top:16px;">'
+      +   '<div class="header" style="gap:12px;align-items:center;">'
+      +     '<div>'
+      +       '<div class="title">Preview</div>'
+      +       '<div class="muted">Matches the public featured strip formatting.</div>'
+      +     '</div>'
+      +     '<select class="input" id="ai_feat_preview_county" style="width:180px;margin-left:auto;"></select>'
+      +   '</div>'
+      +   '<div id="ai_feat_preview" class="grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:12px;"></div>'
+      + '</div>'
+      + '<div class="card" style="margin-top:16px;">'
+      +   '<div class="header" style="gap:12px;align-items:center;">'
+      +     '<div>'
+      +       '<div class="title">Output logs</div>'
+      +       '<div class="muted">Audit of featured compute runs.</div>'
+      +     '</div>'
+      +     '<button class="btn" id="ai_feat_recompute" style="margin-left:auto;">Recompute now</button>'
+      +   '</div>'
+      +   '<div class="table-wrap" style="margin-top:12px;">'
+      +     '<table class="table" id="ai_feat_logs"></table>'
+      +   '</div>'
+      + '</div>';
+
+    var showSelect = $('#ai_feat_pin_show');
+    var previewSelect = $('#ai_feat_preview_county');
+    var pinList = $('#ai_feat_pin_list');
+    var ruleList = $('#ai_feat_rule_list');
+    var previewGrid = $('#ai_feat_preview');
+    var logsTable = $('#ai_feat_logs');
+
+    var state = { shows: [], pins: [], rules: [] };
+
+    function renderPins(){
+      if (!pinList) return;
+      var html = '<div class="table-wrap"><table class="table">'
+        + '<thead><tr><th>Show</th><th>Priority</th><th>County</th><th></th></tr></thead><tbody>'
+        + state.pins.map(function(pin){
+          var show = state.shows.find(function(s){ return s.id === pin.showId; });
+          return '<tr><td>' + escapeHtml((show && show.title) || pin.showId) + '</td><td>' + escapeHtml(pin.priority) + '</td><td>' + escapeHtml(pin.regionCounty || 'Global') + '</td>'
+            + '<td><button class="btn" data-pin-delete="' + pin.id + '">Remove</button></td></tr>';
+        }).join('')
+        + '</tbody></table></div>';
+      pinList.innerHTML = html;
+      $$('#ai_feat_pin_list [data-pin-delete]').forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          try {
+            await j('/admin/api/ai/featured/pins', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'delete', id: btn.getAttribute('data-pin-delete') })});
+            await loadConfig();
+            showToast('Pin removed.', true);
+          } catch (err) {
+            showToast(parseErr(err), false);
+          }
+        });
+      });
+    }
+
+    function renderRules(){
+      if (!ruleList) return;
+      var html = '<div class="table-wrap"><table class="table">'
+        + '<thead><tr><th>County</th><th>Weights override</th><th>Exclusions override</th><th></th></tr></thead><tbody>'
+        + state.rules.map(function(rule){
+          return '<tr><td>' + escapeHtml(rule.county) + '</td><td><pre style="margin:0;white-space:pre-wrap;">' + escapeHtml(JSON.stringify(rule.weightsOverride || {}, null, 2)) + '</pre></td>'
+            + '<td><pre style="margin:0;white-space:pre-wrap;">' + escapeHtml(JSON.stringify(rule.exclusionsOverride || {}, null, 2)) + '</pre></td>'
+            + '<td><button class="btn" data-rule-delete="' + rule.id + '">Remove</button></td></tr>';
+        }).join('')
+        + '</tbody></table></div>';
+      ruleList.innerHTML = html;
+      $$('#ai_feat_rule_list [data-rule-delete]').forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          try {
+            await j('/admin/api/ai/featured/region-rules', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'delete', id: btn.getAttribute('data-rule-delete') })});
+            await loadConfig();
+            showToast('Rule removed.', true);
+          } catch (err) {
+            showToast(parseErr(err), false);
+          }
+        });
+      });
+    }
+
+    function renderLogs(logs){
+      if (!logsTable) return;
+      logsTable.innerHTML = '<thead><tr><th>Time</th><th>County</th><th>Featured list</th></tr></thead><tbody>'
+        + (logs || []).map(function(log){
+          var items = (log.results && log.results.results) ? log.results.results : [];
+          return '<tr><td>' + escapeHtml(formatDateTime(log.computedAt)) + '</td>'
+            + '<td>' + escapeHtml(log.county || 'Global') + '</td>'
+            + '<td>' + escapeHtml(items.map(function(i){ return i.title || i.showId; }).join(', ')) + '</td></tr>';
+        }).join('') + '</tbody>';
+    }
+
+    function renderPreview(items){
+      if (!previewGrid) return;
+      if (!items.length) {
+        previewGrid.innerHTML = '<div class="muted">No shows match the current settings.</div>';
+        return;
+      }
+      previewGrid.innerHTML = items.map(function(item){
+        return '<div class="card" style="margin:0;">'
+          + (item.imageUrl ? '<img src="' + escapeHtml(item.imageUrl) + '" style="width:100%;height:140px;object-fit:cover;border-radius:10px;" />' : '')
+          + '<div style="margin-top:10px;font-weight:700;">' + escapeHtml(item.title || 'Untitled show') + '</div>'
+          + '<div class="muted" style="font-size:12px;">' + escapeHtml(formatDateTime(item.date)) + '</div>'
+          + '<div class="muted" style="font-size:12px;">' + escapeHtml([item.venueName, item.town].filter(Boolean).join(', ')) + '</div>'
+          + '<div style="margin-top:6px;">From ' + escapeHtml(item.priceFrom ? ('£' + (item.priceFrom / 100).toFixed(2)) : 'TBC') + '</div>'
+          + '<details style="margin-top:8px;"><summary class="muted" style="cursor:pointer;">Why featured</summary>'
+          + '<ul style="padding-left:18px;margin:6px 0;">' + (item.reasons || []).map(function(r){ return '<li>' + escapeHtml(r) + '</li>'; }).join('') + '</ul>'
+          + '</details>'
+          + '</div>';
+      }).join('');
+    }
+
+    async function loadShows(){
+      try {
+        var data = await j('/admin/shows');
+        state.shows = data.items || [];
+        if (showSelect) {
+          showSelect.innerHTML = state.shows.map(function(show){
+            return '<option value="' + show.id + '">' + escapeHtml(show.title || 'Untitled show') + '</option>';
+          }).join('');
+        }
+      } catch (err) {
+        showToast(parseErr(err), false);
+      }
+    }
+
+    async function loadPreview(){
+      var county = previewSelect && previewSelect.value ? previewSelect.value : '';
+      var data = await j('/admin/api/ai/featured/preview' + (county ? ('?county=' + encodeURIComponent(county)) : ''));
+      renderPreview(data.preview || []);
+    }
+
+    async function loadConfig(){
+      var data = await j('/admin/api/ai/featured/config');
+      var config = data.config || {};
+      state.pins = data.pins || [];
+      state.rules = data.regionRules || [];
+      if ($('#ai_feat_mode')) $('#ai_feat_mode').value = config.mode || 'AUTO';
+      if ($('#ai_feat_slots')) $('#ai_feat_slots').value = config.slotCount || 8;
+      if ($('#ai_feat_w_velocity')) $('#ai_feat_w_velocity').value = (config.weights && config.weights.salesVelocityWeight) || 1;
+      if ($('#ai_feat_w_urgency')) $('#ai_feat_w_urgency').value = (config.weights && config.weights.urgencyWeight) || 1;
+      if ($('#ai_feat_w_risk')) $('#ai_feat_w_risk').value = (config.weights && config.weights.riskWeight) || 1;
+      if ($('#ai_feat_w_new')) $('#ai_feat_w_new').value = (config.weights && config.weights.newShowWeight) || 0.6;
+      if ($('#ai_feat_w_near')) $('#ai_feat_w_near').value = (config.weights && config.weights.nearSelloutWeight) || 1;
+      if ($('#ai_feat_ex_soldout')) $('#ai_feat_ex_soldout').checked = !!(config.exclusions && config.exclusions.excludeSoldOut);
+      if ($('#ai_feat_ex_notlive')) $('#ai_feat_ex_notlive').checked = !!(config.exclusions && config.exclusions.excludeNotLive);
+      if ($('#ai_feat_ex_hours')) $('#ai_feat_ex_hours').value = (config.exclusions && config.exclusions.excludeWithinHours) || 24;
+
+      if (previewSelect) {
+        previewSelect.innerHTML = '<option value="">Global</option>' + state.rules.map(function(rule){
+          return '<option value="' + escapeHtml(rule.county) + '">' + escapeHtml(rule.county) + '</option>';
+        }).join('');
+      }
+
+      renderPins();
+      renderRules();
+      renderLogs(data.logs || []);
+      await loadPreview();
+    }
+
+    $('#ai_feat_save').addEventListener('click', async function(){
+      try {
+        await j('/admin/api/ai/featured/config', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            mode: $('#ai_feat_mode').value,
+            slotCount: Number($('#ai_feat_slots').value || 8),
+            weights: {
+              salesVelocityWeight: Number($('#ai_feat_w_velocity').value),
+              urgencyWeight: Number($('#ai_feat_w_urgency').value),
+              riskWeight: Number($('#ai_feat_w_risk').value),
+              newShowWeight: Number($('#ai_feat_w_new').value),
+              nearSelloutWeight: Number($('#ai_feat_w_near').value),
+            },
+            exclusions: {
+              excludeSoldOut: $('#ai_feat_ex_soldout').checked,
+              excludeNotLive: $('#ai_feat_ex_notlive').checked,
+              excludeWithinHours: Number($('#ai_feat_ex_hours').value || 0),
+            }
+          })
+        });
+        showToast('Config saved.', true);
+        await loadConfig();
+      } catch (err) {
+        showToast(parseErr(err), false);
+      }
+    });
+
+    $('#ai_feat_pin_add').addEventListener('click', async function(){
+      try {
+        await j('/admin/api/ai/featured/pins', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            action:'add',
+            pin: {
+              showId: showSelect.value,
+              priority: Number($('#ai_feat_pin_priority').value || 1),
+              regionCounty: $('#ai_feat_pin_county').value || null,
+            }
+          })
+        });
+        showToast('Pin added.', true);
+        await loadConfig();
+      } catch (err) {
+        showToast(parseErr(err), false);
+      }
+    });
+
+    $('#ai_feat_rule_add').addEventListener('click', async function(){
+      try {
+        await j('/admin/api/ai/featured/region-rules', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            action:'create',
+            county: $('#ai_feat_rule_county').value,
+            weightsOverride: $('#ai_feat_rule_weights').value ? JSON.parse($('#ai_feat_rule_weights').value) : null,
+            exclusionsOverride: $('#ai_feat_rule_exclusions').value ? JSON.parse($('#ai_feat_rule_exclusions').value) : null,
+          })
+        });
+        showToast('Rule saved.', true);
+        await loadConfig();
+      } catch (err) {
+        showToast(parseErr(err), false);
+      }
+    });
+
+    if (previewSelect) {
+      previewSelect.addEventListener('change', function(){ loadPreview(); });
+    }
+    $('#ai_feat_recompute').addEventListener('click', async function(){
+      try {
+        var county = previewSelect && previewSelect.value ? previewSelect.value : null;
+        var resp = await j('/admin/api/ai/featured/recompute', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ county: county })});
+        renderPreview(resp.preview || []);
+        await loadConfig();
+        showToast('Recompute complete.', true);
+      } catch (err) {
+        showToast(parseErr(err), false);
+      }
+    });
+
+    loadShows().then(loadConfig);
+  }
+
+  function aiInsightsPage(){
+    if (!main) return;
+    main.innerHTML = ''
+      + '<div class="card">'
+      +   '<div class="header" style="gap:12px;align-items:center;">'
+      +     '<div>'
+      +       '<div class="title">AI Insights</div>'
+      +       '<div class="muted">Monitor risk, forecasts, and funnel performance.</div>'
+      +     '</div>'
+      +   '</div>'
+      +   '<div class="table-wrap" style="margin-top:12px;">'
+      +     '<table class="table" id="ai_insights_queue"></table>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:16px;">'
+      +   '<div class="card" id="ai_insights_forecast"></div>'
+      +   '<div class="card" id="ai_insights_comparables"></div>'
+      + '</div>'
+      + '<div class="card" style="margin-top:16px;" id="ai_insights_funnel"></div>'
+      + '<div class="card" style="margin-top:16px;">'
+      +   '<div class="title">1-click actions</div>'
+      +   '<div class="muted">Template-driven drafts added to Marketing Studio.</div>'
+      +   '<div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap;">'
+      +     '<button class="btn" data-ai-action="email_campaign">Generate email campaign draft</button>'
+      +     '<button class="btn" data-ai-action="paid_boost">Generate paid boost copy</button>'
+      +     '<button class="btn" data-ai-action="final_tickets">Generate “final tickets” creative brief</button>'
+      +     '<a class="btn" href="/admin/ui/ai/marketing-studio" data-view="/admin/ui/ai/marketing-studio">Open Marketing Studio</a>'
+      +   '</div>'
+      + '</div>';
+
+    var queueTable = $('#ai_insights_queue');
+    var forecastCard = $('#ai_insights_forecast');
+    var comparablesCard = $('#ai_insights_comparables');
+    var funnelCard = $('#ai_insights_funnel');
+    var selectedShowId = null;
+
+    function renderQueue(items){
+      if (!queueTable) return;
+      queueTable.innerHTML = '<thead><tr><th>Show</th><th>Risk</th><th>T-</th><th>Capacity%</th><th>WoW%</th><th>Forecast</th><th>Target</th><th>Top action</th></tr></thead><tbody>'
+        + items.map(function(item){
+          return '<tr data-show="' + item.showId + '" style="cursor:pointer;">'
+            + '<td>' + escapeHtml(item.title || '') + '</td>'
+            + '<td>' + escapeHtml(item.risk.level) + '<div class="muted" style="font-size:11px;">' + escapeHtml(item.risk.reason) + '</div></td>'
+            + '<td>' + escapeHtml(item.timeToShowDays) + '</td>'
+            + '<td>' + escapeHtml(item.capacityPct ? item.capacityPct.toFixed(1) + '%' : '—') + '</td>'
+            + '<td>' + escapeHtml(item.wowPct.toFixed(1) + '%') + '</td>'
+            + '<td>' + escapeHtml(item.forecast.forecastSold) + ' / ' + escapeHtml(item.forecast.forecastCapacityPct ? item.forecast.forecastCapacityPct.toFixed(1) + '%' : '—') + '</td>'
+            + '<td>' + escapeHtml(item.targetPct ? item.targetPct + '%' : '—') + '</td>'
+            + '<td>' + escapeHtml(item.topAction ? item.topAction.action : '—') + '</td>'
+            + '</tr>';
+        }).join('') + '</tbody>';
+
+      $$('#ai_insights_queue [data-show]').forEach(function(row){
+        row.addEventListener('click', function(){
+          selectedShowId = row.getAttribute('data-show');
+          loadShow(selectedShowId);
+        });
+      });
+    }
+
+    function renderForecast(data){
+      if (!forecastCard) return;
+      forecastCard.innerHTML = ''
+        + '<div class="title">Show forecast</div>'
+        + '<div class="muted" style="margin-bottom:8px;">' + escapeHtml(data.show.title || '') + '</div>'
+        + '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;">'
+        +   '<div class="panel-block"><div class="panel-title">Sold</div><div>' + escapeHtml(data.metrics.soldCount) + '</div></div>'
+        +   '<div class="panel-block"><div class="panel-title">Pace/day</div><div>' + escapeHtml(data.metrics.pacePerDay.toFixed(2)) + '</div></div>'
+        +   '<div class="panel-block"><div class="panel-title">Projected sold</div><div>' + escapeHtml(data.forecast.forecastSold) + '</div></div>'
+        +   '<div class="panel-block"><div class="panel-title">Projected capacity</div><div>' + escapeHtml(data.forecast.forecastCapacityPct ? data.forecast.forecastCapacityPct.toFixed(1) + '%' : '—') + '</div></div>'
+        + '</div>'
+        + '<div class="muted" style="margin-top:8px;">' + escapeHtml(data.risk.level) + ' · ' + escapeHtml(data.risk.reason) + '</div>';
+    }
+
+    function renderComparables(list){
+      if (!comparablesCard) return;
+      comparablesCard.innerHTML = '<div class="title">Best comparable shows</div>'
+        + '<div class="table-wrap" style="margin-top:10px;"><table class="table">'
+        + '<thead><tr><th>Show</th><th>Sold by T-7</th><th>Final capacity%</th><th>WoW</th></tr></thead>'
+        + '<tbody>' + list.map(function(item){
+          return '<tr><td>' + escapeHtml(item.title || '') + '</td>'
+            + '<td>' + escapeHtml(item.soldByT7) + '</td>'
+            + '<td>' + escapeHtml(item.finalCapacityPct ? item.finalCapacityPct.toFixed(1) + '%' : '—') + '</td>'
+            + '<td>' + escapeHtml(item.wowPct.toFixed(1) + '%') + '</td></tr>';
+        }).join('') + '</tbody></table></div>';
+    }
+
+    function renderFunnel(data){
+      if (!funnelCard) return;
+      funnelCard.innerHTML = '<div class="title">Funnel insights</div>'
+        + '<div class="grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:10px;">'
+        + data.funnel.map(function(window){
+          return '<div class="panel-block"><div class="panel-title">Last ' + window.windowDays + ' days</div>'
+            + '<div class="muted">Views: ' + window.counts.VIEW + '</div>'
+            + '<div class="muted">Add to cart: ' + window.counts.ADD_TO_CART + '</div>'
+            + '<div class="muted">Checkout start: ' + window.counts.CHECKOUT_START + '</div>'
+            + '<div class="muted">Paid: ' + window.counts.PAID + '</div>'
+            + '</div>';
+        }).join('')
+        + '</div>'
+        + '<div class="muted" style="margin-top:10px;">Biggest drop: ' + escapeHtml(data.funnelInsights.biggestDrop.stage) + '</div>'
+        + '<div style="margin-top:6px;">' + (data.funnelInsights.recommendations || []).map(function(rec){ return '<div>• ' + escapeHtml(rec) + '</div>'; }).join('') + '</div>';
+    }
+
+    async function loadQueue(){
+      try {
+        var data = await j('/admin/api/ai/insights/queue');
+        renderQueue(data.items || []);
+        if (data.items && data.items.length) {
+          selectedShowId = data.items[0].showId;
+          loadShow(selectedShowId);
+        }
+      } catch (err) {
+        showToast(parseErr(err), false);
+      }
+    }
+
+    async function loadShow(showId){
+      try {
+        var data = await j('/admin/api/ai/insights/show/' + encodeURIComponent(showId));
+        renderForecast(data);
+        renderComparables(data.comparables || []);
+        renderFunnel(data);
+      } catch (err) {
+        showToast(parseErr(err), false);
+      }
+    }
+
+    $$('#main [data-ai-action]').forEach(function(btn){
+      btn.addEventListener('click', async function(){
+        if (!selectedShowId) return;
+        try {
+          await j('/admin/api/ai/insights/action', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ showId: selectedShowId, actionType: btn.getAttribute('data-ai-action') })});
+          showToast('Drafts created in Marketing Studio.', true);
+        } catch (err) {
+          showToast(parseErr(err), false);
+        }
+      });
+    });
+
+    loadQueue();
+  }
+
+  function aiMarketingStudioPage(){
+    if (!main) return;
+    main.innerHTML = ''
+      + '<div class="card">'
+      +   '<div class="title">Marketing Studio</div>'
+      +   '<div class="muted">Template-driven drafts for TixAll campaigns.</div>'
+      +   '<div class="grid" style="grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:12px;">'
+      +     '<select class="input" id="ai_ms_show"></select>'
+      +     '<select class="input" id="ai_ms_channel">'
+      +       '<option>Social</option><option>Email</option><option>PR</option><option>WhatsApp</option>'
+      +     '</select>'
+      +     '<select class="input" id="ai_ms_objective">'
+      +       '<option>Save the date</option><option>Reminder</option><option>Last chance</option><option>Thank you</option><option>Final tickets</option><option>General promo</option>'
+      +     '</select>'
+      +     '<select class="input" id="ai_ms_tone">'
+      +       '<option>cheeky</option><option>urgent</option><option>family</option><option>local pride</option><option>premium</option>'
+      +     '</select>'
+      +   '</div>'
+      +   '<div class="row" style="gap:8px;margin-top:10px;">'
+      +     '<button class="btn p" id="ai_ms_generate">Generate</button>'
+      +   '</div>'
+      +   '<div id="ai_ms_generated" style="margin-top:12px;"></div>'
+      + '</div>'
+      + '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:16px;">'
+      +   '<div class="card">'
+      +     '<div class="title">Drafts</div>'
+      +     '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px;">'
+      +       '<select class="input" id="ai_ms_filter_channel"><option value="">All channels</option><option>Social</option><option>Email</option><option>PR</option><option>WhatsApp</option></select>'
+      +       '<select class="input" id="ai_ms_filter_objective"><option value="">All objectives</option><option>Save the date</option><option>Reminder</option><option>Last chance</option><option>Thank you</option><option>Final tickets</option><option>General promo</option></select>'
+      +       '<select class="input" id="ai_ms_filter_tone"><option value="">All tones</option><option>cheeky</option><option>urgent</option><option>family</option><option>local pride</option><option>premium</option></select>'
+      +       '<button class="btn" id="ai_ms_filter_apply">Filter</button>'
+      +     '</div>'
+      +     '<div id="ai_ms_draft_list" style="margin-top:10px;"></div>'
+      +   '</div>'
+      +   '<div class="card">'
+      +     '<div class="title">Draft editor</div>'
+      +     '<input class="input" id="ai_ms_draft_title" placeholder="Title" style="margin-top:8px;" />'
+      +     '<textarea class="input" id="ai_ms_draft_body" style="height:160px;margin-top:8px;"></textarea>'
+      +     '<label class="ps-check" style="margin-top:8px;"><input type="checkbox" id="ai_ms_draft_used" />Used?</label>'
+      +     '<input class="input" id="ai_ms_draft_platform" placeholder="Platform" style="margin-top:6px;" />'
+      +     '<input class="input" id="ai_ms_draft_metrics" placeholder="Metrics JSON" style="margin-top:6px;" />'
+      +     '<textarea class="input" id="ai_ms_draft_notes" placeholder="Notes" style="margin-top:6px;height:80px;"></textarea>'
+      +     '<div class="row" style="gap:8px;margin-top:10px;">'
+      +       '<button class="btn p" id="ai_ms_draft_save">Save</button>'
+      +       '<button class="btn" id="ai_ms_draft_copy">Copy</button>'
+      +     '</div>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:16px;">'
+      +   '<div class="card">'
+      +     '<div class="title">Content library</div>'
+      +     '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px;">'
+      +       '<input class="input" id="ai_ms_tpl_title" placeholder="Template title" />'
+      +       '<input class="input" id="ai_ms_tpl_channel" placeholder="Channel" />'
+      +       '<input class="input" id="ai_ms_tpl_objective" placeholder="Objective" />'
+      +       '<input class="input" id="ai_ms_tpl_tone" placeholder="Tone" />'
+      +       '<textarea class="input" id="ai_ms_tpl_body" placeholder="Template body with tokens" style="grid-column:1/-1;height:90px;"></textarea>'
+      +       '<input class="input" id="ai_ms_tpl_conditions" placeholder="Conditions JSON" style="grid-column:1/-1;" />'
+      +       '<label class="ps-check"><input type="checkbox" id="ai_ms_tpl_approved" />Approved</label>'
+      +       '<label class="ps-check"><input type="checkbox" id="ai_ms_tpl_default" />Set as default</label>'
+      +       '<button class="btn" id="ai_ms_tpl_save">Save template</button>'
+      +     '</div>'
+      +     '<div id="ai_ms_tpl_list" style="margin-top:10px;"></div>'
+      +   '</div>'
+      +   '<div class="card">'
+      +     '<div class="title">Tone presets</div>'
+      +     '<input class="input" id="ai_ms_tone_name" placeholder="Tone name" style="margin-top:8px;" />'
+      +     '<textarea class="input" id="ai_ms_tone_rules" placeholder="Rules JSON" style="margin-top:8px;height:90px;"></textarea>'
+      +     '<label class="ps-check" style="margin-top:6px;"><input type="checkbox" id="ai_ms_tone_approved" />Approved</label>'
+      +     '<button class="btn" id="ai_ms_tone_save" style="margin-top:8px;">Save tone preset</button>'
+      +     '<div id="ai_ms_tone_list" style="margin-top:10px;"></div>'
+      +   '</div>'
+      + '</div>';
+
+    var showSelect = $('#ai_ms_show');
+    var draftList = $('#ai_ms_draft_list');
+    var templateList = $('#ai_ms_tpl_list');
+    var toneList = $('#ai_ms_tone_list');
+    var selectedDraft = null;
+
+    async function loadShows(){
+      var data = await j('/admin/shows');
+      var shows = data.items || [];
+      showSelect.innerHTML = shows.map(function(show){
+        return '<option value="' + show.id + '">' + escapeHtml(show.title || 'Untitled show') + '</option>';
+      }).join('');
+    }
+
+    async function loadDrafts(){
+      var params = [];
+      if ($('#ai_ms_filter_channel').value) params.push('channel=' + encodeURIComponent($('#ai_ms_filter_channel').value));
+      if ($('#ai_ms_filter_objective').value) params.push('objective=' + encodeURIComponent($('#ai_ms_filter_objective').value));
+      if ($('#ai_ms_filter_tone').value) params.push('tone=' + encodeURIComponent($('#ai_ms_filter_tone').value));
+      var data = await j('/admin/api/ai/marketing/drafts' + (params.length ? ('?' + params.join('&')) : ''));
+      var drafts = data.drafts || [];
+      draftList.innerHTML = drafts.map(function(draft){
+        return '<div class="panel-block" style="margin-bottom:8px;cursor:pointer;" data-draft="' + draft.id + '">'
+          + '<div style="font-weight:700;">' + escapeHtml(draft.title) + '</div>'
+          + '<div class="muted" style="font-size:12px;">' + escapeHtml(draft.channel + ' • ' + draft.objective + ' • ' + draft.tone) + '</div>'
+          + '</div>';
+      }).join('');
+      $$('#ai_ms_draft_list [data-draft]').forEach(function(card){
+        card.addEventListener('click', function(){
+          var id = card.getAttribute('data-draft');
+          selectedDraft = drafts.find(function(d){ return d.id === id; });
+          if (!selectedDraft) return;
+          $('#ai_ms_draft_title').value = selectedDraft.title || '';
+          $('#ai_ms_draft_body').value = selectedDraft.content || '';
+          $('#ai_ms_draft_used').checked = !!(selectedDraft.performance && selectedDraft.performance.used);
+          $('#ai_ms_draft_platform').value = (selectedDraft.performance && selectedDraft.performance.platform) || '';
+          $('#ai_ms_draft_metrics').value = selectedDraft.performance && selectedDraft.performance.metrics ? JSON.stringify(selectedDraft.performance.metrics) : '';
+          $('#ai_ms_draft_notes').value = (selectedDraft.performance && selectedDraft.performance.notes) || '';
+        });
+      });
+    }
+
+    async function loadTemplates(){
+      var data = await j('/admin/api/ai/marketing/templates');
+      var templates = data.templates || [];
+      templateList.innerHTML = templates.map(function(tpl){
+        return '<div class="panel-block" style="margin-bottom:8px;">'
+          + '<div style="font-weight:700;">' + escapeHtml(tpl.title) + '</div>'
+          + '<div class="muted" style="font-size:12px;">' + escapeHtml(tpl.channel + ' • ' + tpl.objective + ' • ' + tpl.tone) + '</div>'
+          + '<div class="muted" style="font-size:12px;">' + escapeHtml(tpl.body.slice(0, 140)) + '</div>'
+          + '</div>';
+      }).join('');
+    }
+
+    async function loadTonePresets(){
+      var data = await j('/admin/api/ai/marketing/tone-presets');
+      var presets = data.presets || [];
+      toneList.innerHTML = presets.map(function(preset){
+        return '<div class="panel-block" style="margin-bottom:8px;">'
+          + '<div style="font-weight:700;">' + escapeHtml(preset.name) + '</div>'
+          + '<div class="muted" style="font-size:12px;">' + escapeHtml(JSON.stringify(preset.rules || {})) + '</div>'
+          + '</div>';
+      }).join('');
+    }
+
+    $('#ai_ms_generate').addEventListener('click', async function(){
+      try {
+        var resp = await j('/admin/api/ai/marketing/generate', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            showId: showSelect.value,
+            channel: $('#ai_ms_channel').value,
+            objective: $('#ai_ms_objective').value,
+            tone: $('#ai_ms_tone').value
+          })
+        });
+        $('#ai_ms_generated').innerHTML = (resp.drafts || []).map(function(draft){
+          return '<div class="panel-block" style="margin-bottom:8px;">'
+            + '<div style="font-weight:700;">' + escapeHtml(draft.title) + '</div>'
+            + '<div class="muted" style="font-size:12px;">' + escapeHtml(draft.reason) + '</div>'
+            + '<pre style="white-space:pre-wrap;margin:6px 0 0;">' + escapeHtml(draft.content) + '</pre>'
+            + '</div>';
+        }).join('');
+        showToast('Drafts generated.', true);
+        await loadDrafts();
+      } catch (err) {
+        showToast(parseErr(err), false);
+      }
+    });
+
+    $('#ai_ms_filter_apply').addEventListener('click', loadDrafts);
+    $('#ai_ms_draft_save').addEventListener('click', async function(){
+      if (!selectedDraft) return;
+      try {
+        await j('/admin/api/ai/marketing/drafts', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            id: selectedDraft.id,
+            showId: selectedDraft.showId,
+            channel: selectedDraft.channel,
+            objective: selectedDraft.objective,
+            tone: selectedDraft.tone,
+            title: $('#ai_ms_draft_title').value,
+            content: $('#ai_ms_draft_body').value,
+          })
+        });
+        await j('/admin/api/ai/marketing/drafts/' + encodeURIComponent(selectedDraft.id) + '/performance', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            used: $('#ai_ms_draft_used').checked,
+            platform: $('#ai_ms_draft_platform').value,
+            metrics: $('#ai_ms_draft_metrics').value ? JSON.parse($('#ai_ms_draft_metrics').value) : null,
+            notes: $('#ai_ms_draft_notes').value
+          })
+        });
+        showToast('Draft saved.', true);
+        await loadDrafts();
+      } catch (err) {
+        showToast(parseErr(err), false);
+      }
+    });
+    $('#ai_ms_draft_copy').addEventListener('click', function(){
+      navigator.clipboard.writeText($('#ai_ms_draft_body').value || '');
+      showToast('Draft copied.', true);
+    });
+
+    $('#ai_ms_tpl_save').addEventListener('click', async function(){
+      try {
+        await j('/admin/api/ai/marketing/templates', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            channel: $('#ai_ms_tpl_channel').value,
+            objective: $('#ai_ms_tpl_objective').value,
+            tone: $('#ai_ms_tpl_tone').value,
+            title: $('#ai_ms_tpl_title').value,
+            body: $('#ai_ms_tpl_body').value,
+            conditions: $('#ai_ms_tpl_conditions').value ? JSON.parse($('#ai_ms_tpl_conditions').value) : null,
+            approved: $('#ai_ms_tpl_approved').checked,
+            isDefault: $('#ai_ms_tpl_default').checked
+          })
+        });
+        showToast('Template saved.', true);
+        await loadTemplates();
+      } catch (err) {
+        showToast(parseErr(err), false);
+      }
+    });
+
+    $('#ai_ms_tone_save').addEventListener('click', async function(){
+      try {
+        await j('/admin/api/ai/marketing/tone-presets', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            name: $('#ai_ms_tone_name').value,
+            rules: $('#ai_ms_tone_rules').value ? JSON.parse($('#ai_ms_tone_rules').value) : null,
+            approved: $('#ai_ms_tone_approved').checked
+          })
+        });
+        showToast('Tone preset saved.', true);
+        await loadTonePresets();
+      } catch (err) {
+        showToast(parseErr(err), false);
+      }
+    });
+
+    Promise.all([loadShows(), loadDrafts(), loadTemplates(), loadTonePresets()]);
   }
   function marketingPage(options){
     if (!main) return;
@@ -12931,6 +13673,9 @@ function renderInterests(customer){
       if (path === '/admin/ui/ai/smart-storefront') return smartStorefront();
       if (path === '/admin/ui/ai/whats-on') return whatsOn();
       if (path === '/admin/ui/ai/customer-chatbot') return customerChatbot();
+      if (path === '/admin/ui/ai/featured') return aiFeaturedPage();
+      if (path === '/admin/ui/ai/insights') return aiInsightsPage();
+      if (path === '/admin/ui/ai/marketing-studio') return aiMarketingStudioPage();
       if (path === '/admin/ui/shows/create') return createShow();
       if (path === '/admin/ui/shows/current')  return listShows();
       if (path === '/admin/ui/customers')     return customers();
