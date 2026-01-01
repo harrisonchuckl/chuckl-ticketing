@@ -116,7 +116,7 @@ app.use("/bootstrap", bootstrapRouter);
 app.use("/checkout", checkoutRouter);
 
 app.use("/uploads", uploadsRouter);
-app.use("/image-proxy", imageProxyRouter);
+app.use("/", imageProxyRouter);
 
 // Admin
 app.use("/admin/uploads", adminUploadsRouter);
