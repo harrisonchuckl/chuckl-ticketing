@@ -8927,8 +8927,8 @@ function renderInterests(customer){
       +     '<label style="display:grid;gap:6px;">Phone<input id="pc_phone" /></label>'
       +     '<label style="display:grid;gap:6px;">Status'
       +       '<select id="pc_status">'
+      +         '<option value="ACTIVE" selected>Active</option>'
       +         '<option value="PROSPECT">Prospect</option>'
-      +         '<option value="ACTIVE">Active</option>'
       +         '<option value="DORMANT">Dormant</option>'
       +         '<option value="BLOCKED">Blocked</option>'
       +       '</select>'
@@ -9031,6 +9031,7 @@ function renderInterests(customer){
   function promoterProfile(promoterId){
     if (!main) return;
     var activeTab = 'overview';
+    var linkedShowsCache = [];
 
     loadPromoter();
 
@@ -9043,6 +9044,68 @@ function renderInterests(customer){
       }catch(e){
         main.innerHTML = '<div class="card"><div class="error">Failed to load promoter: ' + escapeHtml(parseErr(e)) + '</div></div>';
       }
+    }
+
+    function venueInitials(label){
+      var text = String(label || '').trim();
+      if (!text) return '';
+      var parts = text.split(/\s+/).filter(Boolean);
+      var first = parts[0] ? parts[0][0] : '';
+      var second = parts.length > 1 ? parts[1][0] : '';
+      return (first + second).toUpperCase();
+    }
+
+    function venueAvatarHtml(venue, opts){
+      opts = opts || {};
+      var size = opts.size || 48;
+      var label = (venue && venue.name) || 'Venue';
+      var imageUrl = venue && venue.imageUrl;
+      var fontSize = Math.max(12, Math.round(size * 0.42));
+      var initials = venueInitials(label);
+      var inner = imageUrl
+        ? '<img src="' + escapeHtml(imageUrl) + '" alt="' + escapeHtml(label) + ' photo" style="width:100%;height:100%;object-fit:cover;display:block;" />'
+        : '<span style="font-weight:700;color:#0f172a;font-size:' + fontSize + 'px;">' + escapeHtml(initials || '') + '</span>';
+      return ''
+        + '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:999px;background:#f1f5f9;border:1px solid #e2e8f0;display:flex;align-items:center;justify-content:center;overflow:hidden;">'
+        + inner
+        + '</div>';
+    }
+
+    function formatShowDate(value){
+      if (!value) return 'TBC';
+      var d = new Date(value);
+      if (isNaN(d.getTime())) return 'TBC';
+      return d.toLocaleDateString('en-GB', { dateStyle: 'medium' });
+    }
+
+    function formatShowDateTime(value){
+      if (!value) return 'TBC';
+      var d = new Date(value);
+      if (isNaN(d.getTime())) return 'TBC';
+      return d.toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' });
+    }
+
+    function showStatusBadge(status){
+      var label = status || 'DRAFT';
+      var isLive = label === 'LIVE';
+      var bg = isLive ? '#e6f7fd' : '#f8fafc';
+      var color = isLive ? '#0f9cdf' : '#475569';
+      var border = isLive ? '#0f9cdf' : '#e2e8f0';
+      return '<span class="pill" style="background:' + bg + ';color:' + color + ';border:1px solid ' + border + ';">' + escapeHtml(label) + '</span>';
+    }
+
+    function sortShowsByDate(shows){
+      return (shows || []).slice().sort(function(a, b){
+        var aTime = a && a.date ? new Date(a.date).getTime() : Number.POSITIVE_INFINITY;
+        var bTime = b && b.date ? new Date(b.date).getTime() : Number.POSITIVE_INFINITY;
+        return aTime - bTime;
+      });
+    }
+
+    function updateLinkedShowsCache(shows){
+      linkedShowsCache = Array.isArray(shows) ? shows : [];
+      renderVenues();
+      renderDocumentRequests();
     }
 
     function renderPromoter(promoter, accessLevel){
@@ -9149,6 +9212,15 @@ function renderInterests(customer){
 
         +   '<div class="tab-panel" data-panel="documents">'
         +     '<div class="card">'
+        +       '<div class="title">Request documents for this show</div>'
+        +       '<div class="muted" style="margin-top:4px;">Send a checklist to the promoter for a linked show.</div>'
+        +       '<div class="row" style="gap:8px;flex-wrap:wrap;margin-top:10px;">'
+        +         '<select id="pd_request_show" class="ctl" style="min-width:240px;"></select>'
+        +         '<button class="btn" id="pd_request_send">Send request</button>'
+        +       '</div>'
+        +       '<div class="muted" id="pd_request_note" style="margin-top:6px;">Select a linked show to request documents.</div>'
+        +     '</div>'
+        +     '<div class="card" style="margin-top:12px;">'
         +       '<div class="title">Upload document</div>'
         +       '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:10px;">'
         +         '<label style="display:grid;gap:6px;">Document type'
@@ -9177,7 +9249,15 @@ function renderInterests(customer){
         +   '</div>'
 
         +   '<div class="tab-panel" data-panel="venues">'
-        +     '<div class="card"><div class="title">Venues</div><div class="muted">Coming next.</div></div>'
+        +     '<div class="card">'
+        +       '<div class="header">'
+        +         '<div>'
+        +           '<div class="title">Venues & shows</div>'
+        +           '<div class="muted" style="margin-top:4px;">Linked venues and the shows this promoter is working on.</div>'
+        +         '</div>'
+        +       '</div>'
+        +       '<div id="promoterVenuesGrid" class="grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:12px;"></div>'
+        +     '</div>'
         +   '</div>'
         +   '<div class="tab-panel" data-panel="shows">'
         +     '<div class="card">'
@@ -9197,10 +9277,69 @@ function renderInterests(customer){
         +     '</div>'
         +   '</div>'
         +   '<div class="tab-panel" data-panel="deals">'
-        +     '<div class="card"><div class="title">Deals</div><div class="muted">Coming next.</div></div>'
+        +     '<div class="card">'
+        +       '<div class="title">Deals</div>'
+        +       '<div class="muted" style="margin-top:4px;">Record the commercial terms agreed with the promoter and venue.</div>'
+        +       '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:12px;">'
+        +         '<div class="card" style="margin:0;">'
+        +           '<div class="title" style="font-size:15px;">Deal structure</div>'
+        +           '<ul class="muted" style="margin:8px 0 0 18px;">'
+        +             '<li>Fixed hire (guarantee / flat fee)</li>'
+        +             '<li>Split deal (gross or net split)</li>'
+        +             '<li>Minimum guarantee + split overage</li>'
+        +           '</ul>'
+        +         '</div>'
+        +         '<div class="card" style="margin:0;">'
+        +           '<div class="title" style="font-size:15px;">Deductions before split</div>'
+        +           '<ul class="muted" style="margin:8px 0 0 18px;">'
+        +             '<li>Credit card charges</li>'
+        +             '<li>Security, staffing, and production costs</li>'
+        +             '<li>Contras / barter tickets</li>'
+        +             '<li>Marketing commitments</li>'
+        +           '</ul>'
+        +         '</div>'
+        +         '<div class="card" style="margin:0;">'
+        +           '<div class="title" style="font-size:15px;">Settlement notes</div>'
+        +           '<div class="muted" style="margin-top:8px;">Add anything specific to this promoter deal: fee caps, box office rules, VAT, or invoice terms.</div>'
+        +         '</div>'
+        +       '</div>'
+        +     '</div>'
         +   '</div>'
         +   '<div class="tab-panel" data-panel="invoicing">'
-        +     '<div class="card"><div class="title">Invoicing</div><div class="muted">Coming next.</div></div>'
+        +     '<div class="card">'
+        +       '<div class="header">'
+        +         '<div>'
+        +           '<div class="title">Invoicing</div>'
+        +           '<div class="muted" style="margin-top:4px;">Track remittances and settlement deadlines for venue payouts.</div>'
+        +         '</div>'
+        +         '<button class="btn">Export</button>'
+        +       '</div>'
+        +       '<table style="margin-top:12px;">'
+        +         '<thead><tr><th>Remittance date</th><th>Show</th><th>Status</th><th>Notes</th></tr></thead>'
+        +         '<tbody>'
+        +           '<tr><td>05 Apr 2026</td><td>City Sounds Live</td><td><span class="pill">Sent</span></td><td>Net of card fees</td></tr>'
+        +           '<tr><td>18 Apr 2026</td><td>Indie Nights</td><td><span class="pill" style="background:#fff7ed;color:#c2410c;border:1px solid #fdba74;">Scheduled</span></td><td>Day after show</td></tr>'
+        +         '</tbody>'
+        +       '</table>'
+        +     '</div>'
+        +     '<div class="card" style="margin-top:12px;">'
+        +       '<div class="title">Automate remittances post-show</div>'
+        +       '<div class="muted" style="margin-top:4px;">Choose when the venue remittance should be issued automatically.</div>'
+        +       '<div class="row" style="gap:12px;margin-top:10px;flex-wrap:wrap;">'
+        +         '<label class="row" style="gap:6px;"><input type="radio" name="remittanceTiming" checked />Day after show</label>'
+        +         '<label class="row" style="gap:6px;"><input type="radio" name="remittanceTiming" />Day of show</label>'
+        +         '<button class="btn p">Save preference</button>'
+        +       '</div>'
+        +     '</div>'
+        +     '<div class="card" style="margin-top:12px;">'
+        +       '<div class="title">Invoice receipt timeline</div>'
+        +       '<div class="muted" style="margin-top:4px;">Log when the venue receives the promoter invoice and when payment is due.</div>'
+        +       '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:10px;">'
+        +         '<label style="display:grid;gap:6px;">Invoice received<input type="date" /></label>'
+        +         '<label style="display:grid;gap:6px;">Payment due by<input type="date" /></label>'
+        +         '<label style="display:grid;gap:6px;">Settlement notes<input placeholder="e.g. 14-day terms" /></label>'
+        +       '</div>'
+        +     '</div>'
         +   '</div>'
         +   '<div class="tab-panel" data-panel="activity">'
         +     '<div id="promoterActivityList"></div>'
@@ -9211,6 +9350,8 @@ function renderInterests(customer){
       renderContacts(promoter);
       renderDocuments(promoter);
       renderShows();
+      renderVenues();
+      renderDocumentRequests();
       renderActivity(promoter);
       bindOverviewSave(promoter);
       bindLogoUpload(promoter);
@@ -9499,6 +9640,69 @@ function renderInterests(customer){
       });
     }
 
+    function renderDocumentRequests(){
+      var select = $('#pd_request_show');
+      var note = $('#pd_request_note');
+      var sendBtn = $('#pd_request_send');
+      if (!select || !sendBtn) return;
+
+      var shows = sortShowsByDate(linkedShowsCache);
+      if (!shows.length){
+        select.innerHTML = '<option value="">No linked shows yet</option>';
+        sendBtn.disabled = true;
+        if (note) note.textContent = 'Link a show to request documents.';
+        return;
+      }
+
+      select.innerHTML = '<option value="">Select a linked show…</option>'
+        + shows.map(function(s){
+          var label = s.title || 'Untitled show';
+          var when = formatShowDate(s.date);
+          return '<option value="' + escapeHtml(s.id) + '">' + escapeHtml(label + ' · ' + when) + '</option>';
+        }).join('');
+
+      sendBtn.disabled = !select.value;
+      if (note) note.textContent = 'Select a linked show to request documents.';
+
+      select.onchange = function(){
+        sendBtn.disabled = !select.value;
+        if (note) note.textContent = select.value ? 'Ready to request documents for this show.' : 'Select a linked show to request documents.';
+      };
+
+      sendBtn.onclick = function(){
+        if (!select.value) return;
+        alert('Document request sent to the promoter.');
+      };
+    }
+
+    function renderVenues(){
+      var grid = $('#promoterVenuesGrid');
+      if (!grid) return;
+
+      var shows = sortShowsByDate(linkedShowsCache);
+      if (!shows.length){
+        grid.innerHTML = '<div class="muted">No venues linked yet. Link a show to populate this view.</div>';
+        return;
+      }
+
+      grid.innerHTML = shows.map(function(show){
+        var venue = show.venue || {};
+        var venueLabel = formatVenueLabel(venue) || 'Venue';
+        var showTitle = show.title || 'Untitled show';
+        var showDate = formatShowDate(show.date);
+        return ''
+          + '<div class="card" style="margin:0;">'
+          +   '<div class="row" style="gap:12px;align-items:center;">'
+          +     venueAvatarHtml(venue, { size: 52 })
+          +     '<div>'
+          +       '<div class="title" style="font-size:15px;">' + escapeHtml(venueLabel) + '</div>'
+          +       '<div class="muted" style="margin-top:4px;">' + escapeHtml(showTitle) + ' · ' + escapeHtml(showDate) + '</div>'
+          +     '</div>'
+          +   '</div>'
+          + '</div>';
+      }).join('');
+    }
+
     function renderShows(){
       var list = $('#promoterShowsList');
       var select = $('#promoterShowSelect');
@@ -9513,19 +9717,34 @@ function renderInterests(customer){
 
       function renderLinked(){
         if (!list) return;
-        if (!linkedShows.length){
+        var sortedShows = sortShowsByDate(linkedShows);
+        if (!sortedShows.length){
           list.innerHTML = '<div class="muted">No shows linked yet.</div>';
           return;
         }
-        list.innerHTML = linkedShows.map(function(s){
-          return ''
-            + '<div class="row" style="justify-content:space-between;border-bottom:1px solid var(--border);padding:6px 0;">'
-            +   '<div>'
-            +     '<strong>' + escapeHtml(formatShowLabel(s)) + '</strong>'
-            +   '</div>'
-            +   '<button class="btn" data-unlink-show="'+escapeHtml(s.id)+'">Remove</button>'
-            + '</div>';
-        }).join('');
+        list.innerHTML = ''
+          + '<table>'
+          +   '<thead><tr><th>Show</th><th>Date</th><th>Venue</th><th>Status</th><th></th></tr></thead>'
+          +   '<tbody>'
+          +     sortedShows.map(function(s){
+            var venueLabel = formatVenueLabel(s.venue);
+            var venueCell = venueLabel
+              ? ('<div style="display:flex;align-items:center;gap:8px;">'
+                + venueAvatarHtml(s.venue, { size: 36 })
+                + '<span>' + escapeHtml(venueLabel) + '</span>'
+              + '</div>')
+              : '<span class="muted">—</span>';
+            return ''
+              + '<tr>'
+              +   '<td><strong>' + escapeHtml(s.title || 'Untitled show') + '</strong></td>'
+              +   '<td>' + escapeHtml(formatShowDateTime(s.date)) + '</td>'
+              +   '<td>' + venueCell + '</td>'
+              +   '<td>' + showStatusBadge(s.status) + '</td>'
+              +   '<td><button class="btn" data-unlink-show="'+escapeHtml(s.id)+'">Remove</button></td>'
+              + '</tr>';
+          }).join('')
+          +   '</tbody>'
+          + '</table>';
 
         $$('[data-unlink-show]', list).forEach(function(btn){
           btn.addEventListener('click', async function(e){
@@ -9567,6 +9786,7 @@ function renderInterests(customer){
       async function loadLinked(){
         var res = await j('/admin/promoters/' + encodeURIComponent(promoterId) + '/shows');
         linkedShows = (res && res.shows) ? res.shows : [];
+        updateLinkedShowsCache(linkedShows);
       }
 
       async function refresh(){
@@ -9670,12 +9890,12 @@ function renderInterests(customer){
         var card = document.createElement('div');
         card.className = 'card';
         card.style.margin = '0 0 12px 0';
-        var meta = a.metadata ? JSON.stringify(a.metadata) : '';
+        var meta = formatActivityMeta(a.metadata);
         card.innerHTML = ''
           + '<div class="row" style="justify-content:space-between;gap:12px;align-items:flex-start;">'
           +   '<div>'
           +     '<div style="font-weight:700;">' + escapeHtml(activityLabel(a.type)) + '</div>'
-          +     (meta ? '<div class="muted" style="margin-top:4px;">' + escapeHtml(meta) + '</div>' : '')
+          +     (meta ? meta : '')
           +   '</div>'
           +   '<div class="muted" style="white-space:nowrap;">' + escapeHtml(formatDateTime(a.createdAt)) + '</div>'
           + '</div>';
@@ -9759,6 +9979,38 @@ function renderInterests(customer){
         APPROVED: 'Approved'
       };
       return map[doc.status] || 'Uploaded';
+    }
+
+    function formatActivityMeta(meta){
+      if (!meta || typeof meta !== 'object') return '';
+      var entries = Object.entries(meta).filter(function(entry){
+        var value = entry[1];
+        return value !== null && value !== undefined && String(value).trim() !== '';
+      });
+      if (!entries.length) return '';
+      var labelFor = function(key){
+        var labels = {
+          name: 'Name',
+          title: 'Title',
+          contactId: 'Contact',
+          documentId: 'Document',
+          showId: 'Show',
+        };
+        if (labels[key]) return labels[key];
+        return key.replace(/_/g, ' ').replace(/\b\w/g, function(m){ return m.toUpperCase(); });
+      };
+      var rows = entries.map(function(entry){
+        var key = entry[0];
+        var value = entry[1];
+        var display = Array.isArray(value) ? value.join(', ') : (typeof value === 'object' ? JSON.stringify(value) : String(value));
+        return '<div class="row" style="gap:6px;align-items:flex-start;">'
+          + '<span style="min-width:120px;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;">'
+          + escapeHtml(labelFor(key))
+          + '</span>'
+          + '<span>' + escapeHtml(display) + '</span>'
+          + '</div>';
+      }).join('');
+      return '<div style="margin-top:6px;">' + rows + '</div>';
     }
 
     function formatDate(value){
