@@ -893,28 +893,32 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
   <div class="related-carousel">
     <span class="section-label">Other shows you may be interested in</span>
 
-    <div class="related-strip" aria-label="Other shows you may be interested in">
-      ${relatedShows
-        .map((ev: any) => {
-          const v = (ev.venue || {}) as any;
-          const rDate = ev.date ? new Date(ev.date) : null;
-          const rDatePretty = rDate ? formatShortDate(rDate) : 'Date TBC';
+    <div class="related-frame" data-related>
+      <button class="related-nav related-left" type="button" aria-label="Previous shows">‹</button>
+      <div class="related-strip" data-related-strip aria-label="Other shows you may be interested in">
+        ${relatedShows
+          .map((ev: any) => {
+            const v = (ev.venue || {}) as any;
+            const rDate = ev.date ? new Date(ev.date) : null;
+            const rDatePretty = rDate ? formatShortDate(rDate) : 'Date TBC';
 
-          const locLine = [v.name, v.city].filter(Boolean).join(', ');
-          const img = ev.imageUrl || '';
+            const locLine = [v.name, v.city].filter(Boolean).join(', ');
+            const img = ev.imageUrl || '';
 
-          return `
-          <a class="related-item" href="/public/event/${escAttr(ev.id)}" aria-label="${escAttr(ev.title || 'Event')}">
-            <div class="related-imgWrap">
-              ${img ? `<img class="related-img" src="${escAttr(img)}" alt="${escAttr(ev.title || 'Event poster')}" loading="lazy" />` : `<div class="related-imgPh"></div>`}
-            </div>
-            <div class="related-meta">
-              <div class="related-title">${esc(ev.title || 'Event')}</div>
-              <div class="related-sub">${esc(locLine)}${locLine ? ' • ' : ''}${esc(rDatePretty)}</div>
-            </div>
-          </a>`;
-        })
-        .join('')}
+            return `
+            <a class="related-item" href="/public/event/${escAttr(ev.id)}" aria-label="${escAttr(ev.title || 'Event')}">
+              <div class="related-imgWrap">
+                ${img ? `<img class="related-img" src="${escAttr(img)}" alt="${escAttr(ev.title || 'Event poster')}" loading="lazy" />` : `<div class="related-imgPh"></div>`}
+              </div>
+              <div class="related-meta">
+                <div class="related-title">${esc(ev.title || 'Event')}</div>
+                <div class="related-sub">${esc(locLine)}${locLine ? ' • ' : ''}${esc(rDatePretty)}</div>
+              </div>
+            </a>`;
+          })
+          .join('')}
+      </div>
+      <button class="related-nav related-right" type="button" aria-label="Next shows">›</button>
     </div>
   </div>`;
 };
@@ -977,6 +981,36 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
      setTimeout(toTop, 60);
    });
  } catch (e) {}
+})();
+
+(function () {
+  const root = document.querySelector('[data-related]');
+  if (!root) return;
+
+  const strip = root.querySelector('[data-related-strip]');
+  const left = root.querySelector('.related-left');
+  const right = root.querySelector('.related-right');
+  if (!strip || !left || !right) return;
+
+  function update() {
+    const maxScroll = strip.scrollWidth - strip.clientWidth;
+    const atStart = strip.scrollLeft <= 1;
+    const atEnd = strip.scrollLeft >= maxScroll - 1;
+    left.hidden = atStart;
+    right.hidden = atEnd || maxScroll <= 1;
+  }
+
+  function scrollByPage(dir) {
+    const card = strip.querySelector('.related-item');
+    const step = card ? card.getBoundingClientRect().width + 14 : 320;
+    strip.scrollBy({ left: dir * step * 3, behavior: 'smooth' });
+  }
+
+  left.addEventListener('click', () => scrollByPage(-1));
+  right.addEventListener('click', () => scrollByPage(1));
+  strip.addEventListener('scroll', update, { passive: true });
+  window.addEventListener('resize', update);
+  update();
 })();
 </script>
 
@@ -1770,6 +1804,12 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
   margin-top: 28px;
 }
 
+.related-frame{
+  position: relative;
+  max-width: calc(300px * 3 + 14px * 2);
+  width: min(100%, calc(300px * 3 + 14px * 2));
+}
+
 .related-strip{
   display: flex;
   gap: 14px;
@@ -1779,6 +1819,29 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
   scrollbar-width: none; /* Firefox */
 }
 .related-strip::-webkit-scrollbar{ display:none; }
+
+.related-nav{
+  position:absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.92);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size: 22px;
+  font-weight: 800;
+  cursor:pointer;
+  user-select:none;
+  z-index: 2;
+}
+.related-left{ left: -12px; }
+.related-right{ right: -12px; }
+.related-nav[hidden]{ display:none; }
 
 .related-item{
   flex: 0 0 auto;
@@ -1793,6 +1856,12 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 
 @media (min-width: 720px){
   .related-item{ width: 300px; }
+}
+@media (max-width: 719px){
+  .related-frame{
+    max-width: calc(260px * 3 + 14px * 2);
+    width: min(100%, calc(260px * 3 + 14px * 2));
+  }
 }
 
 .related-imgWrap{
