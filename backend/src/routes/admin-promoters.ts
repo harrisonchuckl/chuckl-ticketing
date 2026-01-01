@@ -284,8 +284,18 @@ router.post("/promoters", requireAdminOrOrganiser, async (req, res) => {
       return res.status(400).json({ ok: false, error: "Website is required and must be valid." });
     }
 
+    const tradingName = toNullableString(req.body?.tradingName);
+    const matchers = [
+      { websiteDomain: websiteInfo.domain },
+      { name: { contains: name, mode: "insensitive" as const } },
+      { tradingName: { contains: name, mode: "insensitive" as const } },
+    ];
+    if (tradingName) {
+      matchers.push({ name: { contains: tradingName, mode: "insensitive" as const } });
+      matchers.push({ tradingName: { contains: tradingName, mode: "insensitive" as const } });
+    }
     const existing = await prisma.promoter.findFirst({
-      where: { websiteDomain: websiteInfo.domain },
+      where: { OR: matchers },
       select: {
         id: true,
         ownerId: true,
@@ -336,7 +346,7 @@ router.post("/promoters", requireAdminOrOrganiser, async (req, res) => {
     const created = await prisma.promoter.create({
       data: {
         name,
-        tradingName: toNullableString(req.body?.tradingName),
+        tradingName,
         email: toNullableString(req.body?.email),
         phone: toNullableString(req.body?.phone),
         logoUrl: toNullableString(req.body?.logoUrl),

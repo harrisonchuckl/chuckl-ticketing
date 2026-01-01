@@ -2266,6 +2266,23 @@ router.get(
       +     '</label>'
       +     '<button class="btn p" id="promoterLinkAdd">Add promoter</button>'
       +   '</div>'
+      +   '<div style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px;">'
+      +     '<div class="title" style="font-size:16px;">Create new promoter</div>'
+      +     '<div class="muted" style="margin-top:4px;">Add a new promoter profile and link it to this show.</div>'
+      +     '<div class="grid" style="gap:10px;margin-top:12px;">'
+      +       '<label style="display:grid;gap:6px;">Promoter name'
+      +         '<input id="promoterCreateName" class="ctl" required placeholder="Promoter name" />'
+      +       '</label>'
+      +       '<label style="display:grid;gap:6px;">Trading name'
+      +         '<input id="promoterCreateTrading" class="ctl" placeholder="Trading name (optional)" />'
+      +       '</label>'
+      +       '<label style="display:grid;gap:6px;">Website'
+      +         '<input id="promoterCreateWebsite" class="ctl" required placeholder="https://promoter.com" />'
+      +       '</label>'
+      +       '<div id="promoterCreateErr" class="error"></div>'
+      +       '<button class="btn p" id="promoterCreateSubmit">Create promoter</button>'
+      +     '</div>'
+      +   '</div>'
       + '</div>';
 
     document.body.appendChild(overlay);
@@ -2275,6 +2292,11 @@ router.get(
     var listEl = overlay.querySelector('#promoterLinkList');
     var selectEl = overlay.querySelector('#promoterLinkSelect');
     var addBtn = overlay.querySelector('#promoterLinkAdd');
+    var createName = overlay.querySelector('#promoterCreateName');
+    var createTrading = overlay.querySelector('#promoterCreateTrading');
+    var createWebsite = overlay.querySelector('#promoterCreateWebsite');
+    var createErr = overlay.querySelector('#promoterCreateErr');
+    var createBtn = overlay.querySelector('#promoterCreateSubmit');
     var cachedPromoters = [];
 
     function close(){
@@ -2286,6 +2308,10 @@ router.get(
       if (e.target === overlay) close();
     });
     if (closeBtn) closeBtn.addEventListener('click', function(){ close(); });
+    function escHandler(e){
+      if (e.key === 'Escape') close();
+    }
+    document.addEventListener('keydown', escHandler);
 
     async function load(){
       if (errEl) errEl.textContent = '';
@@ -2372,6 +2398,53 @@ router.get(
           await maybeSetupWeeklyReport(showId, chosen);
         }catch(err){
           if (errEl) errEl.textContent = parseErr(err);
+        }
+      });
+    }
+
+    if (createBtn){
+      createBtn.addEventListener('click', async function(){
+        if (!createName || !createWebsite) return;
+        var nameValue = (createName.value || '').trim();
+        var websiteValue = (createWebsite.value || '').trim();
+        if (createErr) createErr.textContent = '';
+        if (!nameValue || !websiteValue) {
+          if (createErr) createErr.textContent = 'Promoter name and website are required.';
+          return;
+        }
+        try{
+          var res = await j('/admin/promoters', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: nameValue,
+              tradingName: createTrading ? (createTrading.value || '').trim() : '',
+              website: websiteValue,
+            }),
+          });
+          var promoter = res && res.promoter;
+          var promoterId = promoter && promoter.id;
+          if (res && res.existing && promoterId && res.linkable) {
+            await j('/admin/promoters/' + encodeURIComponent(promoterId) + '/link', { method: 'POST' });
+          }
+          if (promoterId) {
+            await j('/admin/shows/' + encodeURIComponent(showId) + '/promoters', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ promoterId: promoterId }),
+            });
+          }
+          if (createName) createName.value = '';
+          if (createTrading) createTrading.value = '';
+          if (createWebsite) createWebsite.value = '';
+          await load();
+          if (typeof opts.onUpdated === 'function') opts.onUpdated();
+          if (promoterId) {
+            var chosen = cachedPromoters.find(function(p){ return p.id === promoterId; });
+            await maybeSetupWeeklyReport(showId, chosen || promoter);
+          }
+        }catch(err){
+          if (createErr) createErr.textContent = parseErr(err);
         }
       });
     }
