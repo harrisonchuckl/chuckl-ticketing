@@ -12351,6 +12351,53 @@ if (!outText) {
         return res.status(500).json({ ok: false, error: "Failed to parse model JSON", outText });
       }
 
+      function moveIsoDateToFuture(iso: string | null | undefined, now: Date) {
+        if (!iso) return iso ?? null;
+        const dt = new Date(iso);
+        if (Number.isNaN(dt.getTime())) return iso ?? null;
+
+        let yearsShifted = 0;
+        while (dt.getTime() < now.getTime() && yearsShifted < 10) {
+          dt.setFullYear(dt.getFullYear() + 1);
+          yearsShifted += 1;
+        }
+
+        return { iso: dt.toISOString(), yearsShifted };
+      }
+
+      const now = new Date();
+      const startAdjusted = moveIsoDateToFuture(draft.startDateTime, now);
+      let yearsShifted = 0;
+      if (typeof startAdjusted === "object") {
+        draft.startDateTime = startAdjusted.iso;
+        yearsShifted = startAdjusted.yearsShifted;
+      }
+
+      if (draft.endDateTime) {
+        const end = new Date(draft.endDateTime);
+        if (!Number.isNaN(end.getTime())) {
+          if (yearsShifted > 0) {
+            end.setFullYear(end.getFullYear() + yearsShifted);
+          }
+
+          if (draft.startDateTime) {
+            const start = new Date(draft.startDateTime);
+            if (!Number.isNaN(start.getTime()) && end.getTime() < start.getTime()) {
+              end.setFullYear(end.getFullYear() + 1);
+            }
+          }
+
+          if (end.getTime() < now.getTime()) {
+            const endAdjusted = moveIsoDateToFuture(end.toISOString(), now);
+            if (typeof endAdjusted === "object") {
+              draft.endDateTime = endAdjusted.iso;
+            }
+          } else {
+            draft.endDateTime = end.toISOString();
+          }
+        }
+      }
+
     // --- Prefer title from docs (deterministic) ---
 const bestForTitle = pickBestDocText(docTexts);
 if (bestForTitle && bestForTitle.text) {
