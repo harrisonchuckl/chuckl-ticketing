@@ -4055,7 +4055,10 @@ var drop, fileInput, list, btn, err, status, result, state;
 
   main.innerHTML =
     '<div class="card">'
-  +   '<div class="title">Create Show (AI)</div>'
+  +   '<div class="title" style="display:flex; align-items:center; gap:8px;">'
+  +     'Create Show'
+  +     '<img src="/tixai.png" alt="TixAll AI" style="height:20px; width:auto;" />'
+  +   '</div>'
   +   '<div class="muted" style="margin-top:6px; line-height:1.4">'
   +     'Drop your show assets here (event copy, briefs, PDFs/DOCX, and artwork). '
   +     'We’ll extract key details and pre-fill the Create Show form for you to review and approve.'
