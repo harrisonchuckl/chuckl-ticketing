@@ -1381,12 +1381,22 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
   gap: 16px;
 }
 
+/* CTA text: allow flex shrink + single line; JS will set the biggest possible font-size */
 .cta-strip__text {
   margin: 0;
-  font-weight: 800;
+  font-weight: 900;
   letter-spacing: 0.02em;
   text-transform: uppercase;
-  font-size: 1rem;
+
+  /* critical for fitting behaviour in a flex row */
+  flex: 1 1 auto;
+  min-width: 0;
+
+  white-space: nowrap;
+  line-height: 1.1;
+
+  /* JS will override inline; this is just a safe default */
+  font-size: 22px;
 }
 
 .cta-strip__button {
@@ -1557,7 +1567,7 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
 
   <section class="cta-strip" aria-label="Create account">
     <div class="cta-strip__inner">
-      <p class="cta-strip__text">Create an account and get closer to the shows you love.</p>
+<p class="cta-strip__text" id="ctaCreateAccountText">Create an account and get closer to the shows you love.</p>
       <a class="cta-strip__button" href="${accountHref}">Create account</a>
     </div>
   </section>
@@ -1699,6 +1709,65 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
         if(currentPage > 1){
           currentPage -= 1;
           applyFilters();
+              // --- CTA TEXT AUTO-FIT (max size while staying one line + not overlapping button) ---
+    const ctaStrip = document.querySelector('.cta-strip[aria-label="Create account"]');
+    const ctaInner = ctaStrip ? ctaStrip.querySelector('.cta-strip__inner') : null;
+    const ctaText = document.getElementById('ctaCreateAccountText');
+    const ctaBtn = ctaStrip ? ctaStrip.querySelector('.cta-strip__button') : null;
+
+    function fitCtaText(){
+      if (!ctaInner || !ctaText) return;
+
+      const innerStyles = window.getComputedStyle(ctaInner);
+      const dir = innerStyles.flexDirection || 'row';
+      const gapRaw = innerStyles.getPropertyValue('gap') || innerStyles.getPropertyValue('column-gap') || '0px';
+      const gap = parseFloat(gapRaw) || 0;
+
+      const innerW = ctaInner.getBoundingClientRect().width;
+
+      // If the layout is column (mobile), the text can use the full width.
+      // If row, reserve space for the button + gap.
+      let available = innerW;
+      if (dir.startsWith('row') && ctaBtn) {
+        const btnW = ctaBtn.getBoundingClientRect().width;
+        available = Math.max(0, innerW - btnW - gap);
+      }
+
+      // Binary search the biggest font size that still fits on one line
+      const MIN = 12;   // px (won't get smaller than this)
+      const MAX = 34;   // px (upper cap so it doesn't look silly on huge screens)
+
+      let lo = MIN;
+      let hi = MAX;
+
+      // Reset first (so measuring isn't biased by an old tiny size)
+      ctaText.style.fontSize = MAX + 'px';
+
+      for (let i = 0; i < 14; i++) {
+        const mid = (lo + hi) / 2;
+        ctaText.style.fontSize = mid + 'px';
+
+        // scrollWidth tells us the width the text *wants* on one line
+        if (ctaText.scrollWidth <= available) lo = mid;
+        else hi = mid;
+      }
+
+      ctaText.style.fontSize = Math.floor(lo) + 'px';
+    }
+
+    // Run now + on resize (and when fonts finish loading)
+    fitCtaText();
+    window.addEventListener('resize', () => window.requestAnimationFrame(fitCtaText));
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(() => window.requestAnimationFrame(fitCtaText)).catch(() => {});
+    }
+
+    // If CTA inner size changes (e.g. dynamic content), refit automatically
+    if (window.ResizeObserver && ctaInner) {
+      const ro = new ResizeObserver(() => fitCtaText());
+      ro.observe(ctaInner);
+    }
+
         }
       });
       pagination.appendChild(prevBtn);
