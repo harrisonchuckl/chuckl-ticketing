@@ -12,6 +12,7 @@ import publicSlugs from "./routes/public-slugs.js";
 import publicUnsubscribeRouter from "./routes/public-unsubscribe.js";
 import publicPreferencesRouter from "./routes/public-preferences.js";
 import publicTrackRouter from "./routes/public-track.js";
+import publicSurveysRouter from "./routes/public-surveys.js";
 
 
 
@@ -47,6 +48,7 @@ import adminProductStoreRouter from "./routes/admin-product-store.js";
 import storefrontRouter from "./routes/storefront.js";
 import adminSmartShowsRouter from "./routes/admin-smart-shows.js";
 import adminAiRouter from "./routes/admin-ai.js";
+import adminAiCrmRouter from "./routes/admin-ai-crm.js";
 
 const app = express();
 
@@ -104,6 +106,7 @@ app.use("/public/orders", publicOrdersRouter);
 
 // 2) Event tracking endpoint
 app.use("/public", publicTrackRouter);
+app.use("/public", publicSurveysRouter);
 
 // 3) Slug rewrites + redirects
 app.use("/public", publicSlugs);
@@ -142,6 +145,7 @@ app.use("/admin/api", adminDashboardRouter);
 app.use("/admin/api", adminProductStoreRouter);
 app.use("/admin/api", adminSmartShowsRouter);
 app.use("/admin/api", adminAiRouter);
+app.use("/admin/api", adminAiCrmRouter);
 app.use("/admin", adminMarketingRouter);
 app.use("/webhooks", sendgridWebhookRouter);
 

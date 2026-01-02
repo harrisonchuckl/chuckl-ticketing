@@ -2253,11 +2253,20 @@ ${mobileCtaHtml}
 (function(){
   var showId = ${escJSON(id)};
   if (!showId) return;
+  var sessionKey = 'tixall_session_id';
+  var sessionId = null;
+  try {
+    sessionId = localStorage.getItem(sessionKey);
+    if (!sessionId) {
+      sessionId = 'sess_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+      localStorage.setItem(sessionKey, sessionId);
+    }
+  } catch (e) {}
   function sendEvent(type){
     fetch('/public/track', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ showId: showId, type: type })
+      body: JSON.stringify({ showId: showId, type: type, sessionId: sessionId })
     }).catch(function(){});
   }
   sendEvent('VIEW');
