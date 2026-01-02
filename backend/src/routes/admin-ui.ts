@@ -6701,12 +6701,23 @@ async function listShows(){
           +'<th></th>'
           +'<th>Title</th><th>When</th><th>Venue</th>'
           +'<th>Status</th>'
-          +'<th>Sales</th>'
+          +'<th>'
+            +'<div style="display:flex;flex-direction:column;align-items:center;gap:4px;">'
+              +'<img src="/IMG_2374.jpeg" alt="TIXALL" style="height:18px;width:auto;" />'
+              +'<span>Sales</span>'
+            +'</div>'
+          +'</th>'
+          +'<th>'
+            +'<div style="display:flex;flex-direction:column;align-items:center;gap:2px;">'
+              +'<span>External</span>'
+              +'<span class="muted" style="font-size:12px;">Sales</span>'
+            +'</div>'
+          +'</th>'
           +'<th>Capacity %</th>'
           +'<th>Time</th>'
           +'<th>Trend</th>'
           +'<th class="ai-risk-header"><img src="/tixai.png" alt="TixAll AI" /></th>'
-          +'<th>Total allocation</th><th>Gross face</th><th class="promoter-col">Promoter</th><th></th>'
+          +'<th>Allocation</th><th>Gross face</th><th class="promoter-col">Promoter</th><th></th>'
         +'</tr></thead>'
         +'<tbody id="tbody"></tbody>'
       +'</table>'
@@ -6731,6 +6742,7 @@ async function listShows(){
   var bulkActionsBound = false;
   var searchTimer = null;
   var venueExtras = loadVenueExtras();
+  var externalSalesMap = loadExternalSalesFromStorage();
 
   function norm(s){ return String(s || '').toLowerCase(); }
 
@@ -6746,6 +6758,19 @@ async function listShows(){
     }catch(e){
       return {};
     }
+  }
+
+  function loadExternalSalesFromStorage(){
+    try{
+      var saved = localStorage.getItem('adminExternalSales');
+      return saved ? JSON.parse(saved) : {};
+    }catch(e){
+      return {};
+    }
+  }
+
+  function saveExternalSalesToStorage(){
+    try{ localStorage.setItem('adminExternalSales', JSON.stringify(externalSalesMap || {})); }catch(e){}
   }
 
   function venueInitials(label){
@@ -6938,7 +6963,7 @@ function statusBadgeHTML(statusLabel){
     if (!tb) return;
 
     if (!items.length){
-      tb.innerHTML = '<tr><td colspan="15" class="muted">No matching events</td></tr>';
+      tb.innerHTML = '<tr><td colspan="16" class="muted">No matching events</td></tr>';
       lastRenderedItems = [];
       updateBulkActions();
       return;
@@ -7017,16 +7042,24 @@ function statusBadgeHTML(statusLabel){
       var promoterAvatar = promoterAvatarHtml(primaryPromoter, { size: 36 });
       var usesExternalTicketing = s.usesExternalTicketing === true;
       var allocationHtml = usesExternalTicketing
-        ? '<span class="muted">External ticket URL</span>'
+        ? '<span class="muted">External</span>'
         : ('<span class="muted">'
-            +'Sold '+sold
-            +' · Held '+held
-            +' · Blocked '+blocked
+            +'Held '+held
             +' · Avail '+(available == null ? '—' : available)
             +(total == null ? '' : (' / '+total))
           +'</span> '+bar);
 
       var salesCell = metrics ? fmtNumber.format(metrics.soldCount || 0) : '—';
+      var externalSalesValue = '';
+      if (externalSalesMap && Object.prototype.hasOwnProperty.call(externalSalesMap, s.id)){
+        externalSalesValue = externalSalesMap[s.id];
+      }else{
+        var fallbackExternal = s.externalSales ?? s.externalSalesCount ?? null;
+        var fallbackNumber = Number(fallbackExternal);
+        externalSalesValue = Number.isFinite(fallbackNumber) ? fallbackNumber : '';
+      }
+      var externalSalesCell = '<input class="ctl" type="number" min="0" data-external-sales="'
+        + escapeHtml(s.id) + '" value="' + escapeHtml(String(externalSalesValue)) + '" style="width:80px;" />';
       var capacityCell = (metrics && metrics.capacityPct != null)
         ? Math.round(metrics.capacityPct) + '%'
         : '—';
@@ -7067,6 +7100,7 @@ function statusBadgeHTML(statusLabel){
           +'<td'+venueAttrs+'>'+venueCell+'</td>'
           +'<td>'+statusBadgeHTML(statusLabel)+'</td>'
           +'<td>'+salesCell+'</td>'
+          +'<td>'+externalSalesCell+'</td>'
           +'<td>'+capacityCell+'</td>'
           +'<td>'+timeCell+'</td>'
           +'<td>'+trendCell+'</td>'
@@ -7095,7 +7129,7 @@ function statusBadgeHTML(statusLabel){
           +'</td>'
         +'</tr>'
         +'<tr class="show-expand" data-expand-row="'+s.id+'" style="display:none;">'
-          +'<td colspan="15">'
+          +'<td colspan="16">'
             +'<div class="expand-panel">'
               +'<div class="panel-block">'
                 +'<div class="panel-title">Pace & forecast</div>'
@@ -7276,6 +7310,35 @@ function statusBadgeHTML(statusLabel){
       });
     });
 
+    $$('[data-external-sales]').forEach(function(input){
+      input.addEventListener('click', function(e){
+        e.stopPropagation();
+      });
+      input.addEventListener('keydown', function(e){
+        e.stopPropagation();
+      });
+      input.addEventListener('change', function(){
+        var id = input.getAttribute('data-external-sales');
+        if (!id) return;
+        var raw = (input.value || '').trim();
+        var nextValue = raw === '' ? null : Number(raw);
+        if (raw !== '' && !Number.isFinite(nextValue)){
+          input.value = '';
+          nextValue = null;
+        }
+        externalSalesMap = externalSalesMap || {};
+        if (nextValue == null){
+          delete externalSalesMap[id];
+          input.value = '';
+        }else{
+          var normalized = Math.max(0, Math.round(nextValue));
+          externalSalesMap[id] = normalized;
+          input.value = String(normalized);
+        }
+        saveExternalSalesToStorage();
+      });
+    });
+
     if (selectAllEl && !selectAllBound){
       selectAllBound = true;
       selectAllEl.addEventListener('change', function(){
@@ -7340,7 +7403,7 @@ function statusBadgeHTML(statusLabel){
   async function load(){
     if (!tb) return;
     tb.innerHTML =
-      '<tr><td colspan="15"><div class="loading-strip" aria-label="Loading"></div></td></tr>';
+      '<tr><td colspan="16"><div class="loading-strip" aria-label="Loading"></div></td></tr>';
     if (countEl) countEl.textContent = '';
 
     try{
@@ -7367,13 +7430,13 @@ function statusBadgeHTML(statusLabel){
       }
 
       if (!allItems.length){
-        tb.innerHTML = '<tr><td colspan="15" class="muted">No shows yet</td></tr>';
+        tb.innerHTML = '<tr><td colspan="16" class="muted">No shows yet</td></tr>';
         if (countEl) countEl.textContent = 'Showing 0 of 0 events';
         return;
       }
       applyFilters();
     }catch(e){
-      tb.innerHTML = '<tr><td colspan="15" class="error">Failed to load shows: '+(e.message||e)+'</td></tr>';
+      tb.innerHTML = '<tr><td colspan="16" class="error">Failed to load shows: '+(e.message||e)+'</td></tr>';
     }
   }
 
