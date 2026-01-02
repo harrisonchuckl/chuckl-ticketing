@@ -49,6 +49,36 @@ function toInt(value: any) {
   return Number.isFinite(n) ? Math.round(n) : 0;
 }
 
+function getStorefrontCartKey(slug: string) {
+  return `storefront_cart_${slug}`;
+}
+
+function readStorefrontCart(req: any, slug: string) {
+  const raw = req.cookies?.[getStorefrontCartKey(slug)];
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => ({
+        productId: String(item.productId || ""),
+        variantId: item.variantId ? String(item.variantId) : null,
+        qty: Math.max(1, Number(item.qty || 1)),
+        customAmount: item.customAmount ? Number(item.customAmount) : null,
+      }))
+      .filter((item) => item.productId);
+  } catch {
+    return [];
+  }
+}
+
+function clearStorefrontCart(res: any, slug: string) {
+  res.cookie(getStorefrontCartKey(slug), JSON.stringify([]), {
+    httpOnly: true,
+    sameSite: "lax",
+  });
+}
+
 router.post("/session", async (req, res) => {
   const DEBUG_REQ_BODY = req.body || {};
   console.debug("checkout/session request body (RAW):", DEBUG_REQ_BODY);
@@ -284,6 +314,8 @@ if (!itQty || itQty < 1 || !itUnit || itUnit < 1) {
     const storefront = show.organiserId
       ? await prisma.storefront.findFirst({ where: { ownerUserId: show.organiserId } })
       : null;
+    const storefrontSlug = storefront?.slug || null;
+    const cartItems = storefrontSlug ? readStorefrontCart(req, storefrontSlug) : [];
 
     if (storefront && upsellItems.length) {
       const productIds = Array.from(
@@ -369,6 +401,68 @@ if (!itQty || itQty < 1 || !itUnit || itUnit < 1) {
             quantity: Math.round(qty),
           });
         }
+      }
+    }
+
+    if (storefront && cartItems.length) {
+      const cartProductIds = Array.from(
+        new Set(cartItems.map((item) => String(item.productId || "")).filter(Boolean))
+      );
+      const cartProducts = cartProductIds.length
+        ? await prisma.product.findMany({
+            where: { id: { in: cartProductIds }, storefrontId: storefront.id, status: "ACTIVE" },
+            include: { variants: true },
+          })
+        : [];
+      const productMap = new Map(cartProducts.map((product) => [product.id, product]));
+
+      for (const item of cartItems) {
+        const product = productMap.get(item.productId);
+        if (!product) continue;
+
+        const variant = item.variantId
+          ? product.variants.find((v) => v.id === item.variantId)
+          : null;
+
+        const qty = Math.max(1, toInt(item.qty || 1));
+        if (product.inventoryMode === "TRACKED") {
+          const stock = variant?.stockCountOverride ?? product.stockCount ?? 0;
+          if (stock < qty) {
+            return res.status(409).json({ ok: false, message: `Insufficient stock for ${product.title}` });
+          }
+        }
+
+        let unitAmount = variant?.pricePenceOverride ?? product.pricePence ?? 0;
+        if (product.allowCustomAmount) {
+          const customAmount = Math.max(100, toInt(item.customAmount || 0));
+          unitAmount = customAmount;
+        }
+
+        productSubtotalPence += unitAmount * qty;
+        if (product.fulfilmentType === "SHIPPING") requiresShipping = true;
+
+        productSelections.push({
+          productId: product.id,
+          variantId: variant?.id || null,
+          qty,
+          unitAmount,
+          source: "STORE_BASKET",
+        });
+
+        lineItems.push({
+          price_data: {
+            currency: product.currency || "gbp",
+            unit_amount: Math.round(unitAmount),
+            product_data: {
+              name: product.title,
+              metadata: {
+                productId: product.id,
+                variantId: variant?.id || "",
+              },
+            },
+          },
+          quantity: qty,
+        });
       }
     }
 
@@ -519,6 +613,10 @@ if (Array.isArray(items) && items.length > 0) {
         showId: show.id,
         email: buyerEmail || null,
       });
+    }
+
+    if (storefrontSlug && cartItems.length) {
+      clearStorefrontCart(res, storefrontSlug);
     }
 
     return res.json({ ok: true, url: session.url });
@@ -719,65 +817,6 @@ const ticketTypes = (show.ticketTypes || []).map((t: any) => {
     const storefront = show.organiserId
       ? await prisma.storefront.findFirst({ where: { ownerUserId: show.organiserId } })
       : null;
-
-    const upsellRules = storefront
-      ? await prisma.upsellRule.findMany({
-          where: {
-            storefrontId: storefront.id,
-            active: true,
-            AND: [
-              { OR: [{ showId: show.id }, { showId: null }] },
-              { OR: [{ ticketTypeId: null }, { ticketTypeId: { in: show.ticketTypes.map((t) => t.id) } }] },
-            ],
-          },
-          include: { product: { include: { variants: true } }, productVariant: true },
-          orderBy: [{ recommended: "desc" }, { priority: "asc" }],
-        })
-      : [];
-
-    const upsellItems = upsellRules
-      .filter((rule) => rule.product && rule.product.status === "ACTIVE")
-      .map((rule) => {
-        const variant = rule.productVariant || null;
-        return {
-          id: rule.id,
-          productId: rule.productId,
-          variantId: rule.productVariantId || null,
-          title: rule.product.title,
-          variantTitle: variant?.title || null,
-          unitAmount: variant?.pricePenceOverride ?? rule.product.pricePence ?? 0,
-          allowCustomAmount: rule.product.allowCustomAmount,
-          fulfilmentType: rule.product.fulfilmentType,
-          maxPerOrder: rule.maxPerOrderOverride ?? rule.product.maxPerOrder ?? null,
-          maxPerTicket: rule.maxPerTicketOverride ?? rule.product.maxPerTicket ?? null,
-          recommended: rule.recommended,
-        };
-      });
-
-    const upsellRowsHtml = upsellItems
-      .map((item) => {
-        const label = item.variantTitle ? `${item.title} (${item.variantTitle})` : item.title;
-        return `
-          <div class="upsell-row"
-            data-product-id="${escAttr(item.productId)}"
-            data-variant-id="${escAttr(item.variantId || "")}"
-            data-price="${escAttr(item.unitAmount || 0)}"
-            data-max-order="${escAttr(item.maxPerOrder || "")}"
-            data-max-ticket="${escAttr(item.maxPerTicket || "")}"
-            data-allow-custom="${item.allowCustomAmount ? "true" : "false"}"
-          >
-            <div>
-              <div class="title">${escAttr(label)}</div>
-              <div class="muted">${item.allowCustomAmount ? "Choose amount" : pFmt(item.unitAmount)}</div>
-            </div>
-            <div>
-              ${item.allowCustomAmount ? '<input class="upsell-amount" type="number" min="100" placeholder="Amount (pence)" />' : ''}
-              <input class="upsell-qty" type="number" min="0" value="0" />
-            </div>
-          </div>
-        `;
-      })
-      .join("");
 
 
  // --- MODE A: LIST VIEW (General Admission) ---
@@ -1265,17 +1304,10 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
     ${ticketRowsHtml}
   </div>
 
-  <div class="card" style="margin-top:16px;">
-    <h3>Add-ons</h3>
-    <div class="upsell-list">
-      ${upsellRowsHtml || '<div class="muted">No add-ons available for this show.</div>'}
-    </div>
-  </div>
-
   <div class="error" id="error-message"></div>
 
    <div style="margin-top:14px;">
-    <button type="submit" id="btn-buy" class="btn btn-primary" disabled>Continue to payment</button>
+    <button type="submit" id="btn-buy" class="btn btn-primary" disabled>Continue to add-ons</button>
 
     <!-- ✅ Secure payment line (centred, inside the panel) -->
     <div class="secure-powered" aria-label="Secure payment powered by TIXL">
@@ -1300,15 +1332,12 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
           <span class="muted">Booking fee</span>
           <span id="sum-fee">£0.00</span>
         </div>
-        <div class="summary-row">
-          <span class="muted">Add-ons</span>
-          <span id="sum-addons">£0.00</span>
-        </div>
         <div class="summary-row" style="align-items:baseline;">
           <span class="muted">Total</span>
           <span class="summary-total" id="sum-total">£0.00</span>
         </div>
         <p class="muted small" id="sum-detail" style="margin:10px 0 0;">0 tickets selected</p>
+        <p class="muted small" style="margin:8px 0 0;">Next: add optional extras before payment.</p>
       </div>
     </div>
   </div>
@@ -1321,13 +1350,11 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
 
   const sumBase = document.getElementById('sum-base');
   const sumFee = document.getElementById('sum-fee');
-  const sumAddons = document.getElementById('sum-addons');
   const sumTotal = document.getElementById('sum-total');
   const sumDetail = document.getElementById('sum-detail');
 
   const buyButton = document.getElementById('btn-buy');
   const errorMessage = document.getElementById('error-message');
-  const upsellRows = Array.from(document.querySelectorAll('.upsell-row'));
 
   function money(pence){
     return '£' + ((Number(pence || 0) / 100).toFixed(2));
@@ -1342,45 +1369,6 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
     }
     errorMessage.style.display = 'block';
     errorMessage.textContent = msg;
-  }
-
-  function getUpsellSelections(totalTickets){
-    const selections = [];
-    let total = 0;
-    upsellRows.forEach(row => {
-      const productId = row.getAttribute('data-product-id');
-      const variantId = row.getAttribute('data-variant-id') || null;
-      const price = Number(row.getAttribute('data-price')) || 0;
-      const maxOrder = Number(row.getAttribute('data-max-order')) || 0;
-      const maxTicket = Number(row.getAttribute('data-max-ticket')) || 0;
-      const allowCustom = row.getAttribute('data-allow-custom') === 'true';
-
-      const qtyInput = row.querySelector('.upsell-qty');
-      let qty = Math.max(0, Number(qtyInput && qtyInput.value) || 0);
-      let maxAllowed = maxOrder || null;
-      if (maxTicket && totalTickets){
-        const ticketCap = maxTicket * totalTickets;
-        maxAllowed = maxAllowed ? Math.min(maxAllowed, ticketCap) : ticketCap;
-      }
-      if (maxAllowed && qty > maxAllowed){
-        qty = maxAllowed;
-        if (qtyInput) qtyInput.value = String(maxAllowed);
-      }
-
-      if (qty > 0){
-        let unitAmount = price;
-        let customAmount = null;
-        if (allowCustom){
-          const amountInput = row.querySelector('.upsell-amount');
-          const amt = Math.max(100, Number(amountInput && amountInput.value) || 0);
-          unitAmount = amt;
-          customAmount = amt;
-        }
-        total += unitAmount * qty;
-        selections.push({ productId, variantId, qty, customAmount });
-      }
-    });
-    return { selections, total };
   }
 
   function getSelections(){
@@ -1410,25 +1398,20 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
       }
     }
 
-    const upsells = getUpsellSelections(totalQty);
-
     return {
       items,
       totalQty,
       baseTotal,
       feeTotal,
-      addonsTotal: upsells.total,
-      upsellItems: upsells.selections,
-      grandTotal: baseTotal + feeTotal + upsells.total
+      grandTotal: baseTotal + feeTotal
     };
   }
 
   function updateSummary(){
-    const { totalQty, baseTotal, feeTotal, addonsTotal, grandTotal } = getSelections();
+    const { totalQty, baseTotal, feeTotal, grandTotal } = getSelections();
 
     sumBase.textContent = money(baseTotal);
     sumFee.textContent = money(feeTotal);
-    if (sumAddons) sumAddons.textContent = money(addonsTotal);
     sumTotal.textContent = money(grandTotal);
 
     sumDetail.textContent = totalQty + (totalQty === 1 ? ' ticket selected' : ' tickets selected');
@@ -1440,49 +1423,30 @@ const ticketRowsHtml = ticketTypes.map((t: any) => {
     const sel = row.querySelector('.qty-select');
     if (sel) sel.addEventListener('change', updateSummary);
   });
-  upsellRows.forEach(row => {
-    const qty = row.querySelector('.upsell-qty');
-    const amt = row.querySelector('.upsell-amount');
-    if (qty) qty.addEventListener('input', updateSummary);
-    if (amt) amt.addEventListener('input', updateSummary);
-  });
-
   updateSummary();
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     setError('');
 
-    const { items, totalQty, upsellItems } = getSelections();
+    const { items, totalQty, baseTotal, feeTotal, grandTotal } = getSelections();
 
     if (!items.length || totalQty < 1){
       setError('Please choose at least 1 ticket.');
       return;
     }
 
-    buyButton.disabled = true;
-    buyButton.textContent = 'Processing...';
-
     try {
-      const res = await fetch('/checkout/session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ showId, items, upsellItems })
-      });
-
-      const data = await res.json();
-
-      if (data.ok && data.url) {
-        window.location.href = data.url;
-      } else {
-        setError(data.message || 'Unknown checkout error. Please try again.');
-        buyButton.disabled = false;
-        buyButton.textContent = 'Continue to payment';
-      }
+      const payload = {
+        showId,
+        items,
+        seats: [],
+        totals: { totalQty, baseTotal, feeTotal, grandTotal }
+      };
+      localStorage.setItem('tixallCheckoutSelection', JSON.stringify(payload));
+      window.location.href = '/checkout/addons?showId=' + encodeURIComponent(showId);
     } catch (err) {
       setError('Connection error. Please try again.');
-      buyButton.disabled = false;
-      buyButton.textContent = 'Continue to payment';
     }
   });
 </script>
@@ -1881,7 +1845,7 @@ touch-action: none;
     </div>
 
        <div class="checkout-action">
-      <button class="btn-checkout" id="btn-next">Continue</button>
+      <button class="btn-checkout" id="btn-next">Continue to add-ons</button>
 
       <!-- ✅ Secure payment line (centred, inside footer panel) -->
       <div class="secure-powered secure-powered--footer" aria-label="Secure payment powered by TIXL">
@@ -1914,16 +1878,6 @@ touch-action: none;
   </div>
 </section>
 
-<!-- Add-ons (optional) -->
-<section id="upsell-panel" style="${upsellRowsHtml ? '' : 'display:none;'}">
-  <div class="tpp-inner">
-    <div class="tpp-title">Add-ons</div>
-    <div class="upsell-list">
-      ${upsellRowsHtml || '<div class="muted">No add-ons available for this show.</div>'}
-    </div>
-  </div>
-</section>
-
     <script>
 
   function setViewportUnit() {
@@ -1936,7 +1890,6 @@ const rawLayout = ${mapData};
 const ticketTypes = ${ticketsData};
 const showId = ${showIdStr};
 const heldSeatIds = new Set(${heldSeatsArray});
-const upsellRows = Array.from(document.querySelectorAll('.upsell-row'));
 
 /* -----------------------------
    Tiered pricing (banded seats)
@@ -4544,46 +4497,6 @@ function findTableSingleGapGroups() {
   updateBasket();
 }
 
-    function getUpsellSelections(totalTickets){
-      const selections = [];
-      let total = 0;
-      upsellRows.forEach(row => {
-        const productId = row.getAttribute('data-product-id');
-        const variantId = row.getAttribute('data-variant-id') || null;
-        const price = Number(row.getAttribute('data-price')) || 0;
-        const maxOrder = Number(row.getAttribute('data-max-order')) || 0;
-        const maxTicket = Number(row.getAttribute('data-max-ticket')) || 0;
-        const allowCustom = row.getAttribute('data-allow-custom') === 'true';
-
-        const qtyInput = row.querySelector('.upsell-qty');
-        let qty = Math.max(0, Number(qtyInput && qtyInput.value) || 0);
-        let maxAllowed = maxOrder || null;
-        if (maxTicket && totalTickets){
-          const ticketCap = maxTicket * totalTickets;
-          maxAllowed = maxAllowed ? Math.min(maxAllowed, ticketCap) : ticketCap;
-        }
-        if (maxAllowed && qty > maxAllowed){
-          qty = maxAllowed;
-          if (qtyInput) qtyInput.value = String(maxAllowed);
-        }
-
-        if (qty > 0){
-          let unitAmount = price;
-          let customAmount = null;
-          if (allowCustom){
-            const amountInput = row.querySelector('.upsell-amount');
-            const amt = Math.max(100, Number(amountInput && amountInput.value) || 0);
-            unitAmount = amt;
-            customAmount = amt;
-          }
-          total += unitAmount * qty;
-          selections.push({ productId, variantId, qty, customAmount });
-        }
-      });
-      return { selections, total };
-    }
-
-
     function updateBasket() {
       let baseTotalPence = 0; let feeTotalPence = 0; let count = 0;
 selectedSeats.forEach(id => {
@@ -4592,16 +4505,13 @@ selectedSeats.forEach(id => {
   count++;
 });
 
-const upsell = getUpsellSelections(count);
 const baseText = '£' + (baseTotalPence / 100).toFixed(2);
 const feeText = '£' + (feeTotalPence / 100).toFixed(2);
-const upsellText = '£' + (upsell.total / 100).toFixed(2);
 
 const totalEl = document.getElementById('ui-total');
 totalEl.innerHTML =
   '<span class="basket-amt">' + baseText + '</span>' +
-  (feeTotalPence > 0 ? '<span class="basket-fee"> + ' + feeText + ' booking fee</span>' : '') +
-  (upsell.total > 0 ? '<span class="basket-fee"> + ' + upsellText + ' add-ons</span>' : '');
+  (feeTotalPence > 0 ? '<span class="basket-fee"> + ' + feeText + ' booking fee</span>' : '');
 
 document.getElementById('ui-count').innerText = count + (count === 1 ? ' ticket' : ' tickets');
         const btn = document.getElementById('btn-next');
@@ -4635,13 +4545,6 @@ if (isMobileView) {
 }
 
 }
-    upsellRows.forEach(row => {
-      const qty = row.querySelector('.upsell-qty');
-      const amt = row.querySelector('.upsell-amount');
-      if (qty) qty.addEventListener('input', updateBasket);
-      if (amt) amt.addEventListener('input', updateBasket);
-    });
-
 document.getElementById('btn-next').addEventListener('click', async () => {
   const btn = document.getElementById('btn-next');
   if (!btn.classList.contains('active')) return;
@@ -4693,27 +4596,21 @@ document.getElementById('btn-next').addEventListener('click', async () => {
     }));
 
     const allSeatIds = items.flatMap(i => i.seatIds);
-    const upsell = getUpsellSelections(allSeatIds.length);
-
-    const res = await fetch('/checkout/session', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        showId,
-        seats: allSeatIds,
-        items,
-        upsellItems: upsell.selections
-      })
-    });
-
-    const data = await res.json();
-
-    if (data.ok && data.url) {
-      window.location.href = data.url;
-    } else {
-      alert("Error: " + (data.message || "Unknown"));
-      btn.innerText = 'Continue';
-    }
+    const baseTotal = allSeatIds.reduce((sum, id) => sum + (seatPrices.get(id) || 0), 0);
+    const feeTotal = allSeatIds.reduce((sum, id) => sum + (seatFees.get(id) || 0), 0);
+    const payload = {
+      showId,
+      seats: allSeatIds,
+      items,
+      totals: {
+        totalQty: allSeatIds.length,
+        baseTotal,
+        feeTotal,
+        grandTotal: baseTotal + feeTotal
+      }
+    };
+    localStorage.setItem('tixallCheckoutSelection', JSON.stringify(payload));
+    window.location.href = '/checkout/addons?showId=' + encodeURIComponent(showId);
   } catch (e) {
     console.error('[checkout] Continue click error', e);
     alert("Connection error");
@@ -4729,6 +4626,373 @@ document.getElementById('btn-next').addEventListener('click', async () => {
   } catch (err: any) {
     console.error('checkout page error', err);
     return res.status(500).json({ ok: false, message: 'Checkout error' });
+  }
+});
+
+router.get('/addons', async (req, res) => {
+  const showId = String(req.query.showId || '');
+  if (!showId) return res.status(404).send('Show ID is required');
+
+  try {
+    const show = await prisma.show.findUnique({
+      where: { id: showId },
+      include: { venue: true, ticketTypes: { orderBy: { pricePence: 'asc' } } },
+    });
+
+    if (!show) return res.status(404).send('Event not found');
+
+    const storefront = show.organiserId
+      ? await prisma.storefront.findFirst({ where: { ownerUserId: show.organiserId } })
+      : null;
+    const storefrontSlug = storefront?.slug || '';
+
+    const upsellRules = storefront
+      ? await prisma.upsellRule.findMany({
+          where: {
+            storefrontId: storefront.id,
+            active: true,
+            AND: [
+              { OR: [{ showId: show.id }, { showId: null }] },
+              { OR: [{ ticketTypeId: null }, { ticketTypeId: { in: show.ticketTypes.map((t) => t.id) } }] },
+            ],
+          },
+          include: { product: { include: { variants: true } }, productVariant: true },
+          orderBy: [{ recommended: "desc" }, { priority: "asc" }],
+        })
+      : [];
+
+    const upsellItems = upsellRules
+      .filter((rule) => rule.product && rule.product.status === "ACTIVE")
+      .map((rule) => {
+        const variant = rule.productVariant || null;
+        return {
+          id: rule.id,
+          productId: rule.productId,
+          variantId: rule.productVariantId || null,
+          title: rule.product.title,
+          variantTitle: variant?.title || null,
+          unitAmount: variant?.pricePenceOverride ?? rule.product.pricePence ?? 0,
+          allowCustomAmount: rule.product.allowCustomAmount,
+          fulfilmentType: rule.product.fulfilmentType,
+          maxPerOrder: rule.maxPerOrderOverride ?? rule.product.maxPerOrder ?? null,
+          maxPerTicket: rule.maxPerTicketOverride ?? rule.product.maxPerTicket ?? null,
+          recommended: rule.recommended,
+        };
+      });
+
+    const upsellRowsHtml = upsellItems
+      .map((item) => {
+        const label = item.variantTitle ? `${item.title} (${item.variantTitle})` : item.title;
+        return `
+          <div class="upsell-row"
+            data-product-id="${escAttr(item.productId)}"
+            data-variant-id="${escAttr(item.variantId || "")}"
+            data-price="${escAttr(item.unitAmount || 0)}"
+            data-max-order="${escAttr(item.maxPerOrder || "")}"
+            data-max-ticket="${escAttr(item.maxPerTicket || "")}"
+            data-allow-custom="${item.allowCustomAmount ? "true" : "false"}"
+          >
+            <div>
+              <div class="title">${escAttr(label)}</div>
+              <div class="muted">${item.allowCustomAmount ? "Choose amount" : pFmt(item.unitAmount)}</div>
+            </div>
+            <div class="upsell-inputs">
+              ${item.allowCustomAmount ? '<input class="upsell-amount" type="number" min="100" placeholder="Amount (pence)" />' : ''}
+              <input class="upsell-qty" type="number" min="0" value="0" />
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+
+    const cartItems = storefrontSlug ? readStorefrontCart(req, storefrontSlug) : [];
+    const cartProductIds = Array.from(new Set(cartItems.map((item) => item.productId)));
+    const cartProducts = cartProductIds.length
+      ? await prisma.product.findMany({
+          where: { id: { in: cartProductIds }, storefrontId: storefront?.id, status: "ACTIVE" },
+          include: { variants: true },
+        })
+      : [];
+    const cartProductMap = new Map(cartProducts.map((product) => [product.id, product]));
+
+    const cartLines = cartItems
+      .map((item) => {
+        const product = cartProductMap.get(item.productId);
+        if (!product) return null;
+        const variant = item.variantId
+          ? product.variants.find((v) => v.id === item.variantId)
+          : null;
+        const unitAmount = product.allowCustomAmount && item.customAmount
+          ? item.customAmount
+          : (variant?.pricePenceOverride ?? product.pricePence ?? 0);
+        return {
+          title: product.title,
+          variantTitle: variant?.title || null,
+          qty: item.qty,
+          unitAmount,
+          lineTotal: unitAmount * item.qty,
+        };
+      })
+      .filter(Boolean) as Array<{
+        title: string;
+        variantTitle: string | null;
+        qty: number;
+        unitAmount: number;
+        lineTotal: number;
+      }>;
+
+    const basketTotalPence = cartLines.reduce((sum, line) => sum + line.lineTotal, 0);
+    const basketCount = cartLines.reduce((sum, line) => sum + line.qty, 0);
+
+    const basketListHtml = cartLines.length
+      ? cartLines
+          .map((line) => {
+            const label = line.variantTitle ? `${line.title} (${line.variantTitle})` : line.title;
+            return `
+              <div class="basket-line">
+                <div>
+                  <div class="basket-title">${escAttr(label)}</div>
+                  <div class="basket-meta">${line.qty} × ${pFmt(line.unitAmount)}</div>
+                </div>
+                <div class="basket-total">${pFmt(line.lineTotal)}</div>
+              </div>
+            `;
+          })
+          .join("")
+      : `<div class="muted">No basket items for this storefront.</div>`;
+
+    res.type('html').send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Add extras | ${escAttr(show.title)}</title>
+  <style>
+    body { font-family: Inter, sans-serif; background:#f3f4f6; margin:0; color:#0f172a; }
+    .topbar { position: sticky; top: 0; z-index: 10; background:#fff; border-bottom:1px solid #e5e7eb; }
+    .topbar-inner { max-width:1100px; margin:0 auto; padding:12px 20px; display:flex; align-items:center; justify-content:space-between; }
+    .brand { display:flex; align-items:center; gap:10px; text-decoration:none; color:#0f172a; font-weight:800; }
+    .brand-logo { height:28px; width:auto; border-radius:8px; }
+    .wrap { max-width:1100px; margin:0 auto; padding:24px 20px 48px; }
+    .page-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:20px; }
+    .page-title { margin:0; font-size:1.6rem; }
+    .grid { display:grid; grid-template-columns: 1.2fr 0.8fr; gap:20px; }
+    .card { background:#fff; border-radius:16px; padding:20px; box-shadow:0 2px 6px rgba(0,0,0,0.04); }
+    .muted { color:#64748b; }
+    .btn { background:#0f172a; color:#fff; border:none; padding:12px 22px; border-radius:10px; font-weight:700; cursor:pointer; }
+    .btn[disabled] { opacity:0.6; cursor:not-allowed; }
+    .upsell-list { display:grid; gap:12px; margin-top:12px; }
+    .upsell-row { display:flex; justify-content:space-between; gap:16px; padding:12px; border:1px solid #e2e8f0; border-radius:12px; align-items:center; }
+    .upsell-row .title { font-weight:700; }
+    .upsell-inputs { display:flex; gap:8px; align-items:center; }
+    .upsell-row input { width:90px; padding:8px 10px; border-radius:10px; border:1px solid #cbd5f5; }
+    .summary-row { display:flex; justify-content:space-between; margin:10px 0; }
+    .summary-total { font-size:1.3rem; font-weight:800; }
+    .basket-line { display:flex; justify-content:space-between; gap:12px; padding:10px 0; border-bottom:1px solid #e2e8f0; }
+    .basket-line:last-child { border-bottom:none; }
+    .basket-title { font-weight:600; }
+    .basket-meta { font-size:0.85rem; color:#64748b; }
+    .basket-total { font-weight:700; }
+    @media (max-width: 900px){
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body data-basket-total="${basketTotalPence}" data-basket-count="${basketCount}">
+  <div class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/public" aria-label="TixAll">
+        <img class="brand-logo" src="/IMG_2374.jpeg" alt="TixAll" />
+      </a>
+      <a class="muted" href="/checkout?showId=${escAttr(show.id)}">Back to tickets</a>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">Add extras for ${escAttr(show.title)}</h1>
+        <div class="muted">Step 2 of 2 — add optional extras before secure payment.</div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2 style="margin-top:0;">Show add-ons</h2>
+        <div class="upsell-list">
+          ${upsellRowsHtml || '<div class="muted">No add-ons available for this show.</div>'}
+        </div>
+
+        <div style="margin-top:20px;">
+          <h3 style="margin-bottom:8px;">Storefront basket</h3>
+          ${basketListHtml}
+          ${storefrontSlug ? `<div class="muted" style="margin-top:8px;">Manage basket items in <a href="/store/${escAttr(storefrontSlug)}/cart">your storefront cart</a>.</div>` : ""}
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top:0;">Order summary</h2>
+        <div class="summary-row">
+          <span class="muted">Tickets</span>
+          <span id="sum-base">£0.00</span>
+        </div>
+        <div class="summary-row">
+          <span class="muted">Booking fee</span>
+          <span id="sum-fee">£0.00</span>
+        </div>
+        <div class="summary-row">
+          <span class="muted">Add-ons</span>
+          <span id="sum-addons">£0.00</span>
+        </div>
+        <div class="summary-row" id="basket-row" style="display:none;">
+          <span class="muted">Basket items</span>
+          <span id="sum-basket">£0.00</span>
+        </div>
+        <div class="summary-row" style="align-items:baseline;">
+          <span class="muted">Total</span>
+          <span class="summary-total" id="sum-total">£0.00</span>
+        </div>
+        <p class="muted small" id="sum-detail" style="margin:10px 0 0;">0 tickets selected</p>
+        <button class="btn" id="btn-pay" style="margin-top:16px;">Continue to payment</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const showId = ${JSON.stringify(show.id)};
+    const storageKey = 'tixallCheckoutSelection';
+    const payloadRaw = localStorage.getItem(storageKey);
+    const payload = payloadRaw ? JSON.parse(payloadRaw) : null;
+    if (!payload || payload.showId !== showId) {
+      window.location.href = '/checkout?showId=' + encodeURIComponent(showId);
+    }
+
+    const basketTotal = Number(document.body.dataset.basketTotal || 0);
+    const basketCount = Number(document.body.dataset.basketCount || 0);
+    const basketRow = document.getElementById('basket-row');
+    const sumBasket = document.getElementById('sum-basket');
+
+    const sumBase = document.getElementById('sum-base');
+    const sumFee = document.getElementById('sum-fee');
+    const sumAddons = document.getElementById('sum-addons');
+    const sumTotal = document.getElementById('sum-total');
+    const sumDetail = document.getElementById('sum-detail');
+
+    const upsellRows = Array.from(document.querySelectorAll('.upsell-row'));
+
+    function money(pence){
+      return '£' + ((Number(pence || 0) / 100).toFixed(2));
+    }
+
+    function getUpsellSelections(totalTickets){
+      const selections = [];
+      let total = 0;
+      upsellRows.forEach(row => {
+        const productId = row.getAttribute('data-product-id');
+        const variantId = row.getAttribute('data-variant-id') || null;
+        const price = Number(row.getAttribute('data-price')) || 0;
+        const maxOrder = Number(row.getAttribute('data-max-order')) || 0;
+        const maxTicket = Number(row.getAttribute('data-max-ticket')) || 0;
+        const allowCustom = row.getAttribute('data-allow-custom') === 'true';
+
+        const qtyInput = row.querySelector('.upsell-qty');
+        let qty = Math.max(0, Number(qtyInput && qtyInput.value) || 0);
+        let maxAllowed = maxOrder || null;
+        if (maxTicket && totalTickets){
+          const ticketCap = maxTicket * totalTickets;
+          maxAllowed = maxAllowed ? Math.min(maxAllowed, ticketCap) : ticketCap;
+        }
+        if (maxAllowed && qty > maxAllowed){
+          qty = maxAllowed;
+          if (qtyInput) qtyInput.value = String(maxAllowed);
+        }
+
+        if (qty > 0){
+          let unitAmount = price;
+          let customAmount = null;
+          if (allowCustom){
+            const amountInput = row.querySelector('.upsell-amount');
+            const amt = Math.max(100, Number(amountInput && amountInput.value) || 0);
+            unitAmount = amt;
+            customAmount = amt;
+          }
+          total += unitAmount * qty;
+          selections.push({ productId, variantId, qty, customAmount });
+        }
+      });
+      return { selections, total };
+    }
+
+    function updateSummary(){
+      const totals = payload?.totals || {};
+      const baseTotal = Number(totals.baseTotal || 0);
+      const feeTotal = Number(totals.feeTotal || 0);
+      const totalQty = Number(totals.totalQty || 0);
+      const upsell = getUpsellSelections(totalQty);
+      const grandTotal = baseTotal + feeTotal + upsell.total + basketTotal;
+
+      sumBase.textContent = money(baseTotal);
+      sumFee.textContent = money(feeTotal);
+      sumAddons.textContent = money(upsell.total);
+      sumTotal.textContent = money(grandTotal);
+      sumDetail.textContent = totalQty + (totalQty === 1 ? ' ticket selected' : ' tickets selected');
+
+      if (basketTotal > 0) {
+        basketRow.style.display = 'flex';
+        sumBasket.textContent = money(basketTotal);
+      }
+    }
+
+    upsellRows.forEach(row => {
+      const qty = row.querySelector('.upsell-qty');
+      const amt = row.querySelector('.upsell-amount');
+      if (qty) qty.addEventListener('input', updateSummary);
+      if (amt) amt.addEventListener('input', updateSummary);
+    });
+
+    updateSummary();
+
+    document.getElementById('btn-pay').addEventListener('click', async () => {
+      const totals = payload?.totals || {};
+      const totalQty = Number(totals.totalQty || 0);
+      const upsell = getUpsellSelections(totalQty);
+
+      const btn = document.getElementById('btn-pay');
+      btn.disabled = true;
+      btn.textContent = 'Processing...';
+
+      try {
+        const res = await fetch('/checkout/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            showId,
+            items: payload.items || [],
+            seats: payload.seats || [],
+            upsellItems: upsell.selections
+          })
+        });
+
+        const data = await res.json();
+        if (data.ok && data.url) {
+          window.location.href = data.url;
+          return;
+        }
+        btn.disabled = false;
+        btn.textContent = 'Continue to payment';
+        alert(data.message || 'Checkout error');
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = 'Continue to payment';
+        alert('Connection error');
+      }
+    });
+  </script>
+</body>
+</html>`);
+  } catch (err: any) {
+    console.error('checkout add-ons page error', err);
+    return res.status(500).send('Checkout error');
   }
 });
 

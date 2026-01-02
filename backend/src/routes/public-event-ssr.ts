@@ -48,6 +48,18 @@ function escJSON(obj: any) {
  return JSON.stringify(obj).replace(/</g, '\\u003c');
 }
 
+function readStorefrontCartCount(req: any, storefront: string) {
+ const raw = req.cookies?.[`storefront_cart_${storefront}`];
+ if (!raw) return 0;
+ try {
+   const parsed = JSON.parse(raw);
+   if (!Array.isArray(parsed)) return 0;
+   return parsed.reduce((sum, item) => sum + Math.max(1, Number(item?.qty || 1)), 0);
+ } catch {
+   return 0;
+ }
+}
+
 function sanitiseRichHtml(input: string) {
  let html = String(input ?? '');
 
@@ -499,6 +511,49 @@ background: rgba(15,156,223,0.18); border: 1px solid rgba(15,156,223,0.35);
  max-width: 55vw;
 }
 
+.app-actions{
+ margin-left: auto;
+ display: flex;
+ align-items: center;
+ gap: 10px;
+}
+.app-action{
+ position: relative;
+ width: 36px;
+ height: 36px;
+ border-radius: 10px;
+ display: grid;
+ place-items: center;
+ text-decoration: none;
+ color: var(--text-main);
+ border: 1px solid transparent;
+}
+.app-action:hover{
+ border-color: var(--border);
+ background: #f8fafc;
+}
+.app-action svg{
+ width: 18px;
+ height: 18px;
+}
+.app-action-badge{
+ position: absolute;
+ top: -4px;
+ right: -4px;
+ min-width: 18px;
+ height: 18px;
+ padding: 0 4px;
+ border-radius: 999px;
+ background: #ef4444;
+ color: #fff;
+ font-size: 0.7rem;
+ font-weight: 700;
+ display: flex;
+ align-items: center;
+ justify-content: center;
+}
+.app-action-badge.is-hidden{ display: none; }
+
  </style>
 </head><body>
  <header class="app-header">
@@ -586,6 +641,9 @@ router.get('/event/:id', async (req, res) => {
    const show = await prisma.show.findFirst({
      where: { id },
      include: {
+       organiser: {
+         select: { storefrontSlug: true },
+       },
        venue: {
  select: { id: true, name: true, address: true, city: true, postcode: true, bookingFeeBps: true },
 },
@@ -677,7 +735,7 @@ const prettyDateShort =
      : [];
    const keywordsMeta = tags.join(', ');
 
-   const ageGuidanceRaw = (show as any).ageGuidance as string | null;
+const ageGuidanceRaw = (show as any).ageGuidance as string | null;
 const ageGuidance = ageGuidanceRaw ? ageGuidanceRaw.trim() : '';
 
 const doorsOpenRaw = (show as any).doorsOpenTime as string | null;
@@ -686,6 +744,10 @@ const doorTimeDisplay = doorsOpenTime ? formatTimeHHMM(doorsOpenTime) : '';
 
 const endTimeNoteRaw = (show as any).endTimeNote as string | null;
 const endTimeNote = endTimeNoteRaw ? endTimeNoteRaw.trim() : '';
+
+ const storefrontSlug = show.organiser?.storefrontSlug || '';
+ const cartCount = storefrontSlug ? readStorefrontCartCount(req, storefrontSlug) : 0;
+ const cartHref = storefrontSlug ? `/store/${encodeURIComponent(storefrontSlug)}/cart` : '/store';
 
    let doorTimeIso: string | undefined;
  if (doorsOpenTime && dateObj) {
@@ -1926,6 +1988,22 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
   <div class="app-brand" aria-label="${escAttr(brand.name)}">
   <img class="app-brand-logo" src="${escAttr(brand.logoUrl)}" alt="${escAttr(brand.name)}" />
 </div>
+  <div class="app-actions">
+    <a class="app-action" href="${escAttr(cartHref)}" aria-label="View basket">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="9" cy="20" r="1"></circle>
+        <circle cx="17" cy="20" r="1"></circle>
+        <path d="M3 4h2l2.4 12.4a2 2 0 0 0 2 1.6h7.2a2 2 0 0 0 2-1.6L21 8H6"></path>
+      </svg>
+      <span class="app-action-badge${cartCount ? "" : " is-hidden"}">${cartCount}</span>
+    </a>
+    <a class="app-action" href="/login" aria-label="Profile">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M20 21a8 8 0 1 0-16 0"></path>
+        <circle cx="12" cy="7" r="4"></circle>
+      </svg>
+    </a>
+  </div>
 
  </div>
 </header>
