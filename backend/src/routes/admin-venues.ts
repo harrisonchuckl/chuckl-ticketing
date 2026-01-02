@@ -53,6 +53,26 @@ router.get("/venues", requireAdminOrOrganiser, async (req, res) => {
   }
 });
 
+/** GET /admin/venues/:venueId — fetch a single venue */
+router.get("/venues/:venueId", requireAdminOrOrganiser, async (req, res) => {
+  try {
+    const venueId = String(req.params.venueId);
+    const venue = await prisma.venue.findFirst({
+      where: { id: venueId, ...venueScope(req) },
+      select: { id: true, name: true, address: true, city: true, postcode: true, capacity: true },
+    });
+
+    if (!venue) {
+      return res.status(404).json({ ok: false, error: "Venue not found" });
+    }
+
+    res.json({ ok: true, venue });
+  } catch (e) {
+    console.error("GET /admin/venues/:venueId failed", e);
+    res.status(500).json({ ok: false, error: "Failed to load venue" });
+  }
+});
+
 /** POST /admin/venues — create a venue */
 router.post("/venues", requireAdminOrOrganiser, async (req, res) => {
   try {
