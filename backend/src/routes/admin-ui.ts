@@ -1555,6 +1555,28 @@ router.get(
       border-radius:8px;
       display:none;
     }
+    .image-draggable{
+      cursor:move;
+    }
+    .image-tile{
+      position:relative;
+      width:100px;
+      height:100px;
+      border-radius:8px;
+      overflow:hidden;
+      border:1px solid rgba(148, 163, 184, 0.4);
+      cursor:move;
+      background:#fff;
+    }
+    .image-tile.dragging{
+      opacity:0.5;
+    }
+    .image-tile img{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+      display:block;
+    }
     .progress{
       height:8px;
       background:#e5e7eb;
@@ -5467,15 +5489,16 @@ async function createShow(){
         +'</div>'
 
         // Date & Time
-       +'<div class="grid" style="margin-bottom: 20px;">'
-+'<label>Date & Time</label>'
-+'<input id="sh_dt" type="datetime-local" class="ctl" />'
-+'</div>'
-
-+'<div class="grid" style="margin-bottom: 20px;">'
-+'<label>End Date & Time</label>'
-+'<input id="sh_dt_end" type="datetime-local" class="ctl" />'
-+'<div class="tip">Optional. Add if you know when the event ends.</div>'
+       +'<div class="grid grid-2" style="margin-bottom: 20px; gap: 16px;">'
+  +'<div class="grid" style="gap:4px;">'
+    +'<label>Date & Time</label>'
+    +'<input id="sh_dt" type="datetime-local" class="ctl" />'
+  +'</div>'
+  +'<div class="grid" style="gap:4px;">'
+    +'<label>End Date & Time</label>'
+    +'<input id="sh_dt_end" type="datetime-local" class="ctl" />'
+    +'<div class="tip">Optional. Add if you know when the event ends.</div>'
+  +'</div>'
 +'</div>'
 
 +'<div class="grid" style="margin-bottom: 20px;">'
@@ -5798,8 +5821,106 @@ setActionMode();
     var barAdd = $('#bar_add');
     var addPreviews = $('#add_previews');
     var allImageUrls = $('#all_image_urls');
+    var dragState = null;
     
     // Upload function for a single file (used for main image and each additional image)
+    function setMainImage(url) {
+        if (!prevMain) return;
+        if (!url) {
+            prevMain.removeAttribute('src');
+            prevMain.style.display = 'none';
+            return;
+        }
+        prevMain.src = url;
+        prevMain.style.display = 'block';
+        prevMain.dataset.url = url;
+        prevMain.classList.add('image-draggable');
+        prevMain.draggable = true;
+    }
+
+    function createAdditionalPreview(url) {
+        var imgContainer = document.createElement('div');
+        imgContainer.className = 'image-tile';
+        imgContainer.dataset.url = url;
+        imgContainer.draggable = true;
+
+        var img = document.createElement('img');
+        img.src = url;
+        img.alt = 'Additional Image';
+
+        var deleteBtn = document.createElement('button');
+        deleteBtn.textContent = '×';
+        deleteBtn.className = 'btn';
+        deleteBtn.style.position = 'absolute';
+        deleteBtn.style.top = '4px';
+        deleteBtn.style.right = '4px';
+        deleteBtn.style.width = '24px';
+        deleteBtn.style.height = '24px';
+        deleteBtn.style.padding = '0';
+        deleteBtn.style.borderRadius = '50%';
+        deleteBtn.style.lineHeight = '24px';
+        deleteBtn.style.fontSize = '12px';
+        deleteBtn.style.fontWeight = 'bold';
+        deleteBtn.style.background = 'rgba(255, 255, 255, 0.8)';
+        deleteBtn.style.borderColor = 'rgba(0, 0, 0, 0.1)';
+        deleteBtn.style.cursor = 'pointer';
+
+        deleteBtn.addEventListener('click', function() {
+            imgContainer.remove();
+            updateAllImageUrls();
+        });
+
+        imgContainer.addEventListener('dragstart', function(e) {
+            if (!imgContainer.dataset.url) return;
+            dragState = { source: 'additional', url: imgContainer.dataset.url, el: imgContainer };
+            imgContainer.classList.add('dragging');
+            if (e.dataTransfer) {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', imgContainer.dataset.url || '');
+            }
+        });
+
+        imgContainer.addEventListener('dragend', function() {
+            imgContainer.classList.remove('dragging');
+            if (dragState && dragState.el === imgContainer) {
+                dragState = null;
+            }
+            updateAllImageUrls();
+        });
+
+        imgContainer.addEventListener('dragover', function(e) {
+            if (!dragState) return;
+            if (dragState.source === 'additional' && dragState.el !== imgContainer) {
+                e.preventDefault();
+                var rect = imgContainer.getBoundingClientRect();
+                var before = e.clientX < rect.left + rect.width / 2;
+                imgContainer.parentNode.insertBefore(dragState.el, before ? imgContainer : imgContainer.nextSibling);
+            }
+            if (dragState.source === 'main') {
+                e.preventDefault();
+            }
+        });
+
+        imgContainer.addEventListener('drop', function(e) {
+            if (!dragState) return;
+            e.preventDefault();
+            if (dragState.source === 'main') {
+                var targetUrl = imgContainer.dataset.url;
+                var mainUrl = dragState.url;
+                if (!targetUrl || !mainUrl) return;
+                setMainImage(targetUrl);
+                imgContainer.dataset.url = mainUrl;
+                var img = imgContainer.querySelector('img');
+                if (img) img.src = mainUrl;
+                updateAllImageUrls();
+            }
+        });
+
+        imgContainer.appendChild(img);
+        imgContainer.appendChild(deleteBtn);
+        return imgContainer;
+    }
+
     async function doUpload(file, barEl, previewEl, isAdditional = false) {
         $('#err').textContent = '';
         barEl.style.width = '15%';
@@ -5809,52 +5930,13 @@ setActionMode();
 
             if (isAdditional) {
                 // Add new preview element and update hidden field
-                var imgContainer = document.createElement('div');
-                imgContainer.style.position = 'relative';
-                imgContainer.style.width = '100px';
-                imgContainer.style.height = '100px';
-                imgContainer.style.overflow = 'hidden';
-                imgContainer.style.borderRadius = '6px';
-                imgContainer.dataset.url = out.url;
-
-                var img = document.createElement('img');
-                img.src = out.url;
-                img.alt = 'Additional Image';
-                img.style.width = '100%';
-                img.style.height = '100%';
-                img.style.objectFit = 'cover';
-
-                var deleteBtn = document.createElement('button');
-                deleteBtn.textContent = 'x';
-                deleteBtn.className = 'btn';
-                deleteBtn.style.position = 'absolute';
-                deleteBtn.style.top = '4px';
-                deleteBtn.style.right = '4px';
-                deleteBtn.style.width = '24px';
-                deleteBtn.style.height = '24px';
-                deleteBtn.style.padding = '0';
-                deleteBtn.style.borderRadius = '50%';
-                deleteBtn.style.lineHeight = '24px';
-                deleteBtn.style.fontSize = '12px';
-                deleteBtn.style.fontWeight = 'bold';
-                deleteBtn.style.background = 'rgba(255, 255, 255, 0.8)';
-                deleteBtn.style.borderColor = 'rgba(0, 0, 0, 0.1)';
-                deleteBtn.style.cursor = 'pointer';
-
-                deleteBtn.addEventListener('click', function() {
-                    imgContainer.remove();
-                    updateAllImageUrls();
-                });
-
-                imgContainer.appendChild(img);
-                imgContainer.appendChild(deleteBtn);
+                var imgContainer = createAdditionalPreview(out.url);
                 addPreviews.appendChild(imgContainer);
 
                 updateAllImageUrls();
             } else {
                 // Update main image preview
-                previewEl.src = out.url;
-                previewEl.style.display = 'block';
+                setMainImage(out.url);
             }
 
             barEl.style.width = '100%';
@@ -5877,6 +5959,24 @@ setActionMode();
         } else {
             dropAdd.style.display = 'block';
         }
+    }
+    
+    if (prevMain) {
+        prevMain.classList.add('image-draggable');
+        prevMain.draggable = true;
+        prevMain.addEventListener('dragstart', function(e) {
+            if (!prevMain.src) return;
+            dragState = { source: 'main', url: prevMain.src, el: prevMain };
+            prevMain.classList.add('dragging');
+            if (e.dataTransfer) {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', prevMain.src);
+            }
+        });
+        prevMain.addEventListener('dragend', function() {
+            prevMain.classList.remove('dragging');
+            dragState = null;
+        });
     }
 
         // --- AI Prefill (one-time) ---
@@ -6022,53 +6122,14 @@ setActionMode();
 
             // --- Images ---
             if (draft.mainImageUrl && prevMain){
-              prevMain.src = draft.mainImageUrl;
-              prevMain.style.display = 'block';
+              setMainImage(draft.mainImageUrl);
               markAi($('#drop_main'), 'drop');
             }
 
             if (Array.isArray(draft.additionalImageUrls) && draft.additionalImageUrls.length && addPreviews){
               addPreviews.innerHTML = '';
               draft.additionalImageUrls.slice(0,10).forEach(function(url){
-                var imgContainer = document.createElement('div');
-                imgContainer.style.position = 'relative';
-                imgContainer.style.width = '100px';
-                imgContainer.style.height = '100px';
-                imgContainer.style.overflow = 'hidden';
-                imgContainer.style.borderRadius = '6px';
-                imgContainer.dataset.url = url;
-
-                var img = document.createElement('img');
-                img.src = url;
-                img.alt = 'Additional Image';
-                img.style.width = '100%';
-                img.style.height = '100%';
-                img.style.objectFit = 'cover';
-
-                var deleteBtn = document.createElement('button');
-                deleteBtn.textContent = 'x';
-                deleteBtn.className = 'btn';
-                deleteBtn.style.position = 'absolute';
-                deleteBtn.style.top = '4px';
-                deleteBtn.style.right = '4px';
-                deleteBtn.style.width = '24px';
-                deleteBtn.style.height = '24px';
-                deleteBtn.style.padding = '0';
-                deleteBtn.style.borderRadius = '50%';
-                deleteBtn.style.lineHeight = '24px';
-                deleteBtn.style.fontSize = '12px';
-                deleteBtn.style.fontWeight = 'bold';
-                deleteBtn.style.background = 'rgba(255, 255, 255, 0.8)';
-                deleteBtn.style.borderColor = 'rgba(0, 0, 0, 0.1)';
-                deleteBtn.style.cursor = 'pointer';
-
-                deleteBtn.addEventListener('click', function() {
-                  imgContainer.remove();
-                  updateAllImageUrls();
-                });
-
-                imgContainer.appendChild(img);
-                imgContainer.appendChild(deleteBtn);
+                var imgContainer = createAdditionalPreview(url);
                 addPreviews.appendChild(imgContainer);
               });
 
@@ -6087,12 +6148,36 @@ setActionMode();
     dropMain.addEventListener('click', function() { fileMain.click(); });
     dropMain.addEventListener('dragover', function(e) { e.preventDefault(); dropMain.classList.add('drag'); });
     dropMain.addEventListener('dragleave', function() { dropMain.classList.remove('drag'); });
-    dropMain.addEventListener('drop', async function(e) {
+    async function handleMainDrop(e) {
         e.preventDefault();
         dropMain.classList.remove('drag');
-        var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-        if (f) await doUpload(f, barMain, prevMain);
-    });
+        var files = e.dataTransfer && e.dataTransfer.files;
+        var f = files && files[0];
+        if (f) {
+            await doUpload(f, barMain, prevMain);
+            return;
+        }
+
+        if (dragState && dragState.source === 'additional') {
+            var oldMain = prevMain && prevMain.src ? prevMain.src : '';
+            var newUrl = dragState.url;
+            if (!newUrl) return;
+            setMainImage(newUrl);
+            if (dragState.el) dragState.el.remove();
+            if (oldMain) {
+                addPreviews.appendChild(createAdditionalPreview(oldMain));
+            }
+            updateAllImageUrls();
+        }
+    }
+
+    dropMain.addEventListener('drop', handleMainDrop);
+    if (prevMain) {
+        prevMain.addEventListener('dragover', function(e) {
+            if (dragState) e.preventDefault();
+        });
+        prevMain.addEventListener('drop', handleMainDrop);
+    }
     fileMain.addEventListener('change', async function() {
         var f = fileMain.files && fileMain.files[0];
         if (f) await doUpload(f, barMain, prevMain);
@@ -6105,18 +6190,31 @@ setActionMode();
             fileAdd.click(); 
         }
     });
-    fileAdd.addEventListener('change', async function() {
-        var files = fileAdd.files;
-        if (files) {
-            let currentCount = $$('#add_previews > div').length;
-            let filesToUpload = Array.from(files).slice(0, 10 - currentCount);
+    dropAdd.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        dropAdd.classList.add('drag');
+    });
+    dropAdd.addEventListener('dragleave', function() {
+        dropAdd.classList.remove('drag');
+    });
+    dropAdd.addEventListener('drop', function(e) {
+        e.preventDefault();
+        dropAdd.classList.remove('drag');
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+            handleAdditionalFiles(e.dataTransfer.files);
+        }
+    });
+    function handleAdditionalFiles(files) {
+        if (!files) return;
+        let currentCount = $$('#add_previews > div').length;
+        let filesToUpload = Array.from(files).slice(0, 10 - currentCount);
 
-            if (filesToUpload.length > 0) {
-                // We show one progress bar for simplicity, as multiple simultaneous uploads can be complex
-                barAdd.style.width = '15%'; 
-                let uploadedCount = 0;
-                let total = filesToUpload.length;
+        if (filesToUpload.length > 0) {
+            barAdd.style.width = '15%';
+            let uploadedCount = 0;
+            let total = filesToUpload.length;
 
+            (async function() {
                 for (const f of filesToUpload) {
                     try {
                         await doUpload(f, barAdd, null, true);
@@ -6127,9 +6225,43 @@ setActionMode();
                     }
                 }
                 setTimeout(function() { barAdd.style.width = '0%'; }, 800);
-            }
+            })();
+        }
+    }
+    fileAdd.addEventListener('change', async function() {
+        var files = fileAdd.files;
+        if (files) {
+            handleAdditionalFiles(files);
         }
         fileAdd.value = ''; // Reset file input so change event fires if the same file is selected again
+    });
+
+    addPreviews.addEventListener('dragover', function(e) {
+        if (!dragState) return;
+        if (dragState.source === 'main' || dragState.source === 'additional') {
+            e.preventDefault();
+        }
+    });
+
+    addPreviews.addEventListener('drop', function(e) {
+        if (!dragState) return;
+        e.preventDefault();
+        if (dragState.source === 'main') {
+            var target = addPreviews.querySelector('.image-tile');
+            var mainUrl = dragState.url;
+            if (target && target.dataset && target.dataset.url && mainUrl) {
+                var targetUrl = target.dataset.url;
+                setMainImage(targetUrl);
+                target.dataset.url = mainUrl;
+                var img = target.querySelector('img');
+                if (img) img.src = mainUrl;
+                updateAllImageUrls();
+            }
+        }
+        if (dragState.source === 'additional' && dragState.el) {
+            addPreviews.appendChild(dragState.el);
+            updateAllImageUrls();
+        }
     });
 
 // --- Save Logic (Updated to remove ticket-specific fields and include new fields) ---
@@ -6250,7 +6382,7 @@ if (existingShowId) {
       // Main image
       if (s.imageUrl) {
         mainImageUrl = s.imageUrl;
-        if (prevMain) { prevMain.src = s.imageUrl; prevMain.style.display = 'block'; }
+        if (prevMain) { setMainImage(s.imageUrl); }
         if (mainImageInput) mainImageInput.value = s.imageUrl;
       }
 
@@ -6259,44 +6391,7 @@ if (existingShowId) {
         addPreviews.innerHTML = '';
         s.additionalImages.forEach(function (url) {
           if (!url) return;
-
-          const imgContainer = document.createElement('div');
-          imgContainer.style.position = 'relative';
-          imgContainer.style.display = 'inline-block';
-          imgContainer.dataset.url = url;
-
-          const img = document.createElement('img');
-          img.src = url;
-          img.style.width = '86px';
-          img.style.height = '64px';
-          img.style.objectFit = 'cover';
-          img.style.borderRadius = '10px';
-          img.style.border = '1px solid rgba(148, 163, 184, 0.4)';
-
-          const delBtn = document.createElement('button');
-          delBtn.type = 'button';
-          delBtn.textContent = '×';
-          delBtn.style.position = 'absolute';
-          delBtn.style.top = '4px';
-          delBtn.style.right = '4px';
-          delBtn.style.width = '22px';
-          delBtn.style.height = '22px';
-          delBtn.style.borderRadius = '999px';
-          delBtn.style.border = '1px solid rgba(148, 163, 184, 0.6)';
-          delBtn.style.background = 'rgba(255,255,255,0.95)';
-          delBtn.style.cursor = 'pointer';
-          delBtn.style.fontWeight = '800';
-          delBtn.style.lineHeight = '1';
-
-          delBtn.addEventListener('click', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            imgContainer.remove();
-            updateAllImageUrls();
-          });
-
-          imgContainer.appendChild(img);
-          imgContainer.appendChild(delBtn);
+          const imgContainer = createAdditionalPreview(url);
           addPreviews.appendChild(imgContainer);
         });
 
@@ -14434,6 +14529,66 @@ if (!outText) {
         return res.status(500).json({ ok: false, error: "Failed to parse model JSON", outText });
       }
 
+      function toUtcTimeKey(dt: Date | null | undefined) {
+        if (!dt || Number.isNaN(dt.getTime())) return null;
+        const pad = (n: number) => String(n).padStart(2, "0");
+        return pad(dt.getUTCHours()) + ":" + pad(dt.getUTCMinutes());
+      }
+
+      function pickModeTime(times: Array<string | null | undefined>) {
+        const counts = new Map<string, number>();
+        times.forEach((t) => {
+          if (!t) return;
+          counts.set(t, (counts.get(t) || 0) + 1);
+        });
+        let best: string | null = null;
+        let bestCount = 0;
+        counts.forEach((count, key) => {
+          if (count > bestCount) {
+            best = key;
+            bestCount = count;
+          }
+        });
+        return best;
+      }
+
+      async function getModeTimesForPromoter(req: any) {
+        const role = String(req.user?.role || "").toUpperCase();
+        const organiserId = role === "ORGANISER" ? String(req.user?.id || "") : null;
+        const where = organiserId ? { organiserId } : {};
+        const shows = await prisma.show.findMany({
+          where,
+          select: { date: true, endDate: true },
+        });
+        const startTimes = shows.map((s) => toUtcTimeKey(s.date)).filter(Boolean);
+        const endTimes = shows.map((s) => (s.endDate ? toUtcTimeKey(s.endDate) : null)).filter(Boolean);
+        return {
+          start: pickModeTime(startTimes),
+          end: pickModeTime(endTimes),
+        };
+      }
+
+      function applyModeTimeIfMissing(iso: string | null | undefined, time: string | null | undefined) {
+        if (!iso || !time) return iso ?? null;
+        const dt = new Date(iso);
+        if (Number.isNaN(dt.getTime())) return iso ?? null;
+        if (dt.getUTCHours() !== 0 || dt.getUTCMinutes() !== 0) return iso;
+        const [h, m] = time.split(":").map((n) => Number(n));
+        if (!Number.isFinite(h) || !Number.isFinite(m)) return iso;
+        dt.setUTCHours(h, m, 0, 0);
+        return dt.toISOString();
+      }
+
+      function applyModeTimeToDate(iso: string | null | undefined, time: string | null | undefined) {
+        if (!iso || !time) return iso ?? null;
+        const dt = new Date(iso);
+        if (Number.isNaN(dt.getTime())) return iso ?? null;
+        const [h, m] = time.split(":").map((n) => Number(n));
+        if (!Number.isFinite(h) || !Number.isFinite(m)) return iso;
+        dt.setUTCHours(h, m, 0, 0);
+        return dt.toISOString();
+      }
+
       function moveIsoDateToFuture(iso: string | null | undefined, now: Date) {
         if (!iso) return iso ?? null;
         const dt = new Date(iso);
@@ -14454,6 +14609,18 @@ if (!outText) {
       if (startAdjusted && typeof startAdjusted === "object") {
         draft.startDateTime = startAdjusted.iso;
         yearsShifted = startAdjusted.yearsShifted;
+      }
+
+      const modeTimes = await getModeTimesForPromoter(req);
+      if (draft.startDateTime && modeTimes.start) {
+        draft.startDateTime = applyModeTimeIfMissing(draft.startDateTime, modeTimes.start);
+      }
+      if (modeTimes.end) {
+        if (draft.endDateTime) {
+          draft.endDateTime = applyModeTimeIfMissing(draft.endDateTime, modeTimes.end);
+        } else if (draft.startDateTime) {
+          draft.endDateTime = applyModeTimeToDate(draft.startDateTime, modeTimes.end);
+        }
       }
 
       if (draft.endDateTime) {
