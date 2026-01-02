@@ -692,6 +692,12 @@ router.get(
   align-items:center;
   gap:10px;
 }
+.hdr-create-show{
+  text-decoration:none;
+  display:inline-flex;
+  align-items:center;
+  height:36px;
+}
 .hdr-menu-toggle{
   width:36px;
   height:36px;
@@ -748,6 +754,23 @@ router.get(
   height:1px;
   background:var(--border);
   margin:6px 0;
+}
+.tixai-logo{
+  height:20px;
+  width:auto;
+  display:inline-block;
+  object-fit:contain;
+}
+.tixai-title{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.sb-ai-logo{
+  height:18px;
+  width:auto;
+  display:inline-block;
+  object-fit:contain;
 }
 
 /* Layout now accounts for fixed header */
@@ -2171,6 +2194,7 @@ router.get(
           <path d="M4 6h16M4 12h16M4 18h16" stroke="#111827" stroke-width="1.8" stroke-linecap="round"/>
         </svg>
       </button>
+      <a class="btn p hdr-create-show" href="/admin/ui/shows/create" data-view="/admin/ui/shows/create">Create Show</a>
       <div class="hdr-account" id="hdrAccount">
         <button class="hdr-account-btn" id="hdrAccountBtn" aria-haspopup="menu" aria-expanded="false" title="Account">
           <!-- Simple person icon (inline SVG) -->
@@ -2197,7 +2221,7 @@ router.get(
 
       <div class="sb-section" data-section="tixel-ai">
         <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="tixel-ai" aria-expanded="false">
-          <span class="sb-link-label">TixAll AI</span>
+          <span class="sb-link-label"><img src="/tixai.png" alt="TixAll AI" class="sb-ai-logo" /></span>
           <svg class="sb-toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
@@ -2208,9 +2232,6 @@ router.get(
               <span class="sb-link-label">Create Show</span>
             </span>
           </a>
-          <a class="sb-link sub" href="/admin/ui/ai/smart-storefront" data-view="/admin/ui/ai/smart-storefront">Smart Storefront</a>
-          <a class="sb-link sub" href="/admin/ui/ai/whats-on" data-view="/admin/ui/ai/whats-on">What&#39;s On</a>
-          <a class="sb-link sub" href="/admin/ui/ai/customer-chatbot" data-view="/admin/ui/ai/customer-chatbot">Customer Chatbot</a>
           <a class="sb-link sub" href="/admin/ui/ai/featured" data-view="/admin/ui/ai/featured">Featured &amp; Discovery</a>
           <a class="sb-link sub" href="/admin/ui/ai/insights" data-view="/admin/ui/ai/insights">AI Insights</a>
           <a class="sb-link sub" href="/admin/ui/ai/marketing-studio" data-view="/admin/ui/ai/marketing-studio">Marketing Studio</a>
@@ -4951,9 +4972,9 @@ var drop, fileInput, list, btn, err, status, result, state;
 
   main.innerHTML =
     '<div class="card">'
-  +   '<div class="title" style="display:flex; align-items:center; gap:8px;">'
+  +   '<div class="title tixai-title">'
   +     'Create Show using'
-  +     '<img src="/tixai.png" alt="TixAll AI" style="height:20px; width:auto;" />'
+  +     '<img src="/tixai.png" alt="TixAll AI" class="tixai-logo" />'
   +   '</div>'
   +   '<div class="muted" style="margin-top:6px; line-height:1.4">'
   +     'Drop your show assets here (event copy, briefs, PDFs/DOCX, and artwork). '
@@ -12422,7 +12443,7 @@ function renderInterests(customer){
       + '<div class="card">'
       +   '<div class="header" style="gap:12px;align-items:center;">'
       +     '<div>'
-      +       '<div class="title">Featured &amp; Discovery</div>'
+      +       '<div class="title tixai-title"><span>Featured &amp; Discovery</span><img src="/tixai.png" alt="TixAll AI" class="tixai-logo" /></div>'
       +       '<div class="muted">Configure how TixAll AI selects featured shows by region.</div>'
       +     '</div>'
       +   '</div>'
@@ -12738,7 +12759,7 @@ function renderInterests(customer){
       + '<div class="card">'
       +   '<div class="header" style="gap:12px;align-items:center;">'
       +     '<div>'
-      +       '<div class="title">AI Insights</div>'
+      +       '<div class="title tixai-title"><img src="/tixai.png" alt="TixAll AI" class="tixai-logo" /><span>Insights</span></div>'
       +       '<div class="muted">Monitor risk, forecasts, and funnel performance.</div>'
       +     '</div>'
       +   '</div>'
@@ -12879,7 +12900,7 @@ function renderInterests(customer){
     if (!main) return;
     main.innerHTML = ''
       + '<div class="card">'
-      +   '<div class="title">Marketing Studio</div>'
+      +   '<div class="title tixai-title"><span>Marketing Studio</span><img src="/tixai.png" alt="TixAll AI" class="tixai-logo" /></div>'
       +   '<div class="muted">Template-driven drafts for TixAll campaigns.</div>'
       +   '<div class="grid" style="grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:12px;">'
       +     '<select class="input" id="ai_ms_show"></select>'
@@ -13933,7 +13954,7 @@ function renderInterests(customer){
       + '<div class="card">'
       +   '<div class="header" style="gap:12px;align-items:center;">'
       +     '<div>'
-      +       '<div class="title">Audience &amp; CRM</div>'
+      +       '<div class="title tixai-title"><span>Audience &amp; CRM</span><img src="/tixai.png" alt="TixAll AI" class="tixai-logo" /></div>'
       +       '<div class="muted">Understand your customer base and take action.</div>'
       +     '</div>'
       +   '</div>'
@@ -14287,7 +14308,7 @@ function renderInterests(customer){
       + '<div class="card">'
       +   '<div class="header" style="gap:12px;align-items:center;">'
       +     '<div>'
-      +       '<div class="title">Store &amp; Add-ons</div>'
+      +       '<div class="title tixai-title"><span>Store &amp; Add-ons</span><img src="/tixai.png" alt="TixAll AI" class="tixai-logo" /></div>'
       +       '<div class="muted">Manage products, add-ons, bundles, and tax rules.</div>'
       +     '</div>'
       +   '</div>'
@@ -14602,7 +14623,7 @@ function renderInterests(customer){
       + '<div class="card">'
       +   '<div class="header" style="gap:12px;align-items:center;">'
       +     '<div>'
-      +       '<div class="title">Support Inbox</div>'
+      +       '<div class="title tixai-title"><span>Support Inbox</span><img src="/tixai.png" alt="TixAll AI" class="tixai-logo" /></div>'
       +       '<div class="muted">Centralised support queue with triage and chatbot management.</div>'
       +     '</div>'
       +   '</div>'
