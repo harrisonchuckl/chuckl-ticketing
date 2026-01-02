@@ -3,6 +3,7 @@ import { OrderStatus, Prisma } from "@prisma/client";
 import prisma from "../lib/prisma.js";
 import Stripe from "stripe";
 import { recordAbandonedCheckoutEvent } from "../services/marketing/automations.js";
+import { readCustomerSession } from "../lib/customer-auth.js";
 
 const router = Router();
 
@@ -495,6 +496,7 @@ if (!itQty || itQty < 1 || !itUnit || itUnit < 1) {
     }
 
     // Create Order (PENDING)
+    const customerSession = await readCustomerSession(req);
     const order = await prisma.order.create({
       data: {
         showId: show.id,
@@ -502,6 +504,7 @@ if (!itQty || itQty < 1 || !itUnit || itUnit < 1) {
         amountPence: ticketSubtotalPence,
         status: OrderStatus.PENDING,
         email: buyerEmail || undefined,
+        customerAccountId: customerSession?.sub ? String(customerSession.sub) : undefined,
         storefrontId: storefront?.id || undefined,
         containsProducts: productSubtotalPence > 0,
         containsTickets: totalQty > 0,

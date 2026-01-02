@@ -3,6 +3,8 @@
 import { Router } from 'express';
 import { ShowStatus } from '@prisma/client';
 import prisma from '../lib/prisma.js';
+import { readCustomerSession } from '../lib/customer-auth.js';
+import { readStorefrontCartCount } from '../lib/storefront-cart.js';
 
 const router = Router();
 
@@ -48,16 +50,18 @@ function escJSON(obj: any) {
  return JSON.stringify(obj).replace(/</g, '\\u003c');
 }
 
-function readStorefrontCartCount(req: any, storefront: string) {
- const raw = req.cookies?.[`storefront_cart_${storefront}`];
- if (!raw) return 0;
- try {
-   const parsed = JSON.parse(raw);
-   if (!Array.isArray(parsed)) return 0;
-   return parsed.reduce((sum, item) => sum + Math.max(1, Number(item?.qty || 1)), 0);
- } catch {
-   return 0;
- }
+async function getBasketCountForStorefront(req: any, storefrontSlug: string, storefrontId: string) {
+ const session = await readCustomerSession(req);
+ const cookieCount = readStorefrontCartCount(req, storefrontSlug);
+ if (!session?.sub) return cookieCount;
+
+ const basket = await prisma.basket.findFirst({
+   where: { customerAccountId: String(session.sub), storefrontId },
+   select: { items: { select: { qty: true } } },
+ });
+
+ const dbCount = (basket?.items || []).reduce((sum, item) => sum + item.qty, 0);
+ return dbCount || cookieCount;
 }
 
 function sanitiseRichHtml(input: string) {
@@ -297,13 +301,14 @@ router.get('/checkout/success', async (req, res) => {
  try {
    const order = await prisma.order.findFirst({
      where: { id: orderId },
-     include: {
-       show: {
-         include: {
-           venue: { select: { name: true, address: true, city: true, postcode: true } },
-         },
-       },
-     },
+      include: {
+        show: {
+          include: {
+            organiser: { select: { storefrontSlug: true } },
+            venue: { select: { name: true, address: true, city: true, postcode: true } },
+          },
+        },
+      },
    });
 
    if (!order || !order.show) return res.status(404).send('Order not found');
@@ -320,6 +325,8 @@ router.get('/checkout/success', async (req, res) => {
    const poster = show.imageUrl || '';
    const venueLine = [venue.name, venue.city].filter(Boolean).join(', ');
    const fullAddress = [venue.address, venue.city, venue.postcode].filter(Boolean).join(', ');
+   const storefrontSlug = show.organiser?.storefrontSlug || '';
+   const accountHref = storefrontSlug ? `/public/${encodeURIComponent(storefrontSlug)}/account` : '/public/account';
 
    const canonical = base ? `${base}/public/checkout/success?orderId=${encodeURIComponent(orderId)}` : `/public/checkout/success?orderId=${encodeURIComponent(orderId)}`;
 
@@ -519,9 +526,9 @@ background: rgba(15,156,223,0.18); border: 1px solid rgba(15,156,223,0.35);
 }
 .app-action{
  position: relative;
- width: 36px;
- height: 36px;
- border-radius: 10px;
+ width: 45px;
+ height: 45px;
+ border-radius: 12px;
  display: grid;
  place-items: center;
  text-decoration: none;
@@ -533,20 +540,20 @@ background: rgba(15,156,223,0.18); border: 1px solid rgba(15,156,223,0.35);
  background: #f8fafc;
 }
 .app-action svg{
- width: 18px;
- height: 18px;
+ width: 23px;
+ height: 23px;
 }
 .app-action-badge{
  position: absolute;
- top: -4px;
- right: -4px;
- min-width: 18px;
- height: 18px;
+ top: -5px;
+ right: -5px;
+ min-width: 22px;
+ height: 22px;
  padding: 0 4px;
  border-radius: 999px;
  background: #ef4444;
  color: #fff;
- font-size: 0.7rem;
+ font-size: 0.72rem;
  font-weight: 700;
  display: flex;
  align-items: center;
@@ -611,12 +618,8 @@ ${shouldRefresh ? `<div class="warn">Order received — we’re processing your 
        </div>
 
        <div class="btns">
-         <a class="btn primary" href="/signup">Sign up</a>
-         <a class="btn ghost" href="/login">Log in</a>
-       </div>
-
-       <div class="small">
-         (If your auth routes aren’t <code>/signup</code> and <code>/login</code>, tell me your exact paths and I’ll patch this precisely.)
+         <a class="btn primary" href="${escAttr(accountHref)}">Sign up</a>
+         <a class="btn ghost" href="${escAttr(accountHref)}">Log in</a>
        </div>
      </div>
    </div>
@@ -746,8 +749,15 @@ const endTimeNoteRaw = (show as any).endTimeNote as string | null;
 const endTimeNote = endTimeNoteRaw ? endTimeNoteRaw.trim() : '';
 
  const storefrontSlug = show.organiser?.storefrontSlug || '';
- const cartCount = storefrontSlug ? readStorefrontCartCount(req, storefrontSlug) : 0;
- const cartHref = storefrontSlug ? `/store/${encodeURIComponent(storefrontSlug)}/cart` : '/store';
+ const storefrontRecord = storefrontSlug
+   ? await prisma.storefront.findUnique({ where: { slug: storefrontSlug } })
+   : null;
+ const cartCount =
+   storefrontSlug && storefrontRecord
+     ? await getBasketCountForStorefront(req, storefrontSlug, storefrontRecord.id)
+     : 0;
+ const cartHref = storefrontSlug ? `/public/${encodeURIComponent(storefrontSlug)}/basket` : '/public/basket';
+ const accountHref = storefrontSlug ? `/public/${encodeURIComponent(storefrontSlug)}/account` : '/public/account';
 
    let doorTimeIso: string | undefined;
  if (doorsOpenTime && dateObj) {
@@ -1997,7 +2007,7 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
       </svg>
       <span class="app-action-badge${cartCount ? "" : " is-hidden"}">${cartCount}</span>
     </a>
-    <a class="app-action" href="/login" aria-label="Profile">
+    <a class="app-action" href="${escAttr(accountHref)}" aria-label="Profile">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M20 21a8 8 0 1 0-16 0"></path>
         <circle cx="12" cy="7" r="4"></circle>

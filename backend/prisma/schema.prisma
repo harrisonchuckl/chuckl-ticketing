@@ -398,6 +398,70 @@ model User {
   marketingAiTonePresets     MarketingAiTonePreset[]
 }
 
+model CustomerAccount {
+  id               String   @id @default(cuid())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  email            String   @unique
+  passwordHash     String
+  name             String?
+  phone            String?
+  marketingConsent Boolean  @default(false)
+  lastLoginAt      DateTime?
+
+  memberships CustomerStorefrontMembership[]
+  baskets     Basket[]
+  orders      Order[]
+}
+
+model CustomerStorefrontMembership {
+  id                String   @id @default(cuid())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  customerAccountId String
+  storefrontId      String
+  marketingOptIn    Boolean  @default(false)
+
+  customerAccount CustomerAccount @relation(fields: [customerAccountId], references: [id])
+  storefront      Storefront      @relation(fields: [storefrontId], references: [id])
+
+  @@unique([customerAccountId, storefrontId])
+  @@index([storefrontId])
+}
+
+model Basket {
+  id                String   @id @default(cuid())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  storefrontId      String
+  customerAccountId String?
+  guestSessionId    String?
+
+  storefront      Storefront       @relation(fields: [storefrontId], references: [id])
+  customerAccount CustomerAccount? @relation(fields: [customerAccountId], references: [id])
+  items           BasketItem[]
+
+  @@unique([customerAccountId, storefrontId])
+  @@index([storefrontId])
+}
+
+model BasketItem {
+  id                String   @id @default(cuid())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  basketId          String
+  productId         String
+  variantId         String?
+  qty               Int
+  customAmountPence Int?
+
+  basket  Basket         @relation(fields: [basketId], references: [id], onDelete: Cascade)
+  product Product        @relation(fields: [productId], references: [id])
+  variant ProductVariant? @relation(fields: [variantId], references: [id])
+
+  @@index([basketId])
+}
+
 model DashboardWidgetPreference {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
@@ -982,10 +1046,12 @@ model Order {
 
   showId       String
   userId       String?
+  customerAccountId String?
   ticketTypeId String?
 
   show       Show        @relation(fields: [showId], references: [id])
   user       User?       @relation(fields: [userId], references: [id])
+  customerAccount CustomerAccount? @relation(fields: [customerAccountId], references: [id])
   ticketType TicketType? @relation(fields: [ticketTypeId], references: [id])
   storefront Storefront? @relation(fields: [storefrontId], references: [id])
 
@@ -1008,6 +1074,7 @@ model Order {
   @@index([stripeCheckoutSessionId])
   @@index([emailDeliveryStatus])
   @@index([storefrontId])
+  @@index([customerAccountId])
 }
 
 model Storefront {

@@ -13,6 +13,7 @@ import publicUnsubscribeRouter from "./routes/public-unsubscribe.js";
 import publicPreferencesRouter from "./routes/public-preferences.js";
 import publicTrackRouter from "./routes/public-track.js";
 import publicSurveysRouter from "./routes/public-surveys.js";
+import publicCustomersRouter from "./routes/public-customers.js";
 
 
 
@@ -107,6 +108,7 @@ app.use("/public/orders", publicOrdersRouter);
 // 2) Event tracking endpoint
 app.use("/public", publicTrackRouter);
 app.use("/public", publicSurveysRouter);
+app.use("/public", publicCustomersRouter);
 
 // 3) Slug rewrites + redirects
 app.use("/public", publicSlugs);
