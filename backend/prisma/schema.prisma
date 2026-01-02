@@ -247,6 +247,56 @@ enum ShowEventType {
   PAID
 }
 
+enum CrmSurveyStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+}
+
+enum SupportTicketCategory {
+  RESEND
+  SEATING
+  REFUND
+  PAYMENT
+  VENUE
+  OTHER
+}
+
+enum SupportTicketStatus {
+  OPEN
+  PENDING
+  RESOLVED
+}
+
+enum SupportTicketPriority {
+  LOW
+  MED
+  HIGH
+}
+
+enum SupportMessageSenderType {
+  CUSTOMER
+  STAFF
+  SYSTEM
+}
+
+enum StoreAddOnMode {
+  UPSELL
+  TICKET_ADDON
+  BUNDLE
+}
+
+enum StoreBundleDiscountType {
+  FIXED
+  PCNT
+}
+
+enum StoreFulfilmentKind {
+  COLLECT
+  POST
+  DIGITAL
+}
+
 model User {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
@@ -319,6 +369,26 @@ model User {
   marketingAuditLogs         MarketingAuditLog[]
   campaignDrafts             CampaignDraft[]
   upsellBundles              UpsellBundle[]
+
+  crmSegments                 CrmSegment[]
+  crmSegmentMembers           CrmSegmentMember[]
+  crmTags                     CrmTag[] @relation("CrmTagOrganiser")
+  crmCustomerTagsOrganiser    CrmCustomerTag[] @relation("CrmCustomerTagOrganiser")
+  crmCustomerTagsCustomer     CrmCustomerTag[] @relation("CrmCustomerTagCustomer")
+  crmEventViewsOrganiser      CrmEventView[] @relation("CrmEventViewOrganiser")
+  crmEventViewsCustomer       CrmEventView[] @relation("CrmEventViewCustomer")
+  crmSurveys                  CrmSurvey[]
+  crmSurveyResponses          CrmSurveyResponse[]
+  storeTaxRates               StoreTaxRate[]
+  storeFulfilmentMethods      StoreFulfilmentMethod[]
+  storeShowAddOns             StoreShowAddOn[]
+  storeBundleRules            StoreBundleRule[]
+  supportTicketsOrganised     SupportTicket[] @relation("SupportTicketOrganiser")
+  supportTicketsCustomer      SupportTicket[] @relation("SupportTicketCustomer")
+  chatbotKnowledgeSources     ChatbotKnowledgeSource[] @relation("ChatbotKnowledgeOrganiser")
+  chatbotTranscriptsOrganiser ChatbotTranscript[] @relation("ChatbotTranscriptOrganiser")
+  chatbotTranscriptsCustomer  ChatbotTranscript[] @relation("ChatbotTranscriptCustomer")
+  chatbotEscalationRules      ChatbotEscalationRule[] @relation("ChatbotEscalationOrganiser")
 
   featuredConfigs            FeaturedConfig[]
   featuredPins               FeaturedPin[]
@@ -612,6 +682,12 @@ model Show {
   showEvents     ShowEvent[]
   marketingAiDrafts MarketingAiDraft[]
   featuredPins      FeaturedPin[]
+  crmEventViews      CrmEventView[]
+  crmSurveys         CrmSurvey[]
+  storeShowAddOns    StoreShowAddOn[]
+  storeBundleRules   StoreBundleRule[]
+  supportTickets     SupportTicket[]
+  chatbotTranscripts ChatbotTranscript[]
 
   @@index([venueId])
   @@index([organiserId])
@@ -917,6 +993,7 @@ model Order {
   refunds   Refund[]
   notes     OrderNote[]
   auditLogs OrderAuditLog[]
+  supportTickets SupportTicket[]
 
   seatsCsv                String?        @db.Text
   stripeCheckoutSessionId String?        @db.VarChar(255)
@@ -993,6 +1070,7 @@ model Product {
   upsellRules        UpsellRule[]
   orderItems         ProductOrderItem[]
   inventoryMovements InventoryMovement[]
+  storeShowAddOns    StoreShowAddOn[]
 
   @@unique([storefrontId, slug])
   @@index([storefrontId, status])
@@ -1606,4 +1684,316 @@ model AllocationSeat {
 
   allocation ExternalAllocation @relation(fields: [allocationId], references: [id])
   seat       Seat               @relation(fields: [seatId], references: [id])
+}
+
+model CrmSegment {
+  id             String   @id @default(cuid())
+  organiserId    String
+  name           String
+  description    String?
+  definitionJson Json
+  lastRunAt      DateTime?
+  archivedAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organiser User @relation(fields: [organiserId], references: [id])
+  members   CrmSegmentMember[]
+
+  @@index([organiserId])
+}
+
+model CrmSegmentMember {
+  id            String   @id @default(cuid())
+  segmentId     String
+  customerId    String?
+  customerEmail String
+  createdAt     DateTime @default(now())
+
+  segment  CrmSegment @relation(fields: [segmentId], references: [id])
+  customer User?      @relation(fields: [customerId], references: [id])
+
+  @@unique([segmentId, customerEmail])
+  @@index([segmentId])
+}
+
+model CrmTag {
+  id          String   @id @default(cuid())
+  organiserId String
+  name        String
+  colour      String?
+  createdAt   DateTime @default(now())
+
+  organiser User @relation("CrmTagOrganiser", fields: [organiserId], references: [id])
+  customers CrmCustomerTag[]
+
+  @@index([organiserId])
+}
+
+model CrmCustomerTag {
+  id            String   @id @default(cuid())
+  organiserId   String
+  customerId    String?
+  customerEmail String
+  tagId         String
+  createdAt     DateTime @default(now())
+
+  organiser User  @relation("CrmCustomerTagOrganiser", fields: [organiserId], references: [id])
+  customer  User? @relation("CrmCustomerTagCustomer", fields: [customerId], references: [id])
+  tag       CrmTag @relation(fields: [tagId], references: [id])
+
+  @@unique([customerEmail, tagId])
+  @@index([organiserId])
+}
+
+model CrmEventView {
+  id            String        @id @default(cuid())
+  organiserId   String
+  showId        String
+  eventType     ShowEventType
+  customerId    String?
+  customerEmail String?
+  sessionId     String?
+  viewedAt      DateTime      @default(now())
+  source        String?
+
+  organiser User  @relation("CrmEventViewOrganiser", fields: [organiserId], references: [id])
+  show      Show  @relation(fields: [showId], references: [id])
+  customer  User? @relation("CrmEventViewCustomer", fields: [customerId], references: [id])
+
+  @@index([organiserId, showId])
+  @@index([eventType, viewedAt])
+}
+
+model CrmSurvey {
+  id          String           @id @default(cuid())
+  organiserId String
+  name        String
+  showId      String?
+  status      CrmSurveyStatus  @default(DRAFT)
+  startsAt    DateTime?
+  endsAt      DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  organiser User  @relation(fields: [organiserId], references: [id])
+  show      Show? @relation(fields: [showId], references: [id])
+  questions CrmSurveyQuestion[]
+  responses CrmSurveyResponse[]
+
+  @@index([organiserId])
+}
+
+model CrmSurveyQuestion {
+  id          String   @id @default(cuid())
+  surveyId    String
+  type        String
+  prompt      String
+  optionsJson Json?
+  sortOrder   Int      @default(0)
+
+  survey CrmSurvey @relation(fields: [surveyId], references: [id])
+
+  @@index([surveyId])
+}
+
+model CrmSurveyResponse {
+  id            String   @id @default(cuid())
+  surveyId      String
+  customerId    String?
+  customerEmail String?
+  sessionId     String?
+  submittedAt   DateTime @default(now())
+  answersJson   Json
+
+  survey   CrmSurvey @relation(fields: [surveyId], references: [id])
+  customer User?     @relation(fields: [customerId], references: [id])
+
+  @@index([surveyId])
+}
+
+model StoreTaxRate {
+  id          String   @id @default(cuid())
+  organiserId String
+  name        String
+  rateBps     Int
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  organiser User @relation(fields: [organiserId], references: [id])
+
+  @@index([organiserId])
+}
+
+model StoreFulfilmentMethod {
+  id          String            @id @default(cuid())
+  organiserId String
+  name        String
+  type        StoreFulfilmentKind
+  detailsJson Json?
+  createdAt   DateTime @default(now())
+
+  organiser User @relation(fields: [organiserId], references: [id])
+
+  @@index([organiserId])
+}
+
+model StoreShowAddOn {
+  id          String        @id @default(cuid())
+  organiserId String
+  showId      String
+  productId   String
+  mode        StoreAddOnMode
+  isActive    Boolean       @default(true)
+  maxPerOrder Int?
+  sortOrder   Int           @default(0)
+
+  organiser User    @relation(fields: [organiserId], references: [id])
+  show      Show    @relation(fields: [showId], references: [id])
+  product   Product @relation(fields: [productId], references: [id])
+
+  @@index([organiserId])
+  @@index([showId])
+}
+
+model StoreBundleRule {
+  id             String                @id @default(cuid())
+  organiserId    String
+  name           String
+  showId         String?
+  productIdsJson Json
+  discountType   StoreBundleDiscountType
+  discountValue  Int
+  startsAt       DateTime?
+  endsAt         DateTime?
+  isActive       Boolean               @default(true)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  organiser User  @relation(fields: [organiserId], references: [id])
+  show      Show? @relation(fields: [showId], references: [id])
+
+  @@index([organiserId])
+}
+
+model SupportTicket {
+  id                    String                 @id @default(cuid())
+  organiserId           String
+  customerId            String?
+  orderId               String?
+  showId                String?
+  subject               String
+  category              SupportTicketCategory
+  status                SupportTicketStatus
+  priority              SupportTicketPriority
+  lastCustomerMessageAt DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  organiser       User  @relation("SupportTicketOrganiser", fields: [organiserId], references: [id])
+  customer        User? @relation("SupportTicketCustomer", fields: [customerId], references: [id])
+  order           Order? @relation(fields: [orderId], references: [id])
+  show            Show? @relation(fields: [showId], references: [id])
+  messages        SupportMessage[]
+  attachments     SupportAttachment[]
+  triageResults   SupportTriageResult[]
+  suggestedReplies SupportSuggestedReply[]
+
+  @@index([organiserId])
+  @@index([status])
+}
+
+model SupportMessage {
+  id         String                  @id @default(cuid())
+  ticketId   String
+  senderType SupportMessageSenderType
+  body       String
+  createdAt  DateTime @default(now())
+  metaJson   Json?
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id])
+
+  @@index([ticketId])
+}
+
+model SupportAttachment {
+  id        String   @id @default(cuid())
+  ticketId  String
+  filename  String
+  url       String
+  createdAt DateTime @default(now())
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id])
+
+  @@index([ticketId])
+}
+
+model SupportTriageResult {
+  id                String   @id @default(cuid())
+  ticketId          String
+  suggestedCategory SupportTicketCategory
+  suggestedPriority SupportTicketPriority
+  suggestedNextStep String?
+  createdAt         DateTime @default(now())
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id])
+
+  @@index([ticketId])
+}
+
+model SupportSuggestedReply {
+  id        String   @id @default(cuid())
+  ticketId  String
+  draftBody String
+  createdAt DateTime @default(now())
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id])
+
+  @@index([ticketId])
+}
+
+model ChatbotKnowledgeSource {
+  id          String   @id @default(cuid())
+  organiserId String
+  type        String
+  title       String
+  content     String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  organiser User @relation("ChatbotKnowledgeOrganiser", fields: [organiserId], references: [id])
+
+  @@index([organiserId])
+}
+
+model ChatbotTranscript {
+  id               String   @id @default(cuid())
+  organiserId      String
+  sessionId        String
+  customerId       String?
+  showId           String?
+  startedAt        DateTime @default(now())
+  endedAt          DateTime?
+  transcriptJson   Json
+  conversionHelped Boolean  @default(false)
+
+  organiser User  @relation("ChatbotTranscriptOrganiser", fields: [organiserId], references: [id])
+  customer  User? @relation("ChatbotTranscriptCustomer", fields: [customerId], references: [id])
+  show      Show? @relation(fields: [showId], references: [id])
+
+  @@index([organiserId])
+}
+
+model ChatbotEscalationRule {
+  id          String   @id @default(cuid())
+  organiserId String
+  name        String
+  matchJson   Json
+  actionJson  Json
+  isActive    Boolean @default(true)
+  createdAt   DateTime @default(now())
+
+  organiser User @relation("ChatbotEscalationOrganiser", fields: [organiserId], references: [id])
+
+  @@index([organiserId])
 }

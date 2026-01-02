@@ -2214,6 +2214,9 @@ router.get(
           <a class="sb-link sub" href="/admin/ui/ai/featured" data-view="/admin/ui/ai/featured">Featured &amp; Discovery</a>
           <a class="sb-link sub" href="/admin/ui/ai/insights" data-view="/admin/ui/ai/insights">AI Insights</a>
           <a class="sb-link sub" href="/admin/ui/ai/marketing-studio" data-view="/admin/ui/ai/marketing-studio">Marketing Studio</a>
+          <a class="sb-link sub" href="/admin/ui/ai/audience" data-view="/admin/ui/ai/audience">Audience &amp; CRM</a>
+          <a class="sb-link sub" href="/admin/ui/ai/store" data-view="/admin/ui/ai/store">Store &amp; Add-ons</a>
+          <a class="sb-link sub" href="/admin/ui/ai/support" data-view="/admin/ui/ai/support">Support Inbox</a>
         </div>
       </div>
 
@@ -13924,6 +13927,923 @@ function renderInterests(customer){
   });
 }
 
+  function aiAudiencePage(){
+    if (!main) return;
+    main.innerHTML = ''
+      + '<div class="card">'
+      +   '<div class="header" style="gap:12px;align-items:center;">'
+      +     '<div>'
+      +       '<div class="title">Audience &amp; CRM</div>'
+      +       '<div class="muted">Understand your customer base and take action.</div>'
+      +     '</div>'
+      +   '</div>'
+      +   '<div class="row" style="gap:8px;margin-top:12px;flex-wrap:wrap;">'
+      +     '<button class="btn tab-btn active" data-tab="overview">Overview</button>'
+      +     '<button class="btn tab-btn" data-tab="segments">Segments</button>'
+      +     '<button class="btn tab-btn" data-tab="tags">Tags</button>'
+      +     '<button class="btn tab-btn" data-tab="surveys">Surveys</button>'
+      +     '<button class="btn tab-btn" data-tab="recommendations">Recommendations</button>'
+      +   '</div>'
+      +   '<div id="audience-overview" class="tab-panel active"></div>'
+      +   '<div id="audience-segments" class="tab-panel"></div>'
+      +   '<div id="audience-tags" class="tab-panel"></div>'
+      +   '<div id="audience-surveys" class="tab-panel"></div>'
+      +   '<div id="audience-recommendations" class="tab-panel"></div>'
+      + '</div>';
+
+    var tabs = Array.prototype.slice.call(main.querySelectorAll('.tab-btn'));
+    var panels = {
+      overview: $('#audience-overview'),
+      segments: $('#audience-segments'),
+      tags: $('#audience-tags'),
+      surveys: $('#audience-surveys'),
+      recommendations: $('#audience-recommendations')
+    };
+
+    function setTab(name){
+      tabs.forEach(function(btn){
+        btn.classList.toggle('active', btn.getAttribute('data-tab') === name);
+      });
+      Object.keys(panels).forEach(function(key){
+        if (!panels[key]) return;
+        panels[key].classList.toggle('active', key === name);
+      });
+    }
+
+    tabs.forEach(function(btn){
+      btn.addEventListener('click', function(){
+        setTab(btn.getAttribute('data-tab'));
+      });
+    });
+
+    async function fetchJson(url, opts){
+      var res = await fetch(url, Object.assign({ credentials:'include' }, opts || {}));
+      var data = {};
+      try { data = await res.json(); } catch(e){}
+      console.log('[admin-ui][audience] response', data);
+      if (!res.ok || !data || data.ok === false) {
+        throw new Error((data && (data.message || data.error)) || 'Request failed');
+      }
+      return data;
+    }
+
+    async function loadOverview(){
+      try{
+        var data = await fetchJson('/admin/api/ai/audience/overview');
+        var totals = data.overview.totals || {};
+        var topTowns = data.overview.topTowns || [];
+        var topShows = data.overview.topShows || [];
+        var segments = data.overview.segments || [];
+
+        panels.overview.innerHTML = ''
+          + '<div class="grid" style="grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;">'
+          +   '<div class="panel-block"><div class="panel-title">Total customers</div><div>' + escapeHtml(totals.totalCustomers || 0) + '</div></div>'
+          +   '<div class="panel-block"><div class="panel-title">New (7 days)</div><div>' + escapeHtml(totals.newCustomers7 || 0) + '</div></div>'
+          +   '<div class="panel-block"><div class="panel-title">New (30 days)</div><div>' + escapeHtml(totals.newCustomers30 || 0) + '</div></div>'
+          +   '<div class="panel-block"><div class="panel-title">Repeat</div><div>' + escapeHtml(totals.repeatCustomers || 0) + '</div></div>'
+          +   '<div class="panel-block"><div class="panel-title">Lapsed</div><div>' + escapeHtml(totals.lapsedCustomers || 0) + '</div></div>'
+          + '</div>'
+          + '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:16px;">'
+          +   '<div class="card" style="margin:0;">'
+          +     '<div class="title">Top towns/counties</div>'
+          +     '<div class="table-wrap" style="margin-top:10px;"><table class="table"><thead><tr><th>Town/County</th><th>Buyers</th></tr></thead><tbody>'
+          +       topTowns.map(function(row){ return '<tr><td>' + escapeHtml(row.town || 'Unknown') + '</td><td>' + escapeHtml(row.count) + '</td></tr>'; }).join('')
+          +     '</tbody></table></div>'
+          +   '</div>'
+          +   '<div class="card" style="margin:0;">'
+          +     '<div class="title">Top shows by new buyer acquisition</div>'
+          +     '<div class="table-wrap" style="margin-top:10px;"><table class="table"><thead><tr><th>Show</th><th>New buyers</th></tr></thead><tbody>'
+          +       topShows.map(function(row){ return '<tr><td>' + escapeHtml(row.title || '') + '</td><td>' + escapeHtml(row.newBuyers) + '</td></tr>'; }).join('')
+          +     '</tbody></table></div>'
+          +   '</div>'
+          + '</div>'
+          + '<div class="card" style="margin-top:16px;">'
+          +   '<div class="title">Segments at a glance</div>'
+          +   '<div class="table-wrap" style="margin-top:10px;"><table class="table"><thead><tr><th>Name</th><th>Size</th><th>Last run</th><th>Quick action</th></tr></thead><tbody>'
+          +     segments.map(function(seg){ return '<tr><td>' + escapeHtml(seg.name || '') + '</td><td>' + escapeHtml(seg.size || 0) + '</td><td>' + escapeHtml(seg.lastRunAt ? formatDateTime(seg.lastRunAt) : '—') + '</td><td><a class="btn" href="/admin/api/ai/segments/' + seg.id + '/export" target="_blank">Export CSV</a></td></tr>'; }).join('')
+          +   '</tbody></table></div>'
+          +   '<div class="row" style="gap:8px;margin-top:12px;flex-wrap:wrap;">'
+          +     '<button class="btn" id="aud_quick_segment">Create segment</button>'
+          +     '<button class="btn" id="aud_quick_survey">Create survey</button>'
+          +     '<button class="btn" id="aud_quick_tag">Tag customers</button>'
+          +   '</div>'
+          + '</div>';
+
+        $('#aud_quick_segment').addEventListener('click', function(){ setTab('segments'); });
+        $('#aud_quick_survey').addEventListener('click', function(){ setTab('surveys'); });
+        $('#aud_quick_tag').addEventListener('click', function(){ setTab('tags'); });
+      }catch(err){
+        showToast(parseErr(err), false);
+      }
+    }
+
+    async function loadSegments(){
+      try{
+        var data = await fetchJson('/admin/api/ai/segments');
+        var segments = data.segments || [];
+        panels.segments.innerHTML = ''
+          + '<div class="card" style="margin:0 0 12px 0;">'
+          +   '<div class="title">Create segment (plain English)</div>'
+          +   '<div class="grid" style="grid-template-columns:2fr 1fr;gap:10px;margin-top:10px;">'
+          +     '<input class="input" id="aud_seg_prompt" placeholder="e.g. lapsed buyers 120+ days" />'
+          +     '<button class="btn" id="aud_seg_generate">Generate</button>'
+          +   '</div>'
+          +   '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px;">'
+          +     '<input class="input" id="aud_seg_name" placeholder="Segment name" />'
+          +     '<input class="input" id="aud_seg_desc" placeholder="Description" />'
+          +   '</div>'
+          +   '<div class="muted" style="margin-top:8px;" id="aud_seg_preview">Preview the translated rules here.</div>'
+          +   '<div class="row" style="gap:8px;margin-top:10px;">'
+          +     '<button class="btn p" id="aud_seg_save">Save segment</button>'
+          +   '</div>'
+          + '</div>'
+          + '<div class="card" style="margin:0;">'
+          +   '<div class="title">Segments</div>'
+          +   '<div class="table-wrap" style="margin-top:10px;"><table class="table"><thead><tr><th>Name</th><th>Description</th><th>Last run</th><th>Actions</th></tr></thead><tbody>'
+          +     segments.map(function(seg){ return '<tr data-seg-id=\"' + seg.id + '\"><td>' + escapeHtml(seg.name || '') + '</td><td>' + escapeHtml(seg.description || '') + '</td><td>' + escapeHtml(seg.lastRunAt ? formatDateTime(seg.lastRunAt) : '—') + '</td><td>'
+          +       '<button class=\"btn\" data-action=\"run\">Run</button> '
+          +       '<button class=\"btn\" data-action=\"view\">View members</button> '
+          +       '<a class=\"btn\" href=\"/admin/api/ai/segments/' + seg.id + '/export\" target=\"_blank\">Export CSV</a> '
+          +       '<button class=\"btn\" data-action=\"archive\">Archive</button>'
+          +     '</td></tr>'; }).join('')
+          +   '</tbody></table></div>'
+          +   '<div id="aud_seg_members" style="margin-top:12px;"></div>'
+          + '</div>';
+
+        var definitionJson = null;
+        var previewEl = $('#aud_seg_preview');
+        $('#aud_seg_generate').addEventListener('click', async function(){
+          try{
+            var promptText = $('#aud_seg_prompt').value;
+            var resp = await fetchJson('/admin/api/ai/segments/parse', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ promptText: promptText })});
+            definitionJson = resp.definitionJson;
+            previewEl.textContent = resp.summary || 'Preview ready.';
+          }catch(err){
+            showToast(parseErr(err), false);
+          }
+        });
+
+        $('#aud_seg_save').addEventListener('click', async function(){
+          try{
+            var payload = {
+              name: $('#aud_seg_name').value,
+              description: $('#aud_seg_desc').value,
+              definitionJson: definitionJson || { prompt: $('#aud_seg_prompt').value }
+            };
+            console.log('[admin-ui][audience] save segment payload', payload);
+            await fetchJson('/admin/api/ai/segments', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            showToast('Segment saved.', true);
+            loadSegments();
+          }catch(err){
+            showToast(parseErr(err), false);
+          }
+        });
+
+        $$('#audience-segments [data-seg-id]').forEach(function(row){
+          row.addEventListener('click', async function(e){
+            var action = e.target && e.target.getAttribute('data-action');
+            if (!action) return;
+            var segId = row.getAttribute('data-seg-id');
+            if (action === 'run') {
+              await fetchJson('/admin/api/ai/segments/' + encodeURIComponent(segId) + '/run', { method:'POST' });
+              showToast('Segment run complete.', true);
+              loadSegments();
+            }
+            if (action === 'archive') {
+              await fetchJson('/admin/api/ai/segments/' + encodeURIComponent(segId) + '/archive', { method:'POST' });
+              showToast('Segment archived.', true);
+              loadSegments();
+            }
+            if (action === 'view') {
+              var members = await fetchJson('/admin/api/ai/segments/' + encodeURIComponent(segId) + '/members');
+              var rows = members.members || [];
+              var membersEl = $('#aud_seg_members');
+              membersEl.innerHTML = '<div class="title">Segment members</div>'
+                + '<div class="table-wrap" style="margin-top:10px;"><table class="table"><thead><tr><th>Name</th><th>Email</th><th>Town</th><th>Last purchase</th><th>Orders</th><th>Lifetime spend</th></tr></thead><tbody>'
+                + rows.map(function(c){ return '<tr><td>' + escapeHtml(c.name || '') + '</td><td>' + escapeHtml(c.email || '') + '</td><td>' + escapeHtml(c.town || '') + '</td><td>' + escapeHtml(c.lastPurchaseAt ? formatDateTime(c.lastPurchaseAt) : '—') + '</td><td>' + escapeHtml(c.orderCount || 0) + '</td><td>' + escapeHtml(((c.lifetimeSpendPence || 0) / 100).toFixed(2)) + '</td></tr>'; }).join('')
+                + '</tbody></table></div>'
+                + '<div class="row" style="gap:8px;margin-top:10px;">'
+                +   '<input class="input" id="aud_seg_tag_email" placeholder="Tag all members with tag ID" style="max-width:280px;" />'
+                +   '<button class="btn" id="aud_seg_tag_apply">Apply tag</button>'
+                + '</div>';
+              $('#aud_seg_tag_apply').addEventListener('click', async function(){
+                try{
+                  var tagId = $('#aud_seg_tag_email').value;
+                  var emails = rows.map(function(r){ return r.email; });
+                  await fetchJson('/admin/api/ai/tags/bulk', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'add', tagId: tagId, emails: emails })});
+                  showToast('Tags updated.', true);
+                }catch(err){
+                  showToast(parseErr(err), false);
+                }
+              });
+            }
+          });
+        });
+      }catch(err){
+        showToast(parseErr(err), false);
+      }
+    }
+
+    async function loadTags(){
+      try{
+        var data = await fetchJson('/admin/api/ai/tags');
+        var tags = data.tags || [];
+        panels.tags.innerHTML = ''
+          + '<div class="card" style="margin:0 0 12px 0;">'
+          +   '<div class="title">Create tag</div>'
+          +   '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px;">'
+          +     '<input class="input" id="aud_tag_name" placeholder="Tag name" />'
+          +     '<input class="input" id="aud_tag_colour" placeholder="Colour (optional)" />'
+          +   '</div>'
+          +   '<button class="btn p" id="aud_tag_save" style="margin-top:10px;">Save tag</button>'
+          + '</div>'
+          + '<div class="card" style="margin:0;">'
+          +   '<div class="title">Tags</div>'
+          +   '<div class="table-wrap" style="margin-top:10px;"><table class="table"><thead><tr><th>Name</th><th>Colour</th><th>Tagged customers</th><th>Action</th></tr></thead><tbody>'
+          +     tags.map(function(tag){ return '<tr data-tag-id=\"' + tag.id + '\"><td>' + escapeHtml(tag.name || '') + '</td><td>' + escapeHtml(tag.colour || '—') + '</td><td>' + escapeHtml((tag.customers || []).length) + '</td><td><button class=\"btn\" data-action=\"delete\">Delete</button></td></tr>'; }).join('')
+          +   '</tbody></table></div>'
+          + '</div>';
+
+        $('#aud_tag_save').addEventListener('click', async function(){
+          try{
+            var payload = { name: $('#aud_tag_name').value, colour: $('#aud_tag_colour').value };
+            console.log('[admin-ui][audience] tag payload', payload);
+            await fetchJson('/admin/api/ai/tags', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            showToast('Tag saved.', true);
+            loadTags();
+          }catch(err){
+            showToast(parseErr(err), false);
+          }
+        });
+
+        $$('#audience-tags [data-tag-id]').forEach(function(row){
+          row.addEventListener('click', async function(e){
+            if (!e.target || e.target.getAttribute('data-action') !== 'delete') return;
+            await fetchJson('/admin/api/ai/tags/' + row.getAttribute('data-tag-id'), { method:'DELETE' });
+            showToast('Tag deleted.', true);
+            loadTags();
+          });
+        });
+      }catch(err){
+        showToast(parseErr(err), false);
+      }
+    }
+
+    async function loadSurveys(){
+      try{
+        var data = await fetchJson('/admin/api/ai/surveys');
+        var surveys = data.surveys || [];
+        panels.surveys.innerHTML = ''
+          + '<div class="card" style="margin:0 0 12px 0;">'
+          +   '<div class="title">Create survey</div>'
+          +   '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px;">'
+          +     '<input class="input" id="aud_survey_name" placeholder="Survey name" />'
+          +     '<input class="input" id="aud_survey_show" placeholder="Show ID (optional)" />'
+          +   '</div>'
+          +   '<textarea class="input" id="aud_survey_questions" placeholder="Questions JSON (type, prompt, optionsJson)" style="height:120px;margin-top:10px;"></textarea>'
+          +   '<button class="btn p" id="aud_survey_save" style="margin-top:10px;">Save survey</button>'
+          + '</div>'
+          + '<div class="card" style="margin:0;">'
+          +   '<div class="title">Surveys</div>'
+          +   '<div class="table-wrap" style="margin-top:10px;"><table class="table"><thead><tr><th>Name</th><th>Status</th><th>Questions</th><th>Responses</th><th>Link</th></tr></thead><tbody>'
+          +     surveys.map(function(s){ return '<tr><td>' + escapeHtml(s.name || '') + '</td><td>' + escapeHtml(s.status || 'DRAFT') + '</td><td>' + escapeHtml((s.questions || []).length) + '</td><td>' + escapeHtml((s.responses || []).length) + '</td><td><a class=\"btn\" target=\"_blank\" href=\"/public/surveys/' + s.id + '\">Open link</a></td></tr>'; }).join('')
+          +   '</tbody></table></div>'
+          + '</div>';
+
+        $('#aud_survey_save').addEventListener('click', async function(){
+          try{
+            var questions = $('#aud_survey_questions').value ? JSON.parse($('#aud_survey_questions').value) : [];
+            var payload = { name: $('#aud_survey_name').value, showId: $('#aud_survey_show').value || null, questions: questions, status: 'ACTIVE' };
+            console.log('[admin-ui][audience] survey payload', payload);
+            await fetchJson('/admin/api/ai/surveys', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            showToast('Survey saved.', true);
+            loadSurveys();
+          }catch(err){
+            showToast(parseErr(err), false);
+          }
+        });
+      }catch(err){
+        showToast(parseErr(err), false);
+      }
+    }
+
+    async function loadAudienceRecommendations(){
+      try{
+        var showsResp = await j('/admin/shows');
+        console.log('[admin-ui][audience] shows response', showsResp);
+        var shows = showsResp && showsResp.shows ? showsResp.shows : [];
+        panels.recommendations.innerHTML = ''
+          + '<div class="card" style="margin:0;">'
+          +   '<div class="title">AI recommendations</div>'
+          +   '<div class="muted">Select a show to see suggested segments and messaging.</div>'
+          +   '<select class="input" id="aud_rec_show" style="margin-top:10px;">'
+          +     '<option value=\"\">Select show</option>'
+          +     shows.map(function(s){ return '<option value=\"' + s.id + '\">' + escapeHtml(s.title || s.id) + '</option>'; }).join('')
+          +   '</select>'
+          +   '<div id="aud_rec_output" style="margin-top:12px;"></div>'
+          + '</div>';
+
+        $('#aud_rec_show').addEventListener('change', async function(){
+          var showId = $('#aud_rec_show').value;
+          if (!showId) return;
+          var data = await fetchJson('/admin/api/ai/recommendations?showId=' + encodeURIComponent(showId));
+          var rec = data.recommendations || {};
+          var output = $('#aud_rec_output');
+          output.innerHTML = ''
+            + '<div class="title">Suggested segments</div>'
+            + '<div class="table-wrap" style="margin-top:10px;"><table class="table"><thead><tr><th>Name</th><th>Reason</th><th>Action</th></tr></thead><tbody>'
+            + (rec.segments || []).map(function(seg){ return '<tr><td>' + escapeHtml(seg.name) + '</td><td>' + escapeHtml(seg.reason) + '</td><td><button class=\"btn\" data-create-seg=\"' + encodeURIComponent(JSON.stringify(seg.definitionJson || {})) + '\">Create segment</button></td></tr>'; }).join('')
+            + '</tbody></table></div>'
+            + '<div class="title" style="margin-top:12px;">Suggested subject lines</div>'
+            + '<div>' + (rec.subjectLines || []).map(function(line){ return '<div>• ' + escapeHtml(line) + '</div>'; }).join('') + '</div>'
+            + '<div class="title" style="margin-top:12px;">Suggested message angles</div>'
+            + '<div>' + (rec.messageAngles || []).map(function(line){ return '<div>• ' + escapeHtml(line) + '</div>'; }).join('') + '</div>';
+
+          $$('#aud_rec_output [data-create-seg]').forEach(function(btn){
+            btn.addEventListener('click', async function(){
+              var definition = JSON.parse(decodeURIComponent(btn.getAttribute('data-create-seg')));
+              await fetchJson('/admin/api/ai/segments', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name: 'Recommended segment', description: 'Created from AI recommendation', definitionJson: definition })});
+              showToast('Segment created.', true);
+              loadSegments();
+              setTab('segments');
+            });
+          });
+        });
+      }catch(err){
+        showToast(parseErr(err), false);
+      }
+    }
+
+    loadOverview();
+    loadSegments();
+    loadTags();
+    loadSurveys();
+    loadAudienceRecommendations();
+  }
+
+  function aiStorePage(){
+    if (!main) return;
+    main.innerHTML = ''
+      + '<div class="card">'
+      +   '<div class="header" style="gap:12px;align-items:center;">'
+      +     '<div>'
+      +       '<div class="title">Store &amp; Add-ons</div>'
+      +       '<div class="muted">Manage products, add-ons, bundles, and tax rules.</div>'
+      +     '</div>'
+      +   '</div>'
+      +   '<div class="row" style="gap:8px;margin-top:12px;flex-wrap:wrap;">'
+      +     '<button class="btn tab-btn active" data-tab="products">Products</button>'
+      +     '<button class="btn tab-btn" data-tab="addons">Add-ons</button>'
+      +     '<button class="btn tab-btn" data-tab="bundles">Bundles &amp; Offers</button>'
+      +     '<button class="btn tab-btn" data-tab="tax">Tax &amp; Fulfilment</button>'
+      +     '<button class="btn tab-btn" data-tab="recommendations">Recommendations</button>'
+      +   '</div>'
+      +   '<div id="store-products" class="tab-panel active"></div>'
+      +   '<div id="store-addons" class="tab-panel"></div>'
+      +   '<div id="store-bundles" class="tab-panel"></div>'
+      +   '<div id="store-tax" class="tab-panel"></div>'
+      +   '<div id="store-recommendations" class="tab-panel"></div>'
+      + '</div>';
+
+    var tabs = Array.prototype.slice.call(main.querySelectorAll('.tab-btn'));
+    var panels = {
+      products: $('#store-products'),
+      addons: $('#store-addons'),
+      bundles: $('#store-bundles'),
+      tax: $('#store-tax'),
+      recommendations: $('#store-recommendations')
+    };
+
+    function setTab(name){
+      tabs.forEach(function(btn){
+        btn.classList.toggle('active', btn.getAttribute('data-tab') === name);
+      });
+      Object.keys(panels).forEach(function(key){
+        if (!panels[key]) return;
+        panels[key].classList.toggle('active', key === name);
+      });
+    }
+
+    tabs.forEach(function(btn){
+      btn.addEventListener('click', function(){
+        setTab(btn.getAttribute('data-tab'));
+      });
+    });
+
+    async function fetchJson(url, opts){
+      var res = await fetch(url, Object.assign({ credentials:'include' }, opts || {}));
+      var data = {};
+      try { data = await res.json(); } catch(e){}
+      console.log('[admin-ui][store] response', data);
+      if (!res.ok || !data || data.ok === false) {
+        throw new Error((data && (data.message || data.error)) || 'Request failed');
+      }
+      return data;
+    }
+
+    async function loadProducts(){
+      try{
+        var data = await fetchJson('/admin/api/ai/store/products');
+        var products = data.products || [];
+        panels.products.innerHTML = ''
+          + '<div class="card" style="margin:0 0 12px 0;">'
+          +   '<div class="title">Create product</div>'
+          +   '<div class="grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:10px;">'
+          +     '<input class="input" id="store_prod_title" placeholder="Name" />'
+          +     '<input class="input" id="store_prod_price" placeholder="Price (pence)" />'
+          +     '<select class="input" id="store_prod_status"><option value="DRAFT">Draft</option><option value="ACTIVE">Active</option></select>'
+          +   '</div>'
+          +   '<textarea class="input" id="store_prod_desc" placeholder="Description" style="margin-top:10px;height:80px;"></textarea>'
+          +   '<button class="btn p" id="store_prod_save" style="margin-top:10px;">Save product</button>'
+          + '</div>'
+          + '<div class="card" style="margin:0;">'
+          +   '<div class="title">Products</div>'
+          +   '<div class="table-wrap" style="margin-top:10px;"><table class="table"><thead><tr><th>Name</th><th>Status</th><th>Stock</th><th>Updated</th></tr></thead><tbody>'
+          +     products.map(function(p){ return '<tr><td>' + escapeHtml(p.title || '') + '</td><td>' + escapeHtml(p.status || 'DRAFT') + '</td><td>' + escapeHtml(p.stockCount || '—') + '</td><td>' + escapeHtml(formatDateTime(p.updatedAt)) + '</td></tr>'; }).join('')
+          +   '</tbody></table></div>'
+          + '</div>';
+
+        $('#store_prod_save').addEventListener('click', async function(){
+          try{
+            var payload = { title: $('#store_prod_title').value, pricePence: $('#store_prod_price').value, description: $('#store_prod_desc').value, status: $('#store_prod_status').value };
+            console.log('[admin-ui][store] product payload', payload);
+            await fetchJson('/admin/api/ai/store/products', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            showToast('Product saved.', true);
+            loadProducts();
+          }catch(err){
+            showToast(parseErr(err), false);
+          }
+        });
+      }catch(err){
+        showToast(parseErr(err), false);
+      }
+    }
+
+    async function loadAddOns(){
+      try{
+        var showsResp = await j('/admin/shows');
+        console.log('[admin-ui][store] shows response', showsResp);
+        var shows = showsResp && showsResp.shows ? showsResp.shows : [];
+        var productsResp = await fetchJson('/admin/api/ai/store/products');
+        var products = productsResp.products || [];
+        var data = await fetchJson('/admin/api/ai/store/addons');
+        var addons = data.addons || [];
+        panels.addons.innerHTML = ''
+          + '<div class="card" style="margin:0 0 12px 0;">'
+          +   '<div class="title">Attach add-on to show</div>'
+          +   '<div class="grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:10px;">'
+          +     '<select class="input" id="store_addon_show"><option value=\"\">Show</option>' + shows.map(function(s){ return '<option value=\"' + s.id + '\">' + escapeHtml(s.title || s.id) + '</option>'; }).join('') + '</select>'
+          +     '<select class="input" id="store_addon_product"><option value=\"\">Product</option>' + products.map(function(p){ return '<option value=\"' + p.id + '\">' + escapeHtml(p.title || p.id) + '</option>'; }).join('') + '</select>'
+          +     '<select class="input" id="store_addon_mode"><option value=\"UPSELL\">Checkout upsell</option><option value=\"TICKET_ADDON\">Ticket add-on</option><option value=\"BUNDLE\">Bundle</option></select>'
+          +   '</div>'
+          +   '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px;">'
+          +     '<input class="input" id="store_addon_max" placeholder="Max per order (optional)" />'
+          +     '<input class="input" id="store_addon_sort" placeholder="Sort order" />'
+          +   '</div>'
+          +   '<button class="btn p" id="store_addon_save" style="margin-top:10px;">Save add-on</button>'
+          + '</div>'
+          + '<div class="card" style="margin:0;">'
+          +   '<div class="title">Add-ons</div>'
+          +   '<div class="table-wrap" style="margin-top:10px;"><table class="table"><thead><tr><th>Show</th><th>Product</th><th>Mode</th><th>Active</th><th>Action</th></tr></thead><tbody>'
+          +     addons.map(function(a){ return '<tr data-addon-id=\"' + a.id + '\"><td>' + escapeHtml(a.show?.title || a.showId) + '</td><td>' + escapeHtml(a.product?.title || a.productId) + '</td><td>' + escapeHtml(a.mode || '') + '</td><td>' + escapeHtml(a.isActive ? 'Yes' : 'No') + '</td><td><button class=\"btn\" data-action=\"delete\">Remove</button></td></tr>'; }).join('')
+          +   '</tbody></table></div>'
+          + '</div>';
+
+        $('#store_addon_save').addEventListener('click', async function(){
+          try{
+            var payload = { showId: $('#store_addon_show').value, productId: $('#store_addon_product').value, mode: $('#store_addon_mode').value, maxPerOrder: $('#store_addon_max').value, sortOrder: $('#store_addon_sort').value };
+            console.log('[admin-ui][store] addon payload', payload);
+            await fetchJson('/admin/api/ai/store/addons', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            showToast('Add-on saved.', true);
+            loadAddOns();
+          }catch(err){
+            showToast(parseErr(err), false);
+          }
+        });
+
+        $$('#store-addons [data-addon-id]').forEach(function(row){
+          row.addEventListener('click', async function(e){
+            if (!e.target || e.target.getAttribute('data-action') !== 'delete') return;
+            await fetchJson('/admin/api/ai/store/addons/' + row.getAttribute('data-addon-id'), { method:'DELETE' });
+            showToast('Add-on removed.', true);
+            loadAddOns();
+          });
+        });
+      }catch(err){
+        showToast(parseErr(err), false);
+      }
+    }
+
+    async function loadBundles(){
+      try{
+        var data = await fetchJson('/admin/api/ai/store/bundles');
+        var bundles = data.bundles || [];
+        panels.bundles.innerHTML = ''
+          + '<div class="card" style="margin:0 0 12px 0;">'
+          +   '<div class="title">Create bundle</div>'
+          +   '<div class="grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:10px;">'
+          +     '<input class="input" id="store_bundle_name" placeholder="Bundle name" />'
+          +     '<input class="input" id="store_bundle_products" placeholder="Product IDs (comma separated)" />'
+          +     '<input class="input" id="store_bundle_discount" placeholder="Discount value" />'
+          +   '</div>'
+          +   '<select class="input" id="store_bundle_type" style="margin-top:10px;">'
+          +     '<option value="FIXED">Fixed (£)</option>'
+          +     '<option value="PCNT">Percent</option>'
+          +   '</select>'
+          +   '<button class="btn p" id="store_bundle_save" style="margin-top:10px;">Save bundle</button>'
+          + '</div>'
+          + '<div class="card" style="margin:0;">'
+          +   '<div class="title">Bundles &amp; offers</div>'
+          +   '<div class="table-wrap" style="margin-top:10px;"><table class="table"><thead><tr><th>Name</th><th>Discount</th><th>Active</th><th>Action</th></tr></thead><tbody>'
+          +     bundles.map(function(b){ return '<tr data-bundle-id=\"' + b.id + '\"><td>' + escapeHtml(b.name || '') + '</td><td>' + escapeHtml(b.discountType + ' ' + b.discountValue) + '</td><td>' + escapeHtml(b.isActive ? 'Yes' : 'No') + '</td><td><button class=\"btn\" data-action=\"delete\">Remove</button></td></tr>'; }).join('')
+          +   '</tbody></table></div>'
+          + '</div>';
+
+        $('#store_bundle_save').addEventListener('click', async function(){
+          try{
+            var products = $('#store_bundle_products').value.split(',').map(function(v){ return v.trim(); }).filter(Boolean);
+            var payload = { name: $('#store_bundle_name').value, productIdsJson: products, discountType: $('#store_bundle_type').value, discountValue: $('#store_bundle_discount').value };
+            console.log('[admin-ui][store] bundle payload', payload);
+            await fetchJson('/admin/api/ai/store/bundles', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            showToast('Bundle saved.', true);
+            loadBundles();
+          }catch(err){
+            showToast(parseErr(err), false);
+          }
+        });
+
+        $$('#store-bundles [data-bundle-id]').forEach(function(row){
+          row.addEventListener('click', async function(e){
+            if (!e.target || e.target.getAttribute('data-action') !== 'delete') return;
+            await fetchJson('/admin/api/ai/store/bundles/' + row.getAttribute('data-bundle-id'), { method:'DELETE' });
+            showToast('Bundle removed.', true);
+            loadBundles();
+          });
+        });
+      }catch(err){
+        showToast(parseErr(err), false);
+      }
+    }
+
+    async function loadTaxFulfilment(){
+      try{
+        var rates = await fetchJson('/admin/api/ai/store/tax-rates');
+        var methods = await fetchJson('/admin/api/ai/store/fulfilment');
+        panels.tax.innerHTML = ''
+          + '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;">'
+          +   '<div class="card" style="margin:0;">'
+          +     '<div class="title">Tax rates</div>'
+          +     '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px;">'
+          +       '<input class="input" id="store_tax_name" placeholder="Tax name" />'
+          +       '<input class="input" id="store_tax_rate" placeholder="Rate (bps)" />'
+          +     '</div>'
+          +     '<button class="btn p" id="store_tax_save" style="margin-top:10px;">Save rate</button>'
+          +     '<div class="table-wrap" style="margin-top:10px;"><table class="table"><thead><tr><th>Name</th><th>Rate</th><th>Action</th></tr></thead><tbody>'
+          +       (rates.rates || []).map(function(r){ return '<tr data-tax-id=\"' + r.id + '\"><td>' + escapeHtml(r.name || '') + '</td><td>' + escapeHtml(r.rateBps || 0) + '</td><td><button class=\"btn\" data-action=\"delete\">Remove</button></td></tr>'; }).join('')
+          +     '</tbody></table></div>'
+          +   '</div>'
+          +   '<div class="card" style="margin:0;">'
+          +     '<div class="title">Fulfilment methods</div>'
+          +     '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px;">'
+          +       '<input class="input" id="store_fulfil_name" placeholder="Method name" />'
+          +       '<select class="input" id="store_fulfil_type"><option value=\"COLLECT\">Collect</option><option value=\"POST\">Post</option><option value=\"DIGITAL\">Digital</option></select>'
+          +     '</div>'
+          +     '<button class="btn p" id="store_fulfil_save" style="margin-top:10px;">Save method</button>'
+          +     '<div class="table-wrap" style="margin-top:10px;"><table class="table"><thead><tr><th>Name</th><th>Type</th><th>Action</th></tr></thead><tbody>'
+          +       (methods.methods || []).map(function(m){ return '<tr data-fulfil-id=\"' + m.id + '\"><td>' + escapeHtml(m.name || '') + '</td><td>' + escapeHtml(m.type || '') + '</td><td><button class=\"btn\" data-action=\"delete\">Remove</button></td></tr>'; }).join('')
+          +     '</tbody></table></div>'
+          +   '</div>'
+          + '</div>';
+
+        $('#store_tax_save').addEventListener('click', async function(){
+          try{
+            var payload = { name: $('#store_tax_name').value, rateBps: $('#store_tax_rate').value };
+            console.log('[admin-ui][store] tax payload', payload);
+            await fetchJson('/admin/api/ai/store/tax-rates', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            showToast('Tax rate saved.', true);
+            loadTaxFulfilment();
+          }catch(err){
+            showToast(parseErr(err), false);
+          }
+        });
+
+        $('#store_fulfil_save').addEventListener('click', async function(){
+          try{
+            var payload = { name: $('#store_fulfil_name').value, type: $('#store_fulfil_type').value };
+            console.log('[admin-ui][store] fulfilment payload', payload);
+            await fetchJson('/admin/api/ai/store/fulfilment', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            showToast('Fulfilment method saved.', true);
+            loadTaxFulfilment();
+          }catch(err){
+            showToast(parseErr(err), false);
+          }
+        });
+
+        $$('#store-tax [data-tax-id]').forEach(function(row){
+          row.addEventListener('click', async function(e){
+            if (!e.target || e.target.getAttribute('data-action') !== 'delete') return;
+            await fetchJson('/admin/api/ai/store/tax-rates/' + row.getAttribute('data-tax-id'), { method:'DELETE' });
+            showToast('Tax rate removed.', true);
+            loadTaxFulfilment();
+          });
+        });
+        $$('#store-tax [data-fulfil-id]').forEach(function(row){
+          row.addEventListener('click', async function(e){
+            if (!e.target || e.target.getAttribute('data-action') !== 'delete') return;
+            await fetchJson('/admin/api/ai/store/fulfilment/' + row.getAttribute('data-fulfil-id'), { method:'DELETE' });
+            showToast('Fulfilment method removed.', true);
+            loadTaxFulfilment();
+          });
+        });
+      }catch(err){
+        showToast(parseErr(err), false);
+      }
+    }
+
+    async function loadStoreRecommendations(){
+      try{
+        var showsResp = await j('/admin/shows');
+        console.log('[admin-ui][store] shows response', showsResp);
+        var shows = showsResp && showsResp.shows ? showsResp.shows : [];
+        panels.recommendations.innerHTML = ''
+          + '<div class="card" style="margin:0;">'
+          +   '<div class="title">AI upsell recommendations</div>'
+          +   '<select class="input" id="store_rec_show" style="margin-top:10px;">'
+          +     '<option value=\"\">Select show</option>'
+          +     shows.map(function(s){ return '<option value=\"' + s.id + '\">' + escapeHtml(s.title || s.id) + '</option>'; }).join('')
+          +   '</select>'
+          +   '<div id="store_rec_output" style="margin-top:12px;"></div>'
+          + '</div>';
+
+        $('#store_rec_show').addEventListener('change', async function(){
+          var showId = $('#store_rec_show').value;
+          if (!showId) return;
+          var data = await fetchJson('/admin/api/ai/store/recommendations?showId=' + encodeURIComponent(showId));
+          var items = data.recommendations || [];
+          $('#store_rec_output').innerHTML = '<div class="table-wrap"><table class="table"><thead><tr><th>Product</th><th>Qty</th><th>Revenue</th><th>Attach rate</th></tr></thead><tbody>'
+            + items.map(function(i){ return '<tr><td>' + escapeHtml(i.title || '') + '</td><td>' + escapeHtml(i.qty) + '</td><td>' + escapeHtml(((i.revenuePence || 0) / 100).toFixed(2)) + '</td><td>' + escapeHtml((i.attachRate * 100).toFixed(1) + '%') + '</td></tr>'; }).join('')
+            + '</tbody></table></div>';
+        });
+      }catch(err){
+        showToast(parseErr(err), false);
+      }
+    }
+
+    loadProducts();
+    loadAddOns();
+    loadBundles();
+    loadTaxFulfilment();
+    loadStoreRecommendations();
+  }
+
+  function aiSupportPage(){
+    if (!main) return;
+    main.innerHTML = ''
+      + '<div class="card">'
+      +   '<div class="header" style="gap:12px;align-items:center;">'
+      +     '<div>'
+      +       '<div class="title">Support Inbox</div>'
+      +       '<div class="muted">Centralised support queue with triage and chatbot management.</div>'
+      +     '</div>'
+      +   '</div>'
+      +   '<div class="row" style="gap:8px;margin-top:12px;flex-wrap:wrap;">'
+      +     '<button class="btn tab-btn active" data-tab="tickets">Tickets</button>'
+      +     '<button class="btn tab-btn" data-tab="triage">AI Triage &amp; Suggested Replies</button>'
+      +     '<button class="btn tab-btn" data-tab="chatbot">Chatbot Management</button>'
+      +     '<button class="btn tab-btn" data-tab="transcripts">Transcripts</button>'
+      +   '</div>'
+      +   '<div id="support-tickets" class="tab-panel active"></div>'
+      +   '<div id="support-triage" class="tab-panel"></div>'
+      +   '<div id="support-chatbot" class="tab-panel"></div>'
+      +   '<div id="support-transcripts" class="tab-panel"></div>'
+      + '</div>';
+
+    var tabs = Array.prototype.slice.call(main.querySelectorAll('.tab-btn'));
+    var panels = {
+      tickets: $('#support-tickets'),
+      triage: $('#support-triage'),
+      chatbot: $('#support-chatbot'),
+      transcripts: $('#support-transcripts')
+    };
+
+    var selectedTicketId = null;
+
+    function setTab(name){
+      tabs.forEach(function(btn){
+        btn.classList.toggle('active', btn.getAttribute('data-tab') === name);
+      });
+      Object.keys(panels).forEach(function(key){
+        if (!panels[key]) return;
+        panels[key].classList.toggle('active', key === name);
+      });
+    }
+
+    tabs.forEach(function(btn){
+      btn.addEventListener('click', function(){
+        setTab(btn.getAttribute('data-tab'));
+      });
+    });
+
+    async function fetchJson(url, opts){
+      var res = await fetch(url, Object.assign({ credentials:'include' }, opts || {}));
+      var data = {};
+      try { data = await res.json(); } catch(e){}
+      console.log('[admin-ui][support] response', data);
+      if (!res.ok || !data || data.ok === false) {
+        throw new Error((data && (data.message || data.error)) || 'Request failed');
+      }
+      return data;
+    }
+
+    async function loadTickets(){
+      try{
+        var data = await fetchJson('/admin/api/ai/support/tickets');
+        var tickets = data.tickets || [];
+        panels.tickets.innerHTML = ''
+          + '<div class="card" style="margin:0 0 12px 0;">'
+          +   '<div class="title">Create ticket</div>'
+          +   '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px;">'
+          +     '<input class="input" id="support_ticket_subject" placeholder="Subject" />'
+          +     '<select class="input" id="support_ticket_category"><option value="OTHER">Category</option><option value="RESEND">Resend tickets</option><option value="SEATING">Seating/accessibility</option><option value="REFUND">Refunds/exchanges</option><option value="PAYMENT">Payment issues</option><option value="VENUE">Venue info</option></select>'
+          +   '</div>'
+          +   '<textarea class="input" id="support_ticket_message" placeholder="Initial message" style="margin-top:10px;height:80px;"></textarea>'
+          +   '<button class="btn p" id="support_ticket_save" style="margin-top:10px;">Save ticket</button>'
+          + '</div>'
+          + '<div class="card" style="margin:0;">'
+          +   '<div class="title">Tickets</div>'
+          +   '<div class="table-wrap" style="margin-top:10px;"><table class="table"><thead><tr><th>Subject</th><th>Status</th><th>Priority</th><th>Category</th><th>Updated</th></tr></thead><tbody>'
+          +     tickets.map(function(t){ return '<tr data-ticket-id=\"' + t.id + '\" style=\"cursor:pointer;\"><td>' + escapeHtml(t.subject || '') + '</td><td>' + escapeHtml(t.status || '') + '</td><td>' + escapeHtml(t.priority || '') + '</td><td>' + escapeHtml(t.category || '') + '</td><td>' + escapeHtml(formatDateTime(t.updatedAt)) + '</td></tr>'; }).join('')
+          +   '</tbody></table></div>'
+          +   '<div id="support_ticket_detail" style="margin-top:12px;"></div>'
+          + '</div>';
+
+        $('#support_ticket_save').addEventListener('click', async function(){
+          try{
+            var payload = { subject: $('#support_ticket_subject').value, category: $('#support_ticket_category').value, message: $('#support_ticket_message').value };
+            console.log('[admin-ui][support] ticket payload', payload);
+            await fetchJson('/admin/api/ai/support/tickets', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            showToast('Ticket saved.', true);
+            loadTickets();
+          }catch(err){
+            showToast(parseErr(err), false);
+          }
+        });
+
+        $$('#support-tickets [data-ticket-id]').forEach(function(row){
+          row.addEventListener('click', async function(){
+            selectedTicketId = row.getAttribute('data-ticket-id');
+            var detail = await fetchJson('/admin/api/ai/support/tickets/' + selectedTicketId);
+            var ticket = detail.ticket;
+            var messages = ticket.messages || [];
+            $('#support_ticket_detail').innerHTML = ''
+              + '<div class="title">Ticket detail</div>'
+              + '<div class="muted">Status: ' + escapeHtml(ticket.status) + ' · Priority: ' + escapeHtml(ticket.priority) + '</div>'
+              + '<div style="margin-top:10px;">' + messages.map(function(m){ return '<div class="panel-block" style="margin-bottom:6px;"><div class="panel-title">' + escapeHtml(m.senderType) + '</div><div>' + escapeHtml(m.body) + '</div></div>'; }).join('') + '</div>'
+              + '<textarea class="input" id="support_ticket_reply" placeholder="Reply" style="margin-top:10px;height:80px;"></textarea>'
+              + '<button class="btn" id="support_ticket_send" style="margin-top:10px;">Send reply</button>'
+              + '<div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap;">'
+              +   '<button class="btn" id="support_ticket_triage">Run triage</button>'
+              +   '<button class="btn" id="support_ticket_suggested">Get suggested reply</button>'
+              + '</div>'
+              + '<div id="support_ticket_ai" style="margin-top:12px;"></div>';
+
+            $('#support_ticket_send').addEventListener('click', async function(){
+              var payload = { senderType: 'STAFF', body: $('#support_ticket_reply').value };
+              console.log('[admin-ui][support] reply payload', payload);
+              await fetchJson('/admin/api/ai/support/tickets/' + selectedTicketId + '/message', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+              showToast('Reply added.', true);
+              loadTickets();
+            });
+
+            $('#support_ticket_triage').addEventListener('click', async function(){
+              var triage = await fetchJson('/admin/api/ai/support/tickets/' + selectedTicketId + '/triage', { method:'POST' });
+              $('#support_ticket_ai').innerHTML = '<div class="title">Triage result</div><div class="muted">Category: ' + escapeHtml(triage.triage.suggestedCategory) + ' · Priority: ' + escapeHtml(triage.triage.suggestedPriority) + '</div>';
+              showToast('Triage complete.', true);
+            });
+
+            $('#support_ticket_suggested').addEventListener('click', async function(){
+              var reply = await fetchJson('/admin/api/ai/support/tickets/' + selectedTicketId + '/suggested-reply');
+              $('#support_ticket_ai').innerHTML = '<div class="title">Suggested reply</div><pre style="white-space:pre-wrap;">' + escapeHtml(reply.reply.draftBody || '') + '</pre>';
+            });
+          });
+        });
+      }catch(err){
+        showToast(parseErr(err), false);
+      }
+    }
+
+    async function loadTriage(){
+      panels.triage.innerHTML = '<div class="card" style="margin:0;"><div class="title">AI triage &amp; suggested replies</div><div class="muted">Select a ticket in the Tickets tab to view triage results.</div></div>';
+    }
+
+    async function loadChatbot(){
+      try{
+        var knowledge = await fetchJson('/admin/api/ai/chatbot/knowledge');
+        var rules = await fetchJson('/admin/api/ai/chatbot/rules');
+        panels.chatbot.innerHTML = ''
+          + '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;">'
+          +   '<div class="card" style="margin:0;">'
+          +     '<div class="title">Knowledge sources</div>'
+          +     '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px;">'
+          +       '<input class="input" id="support_kn_title" placeholder="Title" />'
+          +       '<select class="input" id="support_kn_type"><option value="FAQ">FAQ</option><option value="POLICY">Policy</option><option value="VENUE">Venue</option><option value="SHOW">Show</option></select>'
+          +     '</div>'
+          +     '<textarea class="input" id="support_kn_content" placeholder="Content" style="margin-top:10px;height:80px;"></textarea>'
+          +     '<button class="btn p" id="support_kn_save" style="margin-top:10px;">Save source</button>'
+          +     '<div class="table-wrap" style="margin-top:10px;"><table class="table"><thead><tr><th>Title</th><th>Type</th><th>Action</th></tr></thead><tbody>'
+          +       (knowledge.items || []).map(function(k){ return '<tr data-kn-id=\"' + k.id + '\"><td>' + escapeHtml(k.title || '') + '</td><td>' + escapeHtml(k.type || '') + '</td><td><button class=\"btn\" data-action=\"delete\">Remove</button></td></tr>'; }).join('')
+          +     '</tbody></table></div>'
+          +   '</div>'
+          +   '<div class="card" style="margin:0;">'
+          +     '<div class="title">Escalation rules</div>'
+          +     '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px;">'
+          +       '<input class="input" id="support_rule_name" placeholder="Rule name" />'
+          +       '<textarea class="input" id="support_rule_match" placeholder="Match JSON" style="height:60px;"></textarea>'
+          +     '</div>'
+          +     '<textarea class="input" id="support_rule_action" placeholder="Action JSON" style="margin-top:10px;height:60px;"></textarea>'
+          +     '<button class="btn p" id="support_rule_save" style="margin-top:10px;">Save rule</button>'
+          +     '<div class="table-wrap" style="margin-top:10px;"><table class="table"><thead><tr><th>Name</th><th>Action</th></tr></thead><tbody>'
+          +       (rules.items || []).map(function(r){ return '<tr data-rule-id=\"' + r.id + '\"><td>' + escapeHtml(r.name || '') + '</td><td><button class=\"btn\" data-action=\"delete\">Remove</button></td></tr>'; }).join('')
+          +     '</tbody></table></div>'
+          +   '</div>'
+          + '</div>';
+
+        $('#support_kn_save').addEventListener('click', async function(){
+          try{
+            var payload = { title: $('#support_kn_title').value, type: $('#support_kn_type').value, content: $('#support_kn_content').value };
+            console.log('[admin-ui][support] knowledge payload', payload);
+            await fetchJson('/admin/api/ai/chatbot/knowledge', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            showToast('Knowledge saved.', true);
+            loadChatbot();
+          }catch(err){
+            showToast(parseErr(err), false);
+          }
+        });
+
+        $('#support_rule_save').addEventListener('click', async function(){
+          try{
+            var payload = { name: $('#support_rule_name').value, matchJson: $('#support_rule_match').value ? JSON.parse($('#support_rule_match').value) : {}, actionJson: $('#support_rule_action').value ? JSON.parse($('#support_rule_action').value) : {} };
+            console.log('[admin-ui][support] rule payload', payload);
+            await fetchJson('/admin/api/ai/chatbot/rules', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            showToast('Rule saved.', true);
+            loadChatbot();
+          }catch(err){
+            showToast(parseErr(err), false);
+          }
+        });
+
+        $$('#support-chatbot [data-kn-id]').forEach(function(row){
+          row.addEventListener('click', async function(e){
+            if (!e.target || e.target.getAttribute('data-action') !== 'delete') return;
+            await fetchJson('/admin/api/ai/chatbot/knowledge/' + row.getAttribute('data-kn-id'), { method:'DELETE' });
+            showToast('Knowledge removed.', true);
+            loadChatbot();
+          });
+        });
+        $$('#support-chatbot [data-rule-id]').forEach(function(row){
+          row.addEventListener('click', async function(e){
+            if (!e.target || e.target.getAttribute('data-action') !== 'delete') return;
+            await fetchJson('/admin/api/ai/chatbot/rules/' + row.getAttribute('data-rule-id'), { method:'DELETE' });
+            showToast('Rule removed.', true);
+            loadChatbot();
+          });
+        });
+      }catch(err){
+        showToast(parseErr(err), false);
+      }
+    }
+
+    async function loadTranscripts(){
+      try{
+        var data = await fetchJson('/admin/api/ai/chatbot/transcripts');
+        var transcripts = data.transcripts || [];
+        panels.transcripts.innerHTML = ''
+          + '<div class="card" style="margin:0;">'
+          +   '<div class="title">Chatbot transcripts</div>'
+          +   '<div class="table-wrap" style="margin-top:10px;"><table class="table"><thead><tr><th>Session</th><th>Started</th><th>Conversion helped</th><th>Action</th></tr></thead><tbody>'
+          +     transcripts.map(function(t){ return '<tr data-trans-id=\"' + t.id + '\"><td>' + escapeHtml(t.sessionId || '') + '</td><td>' + escapeHtml(formatDateTime(t.startedAt)) + '</td><td>' + escapeHtml(t.conversionHelped ? 'Yes' : 'No') + '</td><td><button class=\"btn\" data-action=\"flag\">Flag conversion</button></td></tr>'; }).join('')
+          +   '</tbody></table></div>'
+          + '</div>';
+
+        $$('#support-transcripts [data-trans-id]').forEach(function(row){
+          row.addEventListener('click', async function(e){
+            if (!e.target || e.target.getAttribute('data-action') !== 'flag') return;
+            await fetchJson('/admin/api/ai/chatbot/transcripts/' + row.getAttribute('data-trans-id') + '/flag-conversion-helped', { method:'POST' });
+            showToast('Transcript flagged.', true);
+            loadTranscripts();
+          });
+        });
+      }catch(err){
+        showToast(parseErr(err), false);
+      }
+    }
+
+    loadTickets();
+    loadTriage();
+    loadChatbot();
+    loadTranscripts();
+  }
+
   // --- ROUTER ---
   function route(){
     try{
@@ -13939,6 +14859,9 @@ function renderInterests(customer){
       if (path === '/admin/ui/ai/featured') return aiFeaturedPage();
       if (path === '/admin/ui/ai/insights') return aiInsightsPage();
       if (path === '/admin/ui/ai/marketing-studio') return aiMarketingStudioPage();
+      if (path === '/admin/ui/ai/audience') return aiAudiencePage();
+      if (path === '/admin/ui/ai/store') return aiStorePage();
+      if (path === '/admin/ui/ai/support') return aiSupportPage();
       if (path === '/admin/ui/shows/create') return createShow();
       if (path === '/admin/ui/shows/current')  return listShows();
       if (path === '/admin/ui/customers')     return customers();
