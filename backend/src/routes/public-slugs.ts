@@ -1099,7 +1099,7 @@ body {
   background: var(--bg-surface);
   padding: 16px;
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-float);
+box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /* ~60% softer than shadow-float */
   border: 1px solid var(--border);
   display: flex;
   flex-wrap: wrap;
@@ -1164,9 +1164,10 @@ body {
 }
 
 .show-card:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-float);
+  transform: none;           /* ✅ no extra lift */
+  box-shadow: var(--shadow-card); /* ✅ keep same shadow as default */
 }
+
 
 .show-card__image {
   position: relative;
