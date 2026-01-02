@@ -7595,6 +7595,7 @@ async function summaryPage(id){
     +'</div>'
     +'</div>'
     +'<div class="row">'
+    +'<button class="btn" id="summaryEditShow">Edit show</button>'
     +'<button class="btn" id="summarySeating">Edit seating</button>'
     +'<button class="btn" id="summaryTickets">Manage tickets</button>'
     +'</div>'
@@ -7635,6 +7636,7 @@ async function summaryPage(id){
     +'</div>'
     +'</div>';
 
+  var summaryEditShow = $('#summaryEditShow');
   var summarySeating = $('#summarySeating');
   var summaryTickets = $('#summaryTickets');
   var linkToBuilder = $('#linkToBuilder');
@@ -7666,6 +7668,11 @@ async function summaryPage(id){
   if (summarySeating){
     summarySeating.addEventListener('click', function(){
       window.location.href = '/admin/seating/builder/preview/' + id;
+    });
+  }
+  if (summaryEditShow){
+    summaryEditShow.addEventListener('click', function(){
+      window.location.href = '/admin/ui/shows/create?showId=' + encodeURIComponent(id) + '&mode=edit';
     });
   }
   if (summaryTickets){
