@@ -1725,71 +1725,13 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
       prevBtn.className = 'pagination-btn';
       prevBtn.textContent = 'Back';
       prevBtn.disabled = currentPage === 1;
-      prevBtn.addEventListener('click', () => {
-        if(currentPage > 1){
+          prevBtn.addEventListener('click', () => {
+        if (currentPage > 1) {
           currentPage -= 1;
           applyFilters();
-              // --- CTA TEXT AUTO-FIT (max size while staying one line + not overlapping button) ---
-    const ctaStrip = document.querySelector('.cta-strip[aria-label="Create account"]');
-    const ctaInner = ctaStrip ? ctaStrip.querySelector('.cta-strip__inner') : null;
-    const ctaText = document.getElementById('ctaCreateAccountText');
-    const ctaBtn = ctaStrip ? ctaStrip.querySelector('.cta-strip__button') : null;
-
-    function fitCtaText(){
-      if (!ctaInner || !ctaText) return;
-
-      const innerStyles = window.getComputedStyle(ctaInner);
-      const dir = innerStyles.flexDirection || 'row';
-      const gapRaw = innerStyles.getPropertyValue('gap') || innerStyles.getPropertyValue('column-gap') || '0px';
-      const gap = parseFloat(gapRaw) || 0;
-
-      const innerW = ctaInner.getBoundingClientRect().width;
-
-      // If the layout is column (mobile), the text can use the full width.
-      // If row, reserve space for the button + gap.
-      let available = innerW;
-      if (dir.startsWith('row') && ctaBtn) {
-        const btnW = ctaBtn.getBoundingClientRect().width;
-        available = Math.max(0, innerW - btnW - gap);
-      }
-
-      // Binary search the biggest font size that still fits on one line
-      const MIN = 12;   // px (won't get smaller than this)
-      const MAX = 34;   // px (upper cap so it doesn't look silly on huge screens)
-
-      let lo = MIN;
-      let hi = MAX;
-
-      // Reset first (so measuring isn't biased by an old tiny size)
-      ctaText.style.fontSize = MAX + 'px';
-
-      for (let i = 0; i < 14; i++) {
-        const mid = (lo + hi) / 2;
-        ctaText.style.fontSize = mid + 'px';
-
-        // scrollWidth tells us the width the text *wants* on one line
-        if (ctaText.scrollWidth <= available) lo = mid;
-        else hi = mid;
-      }
-
-      ctaText.style.fontSize = Math.floor(lo) + 'px';
-    }
-
-    // Run now + on resize (and when fonts finish loading)
-    fitCtaText();
-    window.addEventListener('resize', () => window.requestAnimationFrame(fitCtaText));
-    if (document.fonts && document.fonts.ready) {
-      document.fonts.ready.then(() => window.requestAnimationFrame(fitCtaText)).catch(() => {});
-    }
-
-    // If CTA inner size changes (e.g. dynamic content), refit automatically
-    if (window.ResizeObserver && ctaInner) {
-      const ro = new ResizeObserver(() => fitCtaText());
-      ro.observe(ctaInner);
-    }
-
         }
       });
+
       pagination.appendChild(prevBtn);
 
       for(let i = 1; i <= totalPages; i += 1){
@@ -1831,7 +1773,7 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
       });
     }
 
-    [venueFilter, cityFilter, countyFilter].forEach(filter => {
+      [venueFilter, cityFilter, countyFilter].forEach(filter => {
       if(filter){
         filter.addEventListener('change', () => {
           resetLocationFilters(filter);
@@ -1840,6 +1782,66 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
         });
       }
     });
+
+    // --- CTA TEXT AUTO-FIT (always keep text + button on one line, no overlap) ---
+    (function initCtaAutofit(){
+      const ctaStrip = document.querySelector('.cta-strip[aria-label="Create account"]');
+      if (!ctaStrip) return;
+
+      const ctaInner = ctaStrip.querySelector('.cta-strip__inner');
+      const ctaText = document.getElementById('ctaCreateAccountText');
+      const ctaBtn  = ctaStrip.querySelector('.cta-strip__button');
+      if (!ctaInner || !ctaText || !ctaBtn) return;
+
+      const MIN = 12; // px
+      const MAX = 30; // px
+
+      function fitCtaText(){
+        const innerW = ctaInner.getBoundingClientRect().width;
+        const btnW   = ctaBtn.getBoundingClientRect().width;
+
+        const styles = window.getComputedStyle(ctaInner);
+        const gapRaw = styles.getPropertyValue('gap') || styles.getPropertyValue('column-gap') || '0px';
+        const gap = parseFloat(gapRaw) || 0;
+
+        const available = Math.max(0, innerW - btnW - gap);
+
+        if (available <= 0) {
+          ctaText.style.fontSize = MIN + 'px';
+          return;
+        }
+
+        let lo = MIN, hi = MAX;
+        ctaText.style.fontSize = MAX + 'px';
+
+        for (let i = 0; i < 14; i++) {
+          const mid = (lo + hi) / 2;
+          ctaText.style.fontSize = mid + 'px';
+          if (ctaText.scrollWidth <= available) lo = mid;
+          else hi = mid;
+        }
+
+        ctaText.style.fontSize = Math.floor(lo) + 'px';
+      }
+
+      const rafFit = () => window.requestAnimationFrame(fitCtaText);
+
+      rafFit();
+      window.addEventListener('resize', rafFit, { passive: true });
+
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(rafFit).catch(() => {});
+      }
+
+      if (window.ResizeObserver) {
+        const ro = new ResizeObserver(rafFit);
+        ro.observe(ctaInner);
+        ro.observe(ctaBtn);
+      }
+    })();
+
+    applyFilters();
+  })();
 
     applyFilters();
   })();
