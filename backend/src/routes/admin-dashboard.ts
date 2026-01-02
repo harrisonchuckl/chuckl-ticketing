@@ -705,7 +705,7 @@ router.get("/dashboard/alerts", requireAdminOrOrganiser, async (req, res) => {
             detail: `${show.title || "Untitled show"} at ${show.venue?.name || ""} — ${
               tickets
             } tickets in last 7 days`,
-            action: { label: "Open", href: `/admin/ui/shows/${show.id}/edit` },
+          action: { label: "Open", href: `/admin/ui/shows/create?showId=${show.id}&mode=edit` },
           });
         }
       });
