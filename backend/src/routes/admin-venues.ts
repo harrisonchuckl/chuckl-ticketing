@@ -1,6 +1,7 @@
 import { Router } from "express";
 import prisma from "../lib/prisma.js";
 import { requireAdminOrOrganiser } from "../lib/authz.js";
+import { lookupPostcode } from "../lib/postcode.js";
 
 const router = Router();
 
@@ -82,13 +83,18 @@ router.post("/venues", requireAdminOrOrganiser, async (req, res) => {
       return res.status(400).json({ ok: false, error: "Name is required" });
     }
 
+    const normalizedPostcode = postcode ? String(postcode).trim() : "";
+    const postcodeLookup = normalizedPostcode ? await lookupPostcode(normalizedPostcode) : null;
+    const derivedCity = postcodeLookup?.city ?? null;
+    const derivedCounty = postcodeLookup?.county ?? null;
+
     const created = await prisma.venue.create({
       data: {
         name: String(name).trim(),
         address: address ? String(address).trim() : null,
-        city: city ? String(city).trim() : null,
-        county: county ? String(county).trim() : null,
-        postcode: postcode ? String(postcode).trim() : null,
+        city: city ? String(city).trim() : derivedCity,
+        county: county ? String(county).trim() : derivedCounty,
+        postcode: normalizedPostcode || null,
         capacity: capacity != null ? Number(capacity) : null,
         ...(isOrganiser(req) ? { ownerId: requireUserId(req) } : {}),
       },
