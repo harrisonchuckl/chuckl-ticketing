@@ -3868,7 +3868,7 @@ document.addEventListener('click', function(e){
         : '';
       return (
         '<div class="table-row">'
-        + '<div><a href="/admin/ui/shows/' + show.id + '/edit" data-view="/admin/ui/shows/' + show.id + '/edit">' + escapeHtml(show.title) + '</a></div>'
+        + '<div><a href="/admin/ui/shows/create?showId=' + show.id + '&mode=edit" data-view="/admin/ui/shows/create?showId=' + show.id + '&mode=edit">' + escapeHtml(show.title) + '</a></div>'
         + '<div>' + escapeHtml(show.venue || '-') + '</div>'
         + '<div>' + dateLabel + '</div>'
         + '<div>' + fmtNumber.format(show.tickets || 0) + '</div>'
@@ -4053,7 +4053,7 @@ document.addEventListener('click', function(e){
         +     (analytics && analytics.risk ? '<div class="muted" style="font-size:12px;">' + escapeHtml(analytics.risk.reason || '') + '</div>' : '')
         +   '</div>'
         +   '<div class="row" style="gap:8px;">'
-        +     '<a class="btn" href="/admin/ui/shows/' + show.id + '/edit" data-view="/admin/ui/shows/' + show.id + '/edit">Open show</a>'
+        +     '<a class="btn" href="/admin/ui/shows/create?showId=' + show.id + '&mode=edit" data-view="/admin/ui/shows/create?showId=' + show.id + '&mode=edit">Open show</a>'
         +     extraButton
         +   '</div>'
         + '</div>';
@@ -5694,6 +5694,8 @@ async function createShow(){
 +  '<div class="row" style="gap:10px; align-items:center; position:relative;">'
 +    '<button id="save" class="btn p" style="padding: 10px 20px; font-size: 16px;">Save Show and Add Unallocated Seating</button>'
 +    '<button id="save_dd_btn" class="btn" type="button" aria-label="Change next step" style="padding: 10px 12px; font-size: 16px; width: 44px;">▾</button>'
++    '<button id="edit_seating" class="btn" type="button" style="display:none;">Seating map</button>'
++    '<button id="edit_tickets" class="btn" type="button" style="display:none;">Tickets</button>'
 
 +    '<div id="save_dd" style="display:none; position:absolute; right:0; top:44px; background:#fff; border:1px solid var(--border); border-radius:12px; box-shadow: var(--shadow); overflow:hidden; min-width:320px; z-index:50;">'
 +      '<button type="button" data-mode="UNALLOCATED" class="btn" style="width:100%; justify-content:flex-start; border:0; border-bottom:1px solid var(--border); border-radius:0; padding:12px 14px;">Save Show and Add Unallocated Seating</button>'
@@ -5722,6 +5724,18 @@ const existingShowId = (() => {
   try { return new URLSearchParams(window.location.search).get('showId') || ''; }
   catch { return ''; }
 })();
+const formMode = (() => {
+  try { return new URLSearchParams(window.location.search).get('mode') || ''; }
+  catch { return ''; }
+})();
+const isEditFlow = !!existingShowId && formMode === 'edit';
+const isDuplicateFlow = !!existingShowId && formMode === 'duplicate';
+
+const saveBtn = $('#save');
+const saveDdBtn = $('#save_dd_btn');
+const saveDd = $('#save_dd');
+const editSeatingBtn = $('#edit_seating');
+const editTicketsBtn = $('#edit_tickets');
 
 
 // Cache ALL sub-category options once (from the original HTML)
@@ -5754,6 +5768,23 @@ function updateCategoryOptions() {
 
 eventTypeSelect.addEventListener('change', updateCategoryOptions);
 updateCategoryOptions();
+
+function setActionMode(){
+  if (!saveBtn) return;
+  if (isEditFlow) {
+    saveBtn.textContent = 'Save Changes';
+  } else if (isDuplicateFlow) {
+    saveBtn.textContent = 'Publish Show';
+  }
+
+  if ((isEditFlow || isDuplicateFlow) && saveDdBtn) {
+    saveDdBtn.style.display = 'none';
+  }
+  if ((isEditFlow || isDuplicateFlow) && saveDd) {
+    saveDd.style.display = 'none';
+  }
+}
+setActionMode();
 
 
     // --- Image Upload Logic (Updated for Main & Additional Images) ---
@@ -6110,11 +6141,17 @@ updateCategoryOptions();
       saveMode = (mode === 'ALLOCATED') ? 'ALLOCATED' : (mode === 'EXTERNAL' ? 'EXTERNAL' : 'UNALLOCATED');
       var saveBtn = $('#save');
       if (saveBtn){
-        saveBtn.textContent = (saveMode === 'ALLOCATED')
-          ? 'Save Show and Add Allocated Seating'
-          : (saveMode === 'EXTERNAL')
-            ? 'Publish show using backup / external ticket link'
-            : 'Save Show and Add Unallocated Seating';
+        if (isEditFlow) {
+          saveBtn.textContent = 'Save Changes';
+        } else if (isDuplicateFlow) {
+          saveBtn.textContent = 'Publish Show';
+        } else {
+          saveBtn.textContent = (saveMode === 'ALLOCATED')
+            ? 'Save Show and Add Allocated Seating'
+            : (saveMode === 'EXTERNAL')
+              ? 'Publish show using backup / external ticket link'
+              : 'Save Show and Add Unallocated Seating';
+        }
       }
     }
 setSaveMode('UNALLOCATED');
@@ -6208,7 +6245,7 @@ if (existingShowId) {
       }
 
       // Description
-      if (desc) desc.innerHTML = s.descriptionHtml || '';
+      if (desc) desc.innerHTML = s.descriptionHtml || s.description || '';
 
       // Main image
       if (s.imageUrl) {
@@ -6274,6 +6311,29 @@ if (existingShowId) {
         setSaveMode('EXTERNAL');
       }
       updateExternalSaveOption();
+
+      if (isEditFlow) {
+        if (editTicketsBtn && s.usesExternalTicketing !== true) {
+          editTicketsBtn.style.display = 'inline-flex';
+          editTicketsBtn.addEventListener('click', function(){
+            window.location.href = '/admin/ui/shows/' + existingShowId + '/tickets';
+          });
+        }
+
+        if (editSeatingBtn && s.usesExternalTicketing !== true && s.usesAllocatedSeating === true) {
+          try{
+            var maps = await j('/admin/seatmaps?showId=' + encodeURIComponent(existingShowId));
+            if (Array.isArray(maps) && maps.length){
+              editSeatingBtn.style.display = 'inline-flex';
+              editSeatingBtn.addEventListener('click', function(){
+                window.location.href = '/admin/seating/builder/preview/' + existingShowId;
+              });
+            }
+          }catch(e){
+            console.warn('createShow: seat map lookup failed', e);
+          }
+        }
+      }
     } catch (e) {
       console.error('createShow: failed to load showId', existingShowId, e);
     }
@@ -6406,7 +6466,7 @@ var showRes = await j(saveUrl, {
     usesAllocatedSeating: saveMode === 'ALLOCATED',
     usesExternalTicketing: saveMode === 'EXTERNAL',
     externalTicketUrl: externalTicketUrl || null,
-    status: saveMode === 'EXTERNAL' ? 'LIVE' : undefined,
+    status: (saveMode === 'EXTERNAL' || isDuplicateFlow) ? 'LIVE' : undefined,
 
     // extra fields
     doorsOpenTime: doorsOpenTime || null,
@@ -6433,7 +6493,16 @@ if (!showId){
   throw new Error('Failed to save show (no id returned from server)');
 }
 
-            
+            if (isEditFlow) {
+              alert('Changes saved');
+              return;
+            }
+
+            if (isDuplicateFlow) {
+              window.location.href = '/admin/ui/shows/' + showId + '/summary';
+              return;
+            }
+
            // NEW: Skip seating-choice page and go straight where the organiser chose
 if (saveMode === 'ALLOCATED'){
   window.location.href = '/admin/seating/builder/preview/' + showId + '?layout=blank';
@@ -6958,7 +7027,7 @@ function statusBadgeHTML(statusLabel){
       a.addEventListener('click', function(e){
         e.preventDefault();
         var id = a.getAttribute('data-edit');
-        if (id) go('/admin/ui/shows/'+id+'/edit');
+        if (id) go('/admin/ui/shows/create?showId='+id+'&mode=edit');
       });
     });
 
@@ -7020,7 +7089,7 @@ function statusBadgeHTML(statusLabel){
           if (!id) return;
           var r = await j('/admin/shows/'+id+'/duplicate', { method:'POST' });
           if (r && r.ok && r.newId){
-            go('/admin/ui/shows/'+r.newId+'/edit');
+            go('/admin/ui/shows/create?showId='+r.newId+'&mode=duplicate');
           }
         }catch(err){
           alert('Duplicate failed: ' + (err.message || err));
@@ -7712,7 +7781,7 @@ async function summaryPage(id){
       +'</div>';
 
     $('#backToShows').addEventListener('click', function(){ go('/admin/ui/shows/current'); });
-    $('#editShowBtn').addEventListener('click', function(){ go('/admin/ui/shows/' + id + '/edit'); });
+    $('#editShowBtn').addEventListener('click', function(){ go('/admin/ui/shows/create?showId=' + id + '&mode=edit'); });
 
     var addTypeForm = $('#addTypeForm');
     var ticketTypesBody = $('#ticketTypesBody');
@@ -13702,7 +13771,8 @@ function renderInterests(customer){
 
       if (path.startsWith('/admin/ui/shows/') && path.endsWith('/edit')){
         var id1 = path.split('/')[4];
-        return editShow(id1);
+        history.replaceState({}, '', '/admin/ui/shows/create?showId=' + encodeURIComponent(id1) + '&mode=edit');
+        return createShow();
       }
       if (path.startsWith('/admin/ui/shows/') && path.endsWith('/tickets')){
         var id2 = path.split('/')[4];
