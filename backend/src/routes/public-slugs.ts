@@ -1,5 +1,7 @@
 import { Router } from "express";
 import prisma from "../lib/prisma.js";
+import { readCustomerSession } from "../lib/customer-auth.js";
+import { readStorefrontCartCount } from "../lib/storefront-cart.js";
 
 const router = Router();
 
@@ -31,16 +33,18 @@ function truncateText(value: string | null | undefined, max = 140) {
   return `${text.slice(0, max).replace(/\s+\S*$/, "")}…`;
 }
 
-function readStorefrontCartCount(req: any, storefront: string) {
-  const raw = req.cookies?.[`storefront_cart_${storefront}`];
-  if (!raw) return 0;
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return 0;
-    return parsed.reduce((sum, item) => sum + Math.max(1, Number(item?.qty || 1)), 0);
-  } catch {
-    return 0;
-  }
+async function getBasketCountForStorefront(req: any, storefrontSlug: string, storefrontId: string) {
+  const session = await readCustomerSession(req);
+  const cookieCount = readStorefrontCartCount(req, storefrontSlug);
+  if (!session?.sub) return cookieCount;
+
+  const basket = await prisma.basket.findFirst({
+    where: { customerAccountId: String(session.sub), storefrontId },
+    select: { items: { select: { qty: true } } },
+  });
+
+  const dbCount = (basket?.items || []).reduce((sum, item) => sum + item.qty, 0);
+  return dbCount || cookieCount;
 }
 
 // Helper to match the SSR brand logic
@@ -51,6 +55,512 @@ function getPublicBrand() {
   const homeHref = String(process.env.PUBLIC_BRAND_HOME_HREF || '/public').trim();
   return { name, logoUrl, homeHref };
 }
+
+function renderAccountPage(opts: { storefrontSlug: string | null; storefrontName: string | null }) {
+  const brand = getPublicBrand();
+  const title = opts.storefrontName ? `${opts.storefrontName} · Account` : "TixAll Account";
+  const storefrontSlug = opts.storefrontSlug || "";
+  const accountTitle = opts.storefrontName || "TixAll";
+  const accountSubtitle = opts.storefrontName
+    ? `Access your tickets, orders, and preferences for ${opts.storefrontName}.`
+    : "Access your tickets, orders, and preferences across TixAll.";
+
+  const accountHref = storefrontSlug ? `/public/${escAttr(storefrontSlug)}/account` : "/public/account";
+  const basketHref = storefrontSlug ? `/public/${escAttr(storefrontSlug)}/basket` : "/public/basket";
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>${escHtml(title)}</title>
+  <style>
+    :root{--bg:#f8fafc;--panel:#fff;--text:#0f172a;--muted:#64748b;--border:#e2e8f0;--brand:#0ea5e9}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+    a{text-decoration:none;color:inherit}
+    .wrap{max-width:1100px;margin:0 auto;padding:24px}
+    .app-header{position:sticky;top:0;background:rgba(255,255,255,0.95);backdrop-filter:saturate(180%) blur(10px);border-bottom:1px solid var(--border);z-index:50}
+    .app-header-inner{max-width:1200px;margin:0 auto;padding:0 20px;height:64px;display:flex;align-items:center;justify-content:space-between}
+    .app-brand{display:inline-flex;align-items:center;gap:10px;text-decoration:none}
+    .app-brand-logo{height:32px;width:auto;border-radius:8px}
+    .app-actions{display:flex;align-items:center;gap:10px}
+    .app-action{position:relative;width:45px;height:45px;border-radius:12px;display:grid;place-items:center;color:var(--text);border:1px solid transparent}
+    .app-action:hover{border-color:var(--border);background:#f8fafc}
+    .app-action svg{width:23px;height:23px}
+    .app-action-badge{position:absolute;top:-5px;right:-5px;min-width:22px;height:22px;padding:0 4px;border-radius:999px;background:#ef4444;color:#fff;font-size:.72rem;font-weight:700;display:flex;align-items:center;justify-content:center}
+    .app-action-badge.is-hidden{display:none}
+
+    .hero{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-top:8px}
+    .hero h1{margin:0;font-size:2rem}
+    .hero p{margin:6px 0 0;color:var(--muted)}
+    .grid{display:grid;gap:20px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+    .card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:20px}
+    .card h2{margin:0 0 12px;font-size:1.1rem}
+    .input{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);margin-bottom:10px}
+    .btn{display:inline-flex;align-items:center;justify-content:center;border-radius:10px;border:1px solid var(--border);padding:10px 14px;background:#fff;color:var(--text);cursor:pointer}
+    .btn.primary{background:var(--brand);color:#fff;border-color:transparent}
+    .btn.link{border:none;background:none;color:var(--brand);padding:0}
+    .btn-row{display:flex;gap:10px;flex-wrap:wrap}
+    .hidden{display:none}
+    .list{display:grid;gap:12px}
+    .list-item{padding:12px;border:1px solid var(--border);border-radius:12px;background:#fff}
+    .muted{color:var(--muted)}
+    .menu{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}
+    .tag{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;background:#e2e8f0;font-size:.8rem}
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <div class="app-header-inner">
+      <a href="${escAttr(brand.homeHref || "/public")}" class="app-brand" aria-label="${escAttr(brand.name)}">
+        <img class="app-brand-logo" src="${escAttr(brand.logoUrl)}" alt="${escAttr(brand.name)}" />
+      </a>
+      <div class="app-actions">
+        <a class="app-action" href="${escAttr(basketHref)}" aria-label="View basket">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="9" cy="20" r="1"></circle>
+            <circle cx="17" cy="20" r="1"></circle>
+            <path d="M3 4h2l2.4 12.4a2 2 0 0 0 2 1.6h7.2a2 2 0 0 0 2-1.6L21 8H6"></path>
+          </svg>
+          <span class="app-action-badge is-hidden" id="basketCount">0</span>
+        </a>
+        <a class="app-action" href="${escAttr(accountHref)}" aria-label="Profile">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20 21a8 8 0 1 0-16 0"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="hero">
+      <div>
+        <h1>${escHtml(accountTitle)} account</h1>
+        <p>${escHtml(accountSubtitle)}</p>
+      </div>
+      <span class="tag">Customer portal</span>
+    </div>
+
+    <div class="grid" style="margin-top:24px">
+      <div class="card" id="signed-out">
+        <h2>Sign in</h2>
+        <input class="input" id="loginEmail" type="email" placeholder="Email" autocomplete="email" />
+        <input class="input" id="loginPassword" type="password" placeholder="Password" autocomplete="current-password" />
+        <div class="btn-row">
+          <button class="btn primary" id="loginBtn">Sign in</button>
+        </div>
+        <p class="muted" style="margin-top:16px">New here? Create an account to manage tickets and orders.</p>
+        <input class="input" id="signupName" type="text" placeholder="Full name" autocomplete="name" />
+        <input class="input" id="signupEmail" type="email" placeholder="Email" autocomplete="email" />
+        <input class="input" id="signupPassword" type="password" placeholder="Password" autocomplete="new-password" />
+        <label style="display:flex;gap:8px;align-items:center;font-size:.9rem;margin-bottom:10px">
+          <input type="checkbox" id="signupConsent" />
+          I agree to receive updates from ${escHtml(accountTitle)}.
+        </label>
+        <div class="btn-row">
+          <button class="btn" id="signupBtn">Create account</button>
+        </div>
+        <p class="muted" id="authMessage"></p>
+      </div>
+
+      <div class="card hidden" id="signed-in">
+        <h2>My account</h2>
+        <p class="muted" id="welcomeText"></p>
+        <div class="menu">
+          <a class="btn" href="#orders">Orders</a>
+          <a class="btn" href="#tickets">Tickets</a>
+          <a class="btn" href="#settings">Settings</a>
+          <button class="btn" id="logoutBtn">Sign out</button>
+        </div>
+      </div>
+
+      <div class="card" id="orders">
+        <h2>Orders</h2>
+        <div class="list" id="ordersList"><span class="muted">Sign in to view your orders.</span></div>
+      </div>
+
+      <div class="card" id="tickets">
+        <h2>Tickets</h2>
+        <p class="muted">Tickets are listed alongside your orders for quick access.</p>
+      </div>
+
+      <div class="card" id="settings">
+        <h2>Saved details</h2>
+        <input class="input" id="profileName" type="text" placeholder="Name" />
+        <input class="input" id="profilePhone" type="text" placeholder="Phone" />
+        <label style="display:flex;gap:8px;align-items:center;font-size:.9rem;margin-bottom:10px">
+          <input type="checkbox" id="globalConsent" />
+          I want to receive updates from TixAll.
+        </label>
+        ${
+          storefrontSlug
+            ? `<label style="display:flex;gap:8px;align-items:center;font-size:.9rem;margin-bottom:10px">
+              <input type="checkbox" id="storefrontConsent" />
+              I want to receive updates from ${escHtml(accountTitle)}.
+            </label>`
+            : ""
+        }
+        <div class="btn-row">
+          <button class="btn primary" id="saveProfileBtn">Save</button>
+        </div>
+        <p class="muted" id="saveMessage"></p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const storefrontSlug = ${storefrontSlug ? `"${escAttr(storefrontSlug)}"` : "null"};
+
+    const authMessage = document.getElementById('authMessage');
+    const signedOut = document.getElementById('signed-out');
+    const signedIn = document.getElementById('signed-in');
+    const welcomeText = document.getElementById('welcomeText');
+    const ordersList = document.getElementById('ordersList');
+    const basketCount = document.getElementById('basketCount');
+
+    function formatDate(raw) {
+      if (!raw) return '';
+      const d = new Date(raw);
+      return d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+
+    function formatMoney(pence) {
+      return '£' + (Number(pence || 0) / 100).toFixed(2);
+    }
+
+    async function postJSON(url, payload) {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload || {}),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Request failed');
+      return data;
+    }
+
+    async function patchJSON(url, payload) {
+      const res = await fetch(url, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload || {}),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Request failed');
+      return data;
+    }
+
+    async function getJSON(url) {
+      const res = await fetch(url, { credentials: 'include' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Request failed');
+      return data;
+    }
+
+    async function loadSession() {
+      const sessionUrl = storefrontSlug
+        ? '/public/auth/session?storefront=' + encodeURIComponent(storefrontSlug)
+        : '/public/auth/session';
+      try {
+        const data = await getJSON(sessionUrl);
+        if (!data.ok) return null;
+        return data;
+      } catch {
+        return null;
+      }
+    }
+
+    async function loadOrders() {
+      if (!storefrontSlug) {
+        const data = await getJSON('/public/customer/orders');
+        return data.items || [];
+      }
+      const data = await getJSON('/public/customer/orders?storefront=' + encodeURIComponent(storefrontSlug));
+      return data.items || [];
+    }
+
+    function renderOrders(items) {
+      if (!items.length) {
+        ordersList.innerHTML = '<span class=\"muted\">No orders yet for this account.</span>';
+        return;
+      }
+      ordersList.innerHTML = items.map(item => {
+        const venue = item.venue ? [item.venue.name, item.venue.city].filter(Boolean).join(' · ') : '';
+        return '<div class=\"list-item\">' +
+          '<strong>' + item.showTitle + '</strong>' +
+          '<div class=\"muted\">' + [formatDate(item.showDate), venue].filter(Boolean).join(' • ') + '</div>' +
+          '<div style=\"margin-top:6px\">' + formatMoney(item.amountPence) + ' · ' + item.status + '</div>' +
+        '</div>';
+      }).join('');
+    }
+
+    async function loadBasketCount() {
+      if (!storefrontSlug) return;
+      try {
+        const data = await getJSON('/public/basket?storefront=' + encodeURIComponent(storefrontSlug));
+        const count = (data.items || []).reduce((sum, item) => sum + Number(item.qty || 0), 0);
+        if (count) {
+          basketCount.textContent = count;
+          basketCount.classList.remove('is-hidden');
+        }
+      } catch {}
+    }
+
+    async function applySession() {
+      const data = await loadSession();
+      if (!data || !data.customer) return;
+
+      signedOut.classList.add('hidden');
+      signedIn.classList.remove('hidden');
+      welcomeText.textContent = 'Signed in as ' + data.customer.email;
+
+      document.getElementById('profileName').value = data.customer.name || '';
+      document.getElementById('profilePhone').value = data.customer.phone || '';
+      document.getElementById('globalConsent').checked = Boolean(data.customer.marketingConsent);
+
+      if (storefrontSlug) {
+        const storefrontConsent = document.getElementById('storefrontConsent');
+        if (storefrontConsent) storefrontConsent.checked = Boolean(data.membership && data.membership.marketingOptIn);
+      }
+
+      const orders = await loadOrders();
+      renderOrders(orders);
+    }
+
+    document.getElementById('loginBtn').addEventListener('click', async () => {
+      authMessage.textContent = '';
+      try {
+        await postJSON('/public/auth/login', {
+          email: document.getElementById('loginEmail').value,
+          password: document.getElementById('loginPassword').value,
+          storefrontSlug,
+        });
+        location.reload();
+      } catch (err) {
+        authMessage.textContent = err.message || 'Sign in failed';
+      }
+    });
+
+    document.getElementById('signupBtn').addEventListener('click', async () => {
+      authMessage.textContent = '';
+      try {
+        await postJSON('/public/auth/signup', {
+          name: document.getElementById('signupName').value,
+          email: document.getElementById('signupEmail').value,
+          password: document.getElementById('signupPassword').value,
+          marketingConsent: document.getElementById('signupConsent').checked,
+          storefrontSlug,
+        });
+        location.reload();
+      } catch (err) {
+        authMessage.textContent = err.message || 'Signup failed';
+      }
+    });
+
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      await postJSON('/public/auth/logout');
+      location.reload();
+    });
+
+    document.getElementById('saveProfileBtn').addEventListener('click', async () => {
+      const saveMessage = document.getElementById('saveMessage');
+      saveMessage.textContent = '';
+      try {
+        await patchJSON('/public/customer/profile', {
+          name: document.getElementById('profileName').value,
+          phone: document.getElementById('profilePhone').value,
+          marketingConsent: document.getElementById('globalConsent').checked,
+        });
+        if (storefrontSlug) {
+          const storefrontConsent = document.getElementById('storefrontConsent');
+          if (storefrontConsent) {
+            await patchJSON('/public/customer/membership?storefront=' + encodeURIComponent(storefrontSlug), {
+              marketingOptIn: storefrontConsent.checked,
+            });
+          }
+        }
+        saveMessage.textContent = 'Saved!';
+      } catch (err) {
+        saveMessage.textContent = err.message || 'Save failed';
+      }
+    });
+
+    loadBasketCount();
+    applySession();
+  </script>
+</body>
+</html>`;
+}
+
+function renderBasketPage(opts: { storefrontSlug: string | null; storefrontName: string | null }) {
+  const brand = getPublicBrand();
+  const title = opts.storefrontName ? `${opts.storefrontName} · Basket` : "Basket";
+  const storefrontSlug = opts.storefrontSlug || "";
+  const accountHref = storefrontSlug ? `/public/${escAttr(storefrontSlug)}/account` : "/public/account";
+  const basketHref = storefrontSlug ? `/public/${escAttr(storefrontSlug)}/basket` : "/public/basket";
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>${escHtml(title)}</title>
+  <style>
+    :root{--bg:#f8fafc;--panel:#fff;--text:#0f172a;--muted:#64748b;--border:#e2e8f0;--brand:#0ea5e9}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+    a{text-decoration:none;color:inherit}
+    .wrap{max-width:1100px;margin:0 auto;padding:24px}
+    .app-header{position:sticky;top:0;background:rgba(255,255,255,0.95);backdrop-filter:saturate(180%) blur(10px);border-bottom:1px solid var(--border);z-index:50}
+    .app-header-inner{max-width:1200px;margin:0 auto;padding:0 20px;height:64px;display:flex;align-items:center;justify-content:space-between}
+    .app-brand{display:inline-flex;align-items:center;gap:10px;text-decoration:none}
+    .app-brand-logo{height:32px;width:auto;border-radius:8px}
+    .app-actions{display:flex;align-items:center;gap:10px}
+    .app-action{position:relative;width:45px;height:45px;border-radius:12px;display:grid;place-items:center;color:var(--text);border:1px solid transparent}
+    .app-action:hover{border-color:var(--border);background:#f8fafc}
+    .app-action svg{width:23px;height:23px}
+    .app-action-badge{position:absolute;top:-5px;right:-5px;min-width:22px;height:22px;padding:0 4px;border-radius:999px;background:#ef4444;color:#fff;font-size:.72rem;font-weight:700;display:flex;align-items:center;justify-content:center}
+    .app-action-badge.is-hidden{display:none}
+    .card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:20px}
+    .list{display:grid;gap:12px}
+    .list-item{padding:12px;border:1px solid var(--border);border-radius:12px;background:#fff;display:flex;justify-content:space-between;gap:12px}
+    .muted{color:var(--muted)}
+    .btn{display:inline-flex;align-items:center;justify-content:center;border-radius:10px;border:1px solid var(--border);padding:10px 14px;background:#fff;color:var(--text);cursor:pointer}
+    .btn.primary{background:var(--brand);color:#fff;border-color:transparent}
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <div class="app-header-inner">
+      <a href="${escAttr(brand.homeHref || "/public")}" class="app-brand" aria-label="${escAttr(brand.name)}">
+        <img class="app-brand-logo" src="${escAttr(brand.logoUrl)}" alt="${escAttr(brand.name)}" />
+      </a>
+      <div class="app-actions">
+        <a class="app-action" href="${escAttr(basketHref)}" aria-label="View basket">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="9" cy="20" r="1"></circle>
+            <circle cx="17" cy="20" r="1"></circle>
+            <path d="M3 4h2l2.4 12.4a2 2 0 0 0 2 1.6h7.2a2 2 0 0 0 2-1.6L21 8H6"></path>
+          </svg>
+          <span class="app-action-badge is-hidden" id="basketCount">0</span>
+        </a>
+        <a class="app-action" href="${escAttr(accountHref)}" aria-label="Profile">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20 21a8 8 0 1 0-16 0"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <h1>${escHtml(title)}</h1>
+    <div class="card" style="margin-top:16px">
+      <div class="list" id="basketList"><span class="muted">Loading basket…</span></div>
+      <div style="margin-top:16px;display:flex;justify-content:space-between;align-items:center">
+        <strong>Total</strong>
+        <strong id="basketTotal">£0.00</strong>
+      </div>
+      <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
+        <a class="btn" href="${storefrontSlug ? `/store/${escAttr(storefrontSlug)}/cart` : "/store"}">Manage in store</a>
+        <a class="btn primary" href="${storefrontSlug ? `/store/${escAttr(storefrontSlug)}/cart` : "/store"}">Checkout</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const storefrontSlug = ${storefrontSlug ? `"${escAttr(storefrontSlug)}"` : "null"};
+    const basketList = document.getElementById('basketList');
+    const basketTotal = document.getElementById('basketTotal');
+    const basketCount = document.getElementById('basketCount');
+
+    function formatMoney(pence) {
+      return '£' + (Number(pence || 0) / 100).toFixed(2);
+    }
+
+    async function getJSON(url) {
+      const res = await fetch(url, { credentials: 'include' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Request failed');
+      return data;
+    }
+
+    async function loadBasket() {
+      if (!storefrontSlug) {
+        basketList.innerHTML = '<span class=\"muted\">No storefront selected.</span>';
+        return;
+      }
+      try {
+        const data = await getJSON('/public/basket?storefront=' + encodeURIComponent(storefrontSlug));
+        const items = data.items || [];
+        if (!items.length) {
+          basketList.innerHTML = '<span class=\"muted\">Your basket is empty.</span>';
+          return;
+        }
+        let total = 0;
+        basketList.innerHTML = items.map(item => {
+          total += Number(item.lineTotalPence || 0);
+          return '<div class=\"list-item\">' +
+            '<div><strong>' + item.title + '</strong>' +
+            (item.variant ? '<div class=\"muted\">' + item.variant + '</div>' : '') +
+            '<div class=\"muted\">Qty ' + item.qty + '</div></div>' +
+            '<div><strong>' + formatMoney(item.lineTotalPence) + '</strong></div>' +
+          '</div>';
+        }).join('');
+        basketTotal.textContent = formatMoney(total);
+        const count = items.reduce((sum, item) => sum + Number(item.qty || 0), 0);
+        if (count) {
+          basketCount.textContent = count;
+          basketCount.classList.remove('is-hidden');
+        }
+      } catch (err) {
+        basketList.innerHTML = '<span class=\"muted\">Failed to load basket.</span>';
+      }
+    }
+
+    loadBasket();
+  </script>
+</body>
+</html>`;
+}
+
+router.get("/account", (_req, res) => {
+  res.type("html").send(renderAccountPage({ storefrontSlug: null, storefrontName: null }));
+});
+
+router.get("/basket", (_req, res) => {
+  res.type("html").send(renderBasketPage({ storefrontSlug: null, storefrontName: null }));
+});
+
+router.get("/:storefront/account", async (req, res) => {
+  const storefrontSlug = String(req.params.storefront || "");
+  const organiser = await prisma.user.findUnique({
+    where: { storefrontSlug },
+    select: { companyName: true, name: true, storefrontSlug: true },
+  });
+
+  if (!organiser) return res.status(404).send("Not found");
+  const storefrontName = organiser.companyName || organiser.name || organiser.storefrontSlug || null;
+  res.type("html").send(renderAccountPage({ storefrontSlug, storefrontName }));
+});
+
+router.get("/:storefront/basket", async (req, res) => {
+  const storefrontSlug = String(req.params.storefront || "");
+  const organiser = await prisma.user.findUnique({
+    where: { storefrontSlug },
+    select: { companyName: true, name: true, storefrontSlug: true },
+  });
+
+  if (!organiser) return res.status(404).send("Not found");
+  const storefrontName = organiser.companyName || organiser.name || organiser.storefrontSlug || null;
+  res.type("html").send(renderBasketPage({ storefrontSlug, storefrontName }));
+});
 
 /**
  * 1) Old URL -> redirect to pretty URL (unless internal rewrite)
@@ -167,8 +677,15 @@ router.get("/:storefront", async (req, res) => {
   const title = organiser.companyName || organiser.name || organiser.storefrontSlug;
   const brand = getPublicBrand();
   const storefrontSlug = organiser.storefrontSlug || "";
-  const cartCount = storefrontSlug ? readStorefrontCartCount(req, storefrontSlug) : 0;
-  const cartHref = storefrontSlug ? `/store/${escAttr(storefrontSlug)}/cart` : "/store";
+  const storefrontRecord = storefrontSlug
+    ? await prisma.storefront.findUnique({ where: { slug: storefrontSlug } })
+    : null;
+  const cartCount =
+    storefrontSlug && storefrontRecord
+      ? await getBasketCountForStorefront(req, storefrontSlug, storefrontRecord.id)
+      : 0;
+  const cartHref = storefrontSlug ? `/public/${escAttr(storefrontSlug)}/basket` : "/public/basket";
+  const accountHref = storefrontSlug ? `/public/${escAttr(storefrontSlug)}/account` : "/public/account";
 
   const visibleShows = shows.filter(show => !!show.slug);
   const featuredShows = visibleShows.slice(0, 6);
@@ -377,9 +894,9 @@ body {
 }
 .app-action {
   position: relative;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+  width: 45px;
+  height: 45px;
+  border-radius: 12px;
   display: grid;
   place-items: center;
   text-decoration: none;
@@ -391,20 +908,20 @@ body {
   background: #f8fafc;
 }
 .app-action svg {
-  width: 18px;
-  height: 18px;
+  width: 23px;
+  height: 23px;
 }
 .app-action-badge {
   position: absolute;
-  top: -4px;
-  right: -4px;
-  min-width: 18px;
-  height: 18px;
+  top: -5px;
+  right: -5px;
+  min-width: 22px;
+  height: 22px;
   padding: 0 4px;
   border-radius: 999px;
   background: #ef4444;
   color: #fff;
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -823,7 +1340,7 @@ body {
           </svg>
           <span class="app-action-badge${cartCount ? "" : " is-hidden"}">${cartCount}</span>
         </a>
-        <a class="app-action" href="/login" aria-label="Profile">
+        <a class="app-action" href="${accountHref}" aria-label="Profile">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M20 21a8 8 0 1 0-16 0"></path>
             <circle cx="12" cy="7" r="4"></circle>
