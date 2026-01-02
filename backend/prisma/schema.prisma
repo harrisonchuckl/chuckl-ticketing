@@ -499,6 +499,7 @@ model Venue {
   name     String
   address  String?
   city     String?
+  county   String?
   postcode String?
   capacity Int?
 
