@@ -7633,6 +7633,8 @@ async function summaryPage(id){
   const statusLabel = show.status || 'DRAFT';
   const isLive = statusLabel === 'LIVE';
   const usesAllocatedSeating = show.usesAllocatedSeating === true;
+  const externalTicketUrl = String(show.externalTicketUrl || '').trim();
+  const isExternalOnly = ticketTypes.length === 0 && show.usesExternalTicketing === true && !!externalTicketUrl;
 
     // --- Links Configuration ---
 
@@ -7715,19 +7717,42 @@ async function summaryPage(id){
     +'<div class="card" style="margin:0">'
     +'<div class="title" style="margin-bottom:8px">Ticket types</div>'
     +(ticketTypes.length === 0
-      ? '<div class="muted">No ticket types yet. Use "Manage tickets" to add them.</div>'
+      ? (isExternalOnly
+        ? '<div class="muted" style="margin-bottom:12px;">No tickets have been created for this show. External link only.</div>'
+          + '<label class="muted" style="font-size:12px;font-weight:600;display:block;margin-bottom:6px;">External ticket link</label>'
+          + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
+            + '<input id="summaryExternalTicketUrl" class="input" type="url" value="'+escapeHtml(externalTicketUrl)+'" style="flex:1;min-width:220px;" />'
+            + '<button class="btn" id="summaryExternalTicketCopy">Copy link</button>'
+            + '<button class="btn p" id="summaryExternalTicketSave">Save link</button>'
+          + '</div>'
+          + '<div id="summaryExternalTicketMsg" class="muted" style="margin-top:8px;font-size:12px;"></div>'
+          + '<div class="muted" style="margin-top:12px;">Create a Tixall allocation for this show to unlock increased AI insights and receive a 50% kick back of the net booking fees.</div>'
+        : '<div class="muted">No ticket types yet. Use "Manage tickets" to add them.</div>')
       : '<table><thead><tr><th>Name</th><th>Price</th><th>Available</th></tr></thead><tbody>'
       + ticketTypes.map(function(t){
           return '<tr><td>'+t.name+'</td><td>£'+((t.pricePence || 0)/100).toFixed(2)+'</td><td>'+(t.available == null ? '—' : t.available)+'</td></tr>';
         }).join('')
       +'</tbody></table>')
     +'</div>'
-    +'<div class="card" style="margin:0">'
+    +'<div class="card" style="margin:0;margin-top:16px;">'
     +  '<div class="header">'
     +    '<div class="title">Promoters</div>'
     +    '<button class="btn" id="showPromotersManage">Manage promoters</button>'
     +  '</div>'
     +  '<div id="showPromotersList" class="muted">Loading promoters…</div>'
+    +'</div>'
+    +'<div class="card" style="margin:0;margin-top:16px;">'
+    +  '<div class="header">'
+    +    '<div>'
+    +      '<div class="title">Product / Upgradable add ons</div>'
+    +      '<div class="muted" style="margin-top:4px;">Add drinks, meals, VIP upgrades, and merch to this show’s checkout.</div>'
+    +    '</div>'
+    +    '<div class="row">'
+    +      '<button class="btn" id="summaryAddOnsManage">Manage add-ons</button>'
+    +      '<button class="btn" id="summaryCreateProduct">Create product</button>'
+    +    '</div>'
+    +  '</div>'
+    +  '<div class="muted" style="margin-top:8px;">Attach products to this show in the upsells manager.</div>'
     +'</div>'
     +'</div>';
 
@@ -7737,6 +7762,12 @@ async function summaryPage(id){
   var linkToBuilder = $('#linkToBuilder');
   var promotersList = $('#showPromotersList');
   var promotersManage = $('#showPromotersManage');
+  var summaryAddOnsManage = $('#summaryAddOnsManage');
+  var summaryCreateProduct = $('#summaryCreateProduct');
+  var summaryExternalTicketUrl = $('#summaryExternalTicketUrl');
+  var summaryExternalTicketCopy = $('#summaryExternalTicketCopy');
+  var summaryExternalTicketSave = $('#summaryExternalTicketSave');
+  var summaryExternalTicketMsg = $('#summaryExternalTicketMsg');
 
   async function loadShowPromoters(){
     if (!promotersList) return;
@@ -7745,18 +7776,20 @@ async function summaryPage(id){
       var res = await j('/admin/shows/' + encodeURIComponent(id) + '/promoters');
       var items = (res && res.promoters) ? res.promoters : [];
       if (!items.length){
-        promotersList.innerHTML = '<div class="muted">No promoters linked yet.</div>';
-        return;
-      }
-      promotersList.innerHTML = items.map(function(p){
-        var label = p.tradingName || p.name || 'Promoter';
-        var meta = p.email ? (' · ' + p.email) : '';
-        return '<div style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>'
-          + escapeHtml(label) + '</strong><span class="muted" style="font-size:12px;">'
-          + escapeHtml(meta) + '</span></div>';
-      }).join('');
-    }catch(e){
-      promotersList.innerHTML = '<div class="error">Failed to load promoters: ' + escapeHtml(parseErr(e)) + '</div>';
+      promotersList.innerHTML = '<div class="muted">No promoters linked yet.</div>';
+      return;
+    }
+    promotersList.innerHTML = items.map(function(p){
+      var label = p.tradingName || p.name || 'Promoter';
+      var meta = p.email ? (' · ' + p.email) : '';
+      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">'
+        + promoterAvatarHtml(p, { size: 36 })
+        + '<div><strong>'
+        + escapeHtml(label) + '</strong><span class="muted" style="font-size:12px;">'
+        + escapeHtml(meta) + '</span></div></div>';
+    }).join('');
+  }catch(e){
+    promotersList.innerHTML = '<div class="error">Failed to load promoters: ' + escapeHtml(parseErr(e)) + '</div>';
     }
   }
 
@@ -7788,6 +7821,65 @@ async function summaryPage(id){
   if (promotersManage){
     promotersManage.addEventListener('click', function(){
       openPromoterLinker({ showId: id, showTitle: show.title, onUpdated: loadShowPromoters });
+    });
+  }
+  if (summaryAddOnsManage){
+    summaryAddOnsManage.addEventListener('click', function(){
+      go('/admin/ui/product-store/upsells');
+    });
+  }
+  if (summaryCreateProduct){
+    summaryCreateProduct.addEventListener('click', function(){
+      go('/admin/ui/product-store/products/new');
+    });
+  }
+  if (summaryExternalTicketCopy && summaryExternalTicketUrl){
+    summaryExternalTicketCopy.addEventListener('click', function(){
+      var linkValue = summaryExternalTicketUrl.value.trim();
+      if (!linkValue) return;
+      if (navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(linkValue).then(function(){
+          if (summaryExternalTicketMsg) summaryExternalTicketMsg.textContent = 'Link copied to clipboard.';
+        }).catch(function(){
+          summaryExternalTicketUrl.select();
+        });
+      }else{
+        summaryExternalTicketUrl.select();
+      }
+    });
+  }
+  if (summaryExternalTicketSave && summaryExternalTicketUrl){
+    summaryExternalTicketSave.addEventListener('click', async function(){
+      if (summaryExternalTicketMsg) summaryExternalTicketMsg.textContent = '';
+      var linkValue = summaryExternalTicketUrl.value.trim();
+      if (!linkValue){
+        if (summaryExternalTicketMsg) summaryExternalTicketMsg.textContent = 'External ticket link is required.';
+        return;
+      }
+      try{
+        new URL(linkValue);
+      }catch(e){
+        if (summaryExternalTicketMsg) summaryExternalTicketMsg.textContent = 'External ticket link must be a valid URL.';
+        return;
+      }
+      if (summaryExternalTicketMsg) summaryExternalTicketMsg.textContent = 'Saving…';
+      try{
+        var r = await j('/admin/shows/' + id, {
+          method:'PATCH',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            externalTicketUrl: linkValue,
+            usesExternalTicketing: true
+          })
+        });
+        if (r && r.ok){
+          if (summaryExternalTicketMsg) summaryExternalTicketMsg.textContent = 'Saved.';
+        }else{
+          throw new Error((r && r.error) || 'Failed to save');
+        }
+      }catch(e){
+        if (summaryExternalTicketMsg) summaryExternalTicketMsg.textContent = e.message || String(e);
+      }
     });
   }
 
