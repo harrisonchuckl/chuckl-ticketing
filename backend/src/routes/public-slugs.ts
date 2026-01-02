@@ -951,7 +951,7 @@ body {
 .hero-section {
   background: var(--bg-page);
   color: var(--text-main);
-  padding: 28px 0 18px;           /* ✅ remove side padding (fixes 20px drift) */
+  padding: 42px 0 18px;           /* ✅ remove side padding (fixes 20px drift) */
   position: relative;
 }
 
@@ -1336,11 +1336,41 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
   border: 1px dashed var(--border);
 }
 
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin-top: 24px;
+  flex-wrap: wrap;
+}
+
+.pagination-btn {
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-main);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pagination-btn.is-active {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+.pagination-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 @media (max-width: 768px) {
   .app-header-inner { padding: 0 16px; }
 
   /* ✅ keep hero aligned with header + wrap on mobile */
-  .hero-section { padding: 24px 0 20px; }
+  .hero-section { padding: 36px 0 20px; }
   .hero-content { padding: 0 16px; }
 
   /* ✅ +20% from previous mobile size (2.2rem -> 2.64rem) */
@@ -1456,6 +1486,7 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
     <div class="show-grid" id="show-grid">
       ${cards || `<div class="empty">No live events scheduled at the moment.</div>`}
     </div>
+    <div class="pagination" id="pagination" aria-label="All shows pagination"></div>
   </div>  
   
   <script>
@@ -1511,48 +1542,134 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
     const cityFilter = document.getElementById('filter-city');
     const countyFilter = document.getElementById('filter-county');
     const cards = Array.from(document.querySelectorAll('[data-show]'));
+    const pageSize = 15;
+    let currentPage = 1;
 
     function applyFilters(){
       const typeValue = typeFilter?.value || '';
       const venueValue = venueFilter?.value || '';
       const cityValue = cityFilter?.value || '';
       const countyValue = countyFilter?.value || '';
-      let visibleCount = 0;
-      
-      cards.forEach(card => {
+      const filtered = cards.filter(card => {
         const type = card.getAttribute('data-type') || '';
         const venue = card.getAttribute('data-venue') || '';
         const city = card.getAttribute('data-city') || '';
         const county = card.getAttribute('data-county') || '';
 
-        const show = 
+        return (
           (!typeValue || type === typeValue) &&
           (!venueValue || venue === venueValue) &&
           (!cityValue || city === cityValue) &&
-          (!countyValue || county === countyValue);
+          (!countyValue || county === countyValue)
+        );
+      });
 
-        // Use 'flex' to maintain card height/structure
-        card.style.display = show ? 'flex' : 'none'; 
-        if(show) visibleCount += 1;
+      cards.forEach(card => {
+        card.style.display = 'none';
+      });
+
+      const totalCount = filtered.length;
+      const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+      if (currentPage > totalPages) currentPage = totalPages;
+
+      const start = (currentPage - 1) * pageSize;
+      const pageItems = filtered.slice(start, start + pageSize);
+      pageItems.forEach(card => {
+        card.style.display = 'flex';
       });
 
       const grid = document.getElementById('show-grid');
       if(grid){
         const existing = grid.querySelector('.empty');
-        if(visibleCount === 0 && !existing){
+        if(totalCount === 0 && !existing){
            const empty = document.createElement('div');
            empty.className = 'empty';
            empty.textContent = 'No shows match those filters.';
            grid.appendChild(empty);
-        } else if(visibleCount > 0 && existing){
+        } else if(totalCount > 0 && existing){
            existing.remove();
         }
       }
+
+      renderPagination(totalCount);
     }
 
-    [typeFilter, venueFilter, cityFilter, countyFilter].forEach(f => {
-      if(f) f.addEventListener('change', applyFilters);
+    function renderPagination(totalCount){
+      const pagination = document.getElementById('pagination');
+      if(!pagination) return;
+      const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+      pagination.innerHTML = '';
+
+      if(totalCount === 0 || totalPages <= 1){
+        pagination.style.display = 'none';
+        return;
+      }
+
+      pagination.style.display = 'flex';
+
+      const prevBtn = document.createElement('button');
+      prevBtn.type = 'button';
+      prevBtn.className = 'pagination-btn';
+      prevBtn.textContent = 'Back';
+      prevBtn.disabled = currentPage === 1;
+      prevBtn.addEventListener('click', () => {
+        if(currentPage > 1){
+          currentPage -= 1;
+          applyFilters();
+        }
+      });
+      pagination.appendChild(prevBtn);
+
+      for(let i = 1; i <= totalPages; i += 1){
+        const pageBtn = document.createElement('button');
+        pageBtn.type = 'button';
+        pageBtn.className = 'pagination-btn' + (i === currentPage ? ' is-active' : '');
+        pageBtn.textContent = String(i);
+        pageBtn.addEventListener('click', () => {
+          currentPage = i;
+          applyFilters();
+        });
+        pagination.appendChild(pageBtn);
+      }
+
+      const nextBtn = document.createElement('button');
+      nextBtn.type = 'button';
+      nextBtn.className = 'pagination-btn';
+      nextBtn.textContent = 'Next';
+      nextBtn.disabled = currentPage === totalPages;
+      nextBtn.addEventListener('click', () => {
+        if(currentPage < totalPages){
+          currentPage += 1;
+          applyFilters();
+        }
+      });
+      pagination.appendChild(nextBtn);
+    }
+
+    function resetLocationFilters(except){
+      if(except !== venueFilter && venueFilter) venueFilter.value = '';
+      if(except !== cityFilter && cityFilter) cityFilter.value = '';
+      if(except !== countyFilter && countyFilter) countyFilter.value = '';
+    }
+
+    if(typeFilter){
+      typeFilter.addEventListener('change', () => {
+        currentPage = 1;
+        applyFilters();
+      });
+    }
+
+    [venueFilter, cityFilter, countyFilter].forEach(filter => {
+      if(filter){
+        filter.addEventListener('change', () => {
+          resetLocationFilters(filter);
+          currentPage = 1;
+          applyFilters();
+        });
+      }
     });
+
+    applyFilters();
   })();
 </script>
 </body>
