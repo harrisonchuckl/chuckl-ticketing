@@ -823,6 +823,11 @@ router.get("/:storefront", async (req, res) => {
  <style>
 :root {
   --app-header-h: 64px;
+
+  /* ✅ single source of truth for perfect alignment */
+  --container-w: 1200px;
+  --page-pad: 20px;
+
   --bg-page: #F3F4F6;
   --bg-surface: #FFFFFF;
   --primary: #0F172A;
@@ -861,10 +866,10 @@ body {
   border-bottom: 1px solid var(--border);
 }
 .app-header-inner {
-  max-width: 1200px;
+  max-width: var(--container-w);
   height: 100%;
   margin: 0 auto;
-  padding: 0 20px;
+  padding: 0 var(--page-pad);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -933,30 +938,33 @@ body {
 .hero-section {
   background: var(--bg-page);
   color: var(--text-main);
-  padding: 28px 20px 18px;
+  padding: 28px var(--page-pad) 18px;
   position: relative;
 }
 
 .hero-content {
-  max-width: 1200px;
+  max-width: var(--container-w);
   margin: 0 auto;
   text-align: left;
 }
 
+
 .hero-title {
   font-family: 'Outfit', sans-serif;
   font-weight: 900;
-  font-size: clamp(2.6rem, 6vw, 4.5rem);
+  font-size: clamp(1.3rem, 3vw, 2.25rem); /* ✅ 50% of previous */
   margin: 0 0 10px;
   color: var(--primary);
 }
 
+
 /* --- FEATURED SLIDER --- */
 .featured-section {
-  max-width: 1200px;
+  max-width: var(--container-w);
   margin: -10px auto 40px;
-  padding: 0 20px;
+  padding: 0 var(--page-pad);
 }
+
 
 .featured-slider {
   position: relative;
@@ -1078,9 +1086,9 @@ body {
 
 /* --- MAIN CONTENT --- */
 .wrap {
-  max-width: 1200px;
+  max-width: var(--container-w);
   margin: 0 auto;
-  padding: 0 20px 80px;
+  padding: 0 var(--page-pad) 80px;
   position: relative;
   z-index: 20;
 }
@@ -1313,8 +1321,9 @@ body {
 }
 
 @media (max-width: 768px) {
-  .app-header-inner { padding: 0 16px; }
-  .hero-section { padding: 24px 16px 20px; }
+ .app-header-inner { padding: 0 16px; }
+.hero-section { padding: 24px 16px 20px; }
+
   .hero-title { font-size: 2.2rem; }
   .hero-slide { grid-template-columns: 1fr; padding: 20px; }
   .featured-section { margin-top: -10px; }
