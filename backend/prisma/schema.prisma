@@ -1102,6 +1102,8 @@ model Storefront {
   owner         User           @relation(fields: [ownerUserId], references: [id])
   products      Product[]
   orders        Order[]
+  memberships   CustomerStorefrontMembership[]
+  baskets       Basket[]
   upsellRules   UpsellRule[]
   productOrders ProductOrder[]
 
@@ -1132,6 +1134,7 @@ model Product {
   maxPerTicket      Int?
 
   storefront         Storefront          @relation(fields: [storefrontId], references: [id])
+  basketItems        BasketItem[]
   variants           ProductVariant[]
   images             ProductImage[]
   upsellRules        UpsellRule[]
@@ -1156,6 +1159,7 @@ model ProductVariant {
   sortOrder          Int     @default(0)
 
   product            Product             @relation(fields: [productId], references: [id])
+  basketItems        BasketItem[]
   orderItems         ProductOrderItem[]
   inventoryMovements InventoryMovement[]
   upsellRules        UpsellRule[]
