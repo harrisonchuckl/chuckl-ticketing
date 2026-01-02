@@ -1379,6 +1379,9 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+
+  /* ✅ never allow the CTA row to wrap */
+  flex-wrap: nowrap;
 }
 
 /* CTA text: allow flex shrink + single line; JS will set the biggest possible font-size */
@@ -1388,12 +1391,17 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
   letter-spacing: 0.02em;
   text-transform: uppercase;
 
-  /* critical for fitting behaviour in a flex row */
+  /* ✅ allow shrink within a single flex row */
   flex: 1 1 auto;
   min-width: 0;
 
+  /* ✅ never wrap */
   white-space: nowrap;
   line-height: 1.1;
+
+  /* ✅ never overlap the button */
+  overflow: hidden;
+  text-overflow: ellipsis;
 
   /* JS will override inline; this is just a safe default */
   font-size: 22px;
@@ -1401,6 +1409,8 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
 
 .cta-strip__button {
   display: inline-flex;
+    flex: 0 0 auto;   /* ✅ don’t shrink */
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
   padding: 10px 22px;
@@ -1454,8 +1464,18 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
   .filters-bar { flex-direction: column; align-items: stretch; gap: 12px; }
   .card-actions { width: 100%; }
   .card-actions .btn { flex: 1; }
-  .cta-strip__inner { flex-direction: column; align-items: flex-start; }
-  .cta-strip__text { font-size: 0.95rem; }
+  /* ✅ Keep CREATE ACCOUNT CTA always on ONE line */
+  .cta-strip[aria-label="Create account"] .cta-strip__inner {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: nowrap;
+  }
+
+  /* ✅ Products section can still stack on mobile if you want */
+  .cta-strip[aria-label="Products"] .cta-strip__inner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
   .cta-strip--products .cta-strip__inner { padding: 32px 16px; }
 }
 </style>
