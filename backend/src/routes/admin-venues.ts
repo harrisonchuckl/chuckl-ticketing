@@ -1,7 +1,7 @@
 import { Router } from "express";
 import prisma from "../lib/prisma.js";
 import { requireAdminOrOrganiser } from "../lib/authz.js";
-import { lookupPostcode } from "../lib/postcode.js";
+import { lookupPostcode, normalizePostcode } from "../lib/postcode.js";
 
 const router = Router();
 
@@ -83,18 +83,22 @@ router.post("/venues", requireAdminOrOrganiser, async (req, res) => {
       return res.status(400).json({ ok: false, error: "Name is required" });
     }
 
-    const normalizedPostcode = postcode ? String(postcode).trim() : "";
+    const rawPostcode = typeof postcode === "string" ? postcode : "";
+    const normalizedPostcode = rawPostcode ? normalizePostcode(rawPostcode) : "";
     const postcodeLookup = normalizedPostcode ? await lookupPostcode(normalizedPostcode) : null;
     const derivedCity = postcodeLookup?.city ?? null;
     const derivedCounty = postcodeLookup?.county ?? null;
+    const cleanedCity = typeof city === "string" ? city.trim() : "";
+    const cleanedCounty = typeof county === "string" ? county.trim() : "";
+    const storedPostcode = postcodeLookup?.postcode || normalizedPostcode || null;
 
     const created = await prisma.venue.create({
       data: {
         name: String(name).trim(),
         address: address ? String(address).trim() : null,
-        city: city ? String(city).trim() : derivedCity,
-        county: county ? String(county).trim() : derivedCounty,
-        postcode: normalizedPostcode || null,
+        city: cleanedCity || derivedCity,
+        county: cleanedCounty || derivedCounty,
+        postcode: storedPostcode,
         capacity: capacity != null ? Number(capacity) : null,
         ...(isOrganiser(req) ? { ownerId: requireUserId(req) } : {}),
       },
