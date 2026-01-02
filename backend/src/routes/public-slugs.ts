@@ -1366,6 +1366,69 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
   cursor: not-allowed;
 }
 
+.cta-strip {
+  background: #0f9cdf;
+  color: #fff;
+}
+
+.cta-strip__inner {
+  max-width: var(--container-w);
+  margin: 0 auto;
+  padding: 14px var(--page-pad);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.cta-strip__text {
+  margin: 0;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-size: 1rem;
+}
+
+.cta-strip__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 22px;
+  border-radius: 999px;
+  border: 2px solid #fff;
+  color: #fff;
+  font-weight: 700;
+  text-decoration: none;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.cta-strip__button:hover {
+  background: #fff;
+  color: #0b86c6;
+}
+
+.cta-strip--products {
+  background: #0b1120;
+}
+
+.cta-strip--products .cta-strip__inner {
+  padding: 38px var(--page-pad);
+  align-items: flex-start;
+}
+
+.cta-strip__copy p {
+  margin: 0;
+  max-width: 560px;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.section-heading--light {
+  color: #fff;
+}
+
 @media (max-width: 768px) {
   .app-header-inner { padding: 0 16px; }
 
@@ -1381,6 +1444,9 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
   .filters-bar { flex-direction: column; align-items: stretch; gap: 12px; }
   .card-actions { width: 100%; }
   .card-actions .btn { flex: 1; }
+  .cta-strip__inner { flex-direction: column; align-items: flex-start; }
+  .cta-strip__text { font-size: 0.95rem; }
+  .cta-strip--products .cta-strip__inner { padding: 32px 16px; }
 }
 </style>
 </head>
@@ -1488,6 +1554,23 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
     </div>
     <div class="pagination" id="pagination" aria-label="All shows pagination"></div>
   </div>  
+
+  <section class="cta-strip" aria-label="Create account">
+    <div class="cta-strip__inner">
+      <p class="cta-strip__text">Create an account and get closer to the shows you love.</p>
+      <a class="cta-strip__button" href="${accountHref}">Create account</a>
+    </div>
+  </section>
+
+  <section class="cta-strip cta-strip--products" aria-label="Products">
+    <div class="cta-strip__inner">
+      <div class="cta-strip__copy">
+        <h2 class="section-heading section-heading--light">Products</h2>
+        <p>Browse products the event organiser has for sale, plus extras from show promoters.</p>
+      </div>
+      <a class="cta-strip__button" href="/admin/ui/product-store/products">View products</a>
+    </div>
+  </section>
   
   <script>
   (function(){
