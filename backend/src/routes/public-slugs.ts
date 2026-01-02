@@ -938,24 +938,25 @@ body {
 .hero-section {
   background: var(--bg-page);
   color: var(--text-main);
-  padding: 28px var(--page-pad) 18px;
+  padding: 28px 0 18px;           /* ✅ remove side padding (fixes 20px drift) */
   position: relative;
 }
 
 .hero-content {
   max-width: var(--container-w);
   margin: 0 auto;
+  padding: 0 var(--page-pad);     /* ✅ match header + wrap left edge exactly */
   text-align: left;
 }
-
 
 .hero-title {
   font-family: 'Outfit', sans-serif;
   font-weight: 900;
-  font-size: clamp(1.3rem, 3vw, 2.25rem); /* ✅ 50% of previous */
+  font-size: clamp(1.56rem, 3.6vw, 2.7rem); /* ✅ +20% from current */
   margin: 0 0 10px;
   color: var(--primary);
 }
+
 
 
 /* --- FEATURED SLIDER --- */
@@ -1213,12 +1214,13 @@ body {
 }
 
 .show-card__meta {
-  font-size: 0.85rem;
+  font-size: 0.98rem; /* ✅ 0.85 * 1.15 ≈ 0.98 */
   color: var(--brand);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.02em;
 }
+
 
 .show-card__title {
   margin: 0;
@@ -1321,10 +1323,15 @@ body {
 }
 
 @media (max-width: 768px) {
- .app-header-inner { padding: 0 16px; }
-.hero-section { padding: 24px 16px 20px; }
+  .app-header-inner { padding: 0 16px; }
 
-  .hero-title { font-size: 2.2rem; }
+  /* ✅ keep hero aligned with header + wrap on mobile */
+  .hero-section { padding: 24px 0 20px; }
+  .hero-content { padding: 0 16px; }
+
+  /* ✅ +20% from previous mobile size (2.2rem -> 2.64rem) */
+  .hero-title { font-size: 2.64rem; }
+
   .hero-slide { grid-template-columns: 1fr; padding: 20px; }
   .featured-section { margin-top: -10px; }
   .filters-bar { flex-direction: column; align-items: stretch; gap: 12px; }
