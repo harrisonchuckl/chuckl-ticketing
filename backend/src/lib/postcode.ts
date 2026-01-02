@@ -4,7 +4,7 @@ export type PostcodeLookupResult = {
   county: string | null;
 };
 
-function normalizePostcode(postcode: string) {
+export function normalizePostcode(postcode: string) {
   return postcode.replace(/\s+/g, " ").trim().toUpperCase();
 }
 
@@ -40,6 +40,7 @@ export async function lookupPostcode(postcode: string): Promise<PostcodeLookupRe
 
   const result = payload.result;
   const city =
+    cleanLocationValue(result.post_town) ||
     cleanLocationValue(result.admin_district) ||
     cleanLocationValue(result.parish) ||
     cleanLocationValue(result.admin_ward) ||
