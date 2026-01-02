@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { ShowEventType } from "@prisma/client";
 import prisma from "../lib/prisma.js";
 
 const router = Router();
@@ -10,10 +11,15 @@ router.post("/track", async (req, res) => {
       return res.status(400).json({ ok: false, error: "showId and type required" });
     }
 
+    const typeValue = String(type);
+    if (!Object.values(ShowEventType).includes(typeValue as ShowEventType)) {
+      return res.status(400).json({ ok: false, error: "Invalid event type" });
+    }
+
     await prisma.showEvent.create({
       data: {
         showId: String(showId),
-        type: String(type),
+        type: typeValue as ShowEventType,
         sessionId: sessionId ? String(sessionId) : null,
         orderId: orderId ? String(orderId) : null,
         ts: new Date(),
