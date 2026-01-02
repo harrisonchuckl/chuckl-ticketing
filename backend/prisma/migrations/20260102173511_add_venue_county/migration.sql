@@ -1,0 +1,3 @@
+ALTER TABLE "Venue"
+  ADD COLUMN IF NOT EXISTS "county" TEXT;
+
