@@ -83,13 +83,20 @@ router.post("/venues", requireAdminOrOrganiser, async (req, res) => {
       return res.status(400).json({ ok: false, error: "Name is required" });
     }
 
+    const cleanedCity = typeof city === "string" ? city.trim() : "";
+    if (!cleanedCity) {
+      return res.status(400).json({ ok: false, error: "Town/City is required" });
+    }
+    const cleanedCounty = typeof county === "string" ? county.trim() : "";
+    if (!cleanedCounty) {
+      return res.status(400).json({ ok: false, error: "County is required" });
+    }
+
     const rawPostcode = typeof postcode === "string" ? postcode : "";
     const normalizedPostcode = rawPostcode ? normalizePostcode(rawPostcode) : "";
     const postcodeLookup = normalizedPostcode ? await lookupPostcode(normalizedPostcode) : null;
     const derivedCity = postcodeLookup?.city ?? null;
     const derivedCounty = postcodeLookup?.county ?? null;
-    const cleanedCity = typeof city === "string" ? city.trim() : "";
-    const cleanedCounty = typeof county === "string" ? county.trim() : "";
     const storedPostcode = postcodeLookup?.postcode || normalizedPostcode || null;
 
     const created = await prisma.venue.create({
@@ -112,17 +119,63 @@ router.post("/venues", requireAdminOrOrganiser, async (req, res) => {
   }
 });
 
-/** PATCH /admin/venues/:venueId — update booking fee */
+/** PATCH /admin/venues/:venueId — update venue details */
 router.patch("/venues/:venueId", requireAdminOrOrganiser, async (req, res) => {
   try {
     const venueId = String(req.params.venueId);
-    const { bookingFeeBps } = req.body || {};
-    const parsed = Number(bookingFeeBps);
-    if (!Number.isFinite(parsed)) {
-      return res.status(400).json({ ok: false, error: "bookingFeeBps must be a number" });
+    const { bookingFeeBps, name, address, city, county, postcode, capacity } = req.body || {};
+    const updates: Record<string, any> = {};
+    if (name !== undefined) {
+      const trimmed = String(name || "").trim();
+      if (!trimmed) {
+        return res.status(400).json({ ok: false, error: "Name is required" });
+      }
+      updates.name = trimmed;
+    }
+    if (address !== undefined) {
+      updates.address = address ? String(address).trim() : null;
+    }
+    if (city !== undefined) {
+      const cleanedCity = String(city || "").trim();
+      if (!cleanedCity) {
+        return res.status(400).json({ ok: false, error: "Town/City is required" });
+      }
+      updates.city = cleanedCity;
+    }
+    if (county !== undefined) {
+      const cleanedCounty = String(county || "").trim();
+      if (!cleanedCounty) {
+        return res.status(400).json({ ok: false, error: "County is required" });
+      }
+      updates.county = cleanedCounty;
+    }
+    if (postcode !== undefined) {
+      const rawPostcode = typeof postcode === "string" ? postcode : "";
+      updates.postcode = rawPostcode ? normalizePostcode(rawPostcode) : null;
+    }
+    if (capacity !== undefined) {
+      if (capacity === null || capacity === "") {
+        updates.capacity = null;
+      } else {
+        const parsedCapacity = Number(capacity);
+        if (!Number.isFinite(parsedCapacity)) {
+          return res.status(400).json({ ok: false, error: "Capacity must be a number" });
+        }
+        updates.capacity = parsedCapacity;
+      }
+    }
+    if (bookingFeeBps !== undefined) {
+      const parsed = Number(bookingFeeBps);
+      if (!Number.isFinite(parsed)) {
+        return res.status(400).json({ ok: false, error: "bookingFeeBps must be a number" });
+      }
+      updates.bookingFeeBps = Math.max(1000, Math.round(parsed));
     }
 
-    const nextBookingFeeBps = Math.max(1000, Math.round(parsed));
+    if (!Object.keys(updates).length) {
+      return res.status(400).json({ ok: false, error: "No fields to update" });
+    }
+
     const existing = await prisma.venue.findFirst({
       where: { id: venueId, ...venueScope(req) },
       select: { id: true },
@@ -133,8 +186,17 @@ router.patch("/venues/:venueId", requireAdminOrOrganiser, async (req, res) => {
 
     const updated = await prisma.venue.update({
       where: { id: venueId },
-      data: { bookingFeeBps: nextBookingFeeBps },
-      select: { id: true, bookingFeeBps: true },
+      data: updates,
+      select: {
+        id: true,
+        name: true,
+        address: true,
+        city: true,
+        county: true,
+        postcode: true,
+        capacity: true,
+        bookingFeeBps: true,
+      },
     });
 
     res.json({ ok: true, venue: updated });

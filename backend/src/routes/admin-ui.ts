@@ -4756,13 +4756,13 @@ document.addEventListener('click', function(e){
     }
   }
 
-  async function createVenue(name, address){
+  async function createVenue(name, address, city, county){
     // attempt with address (preferred)
     try{
       var created = await j('/admin/venues', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ name:name, address:address })
+        body: JSON.stringify({ name:name, address:address, city:city, county:county })
       });
       return created;
     }catch(e){
@@ -4770,7 +4770,7 @@ document.addEventListener('click', function(e){
       var created2 = await j('/admin/venues', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ name:name })
+        body: JSON.stringify({ name:name, city:city, county:county })
       });
       // attach address locally so UI can still show it
       if (created2 && (created2.venue || created2.item)){
@@ -4796,6 +4796,14 @@ document.addEventListener('click', function(e){
       +       (prefillAddress || '').replace(/</g,'&lt;').replace(/>/g,'&gt;')
       +     '</textarea>'
       +   '</div>'
+      +   '<div class="grid" style="gap:6px;">'
+      +     '<label style="margin:0;">Town/City</label>'
+      +     '<input id="newVenueCity" />'
+      +   '</div>'
+      +   '<div class="grid" style="gap:6px;">'
+      +     '<label style="margin:0;">County</label>'
+      +     '<input id="newVenueCounty" />'
+      +   '</div>'
       +   '<div class="row" style="justify-content:flex-end;gap:8px;margin-top:6px;">'
       +     '<button type="button" id="cancelCreateVenue" class="btn">Cancel</button>'
       +     '<button type="button" id="saveCreateVenue" class="btn p">Save venue</button>'
@@ -4807,6 +4815,8 @@ document.addEventListener('click', function(e){
 
     var nameEl = createPanel.querySelector('#newVenueName');
     var addrEl = createPanel.querySelector('#newVenueAddress');
+    var cityEl = createPanel.querySelector('#newVenueCity');
+    var countyEl = createPanel.querySelector('#newVenueCounty');
     if (addrEl) addrEl.focus();
 
     createPanel.querySelector('#cancelCreateVenue').addEventListener('click', function(){
@@ -4819,20 +4829,24 @@ document.addEventListener('click', function(e){
 
       var nm = nameEl ? nameEl.value.trim() : '';
       var ad = addrEl ? addrEl.value.trim() : '';
+      var ct = cityEl ? cityEl.value.trim() : '';
+      var co = countyEl ? countyEl.value.trim() : '';
 
-      if (!nm || !ad){
-        if (errEl) errEl.textContent = 'Venue name and address are required.';
+      if (!nm || !ct || !co){
+        if (errEl) errEl.textContent = 'Venue name, town/city, and county are required.';
         return;
       }
 
       try{
-        var created = await createVenue(nm, ad);
+        var created = await createVenue(nm, ad, ct, co);
         var v = (created && (created.venue || created.item)) ? (created.venue || created.item) : null;
         if (!v || !v.id){
           throw new Error('Failed to create venue (no id returned).');
         }
         v.name = v.name || nm;
         v.address = v.address || ad;
+        v.city = v.city || ct;
+        v.county = v.county || co;
 
         selectedVenue = v;
         input.value = v.name;
@@ -9794,8 +9808,8 @@ function renderInterests(customer){
       +     '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">'
       +       '<label style="display:grid;gap:6px;">Venue name<input id="nv_name" required /></label>'
       +       '<label style="display:grid;gap:6px;">Address<textarea id="nv_address" rows="2" style="resize:vertical;"></textarea></label>'
-      +       '<label style="display:grid;gap:6px;">City<input id="nv_city" /></label>'
-      +       '<label style="display:grid;gap:6px;">County<input id="nv_county" /></label>'
+      +       '<label style="display:grid;gap:6px;">Town/City<input id="nv_city" required /></label>'
+      +       '<label style="display:grid;gap:6px;">County<input id="nv_county" required /></label>'
       +       '<label style="display:grid;gap:6px;">Postcode<input id="nv_postcode" /></label>'
       +       '<label style="display:grid;gap:6px;">Capacity<input id="nv_capacity" type="number" min="1" /></label>'
       +     '</div>'
@@ -9888,6 +9902,14 @@ function renderInterests(customer){
         };
         if (!payload.name){
           formErr.textContent = 'Name is required';
+          return;
+        }
+        if (!payload.city){
+          formErr.textContent = 'Town/City is required';
+          return;
+        }
+        if (!payload.county){
+          formErr.textContent = 'County is required';
           return;
         }
         try{
@@ -10031,6 +10053,11 @@ function renderInterests(customer){
           +     '<label style="margin:0;font-weight:600;font-size:13px;">Contact name<input data-field="contactName" value="' + escapeHtml(ext.contactName || '') + '" placeholder="Venue manager" /></label>'
           +     '<label style="margin:0;font-weight:600;font-size:13px;">Contact email<input data-field="contactEmail" type="email" value="' + escapeHtml(ext.contactEmail || '') + '" placeholder="manager@example.com" /></label>'
           +     '<label style="margin:0;font-weight:600;font-size:13px;">Contact phone<input data-field="contactPhone" value="' + escapeHtml(ext.contactPhone || '') + '" placeholder="+44 20 1234 5678" /></label>'
+          +   '</div>'
+
+          +   '<div class="grid" style="gap:6px;">'
+          +     '<label style="margin:0;font-weight:600;font-size:13px;">Town/City<input data-field="city" value="' + escapeHtml(v.city || '') + '" /></label>'
+          +     '<label style="margin:0;font-weight:600;font-size:13px;">County<input data-field="county" value="' + escapeHtml(v.county || '') + '" /></label>'
           +   '</div>'
 
           +   '<div class="grid" style="gap:6px;">'
@@ -10338,26 +10365,53 @@ function renderInterests(customer){
 
         var saveBtn = card.querySelector('[data-save]');
         if (saveBtn){
-          saveBtn.addEventListener('click', function(){
+          saveBtn.addEventListener('click', async function(){
+            var cityValue = valueOf('city');
+            var countyValue = valueOf('county');
+            if (!cityValue || !countyValue){
+              var status = card.querySelector('[data-status="' + v.id + '"]');
+              if (status){
+                status.textContent = 'Town/City and County are required.';
+                status.style.color = '#dc2626';
+                setTimeout(function(){ status.textContent = ''; }, 3000);
+              }
+              return;
+            }
             var data = {
               image: imgInput ? imgInput.value.trim() : '',
               contactName: valueOf('contactName'),
               contactEmail: valueOf('contactEmail'),
               contactPhone: valueOf('contactPhone'),
+              city: cityValue,
+              county: countyValue,
               capacity: numberOf('capacity'),
               contra: numberOf('contra'),
               fee: Math.max(10, numberOf('fee') || 10),
               spaces: spaces.slice(),
               maps: maps.slice(),
             };
-            extras = extras || {};
-            extras[v.id] = data;
-            saveVenueExtras();
-            var status = card.querySelector('[data-status="' + v.id + '"]');
-            if (status){
-              status.textContent = 'Saved';
-              status.style.color = '#059669';
-              setTimeout(function(){ status.textContent = ''; }, 2000);
+            try{
+              await j('/admin/venues/' + encodeURIComponent(v.id), {
+                method:'PATCH',
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ city: data.city, county: data.county })
+              });
+              extras = extras || {};
+              extras[v.id] = data;
+              saveVenueExtras();
+              var status = card.querySelector('[data-status="' + v.id + '"]');
+              if (status){
+                status.textContent = 'Saved';
+                status.style.color = '#059669';
+                setTimeout(function(){ status.textContent = ''; }, 2000);
+              }
+            }catch(err){
+              var statusErr = card.querySelector('[data-status="' + v.id + '"]');
+              if (statusErr){
+                statusErr.textContent = parseErr(err);
+                statusErr.style.color = '#dc2626';
+                setTimeout(function(){ statusErr.textContent = ''; }, 3000);
+              }
             }
           });
         }
