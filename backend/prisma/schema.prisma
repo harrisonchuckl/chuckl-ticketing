@@ -705,7 +705,7 @@ model MarketingAiDraft {
   organiser  User  @relation("MarketingAiDraftOrganiser", fields: [organiserId], references: [id])
   show      Show? @relation(fields: [showId], references: [id])
   sourceTemplate MarketingAiTemplate? @relation(fields: [sourceTemplateId], references: [id])
-  createdBy  User? @relation("MarketingAiDraftCreatedBy", fields: [createdById], references: [id])
+  createdBy  User? @relation("MarketingAiDraftCreatedBy", fields: [createdByUserId], references: [id])
   performance MarketingAiDraftPerformance?
 
   @@index([organiserId])
