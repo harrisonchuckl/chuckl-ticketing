@@ -31,6 +31,18 @@ function truncateText(value: string | null | undefined, max = 140) {
   return `${text.slice(0, max).replace(/\s+\S*$/, "")}…`;
 }
 
+function readStorefrontCartCount(req: any, storefront: string) {
+  const raw = req.cookies?.[`storefront_cart_${storefront}`];
+  if (!raw) return 0;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return 0;
+    return parsed.reduce((sum, item) => sum + Math.max(1, Number(item?.qty || 1)), 0);
+  } catch {
+    return 0;
+  }
+}
+
 // Helper to match the SSR brand logic
 function getPublicBrand() {
   const name = String(process.env.PUBLIC_BRAND_NAME || 'TixAll').trim();
@@ -154,6 +166,9 @@ router.get("/:storefront", async (req, res) => {
 
   const title = organiser.companyName || organiser.name || organiser.storefrontSlug;
   const brand = getPublicBrand();
+  const storefrontSlug = organiser.storefrontSlug || "";
+  const cartCount = storefrontSlug ? readStorefrontCartCount(req, storefrontSlug) : 0;
+  const cartHref = storefrontSlug ? `/store/${escAttr(storefrontSlug)}/cart` : "/store";
 
   const visibleShows = shows.filter(show => !!show.slug);
   const featuredShows = visibleShows.slice(0, 6);
@@ -355,6 +370,47 @@ body {
   color: var(--primary);
   font-size: 1.1rem;
 }
+.app-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.app-action {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+  color: var(--text-main);
+  border: 1px solid transparent;
+}
+.app-action:hover {
+  border-color: var(--border);
+  background: #f8fafc;
+}
+.app-action svg {
+  width: 18px;
+  height: 18px;
+}
+.app-action-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.app-action-badge.is-hidden { display: none; }
 
 /* --- HERO SECTION --- */
 .hero-section {
@@ -758,6 +814,22 @@ body {
       <a href="${escAttr(brand.homeHref || '#')}" class="app-brand" aria-label="${escAttr(brand.name)}">
         <img class="app-brand-logo" src="${escAttr(brand.logoUrl)}" alt="${escAttr(brand.name)}" />
       </a>
+      <div class="app-actions">
+        <a class="app-action" href="${cartHref}" aria-label="View basket">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="9" cy="20" r="1"></circle>
+            <circle cx="17" cy="20" r="1"></circle>
+            <path d="M3 4h2l2.4 12.4a2 2 0 0 0 2 1.6h7.2a2 2 0 0 0 2-1.6L21 8H6"></path>
+          </svg>
+          <span class="app-action-badge${cartCount ? "" : " is-hidden"}">${cartCount}</span>
+        </a>
+        <a class="app-action" href="/login" aria-label="Profile">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20 21a8 8 0 1 0-16 0"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+        </a>
+      </div>
     </div>
   </header>
 
