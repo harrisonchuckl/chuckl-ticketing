@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma.js";
 import { requireAdminOrOrganiser } from "../lib/authz.js";
 import {
@@ -48,6 +49,13 @@ function parseJson(input: any, fallback: any) {
   } catch (err) {
     return fallback;
   }
+}
+
+function toPlainObject(value: unknown): Record<string, any> {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, any>;
+  }
+  return {};
 }
 
 function formatDateShort(date: Date) {
@@ -187,12 +195,12 @@ async function buildFeaturedPreview(req: any, county: string | null) {
   );
 
   const weights = {
-    ...config.weights,
-    ...(regionRule?.weightsOverride || {}),
+    ...toPlainObject(config.weights),
+    ...toPlainObject(regionRule?.weightsOverride),
   };
   const exclusions = {
-    ...config.exclusions,
-    ...(regionRule?.exclusionsOverride || {}),
+    ...toPlainObject(config.exclusions),
+    ...toPlainObject(regionRule?.exclusionsOverride),
   };
 
   const metricsMap = await computeShowMetricsBatch({
@@ -841,7 +849,7 @@ async function ensureStarterTemplates(organiserId: string) {
       tone: template.tone,
       title: template.title,
       body: template.body,
-      conditions: template.conditions ?? null,
+      conditions: template.conditions ?? Prisma.DbNull,
       approved: true,
       isDefault: false,
     })),
