@@ -2891,7 +2891,7 @@ router.get(
         + '<div class="header">'
         +   '<div>'
         +     '<div class="title">' + escapeHtml(v.name || 'Untitled venue') + '</div>'
-        +     '<div class="muted">' + escapeHtml([v.city, v.postcode].filter(Boolean).join(' • ')) + '</div>'
+        +     '<div class="muted">' + escapeHtml([v.city, v.county, v.postcode].filter(Boolean).join(' • ')) + '</div>'
         +   '</div>'
         +   '<div class="row" style="gap:6px;align-items:center;">'
         +     '<div style="position:relative;">'
@@ -9795,6 +9795,7 @@ function renderInterests(customer){
       +       '<label style="display:grid;gap:6px;">Venue name<input id="nv_name" required /></label>'
       +       '<label style="display:grid;gap:6px;">Address<textarea id="nv_address" rows="2" style="resize:vertical;"></textarea></label>'
       +       '<label style="display:grid;gap:6px;">City<input id="nv_city" /></label>'
+      +       '<label style="display:grid;gap:6px;">County<input id="nv_county" /></label>'
       +       '<label style="display:grid;gap:6px;">Postcode<input id="nv_postcode" /></label>'
       +       '<label style="display:grid;gap:6px;">Capacity<input id="nv_capacity" type="number" min="1" /></label>'
       +     '</div>'
@@ -9825,6 +9826,7 @@ function renderInterests(customer){
       name: $('#nv_name'),
       address: $('#nv_address'),
       city: $('#nv_city'),
+      county: $('#nv_county'),
       postcode: $('#nv_postcode'),
       capacity: $('#nv_capacity'),
       cancel: $('#cancelNewVenue'),
@@ -9880,6 +9882,7 @@ function renderInterests(customer){
           name: (formFields.name && formFields.name.value.trim()) || '',
           address: (formFields.address && formFields.address.value.trim()) || null,
           city: (formFields.city && formFields.city.value.trim()) || null,
+          county: (formFields.county && formFields.county.value.trim()) || null,
           postcode: (formFields.postcode && formFields.postcode.value.trim()) || null,
           capacity: formFields.capacity && formFields.capacity.value ? Number(formFields.capacity.value) : null,
         };
@@ -9897,6 +9900,7 @@ function renderInterests(customer){
           if (formFields.name) formFields.name.value = '';
           if (formFields.address) formFields.address.value = '';
           if (formFields.city) formFields.city.value = '';
+          if (formFields.county) formFields.county.value = '';
           if (formFields.postcode) formFields.postcode.value = '';
           if (formFields.capacity) formFields.capacity.value = '';
           loadVenues(search && search.value ? search.value : '');
@@ -9996,7 +10000,7 @@ function renderInterests(customer){
           + '<div class="header">'
           +   '<div>'
           +     '<div class="title">' + escapeHtml(v.name || 'Untitled venue') + '</div>'
-          +     '<div class="muted">' + escapeHtml([v.city, v.postcode].filter(Boolean).join(' • ')) + '</div>'
+          +     '<div class="muted">' + escapeHtml([v.city, v.county, v.postcode].filter(Boolean).join(' • ')) + '</div>'
           +   '</div>'
           +   '<div class="row" style="gap:6px;align-items:center;">'
           +     deleteBtnHtml

@@ -662,10 +662,11 @@ router.get("/:storefront", async (req, res) => {
       slug: true,
       imageUrl: true,
       description: true,
+      eventType: true,
       eventCategory: true,
       externalTicketUrl: true,
       usesExternalTicketing: true,
-      venue: { select: { name: true, city: true } },
+      venue: { select: { name: true, city: true, county: true } },
       ticketTypes: {
         select: { pricePence: true, available: true },
         orderBy: { pricePence: 'asc' },
@@ -691,10 +692,12 @@ router.get("/:storefront", async (req, res) => {
   const featuredShows = visibleShows.slice(0, 6);
   const unique = (values: string[]) =>
     Array.from(new Set(values.filter(Boolean).map(value => value.trim()))).sort();
+  const humanize = (value: string) =>
+    value
+      .replace(/[_-]+/g, " ")
+      .replace(/\b\w/g, letter => letter.toUpperCase());
 
-  const venueLabels = unique(
-    visibleShows.map(show => show.venue?.name || "Venue TBC")
-  );
+  const venueLabels = unique(visibleShows.map(show => show.venue?.name || ""));
   const showVenueName = venueLabels.length > 1;
 
   const cards = visibleShows
@@ -727,7 +730,10 @@ router.get("/:storefront", async (req, res) => {
       return `
         <article class="show-card" data-show
           data-date="${escHtml(show.date.toISOString())}"
-          data-type="${escHtml(show.eventCategory || "")}">
+          data-type="${escHtml(show.eventType || "")}"
+          data-venue="${escHtml(show.venue?.name || "")}"
+          data-city="${escHtml(show.venue?.city || "")}"
+          data-county="${escHtml(show.venue?.county || "")}">
           <a class="show-card__image" href="/public/${escHtml(storefront)}/${escHtml(show.slug)}" aria-label="View ${escHtml(show.title)}">
             ${
               image
@@ -810,7 +816,14 @@ router.get("/:storefront", async (req, res) => {
     })
     .join("");
 
-  const typeOptions = unique(visibleShows.map(show => show.eventCategory || ""));
+  const typeOptions = unique(visibleShows.map(show => show.eventType || ""));
+  const venueOptions = unique(visibleShows.map(show => show.venue?.name || ""));
+  const cityOptions = unique(visibleShows.map(show => show.venue?.city || ""));
+  const countyOptions = unique(visibleShows.map(show => show.venue?.county || ""));
+  const showTypeFilter = typeOptions.length > 1;
+  const showVenueFilter = venueOptions.length > 1;
+  const showCityFilter = showVenueFilter && cityOptions.length > 1;
+  const showCountyFilter = showVenueFilter && countyOptions.length > 1;
 
   res.type("html").send(`
 <!doctype html>
@@ -1392,23 +1405,52 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
   <div class="wrap">
     <h2 class="section-heading">All shows</h2>
     <div class="filters-bar">
-      <div class="filter-group">
-        <label class="filter-label" for="filter-date">Date</label>
-        <select id="filter-date" class="filter-select">
-          <option value="all">Any date</option>
-          <option value="today">Today</option>
-          <option value="week">This week</option>
-          <option value="month">This month</option>
-        </select>
-      </div>
-      
-      <div class="filter-group">
-        <label class="filter-label" for="filter-type">Category</label>
-        <select id="filter-type" class="filter-select">
-          <option value="">All categories</option>
-          ${typeOptions.map(t => `<option value="${escHtml(t)}">${escHtml(t)}</option>`).join("")}
-        </select>
-      </div>
+      ${
+        showTypeFilter
+          ? `<div class="filter-group">
+              <label class="filter-label" for="filter-type">Category</label>
+              <select id="filter-type" class="filter-select">
+                <option value="">All categories</option>
+                ${typeOptions
+                  .map(t => `<option value="${escHtml(t)}">${escHtml(humanize(t))}</option>`)
+                  .join("")}
+              </select>
+            </div>`
+          : ""
+      }
+      ${
+        showVenueFilter
+          ? `<div class="filter-group">
+              <label class="filter-label" for="filter-venue">Venue</label>
+              <select id="filter-venue" class="filter-select">
+                <option value="">All venues</option>
+                ${venueOptions.map(v => `<option value="${escHtml(v)}">${escHtml(v)}</option>`).join("")}
+              </select>
+            </div>`
+          : ""
+      }
+      ${
+        showCityFilter
+          ? `<div class="filter-group">
+              <label class="filter-label" for="filter-city">Town / city</label>
+              <select id="filter-city" class="filter-select">
+                <option value="">All towns/cities</option>
+                ${cityOptions.map(city => `<option value="${escHtml(city)}">${escHtml(city)}</option>`).join("")}
+              </select>
+            </div>`
+          : ""
+      }
+      ${
+        showCountyFilter
+          ? `<div class="filter-group">
+              <label class="filter-label" for="filter-county">County</label>
+              <select id="filter-county" class="filter-select">
+                <option value="">All counties</option>
+                ${countyOptions.map(county => `<option value="${escHtml(county)}">${escHtml(county)}</option>`).join("")}
+              </select>
+            </div>`
+          : ""
+      }
     </div>
 
     <div class="show-grid" id="show-grid">
@@ -1464,42 +1506,30 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
       start();
     }
 
-    const dateFilter = document.getElementById('filter-date');
     const typeFilter = document.getElementById('filter-type');
+    const venueFilter = document.getElementById('filter-venue');
+    const cityFilter = document.getElementById('filter-city');
+    const countyFilter = document.getElementById('filter-county');
     const cards = Array.from(document.querySelectorAll('[data-show]'));
 
-    function matchesDate(iso, filter){
-      if(!filter || filter === 'all') return true;
-      const date = new Date(iso);
-      const now = new Date();
-      if(filter === 'today'){
-        return date.toDateString() === now.toDateString();
-      }
-      if(filter === 'week'){
-        const start = new Date(now);
-        start.setDate(now.getDate() - now.getDay());
-        const end = new Date(start);
-        end.setDate(start.getDate() + 7);
-        return date >= start && date < end;
-      }
-      if(filter === 'month'){
-        return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
-      }
-      return true;
-    }
-
     function applyFilters(){
-      const dateValue = dateFilter?.value || 'all';
       const typeValue = typeFilter?.value || '';
+      const venueValue = venueFilter?.value || '';
+      const cityValue = cityFilter?.value || '';
+      const countyValue = countyFilter?.value || '';
       let visibleCount = 0;
       
       cards.forEach(card => {
-        const date = card.getAttribute('data-date') || '';
         const type = card.getAttribute('data-type') || '';
+        const venue = card.getAttribute('data-venue') || '';
+        const city = card.getAttribute('data-city') || '';
+        const county = card.getAttribute('data-county') || '';
 
         const show = 
-          matchesDate(date, dateValue) &&
-          (!typeValue || type === typeValue);
+          (!typeValue || type === typeValue) &&
+          (!venueValue || venue === venueValue) &&
+          (!cityValue || city === cityValue) &&
+          (!countyValue || county === countyValue);
 
         // Use 'flex' to maintain card height/structure
         card.style.display = show ? 'flex' : 'none'; 
@@ -1520,7 +1550,7 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
       }
     }
 
-    [dateFilter, typeFilter].forEach(f => {
+    [typeFilter, venueFilter, cityFilter, countyFilter].forEach(f => {
       if(f) f.addEventListener('change', applyFilters);
     });
   })();

@@ -18,7 +18,7 @@ function venueScope(req: any) {
   return isOrganiser(req) ? { ownerId: requireUserId(req) } : {};
 }
 
-/** GET /admin/venues?q= — search name/city/postcode */
+/** GET /admin/venues?q= — search name/city/county/postcode */
 router.get("/venues", requireAdminOrOrganiser, async (req, res) => {
   try {
     const q = (String(req.query.q || "").trim()) || null;
@@ -33,6 +33,7 @@ router.get("/venues", requireAdminOrOrganiser, async (req, res) => {
               OR: [
                 { name: { contains: q, mode: "insensitive" as const } },
                 { city: { contains: q, mode: "insensitive" as const } },
+                { county: { contains: q, mode: "insensitive" as const } },
                 { postcode: { contains: q, mode: "insensitive" as const } },
               ],
             },
@@ -43,7 +44,7 @@ router.get("/venues", requireAdminOrOrganiser, async (req, res) => {
     const items = await prisma.venue.findMany({
       where,
       orderBy: [{ name: "asc" }],
-      select: { id: true, name: true, address: true, city: true, postcode: true, capacity: true },
+      select: { id: true, name: true, address: true, city: true, county: true, postcode: true, capacity: true },
     });
 
     res.json({ ok: true, items });
@@ -59,7 +60,7 @@ router.get("/venues/:venueId", requireAdminOrOrganiser, async (req, res) => {
     const venueId = String(req.params.venueId);
     const venue = await prisma.venue.findFirst({
       where: { id: venueId, ...venueScope(req) },
-      select: { id: true, name: true, address: true, city: true, postcode: true, capacity: true },
+      select: { id: true, name: true, address: true, city: true, county: true, postcode: true, capacity: true },
     });
 
     if (!venue) {
@@ -76,7 +77,7 @@ router.get("/venues/:venueId", requireAdminOrOrganiser, async (req, res) => {
 /** POST /admin/venues — create a venue */
 router.post("/venues", requireAdminOrOrganiser, async (req, res) => {
   try {
-    const { name, address, city, postcode, capacity } = req.body || {};
+    const { name, address, city, county, postcode, capacity } = req.body || {};
     if (!name || String(name).trim() === "") {
       return res.status(400).json({ ok: false, error: "Name is required" });
     }
@@ -86,11 +87,12 @@ router.post("/venues", requireAdminOrOrganiser, async (req, res) => {
         name: String(name).trim(),
         address: address ? String(address).trim() : null,
         city: city ? String(city).trim() : null,
+        county: county ? String(county).trim() : null,
         postcode: postcode ? String(postcode).trim() : null,
         capacity: capacity != null ? Number(capacity) : null,
         ...(isOrganiser(req) ? { ownerId: requireUserId(req) } : {}),
       },
-      select: { id: true, name: true, address: true, city: true, postcode: true, capacity: true },
+      select: { id: true, name: true, address: true, city: true, county: true, postcode: true, capacity: true },
     });
 
     res.json({ ok: true, venue: created });
