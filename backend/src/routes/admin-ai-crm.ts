@@ -594,7 +594,9 @@ router.post("/ai/tags/bulk", requireAdminOrOrganiser, async (req, res) => {
 
   const tagId = String(payload.tagId || "");
   const action = String(payload.action || "add");
-  const emails = Array.isArray(payload.emails) ? payload.emails.map(normalizeEmail).filter(Boolean) : [];
+  const emails: string[] = Array.isArray(payload.emails)
+    ? payload.emails.map((email: string) => normalizeEmail(email)).filter(Boolean)
+    : [];
   if (!tagId || !emails.length) return res.status(400).json({ ok: false, error: "Tag and emails required" });
 
   if (action === "remove") {
