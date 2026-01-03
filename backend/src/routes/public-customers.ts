@@ -8,10 +8,11 @@ import {
   signCustomerToken,
 } from "../lib/customer-auth.js";
 import { ensureMembership, linkPaidGuestOrders, mergeGuestCart, requireCustomer } from "../lib/public-customer.js";
+import { publicAuthLimiter, requireSameOrigin } from "../lib/public-auth-guards.js";
 
 const router = Router();
 
-router.post("/auth/signup", async (req, res) => {
+router.post("/auth/signup", publicAuthLimiter, requireSameOrigin, async (req, res) => {
   try {
     const email = String(req.body?.email || "").trim().toLowerCase();
     const password = String(req.body?.password || "");
@@ -51,6 +52,7 @@ router.post("/auth/signup", async (req, res) => {
     const token = await signCustomerToken({ id: customer.id, email: customer.email });
     setCustomerCookie(res, token);
 
+    console.info("public signup", { customerId: customer.id, storefrontSlug });
     return res.status(201).json({ ok: true, customer });
   } catch (error: any) {
     console.error("public signup failed", error);
@@ -58,7 +60,7 @@ router.post("/auth/signup", async (req, res) => {
   }
 });
 
-router.post("/auth/login", async (req, res) => {
+router.post("/auth/login", publicAuthLimiter, requireSameOrigin, async (req, res) => {
   try {
     const email = String(req.body?.email || "").trim().toLowerCase();
     const password = String(req.body?.password || "");
@@ -70,11 +72,15 @@ router.post("/auth/login", async (req, res) => {
 
     const customer = await prisma.customerAccount.findUnique({ where: { email } });
     if (!customer || !customer.passwordHash) {
+      console.warn("public login failed", { storefrontSlug, reason: "missing_account" });
       return res.status(401).json({ ok: false, error: "Invalid credentials" });
     }
 
     const ok = await verifyPassword(password, customer.passwordHash);
-    if (!ok) return res.status(401).json({ ok: false, error: "Invalid credentials" });
+    if (!ok) {
+      console.warn("public login failed", { storefrontSlug, reason: "invalid_password" });
+      return res.status(401).json({ ok: false, error: "Invalid credentials" });
+    }
 
     await prisma.customerAccount.update({
       where: { id: customer.id },
@@ -92,6 +98,7 @@ router.post("/auth/login", async (req, res) => {
     const token = await signCustomerToken({ id: customer.id, email: customer.email });
     setCustomerCookie(res, token);
 
+    console.info("public login", { customerId: customer.id, storefrontSlug });
     return res.json({ ok: true, customer: { id: customer.id, email: customer.email, name: customer.name } });
   } catch (error: any) {
     console.error("public login failed", error);
@@ -99,8 +106,12 @@ router.post("/auth/login", async (req, res) => {
   }
 });
 
-router.post("/auth/logout", (_req, res) => {
+router.post("/auth/logout", publicAuthLimiter, requireSameOrigin, async (req, res) => {
+  const session = await readCustomerSession(req);
   clearCustomerCookie(res);
+  if (session?.sub) {
+    console.info("public logout", { customerId: session.sub });
+  }
   res.json({ ok: true });
 });
 

@@ -566,7 +566,7 @@ router.get('/checkout/success', async (req, res) => {
    const venueLine = [venue.name, venue.city].filter(Boolean).join(', ');
    const fullAddress = [venue.address, venue.city, venue.postcode].filter(Boolean).join(', ');
    const storefrontSlug = show.organiser?.storefrontSlug || '';
-   const accountHref = storefrontSlug ? `/public/${encodeURIComponent(storefrontSlug)}/account` : '/public/account';
+   const accountHref = storefrontSlug ? `/public/${encodeURIComponent(storefrontSlug)}/account` : '/account';
 
    const canonical = base ? `${base}/public/checkout/success?orderId=${encodeURIComponent(orderId)}` : `/public/checkout/success?orderId=${encodeURIComponent(orderId)}`;
 
@@ -1121,7 +1121,7 @@ const endTimeNote = endTimeNoteRaw ? endTimeNoteRaw.trim() : '';
  const session = await readCustomerSession(req);
  const accountHref = storefrontSlug
    ? `/public/${encodeURIComponent(storefrontSlug)}/account${session?.sub ? "/portal" : ""}`
-   : '/public/account';
+   : '/account';
 
    let doorTimeIso: string | undefined;
  if (doorsOpenTime && dateObj) {
