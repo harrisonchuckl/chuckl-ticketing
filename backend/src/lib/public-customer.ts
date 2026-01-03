@@ -86,7 +86,10 @@ export async function linkPaidGuestOrders(
   await prisma.order.updateMany({
     where: {
       status: "PAID",
-      OR: [{ email: normalisedEmail }, { shippingEmail: normalisedEmail }],
+      OR: [
+        { email: { equals: normalisedEmail, mode: "insensitive" } },
+        { shippingEmail: { equals: normalisedEmail, mode: "insensitive" } },
+      ],
       customerAccountId: null,
       ...(organiserId ? { show: { organiserId } } : {}),
     },
