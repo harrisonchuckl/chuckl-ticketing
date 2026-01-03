@@ -1348,6 +1348,7 @@ router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
   additionalImages,
   usesAllocatedSeating,
   showCapacity,
+  activeSeatMapId,
   externalTicketUrl,
   usesExternalTicketing,
 } = req.body || {};
