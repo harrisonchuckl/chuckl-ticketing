@@ -13895,60 +13895,95 @@ function renderInterests(customer){
         +'</div>'
         +'<a class="btn" href="/admin/ui/logout" style="text-decoration:none">Log out</a>'
       +'</div>'
-      +'<div class="grid" style="grid-template-columns:1fr 1fr;gap:12px">'
-        +'<div class="card" style="margin:0">'
-          +'<div class="title">Profile</div>'
-          +'<div class="muted" style="margin-bottom:10px">Update your name and email.</div>'
-          +'<label style="font-size:12px;font-weight:700;display:block;margin:8px 0 4px">Name</label>'
-          +'<input id="acc_name" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px" />'
-          +'<label style="font-size:12px;font-weight:700;display:block;margin:8px 0 4px">Email</label>'
-          +'<input id="acc_email" type="email" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px" />'
-          +'<div class="row" style="margin-top:10px;gap:8px">'
-            +'<button class="btn p" id="acc_save">Save profile</button>'
-            +'<div id="acc_err" class="error"></div>'
+      +'<div class="tabs">'
+        +'<button class="tab-btn active" data-tab="account">Account</button>'
+        +'<button class="tab-btn" data-tab="brand">Brand</button>'
+      +'</div>'
+      +'<div id="account-panel" class="tab-panel active">'
+        +'<div class="grid" style="grid-template-columns:1fr 1fr;gap:12px">'
+          +'<div class="card" style="margin:0">'
+            +'<div class="title">Profile</div>'
+            +'<div class="muted" style="margin-bottom:10px">Update your contact details.</div>'
+            +'<label style="font-size:12px;font-weight:700;display:block;margin:8px 0 4px">Name</label>'
+            +'<input id="acc_name" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px" />'
+            +'<label style="font-size:12px;font-weight:700;display:block;margin:8px 0 4px">Telephone</label>'
+            +'<input id="acc_phone" type="tel" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px" />'
+            +'<label style="font-size:12px;font-weight:700;display:block;margin:8px 0 4px">Email</label>'
+            +'<input id="acc_email" type="email" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px" />'
+            +'<div class="row" style="margin-top:10px;gap:8px">'
+              +'<button class="btn p" id="acc_save">Save profile</button>'
+              +'<div id="acc_err" class="error"></div>'
+            +'</div>'
           +'</div>'
-        +'</div>'
 
-        +'<div class="card" style="margin:0">'
-          +'<div class="title">Security</div>'
-          +'<div class="muted" style="margin-bottom:10px">Change your password.</div>'
-          +'<label style="font-size:12px;font-weight:700;display:block;margin:8px 0 4px">Current password</label>'
-          +'<input id="pw_current" type="password" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px" />'
-          +'<label style="font-size:12px;font-weight:700;display:block;margin:8px 0 4px">New password</label>'
-          +'<input id="pw_new" type="password" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px" />'
-          +'<div class="row" style="margin-top:10px;gap:8px">'
-            +'<button class="btn" id="pw_save">Update password</button>'
-            +'<div id="pw_err" class="error"></div>'
+          +'<div class="card" style="margin:0">'
+            +'<div class="title">Security</div>'
+            +'<div class="muted" style="margin-bottom:10px">Change your password.</div>'
+            +'<label style="font-size:12px;font-weight:700;display:block;margin:8px 0 4px">Current password</label>'
+            +'<input id="pw_current" type="password" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px" />'
+            +'<label style="font-size:12px;font-weight:700;display:block;margin:8px 0 4px">New password</label>'
+            +'<input id="pw_new" type="password" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px" />'
+            +'<div class="row" style="margin-top:10px;gap:8px">'
+              +'<button class="btn" id="pw_save">Update password</button>'
+              +'<div id="pw_err" class="error"></div>'
+            +'</div>'
           +'</div>'
         +'</div>'
       +'</div>'
-      +'<div class="card" style="margin-top:12px">'
-  +'<div class="title">Business & Storefront</div>'
-  +'<div class="muted">This controls your public organiser page and event URLs.</div>'
-
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">'
-    +'<div>'
-      +'<label class="muted">Company name</label>'
-      +'<input id="biz_companyName" class="input" />'
-    +'</div>'
-    +'<div>'
-      +'<label class="muted">Phone</label>'
-      +'<input id="biz_phone" class="input" placeholder="+44" />'
-    +'</div>'
-  +'</div>'
-
-  +'<div style="margin-top:10px">'
-    +'<label class="muted">Storefront name (unique)</label>'
-    +'<input id="biz_storefrontSlug" class="input" />'
-    +'<div id="biz_storefrontPreview" class="muted" style="margin-top:6px"></div>'
-    +'<div class="muted" style="margin-top:6px">Your show URLs will become: /public/&lt;storefront&gt;/&lt;show-title&gt;</div>'
-  +'</div>'
-
-  +'<div class="row" style="margin-top:10px;gap:8px">'
-    +'<button class="btn p" id="biz_save">Save business details</button>'
-    +'<div id="biz_err" class="error"></div>'
-  +'</div>'
-+'</div>'
+      +'<div id="brand-panel" class="tab-panel">'
+        +'<div class="grid" style="grid-template-columns:1fr 1fr;gap:12px">'
+          +'<div class="card" style="margin:0">'
+            +'<div class="title">Business & Storefront</div>'
+            +'<div class="muted">This controls your public organiser page and event URLs.</div>'
+            +'<div style="margin-top:10px">'
+              +'<label class="muted">Company name</label>'
+              +'<input id="biz_companyName" class="input" />'
+            +'</div>'
+            +'<div style="margin-top:10px">'
+              +'<label class="muted">Storefront name (unique)</label>'
+              +'<input id="biz_storefrontSlug" class="input" />'
+              +'<div id="biz_storefrontPreview" class="muted" style="margin-top:6px"></div>'
+              +'<div class="muted" style="margin-top:6px">Your show URLs will become: /public/&lt;storefront&gt;/&lt;show-title&gt;</div>'
+            +'</div>'
+            +'<div class="row" style="margin-top:10px;gap:8px">'
+              +'<button class="btn p" id="biz_save">Save business details</button>'
+              +'<div id="biz_err" class="error"></div>'
+            +'</div>'
+          +'</div>'
+          +'<div class="card" style="margin:0">'
+            +'<div class="title">Branding</div>'
+            +'<div class="muted">Set your public brand colors and logo.</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">'
+              +'<div>'
+                +'<label class="muted">Brand color (RGB)</label>'
+                +'<input id="brand_color_rgb" class="input" placeholder="14, 165, 233" />'
+              +'</div>'
+              +'<div>'
+                +'<label class="muted">Brand color (Hex)</label>'
+                +'<input id="brand_color_hex" class="input" placeholder="#0ea5e9" />'
+              +'</div>'
+            +'</div>'
+            +'<div style="margin-top:10px">'
+              +'<div class="muted" style="margin-bottom:6px">Logo</div>'
+              +'<div class="row" style="gap:12px;align-items:center;flex-wrap:wrap">'
+                +'<div id="brand_logo_preview" style="width:72px;height:72px;border-radius:12px;border:1px dashed var(--border);display:grid;place-items:center;background:#f8fafc"></div>'
+                +'<div style="display:grid;gap:6px">'
+                  +'<input id="brand_logo_file" type="file" accept="image/*" />'
+                  +'<div class="row" style="gap:8px">'
+                    +'<button class="btn" id="brand_logo_upload">Upload logo</button>'
+                    +'<input type="hidden" id="brand_logo_url" />'
+                  +'</div>'
+                  +'<div id="brand_logo_error" class="error"></div>'
+                +'</div>'
+              +'</div>'
+            +'</div>'
+            +'<div class="row" style="margin-top:10px;gap:8px">'
+              +'<button class="btn p" id="brand_save">Save brand settings</button>'
+              +'<div id="brand_err" class="error"></div>'
+            +'</div>'
+          +'</div>'
+        +'</div>'
+      +'</div>'
     +'</div>';
 
     // Load user
@@ -13962,6 +13997,28 @@ function renderInterests(customer){
     }
   }
 
+  var tabs = Array.prototype.slice.call(main.querySelectorAll('.tab-btn'));
+  var panels = {
+    account: $('#account-panel'),
+    brand: $('#brand-panel')
+  };
+
+  function setTab(name){
+    tabs.forEach(function(btn){
+      btn.classList.toggle('active', btn.getAttribute('data-tab') === name);
+    });
+    Object.keys(panels).forEach(function(key){
+      if (!panels[key]) return;
+      panels[key].classList.toggle('active', key === name);
+    });
+  }
+
+  tabs.forEach(function(btn){
+    btn.addEventListener('click', function(){
+      setTab(btn.getAttribute('data-tab'));
+    });
+  });
+
   let u = {};
   try{
     const me = await j('/auth/me');
@@ -13972,11 +14029,14 @@ function renderInterests(customer){
 
   // Fill fields (safe even if load failed)
   $('#acc_name').value = (u && u.name) || '';
+  $('#acc_phone').value = (u && u.phone) || '';
   $('#acc_email').value = (u && u.email) || '';
 
   $('#biz_companyName').value = (u && u.companyName) || '';
-  $('#biz_phone').value = (u && u.phone) || '';
   $('#biz_storefrontSlug').value = (u && u.storefrontSlug) || '';
+  $('#brand_color_rgb').value = (u && u.brandColorRgb) || '';
+  $('#brand_color_hex').value = (u && u.brandColorHex) || '';
+  $('#brand_logo_url').value = (u && u.brandLogoUrl) || '';
 
   const updatePreview = () => {
     const raw = ($('#biz_storefrontSlug').value || '').trim();
@@ -13994,18 +14054,56 @@ function renderInterests(customer){
   $('#biz_storefrontSlug').addEventListener('input', updatePreview);
   updatePreview();
 
+  function setBrandLogoPreview(url){
+    var preview = $('#brand_logo_preview');
+    if (!preview) return;
+    var safeUrl = String(url || '').trim();
+    preview.innerHTML = safeUrl
+      ? '<img src="' + escapeHtml(safeUrl) + '" alt="Brand logo" style="width:100%;height:100%;object-fit:cover;border-radius:10px" />'
+      : '<div class="muted" style="font-size:12px">No logo</div>';
+  }
 
-  // Save profile (name/email only)
+  setBrandLogoPreview($('#brand_logo_url').value);
+
+  var brandLogoUploadBtn = $('#brand_logo_upload');
+  var brandLogoFile = $('#brand_logo_file');
+  if (brandLogoUploadBtn && brandLogoFile){
+    brandLogoUploadBtn.addEventListener('click', async function(){
+      var err = $('#brand_logo_error');
+      if (err) err.textContent = '';
+      var file = brandLogoFile.files && brandLogoFile.files[0];
+      if (!file){
+        if (err) err.textContent = 'Choose a logo to upload.';
+        return;
+      }
+      brandLogoUploadBtn.disabled = true;
+      brandLogoUploadBtn.textContent = 'Uploading…';
+      try{
+        var upload = await uploadPoster(file);
+        $('#brand_logo_url').value = upload.url || '';
+        setBrandLogoPreview(upload.url || '');
+      }catch(e){
+        if (err) err.textContent = cleanErr(e);
+      }finally{
+        brandLogoUploadBtn.disabled = false;
+        brandLogoUploadBtn.textContent = 'Upload logo';
+      }
+    });
+  }
+
+
+  // Save profile (name/phone/email)
   $('#acc_save').addEventListener('click', async function(){
     $('#acc_err').textContent = '';
     try{
       const name = $('#acc_name').value.trim();
+      const phone = $('#acc_phone').value.trim();
       const email = $('#acc_email').value.trim();
 
       const r = await j('/auth/me', {
         method:'PUT',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ name, email })
+        body: JSON.stringify({ name, phone: phone || null, email })
       });
 
       if (r && r.ok) alert('Profile updated');
@@ -14022,7 +14120,6 @@ function renderInterests(customer){
     try{
       const payload = {
         companyName: ($('#biz_companyName').value || '').trim() || null,
-        phone: ($('#biz_phone').value || '').trim() || null,
         storefrontSlug: ($('#biz_storefrontSlug').value || '').trim() || null,
       };
 
@@ -14040,6 +14137,31 @@ function renderInterests(customer){
     }catch(e){
       // This will show the friendly uniqueness error from /auth/me (409)
       $('#biz_err').textContent = cleanErr(e);
+    }
+  });
+
+  $('#brand_save').addEventListener('click', async function(){
+    $('#brand_err').textContent = '';
+    try{
+      const payload = {
+        brandColorRgb: ($('#brand_color_rgb').value || '').trim() || null,
+        brandColorHex: ($('#brand_color_hex').value || '').trim() || null,
+        brandLogoUrl: ($('#brand_logo_url').value || '').trim() || null
+      };
+
+      const r = await j('/auth/me', {
+        method:'PUT',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+      });
+
+      if (r && r.ok){
+        alert('Brand settings updated');
+      }else{
+        throw new Error((r && (r.message || r.error)) || 'Failed to update');
+      }
+    }catch(e){
+      $('#brand_err').textContent = cleanErr(e);
     }
   });
 

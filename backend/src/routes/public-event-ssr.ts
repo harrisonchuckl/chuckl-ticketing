@@ -8,18 +8,44 @@ import { readStorefrontCartCount } from '../lib/storefront-cart.js';
 
 const router = Router();
 
-function getPublicBrand() {
- const name = String(process.env.PUBLIC_BRAND_NAME || 'TixAll').trim();
+function normaliseHexColor(value: string | null | undefined) {
+  const raw = String(value ?? '').trim();
+  const match = raw.match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (!match) return null;
+  return `#${match[1].toLowerCase()}`;
+}
 
-   // Default to the same local logo used on the checkout topbar
- // (served by your Express swqatic as "/IMG_2374.jpeg")
- const defaultLocalLogo = '/IMG_2374.jpeg';
+function normaliseRgbColor(value: string | null | undefined) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return null;
+  const rgbMatch = raw.match(/^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i);
+  const tuple = rgbMatch ? rgbMatch.slice(1) : raw.match(/^(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})$/)?.slice(1);
+  if (!tuple) return null;
+  const nums = tuple.map((n) => Math.max(0, Math.min(255, Number(n))));
+  if (nums.some((n) => Number.isNaN(n))) return null;
+  return `rgb(${nums.join(', ')})`;
+}
 
- const logoUrl =
-   String(process.env.PUBLIC_BRAND_LOGO_URL ?? '').trim() || defaultLocalLogo;
+function resolveBrandColor(organiser: { brandColorHex?: string | null; brandColorRgb?: string | null }) {
+  return normaliseHexColor(organiser.brandColorHex) || normaliseRgbColor(organiser.brandColorRgb);
+}
 
- const homeHref = String(process.env.PUBLIC_BRAND_HOME_HREF || '/public').trim();
- return { name, logoUrl, homeHref };
+function getPublicBrand(overrides?: { name?: string | null; logoUrl?: string | null; homeHref?: string | null; color?: string | null }) {
+  const name = String(process.env.PUBLIC_BRAND_NAME || 'TixAll').trim();
+
+  // Default to the same local logo used on the checkout topbar
+  // (served by your Express swqatic as "/IMG_2374.jpeg")
+  const defaultLocalLogo = '/IMG_2374.jpeg';
+
+  const logoUrl =
+    String(process.env.PUBLIC_BRAND_LOGO_URL ?? '').trim() || defaultLocalLogo;
+
+  const homeHref = String(process.env.PUBLIC_BRAND_HOME_HREF || '/public').trim();
+  const resolvedName = String(overrides?.name || name).trim() || name;
+  const resolvedLogo = String(overrides?.logoUrl || logoUrl).trim() || logoUrl;
+  const resolvedHome = String(overrides?.homeHref || homeHref).trim() || homeHref;
+  const resolvedColor = overrides?.color || null;
+  return { name: resolvedName, logoUrl: resolvedLogo, homeHref: resolvedHome, color: resolvedColor };
 }
 
 
@@ -304,7 +330,16 @@ router.get('/checkout/success', async (req, res) => {
       include: {
         show: {
           include: {
-            organiser: { select: { storefrontSlug: true } },
+            organiser: {
+              select: {
+                storefrontSlug: true,
+                companyName: true,
+                name: true,
+                brandLogoUrl: true,
+                brandColorHex: true,
+                brandColorRgb: true
+              }
+            },
             venue: { select: { name: true, address: true, city: true, postcode: true } },
           },
         },
@@ -337,7 +372,12 @@ router.get('/checkout/success', async (req, res) => {
    // If webhook hasn’t flipped it to PAID yet, refresh a few times.
    const shouldRefresh = status !== 'PAID';
 
-   const brand = getPublicBrand();
+   const brand = getPublicBrand({
+     name: show.organiser?.companyName || show.organiser?.name || show.organiser?.storefrontSlug,
+     logoUrl: show.organiser?.brandLogoUrl,
+     homeHref: storefrontSlug ? `/public/${encodeURIComponent(storefrontSlug)}` : '/public',
+     color: show.organiser ? resolveBrandColor(show.organiser) : null
+   });
 
 
    res.type('html').send(`<!doctype html>
@@ -361,8 +401,8 @@ router.get('/checkout/success', async (req, res) => {
      --bg-page: #F3F4F6;
      --bg-surface: #FFFFFF;
      --primary: #0F172A;
-     --brand: #0f9cdf;
---brand-hover: #0b86c6;
+     --brand: ${escAttr(brand.color || '#0f9cdf')};
+--brand-hover: ${escAttr(brand.color || '#0b86c6')};
      --text-main: #111827;
      --text-muted: #6B7280;
      --border: #E5E7EB;
@@ -645,7 +685,14 @@ router.get('/event/:id', async (req, res) => {
      where: { id },
      include: {
        organiser: {
-         select: { storefrontSlug: true },
+         select: {
+           storefrontSlug: true,
+           companyName: true,
+           name: true,
+           brandLogoUrl: true,
+           brandColorHex: true,
+           brandColorRgb: true
+         },
        },
        venue: {
  select: { id: true, name: true, address: true, city: true, postcode: true, bookingFeeBps: true },
@@ -995,7 +1042,12 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
   </div>`;
 };
 
-   const brand = getPublicBrand();
+   const brand = getPublicBrand({
+     name: show.organiser?.companyName || show.organiser?.name || show.organiser?.storefrontSlug,
+     logoUrl: show.organiser?.brandLogoUrl,
+     homeHref: storefrontSlug ? `/public/${encodeURIComponent(storefrontSlug)}` : '/public',
+     color: show.organiser ? resolveBrandColor(show.organiser) : null
+   });
 
    // --- RENDER HTML ---
    res.type('html').send(`<!doctype html>
@@ -1097,8 +1149,8 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
      /* TiXALL Blue Palette */
      --bg-page: #F3F4F6;
      --bg-surface: #FFFFFF;
-     --primary: #0F172A;--brand: #0f9cdf;
---brand-hover: #0b86c6;
+     --primary: #0F172A;--brand: ${escAttr(brand.color || '#0f9cdf')};
+--brand-hover: ${escAttr(brand.color || '#0b86c6')};
      --text-main: #111827;
      --text-muted: #6B7280;
      --border: #E5E7EB;
