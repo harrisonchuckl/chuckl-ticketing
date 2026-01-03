@@ -430,6 +430,7 @@ model CustomerStorefrontMembership {
   customerAccountId String
   storefrontId      String
   marketingOptIn    Boolean  @default(false)
+  preferencesJson   Json?
 
   customerAccount CustomerAccount @relation(fields: [customerAccountId], references: [id])
   storefront      Storefront      @relation(fields: [storefrontId], references: [id])

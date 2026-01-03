@@ -8,10 +8,29 @@ export type CustomerSession = {
   sub: string;
   email?: string;
   type?: string;
+  mode?: "VENUE" | "GLOBAL";
+  activeOrganiserSlug?: string;
+  activeOrganiserId?: string;
 };
 
-export async function signCustomerToken(payload: { id: string; email: string }) {
-  return createJwt({ sub: payload.id, email: payload.email, type: "customer" }, Math.floor(SESSION_MS / 1000));
+export async function signCustomerToken(payload: {
+  id: string;
+  email: string;
+  mode?: "VENUE" | "GLOBAL";
+  activeOrganiserSlug?: string;
+  activeOrganiserId?: string;
+}) {
+  return createJwt(
+    {
+      sub: payload.id,
+      email: payload.email,
+      type: "customer",
+      mode: payload.mode ?? "GLOBAL",
+      activeOrganiserSlug: payload.activeOrganiserSlug,
+      activeOrganiserId: payload.activeOrganiserId,
+    },
+    Math.floor(SESSION_MS / 1000),
+  );
 }
 
 export function setCustomerCookie(res: Response, token: string) {
