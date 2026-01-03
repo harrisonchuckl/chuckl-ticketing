@@ -122,12 +122,24 @@ router.post("/auth/login", publicAuthLimiter, requireSameOrigin, async (req, res
       data: { lastLoginAt: new Date() },
     });
 
-    const storefront = storefrontSlug
-      ? await prisma.storefront.findUnique({ where: { slug: storefrontSlug }, select: { ownerUserId: true } })
-      : null;
+    let organiserId: string | null = null;
+    if (storefrontSlug) {
+      const storefront = await prisma.storefront.findUnique({
+        where: { slug: storefrontSlug },
+        select: { ownerUserId: true },
+      });
+      organiserId = storefront?.ownerUserId || null;
+      if (!organiserId) {
+        const organiser = await prisma.user.findUnique({
+          where: { storefrontSlug },
+          select: { id: true },
+        });
+        organiserId = organiser?.id || null;
+      }
+    }
 
     await ensureMembership(customer.id, storefrontSlug);
-    await linkPaidGuestOrders(customer.id, customer.email, storefront?.ownerUserId);
+    await linkPaidGuestOrders(customer.id, customer.email, organiserId);
     await mergeGuestCart(req, res, customer.id, storefrontSlug);
 
     const token = await signCustomerToken({ id: customer.id, email: customer.email });
@@ -186,21 +198,32 @@ router.get("/customer/orders", requireCustomer, async (req: any, res) => {
       where: { slug: storefrontSlug },
       select: { id: true, ownerUserId: true },
     });
-    if (!storefront) return res.json({ ok: true, items: [] });
-    storefrontId = storefront.id;
-    organiserId = storefront.ownerUserId;
+    if (storefront) {
+      storefrontId = storefront.id;
+      organiserId = storefront.ownerUserId;
+    } else {
+      const organiser = await prisma.user.findUnique({
+        where: { storefrontSlug },
+        select: { id: true },
+      });
+      organiserId = organiser?.id;
+    }
   }
 
   const orders = await prisma.order.findMany({
     where: {
       customerAccountId: String(req.customerSession.sub),
-      ...(storefrontId
-        ? {
-            OR: [
-              { storefrontId },
-              { storefrontId: null, show: { organiserId } },
-            ],
-          }
+      ...(storefrontSlug
+        ? storefrontId
+          ? {
+              OR: [
+                { storefrontId },
+                ...(organiserId ? [{ storefrontId: null, show: { organiserId } }] : []),
+              ],
+            }
+          : organiserId
+          ? { show: { organiserId } }
+          : {}
         : {}),
     },
     include: {
