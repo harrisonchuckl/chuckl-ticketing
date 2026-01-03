@@ -43,6 +43,11 @@ enum StorefrontStatus {
   LIVE
 }
 
+enum StorefrontThemePage {
+  ALL_EVENTS
+  EVENT_PAGE
+}
+
 enum TaxMode {
   NONE
   VAT
@@ -399,6 +404,7 @@ model User {
   featuredDecisionLogs       FeaturedDecisionLog[]
   marketingAiTemplates       MarketingAiTemplate[]
   marketingAiTonePresets     MarketingAiTonePreset[]
+  storefrontThemes          StorefrontTheme[]
 }
 
 model CustomerAccount {
@@ -1112,6 +1118,22 @@ model Storefront {
   productOrders ProductOrder[]
 
   @@index([ownerUserId])
+}
+
+model StorefrontTheme {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  organiserId String
+  page        StorefrontThemePage
+  draftJson   Json?
+  publishedJson Json?
+  publishedAt DateTime?
+
+  organiser User @relation(fields: [organiserId], references: [id])
+
+  @@unique([organiserId, page])
+  @@index([organiserId])
 }
 
 model Product {
