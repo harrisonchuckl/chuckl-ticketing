@@ -1756,34 +1756,48 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
   border: 1px dashed var(--border);
 }
 
-.pagination {
+.load-more {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 8px;
   margin-top: 24px;
-  flex-wrap: wrap;
 }
 
-.pagination-btn {
+.load-more-btn {
   border: 1px solid var(--border);
   background: var(--bg-surface);
   color: var(--text-main);
-  padding: 8px 12px;
-  border-radius: 8px;
-  font-weight: 600;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-weight: 700;
   cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
+  box-shadow: var(--shadow-sm);
 }
 
-.pagination-btn.is-active {
-  background: var(--brand);
-  border-color: var(--brand);
-  color: var(--theme-primary-text, #fff);
+.load-more-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-card);
 }
 
-.pagination-btn:disabled {
-  opacity: 0.45;
+.load-more-btn:disabled {
+  opacity: 0.55;
   cursor: not-allowed;
+  transform: none;
+}
+
+.load-more-btn.is-loading::after {
+  content: "";
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-left: 10px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-right-color: currentColor;
+  animation: spin 0.8s linear infinite;
+  vertical-align: middle;
 }
 
 .cta-strip {
@@ -1799,28 +1813,18 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-
-  /* ✅ never allow the CTA row to wrap */
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 
-/* CTA text: allow flex shrink + single line; JS will set the biggest possible font-size */
 .cta-strip__text {
   margin: 0;
   font-weight: 900;
   letter-spacing: 0.02em;
   text-transform: uppercase;
-
-  /* ✅ allow shrink within a single flex row */
-  flex: 1 1 auto;
+  flex: 1 1 560px;
   min-width: 0;
-
-  /* ✅ never wrap */
-  white-space: nowrap;
-  line-height: 1.1;
-
-  /* JS will override inline; this is just a safe default */
-  font-size: 22px;
+  line-height: 1.2;
+  font-size: 24px;
 }
 
 .cta-strip__button {
@@ -1842,6 +1846,17 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
 .cta-strip__button:hover {
   background: var(--theme-primary-text, #fff);
   color: var(--tixall-blue);
+}
+
+.cta-strip[aria-label="Create account"] .cta-strip__inner {
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.cta-strip[aria-label="Create account"] .cta-strip__text {
+  max-width: 900px;
+  text-wrap: balance;
 }
 
 .cta-strip--products {
@@ -1979,14 +1994,10 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
   .filters-bar { flex-direction: column; align-items: stretch; gap: 12px; }
   .card-actions { width: 100%; }
   .card-actions .btn { flex: 1; }
-  /* ✅ Keep CREATE ACCOUNT CTA always on ONE line */
   .cta-strip[aria-label="Create account"] .cta-strip__inner {
     flex-direction: column;
-    align-items: flex-start;
-    flex-wrap: nowrap;
-  }
-  .cta-strip[aria-label="Create account"] .cta-strip__text {
-    width: 100%;
+    align-items: center;
+    text-align: center;
   }
 
   /* ✅ Products section can still stack on mobile if you want */
@@ -2003,6 +2014,12 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
   .partner-strip__inner {
     flex-direction: column;
     text-align: center;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 
@@ -2120,12 +2137,14 @@ ${editorStyles}
       ${cards || `<div class="empty">No live events scheduled at the moment.</div>`}
       ${editorOverlay("Tiles")}
     </div>
-    <div class="pagination" id="pagination" aria-label="All shows pagination"></div>
+    <div class="load-more" id="load-more" aria-label="Load more shows">
+      <button class="load-more-btn" id="load-more-btn" type="button">Load more shows</button>
+    </div>
   </div>  
 
   <section class="cta-strip" aria-label="Create account">
     <div class="cta-strip__inner">
-<p class="cta-strip__text" id="ctaCreateAccountText">Create an account and get closer to the shows you love.</p>
+<p class="cta-strip__text">Create an account and get closer to the shows you love.</p>
       <a class="cta-strip__button" href="${accountHref}">Create account</a>
     </div>
   </section>
@@ -2203,9 +2222,12 @@ ${editorStyles}
     const countyFilter = document.getElementById('filter-county');
     const cards = Array.from(document.querySelectorAll('[data-show]'));
     const pageSize = 15;
-    let currentPage = 1;
+    let visibleCount = pageSize;
+    const loadMoreWrap = document.getElementById('load-more');
+    const loadMoreBtn = document.getElementById('load-more-btn');
 
-    function applyFilters(){
+    function applyFilters(options){
+      const resetVisible = options && options.resetVisible;
       const typeValue = typeFilter?.value || '';
       const venueValue = venueFilter?.value || '';
       const cityValue = cityFilter?.value || '';
@@ -2229,11 +2251,12 @@ ${editorStyles}
       });
 
       const totalCount = filtered.length;
-      const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-      if (currentPage > totalPages) currentPage = totalPages;
+      if (resetVisible) {
+        visibleCount = pageSize;
+      }
+      if (visibleCount > totalCount) visibleCount = totalCount;
 
-      const start = (currentPage - 1) * pageSize;
-      const pageItems = filtered.slice(start, start + pageSize);
+      const pageItems = filtered.slice(0, visibleCount);
       pageItems.forEach(card => {
         card.style.display = 'flex';
       });
@@ -2251,60 +2274,17 @@ ${editorStyles}
         }
       }
 
-      renderPagination(totalCount);
+      updateLoadMore(totalCount);
     }
 
-    function renderPagination(totalCount){
-      const pagination = document.getElementById('pagination');
-      if(!pagination) return;
-      const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-      pagination.innerHTML = '';
-
-      if(totalCount === 0 || totalPages <= 1){
-        pagination.style.display = 'none';
+    function updateLoadMore(totalCount){
+      if(!loadMoreWrap || !loadMoreBtn) return;
+      if(totalCount === 0 || visibleCount >= totalCount){
+        loadMoreWrap.style.display = 'none';
         return;
       }
-
-      pagination.style.display = 'flex';
-
-      const prevBtn = document.createElement('button');
-      prevBtn.type = 'button';
-      prevBtn.className = 'pagination-btn';
-      prevBtn.textContent = 'Back';
-      prevBtn.disabled = currentPage === 1;
-          prevBtn.addEventListener('click', () => {
-        if (currentPage > 1) {
-          currentPage -= 1;
-          applyFilters();
-        }
-      });
-
-      pagination.appendChild(prevBtn);
-
-      for(let i = 1; i <= totalPages; i += 1){
-        const pageBtn = document.createElement('button');
-        pageBtn.type = 'button';
-        pageBtn.className = 'pagination-btn' + (i === currentPage ? ' is-active' : '');
-        pageBtn.textContent = String(i);
-        pageBtn.addEventListener('click', () => {
-          currentPage = i;
-          applyFilters();
-        });
-        pagination.appendChild(pageBtn);
-      }
-
-      const nextBtn = document.createElement('button');
-      nextBtn.type = 'button';
-      nextBtn.className = 'pagination-btn';
-      nextBtn.textContent = 'Next';
-      nextBtn.disabled = currentPage === totalPages;
-      nextBtn.addEventListener('click', () => {
-        if(currentPage < totalPages){
-          currentPage += 1;
-          applyFilters();
-        }
-      });
-      pagination.appendChild(nextBtn);
+      loadMoreWrap.style.display = 'flex';
+      loadMoreBtn.disabled = false;
     }
 
     function resetLocationFilters(except){
@@ -2315,8 +2295,7 @@ ${editorStyles}
 
     if(typeFilter){
       typeFilter.addEventListener('change', () => {
-        currentPage = 1;
-        applyFilters();
+        applyFilters({ resetVisible: true });
       });
     }
 
@@ -2324,74 +2303,24 @@ ${editorStyles}
       if(filter){
         filter.addEventListener('change', () => {
           resetLocationFilters(filter);
-          currentPage = 1;
-          applyFilters();
+          applyFilters({ resetVisible: true });
         });
       }
     });
+    if(loadMoreBtn){
+      loadMoreBtn.addEventListener('click', () => {
+        if(loadMoreBtn.disabled) return;
+        loadMoreBtn.disabled = true;
+        loadMoreBtn.classList.add('is-loading');
+        window.setTimeout(() => {
+          visibleCount += pageSize;
+          loadMoreBtn.classList.remove('is-loading');
+          applyFilters();
+        }, 350);
+      });
+    }
 
-    // --- CTA TEXT AUTO-FIT (always keep text + button on one line, no overlap) ---
-    (function initCtaAutofit(){
-      const ctaStrip = document.querySelector('.cta-strip[aria-label="Create account"]');
-      if (!ctaStrip) return;
-
-      const ctaInner = ctaStrip.querySelector('.cta-strip__inner');
-      const ctaText = document.getElementById('ctaCreateAccountText');
-      const ctaBtn  = ctaStrip.querySelector('.cta-strip__button');
-      if (!ctaInner || !ctaText || !ctaBtn) return;
-
-      const MIN = 12; // px
-      const MAX = 30; // px
-
-      function fitCtaText(){
-        const innerW = ctaInner.getBoundingClientRect().width;
-        const btnW   = ctaBtn.getBoundingClientRect().width;
-
-        const styles = window.getComputedStyle(ctaInner);
-        const gapRaw = styles.getPropertyValue('gap') || styles.getPropertyValue('column-gap') || '0px';
-        const gap = parseFloat(gapRaw) || 0;
-        const flexDirection = styles.getPropertyValue('flex-direction') || 'row';
-
-        const available =
-          flexDirection.includes('column')
-            ? Math.max(0, innerW)
-            : Math.max(0, innerW - btnW - gap);
-
-        if (available <= 0) {
-          ctaText.style.fontSize = MIN + 'px';
-          return;
-        }
-
-        let lo = MIN, hi = MAX;
-        ctaText.style.fontSize = MAX + 'px';
-
-        for (let i = 0; i < 14; i++) {
-          const mid = (lo + hi) / 2;
-          ctaText.style.fontSize = mid + 'px';
-          if (ctaText.scrollWidth <= available) lo = mid;
-          else hi = mid;
-        }
-
-        ctaText.style.fontSize = Math.floor(lo) + 'px';
-      }
-
-      const rafFit = () => window.requestAnimationFrame(fitCtaText);
-
-      rafFit();
-      window.addEventListener('resize', rafFit, { passive: true });
-
-      if (document.fonts && document.fonts.ready) {
-        document.fonts.ready.then(rafFit).catch(() => {});
-      }
-
-      if (window.ResizeObserver) {
-        const ro = new ResizeObserver(rafFit);
-        ro.observe(ctaInner);
-        ro.observe(ctaBtn);
-      }
-    })();
-
-    applyFilters();
+    applyFilters({ resetVisible: true });
   })();
   </script>
   ${editorScript}
