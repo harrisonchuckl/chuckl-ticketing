@@ -107,13 +107,15 @@ function buildStorefrontTheme(raw: any): StorefrontTheme {
     footer: { sections: [] },
     assets: { ...defaultStorefrontTheme.assets },
   };
+  const tokenKeys = Object.keys(theme.tokens) as Array<keyof StorefrontTheme["tokens"]>;
+  const copyKeys = Object.keys(theme.copy) as Array<keyof StorefrontTheme["copy"]>;
 
   if (raw && typeof raw === "object") {
     const tokens = raw.tokens || {};
     const copy = raw.copy || {};
     const assets = raw.assets || {};
 
-    Object.keys(theme.tokens).forEach((key) => {
+    tokenKeys.forEach((key) => {
       if (key === "borderRadius") {
         const parsed = Number(tokens[key]);
         if (!Number.isNaN(parsed)) {
@@ -123,14 +125,14 @@ function buildStorefrontTheme(raw: any): StorefrontTheme {
       }
       const value = String(tokens[key] ?? "").trim();
       if (value) {
-        theme.tokens[key as keyof StorefrontTheme["tokens"]] = value as any;
+        theme.tokens[key as Exclude<keyof StorefrontTheme["tokens"], "borderRadius">] = value;
       }
     });
 
-    Object.keys(theme.copy).forEach((key) => {
+    copyKeys.forEach((key) => {
       const value = String(copy[key] ?? "").trim();
       if (value) {
-        theme.copy[key as keyof StorefrontTheme["copy"]] = value as any;
+        theme.copy[key] = value;
       }
     });
 

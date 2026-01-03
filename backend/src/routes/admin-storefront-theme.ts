@@ -55,8 +55,9 @@ function parsePage(raw: unknown): StorefrontThemePage | null {
 
 function buildTokens(input: any) {
   const tokens: typeof defaultTokens = { ...defaultTokens };
+  const tokenKeys = Object.keys(tokens) as Array<keyof typeof tokens>;
   if (input && typeof input === "object") {
-    Object.keys(tokens).forEach((key) => {
+    tokenKeys.forEach((key) => {
       const value = input[key];
       if (key === "borderRadius") {
         const parsed = Number(value);
@@ -66,7 +67,7 @@ function buildTokens(input: any) {
         return;
       }
       if (typeof value === "string" && value.trim()) {
-        tokens[key as keyof typeof tokens] = value.trim() as any;
+        tokens[key as Exclude<keyof typeof tokens, "borderRadius">] = value.trim();
       }
     });
   }
@@ -75,11 +76,12 @@ function buildTokens(input: any) {
 
 function buildCopy(input: any) {
   const copy: typeof defaultCopy = { ...defaultCopy };
+  const copyKeys = Object.keys(copy) as Array<keyof typeof copy>;
   if (input && typeof input === "object") {
-    Object.keys(copy).forEach((key) => {
+    copyKeys.forEach((key) => {
       const value = clampString(input[key], MAX_COPY_LENGTH);
       if (value !== null) {
-        copy[key as keyof typeof copy] = escapeHtml(value);
+        copy[key] = escapeHtml(value);
       }
     });
   }

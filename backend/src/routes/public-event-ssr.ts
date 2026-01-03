@@ -82,13 +82,15 @@ function buildStorefrontTheme(raw: any): StorefrontTheme {
     footer: { sections: [] },
     assets: { ...defaultStorefrontTheme.assets },
   };
+  const tokenKeys = Object.keys(theme.tokens) as Array<keyof StorefrontTheme['tokens']>;
+  const copyKeys = Object.keys(theme.copy) as Array<keyof StorefrontTheme['copy']>;
 
   if (raw && typeof raw === 'object') {
     const tokens = raw.tokens || {};
     const copy = raw.copy || {};
     const assets = raw.assets || {};
 
-    Object.keys(theme.tokens).forEach((key) => {
+    tokenKeys.forEach((key) => {
       if (key === 'borderRadius') {
         const parsed = Number(tokens[key]);
         if (!Number.isNaN(parsed)) {
@@ -98,14 +100,14 @@ function buildStorefrontTheme(raw: any): StorefrontTheme {
       }
       const value = String(tokens[key] ?? '').trim();
       if (value) {
-        theme.tokens[key as keyof StorefrontTheme['tokens']] = value as any;
+        theme.tokens[key as Exclude<keyof StorefrontTheme['tokens'], 'borderRadius'>] = value;
       }
     });
 
-    Object.keys(theme.copy).forEach((key) => {
+    copyKeys.forEach((key) => {
       const value = String(copy[key] ?? '').trim();
       if (value) {
-        theme.copy[key as keyof StorefrontTheme['copy']] = value as any;
+        theme.copy[key] = value;
       }
     });
 
@@ -504,7 +506,7 @@ router.get('/checkout/success', async (req, res) => {
      homeHref: storefrontSlug ? `/public/${encodeURIComponent(storefrontSlug)}` : '/public',
      color: show.organiser ? resolveBrandColor(show.organiser) : null
    });
-   const logoUrl = themeLogo || brand.logoUrl;
+   const logoUrl = brand.logoUrl;
 
 
    res.type('html').send(`<!doctype html>
@@ -1137,19 +1139,19 @@ const mobileCtaHtml =
    const mapEmbedUrl = `https://maps.google.com/maps?q=${mapQuery}&t=&z=15&ie=UTF8&iwloc=&output=embed`;
    const mapLink = `https://maps.google.com/maps?q=${mapQuery}`;
 
-   const organiserId = (show as any).organiserId as string | null;
+   const organiserIdForRelated = organiserId || ((show as any).organiserId as string | null);
 let relatedShows: any[] = [];
 
 // We use these to prioritise "same category/type" before going further afield
 const baseCategory = ((show as any).eventCategory || null) as string | null;
 const baseType = ((show as any).eventType || null) as string | null;
 
-if (organiserId) {
+if (organiserIdForRelated) {
   const now = new Date();
 
   const others = await prisma.show.findMany({
     where: {
-      organiserId,
+      organiserId: organiserIdForRelated,
       id: { not: show.id },
       status: ShowStatus.LIVE,
       // Only suggest upcoming shows
@@ -1294,6 +1296,7 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
      homeHref: storefrontSlug ? `/public/${encodeURIComponent(storefrontSlug)}` : '/public',
      color: show.organiser ? resolveBrandColor(show.organiser) : null
    });
+   const logoUrl = themeLogo || brand.logoUrl;
 
    // --- RENDER HTML ---
    res.type('html').send(`<!doctype html>
