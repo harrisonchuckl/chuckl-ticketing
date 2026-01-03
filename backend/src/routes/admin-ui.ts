@@ -610,6 +610,448 @@ router.get("/ui/logout", (_req, res) => {
   res.redirect("/admin/ui/login");
 });
 
+router.get("/storefront", requireAdminOrOrganiser, (_req, res) => {
+  res.redirect("/admin/ui/storefront");
+});
+
+router.get("/storefront/editor", requireAdminOrOrganiser, (req, res) => {
+  const pageParam =
+    typeof req.query.page === "string" && req.query.page === "event"
+      ? "event"
+      : "all-events";
+
+  res.set("Cache-Control", "no-store");
+  res.type("html").send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Storefront Editor</title>
+  <style>
+    *{box-sizing:border-box;}
+    body{
+      margin:0;
+      font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
+      color:#0f172a;
+      background:#f8fafc;
+    }
+    .topbar{
+      position:sticky;
+      top:0;
+      z-index:10;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:16px;
+      padding:12px 20px;
+      background:#ffffff;
+      border-bottom:1px solid #e2e8f0;
+    }
+    .topbar .left{
+      display:flex;
+      align-items:center;
+      gap:12px;
+    }
+    .container{
+      display:grid;
+      grid-template-columns:minmax(0,1fr) 360px;
+      gap:16px;
+      padding:16px 20px;
+      height:calc(100vh - 64px);
+    }
+    .panel{
+      background:#ffffff;
+      border:1px solid #e2e8f0;
+      border-radius:12px;
+      padding:16px;
+      overflow:auto;
+    }
+    .preview{
+      padding:0;
+      overflow:hidden;
+    }
+    iframe{
+      width:100%;
+      height:100%;
+      border:0;
+    }
+    .section{
+      margin-bottom:18px;
+    }
+    .section h3{
+      margin:0 0 8px 0;
+      font-size:14px;
+    }
+    label{
+      display:block;
+      font-size:12px;
+      color:#475569;
+      margin-bottom:6px;
+    }
+    input[type="text"], select, input[type="color"], input[type="number"]{
+      width:100%;
+      border:1px solid #e2e8f0;
+      border-radius:8px;
+      padding:8px 10px;
+      font-size:14px;
+    }
+    .row{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+    }
+    .btn{
+      border:1px solid #2563eb;
+      background:#2563eb;
+      color:#fff;
+      padding:8px 14px;
+      border-radius:8px;
+      cursor:pointer;
+      font-weight:600;
+    }
+    .btn.secondary{
+      background:#fff;
+      color:#2563eb;
+    }
+    .status{
+      font-size:12px;
+      color:#475569;
+      margin-left:auto;
+    }
+    #toast{
+      position:fixed;
+      right:16px;
+      bottom:16px;
+      background:#111827;
+      color:#fff;
+      padding:10px 14px;
+      border-radius:8px;
+      opacity:0;
+      transition:opacity 0.2s ease;
+    }
+    #toast.show{ opacity:1; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="left">
+      <strong>Storefront Editor</strong>
+      <select id="pageSwitcher">
+        <option value="all-events">All Events</option>
+        <option value="event">Event Page</option>
+      </select>
+    </div>
+    <div class="left">
+      <button class="btn secondary" id="saveDraft">Save Draft</button>
+      <button class="btn" id="publish">Publish</button>
+      <a class="btn secondary" href="/admin/ui/storefront">Exit</a>
+    </div>
+    <div class="status" id="saveStatus">Ready</div>
+  </div>
+  <div class="container">
+    <div class="panel preview">
+      <iframe id="previewFrame" title="Live preview"></iframe>
+    </div>
+    <div class="panel">
+      <div class="section">
+        <h3>Brand</h3>
+        <label for="logoUrl">Logo URL</label>
+        <input id="logoUrl" type="text" placeholder="https://..." />
+        <label for="fontFamily" style="margin-top:10px;">Font family</label>
+        <select id="fontFamily">
+          <option value="Inter">Inter</option>
+          <option value="Poppins">Poppins</option>
+          <option value="DM Sans">DM Sans</option>
+          <option value="Playfair Display">Playfair Display</option>
+        </select>
+      </div>
+      <div class="section">
+        <h3>Colors</h3>
+        <div class="row">
+          <div>
+            <label for="primary">Primary</label>
+            <input id="primary" type="color" />
+          </div>
+          <div>
+            <label for="primaryText">Primary text</label>
+            <input id="primaryText" type="color" />
+          </div>
+          <div>
+            <label for="bannerBg">Banner</label>
+            <input id="bannerBg" type="color" />
+          </div>
+          <div>
+            <label for="pageBg">Page</label>
+            <input id="pageBg" type="color" />
+          </div>
+          <div>
+            <label for="cardBg">Card</label>
+            <input id="cardBg" type="color" />
+          </div>
+          <div>
+            <label for="textColor">Text</label>
+            <input id="textColor" type="color" />
+          </div>
+          <div>
+            <label for="mutedText">Muted text</label>
+            <input id="mutedText" type="color" />
+          </div>
+        </div>
+      </div>
+      <div class="section">
+        <h3>Shape</h3>
+        <label for="borderRadius">Border radius</label>
+        <input id="borderRadius" type="number" min="0" max="32" step="1" />
+      </div>
+      <div class="section">
+        <h3>Copy overrides</h3>
+        <label for="allEventsTitle">All events title</label>
+        <input id="allEventsTitle" type="text" />
+        <label for="allEventsSubtitle" style="margin-top:10px;">All events subtitle</label>
+        <input id="allEventsSubtitle" type="text" />
+        <label for="eventPageCtaText" style="margin-top:10px;">Event CTA text</label>
+        <input id="eventPageCtaText" type="text" />
+      </div>
+    </div>
+  </div>
+  <div id="toast"></div>
+  <script>
+    const pageMode = ${JSON.stringify(pageParam)};
+    const defaultTheme = {
+      tokens: {
+        fontFamily: "Inter",
+        bannerBg: "#0B1220",
+        primary: "#2563EB",
+        primaryText: "#FFFFFF",
+        pageBg: "#0A0A0A",
+        cardBg: "#111827",
+        text: "#E5E7EB",
+        mutedText: "#9CA3AF",
+        borderRadius: 16
+      },
+      copy: {
+        allEventsTitle: "What's On",
+        allEventsSubtitle: "Upcoming events",
+        eventPageCtaText: "Book Tickets"
+      },
+      footer: { sections: [] },
+      assets: { logoUrl: "" }
+    };
+    let theme = JSON.parse(JSON.stringify(defaultTheme));
+
+    const previewFrame = document.getElementById('previewFrame');
+    const toast = document.getElementById('toast');
+    const saveStatus = document.getElementById('saveStatus');
+    const pageSwitcher = document.getElementById('pageSwitcher');
+
+    pageSwitcher.value = pageMode;
+    pageSwitcher.addEventListener('change', () => {
+      window.location.href = '/admin/storefront/editor?page=' + pageSwitcher.value;
+    });
+
+    const previewDoc = \`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <style>
+    :root{
+      --fontFamily: Inter;
+      --bannerBg: #0B1220;
+      --primary: #2563EB;
+      --primaryText: #FFFFFF;
+      --pageBg: #0A0A0A;
+      --cardBg: #111827;
+      --text: #E5E7EB;
+      --mutedText: #9CA3AF;
+      --radius: 16px;
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:var(--fontFamily);background:var(--pageBg);color:var(--text);}
+    .banner{background:var(--bannerBg);padding:28px 32px;}
+    .logo{height:32px;object-fit:contain;}
+    .hero-title{font-size:32px;margin:16px 0 6px 0;}
+    .muted{color:var(--mutedText);}
+    .btn{display:inline-block;background:var(--primary);color:var(--primaryText);padding:10px 16px;border-radius:var(--radius);text-decoration:none;font-weight:600;}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;padding:24px 32px;}
+    .card{background:var(--cardBg);padding:16px;border-radius:var(--radius);}
+    .event-view{display:none;}
+  </style>
+</head>
+<body>
+  <div class="banner">
+    <img class="logo" id="logo" alt="Logo" style="display:none;" />
+    <div class="all-events-view">
+      <div class="hero-title" id="allEventsTitle">What's On</div>
+      <div class="muted" id="allEventsSubtitle">Upcoming events</div>
+    </div>
+    <div class="event-view">
+      <div class="hero-title">Live Tonight</div>
+      <div class="muted">Main Hall · 8pm</div>
+      <div style="margin-top:14px;"><a class="btn" id="eventCta" href="#">Book Tickets</a></div>
+    </div>
+  </div>
+  <div class="grid">
+    <div class="card">
+      <div style="font-weight:600;">Sample Event</div>
+      <div class="muted">Fri 12 July · London</div>
+      <div style="margin-top:12px;"><a class="btn" href="#">View details</a></div>
+    </div>
+    <div class="card">
+      <div style="font-weight:600;">Another Event</div>
+      <div class="muted">Sat 13 July · Bristol</div>
+      <div style="margin-top:12px;"><a class="btn" href="#">View details</a></div>
+    </div>
+  </div>
+  <script>
+    const root = document.documentElement;
+    function applyTheme(payload){
+      const t = payload.tokens || {};
+      if (t.fontFamily) root.style.setProperty('--fontFamily', t.fontFamily);
+      if (t.bannerBg) root.style.setProperty('--bannerBg', t.bannerBg);
+      if (t.primary) root.style.setProperty('--primary', t.primary);
+      if (t.primaryText) root.style.setProperty('--primaryText', t.primaryText);
+      if (t.pageBg) root.style.setProperty('--pageBg', t.pageBg);
+      if (t.cardBg) root.style.setProperty('--cardBg', t.cardBg);
+      if (t.text) root.style.setProperty('--text', t.text);
+      if (t.mutedText) root.style.setProperty('--mutedText', t.mutedText);
+      if (t.borderRadius != null) root.style.setProperty('--radius', t.borderRadius + 'px');
+      if (payload.copy){
+        if (payload.copy.allEventsTitle) document.getElementById('allEventsTitle').textContent = payload.copy.allEventsTitle;
+        if (payload.copy.allEventsSubtitle) document.getElementById('allEventsSubtitle').textContent = payload.copy.allEventsSubtitle;
+        if (payload.copy.eventPageCtaText) document.getElementById('eventCta').textContent = payload.copy.eventPageCtaText;
+      }
+      const logo = document.getElementById('logo');
+      if (payload.assets && payload.assets.logoUrl){
+        logo.src = payload.assets.logoUrl;
+        logo.style.display = 'block';
+      }else{
+        logo.style.display = 'none';
+      }
+      const isEvent = payload.mode === 'event';
+      document.querySelector('.event-view').style.display = isEvent ? 'block' : 'none';
+      document.querySelector('.all-events-view').style.display = isEvent ? 'none' : 'block';
+    }
+    window.addEventListener('message', (event) => {
+      if (!event.data || event.data.type !== 'storefront-theme') return;
+      applyTheme(event.data.theme || {});
+      if (event.data.mode) applyTheme({ mode: event.data.mode });
+    });
+    window.applyTheme = applyTheme;
+  </script>
+</body>
+</html>\`;
+
+    previewFrame.srcdoc = previewDoc;
+
+    function showToast(message, ok){
+      toast.textContent = message;
+      toast.style.background = ok ? '#16a34a' : '#dc2626';
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2000);
+    }
+
+    function postTheme(){
+      if (!previewFrame.contentWindow) return;
+      previewFrame.contentWindow.postMessage({ type: 'storefront-theme', theme, mode: pageMode }, '*');
+    }
+
+    function updateTheme(path, value){
+      const parts = path.split('.');
+      let target = theme;
+      for (let i = 0; i < parts.length - 1; i++){
+        target = target[parts[i]];
+      }
+      target[parts[parts.length - 1]] = value;
+      postTheme();
+    }
+
+    function bindInput(id, path, parser){
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('input', () => {
+        const value = parser ? parser(el.value) : el.value;
+        updateTheme(path, value);
+      });
+    }
+
+    bindInput('logoUrl', 'assets.logoUrl');
+    bindInput('fontFamily', 'tokens.fontFamily');
+    bindInput('primary', 'tokens.primary');
+    bindInput('primaryText', 'tokens.primaryText');
+    bindInput('bannerBg', 'tokens.bannerBg');
+    bindInput('pageBg', 'tokens.pageBg');
+    bindInput('cardBg', 'tokens.cardBg');
+    bindInput('textColor', 'tokens.text');
+    bindInput('mutedText', 'tokens.mutedText');
+    bindInput('borderRadius', 'tokens.borderRadius', (v) => Number(v));
+    bindInput('allEventsTitle', 'copy.allEventsTitle');
+    bindInput('allEventsSubtitle', 'copy.allEventsSubtitle');
+    bindInput('eventPageCtaText', 'copy.eventPageCtaText');
+
+    function populateForm(){
+      document.getElementById('logoUrl').value = theme.assets.logoUrl || '';
+      document.getElementById('fontFamily').value = theme.tokens.fontFamily || 'Inter';
+      document.getElementById('primary').value = theme.tokens.primary || '#2563EB';
+      document.getElementById('primaryText').value = theme.tokens.primaryText || '#FFFFFF';
+      document.getElementById('bannerBg').value = theme.tokens.bannerBg || '#0B1220';
+      document.getElementById('pageBg').value = theme.tokens.pageBg || '#0A0A0A';
+      document.getElementById('cardBg').value = theme.tokens.cardBg || '#111827';
+      document.getElementById('textColor').value = theme.tokens.text || '#E5E7EB';
+      document.getElementById('mutedText').value = theme.tokens.mutedText || '#9CA3AF';
+      document.getElementById('borderRadius').value = theme.tokens.borderRadius || 16;
+      document.getElementById('allEventsTitle').value = theme.copy.allEventsTitle || \"What's On\";
+      document.getElementById('allEventsSubtitle').value = theme.copy.allEventsSubtitle || 'Upcoming events';
+      document.getElementById('eventPageCtaText').value = theme.copy.eventPageCtaText || 'Book Tickets';
+    }
+
+    async function loadTheme(){
+      try{
+        const res = await fetch('/admin/api/storefront-theme?page=' + pageMode, { credentials: 'include' });
+        const data = await res.json();
+        if (data && data.theme){
+          theme = Object.assign({}, defaultTheme, data.theme || {});
+          theme.tokens = Object.assign({}, defaultTheme.tokens, theme.tokens || {});
+          theme.copy = Object.assign({}, defaultTheme.copy, theme.copy || {});
+          theme.footer = theme.footer || { sections: [] };
+          theme.assets = Object.assign({}, defaultTheme.assets, theme.assets || {});
+        }
+        populateForm();
+        postTheme();
+      }catch(err){
+        showToast('Failed to load theme', false);
+      }
+    }
+
+    async function saveTheme(endpoint){
+      try{
+        saveStatus.textContent = 'Saving...';
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ page: pageMode, theme })
+        });
+        const data = await res.json();
+        if (!res.ok || (data && data.ok === false)){
+          throw new Error((data && (data.error || data.message)) || 'Save failed');
+        }
+        saveStatus.textContent = 'Saved';
+        showToast('Saved successfully', true);
+      }catch(err){
+        saveStatus.textContent = 'Error';
+        showToast(err.message || 'Save failed', false);
+      }
+    }
+
+    document.getElementById('saveDraft').addEventListener('click', () => saveTheme('/admin/api/storefront-theme/save-draft'));
+    document.getElementById('publish').addEventListener('click', () => saveTheme('/admin/api/storefront-theme/publish'));
+
+    loadTheme();
+  </script>
+</body>
+</html>`);
+});
+
 
 /**
  * Admin Single Page App (Organiser Console)
@@ -2251,6 +2693,7 @@ router.get(
         <div class="sb-submenu" data-submenu="shows">
           <a class="sb-link sub" href="/admin/ui/shows/create" data-view="/admin/ui/shows/create">Create Show</a>
           <a class="sb-link sub" href="/admin/ui/shows/current" data-view="/admin/ui/shows/current">All Events</a>
+          <a class="sb-link sub" href="/admin/ui/storefront" data-view="/admin/ui/storefront">Storefront</a>
         </div>
       </div>
 
@@ -8272,6 +8715,92 @@ var available = Math.trunc(a);
         go('/admin/ui/shows/' + showId + '/tickets');
       });
     }
+  }
+
+  // --- STOREFRONT ---
+  async function storefrontPage(){
+    if (!main) return;
+
+    main.innerHTML =
+      '<div class="card">'
+        +'<div class="header">'
+          +'<div>'
+            +'<div class="title">Storefront</div>'
+            +'<div class="muted" style="margin-top:4px">Customise your public All Events and Event pages with safe theme tokens and copy overrides.</div>'
+          +'</div>'
+        +'</div>'
+        +'<div class="grid" style="grid-template-columns:1.4fr 1fr;gap:16px;margin-top:10px;">'
+          +'<div class="card" style="margin:0;">'
+            +'<div class="title">Get started</div>'
+            +'<div class="muted" style="margin-top:6px;">Edit colours, fonts, logos, and key copy without touching layout. Changes update the live preview instantly.</div>'
+            +'<div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">'
+              +'<a class="btn" href="/admin/storefront/editor?page=all-events" target="_blank" rel="noopener">Open Storefront</a>'
+              +'<a class="btn" id="storefront_live_link" href="/public" target="_blank" rel="noopener">Preview live page</a>'
+            +'</div>'
+          +'</div>'
+          +'<div class="card" style="margin:0;">'
+            +'<div class="title">Status</div>'
+            +'<div class="grid" style="grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">'
+              +'<div>'
+                +'<div class="muted" style="font-size:12px;">State</div>'
+                +'<div id="storefront_status" style="font-weight:600;">Draft</div>'
+              +'</div>'
+              +'<div>'
+                +'<div class="muted" style="font-size:12px;">Last updated</div>'
+                +'<div id="storefront_updated">—</div>'
+              +'</div>'
+              +'<div>'
+                +'<div class="muted" style="font-size:12px;">Published</div>'
+                +'<div id="storefront_published">—</div>'
+              +'</div>'
+            +'</div>'
+            +'<div style="margin-top:12px;">'
+              +'<button class="btn" id="storefront_revert">Revert to published</button>'
+            +'</div>'
+          +'</div>'
+        +'</div>'
+      +'</div>';
+
+    var statusEl = $('#storefront_status');
+    var updatedEl = $('#storefront_updated');
+    var publishedEl = $('#storefront_published');
+    var revertBtn = $('#storefront_revert');
+
+    async function loadStatus(){
+      try{
+        var data = await j('/admin/api/storefront-theme?page=all-events');
+        var updatedAt = data.updatedAt ? new Date(data.updatedAt) : null;
+        var publishedAt = data.publishedAt ? new Date(data.publishedAt) : null;
+        var status = publishedAt
+          ? (updatedAt && updatedAt > publishedAt ? 'Draft' : 'Published')
+          : 'Draft';
+
+        if (statusEl) statusEl.textContent = status;
+        if (updatedEl) updatedEl.textContent = updatedAt ? formatDateTime(updatedAt) : '—';
+        if (publishedEl) publishedEl.textContent = publishedAt ? formatDateTime(publishedAt) : '—';
+        if (revertBtn) revertBtn.disabled = !data.publishedJson;
+      }catch(err){
+        showToast(parseErr(err), false);
+      }
+    }
+
+    if (revertBtn){
+      revertBtn.addEventListener('click', async function(){
+        try{
+          await j('/admin/api/storefront-theme/revert-to-published', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ page: 'all-events' })
+          });
+          showToast('Draft reset to published.', true);
+          loadStatus();
+        }catch(err){
+          showToast(parseErr(err), false);
+        }
+      });
+    }
+
+    loadStatus();
   }
 
   // --- CUSTOMERS (MVP structure) ---
@@ -15128,6 +15657,7 @@ function renderInterests(customer){
       if (path === '/admin/ui/ai/support') return aiSupportPage();
       if (path === '/admin/ui/shows/create') return createShow();
       if (path === '/admin/ui/shows/current')  return listShows();
+      if (path === '/admin/ui/storefront')   return storefrontPage();
       if (path === '/admin/ui/customers')     return customers();
       if (path === '/admin/ui/orders')         return orders();
       if (path === '/admin/ui/venues')         return venues();
