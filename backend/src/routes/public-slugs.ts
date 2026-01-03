@@ -1514,6 +1514,74 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
   color: #fff;
 }
 
+.info-strip {
+  background: #0b1120;
+  color: #fff;
+}
+
+.info-strip__inner {
+  max-width: var(--container-w);
+  margin: 0 auto;
+  padding: 48px var(--page-pad);
+}
+
+.info-strip__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 32px;
+}
+
+.info-strip__column p {
+  margin: 0 0 14px;
+  color: rgba(255, 255, 255, 0.82);
+  line-height: 1.5;
+}
+
+.info-strip__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.info-strip__link {
+  color: #fff;
+  text-decoration: none;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  font-size: 0.9rem;
+}
+
+.info-strip__link:hover {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.partner-strip {
+  background: #ffffff;
+  border-top: 1px solid var(--border);
+}
+
+.partner-strip__inner {
+  max-width: var(--container-w);
+  margin: 0 auto;
+  padding: 16px var(--page-pad);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-weight: 700;
+  color: var(--primary);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.partner-strip__logo {
+  height: 28px;
+  width: auto;
+}
+
 @media (max-width: 768px) {
   .app-header-inner { padding: 0 16px; }
 
@@ -1542,6 +1610,17 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
     align-items: flex-start;
   }
   .cta-strip--products .cta-strip__inner { padding: 32px 16px; }
+
+  .info-strip__inner { padding: 32px 16px; }
+  .info-strip__grid { grid-template-columns: 1fr; }
+  .partner-strip__inner {
+    flex-direction: column;
+    text-align: center;
+  }
+}
+
+@media (max-width: 1024px) {
+  .info-strip__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 </style>
 </head>
@@ -1664,6 +1743,39 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
         <p>Browse products the event organiser has for sale, plus extras from show promoters.</p>
       </div>
       <a class="cta-strip__button" href="/admin/ui/product-store/products">View products</a>
+    </div>
+  </section>
+
+  <section class="info-strip" aria-label="Contact and policies">
+    <div class="info-strip__inner">
+      <div class="info-strip__grid">
+        <div class="info-strip__column">
+          <h3 class="section-heading section-heading--light">Get in touch</h3>
+          <p>Email us at hello@tixall.co.uk</p>
+          <p>Call 0800 123 4567</p>
+        </div>
+        <div class="info-strip__column">
+          <h3 class="section-heading section-heading--light">Opening times</h3>
+          <p>Monday - Friday: 9:00am - 6:00pm</p>
+          <p>Saturday: 10:00am - 2:00pm</p>
+        </div>
+        <div class="info-strip__column">
+          <h3 class="section-heading section-heading--light">Ticketing made effortless</h3>
+          <p>Powering memorable live events with seamless access.</p>
+          <ul class="info-strip__list">
+            <li><a class="info-strip__link" href="#">Terms &amp; conditions</a></li>
+            <li><a class="info-strip__link" href="#">Privacy policy</a></li>
+            <li><a class="info-strip__link" href="#">Accessibility</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="partner-strip" aria-label="Advanced ticketing">
+    <div class="partner-strip__inner">
+      <span>Advanced ticketing and product services powered by</span>
+      <img class="partner-strip__logo" src="/TixAll%20on%20White%20Background.png" alt="Tixal" />
     </div>
   </section>
   
