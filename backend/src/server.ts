@@ -112,11 +112,11 @@ app.use("/public/orders", publicOrdersRouter);
 app.use("/public", publicTrackRouter);
 app.use("/public", publicSurveysRouter);
 app.use("/public", publicCustomersRouter);
+app.use("/public", publicSlugs);
 app.use("/public", publicAccountRouter);
 app.use("/", globalAccountRouter);
 
 // 3) Slug rewrites + redirects
-app.use("/public", publicSlugs);
 
 // 4) SSR public event pages (legacy + internal rewrite target)
 app.use("/public", publicEventRouter);
