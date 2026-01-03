@@ -917,7 +917,7 @@ router.get("/storefront/editor", requireAdminOrOrganiser, async (req, res) => {
       },
       copy: {
         allEventsTitle: "What's On",
-        allEventsSubtitle: "Upcoming events",
+        allEventsSubtitle: "",
         eventPageCtaText: "Book Tickets"
       },
       footer: { sections: [] },
@@ -1117,7 +1117,7 @@ router.get("/storefront/editor", requireAdminOrOrganiser, async (req, res) => {
       document.getElementById('mutedText').value = theme.tokens.mutedText || '#6B7280';
       document.getElementById('borderRadius').value = theme.tokens.borderRadius || 16;
       document.getElementById('allEventsTitle').value = theme.copy.allEventsTitle || \"What's On\";
-      document.getElementById('allEventsSubtitle').value = theme.copy.allEventsSubtitle || 'Upcoming events';
+      document.getElementById('allEventsSubtitle').value = theme.copy.allEventsSubtitle || '';
       document.getElementById('eventPageCtaText').value = theme.copy.eventPageCtaText || 'Book Tickets';
       renderFooterBuilder();
     }
