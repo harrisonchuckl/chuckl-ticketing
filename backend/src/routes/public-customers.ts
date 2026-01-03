@@ -9,6 +9,7 @@ import {
 } from "../lib/customer-auth.js";
 import { ensureMembership, linkPaidGuestOrders, mergeGuestCart, requireCustomer } from "../lib/public-customer.js";
 import { publicAuthLimiter, requireSameOrigin } from "../lib/public-auth-guards.js";
+import { readStorefrontCart } from "../lib/storefront-cart.js";
 
 const router = Router();
 
