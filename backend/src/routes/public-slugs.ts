@@ -2,6 +2,7 @@ import { Router } from "express";
 import prisma from "../lib/prisma.js";
 import { readCustomerSession } from "../lib/customer-auth.js";
 import { readStorefrontCartCount } from "../lib/storefront-cart.js";
+import { verifyJwt } from "../utils/security.js";
 
 const router = Router();
 
@@ -53,6 +54,133 @@ function normaliseRgbColor(value: string | null | undefined) {
 
 function resolveBrandColor(organiser: { brandColorHex?: string | null; brandColorRgb?: string | null }) {
   return normaliseHexColor(organiser.brandColorHex) || normaliseRgbColor(organiser.brandColorRgb);
+}
+
+type StorefrontTheme = {
+  tokens: {
+    fontFamily: string;
+    bannerBg: string;
+    primary: string;
+    primaryText: string;
+    pageBg: string;
+    cardBg: string;
+    text: string;
+    mutedText: string;
+    borderRadius: number;
+  };
+  copy: {
+    allEventsTitle: string;
+    allEventsSubtitle: string;
+    eventPageCtaText: string;
+    eventPageFromLabel: string;
+  };
+  footer: { sections: Array<{ title: string; items: string[] }> };
+  assets: { logoUrl: string };
+};
+
+const defaultStorefrontTheme: StorefrontTheme = {
+  tokens: {
+    fontFamily: "Inter",
+    bannerBg: "#0B1220",
+    primary: "#2563EB",
+    primaryText: "#FFFFFF",
+    pageBg: "#F3F4F6",
+    cardBg: "#FFFFFF",
+    text: "#0F172A",
+    mutedText: "#6B7280",
+    borderRadius: 16,
+  },
+  copy: {
+    allEventsTitle: "What's On",
+    allEventsSubtitle: "Upcoming events",
+    eventPageCtaText: "Book Tickets",
+    eventPageFromLabel: "From",
+  },
+  footer: { sections: [] },
+  assets: { logoUrl: "" },
+};
+
+function buildStorefrontTheme(raw: any): StorefrontTheme {
+  const theme: StorefrontTheme = {
+    tokens: { ...defaultStorefrontTheme.tokens },
+    copy: { ...defaultStorefrontTheme.copy },
+    footer: { sections: [] },
+    assets: { ...defaultStorefrontTheme.assets },
+  };
+
+  if (raw && typeof raw === "object") {
+    const tokens = raw.tokens || {};
+    const copy = raw.copy || {};
+    const assets = raw.assets || {};
+
+    Object.keys(theme.tokens).forEach((key) => {
+      if (key === "borderRadius") {
+        const parsed = Number(tokens[key]);
+        if (!Number.isNaN(parsed)) {
+          theme.tokens.borderRadius = Math.min(32, Math.max(0, parsed));
+        }
+        return;
+      }
+      const value = String(tokens[key] ?? "").trim();
+      if (value) {
+        theme.tokens[key as keyof StorefrontTheme["tokens"]] = value as any;
+      }
+    });
+
+    Object.keys(theme.copy).forEach((key) => {
+      const value = String(copy[key] ?? "").trim();
+      if (value) {
+        theme.copy[key as keyof StorefrontTheme["copy"]] = value as any;
+      }
+    });
+
+    const logoUrl = String(assets.logoUrl ?? "").trim();
+    if (logoUrl) {
+      theme.assets.logoUrl = logoUrl;
+    }
+
+    if (Array.isArray(raw.footer?.sections)) {
+      theme.footer.sections = raw.footer.sections
+        .filter((section: any) => section && typeof section === "object")
+        .map((section: any) => ({
+          title: String(section.title ?? "").trim(),
+          items: Array.isArray(section.items)
+            ? section.items.map((item: any) => String(item ?? "").trim()).filter(Boolean)
+            : [],
+        }));
+    }
+  }
+
+  return theme;
+}
+
+type EditorTokenPayload = {
+  type?: string;
+  scope?: string;
+  editor?: boolean;
+  organiserId?: string;
+  storefrontSlug?: string;
+};
+
+async function canUseEditorMode(req: any, organiserId: string, storefrontSlug: string | null) {
+  const editorRequested = String(req.query?.editor || "") === "1";
+  if (!editorRequested) return false;
+
+  const role = String(req.user?.role || "").toUpperCase();
+  if (role === "ADMIN" || role === "ORGANISER") return true;
+
+  const token = String(req.query?.token || req.query?.editorToken || "").trim();
+  if (!token) return false;
+
+  const payload = await verifyJwt<EditorTokenPayload>(token);
+  if (!payload) return false;
+
+  const isEditorToken = payload.type === "storefront-editor" || payload.scope === "storefront-editor" || payload.editor === true;
+  if (!isEditorToken) return false;
+  if (payload.organiserId && payload.organiserId !== organiserId) return false;
+  if (payload.storefrontSlug && storefrontSlug && payload.storefrontSlug !== storefrontSlug) return false;
+
+  return true;
 }
 
 async function getBasketCountForStorefront(req: any, storefrontSlug: string, storefrontId: string) {
@@ -639,7 +767,14 @@ if (String(req.query?._internal || "") === "1") return next("router");
   // If not published / no slug yet, let existing handler render as fallback
 if (!show?.slug || !show.organiser?.storefrontSlug) return next("router");
 
-  return res.redirect(301, `/public/${show.organiser.storefrontSlug}/${show.slug}`);
+  const params = new URLSearchParams();
+  if (String(req.query?.editor || "") === "1") params.set("editor", "1");
+  const token = String(req.query?.token || req.query?.editorToken || "").trim();
+  if (token) params.set("token", token);
+  const query = params.toString();
+  const suffix = query ? `?${query}` : "";
+
+  return res.redirect(301, `/public/${show.organiser.storefrontSlug}/${show.slug}${suffix}`);
 });
 
 /**
@@ -685,7 +820,11 @@ router.get("/:storefront/:slug", async (req, res, next) => {
   }
 
   // INTERNAL rewrite to existing booking handler:
-  req.url = `/event/${show.id}?_internal=1`;
+  const params = new URLSearchParams({ _internal: "1" });
+  if (String(req.query?.editor || "") === "1") params.set("editor", "1");
+  const editorToken = String(req.query?.token || req.query?.editorToken || "").trim();
+  if (editorToken) params.set("token", editorToken);
+  req.url = `/event/${show.id}?${params.toString()}`;
   return next();
 });
 
@@ -742,6 +881,116 @@ router.get("/:storefront", async (req, res) => {
     homeHref: organiser.storefrontSlug ? `/public/${organiser.storefrontSlug}` : "/public",
     color: resolveBrandColor(organiser)
   });
+  const editorEnabled = await canUseEditorMode(req, organiser.id, organiser.storefrontSlug || null);
+  const themeRecord = editorEnabled
+    ? await prisma.storefrontTheme.findUnique({
+        where: { organiserId_page: { organiserId: organiser.id, page: "ALL_EVENTS" } },
+      })
+    : null;
+  const editorTheme = buildStorefrontTheme(themeRecord?.draftJson || null);
+  const heroTitle = editorEnabled ? editorTheme.copy.allEventsTitle : "What's On";
+  const heroSubtitle = editorEnabled ? editorTheme.copy.allEventsSubtitle : "Upcoming events";
+  const themeLogo = editorEnabled && editorTheme.assets.logoUrl
+    ? toPublicImageUrl(editorTheme.assets.logoUrl, 180) || editorTheme.assets.logoUrl
+    : "";
+  const logoUrl = themeLogo || brand.logoUrl;
+  const editorRegionAttr = (label: string) =>
+    editorEnabled ? ` data-editor-region="${escAttr(label)}"` : "";
+  const editorOverlay = (label: string) =>
+    editorEnabled
+      ? `<div class="editor-overlay" aria-hidden="true"><span class="editor-overlay__label">${escHtml(label)}</span></div>`
+      : "";
+  const editorStyles = editorEnabled
+    ? `
+  [data-editor-region] {
+    position: relative;
+  }
+  .editor-overlay {
+    position: absolute;
+    inset: 0;
+    border: 2px dashed rgba(37, 99, 235, 0.7);
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 30;
+  }
+  .editor-overlay__label {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: rgba(15, 23, 42, 0.85);
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 4px 10px;
+    border-radius: 999px;
+  }
+`
+    : "";
+  const themeVars = editorEnabled
+    ? `<style id="storefront-theme-vars">
+  :root{
+    --theme-font-family: ${escHtml(editorTheme.tokens.fontFamily)};
+    --theme-banner-bg: ${escHtml(editorTheme.tokens.bannerBg)};
+    --theme-primary: ${escHtml(editorTheme.tokens.primary)};
+    --theme-primary-text: ${escHtml(editorTheme.tokens.primaryText)};
+    --theme-page-bg: ${escHtml(editorTheme.tokens.pageBg)};
+    --theme-card-bg: ${escHtml(editorTheme.tokens.cardBg)};
+    --theme-text: ${escHtml(editorTheme.tokens.text)};
+    --theme-muted-text: ${escHtml(editorTheme.tokens.mutedText)};
+    --theme-radius: ${escHtml(String(editorTheme.tokens.borderRadius))}px;
+  }
+  </style>`
+    : "";
+  const editorScript = editorEnabled
+    ? `<script>
+  (function(){
+    function applyTheme(payload){
+      if (!payload) return;
+      var root = document.documentElement;
+      var tokens = payload.tokens || {};
+      if (tokens.fontFamily) root.style.setProperty('--theme-font-family', tokens.fontFamily);
+      if (tokens.bannerBg) root.style.setProperty('--theme-banner-bg', tokens.bannerBg);
+      if (tokens.primary) root.style.setProperty('--theme-primary', tokens.primary);
+      if (tokens.primaryText) root.style.setProperty('--theme-primary-text', tokens.primaryText);
+      if (tokens.pageBg) root.style.setProperty('--theme-page-bg', tokens.pageBg);
+      if (tokens.cardBg) root.style.setProperty('--theme-card-bg', tokens.cardBg);
+      if (tokens.text) root.style.setProperty('--theme-text', tokens.text);
+      if (tokens.mutedText) root.style.setProperty('--theme-muted-text', tokens.mutedText);
+      if (tokens.borderRadius != null && tokens.borderRadius !== '') {
+        root.style.setProperty('--theme-radius', tokens.borderRadius + 'px');
+      }
+      if (payload.copy) {
+        document.querySelectorAll('[data-editor-copy]').forEach(function(node){
+          var key = node.getAttribute('data-editor-copy');
+          if (!key) return;
+          var value = payload.copy[key];
+          if (typeof value === 'string' && value.trim()) {
+            node.textContent = value;
+          }
+        });
+      }
+      if (payload.assets) {
+        var logo = document.querySelector('[data-editor-logo]');
+        if (logo) {
+          var url = String(payload.assets.logoUrl || '').trim();
+          if (url) {
+            logo.setAttribute('src', url);
+          } else {
+            var fallback = logo.getAttribute('data-default-logo') || '';
+            if (fallback) logo.setAttribute('src', fallback);
+          }
+        }
+      }
+    }
+    window.addEventListener('message', function(event){
+      if (!event.data || event.data.type !== 'storefront-theme') return;
+      applyTheme(event.data.theme || {});
+    });
+  })();
+  </script>`
+    : "";
   const storefrontSlug = organiser.storefrontSlug || "";
   const storefrontRecord = storefrontSlug
     ? await prisma.storefront.findUnique({ where: { slug: storefrontSlug } })
@@ -818,9 +1067,10 @@ router.get("/:storefront", async (req, res) => {
                 ? `<div class="show-card__details">${escHtml(show.venue?.name || "Venue TBC")}</div>`
                 : ""
             }
-            <div class="show-card__actions">
+            <div class="show-card__actions"${editorRegionAttr("Buttons")}>
               <a class="btn btn--primary" href="${escAttr(quickBookHref)}"${quickBookAttrs}>Quick book</a>
               <a class="btn btn--ghost" href="/public/${escHtml(storefront)}/${escHtml(show.slug)}">More info</a>
+              ${editorOverlay("Buttons")}
             </div>
           </div>
         </article>
@@ -871,9 +1121,10 @@ router.get("/:storefront", async (req, res) => {
               ${showVenueName ? ` • ${escHtml(show.venue?.name || "Venue TBC")}` : ""}
             </p>
             <p class="hero-summary">${escHtml(summary)}</p>
-            <div class="hero-actions">
+            <div class="hero-actions"${editorRegionAttr("Buttons")}>
               <a class="btn btn--primary" href="${escAttr(quickBookHref)}"${quickBookAttrs}>Quick book</a>
               <a class="btn btn--ghost" href="/public/${escHtml(storefront)}/${escHtml(show.slug)}">More info</a>
+              ${editorOverlay("Buttons")}
             </div>
           </div>
         </div>
@@ -898,6 +1149,7 @@ router.get("/:storefront", async (req, res) => {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escHtml(title)} – Events</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@700;800;900&display=swap" rel="stylesheet">
+  ${themeVars}
  <style>
 :root {
   --app-header-h: 64px;
@@ -906,19 +1158,20 @@ router.get("/:storefront", async (req, res) => {
   --container-w: 1200px;
   --page-pad: 20px;
 
-  --bg-page: #F3F4F6;
-  --bg-surface: #FFFFFF;
-  --primary: #0F172A;
-  --brand: ${escHtml(brand.color || "#0f9cdf")};
-  --brand-hover: ${escHtml(brand.color || "#0b86c6")};
-  --text-main: #111827;
-  --text-muted: #6B7280;
+  --bg-page: var(--theme-page-bg, #F3F4F6);
+  --bg-surface: var(--theme-card-bg, #FFFFFF);
+  --primary: var(--theme-text, #0F172A);
+  --brand: var(--theme-primary, ${escHtml(brand.color || "#0f9cdf")});
+  --brand-hover: var(--theme-primary, ${escHtml(brand.color || "#0b86c6")});
+  --text-main: var(--theme-text, #111827);
+  --text-muted: var(--theme-muted-text, #6B7280);
   --border: #E5E7EB;
-  --radius-md: 12px;
-  --radius-lg: 16px;
+  --radius-md: var(--theme-radius, 12px);
+  --radius-lg: var(--theme-radius, 16px);
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-card: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --shadow-float: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  --banner-bg: var(--theme-banner-bg, var(--bg-page));
 }
 
 * { box-sizing: border-box; }
@@ -926,7 +1179,7 @@ router.get("/:storefront", async (req, res) => {
 body {
   margin: 0;
   padding-top: var(--app-header-h);
-  font-family: 'Inter', sans-serif;
+  font-family: var(--theme-font-family, 'Inter'), sans-serif;
   background: var(--bg-page);
   color: var(--text-main);
   -webkit-font-smoothing: antialiased;
@@ -964,7 +1217,7 @@ body {
   border-radius: 8px;
 }
 .app-brand-text {
-  font-family: 'Outfit', sans-serif;
+  font-family: var(--theme-font-family, 'Outfit'), sans-serif;
   font-weight: 900;
   text-transform: uppercase;
   color: var(--primary);
@@ -1014,7 +1267,7 @@ body {
 
 /* --- HERO SECTION --- */
 .hero-section {
-  background: var(--bg-page);
+  background: var(--banner-bg);
   color: var(--text-main);
   padding: 42px 0 18px;           /* ✅ remove side padding (fixes 20px drift) */
   position: relative;
@@ -1028,11 +1281,16 @@ body {
 }
 
 .hero-title {
-  font-family: 'Outfit', sans-serif;
+  font-family: var(--theme-font-family, 'Outfit'), sans-serif;
   font-weight: 900;
   font-size: clamp(1.56rem, 3.6vw, 2.7rem); /* ✅ +20% from current */
   margin: 0 0 10px;
   color: var(--primary);
+}
+.hero-subtitle {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--text-muted);
 }
 
 
@@ -1104,7 +1362,7 @@ body {
 }
 
 .featured-content h2 {
-  font-family: 'Outfit', sans-serif;
+  font-family: var(--theme-font-family, 'Outfit'), sans-serif;
   font-size: clamp(1.8rem, 3vw, 2.8rem);
   margin: 0;
   font-weight: 800;
@@ -1156,7 +1414,7 @@ body {
 }
 
 .section-heading {
-  font-family: 'Outfit', sans-serif;
+  font-family: var(--theme-font-family, 'Outfit'), sans-serif;
   font-weight: 800;
   font-size: clamp(1.8rem, 3vw, 2.4rem);
   margin: 0 0 16px;
@@ -1372,7 +1630,7 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
 
 .btn--primary {
   background: var(--brand);
-  color: #fff;
+  color: var(--theme-primary-text, #fff);
   border: 1px solid transparent;
   box-shadow: 0 4px 6px rgba(15, 156, 223, 0.2);
 }
@@ -1432,8 +1690,8 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
 }
 
 .cta-strip {
-  background: #0f9cdf;
-  color: #fff;
+  background: var(--brand);
+  color: var(--theme-primary-text, #fff);
 }
 
 .cta-strip__inner {
@@ -1480,8 +1738,8 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
   justify-content: center;
   padding: 10px 22px;
   border-radius: 999px;
-  border: 2px solid #fff;
-  color: #fff;
+  border: 2px solid var(--theme-primary-text, #fff);
+  color: var(--theme-primary-text, #fff);
   font-weight: 700;
   text-decoration: none;
   transition: all 0.2s;
@@ -1489,8 +1747,8 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
 }
 
 .cta-strip__button:hover {
-  background: #fff;
-  color: #0b86c6;
+  background: var(--theme-primary-text, #fff);
+  color: var(--brand);
 }
 
 .cta-strip--products {
@@ -1622,14 +1880,16 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
 @media (max-width: 1024px) {
   .info-strip__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+${editorStyles}
 </style>
 </head>
 <body>
 
   <header class="app-header">
     <div class="app-header-inner">
-      <a href="${escAttr(brand.homeHref || '#')}" class="app-brand" aria-label="${escAttr(brand.name)}">
-        <img class="app-brand-logo" src="${escAttr(brand.logoUrl)}" alt="${escAttr(brand.name)}" />
+      <a href="${escAttr(brand.homeHref || '#')}" class="app-brand"${editorRegionAttr("Logo")} aria-label="${escAttr(brand.name)}">
+        <img class="app-brand-logo" src="${escAttr(logoUrl)}" alt="${escAttr(brand.name)}" data-editor-logo data-default-logo="${escAttr(brand.logoUrl)}" />
+        ${editorOverlay("Logo")}
       </a>
       <div class="app-actions">
         <a class="app-action" href="${cartHref}" aria-label="View basket">
@@ -1650,10 +1910,13 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
     </div>
   </header>
 
-  <section class="hero-section">
-    <div class="hero-content">
-      <h1 class="hero-title">What's On</h1>
+  <section class="hero-section"${editorRegionAttr("Banner")}>
+    <div class="hero-content"${editorRegionAttr("Headings")}>
+      <h1 class="hero-title" data-editor-copy="allEventsTitle">${escHtml(heroTitle)}</h1>
+      <p class="hero-subtitle" data-editor-copy="allEventsSubtitle">${escHtml(heroSubtitle)}</p>
+      ${editorOverlay("Headings")}
     </div>
+    ${editorOverlay("Banner")}
   </section>
 
   ${
@@ -1723,8 +1986,9 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
       }
     </div>
 
-    <div class="show-grid" id="show-grid">
+    <div class="show-grid" id="show-grid"${editorRegionAttr("Tiles")}>
       ${cards || `<div class="empty">No live events scheduled at the moment.</div>`}
+      ${editorOverlay("Tiles")}
     </div>
     <div class="pagination" id="pagination" aria-label="All shows pagination"></div>
   </div>  
@@ -1746,7 +2010,7 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
     </div>
   </section>
 
-  <section class="info-strip" aria-label="Contact and policies">
+  <section class="info-strip"${editorRegionAttr("Footer")} aria-label="Contact and policies">
     <div class="info-strip__inner">
       <div class="info-strip__grid">
         <div class="info-strip__column">
@@ -1770,6 +2034,7 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
         </div>
       </div>
     </div>
+    ${editorOverlay("Footer")}
   </section>
 
   <section class="partner-strip" aria-label="Advanced ticketing">
@@ -2022,7 +2287,8 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
 
     applyFilters();
   })();
-</script>
+  </script>
+  ${editorScript}
 </body>
 </html>
   `);

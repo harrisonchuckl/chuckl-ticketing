@@ -5,6 +5,7 @@ import { ShowStatus } from '@prisma/client';
 import prisma from '../lib/prisma.js';
 import { readCustomerSession } from '../lib/customer-auth.js';
 import { readStorefrontCartCount } from '../lib/storefront-cart.js';
+import { verifyJwt } from '../utils/security.js';
 
 const router = Router();
 
@@ -28,6 +29,131 @@ function normaliseRgbColor(value: string | null | undefined) {
 
 function resolveBrandColor(organiser: { brandColorHex?: string | null; brandColorRgb?: string | null }) {
   return normaliseHexColor(organiser.brandColorHex) || normaliseRgbColor(organiser.brandColorRgb);
+}
+
+type StorefrontTheme = {
+  tokens: {
+    fontFamily: string;
+    bannerBg: string;
+    primary: string;
+    primaryText: string;
+    pageBg: string;
+    cardBg: string;
+    text: string;
+    mutedText: string;
+    borderRadius: number;
+  };
+  copy: {
+    allEventsTitle: string;
+    allEventsSubtitle: string;
+    eventPageCtaText: string;
+    eventPageFromLabel: string;
+  };
+  footer: { sections: Array<{ title: string; items: string[] }> };
+  assets: { logoUrl: string };
+};
+
+const defaultStorefrontTheme: StorefrontTheme = {
+  tokens: {
+    fontFamily: 'Inter',
+    bannerBg: '#0B1220',
+    primary: '#2563EB',
+    primaryText: '#FFFFFF',
+    pageBg: '#F3F4F6',
+    cardBg: '#FFFFFF',
+    text: '#0F172A',
+    mutedText: '#6B7280',
+    borderRadius: 16,
+  },
+  copy: {
+    allEventsTitle: "What's On",
+    allEventsSubtitle: 'Upcoming events',
+    eventPageCtaText: 'Book Tickets',
+    eventPageFromLabel: 'From',
+  },
+  footer: { sections: [] },
+  assets: { logoUrl: '' },
+};
+
+function buildStorefrontTheme(raw: any): StorefrontTheme {
+  const theme: StorefrontTheme = {
+    tokens: { ...defaultStorefrontTheme.tokens },
+    copy: { ...defaultStorefrontTheme.copy },
+    footer: { sections: [] },
+    assets: { ...defaultStorefrontTheme.assets },
+  };
+
+  if (raw && typeof raw === 'object') {
+    const tokens = raw.tokens || {};
+    const copy = raw.copy || {};
+    const assets = raw.assets || {};
+
+    Object.keys(theme.tokens).forEach((key) => {
+      if (key === 'borderRadius') {
+        const parsed = Number(tokens[key]);
+        if (!Number.isNaN(parsed)) {
+          theme.tokens.borderRadius = Math.min(32, Math.max(0, parsed));
+        }
+        return;
+      }
+      const value = String(tokens[key] ?? '').trim();
+      if (value) {
+        theme.tokens[key as keyof StorefrontTheme['tokens']] = value as any;
+      }
+    });
+
+    Object.keys(theme.copy).forEach((key) => {
+      const value = String(copy[key] ?? '').trim();
+      if (value) {
+        theme.copy[key as keyof StorefrontTheme['copy']] = value as any;
+      }
+    });
+
+    const logoUrl = String(assets.logoUrl ?? '').trim();
+    if (logoUrl) theme.assets.logoUrl = logoUrl;
+
+    if (Array.isArray(raw.footer?.sections)) {
+      theme.footer.sections = raw.footer.sections
+        .filter((section: any) => section && typeof section === 'object')
+        .map((section: any) => ({
+          title: String(section.title ?? '').trim(),
+          items: Array.isArray(section.items)
+            ? section.items.map((item: any) => String(item ?? '').trim()).filter(Boolean)
+            : [],
+        }));
+    }
+  }
+
+  return theme;
+}
+
+type EditorTokenPayload = {
+  type?: string;
+  scope?: string;
+  editor?: boolean;
+  organiserId?: string;
+  storefrontSlug?: string;
+};
+
+async function canUseEditorMode(req: any, organiserId: string, storefrontSlug: string | null) {
+  const editorRequested = String(req.query?.editor || '') === '1';
+  if (!editorRequested) return false;
+
+  const role = String(req.user?.role || '').toUpperCase();
+  if (role === 'ADMIN' || role === 'ORGANISER') return true;
+
+  const token = String(req.query?.token || req.query?.editorToken || '').trim();
+  if (!token) return false;
+
+  const payload = await verifyJwt<EditorTokenPayload>(token);
+  if (!payload) return false;
+
+  const isEditorToken = payload.type === 'storefront-editor' || payload.scope === 'storefront-editor' || payload.editor === true;
+  if (!isEditorToken) return false;
+  if (payload.organiserId && payload.organiserId !== organiserId) return false;
+  if (payload.storefrontSlug && storefrontSlug && payload.storefrontSlug !== storefrontSlug) return false;
+
+  return true;
 }
 
 function getPublicBrand(overrides?: { name?: string | null; logoUrl?: string | null; homeHref?: string | null; color?: string | null }) {
@@ -378,6 +504,7 @@ router.get('/checkout/success', async (req, res) => {
      homeHref: storefrontSlug ? `/public/${encodeURIComponent(storefrontSlug)}` : '/public',
      color: show.organiser ? resolveBrandColor(show.organiser) : null
    });
+   const logoUrl = themeLogo || brand.logoUrl;
 
 
    res.type('html').send(`<!doctype html>
@@ -523,7 +650,7 @@ background: rgba(15,156,223,0.18); border: 1px solid rgba(15,156,223,0.35);
 }
 
 .app-brand-text{
- font-family: 'Outfit', sans-serif;
+ font-family: var(--theme-font-family, 'Outfit'), sans-serif;
  font-weight: 900;
  letter-spacing: 0.02em;
  color: var(--primary);
@@ -686,6 +813,7 @@ router.get('/event/:id', async (req, res) => {
      include: {
        organiser: {
          select: {
+           id: true,
            storefrontSlug: true,
            companyName: true,
            name: true,
@@ -720,6 +848,118 @@ const externalTicketUrl = String((show as any).externalTicketUrl || '').trim();
 const usesExternalTicketing = (show as any).usesExternalTicketing === true;
 const hasAvailableTickets = (ticketTypes || []).some((t) => t?.available === null || t?.available > 0);
 const shouldUseExternalTickets = !!externalTicketUrl && (usesExternalTicketing || !hasAvailableTickets);
+
+  const organiserId = String(show.organiser?.id || '');
+  const editorStorefrontSlug = show.organiser?.storefrontSlug || null;
+  const editorEnabled = organiserId ? await canUseEditorMode(req, organiserId, editorStorefrontSlug) : false;
+  const themeRecord = editorEnabled
+    ? await prisma.storefrontTheme.findUnique({
+        where: { organiserId_page: { organiserId, page: 'EVENT_PAGE' } },
+      })
+    : null;
+  const editorTheme = buildStorefrontTheme(themeRecord?.draftJson || null);
+  const ctaText = editorEnabled ? editorTheme.copy.eventPageCtaText : 'Book Tickets';
+  const fromLabel = editorEnabled ? editorTheme.copy.eventPageFromLabel : 'From';
+  const themeLogo = editorEnabled && editorTheme.assets.logoUrl
+    ? editorTheme.assets.logoUrl
+    : '';
+  const editorRegionAttr = (label: string) =>
+    editorEnabled ? ` data-editor-region="${escAttr(label)}"` : '';
+  const editorOverlay = (label: string) =>
+    editorEnabled
+      ? `<div class="editor-overlay" aria-hidden="true"><span class="editor-overlay__label">${esc(label)}</span></div>`
+      : '';
+  const editorStyles = editorEnabled
+    ? `
+  [data-editor-region] {
+    position: relative;
+  }
+  .editor-overlay {
+    position: absolute;
+    inset: 0;
+    border: 2px dashed rgba(37, 99, 235, 0.7);
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 30;
+  }
+  .editor-overlay__label {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: rgba(15, 23, 42, 0.85);
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 4px 10px;
+    border-radius: 999px;
+  }
+`
+    : '';
+  const themeVars = editorEnabled
+    ? `<style id="storefront-theme-vars">
+  :root{
+    --theme-font-family: ${esc(editorTheme.tokens.fontFamily)};
+    --theme-banner-bg: ${esc(editorTheme.tokens.bannerBg)};
+    --theme-primary: ${esc(editorTheme.tokens.primary)};
+    --theme-primary-text: ${esc(editorTheme.tokens.primaryText)};
+    --theme-page-bg: ${esc(editorTheme.tokens.pageBg)};
+    --theme-card-bg: ${esc(editorTheme.tokens.cardBg)};
+    --theme-text: ${esc(editorTheme.tokens.text)};
+    --theme-muted-text: ${esc(editorTheme.tokens.mutedText)};
+    --theme-radius: ${esc(String(editorTheme.tokens.borderRadius))}px;
+  }
+  </style>`
+    : '';
+  const editorScript = editorEnabled
+    ? `<script>
+  (function(){
+    function applyTheme(payload){
+      if (!payload) return;
+      var root = document.documentElement;
+      var tokens = payload.tokens || {};
+      if (tokens.fontFamily) root.style.setProperty('--theme-font-family', tokens.fontFamily);
+      if (tokens.bannerBg) root.style.setProperty('--theme-banner-bg', tokens.bannerBg);
+      if (tokens.primary) root.style.setProperty('--theme-primary', tokens.primary);
+      if (tokens.primaryText) root.style.setProperty('--theme-primary-text', tokens.primaryText);
+      if (tokens.pageBg) root.style.setProperty('--theme-page-bg', tokens.pageBg);
+      if (tokens.cardBg) root.style.setProperty('--theme-card-bg', tokens.cardBg);
+      if (tokens.text) root.style.setProperty('--theme-text', tokens.text);
+      if (tokens.mutedText) root.style.setProperty('--theme-muted-text', tokens.mutedText);
+      if (tokens.borderRadius != null && tokens.borderRadius !== '') {
+        root.style.setProperty('--theme-radius', tokens.borderRadius + 'px');
+      }
+      if (payload.copy) {
+        document.querySelectorAll('[data-editor-copy]').forEach(function(node){
+          var key = node.getAttribute('data-editor-copy');
+          if (!key) return;
+          var value = payload.copy[key];
+          if (typeof value === 'string' && value.trim()) {
+            node.textContent = value;
+          }
+        });
+      }
+      if (payload.assets) {
+        var logo = document.querySelector('[data-editor-logo]');
+        if (logo) {
+          var url = String(payload.assets.logoUrl || '').trim();
+          if (url) {
+            logo.setAttribute('src', url);
+          } else {
+            var fallback = logo.getAttribute('data-default-logo') || '';
+            if (fallback) logo.setAttribute('src', fallback);
+          }
+        }
+      }
+    }
+    window.addEventListener('message', function(event){
+      if (!event.data || event.data.type !== 'storefront-theme') return;
+      applyTheme(event.data.theme || {});
+    });
+  })();
+  </script>`
+    : '';
 
 // Booking fee helper (used by ticket list + mobile bar)
 const venueBps = Number((venue as any)?.bookingFeeBps || 0);
@@ -855,14 +1095,15 @@ const hasMultipleTicketTypes = (ticketTypes || []).length > 1;
 
 const shouldScrollToTicketList = isAllocatedSeating && hasMultipleTicketTypes;
 
+const mobileCtaLabel = esc(ctaText);
 const mobileCtaHtml =
  shouldUseExternalTickets
-   ? `<a href="${escAttr(externalTicketUrl)}" class="btn-mob-cta" target="_blank" rel="noopener">BUY EXTERNAL</a>`
+   ? `<a href="${escAttr(externalTicketUrl)}" class="btn-mob-cta" data-editor-copy="eventPageCtaText" target="_blank" rel="noopener">${mobileCtaLabel}</a>`
    : !ticketTypes.length
-     ? `<a href="javascript:void(0)" class="btn-mob-cta" data-scroll-to="main-tickets">BOOK TICKETS</a>`
+     ? `<a href="javascript:void(0)" class="btn-mob-cta" data-editor-copy="eventPageCtaText" data-scroll-to="main-tickets">${mobileCtaLabel}</a>`
      : shouldScrollToTicketList
-       ? `<a href="javascript:void(0)" class="btn-mob-cta" data-scroll-to="main-tickets">BOOK TICKETS</a>`
-       : `<a href="/checkout?showId=${showIdEnc}" class="btn-mob-cta">BOOK TICKETS</a>`;
+       ? `<a href="javascript:void(0)" class="btn-mob-cta" data-editor-copy="eventPageCtaText" data-scroll-to="main-tickets">${mobileCtaLabel}</a>`
+       : `<a href="/checkout?showId=${showIdEnc}" class="btn-mob-cta" data-editor-copy="eventPageCtaText">${mobileCtaLabel}</a>`;
 
    // Schema.org
    const offers = ticketTypes.map((t) => ({
@@ -970,7 +1211,7 @@ if (organiserId) {
 
        <div class="t-action">
          <div class="t-price-line"></div>
-         <div class="btn-buy">Buy tickets</div>
+         <div class="btn-buy" data-editor-copy="eventPageCtaText">${esc(ctaText)}</div>
        </div>
      </a>
    `;
@@ -998,7 +1239,7 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
            <span class="t-price">${esc(pFmt(t.pricePence))}</span>
            ${bfHtml}
          </div>
-         <div class="btn-buy">Book tickets</div>
+         <div class="btn-buy" data-editor-copy="eventPageCtaText">${esc(ctaText)}</div>
        </div>
      </a>
    `;
@@ -1006,10 +1247,14 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 };
 
    const renderRelatedShows = () => {
-  if (!relatedShows.length) return '';
+  if (!relatedShows.length) {
+    return editorEnabled
+      ? `<div class="related-carousel"${editorRegionAttr('Tiles')} style="min-height: 120px;" aria-label="Related shows placeholder">${editorOverlay('Tiles')}</div>`
+      : '';
+  }
 
   return `
-  <div class="related-carousel">
+  <div class="related-carousel"${editorRegionAttr('Tiles')}>
     <span class="section-label">Other shows you may be interested in</span>
 
     <div class="related-frame" data-related>
@@ -1039,6 +1284,7 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
       </div>
       <button class="related-nav related-right" type="button" aria-label="Next shows">›</button>
     </div>
+    ${editorOverlay('Tiles')}
   </div>`;
 };
 
@@ -1062,6 +1308,7 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
  <link rel="preconnect" href="https://fonts.googleapis.com">
  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@400;700;800;900&display=swap" rel="stylesheet">
+ ${themeVars}
 
  <script type="application/ld+json">${escJSON(jsonLd)}</script>
 <script>
@@ -1147,15 +1394,16 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
    --page-pad: 24px;
 
      /* TiXALL Blue Palette */
-     --bg-page: #F3F4F6;
-     --bg-surface: #FFFFFF;
-     --primary: #0F172A;--brand: ${escAttr(brand.color || '#0f9cdf')};
---brand-hover: ${escAttr(brand.color || '#0b86c6')};
-     --text-main: #111827;
-     --text-muted: #6B7280;
+     --bg-page: var(--theme-page-bg, #F3F4F6);
+     --bg-surface: var(--theme-card-bg, #FFFFFF);
+     --primary: var(--theme-text, #0F172A);
+--brand: var(--theme-primary, ${escAttr(brand.color || '#0f9cdf')});
+--brand-hover: var(--theme-primary, ${escAttr(brand.color || '#0b86c6')});
+     --text-main: var(--theme-text, #111827);
+     --text-muted: var(--theme-muted-text, #6B7280);
      --border: #E5E7EB;
-     --radius-md: 12px;
-     --radius-lg: 16px;
+     --radius-md: var(--theme-radius, 12px);
+     --radius-lg: var(--theme-radius, 16px);
 --shadow-float: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
 --shadow-card: 0 2px 10px rgba(0,0,0,0.06);
    }
@@ -1165,20 +1413,20 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
  body {
  margin: 0;
  padding-top: var(--app-header-h);
- font-family: 'Inter', sans-serif;
+ font-family: var(--theme-font-family, 'Inter'), sans-serif;
  background-color: var(--bg-page);
  color: var(--text-main);
  -webkit-font-smoothing: antialiased;
 }
 
-   h1, h2, h3, h4, .font-heading { font-family: 'Outfit', sans-serif; font-weight: 700; line-height: 1.1; margin: 0; }
+   h1, h2, h3, h4, .font-heading { font-family: var(--theme-font-family, 'Outfit'), sans-serif; font-weight: 700; line-height: 1.1; margin: 0; }
    a { color: inherit; text-decoration: none; transition: opacity 0.2s; }
    a:hover { opacity: 0.8; }
 
    /* --- HERO SECTION (NO CROP: image always fully visible) --- */
 .hero{
   position: relative;
-  background: var(--primary);
+  background: var(--theme-banner-bg, var(--primary));
   color: white;
   overflow: hidden;
   isolation: isolate;   /* creates a clean stacking context */
@@ -1336,7 +1584,7 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 }
 
 .app-brand-text{
- font-family: 'Outfit', sans-serif;
+ font-family: var(--theme-font-family, 'Outfit'), sans-serif;
  font-weight: 900;
  letter-spacing: 0.02em;
  color: var(--primary);
@@ -1897,7 +2145,7 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
  top: -0.1em; /* tiny extra lift so it sits higher */
 }
    .btn-buy {
-     background: var(--brand); color: white; font-size: 0.85rem; font-weight: 700;
+     background: var(--brand); color: var(--theme-primary-text, #fff); font-size: 0.85rem; font-weight: 700;
      padding: 8px 16px; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.05em;
      transition: background 0.2s; white-space: nowrap;
    }
@@ -1920,7 +2168,7 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 .mob-fee { font-size: 0.95rem; font-weight: 400; color: var(--text-muted); }
 
 .btn-mob-cta {
-     background: var(--brand); color: white; padding: 12px 24px; border-radius: 8px; font-weight: 700; font-size: 1rem;
+     background: var(--brand); color: var(--theme-primary-text, #fff); padding: 12px 24px; border-radius: 8px; font-weight: 700; font-size: 1rem;
    }
 
    /* Related shows carousel (beneath tickets) */
@@ -2041,14 +2289,16 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
   .booking-area { display: none; }
   .mobile-bar { display: flex; }
 }
+${editorStyles}
  </style>
 </head>
 <body>
 
 <header class="app-header">
  <div class="app-header-inner">
-  <div class="app-brand" aria-label="${escAttr(brand.name)}">
-  <img class="app-brand-logo" src="${escAttr(brand.logoUrl)}" alt="${escAttr(brand.name)}" />
+  <div class="app-brand"${editorRegionAttr('Logo')} aria-label="${escAttr(brand.name)}">
+  <img class="app-brand-logo" src="${escAttr(logoUrl)}" alt="${escAttr(brand.name)}" data-editor-logo data-default-logo="${escAttr(brand.logoUrl)}" />
+  ${editorOverlay('Logo')}
 </div>
   <div class="app-actions">
     <a class="app-action" href="${escAttr(cartHref)}" aria-label="View basket">
@@ -2070,7 +2320,7 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
  </div>
 </header>
 
-<header class="hero">
+<header class="hero"${editorRegionAttr('Banner')}>
 
   <div class="hero-media">
     ${poster ? `<img class="hero-bg" src="${escAttr(poster)}" alt="${escAttr(show.title || 'Event poster')}" loading="eager" />` : ''}
@@ -2096,14 +2346,16 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
     </div>
   </div>
 
+  ${editorOverlay('Banner')}
 </header>
 
  <div class="layout">
 
   <div class="content-area">
 
-     <div class="page-title-row">
+     <div class="page-title-row"${editorRegionAttr('Headings')}>
        <h1 class="page-title">${esc(show.title)}</h1>
+       ${editorOverlay('Headings')}
      </div>
 
      <div>
@@ -2156,11 +2408,12 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
          </div>
      </div>
 
-     <div id="main-tickets">
+     <div id="main-tickets"${editorRegionAttr('Buttons')}>
          <span class="section-label">Tickets</span>
          <div class="ticket-list-container" style="padding:0;">
              ${renderTicketList(true)}
          </div>
+         ${editorOverlay('Buttons')}
      </div>
 ${renderRelatedShows()}
    </div>
@@ -2190,12 +2443,13 @@ ${accessibilityReasons
        <div class="ticket-list-container">
          ${renderTicketList(false)}
        </div>
-    <div class="widget-footer">
+    <div class="widget-footer"${editorRegionAttr('Footer')}>
   <span class="secure-powered">
     <span class="secure-lock" aria-hidden="true">🔒</span>
     <span class="secure-text">Secure checkout powered by</span>
     <img class="secure-logo" src="/IMG_2374.jpeg" alt="TixAll" loading="lazy" />
   </span>
+  ${editorOverlay('Footer')}
 </div>
      </div>
    </div>
@@ -2204,7 +2458,7 @@ ${accessibilityReasons
 
   <div class="mobile-bar">
    <div>
-     <div class="mob-price">From</div>
+     <div class="mob-price" data-editor-copy="eventPageFromLabel">${esc(fromLabel)}</div>
      <div class="mob-line">
        <div class="mob-val">${fromPrice ? esc(fromPrice) : '£0.00'}</div>
 ${fromFeeHtml ? `<div class="mob-fee">${fromFeeHtml}</div>` : ''}
@@ -2422,6 +2676,7 @@ ${mobileCtaHtml}
   });
 })();
 </script>
+${editorScript}
 
 </body>
 </html>`);
