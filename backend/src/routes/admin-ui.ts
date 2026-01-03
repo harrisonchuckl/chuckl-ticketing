@@ -868,10 +868,10 @@ router.get("/storefront/editor", requireAdminOrOrganiser, async (req, res) => {
         bannerBg: "#0B1220",
         primary: "#2563EB",
         primaryText: "#FFFFFF",
-        pageBg: "#0A0A0A",
-        cardBg: "#111827",
-        text: "#E5E7EB",
-        mutedText: "#9CA3AF",
+        pageBg: "#F3F4F6",
+        cardBg: "#FFFFFF",
+        text: "#0F172A",
+        mutedText: "#6B7280",
         borderRadius: 16
       },
       copy: {
@@ -956,10 +956,10 @@ router.get("/storefront/editor", requireAdminOrOrganiser, async (req, res) => {
       document.getElementById('primary').value = theme.tokens.primary || '#2563EB';
       document.getElementById('primaryText').value = theme.tokens.primaryText || '#FFFFFF';
       document.getElementById('bannerBg').value = theme.tokens.bannerBg || '#0B1220';
-      document.getElementById('pageBg').value = theme.tokens.pageBg || '#0A0A0A';
-      document.getElementById('cardBg').value = theme.tokens.cardBg || '#111827';
-      document.getElementById('textColor').value = theme.tokens.text || '#E5E7EB';
-      document.getElementById('mutedText').value = theme.tokens.mutedText || '#9CA3AF';
+      document.getElementById('pageBg').value = theme.tokens.pageBg || '#F3F4F6';
+      document.getElementById('cardBg').value = theme.tokens.cardBg || '#FFFFFF';
+      document.getElementById('textColor').value = theme.tokens.text || '#0F172A';
+      document.getElementById('mutedText').value = theme.tokens.mutedText || '#6B7280';
       document.getElementById('borderRadius').value = theme.tokens.borderRadius || 16;
       document.getElementById('allEventsTitle').value = theme.copy.allEventsTitle || \"What's On\";
       document.getElementById('allEventsSubtitle').value = theme.copy.allEventsSubtitle || 'Upcoming events';
