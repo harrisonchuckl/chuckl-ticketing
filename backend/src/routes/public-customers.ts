@@ -180,16 +180,28 @@ router.get("/auth/session", async (req, res) => {
 router.get("/customer/orders", requireCustomer, async (req: any, res) => {
   const storefrontSlug = String(req.query?.storefront || "").trim() || null;
   let storefrontId: string | undefined;
+  let organiserId: string | undefined;
   if (storefrontSlug) {
-    const storefront = await prisma.storefront.findUnique({ where: { slug: storefrontSlug } });
+    const storefront = await prisma.storefront.findUnique({
+      where: { slug: storefrontSlug },
+      select: { id: true, ownerUserId: true },
+    });
     if (!storefront) return res.json({ ok: true, items: [] });
     storefrontId = storefront.id;
+    organiserId = storefront.ownerUserId;
   }
 
   const orders = await prisma.order.findMany({
     where: {
       customerAccountId: String(req.customerSession.sub),
-      ...(storefrontId ? { storefrontId } : {}),
+      ...(storefrontId
+        ? {
+            OR: [
+              { storefrontId },
+              { storefrontId: null, show: { organiserId } },
+            ],
+          }
+        : {}),
     },
     include: {
       show: { select: { title: true, date: true, venue: { select: { name: true, city: true } } } },
