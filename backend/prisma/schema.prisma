@@ -346,6 +346,9 @@ model User {
   companyNumber String?
   vatNumber     String?
   phone         String?
+  brandLogoUrl  String?
+  brandColorRgb String?
+  brandColorHex String?
   addressLine1  String?
   addressLine2  String?
   city          String?

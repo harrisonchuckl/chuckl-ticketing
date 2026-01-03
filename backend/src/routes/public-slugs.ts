@@ -33,6 +33,28 @@ function truncateText(value: string | null | undefined, max = 140) {
   return `${text.slice(0, max).replace(/\s+\S*$/, "")}…`;
 }
 
+function normaliseHexColor(value: string | null | undefined) {
+  const raw = String(value ?? "").trim();
+  const match = raw.match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (!match) return null;
+  return `#${match[1].toLowerCase()}`;
+}
+
+function normaliseRgbColor(value: string | null | undefined) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const rgbMatch = raw.match(/^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i);
+  const tuple = rgbMatch ? rgbMatch.slice(1) : raw.match(/^(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})$/)?.slice(1);
+  if (!tuple) return null;
+  const nums = tuple.map((n) => Math.max(0, Math.min(255, Number(n))));
+  if (nums.some((n) => Number.isNaN(n))) return null;
+  return `rgb(${nums.join(", ")})`;
+}
+
+function resolveBrandColor(organiser: { brandColorHex?: string | null; brandColorRgb?: string | null }) {
+  return normaliseHexColor(organiser.brandColorHex) || normaliseRgbColor(organiser.brandColorRgb);
+}
+
 async function getBasketCountForStorefront(req: any, storefrontSlug: string, storefrontId: string) {
   const session = await readCustomerSession(req);
   const cookieCount = readStorefrontCartCount(req, storefrontSlug);
@@ -48,16 +70,25 @@ async function getBasketCountForStorefront(req: any, storefrontSlug: string, sto
 }
 
 // Helper to match the SSR brand logic
-function getPublicBrand() {
+function getPublicBrand(overrides?: { name?: string | null; logoUrl?: string | null; homeHref?: string | null; color?: string | null }) {
   const name = String(process.env.PUBLIC_BRAND_NAME || 'TixAll').trim();
   const defaultLocalLogo = '/IMG_2374.jpeg'; 
   const logoUrl = String(process.env.PUBLIC_BRAND_LOGO_URL ?? '').trim() || defaultLocalLogo;
   const homeHref = String(process.env.PUBLIC_BRAND_HOME_HREF || '/public').trim();
-  return { name, logoUrl, homeHref };
+  const resolvedName = String(overrides?.name || name).trim() || name;
+  const resolvedLogo = String(overrides?.logoUrl || logoUrl).trim() || logoUrl;
+  const resolvedHome = String(overrides?.homeHref || homeHref).trim() || homeHref;
+  const resolvedColor = overrides?.color || null;
+  return {
+    name: resolvedName,
+    logoUrl: toPublicImageUrl(resolvedLogo, 180) || resolvedLogo,
+    homeHref: resolvedHome,
+    color: resolvedColor
+  };
 }
 
-function renderAccountPage(opts: { storefrontSlug: string | null; storefrontName: string | null }) {
-  const brand = getPublicBrand();
+function renderAccountPage(opts: { storefrontSlug: string | null; storefrontName: string | null; brand?: { name: string; logoUrl: string; homeHref: string; color?: string | null } }) {
+  const brand = opts.brand || getPublicBrand();
   const title = opts.storefrontName ? `${opts.storefrontName} · Account` : "TixAll Account";
   const storefrontSlug = opts.storefrontSlug || "";
   const accountTitle = opts.storefrontName || "TixAll";
@@ -75,7 +106,7 @@ function renderAccountPage(opts: { storefrontSlug: string | null; storefrontName
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>${escHtml(title)}</title>
   <style>
-    :root{--bg:#f8fafc;--panel:#fff;--text:#0f172a;--muted:#64748b;--border:#e2e8f0;--brand:#0ea5e9}
+    :root{--bg:#f8fafc;--panel:#fff;--text:#0f172a;--muted:#64748b;--border:#e2e8f0;--brand:${escHtml(brand.color || "#0ea5e9")}}
     *{box-sizing:border-box}
     body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
     a{text-decoration:none;color:inherit}
@@ -397,8 +428,8 @@ function renderAccountPage(opts: { storefrontSlug: string | null; storefrontName
 </html>`;
 }
 
-function renderBasketPage(opts: { storefrontSlug: string | null; storefrontName: string | null }) {
-  const brand = getPublicBrand();
+function renderBasketPage(opts: { storefrontSlug: string | null; storefrontName: string | null; brand?: { name: string; logoUrl: string; homeHref: string; color?: string | null } }) {
+  const brand = opts.brand || getPublicBrand();
   const title = opts.storefrontName ? `${opts.storefrontName} · Basket` : "Basket";
   const storefrontSlug = opts.storefrontSlug || "";
   const accountHref = storefrontSlug ? `/public/${escAttr(storefrontSlug)}/account` : "/public/account";
@@ -411,7 +442,7 @@ function renderBasketPage(opts: { storefrontSlug: string | null; storefrontName:
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>${escHtml(title)}</title>
   <style>
-    :root{--bg:#f8fafc;--panel:#fff;--text:#0f172a;--muted:#64748b;--border:#e2e8f0;--brand:#0ea5e9}
+    :root{--bg:#f8fafc;--panel:#fff;--text:#0f172a;--muted:#64748b;--border:#e2e8f0;--brand:${escHtml(brand.color || "#0ea5e9")}}
     *{box-sizing:border-box}
     body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
     a{text-decoration:none;color:inherit}
@@ -542,24 +573,50 @@ router.get("/:storefront/account", async (req, res) => {
   const storefrontSlug = String(req.params.storefront || "");
   const organiser = await prisma.user.findUnique({
     where: { storefrontSlug },
-    select: { companyName: true, name: true, storefrontSlug: true },
+    select: {
+      companyName: true,
+      name: true,
+      storefrontSlug: true,
+      brandLogoUrl: true,
+      brandColorHex: true,
+      brandColorRgb: true
+    },
   });
 
   if (!organiser) return res.status(404).send("Not found");
   const storefrontName = organiser.companyName || organiser.name || organiser.storefrontSlug || null;
-  res.type("html").send(renderAccountPage({ storefrontSlug, storefrontName }));
+  const brand = getPublicBrand({
+    name: storefrontName,
+    logoUrl: organiser.brandLogoUrl,
+    homeHref: `/public/${storefrontSlug}`,
+    color: resolveBrandColor(organiser)
+  });
+  res.type("html").send(renderAccountPage({ storefrontSlug, storefrontName, brand }));
 });
 
 router.get("/:storefront/basket", async (req, res) => {
   const storefrontSlug = String(req.params.storefront || "");
   const organiser = await prisma.user.findUnique({
     where: { storefrontSlug },
-    select: { companyName: true, name: true, storefrontSlug: true },
+    select: {
+      companyName: true,
+      name: true,
+      storefrontSlug: true,
+      brandLogoUrl: true,
+      brandColorHex: true,
+      brandColorRgb: true
+    },
   });
 
   if (!organiser) return res.status(404).send("Not found");
   const storefrontName = organiser.companyName || organiser.name || organiser.storefrontSlug || null;
-  res.type("html").send(renderBasketPage({ storefrontSlug, storefrontName }));
+  const brand = getPublicBrand({
+    name: storefrontName,
+    logoUrl: organiser.brandLogoUrl,
+    homeHref: `/public/${storefrontSlug}`,
+    color: resolveBrandColor(organiser)
+  });
+  res.type("html").send(renderBasketPage({ storefrontSlug, storefrontName, brand }));
 });
 
 /**
@@ -647,6 +704,9 @@ router.get("/:storefront", async (req, res) => {
       storefrontSlug: true,
       companyName: true,
       name: true,
+      brandLogoUrl: true,
+      brandColorHex: true,
+      brandColorRgb: true,
     },
   });
 
@@ -676,7 +736,12 @@ router.get("/:storefront", async (req, res) => {
   });
 
   const title = organiser.companyName || organiser.name || organiser.storefrontSlug;
-  const brand = getPublicBrand();
+  const brand = getPublicBrand({
+    name: title,
+    logoUrl: organiser.brandLogoUrl,
+    homeHref: organiser.storefrontSlug ? `/public/${organiser.storefrontSlug}` : "/public",
+    color: resolveBrandColor(organiser)
+  });
   const storefrontSlug = organiser.storefrontSlug || "";
   const storefrontRecord = storefrontSlug
     ? await prisma.storefront.findUnique({ where: { slug: storefrontSlug } })
@@ -844,8 +909,8 @@ router.get("/:storefront", async (req, res) => {
   --bg-page: #F3F4F6;
   --bg-surface: #FFFFFF;
   --primary: #0F172A;
-  --brand: #0f9cdf;
-  --brand-hover: #0b86c6;
+  --brand: ${escHtml(brand.color || "#0f9cdf")};
+  --brand-hover: ${escHtml(brand.color || "#0b86c6")};
   --text-main: #111827;
   --text-muted: #6B7280;
   --border: #E5E7EB;
