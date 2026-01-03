@@ -1200,13 +1200,13 @@ router.get("/:storefront", async (req, res) => {
         : "";
       return `
         <div class="hero-slide${idx === 0 ? " is-active" : ""}" data-slide="${idx}">
-          <div class="hero-media">
+          <a class="hero-media" href="/public/${escHtml(storefront)}/${escHtml(show.slug)}" aria-label="View ${escHtml(show.title)}">
             ${
               image
                 ? `<img src="${escAttr(image)}" alt="${escHtml(show.title)}" />`
                 : `<div class="hero-placeholder" aria-hidden="true"></div>`
             }
-          </div>
+          </a>
           <div class="featured-content">
             <span class="hero-eyebrow">Featured show</span>
             <h2>${escHtml(show.title || "Featured show")}</h2>
@@ -1427,6 +1427,7 @@ body {
   overflow: hidden;
   background: #111827;
   aspect-ratio: 16/9;
+  display: block;
 }
 
 .hero-media img {
@@ -1648,7 +1649,7 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
 
 .show-card__meta {
   font-size: 0.98rem; /* ✅ 0.85 * 1.15 ≈ 0.98 */
-  color: var(--brand);
+  color: var(--tixall-blue);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.02em;
@@ -1818,10 +1819,6 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
   white-space: nowrap;
   line-height: 1.1;
 
-  /* ✅ never overlap the button */
-  overflow: hidden;
-  text-overflow: ellipsis;
-
   /* JS will override inline; this is just a safe default */
   font-size: 22px;
 }
@@ -1833,7 +1830,7 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
   align-items: center;
   justify-content: center;
   padding: 10px 22px;
-  border-radius: 999px;
+  border-radius: 10px;
   border: 2px solid var(--theme-primary-text, #fff);
   color: var(--theme-primary-text, #fff);
   font-weight: 700;
@@ -1984,9 +1981,12 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
   .card-actions .btn { flex: 1; }
   /* ✅ Keep CREATE ACCOUNT CTA always on ONE line */
   .cta-strip[aria-label="Create account"] .cta-strip__inner {
-    flex-direction: row;
-    align-items: center;
+    flex-direction: column;
+    align-items: flex-start;
     flex-wrap: nowrap;
+  }
+  .cta-strip[aria-label="Create account"] .cta-strip__text {
+    width: 100%;
   }
 
   /* ✅ Products section can still stack on mobile if you want */
@@ -2350,8 +2350,12 @@ ${editorStyles}
         const styles = window.getComputedStyle(ctaInner);
         const gapRaw = styles.getPropertyValue('gap') || styles.getPropertyValue('column-gap') || '0px';
         const gap = parseFloat(gapRaw) || 0;
+        const flexDirection = styles.getPropertyValue('flex-direction') || 'row';
 
-        const available = Math.max(0, innerW - btnW - gap);
+        const available =
+          flexDirection.includes('column')
+            ? Math.max(0, innerW)
+            : Math.max(0, innerW - btnW - gap);
 
         if (available <= 0) {
           ctaText.style.fontSize = MIN + 'px';
@@ -2386,9 +2390,6 @@ ${editorStyles}
         ro.observe(ctaBtn);
       }
     })();
-
-    applyFilters();
-  })();
 
     applyFilters();
   })();

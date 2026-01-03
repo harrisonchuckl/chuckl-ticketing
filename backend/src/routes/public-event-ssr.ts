@@ -1465,8 +1465,8 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
    --app-header-h: 64px;
 
    /* Keep header + content perfectly aligned */
-   --page-max: 1120px;
-   --page-pad: 24px;
+   --page-max: 1280px;
+   --page-pad: 20px;
 
      /* TiXALL Blue Palette */
      --bg-page: var(--theme-page-bg, #F3F4F6);
@@ -1507,6 +1507,8 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
   color: var(--theme-primary-text, #fff);
   overflow: hidden;
   isolation: isolate;   /* creates a clean stacking context */
+  width: 100%;
+  max-width: 100%;
 }
 
 
@@ -1561,6 +1563,8 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
   z-index: 1;           /* ensures strip z-index wins cleanly */
   line-height: 0;       /* prevents tiny baseline gaps */
   background: var(--primary);
+  width: 100%;
+  max-width: 100%;
 }
 
 .hero-bg{
@@ -1919,7 +1923,8 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 
 @media (min-width: 960px) {
  .layout {
-   grid-template-columns: 1fr 340px;
+   grid-template-columns: minmax(0, 1fr) 320px;
+   gap: 32px;
    margin-top: 0; /* keep layout clean now title is outside hero */
  }
 }
