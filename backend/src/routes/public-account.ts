@@ -9,6 +9,7 @@ import {
 } from "../lib/customer-auth.js";
 import { ensureMembership, linkPaidGuestOrders, mergeGuestCart } from "../lib/public-customer.js";
 import { publicAuthLimiter, requireSameOrigin } from "../lib/public-auth-guards.js";
+import { hashCustomerVerificationToken, issueCustomerEmailVerification } from "../lib/customer-email-verification.js";
 
 const router = Router();
 
@@ -139,12 +140,16 @@ function renderAccountPage(storefrontSlug: string, storefrontName: string) {
     document.getElementById('signupBtn').addEventListener('click', async () => {
       authMessage.textContent = '';
       try {
-        await postJSON('/public/' + storefrontSlug + '/account/register', {
+        const data = await postJSON('/public/' + storefrontSlug + '/account/register', {
           name: document.getElementById('signupName').value,
           email: document.getElementById('signupEmail').value,
           password: document.getElementById('signupPassword').value,
           marketingConsent: document.getElementById('signupConsent').checked,
         });
+        if (data.requiresVerification) {
+          authMessage.textContent = data.message || 'Check your email to verify your account.';
+          return;
+        }
         location.reload();
       } catch (err) {
         authMessage.textContent = err.message || 'Signup failed';
@@ -447,7 +452,7 @@ router.post("/:organiserSlug/account/register", publicAuthLimiter, requireSameOr
     const marketingConsent = Boolean(req.body?.marketingConsent || false);
     const organiser = await prisma.user.findUnique({
       where: { storefrontSlug: organiserSlug },
-      select: { id: true },
+      select: { id: true, companyName: true, name: true },
     });
 
     if (!email || !password) {
@@ -466,20 +471,26 @@ router.post("/:organiserSlug/account/register", publicAuthLimiter, requireSameOr
         passwordHash,
         name,
         marketingConsent,
-        lastLoginAt: new Date(),
       },
       select: { id: true, email: true, name: true },
     });
 
-    await ensureMembership(customer.id, organiserSlug);
-    await linkPaidGuestOrders(customer.id, customer.email, organiser?.id);
-    await mergeGuestCart(req, res, customer.id, organiserSlug);
-
-    const token = await signCustomerToken({ id: customer.id, email: customer.email });
-    setCustomerCookie(res, token);
+    const storefrontName = organiser?.companyName || organiser?.name || organiserSlug;
+    await issueCustomerEmailVerification({
+      customerId: customer.id,
+      email: customer.email,
+      req,
+      verifyPath: `/public/${encodeURIComponent(organiserSlug)}/account/verify`,
+      storefrontName,
+    });
 
     console.info("public account register", { customerId: customer.id, organiserSlug });
-    return res.status(201).json({ ok: true, customer });
+    return res.status(201).json({
+      ok: true,
+      customer,
+      requiresVerification: true,
+      message: "Check your email to verify your account before signing in.",
+    });
   } catch (error: any) {
     console.error("public account register failed", error);
     return res.status(500).json({ ok: false, error: "Failed to create account" });
@@ -493,7 +504,7 @@ router.post("/:organiserSlug/account/login", publicAuthLimiter, requireSameOrigi
     const password = String(req.body?.password || "");
     const organiser = await prisma.user.findUnique({
       where: { storefrontSlug: organiserSlug },
-      select: { id: true },
+      select: { id: true, companyName: true, name: true },
     });
 
     if (!email || !password) {
@@ -510,6 +521,21 @@ router.post("/:organiserSlug/account/login", publicAuthLimiter, requireSameOrigi
     if (!ok) {
       console.warn("public account login failed", { organiserSlug, reason: "invalid_password" });
       return res.status(401).json({ ok: false, error: "Invalid credentials" });
+    }
+
+    if (!customer.emailVerifiedAt) {
+      const storefrontName = organiser?.companyName || organiser?.name || organiserSlug;
+      await issueCustomerEmailVerification({
+        customerId: customer.id,
+        email: customer.email,
+        req,
+        verifyPath: `/public/${encodeURIComponent(organiserSlug)}/account/verify`,
+        storefrontName,
+      });
+      return res.status(403).json({
+        ok: false,
+        error: "Please verify your email to continue. We've sent you a new verification link.",
+      });
     }
 
     await prisma.customerAccount.update({
@@ -530,6 +556,45 @@ router.post("/:organiserSlug/account/login", publicAuthLimiter, requireSameOrigi
     console.error("public account login failed", error);
     return res.status(500).json({ ok: false, error: "Login failed" });
   }
+});
+
+router.get("/:organiserSlug/account/verify", async (req, res) => {
+  const organiserSlug = String(req.params.organiserSlug || "").trim();
+  const token = String(req.query?.token || "").trim();
+  if (!token) return res.status(400).send("Missing verification token.");
+
+  const tokenHash = hashCustomerVerificationToken(token);
+  const customer = await prisma.customerAccount.findFirst({
+    where: {
+      emailVerificationTokenHash: tokenHash,
+      emailVerificationExpiresAt: { gt: new Date() },
+    },
+    select: { id: true, email: true },
+  });
+
+  if (!customer) return res.status(400).send("Verification link is invalid or expired.");
+
+  await prisma.customerAccount.update({
+    where: { id: customer.id },
+    data: {
+      emailVerifiedAt: new Date(),
+      emailVerificationTokenHash: null,
+      emailVerificationExpiresAt: null,
+    },
+  });
+
+  const organiser = await prisma.user.findUnique({
+    where: { storefrontSlug: organiserSlug },
+    select: { id: true },
+  });
+
+  await ensureMembership(customer.id, organiserSlug);
+  await linkPaidGuestOrders(customer.id, customer.email, organiser?.id);
+
+  const tokenJwt = await signCustomerToken({ id: customer.id, email: customer.email });
+  setCustomerCookie(res, tokenJwt);
+
+  return res.redirect(`/public/${encodeURIComponent(organiserSlug)}/account/portal`);
 });
 
 router.post("/:organiserSlug/account/logout", publicAuthLimiter, requireSameOrigin, async (req, res) => {

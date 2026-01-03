@@ -10,6 +10,7 @@ import {
 import { ensureMembership, linkPaidGuestOrders, mergeGuestCart, requireCustomer } from "../lib/public-customer.js";
 import { publicAuthLimiter, requireSameOrigin } from "../lib/public-auth-guards.js";
 import { readStorefrontCart } from "../lib/storefront-cart.js";
+import { issueCustomerEmailVerification } from "../lib/customer-email-verification.js";
 
 const router = Router();
 
@@ -37,24 +38,36 @@ router.post("/auth/signup", publicAuthLimiter, requireSameOrigin, async (req, re
         passwordHash,
         name,
         marketingConsent,
-        lastLoginAt: new Date(),
       },
       select: { id: true, email: true, name: true },
     });
 
     const storefront = storefrontSlug
-      ? await prisma.storefront.findUnique({ where: { slug: storefrontSlug }, select: { ownerUserId: true } })
+      ? await prisma.storefront.findUnique({
+          where: { slug: storefrontSlug },
+          select: { ownerUserId: true, name: true },
+        })
       : null;
 
-    await ensureMembership(customer.id, storefrontSlug);
-    await linkPaidGuestOrders(customer.id, customer.email, storefront?.ownerUserId);
-    await mergeGuestCart(req, res, customer.id, storefrontSlug);
-
-    const token = await signCustomerToken({ id: customer.id, email: customer.email });
-    setCustomerCookie(res, token);
+    const storefrontName = storefront?.name || storefrontSlug || null;
+    const verifyPath = storefrontSlug
+      ? `/public/${encodeURIComponent(storefrontSlug)}/account/verify`
+      : "/account/verify";
+    await issueCustomerEmailVerification({
+      customerId: customer.id,
+      email: customer.email,
+      req,
+      verifyPath,
+      storefrontName,
+    });
 
     console.info("public signup", { customerId: customer.id, storefrontSlug });
-    return res.status(201).json({ ok: true, customer });
+    return res.status(201).json({
+      ok: true,
+      customer,
+      requiresVerification: true,
+      message: "Check your email to verify your account before signing in.",
+    });
   } catch (error: any) {
     console.error("public signup failed", error);
     return res.status(500).json({ ok: false, error: "Failed to create account" });
@@ -83,6 +96,27 @@ router.post("/auth/login", publicAuthLimiter, requireSameOrigin, async (req, res
       return res.status(401).json({ ok: false, error: "Invalid credentials" });
     }
 
+    if (!customer.emailVerifiedAt) {
+      const storefront = storefrontSlug
+        ? await prisma.storefront.findUnique({ where: { slug: storefrontSlug }, select: { name: true } })
+        : null;
+      const storefrontName = storefront?.name || storefrontSlug || null;
+      const verifyPath = storefrontSlug
+        ? `/public/${encodeURIComponent(storefrontSlug)}/account/verify`
+        : "/account/verify";
+      await issueCustomerEmailVerification({
+        customerId: customer.id,
+        email: customer.email,
+        req,
+        verifyPath,
+        storefrontName,
+      });
+      return res.status(403).json({
+        ok: false,
+        error: "Please verify your email to continue. We've sent you a new verification link.",
+      });
+    }
+
     await prisma.customerAccount.update({
       where: { id: customer.id },
       data: { lastLoginAt: new Date() },
@@ -106,6 +140,7 @@ router.post("/auth/login", publicAuthLimiter, requireSameOrigin, async (req, res
     return res.status(500).json({ ok: false, error: "Login failed" });
   }
 });
+
 
 router.post("/auth/logout", publicAuthLimiter, requireSameOrigin, async (req, res) => {
   const session = await readCustomerSession(req);

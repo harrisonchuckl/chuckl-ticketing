@@ -589,13 +589,17 @@ function renderAccountPage(opts: { storefrontSlug: string | null; storefrontName
     document.getElementById('signupBtn').addEventListener('click', async () => {
       authMessage.textContent = '';
       try {
-        await postJSON('/public/auth/signup', {
+        const data = await postJSON('/public/auth/signup', {
           name: document.getElementById('signupName').value,
           email: document.getElementById('signupEmail').value,
           password: document.getElementById('signupPassword').value,
           marketingConsent: document.getElementById('signupConsent').checked,
           storefrontSlug,
         });
+        if (data.requiresVerification) {
+          authMessage.textContent = data.message || 'Check your email to verify your account.';
+          return;
+        }
         location.reload();
       } catch (err) {
         authMessage.textContent = err.message || 'Signup failed';
