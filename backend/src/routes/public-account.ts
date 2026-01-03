@@ -7,7 +7,7 @@ import {
   setCustomerCookie,
   signCustomerToken,
 } from "../lib/customer-auth.js";
-import { ensureMembership, mergeGuestCart } from "../lib/public-customer.js";
+import { ensureMembership, linkPaidGuestOrders, mergeGuestCart } from "../lib/public-customer.js";
 
 const router = Router();
 
@@ -161,10 +161,86 @@ function renderAccountPage(storefrontSlug: string, storefrontName: string) {
 </html>`;
 }
 
-function renderPortalPage(storefrontSlug: string, storefrontName: string, customerEmail: string) {
+function formatShortDate(input: Date | string | null) {
+  if (!input) return "TBD";
+  const date = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(date.getTime())) return "TBD";
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function formatMoney(amountPence: number | null | undefined) {
+  const amount = Number(amountPence || 0) / 100;
+  return `£${amount.toFixed(2)}`;
+}
+
+function renderPortalPage(
+  storefrontSlug: string,
+  storefrontName: string,
+  customer: { email: string; name: string | null; phone: string | null },
+  membershipOptIn: boolean | null,
+  orders: Array<{
+    id: string;
+    amountPence: number;
+    status: string;
+    createdAt: Date;
+    showTitle: string;
+    showDate: Date | null;
+    venue: { name: string | null; city: string | null } | null;
+  }>,
+  tickets: Array<{
+    id: string;
+    showTitle: string;
+    showDate: Date | null;
+    ticketType: string;
+    quantity: number;
+    seatRef: string | null;
+  }>
+) {
   const safeSlug = encodeURIComponent(storefrontSlug);
   const safeName = escHtml(storefrontName);
-  const safeEmail = escHtml(customerEmail);
+  const safeEmail = escHtml(customer.email);
+  const safeCustomerName = escHtml(customer.name || "Not provided");
+  const safeCustomerPhone = escHtml(customer.phone || "Not provided");
+  const membershipLabel =
+    membershipOptIn === null
+      ? "Not set"
+      : membershipOptIn
+      ? "Opted in to organiser updates"
+      : "Not opted in";
+  const ordersHtml = orders.length
+    ? orders
+        .map((order) => {
+          const venue = order.venue
+            ? [order.venue.name, order.venue.city].filter(Boolean).join(" · ")
+            : "";
+          return `
+          <div class="list-item">
+            <strong>${escHtml(order.showTitle)}</strong>
+            <div class="muted">${escHtml(formatShortDate(order.showDate))}${venue ? ` • ${escHtml(venue)}` : ""}</div>
+            <div class="muted" style="margin-top:6px">${escHtml(formatMoney(order.amountPence))} · ${escHtml(
+              order.status
+            )}</div>
+          </div>`;
+        })
+        .join("")
+    : '<span class="muted">No orders yet for this organiser.</span>';
+  const ticketsHtml = tickets.length
+    ? tickets
+        .map((ticket) => {
+          const seatLabel = ticket.seatRef ? ` • Seat ${escHtml(ticket.seatRef)}` : "";
+          return `
+          <div class="list-item">
+            <strong>${escHtml(ticket.showTitle)}</strong>
+            <div class="muted">${escHtml(formatShortDate(ticket.showDate))} • ${escHtml(
+              ticket.ticketType
+            )}${seatLabel}</div>
+            <div class="muted" style="margin-top:6px">${escHtml(String(ticket.quantity))} ticket${
+              ticket.quantity === 1 ? "" : "s"
+            }</div>
+          </div>`;
+        })
+        .join("")
+    : '<span class="muted">No tickets yet for this organiser.</span>';
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -183,6 +259,9 @@ function renderPortalPage(storefrontSlug: string, storefrontName: string, custom
     .btn{display:inline-flex;align-items:center;justify-content:center;border-radius:10px;border:1px solid var(--border);padding:10px 14px;background:#fff;color:var(--text);cursor:pointer}
     .btn.primary{background:var(--brand);color:#fff;border-color:transparent}
     .btn-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+    .section{margin-top:18px}
+    .list{display:grid;gap:12px}
+    .list-item{padding:12px;border:1px solid var(--border);border-radius:12px;background:#fff}
   </style>
 </head>
 <body>
@@ -190,6 +269,23 @@ function renderPortalPage(storefrontSlug: string, storefrontName: string, custom
     <h1 class="title">${safeName} portal</h1>
     <div class="card">
       <p class="muted">Signed in as ${safeEmail}.</p>
+      <div class="section">
+        <strong>Saved details</strong>
+        <div class="muted" style="margin-top:6px">Name: ${safeCustomerName}</div>
+        <div class="muted">Phone: ${safeCustomerPhone}</div>
+      </div>
+      <div class="section">
+        <strong>Marketing preference</strong>
+        <div class="muted" style="margin-top:6px">${escHtml(membershipLabel)}</div>
+      </div>
+      <div class="section">
+        <strong>Orders</strong>
+        <div class="list" style="margin-top:10px">${ordersHtml}</div>
+      </div>
+      <div class="section">
+        <strong>Tickets</strong>
+        <div class="list" style="margin-top:10px">${ticketsHtml}</div>
+      </div>
       <div class="btn-row">
         <a class="btn" href="/public/${safeSlug}/account">Back to account</a>
         <button class="btn primary" id="logoutBtn">Sign out</button>
@@ -222,7 +318,7 @@ router.get("/:organiserSlug/account/portal", async (req, res) => {
   const organiserSlug = String(req.params.organiserSlug || "").trim();
   const organiser = await prisma.user.findUnique({
     where: { storefrontSlug: organiserSlug },
-    select: { companyName: true, name: true, storefrontSlug: true },
+    select: { id: true, companyName: true, name: true, storefrontSlug: true },
   });
 
   if (!organiser) return res.status(404).send("Not found");
@@ -234,7 +330,7 @@ router.get("/:organiserSlug/account/portal", async (req, res) => {
 
   const customer = await prisma.customerAccount.findUnique({
     where: { id: String(session.sub) },
-    select: { email: true },
+    select: { id: true, email: true, name: true, phone: true },
   });
 
   if (!customer?.email) {
@@ -242,8 +338,69 @@ router.get("/:organiserSlug/account/portal", async (req, res) => {
     return res.redirect(`/public/${encodeURIComponent(organiserSlug)}/account`);
   }
 
+  const storefront = await prisma.storefront.findUnique({
+    where: { slug: organiserSlug },
+    select: { id: true },
+  });
+
+  const membership = storefront
+    ? await prisma.customerStorefrontMembership.findFirst({
+        where: { customerAccountId: customer.id, storefrontId: storefront.id },
+        select: { marketingOptIn: true },
+      })
+    : null;
+
+  const orders = await prisma.order.findMany({
+    where: {
+      customerAccountId: customer.id,
+      show: { organiserId: organiser.id },
+    },
+    include: {
+      show: { select: { title: true, date: true, venue: { select: { name: true, city: true } } } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 30,
+  });
+
+  const tickets = await prisma.ticket.findMany({
+    where: {
+      order: { customerAccountId: customer.id },
+      show: { organiserId: organiser.id },
+    },
+    include: {
+      show: { select: { title: true, date: true } },
+      ticketType: { select: { name: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+
   const storefrontName = organiser.companyName || organiser.name || organiser.storefrontSlug || organiserSlug;
-  res.type("html").send(renderPortalPage(organiserSlug, storefrontName, customer.email));
+  res.type("html").send(
+    renderPortalPage(
+      organiserSlug,
+      storefrontName,
+      { email: customer.email, name: customer.name, phone: customer.phone },
+      membership?.marketingOptIn ?? null,
+      orders.map((order) => ({
+        id: order.id,
+        amountPence: order.amountPence,
+        status: order.status,
+        createdAt: order.createdAt,
+        showTitle: order.show?.title || "Show",
+        showDate: order.show?.date || null,
+        venue: order.show?.venue || null,
+      })),
+      tickets.map((ticket) => ({
+        id: ticket.id,
+        showTitle: ticket.show?.title || "Show",
+        showDate: ticket.show?.date || null,
+        ticketType: ticket.ticketType?.name || "Ticket",
+        quantity: ticket.quantity ?? 1,
+        seatRef: ticket.seatRef || null,
+      }))
+    )
+  );
 });
 
 router.post("/:organiserSlug/account/register", async (req, res) => {
@@ -253,6 +410,10 @@ router.post("/:organiserSlug/account/register", async (req, res) => {
     const password = String(req.body?.password || "");
     const name = String(req.body?.name || "").trim() || null;
     const marketingConsent = Boolean(req.body?.marketingConsent || false);
+    const organiser = await prisma.user.findUnique({
+      where: { storefrontSlug: organiserSlug },
+      select: { id: true },
+    });
 
     if (!email || !password) {
       return res.status(400).json({ ok: false, error: "Email and password are required" });
@@ -276,6 +437,7 @@ router.post("/:organiserSlug/account/register", async (req, res) => {
     });
 
     await ensureMembership(customer.id, organiserSlug);
+    await linkPaidGuestOrders(customer.id, customer.email, organiser?.id);
     await mergeGuestCart(req, res, customer.id, organiserSlug);
 
     const token = await signCustomerToken({ id: customer.id, email: customer.email });
@@ -293,6 +455,10 @@ router.post("/:organiserSlug/account/login", async (req, res) => {
     const organiserSlug = String(req.params.organiserSlug || "").trim();
     const email = String(req.body?.email || "").trim().toLowerCase();
     const password = String(req.body?.password || "");
+    const organiser = await prisma.user.findUnique({
+      where: { storefrontSlug: organiserSlug },
+      select: { id: true },
+    });
 
     if (!email || !password) {
       return res.status(400).json({ ok: false, error: "Email and password are required" });
@@ -312,6 +478,7 @@ router.post("/:organiserSlug/account/login", async (req, res) => {
     });
 
     await ensureMembership(customer.id, organiserSlug);
+    await linkPaidGuestOrders(customer.id, customer.email, organiser?.id);
     await mergeGuestCart(req, res, customer.id, organiserSlug);
 
     const token = await signCustomerToken({ id: customer.id, email: customer.email });

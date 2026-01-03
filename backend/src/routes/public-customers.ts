@@ -7,7 +7,7 @@ import {
   setCustomerCookie,
   signCustomerToken,
 } from "../lib/customer-auth.js";
-import { ensureMembership, mergeGuestCart, requireCustomer } from "../lib/public-customer.js";
+import { ensureMembership, linkPaidGuestOrders, mergeGuestCart, requireCustomer } from "../lib/public-customer.js";
 
 const router = Router();
 
@@ -40,7 +40,12 @@ router.post("/auth/signup", async (req, res) => {
       select: { id: true, email: true, name: true },
     });
 
+    const storefront = storefrontSlug
+      ? await prisma.storefront.findUnique({ where: { slug: storefrontSlug }, select: { ownerUserId: true } })
+      : null;
+
     await ensureMembership(customer.id, storefrontSlug);
+    await linkPaidGuestOrders(customer.id, customer.email, storefront?.ownerUserId);
     await mergeGuestCart(req, res, customer.id, storefrontSlug);
 
     const token = await signCustomerToken({ id: customer.id, email: customer.email });
@@ -76,7 +81,12 @@ router.post("/auth/login", async (req, res) => {
       data: { lastLoginAt: new Date() },
     });
 
+    const storefront = storefrontSlug
+      ? await prisma.storefront.findUnique({ where: { slug: storefrontSlug }, select: { ownerUserId: true } })
+      : null;
+
     await ensureMembership(customer.id, storefrontSlug);
+    await linkPaidGuestOrders(customer.id, customer.email, storefront?.ownerUserId);
     await mergeGuestCart(req, res, customer.id, storefrontSlug);
 
     const token = await signCustomerToken({ id: customer.id, email: customer.email });

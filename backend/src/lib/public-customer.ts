@@ -75,6 +75,25 @@ export async function mergeGuestCart(
   clearStorefrontCart(res, storefrontSlug);
 }
 
+export async function linkPaidGuestOrders(
+  customerAccountId: string,
+  email: string,
+  organiserId?: string | null
+) {
+  const normalisedEmail = String(email || "").trim().toLowerCase();
+  if (!organiserId || !normalisedEmail) return;
+
+  await prisma.order.updateMany({
+    where: {
+      status: "PAID",
+      email: normalisedEmail,
+      customerAccountId: null,
+      show: { organiserId },
+    },
+    data: { customerAccountId },
+  });
+}
+
 export function requireCustomer(req: any, res: any, next: any) {
   readCustomerSession(req)
     .then((session) => {
