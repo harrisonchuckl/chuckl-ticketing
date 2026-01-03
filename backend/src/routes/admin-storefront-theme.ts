@@ -26,7 +26,7 @@ const defaultTokens = {
 
 const defaultCopy = {
   allEventsTitle: "What's On",
-  allEventsSubtitle: "Upcoming events",
+  allEventsSubtitle: "",
   eventPageCtaText: "Book Tickets",
   eventPageFromLabel: "From",
 };

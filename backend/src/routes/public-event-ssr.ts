@@ -1465,7 +1465,7 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
    --app-header-h: 64px;
 
    /* Keep header + content perfectly aligned */
-   --page-max: 1200px;
+   --page-max: 1120px;
    --page-pad: 24px;
 
      /* TiXALL Blue Palette */
@@ -1474,6 +1474,8 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
      --primary: var(--theme-text, #0F172A);
 --brand: var(--theme-primary, ${escAttr(brand.color || '#0f9cdf')});
 --brand-hover: var(--theme-primary, ${escAttr(brand.color || '#0b86c6')});
+     --tixall-blue: #009fe3;
+     --tixall-blue-hover: #0089c6;
      --text-main: var(--theme-text, #111827);
      --text-muted: var(--theme-muted-text, #6B7280);
      --border: #E5E7EB;
@@ -1643,6 +1645,49 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
  justify-content: flex-start;
  gap: 18px;
 }
+
+.app-actions{
+ margin-left: auto;
+ display: flex;
+ align-items: center;
+ gap: 10px;
+}
+.app-action{
+ position: relative;
+ width: 45px;
+ height: 45px;
+ border-radius: 12px;
+ display: grid;
+ place-items: center;
+ text-decoration: none;
+ color: var(--text-main);
+ border: 1px solid transparent;
+}
+.app-action:hover{
+ border-color: var(--border);
+ background: #f8fafc;
+}
+.app-action svg{
+ width: 23px;
+ height: 23px;
+}
+.app-action-badge{
+ position: absolute;
+ top: -5px;
+ right: -5px;
+ min-width: 22px;
+ height: 22px;
+ padding: 0 4px;
+ border-radius: 999px;
+ background: #ef4444;
+ color: #fff;
+ font-size: 0.72rem;
+ font-weight: 700;
+ display: flex;
+ align-items: center;
+ justify-content: center;
+}
+.app-action-badge.is-hidden{ display: none; }
 
 .app-brand{
  display: inline-flex;
@@ -1852,7 +1897,7 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 /* On desktop, keep the title in the LEFT column so it sits “between” content + widget */
 @media (min-width: 960px){
  .below-hero-inner{
-   grid-template-columns: 1fr 380px;
+   grid-template-columns: 1fr 340px;
    align-items: end;
  }
  .page-title{
@@ -1867,14 +1912,14 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
  margin: 0 auto;
  padding: 18px var(--page-pad) 80px; /* gap under hero */
  display: grid;
- gap: 48px;
+ gap: 36px;
  position: relative;
  z-index: 20;
 }
 
 @media (min-width: 960px) {
  .layout {
-   grid-template-columns: 1fr 380px;
+   grid-template-columns: 1fr 340px;
    margin-top: 0; /* keep layout clean now title is outside hero */
  }
 }
@@ -2250,11 +2295,11 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
  top: -0.1em; /* tiny extra lift so it sits higher */
 }
    .btn-buy {
-     background: var(--brand); color: var(--theme-primary-text, #fff); font-size: 0.85rem; font-weight: 700;
+     background: var(--tixall-blue); color: var(--theme-primary-text, #fff); font-size: 0.85rem; font-weight: 700;
      padding: 8px 16px; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.05em;
      transition: background 0.2s; white-space: nowrap;
    }
-.ticket-row:hover .btn-buy { background: var(--brand-hover); box-shadow: 0 2px 8px rgba(15, 156, 223, 0.35); }
+.ticket-row:hover .btn-buy { background: var(--tixall-blue-hover); box-shadow: 0 2px 8px rgba(0, 159, 227, 0.35); }
    .btn-sold {
      background: #F1F5F9; color: #94A3B8; cursor: not-allowed;
      font-size: 0.85rem; font-weight: 700; padding: 8px 16px; border-radius: 6px; text-transform: uppercase;
@@ -2273,7 +2318,7 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 .mob-fee { font-size: 0.95rem; font-weight: 400; color: var(--text-muted); }
 
 .btn-mob-cta {
-     background: var(--brand); color: var(--theme-primary-text, #fff); padding: 12px 24px; border-radius: 8px; font-weight: 700; font-size: 1rem;
+     background: var(--tixall-blue); color: var(--theme-primary-text, #fff); padding: 12px 24px; border-radius: 8px; font-weight: 700; font-size: 1rem;
    }
 
    /* Related shows carousel (beneath tickets) */

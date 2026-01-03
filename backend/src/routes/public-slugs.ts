@@ -106,7 +106,7 @@ const defaultStorefrontTheme: StorefrontTheme = {
   },
   copy: {
     allEventsTitle: "What's On",
-    allEventsSubtitle: "Upcoming events",
+    allEventsSubtitle: "",
     eventPageCtaText: "Book Tickets",
     eventPageFromLabel: "From",
   },
@@ -1257,6 +1257,8 @@ router.get("/:storefront", async (req, res) => {
   --primary: var(--theme-text, #0F172A);
   --brand: var(--theme-primary, ${escHtml(brand.color || "#0f9cdf")});
   --brand-hover: var(--theme-primary, ${escHtml(brand.color || "#0b86c6")});
+  --tixall-blue: #009fe3;
+  --tixall-blue-hover: #0089c6;
   --text-main: var(--theme-text, #111827);
   --text-muted: var(--theme-muted-text, #6B7280);
   --border: #E5E7EB;
@@ -1361,7 +1363,7 @@ body {
 
 /* --- HERO SECTION --- */
 .hero-section {
-  background: var(--banner-bg);
+  background: var(--bg-page);
   color: var(--text-main);
   padding: 42px 0 18px;           /* ✅ remove side padding (fixes 20px drift) */
   position: relative;
@@ -1723,13 +1725,13 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
 }
 
 .btn--primary {
-  background: var(--brand);
+  background: var(--tixall-blue);
   color: var(--theme-primary-text, #fff);
   border: 1px solid transparent;
-  box-shadow: 0 4px 6px rgba(15, 156, 223, 0.2);
+  box-shadow: 0 4px 6px rgba(0, 159, 227, 0.2);
 }
 .btn--primary:hover {
-  background: var(--brand-hover);
+  background: var(--tixall-blue-hover);
   transform: translateY(-1px);
 }
 
@@ -1784,7 +1786,7 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
 }
 
 .cta-strip {
-  background: var(--brand);
+  background: var(--tixall-blue);
   color: var(--theme-primary-text, #fff);
 }
 
@@ -1842,7 +1844,7 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
 
 .cta-strip__button:hover {
   background: var(--theme-primary-text, #fff);
-  color: var(--brand);
+  color: var(--tixall-blue);
 }
 
 .cta-strip--products {
@@ -2041,7 +2043,7 @@ ${editorStyles}
   <section class="hero-section"${editorRegionAttr("Banner")}>
     <div class="hero-content"${editorRegionAttr("Headings")}>
       <h1 class="hero-title" data-editor-copy="allEventsTitle">${escHtml(heroTitle)}</h1>
-      <p class="hero-subtitle" data-editor-copy="allEventsSubtitle">${escHtml(heroSubtitle)}</p>
+      ${heroSubtitle ? `<p class="hero-subtitle" data-editor-copy="allEventsSubtitle">${escHtml(heroSubtitle)}</p>` : ""}
       ${editorOverlay("Headings")}
     </div>
     ${editorOverlay("Banner")}
