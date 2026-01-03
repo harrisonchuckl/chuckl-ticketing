@@ -3,6 +3,8 @@ import prisma from "../lib/prisma.js";
 import { clearCustomerCookie, readCustomerSession, setCustomerCookie, signCustomerToken } from "../lib/customer-auth.js";
 import { hashPassword, verifyPassword } from "../utils/security.js";
 import { publicAuthLimiter, requireSameOrigin } from "../lib/public-auth-guards.js";
+import { hashCustomerVerificationToken } from "../lib/customer-email-verification.js";
+import { linkPaidGuestOrders } from "../lib/public-customer.js";
 
 const router = Router();
 
@@ -129,12 +131,16 @@ function renderGlobalAccountPage() {
     document.getElementById('signupBtn').addEventListener('click', async () => {
       authMessage.textContent = '';
       try {
-        await postJSON('/public/auth/signup', {
+        const data = await postJSON('/public/auth/signup', {
           name: document.getElementById('signupName').value,
           email: document.getElementById('signupEmail').value,
           password: document.getElementById('signupPassword').value,
           marketingConsent: document.getElementById('signupConsent').checked,
         });
+        if (data.requiresVerification) {
+          authMessage.textContent = data.message || 'Check your email to verify your account.';
+          return;
+        }
         location.reload();
       } catch (err) {
         authMessage.textContent = err.message || 'Signup failed';
@@ -444,6 +450,38 @@ router.get("/account/portal", async (req, res) => {
       venues: Array.from(venuesMap.values()),
     })
   );
+});
+
+router.get("/account/verify", async (req, res) => {
+  const token = String(req.query?.token || "").trim();
+  if (!token) return res.status(400).send("Missing verification token.");
+
+  const tokenHash = hashCustomerVerificationToken(token);
+  const customer = await prisma.customerAccount.findFirst({
+    where: {
+      emailVerificationTokenHash: tokenHash,
+      emailVerificationExpiresAt: { gt: new Date() },
+    },
+    select: { id: true, email: true },
+  });
+
+  if (!customer) return res.status(400).send("Verification link is invalid or expired.");
+
+  await prisma.customerAccount.update({
+    where: { id: customer.id },
+    data: {
+      emailVerifiedAt: new Date(),
+      emailVerificationTokenHash: null,
+      emailVerificationExpiresAt: null,
+    },
+  });
+
+  await linkPaidGuestOrders(customer.id, customer.email);
+
+  const tokenJwt = await signCustomerToken({ id: customer.id, email: customer.email });
+  setCustomerCookie(res, tokenJwt);
+
+  return res.redirect("/account/portal");
 });
 
 router.post("/account/change-password", publicAuthLimiter, requireSameOrigin, async (req, res) => {

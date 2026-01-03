@@ -417,6 +417,9 @@ model CustomerAccount {
   phone            String?
   marketingConsent Boolean  @default(false)
   lastLoginAt      DateTime?
+  emailVerifiedAt  DateTime?
+  emailVerificationTokenHash String? @db.Text
+  emailVerificationExpiresAt DateTime?
 
   memberships CustomerStorefrontMembership[]
   baskets     Basket[]

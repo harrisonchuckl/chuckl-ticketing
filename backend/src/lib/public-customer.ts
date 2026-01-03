@@ -81,14 +81,14 @@ export async function linkPaidGuestOrders(
   organiserId?: string | null
 ) {
   const normalisedEmail = String(email || "").trim().toLowerCase();
-  if (!organiserId || !normalisedEmail) return;
+  if (!normalisedEmail) return;
 
   await prisma.order.updateMany({
     where: {
       status: "PAID",
-      email: normalisedEmail,
+      OR: [{ email: normalisedEmail }, { shippingEmail: normalisedEmail }],
       customerAccountId: null,
-      show: { organiserId },
+      ...(organiserId ? { show: { organiserId } } : {}),
     },
     data: { customerAccountId },
   });
