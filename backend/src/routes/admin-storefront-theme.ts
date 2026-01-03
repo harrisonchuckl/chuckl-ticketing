@@ -212,7 +212,9 @@ router.post(
         return res.status(400).json({ ok: false, error: "No draft theme to publish" });
       }
 
-      const publishTheme = theme || existing?.draftJson;
+      const publishThemeRaw = theme || existing?.draftJson;
+      const publishTheme = sanitizeTheme(publishThemeRaw);
+      assertThemeSize(publishTheme);
       const updated = await prisma.storefrontTheme.upsert({
         where: { organiserId_page: { organiserId, page } },
         update: {

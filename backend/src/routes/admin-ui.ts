@@ -732,6 +732,10 @@ router.get("/storefront/editor", requireAdminOrOrganiser, async (req, res) => {
       cursor:pointer;
       font-weight:600;
     }
+    .btn.small{
+      padding:6px 10px;
+      font-size:12px;
+    }
     .btn.secondary{
       background:#fff;
       color:#2563eb;
@@ -753,6 +757,37 @@ router.get("/storefront/editor", requireAdminOrOrganiser, async (req, res) => {
       transition:opacity 0.2s ease;
     }
     #toast.show{ opacity:1; }
+    .footer-builder{
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+    .footer-section-card{
+      border:1px solid #e2e8f0;
+      border-radius:10px;
+      padding:10px;
+      background:#f8fafc;
+    }
+    .footer-section-header{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      margin-bottom:8px;
+    }
+    .footer-items{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+    .footer-item-row{
+      display:flex;
+      gap:8px;
+      align-items:center;
+    }
+    .footer-hint{
+      font-size:12px;
+      color:#64748b;
+    }
   </style>
 </head>
 <body>
@@ -835,6 +870,12 @@ router.get("/storefront/editor", requireAdminOrOrganiser, async (req, res) => {
         <label for="eventPageCtaText" style="margin-top:10px;">Event CTA text</label>
         <input id="eventPageCtaText" type="text" />
       </div>
+      <div class="section">
+        <h3>Footer builder</h3>
+        <div class="footer-builder" id="footerBuilder"></div>
+        <button class="btn secondary small" id="footerAddSection" type="button">Add section</button>
+        <div class="footer-hint">Up to 6 sections, 8 items per section.</div>
+      </div>
     </div>
   </div>
   <div id="toast"></div>
@@ -888,6 +929,14 @@ router.get("/storefront/editor", requireAdminOrOrganiser, async (req, res) => {
     const toast = document.getElementById('toast');
     const saveStatus = document.getElementById('saveStatus');
     const pageSwitcher = document.getElementById('pageSwitcher');
+    const footerBuilder = document.getElementById('footerBuilder');
+    const footerAddSection = document.getElementById('footerAddSection');
+    const FOOTER_LIMITS = {
+      sections: 6,
+      items: 8,
+      titleMax: 80,
+      itemMax: 120
+    };
 
     pageSwitcher.value = pageMode;
     pageSwitcher.addEventListener('change', () => {
@@ -927,6 +976,112 @@ router.get("/storefront/editor", requireAdminOrOrganiser, async (req, res) => {
       postTheme();
     }
 
+    function clampText(value, max){
+      const text = String(value || '').trim();
+      if (!text) return '';
+      return text.length > max ? text.slice(0, max) : text;
+    }
+
+    function ensureFooter(){
+      theme.footer = theme.footer || { sections: [] };
+      if (!Array.isArray(theme.footer.sections)) theme.footer.sections = [];
+    }
+
+    function renderFooterBuilder(){
+      if (!footerBuilder) return;
+      ensureFooter();
+      footerBuilder.innerHTML = '';
+      const sections = theme.footer.sections;
+
+      sections.forEach((section, sectionIndex) => {
+        const card = document.createElement('div');
+        card.className = 'footer-section-card';
+
+        const header = document.createElement('div');
+        header.className = 'footer-section-header';
+
+        const titleInput = document.createElement('input');
+        titleInput.type = 'text';
+        titleInput.placeholder = 'Section title';
+        titleInput.maxLength = FOOTER_LIMITS.titleMax;
+        titleInput.value = section.title || '';
+        titleInput.addEventListener('input', () => {
+          section.title = clampText(titleInput.value, FOOTER_LIMITS.titleMax);
+          titleInput.value = section.title;
+          postTheme();
+        });
+
+        const removeSection = document.createElement('button');
+        removeSection.type = 'button';
+        removeSection.className = 'btn secondary small';
+        removeSection.textContent = 'Remove';
+        removeSection.addEventListener('click', () => {
+          sections.splice(sectionIndex, 1);
+          renderFooterBuilder();
+          postTheme();
+        });
+
+        header.appendChild(titleInput);
+        header.appendChild(removeSection);
+        card.appendChild(header);
+
+        const itemsWrapper = document.createElement('div');
+        itemsWrapper.className = 'footer-items';
+        const items = Array.isArray(section.items) ? section.items : [];
+        section.items = items;
+
+        items.forEach((item, itemIndex) => {
+          const row = document.createElement('div');
+          row.className = 'footer-item-row';
+
+          const itemInput = document.createElement('input');
+          itemInput.type = 'text';
+          itemInput.placeholder = 'Footer item';
+          itemInput.maxLength = FOOTER_LIMITS.itemMax;
+          itemInput.value = item || '';
+          itemInput.addEventListener('input', () => {
+            section.items[itemIndex] = clampText(itemInput.value, FOOTER_LIMITS.itemMax);
+            itemInput.value = section.items[itemIndex];
+            postTheme();
+          });
+
+          const removeItem = document.createElement('button');
+          removeItem.type = 'button';
+          removeItem.className = 'btn secondary small';
+          removeItem.textContent = 'Remove';
+          removeItem.addEventListener('click', () => {
+            section.items.splice(itemIndex, 1);
+            renderFooterBuilder();
+            postTheme();
+          });
+
+          row.appendChild(itemInput);
+          row.appendChild(removeItem);
+          itemsWrapper.appendChild(row);
+        });
+
+        const addItem = document.createElement('button');
+        addItem.type = 'button';
+        addItem.className = 'btn secondary small';
+        addItem.textContent = 'Add item';
+        addItem.disabled = items.length >= FOOTER_LIMITS.items;
+        addItem.addEventListener('click', () => {
+          if (section.items.length >= FOOTER_LIMITS.items) return;
+          section.items.push('');
+          renderFooterBuilder();
+          postTheme();
+        });
+
+        card.appendChild(itemsWrapper);
+        card.appendChild(addItem);
+        footerBuilder.appendChild(card);
+      });
+
+      if (footerAddSection) {
+        footerAddSection.disabled = sections.length >= FOOTER_LIMITS.sections;
+      }
+    }
+
     function bindInput(id, path, parser){
       const el = document.getElementById(id);
       if (!el) return;
@@ -964,6 +1119,7 @@ router.get("/storefront/editor", requireAdminOrOrganiser, async (req, res) => {
       document.getElementById('allEventsTitle').value = theme.copy.allEventsTitle || \"What's On\";
       document.getElementById('allEventsSubtitle').value = theme.copy.allEventsSubtitle || 'Upcoming events';
       document.getElementById('eventPageCtaText').value = theme.copy.eventPageCtaText || 'Book Tickets';
+      renderFooterBuilder();
     }
 
     async function loadTheme(){
@@ -1008,6 +1164,15 @@ router.get("/storefront/editor", requireAdminOrOrganiser, async (req, res) => {
     document.getElementById('saveDraft').addEventListener('click', () => saveTheme('/admin/api/storefront-theme/save-draft'));
     document.getElementById('publish').addEventListener('click', () => saveTheme('/admin/api/storefront-theme/publish'));
     previewFrame.addEventListener('load', () => postTheme());
+    if (footerAddSection) {
+      footerAddSection.addEventListener('click', () => {
+        ensureFooter();
+        if (theme.footer.sections.length >= FOOTER_LIMITS.sections) return;
+        theme.footer.sections.push({ title: '', items: [] });
+        renderFooterBuilder();
+        postTheme();
+      });
+    }
 
     setPreview();
     loadTheme();
