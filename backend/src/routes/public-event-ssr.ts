@@ -8,6 +8,20 @@ import { readStorefrontCartCount } from '../lib/storefront-cart.js';
 import { verifyJwt } from '../utils/security.js';
 
 const router = Router();
+const THEME_CACHE_TTL_MS = 30 * 1000;
+const themeCache = new Map<string, { expires: number; data: any | null }>();
+
+async function getCachedStorefrontTheme(organiserId: string, page: "ALL_EVENTS" | "EVENT_PAGE") {
+  if (!organiserId) return null;
+  const key = `${organiserId}:${page}`;
+  const cached = themeCache.get(key);
+  if (cached && cached.expires > Date.now()) return cached.data;
+  const data = await prisma.storefrontTheme.findUnique({
+    where: { organiserId_page: { organiserId, page } },
+  });
+  themeCache.set(key, { data, expires: Date.now() + THEME_CACHE_TTL_MS });
+  return data;
+}
 
 function normaliseHexColor(value: string | null | undefined) {
   const raw = String(value ?? '').trim();
@@ -127,6 +141,69 @@ function buildStorefrontTheme(raw: any): StorefrontTheme {
   }
 
   return theme;
+}
+
+function getThemeCopyOverrides(raw: any) {
+  if (raw && typeof raw === 'object' && raw.copy && typeof raw.copy === 'object') {
+    return raw.copy as Partial<StorefrontTheme['copy']>;
+  }
+  return {};
+}
+
+function getThemeFooterSections(theme: StorefrontTheme) {
+  return theme.footer.sections
+    .map((section) => ({
+      title: String(section.title || '').trim(),
+      items: (section.items || []).map((item) => String(item || '').trim()).filter(Boolean),
+    }))
+    .filter((section) => section.title || section.items.length);
+}
+
+function renderThemeFooter(
+  sections: Array<{ title: string; items: string[] }>,
+  editorRegionAttr: (label: string) => string,
+  editorOverlay: (label: string) => string
+) {
+  if (!sections.length) return '';
+  return `
+  <div class="widget-footer theme-footer"${editorRegionAttr('Footer')}>
+    <div class="theme-footer__grid">
+      ${sections
+        .map(
+          (section) => `
+          <div class="theme-footer__column">
+            ${section.title ? `<h4 class="theme-footer__title">${esc(section.title)}</h4>` : ''}
+            ${
+              section.items.length
+                ? `<ul class="theme-footer__list">
+                  ${section.items.map((item) => `<li>${esc(item)}</li>`).join('')}
+                </ul>`
+                : ''
+            }
+          </div>
+        `
+        )
+        .join('')}
+    </div>
+    ${editorOverlay('Footer')}
+  </div>
+  `;
+}
+
+function renderThemeVars(theme: StorefrontTheme) {
+  return `<style id="storefront-theme-vars">
+  :root{
+    --theme-font-family: ${esc(theme.tokens.fontFamily)};
+    --theme-banner-bg: ${esc(theme.tokens.bannerBg)};
+    --theme-primary: ${esc(theme.tokens.primary)};
+    --theme-primary-text: ${esc(theme.tokens.primaryText)};
+    --theme-page-bg: ${esc(theme.tokens.pageBg)};
+    --theme-card-bg: ${esc(theme.tokens.cardBg)};
+    --theme-text: ${esc(theme.tokens.text)};
+    --theme-muted-text: ${esc(theme.tokens.mutedText)};
+    --theme-radius: ${esc(String(theme.tokens.borderRadius))}px;
+  }
+  </style>`;
 }
 
 type EditorTokenPayload = {
@@ -854,17 +931,16 @@ const shouldUseExternalTickets = !!externalTicketUrl && (usesExternalTicketing |
   const organiserId = String(show.organiser?.id || '');
   const editorStorefrontSlug = show.organiser?.storefrontSlug || null;
   const editorEnabled = organiserId ? await canUseEditorMode(req, organiserId, editorStorefrontSlug) : false;
-  const themeRecord = editorEnabled
-    ? await prisma.storefrontTheme.findUnique({
-        where: { organiserId_page: { organiserId, page: 'EVENT_PAGE' } },
-      })
-    : null;
-  const editorTheme = buildStorefrontTheme(themeRecord?.draftJson || null);
-  const ctaText = editorEnabled ? editorTheme.copy.eventPageCtaText : 'Book Tickets';
-  const fromLabel = editorEnabled ? editorTheme.copy.eventPageFromLabel : 'From';
-  const themeLogo = editorEnabled && editorTheme.assets.logoUrl
-    ? editorTheme.assets.logoUrl
+  const themeRecord = await getCachedStorefrontTheme(organiserId, 'EVENT_PAGE');
+  const themePayload = editorEnabled ? themeRecord?.draftJson ?? themeRecord?.publishedJson : themeRecord?.publishedJson;
+  const storefrontTheme = buildStorefrontTheme(themePayload || null);
+  const themeCopyOverrides = getThemeCopyOverrides(themePayload);
+  const ctaText = themeCopyOverrides.eventPageCtaText ?? defaultStorefrontTheme.copy.eventPageCtaText;
+  const fromLabel = themeCopyOverrides.eventPageFromLabel ?? defaultStorefrontTheme.copy.eventPageFromLabel;
+  const themeLogo = storefrontTheme.assets.logoUrl
+    ? storefrontTheme.assets.logoUrl
     : '';
+  const footerSections = getThemeFooterSections(storefrontTheme);
   const editorRegionAttr = (label: string) =>
     editorEnabled ? ` data-editor-region="${escAttr(label)}"` : '';
   const editorOverlay = (label: string) =>
@@ -899,21 +975,7 @@ const shouldUseExternalTickets = !!externalTicketUrl && (usesExternalTicketing |
   }
 `
     : '';
-  const themeVars = editorEnabled
-    ? `<style id="storefront-theme-vars">
-  :root{
-    --theme-font-family: ${esc(editorTheme.tokens.fontFamily)};
-    --theme-banner-bg: ${esc(editorTheme.tokens.bannerBg)};
-    --theme-primary: ${esc(editorTheme.tokens.primary)};
-    --theme-primary-text: ${esc(editorTheme.tokens.primaryText)};
-    --theme-page-bg: ${esc(editorTheme.tokens.pageBg)};
-    --theme-card-bg: ${esc(editorTheme.tokens.cardBg)};
-    --theme-text: ${esc(editorTheme.tokens.text)};
-    --theme-muted-text: ${esc(editorTheme.tokens.mutedText)};
-    --theme-radius: ${esc(String(editorTheme.tokens.borderRadius))}px;
-  }
-  </style>`
-    : '';
+  const themeVars = renderThemeVars(storefrontTheme);
   const editorScript = editorEnabled
     ? `<script>
   (function(){
@@ -962,6 +1024,16 @@ const shouldUseExternalTickets = !!externalTicketUrl && (usesExternalTicketing |
   })();
   </script>`
     : '';
+  const footerHtml = footerSections.length
+    ? renderThemeFooter(footerSections, editorRegionAttr, editorOverlay)
+    : `    <div class="widget-footer"${editorRegionAttr('Footer')}>
+  <span class="secure-powered">
+    <span class="secure-lock" aria-hidden="true">🔒</span>
+    <span class="secure-text">Secure checkout powered by</span>
+    <img class="secure-logo" src="/IMG_2374.jpeg" alt="TixAll" loading="lazy" />
+  </span>
+  ${editorOverlay('Footer')}
+</div>`;
 
 // Booking fee helper (used by ticket list + mobile bar)
 const venueBps = Number((venue as any)?.bookingFeeBps || 0);
@@ -1430,7 +1502,7 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 .hero{
   position: relative;
   background: var(--theme-banner-bg, var(--primary));
-  color: white;
+  color: var(--theme-primary-text, #fff);
   overflow: hidden;
   isolation: isolate;   /* creates a clean stacking context */
 }
@@ -2004,7 +2076,7 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 
 
    /* Venue Map Styles (Updated for Iframe) */
-   .venue-map-container { margin-top: 24px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+   .venue-map-container { margin-top: 24px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: var(--bg-surface); box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
    .venue-map-header {
      position: relative; height: 220px; /* Taller for better map view */ background: #E2E8F0;
    }
@@ -2013,20 +2085,20 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
     filter: none;                 /* always colour */
     transition: none;             /* no hover behaviour needed */
 }
-   .venue-details { padding: 20px; background: #fff; position: relative; z-index: 2;}
+   .venue-details { padding: 20px; background: var(--bg-surface); position: relative; z-index: 2;}
    .venue-name { font-size: 1.3rem; margin-bottom: 4px; font-family: 'Outfit', sans-serif; }
    .venue-address { color: var(--text-muted); margin-bottom: 16px; }
    .btn-outline {
      display: inline-block; padding: 8px 16px; border: 2px solid var(--border);
-     border-radius: 6px; font-weight: 600; font-size: 0.9rem; transition: all 0.2s; background: #fff;
+     border-radius: 6px; font-weight: 600; font-size: 0.9rem; transition: all 0.2s; background: var(--bg-surface);
    }
-   .btn-outline:hover { border-color: var(--brand); color: var(--brand); background: #F8FAFC; }
+   .btn-outline:hover { border-color: var(--brand); color: var(--brand); background: var(--bg-page); }
 
    /* --- BOOKING WIDGET (Sidebar) --- */
   .booking-widget {
  position: sticky;
  top: calc(var(--app-header-h) + 16px);
- background: white;
+ background: var(--bg-surface);
  border-radius: var(--radius-lg);
  box-shadow: var(--shadow-float);
  border: 1px solid var(--border);
@@ -2034,7 +2106,7 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 }
 
  .accessibility-pill{
- background: #fff;
+ background: var(--bg-surface);
  color: var(--primary);
  padding: 24px; /* match .widget-header */
  border-bottom: 1px solid var(--border);
@@ -2072,16 +2144,46 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 }
 
 
-   .widget-header { padding: 24px; border-bottom: 1px solid var(--border); background: #fff; }
+   .widget-header { padding: 24px; border-bottom: 1px solid var(--border); background: var(--bg-surface); }
    .widget-title { font-size: 1.25rem; font-weight: 800; color: var(--primary); }
    .widget-subtitle { font-size: 0.9rem; color: var(--text-muted); margin-top: 4px; font-weight: 500;}
 .widget-footer{
-  background: #F8FAFC;
+  background: var(--bg-page);
   padding: 16px;
   border-top: 1px solid var(--border);
   text-align: center;
   font-size: 0.8rem;
   color: var(--text-muted);
+}
+
+.widget-footer.theme-footer {
+  text-align: left;
+  color: var(--text-main);
+}
+
+.theme-footer__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+}
+
+.theme-footer__title {
+  margin: 0 0 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.theme-footer__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--text-main);
 }
 
 /* Footer “powered by” line */
@@ -2446,14 +2548,7 @@ ${accessibilityReasons
        <div class="ticket-list-container">
          ${renderTicketList(false)}
        </div>
-    <div class="widget-footer"${editorRegionAttr('Footer')}>
-  <span class="secure-powered">
-    <span class="secure-lock" aria-hidden="true">🔒</span>
-    <span class="secure-text">Secure checkout powered by</span>
-    <img class="secure-logo" src="/IMG_2374.jpeg" alt="TixAll" loading="lazy" />
-  </span>
-  ${editorOverlay('Footer')}
-</div>
+${footerHtml}
      </div>
    </div>
 

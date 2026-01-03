@@ -5,6 +5,20 @@ import { readStorefrontCartCount } from "../lib/storefront-cart.js";
 import { verifyJwt } from "../utils/security.js";
 
 const router = Router();
+const THEME_CACHE_TTL_MS = 30 * 1000;
+const themeCache = new Map<string, { expires: number; data: any | null }>();
+
+async function getCachedStorefrontTheme(organiserId: string, page: "ALL_EVENTS" | "EVENT_PAGE") {
+  if (!organiserId) return null;
+  const key = `${organiserId}:${page}`;
+  const cached = themeCache.get(key);
+  if (cached && cached.expires > Date.now()) return cached.data;
+  const data = await prisma.storefrontTheme.findUnique({
+    where: { organiserId_page: { organiserId, page } },
+  });
+  themeCache.set(key, { data, expires: Date.now() + THEME_CACHE_TTL_MS });
+  return data;
+}
 
 function escHtml(v: any) {
   return String(v ?? "")
@@ -154,6 +168,71 @@ function buildStorefrontTheme(raw: any): StorefrontTheme {
   }
 
   return theme;
+}
+
+function getThemeCopyOverrides(raw: any) {
+  if (raw && typeof raw === "object" && raw.copy && typeof raw.copy === "object") {
+    return raw.copy as Partial<StorefrontTheme["copy"]>;
+  }
+  return {};
+}
+
+function getThemeFooterSections(theme: StorefrontTheme) {
+  return theme.footer.sections
+    .map((section) => ({
+      title: String(section.title || "").trim(),
+      items: (section.items || []).map((item) => String(item || "").trim()).filter(Boolean),
+    }))
+    .filter((section) => section.title || section.items.length);
+}
+
+function renderThemeFooter(
+  sections: Array<{ title: string; items: string[] }>,
+  editorRegionAttr: (label: string) => string,
+  editorOverlay: (label: string) => string
+) {
+  if (!sections.length) return "";
+  return `
+  <section class="theme-footer"${editorRegionAttr("Footer")} aria-label="Footer">
+    <div class="theme-footer__inner">
+      <div class="theme-footer__grid">
+        ${sections
+          .map(
+            (section) => `
+            <div class="theme-footer__column">
+              ${section.title ? `<h3 class="section-heading section-heading--light">${escHtml(section.title)}</h3>` : ""}
+              ${
+                section.items.length
+                  ? `<ul class="theme-footer__list">
+                    ${section.items.map((item) => `<li>${escHtml(item)}</li>`).join("")}
+                  </ul>`
+                  : ""
+              }
+            </div>
+          `
+          )
+          .join("")}
+      </div>
+    </div>
+    ${editorOverlay("Footer")}
+  </section>
+  `;
+}
+
+function renderThemeVars(theme: StorefrontTheme) {
+  return `<style id="storefront-theme-vars">
+  :root{
+    --theme-font-family: ${escHtml(theme.tokens.fontFamily)};
+    --theme-banner-bg: ${escHtml(theme.tokens.bannerBg)};
+    --theme-primary: ${escHtml(theme.tokens.primary)};
+    --theme-primary-text: ${escHtml(theme.tokens.primaryText)};
+    --theme-page-bg: ${escHtml(theme.tokens.pageBg)};
+    --theme-card-bg: ${escHtml(theme.tokens.cardBg)};
+    --theme-text: ${escHtml(theme.tokens.text)};
+    --theme-muted-text: ${escHtml(theme.tokens.mutedText)};
+    --theme-radius: ${escHtml(String(theme.tokens.borderRadius))}px;
+  }
+  </style>`;
 }
 
 type EditorTokenPayload = {
@@ -884,16 +963,14 @@ router.get("/:storefront", async (req, res) => {
     color: resolveBrandColor(organiser)
   });
   const editorEnabled = await canUseEditorMode(req, organiser.id, organiser.storefrontSlug || null);
-  const themeRecord = editorEnabled
-    ? await prisma.storefrontTheme.findUnique({
-        where: { organiserId_page: { organiserId: organiser.id, page: "ALL_EVENTS" } },
-      })
-    : null;
-  const editorTheme = buildStorefrontTheme(themeRecord?.draftJson || null);
-  const heroTitle = editorEnabled ? editorTheme.copy.allEventsTitle : "What's On";
-  const heroSubtitle = editorEnabled ? editorTheme.copy.allEventsSubtitle : "Upcoming events";
-  const themeLogo = editorEnabled && editorTheme.assets.logoUrl
-    ? toPublicImageUrl(editorTheme.assets.logoUrl, 180) || editorTheme.assets.logoUrl
+  const themeRecord = await getCachedStorefrontTheme(organiser.id, "ALL_EVENTS");
+  const themePayload = editorEnabled ? themeRecord?.draftJson ?? themeRecord?.publishedJson : themeRecord?.publishedJson;
+  const storefrontTheme = buildStorefrontTheme(themePayload || null);
+  const themeCopyOverrides = getThemeCopyOverrides(themePayload);
+  const heroTitle = themeCopyOverrides.allEventsTitle ?? defaultStorefrontTheme.copy.allEventsTitle;
+  const heroSubtitle = themeCopyOverrides.allEventsSubtitle ?? defaultStorefrontTheme.copy.allEventsSubtitle;
+  const themeLogo = storefrontTheme.assets.logoUrl
+    ? toPublicImageUrl(storefrontTheme.assets.logoUrl, 180) || storefrontTheme.assets.logoUrl
     : "";
   const logoUrl = themeLogo || brand.logoUrl;
   const editorRegionAttr = (label: string) =>
@@ -930,21 +1007,7 @@ router.get("/:storefront", async (req, res) => {
   }
 `
     : "";
-  const themeVars = editorEnabled
-    ? `<style id="storefront-theme-vars">
-  :root{
-    --theme-font-family: ${escHtml(editorTheme.tokens.fontFamily)};
-    --theme-banner-bg: ${escHtml(editorTheme.tokens.bannerBg)};
-    --theme-primary: ${escHtml(editorTheme.tokens.primary)};
-    --theme-primary-text: ${escHtml(editorTheme.tokens.primaryText)};
-    --theme-page-bg: ${escHtml(editorTheme.tokens.pageBg)};
-    --theme-card-bg: ${escHtml(editorTheme.tokens.cardBg)};
-    --theme-text: ${escHtml(editorTheme.tokens.text)};
-    --theme-muted-text: ${escHtml(editorTheme.tokens.mutedText)};
-    --theme-radius: ${escHtml(String(editorTheme.tokens.borderRadius))}px;
-  }
-  </style>`
-    : "";
+  const themeVars = renderThemeVars(storefrontTheme);
   const editorScript = editorEnabled
     ? `<script>
   (function(){
@@ -993,6 +1056,35 @@ router.get("/:storefront", async (req, res) => {
   })();
   </script>`
     : "";
+  const footerSections = getThemeFooterSections(storefrontTheme);
+  const footerHtml = footerSections.length
+    ? renderThemeFooter(footerSections, editorRegionAttr, editorOverlay)
+    : `  <section class="info-strip"${editorRegionAttr("Footer")} aria-label="Contact and policies">
+    <div class="info-strip__inner">
+      <div class="info-strip__grid">
+        <div class="info-strip__column">
+          <h3 class="section-heading section-heading--light">Get in touch</h3>
+          <p>Email us at hello@tixall.co.uk</p>
+          <p>Call 0800 123 4567</p>
+        </div>
+        <div class="info-strip__column">
+          <h3 class="section-heading section-heading--light">Opening times</h3>
+          <p>Monday - Friday: 9:00am - 6:00pm</p>
+          <p>Saturday: 10:00am - 2:00pm</p>
+        </div>
+        <div class="info-strip__column">
+          <h3 class="section-heading section-heading--light">Ticketing made effortless</h3>
+          <p>Powering memorable live events with seamless access.</p>
+          <ul class="info-strip__list">
+            <li><a class="info-strip__link" href="#">Terms &amp; conditions</a></li>
+            <li><a class="info-strip__link" href="#">Privacy policy</a></li>
+            <li><a class="info-strip__link" href="#">Accessibility</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    ${editorOverlay("Footer")}
+  </section>`;
   const storefrontSlug = organiser.storefrontSlug || "";
   const storefrontRecord = storefrontSlug
     ? await prisma.storefront.findUnique({ where: { slug: storefrontSlug } })
@@ -1243,7 +1335,7 @@ body {
 }
 .app-action:hover {
   border-color: var(--border);
-  background: #f8fafc;
+  background: var(--bg-page);
 }
 .app-action svg {
   width: 23px;
@@ -1512,7 +1604,7 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
   display: block;
   width: 100%;
   aspect-ratio: 16/9;
-  background: #e2e8f0;
+  background: var(--bg-page);
   overflow: hidden;
 }
 
@@ -1642,7 +1734,7 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
 }
 
 .btn--ghost {
-  background: white;
+  background: var(--bg-surface);
   border: 1px solid var(--border);
   color: var(--text-main);
 }
@@ -1683,7 +1775,7 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
 .pagination-btn.is-active {
   background: var(--brand);
   border-color: var(--brand);
-  color: #fff;
+  color: var(--theme-primary-text, #fff);
 }
 
 .pagination-btn:disabled {
@@ -1754,7 +1846,7 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
 }
 
 .cta-strip--products {
-  background: #0b1120;
+  background: var(--theme-banner-bg, #0b1120);
 }
 
 .cta-strip--products .cta-strip__inner {
@@ -1771,12 +1863,12 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
 }
 
 .section-heading--light {
-  color: #fff;
+  color: var(--theme-primary-text, #fff);
 }
 
 .info-strip {
-  background: #0b1120;
-  color: #fff;
+  background: var(--theme-banner-bg, #0b1120);
+  color: var(--theme-primary-text, #fff);
 }
 
 .info-strip__inner {
@@ -1806,7 +1898,7 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
 }
 
 .info-strip__link {
-  color: #fff;
+  color: var(--theme-primary-text, #fff);
   text-decoration: none;
   font-weight: 700;
   letter-spacing: 0.01em;
@@ -1818,8 +1910,39 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
   color: rgba(255, 255, 255, 0.75);
 }
 
+.theme-footer {
+  background: var(--theme-banner-bg, #0b1120);
+  color: var(--theme-primary-text, #fff);
+}
+
+.theme-footer__inner {
+  max-width: var(--container-w);
+  margin: 0 auto;
+  padding: 48px var(--page-pad);
+}
+
+.theme-footer__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 32px;
+}
+
+.theme-footer__list {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+  color: rgba(255, 255, 255, 0.82);
+  line-height: 1.5;
+}
+
+.theme-footer__list li {
+  margin: 0;
+}
+
 .partner-strip {
-  background: #ffffff;
+  background: var(--bg-surface);
   border-top: 1px solid var(--border);
 }
 
@@ -1873,6 +1996,8 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
 
   .info-strip__inner { padding: 32px 16px; }
   .info-strip__grid { grid-template-columns: 1fr; }
+  .theme-footer__inner { padding: 32px 16px; }
+  .theme-footer__grid { grid-template-columns: 1fr; }
   .partner-strip__inner {
     flex-direction: column;
     text-align: center;
@@ -1881,6 +2006,7 @@ box-shadow: 0 8px 10px -3px rgba(0,0,0,0.04), 0 3px 4px -3px rgba(0,0,0,0.03); /
 
 @media (max-width: 1024px) {
   .info-strip__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .theme-footer__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 ${editorStyles}
 </style>
@@ -2012,32 +2138,7 @@ ${editorStyles}
     </div>
   </section>
 
-  <section class="info-strip"${editorRegionAttr("Footer")} aria-label="Contact and policies">
-    <div class="info-strip__inner">
-      <div class="info-strip__grid">
-        <div class="info-strip__column">
-          <h3 class="section-heading section-heading--light">Get in touch</h3>
-          <p>Email us at hello@tixall.co.uk</p>
-          <p>Call 0800 123 4567</p>
-        </div>
-        <div class="info-strip__column">
-          <h3 class="section-heading section-heading--light">Opening times</h3>
-          <p>Monday - Friday: 9:00am - 6:00pm</p>
-          <p>Saturday: 10:00am - 2:00pm</p>
-        </div>
-        <div class="info-strip__column">
-          <h3 class="section-heading section-heading--light">Ticketing made effortless</h3>
-          <p>Powering memorable live events with seamless access.</p>
-          <ul class="info-strip__list">
-            <li><a class="info-strip__link" href="#">Terms &amp; conditions</a></li>
-            <li><a class="info-strip__link" href="#">Privacy policy</a></li>
-            <li><a class="info-strip__link" href="#">Accessibility</a></li>
-          </ul>
-        </div>
-      </div>
-    </div>
-    ${editorOverlay("Footer")}
-  </section>
+  ${footerHtml}
 
   <section class="partner-strip" aria-label="Advanced ticketing">
     <div class="partner-strip__inner">
