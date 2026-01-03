@@ -614,11 +614,34 @@ router.get("/storefront", requireAdminOrOrganiser, (_req, res) => {
   res.redirect("/admin/ui/storefront");
 });
 
-router.get("/storefront/editor", requireAdminOrOrganiser, (req, res) => {
+router.get("/storefront/editor", requireAdminOrOrganiser, async (req, res) => {
   const pageParam =
     typeof req.query.page === "string" && req.query.page === "event"
       ? "event"
       : "all-events";
+  const organiserId = String(req.user?.id || "");
+  const [user, previewShow] = await Promise.all([
+    organiserId
+      ? prisma.user.findUnique({
+          where: { id: organiserId },
+          select: { storefrontSlug: true },
+        })
+      : Promise.resolve(null),
+    organiserId
+      ? prisma.show.findFirst({
+          where: { organiserId },
+          orderBy: [{ date: "asc" }],
+          select: { id: true },
+        })
+      : Promise.resolve(null),
+  ]);
+  const storefrontSlug = user?.storefrontSlug || "";
+  const allEventsPreviewUrl = storefrontSlug
+    ? `/public/${encodeURIComponent(storefrontSlug)}?editor=1`
+    : "";
+  const eventPreviewUrl = previewShow?.id
+    ? `/public/event/${encodeURIComponent(previewShow.id)}?editor=1`
+    : "";
 
   res.set("Cache-Control", "no-store");
   res.type("html").send(`<!doctype html>
@@ -817,6 +840,28 @@ router.get("/storefront/editor", requireAdminOrOrganiser, (req, res) => {
   <div id="toast"></div>
   <script>
     const pageMode = ${JSON.stringify(pageParam)};
+    const previewUrls = ${JSON.stringify({
+      "all-events": allEventsPreviewUrl,
+      event: eventPreviewUrl,
+    })};
+    const previewFallbackDoc = \`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:#f8fafc;color:#0f172a;display:grid;place-items:center;height:100vh;}
+    .card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:24px;max-width:320px;text-align:center;}
+    .title{font-weight:600;margin-bottom:6px;}
+    .muted{color:#64748b;font-size:14px;}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="title">Preview unavailable</div>
+    <div class="muted">Create an event and set a storefront slug to see a live preview here.</div>
+  </div>
+</body>
+</html>\`;
     const defaultTheme = {
       tokens: {
         fontFamily: "Inter",
@@ -849,99 +894,16 @@ router.get("/storefront/editor", requireAdminOrOrganiser, (req, res) => {
       window.location.href = '/admin/storefront/editor?page=' + pageSwitcher.value;
     });
 
-    const previewDoc = \`<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <style>
-    :root{
-      --fontFamily: Inter;
-      --bannerBg: #0B1220;
-      --primary: #2563EB;
-      --primaryText: #FFFFFF;
-      --pageBg: #0A0A0A;
-      --cardBg: #111827;
-      --text: #E5E7EB;
-      --mutedText: #9CA3AF;
-      --radius: 16px;
-    }
-    *{box-sizing:border-box;}
-    body{margin:0;font-family:var(--fontFamily);background:var(--pageBg);color:var(--text);}
-    .banner{background:var(--bannerBg);padding:28px 32px;}
-    .logo{height:32px;object-fit:contain;}
-    .hero-title{font-size:32px;margin:16px 0 6px 0;}
-    .muted{color:var(--mutedText);}
-    .btn{display:inline-block;background:var(--primary);color:var(--primaryText);padding:10px 16px;border-radius:var(--radius);text-decoration:none;font-weight:600;}
-    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;padding:24px 32px;}
-    .card{background:var(--cardBg);padding:16px;border-radius:var(--radius);}
-    .event-view{display:none;}
-  </style>
-</head>
-<body>
-  <div class="banner">
-    <img class="logo" id="logo" alt="Logo" style="display:none;" />
-    <div class="all-events-view">
-      <div class="hero-title" id="allEventsTitle">What's On</div>
-      <div class="muted" id="allEventsSubtitle">Upcoming events</div>
-    </div>
-    <div class="event-view">
-      <div class="hero-title">Live Tonight</div>
-      <div class="muted">Main Hall · 8pm</div>
-      <div style="margin-top:14px;"><a class="btn" id="eventCta" href="#">Book Tickets</a></div>
-    </div>
-  </div>
-  <div class="grid">
-    <div class="card">
-      <div style="font-weight:600;">Sample Event</div>
-      <div class="muted">Fri 12 July · London</div>
-      <div style="margin-top:12px;"><a class="btn" href="#">View details</a></div>
-    </div>
-    <div class="card">
-      <div style="font-weight:600;">Another Event</div>
-      <div class="muted">Sat 13 July · Bristol</div>
-      <div style="margin-top:12px;"><a class="btn" href="#">View details</a></div>
-    </div>
-  </div>
-  <script>
-    const root = document.documentElement;
-    function applyTheme(payload){
-      const t = payload.tokens || {};
-      if (t.fontFamily) root.style.setProperty('--fontFamily', t.fontFamily);
-      if (t.bannerBg) root.style.setProperty('--bannerBg', t.bannerBg);
-      if (t.primary) root.style.setProperty('--primary', t.primary);
-      if (t.primaryText) root.style.setProperty('--primaryText', t.primaryText);
-      if (t.pageBg) root.style.setProperty('--pageBg', t.pageBg);
-      if (t.cardBg) root.style.setProperty('--cardBg', t.cardBg);
-      if (t.text) root.style.setProperty('--text', t.text);
-      if (t.mutedText) root.style.setProperty('--mutedText', t.mutedText);
-      if (t.borderRadius != null) root.style.setProperty('--radius', t.borderRadius + 'px');
-      if (payload.copy){
-        if (payload.copy.allEventsTitle) document.getElementById('allEventsTitle').textContent = payload.copy.allEventsTitle;
-        if (payload.copy.allEventsSubtitle) document.getElementById('allEventsSubtitle').textContent = payload.copy.allEventsSubtitle;
-        if (payload.copy.eventPageCtaText) document.getElementById('eventCta').textContent = payload.copy.eventPageCtaText;
+    function setPreview(){
+      const url = previewUrls[pageMode];
+      if (url){
+        previewFrame.removeAttribute('srcdoc');
+        previewFrame.src = url;
+        return;
       }
-      const logo = document.getElementById('logo');
-      if (payload.assets && payload.assets.logoUrl){
-        logo.src = payload.assets.logoUrl;
-        logo.style.display = 'block';
-      }else{
-        logo.style.display = 'none';
-      }
-      const isEvent = payload.mode === 'event';
-      document.querySelector('.event-view').style.display = isEvent ? 'block' : 'none';
-      document.querySelector('.all-events-view').style.display = isEvent ? 'none' : 'block';
+      previewFrame.removeAttribute('src');
+      previewFrame.srcdoc = previewFallbackDoc;
     }
-    window.addEventListener('message', (event) => {
-      if (!event.data || event.data.type !== 'storefront-theme') return;
-      applyTheme(event.data.theme || {});
-      if (event.data.mode) applyTheme({ mode: event.data.mode });
-    });
-    window.applyTheme = applyTheme;
-  </script>
-</body>
-</html>\`;
-
-    previewFrame.srcdoc = previewDoc;
 
     function showToast(message, ok){
       toast.textContent = message;
@@ -1045,7 +1007,9 @@ router.get("/storefront/editor", requireAdminOrOrganiser, (req, res) => {
 
     document.getElementById('saveDraft').addEventListener('click', () => saveTheme('/admin/api/storefront-theme/save-draft'));
     document.getElementById('publish').addEventListener('click', () => saveTheme('/admin/api/storefront-theme/publish'));
+    previewFrame.addEventListener('load', () => postTheme());
 
+    setPreview();
     loadTheme();
   </script>
 </body>
