@@ -6,8 +6,8 @@ type SeatingMap = {
   id: string;
   name: string;
   summary: string | null;
-  rows: number;
-  cols: number;
+  rows: number | null;
+  cols: number | null;
   updatedAt: string;
 };
 
@@ -25,6 +25,9 @@ export default function TicketBuilder() {
   const [ticketType, setTicketType] = useState<TicketType>("PAID");
   const [price, setPrice] = useState<string>("25.00");
   const [feesIncluded, setFeesIncluded] = useState<boolean>(false);
+  const [ticketName, setTicketName] = useState<string>("General Admission");
+  const [ticketTypeId, setTicketTypeId] = useState<string | null>(null);
+  const [ticketTypeAvailable, setTicketTypeAvailable] = useState<number | null>(null);
 
   const [seatingType, setSeatingType] = useState<SeatingType>("UNALLOCATED");
   const [capacity, setCapacity] = useState<number>(300);
@@ -33,6 +36,44 @@ export default function TicketBuilder() {
   const [selectedMapId, setSelectedMapId] = useState<string>("");
 
   const showAllocatedOptions = seatingType === "ALLOCATED";
+
+  useEffect(() => {
+    if (!showId) return;
+    let alive = true;
+    api.getAdminShow(showId)
+      .then(({ item }) => {
+        if (!alive) return;
+        if (item.venue?.id) {
+          setVenueId(item.venue.id);
+        } else if (item.venueId) {
+          setVenueId(item.venueId);
+        }
+        if (item.usesAllocatedSeating != null) {
+          setSeatingType(item.usesAllocatedSeating ? "ALLOCATED" : "UNALLOCATED");
+        }
+        if (item.showCapacity != null) {
+          setCapacity(item.showCapacity);
+        }
+        if (item.activeSeatMapId) {
+          setSelectedMapId(item.activeSeatMapId);
+        }
+        if (item.ticketTypes?.length) {
+          const primaryTicket = item.ticketTypes[0];
+          setTicketName(primaryTicket.name || "General Admission");
+          setTicketTypeId(primaryTicket.id);
+          setTicketTypeAvailable(primaryTicket.available ?? null);
+          if (primaryTicket.pricePence > 0) {
+            setTicketType("PAID");
+            setPrice((primaryTicket.pricePence / 100).toFixed(2));
+          } else {
+            setTicketType("FREE");
+            setPrice("0.00");
+          }
+        }
+      })
+      .catch(() => undefined);
+    return () => { alive = false; };
+  }, [showId]);
 
   useEffect(() => {
     if (!venueId || !showAllocatedOptions) return;
@@ -48,8 +89,12 @@ export default function TicketBuilder() {
     [maps, selectedMapId]
   );
 
+  const selectedMapCapacity = useMemo(() => {
+    if (!selectedMap || !selectedMap.rows || !selectedMap.cols) return null;
+    return selectedMap.rows * selectedMap.cols;
+  }, [selectedMap]);
+
   const saveAndContinue = async () => {
-    // TODO: Hook to your ticket-config save endpoint.
     if (showAllocatedOptions && !selectedMapId) {
       const go = confirm("No seating map selected. Do you want to open the Seating Map Builder?");
       if (go) {
@@ -57,8 +102,50 @@ export default function TicketBuilder() {
         return;
       }
     }
-    alert("Ticket settings saved.");
-    nav(`/events/${showId}`);
+    if (!showId) return;
+
+    const parsedPrice = Number(price);
+    const pricePence = ticketType === "FREE"
+      ? 0
+      : Math.max(0, Math.round((Number.isFinite(parsedPrice) ? parsedPrice : 0) * 100));
+
+    const computedAvailable = showAllocatedOptions
+      ? (selectedMapCapacity ?? ticketTypeAvailable ?? capacity)
+      : capacity;
+    const available = Math.max(1, computedAvailable ?? 1);
+
+    const bookingFeePence = feesIncluded ? 0 : undefined;
+
+    try {
+      await api.updateShow(showId, {
+        venueId: venueId || null,
+        usesAllocatedSeating: showAllocatedOptions,
+        showCapacity: showAllocatedOptions ? null : capacity,
+        activeSeatMapId: showAllocatedOptions ? (selectedMapId || null) : null,
+      });
+
+      if (ticketTypeId) {
+        await api.updateTicketType(ticketTypeId, {
+          name: ticketName,
+          pricePence,
+          bookingFeePence,
+          available,
+        });
+      } else {
+        await api.createTicketType(showId, {
+          name: ticketName,
+          pricePence,
+          bookingFeePence,
+          available,
+        });
+      }
+
+      alert("Ticket settings saved.");
+      nav(`/events/${showId}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to save ticket settings.";
+      alert(message);
+    }
   };
 
   return (

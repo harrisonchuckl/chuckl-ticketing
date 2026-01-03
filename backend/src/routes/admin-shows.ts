@@ -869,6 +869,7 @@ router.post("/shows", requireAdminOrOrganiser, async (req, res) => {
   additionalImages,
   usesAllocatedSeating,
   showCapacity,
+  activeSeatMapId,
   externalTicketUrl,
   usesExternalTicketing,
 } = req.body || {};
@@ -1000,6 +1001,8 @@ router.get("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
         usesExternalTicketing: true,
 
         usesAllocatedSeating: true,
+
+        activeSeatMapId: true,
 
         status: true,
 
@@ -1379,6 +1382,23 @@ router.patch("/shows/:id", requireAdminOrOrganiser, async (req, res) => {
     const parsedAccessibility =
       accessibility && typeof accessibility === "object" ? accessibility : undefined;
 
+    let activeSeatMapIdToSet: string | null | undefined;
+    if (activeSeatMapId !== undefined) {
+      const normalized = asNullableString(activeSeatMapId);
+      if (!normalized) {
+        activeSeatMapIdToSet = null;
+      } else {
+        const seatMap = await prisma.seatMap.findUnique({
+          where: { id: normalized },
+          select: { id: true },
+        });
+        if (!seatMap) {
+          return res.status(404).json({ ok: false, error: "Seat map not found" });
+        }
+        activeSeatMapIdToSet = seatMap.id;
+      }
+    }
+
     // --- UPDATED SLUG LOGIC ---
     let slugToSet: string | undefined;
     const incomingTitle =
@@ -1435,6 +1455,9 @@ organiserId: effectiveOrganiserId,
           : {}),
         ...(usesAllocatedSeating !== undefined
           ? { usesAllocatedSeating: !!usesAllocatedSeating }
+          : {}),
+        ...(activeSeatMapIdToSet !== undefined
+          ? { activeSeatMapId: activeSeatMapIdToSet }
           : {}),
       ...(showCapacity !== undefined
   ? {
