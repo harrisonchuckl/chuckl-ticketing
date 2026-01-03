@@ -14,6 +14,7 @@ import publicPreferencesRouter from "./routes/public-preferences.js";
 import publicTrackRouter from "./routes/public-track.js";
 import publicSurveysRouter from "./routes/public-surveys.js";
 import publicCustomersRouter from "./routes/public-customers.js";
+import publicAccountRouter from "./routes/public-account.js";
 
 
 
@@ -110,6 +111,7 @@ app.use("/public/orders", publicOrdersRouter);
 app.use("/public", publicTrackRouter);
 app.use("/public", publicSurveysRouter);
 app.use("/public", publicCustomersRouter);
+app.use("/public", publicAccountRouter);
 
 // 3) Slug rewrites + redirects
 app.use("/public", publicSlugs);
