@@ -1118,7 +1118,10 @@ const endTimeNote = endTimeNoteRaw ? endTimeNoteRaw.trim() : '';
      ? await getBasketCountForStorefront(req, storefrontSlug, storefrontRecord.id)
      : 0;
  const cartHref = storefrontSlug ? `/public/${encodeURIComponent(storefrontSlug)}/basket` : '/public/basket';
- const accountHref = storefrontSlug ? `/public/${encodeURIComponent(storefrontSlug)}/account` : '/public/account';
+ const session = await readCustomerSession(req);
+ const accountHref = storefrontSlug
+   ? `/public/${encodeURIComponent(storefrontSlug)}/account${session?.sub ? "/portal" : ""}`
+   : '/public/account';
 
    let doorTimeIso: string | undefined;
  if (doorsOpenTime && dateObj) {
