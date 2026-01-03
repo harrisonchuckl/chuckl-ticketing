@@ -26,6 +26,57 @@ export const api = {
 
   getShow: (id: string) => request<{ ok: true; show: any }>(`/events/${id}`),
 
+  // Admin show details
+  getAdminShow: (id: string) =>
+    request<{
+      ok: true;
+      item: {
+        id: string;
+        title: string | null;
+        venue: { id: string; name: string; city: string | null; capacity: number | null } | null;
+        venueId: string | null;
+        usesAllocatedSeating: boolean | null;
+        showCapacity: number | null;
+        activeSeatMapId: string | null;
+        ticketTypes: Array<{
+          id: string;
+          name: string;
+          pricePence: number;
+          bookingFeePence: number | null;
+          available: number | null;
+        }>;
+      };
+    }>(`/admin/shows/${id}`),
+
+  updateShow: (id: string, payload: {
+    venueId?: string | null;
+    usesAllocatedSeating?: boolean;
+    showCapacity?: number | null;
+    activeSeatMapId?: string | null;
+  }) =>
+    request<{ ok: true; id: string }>(`/admin/shows/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload)
+    }),
+
+  createTicketType: (
+    showId: string,
+    payload: { name: string; pricePence: number; bookingFeePence?: number; available: number }
+  ) =>
+    request<{ ok: true; ticketType: { id: string } }>(`/admin/shows/${showId}/ticket-types`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+
+  updateTicketType: (
+    ticketTypeId: string,
+    payload: { name?: string; pricePence?: number; bookingFeePence?: number; available?: number }
+  ) =>
+    request<{ ok: true; ticketType: { id: string } }>(`/admin/ticket-types/${ticketTypeId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    }),
+
   // Admin Venues search (for the dropdown)
   searchVenues: (q = "") =>
     request<{ ok: true; items: Array<{ id: string; name: string; city: string | null }> }>(
