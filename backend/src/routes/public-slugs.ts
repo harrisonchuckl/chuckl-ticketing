@@ -305,7 +305,7 @@ function renderAccountPage(opts: { storefrontSlug: string | null; storefrontName
     ? `Access your tickets, orders, and preferences for ${opts.storefrontName}.`
     : "Access your tickets, orders, and preferences across TixAll.";
 
-  const accountHref = storefrontSlug ? `/public/${escAttr(storefrontSlug)}/account` : "/public/account";
+  const accountHref = storefrontSlug ? `/public/${escAttr(storefrontSlug)}/account` : "/account";
   const basketHref = storefrontSlug ? `/public/${escAttr(storefrontSlug)}/basket` : "/public/basket";
 
   return `<!doctype html>
@@ -641,7 +641,7 @@ function renderBasketPage(opts: { storefrontSlug: string | null; storefrontName:
   const brand = opts.brand || getPublicBrand();
   const title = opts.storefrontName ? `${opts.storefrontName} · Basket` : "Basket";
   const storefrontSlug = opts.storefrontSlug || "";
-  const accountHref = storefrontSlug ? `/public/${escAttr(storefrontSlug)}/account` : "/public/account";
+  const accountHref = storefrontSlug ? `/public/${escAttr(storefrontSlug)}/account` : "/account";
   const basketHref = storefrontSlug ? `/public/${escAttr(storefrontSlug)}/basket` : "/public/basket";
 
   return `<!doctype html>
@@ -1094,7 +1094,7 @@ router.get("/:storefront", async (req, res) => {
       ? await getBasketCountForStorefront(req, storefrontSlug, storefrontRecord.id)
       : 0;
   const cartHref = storefrontSlug ? `/public/${escAttr(storefrontSlug)}/basket` : "/public/basket";
-  const accountHref = storefrontSlug ? `/public/${escAttr(storefrontSlug)}/account` : "/public/account";
+  const accountHref = storefrontSlug ? `/public/${escAttr(storefrontSlug)}/account` : "/account";
 
   const visibleShows = shows.filter(show => !!show.slug);
   const featuredShows = visibleShows.slice(0, 6);

@@ -15,6 +15,7 @@ import publicTrackRouter from "./routes/public-track.js";
 import publicSurveysRouter from "./routes/public-surveys.js";
 import publicCustomersRouter from "./routes/public-customers.js";
 import publicAccountRouter from "./routes/public-account.js";
+import globalAccountRouter from "./routes/global-account.js";
 
 
 
@@ -112,6 +113,7 @@ app.use("/public", publicTrackRouter);
 app.use("/public", publicSurveysRouter);
 app.use("/public", publicCustomersRouter);
 app.use("/public", publicAccountRouter);
+app.use("/", globalAccountRouter);
 
 // 3) Slug rewrites + redirects
 app.use("/public", publicSlugs);

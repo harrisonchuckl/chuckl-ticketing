@@ -1,13 +1,7 @@
 import { Router } from "express";
 import prisma from "../lib/prisma.js";
+import { clearCustomerCookie, readCustomerSession, setCustomerCookie, signCustomerToken } from "../lib/customer-auth.js";
 import { hashPassword, verifyPassword } from "../utils/security.js";
-import {
-  clearCustomerCookie,
-  readCustomerSession,
-  setCustomerCookie,
-  signCustomerToken,
-} from "../lib/customer-auth.js";
-import { ensureMembership, linkPaidGuestOrders, mergeGuestCart } from "../lib/public-customer.js";
 import { publicAuthLimiter, requireSameOrigin } from "../lib/public-auth-guards.js";
 
 const router = Router();
@@ -21,16 +15,13 @@ function escHtml(input: string) {
     .replace(/'/g, "&#39;");
 }
 
-function renderAccountPage(storefrontSlug: string, storefrontName: string) {
-  const title = escHtml(`${storefrontName} · Account`);
-  const safeName = escHtml(storefrontName);
-  const safeSlug = encodeURIComponent(storefrontSlug);
+function renderGlobalAccountPage() {
   return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>${title}</title>
+  <title>Account</title>
   <style>
     :root{--bg:#f8fafc;--panel:#fff;--text:#0f172a;--muted:#64748b;--border:#e2e8f0;--brand:#0ea5e9}
     *{box-sizing:border-box}
@@ -50,8 +41,8 @@ function renderAccountPage(storefrontSlug: string, storefrontName: string) {
 </head>
 <body>
   <div class="wrap">
-    <h1 class="title">${safeName} account</h1>
-    <p class="muted">Sign in or create an account to manage your tickets.</p>
+    <h1 class="title">Account</h1>
+    <p class="muted">Sign in or create an account to manage tickets across venues.</p>
 
     <div class="card" id="signed-out">
       <h2>Sign in</h2>
@@ -69,7 +60,7 @@ function renderAccountPage(storefrontSlug: string, storefrontName: string) {
       <input class="input" id="signupPassword" type="password" placeholder="Password" autocomplete="new-password" />
       <label style="display:flex;gap:8px;align-items:center;font-size:.9rem;margin-bottom:10px">
         <input type="checkbox" id="signupConsent" />
-        I agree to receive updates from ${safeName}.
+        I agree to receive updates from TixAll.
       </label>
       <div class="btn-row">
         <button class="btn" id="signupBtn">Create account</button>
@@ -81,14 +72,13 @@ function renderAccountPage(storefrontSlug: string, storefrontName: string) {
       <h2>You're signed in</h2>
       <p class="muted" id="welcomeText"></p>
       <div class="btn-row">
-        <a class="btn primary" href="/public/${safeSlug}/account/portal">Go to portal</a>
+        <a class="btn primary" href="/account/portal">Go to portal</a>
         <button class="btn" id="logoutBtn">Sign out</button>
       </div>
     </div>
   </div>
 
   <script>
-    const storefrontSlug = ${JSON.stringify(storefrontSlug)};
     const authMessage = document.getElementById('authMessage');
     const signedOut = document.getElementById('signed-out');
     const signedIn = document.getElementById('signed-in');
@@ -115,7 +105,7 @@ function renderAccountPage(storefrontSlug: string, storefrontName: string) {
 
     async function applySession() {
       try {
-        const data = await getJSON('/public/auth/session?storefront=' + encodeURIComponent(storefrontSlug));
+        const data = await getJSON('/public/auth/session');
         if (!data.ok || !data.customer) return;
         signedOut.classList.add('hidden');
         signedIn.classList.remove('hidden');
@@ -126,7 +116,7 @@ function renderAccountPage(storefrontSlug: string, storefrontName: string) {
     document.getElementById('loginBtn').addEventListener('click', async () => {
       authMessage.textContent = '';
       try {
-        await postJSON('/public/' + storefrontSlug + '/account/login', {
+        await postJSON('/public/auth/login', {
           email: document.getElementById('loginEmail').value,
           password: document.getElementById('loginPassword').value,
         });
@@ -139,7 +129,7 @@ function renderAccountPage(storefrontSlug: string, storefrontName: string) {
     document.getElementById('signupBtn').addEventListener('click', async () => {
       authMessage.textContent = '';
       try {
-        await postJSON('/public/' + storefrontSlug + '/account/register', {
+        await postJSON('/public/auth/signup', {
           name: document.getElementById('signupName').value,
           email: document.getElementById('signupEmail').value,
           password: document.getElementById('signupPassword').value,
@@ -152,7 +142,7 @@ function renderAccountPage(storefrontSlug: string, storefrontName: string) {
     });
 
     document.getElementById('logoutBtn').addEventListener('click', async () => {
-      await postJSON('/public/' + storefrontSlug + '/account/logout');
+      await postJSON('/public/auth/logout');
       location.reload();
     });
 
@@ -174,11 +164,15 @@ function formatMoney(amountPence: number | null | undefined) {
   return `£${amount.toFixed(2)}`;
 }
 
-function renderPortalPage(
-  storefrontSlug: string,
-  storefrontName: string,
-  customer: { email: string; name: string | null; phone: string | null },
-  membershipOptIn: boolean | null,
+function renderGlobalPortalPage({
+  customer,
+  marketingConsent,
+  orders,
+  tickets,
+  venues,
+}: {
+  customer: { email: string; name: string | null; phone: string | null };
+  marketingConsent: boolean | null;
   orders: Array<{
     id: string;
     amountPence: number;
@@ -187,7 +181,8 @@ function renderPortalPage(
     showTitle: string;
     showDate: Date | null;
     venue: { name: string | null; city: string | null } | null;
-  }>,
+    organiserName: string | null;
+  }>;
   tickets: Array<{
     id: string;
     showTitle: string;
@@ -195,36 +190,36 @@ function renderPortalPage(
     ticketType: string;
     quantity: number;
     seatRef: string | null;
-  }>
-) {
-  const safeSlug = encodeURIComponent(storefrontSlug);
-  const safeName = escHtml(storefrontName);
+  }>;
+  venues: Array<{ slug: string; name: string }>;
+}) {
   const safeEmail = escHtml(customer.email);
   const safeCustomerName = escHtml(customer.name || "Not provided");
   const safeCustomerPhone = escHtml(customer.phone || "Not provided");
-  const membershipLabel =
-    membershipOptIn === null
+  const marketingLabel =
+    marketingConsent === null
       ? "Not set"
-      : membershipOptIn
-      ? "Opted in to organiser updates"
+      : marketingConsent
+      ? "Opted in to updates"
       : "Not opted in";
   const ordersHtml = orders.length
     ? orders
         .map((order) => {
-          const venue = order.venue
+          const venueLabel = order.venue
             ? [order.venue.name, order.venue.city].filter(Boolean).join(" · ")
             : "";
+          const organiserLabel = order.organiserName ? ` • ${escHtml(order.organiserName)}` : "";
           return `
           <div class="list-item">
             <strong>${escHtml(order.showTitle)}</strong>
-            <div class="muted">${escHtml(formatShortDate(order.showDate))}${venue ? ` • ${escHtml(venue)}` : ""}</div>
+            <div class="muted">${escHtml(formatShortDate(order.showDate))}${venueLabel ? ` • ${escHtml(venueLabel)}` : ""}${organiserLabel}</div>
             <div class="muted" style="margin-top:6px">${escHtml(formatMoney(order.amountPence))} · ${escHtml(
               order.status
             )}</div>
           </div>`;
         })
         .join("")
-    : '<span class="muted">No orders yet for this organiser.</span>';
+    : '<span class="muted">No orders yet.</span>';
   const ticketsHtml = tickets.length
     ? tickets
         .map((ticket) => {
@@ -241,13 +236,22 @@ function renderPortalPage(
           </div>`;
         })
         .join("")
-    : '<span class="muted">No tickets yet for this organiser.</span>';
+    : '<span class="muted">No tickets yet.</span>';
+  const venuesHtml = venues.length
+    ? venues
+        .map(
+          (venue) =>
+            `<a class="btn" href="/public/${encodeURIComponent(venue.slug)}/account/portal">${escHtml(venue.name)}</a>`
+        )
+        .join("")
+    : '<span class="muted">No venues yet.</span>';
+
   return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>${safeName} · Portal</title>
+  <title>Account · Portal</title>
   <style>
     :root{--bg:#f8fafc;--panel:#fff;--text:#0f172a;--muted:#64748b;--border:#e2e8f0;--brand:#0ea5e9}
     *{box-sizing:border-box}
@@ -268,7 +272,7 @@ function renderPortalPage(
 </head>
 <body>
   <div class="wrap">
-    <h1 class="title">${safeName} portal</h1>
+    <h1 class="title">Account portal</h1>
     <div class="card">
       <p class="muted">Signed in as ${safeEmail}.</p>
       <div class="section">
@@ -278,7 +282,11 @@ function renderPortalPage(
       </div>
       <div class="section">
         <strong>Marketing preference</strong>
-        <div class="muted" style="margin-top:6px">${escHtml(membershipLabel)}</div>
+        <div class="muted" style="margin-top:6px">${escHtml(marketingLabel)}</div>
+      </div>
+      <div class="section">
+        <strong>Venue switcher</strong>
+        <div class="btn-row">${venuesHtml}</div>
       </div>
       <div class="section">
         <strong>Orders</strong>
@@ -299,22 +307,22 @@ function renderPortalPage(
         <div class="muted" id="passwordMessage" style="margin-top:8px"></div>
       </div>
       <div class="btn-row">
-        <a class="btn" href="/public/${safeSlug}/account">Back to account</a>
+        <a class="btn" href="/account">Back to account</a>
         <button class="btn primary" id="logoutBtn">Sign out</button>
       </div>
     </div>
   </div>
   <script>
     document.getElementById('logoutBtn').addEventListener('click', async () => {
-      await fetch('/public/${safeSlug}/account/logout', { method: 'POST', credentials: 'include' });
-      location.href = '/public/${safeSlug}/account';
+      await fetch('/public/auth/logout', { method: 'POST', credentials: 'include' });
+      location.href = '/account';
     });
 
     document.getElementById('changePasswordBtn').addEventListener('click', async () => {
       const message = document.getElementById('passwordMessage');
       message.textContent = '';
       try {
-        const res = await fetch('/public/${safeSlug}/account/portal/change-password', {
+        const res = await fetch('/account/change-password', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -337,71 +345,44 @@ function renderPortalPage(
 </html>`;
 }
 
-router.get("/:organiserSlug/account", async (req, res) => {
-  const organiserSlug = String(req.params.organiserSlug || "").trim();
-  const organiser = await prisma.user.findUnique({
-    where: { storefrontSlug: organiserSlug },
-    select: { companyName: true, name: true, storefrontSlug: true },
-  });
-
-  if (!organiser) return res.status(404).send("Not found");
-  const storefrontName = organiser.companyName || organiser.name || organiser.storefrontSlug || organiserSlug;
-  res.type("html").send(renderAccountPage(organiserSlug, storefrontName));
+router.get("/account", (_req, res) => {
+  res.type("html").send(renderGlobalAccountPage());
 });
 
-router.get("/:organiserSlug/account/portal", async (req, res) => {
-  const organiserSlug = String(req.params.organiserSlug || "").trim();
-  const organiser = await prisma.user.findUnique({
-    where: { storefrontSlug: organiserSlug },
-    select: { id: true, companyName: true, name: true, storefrontSlug: true },
-  });
-
-  if (!organiser) return res.status(404).send("Not found");
-
+router.get("/account/portal", async (req, res) => {
   const session = await readCustomerSession(req);
   if (!session?.sub) {
-    return res.redirect(`/public/${encodeURIComponent(organiserSlug)}/account`);
+    return res.redirect("/account");
   }
 
   const customer = await prisma.customerAccount.findUnique({
     where: { id: String(session.sub) },
-    select: { id: true, email: true, name: true, phone: true },
+    select: { id: true, email: true, name: true, phone: true, marketingConsent: true },
   });
 
   if (!customer?.email) {
     clearCustomerCookie(res);
-    return res.redirect(`/public/${encodeURIComponent(organiserSlug)}/account`);
+    return res.redirect("/account");
   }
 
-  const storefront = await prisma.storefront.findUnique({
-    where: { slug: organiserSlug },
-    select: { id: true },
-  });
-
-  const membership = storefront
-    ? await prisma.customerStorefrontMembership.findFirst({
-        where: { customerAccountId: customer.id, storefrontId: storefront.id },
-        select: { marketingOptIn: true },
-      })
-    : null;
-
   const orders = await prisma.order.findMany({
-    where: {
-      customerAccountId: customer.id,
-      show: { organiserId: organiser.id },
-    },
+    where: { customerAccountId: customer.id },
     include: {
-      show: { select: { title: true, date: true, venue: { select: { name: true, city: true } } } },
+      show: {
+        select: {
+          title: true,
+          date: true,
+          venue: { select: { name: true, city: true } },
+          organiser: { select: { storefrontSlug: true, companyName: true, name: true } },
+        },
+      },
     },
     orderBy: { createdAt: "desc" },
     take: 30,
   });
 
   const tickets = await prisma.ticket.findMany({
-    where: {
-      order: { customerAccountId: customer.id },
-      show: { organiserId: organiser.id },
-    },
+    where: { order: { customerAccountId: customer.id } },
     include: {
       show: { select: { title: true, date: true } },
       ticketType: { select: { name: true } },
@@ -410,14 +391,38 @@ router.get("/:organiserSlug/account/portal", async (req, res) => {
     take: 50,
   });
 
-  const storefrontName = organiser.companyName || organiser.name || organiser.storefrontSlug || organiserSlug;
+  const memberships = await prisma.customerStorefrontMembership.findMany({
+    where: { customerAccountId: customer.id },
+    include: { storefront: { select: { slug: true, name: true } } },
+  });
+
+  const venuesMap = new Map<string, { slug: string; name: string }>();
+  for (const membership of memberships) {
+    const storefront = membership.storefront;
+    if (storefront?.slug) {
+      venuesMap.set(storefront.slug, { slug: storefront.slug, name: storefront.name || storefront.slug });
+    }
+  }
+  for (const order of orders) {
+    const organiser = order.show?.organiser;
+    if (organiser?.storefrontSlug) {
+      const label = organiser.companyName || organiser.name || organiser.storefrontSlug;
+      venuesMap.set(organiser.storefrontSlug, { slug: organiser.storefrontSlug, name: label });
+    }
+  }
+
+  const token = await signCustomerToken({
+    id: customer.id,
+    email: customer.email,
+    mode: "GLOBAL",
+  });
+  setCustomerCookie(res, token);
+
   res.type("html").send(
-    renderPortalPage(
-      organiserSlug,
-      storefrontName,
-      { email: customer.email, name: customer.name, phone: customer.phone },
-      membership?.marketingOptIn ?? null,
-      orders.map((order) => ({
+    renderGlobalPortalPage({
+      customer: { email: customer.email, name: customer.name, phone: customer.phone },
+      marketingConsent: customer.marketingConsent ?? null,
+      orders: orders.map((order) => ({
         id: order.id,
         amountPence: order.amountPence,
         status: order.status,
@@ -425,128 +430,26 @@ router.get("/:organiserSlug/account/portal", async (req, res) => {
         showTitle: order.show?.title || "Show",
         showDate: order.show?.date || null,
         venue: order.show?.venue || null,
+        organiserName:
+          order.show?.organiser?.companyName || order.show?.organiser?.name || order.show?.organiser?.storefrontSlug || null,
       })),
-      tickets.map((ticket) => ({
+      tickets: tickets.map((ticket) => ({
         id: ticket.id,
         showTitle: ticket.show?.title || "Show",
         showDate: ticket.show?.date || null,
         ticketType: ticket.ticketType?.name || "Ticket",
         quantity: ticket.quantity ?? 1,
         seatRef: ticket.seatRef || null,
-      }))
-    )
+      })),
+      venues: Array.from(venuesMap.values()),
+    })
   );
 });
 
-router.post("/:organiserSlug/account/register", publicAuthLimiter, requireSameOrigin, async (req, res) => {
-  try {
-    const organiserSlug = String(req.params.organiserSlug || "").trim();
-    const email = String(req.body?.email || "").trim().toLowerCase();
-    const password = String(req.body?.password || "");
-    const name = String(req.body?.name || "").trim() || null;
-    const marketingConsent = Boolean(req.body?.marketingConsent || false);
-    const organiser = await prisma.user.findUnique({
-      where: { storefrontSlug: organiserSlug },
-      select: { id: true },
-    });
-
-    if (!email || !password) {
-      return res.status(400).json({ ok: false, error: "Email and password are required" });
-    }
-
-    const existing = await prisma.customerAccount.findUnique({ where: { email } });
-    if (existing) {
-      return res.status(409).json({ ok: false, error: "Account already exists" });
-    }
-
-    const passwordHash = await hashPassword(password);
-    const customer = await prisma.customerAccount.create({
-      data: {
-        email,
-        passwordHash,
-        name,
-        marketingConsent,
-        lastLoginAt: new Date(),
-      },
-      select: { id: true, email: true, name: true },
-    });
-
-    await ensureMembership(customer.id, organiserSlug);
-    await linkPaidGuestOrders(customer.id, customer.email, organiser?.id);
-    await mergeGuestCart(req, res, customer.id, organiserSlug);
-
-    const token = await signCustomerToken({ id: customer.id, email: customer.email });
-    setCustomerCookie(res, token);
-
-    console.info("public account register", { customerId: customer.id, organiserSlug });
-    return res.status(201).json({ ok: true, customer });
-  } catch (error: any) {
-    console.error("public account register failed", error);
-    return res.status(500).json({ ok: false, error: "Failed to create account" });
-  }
-});
-
-router.post("/:organiserSlug/account/login", publicAuthLimiter, requireSameOrigin, async (req, res) => {
-  try {
-    const organiserSlug = String(req.params.organiserSlug || "").trim();
-    const email = String(req.body?.email || "").trim().toLowerCase();
-    const password = String(req.body?.password || "");
-    const organiser = await prisma.user.findUnique({
-      where: { storefrontSlug: organiserSlug },
-      select: { id: true },
-    });
-
-    if (!email || !password) {
-      return res.status(400).json({ ok: false, error: "Email and password are required" });
-    }
-
-    const customer = await prisma.customerAccount.findUnique({ where: { email } });
-    if (!customer || !customer.passwordHash) {
-      console.warn("public account login failed", { organiserSlug, reason: "missing_account" });
-      return res.status(401).json({ ok: false, error: "Invalid credentials" });
-    }
-
-    const ok = await verifyPassword(password, customer.passwordHash);
-    if (!ok) {
-      console.warn("public account login failed", { organiserSlug, reason: "invalid_password" });
-      return res.status(401).json({ ok: false, error: "Invalid credentials" });
-    }
-
-    await prisma.customerAccount.update({
-      where: { id: customer.id },
-      data: { lastLoginAt: new Date() },
-    });
-
-    await ensureMembership(customer.id, organiserSlug);
-    await linkPaidGuestOrders(customer.id, customer.email, organiser?.id);
-    await mergeGuestCart(req, res, customer.id, organiserSlug);
-
-    const token = await signCustomerToken({ id: customer.id, email: customer.email });
-    setCustomerCookie(res, token);
-
-    console.info("public account login", { customerId: customer.id, organiserSlug });
-    return res.json({ ok: true, customer: { id: customer.id, email: customer.email, name: customer.name } });
-  } catch (error: any) {
-    console.error("public account login failed", error);
-    return res.status(500).json({ ok: false, error: "Login failed" });
-  }
-});
-
-router.post("/:organiserSlug/account/logout", publicAuthLimiter, requireSameOrigin, async (req, res) => {
-  const session = await readCustomerSession(req);
-  const organiserSlug = String(req.params.organiserSlug || "").trim();
-  clearCustomerCookie(res);
-  if (session?.sub) {
-    console.info("public account logout", { customerId: session.sub, organiserSlug });
-  }
-  res.json({ ok: true });
-});
-
-router.post("/:organiserSlug/account/portal/change-password", publicAuthLimiter, requireSameOrigin, async (req, res) => {
+router.post("/account/change-password", publicAuthLimiter, requireSameOrigin, async (req, res) => {
   const session = await readCustomerSession(req);
   if (!session?.sub) return res.status(401).json({ ok: false, error: "Unauthorized" });
 
-  const organiserSlug = String(req.params.organiserSlug || "").trim();
   const currentPassword = String(req.body?.currentPassword || "");
   const newPassword = String(req.body?.newPassword || "");
 
@@ -572,7 +475,7 @@ router.post("/:organiserSlug/account/portal/change-password", publicAuthLimiter,
     data: { passwordHash },
   });
 
-  console.info("public account password change", { customerId: customer.id, organiserSlug });
+  console.info("global account password change", { customerId: customer.id });
   return res.json({ ok: true });
 });
 

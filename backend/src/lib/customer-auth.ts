@@ -52,5 +52,8 @@ export async function readCustomerSession(req: Request): Promise<CustomerSession
   if (!token) return null;
   const payload = await verifyJwt<CustomerSession>(String(token));
   if (!payload || payload.type !== "customer" || !payload.sub) return null;
-  return payload;
+  return {
+    ...payload,
+    mode: payload.mode ?? "GLOBAL",
+  };
 }
