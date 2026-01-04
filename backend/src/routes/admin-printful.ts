@@ -276,13 +276,25 @@ router.get("/integrations/printful/callback", requireAdminOrOrganiser, async (re
       return res.status(500).json(responsePayload);
     }
 
-    res.clearCookie(STATE_COOKIE, { path: "/" });
+   res.clearCookie(STATE_COOKIE, { path: "/" });
 
-    return res.json({
-      ok: true,
-      status: "CONNECTED",
-      tokenExpiresAt: expiresAt,
-    });
+const redirectTo = "/admin/ui/integrations/printful?connected=1";
+
+// If something in future calls this via fetch(), keep JSON support
+const wantsJson =
+  String(req.query.format || "") === "json" ||
+  String(req.headers.accept || "").includes("application/json") ||
+  String(req.headers["x-requested-with"] || "") === "XMLHttpRequest";
+
+if (wantsJson) {
+  return res.status(200).json({
+    ok: true,
+    status: "CONNECTED",
+    tokenExpiresAt: expiresAt ? expiresAt.toISOString() : null,
+  });
+}
+
+return res.redirect(302, redirectTo);
   } catch (err: any) {
     console.error("[printful] callback failed", err);
     const responsePayload = {
