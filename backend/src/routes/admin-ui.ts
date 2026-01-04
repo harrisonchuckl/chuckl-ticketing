@@ -2861,6 +2861,18 @@ router.get(
         </div>
       </div>
 
+      <div class="sb-section" data-section="integrations">
+        <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="integrations" aria-expanded="false">
+          <span class="sb-link-label">Integrations</span>
+          <svg class="sb-toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div class="sb-submenu" data-submenu="integrations">
+          <a class="sb-link sub" href="/admin/ui/integrations/printful" data-view="/admin/ui/integrations/printful">Printful</a>
+        </div>
+      </div>
+
       <div class="sb-section" data-section="settings">
         <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="settings" aria-expanded="false">
           <span class="sb-link-label">Settings</span>
@@ -12310,6 +12322,93 @@ function renderInterests(customer){
     }
 
   }
+  function printfulIntegrationPage(){
+    if (!main) return;
+    main.innerHTML = ''
+      + '<div class="card">'
+      +   '<div class="header" style="align-items:flex-start;">'
+      +     '<div>'
+      +       '<div class="title">Printful</div>'
+      +       '<div class="muted">Connect Printful to fulfil merchandise orders.</div>'
+      +     '</div>'
+      +   '</div>'
+      +   '<div class="grid" style="gap:12px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));align-items:center;">'
+      +     '<div>'
+      +       '<div class="muted" style="font-size:12px;">Connection status</div>'
+      +       '<div class="title" id="printful_status">Loading…</div>'
+      +       '<div class="muted" id="printful_expiry" style="margin-top:6px;"></div>'
+      +     '</div>'
+      +     '<div class="row" id="printful_actions" style="justify-content:flex-start;flex-wrap:wrap;"></div>'
+      +   '</div>'
+      +   '<div class="loading-strip" id="printful_loading" style="margin-top:12px;"></div>'
+      + '</div>';
+
+    var statusEl = $('#printful_status');
+    var expiryEl = $('#printful_expiry');
+    var actionsEl = $('#printful_actions');
+    var loadingEl = $('#printful_loading');
+
+    function setLoading(isLoading){
+      if (loadingEl) loadingEl.style.display = isLoading ? 'block' : 'none';
+    }
+
+    async function loadStatus(){
+      setLoading(true);
+      if (actionsEl) actionsEl.innerHTML = '';
+      if (statusEl) statusEl.textContent = 'Loading…';
+      if (expiryEl) expiryEl.textContent = '';
+
+      try{
+        var data = await j('/admin/api/integrations/printful/status');
+        var status = data && data.status ? String(data.status) : 'DISCONNECTED';
+        var isConnected = status === 'CONNECTED';
+        var pillClass = isConnected ? 'good' : 'bad';
+        if (statusEl){
+          statusEl.innerHTML = 'Status: <span class="pill ' + pillClass + '">' + escapeHtml(status) + '</span>';
+        }
+        if (expiryEl){
+          if (isConnected){
+            expiryEl.textContent = data && data.tokenExpiresAt
+              ? ('Token expires: ' + formatDateTime(data.tokenExpiresAt))
+              : 'Token expires: —';
+          } else {
+            expiryEl.textContent = 'Connect Printful to enable fulfilment sync.';
+          }
+        }
+        if (actionsEl){
+          if (isConnected){
+            actionsEl.innerHTML = '<button class="btn" id="printful_disconnect">Disconnect</button>';
+            var disconnectBtn = $('#printful_disconnect');
+            if (disconnectBtn){
+              disconnectBtn.addEventListener('click', async function(){
+                disconnectBtn.disabled = true;
+                disconnectBtn.textContent = 'Disconnecting...';
+                try{
+                  await j('/admin/api/integrations/printful/disconnect', { method:'POST' });
+                  showToast('Printful disconnected.', true);
+                  await loadStatus();
+                }catch(err){
+                  showToast(parseErr(err), false);
+                  disconnectBtn.disabled = false;
+                  disconnectBtn.textContent = 'Disconnect';
+                }
+              });
+            }
+          } else {
+            actionsEl.innerHTML = '<a class="btn p" href="/admin/api/integrations/printful/connect">Connect Printful</a>';
+          }
+        }
+      }catch(err){
+        if (statusEl) statusEl.textContent = 'Status unavailable';
+        if (expiryEl) expiryEl.textContent = parseErr(err) || 'Failed to load Printful status.';
+        showToast(parseErr(err), false);
+      }finally{
+        setLoading(false);
+      }
+    }
+
+    loadStatus();
+  }
   function productStorePage(){
     if (!main) return;
     main.innerHTML = ''
@@ -15796,6 +15895,7 @@ function renderInterests(customer){
       if (path === '/admin/ui/marketing')      return marketingPage();
       if (path === '/admin/ui/audiences')      return audiences();
       if (path === '/admin/ui/email')          return emailPage();
+      if (path === '/admin/ui/integrations/printful') return printfulIntegrationPage();
       if (path === '/admin/ui/product-store')  return productStorePage();
       if (path === '/admin/ui/product-store/settings') return productStoreSettingsPage();
       if (path === '/admin/ui/product-store/upsells') return productStoreUpsellsPage();
