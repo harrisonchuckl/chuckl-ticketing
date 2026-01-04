@@ -166,6 +166,7 @@ app.use("/admin/api", adminPrintfulRouter);
 app.use("/admin/api", adminOwnerRouter);
 app.use("/admin/api", adminOwnerDashboardRouter);
 app.use("/admin/api", adminOwnerOrganisersRouter);
+app.use("/admin/api", adminMarketingRouter);
 app.use("/admin", adminMarketingRouter);
 app.use("/webhooks", sendgridWebhookRouter);
 

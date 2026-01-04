@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import prisma from '../lib/prisma.js';
 import { requireAdminOrOrganiser } from '../lib/authz.js';
+import { isOwnerEmail } from '../lib/owner-authz.js';
+import { requireAuth } from '../middleware/requireAuth.js';
 import { renderMarketingTemplate } from '../lib/email-marketing/rendering.js';
 import { createUnsubscribeToken } from '../lib/email-marketing/unsubscribe.js';
 import { createPreferencesToken } from '../lib/email-marketing/preferences.js';
@@ -54,6 +56,53 @@ async function logMarketingAudit(
 
 const PUBLIC_BASE_URL =
   process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
+
+function requireAdminOrOwner(req: any, res: any, next: any) {
+  return requireAuth(req, res, () => {
+    const role = String(req.user?.role || '').trim().toUpperCase();
+    if (role === 'ADMIN' || isOwnerEmail(req.user?.email)) return next();
+    return res.status(403).json({ error: true, message: 'Forbidden' });
+  });
+}
+
+function isValidPublicBaseUrl(value: string) {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return Boolean(url.protocol && url.host);
+  } catch {
+    return false;
+  }
+}
+
+router.get('/marketing/health', requireAdminOrOwner, async (_req, res) => {
+  const workerEnabled = String(process.env.MARKETING_WORKER_ENABLED || 'true') === 'true';
+  const intervalMs = Number(process.env.MARKETING_WORKER_INTERVAL_MS || 30000);
+  const sendRate = Number(process.env.MARKETING_SEND_RATE_PER_SEC || 50);
+  const dailyLimit = Number(process.env.MARKETING_DAILY_LIMIT || 50000);
+  const providerConfigured = Boolean(String(process.env.SENDGRID_API_KEY || '').trim());
+  const publicBaseUrl = process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || process.env.BASE_URL || '';
+  const unsubscribeBaseUrlOk = isValidPublicBaseUrl(publicBaseUrl);
+
+  console.info('[marketing:health]', {
+    workerEnabled,
+    intervalMs,
+    sendRate,
+    dailyLimit,
+    providerConfigured,
+    unsubscribeBaseUrlOk,
+    publicBaseUrlConfigured: Boolean(publicBaseUrl),
+  });
+
+  res.json({
+    workerEnabled,
+    intervalMs,
+    sendRate,
+    dailyLimit,
+    providerConfigured,
+    unsubscribeBaseUrlOk,
+  });
+});
 
 router.get('/marketing/contacts', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
