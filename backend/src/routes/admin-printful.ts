@@ -400,28 +400,36 @@ router.post("/integrations/printful/import", requireAdminOrOrganiser, async (req
         });
       }
 
-      await tx.fulfilmentProductMapping.upsert({
+      const existingProductMapping = await tx.fulfilmentProductMapping.findFirst({
         where: {
-          provider_productId_productVariantId: {
-            provider: "PRINTFUL",
-            productId: productRow.id,
-            productVariantId: null,
-          },
-        },
-        update: {
-          organiserId,
-          providerProductId: printfulProductId,
-          providerVariantId: null,
-        },
-        create: {
           organiserId,
           provider: "PRINTFUL",
           productId: productRow.id,
           productVariantId: null,
-          providerProductId: printfulProductId,
-          providerVariantId: null,
         },
       });
+
+      if (existingProductMapping) {
+        await tx.fulfilmentProductMapping.update({
+          where: { id: existingProductMapping.id },
+          data: {
+            organiserId,
+            providerProductId: printfulProductId,
+            providerVariantId: null,
+          },
+        });
+      } else {
+        await tx.fulfilmentProductMapping.create({
+          data: {
+            organiserId,
+            provider: "PRINTFUL",
+            productId: productRow.id,
+            productVariantId: null,
+            providerProductId: printfulProductId,
+            providerVariantId: null,
+          },
+        });
+      }
 
       for (const variant of createdVariants) {
         if (!variant.providerVariantId) continue;
