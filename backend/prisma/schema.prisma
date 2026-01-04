@@ -424,6 +424,8 @@ model CustomerAccount {
   memberships CustomerStorefrontMembership[]
   baskets     Basket[]
   orders      Order[]
+  rememberTokens CustomerRememberToken[]
+  showViews     CustomerShowView[]
 }
 
 model CustomerStorefrontMembership {
@@ -440,6 +442,38 @@ model CustomerStorefrontMembership {
 
   @@unique([customerAccountId, storefrontId])
   @@index([storefrontId])
+}
+
+model CustomerRememberToken {
+  id                String   @id @default(cuid())
+  createdAt         DateTime @default(now())
+  customerAccountId String
+  tokenHash         String   @unique @db.Text
+  expiresAt         DateTime
+  lastUsedAt        DateTime?
+  userAgent         String?
+  ipAddress         String?
+
+  customerAccount CustomerAccount @relation(fields: [customerAccountId], references: [id])
+
+  @@index([customerAccountId])
+  @@index([expiresAt])
+}
+
+model CustomerShowView {
+  id                String   @id @default(cuid())
+  createdAt         DateTime @default(now())
+  showId            String
+  customerAccountId String?
+  sessionId         String?
+  source            String?
+
+  show            Show             @relation(fields: [showId], references: [id])
+  customerAccount CustomerAccount? @relation(fields: [customerAccountId], references: [id])
+
+  @@index([showId])
+  @@index([customerAccountId])
+  @@index([createdAt])
 }
 
 model Basket {
@@ -766,6 +800,7 @@ model Show {
   storeBundleRules   StoreBundleRule[]
   supportTickets     SupportTicket[]
   chatbotTranscripts ChatbotTranscript[]
+  customerShowViews  CustomerShowView[]
 
   @@index([venueId])
   @@index([organiserId])
