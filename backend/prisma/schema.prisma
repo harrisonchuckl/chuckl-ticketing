@@ -605,6 +605,7 @@ model Promoter {
   activities PromoterActivity[]
   showLinks  ShowPromoter[]
   members    PromoterMember[]
+  products   Product[]
 }
 
 model PromoterMember {
@@ -1197,8 +1198,10 @@ model Product {
   preorderCloseAt   DateTime?
   maxPerOrder       Int?
   maxPerTicket      Int?
+  promoterId        String?
 
   storefront         Storefront          @relation(fields: [storefrontId], references: [id])
+  promoter           Promoter?           @relation(fields: [promoterId], references: [id])
   basketItems        BasketItem[]
   variants           ProductVariant[]
   images             ProductImage[]
@@ -1209,6 +1212,7 @@ model Product {
 
   @@unique([storefrontId, slug])
   @@index([storefrontId, status])
+  @@index([storefrontId, promoterId])
 }
 
 model ProductVariant {
