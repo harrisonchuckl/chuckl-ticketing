@@ -70,6 +70,12 @@ enum ProductFulfilmentType {
   NONE
 }
 
+enum PrintfulShippingPolicy {
+  PASS_THROUGH
+  INCLUDED
+  THRESHOLD
+}
+
 enum InventoryMode {
   UNLIMITED
   TRACKED
@@ -1215,6 +1221,11 @@ model FulfilmentProductMapping {
   productVariantId String?
   providerProductId String
   providerVariantId String?
+  providerBasePricePence Int?
+  providerBaseCurrency   String? @default("gbp")
+  providerBaseUpdatedAt  DateTime?
+  providerShippingEstimatePence Int?
+  providerTaxEstimatePence Int?
 
   organiser      User           @relation(fields: [organiserId], references: [id])
   product        Product        @relation(fields: [productId], references: [id])
@@ -1240,6 +1251,9 @@ model Product {
   description       String?
   fulfilmentType    ProductFulfilmentType @default(NONE)
   pricePence        Int?
+  retailPricePence  Int?
+  compareAtPricePence Int?
+  marginRuleUsed    String?
   currency          String                @default("gbp")
   allowCustomAmount Boolean               @default(false)
   inventoryMode     InventoryMode         @default(UNLIMITED)
@@ -1354,9 +1368,18 @@ model ProductOrder {
   status           ProductOrderStatus
   fulfilmentStatus ProductOrderFulfilmentStatus @default(UNFULFILLED)
 
+  printfulOrderId        String?
+  printfulCostSubtotalPence Int?
+  printfulShippingPence  Int?
+  printfulTaxPence       Int?
+  printfulTotalPence     Int?
+  printfulCostCurrency   String?
+  printfulCostRawJson    Json?
+
   storefront Storefront         @relation(fields: [storefrontId], references: [id])
   order      Order?             @relation(fields: [orderId], references: [id])
   items      ProductOrderItem[]
+  profitSnapshot ProductOrderProfitSnapshot?
 
   @@index([storefrontId])
   @@index([stripeCheckoutSessionId])
@@ -1387,8 +1410,101 @@ model ProductOrderItem {
   productOrder ProductOrder    @relation(fields: [productOrderId], references: [id])
   product      Product         @relation(fields: [productId], references: [id])
   variant      ProductVariant? @relation(fields: [variantId], references: [id])
+  profitSnapshot ProductOrderItemProfitSnapshot?
 
   @@index([productOrderId])
+}
+
+
+model PrintfulPricingConfig {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organiserId String @unique
+  marginBps   Int    @default(1500)
+  vatRegistered Boolean @default(true)
+  vatRateBps Int @default(2000)
+  shippingPolicy PrintfulShippingPolicy @default(PASS_THROUGH)
+  stripeFeeBps Int @default(150)
+  stripeFeeFixedPence Int @default(20)
+  allowNegativeMargin Boolean @default(false)
+  minimumProfitPence Int @default(0)
+
+  organiser User @relation(fields: [organiserId], references: [id])
+
+  @@index([organiserId])
+}
+
+model ProductOrderProfitSnapshot {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  productOrderId String @unique
+  organiserId String
+
+  retailSubtotalPence Int
+  retailShippingPence Int
+  retailTaxPence Int
+  retailTotalPence Int
+
+  printfulSubtotalPence Int
+  printfulShippingPence Int
+  printfulTaxPence Int
+  printfulTotalPence Int
+
+  stripeFeePence Int
+  vatEstimatePence Int
+  netProfitPence Int
+  currency String
+
+  marginBpsUsed Int
+  vatRateBpsUsed Int
+  shippingPolicyUsed PrintfulShippingPolicy
+  negativeMargin Boolean @default(false)
+  missingPrintfulCost Boolean @default(false)
+
+  organiserSharePence Int @default(0)
+  platformSharePence Int @default(0)
+  creatorSharePence Int @default(0)
+
+  organiser User @relation(fields: [organiserId], references: [id])
+  productOrder ProductOrder @relation(fields: [productOrderId], references: [id])
+  itemSnapshots ProductOrderItemProfitSnapshot[]
+
+  @@index([organiserId])
+}
+
+model ProductOrderItemProfitSnapshot {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  productOrderItemId String @unique
+  profitSnapshotId String
+  organiserId String
+
+  retailUnitPricePence Int
+  retailLineTotalPence Int
+  printfulUnitCostPence Int
+  printfulLineTotalPence Int
+  stripeFeePence Int
+  vatEstimatePence Int
+  netProfitPence Int
+  currency String
+  marginBpsUsed Int
+  negativeMargin Boolean @default(false)
+
+  organiserSharePence Int @default(0)
+  platformSharePence Int @default(0)
+  creatorSharePence Int @default(0)
+
+  organiser User @relation(fields: [organiserId], references: [id])
+  profitSnapshot ProductOrderProfitSnapshot @relation(fields: [profitSnapshotId], references: [id])
+  productOrderItem ProductOrderItem @relation(fields: [productOrderItemId], references: [id])
+
+  @@index([organiserId])
 }
 
 model InventoryMovement {

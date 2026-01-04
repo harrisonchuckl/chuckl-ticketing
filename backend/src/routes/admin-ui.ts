@@ -2867,6 +2867,8 @@ router.get(
             <a class="sb-link sub" href="/admin/ui/product-store/settings" data-view="/admin/ui/product-store/settings">Settings</a>
             <a class="sb-link sub" href="/admin/ui/product-store/upsells" data-view="/admin/ui/product-store/upsells">Upsells</a>
             <a class="sb-link sub" href="/admin/ui/integrations/printful" data-view="/admin/ui/integrations/printful">Printful Integration</a>
+            <a class="sb-link sub" href="/admin/ui/integrations/printful-pricing" data-view="/admin/ui/integrations/printful-pricing">Printful Pricing</a>
+            <a class="sb-link sub" href="/admin/ui/integrations/printful-reconciliation" data-view="/admin/ui/integrations/printful-reconciliation">Printful Reconciliation</a>
           </div>
         </div>
 
@@ -12499,6 +12501,218 @@ function renderInterests(customer){
 
     loadStatus();
   }
+
+  function printfulPricingPage(){
+    if (!main) return;
+    main.innerHTML = ''
+      + '<div class="card">'
+      +   '<div class="header" style="align-items:flex-start;gap:12px;">'
+      +     '<div>'
+      +       '<div class="title">Printful Pricing</div>'
+      +       '<div class="muted">Default margin, VAT, and fee settings for Printful products.</div>'
+      +     '</div>'
+      +     '<button class="btn p" id="pf_save">Save settings</button>'
+      +   '</div>'
+      +   '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">'
+      +     '<label class="field">Margin %<input class="input" id="pf_margin" type="number" min="0" step="0.1" /></label>'
+      +     '<label class="field">VAT %<input class="input" id="pf_vat" type="number" min="0" step="0.1" /></label>'
+      +     '<label class="field">Stripe fee %<input class="input" id="pf_stripe_bps" type="number" min="0" step="0.1" /></label>'
+      +     '<label class="field">Stripe fixed fee (pence)<input class="input" id="pf_stripe_fixed" type="number" min="0" step="1" /></label>'
+      +     '<label class="field">Minimum profit (pence)<input class="input" id="pf_min_profit" type="number" min="0" step="1" /></label>'
+      +     '<label class="field">Allow negative margin<select class="input" id="pf_allow_negative"><option value="false">No</option><option value="true">Yes</option></select></label>'
+      +     '<label class="field">Shipping policy<select class="input" id="pf_shipping"><option value="PASS_THROUGH">Pass-through (charge customer)</option><option value="INCLUDED">Included in retail price</option><option value="THRESHOLD">Threshold free shipping</option></select></label>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="card" style="margin-top:16px;">'
+      +   '<div class="title">Price calculator</div>'
+      +   '<div class="muted" style="margin-top:6px;">Enter a Printful base cost to see the retail price customers pay.</div>'
+      +   '<div class="row" style="gap:10px;margin-top:12px;flex-wrap:wrap;">'
+      +     '<input class="input" id="pf_calc_base" type="number" min="0" step="1" placeholder="Base cost (pence)" style="max-width:220px;" />'
+      +     '<button class="btn" id="pf_calc">Calculate</button>'
+      +   '</div>'
+      +   '<div class="muted" id="pf_calc_result" style="margin-top:10px;"></div>'
+      + '</div>';
+
+    var marginEl = $('#pf_margin');
+    var vatEl = $('#pf_vat');
+    var stripeBpsEl = $('#pf_stripe_bps');
+    var stripeFixedEl = $('#pf_stripe_fixed');
+    var minProfitEl = $('#pf_min_profit');
+    var allowNegativeEl = $('#pf_allow_negative');
+    var shippingEl = $('#pf_shipping');
+    var saveBtn = $('#pf_save');
+    var calcBtn = $('#pf_calc');
+    var calcBaseEl = $('#pf_calc_base');
+    var calcResultEl = $('#pf_calc_result');
+
+    function pFmt(p){ return '£' + (Number(p || 0) / 100).toFixed(2); }
+
+    async function loadConfig(){
+      try{
+        var data = await j('/admin/api/integrations/printful/pricing-config');
+        var cfg = data && data.config ? data.config : {};
+        if (marginEl) marginEl.value = String((Number(cfg.marginBps || 0) / 100).toFixed(1));
+        if (vatEl) vatEl.value = String((Number(cfg.vatRateBps || 0) / 100).toFixed(1));
+        if (stripeBpsEl) stripeBpsEl.value = String((Number(cfg.stripeFeeBps || 0) / 100).toFixed(2));
+        if (stripeFixedEl) stripeFixedEl.value = String(cfg.stripeFeeFixedPence || 0);
+        if (minProfitEl) minProfitEl.value = String(cfg.minimumProfitPence || 0);
+        if (allowNegativeEl) allowNegativeEl.value = String(cfg.allowNegativeMargin ? 'true' : 'false');
+        if (shippingEl) shippingEl.value = String(cfg.shippingPolicy || 'PASS_THROUGH');
+      }catch(err){
+        showToast(parseErr(err), false);
+      }
+    }
+
+    async function saveConfig(){
+      if (!saveBtn) return;
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving...';
+      try{
+        var payload = {
+          marginBps: Math.round(Number(marginEl && marginEl.value || 0) * 100),
+          vatRegistered: true,
+          vatRateBps: Math.round(Number(vatEl && vatEl.value || 0) * 100),
+          stripeFeeBps: Math.round(Number(stripeBpsEl && stripeBpsEl.value || 0) * 100),
+          stripeFeeFixedPence: Number(stripeFixedEl && stripeFixedEl.value || 0),
+          minimumProfitPence: Number(minProfitEl && minProfitEl.value || 0),
+          allowNegativeMargin: String(allowNegativeEl && allowNegativeEl.value || 'false') === 'true',
+          shippingPolicy: shippingEl && shippingEl.value ? shippingEl.value : 'PASS_THROUGH'
+        };
+        await j('/admin/api/integrations/printful/pricing-config', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+        showToast('Pricing settings saved.', true);
+      }catch(err){
+        showToast(parseErr(err), false);
+      }finally{
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save settings';
+      }
+    }
+
+    function calcRetail(){
+      var base = Number(calcBaseEl && calcBaseEl.value || 0);
+      var marginBps = Math.round(Number(marginEl && marginEl.value || 0) * 100);
+      var vatRateBps = Math.round(Number(vatEl && vatEl.value || 0) * 100);
+      var preVat = Math.round(base * (1 + marginBps / 10000));
+      var vat = Math.round(preVat * (vatRateBps / 10000));
+      var retail = preVat + vat;
+      if (calcResultEl){
+        calcResultEl.textContent = 'Retail price: ' + pFmt(retail) + ' (pre-VAT ' + pFmt(preVat) + ', VAT ' + pFmt(vat) + ')';
+      }
+    }
+
+    if (saveBtn) saveBtn.addEventListener('click', saveConfig);
+    if (calcBtn) calcBtn.addEventListener('click', calcRetail);
+
+    loadConfig();
+  }
+
+  function printfulReconciliationPage(){
+    if (!main) return;
+    main.innerHTML = ''
+      + '<div class="card">'
+      +   '<div class="header" style="align-items:flex-start;gap:12px;">'
+      +     '<div>'
+      +       '<div class="title">Printful Reconciliation</div>'
+      +       '<div class="muted">Review retail vs Printful cost and profitability per order.</div>'
+      +     '</div>'
+      +     '<button class="btn" id="pf_recon_reload">Refresh</button>'
+      +   '</div>'
+      +   '<div class="row" style="gap:10px;flex-wrap:wrap;">'
+      +     '<input class="input" id="pf_recon_start" type="date" />'
+      +     '<input class="input" id="pf_recon_end" type="date" />'
+      +     '<select class="input" id="pf_recon_status">'
+      +       '<option value="">All statuses</option>'
+      +       '<option value="PAID">Paid</option>'
+      +       '<option value="REFUNDED">Refunded</option>'
+      +       '<option value="CANCELLED">Cancelled</option>'
+      +     '</select>'
+      +     '<label class="row" style="gap:6px;align-items:center;">'
+      +       '<input type="checkbox" id="pf_recon_negative" />'
+      +       '<span class="muted">Negative margin only</span>'
+      +     '</label>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="card" style="margin-top:16px;">'
+      +   '<div class="table-list" id="pf_recon_table">'
+      +     '<div class="table-row head">'
+      +       '<div>Order</div>'
+      +       '<div>Retail</div>'
+      +       '<div>Printful</div>'
+      +       '<div>Stripe fees</div>'
+      +       '<div>VAT</div>'
+      +       '<div>Net profit</div>'
+      +     '</div>'
+      +   '</div>'
+      + '</div>';
+
+    var startEl = $('#pf_recon_start');
+    var endEl = $('#pf_recon_end');
+    var statusEl = $('#pf_recon_status');
+    var negativeEl = $('#pf_recon_negative');
+    var tableEl = $('#pf_recon_table');
+    var reloadBtn = $('#pf_recon_reload');
+
+    function pFmt(p){ return '£' + (Number(p || 0) / 100).toFixed(2); }
+
+    function buildRow(order){
+      var snap = order.profitSnapshot || {};
+      var profit = Number(snap.netProfitPence || 0);
+      var profitClass = profit < 0 ? 'bad' : 'good';
+      return ''
+        + '<div class="table-row">'
+        +   '<div>'
+        +     '<div class="title" style="font-size:14px;">' + escapeHtml(order.id) + '</div>'
+        +     '<div class="muted" style="font-size:12px;">' + escapeHtml(order.status || '—') + '</div>'
+        +   '</div>'
+        +   '<div>' + pFmt(snap.retailTotalPence || order.totalPence) + '</div>'
+        +   '<div>' + pFmt(snap.printfulTotalPence || 0) + '</div>'
+        +   '<div>' + pFmt(snap.stripeFeePence || 0) + '</div>'
+        +   '<div>' + pFmt(snap.vatEstimatePence || 0) + '</div>'
+        +   '<div><span class="pill ' + profitClass + '">' + pFmt(profit) + '</span></div>'
+        + '</div>';
+    }
+
+    async function loadRecon(){
+      if (tableEl){
+        tableEl.innerHTML = ''
+          + '<div class="table-row head">'
+          + '<div>Order</div><div>Retail</div><div>Printful</div><div>Stripe fees</div><div>VAT</div><div>Net profit</div>'
+          + '</div>'
+          + '<div class="muted" style="padding:12px;">Loading…</div>';
+      }
+      try{
+        var params = new URLSearchParams();
+        if (startEl && startEl.value) params.set('start', startEl.value);
+        if (endEl && endEl.value) params.set('end', endEl.value);
+        if (statusEl && statusEl.value) params.set('status', statusEl.value);
+        if (negativeEl && negativeEl.checked) params.set('negativeOnly', '1');
+
+        var data = await j('/admin/api/integrations/printful/reconciliation?' + params.toString());
+        var orders = data && data.orders ? data.orders : [];
+        if (tableEl){
+          tableEl.innerHTML = ''
+            + '<div class="table-row head">'
+            + '<div>Order</div><div>Retail</div><div>Printful</div><div>Stripe fees</div><div>VAT</div><div>Net profit</div>'
+            + '</div>'
+            + (orders.length ? orders.map(buildRow).join('') : '<div class="muted" style="padding:12px;">No orders found.</div>');
+        }
+      }catch(err){
+        showToast(parseErr(err), false);
+      }
+    }
+
+    if (reloadBtn) reloadBtn.addEventListener('click', loadRecon);
+    if (startEl) startEl.addEventListener('change', loadRecon);
+    if (endEl) endEl.addEventListener('change', loadRecon);
+    if (statusEl) statusEl.addEventListener('change', loadRecon);
+    if (negativeEl) negativeEl.addEventListener('change', loadRecon);
+
+    loadRecon();
+  }
+
   function productStorePage(){
     if (!main) return;
     main.innerHTML = ''
@@ -16030,6 +16244,8 @@ function renderInterests(customer){
       if (path === '/admin/ui/audiences')      return audiences();
       if (path === '/admin/ui/email')          return emailPage();
       if (path === '/admin/ui/integrations/printful') return printfulIntegrationPage();
+      if (path === '/admin/ui/integrations/printful-pricing') return printfulPricingPage();
+      if (path === '/admin/ui/integrations/printful-reconciliation') return printfulReconciliationPage();
       if (path === '/admin/ui/product-store')  return productStorePage();
       if (path === '/admin/ui/product-store/settings') return productStoreSettingsPage();
       if (path === '/admin/ui/product-store/upsells') return productStoreUpsellsPage();

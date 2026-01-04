@@ -61,12 +61,19 @@ export type PrintfulOrderCreateResponse = {
     id?: number;
     external_id?: string;
     status?: string;
+    costs?: {
+      subtotal?: string;
+      shipping?: string;
+      tax?: string;
+      total?: string;
+      currency?: string;
+    };
   };
 };
 
 type PrintfulClient = {
   fetchProduct: (productId: string) => Promise<PrintfulProductResponse>;
-  createOrder: (payload: PrintfulOrderCreatePayload) => Promise<PrintfulOrderCreateResponse>;
+  createOrder: (payload: PrintfulOrderCreatePayload) => Promise<{ json: PrintfulOrderCreateResponse; rawBody: string; status: number }>;
 };
 
 function requireOAuthConfig() {
@@ -96,12 +103,14 @@ async function refreshAccessToken(organiserId: string, refreshToken: string) {
     }).toString(),
   });
 
+  const tokenBody = await tokenRes.text();
+  console.info("[printful] token refresh response", { status: tokenRes.status, body: tokenBody });
+
   if (!tokenRes.ok) {
-    const errorBody = await tokenRes.text();
-    throw new Error(`Printful token refresh failed: ${errorBody}`);
+    throw new Error(`Printful token refresh failed: ${tokenBody}`);
   }
 
-  const tokenJson = (await tokenRes.json()) as PrintfulTokenResponse;
+  const tokenJson = (tokenBody ? JSON.parse(tokenBody) : {}) as PrintfulTokenResponse;
   const accessToken = tokenJson.access_token || "";
   if (!accessToken) {
     throw new Error("Printful refresh missing access token");
@@ -153,11 +162,12 @@ export async function createPrintfulClient(organiserId: string): Promise<Printfu
     const res = await fetch(`${PRINTFUL_API_BASE}/store/products/${encodeURIComponent(productId)}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
+    const body = await res.text();
+    console.info("[printful] fetch product response", { status: res.status, body });
     if (!res.ok) {
-      const errorBody = await res.text();
-      throw new Error(`Printful product fetch failed: ${errorBody}`);
+      throw new Error(`Printful product fetch failed: ${body}`);
     }
-    return (await res.json()) as PrintfulProductResponse;
+    return (body ? JSON.parse(body) : {}) as PrintfulProductResponse;
   };
 
   const createOrder = async (payload: PrintfulOrderCreatePayload) => {
@@ -166,11 +176,16 @@ export async function createPrintfulClient(organiserId: string): Promise<Printfu
       headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
+    const body = await res.text();
+    console.info("[printful] create order response", { status: res.status, body });
     if (!res.ok) {
-      const errorBody = await res.text();
-      throw new Error(`Printful order create failed: ${errorBody}`);
+      throw new Error(`Printful order create failed: ${body}`);
     }
-    return (await res.json()) as PrintfulOrderCreateResponse;
+    return {
+      json: (body ? JSON.parse(body) : {}) as PrintfulOrderCreateResponse,
+      rawBody: body,
+      status: res.status,
+    };
   };
 
   return { fetchProduct, createOrder };

@@ -6,6 +6,11 @@ import { requireAdminOrOrganiser } from "../lib/authz.js";
 import { encryptToken } from "../lib/token-crypto.js";
 import { createPrintfulClient } from "../services/integrations/printful.js";
 import { slugify } from "../lib/storefront.js";
+import {
+  computeRetailFromBase,
+  DEFAULT_PRINTFUL_PRICING,
+  getPrintfulPricingConfig,
+} from "../services/printful-pricing.js";
 
 const router = Router();
 
@@ -276,25 +281,24 @@ router.get("/integrations/printful/callback", requireAdminOrOrganiser, async (re
       return res.status(500).json(responsePayload);
     }
 
-   res.clearCookie(STATE_COOKIE, { path: "/" });
+    res.clearCookie(STATE_COOKIE, { path: "/" });
 
-const redirectTo = "/admin/ui/integrations/printful?connected=1";
+    const redirectTo = "/admin/ui/integrations/printful?connected=1";
 
-// If something in future calls this via fetch(), keep JSON support
-const wantsJson =
-  String(req.query.format || "") === "json" ||
-  String(req.headers.accept || "").includes("application/json") ||
-  String(req.headers["x-requested-with"] || "") === "XMLHttpRequest";
+    const wantsJson =
+      String(req.query.format || "") === "json" ||
+      String(req.headers.accept || "").includes("application/json") ||
+      String(req.headers["x-requested-with"] || "") === "XMLHttpRequest";
 
-if (wantsJson) {
-  return res.status(200).json({
-    ok: true,
-    status: "CONNECTED",
-    tokenExpiresAt: expiresAt ? expiresAt.toISOString() : null,
-  });
-}
+    if (wantsJson) {
+      return res.status(200).json({
+        ok: true,
+        status: "CONNECTED",
+        tokenExpiresAt: expiresAt ? expiresAt.toISOString() : null,
+      });
+    }
 
-return res.redirect(302, redirectTo);
+    return res.redirect(302, redirectTo);
   } catch (err: any) {
     console.error("[printful] callback failed", err);
     const responsePayload = {
@@ -360,6 +364,96 @@ router.get("/integrations/printful/status", requireAdminOrOrganiser, async (req,
   }
 });
 
+router.get("/integrations/printful/pricing-config", requireAdminOrOrganiser, async (req, res) => {
+  try {
+    const organiserId = resolveOrganiserId(req);
+    if (!organiserId) {
+      return res.status(400).json({ ok: false, error: "Missing organiser id" });
+    }
+
+    const config = await getPrintfulPricingConfig(organiserId);
+
+    return res.json({ ok: true, config });
+  } catch (err: any) {
+    console.error("[printful] pricing config load failed", err);
+    return res.status(500).json({ ok: false, error: "Failed to load pricing config" });
+  }
+});
+
+router.post("/integrations/printful/pricing-config", requireAdminOrOrganiser, async (req, res) => {
+  try {
+    const organiserId = resolveOrganiserId(req);
+    if (!organiserId) {
+      return res.status(400).json({ ok: false, error: "Missing organiser id" });
+    }
+
+    const payload = req.body || {};
+    const data = {
+      marginBps: Math.max(0, Number(payload.marginBps ?? DEFAULT_PRINTFUL_PRICING.marginBps)),
+      vatRegistered: payload.vatRegistered !== undefined ? Boolean(payload.vatRegistered) : true,
+      vatRateBps: Math.max(0, Number(payload.vatRateBps ?? DEFAULT_PRINTFUL_PRICING.vatRateBps)),
+      shippingPolicy: String(payload.shippingPolicy || DEFAULT_PRINTFUL_PRICING.shippingPolicy),
+      stripeFeeBps: Math.max(0, Number(payload.stripeFeeBps ?? DEFAULT_PRINTFUL_PRICING.stripeFeeBps)),
+      stripeFeeFixedPence: Math.max(0, Number(payload.stripeFeeFixedPence ?? DEFAULT_PRINTFUL_PRICING.stripeFeeFixedPence)),
+      allowNegativeMargin: Boolean(payload.allowNegativeMargin),
+      minimumProfitPence: Math.max(0, Number(payload.minimumProfitPence ?? DEFAULT_PRINTFUL_PRICING.minimumProfitPence)),
+    };
+
+    const config = await prisma.printfulPricingConfig.upsert({
+      where: { organiserId },
+      create: { organiserId, ...data },
+      update: data,
+    });
+
+    return res.json({ ok: true, config });
+  } catch (err: any) {
+    console.error("[printful] pricing config save failed", err);
+    return res.status(500).json({ ok: false, error: "Failed to save pricing config" });
+  }
+});
+
+router.get("/integrations/printful/reconciliation", requireAdminOrOrganiser, async (req, res) => {
+  try {
+    const organiserId = resolveOrganiserId(req);
+    if (!organiserId) {
+      return res.status(400).json({ ok: false, error: "Missing organiser id" });
+    }
+
+    const start = typeof req.query.start === "string" ? new Date(req.query.start) : null;
+    const end = typeof req.query.end === "string" ? new Date(req.query.end) : null;
+    const status = typeof req.query.status === "string" ? req.query.status.toUpperCase() : "";
+    const negativeOnly = String(req.query.negativeOnly || "") === "1";
+
+    const storefront = await prisma.storefront.findFirst({ where: { ownerUserId: organiserId } });
+    if (!storefront) return res.json({ ok: true, orders: [] });
+
+    const where: any = {
+      storefrontId: storefront.id,
+      ...(status ? { status } : {}),
+      ...(start || end ? { createdAt: { ...(start ? { gte: start } : {}), ...(end ? { lte: end } : {}) } } : {}),
+    };
+
+    const orders = await prisma.productOrder.findMany({
+      where,
+      include: {
+        items: true,
+        profitSnapshot: true,
+      },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    });
+
+    const filtered = negativeOnly
+      ? orders.filter((order) => order.profitSnapshot?.negativeMargin)
+      : orders;
+
+    return res.json({ ok: true, orders: filtered });
+  } catch (err: any) {
+    console.error("[printful] reconciliation failed", err);
+    return res.status(500).json({ ok: false, error: "Failed to load reconciliation" });
+  }
+});
+
 router.post("/integrations/printful/import", requireAdminOrOrganiser, async (req, res) => {
   try {
     const organiserId = resolveOrganiserId(req);
@@ -383,6 +477,8 @@ router.post("/integrations/printful/import", requireAdminOrOrganiser, async (req
       return res.status(404).json({ ok: false, error: "Storefront not found" });
     }
 
+    const pricingConfig = await getPrintfulPricingConfig(organiserId);
+
     const client = await createPrintfulClient(organiserId);
     const printfulProduct = await client.fetchProduct(printfulProductId);
     const syncProduct = printfulProduct.result?.sync_product;
@@ -392,18 +488,31 @@ router.post("/integrations/printful/import", requireAdminOrOrganiser, async (req
       return res.status(404).json({ ok: false, error: "Printful product not found" });
     }
 
-    const variantPayloads = syncVariants.map((variant, index) => ({
-      title: String(variant.name || `Variant ${index + 1}`).trim(),
-      sku: variant.sku ? String(variant.sku).trim() : null,
-      pricePenceOverride: parsePriceToPence(variant.retail_price),
-      sortOrder: index,
-      providerVariantId: variant.variant_id || variant.id || null,
-    }));
+    const variantPayloads = syncVariants.map((variant, index) => {
+      const baseCostPence = parsePriceToPence(variant.retail_price);
+      const pricing = baseCostPence !== null
+        ? computeRetailFromBase({
+            baseCostPence,
+            marginBps: pricingConfig.marginBps,
+            vatRegistered: pricingConfig.vatRegistered,
+            vatRateBps: pricingConfig.vatRateBps,
+          })
+        : null;
 
-    const prices = variantPayloads
+      return {
+        title: String(variant.name || `Variant ${index + 1}`).trim(),
+        sku: variant.sku ? String(variant.sku).trim() : null,
+        pricePenceOverride: pricing?.retail ?? null,
+        baseCostPence,
+        sortOrder: index,
+        providerVariantId: variant.variant_id || variant.id || null,
+      };
+    });
+
+    const retailPrices = variantPayloads
       .map((variant) => variant.pricePenceOverride)
       .filter((value): value is number => typeof value === "number");
-    const pricePence = prices.length ? Math.min(...prices) : null;
+    const pricePence = retailPrices.length ? Math.min(...retailPrices) : null;
 
     const imageUrls = collectImageUrls({ sync_product: syncProduct, sync_variants: syncVariants });
 
@@ -425,8 +534,10 @@ router.post("/integrations/printful/import", requireAdminOrOrganiser, async (req
         fulfilmentType: "PRINTFUL" as const,
         status: "DRAFT" as const,
         pricePence,
+        retailPricePence: pricePence,
         currency: "gbp",
         inventoryMode: "UNLIMITED" as const,
+        marginRuleUsed: "DEFAULT_MARGIN",
       };
 
       const productRow = existingMapping
@@ -459,7 +570,7 @@ router.post("/integrations/printful/import", requireAdminOrOrganiser, async (req
             sortOrder: variant.sortOrder,
           },
         });
-        createdVariants.push({ row: created, providerVariantId: variant.providerVariantId });
+        createdVariants.push({ row: created, providerVariantId: variant.providerVariantId, baseCostPence: variant.baseCostPence });
       }
 
       if (imageUrls.length) {
@@ -517,6 +628,9 @@ router.post("/integrations/printful/import", requireAdminOrOrganiser, async (req
             organiserId,
             providerProductId: printfulProductId,
             providerVariantId: String(variant.providerVariantId),
+            providerBasePricePence: variant.baseCostPence,
+            providerBaseCurrency: "gbp",
+            providerBaseUpdatedAt: new Date(),
           },
           create: {
             organiserId,
@@ -525,6 +639,9 @@ router.post("/integrations/printful/import", requireAdminOrOrganiser, async (req
             productVariantId: variant.row.id,
             providerProductId: printfulProductId,
             providerVariantId: String(variant.providerVariantId),
+            providerBasePricePence: variant.baseCostPence,
+            providerBaseCurrency: "gbp",
+            providerBaseUpdatedAt: new Date(),
           },
         });
       }
