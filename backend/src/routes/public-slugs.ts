@@ -573,8 +573,8 @@ function renderAccountPage(opts: { storefrontSlug: string | null; storefrontName
       }
       ordersList.innerHTML = items.map(item => {
         const venue = item.venue ? [item.venue.name, item.venue.city].filter(Boolean).join(' · ') : '';
-        const ticketsLabel = item.ticketsCount ? `${item.ticketsCount} tickets` : '';
-        const productsLabel = item.productOrdersCount ? `${item.productOrdersCount} products` : '';
+        const ticketsLabel = item.ticketsCount ? item.ticketsCount + ' tickets' : '';
+        const productsLabel = item.productOrdersCount ? item.productOrdersCount + ' products' : '';
         const totals = [ticketsLabel, productsLabel].filter(Boolean).join(' · ');
         const pdfUrl = storefrontSlug
           ? '/public/customer/orders/' + encodeURIComponent(item.id) + '/tickets.pdf?storefront=' + encodeURIComponent(storefrontSlug)
