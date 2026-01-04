@@ -14,6 +14,13 @@ export type AdminAuditInput = {
 
 export async function logAdminAudit(input: AdminAuditInput) {
   try {
+    const metadataJson =
+      input.metadataJson === undefined
+        ? undefined
+        : input.metadataJson === null
+          ? Prisma.DbNull
+          : input.metadataJson;
+
     await prisma.adminAuditLog.create({
       data: {
         actorUserId: input.actorUserId ?? null,
@@ -21,7 +28,7 @@ export async function logAdminAudit(input: AdminAuditInput) {
         action: input.action,
         targetType: input.targetType ?? null,
         targetId: input.targetId ?? null,
-        metadataJson: input.metadataJson ?? null,
+        metadataJson,
         ip: input.req?.ip ?? null,
         userAgent: String(input.req?.headers["user-agent"] || "") || null,
       },

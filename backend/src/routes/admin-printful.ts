@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { PrintfulShippingPolicy } from "@prisma/client";
 import crypto from "node:crypto";
 import jwt from "jsonwebtoken";
 import prisma from "../lib/prisma.js";
@@ -41,6 +42,13 @@ function parsePriceToPence(value: string | null | undefined) {
   const parsed = Number.parseFloat(value);
   if (!Number.isFinite(parsed)) return null;
   return Math.round(parsed * 100);
+}
+
+function parseShippingPolicy(value: unknown): PrintfulShippingPolicy {
+  const candidate = String(value || "").toUpperCase();
+  return Object.values(PrintfulShippingPolicy).includes(candidate as PrintfulShippingPolicy)
+    ? (candidate as PrintfulShippingPolicy)
+    : PrintfulShippingPolicy.PASS_THROUGH;
 }
 
 function collectImageUrls(payload: {
@@ -392,7 +400,9 @@ router.post("/integrations/printful/pricing-config", requireAdminOrOrganiser, as
       marginBps: Math.max(0, Number(payload.marginBps ?? DEFAULT_PRINTFUL_PRICING.marginBps)),
       vatRegistered: payload.vatRegistered !== undefined ? Boolean(payload.vatRegistered) : true,
       vatRateBps: Math.max(0, Number(payload.vatRateBps ?? DEFAULT_PRINTFUL_PRICING.vatRateBps)),
-      shippingPolicy: String(payload.shippingPolicy || DEFAULT_PRINTFUL_PRICING.shippingPolicy),
+      shippingPolicy: parseShippingPolicy(
+        payload.shippingPolicy ?? DEFAULT_PRINTFUL_PRICING.shippingPolicy
+      ),
       stripeFeeBps: Math.max(0, Number(payload.stripeFeeBps ?? DEFAULT_PRINTFUL_PRICING.stripeFeeBps)),
       stripeFeeFixedPence: Math.max(0, Number(payload.stripeFeeFixedPence ?? DEFAULT_PRINTFUL_PRICING.stripeFeeFixedPence)),
       allowNegativeMargin: Boolean(payload.allowNegativeMargin),

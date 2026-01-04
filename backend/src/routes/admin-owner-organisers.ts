@@ -27,7 +27,7 @@ type OrganiserProfilePayload = {
   subscriptionStatus?: SubscriptionStatus;
   subscriptionPlan?: string | null;
   subscriptionPeriodEnd?: Date | null;
-  permissionsJson?: Prisma.JsonValue | null;
+  permissionsJson?: Prisma.InputJsonValue | null;
   notes?: string | null;
 };
 
@@ -240,7 +240,11 @@ router.post(
     }
 
     if (Object.prototype.hasOwnProperty.call(payload, "permissionsJson")) {
-      update.permissionsJson = payload.permissionsJson || null;
+      if (payload.permissionsJson === null) {
+        update.permissionsJson = Prisma.DbNull;
+      } else {
+        update.permissionsJson = payload.permissionsJson as Prisma.InputJsonValue;
+      }
       changedFields.push("permissionsJson");
     }
 
