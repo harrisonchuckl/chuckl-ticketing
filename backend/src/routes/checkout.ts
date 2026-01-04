@@ -5,6 +5,7 @@ import Stripe from "stripe";
 import { recordAbandonedCheckoutEvent } from "../services/marketing/automations.js";
 import { readCustomerSession } from "../lib/customer-auth.js";
 import { buildConsentBanner } from "../lib/public-consent-banner.js";
+import { getPrintfulPricingConfig } from "../services/printful-pricing.js";
 
 const router = Router();
 
@@ -389,6 +390,7 @@ if (!itQty || itQty < 1 || !itUnit || itUnit < 1) {
             variantId,
             qty,
             unitAmount,
+            fulfilmentType: product.fulfilmentType,
           });
 
           lineItems.push({
@@ -449,6 +451,7 @@ if (!itQty || itQty < 1 || !itUnit || itUnit < 1) {
           qty,
           unitAmount,
           source: "STORE_BASKET",
+          fulfilmentType: product.fulfilmentType,
         });
 
         lineItems.push({
@@ -465,6 +468,54 @@ if (!itQty || itQty < 1 || !itUnit || itUnit < 1) {
           },
           quantity: qty,
         });
+      }
+    }
+
+
+    if (storefront && productSelections.length) {
+      const printfulSelections = productSelections.filter((item) => item.fulfilmentType === "PRINTFUL");
+      if (printfulSelections.length) {
+        const organiserId = storefront.ownerUserId;
+        const pricingConfig = await getPrintfulPricingConfig(organiserId);
+        const productIds = Array.from(new Set(printfulSelections.map((item) => String(item.productId))));
+        const variantIds = Array.from(new Set(printfulSelections.map((item) => item.variantId).filter(Boolean))) as string[];
+        const mappings = await prisma.fulfilmentProductMapping.findMany({
+          where: {
+            organiserId,
+            provider: "PRINTFUL",
+            productId: { in: productIds },
+            OR: [{ productVariantId: { in: variantIds } }, { productVariantId: null }],
+          },
+        });
+        const mappingByKey = new Map(
+          mappings.map((mapping) => [`${mapping.productId}:${mapping.productVariantId || "base"}`, mapping])
+        );
+
+        for (const item of printfulSelections) {
+          const key = `${item.productId}:${item.variantId || "base"}`;
+          const mapping = mappingByKey.get(key);
+          if (!mapping || mapping.providerBasePricePence === null || mapping.providerBasePricePence === undefined) {
+            return res.status(400).json({
+              ok: false,
+              message: "Printful pricing is missing for a product in your cart. Please contact the organiser.",
+            });
+          }
+
+          const estimatedProfit = Number(item.unitAmount || 0) - Number(mapping.providerBasePricePence || 0);
+          if (!pricingConfig.allowNegativeMargin && estimatedProfit < 0) {
+            return res.status(400).json({
+              ok: false,
+              message: "A Printful item would sell at a loss. Please contact the organiser.",
+            });
+          }
+
+          if (pricingConfig.minimumProfitPence > 0 && estimatedProfit < pricingConfig.minimumProfitPence) {
+            return res.status(400).json({
+              ok: false,
+              message: "A Printful item does not meet the minimum profit threshold.",
+            });
+          }
+        }
       }
     }
 

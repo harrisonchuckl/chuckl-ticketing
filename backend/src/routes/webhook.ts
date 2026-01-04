@@ -9,6 +9,7 @@ import { syncMarketingContactFromOrder } from "../services/marketing/contacts.js
 import { MarketingAutomationTriggerType, MarketingConsentSource, Prisma, ProductOrderFulfilmentStatus, ProductOrderItemStatus } from "@prisma/client";
 import { enqueueAutomationForContact, markCheckoutCompleted } from "../services/marketing/automations.js";
 import { createPrintfulClient, PrintfulOrderCreatePayload } from "../services/integrations/printful.js";
+import { estimateStripeFees, estimateVat, getPrintfulPricingConfig } from "../services/printful-pricing.js";
 
 
 const stripeSecret = process.env.STRIPE_SECRET_KEY;
@@ -215,6 +216,8 @@ async function handleProductOrderFromSession(session: Stripe.Checkout.Session) {
     });
   }
 
+  await refreshProductOrderProfitSnapshot(order.id);
+
   return order;
 }
 
@@ -254,6 +257,174 @@ function buildPrintfulRecipient(order: {
     phone: order.customerPhone || undefined,
     email: order.customerEmail || undefined,
   };
+}
+
+
+function parsePrintfulMoney(value: any) {
+  if (value === null || value === undefined) return null;
+  const parsed = Number.parseFloat(String(value));
+  if (!Number.isFinite(parsed)) return null;
+  return Math.round(parsed * 100);
+}
+
+async function refreshProductOrderProfitSnapshot(orderId: string) {
+  const order = await prisma.productOrder.findUnique({
+    where: { id: orderId },
+    include: { items: true, storefront: true },
+  });
+
+  if (!order || !order.storefront) return;
+
+  const organiserId = order.storefront.ownerUserId;
+  const pricingConfig = await getPrintfulPricingConfig(organiserId);
+
+  const productIds = Array.from(new Set(order.items.map((item) => item.productId)));
+  const variantIds = Array.from(new Set(order.items.map((item) => item.variantId).filter(Boolean))) as string[];
+
+  const [mappings, products] = await Promise.all([
+    prisma.fulfilmentProductMapping.findMany({
+      where: {
+        organiserId,
+        provider: "PRINTFUL",
+        productId: { in: productIds },
+        OR: [{ productVariantId: { in: variantIds } }, { productVariantId: null }],
+      },
+    }),
+    prisma.product.findMany({
+      where: { id: { in: productIds } },
+      select: { id: true, promoter: { select: { ownerId: true } } },
+    }),
+  ]);
+
+  const mappingByKey = new Map(
+    mappings.map((mapping) => [`${mapping.productId}:${mapping.productVariantId || "base"}`, mapping])
+  );
+  const productById = new Map(products.map((product) => [product.id, product]));
+
+  let missingCost = false;
+  let estimatedPrintfulSubtotal = 0;
+
+  const itemSnapshots = order.items.map((item) => {
+    const key = `${item.productId}:${item.variantId || "base"}`;
+    const mapping = mappingByKey.get(key);
+    const baseCost = mapping?.providerBasePricePence ?? null;
+    if (baseCost === null || baseCost === undefined) {
+      missingCost = true;
+    }
+    const printfulLineTotal = baseCost ? baseCost * item.qty : 0;
+    estimatedPrintfulSubtotal += printfulLineTotal;
+
+    const product = productById.get(item.productId);
+    const promoterOwnerId = product?.promoter?.ownerId || null;
+    const isShared = Boolean(promoterOwnerId && promoterOwnerId !== organiserId);
+    const organiserShare = isShared ? Math.round(item.lineTotalPence * 0.1) : item.lineTotalPence;
+    const platformShare = isShared ? Math.round(item.lineTotalPence * 0.05) : 0;
+    const creatorShare = isShared ? Math.max(0, item.lineTotalPence - organiserShare - platformShare) : 0;
+
+    return {
+      productOrderItemId: item.id,
+      organiserId,
+      retailUnitPricePence: item.unitPricePence,
+      retailLineTotalPence: item.lineTotalPence,
+      printfulUnitCostPence: baseCost ?? 0,
+      printfulLineTotalPence: printfulLineTotal,
+      marginBpsUsed: pricingConfig.marginBps,
+      currency: order.currency,
+      organiserSharePence: organiserShare,
+      platformSharePence: platformShare,
+      creatorSharePence: creatorShare,
+    };
+  });
+
+  const retailSubtotal = order.subtotalPence;
+  const retailShipping = order.shippingPence;
+  const retailTax = order.taxPence;
+  const retailTotal = order.totalPence;
+
+  const printfulSubtotal = order.printfulCostSubtotalPence ?? estimatedPrintfulSubtotal;
+  const printfulShipping = order.printfulShippingPence ?? 0;
+  const printfulTax = order.printfulTaxPence ?? 0;
+  const printfulTotal = order.printfulTotalPence ?? (printfulSubtotal + printfulShipping + printfulTax);
+
+  const stripeFeePence = estimateStripeFees(retailTotal, pricingConfig);
+  const vatEstimatePence = estimateVat(retailSubtotal, pricingConfig);
+  const netProfitPence = retailTotal - printfulTotal - stripeFeePence - vatEstimatePence;
+
+  const organiserShareTotal = itemSnapshots.reduce((sum, row) => sum + row.organiserSharePence, 0);
+  const platformShareTotal = itemSnapshots.reduce((sum, row) => sum + row.platformSharePence, 0);
+  const creatorShareTotal = itemSnapshots.reduce((sum, row) => sum + row.creatorSharePence, 0);
+
+  const snapshot = await prisma.productOrderProfitSnapshot.upsert({
+    where: { productOrderId: order.id },
+    create: {
+      productOrderId: order.id,
+      organiserId,
+      retailSubtotalPence: retailSubtotal,
+      retailShippingPence: retailShipping,
+      retailTaxPence: retailTax,
+      retailTotalPence: retailTotal,
+      printfulSubtotalPence: printfulSubtotal,
+      printfulShippingPence: printfulShipping,
+      printfulTaxPence: printfulTax,
+      printfulTotalPence: printfulTotal,
+      stripeFeePence,
+      vatEstimatePence,
+      netProfitPence,
+      currency: order.currency,
+      marginBpsUsed: pricingConfig.marginBps,
+      vatRateBpsUsed: pricingConfig.vatRateBps,
+      shippingPolicyUsed: pricingConfig.shippingPolicy,
+      negativeMargin: netProfitPence < 0,
+      missingPrintfulCost: missingCost,
+      organiserSharePence: organiserShareTotal,
+      platformSharePence: platformShareTotal,
+      creatorSharePence: creatorShareTotal,
+    },
+    update: {
+      retailSubtotalPence: retailSubtotal,
+      retailShippingPence: retailShipping,
+      retailTaxPence: retailTax,
+      retailTotalPence: retailTotal,
+      printfulSubtotalPence: printfulSubtotal,
+      printfulShippingPence: printfulShipping,
+      printfulTaxPence: printfulTax,
+      printfulTotalPence: printfulTotal,
+      stripeFeePence,
+      vatEstimatePence,
+      netProfitPence,
+      currency: order.currency,
+      marginBpsUsed: pricingConfig.marginBps,
+      vatRateBpsUsed: pricingConfig.vatRateBps,
+      shippingPolicyUsed: pricingConfig.shippingPolicy,
+      negativeMargin: netProfitPence < 0,
+      missingPrintfulCost: missingCost,
+      organiserSharePence: organiserShareTotal,
+      platformSharePence: platformShareTotal,
+      creatorSharePence: creatorShareTotal,
+    },
+  });
+
+  const totalRetailForAllocation = retailSubtotal || 1;
+  await prisma.productOrderItemProfitSnapshot.deleteMany({
+    where: { productOrderItemId: { in: itemSnapshots.map((row) => row.productOrderItemId) } },
+  });
+
+  await prisma.productOrderItemProfitSnapshot.createMany({
+    data: itemSnapshots.map((row) => {
+      const allocationRatio = row.retailLineTotalPence / totalRetailForAllocation;
+      const stripeFeeShare = Math.round(stripeFeePence * allocationRatio);
+      const vatShare = Math.round(vatEstimatePence * allocationRatio);
+      const netProfit = row.retailLineTotalPence - row.printfulLineTotalPence - stripeFeeShare - vatShare;
+      return {
+        ...row,
+        stripeFeePence: stripeFeeShare,
+        vatEstimatePence: vatShare,
+        netProfitPence: netProfit,
+        negativeMargin: netProfit < 0,
+        profitSnapshotId: snapshot.id,
+      };
+    }),
+  });
 }
 
 async function fulfilPrintfulItemsForOrder(orderId: string, sessionId: string) {
@@ -362,11 +533,31 @@ async function fulfilPrintfulItemsForOrder(orderId: string, sessionId: string) {
       items: orderItemsPayload,
     };
     const response = await client.createOrder(payload);
-    const printfulOrderId = response.result?.id;
+    const printfulOrderId = response.json.result?.id;
 
     if (!printfulOrderId) {
       throw new Error("Printful order response missing id.");
     }
+
+    const costs = response.json.result?.costs || {};
+    const printfulSubtotal = parsePrintfulMoney(costs.subtotal);
+    const printfulShipping = parsePrintfulMoney(costs.shipping);
+    const printfulTax = parsePrintfulMoney(costs.tax);
+    const printfulTotal = parsePrintfulMoney(costs.total);
+    const printfulCurrency = costs.currency ? String(costs.currency).toLowerCase() : null;
+
+    await prisma.productOrder.update({
+      where: { id: order.id },
+      data: {
+        printfulOrderId: String(printfulOrderId),
+        printfulCostSubtotalPence: printfulSubtotal ?? undefined,
+        printfulShippingPence: printfulShipping ?? undefined,
+        printfulTaxPence: printfulTax ?? undefined,
+        printfulTotalPence: printfulTotal ?? undefined,
+        printfulCostCurrency: printfulCurrency ?? undefined,
+        printfulCostRawJson: response.rawBody ? JSON.parse(response.rawBody) : undefined,
+      },
+    });
 
     await prisma.productOrderItem.updateMany({
       where: { id: { in: printfulItems.map((item) => item.id) } },
@@ -384,6 +575,8 @@ async function fulfilPrintfulItemsForOrder(orderId: string, sessionId: string) {
       where: { id: order.id },
       data: { fulfilmentStatus: buildProductOrderFulfilmentStatus(refreshedItems) },
     });
+
+    await refreshProductOrderProfitSnapshot(order.id);
   } catch (err: any) {
     const message = err?.message ? String(err.message) : "Printful fulfilment failed.";
     await prisma.productOrderItem.updateMany({
