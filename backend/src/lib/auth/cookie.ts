@@ -36,3 +36,8 @@ export function readConsent(req: Request): ConsentPreferences {
 
   return { personalisation: false };
 }
+
+export function hasConsentCookie(req: Request): boolean {
+  const raw = req.cookies?.[CONSENT_COOKIE_NAME];
+  return typeof raw === "string" && raw.length > 0;
+}

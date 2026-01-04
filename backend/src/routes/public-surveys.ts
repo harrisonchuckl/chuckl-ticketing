@@ -1,5 +1,6 @@
 import { Router } from "express";
 import prisma from "../lib/prisma.js";
+import { buildConsentBanner } from "../lib/public-consent-banner.js";
 
 const router = Router();
 
@@ -35,6 +36,7 @@ router.get("/surveys/:id", async (req, res) => {
     })
     .join("<div style=\"margin:12px 0;\"></div>");
 
+  const consent = buildConsentBanner(req);
   res.send(`<!doctype html>
 <html lang="en">
 <head>
@@ -47,8 +49,10 @@ router.get("/surveys/:id", async (req, res) => {
     input, textarea{width:100%;padding:8px;}
     button{padding:10px 16px;}
   </style>
+  ${consent.styles}
 </head>
 <body>
+  ${consent.banner}
   <h1>${survey.name}</h1>
   <form method="POST" action="/public/surveys/${survey.id}/submit">
     ${questionsHtml}

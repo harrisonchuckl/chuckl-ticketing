@@ -2,6 +2,7 @@ import { Router } from "express";
 import prisma from "../lib/prisma.js";
 import { readCustomerSession } from "../lib/customer-auth.js";
 import { readStorefrontCartCount } from "../lib/storefront-cart.js";
+import { buildConsentBanner } from "../lib/public-consent-banner.js";
 import { verifyJwt } from "../utils/security.js";
 
 const router = Router();
@@ -296,7 +297,13 @@ function getPublicBrand(overrides?: { name?: string | null; logoUrl?: string | n
   };
 }
 
-function renderAccountPage(opts: { storefrontSlug: string | null; storefrontName: string | null; brand?: { name: string; logoUrl: string; homeHref: string; color?: string | null } }) {
+function renderAccountPage(opts: {
+  storefrontSlug: string | null;
+  storefrontName: string | null;
+  brand?: { name: string; logoUrl: string; homeHref: string; color?: string | null };
+  consentStyles: string;
+  consentBanner: string;
+}) {
   const brand = opts.brand || getPublicBrand();
   const title = opts.storefrontName ? `${opts.storefrontName} · Account` : "TixAll Account";
   const storefrontSlug = opts.storefrontSlug || "";
@@ -349,8 +356,10 @@ function renderAccountPage(opts: { storefrontSlug: string | null; storefrontName
     .menu{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}
     .tag{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;background:#e2e8f0;font-size:.8rem}
   </style>
+  ${opts.consentStyles}
 </head>
 <body>
+  ${opts.consentBanner}
   <header class="app-header">
     <div class="app-header-inner">
       <a href="${escAttr(brand.homeHref || "/public")}" class="app-brand" aria-label="${escAttr(brand.name)}">
@@ -413,7 +422,6 @@ function renderAccountPage(opts: { storefrontSlug: string | null; storefrontName
           <a class="btn" href="#orders">Orders</a>
           <a class="btn" href="#tickets">Tickets</a>
           <a class="btn" href="#products">Products</a>
-          <a class="btn" href="#recommendations">Recommendations</a>
           <a class="btn" href="#settings">Settings</a>
           <button class="btn" id="logoutBtn">Sign out</button>
         </div>
@@ -432,11 +440,6 @@ function renderAccountPage(opts: { storefrontSlug: string | null; storefrontName
       <div class="card" id="products">
         <h2>Products</h2>
         <div class="list" id="productsList"><span class="muted">Sign in to view your products.</span></div>
-      </div>
-
-      <div class="card" id="recommendations">
-        <h2>Recommended shows</h2>
-        <div class="list" id="recommendationsList"><span class="muted">Sign in to see recommendations.</span></div>
       </div>
 
       <div class="card" id="settings">
@@ -473,7 +476,6 @@ function renderAccountPage(opts: { storefrontSlug: string | null; storefrontName
     const ordersList = document.getElementById('ordersList');
     const ticketsList = document.getElementById('ticketsList');
     const productsList = document.getElementById('productsList');
-    const recommendationsList = document.getElementById('recommendationsList');
     const basketCount = document.getElementById('basketCount');
 
     function formatDate(raw) {
@@ -557,14 +559,6 @@ function renderAccountPage(opts: { storefrontSlug: string | null; storefrontName
       return data.items || [];
     }
 
-    async function loadRecommendations() {
-      if (!storefrontSlug) {
-        const data = await getJSON('/public/customer/recommendations');
-        return data.items || [];
-      }
-      const data = await getJSON('/public/customer/recommendations?storefront=' + encodeURIComponent(storefrontSlug));
-      return data.items || [];
-    }
 
     function renderOrders(items) {
       if (!items.length) {
@@ -652,22 +646,6 @@ function renderAccountPage(opts: { storefrontSlug: string | null; storefrontName
       }).join('');
     }
 
-    function renderRecommendations(items) {
-      if (!items.length) {
-        recommendationsList.innerHTML = '<span class=\"muted\">No recommendations yet.</span>';
-        return;
-      }
-      recommendationsList.innerHTML = items.map(item => {
-        const venue = item.venue ? [item.venue.name, item.venue.city].filter(Boolean).join(' · ') : '';
-        const url = '/public/event/' + encodeURIComponent(item.id);
-        return '<div class=\"list-item\">' +
-          '<a href=\"' + url + '\" style=\"text-decoration:none;color:inherit\">' +
-            '<strong>' + item.title + '</strong>' +
-            '<div class=\"muted\">' + [formatDate(item.date), venue, item.eventType].filter(Boolean).join(' • ') + '</div>' +
-          '</a>' +
-        '</div>';
-      }).join('');
-    }
 
     async function loadBasketCount() {
       if (!storefrontSlug) return;
@@ -698,16 +676,14 @@ function renderAccountPage(opts: { storefrontSlug: string | null; storefrontName
         if (storefrontConsent) storefrontConsent.checked = Boolean(data.membership && data.membership.marketingOptIn);
       }
 
-      const [orders, tickets, products, recommendations] = await Promise.all([
+      const [orders, tickets, products] = await Promise.all([
         loadOrders(),
         loadTickets(),
         loadProducts(),
-        loadRecommendations(),
       ]);
       renderOrders(orders);
       renderTickets(tickets);
       renderProducts(products);
-      renderRecommendations(recommendations);
     }
 
     document.getElementById('loginBtn').addEventListener('click', async () => {
@@ -779,7 +755,13 @@ function renderAccountPage(opts: { storefrontSlug: string | null; storefrontName
 </html>`;
 }
 
-function renderBasketPage(opts: { storefrontSlug: string | null; storefrontName: string | null; brand?: { name: string; logoUrl: string; homeHref: string; color?: string | null } }) {
+function renderBasketPage(opts: {
+  storefrontSlug: string | null;
+  storefrontName: string | null;
+  brand?: { name: string; logoUrl: string; homeHref: string; color?: string | null };
+  consentStyles: string;
+  consentBanner: string;
+}) {
   const brand = opts.brand || getPublicBrand();
   const title = opts.storefrontName ? `${opts.storefrontName} · Basket` : "Basket";
   const storefrontSlug = opts.storefrontSlug || "";
@@ -815,8 +797,10 @@ function renderBasketPage(opts: { storefrontSlug: string | null; storefrontName:
     .btn{display:inline-flex;align-items:center;justify-content:center;border-radius:10px;border:1px solid var(--border);padding:10px 14px;background:#fff;color:var(--text);cursor:pointer}
     .btn.primary{background:var(--brand);color:#fff;border-color:transparent}
   </style>
+  ${opts.consentStyles}
 </head>
 <body>
+  ${opts.consentBanner}
   <header class="app-header">
     <div class="app-header-inner">
       <a href="${escAttr(brand.homeHref || "/public")}" class="app-brand" aria-label="${escAttr(brand.name)}">
@@ -912,12 +896,28 @@ function renderBasketPage(opts: { storefrontSlug: string | null; storefrontName:
 </html>`;
 }
 
-router.get("/account", (_req, res) => {
-  res.type("html").send(renderAccountPage({ storefrontSlug: null, storefrontName: null }));
+router.get("/account", (req, res) => {
+  const consent = buildConsentBanner(req);
+  res.type("html").send(
+    renderAccountPage({
+      storefrontSlug: null,
+      storefrontName: null,
+      consentStyles: consent.styles,
+      consentBanner: consent.banner,
+    })
+  );
 });
 
-router.get("/basket", (_req, res) => {
-  res.type("html").send(renderBasketPage({ storefrontSlug: null, storefrontName: null }));
+router.get("/basket", (req, res) => {
+  const consent = buildConsentBanner(req);
+  res.type("html").send(
+    renderBasketPage({
+      storefrontSlug: null,
+      storefrontName: null,
+      consentStyles: consent.styles,
+      consentBanner: consent.banner,
+    })
+  );
 });
 
 router.get("/:storefront/account", async (req, res) => {
@@ -942,7 +942,16 @@ router.get("/:storefront/account", async (req, res) => {
     homeHref: `/public/${storefrontSlug}`,
     color: resolveBrandColor(organiser)
   });
-  res.type("html").send(renderAccountPage({ storefrontSlug, storefrontName, brand }));
+  const consent = buildConsentBanner(req);
+  res.type("html").send(
+    renderAccountPage({
+      storefrontSlug,
+      storefrontName,
+      brand,
+      consentStyles: consent.styles,
+      consentBanner: consent.banner,
+    })
+  );
 });
 
 router.get("/:storefront/basket", async (req, res) => {
@@ -967,7 +976,16 @@ router.get("/:storefront/basket", async (req, res) => {
     homeHref: `/public/${storefrontSlug}`,
     color: resolveBrandColor(organiser)
   });
-  res.type("html").send(renderBasketPage({ storefrontSlug, storefrontName, brand }));
+  const consent = buildConsentBanner(req);
+  res.type("html").send(
+    renderBasketPage({
+      storefrontSlug,
+      storefrontName,
+      brand,
+      consentStyles: consent.styles,
+      consentBanner: consent.banner,
+    })
+  );
 });
 
 /**
@@ -1377,6 +1395,7 @@ router.get("/:storefront", async (req, res) => {
   const showCityFilter = showVenueFilter && cityOptions.length > 1;
   const showCountyFilter = showVenueFilter && countyOptions.length > 1;
 
+  const consent = buildConsentBanner(req);
   res.type("html").send(`
 <!doctype html>
 <html>
@@ -1386,6 +1405,7 @@ router.get("/:storefront", async (req, res) => {
   <title>${escHtml(title)} – Events</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@700;800;900&display=swap" rel="stylesheet">
   ${themeVars}
+  ${consent.styles}
  <style>
 :root {
   --app-header-h: 64px;
@@ -2173,6 +2193,7 @@ ${editorStyles}
 </style>
 </head>
 <body>
+${consent.banner}
 
   <header class="app-header">
     <div class="app-header-inner">

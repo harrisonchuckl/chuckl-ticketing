@@ -12,6 +12,7 @@ import { publicAuthLimiter, requireSameOrigin } from "../lib/public-auth-guards.
 import { readStorefrontCart } from "../lib/storefront-cart.js";
 import { issueCustomerEmailVerification } from "../lib/customer-email-verification.js";
 import { buildCustomerTicketsPdf, sendTicketsEmail } from "../services/email.js";
+import { readConsent } from "../lib/auth/cookie.js";
 
 const router = Router();
 
@@ -325,6 +326,11 @@ router.get("/customer/products", requireCustomer, async (req: any, res) => {
 });
 
 router.get("/customer/recommendations", requireCustomer, async (req: any, res) => {
+  const consent = readConsent(req);
+  if (!consent.personalisation) {
+    return res.status(403).json({ ok: false, error: "Personalisation consent required" });
+  }
+
   const storefrontSlug = String(req.query?.storefront || "").trim() || null;
   const { organiserId } = await resolveStorefrontContext(storefrontSlug);
 
