@@ -66,6 +66,7 @@ enum ProductFulfilmentType {
   SHIPPING
   COLLECT
   EMAIL
+  PRINTFUL
   NONE
 }
 

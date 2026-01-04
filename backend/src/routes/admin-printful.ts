@@ -4,6 +4,8 @@ import jwt from "jsonwebtoken";
 import prisma from "../lib/prisma.js";
 import { requireAdminOrOrganiser } from "../lib/authz.js";
 import { encryptToken } from "../lib/token-crypto.js";
+import { createPrintfulClient } from "../services/integrations/printful.js";
+import { slugify } from "../lib/storefront.js";
 
 const router = Router();
 
@@ -27,6 +29,55 @@ function resolveOrganiserId(req: any) {
 function isSecureCookie(req: any) {
   const xfProto = String(req.headers["x-forwarded-proto"] || "");
   return process.env.NODE_ENV === "production" || xfProto.includes("https");
+}
+
+function parsePriceToPence(value: string | null | undefined) {
+  if (!value) return null;
+  const parsed = Number.parseFloat(value);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.round(parsed * 100);
+}
+
+function collectImageUrls(payload: {
+  sync_product?: { thumbnail_url?: string; files?: Array<{ preview_url?: string; url?: string }> };
+  sync_variants?: Array<{ files?: Array<{ preview_url?: string; url?: string }> }>;
+}) {
+  const urls: string[] = [];
+  if (payload.sync_product?.thumbnail_url) {
+    urls.push(payload.sync_product.thumbnail_url);
+  }
+  (payload.sync_product?.files || []).forEach((file) => {
+    if (file.preview_url) urls.push(file.preview_url);
+    else if (file.url) urls.push(file.url);
+  });
+  (payload.sync_variants || []).forEach((variant) => {
+    (variant.files || []).forEach((file) => {
+      if (file.preview_url) urls.push(file.preview_url);
+      else if (file.url) urls.push(file.url);
+    });
+  });
+
+  const seen = new Set<string>();
+  return urls.filter((url) => {
+    if (!url || seen.has(url)) return false;
+    seen.add(url);
+    return true;
+  });
+}
+
+async function ensureUniqueProductSlug(storefrontId: string, title: string) {
+  const baseSlug = slugify(title || "printful-product");
+  let candidate = baseSlug;
+  let suffix = 1;
+
+  while (true) {
+    const existing = await prisma.product.findFirst({
+      where: { storefrontId, slug: candidate },
+    });
+    if (!existing) return candidate;
+    suffix += 1;
+    candidate = `${baseSlug}-${suffix}`;
+  }
 }
 
 function requireOAuthConfig() {
@@ -234,6 +285,182 @@ router.get("/integrations/printful/status", requireAdminOrOrganiser, async (req,
   } catch (err: any) {
     console.error("[printful] status failed", err);
     return res.status(500).json({ ok: false, error: "Failed to load Printful status" });
+  }
+});
+
+router.post("/integrations/printful/import", requireAdminOrOrganiser, async (req, res) => {
+  try {
+    const organiserId = resolveOrganiserId(req);
+    if (!organiserId) {
+      return res.status(400).json({ ok: false, error: "Missing organiser id" });
+    }
+
+    const payload = req.body || {};
+    const printfulProductId = String(payload.printfulProductId || "").trim();
+    const storefrontId = payload.storefrontId ? String(payload.storefrontId) : "";
+
+    if (!printfulProductId) {
+      return res.status(400).json({ ok: false, error: "Printful product id is required" });
+    }
+
+    const storefront = storefrontId
+      ? await prisma.storefront.findFirst({ where: { id: storefrontId, ownerUserId: organiserId } })
+      : await prisma.storefront.findFirst({ where: { ownerUserId: organiserId } });
+
+    if (!storefront) {
+      return res.status(404).json({ ok: false, error: "Storefront not found" });
+    }
+
+    const client = await createPrintfulClient(organiserId);
+    const printfulProduct = await client.fetchProduct(printfulProductId);
+    const syncProduct = printfulProduct.result?.sync_product;
+    const syncVariants = printfulProduct.result?.sync_variants || [];
+
+    if (!syncProduct) {
+      return res.status(404).json({ ok: false, error: "Printful product not found" });
+    }
+
+    const variantPayloads = syncVariants.map((variant, index) => ({
+      title: String(variant.name || `Variant ${index + 1}`).trim(),
+      sku: variant.sku ? String(variant.sku).trim() : null,
+      pricePenceOverride: parsePriceToPence(variant.retail_price),
+      sortOrder: index,
+      providerVariantId: variant.variant_id || variant.id || null,
+    }));
+
+    const prices = variantPayloads
+      .map((variant) => variant.pricePenceOverride)
+      .filter((value): value is number => typeof value === "number");
+    const pricePence = prices.length ? Math.min(...prices) : null;
+
+    const imageUrls = collectImageUrls({ sync_product: syncProduct, sync_variants: syncVariants });
+
+    const existingMapping = await prisma.fulfilmentProductMapping.findFirst({
+      where: {
+        organiserId,
+        provider: "PRINTFUL",
+        providerProductId: printfulProductId,
+        productVariantId: null,
+      },
+    });
+
+    const product = await prisma.$transaction(async (tx) => {
+      const baseData = {
+        storefrontId: storefront.id,
+        title: String(syncProduct.name || "Printful product").trim(),
+        description: syncProduct.description || null,
+        category: "MERCH" as const,
+        fulfilmentType: "PRINTFUL" as const,
+        status: "DRAFT" as const,
+        pricePence,
+        currency: "gbp",
+        inventoryMode: "UNLIMITED" as const,
+      };
+
+      const productRow = existingMapping
+        ? await tx.product.update({
+            where: { id: existingMapping.productId },
+            data: baseData,
+          })
+        : await tx.product.create({
+            data: {
+              ...baseData,
+              slug: await ensureUniqueProductSlug(storefront.id, baseData.title),
+            },
+          });
+
+      await tx.productVariant.deleteMany({ where: { productId: productRow.id } });
+      await tx.productImage.deleteMany({ where: { productId: productRow.id } });
+      await tx.fulfilmentProductMapping.deleteMany({
+        where: { productId: productRow.id, provider: "PRINTFUL", productVariantId: { not: null } },
+      });
+
+      const createdVariants = [];
+      for (const variant of variantPayloads) {
+        if (!variant.title) continue;
+        const created = await tx.productVariant.create({
+          data: {
+            productId: productRow.id,
+            title: variant.title,
+            sku: variant.sku,
+            pricePenceOverride: variant.pricePenceOverride,
+            sortOrder: variant.sortOrder,
+          },
+        });
+        createdVariants.push({ row: created, providerVariantId: variant.providerVariantId });
+      }
+
+      if (imageUrls.length) {
+        await tx.productImage.createMany({
+          data: imageUrls.map((url, index) => ({
+            productId: productRow.id,
+            url,
+            sortOrder: index,
+          })),
+        });
+      }
+
+      await tx.fulfilmentProductMapping.upsert({
+        where: {
+          provider_productId_productVariantId: {
+            provider: "PRINTFUL",
+            productId: productRow.id,
+            productVariantId: null,
+          },
+        },
+        update: {
+          organiserId,
+          providerProductId: printfulProductId,
+          providerVariantId: null,
+        },
+        create: {
+          organiserId,
+          provider: "PRINTFUL",
+          productId: productRow.id,
+          productVariantId: null,
+          providerProductId: printfulProductId,
+          providerVariantId: null,
+        },
+      });
+
+      for (const variant of createdVariants) {
+        if (!variant.providerVariantId) continue;
+        await tx.fulfilmentProductMapping.upsert({
+          where: {
+            provider_productId_productVariantId: {
+              provider: "PRINTFUL",
+              productId: productRow.id,
+              productVariantId: variant.row.id,
+            },
+          },
+          update: {
+            organiserId,
+            providerProductId: printfulProductId,
+            providerVariantId: String(variant.providerVariantId),
+          },
+          create: {
+            organiserId,
+            provider: "PRINTFUL",
+            productId: productRow.id,
+            productVariantId: variant.row.id,
+            providerProductId: printfulProductId,
+            providerVariantId: String(variant.providerVariantId),
+          },
+        });
+      }
+
+      return productRow;
+    });
+
+    const fullProduct = await prisma.product.findUnique({
+      where: { id: product.id },
+      include: { variants: true, images: true },
+    });
+
+    return res.json({ ok: true, product: fullProduct });
+  } catch (err: any) {
+    console.error("[printful] import failed", err);
+    return res.status(500).json({ ok: false, error: err?.message || "Failed to import Printful product" });
   }
 });
 

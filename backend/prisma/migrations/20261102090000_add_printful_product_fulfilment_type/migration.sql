@@ -1,0 +1,1 @@
+ALTER TYPE "ProductFulfilmentType" ADD VALUE IF NOT EXISTS 'PRINTFUL';
