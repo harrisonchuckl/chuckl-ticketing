@@ -56,6 +56,16 @@ function truncateText(value: string | null | undefined, max = 140) {
   return `${text.slice(0, max).replace(/\s+\S*$/, "")}…`;
 }
 
+function formatMoney(pence: number | null | undefined, currency?: string | null) {
+  const amount = Number(pence || 0) / 100;
+  const code = String(currency || "GBP").toUpperCase();
+  try {
+    return new Intl.NumberFormat("en-GB", { style: "currency", currency: code }).format(amount);
+  } catch {
+    return `£${amount.toFixed(2)}`;
+  }
+}
+
 function normaliseHexColor(value: string | null | undefined) {
   const raw = String(value ?? "").trim();
   const match = raw.match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i);
@@ -1420,6 +1430,7 @@ router.get("/:storefront", async (req, res) => {
   }
 
   const recommendationEvents = [];
+  const recommendationProducts = [];
   if (customerAccountId && consentPreferences.personalisation) {
     const paidOrders = await prisma.order.findMany({
       where: {
@@ -1478,6 +1489,24 @@ router.get("/:storefront", async (req, res) => {
         recommendationEvents.push(...recommendations);
       }
     }
+
+    if (storefrontRecord) {
+      const products = await prisma.product.findMany({
+        where: { storefrontId: storefrontRecord.id, status: "ACTIVE" },
+        select: {
+          id: true,
+          title: true,
+          slug: true,
+          pricePence: true,
+          allowCustomAmount: true,
+          currency: true,
+          images: { select: { url: true, sortOrder: true } },
+        },
+        orderBy: { updatedAt: "desc" },
+        take: 4,
+      });
+      recommendationProducts.push(...products);
+    }
   }
 
   const previouslyViewed = consentPreferences.personalisation && customerSession?.sub
@@ -1505,8 +1534,54 @@ router.get("/:storefront", async (req, res) => {
       })
     : [];
 
-  const recommendationCards = recommendationEvents
-    .map((show) => {
+  const recommendationItems = [];
+  const maxRecommendationItems = 6;
+  const maxRecommendations = Math.max(recommendationEvents.length, recommendationProducts.length);
+  for (let i = 0; i < maxRecommendations; i += 1) {
+    const show = recommendationEvents[i];
+    if (show) {
+      recommendationItems.push({ type: "show", data: show });
+    }
+    const product = recommendationProducts[i];
+    if (product) {
+      recommendationItems.push({ type: "product", data: product });
+    }
+    if (recommendationItems.length >= maxRecommendationItems) break;
+  }
+
+  const recommendationCards = recommendationItems
+    .slice(0, maxRecommendationItems)
+    .map((item) => {
+      if (item.type === "product") {
+        const product = item.data;
+        const image = product.images?.length
+          ? toPublicImageUrl(
+              product.images.slice().sort((a, b) => a.sortOrder - b.sortOrder)[0]?.url,
+              800
+            )
+          : "";
+        const priceLabel = product.allowCustomAmount
+          ? "Choose amount"
+          : formatMoney(product.pricePence, product.currency);
+        return `
+        <a class="recommendation-card" href="/store/${escHtml(storefront)}/products/${escHtml(product.slug || "")}">
+          <div class="recommendation-card__media">
+            ${
+              image
+                ? `<img src="${escAttr(image)}" alt="${escHtml(product.title || "Product")}" loading="lazy" />`
+                : `<div class="recommendation-card__placeholder" aria-hidden="true"></div>`
+            }
+          </div>
+          <div class="recommendation-card__body">
+            <div class="recommendation-card__eyebrow">Product</div>
+            <div class="recommendation-card__title">${escHtml(product.title || "Product")}</div>
+            ${priceLabel ? `<div class="recommendation-card__meta">${escHtml(priceLabel)}</div>` : ""}
+          </div>
+        </a>
+      `;
+      }
+
+      const show = item.data;
       const d = show.date ? new Date(show.date) : null;
       const dateStr = d
         ? d.toLocaleDateString("en-GB", {
@@ -1577,7 +1652,7 @@ router.get("/:storefront", async (req, res) => {
       <div class="recommendations-banner__header">
         <div>
           <h2 class="section-heading">Recommended for you</h2>
-          <p class="section-subtitle">Based on your past bookings with this organiser.</p>
+          <p class="section-subtitle">Based on your past bookings and store activity.</p>
         </div>
         <a class="btn btn--ghost" href="#all-events">Browse all shows</a>
       </div>
@@ -1893,16 +1968,16 @@ body {
 
 .recommendations-banner {
   max-width: var(--container-w);
-  margin: 24px auto 0;
+  margin: 32px auto 0;
   padding: 0 var(--page-pad);
 }
 
 .recommendations-banner__inner {
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
-  padding: 20px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
 }
 
 .recommendations-banner__header {
