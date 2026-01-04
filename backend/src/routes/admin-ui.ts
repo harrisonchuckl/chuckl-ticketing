@@ -5,6 +5,7 @@ import { Router, json } from "express";
 import type { DashboardWidgetPreference } from "@prisma/client";
 import prisma from "../lib/prisma.js";
 import { requireAdminOrOrganiser } from "../lib/authz.js";
+import { isOwnerEmail, requireSiteOwner } from "../lib/owner-authz.js";
 
 const router = Router();
 
@@ -1194,7 +1195,33 @@ router.get(
     next();
   },
   requireAdminOrOrganiser,
-  (_req, res) => {
+  (req, res, next) => {
+    if (req.path.startsWith("/ui/owner")) {
+      return requireSiteOwner(req, res, next);
+    }
+    return next();
+  },
+  (req, res) => {
+    const ownerConsoleNav = isOwnerEmail(req.user?.email)
+      ? `
+        <div class="sb-section" data-section="owner">
+          <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="owner" aria-expanded="false">
+            <span class="sb-link-label">
+              <svg class="sb-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 3l7 4v5c0 4.4-3 8.6-7 9-4-.4-7-4.6-7-9V7l7-4Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                <path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span>Owner Console</span>
+            </span>
+            <svg class="sb-toggle-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <div class="sb-submenu" data-submenu="owner">
+            <a class="sb-link sub" href="/admin/ui/owner" data-view="/admin/ui/owner">Owner Console</a>
+          </div>
+        </div>`
+      : "";
 
     res.set("Cache-Control", "no-store");
     res.type("html").send(`<!doctype html>
@@ -2977,6 +3004,7 @@ router.get(
             <a class="sb-link sub" href="/admin/ui/ai/support" data-view="/admin/ui/ai/support">Support Inbox</a>
           </div>
         </div>
+        ${ownerConsoleNav}
       </nav>
     </aside>
 
@@ -4086,6 +4114,22 @@ document.addEventListener('click', function(e){
       renderDashboard();
       renderWidgetDrawer();
     });
+  }
+
+  async function ownerConsolePage(){
+    if (!main) return;
+    main.innerHTML =
+      '<div class="card">'
+      +  '<div class="title">Owner Console</div>'
+      +  '<div class="muted">Owner-only tools will appear here.</div>'
+      + '</div>';
+
+    try{
+      var ownerResponse = await j('/admin/api/owner');
+      console.log('[admin-ui][owner] response', ownerResponse);
+    }catch(err){
+      console.error('[admin-ui][owner] response error', err);
+    }
   }
 
   const fmtMoney = new Intl.NumberFormat('en-GB', {
@@ -16231,6 +16275,7 @@ function renderInterests(customer){
       if (path === '/admin/ui/ai/audience') return aiAudiencePage();
       if (path === '/admin/ui/ai/store') return aiStorePage();
       if (path === '/admin/ui/ai/support') return aiSupportPage();
+      if (path === '/admin/ui/owner') return ownerConsolePage();
       if (path === '/admin/ui/shows/create') return createShow();
       if (path === '/admin/ui/shows/current')  return listShows();
       if (path === '/admin/ui/storefront')   return storefrontPage();
