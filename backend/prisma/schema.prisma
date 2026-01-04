@@ -431,6 +431,9 @@ model User {
   chatbotEscalationRules      ChatbotEscalationRule[] @relation("ChatbotEscalationOrganiser")
   fulfilmentIntegrations      FulfilmentIntegration[]
   fulfilmentProductMappings   FulfilmentProductMapping[]
+  printfulPricingConfig       PrintfulPricingConfig?
+  productOrderProfitSnapshots ProductOrderProfitSnapshot[]
+  productOrderItemProfitSnapshots ProductOrderItemProfitSnapshot[]
 
   featuredConfigs            FeaturedConfig[]
   featuredPins               FeaturedPin[]
