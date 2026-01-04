@@ -27,7 +27,7 @@ type OrganiserProfilePayload = {
   subscriptionStatus?: SubscriptionStatus;
   subscriptionPlan?: string | null;
   subscriptionPeriodEnd?: Date | null;
-  permissionsJson?: Prisma.InputJsonValue | null;
+  permissionsJson?: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput;
   notes?: string | null;
 };
 
