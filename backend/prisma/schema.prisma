@@ -361,6 +361,7 @@ model User {
   orderAuditLogs             OrderAuditLog[]             @relation("OrderAuditActor")
   marketingAiDraftsOrganised MarketingAiDraft[] @relation("MarketingAiDraftOrganiser")
   marketingAiDraftsCreated   MarketingAiDraft[] @relation("MarketingAiDraftCreatedBy")
+  adminAuditLogs             AdminAuditLog[]             @relation("AdminAuditActor")
 
 
   venueMemberships    VenueMember[]
@@ -1854,6 +1855,25 @@ model MarketingAuditLog {
   tenant User @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId, createdAt])
+}
+
+model AdminAuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String?
+  actorEmail  String?
+  action      String
+  targetType  String?
+  targetId    String?
+  metadataJson Json?
+  ip          String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  actor User? @relation("AdminAuditActor", fields: [actorUserId], references: [id])
+
+  @@index([actorUserId, createdAt])
+  @@index([action, createdAt])
+  @@index([targetType, targetId])
 }
 
 model OrderNote {

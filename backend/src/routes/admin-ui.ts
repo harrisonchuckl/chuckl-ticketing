@@ -4211,7 +4211,8 @@ document.addEventListener('click', function(e){
       { key: 'insights', label: 'Insights', path: '/admin/ui/owner/insights' },
       { key: 'organisers', label: 'Organisers', path: '/admin/ui/owner/organisers' },
       { key: 'financial', label: 'Financial', path: '/admin/ui/owner/financial' },
-      { key: 'health', label: 'Health', path: '/admin/ui/owner/health' }
+      { key: 'health', label: 'Health', path: '/admin/ui/owner/health' },
+      { key: 'audit', label: 'Audit log', path: '/admin/ui/owner/audit' }
     ];
     var tabContent = {
       insights: {
@@ -4229,11 +4230,16 @@ document.addEventListener('click', function(e){
       health: {
         title: 'Platform health',
         body: 'Placeholder operational alerts, uptime summaries, and incident tracking will appear here.'
+      },
+      audit: {
+        title: 'Owner audit log',
+        body: 'Review sensitive owner actions across organisers.'
       }
     };
     var current = tabContent[tab] || tabContent.insights;
     var isInsights = tab === 'insights';
     var isOrganisers = tab === 'organisers';
+    var isAudit = tab === 'audit';
     var organiserTypeOptions = ownerOrganiserTypeOptions('', true);
     var organiserStatusOptions = ownerSubscriptionStatusOptions('', true);
 
@@ -4335,7 +4341,25 @@ document.addEventListener('click', function(e){
           +   '</div>'
           +   '<div id="ownerOrganiserDrawerBody"></div>'
           + '</aside>'
-          : ''))
+          : (isAudit
+            ? '<section class="card" id="ownerAuditCard">'
+              + '<div class="header" style="align-items:flex-start;gap:12px;">'
+              +   '<div>'
+              +     '<div class="title">Audit log</div>'
+              +     '<div class="muted">Review sensitive owner actions and safeguards.</div>'
+              +   '</div>'
+              +   '<div class="row" style="gap:8px;flex-wrap:wrap;justify-content:flex-end;">'
+              +     '<select id="ownerAuditAction" class="ctl" style="min-width:180px;"></select>'
+              +     '<input type="date" id="ownerAuditFrom" class="ctl" />'
+              +     '<input type="date" id="ownerAuditTo" class="ctl" />'
+              +     '<button class="btn small secondary" id="ownerAuditApply">Apply</button>'
+              +   '</div>'
+              + '</div>'
+              + '<div class="error-inline" id="ownerAuditError" style="display:none;"></div>'
+              + '<div id="ownerAuditTable"></div>'
+              + '<div class="owner-pagination" id="ownerAuditPagination"></div>'
+            + '</section>'
+            : '')))
       + '</div>';
 
     if (isInsights){
@@ -4345,6 +4369,9 @@ document.addEventListener('click', function(e){
     }
     if (isOrganisers){
       initOwnerOrganisers();
+    }
+    if (isAudit){
+      initOwnerAudit();
     }
   }
 
@@ -4388,6 +4415,16 @@ document.addEventListener('click', function(e){
     { value: 'CANCELLED', label: 'Cancelled' }
   ];
 
+  var ownerAuditActionLabels = [
+    { value: '', label: 'All actions' },
+    { value: 'OWNER_STEP_UP', label: 'Step-up' },
+    { value: 'ORGANISER_PROFILE_UPDATED', label: 'Organiser profile updated' },
+    { value: 'PASSWORD_RESET_SENT', label: 'Password reset sent' },
+    { value: 'PASSWORD_RESET_ATTEMPT', label: 'Password reset attempt' },
+    { value: 'OWNER_EMAIL_SENT', label: 'Owner email sent' },
+    { value: 'OWNER_EMAIL_ATTEMPT', label: 'Owner email attempt' }
+  ];
+
   function ownerOrganiserTypeOptions(selected, includeAny){
     return ownerOrganiserTypeLabels.filter(function(item){
       return includeAny || item.value;
@@ -4406,6 +4443,13 @@ document.addEventListener('click', function(e){
     }).join('');
   }
 
+  function ownerAuditActionOptions(selected){
+    return ownerAuditActionLabels.map(function(item){
+      var sel = item.value === selected ? ' selected' : '';
+      return '<option value="' + item.value + '"' + sel + '>' + item.label + '</option>';
+    }).join('');
+  }
+
   function ownerOrganiserLabel(value, fallback){
     var match = ownerOrganiserTypeLabels.find(function(item){ return item.value === value; });
     return match ? match.label : (fallback || 'Other');
@@ -4414,6 +4458,92 @@ document.addEventListener('click', function(e){
   function ownerSubscriptionLabel(value, fallback){
     var match = ownerSubscriptionStatusLabels.find(function(item){ return item.value === value; });
     return match ? match.label : (fallback || 'None');
+  }
+
+  function notifyOwnerAction(title, message){
+    openAdminModal({
+      title: title || 'Owner Console',
+      body: '<div class="muted">' + escapeHtml(message || '') + '</div>',
+      actions: '<button class="btn" id="ownerNotifyClose">Close</button>',
+      onReady: function(overlay){
+        overlay.querySelector('#ownerNotifyClose').addEventListener('click', closeAdminModal);
+      }
+    });
+  }
+
+  function requestOwnerStepUp(){
+    return new Promise(function(resolve){
+      openAdminModal({
+        title: 'Step-up required',
+        body:
+          '<div class="muted">Confirm your password to continue.</div>'
+          + '<div class="grid">'
+          +   '<input type="password" class="ctl" id="ownerStepUpPassword" placeholder="Password" />'
+          +   '<div class="error-inline" id="ownerStepUpError" style="display:none;"></div>'
+          + '</div>',
+        actions:
+          '<button class="btn" id="ownerStepUpCancel">Cancel</button>'
+          + '<button class="btn primary" id="ownerStepUpConfirm">Confirm</button>',
+        onReady: function(overlay){
+          var passwordInput = overlay.querySelector('#ownerStepUpPassword');
+          var errorEl = overlay.querySelector('#ownerStepUpError');
+          var cancelBtn = overlay.querySelector('#ownerStepUpCancel');
+          var confirmBtn = overlay.querySelector('#ownerStepUpConfirm');
+
+          function setError(message){
+            if (!errorEl) return;
+            errorEl.textContent = message || '';
+            errorEl.style.display = message ? 'block' : 'none';
+          }
+
+          cancelBtn.addEventListener('click', function(){
+            closeAdminModal();
+            resolve(false);
+          });
+
+          confirmBtn.addEventListener('click', async function(){
+            setError('');
+            var password = passwordInput.value || '';
+            if (!password){
+              setError('Password required.');
+              return;
+            }
+            confirmBtn.disabled = true;
+            try{
+              await j('/admin/api/owner/step-up', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: password })
+              });
+              closeAdminModal();
+              resolve(true);
+            }catch(e){
+              setError(parseErr(e));
+              confirmBtn.disabled = false;
+            }
+          });
+        }
+      });
+    });
+  }
+
+  async function ownerSensitiveRequest(url, opts, attempted){
+    var res = await fetch(url, { credentials:'include', ...(opts || {}) });
+    var text = '';
+    try{ text = await res.text(); }catch(e){}
+    var data = {};
+    if (text){
+      try{ data = JSON.parse(text); }catch(e){ data = {}; }
+    }
+    if (!res.ok){
+      if (res.status === 403 && data && data.stepUpRequired && !attempted){
+        var ok = await requestOwnerStepUp();
+        if (!ok) throw new Error('Step-up required.');
+        return ownerSensitiveRequest(url, opts, true);
+      }
+      throw new Error(text || ('HTTP ' + res.status));
+    }
+    return data || {};
   }
 
   function renderDelta(value){
@@ -5608,7 +5738,7 @@ document.addEventListener('click', function(e){
     if (selectEl) selectEl.disabled = true;
     setOwnerOrganiserError('');
     try{
-      var res = await j('/admin/api/owner/organisers/' + userId + '/profile', {
+      var res = await ownerSensitiveRequest('/admin/api/owner/organisers/' + userId + '/profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload || {})
@@ -5724,12 +5854,248 @@ document.addEventListener('click', function(e){
       + '</div>'
       + '<div class="drawer-section">'
       + '<div class="title">Quick actions</div>'
-      + '<div class="muted" style="font-size:12px;margin-bottom:8px;">Placeholders for Stage 6 workflows.</div>'
+      + '<div class="muted" style="font-size:12px;margin-bottom:8px;">Sensitive actions require password confirmation.</div>'
       + '<div class="quick-actions">'
-      +   '<button class="btn small secondary" disabled>Reset password</button>'
-      +   '<button class="btn small secondary" disabled>Email organiser</button>'
+      +   '<button class="btn small secondary" data-action="owner-send-reset" data-user-id="' + user.id + '">Send reset link</button>'
+      +   '<button class="btn small secondary" data-action="owner-send-email" data-user-id="' + user.id + '">Email organiser</button>'
       + '</div>'
       + '</div>';
+
+    var resetBtn = body.querySelector('[data-action="owner-send-reset"]');
+    if (resetBtn){
+      resetBtn.addEventListener('click', function(){
+        openAdminModal({
+          title: 'Send password reset',
+          body: '<div class="muted">Send a reset password email to this organiser?</div>',
+          actions:
+            '<button class="btn" id="ownerResetCancel">Cancel</button>'
+            + '<button class="btn primary" id="ownerResetConfirm">Send reset link</button>',
+          onReady: function(overlay){
+            overlay.querySelector('#ownerResetCancel').addEventListener('click', closeAdminModal);
+            overlay.querySelector('#ownerResetConfirm').addEventListener('click', async function(){
+              try{
+                await ownerSensitiveRequest('/admin/api/owner/organisers/' + user.id + '/send-reset', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: '{}'
+                });
+                closeAdminModal();
+                notifyOwnerAction('Reset email sent', 'A reset link has been sent to the organiser.');
+              }catch(e){
+                notifyOwnerAction('Reset failed', parseErr(e));
+              }
+            });
+          }
+        });
+      });
+    }
+
+    var emailBtn = body.querySelector('[data-action="owner-send-email"]');
+    if (emailBtn){
+      emailBtn.addEventListener('click', function(){
+        openAdminModal({
+          title: 'Email organiser',
+          body:
+            '<div class="grid">'
+            + '<input type="text" class="ctl" id="ownerEmailSubject" placeholder="Subject" />'
+            + '<textarea class="ctl" id="ownerEmailBody" rows="6" placeholder="Message"></textarea>'
+            + '<div class="error-inline" id="ownerEmailError" style="display:none;"></div>'
+            + '</div>',
+          actions:
+            '<button class="btn" id="ownerEmailCancel">Cancel</button>'
+            + '<button class="btn primary" id="ownerEmailSend">Send email</button>',
+          onReady: function(overlay){
+            var subjectInput = overlay.querySelector('#ownerEmailSubject');
+            var bodyInput = overlay.querySelector('#ownerEmailBody');
+            var errorEl = overlay.querySelector('#ownerEmailError');
+            var sendBtn = overlay.querySelector('#ownerEmailSend');
+            var cancelBtn = overlay.querySelector('#ownerEmailCancel');
+
+            function setError(message){
+              errorEl.textContent = message || '';
+              errorEl.style.display = message ? 'block' : 'none';
+            }
+
+            cancelBtn.addEventListener('click', closeAdminModal);
+            sendBtn.addEventListener('click', async function(){
+              setError('');
+              var subject = (subjectInput.value || '').trim();
+              var bodyText = (bodyInput.value || '').trim();
+              if (!subject || !bodyText){
+                setError('Subject and message are required.');
+                return;
+              }
+              sendBtn.disabled = true;
+              try{
+                await ownerSensitiveRequest('/admin/api/owner/organisers/' + user.id + '/send-email', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ subject: subject, body: bodyText })
+                });
+                closeAdminModal();
+                notifyOwnerAction('Email sent', 'The organiser has been emailed.');
+              }catch(e){
+                setError(parseErr(e));
+                sendBtn.disabled = false;
+              }
+            });
+          }
+        });
+      });
+    }
+  }
+
+  var ownerAuditState = {
+    action: '',
+    from: '',
+    to: '',
+    page: 1,
+    pageSize: 25,
+    items: [],
+    total: 0,
+    totalPages: 1
+  };
+
+  function initOwnerAudit(){
+    var actionSelect = $('#ownerAuditAction');
+    if (actionSelect){
+      actionSelect.innerHTML = ownerAuditActionOptions(ownerAuditState.action || '');
+    }
+    var fromInput = $('#ownerAuditFrom');
+    var toInput = $('#ownerAuditTo');
+    if (fromInput) fromInput.value = ownerAuditState.from || '';
+    if (toInput) toInput.value = ownerAuditState.to || '';
+
+    var applyBtn = $('#ownerAuditApply');
+    if (applyBtn){
+      applyBtn.addEventListener('click', function(){
+        ownerAuditState.action = actionSelect ? (actionSelect.value || '') : '';
+        ownerAuditState.from = fromInput ? (fromInput.value || '') : '';
+        ownerAuditState.to = toInput ? (toInput.value || '') : '';
+        ownerAuditState.page = 1;
+        loadOwnerAuditLogs();
+      });
+    }
+
+    loadOwnerAuditLogs();
+  }
+
+  function buildOwnerAuditUrl(){
+    var params = new URLSearchParams();
+    if (ownerAuditState.action) params.set('action', ownerAuditState.action);
+    if (ownerAuditState.from) params.set('from', ownerAuditState.from);
+    if (ownerAuditState.to) params.set('to', ownerAuditState.to);
+    params.set('page', String(ownerAuditState.page || 1));
+    params.set('pageSize', String(ownerAuditState.pageSize || 25));
+    return '/admin/api/owner/audit-logs?' + params.toString();
+  }
+
+  function setOwnerAuditError(message){
+    var el = $('#ownerAuditError');
+    if (!el) return;
+    el.textContent = message || '';
+    el.style.display = message ? 'block' : 'none';
+  }
+
+  function formatAuditMetadata(metadata){
+    if (!metadata) return '—';
+    try{
+      if (metadata.fields && Array.isArray(metadata.fields)){
+        return 'Fields: ' + metadata.fields.join(', ');
+      }
+      if (metadata.subjectHash){
+        var summary = 'Subject hash: ' + metadata.subjectHash.slice(0, 8) + '…';
+        if (metadata.subjectLength) summary += ' · Subject length: ' + metadata.subjectLength;
+        if (metadata.bodyLength) summary += ' · Body length: ' + metadata.bodyLength;
+        return summary;
+      }
+      if (metadata.status){
+        return 'Status: ' + metadata.status;
+      }
+      return JSON.stringify(metadata);
+    }catch(e){
+      return '—';
+    }
+  }
+
+  function renderOwnerAuditTable(){
+    var table = $('#ownerAuditTable');
+    if (!table) return;
+    if (!ownerAuditState.items.length){
+      table.innerHTML = '<div class="empty-state">No audit entries yet.</div>';
+      return;
+    }
+
+    var head = '<div class="table-row head">'
+      + '<div>Date</div><div>Action</div><div>Target</div><div>Actor</div><div>Metadata</div>'
+      + '</div>';
+
+    var rows = ownerAuditState.items.map(function(item){
+      var date = item.createdAt ? formatDateTime(item.createdAt) : '—';
+      var target = item.targetType && item.targetId ? (item.targetType + ' · ' + item.targetId) : '—';
+      var actor = item.actorEmail || '—';
+      return '<div class="table-row">'
+        + '<div>' + escapeHtml(date) + '</div>'
+        + '<div>' + escapeHtml(item.action || '') + '</div>'
+        + '<div>' + escapeHtml(target) + '</div>'
+        + '<div>' + escapeHtml(actor) + '</div>'
+        + '<div>' + escapeHtml(formatAuditMetadata(item.metadataJson)) + '</div>'
+        + '</div>';
+    }).join('');
+
+    table.innerHTML = head + rows;
+  }
+
+  function renderOwnerAuditPagination(){
+    var container = $('#ownerAuditPagination');
+    if (!container) return;
+    var page = ownerAuditState.page || 1;
+    var totalPages = ownerAuditState.totalPages || 1;
+    if (totalPages <= 1){
+      container.innerHTML = '';
+      return;
+    }
+    container.innerHTML =
+      '<button class="btn small secondary" data-action="owner-audit-prev"' + (page <= 1 ? ' disabled' : '') + '>Previous</button>'
+      + '<span class="muted" style="font-size:12px;">Page ' + page + ' of ' + totalPages + '</span>'
+      + '<button class="btn small secondary" data-action="owner-audit-next"' + (page >= totalPages ? ' disabled' : '') + '>Next</button>';
+
+    var prev = container.querySelector('[data-action="owner-audit-prev"]');
+    var next = container.querySelector('[data-action="owner-audit-next"]');
+    if (prev){
+      prev.addEventListener('click', function(){
+        if (ownerAuditState.page <= 1) return;
+        ownerAuditState.page -= 1;
+        loadOwnerAuditLogs();
+      });
+    }
+    if (next){
+      next.addEventListener('click', function(){
+        if (ownerAuditState.page >= totalPages) return;
+        ownerAuditState.page += 1;
+        loadOwnerAuditLogs();
+      });
+    }
+  }
+
+  async function loadOwnerAuditLogs(){
+    var table = $('#ownerAuditTable');
+    if (table) table.innerHTML = '<div class="skeleton skeleton-line"></div>';
+    setOwnerAuditError('');
+    try{
+      var data = await j(buildOwnerAuditUrl());
+      ownerAuditState.items = (data && data.items) ? data.items : [];
+      ownerAuditState.total = data && data.total ? data.total : 0;
+      ownerAuditState.totalPages = data && data.totalPages ? data.totalPages : 1;
+      ownerAuditState.page = data && data.page ? data.page : ownerAuditState.page;
+      renderOwnerAuditTable();
+      renderOwnerAuditPagination();
+    }catch(e){
+      setOwnerAuditError(parseErr(e));
+      if (table){
+        table.innerHTML = '<div class="error-inline">Audit log failed to load.</div>';
+      }
+    }
   }
 
   function renderAlerts(alertsData){
@@ -17421,6 +17787,7 @@ function renderInterests(customer){
       if (path === '/admin/ui/owner/organisers') return ownerConsolePage('organisers');
       if (path === '/admin/ui/owner/financial') return ownerConsolePage('financial');
       if (path === '/admin/ui/owner/health') return ownerConsolePage('health');
+      if (path === '/admin/ui/owner/audit') return ownerConsolePage('audit');
       if (path === '/admin/ui/shows/create') return createShow();
       if (path === '/admin/ui/shows/current')  return listShows();
       if (path === '/admin/ui/storefront')   return storefrontPage();
