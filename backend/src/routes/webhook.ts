@@ -6,8 +6,9 @@ import { calcFeesForShow } from "../services/fees.js";
 import { sendTicketsEmail, sendDigitalProductEmail } from "../services/email.js";
 import { decrementStockTransaction } from "../lib/storefront.js";
 import { syncMarketingContactFromOrder } from "../services/marketing/contacts.js";
-import { MarketingAutomationTriggerType, MarketingConsentSource, Prisma } from "@prisma/client";
+import { MarketingAutomationTriggerType, MarketingConsentSource, Prisma, ProductOrderFulfilmentStatus, ProductOrderItemStatus } from "@prisma/client";
 import { enqueueAutomationForContact, markCheckoutCompleted } from "../services/marketing/automations.js";
+import { createPrintfulClient, PrintfulOrderCreatePayload } from "../services/integrations/printful.js";
 
 
 const stripeSecret = process.env.STRIPE_SECRET_KEY;
@@ -217,6 +218,185 @@ async function handleProductOrderFromSession(session: Stripe.Checkout.Session) {
   return order;
 }
 
+function buildProductOrderFulfilmentStatus(items: Array<{ fulfilmentStatus: ProductOrderItemStatus }>) {
+  if (items.some((item) => item.fulfilmentStatus === ProductOrderItemStatus.ERROR)) {
+    return ProductOrderFulfilmentStatus.ERROR;
+  }
+  const fulfilledCount = items.filter((item) => item.fulfilmentStatus === ProductOrderItemStatus.FULFILLED).length;
+  if (fulfilledCount === 0) return ProductOrderFulfilmentStatus.UNFULFILLED;
+  if (fulfilledCount === items.length) return ProductOrderFulfilmentStatus.FULFILLED;
+  return ProductOrderFulfilmentStatus.PARTIAL;
+}
+
+function buildPrintfulRecipient(order: {
+  customerName: string | null;
+  customerEmail: string | null;
+  customerPhone: string | null;
+  shippingAddressJson: Prisma.JsonValue | null;
+}): PrintfulOrderCreatePayload["recipient"] | null {
+  if (!order.shippingAddressJson || typeof order.shippingAddressJson !== "object") return null;
+  const address = order.shippingAddressJson as Record<string, any>;
+  const line1 = String(address.line1 || "").trim();
+  const city = String(address.city || "").trim();
+  const postalCode = String(address.postal_code || "").trim();
+  const country = String(address.country || "").trim();
+
+  if (!line1 || !city || !postalCode || !country) return null;
+
+  return {
+    name: order.customerName || "Customer",
+    address1: line1,
+    address2: address.line2 ? String(address.line2) : undefined,
+    city,
+    state_code: address.state ? String(address.state) : undefined,
+    country_code: country,
+    zip: postalCode,
+    phone: order.customerPhone || undefined,
+    email: order.customerEmail || undefined,
+  };
+}
+
+async function fulfilPrintfulItemsForOrder(orderId: string, sessionId: string) {
+  const order = await prisma.productOrder.findUnique({
+    where: { id: orderId },
+    include: { items: true, storefront: true },
+  });
+
+  if (!order) return;
+  if (order.stripeCheckoutSessionId && order.stripeCheckoutSessionId !== sessionId) return;
+
+  const printfulItems = order.items.filter((item) => item.fulfilmentTypeSnapshot === "PRINTFUL");
+  if (!printfulItems.length) return;
+
+  if (printfulItems.some((item) => item.fulfilmentProviderOrderId || item.fulfilmentStatus === "ERROR")) {
+    return;
+  }
+
+  const recipient = buildPrintfulRecipient(order);
+  if (!recipient) {
+    const message = "Missing shipping address for Printful fulfilment.";
+    await prisma.productOrderItem.updateMany({
+      where: { id: { in: printfulItems.map((item) => item.id) } },
+      data: { fulfilmentStatus: "ERROR", fulfilmentErrorMessage: message },
+    });
+    await prisma.productOrder.update({
+      where: { id: order.id },
+      data: { fulfilmentStatus: "ERROR" },
+    });
+    return;
+  }
+
+  const organiserId = order.storefront.ownerUserId;
+  const productIds = Array.from(new Set(printfulItems.map((item) => item.productId)));
+  const variantIds = Array.from(new Set(printfulItems.map((item) => item.variantId).filter(Boolean))) as string[];
+
+  const mappings = await prisma.fulfilmentProductMapping.findMany({
+    where: {
+      organiserId,
+      provider: "PRINTFUL",
+      productId: { in: productIds },
+      OR: [{ productVariantId: { in: variantIds } }, { productVariantId: null }],
+    },
+  });
+
+  const mappingByKey = new Map(
+    mappings.map((mapping) => [`${mapping.productId}:${mapping.productVariantId || "base"}`, mapping])
+  );
+
+  const errors: Array<{ id: string; message: string }> = [];
+  const orderItemsPayload: PrintfulOrderCreatePayload["items"] = [];
+
+  for (const item of printfulItems) {
+    const key = `${item.productId}:${item.variantId || "base"}`;
+    const mapping = mappingByKey.get(key);
+    if (!mapping) {
+      errors.push({
+        id: item.id,
+        message: "Missing Printful mapping for this product variant.",
+      });
+      continue;
+    }
+    if (!mapping.providerVariantId) {
+      errors.push({
+        id: item.id,
+        message: "Printful variant id missing in fulfilment mapping.",
+      });
+      continue;
+    }
+    const variantId = Number(mapping.providerVariantId);
+    if (!Number.isFinite(variantId)) {
+      errors.push({
+        id: item.id,
+        message: "Invalid Printful variant id configured for fulfilment mapping.",
+      });
+      continue;
+    }
+    orderItemsPayload.push({
+      sync_variant_id: variantId,
+      quantity: item.qty,
+      external_id: item.id,
+    });
+  }
+
+  if (errors.length) {
+    await Promise.all(
+      errors.map((error) =>
+        prisma.productOrderItem.update({
+          where: { id: error.id },
+          data: { fulfilmentStatus: "ERROR", fulfilmentErrorMessage: error.message },
+        })
+      )
+    );
+    await prisma.productOrder.update({
+      where: { id: order.id },
+      data: { fulfilmentStatus: "ERROR" },
+    });
+    return;
+  }
+
+  try {
+    const client = await createPrintfulClient(organiserId);
+    const payload: PrintfulOrderCreatePayload = {
+      external_id: `${order.id}:${order.stripeCheckoutSessionId || sessionId}`,
+      recipient,
+      items: orderItemsPayload,
+    };
+    const response = await client.createOrder(payload);
+    const printfulOrderId = response.result?.id;
+
+    if (!printfulOrderId) {
+      throw new Error("Printful order response missing id.");
+    }
+
+    await prisma.productOrderItem.updateMany({
+      where: { id: { in: printfulItems.map((item) => item.id) } },
+      data: {
+        fulfilmentProviderOrderId: String(printfulOrderId),
+        fulfilmentErrorMessage: null,
+      },
+    });
+
+    const refreshedItems = await prisma.productOrderItem.findMany({
+      where: { productOrderId: order.id },
+      select: { fulfilmentStatus: true },
+    });
+    await prisma.productOrder.update({
+      where: { id: order.id },
+      data: { fulfilmentStatus: buildProductOrderFulfilmentStatus(refreshedItems) },
+    });
+  } catch (err: any) {
+    const message = err?.message ? String(err.message) : "Printful fulfilment failed.";
+    await prisma.productOrderItem.updateMany({
+      where: { id: { in: printfulItems.map((item) => item.id) } },
+      data: { fulfilmentStatus: "ERROR", fulfilmentErrorMessage: message },
+    });
+    await prisma.productOrder.update({
+      where: { id: order.id },
+      data: { fulfilmentStatus: "ERROR" },
+    });
+  }
+}
+
 async function loadSeatRefMapForShow(showId: string): Promise<Map<string, string>> {
   const show = await prisma.show.findUnique({
     where: { id: showId },
@@ -377,12 +557,18 @@ router.post("/stripe", express.raw({ type: "application/json" }), async (req, re
     }
 
     if (hasProductOrder && !hasTicketOrder) {
-      await handleProductOrderFromSession(session);
+      const productOrder = await handleProductOrderFromSession(session);
+      if (productOrder) {
+        await fulfilPrintfulItemsForOrder(productOrder.id, session.id);
+      }
       return res.json({ received: true });
     }
 
     if (hasProductOrder) {
-      await handleProductOrderFromSession(session);
+      const productOrder = await handleProductOrderFromSession(session);
+      if (productOrder) {
+        await fulfilPrintfulItemsForOrder(productOrder.id, session.id);
+      }
     }
 
     if (!orderId || !showId) {

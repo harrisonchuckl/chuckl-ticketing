@@ -90,11 +90,13 @@ enum ProductOrderFulfilmentStatus {
   UNFULFILLED
   PARTIAL
   FULFILLED
+  ERROR
 }
 
 enum ProductOrderItemStatus {
   UNFULFILLED
   FULFILLED
+  ERROR
 }
 
 enum FulfilmentProvider {
@@ -1375,6 +1377,8 @@ model ProductOrderItem {
   lineTotalPence         Int
   fulfilmentTypeSnapshot ProductFulfilmentType
   fulfilmentStatus       ProductOrderItemStatus @default(UNFULFILLED)
+  fulfilmentProviderOrderId String?
+  fulfilmentErrorMessage String?
   metadataJson           Json?
 
   productOrder ProductOrder    @relation(fields: [productOrderId], references: [id])
