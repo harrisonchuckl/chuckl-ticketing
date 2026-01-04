@@ -4,6 +4,7 @@ import prisma from "../lib/prisma.js";
 import Stripe from "stripe";
 import { recordAbandonedCheckoutEvent } from "../services/marketing/automations.js";
 import { readCustomerSession } from "../lib/customer-auth.js";
+import { buildConsentBanner } from "../lib/public-consent-banner.js";
 
 const router = Router();
 
@@ -677,6 +678,7 @@ router.get("/success", async (req, res) => {
 
     const gbp = (pence?: number | null) => `£${(((pence ?? 0) as number) / 100).toFixed(2)}`;
     const isPaid = order.status === "PAID";
+    const consent = buildConsentBanner(req);
 
     return res
       .status(200)
@@ -711,11 +713,13 @@ router.get("/success", async (req, res) => {
     padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
   }
 }
-
+  
   
   </style>
+  ${consent.styles}
 </head>
 <body>
+  ${consent.banner}
   <div class="card">
     <h1>${isPaid ? "✅ Payment confirmed" : "⏳ Payment received (processing)"} </h1>
     <div class="muted">${show?.title || "Your event"}${show?.date ? ` • ${new Date(show.date).toLocaleString("en-GB", { dateStyle: "full" })}` : ""}</div>

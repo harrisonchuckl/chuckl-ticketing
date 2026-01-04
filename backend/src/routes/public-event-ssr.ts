@@ -5,6 +5,8 @@ import { ShowStatus } from '@prisma/client';
 import prisma from '../lib/prisma.js';
 import { readCustomerSession } from '../lib/customer-auth.js';
 import { readStorefrontCartCount } from '../lib/storefront-cart.js';
+import { readConsent } from '../lib/auth/cookie.js';
+import { buildConsentBanner } from '../lib/public-consent-banner.js';
 import { verifyJwt } from '../utils/security.js';
 
 const router = Router();
@@ -584,6 +586,7 @@ router.get('/checkout/success', async (req, res) => {
      color: show.organiser ? resolveBrandColor(show.organiser) : null
    });
    const logoUrl = brand.logoUrl;
+   const consent = buildConsentBanner(req);
 
 
    res.type('html').send(`<!doctype html>
@@ -600,6 +603,7 @@ router.get('/checkout/success', async (req, res) => {
  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@400;700;800;900&display=swap" rel="stylesheet">
 
  ${shouldRefresh ? `<meta http-equiv="refresh" content="3">` : ''}
+ ${consent.styles}
 
  <style>
    :root {
@@ -1372,6 +1376,43 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
      color: show.organiser ? resolveBrandColor(show.organiser) : null
    });
    const logoUrl = themeLogo || brand.logoUrl;
+   const consent = buildConsentBanner(req);
+   const consentPreferences = readConsent(req);
+   const trackingScript = consentPreferences.personalisation
+     ? `<script>
+(function(){
+  var showId = ${escJSON(id)};
+  if (!showId) return;
+  var sessionKey = 'tixall_session_id';
+  var sessionId = null;
+  try {
+    sessionId = localStorage.getItem(sessionKey);
+    if (!sessionId) {
+      sessionId = 'sess_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+      localStorage.setItem(sessionKey, sessionId);
+    }
+  } catch (e) {}
+  function sendEvent(type){
+    fetch('/public/track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ showId: showId, type: type, sessionId: sessionId })
+    }).catch(function(){});
+  }
+  sendEvent('VIEW');
+  document.querySelectorAll('.ticket-row a, .ticket-row').forEach(function(el){
+    el.addEventListener('click', function(){
+      sendEvent('ADD_TO_CART');
+    });
+  });
+  document.querySelectorAll('a[href^=\"/checkout\"], a[href*=\"/checkout?\"]').forEach(function(el){
+    el.addEventListener('click', function(){
+      sendEvent('CHECKOUT_START');
+    });
+  });
+})();
+</script>`
+     : '';
 
    // --- RENDER HTML ---
    res.type('html').send(`<!doctype html>
@@ -1387,6 +1428,7 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@400;700;800;900&display=swap" rel="stylesheet">
  ${themeVars}
+ ${consent.styles}
 
  <script type="application/ld+json">${escJSON(jsonLd)}</script>
 <script>
@@ -2448,9 +2490,11 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
   .mobile-bar { display: flex; }
 }
 ${editorStyles}
- </style>
+</style>
 </head>
 <body>
+${consent.banner}
+${consent.banner}
 
 <header class="app-header">
  <div class="app-header-inner">
@@ -2794,39 +2838,7 @@ ${mobileCtaHtml}
 
 })();
 </script>
-<script>
-(function(){
-  var showId = ${escJSON(id)};
-  if (!showId) return;
-  var sessionKey = 'tixall_session_id';
-  var sessionId = null;
-  try {
-    sessionId = localStorage.getItem(sessionKey);
-    if (!sessionId) {
-      sessionId = 'sess_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
-      localStorage.setItem(sessionKey, sessionId);
-    }
-  } catch (e) {}
-  function sendEvent(type){
-    fetch('/public/track', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ showId: showId, type: type, sessionId: sessionId })
-    }).catch(function(){});
-  }
-  sendEvent('VIEW');
-  document.querySelectorAll('.ticket-row a, .ticket-row').forEach(function(el){
-    el.addEventListener('click', function(){
-      sendEvent('ADD_TO_CART');
-    });
-  });
-  document.querySelectorAll('a[href^=\"/checkout\"], a[href*=\"/checkout?\"]').forEach(function(el){
-    el.addEventListener('click', function(){
-      sendEvent('CHECKOUT_START');
-    });
-  });
-})();
-</script>
+${trackingScript}
 ${editorScript}
 
 </body>

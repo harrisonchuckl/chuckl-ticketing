@@ -10,6 +10,7 @@ import {
 import { ensureMembership, linkPaidGuestOrders, mergeGuestCart } from "../lib/public-customer.js";
 import { publicAuthLimiter, requireSameOrigin } from "../lib/public-auth-guards.js";
 import { hashCustomerVerificationToken, issueCustomerEmailVerification } from "../lib/customer-email-verification.js";
+import { buildConsentBanner } from "../lib/public-consent-banner.js";
 
 const router = Router();
 
@@ -22,7 +23,12 @@ function escHtml(input: string) {
     .replace(/'/g, "&#39;");
 }
 
-function renderAccountPage(storefrontSlug: string, storefrontName: string) {
+function renderAccountPage(
+  storefrontSlug: string,
+  storefrontName: string,
+  consentStyles: string,
+  consentBanner: string
+) {
   const title = escHtml(`${storefrontName} · Account`);
   const safeName = escHtml(storefrontName);
   const safeSlug = encodeURIComponent(storefrontSlug);
@@ -48,8 +54,10 @@ function renderAccountPage(storefrontSlug: string, storefrontName: string) {
     .hidden{display:none}
     .divider{height:1px;background:var(--border);margin:16px 0}
   </style>
+  ${consentStyles}
 </head>
 <body>
+  ${consentBanner}
   <div class="wrap">
     <h1 class="title">${safeName} account</h1>
     <p class="muted">Sign in or create an account to manage your tickets.</p>
@@ -200,7 +208,9 @@ function renderPortalPage(
     ticketType: string;
     quantity: number;
     seatRef: string | null;
-  }>
+  }>,
+  consentStyles: string,
+  consentBanner: string
 ) {
   const safeSlug = encodeURIComponent(storefrontSlug);
   const safeName = escHtml(storefrontName);
@@ -270,8 +280,10 @@ function renderPortalPage(
     .list-item{padding:12px;border:1px solid var(--border);border-radius:12px;background:#fff}
     .input{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);margin-top:10px}
   </style>
+  ${consentStyles}
 </head>
 <body>
+  ${consentBanner}
   <div class="wrap">
     <h1 class="title">${safeName} portal</h1>
     <div class="card">
@@ -351,7 +363,10 @@ router.get("/:organiserSlug/account", async (req, res) => {
 
   if (!organiser) return res.status(404).send("Not found");
   const storefrontName = organiser.companyName || organiser.name || organiser.storefrontSlug || organiserSlug;
-  res.type("html").send(renderAccountPage(organiserSlug, storefrontName));
+  const consent = buildConsentBanner(req);
+  res
+    .type("html")
+    .send(renderAccountPage(organiserSlug, storefrontName, consent.styles, consent.banner));
 });
 
 router.get("/:organiserSlug/account/portal", async (req, res) => {
@@ -416,6 +431,7 @@ router.get("/:organiserSlug/account/portal", async (req, res) => {
   });
 
   const storefrontName = organiser.companyName || organiser.name || organiser.storefrontSlug || organiserSlug;
+  const consent = buildConsentBanner(req);
   res.type("html").send(
     renderPortalPage(
       organiserSlug,
@@ -438,7 +454,9 @@ router.get("/:organiserSlug/account/portal", async (req, res) => {
         ticketType: ticket.ticketType?.name || "Ticket",
         quantity: ticket.quantity ?? 1,
         seatRef: ticket.seatRef || null,
-      }))
+      })),
+      consent.styles,
+      consent.banner
     )
   );
 });
