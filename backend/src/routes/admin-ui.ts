@@ -12699,7 +12699,10 @@ function renderInterests(customer){
       +       '<div class="title">' + (isEdit ? 'Edit product' : 'Create product') + '</div>'
       +       '<div class="muted">Keep it simple: add photos, a clear title, and pricing. You can refine details anytime.</div>'
       +     '</div>'
-      +     '<button class="btn" id="ps_prod_back">Back</button>'
+      +     '<div class="row" style="gap:8px;">'
+      +       (isEdit ? '' : '<button class="btn" id="ps_prod_import">Import from Printful</button>')
+      +       '<button class="btn" id="ps_prod_back">Back</button>'
+      +     '</div>'
       +   '</div>'
       +   '<div class="card ps-section">'
       +     '<div class="ps-section-header">'
@@ -12753,6 +12756,7 @@ function renderInterests(customer){
       +           '<option value="SHIPPING">Shipping</option>'
       +           '<option value="COLLECT">Collect</option>'
       +           '<option value="EMAIL">Email</option>'
+      +           '<option value="PRINTFUL">Printful</option>'
       +         '</select>'
       +       '</label>'
       +       '<label class="ps-field">'
@@ -12887,6 +12891,26 @@ function renderInterests(customer){
     $('#ps_add_variant').addEventListener('click', function(){ addVariantRow(); });
     $('#ps_add_image').addEventListener('click', function(){ addImageRow(); });
     $('#ps_prod_back').addEventListener('click', function(){ go('/admin/ui/product-store'); });
+    var importBtn = $('#ps_prod_import');
+    if (importBtn){
+      importBtn.addEventListener('click', async function(){
+        var printfulProductId = prompt('Enter Printful product ID');
+        if (!printfulProductId) return;
+        try{
+          var data = await j('/admin/api/integrations/printful/import', {
+            method: 'POST',
+            headers: { 'Content-Type':'application/json' },
+            body: JSON.stringify({ printfulProductId: printfulProductId })
+          });
+          if (data && data.product && data.product.id){
+            showToast('Printful product imported.', true);
+            go('/admin/ui/product-store/products/' + data.product.id + '/edit');
+          }
+        }catch(err){
+          showToast(parseErr(err), false);
+        }
+      });
+    }
 
     $('#ps_prod_title').addEventListener('input', function(){
       if (!$('#ps_prod_slug').value){
