@@ -11,6 +11,7 @@ import { ensureMembership, linkPaidGuestOrders, mergeGuestCart, requireCustomer 
 import { publicAuthLimiter, requireSameOrigin } from "../lib/public-auth-guards.js";
 import { readStorefrontCart } from "../lib/storefront-cart.js";
 import { issueCustomerEmailVerification } from "../lib/customer-email-verification.js";
+import { buildCustomerTicketsPdf, sendTicketsEmail } from "../services/email.js";
 
 const router = Router();
 
@@ -191,43 +192,16 @@ router.get("/auth/session", async (req, res) => {
 
 router.get("/customer/orders", requireCustomer, async (req: any, res) => {
   const storefrontSlug = String(req.query?.storefront || "").trim() || null;
-  let storefrontId: string | undefined;
-  let organiserId: string | undefined;
-  if (storefrontSlug) {
-    const storefront = await prisma.storefront.findUnique({
-      where: { slug: storefrontSlug },
-      select: { id: true, ownerUserId: true },
-    });
-    if (storefront) {
-      storefrontId = storefront.id;
-      organiserId = storefront.ownerUserId;
-    } else {
-      const organiser = await prisma.user.findUnique({
-        where: { storefrontSlug },
-        select: { id: true },
-      });
-      organiserId = organiser?.id;
-    }
-  }
+  const { storefrontId, organiserId } = await resolveStorefrontContext(storefrontSlug);
 
   const orders = await prisma.order.findMany({
     where: {
       customerAccountId: String(req.customerSession.sub),
-      ...(storefrontSlug
-        ? storefrontId
-          ? {
-              OR: [
-                { storefrontId },
-                ...(organiserId ? [{ storefrontId: null, show: { organiserId } }] : []),
-              ],
-            }
-          : organiserId
-          ? { show: { organiserId } }
-          : {}
-        : {}),
+      ...buildOrderScope(storefrontSlug, storefrontId, organiserId),
     },
     include: {
       show: { select: { title: true, date: true, venue: { select: { name: true, city: true } } } },
+      _count: { select: { tickets: true, productOrders: true } },
     },
     orderBy: { createdAt: "desc" },
     take: 30,
@@ -239,12 +213,236 @@ router.get("/customer/orders", requireCustomer, async (req: any, res) => {
       id: order.id,
       createdAt: order.createdAt,
       amountPence: order.amountPence,
+      ticketsCount: order._count.tickets,
+      productOrdersCount: order._count.productOrders,
       showTitle: order.show?.title || "Show",
       showDate: order.show?.date || null,
       venue: order.show?.venue || null,
       status: order.status,
     })),
   });
+});
+
+router.get("/customer/tickets", requireCustomer, async (req: any, res) => {
+  const storefrontSlug = String(req.query?.storefront || "").trim() || null;
+  const { storefrontId, organiserId } = await resolveStorefrontContext(storefrontSlug);
+
+  const orders = await prisma.order.findMany({
+    where: {
+      customerAccountId: String(req.customerSession.sub),
+      ...buildOrderScope(storefrontSlug, storefrontId, organiserId),
+    },
+    include: {
+      show: {
+        select: {
+          title: true,
+          date: true,
+          venue: { select: { name: true, city: true, county: true } },
+        },
+      },
+      tickets: {
+        include: {
+          ticketType: { select: { name: true } },
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 30,
+  });
+
+  const items = orders.map((order) => ({
+    orderId: order.id,
+    createdAt: order.createdAt,
+    showTitle: order.show?.title || "Show",
+    showDate: order.show?.date || null,
+    venue: order.show?.venue || null,
+    status: order.status,
+    pdfUrl: storefrontSlug
+      ? `/public/customer/orders/${encodeURIComponent(order.id)}/tickets.pdf?storefront=${encodeURIComponent(
+          storefrontSlug
+        )}`
+      : `/public/customer/orders/${encodeURIComponent(order.id)}/tickets.pdf`,
+    tickets: (order.tickets || []).map((ticket) => ({
+      id: ticket.id,
+      serial: ticket.serial,
+      status: ticket.status,
+      seatRef: ticket.seatRef,
+      holderName: ticket.holderName,
+      ticketType: ticket.ticketType?.name || null,
+    })),
+  }));
+
+  return res.json({ ok: true, items });
+});
+
+router.get("/customer/products", requireCustomer, async (req: any, res) => {
+  const storefrontSlug = String(req.query?.storefront || "").trim() || null;
+  const { storefrontId } = await resolveStorefrontContext(storefrontSlug);
+
+  const orders = await prisma.order.findMany({
+    where: {
+      customerAccountId: String(req.customerSession.sub),
+      containsProducts: true,
+      ...(storefrontId ? { storefrontId } : {}),
+    },
+    include: {
+      productOrders: {
+        include: {
+          items: {
+            include: {
+              product: { select: { title: true } },
+              variant: { select: { title: true } },
+            },
+          },
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 30,
+  });
+
+  const items = orders.flatMap((order) =>
+    (order.productOrders || []).map((productOrder) => ({
+      orderId: order.id,
+      createdAt: order.createdAt,
+      status: productOrder.status,
+      fulfilmentStatus: productOrder.fulfilmentStatus,
+      totalPence: productOrder.totalPence,
+      items: productOrder.items.map((item) => ({
+        id: item.id,
+        title: item.titleSnapshot || item.product?.title || "Product",
+        variant: item.variantSnapshot || item.variant?.title || null,
+        qty: item.qty,
+        unitPricePence: item.unitPricePence,
+        lineTotalPence: item.lineTotalPence,
+        fulfilmentType: item.fulfilmentTypeSnapshot,
+        fulfilmentStatus: item.fulfilmentStatus,
+      })),
+    }))
+  );
+
+  return res.json({ ok: true, items });
+});
+
+router.get("/customer/recommendations", requireCustomer, async (req: any, res) => {
+  const storefrontSlug = String(req.query?.storefront || "").trim() || null;
+  const { organiserId } = await resolveStorefrontContext(storefrontSlug);
+
+  const orders = await prisma.order.findMany({
+    where: {
+      customerAccountId: String(req.customerSession.sub),
+      status: "PAID",
+      ...(organiserId ? { show: { organiserId } } : {}),
+    },
+    select: {
+      show: {
+        select: {
+          id: true,
+          organiserId: true,
+          eventType: true,
+          venue: { select: { county: true } },
+        },
+      },
+    },
+  });
+
+  const purchasedShowIds = new Set<string>();
+  const organiserIds = new Set<string>();
+  const eventTypes = new Set<string>();
+  const counties = new Set<string>();
+
+  for (const order of orders) {
+    const show = order.show;
+    if (!show) continue;
+    purchasedShowIds.add(show.id);
+    if (show.organiserId) organiserIds.add(show.organiserId);
+    if (show.eventType) eventTypes.add(show.eventType);
+    if (show.venue?.county) counties.add(show.venue.county);
+  }
+
+  if (!organiserIds.size || !eventTypes.size || !counties.size) {
+    return res.json({ ok: true, items: [] });
+  }
+
+  const recommendations = await prisma.show.findMany({
+    where: {
+      status: "LIVE",
+      date: { gte: new Date() },
+      organiserId: { in: Array.from(organiserIds) },
+      eventType: { in: Array.from(eventTypes) },
+      venue: { county: { in: Array.from(counties) } },
+      id: { notIn: Array.from(purchasedShowIds) },
+    },
+    select: {
+      id: true,
+      title: true,
+      date: true,
+      eventType: true,
+      venue: { select: { name: true, city: true, county: true } },
+    },
+    orderBy: { date: "asc" },
+    take: 6,
+  });
+
+  return res.json({
+    ok: true,
+    items: recommendations.map((show) => ({
+      id: show.id,
+      title: show.title || "Untitled show",
+      date: show.date,
+      eventType: show.eventType,
+      venue: show.venue || null,
+    })),
+  });
+});
+
+router.get("/customer/orders/:orderId/tickets.pdf", requireCustomer, async (req: any, res) => {
+  const storefrontSlug = String(req.query?.storefront || "").trim() || null;
+  const { storefrontId, organiserId } = await resolveStorefrontContext(storefrontSlug);
+  const orderId = String(req.params.orderId || "");
+  if (!orderId) return res.status(400).json({ ok: false, error: "Order ID is required" });
+
+  const order = await prisma.order.findFirst({
+    where: {
+      id: orderId,
+      customerAccountId: String(req.customerSession.sub),
+      ...buildOrderScope(storefrontSlug, storefrontId, organiserId),
+    },
+    select: { id: true },
+  });
+
+  if (!order) return res.status(404).json({ ok: false, error: "Order not found" });
+
+  const pdfResult = await buildCustomerTicketsPdf(order.id);
+  if (!pdfResult) return res.status(404).json({ ok: false, error: "Tickets PDF unavailable" });
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader(
+    "Content-Disposition",
+    `inline; filename="tixall-tickets-${encodeURIComponent(pdfResult.orderRef)}.pdf"`
+  );
+  return res.send(pdfResult.pdf);
+});
+
+router.post("/customer/orders/:orderId/resend", requireCustomer, async (req: any, res) => {
+  const storefrontSlug = String(req.query?.storefront || "").trim() || null;
+  const { storefrontId, organiserId } = await resolveStorefrontContext(storefrontSlug);
+  const orderId = String(req.params.orderId || "");
+  if (!orderId) return res.status(400).json({ ok: false, error: "Order ID is required" });
+
+  const order = await prisma.order.findFirst({
+    where: {
+      id: orderId,
+      customerAccountId: String(req.customerSession.sub),
+      ...buildOrderScope(storefrontSlug, storefrontId, organiserId),
+    },
+    select: { id: true },
+  });
+
+  if (!order) return res.status(404).json({ ok: false, error: "Order not found" });
+
+  const result = await sendTicketsEmail(order.id);
+  return res.json({ ok: result.ok, message: result.message || undefined });
 });
 
 router.patch("/customer/profile", requireCustomer, async (req: any, res) => {
@@ -357,5 +555,47 @@ router.get("/basket", async (req, res) => {
 
   return res.json({ ok: true, items });
 });
+
+async function resolveStorefrontContext(storefrontSlug: string | null) {
+  let storefrontId: string | undefined;
+  let organiserId: string | undefined;
+  if (storefrontSlug) {
+    const storefront = await prisma.storefront.findUnique({
+      where: { slug: storefrontSlug },
+      select: { id: true, ownerUserId: true },
+    });
+    if (storefront) {
+      storefrontId = storefront.id;
+      organiserId = storefront.ownerUserId;
+    } else {
+      const organiser = await prisma.user.findUnique({
+        where: { storefrontSlug },
+        select: { id: true },
+      });
+      organiserId = organiser?.id;
+    }
+  }
+  return { storefrontId, organiserId };
+}
+
+function buildOrderScope(
+  storefrontSlug: string | null,
+  storefrontId?: string,
+  organiserId?: string
+) {
+  if (!storefrontSlug) return {};
+  if (storefrontId) {
+    return {
+      OR: [
+        { storefrontId },
+        ...(organiserId ? [{ storefrontId: null, show: { organiserId } }] : []),
+      ],
+    };
+  }
+  if (organiserId) {
+    return { show: { organiserId } };
+  }
+  return {};
+}
 
 export default router;
