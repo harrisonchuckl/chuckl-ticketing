@@ -1,7 +1,7 @@
 import express, { Router } from "express";
 import crypto from "node:crypto";
 import prisma from "../lib/prisma.js";
-import { ProductOrderFulfilmentStatus, ProductOrderItemStatus } from "@prisma/client";
+import { ProductOrderFulfilmentStatus, ProductOrderItem, ProductOrderItemStatus } from "@prisma/client";
 
 const router = Router();
 
@@ -83,7 +83,7 @@ router.post("/printful", express.raw({ type: "*/*" }), async (req, res) => {
   const externalId = String(orderData?.external_id || payload.external_id || payload.data?.external_id || "").trim();
   const externalOrderId = externalId ? externalId.split(":")[0] : null;
 
-  let items = [];
+  let items: ProductOrderItem[] = [];
   if (printfulOrderId) {
     items = await prisma.productOrderItem.findMany({
       where: { fulfilmentProviderOrderId: String(printfulOrderId) },
