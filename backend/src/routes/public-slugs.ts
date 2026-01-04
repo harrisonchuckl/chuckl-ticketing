@@ -676,7 +676,18 @@ function renderAccountPage(opts: {
       productsList.innerHTML = items.map(item => {
         const lines = (item.items || []).map(line => {
           const title = [line.title, line.variant].filter(Boolean).join(' · ');
-          return '<div class=\"muted\">' + title + ' · ' + line.qty + ' × ' + formatMoney(line.unitPricePence) + '</div>';
+          const fulfilment = line.fulfilmentStatus ? ' · ' + line.fulfilmentStatus : '';
+          const trackingBits = [];
+          if (line.trackingNumber) trackingBits.push('No. ' + line.trackingNumber);
+          if (line.trackingCarrier) trackingBits.push(line.trackingCarrier);
+          const trackingLabel = trackingBits.length ? trackingBits.join(' · ') : '';
+          const trackingLink = line.trackingUrl
+            ? '<a class=\"btn\" href=\"' + line.trackingUrl + '\" target=\"_blank\" rel=\"noreferrer\">Track shipment</a>'
+            : '';
+          return ''
+            + '<div class=\"muted\">' + title + ' · ' + line.qty + ' × ' + formatMoney(line.unitPricePence) + fulfilment + '</div>'
+            + (trackingLabel ? '<div class=\"muted\">Tracking: ' + trackingLabel + '</div>' : '')
+            + (trackingLink ? '<div style=\"margin-top:6px\">' + trackingLink + '</div>' : '');
         }).join('');
         return '<div class=\"list-item\">' +
           '<strong>Order ' + item.orderId + '</strong>' +

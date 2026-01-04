@@ -492,10 +492,18 @@ router.post("/product-store/orders/:id/fulfil", requireAdminOrOrganiser, async (
     const payload = req.body || {};
 
     if (payload.itemId) {
+      const metadata = payload.metadata || {};
+      const trackingNumber = typeof metadata.trackingNumber === "string" ? metadata.trackingNumber.trim() : "";
+      const trackingUrl = typeof metadata.trackingUrl === "string" ? metadata.trackingUrl.trim() : "";
+      const trackingCarrier = typeof metadata.trackingCarrier === "string" ? metadata.trackingCarrier.trim() : "";
+
       await prisma.productOrderItem.update({
         where: { id: String(payload.itemId) },
         data: {
           fulfilmentStatus: payload.status || "FULFILLED",
+          trackingNumber: trackingNumber || undefined,
+          trackingUrl: trackingUrl || undefined,
+          trackingCarrier: trackingCarrier || undefined,
           metadataJson: payload.metadata ? payload.metadata : undefined,
         },
       });

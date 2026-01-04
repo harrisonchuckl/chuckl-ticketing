@@ -55,6 +55,7 @@ import adminAiRouter from "./routes/admin-ai.js";
 import adminAiCrmRouter from "./routes/admin-ai-crm.js";
 import adminStorefrontThemeRouter from "./routes/admin-storefront-theme.js";
 import adminPrintfulRouter from "./routes/admin-printful.js";
+import printfulWebhookRouter from "./routes/webhooks-printful.js";
 
 const app = express();
 
@@ -82,6 +83,7 @@ app.use(morgan("dev"));
 
 // ✅ Stripe webhook MUST be mounted before express.json()
 app.use("/webhook", webhookRouter);
+app.use("/webhooks", printfulWebhookRouter);
 
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));

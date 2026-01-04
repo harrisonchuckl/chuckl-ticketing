@@ -13088,6 +13088,14 @@ function renderInterests(customer){
       return '£' + ((Number(pence || 0) / 100).toFixed(2));
     }
 
+    function escAttr(value){
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+
     async function loadOrder(){
       try{
         var data = await j('/admin/api/product-store/orders/' + orderId);
@@ -13095,6 +13103,13 @@ function renderInterests(customer){
         if (!order) return;
         $('#ps_order_meta').textContent = (order.customerEmail || 'Guest') + ' · ' + money(order.totalPence);
         var html = (order.items || []).map(function(item){
+          var trackingParts = [];
+          if (item.trackingNumber) trackingParts.push('No. ' + item.trackingNumber);
+          if (item.trackingCarrier) trackingParts.push(item.trackingCarrier);
+          var trackingInfo = trackingParts.length ? trackingParts.join(' · ') : '';
+          var trackingLink = item.trackingUrl
+            ? '<a class="muted" href="' + escAttr(item.trackingUrl) + '" target="_blank" rel="noreferrer">View tracking</a>'
+            : '';
           return ''
             + '<div class="card" style="margin-top:12px;">'
             +   '<div class="title">' + item.titleSnapshot + '</div>'
@@ -13102,9 +13117,11 @@ function renderInterests(customer){
             +   '<div class="muted">Fulfilment: ' + item.fulfilmentTypeSnapshot + '</div>'
             +   '<div class="muted">Status: ' + (item.fulfilmentStatus || 'UNFULFILLED') + '</div>'
             +   '<div class="muted">Provider order: ' + (item.fulfilmentProviderOrderId || '-') + '</div>'
+            +   (trackingInfo ? '<div class="muted">Tracking: ' + trackingInfo + '</div>' : '')
+            +   (trackingLink ? '<div>' + trackingLink + '</div>' : '')
             +   (item.fulfilmentErrorMessage ? '<div class="muted" style="color:#b42525;">Error: ' + item.fulfilmentErrorMessage + '</div>' : '')
             +   '<div class="row" style="gap:8px;margin-top:8px;">'
-            +     '<input class="input" data-tracking placeholder="Tracking number" />'
+            +     '<input class="input" data-tracking placeholder="Tracking number" value="' + escAttr(item.trackingNumber || '') + '" />'
             +     '<input class="input" data-dispatch placeholder="Dispatch date" />'
             +     '<input class="input" data-notes placeholder="Notes" />'
             +     '<button class="btn" data-fulfil>Mark fulfilled</button>'

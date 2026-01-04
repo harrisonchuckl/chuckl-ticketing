@@ -318,6 +318,9 @@ router.get("/customer/products", requireCustomer, async (req: any, res) => {
         lineTotalPence: item.lineTotalPence,
         fulfilmentType: item.fulfilmentTypeSnapshot,
         fulfilmentStatus: item.fulfilmentStatus,
+        trackingNumber: item.trackingNumber,
+        trackingUrl: item.trackingUrl,
+        trackingCarrier: item.trackingCarrier,
       })),
     }))
   );
