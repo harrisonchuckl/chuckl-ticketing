@@ -412,6 +412,8 @@ function renderAccountPage(opts: { storefrontSlug: string | null; storefrontName
         <div class="menu">
           <a class="btn" href="#orders">Orders</a>
           <a class="btn" href="#tickets">Tickets</a>
+          <a class="btn" href="#products">Products</a>
+          <a class="btn" href="#recommendations">Recommendations</a>
           <a class="btn" href="#settings">Settings</a>
           <button class="btn" id="logoutBtn">Sign out</button>
         </div>
@@ -424,7 +426,17 @@ function renderAccountPage(opts: { storefrontSlug: string | null; storefrontName
 
       <div class="card" id="tickets">
         <h2>Tickets</h2>
-        <p class="muted">Tickets are listed alongside your orders for quick access.</p>
+        <div class="list" id="ticketsList"><span class="muted">Sign in to view your tickets.</span></div>
+      </div>
+
+      <div class="card" id="products">
+        <h2>Products</h2>
+        <div class="list" id="productsList"><span class="muted">Sign in to view your products.</span></div>
+      </div>
+
+      <div class="card" id="recommendations">
+        <h2>Recommended shows</h2>
+        <div class="list" id="recommendationsList"><span class="muted">Sign in to see recommendations.</span></div>
       </div>
 
       <div class="card" id="settings">
@@ -459,6 +471,9 @@ function renderAccountPage(opts: { storefrontSlug: string | null; storefrontName
     const signedIn = document.getElementById('signed-in');
     const welcomeText = document.getElementById('welcomeText');
     const ordersList = document.getElementById('ordersList');
+    const ticketsList = document.getElementById('ticketsList');
+    const productsList = document.getElementById('productsList');
+    const recommendationsList = document.getElementById('recommendationsList');
     const basketCount = document.getElementById('basketCount');
 
     function formatDate(raw) {
@@ -524,6 +539,33 @@ function renderAccountPage(opts: { storefrontSlug: string | null; storefrontName
       return data.items || [];
     }
 
+    async function loadTickets() {
+      if (!storefrontSlug) {
+        const data = await getJSON('/public/customer/tickets');
+        return data.items || [];
+      }
+      const data = await getJSON('/public/customer/tickets?storefront=' + encodeURIComponent(storefrontSlug));
+      return data.items || [];
+    }
+
+    async function loadProducts() {
+      if (!storefrontSlug) {
+        const data = await getJSON('/public/customer/products');
+        return data.items || [];
+      }
+      const data = await getJSON('/public/customer/products?storefront=' + encodeURIComponent(storefrontSlug));
+      return data.items || [];
+    }
+
+    async function loadRecommendations() {
+      if (!storefrontSlug) {
+        const data = await getJSON('/public/customer/recommendations');
+        return data.items || [];
+      }
+      const data = await getJSON('/public/customer/recommendations?storefront=' + encodeURIComponent(storefrontSlug));
+      return data.items || [];
+    }
+
     function renderOrders(items) {
       if (!items.length) {
         ordersList.innerHTML = '<span class=\"muted\">No orders yet for this account.</span>';
@@ -531,10 +573,98 @@ function renderAccountPage(opts: { storefrontSlug: string | null; storefrontName
       }
       ordersList.innerHTML = items.map(item => {
         const venue = item.venue ? [item.venue.name, item.venue.city].filter(Boolean).join(' · ') : '';
+        const ticketsLabel = item.ticketsCount ? `${item.ticketsCount} tickets` : '';
+        const productsLabel = item.productOrdersCount ? `${item.productOrdersCount} products` : '';
+        const totals = [ticketsLabel, productsLabel].filter(Boolean).join(' · ');
+        const pdfUrl = storefrontSlug
+          ? '/public/customer/orders/' + encodeURIComponent(item.id) + '/tickets.pdf?storefront=' + encodeURIComponent(storefrontSlug)
+          : '/public/customer/orders/' + encodeURIComponent(item.id) + '/tickets.pdf';
         return '<div class=\"list-item\">' +
           '<strong>' + item.showTitle + '</strong>' +
           '<div class=\"muted\">' + [formatDate(item.showDate), venue].filter(Boolean).join(' • ') + '</div>' +
-          '<div style=\"margin-top:6px\">' + formatMoney(item.amountPence) + ' · ' + item.status + '</div>' +
+          '<div style=\"margin-top:6px\">' + [formatMoney(item.amountPence), item.status, totals].filter(Boolean).join(' · ') + '</div>' +
+          '<div class=\"btn-row\" style=\"margin-top:8px\">' +
+            (item.ticketsCount ? '<a class=\"btn\" href=\"' + pdfUrl + '\">Download tickets</a>' : '') +
+            '<button class=\"btn\" data-order-resend=\"' + item.id + '\">Resend confirmation email</button>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+
+      ordersList.querySelectorAll('[data-order-resend]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const orderId = btn.getAttribute('data-order-resend');
+          if (!orderId) return;
+          btn.setAttribute('disabled', 'true');
+          btn.textContent = 'Sending…';
+          try {
+            const url = storefrontSlug
+              ? '/public/customer/orders/' + encodeURIComponent(orderId) + '/resend?storefront=' + encodeURIComponent(storefrontSlug)
+              : '/public/customer/orders/' + encodeURIComponent(orderId) + '/resend';
+            await postJSON(url, {});
+            btn.textContent = 'Email sent';
+          } catch (err) {
+            btn.textContent = 'Resend confirmation email';
+          } finally {
+            setTimeout(() => btn.removeAttribute('disabled'), 1000);
+          }
+        });
+      });
+    }
+
+    function renderTickets(items) {
+      if (!items.length) {
+        ticketsList.innerHTML = '<span class=\"muted\">No tickets yet for this account.</span>';
+        return;
+      }
+      ticketsList.innerHTML = items.map(item => {
+        const venue = item.venue ? [item.venue.name, item.venue.city].filter(Boolean).join(' · ') : '';
+        const ticketRows = (item.tickets || []).map(ticket => {
+          const details = [ticket.ticketType, ticket.seatRef, ticket.serial].filter(Boolean).join(' · ');
+          return '<div class=\"muted\">' + details + '</div>';
+        }).join('');
+        return '<div class=\"list-item\">' +
+          '<strong>' + item.showTitle + '</strong>' +
+          '<div class=\"muted\">' + [formatDate(item.showDate), venue].filter(Boolean).join(' • ') + '</div>' +
+          '<div style=\"margin-top:6px\">' +
+            '<a class=\"btn\" href=\"' + item.pdfUrl + '\">Download PDF tickets</a>' +
+          '</div>' +
+          '<div style=\"margin-top:8px\">' + (ticketRows || '<span class=\"muted\">No ticket details available.</span>') + '</div>' +
+        '</div>';
+      }).join('');
+    }
+
+    function renderProducts(items) {
+      if (!items.length) {
+        productsList.innerHTML = '<span class=\"muted\">No products purchased yet.</span>';
+        return;
+      }
+      productsList.innerHTML = items.map(item => {
+        const lines = (item.items || []).map(line => {
+          const title = [line.title, line.variant].filter(Boolean).join(' · ');
+          return '<div class=\"muted\">' + title + ' · ' + line.qty + ' × ' + formatMoney(line.unitPricePence) + '</div>';
+        }).join('');
+        return '<div class=\"list-item\">' +
+          '<strong>Order ' + item.orderId + '</strong>' +
+          '<div class=\"muted\">' + [formatDate(item.createdAt), item.status].filter(Boolean).join(' • ') + '</div>' +
+          '<div style=\"margin-top:6px\">Total: ' + formatMoney(item.totalPence) + '</div>' +
+          '<div style=\"margin-top:8px\">' + lines + '</div>' +
+        '</div>';
+      }).join('');
+    }
+
+    function renderRecommendations(items) {
+      if (!items.length) {
+        recommendationsList.innerHTML = '<span class=\"muted\">No recommendations yet.</span>';
+        return;
+      }
+      recommendationsList.innerHTML = items.map(item => {
+        const venue = item.venue ? [item.venue.name, item.venue.city].filter(Boolean).join(' · ') : '';
+        const url = '/public/event/' + encodeURIComponent(item.id);
+        return '<div class=\"list-item\">' +
+          '<a href=\"' + url + '\" style=\"text-decoration:none;color:inherit\">' +
+            '<strong>' + item.title + '</strong>' +
+            '<div class=\"muted\">' + [formatDate(item.date), venue, item.eventType].filter(Boolean).join(' • ') + '</div>' +
+          '</a>' +
         '</div>';
       }).join('');
     }
@@ -568,8 +698,16 @@ function renderAccountPage(opts: { storefrontSlug: string | null; storefrontName
         if (storefrontConsent) storefrontConsent.checked = Boolean(data.membership && data.membership.marketingOptIn);
       }
 
-      const orders = await loadOrders();
+      const [orders, tickets, products, recommendations] = await Promise.all([
+        loadOrders(),
+        loadTickets(),
+        loadProducts(),
+        loadRecommendations(),
+      ]);
       renderOrders(orders);
+      renderTickets(tickets);
+      renderProducts(products);
+      renderRecommendations(recommendations);
     }
 
     document.getElementById('loginBtn').addEventListener('click', async () => {

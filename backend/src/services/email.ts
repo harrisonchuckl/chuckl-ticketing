@@ -449,18 +449,15 @@ function formatGBPFromPence(pence?: number | null) {
   return `£${(pence / 100).toFixed(2)}`;
 }
 
-async function buildAttachments(order: NonNullable<OrderDeep>) {
-  if (!ATTACH_PDFS) return [];
-    console.log("[email] PDF_ATTACHMENTS enabled?", { ATTACH_PDFS });
-
+function buildOrderPdfData(order: NonNullable<OrderDeep>) {
   const s = order.show;
   const v = s?.venue;
 
   // Map ticketTypeId -> ticketType (if your Ticket model has ticketTypeId)
   const ticketTypes = s?.ticketTypes || [];
 
-    const rawCount = (order.tickets || []).length;
-  const nullSerialCount = (order.tickets || []).filter(t => !t.serial).length;
+  const rawCount = (order.tickets || []).length;
+  const nullSerialCount = (order.tickets || []).filter((t) => !t.serial).length;
 
   console.log("[email] ticket rows for order", {
     orderId: order.id,
@@ -468,43 +465,41 @@ async function buildAttachments(order: NonNullable<OrderDeep>) {
     nullSerialCount,
   });
 
+  const tickets = (order.tickets || [])
+    .filter((t) => !!t.serial)
+    .map((t) => {
+      const anyT = t as any;
 
-const tickets = (order.tickets || []).filter(t => !!t.serial).map((t) => {
+      const ticketTypeId = anyT.ticketTypeId as string | undefined;
+      const linkedType = ticketTypeId ? ticketTypes.find((tt) => tt.id === ticketTypeId) : undefined;
 
-  const anyT = t as any;
+      const ticketTypeName =
+        linkedType?.name ?? (anyT.ticketTypeName as string | undefined) ?? undefined;
 
-    const ticketTypeId = anyT.ticketTypeId as string | undefined;
-    const linkedType = ticketTypeId
-      ? ticketTypes.find((tt) => tt.id === ticketTypeId)
-      : undefined;
+      const ticketPrice =
+        linkedType?.pricePence != null ? formatGBPFromPence(linkedType.pricePence) : undefined;
 
-    const ticketTypeName =
-      linkedType?.name ?? (anyT.ticketTypeName as string | undefined) ?? undefined;
+      const seatLabel =
+        (anyT.seatRef as string | undefined) ||
+        (anyT.seatLabel as string | undefined) ||
+        (anyT.seatCode as string | undefined) ||
+        (anyT.seatName as string | undefined) ||
+        undefined;
 
-    const ticketPrice =
-      linkedType?.pricePence != null ? formatGBPFromPence(linkedType.pricePence) : undefined;
+      return {
+        serial: t.serial!,
+        ticketType: ticketTypeName,
+        price: ticketPrice,
+        seatLabel,
+      };
+    });
 
-       const seatLabel =
-      (anyT.seatRef as string | undefined) ||
-      (anyT.seatLabel as string | undefined) ||
-      (anyT.seatCode as string | undefined) ||
-      (anyT.seatName as string | undefined) ||
-      undefined;
-
-    return {
-serial: t.serial!,
-      ticketType: ticketTypeName,
-      price: ticketPrice,
-      seatLabel,
-    };
-  });
-
-   console.log("[email] tickets going into PDF", {
+  console.log("[email] tickets going into PDF", {
     pdfTicketCount: tickets.length,
     exampleSerial: tickets[0]?.serial,
   });
-  
-  if (tickets.length === 0) return [];
+
+  if (tickets.length === 0) return null;
 
   const anyShow = s as any;
   const doorsOpenText =
@@ -517,7 +512,7 @@ serial: t.serial!,
     ((order as any).reference as string | undefined) ||
     order.id;
 
-    const venueAddress =
+  const venueAddress =
     [v?.address, v?.city, v?.postcode].filter(Boolean).join(", ") || undefined;
 
   // Build a TicketSource-style tickets line (e.g. "2 x Standard, 1 x VIP")
@@ -557,19 +552,45 @@ serial: t.serial!,
       : undefined,
   };
 
- try {
-  const pdf = await buildOrderTicketsPdf(meta, tickets);
-
-  console.log("[email] pdf built", { bytes: pdf.length });
-
-  return [
-    { filename: `tixall-tickets-${orderRef}.pdf`, content: pdf },
-  ];
-} catch (err) {
-  console.error("[email] pdf build failed", err);
-  return [];
+  return { tickets, meta, orderRef };
 }
 
+export async function buildCustomerTicketsPdf(orderId: string) {
+  const order = await fetchOrderDeep(orderId);
+  if (!order) return null;
+  const pdfData = buildOrderPdfData(order);
+  if (!pdfData) return null;
+
+  const { tickets, meta, orderRef } = pdfData;
+  try {
+    const pdf = await buildOrderTicketsPdf(meta, tickets);
+    console.log("[email] pdf built", { bytes: pdf.length });
+    return { pdf, orderRef, order };
+  } catch (err) {
+    console.error("[email] pdf build failed", err);
+    return null;
+  }
+}
+
+async function buildAttachments(order: NonNullable<OrderDeep>) {
+  if (!ATTACH_PDFS) return [];
+  console.log("[email] PDF_ATTACHMENTS enabled?", { ATTACH_PDFS });
+
+  const pdfData = buildOrderPdfData(order);
+  if (!pdfData) return [];
+
+  const { tickets, meta, orderRef } = pdfData;
+
+  try {
+    const pdf = await buildOrderTicketsPdf(meta, tickets);
+
+    console.log("[email] pdf built", { bytes: pdf.length });
+
+    return [{ filename: `tixall-tickets-${orderRef}.pdf`, content: pdf }];
+  } catch (err) {
+    console.error("[email] pdf build failed", err);
+    return [];
+  }
 }
 
 export async function sendTicketsEmail(orderId: string, to?: string) {
