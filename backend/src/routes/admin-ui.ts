@@ -1220,7 +1220,12 @@ router.get(
             </svg>
           </button>
           <div class="sb-submenu" data-submenu="owner">
-            <a class="sb-link sub" href="/admin/ui/owner/insights" data-view="/admin/ui/owner/insights">Owner Console</a>
+            <a class="sb-link sub" href="/admin/ui/owner" data-view="/admin/ui/owner">Owner Console</a>
+            <a class="sb-link sub" href="/admin/ui/owner/insights" data-view="/admin/ui/owner/insights">Insights</a>
+            <a class="sb-link sub" href="/admin/ui/owner/organisers" data-view="/admin/ui/owner/organisers">Organisers</a>
+            <a class="sb-link sub" href="/admin/ui/owner/financial" data-view="/admin/ui/owner/financial">Financial</a>
+            <a class="sb-link sub" href="/admin/ui/owner/health" data-view="/admin/ui/owner/health">Health</a>
+            <a class="sb-link sub" href="/admin/ui/owner/audit" data-view="/admin/ui/owner/audit">Audit log</a>
           </div>
         </div>`
       : "";
@@ -2066,6 +2071,40 @@ router.get(
       border:1px solid var(--border);
       font-size:12px;
       font-weight:600;
+    }
+    .owner-overview-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+      gap:12px;
+    }
+    .owner-overview-card{
+      border:1px solid var(--border);
+      background:#ffffff;
+      border-radius:14px;
+      padding:16px;
+      text-decoration:none;
+      color:inherit;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      min-height:140px;
+      transition:box-shadow 0.2s ease, transform 0.2s ease;
+    }
+    .owner-overview-card:hover{
+      box-shadow:0 8px 16px rgba(15,23,42,0.08);
+      transform:translateY(-2px);
+    }
+    .owner-overview-card .title{
+      font-size:16px;
+    }
+    .owner-overview-card .muted{
+      font-size:13px;
+      flex:1;
+    }
+    .owner-overview-link{
+      font-size:12px;
+      font-weight:600;
+      color:#0f9cdf;
     }
     .chart-tooltip{
       position:absolute;
@@ -3273,9 +3312,6 @@ router.get(
 
   function setActive(path){
     var normalized = (path === '/admin/ui' || path === '/admin/ui/index.html') ? '/admin/ui/home' : path;
-    if (normalized.startsWith('/admin/ui/owner')){
-      normalized = '/admin/ui/owner/insights';
-    }
     $$('.sb-link').forEach(function(a){
       a.classList.toggle('active', a.getAttribute('data-view') === normalized);
     });
@@ -4207,44 +4243,40 @@ document.addEventListener('click', function(e){
     });
   }
 
-  async function ownerConsolePage(activeTab){
+  async function ownerConsoleOverviewPage(){
     if (!main) return;
-    var tab = activeTab || 'insights';
-    var tabs = [
-      { key: 'insights', label: 'Insights', path: '/admin/ui/owner/insights' },
-      { key: 'organisers', label: 'Organisers', path: '/admin/ui/owner/organisers' },
-      { key: 'financial', label: 'Financial', path: '/admin/ui/owner/financial' },
-      { key: 'health', label: 'Health', path: '/admin/ui/owner/health' },
-      { key: 'audit', label: 'Audit log', path: '/admin/ui/owner/audit' }
-    ];
-    var tabContent = {
-      insights: {
-        title: 'Insights overview',
-        body: 'Placeholder metrics for site-wide performance, conversion, and demand trends will appear here.'
+    var pages = [
+      {
+        key: 'insights',
+        title: 'Insights',
+        description: 'Site-wide performance, conversion, and demand trends.',
+        path: '/admin/ui/owner/insights'
       },
-      organisers: {
-        title: 'Organiser directory',
-        body: 'Site-wide organiser rollup with categorisation and subscription placeholders.'
+      {
+        key: 'organisers',
+        title: 'Organisers',
+        description: 'Organiser directory with categorisation and subscription details.',
+        path: '/admin/ui/owner/organisers'
       },
-      financial: {
-        title: 'Financial controls',
-        body: 'Placeholder settlement, fee, and revenue summaries will appear here.'
+      {
+        key: 'financial',
+        title: 'Financial',
+        description: 'Settlements, fees, revenue rollups, and payout operations.',
+        path: '/admin/ui/owner/financial'
       },
-      health: {
-        title: 'Platform health',
-        body: 'Placeholder operational alerts, uptime summaries, and incident tracking will appear here.'
+      {
+        key: 'health',
+        title: 'Health',
+        description: 'Operational alerts, uptime summaries, and incidents.',
+        path: '/admin/ui/owner/health'
       },
-      audit: {
-        title: 'Owner audit log',
-        body: 'Review sensitive owner actions across organisers.'
+      {
+        key: 'audit',
+        title: 'Audit log',
+        description: 'Sensitive owner actions and safeguards across organisers.',
+        path: '/admin/ui/owner/audit'
       }
-    };
-    var current = tabContent[tab] || tabContent.insights;
-    var isInsights = tab === 'insights';
-    var isOrganisers = tab === 'organisers';
-    var isAudit = tab === 'audit';
-    var organiserTypeOptions = ownerOrganiserTypeOptions('', true);
-    var organiserStatusOptions = ownerSubscriptionStatusOptions('', true);
+    ];
 
     main.innerHTML =
       '<div class="dashboard owner-dashboard">'
@@ -4255,10 +4287,63 @@ document.addEventListener('click', function(e){
       +        '<div class="muted">Site-wide controls and business-critical insights</div>'
       +      '</div>'
       +    '</div>'
-      +    '<div class="tabs" style="margin-top:12px;">'
-      +      tabs.map(function(item){
-               return '<a class="tab-btn' + (item.key === tab ? ' active' : '') + '" href="' + item.path + '" data-view="' + item.path + '">' + item.label + '</a>';
-             }).join('')
+      +  '</section>'
+      +  '<section class="owner-overview-grid">'
+      +    pages.map(function(item){
+             return ''
+               + '<a class="owner-overview-card" href="' + item.path + '" data-view="' + item.path + '">'
+               +   '<div class="title">' + escapeHtml(item.title) + '</div>'
+               +   '<div class="muted">' + escapeHtml(item.description) + '</div>'
+               +   '<div class="owner-overview-link">Open</div>'
+               + '</a>';
+           }).join('')
+      +  '</section>'
+      + '</div>';
+  }
+
+  async function ownerConsolePage(activeTab){
+    if (!main) return;
+    var tab = activeTab || 'insights';
+    var tabContent = {
+      insights: {
+        title: 'Insights',
+        body: 'Site-wide performance, conversion, and demand trends.'
+      },
+      organisers: {
+        title: 'Organisers',
+        body: 'Site-wide organiser directory with categorisation and subscription details.'
+      },
+      financial: {
+        title: 'Financial controls',
+        body: 'Settlement, fee, and revenue summaries will appear here.'
+      },
+      health: {
+        title: 'Platform health',
+        body: 'Operational alerts, uptime summaries, and incident tracking will appear here.'
+      },
+      audit: {
+        title: 'Audit log',
+        body: 'Review sensitive owner actions across organisers.'
+      }
+    };
+    var current = tabContent[tab] || tabContent.insights;
+    var isInsights = tab === 'insights';
+    var isOrganisers = tab === 'organisers';
+    var isFinancial = tab === 'financial';
+    var isHealth = tab === 'health';
+    var isAudit = tab === 'audit';
+    var organiserTypeOptions = ownerOrganiserTypeOptions('', true);
+    var organiserStatusOptions = ownerSubscriptionStatusOptions('', true);
+
+    main.innerHTML =
+      '<div class="dashboard owner-dashboard">'
+      +  '<section class="card">'
+      +    '<div class="header" style="gap:12px;align-items:center;justify-content:space-between;">'
+      +      '<div>'
+      +        '<div class="title">Owner Console</div>'
+      +        '<div class="muted">' + escapeHtml(current.title) + ' · ' + escapeHtml(current.body) + '</div>'
+      +      '</div>'
+      +      '<a class="btn small secondary" href="/admin/ui/owner" data-view="/admin/ui/owner">Back to Owner Console</a>'
       +    '</div>'
       +    (isInsights
         ? '<div class="owner-controls">'
@@ -4276,12 +4361,7 @@ document.addEventListener('click', function(e){
           + '<div class="owner-filter" id="ownerFilter"></div>'
           + '<div class="muted" id="ownerRangeLabel" style="font-size:12px;"></div>'
         + '</div>'
-        : '<div class="tab-panel active">'
-          + '<div class="panel-block" style="margin-top:8px;">'
-          +   '<div class="panel-title">' + escapeHtml(current.title) + '</div>'
-          +   '<div class="muted">' + escapeHtml(current.body) + '</div>'
-          + '</div>'
-        + '</div>')
+        : '')
       +  '</section>'
       +  (isInsights
         ? '<section class="kpi-grid" id="ownerKpiGrid">'
@@ -4348,8 +4428,8 @@ document.addEventListener('click', function(e){
             ? '<section class="card" id="ownerAuditCard">'
               + '<div class="header" style="align-items:flex-start;gap:12px;">'
               +   '<div>'
-              +     '<div class="title">Audit log</div>'
-              +     '<div class="muted">Review sensitive owner actions and safeguards.</div>'
+                +     '<div class="title">Audit log</div>'
+                +     '<div class="muted">Review sensitive owner actions and safeguards.</div>'
               +   '</div>'
               +   '<div class="row" style="gap:8px;flex-wrap:wrap;justify-content:flex-end;">'
               +     '<select id="ownerAuditAction" class="ctl" style="min-width:180px;"></select>'
@@ -4362,7 +4442,14 @@ document.addEventListener('click', function(e){
               + '<div id="ownerAuditTable"></div>'
               + '<div class="owner-pagination" id="ownerAuditPagination"></div>'
             + '</section>'
-            : '')))
+            : (isFinancial || isHealth
+              ? '<section class="card">'
+                + '<div class="panel-block" style="margin-top:8px;">'
+                +   '<div class="panel-title">' + escapeHtml(current.title) + '</div>'
+                +   '<div class="muted">' + escapeHtml(current.body) + '</div>'
+                + '</div>'
+              + '</section>'
+              : ''))))
       + '</div>';
 
     if (isInsights){
@@ -17783,8 +17870,7 @@ function renderInterests(customer){
       if (path === '/admin/ui/ai/store') return aiStorePage();
       if (path === '/admin/ui/ai/support') return aiSupportPage();
       if (path === '/admin/ui/owner'){
-        history.replaceState({}, '', '/admin/ui/owner/insights');
-        return ownerConsolePage('insights');
+        return ownerConsoleOverviewPage();
       }
       if (path === '/admin/ui/owner/insights') return ownerConsolePage('insights');
       if (path === '/admin/ui/owner/organisers') return ownerConsolePage('organisers');
