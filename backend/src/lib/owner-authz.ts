@@ -6,7 +6,7 @@ const DEFAULT_OWNER_EMAILS = ["harrison@chuckl.co.uk"];
 function getOwnerAllowlist(): string[] {
   const raw = process.env.TIXALL_OWNER_EMAILS;
   if (!raw || raw.trim().length === 0) {
-    return process.env.NODE_ENV === "production" ? [] : DEFAULT_OWNER_EMAILS;
+    return DEFAULT_OWNER_EMAILS.map((email) => email.trim().toLowerCase()).filter(Boolean);
   }
 
   return raw
