@@ -1218,7 +1218,7 @@ router.get(
             </svg>
           </button>
           <div class="sb-submenu" data-submenu="owner">
-            <a class="sb-link sub" href="/admin/ui/owner" data-view="/admin/ui/owner">Owner Console</a>
+            <a class="sb-link sub" href="/admin/ui/owner/insights" data-view="/admin/ui/owner/insights">Owner Console</a>
           </div>
         </div>`
       : "";
@@ -3185,6 +3185,9 @@ router.get(
 
   function setActive(path){
     var normalized = (path === '/admin/ui' || path === '/admin/ui/index.html') ? '/admin/ui/home' : path;
+    if (normalized.startsWith('/admin/ui/owner')){
+      normalized = '/admin/ui/owner/insights';
+    }
     $$('.sb-link').forEach(function(a){
       a.classList.toggle('active', a.getAttribute('data-view') === normalized);
     });
@@ -4116,12 +4119,54 @@ document.addEventListener('click', function(e){
     });
   }
 
-  async function ownerConsolePage(){
+  async function ownerConsolePage(activeTab){
     if (!main) return;
+    var tab = activeTab || 'insights';
+    var tabs = [
+      { key: 'insights', label: 'Insights', path: '/admin/ui/owner/insights' },
+      { key: 'organisers', label: 'Organisers', path: '/admin/ui/owner/organisers' },
+      { key: 'financial', label: 'Financial', path: '/admin/ui/owner/financial' },
+      { key: 'health', label: 'Health', path: '/admin/ui/owner/health' }
+    ];
+    var tabContent = {
+      insights: {
+        title: 'Insights overview',
+        body: 'Placeholder metrics for site-wide performance, conversion, and demand trends will appear here.'
+      },
+      organisers: {
+        title: 'Organiser rollup',
+        body: 'Placeholder organiser summaries, growth signals, and engagement flags will appear here.'
+      },
+      financial: {
+        title: 'Financial controls',
+        body: 'Placeholder settlement, fee, and revenue summaries will appear here.'
+      },
+      health: {
+        title: 'Platform health',
+        body: 'Placeholder operational alerts, uptime summaries, and incident tracking will appear here.'
+      }
+    };
+    var current = tabContent[tab] || tabContent.insights;
+
     main.innerHTML =
       '<div class="card">'
-      +  '<div class="title">Owner Console</div>'
-      +  '<div class="muted">Owner-only tools will appear here.</div>'
+      +  '<div class="header" style="gap:12px;align-items:center;">'
+      +    '<div>'
+      +      '<div class="title">Owner Console</div>'
+      +      '<div class="muted">Site-wide controls and business-critical insights</div>'
+      +    '</div>'
+      +  '</div>'
+      +  '<div class="tabs" style="margin-top:12px;">'
+      +    tabs.map(function(item){
+             return '<a class="tab-btn' + (item.key === tab ? ' active' : '') + '" href="' + item.path + '" data-view="' + item.path + '">' + item.label + '</a>';
+           }).join('')
+      +  '</div>'
+      +  '<div class="tab-panel active">'
+      +    '<div class="panel-block" style="margin-top:8px;">'
+      +      '<div class="panel-title">' + escapeHtml(current.title) + '</div>'
+      +      '<div class="muted">' + escapeHtml(current.body) + '</div>'
+      +    '</div>'
+      +  '</div>'
       + '</div>';
 
     try{
@@ -4129,6 +4174,11 @@ document.addEventListener('click', function(e){
       console.log('[admin-ui][owner] response', ownerResponse);
     }catch(err){
       console.error('[admin-ui][owner] response error', err);
+      main.innerHTML =
+        '<div class="card">'
+        +  '<div class="title">Not authorised</div>'
+        +  '<div class="muted">You do not have access to the Owner Console. Please contact support if you believe this is a mistake.</div>'
+        + '</div>';
     }
   }
 
@@ -16275,7 +16325,14 @@ function renderInterests(customer){
       if (path === '/admin/ui/ai/audience') return aiAudiencePage();
       if (path === '/admin/ui/ai/store') return aiStorePage();
       if (path === '/admin/ui/ai/support') return aiSupportPage();
-      if (path === '/admin/ui/owner') return ownerConsolePage();
+      if (path === '/admin/ui/owner'){
+        history.replaceState({}, '', '/admin/ui/owner/insights');
+        return ownerConsolePage('insights');
+      }
+      if (path === '/admin/ui/owner/insights') return ownerConsolePage('insights');
+      if (path === '/admin/ui/owner/organisers') return ownerConsolePage('organisers');
+      if (path === '/admin/ui/owner/financial') return ownerConsolePage('financial');
+      if (path === '/admin/ui/owner/health') return ownerConsolePage('health');
       if (path === '/admin/ui/shows/create') return createShow();
       if (path === '/admin/ui/shows/current')  return listShows();
       if (path === '/admin/ui/storefront')   return storefrontPage();
