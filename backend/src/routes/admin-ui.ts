@@ -1980,6 +1980,52 @@ router.get(
       border-color:#0f9cdf;
       color:#ffffff;
     }
+    .owner-controls{
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+      margin-top:12px;
+    }
+    .owner-range-actions,
+    .owner-range-custom,
+    .owner-filter{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      align-items:center;
+    }
+    .range-btn{
+      border:1px solid var(--border);
+      background:#ffffff;
+      border-radius:999px;
+      padding:6px 12px;
+      font-size:12px;
+      font-weight:600;
+      cursor:pointer;
+    }
+    .range-btn.active{
+      background:#0f9cdf;
+      border-color:#0f9cdf;
+      color:#ffffff;
+    }
+    .owner-filter-chip{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:4px 10px;
+      border-radius:999px;
+      background:#f8fafc;
+      border:1px solid var(--border);
+      font-size:12px;
+      font-weight:600;
+    }
+    .owner-filter-chip button{
+      border:none;
+      background:transparent;
+      cursor:pointer;
+      font-size:14px;
+      line-height:1;
+    }
     .chart-tooltip{
       position:absolute;
       top:0;
@@ -4147,38 +4193,84 @@ document.addEventListener('click', function(e){
       }
     };
     var current = tabContent[tab] || tabContent.insights;
+    var isInsights = tab === 'insights';
 
     main.innerHTML =
-      '<div class="card">'
-      +  '<div class="header" style="gap:12px;align-items:center;">'
-      +    '<div>'
-      +      '<div class="title">Owner Console</div>'
-      +      '<div class="muted">Site-wide controls and business-critical insights</div>'
+      '<div class="dashboard owner-dashboard">'
+      +  '<section class="card">'
+      +    '<div class="header" style="gap:12px;align-items:center;">'
+      +      '<div>'
+      +        '<div class="title">Owner Console</div>'
+      +        '<div class="muted">Site-wide controls and business-critical insights</div>'
+      +      '</div>'
       +    '</div>'
-      +  '</div>'
-      +  '<div class="tabs" style="margin-top:12px;">'
-      +    tabs.map(function(item){
-             return '<a class="tab-btn' + (item.key === tab ? ' active' : '') + '" href="' + item.path + '" data-view="' + item.path + '">' + item.label + '</a>';
-           }).join('')
-      +  '</div>'
-      +  '<div class="tab-panel active">'
-      +    '<div class="panel-block" style="margin-top:8px;">'
-      +      '<div class="panel-title">' + escapeHtml(current.title) + '</div>'
-      +      '<div class="muted">' + escapeHtml(current.body) + '</div>'
+      +    '<div class="tabs" style="margin-top:12px;">'
+      +      tabs.map(function(item){
+               return '<a class="tab-btn' + (item.key === tab ? ' active' : '') + '" href="' + item.path + '" data-view="' + item.path + '">' + item.label + '</a>';
+             }).join('')
       +    '</div>'
-      +  '</div>'
+      +    (isInsights
+        ? '<div class="owner-controls">'
+          + '<div>'
+          +   '<div class="kpi-label" style="margin-bottom:6px;">Date range</div>'
+          +   '<div class="owner-range-actions" id="ownerRangeButtons"></div>'
+          + '</div>'
+          + '<div class="owner-range-custom">'
+          +   '<input type="date" id="ownerFromDate" />'
+          +   '<span class="muted" style="font-size:12px;">to</span>'
+          +   '<input type="date" id="ownerToDate" />'
+          +   '<button class="btn small secondary" id="ownerApplyRange">Apply</button>'
+          + '</div>'
+          + '<div class="error-inline" id="ownerRangeError" style="display:none;"></div>'
+          + '<div class="owner-filter" id="ownerFilter"></div>'
+          + '<div class="muted" id="ownerRangeLabel" style="font-size:12px;"></div>'
+        + '</div>'
+        : '<div class="tab-panel active">'
+          + '<div class="panel-block" style="margin-top:8px;">'
+          +   '<div class="panel-title">' + escapeHtml(current.title) + '</div>'
+          +   '<div class="muted">' + escapeHtml(current.body) + '</div>'
+          + '</div>'
+        + '</div>')
+      +  '</section>'
+      +  (isInsights
+        ? '<section class="kpi-grid" id="ownerKpiGrid">'
+          + '<div class="kpi-card skeleton skeleton-tile"></div>'
+          + '<div class="kpi-card skeleton skeleton-tile"></div>'
+          + '<div class="kpi-card skeleton skeleton-tile"></div>'
+          + '<div class="kpi-card skeleton skeleton-tile"></div>'
+          + '<div class="kpi-card skeleton skeleton-tile"></div>'
+          + '<div class="kpi-card skeleton skeleton-tile"></div>'
+          + '<div class="kpi-card skeleton skeleton-tile"></div>'
+        + '</section>'
+        + '<section class="card" id="ownerChartCard">'
+          + '<div class="header">'
+          +   '<div>'
+          +     '<div class="title">Site-wide performance</div>'
+          +     '<div class="muted" id="ownerChartSubtitle">Loading...</div>'
+          +   '</div>'
+          +   '<div class="row chart-toggles" id="ownerMetricToggles"></div>'
+          + '</div>'
+          + '<div class="row chart-toggles" id="ownerGranularityToggles" style="margin-top:6px;"></div>'
+          + '<div id="ownerChartBody">'
+          +   '<div class="skeleton skeleton-line" style="height:200px;"></div>'
+          + '</div>'
+        + '</section>'
+        + '<section class="card" id="ownerTopOrganisersCard">'
+          + '<div class="header">'
+          +   '<div>'
+          +     '<div class="title">Top organisers</div>'
+          +     '<div class="muted" style="font-size:12px;">Aggregate totals for the selected period.</div>'
+          +   '</div>'
+          + '</div>'
+          + '<div id="ownerTopOrganisersBody"><div class="skeleton skeleton-line"></div></div>'
+        + '</section>'
+        : '')
       + '</div>';
 
-    try{
-      var ownerResponse = await j('/admin/api/owner');
-      console.log('[admin-ui][owner] response', ownerResponse);
-    }catch(err){
-      console.error('[admin-ui][owner] response error', err);
-      main.innerHTML =
-        '<div class="card">'
-        +  '<div class="title">Not authorised</div>'
-        +  '<div class="muted">You do not have access to the Owner Console. Please contact support if you believe this is a mistake.</div>'
-        + '</div>';
+    if (isInsights){
+      initOwnerInsightsState();
+      bindOwnerInsightsControls();
+      loadOwnerInsights();
     }
   }
 
@@ -4488,6 +4580,15 @@ document.addEventListener('click', function(e){
 
   var timeseriesCache = {};
   var chartMetric = 'tickets';
+  var ownerInsightsState = {
+    rangePreset: '30d',
+    from: null,
+    to: null,
+    metric: 'tickets',
+    granularity: 'day',
+    organiserId: null,
+    organiserLabel: null
+  };
 
   function isMoneyMetric(metric){
     return metric === 'gross' || metric === 'net' || metric === 'refunds';
@@ -4642,6 +4743,502 @@ document.addEventListener('click', function(e){
     }catch(e){
       if (chartBody) chartBody.innerHTML = '<div class="error-inline">Chart failed to load.</div>';
     }
+  }
+
+  function initOwnerInsightsState(){
+    if (!ownerInsightsState.from || !ownerInsightsState.to){
+      setOwnerRangePreset(ownerInsightsState.rangePreset || '30d');
+    }
+  }
+
+  function ownerMetricLabel(metric){
+    if (metric === 'gross') return 'Gross revenue';
+    if (metric === 'net') return 'Net revenue';
+    if (metric === 'kickback') return 'Kickback';
+    return 'Tickets sold';
+  }
+
+  function ownerGranularityLabel(granularity){
+    if (granularity === 'week') return 'Weekly';
+    if (granularity === 'month') return 'Monthly';
+    return 'Daily';
+  }
+
+  function ownerIsMoneyMetric(metric){
+    return metric === 'gross' || metric === 'net' || metric === 'kickback';
+  }
+
+  function setOwnerRangePreset(preset){
+    var days = Number(String(preset || '30d').replace('d', '')) || 30;
+    var end = new Date();
+    var start = new Date(end);
+    start.setUTCDate(end.getUTCDate() - (days - 1));
+    ownerInsightsState.from = start.toISOString().slice(0, 10);
+    ownerInsightsState.to = end.toISOString().slice(0, 10);
+    ownerInsightsState.rangePreset = days + 'd';
+  }
+
+  function setOwnerRangeCustom(from, to){
+    ownerInsightsState.from = from;
+    ownerInsightsState.to = to;
+    ownerInsightsState.rangePreset = 'custom';
+  }
+
+  function updateOwnerRangeLabel(){
+    var labelEl = $('#ownerRangeLabel');
+    if (!labelEl) return;
+    if (!ownerInsightsState.from || !ownerInsightsState.to){
+      labelEl.textContent = '';
+      return;
+    }
+    var fromLabel = fmtDateTime.format(new Date(ownerInsightsState.from));
+    var toLabel = fmtDateTime.format(new Date(ownerInsightsState.to));
+    labelEl.textContent = fromLabel + ' → ' + toLabel;
+  }
+
+  function renderOwnerFilter(){
+    var filter = $('#ownerFilter');
+    if (!filter) return;
+    if (!ownerInsightsState.organiserId){
+      filter.innerHTML = '';
+      return;
+    }
+    var label = ownerInsightsState.organiserLabel || 'Organiser';
+    filter.innerHTML =
+      '<div class="owner-filter-chip">'
+      + 'Filtered: ' + escapeHtml(label)
+      + '<button type="button" data-action="clear-owner-filter">×</button>'
+      + '</div>';
+    var clearBtn = filter.querySelector('[data-action="clear-owner-filter"]');
+    if (clearBtn){
+      clearBtn.addEventListener('click', function(){
+        ownerInsightsState.organiserId = null;
+        ownerInsightsState.organiserLabel = null;
+        loadOwnerInsights();
+      });
+    }
+  }
+
+  function updateOwnerRangeControls(){
+    var buttonsEl = $('#ownerRangeButtons');
+    if (buttonsEl){
+      var ranges = [7, 30, 90, 365];
+      buttonsEl.innerHTML = ranges.map(function(days){
+        var key = days + 'd';
+        var active = ownerInsightsState.rangePreset === key ? ' active' : '';
+        return '<button class="range-btn' + active + '" data-range="' + key + '">Last ' + days + '</button>';
+      }).join('');
+      $$('#ownerRangeButtons .range-btn').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var preset = btn.getAttribute('data-range');
+          if (!preset) return;
+          setOwnerRangePreset(preset);
+          updateOwnerRangeControls();
+          updateOwnerRangeLabel();
+          loadOwnerInsightsData();
+        });
+      });
+    }
+
+    var fromInput = $('#ownerFromDate');
+    var toInput = $('#ownerToDate');
+    if (fromInput) fromInput.value = ownerInsightsState.from || '';
+    if (toInput) toInput.value = ownerInsightsState.to || '';
+  }
+
+  function bindOwnerInsightsControls(){
+    updateOwnerRangeControls();
+    updateOwnerRangeLabel();
+    renderOwnerFilter();
+
+    var applyBtn = $('#ownerApplyRange');
+    if (applyBtn){
+      applyBtn.addEventListener('click', function(){
+        var fromInput = $('#ownerFromDate');
+        var toInput = $('#ownerToDate');
+        var errorEl = $('#ownerRangeError');
+        if (errorEl){
+          errorEl.textContent = '';
+          errorEl.style.display = 'none';
+        }
+        var from = fromInput ? fromInput.value : '';
+        var to = toInput ? toInput.value : '';
+        if (!from || !to){
+          if (errorEl){
+            errorEl.textContent = 'Please select both dates.';
+            errorEl.style.display = 'block';
+          }
+          return;
+        }
+        if (from > to){
+          if (errorEl){
+            errorEl.textContent = 'From date must be before To date.';
+            errorEl.style.display = 'block';
+          }
+          return;
+        }
+        setOwnerRangeCustom(from, to);
+        updateOwnerRangeControls();
+        updateOwnerRangeLabel();
+        loadOwnerInsightsData();
+      });
+    }
+  }
+
+  function buildOwnerUrl(base, extra){
+    var params = new URLSearchParams();
+    if (ownerInsightsState.from) params.set('from', ownerInsightsState.from);
+    if (ownerInsightsState.to) params.set('to', ownerInsightsState.to);
+    if (ownerInsightsState.organiserId) params.set('organiserId', ownerInsightsState.organiserId);
+    if (extra){
+      Object.keys(extra).forEach(function(key){
+        if (extra[key] !== undefined && extra[key] !== null){
+          params.set(key, String(extra[key]));
+        }
+      });
+    }
+    var qs = params.toString();
+    return qs ? (base + '?' + qs) : base;
+  }
+
+  function renderOwnerKpiTiles(summary){
+    var grid = $('#ownerKpiGrid');
+    if (!grid) return;
+    var tiles = [
+      { label: 'Tickets sold', value: fmtNumber.format(summary.ticketsSold || 0) },
+      { label: 'Gross revenue', value: formatMoney(summary.grossPence || 0) },
+      { label: 'Net revenue', value: formatMoney(summary.netPence || 0) },
+      { label: 'Kickback', value: formatMoney(summary.kickbackPence || 0) },
+      { label: 'Organisers', value: fmtNumber.format(summary.organisersCount || 0) },
+      { label: 'Total customers', value: fmtNumber.format(summary.customersDistinctCount || 0) },
+      { label: 'Registered customers', value: fmtNumber.format(summary.registeredCustomersCount || 0) }
+    ];
+
+    grid.innerHTML = tiles.map(function(tile){
+      return (
+        '<div class="kpi-card">'
+        + '<div class="kpi-label">' + tile.label + '</div>'
+        + '<div class="kpi-value">' + tile.value + '</div>'
+        + '</div>'
+      );
+    }).join('');
+  }
+
+  function renderOwnerMetricToggles(){
+    var toggles = $('#ownerMetricToggles');
+    if (!toggles) return;
+    var options = [
+      { key: 'tickets', label: 'Tickets' },
+      { key: 'gross', label: 'Gross £' },
+      { key: 'kickback', label: 'Kickback £' },
+      { key: 'net', label: 'Net £' }
+    ];
+
+    toggles.innerHTML = options.map(function(opt){
+      var active = opt.key === ownerInsightsState.metric ? ' active' : '';
+      return '<button class="chart-toggle' + active + '" data-metric="' + opt.key + '">' + opt.label + '</button>';
+    }).join('');
+
+    $$('#ownerMetricToggles .chart-toggle').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var metric = btn.getAttribute('data-metric');
+        if (!metric || metric === ownerInsightsState.metric) return;
+        ownerInsightsState.metric = metric;
+        renderOwnerMetricToggles();
+        updateOwnerChartSubtitle();
+        loadOwnerTimeseries();
+      });
+    });
+  }
+
+  function renderOwnerGranularityToggles(){
+    var toggles = $('#ownerGranularityToggles');
+    if (!toggles) return;
+    var options = [
+      { key: 'day', label: 'Day' },
+      { key: 'week', label: 'Week' },
+      { key: 'month', label: 'Month' }
+    ];
+
+    toggles.innerHTML = options.map(function(opt){
+      var active = opt.key === ownerInsightsState.granularity ? ' active' : '';
+      return '<button class="chart-toggle' + active + '" data-granularity="' + opt.key + '">' + opt.label + '</button>';
+    }).join('');
+
+    $$('#ownerGranularityToggles .chart-toggle').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var granularity = btn.getAttribute('data-granularity');
+        if (!granularity || granularity === ownerInsightsState.granularity) return;
+        ownerInsightsState.granularity = granularity;
+        renderOwnerGranularityToggles();
+        updateOwnerChartSubtitle();
+        loadOwnerTimeseries();
+      });
+    });
+  }
+
+  function updateOwnerChartSubtitle(){
+    var subtitle = $('#ownerChartSubtitle');
+    if (!subtitle) return;
+    subtitle.textContent = ownerMetricLabel(ownerInsightsState.metric) + ' · ' + ownerGranularityLabel(ownerInsightsState.granularity);
+  }
+
+  function formatOwnerAxisDate(dateStr, granularity){
+    var date = new Date(dateStr);
+    if (granularity === 'month'){
+      return new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        month: 'short',
+        year: 'numeric'
+      }).format(date);
+    }
+    return fmtDate.format(date);
+  }
+
+  function formatOwnerTooltipDate(dateStr, granularity){
+    var date = new Date(dateStr);
+    if (granularity === 'month'){
+      return new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        month: 'short',
+        year: 'numeric'
+      }).format(date);
+    }
+    if (granularity === 'week'){
+      return 'Week of ' + fmtDateTime.format(date);
+    }
+    return fmtDateTime.format(date);
+  }
+
+  function renderOwnerChart(series, metric, granularity){
+    var chartBody = $('#ownerChartBody');
+    if (!chartBody) return;
+
+    if (!series || !series.length){
+      chartBody.innerHTML = '<div class="empty-state">No data in this period yet.</div>';
+      return;
+    }
+
+    var normalized = series.map(function(point){
+      var value = metric === 'tickets'
+        ? Number(point.value || 0)
+        : Number(point.valuePence || point.value || 0);
+      return { date: point.date, value: value };
+    });
+
+    var maxValue = Math.max.apply(null, normalized.map(function(d){ return d.value || 0; })) || 1;
+    var axisSteps = 4;
+    var step = getNiceStep(maxValue, axisSteps);
+    var maxTick = step * axisSteps;
+    var barsHtml = normalized.map(function(point, idx){
+      var height = Math.max(4, Math.round((point.value / maxTick) * 100));
+      var isActive = idx === normalized.length - 1 ? ' active' : '';
+      var labelValue = ownerIsMoneyMetric(metric)
+        ? formatMoney(point.value)
+        : fmtNumber.format(point.value || 0);
+      return '<div class="chart-bar' + isActive + '" style="height:' + height + '%;" data-date="'
+        + point.date + '" data-value="' + labelValue + '"></div>';
+    }).join('');
+
+    var startLabel = formatOwnerAxisDate(normalized[0].date, granularity);
+    var endLabel = formatOwnerAxisDate(normalized[normalized.length - 1].date, granularity);
+    var ticksHtml = '';
+    for (var i = axisSteps; i >= 0; i -= 1){
+      var tickValue = Math.round(step * i);
+      var tickLabel = ownerIsMoneyMetric(metric)
+        ? formatMoney(tickValue)
+        : fmtNumber.format(tickValue);
+      ticksHtml += '<div class="tick"><span>' + tickLabel + '</span></div>';
+    }
+
+    chartBody.innerHTML =
+      '<div class="chart-layout">'
+      + '<div class="chart-y-axis">' + ticksHtml + '</div>'
+      + '<div class="chart-plot">'
+      + '<div class="chart-wrap">' + barsHtml + '</div>'
+      + '<div class="chart-axis"><span>' + startLabel + '</span><span>' + endLabel + '</span></div>'
+      + '<div class="chart-tooltip" id="ownerChartTooltip" aria-hidden="true"></div>'
+      + '</div>'
+      + '</div>';
+
+    var tooltip = $('#ownerChartTooltip');
+    var plot = chartBody.querySelector('.chart-plot');
+    if (!tooltip || !plot) return;
+
+    function showTooltip(bar){
+      var date = bar.getAttribute('data-date') || '';
+      var value = bar.getAttribute('data-value') || '0';
+      tooltip.innerHTML =
+        '<div class="tooltip-date">' + formatOwnerTooltipDate(date, granularity) + '</div>'
+        + '<div class="tooltip-row"><span>' + ownerMetricLabel(metric) + '</span><strong>' + value + '</strong></div>';
+
+      var barRect = bar.getBoundingClientRect();
+      var plotRect = plot.getBoundingClientRect();
+      var left = barRect.left - plotRect.left + barRect.width / 2;
+      var top = barRect.top - plotRect.top;
+      var clampLeft = Math.max(90, Math.min(left, plotRect.width - 90));
+
+      tooltip.style.left = clampLeft + 'px';
+      tooltip.style.top = top + 'px';
+      tooltip.classList.add('visible');
+      tooltip.setAttribute('aria-hidden', 'false');
+    }
+
+    function hideTooltip(){
+      tooltip.classList.remove('visible');
+      tooltip.setAttribute('aria-hidden', 'true');
+    }
+
+    var bars = chartBody.querySelectorAll('.chart-bar');
+    bars.forEach(function(bar){
+      bar.addEventListener('mouseenter', function(){
+        bars.forEach(function(other){ other.classList.remove('is-hover'); });
+        bar.classList.add('is-hover');
+        showTooltip(bar);
+      });
+      bar.addEventListener('mouseleave', function(){
+        bar.classList.remove('is-hover');
+        hideTooltip();
+      });
+    });
+  }
+
+  async function loadOwnerSummary(){
+    var grid = $('#ownerKpiGrid');
+    if (grid){
+      grid.innerHTML =
+        '<div class="kpi-card skeleton skeleton-tile"></div>'
+        + '<div class="kpi-card skeleton skeleton-tile"></div>'
+        + '<div class="kpi-card skeleton skeleton-tile"></div>'
+        + '<div class="kpi-card skeleton skeleton-tile"></div>'
+        + '<div class="kpi-card skeleton skeleton-tile"></div>'
+        + '<div class="kpi-card skeleton skeleton-tile"></div>'
+        + '<div class="kpi-card skeleton skeleton-tile"></div>';
+    }
+
+    try{
+      var data = await j(buildOwnerUrl('/admin/api/owner/summary'));
+      renderOwnerKpiTiles(data || {});
+    }catch(e){
+      if (grid){
+        grid.innerHTML =
+          '<div class="error-inline">Summary failed to load. <button class="btn small secondary" data-retry="owner-summary">Retry</button></div>';
+        var retry = grid.querySelector('[data-retry="owner-summary"]');
+        if (retry){
+          retry.addEventListener('click', function(){
+            loadOwnerSummary();
+          });
+        }
+      }
+    }
+  }
+
+  async function loadOwnerTimeseries(){
+    var chartBody = $('#ownerChartBody');
+    if (chartBody) chartBody.innerHTML = '<div class="skeleton skeleton-line" style="height:200px;"></div>';
+
+    try{
+      var data = await j(buildOwnerUrl('/admin/api/owner/timeseries', {
+        metric: ownerInsightsState.metric,
+        granularity: ownerInsightsState.granularity
+      }));
+      renderOwnerChart(data || [], ownerInsightsState.metric, ownerInsightsState.granularity);
+    }catch(e){
+      if (chartBody){
+        chartBody.innerHTML =
+          '<div class="error-inline">Chart failed to load. <button class="btn small secondary" data-retry="owner-chart">Retry</button></div>';
+        var retry = chartBody.querySelector('[data-retry="owner-chart"]');
+        if (retry){
+          retry.addEventListener('click', function(){
+            loadOwnerTimeseries();
+          });
+        }
+      }
+    }
+  }
+
+  function formatOwnerOrganiserLabel(row){
+    if (row.organiserName){
+      return row.organiserName;
+    }
+    var id = row.organiserId ? String(row.organiserId) : '';
+    return id ? ('Organiser ' + id.slice(0, 6)) : 'Organiser';
+  }
+
+  function renderOwnerTopOrganisers(rows){
+    var body = $('#ownerTopOrganisersBody');
+    if (!body) return;
+    if (!rows || !rows.length){
+      body.innerHTML = '<div class="empty-state">No organisers in this period yet.</div>';
+      return;
+    }
+
+    var head = '<div class="table-row head">'
+      + '<div>Organiser</div><div>Gross</div><div>Tickets</div><div>Kickback</div><div>Net</div>'
+      + '</div>';
+
+    var rowsHtml = rows.map(function(row){
+      var label = formatOwnerOrganiserLabel(row);
+      return (
+        '<div class="table-row">'
+        + '<div><a href="#" data-action="owner-filter" data-organiser-id="' + row.organiserId + '">' + escapeHtml(label) + '</a></div>'
+        + '<div>' + formatMoney(row.grossPence || 0) + '</div>'
+        + '<div>' + fmtNumber.format(row.ticketsSold || 0) + '</div>'
+        + '<div>' + formatMoney(row.kickbackPence || 0) + '</div>'
+        + '<div>' + formatMoney(row.netPence || 0) + '</div>'
+        + '</div>'
+      );
+    }).join('');
+
+    body.innerHTML = '<div class="table-list">' + head + rowsHtml + '</div>';
+
+    $$('#ownerTopOrganisersBody [data-action="owner-filter"]').forEach(function(link){
+      link.addEventListener('click', function(e){
+        e.preventDefault();
+        var organiserId = link.getAttribute('data-organiser-id');
+        if (!organiserId) return;
+        ownerInsightsState.organiserId = organiserId;
+        ownerInsightsState.organiserLabel = (link.textContent || '').trim() || 'Organiser';
+        renderOwnerFilter();
+        loadOwnerInsightsData();
+      });
+    });
+  }
+
+  async function loadOwnerTopOrganisers(){
+    var body = $('#ownerTopOrganisersBody');
+    if (body) body.innerHTML = '<div class="skeleton skeleton-line"></div>';
+    try{
+      var data = await j(buildOwnerUrl('/admin/api/owner/top-organisers'));
+      renderOwnerTopOrganisers(data || []);
+    }catch(e){
+      if (body){
+        body.innerHTML =
+          '<div class="error-inline">Top organisers failed to load. <button class="btn small secondary" data-retry="owner-organisers">Retry</button></div>';
+        var retry = body.querySelector('[data-retry="owner-organisers"]');
+        if (retry){
+          retry.addEventListener('click', function(){
+            loadOwnerTopOrganisers();
+          });
+        }
+      }
+    }
+  }
+
+  function loadOwnerInsightsData(){
+    updateOwnerChartSubtitle();
+    updateOwnerRangeLabel();
+    renderOwnerFilter();
+    loadOwnerSummary();
+    loadOwnerTimeseries();
+    loadOwnerTopOrganisers();
+  }
+
+  function loadOwnerInsights(){
+    updateOwnerRangeControls();
+    renderOwnerMetricToggles();
+    renderOwnerGranularityToggles();
+    loadOwnerInsightsData();
   }
 
   function renderAlerts(alertsData){
