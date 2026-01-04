@@ -137,35 +137,50 @@ router.get("/integrations/printful/connect", requireAdminOrOrganiser, (req, res)
 router.get("/integrations/printful/callback", requireAdminOrOrganiser, async (req, res) => {
   const code = typeof req.query.code === "string" ? req.query.code : "";
   const state = typeof req.query.state === "string" ? req.query.state : "";
+  const includeDetail = process.env.NODE_ENV !== "production" || isAdmin(req);
+  const detail = {
+    token_exchange_status: null as number | null,
+    token_exchange_body: null as string | null,
+    prisma_error: null as string | null,
+  };
 
   if (!code || !state) {
+    console.warn("[printful] missing oauth parameters", { hasCode: Boolean(code), hasState: Boolean(state) });
     return res.status(400).json({ ok: false, error: "Missing OAuth parameters" });
   }
 
   const stateCookie = req.cookies?.[STATE_COOKIE];
   if (!stateCookie) {
+    console.warn("[printful] missing oauth state cookie");
     return res.status(400).json({ ok: false, error: "Missing OAuth state" });
   }
 
   let statePayload: { sub: string; organiserId: string; nonce: string };
   try {
     statePayload = verifyStateCookie(stateCookie);
+    console.info("[printful] state validation ok", {
+      organiserId: statePayload.organiserId,
+      sub: statePayload.sub,
+    });
   } catch (err) {
     console.error("[printful] invalid state cookie", err);
     return res.status(400).json({ ok: false, error: "Invalid OAuth state" });
   }
 
   if (statePayload.nonce !== state) {
+    console.warn("[printful] oauth state mismatch", { organiserId: statePayload.organiserId });
     return res.status(400).json({ ok: false, error: "OAuth state mismatch" });
   }
 
   if (String(req.user?.id || "") !== statePayload.sub) {
+    console.warn("[printful] oauth user mismatch", { organiserId: statePayload.organiserId });
     return res.status(403).json({ ok: false, error: "OAuth user mismatch" });
   }
 
   try {
     const { clientId, clientSecret, redirectUri } = requireOAuthConfig();
 
+    console.info("[printful] token exchange request made", { organiserId: statePayload.organiserId });
     const tokenRes = await fetch(PRINTFUL_TOKEN_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -177,22 +192,48 @@ router.get("/integrations/printful/callback", requireAdminOrOrganiser, async (re
         redirect_url: redirectUri,
       }).toString(),
     });
+    const tokenBody = await tokenRes.text();
+    detail.token_exchange_status = tokenRes.status;
+    detail.token_exchange_body = tokenBody;
+    console.info("[printful] token exchange response", {
+      status: tokenRes.status,
+      body: tokenBody,
+    });
 
     if (!tokenRes.ok) {
-      const errorBody = await tokenRes.text();
-      console.error("[printful] token exchange failed", errorBody);
-      return res.status(502).json({ ok: false, error: "Failed to connect to Printful" });
+      console.error("[printful] token exchange failed", tokenBody);
+      const responsePayload = {
+        ok: false,
+        error: "Failed to connect to Printful",
+        code: "TOKEN_EXCHANGE_FAILED",
+        ...(includeDetail ? { detail } : {}),
+      };
+      return res.status(502).json(responsePayload);
     }
 
-    const tokenJson = (await tokenRes.json()) as {
-      access_token?: string;
-      refresh_token?: string;
-      expires_in?: number;
-    };
+    let tokenJson: { access_token?: string; refresh_token?: string; expires_in?: number } = {};
+    try {
+      tokenJson = tokenBody ? JSON.parse(tokenBody) : {};
+    } catch (err) {
+      console.error("[printful] token exchange parse failed", err);
+      const responsePayload = {
+        ok: false,
+        error: "Failed to connect to Printful",
+        code: "TOKEN_EXCHANGE_PARSE_FAILED",
+        ...(includeDetail ? { detail } : {}),
+      };
+      return res.status(502).json(responsePayload);
+    }
 
     const accessToken = tokenJson.access_token || "";
     if (!accessToken) {
-      return res.status(502).json({ ok: false, error: "Printful token missing" });
+      const responsePayload = {
+        ok: false,
+        error: "Printful token missing",
+        code: "TOKEN_EXCHANGE_MISSING_TOKEN",
+        ...(includeDetail ? { detail } : {}),
+      };
+      return res.status(502).json(responsePayload);
     }
 
     const refreshToken = tokenJson.refresh_token || null;
@@ -201,26 +242,39 @@ router.get("/integrations/printful/callback", requireAdminOrOrganiser, async (re
       ? new Date(Date.now() + expiresIn * 1000)
       : null;
 
-    await prisma.fulfilmentIntegration.upsert({
-      where: {
-        organiserId_provider: {
+    try {
+      await prisma.fulfilmentIntegration.upsert({
+        where: {
+          organiserId_provider: {
+            organiserId: statePayload.organiserId,
+            provider: "PRINTFUL",
+          },
+        },
+        update: {
+          accessTokenEncrypted: encryptToken(accessToken),
+          refreshTokenEncrypted: refreshToken ? encryptToken(refreshToken) : null,
+          accessTokenExpiresAt: expiresAt,
+        },
+        create: {
           organiserId: statePayload.organiserId,
           provider: "PRINTFUL",
+          accessTokenEncrypted: encryptToken(accessToken),
+          refreshTokenEncrypted: refreshToken ? encryptToken(refreshToken) : null,
+          accessTokenExpiresAt: expiresAt,
         },
-      },
-      update: {
-        accessTokenEncrypted: encryptToken(accessToken),
-        refreshTokenEncrypted: refreshToken ? encryptToken(refreshToken) : null,
-        accessTokenExpiresAt: expiresAt,
-      },
-      create: {
-        organiserId: statePayload.organiserId,
-        provider: "PRINTFUL",
-        accessTokenEncrypted: encryptToken(accessToken),
-        refreshTokenEncrypted: refreshToken ? encryptToken(refreshToken) : null,
-        accessTokenExpiresAt: expiresAt,
-      },
-    });
+      });
+      console.info("[printful] db write succeeded", { organiserId: statePayload.organiserId });
+    } catch (err: any) {
+      detail.prisma_error = String(err?.message || err);
+      console.error("[printful] db write failed", err);
+      const responsePayload = {
+        ok: false,
+        error: "Failed to complete Printful connection",
+        code: "DB_WRITE_FAILED",
+        ...(includeDetail ? { detail } : {}),
+      };
+      return res.status(500).json(responsePayload);
+    }
 
     res.clearCookie(STATE_COOKIE, { path: "/" });
 
@@ -231,7 +285,13 @@ router.get("/integrations/printful/callback", requireAdminOrOrganiser, async (re
     });
   } catch (err: any) {
     console.error("[printful] callback failed", err);
-    return res.status(500).json({ ok: false, error: "Failed to complete Printful connection" });
+    const responsePayload = {
+      ok: false,
+      error: "Failed to complete Printful connection",
+      code: "CALLBACK_FAILED",
+      ...(includeDetail ? { detail } : {}),
+    };
+    return res.status(500).json(responsePayload);
   }
 });
 
