@@ -509,13 +509,18 @@ router.post("/product-store/orders/:id/fulfil", requireAdminOrOrganiser, async (
     }
 
     const items = await prisma.productOrderItem.findMany({ where: { productOrderId: orderId } });
-    const fulfilled = items.filter((item) => item.fulfilmentStatus === ProductOrderItemStatus.FULFILLED).length;
-    const fulfilmentStatus =
-      fulfilled === 0
-        ? ProductOrderFulfilmentStatus.UNFULFILLED
-        : fulfilled === items.length
-          ? ProductOrderFulfilmentStatus.FULFILLED
-          : ProductOrderFulfilmentStatus.PARTIAL;
+    let fulfilmentStatus: ProductOrderFulfilmentStatus;
+    if (items.some((item) => item.fulfilmentStatus === ProductOrderItemStatus.ERROR)) {
+      fulfilmentStatus = ProductOrderFulfilmentStatus.ERROR;
+    } else {
+      const fulfilled = items.filter((item) => item.fulfilmentStatus === ProductOrderItemStatus.FULFILLED).length;
+      fulfilmentStatus =
+        fulfilled === 0
+          ? ProductOrderFulfilmentStatus.UNFULFILLED
+          : fulfilled === items.length
+            ? ProductOrderFulfilmentStatus.FULFILLED
+            : ProductOrderFulfilmentStatus.PARTIAL;
+    }
 
     await prisma.productOrder.update({
       where: { id: orderId },

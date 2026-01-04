@@ -32,8 +32,41 @@ export type PrintfulProductResponse = {
   };
 };
 
+export type PrintfulOrderRecipient = {
+  name: string;
+  address1: string;
+  address2?: string;
+  city: string;
+  state_code?: string;
+  country_code: string;
+  zip: string;
+  phone?: string;
+  email?: string;
+};
+
+export type PrintfulOrderItemPayload = {
+  sync_variant_id: number;
+  quantity: number;
+  external_id?: string;
+};
+
+export type PrintfulOrderCreatePayload = {
+  external_id: string;
+  recipient: PrintfulOrderRecipient;
+  items: PrintfulOrderItemPayload[];
+};
+
+export type PrintfulOrderCreateResponse = {
+  result?: {
+    id?: number;
+    external_id?: string;
+    status?: string;
+  };
+};
+
 type PrintfulClient = {
   fetchProduct: (productId: string) => Promise<PrintfulProductResponse>;
+  createOrder: (payload: PrintfulOrderCreatePayload) => Promise<PrintfulOrderCreateResponse>;
 };
 
 function requireOAuthConfig() {
@@ -127,5 +160,18 @@ export async function createPrintfulClient(organiserId: string): Promise<Printfu
     return (await res.json()) as PrintfulProductResponse;
   };
 
-  return { fetchProduct };
+  const createOrder = async (payload: PrintfulOrderCreatePayload) => {
+    const res = await fetch(`${PRINTFUL_API_BASE}/orders`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const errorBody = await res.text();
+      throw new Error(`Printful order create failed: ${errorBody}`);
+    }
+    return (await res.json()) as PrintfulOrderCreateResponse;
+  };
+
+  return { fetchProduct, createOrder };
 }

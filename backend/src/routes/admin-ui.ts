@@ -13100,6 +13100,9 @@ function renderInterests(customer){
             +   '<div class="title">' + item.titleSnapshot + '</div>'
             +   '<div class="muted">Qty ' + item.qty + ' · ' + money(item.lineTotalPence) + '</div>'
             +   '<div class="muted">Fulfilment: ' + item.fulfilmentTypeSnapshot + '</div>'
+            +   '<div class="muted">Status: ' + (item.fulfilmentStatus || 'UNFULFILLED') + '</div>'
+            +   '<div class="muted">Provider order: ' + (item.fulfilmentProviderOrderId || '-') + '</div>'
+            +   (item.fulfilmentErrorMessage ? '<div class="muted" style="color:#b42525;">Error: ' + item.fulfilmentErrorMessage + '</div>' : '')
             +   '<div class="row" style="gap:8px;margin-top:8px;">'
             +     '<input class="input" data-tracking placeholder="Tracking number" />'
             +     '<input class="input" data-dispatch placeholder="Dispatch date" />'
