@@ -17,6 +17,7 @@ import adminSeatMapsRoutes from "./routes/admin-seatmaps.js";
 import seatMapsRoutes from "./routes/seatmaps.js";
 import adminOrdersApiRoutes from "./routes/admin-orders-api.js";
 import adminAiCrmRoutes from "./routes/admin-ai-crm.js";
+import adminOwnerRoutes from "./routes/admin-owner.js";
 
 const app = express();
 
@@ -46,6 +47,7 @@ app.use("/admin/seatmaps", adminSeatMapsRoutes); // /admin/seatmaps?showId=...
 app.use("/seatmaps", seatMapsRoutes);            // /seatmaps/:seatMapId/...
 app.use("/admin/api", adminOrdersApiRoutes);
 app.use("/admin/api", adminAiCrmRoutes);
+app.use("/admin/api", adminOwnerRoutes);
 
 const port = Number(process.env.PORT) || 3000;
 app.listen(port, () => {

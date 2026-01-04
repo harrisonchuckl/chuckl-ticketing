@@ -56,6 +56,7 @@ import adminAiCrmRouter from "./routes/admin-ai-crm.js";
 import adminStorefrontThemeRouter from "./routes/admin-storefront-theme.js";
 import adminPrintfulRouter from "./routes/admin-printful.js";
 import printfulWebhookRouter from "./routes/webhooks-printful.js";
+import adminOwnerRouter from "./routes/admin-owner.js";
 
 const app = express();
 
@@ -160,6 +161,7 @@ app.use("/admin/api", adminAiRouter);
 app.use("/admin/api", adminAiCrmRouter);
 app.use("/admin/api", adminStorefrontThemeRouter);
 app.use("/admin/api", adminPrintfulRouter);
+app.use("/admin/api", adminOwnerRouter);
 app.use("/admin", adminMarketingRouter);
 app.use("/webhooks", sendgridWebhookRouter);
 
