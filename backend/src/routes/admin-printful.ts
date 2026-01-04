@@ -123,7 +123,7 @@ router.get("/integrations/printful/connect", requireAdminOrOrganiser, (req, res)
     const params = new URLSearchParams({
       response_type: "code",
       client_id: clientId,
-      redirect_uri: redirectUri,
+      redirect_url: redirectUri,
       state: nonce,
     });
 
@@ -174,7 +174,7 @@ router.get("/integrations/printful/callback", requireAdminOrOrganiser, async (re
         code,
         client_id: clientId,
         client_secret: clientSecret,
-        redirect_uri: redirectUri,
+        redirect_url: redirectUri,
       }).toString(),
     });
 
