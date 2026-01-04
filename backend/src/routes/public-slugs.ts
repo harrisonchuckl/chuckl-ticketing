@@ -110,6 +110,30 @@ type StorefrontTheme = {
   assets: { logoUrl: string };
 };
 
+type RecommendationShow = {
+  id: string;
+  title: string | null;
+  date: Date;
+  slug: string | null;
+  imageUrl: string | null;
+  eventType: string | null;
+  venue: { name: string; city: string | null; county: string | null } | null;
+};
+
+type RecommendationProduct = {
+  id: string;
+  title: string;
+  slug: string;
+  pricePence: number | null;
+  currency: string;
+  allowCustomAmount: boolean;
+  images: Array<{ sortOrder: number; url: string }>;
+};
+
+type RecommendationItem =
+  | { type: "show"; data: RecommendationShow }
+  | { type: "product"; data: RecommendationProduct };
+
 const defaultStorefrontTheme: StorefrontTheme = {
   tokens: {
     fontFamily: "Inter",
@@ -1429,8 +1453,8 @@ router.get("/:storefront", async (req, res) => {
     }
   }
 
-  const recommendationEvents = [];
-  const recommendationProducts = [];
+  const recommendationEvents: RecommendationShow[] = [];
+  const recommendationProducts: RecommendationProduct[] = [];
   if (customerAccountId && consentPreferences.personalisation) {
     const paidOrders = await prisma.order.findMany({
       where: {
@@ -1534,7 +1558,7 @@ router.get("/:storefront", async (req, res) => {
       })
     : [];
 
-  const recommendationItems = [];
+  const recommendationItems: RecommendationItem[] = [];
   const maxRecommendationItems = 6;
   const maxRecommendations = Math.max(recommendationEvents.length, recommendationProducts.length);
   for (let i = 0; i < maxRecommendations; i += 1) {
