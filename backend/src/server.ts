@@ -58,6 +58,7 @@ import adminPrintfulRouter from "./routes/admin-printful.js";
 import printfulWebhookRouter from "./routes/webhooks-printful.js";
 import adminOwnerRouter from "./routes/admin-owner.js";
 import adminOwnerDashboardRouter from "./routes/admin-owner-dashboard.js";
+import adminOwnerOrganisersRouter from "./routes/admin-owner-organisers.js";
 
 const app = express();
 
@@ -164,6 +165,7 @@ app.use("/admin/api", adminStorefrontThemeRouter);
 app.use("/admin/api", adminPrintfulRouter);
 app.use("/admin/api", adminOwnerRouter);
 app.use("/admin/api", adminOwnerDashboardRouter);
+app.use("/admin/api", adminOwnerOrganisersRouter);
 app.use("/admin", adminMarketingRouter);
 app.use("/webhooks", sendgridWebhookRouter);
 
