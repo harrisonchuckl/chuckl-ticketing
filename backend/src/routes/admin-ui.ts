@@ -2026,6 +2026,45 @@ router.get(
       font-size:14px;
       line-height:1;
     }
+    .owner-pagination{
+      margin-top:12px;
+      display:flex;
+      justify-content:flex-end;
+    }
+    .owner-organiser-name{
+      font-weight:600;
+    }
+    .owner-inline-select{
+      min-width:130px;
+    }
+    .owner-organiser-row{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      padding:6px 0;
+      border-bottom:1px solid var(--border);
+      font-size:13px;
+    }
+    .owner-organiser-row:last-child{
+      border-bottom:none;
+    }
+    .owner-organiser-chip-list{
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+      margin-top:6px;
+    }
+    .owner-organiser-chip{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:4px 10px;
+      border-radius:999px;
+      background:#f8fafc;
+      border:1px solid var(--border);
+      font-size:12px;
+      font-weight:600;
+    }
     .chart-tooltip{
       position:absolute;
       top:0;
@@ -4180,8 +4219,8 @@ document.addEventListener('click', function(e){
         body: 'Placeholder metrics for site-wide performance, conversion, and demand trends will appear here.'
       },
       organisers: {
-        title: 'Organiser rollup',
-        body: 'Placeholder organiser summaries, growth signals, and engagement flags will appear here.'
+        title: 'Organiser directory',
+        body: 'Site-wide organiser rollup with categorisation and subscription placeholders.'
       },
       financial: {
         title: 'Financial controls',
@@ -4194,6 +4233,9 @@ document.addEventListener('click', function(e){
     };
     var current = tabContent[tab] || tabContent.insights;
     var isInsights = tab === 'insights';
+    var isOrganisers = tab === 'organisers';
+    var organiserTypeOptions = ownerOrganiserTypeOptions('', true);
+    var organiserStatusOptions = ownerSubscriptionStatusOptions('', true);
 
     main.innerHTML =
       '<div class="dashboard owner-dashboard">'
@@ -4264,13 +4306,45 @@ document.addEventListener('click', function(e){
           + '</div>'
           + '<div id="ownerTopOrganisersBody"><div class="skeleton skeleton-line"></div></div>'
         + '</section>'
-        : '')
+        : (isOrganisers
+          ? '<section class="card" id="ownerOrganisersCard">'
+            + '<div class="header" style="align-items:flex-start;gap:12px;">'
+            +   '<div>'
+            +     '<div class="title">Organisers</div>'
+            +     '<div class="muted">Site-wide organiser listing with categorisation and subscription placeholders.</div>'
+            +   '</div>'
+            +   '<div class="row" style="gap:8px;flex-wrap:wrap;justify-content:flex-end;">'
+            +     '<input id="ownerOrganiserSearch" class="ctl" placeholder="Search name or email" style="min-width:220px;" />'
+            +     '<select id="ownerOrganiserType" class="ctl" style="min-width:160px;">' + organiserTypeOptions + '</select>'
+            +     '<select id="ownerOrganiserStatus" class="ctl" style="min-width:180px;">' + organiserStatusOptions + '</select>'
+            +   '</div>'
+            + '</div>'
+            + '<div class="error-inline" id="ownerOrganiserError" style="display:none;"></div>'
+            + '<div id="ownerOrganiserTable"></div>'
+            + '<div id="ownerOrganiserEmpty" class="muted" style="display:none;margin-top:10px;">No organisers match your filters.</div>'
+            + '<div class="owner-pagination" id="ownerOrganiserPagination"></div>'
+          + '</section>'
+          + '<div class="drawer-overlay" id="ownerOrganiserDrawerOverlay"></div>'
+          + '<aside class="drawer" id="ownerOrganiserDrawer" aria-hidden="true">'
+          +   '<div class="drawer-header">'
+          +     '<div>'
+          +       '<div class="title" id="ownerOrganiserDrawerTitle">Organiser</div>'
+          +       '<div class="muted" id="ownerOrganiserDrawerMeta"></div>'
+          +     '</div>'
+          +     '<button class="drawer-close" id="ownerOrganiserDrawerClose" aria-label="Close organiser profile">Close</button>'
+          +   '</div>'
+          +   '<div id="ownerOrganiserDrawerBody"></div>'
+          + '</aside>'
+          : ''))
       + '</div>';
 
     if (isInsights){
       initOwnerInsightsState();
       bindOwnerInsightsControls();
       loadOwnerInsights();
+    }
+    if (isOrganisers){
+      initOwnerOrganisers();
     }
   }
 
@@ -4296,6 +4370,51 @@ document.addEventListener('click', function(e){
     month: 'short',
     year: 'numeric'
   });
+
+  var ownerOrganiserTypeLabels = [
+    { value: '', label: 'All types' },
+    { value: 'VENUE', label: 'Venue' },
+    { value: 'PROMOTER', label: 'Promoter' },
+    { value: 'ARTIST', label: 'Artist' },
+    { value: 'OTHER', label: 'Other' }
+  ];
+
+  var ownerSubscriptionStatusLabels = [
+    { value: '', label: 'All statuses' },
+    { value: 'NONE', label: 'None' },
+    { value: 'TRIAL', label: 'Trial' },
+    { value: 'ACTIVE', label: 'Active' },
+    { value: 'PAST_DUE', label: 'Past due' },
+    { value: 'CANCELLED', label: 'Cancelled' }
+  ];
+
+  function ownerOrganiserTypeOptions(selected, includeAny){
+    return ownerOrganiserTypeLabels.filter(function(item){
+      return includeAny || item.value;
+    }).map(function(item){
+      var sel = item.value === selected ? ' selected' : '';
+      return '<option value="' + item.value + '"' + sel + '>' + item.label + '</option>';
+    }).join('');
+  }
+
+  function ownerSubscriptionStatusOptions(selected, includeAny){
+    return ownerSubscriptionStatusLabels.filter(function(item){
+      return includeAny || item.value;
+    }).map(function(item){
+      var sel = item.value === selected ? ' selected' : '';
+      return '<option value="' + item.value + '"' + sel + '>' + item.label + '</option>';
+    }).join('');
+  }
+
+  function ownerOrganiserLabel(value, fallback){
+    var match = ownerOrganiserTypeLabels.find(function(item){ return item.value === value; });
+    return match ? match.label : (fallback || 'Other');
+  }
+
+  function ownerSubscriptionLabel(value, fallback){
+    var match = ownerSubscriptionStatusLabels.find(function(item){ return item.value === value; });
+    return match ? match.label : (fallback || 'None');
+  }
 
   function renderDelta(value){
     var cls = value >= 0 ? 'up' : 'down';
@@ -5239,6 +5358,378 @@ document.addEventListener('click', function(e){
     renderOwnerMetricToggles();
     renderOwnerGranularityToggles();
     loadOwnerInsightsData();
+  }
+
+  var ownerOrganisersState = {
+    search: '',
+    type: '',
+    status: '',
+    page: 1,
+    pageSize: 20,
+    total: 0,
+    totalPages: 1,
+    items: []
+  };
+
+  var ownerOrganiserSearchTimer = null;
+
+  function initOwnerOrganisers(){
+    ownerOrganisersState.search = '';
+    ownerOrganisersState.type = '';
+    ownerOrganisersState.status = '';
+    ownerOrganisersState.page = 1;
+    ownerOrganisersState.pageSize = 20;
+    ownerOrganisersState.items = [];
+    ownerOrganisersState.total = 0;
+    ownerOrganisersState.totalPages = 1;
+
+    var search = $('#ownerOrganiserSearch');
+    var typeFilter = $('#ownerOrganiserType');
+    var statusFilter = $('#ownerOrganiserStatus');
+    var overlay = $('#ownerOrganiserDrawerOverlay');
+    var closeBtn = $('#ownerOrganiserDrawerClose');
+
+    if (search){
+      search.value = '';
+      search.addEventListener('input', function(){
+        ownerOrganisersState.search = search.value || '';
+        ownerOrganisersState.page = 1;
+        scheduleOwnerOrganisersLoad();
+      });
+    }
+    if (typeFilter){
+      typeFilter.value = '';
+      typeFilter.addEventListener('change', function(){
+        ownerOrganisersState.type = typeFilter.value || '';
+        ownerOrganisersState.page = 1;
+        loadOwnerOrganisers();
+      });
+    }
+    if (statusFilter){
+      statusFilter.value = '';
+      statusFilter.addEventListener('change', function(){
+        ownerOrganisersState.status = statusFilter.value || '';
+        ownerOrganisersState.page = 1;
+        loadOwnerOrganisers();
+      });
+    }
+    if (overlay){
+      overlay.addEventListener('click', function(){
+        closeOwnerOrganiserDrawer();
+      });
+    }
+    if (closeBtn){
+      closeBtn.addEventListener('click', function(){
+        closeOwnerOrganiserDrawer();
+      });
+    }
+
+    loadOwnerOrganisers();
+  }
+
+  function scheduleOwnerOrganisersLoad(){
+    if (ownerOrganiserSearchTimer) clearTimeout(ownerOrganiserSearchTimer);
+    ownerOrganiserSearchTimer = setTimeout(function(){
+      loadOwnerOrganisers();
+    }, 250);
+  }
+
+  function buildOwnerOrganiserUrl(){
+    var params = new URLSearchParams();
+    if (ownerOrganisersState.search) params.set('search', ownerOrganisersState.search);
+    if (ownerOrganisersState.type) params.set('type', ownerOrganisersState.type);
+    if (ownerOrganisersState.status) params.set('status', ownerOrganisersState.status);
+    params.set('page', String(ownerOrganisersState.page || 1));
+    params.set('pageSize', String(ownerOrganisersState.pageSize || 20));
+    return '/admin/api/owner/organisers?' + params.toString();
+  }
+
+  function setOwnerOrganiserError(message){
+    var el = $('#ownerOrganiserError');
+    if (!el) return;
+    if (!message){
+      el.style.display = 'none';
+      el.textContent = '';
+      return;
+    }
+    el.style.display = 'block';
+    el.textContent = message;
+  }
+
+  async function loadOwnerOrganisers(){
+    var table = $('#ownerOrganiserTable');
+    var empty = $('#ownerOrganiserEmpty');
+    if (table) table.innerHTML = '<div class="skeleton skeleton-line"></div>';
+    if (empty) empty.style.display = 'none';
+    setOwnerOrganiserError('');
+
+    try{
+      var data = await j(buildOwnerOrganiserUrl());
+      ownerOrganisersState.items = (data && data.items) ? data.items : [];
+      ownerOrganisersState.total = data && data.total ? data.total : 0;
+      ownerOrganisersState.totalPages = data && data.totalPages ? data.totalPages : 1;
+      ownerOrganisersState.page = data && data.page ? data.page : ownerOrganisersState.page;
+      ownerOrganisersState.pageSize = data && data.pageSize ? data.pageSize : ownerOrganisersState.pageSize;
+      renderOwnerOrganisersTable();
+      renderOwnerOrganiserPagination();
+    }catch(e){
+      if (table){
+        table.innerHTML =
+          '<div class="error-inline">Organisers failed to load. <button class="btn small secondary" data-retry="owner-organisers">Retry</button></div>';
+        var retry = table.querySelector('[data-retry="owner-organisers"]');
+        if (retry){
+          retry.addEventListener('click', function(){
+            loadOwnerOrganisers();
+          });
+        }
+      }
+      setOwnerOrganiserError(parseErr(e));
+    }
+  }
+
+  function renderOwnerOrganisersTable(){
+    var table = $('#ownerOrganiserTable');
+    var empty = $('#ownerOrganiserEmpty');
+    if (!table) return;
+
+    if (!ownerOrganisersState.items || !ownerOrganisersState.items.length){
+      table.innerHTML = '';
+      if (empty) empty.style.display = 'block';
+      return;
+    }
+    if (empty) empty.style.display = 'none';
+
+    var head = '<div class="table-row head">'
+      + '<div>Organiser</div>'
+      + '<div>Role</div>'
+      + '<div>Type</div>'
+      + '<div>Subscription</div>'
+      + '<div>Plan</div>'
+      + '<div>Created</div>'
+      + '<div></div>'
+      + '</div>';
+
+    var rows = ownerOrganisersState.items.map(function(item){
+      var profile = item.organiserProfile || {};
+      var organiserType = profile.organiserType || 'OTHER';
+      var subscriptionStatus = profile.subscriptionStatus || 'NONE';
+      var plan = profile.subscriptionPlan || '—';
+      var createdLabel = item.createdAt ? fmtDateTime.format(new Date(item.createdAt)) : '—';
+      var name = item.name || 'Organiser';
+      var email = item.email || '';
+      var role = item.role || '—';
+      return (
+        '<div class="table-row">'
+        + '<div>'
+        +   '<div class="owner-organiser-name">' + escapeHtml(name) + '</div>'
+        +   '<div class="muted" style="font-size:12px;">' + escapeHtml(email) + '</div>'
+        + '</div>'
+        + '<div>' + escapeHtml(role) + '</div>'
+        + '<div>'
+        +   '<select class="ctl owner-inline-select" data-field="organiserType" data-user-id="' + item.userId + '" data-current="' + organiserType + '">'
+        +     ownerOrganiserTypeOptions(organiserType, false)
+        +   '</select>'
+        + '</div>'
+        + '<div>'
+        +   '<select class="ctl owner-inline-select" data-field="subscriptionStatus" data-user-id="' + item.userId + '" data-current="' + subscriptionStatus + '">'
+        +     ownerSubscriptionStatusOptions(subscriptionStatus, false)
+        +   '</select>'
+        + '</div>'
+        + '<div>' + escapeHtml(plan) + '</div>'
+        + '<div>' + createdLabel + '</div>'
+        + '<div><button class="btn small secondary" data-action="owner-organiser-view" data-user-id="' + item.userId + '">View</button></div>'
+        + '</div>'
+      );
+    }).join('');
+
+    table.innerHTML = '<div class="table-list">' + head + rows + '</div>';
+
+    $$('#ownerOrganiserTable [data-action="owner-organiser-view"]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var userId = btn.getAttribute('data-user-id');
+        if (!userId) return;
+        openOwnerOrganiserDrawer(userId);
+      });
+    });
+
+    $$('#ownerOrganiserTable .owner-inline-select').forEach(function(select){
+      select.addEventListener('change', function(){
+        var userId = select.getAttribute('data-user-id');
+        var field = select.getAttribute('data-field');
+        var prev = select.getAttribute('data-current') || '';
+        var next = select.value || '';
+        if (!userId || !field || prev === next) return;
+        var payload = {};
+        payload[field] = next;
+        updateOwnerOrganiserProfile(userId, payload, select, prev);
+      });
+    });
+  }
+
+  function renderOwnerOrganiserPagination(){
+    var container = $('#ownerOrganiserPagination');
+    if (!container) return;
+    var page = ownerOrganisersState.page || 1;
+    var totalPages = ownerOrganisersState.totalPages || 1;
+    var total = ownerOrganisersState.total || 0;
+
+    if (total <= ownerOrganisersState.pageSize){
+      container.innerHTML = '';
+      return;
+    }
+
+    container.innerHTML =
+      '<div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;">'
+      + '<button class="btn small secondary" data-action="owner-organiser-prev"' + (page <= 1 ? ' disabled' : '') + '>Previous</button>'
+      + '<div class="muted" style="font-size:12px;">Page ' + page + ' of ' + totalPages + ' · ' + fmtNumber.format(total) + ' organisers</div>'
+      + '<button class="btn small secondary" data-action="owner-organiser-next"' + (page >= totalPages ? ' disabled' : '') + '>Next</button>'
+      + '</div>';
+
+    var prev = container.querySelector('[data-action="owner-organiser-prev"]');
+    var next = container.querySelector('[data-action="owner-organiser-next"]');
+    if (prev){
+      prev.addEventListener('click', function(){
+        if (ownerOrganisersState.page <= 1) return;
+        ownerOrganisersState.page -= 1;
+        loadOwnerOrganisers();
+      });
+    }
+    if (next){
+      next.addEventListener('click', function(){
+        if (ownerOrganisersState.page >= totalPages) return;
+        ownerOrganisersState.page += 1;
+        loadOwnerOrganisers();
+      });
+    }
+  }
+
+  async function updateOwnerOrganiserProfile(userId, payload, selectEl, prevValue){
+    if (!userId) return;
+    if (selectEl) selectEl.disabled = true;
+    setOwnerOrganiserError('');
+    try{
+      var res = await j('/admin/api/owner/organisers/' + userId + '/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload || {})
+      });
+      if (selectEl){
+        selectEl.setAttribute('data-current', selectEl.value || '');
+      }
+      var item = ownerOrganisersState.items.find(function(entry){ return entry.userId === userId; });
+      if (item && res && res.organiserProfile){
+        item.organiserProfile = res.organiserProfile;
+      }
+    }catch(e){
+      if (selectEl){
+        selectEl.value = prevValue || '';
+        selectEl.setAttribute('data-current', prevValue || '');
+      }
+      setOwnerOrganiserError(parseErr(e));
+    }finally{
+      if (selectEl) selectEl.disabled = false;
+    }
+  }
+
+  function openOwnerOrganiserDrawer(userId){
+    var overlay = $('#ownerOrganiserDrawerOverlay');
+    var drawer = $('#ownerOrganiserDrawer');
+    if (!overlay || !drawer) return;
+    overlay.classList.add('open');
+    drawer.classList.add('open');
+    drawer.setAttribute('aria-hidden', 'false');
+    renderOwnerOrganiserDrawerLoading();
+    loadOwnerOrganiserDetail(userId);
+  }
+
+  function closeOwnerOrganiserDrawer(){
+    var overlay = $('#ownerOrganiserDrawerOverlay');
+    var drawer = $('#ownerOrganiserDrawer');
+    if (!overlay || !drawer) return;
+    overlay.classList.remove('open');
+    drawer.classList.remove('open');
+    drawer.setAttribute('aria-hidden', 'true');
+  }
+
+  function renderOwnerOrganiserDrawerLoading(){
+    var body = $('#ownerOrganiserDrawerBody');
+    var title = $('#ownerOrganiserDrawerTitle');
+    var meta = $('#ownerOrganiserDrawerMeta');
+    if (title) title.textContent = 'Organiser';
+    if (meta) meta.textContent = '';
+    if (body){
+      body.innerHTML = '<div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line" style="margin-top:8px;"></div>';
+    }
+  }
+
+  async function loadOwnerOrganiserDetail(userId){
+    try{
+      var data = await j('/admin/api/owner/organisers/' + userId);
+      renderOwnerOrganiserDetail(data || {});
+    }catch(e){
+      var body = $('#ownerOrganiserDrawerBody');
+      if (body){
+        body.innerHTML = '<div class="error-inline">Failed to load organiser details.</div>';
+      }
+    }
+  }
+
+  function renderOwnerOrganiserDetail(data){
+    var body = $('#ownerOrganiserDrawerBody');
+    var title = $('#ownerOrganiserDrawerTitle');
+    var meta = $('#ownerOrganiserDrawerMeta');
+    if (!body) return;
+    var user = data.user || {};
+    var profile = data.organiserProfile || {};
+    var memberships = data.venueMemberships || [];
+
+    var name = user.name || 'Organiser';
+    var email = user.email || '';
+    var role = user.role || '—';
+    var createdLabel = user.createdAt ? fmtDateTime.format(new Date(user.createdAt)) : '—';
+    var organiserType = ownerOrganiserLabel(profile.organiserType || 'OTHER');
+    var subscriptionStatus = ownerSubscriptionLabel(profile.subscriptionStatus || 'NONE');
+    var plan = profile.subscriptionPlan || '—';
+    var periodEnd = profile.subscriptionPeriodEnd ? fmtDateTime.format(new Date(profile.subscriptionPeriodEnd)) : '—';
+    var notes = profile.notes || '—';
+
+    if (title) title.textContent = name;
+    if (meta) meta.textContent = email;
+
+    var membershipHtml = memberships.length
+      ? memberships.map(function(member){
+          var venueName = member.venue ? member.venue.name : 'Venue';
+          return '<div class="owner-organiser-chip">' + escapeHtml(venueName) + ' · ' + escapeHtml(member.role || '') + '</div>';
+        }).join('')
+      : '<div class="muted" style="font-size:12px;">No venue memberships yet.</div>';
+
+    body.innerHTML =
+      '<div class="drawer-section">'
+      + '<div class="title">User basics</div>'
+      + '<div class="owner-organiser-row"><span class="muted">Email</span><span>' + escapeHtml(email) + '</span></div>'
+      + '<div class="owner-organiser-row"><span class="muted">Role</span><span>' + escapeHtml(role) + '</span></div>'
+      + '<div class="owner-organiser-row"><span class="muted">Created</span><span>' + createdLabel + '</span></div>'
+      + '</div>'
+      + '<div class="drawer-section">'
+      + '<div class="title">Organiser profile</div>'
+      + '<div class="owner-organiser-row"><span class="muted">Type</span><span>' + escapeHtml(organiserType) + '</span></div>'
+      + '<div class="owner-organiser-row"><span class="muted">Subscription</span><span>' + escapeHtml(subscriptionStatus) + '</span></div>'
+      + '<div class="owner-organiser-row"><span class="muted">Plan</span><span>' + escapeHtml(plan) + '</span></div>'
+      + '<div class="owner-organiser-row"><span class="muted">Period end</span><span>' + escapeHtml(periodEnd) + '</span></div>'
+      + '<div class="owner-organiser-row"><span class="muted">Notes</span><span>' + escapeHtml(notes) + '</span></div>'
+      + '</div>'
+      + '<div class="drawer-section">'
+      + '<div class="title">Venue memberships</div>'
+      + '<div class="owner-organiser-chip-list">' + membershipHtml + '</div>'
+      + '</div>'
+      + '<div class="drawer-section">'
+      + '<div class="title">Quick actions</div>'
+      + '<div class="muted" style="font-size:12px;margin-bottom:8px;">Placeholders for Stage 6 workflows.</div>'
+      + '<div class="quick-actions">'
+      +   '<button class="btn small secondary" disabled>Reset password</button>'
+      +   '<button class="btn small secondary" disabled>Email organiser</button>'
+      + '</div>'
+      + '</div>';
   }
 
   function renderAlerts(alertsData){

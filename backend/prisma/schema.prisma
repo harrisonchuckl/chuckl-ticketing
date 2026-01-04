@@ -134,6 +134,21 @@ enum PlatformRole {
   PLATFORM_ADMIN
 }
 
+enum OrganiserType {
+  VENUE
+  PROMOTER
+  ARTIST
+  OTHER
+}
+
+enum SubscriptionStatus {
+  NONE
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+}
+
 enum VenueRole {
   OWNER
   MANAGER
@@ -329,6 +344,7 @@ model User {
   platformRole PlatformRole @default(USER)
 
   organiserSplitBps Int?
+  organiserProfile  OrganiserProfile?
 
   // ✅ Password reset fields
   resetTokenHash        String?   @db.Text
@@ -422,6 +438,19 @@ model User {
   marketingAiTemplates       MarketingAiTemplate[]
   marketingAiTonePresets     MarketingAiTonePreset[]
   storefrontThemes          StorefrontTheme[]
+}
+
+model OrganiserProfile {
+  userId                 String             @id
+  organiserType          OrganiserType      @default(OTHER)
+  subscriptionStatus     SubscriptionStatus @default(NONE)
+  subscriptionPlan       String?
+  subscriptionPeriodEnd  DateTime?
+  permissionsJson        Json?
+  notes                  String?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  user                   User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model CustomerAccount {
