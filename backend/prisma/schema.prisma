@@ -96,6 +96,12 @@ enum ProductOrderItemStatus {
   FULFILLED
 }
 
+enum FulfilmentProvider {
+  PRINTFUL
+  PRINTIFY
+  GELATO
+}
+
 enum InventoryMovementReason {
   SALE
   ADJUSTMENT
@@ -397,6 +403,8 @@ model User {
   chatbotTranscriptsOrganiser ChatbotTranscript[] @relation("ChatbotTranscriptOrganiser")
   chatbotTranscriptsCustomer  ChatbotTranscript[] @relation("ChatbotTranscriptCustomer")
   chatbotEscalationRules      ChatbotEscalationRule[] @relation("ChatbotEscalationOrganiser")
+  fulfilmentIntegrations      FulfilmentIntegration[]
+  fulfilmentProductMappings   FulfilmentProductMapping[]
 
   featuredConfigs            FeaturedConfig[]
   featuredPins               FeaturedPin[]
@@ -1176,6 +1184,46 @@ model StorefrontTheme {
   @@index([organiserId])
 }
 
+model FulfilmentIntegration {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organiserId          String
+  provider             FulfilmentProvider
+  accessTokenEncrypted String?  @db.Text
+  refreshTokenEncrypted String? @db.Text
+  accessTokenExpiresAt DateTime?
+
+  organiser User @relation(fields: [organiserId], references: [id])
+
+  @@unique([organiserId, provider])
+  @@index([organiserId])
+}
+
+model FulfilmentProductMapping {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organiserId      String
+  provider         FulfilmentProvider
+  productId        String
+  productVariantId String?
+  providerProductId String
+  providerVariantId String?
+
+  organiser      User           @relation(fields: [organiserId], references: [id])
+  product        Product        @relation(fields: [productId], references: [id])
+  productVariant ProductVariant? @relation(fields: [productVariantId], references: [id])
+
+  @@index([organiserId])
+  @@index([productId])
+  @@index([productVariantId])
+  @@index([provider, providerProductId])
+  @@unique([provider, productId, productVariantId])
+}
+
 model Product {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
@@ -1209,6 +1257,7 @@ model Product {
   orderItems         ProductOrderItem[]
   inventoryMovements InventoryMovement[]
   storeShowAddOns    StoreShowAddOn[]
+  fulfilmentMappings FulfilmentProductMapping[]
 
   @@unique([storefrontId, slug])
   @@index([storefrontId, status])
@@ -1232,6 +1281,7 @@ model ProductVariant {
   orderItems         ProductOrderItem[]
   inventoryMovements InventoryMovement[]
   upsellRules        UpsellRule[]
+  fulfilmentMappings FulfilmentProductMapping[]
 
   @@index([productId])
 }
