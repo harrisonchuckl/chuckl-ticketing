@@ -1202,7 +1202,9 @@ router.get(
     return next();
   },
   (req, res) => {
-    const ownerConsoleNav = isOwnerEmail(req.user?.email)
+    const isOwner = isOwnerEmail(req.user?.email);
+    const ownerDebugComment = isOwner ? `<!-- owner-check: email=${req.user?.email}, isOwner=true -->` : "";
+    const ownerConsoleNav = isOwner
       ? `
         <div class="sb-section" data-section="owner">
           <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="owner" aria-expanded="false">
@@ -2895,6 +2897,7 @@ router.get(
   </style>
 </head>
 <body>
+  ${ownerDebugComment}
   <header class="top-header">
     <a class="hdr-brand" href="/admin/ui/home" data-view="/admin/ui/home">
       <!-- NOTE: spaces must be URL-encoded -->
