@@ -1214,7 +1214,7 @@ router.get(
 
   /* Global fixed header height */
   --header-h:56px;
-  --sidebar-width:220px;
+  --sidebar-width:280px;
 
   /* TixAll AI highlight */
   --ai:#009fe3;
@@ -1358,7 +1358,7 @@ router.get(
   flex:0 0 var(--sidebar-width);
   background:#ffffff;
   border-right:1px solid var(--border);
-  padding:16px 12px;
+  padding:18px 16px 24px;
   position:sticky;
   top:var(--header-h);
   height:calc(100vh - var(--header-h));
@@ -1366,33 +1366,60 @@ router.get(
   overflow:auto;
   scrollbar-gutter:stable;
 }
-    .sb-group{
-      font-size:12px;
-      letter-spacing:.04em;
-      color:var(--muted);
-      margin:14px 8px 6px;
-      text-transform:uppercase;
-    }
-    .sb-link{
-      display:block;
-      padding:10px 12px;
-      margin:4px 4px;
-      border-radius:8px;
-      color:#111827;
-      text-decoration:none;
-    }
-    .sb-btn-link{
-      border:0;
-      background:transparent;
-      cursor:pointer;
-      font:inherit;
-      text-align:left;
-      width:100%;
-    }
-    .sb-link.active,
-    .sb-link:hover{
-      background:#f1f5f9;
-    }
+.sb-brand{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin:6px 6px 18px;
+}
+.sb-brand img{
+  height:30px;
+  width:auto;
+  display:block;
+}
+.sb-nav{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+.sb-link{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  padding:10px 12px;
+  margin:0;
+  border-radius:12px;
+  color:#111827;
+  text-decoration:none;
+  font-size:20px;
+  font-weight:500;
+  line-height:1.2;
+}
+.sb-link.sub{
+  font-size:14px;
+  font-weight:500;
+  color:var(--muted);
+  padding:8px 12px 8px 48px;
+  border-radius:10px;
+  margin:2px 0;
+}
+.sb-btn-link{
+  border:0;
+  background:transparent;
+  cursor:pointer;
+  font:inherit;
+  text-align:left;
+  width:100%;
+}
+.sb-link.active,
+.sb-link:hover{
+  background:#f1f5f9;
+}
+.sb-link.sub.active,
+.sb-link.sub:hover{
+  background:#eef2f6;
+  color:#0f172a;
+}
 .sb-toggle-icon{
   transition:transform 0.2s ease;
 }
@@ -1401,14 +1428,19 @@ router.get(
 }
 .sb-submenu{
   display:none;
-  margin-left:6px;
+  margin:4px 0 6px;
 }
 .sb-section.open .sb-submenu{
   display:block;
 }
-.sb-sub{margin-left:6px;}
+.sb-icon{
+  width:28px;
+  height:28px;
+  stroke:#111827;
+  flex:0 0 auto;
+}
 
-    /* Keeps "Create Show" + AI logo on one line */
+/* Keeps label + toggle aligned */
 .sb-link-row{
   display:flex;
   align-items:center;
@@ -1421,18 +1453,21 @@ router.get(
 .sb-link-label{
   flex:1;
   min-width:0;
+  display:flex;
+  align-items:center;
+  gap:14px;
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
 }
 
 .ai-menu-logo{
-  height:16px;
+  height:20px;
   width:auto;
   flex:0 0 auto;
 }
 .ai-menu-logo-main{
-  height:18px;
+  height:22px;
 }
 .sr-only{
   position:absolute;
@@ -2788,104 +2823,159 @@ router.get(
 
   <div class="wrap">
     <aside class="sidebar" id="adminSidebar">
-      <a class="sb-link" href="/admin/ui/home" data-view="/admin/ui/home">Dashboard</a>
-
-      <div class="sb-section" data-section="tixel-ai">
-        <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="tixel-ai" aria-expanded="false">
-          <span class="sb-link-label"><img src="/tixai.png" alt="TixAll AI" class="sb-ai-logo" /></span>
-          <svg class="sb-toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </button>
-        <div class="sb-submenu" data-submenu="tixel-ai">
-          <a class="sb-link sub" href="/admin/ui/shows/create-ai" data-view="/admin/ui/shows/create-ai">
-            <span class="sb-link-row">
-              <span class="sb-link-label">Create Show</span>
+      <div class="sb-brand">
+        <img src="/admin/ui/brand-logo" alt="TixAll" />
+      </div>
+      <nav class="sb-nav" aria-label="Primary">
+        <div class="sb-section" data-section="events">
+          <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="events" aria-expanded="false">
+            <span class="sb-link-label">
+              <svg class="sb-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4V8Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                <path d="M9 8v8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              </svg>
+              <span>Events</span>
             </span>
-          </a>
-          <a class="sb-link sub" href="/admin/ui/ai/featured" data-view="/admin/ui/ai/featured">Featured &amp; Discovery</a>
-          <a class="sb-link sub" href="/admin/ui/ai/insights" data-view="/admin/ui/ai/insights">AI Insights</a>
-          <a class="sb-link sub" href="/admin/ui/ai/marketing-studio" data-view="/admin/ui/ai/marketing-studio">Marketing Studio</a>
-          <a class="sb-link sub" href="/admin/ui/ai/audience" data-view="/admin/ui/ai/audience">Audience &amp; CRM</a>
-          <a class="sb-link sub" href="/admin/ui/ai/store" data-view="/admin/ui/ai/store">Store &amp; Add-ons</a>
-          <a class="sb-link sub" href="/admin/ui/ai/support" data-view="/admin/ui/ai/support">Support Inbox</a>
+            <svg class="sb-toggle-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <div class="sb-submenu" data-submenu="events">
+            <a class="sb-link sub" href="/admin/ui/home" data-view="/admin/ui/home">Dashboard</a>
+            <a class="sb-link sub" href="/admin/ui/shows/create" data-view="/admin/ui/shows/create">Create Show</a>
+            <a class="sb-link sub" href="/admin/ui/shows/current" data-view="/admin/ui/shows/current">All Events</a>
+          </div>
         </div>
-      </div>
 
-      <div class="sb-section" data-section="shows">
-        <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="shows" aria-expanded="false">
-          <span class="sb-link-label">Shows and Events</span>
-          <svg class="sb-toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </button>
-        <div class="sb-submenu" data-submenu="shows">
-          <a class="sb-link sub" href="/admin/ui/shows/create" data-view="/admin/ui/shows/create">Create Show</a>
-          <a class="sb-link sub" href="/admin/ui/shows/current" data-view="/admin/ui/shows/current">All Events</a>
-          <a class="sb-link sub" href="/admin/ui/storefront" data-view="/admin/ui/storefront">Storefront</a>
+        <div class="sb-section" data-section="products">
+          <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="products" aria-expanded="false">
+            <span class="sb-link-label">
+              <svg class="sb-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M6 7h12l1.2 4.5a2 2 0 0 1-1.94 2.5H6.74a2 2 0 0 1-1.94-2.5L6 7Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                <path d="M6 7l-1-3h14l-1 3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M8 21h8a2 2 0 0 0 2-2v-5H6v5a2 2 0 0 0 2 2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+              </svg>
+              <span>Products</span>
+            </span>
+            <svg class="sb-toggle-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <div class="sb-submenu" data-submenu="products">
+            <a class="sb-link sub" href="/admin/ui/product-store" data-view="/admin/ui/product-store">Product Store</a>
+            <a class="sb-link sub" href="/admin/ui/product-store/orders" data-view="/admin/ui/product-store/orders">Orders</a>
+            <a class="sb-link sub" href="/admin/ui/product-store/settings" data-view="/admin/ui/product-store/settings">Settings</a>
+            <a class="sb-link sub" href="/admin/ui/product-store/upsells" data-view="/admin/ui/product-store/upsells">Upsells</a>
+            <a class="sb-link sub" href="/admin/ui/integrations/printful" data-view="/admin/ui/integrations/printful">Printful Integration</a>
+          </div>
         </div>
-      </div>
 
-      <a class="sb-link" href="/admin/ui/customers" data-view="/admin/ui/customers">Customers</a>
-      <a class="sb-link" href="/admin/ui/venues" data-view="/admin/ui/venues">Venues</a>
-      <a class="sb-link" href="/admin/ui/promoters" data-view="/admin/ui/promoters">Promoters</a>
-      <a class="sb-link" href="/admin/ui/orders" data-view="/admin/ui/orders">Orders</a>
-      <a class="sb-link" href="/admin/ui/analytics" data-view="/admin/ui/analytics">Insights</a>
-
-      <div class="sb-section" data-section="marketing">
-        <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="marketing" aria-expanded="false">
-          <span class="sb-link-label">Marketing</span>
-          <svg class="sb-toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </button>
-        <div class="sb-submenu" data-submenu="marketing">
-          <a class="sb-link sub" href="/admin/ui/marketing" data-view="/admin/ui/marketing">Marketing Overview</a>
-          <a class="sb-link sub" href="/admin/ui/audiences" data-view="/admin/ui/audiences">Audiences</a>
-          <a class="sb-link sub" href="/admin/ui/email" data-view="/admin/ui/email">Email Campaigns</a>
+        <div class="sb-section" data-section="venues">
+          <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="venues" aria-expanded="false">
+            <span class="sb-link-label">
+              <svg class="sb-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M4 20h16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                <path d="M6 20V9a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v11" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                <path d="M9 12h2M13 12h2M9 15h2M13 15h2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              </svg>
+              <span>Venues</span>
+            </span>
+            <svg class="sb-toggle-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <div class="sb-submenu" data-submenu="venues">
+            <a class="sb-link sub" href="/admin/ui/venues" data-view="/admin/ui/venues">Venues</a>
+          </div>
         </div>
-      </div>
 
-      <div class="sb-section" data-section="commerce">
-        <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="commerce" aria-expanded="false">
-          <span class="sb-link-label">Commerce</span>
-          <svg class="sb-toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </button>
-        <div class="sb-submenu" data-submenu="commerce">
-          <a class="sb-link sub" href="/admin/ui/product-store" data-view="/admin/ui/product-store">Product Store</a>
-          <a class="sb-link sub" href="/admin/ui/product-store/orders" data-view="/admin/ui/product-store/orders">Orders</a>
-          <a class="sb-link sub" href="/admin/ui/product-store/settings" data-view="/admin/ui/product-store/settings">Settings</a>
-          <a class="sb-link sub" href="/admin/ui/product-store/upsells" data-view="/admin/ui/product-store/upsells">Upsells</a>
+        <div class="sb-section" data-section="artists">
+          <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="artists" aria-expanded="false">
+            <span class="sb-link-label">
+              <svg class="sb-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M8.5 11a3.5 3.5 0 1 0-3.5-3.5A3.5 3.5 0 0 0 8.5 11Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M18 10a3 3 0 1 0-3-3 3 3 0 0 0 3 3Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M2 20c.8-3 3.5-5 6.5-5s5.7 2 6.5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M13 19.5c.3-1.8 1.6-3.4 3.5-4.1 1.9-.6 4 .1 5.1 1.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span>Artists &amp; Promoters</span>
+            </span>
+            <svg class="sb-toggle-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <div class="sb-submenu" data-submenu="artists">
+            <a class="sb-link sub" href="/admin/ui/promoters" data-view="/admin/ui/promoters">Promoters</a>
+          </div>
         </div>
-      </div>
 
-      <div class="sb-section" data-section="integrations">
-        <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="integrations" aria-expanded="false">
-          <span class="sb-link-label">Integrations</span>
-          <svg class="sb-toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </button>
-        <div class="sb-submenu" data-submenu="integrations">
-          <a class="sb-link sub" href="/admin/ui/integrations/printful" data-view="/admin/ui/integrations/printful">Printful</a>
+        <div class="sb-section" data-section="customers">
+          <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="customers" aria-expanded="false">
+            <span class="sb-link-label">
+              <svg class="sb-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M3 12v4a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                <path d="M3 12l8-4 10 5-10 5-5-2.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M14.5 7.5 17 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              </svg>
+              <span>Customers &amp; Marketing</span>
+            </span>
+            <svg class="sb-toggle-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <div class="sb-submenu" data-submenu="customers">
+            <a class="sb-link sub" href="/admin/ui/customers" data-view="/admin/ui/customers">Customers</a>
+            <a class="sb-link sub" href="/admin/ui/marketing" data-view="/admin/ui/marketing">Marketing Overview</a>
+            <a class="sb-link sub" href="/admin/ui/audiences" data-view="/admin/ui/audiences">Audiences</a>
+            <a class="sb-link sub" href="/admin/ui/email" data-view="/admin/ui/email">Email Campaigns</a>
+            <a class="sb-link sub" href="/admin/ui/analytics" data-view="/admin/ui/analytics">Insights</a>
+          </div>
         </div>
-      </div>
 
-      <div class="sb-section" data-section="settings">
-        <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="settings" aria-expanded="false">
-          <span class="sb-link-label">Settings</span>
-          <svg class="sb-toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </button>
-        <div class="sb-submenu" data-submenu="settings">
-          <a class="sb-link sub" href="/admin/ui/account" data-view="/admin/ui/account">Account</a>
-          <a class="sb-link sub" href="/admin/ui/finance" data-view="/admin/ui/finance">Finance</a>
-          <a class="sb-link sub" href="/admin/ui/logout">Log out</a>
+        <div class="sb-section" data-section="store">
+          <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="store" aria-expanded="false">
+            <span class="sb-link-label">
+              <svg class="sb-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M4 7h16l-1.5 6H5.5L4 7Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                <path d="M7 7l1-3h8l1 3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M6 13v5a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              </svg>
+              <span>My Store</span>
+            </span>
+            <svg class="sb-toggle-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <div class="sb-submenu" data-submenu="store">
+            <a class="sb-link sub" href="/admin/ui/storefront" data-view="/admin/ui/storefront">Storefront</a>
+            <a class="sb-link sub" href="/admin/ui/orders" data-view="/admin/ui/orders">Orders</a>
+            <a class="sb-link sub" href="/admin/ui/account" data-view="/admin/ui/account">Account</a>
+            <a class="sb-link sub" href="/admin/ui/finance" data-view="/admin/ui/finance">Finance</a>
+            <a class="sb-link sub" href="/admin/ui/logout">Log out</a>
+          </div>
         </div>
-      </div>
+
+        <div class="sb-section" data-section="tixel-ai">
+          <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="tixel-ai" aria-expanded="false">
+            <span class="sb-link-label">
+              <img src="/tixai.png" alt="TixAll AI" class="ai-menu-logo ai-menu-logo-main" />
+              <span>TixAll AI</span>
+            </span>
+            <svg class="sb-toggle-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <div class="sb-submenu" data-submenu="tixel-ai">
+            <a class="sb-link sub" href="/admin/ui/shows/create-ai" data-view="/admin/ui/shows/create-ai">Create Show</a>
+            <a class="sb-link sub" href="/admin/ui/ai/featured" data-view="/admin/ui/ai/featured">Featured &amp; Discovery</a>
+            <a class="sb-link sub" href="/admin/ui/ai/insights" data-view="/admin/ui/ai/insights">AI Insights</a>
+            <a class="sb-link sub" href="/admin/ui/ai/marketing-studio" data-view="/admin/ui/ai/marketing-studio">Marketing Studio</a>
+            <a class="sb-link sub" href="/admin/ui/ai/audience" data-view="/admin/ui/ai/audience">Audience &amp; CRM</a>
+            <a class="sb-link sub" href="/admin/ui/ai/store" data-view="/admin/ui/ai/store">Store &amp; Add-ons</a>
+            <a class="sb-link sub" href="/admin/ui/ai/support" data-view="/admin/ui/ai/support">Support Inbox</a>
+          </div>
+        </div>
+      </nav>
     </aside>
 
     <main class="content" id="main">
