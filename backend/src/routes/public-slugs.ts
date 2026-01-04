@@ -1,6 +1,8 @@
+import crypto from "crypto";
 import { Router } from "express";
 import prisma from "../lib/prisma.js";
 import { readCustomerSession } from "../lib/customer-auth.js";
+import { readConsent } from "../lib/auth/cookie.js";
 import { readStorefrontCartCount } from "../lib/storefront-cart.js";
 import { buildConsentBanner } from "../lib/public-consent-banner.js";
 import { verifyJwt } from "../utils/security.js";
@@ -8,6 +10,11 @@ import { verifyJwt } from "../utils/security.js";
 const router = Router();
 const THEME_CACHE_TTL_MS = 30 * 1000;
 const themeCache = new Map<string, { expires: number; data: any | null }>();
+const SOFT_CUSTOMER_TOKEN_COOKIE = "customer_soft_token";
+
+function hashSoftToken(token: string) {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
 
 async function getCachedStorefrontTheme(organiserId: string, page: "ALL_EVENTS" | "EVENT_PAGE") {
   if (!organiserId) return null;
@@ -1395,6 +1402,204 @@ router.get("/:storefront", async (req, res) => {
   const showCityFilter = showVenueFilter && cityOptions.length > 1;
   const showCountyFilter = showVenueFilter && countyOptions.length > 1;
 
+  const consentPreferences = readConsent(req);
+  const customerSession = consentPreferences.personalisation ? await readCustomerSession(req) : null;
+  let customerAccountId = customerSession?.sub ? String(customerSession.sub) : null;
+  if (!customerAccountId && consentPreferences.personalisation) {
+    const softToken = String(req.cookies?.[SOFT_CUSTOMER_TOKEN_COOKIE] || "").trim();
+    if (softToken) {
+      const tokenHash = hashSoftToken(softToken);
+      const rememberToken = await prisma.customerRememberToken.findFirst({
+        where: { tokenHash, expiresAt: { gt: new Date() } },
+        select: { customerAccountId: true },
+      });
+      if (rememberToken?.customerAccountId) {
+        customerAccountId = rememberToken.customerAccountId;
+      }
+    }
+  }
+
+  const recommendationEvents = [];
+  if (customerAccountId && consentPreferences.personalisation) {
+    const paidOrders = await prisma.order.findMany({
+      where: {
+        customerAccountId,
+        status: "PAID",
+        show: { organiserId: organiser.id },
+      },
+      select: {
+        show: {
+          select: {
+            id: true,
+            organiserId: true,
+            eventType: true,
+            venue: { select: { county: true } },
+          },
+        },
+      },
+    });
+
+    if (paidOrders.length) {
+      const purchasedShowIds = new Set<string>();
+      const eventTypes = new Set<string>();
+      const counties = new Set<string>();
+
+      for (const order of paidOrders) {
+        const show = order.show;
+        if (!show) continue;
+        purchasedShowIds.add(show.id);
+        if (show.eventType) eventTypes.add(show.eventType);
+        if (show.venue?.county) counties.add(show.venue.county);
+      }
+
+      if (eventTypes.size && counties.size) {
+        const recommendations = await prisma.show.findMany({
+          where: {
+            status: "LIVE",
+            date: { gte: new Date() },
+            organiserId: organiser.id,
+            eventType: { in: Array.from(eventTypes) },
+            venue: { county: { in: Array.from(counties) } },
+            id: { notIn: Array.from(purchasedShowIds) },
+            slug: { not: null },
+          },
+          select: {
+            id: true,
+            title: true,
+            date: true,
+            slug: true,
+            imageUrl: true,
+            eventType: true,
+            venue: { select: { name: true, city: true, county: true } },
+          },
+          orderBy: { date: "asc" },
+          take: 4,
+        });
+        recommendationEvents.push(...recommendations);
+      }
+    }
+  }
+
+  const previouslyViewed = consentPreferences.personalisation && customerSession?.sub
+    ? await prisma.customerShowView.findMany({
+        where: {
+          customerAccountId: String(customerSession.sub),
+          show: { organiserId: organiser.id, status: "LIVE", slug: { not: null } },
+        },
+        orderBy: { createdAt: "desc" },
+        distinct: ["showId"],
+        select: {
+          show: {
+            select: {
+              id: true,
+              title: true,
+              date: true,
+              slug: true,
+              imageUrl: true,
+              eventType: true,
+              venue: { select: { name: true, city: true, county: true } },
+            },
+          },
+        },
+        take: 6,
+      })
+    : [];
+
+  const recommendationCards = recommendationEvents
+    .map((show) => {
+      const d = show.date ? new Date(show.date) : null;
+      const dateStr = d
+        ? d.toLocaleDateString("en-GB", {
+            weekday: "short",
+            day: "2-digit",
+            month: "short",
+          })
+        : "Date TBC";
+      const location = [show.venue?.name, show.venue?.city].filter(Boolean).join(", ");
+      const image = toPublicImageUrl(show.imageUrl, 800);
+      return `
+        <a class="recommendation-card" href="/public/${escHtml(storefront)}/${escHtml(show.slug || "")}">
+          <div class="recommendation-card__media">
+            ${
+              image
+                ? `<img src="${escAttr(image)}" alt="${escHtml(show.title || "Show")}" loading="lazy" />`
+                : `<div class="recommendation-card__placeholder" aria-hidden="true"></div>`
+            }
+          </div>
+          <div class="recommendation-card__body">
+            <div class="recommendation-card__eyebrow">${escHtml(dateStr)}</div>
+            <div class="recommendation-card__title">${escHtml(show.title || "Untitled show")}</div>
+            ${location ? `<div class="recommendation-card__meta">${escHtml(location)}</div>` : ""}
+          </div>
+        </a>
+      `;
+    })
+    .join("");
+
+  const previouslyViewedCards = previouslyViewed
+    .map((entry) => entry.show)
+    .filter((show) => show && show.slug)
+    .map((show) => {
+      const d = show.date ? new Date(show.date) : null;
+      const dateStr = d
+        ? d.toLocaleDateString("en-GB", {
+            weekday: "short",
+            day: "2-digit",
+            month: "short",
+          })
+        : "Date TBC";
+      const location = [show.venue?.name, show.venue?.city].filter(Boolean).join(", ");
+      const image = toPublicImageUrl(show.imageUrl, 800);
+      return `
+        <a class="recommendation-card" href="/public/${escHtml(storefront)}/${escHtml(show.slug || "")}">
+          <div class="recommendation-card__media">
+            ${
+              image
+                ? `<img src="${escAttr(image)}" alt="${escHtml(show.title || "Show")}" loading="lazy" />`
+                : `<div class="recommendation-card__placeholder" aria-hidden="true"></div>`
+            }
+          </div>
+          <div class="recommendation-card__body">
+            <div class="recommendation-card__eyebrow">${escHtml(dateStr)}</div>
+            <div class="recommendation-card__title">${escHtml(show.title || "Untitled show")}</div>
+            ${location ? `<div class="recommendation-card__meta">${escHtml(location)}</div>` : ""}
+          </div>
+        </a>
+      `;
+    })
+    .join("");
+
+  const recommendationsBanner =
+    consentPreferences.personalisation && recommendationCards
+      ? `
+  <section class="recommendations-banner" aria-label="Recommended events">
+    <div class="recommendations-banner__inner">
+      <div class="recommendations-banner__header">
+        <div>
+          <h2 class="section-heading">Recommended for you</h2>
+          <p class="section-subtitle">Based on your past bookings with this organiser.</p>
+        </div>
+        <a class="btn btn--ghost" href="#all-events">Browse all shows</a>
+      </div>
+      <div class="recommendations-grid">
+        ${recommendationCards}
+      </div>
+    </div>
+  </section>`
+      : "";
+
+  const previouslyViewedHtml =
+    consentPreferences.personalisation && customerSession?.sub && previouslyViewedCards
+      ? `
+    <section class="previously-viewed" aria-label="Previously viewed">
+      <h2 class="section-heading">Previously viewed</h2>
+      <div class="recommendations-grid">
+        ${previouslyViewedCards}
+      </div>
+    </section>
+  `
+      : "";
+
   const consent = buildConsentBanner(req);
   res.type("html").send(`
 <!doctype html>
@@ -1678,6 +1883,107 @@ body {
   font-size: clamp(1.8rem, 3vw, 2.4rem);
   margin: 0 0 16px;
   color: var(--primary);
+}
+
+.section-subtitle {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 1rem;
+}
+
+.recommendations-banner {
+  max-width: var(--container-w);
+  margin: 24px auto 0;
+  padding: 0 var(--page-pad);
+}
+
+.recommendations-banner__inner {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: 20px;
+}
+
+.recommendations-banner__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.recommendations-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.recommendation-card {
+  text-decoration: none;
+  color: inherit;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.recommendation-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card);
+}
+
+.recommendation-card__media {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: var(--bg-page);
+  overflow: hidden;
+}
+
+.recommendation-card__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.recommendation-card__placeholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #e2e8f0, #f8fafc);
+}
+
+.recommendation-card__body {
+  padding: 14px;
+  display: grid;
+  gap: 6px;
+}
+
+.recommendation-card__eyebrow {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.recommendation-card__title {
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.recommendation-card__meta {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.previously-viewed {
+  margin-top: 32px;
 }
 
 /* --- MAIN CONTENT --- */
@@ -2220,6 +2526,8 @@ ${consent.banner}
     </div>
   </header>
 
+  ${recommendationsBanner}
+
   <section class="hero-section"${editorRegionAttr("Banner")}>
     <div class="hero-content"${editorRegionAttr("Headings")}>
       <h1 class="hero-title" data-editor-copy="allEventsTitle">${escHtml(heroTitle)}</h1>
@@ -2246,7 +2554,7 @@ ${consent.banner}
   }
 
   <div class="wrap">
-    <h2 class="section-heading">All shows</h2>
+    <h2 class="section-heading" id="all-events">All shows</h2>
     <div class="filters-bar">
       ${
         showTypeFilter
@@ -2303,6 +2611,8 @@ ${consent.banner}
     <div class="load-more" id="load-more" aria-label="Load more shows">
       <button class="load-more-btn" id="load-more-btn" type="button">Load more shows</button>
     </div>
+
+    ${previouslyViewedHtml}
   </div>  
 
   <section class="cta-strip" aria-label="Create account">

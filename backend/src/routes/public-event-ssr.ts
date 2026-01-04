@@ -921,7 +921,7 @@ ticketTypes: {
    // @ts-ignore
    const status = (show as any).status as string;
 
-   if (status !== 'LIVE' && status !== 'live') {
+ if (status !== 'LIVE' && status !== 'live') {
       return res.status(404).send(`Event is not LIVE (Status: ${status})`);
    }
 
@@ -931,6 +931,34 @@ const externalTicketUrl = String((show as any).externalTicketUrl || '').trim();
 const usesExternalTicketing = (show as any).usesExternalTicketing === true;
 const hasAvailableTickets = (ticketTypes || []).some((t) => t?.available === null || t?.available > 0);
 const shouldUseExternalTickets = !!externalTicketUrl && (usesExternalTicketing || !hasAvailableTickets);
+
+  const consentPreferences = readConsent(req);
+  const customerSession = consentPreferences.personalisation ? await readCustomerSession(req) : null;
+  if (consentPreferences.personalisation && customerSession?.sub) {
+    const existingView = await prisma.customerShowView.findFirst({
+      where: {
+        customerAccountId: String(customerSession.sub),
+        showId: id,
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    });
+
+    if (existingView) {
+      await prisma.customerShowView.update({
+        where: { id: existingView.id },
+        data: { createdAt: new Date(), source: 'PUBLIC_SSR' },
+      });
+    } else {
+      await prisma.customerShowView.create({
+        data: {
+          showId: id,
+          customerAccountId: String(customerSession.sub),
+          source: 'PUBLIC_SSR',
+        },
+      });
+    }
+  }
 
   const organiserId = String(show.organiser?.id || '');
   const editorStorefrontSlug = show.organiser?.storefrontSlug || null;
@@ -1377,7 +1405,6 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
    });
    const logoUrl = themeLogo || brand.logoUrl;
    const consent = buildConsentBanner(req);
-   const consentPreferences = readConsent(req);
    const trackingScript = consentPreferences.personalisation
      ? `<script>
 (function(){
