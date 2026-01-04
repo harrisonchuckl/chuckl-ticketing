@@ -1379,6 +1379,9 @@ model ProductOrderItem {
   fulfilmentStatus       ProductOrderItemStatus @default(UNFULFILLED)
   fulfilmentProviderOrderId String?
   fulfilmentErrorMessage String?
+  trackingNumber         String?
+  trackingUrl            String?
+  trackingCarrier        String?
   metadataJson           Json?
 
   productOrder ProductOrder    @relation(fields: [productOrderId], references: [id])
