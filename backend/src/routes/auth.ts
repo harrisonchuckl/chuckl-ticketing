@@ -50,6 +50,55 @@ function appOriginFromRequest(req: any) {
   return "http://localhost:4000";
 }
 
+export async function sendPasswordResetEmailForUser(opts: {
+  prisma: PrismaClient;
+  user: { id: string; email: string; resetTokenRequestedAt?: Date | null };
+  req: any;
+  minIntervalMs?: number;
+}) {
+  const minIntervalMs = Number(opts.minIntervalMs || 0);
+  const last = opts.user.resetTokenRequestedAt as Date | null | undefined;
+  if (minIntervalMs && last && Date.now() - last.getTime() < minIntervalMs) {
+    return { skipped: true };
+  }
+
+  const token = crypto.randomBytes(32).toString("hex");
+  const tokenHash = sha256(token);
+
+  const ttlMinutes = Number(process.env.PASSWORD_RESET_TTL_MINUTES || "30");
+  const expiresAt = new Date(Date.now() + ttlMinutes * 60_000);
+
+  await opts.prisma.user.update({
+    where: { id: opts.user.id },
+    data: {
+      resetTokenHash: tokenHash,
+      resetTokenExpiresAt: expiresAt,
+      resetTokenRequestedAt: new Date(),
+      resetTokenUsedAt: null,
+    },
+  });
+
+  const origin = appOriginFromRequest(opts.req);
+  const resetLink = `${origin}/auth/reset?token=${encodeURIComponent(token)}`;
+
+  let sent = true;
+  try {
+    await sendMail({
+      to: opts.user.email,
+      subject: "Reset your TicketIn password",
+      text: `Use this link to reset your password (expires in ${ttlMinutes} minutes):\n\n${resetLink}`,
+      html:
+        `<p>Use this link to reset your password (expires in ${ttlMinutes} minutes):</p>` +
+        `<p><a href="${resetLink}">${resetLink}</a></p>`,
+    });
+  } catch (e) {
+    sent = false;
+    console.error("[mailer] send failed", e);
+  }
+
+  return { skipped: false, sent };
+}
+
 function adminApprovalEmail() {
   return String(process.env.ADMIN_APPROVAL_EMAIL || "harrison@chuckl.co.uk").trim();
 }
@@ -370,38 +419,14 @@ router.post("/forgot-password", async (req, res) => {
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) return res.json({ ok: true });
 
-    const last = (user as any).resetTokenRequestedAt as Date | null;
-    if (last && Date.now() - last.getTime() < 60_000) return res.json({ ok: true });
-
-    const token = crypto.randomBytes(32).toString("hex");
-    const tokenHash = sha256(token);
-
-    const ttlMinutes = Number(process.env.PASSWORD_RESET_TTL_MINUTES || "30");
-    const expiresAt = new Date(Date.now() + ttlMinutes * 60_000);
-
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        resetTokenHash: tokenHash,
-        resetTokenExpiresAt: expiresAt,
-        resetTokenRequestedAt: new Date(),
-        resetTokenUsedAt: null,
-      },
+    await sendPasswordResetEmailForUser({
+      prisma,
+      user,
+      req,
+      minIntervalMs: 60_000,
     });
 
-    const origin = appOriginFromRequest(req);
-    const resetLink = `${origin}/auth/reset?token=${encodeURIComponent(token)}`;
-
-    sendMail({
-  to: email,
-  subject: "Reset your TicketIn password",
-  text: `Use this link to reset your password (expires in ${ttlMinutes} minutes):\n\n${resetLink}`,
-  html:
-    `<p>Use this link to reset your password (expires in ${ttlMinutes} minutes):</p>` +
-    `<p><a href="${resetLink}">${resetLink}</a></p>`,
-}).catch((e) => console.error("[mailer] send failed", e));
-
-return res.json({ ok: true });
+    return res.json({ ok: true });
   } catch (err) {
     console.error("forgot-password failed", err);
     return res.status(500).json({ error: "internal error" });
