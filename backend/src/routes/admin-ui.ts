@@ -15347,7 +15347,7 @@ function renderInterests(customer){
 
     function escapeCsv(value){
       var str = String(value == null ? '' : value);
-      if (/[\",\n]/.test(str)){
+      if (/[",\\n]/.test(str)){
         return '\"' + str.replace(/\"/g, '\"\"') + '\"';
       }
       return str;
@@ -18778,7 +18778,7 @@ for (const d of docs) {
 
 function extractTitleFromText(text: string){
   const lines = String(text || "")
-    .replace(/\r/g, "")
+    .replace(/\\r/g, "")
     .split("\n")
     .map(l => l.trim())
     .filter(Boolean);
@@ -18819,12 +18819,12 @@ function escapeHtml(s: string){
 function textToExactHtml(text: string){
   // preserve words exactly; keep line breaks
   const safe = escapeHtml(text);
-  const parts = safe.split(/\n{2,}/).map(p => p.replace(/\n/g, "<br>"));
+  const parts = safe.split(/\\n{2,}/).map(p => p.replace(/\\n/g, "<br>"));
   return parts.map(p => `<p>${p}</p>`).join("");
 }
 
 function extractEventDescriptionFromText(raw: string): string | null {
-  const text = String(raw || "").replace(/\r/g, "");
+  const text = String(raw || "").replace(/\\r/g, "");
   if (!text.trim()) return null;
 
   const lines = text.split("\n");
@@ -18881,7 +18881,7 @@ function extractEventDescriptionFromText(raw: string): string | null {
   // 2) If no heading found, try paragraph heuristic: pick the longest paragraph with multiple sentences
   if (!candidates.length) {
     const paras = text
-      .split(/\n{2,}/)
+      .split(/\\n{2,}/)
       .map(p => p.trim())
       .filter(Boolean);
 
@@ -18990,7 +18990,7 @@ async function generateMultiParagraphDescriptionHtml(
   if (!html.includes("<p")) {
     const safe = escapeHtml(html);
     return safe
-      .split(/\n{2,}/)
+      .split(/\\n{2,}/)
       .map(p => p.trim())
       .filter(Boolean)
       .map(p => `<p>${p}</p>`)
@@ -19365,8 +19365,8 @@ const _bestDocText = (() => {
 })();
 
 const _docParas = _bestDocText
-  .replace(/\r/g, "")
-  .split(/\n{2,}|\n/)
+  .replace(/\\r/g, "")
+  .split(/\\n{2,}|\\n/)
   .map((s: string) => s.trim())
   .filter(Boolean);
 
@@ -19405,7 +19405,7 @@ if (!_usedDocDescription && typeof draft.descriptionHtml === "string") {
     .replace(/<\/?[^>]+>/g, "")
     .trim();
 
-  const blocks = plain.split(/\n{2,}/).map((s: string) => s.trim()).filter(Boolean);
+  const blocks = plain.split(/\\n{2,}/).map((s: string) => s.trim()).filter(Boolean);
   
   if (blocks.length < 2 && plain.length > 0) {
     const sentences = plain.split(/([.!?])\s+/).filter(Boolean);
