@@ -22,6 +22,7 @@ import {
   MarketingRecipientStatus,
   MarketingSenderMode,
   MarketingVerifiedStatus,
+  OrderStatus,
   Prisma,
   ShowStatus,
 } from '@prisma/client';
@@ -54,6 +55,7 @@ import { triggerTagAppliedAutomation } from '../services/marketing/automations.j
 import { ensureDefaultPreferenceTopics } from '../services/marketing/preferences.js';
 import { recordConsentAudit } from '../services/marketing/audit.js';
 import { renderEmailDocument } from '../lib/email-builder/rendering.js';
+import { buildPreviewPersonalisationContext } from '../services/marketing/personalisation.js';
 
 const router = Router();
 
@@ -186,6 +188,8 @@ async function fetchTemplateShow(tenantId: string, showId?: string | null) {
       usesExternalTicketing: true,
       slug: true,
       tags: true,
+      eventCategory: true,
+      showCapacity: true,
       venue: { select: { name: true, city: true, county: true } },
     },
   });
@@ -209,9 +213,27 @@ async function fetchUpcomingShows(tenantId: string, excludeId?: string | null) {
       externalTicketUrl: true,
       usesExternalTicketing: true,
       slug: true,
+      eventCategory: true,
       venue: { select: { name: true } },
     },
   });
+}
+
+async function withShowAvailability(show: Awaited<ReturnType<typeof fetchTemplateShow>> | null) {
+  if (!show || show.showCapacity === null || show.showCapacity === undefined) return show;
+  const soldAgg = await prisma.ticket.aggregate({
+    where: {
+      showId: show.id,
+      order: { status: OrderStatus.PAID },
+    },
+    _sum: { quantity: true },
+  });
+  const soldCount = Number(soldAgg._sum.quantity || 0);
+  const remaining = Math.max(0, Number(show.showCapacity) - soldCount);
+  return {
+    ...show,
+    ticketsRemaining: Number.isFinite(remaining) ? remaining : null,
+  };
 }
 
 function requireAdminOrOwner(req: any, res: any, next: any) {
@@ -1227,12 +1249,17 @@ router.post('/api/email-templates', requireAdminOrOrganiser, async (req, res) =>
     return res.status(400).json({ ok: false, message: 'Name, subject, and document are required' });
   }
 
-  const show = await fetchTemplateShow(tenantId, showId);
+  const show = await withShowAvailability(await fetchTemplateShow(tenantId, showId));
   const upcoming = await fetchUpcomingShows(tenantId, show?.id || null);
   const { html } = renderEmailDocument(document, {
     show: show || undefined,
     upcomingShows: upcoming,
     baseUrl: PUBLIC_BASE_URL,
+    personalisation: buildPreviewPersonalisationContext({
+      showTitle: show?.title || null,
+      venueName: show?.venue?.name || null,
+      topCategory: show?.eventCategory || null,
+    }),
   });
 
   const template = await prisma.marketingEmailTemplate.create({
@@ -1305,12 +1332,17 @@ router.post('/api/email-templates/:id/versions', requireAdminOrOrganiser, async 
   });
   const nextVersion = (lastVersion?.version || 0) + 1;
 
-  const show = await fetchTemplateShow(tenantId, showId || template.showId || undefined);
+  const show = await withShowAvailability(await fetchTemplateShow(tenantId, showId || template.showId || undefined));
   const upcoming = await fetchUpcomingShows(tenantId, show?.id || null);
   const { html } = renderEmailDocument(document, {
     show: show || undefined,
     upcomingShows: upcoming,
     baseUrl: PUBLIC_BASE_URL,
+    personalisation: buildPreviewPersonalisationContext({
+      showTitle: show?.title || null,
+      venueName: show?.venue?.name || null,
+      topCategory: show?.eventCategory || null,
+    }),
   });
 
   const version = await prisma.marketingEmailTemplateVersion.create({
@@ -1362,12 +1394,17 @@ router.post('/api/email-templates/render', requireAdminOrOrganiser, async (req, 
   const { document, showId } = req.body || {};
   if (!document) return res.status(400).json({ ok: false, message: 'Document is required' });
 
-  const show = await fetchTemplateShow(tenantId, showId);
+  const show = await withShowAvailability(await fetchTemplateShow(tenantId, showId));
   const upcoming = await fetchUpcomingShows(tenantId, show?.id || null);
   const { html } = renderEmailDocument(document, {
     show: show || undefined,
     upcomingShows: upcoming,
     baseUrl: PUBLIC_BASE_URL,
+    personalisation: buildPreviewPersonalisationContext({
+      showTitle: show?.title || null,
+      venueName: show?.venue?.name || null,
+      topCategory: show?.eventCategory || null,
+    }),
   });
 
   res.json({ ok: true, html });

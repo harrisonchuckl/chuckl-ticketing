@@ -3072,6 +3072,21 @@ router.get(
       display:grid;
       gap:8px;
     }
+    .email-token-helper{
+      border:1px dashed var(--border);
+      border-radius:10px;
+      padding:8px;
+      background:#f8fafc;
+    }
+    .email-token-helper .token-list{
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+    }
+    .email-token-helper .token-btn{
+      font-size:11px;
+      padding:4px 6px;
+    }
     @media (max-width:1200px){
       .email-editor{
         grid-template-columns:1fr;
@@ -18727,6 +18742,23 @@ function renderInterests(customer){
     if (type === 'UpcomingShowsList') {
       base.content = { title: 'Upcoming shows' };
     }
+    if (type === 'RecommendedForYou') {
+      base.content = { title: 'Recommended for you' };
+    }
+    if (type === 'BecauseYouLiked') {
+      base.content = { title: 'Because you liked {{topCategory}}' };
+    }
+    if (type === 'BringTheGroup') {
+      base.content = {
+        groupCopy: 'Bring the whole crew back — block out seats for the group.',
+        defaultCopy: 'Make it a night out with friends and lock in seats together.'
+      };
+    }
+    if (type === 'UrgencyBanner') {
+      base.content = { text: 'Hurry — tickets are nearly sold out.', threshold: 20 };
+      base.style.align = 'center';
+      base.style.padding = 12;
+    }
 
     return base;
   }
@@ -18739,6 +18771,10 @@ function renderInterests(customer){
     if (block.type === 'ShowHero') return 'Show hero block';
     if (block.type === 'ShowLineup') return 'Show lineup';
     if (block.type === 'UpcomingShowsList') return 'Upcoming list';
+    if (block.type === 'RecommendedForYou') return 'Recommended list';
+    if (block.type === 'BecauseYouLiked') return 'Affinity list';
+    if (block.type === 'BringTheGroup') return 'Group buyer copy';
+    if (block.type === 'UrgencyBanner') return 'Urgency banner';
     if (block.type === 'Social') return 'Social links';
     if (block.type === 'Divider') return 'Divider';
     if (block.type === 'Spacer') return 'Spacer';
@@ -18882,10 +18918,20 @@ function renderInterests(customer){
       shows: [],
       versions: []
     };
+    var personalisationTokens = [
+      '{{firstName}}',
+      '{{town}}',
+      '{{lastShowAttended}}',
+      '{{favouriteVenue}}',
+      '{{topCategory}}',
+      '{{groupBuyerLabel}}'
+    ];
+    var activeTokenField = null;
 
     var blockTypes = [
       'Header','Text','Image','Button','Divider','Spacer','Social','Footer',
-      'ShowHero','ShowCTA','ShowLineup','UpcomingShowsList'
+      'ShowHero','ShowCTA','ShowLineup','UpcomingShowsList',
+      'RecommendedForYou','BecauseYouLiked','BringTheGroup','UrgencyBanner'
     ];
 
     var blockListEl = $('#emailBlockList');
@@ -18926,6 +18972,21 @@ function renderInterests(customer){
 
     function findBlock(id){
       return state.document.blocks.find(function(block){ return block.id === id; });
+    }
+
+    function insertTokenIntoField(input, token){
+      if (!input || !token) return;
+      var start = input.selectionStart;
+      var end = input.selectionEnd;
+      if (typeof start === 'number' && typeof end === 'number'){
+        var value = input.value || '';
+        input.value = value.slice(0, start) + token + value.slice(end);
+        var cursor = start + token.length;
+        input.setSelectionRange(cursor, cursor);
+      }else{
+        input.value = (input.value || '') + token;
+      }
+      input.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
     function renderCanvas(){
@@ -19000,29 +19061,41 @@ function renderInterests(customer){
         inspectorEl.innerHTML = '<div class="muted">Select a block to edit its content and styles.</div>';
         return;
       }
+      activeTokenField = null;
       var showLinkField = block.type === 'Button' || block.type === 'ShowCTA' || block.type === 'Image';
-      var showTextField = block.type === 'Header' || block.type === 'Text' || block.type === 'Footer';
-      var showTitleField = block.type === 'ShowLineup' || block.type === 'UpcomingShowsList';
-      var showImageField = block.type === 'Image';
-      var showButtonField = block.type === 'Button' || block.type === 'ShowCTA';
-      var showSocialField = block.type === 'Social';
-      var showDividerField = block.type === 'Divider';
-      var showSpacerField = block.type === 'Spacer';
+    var showTextField = block.type === 'Header' || block.type === 'Text' || block.type === 'Footer';
+    var showTitleField = block.type === 'ShowLineup' || block.type === 'UpcomingShowsList' || block.type === 'RecommendedForYou' || block.type === 'BecauseYouLiked';
+    var showImageField = block.type === 'Image';
+    var showButtonField = block.type === 'Button' || block.type === 'ShowCTA';
+    var showSocialField = block.type === 'Social';
+    var showDividerField = block.type === 'Divider';
+    var showSpacerField = block.type === 'Spacer';
+    var showGroupCopyField = block.type === 'BringTheGroup';
+    var showUrgencyField = block.type === 'UrgencyBanner';
+    var showTokenField = showTextField || showTitleField || showButtonField || showGroupCopyField || showUrgencyField || showLinkField;
 
-      inspectorEl.innerHTML = ''
-        + '<div>'
-          + '<div class="muted">Block type</div>'
-          + '<div style="font-weight:700;margin-bottom:8px;">' + escapeHtml(block.type) + '</div>'
-        + '</div>'
+    inspectorEl.innerHTML = ''
+      + '<div>'
+        + '<div class="muted">Block type</div>'
+        + '<div style="font-weight:700;margin-bottom:8px;">' + escapeHtml(block.type) + '</div>'
+      + '</div>'
         + (showTextField ? ('<div><label>Text</label><textarea class="input" data-field="text" rows="4">' + escapeHtml(block.content.text || '') + '</textarea></div>') : '')
         + (showTitleField ? ('<div><label>Title</label><input class="input" data-field="title" value="' + escapeHtml(block.content.title || '') + '" /></div>') : '')
         + (showImageField ? ('<div><label>Image URL</label><input class="input" data-field="url" value="' + escapeHtml(block.content.url || '') + '" /></div>'
           + '<div><label>Alt text</label><input class="input" data-field="alt" value="' + escapeHtml(block.content.alt || '') + '" /></div>') : '')
         + (showButtonField ? ('<div><label>Button label</label><input class="input" data-field="buttonText" value="' + escapeHtml(block.content.text || '') + '" /></div>') : '')
         + (showLinkField ? ('<div><label>Link URL</label><input class="input" data-field="linkUrl" value="' + escapeHtml(block.content.linkUrl || '') + '" /></div>') : '')
+        + (showGroupCopyField ? ('<div><label>Group buyer copy</label><textarea class="input" data-field="groupCopy" rows="3">' + escapeHtml(block.content.groupCopy || '') + '</textarea></div>'
+          + '<div><label>Default copy</label><textarea class="input" data-field="defaultCopy" rows="3">' + escapeHtml(block.content.defaultCopy || '') + '</textarea></div>') : '')
+        + (showUrgencyField ? ('<div><label>Urgency text</label><textarea class="input" data-field="urgencyText" rows="3">' + escapeHtml(block.content.text || '') + '</textarea></div>'
+          + '<div><label>Show when remaining tickets ≤</label><input class="input" data-field="urgencyThreshold" type="number" value="' + escapeHtml(String(block.content.threshold || 20)) + '" /></div>') : '')
         + (showSocialField ? ('<div><label>Social links (Label|URL per line)</label><textarea class="input" data-field="social" rows="4">' + escapeHtml((block.content.links || []).map(function(link){ return (link.label || '') + '|' + (link.url || ''); }).join('\\n')) + '</textarea></div>') : '')
         + (showDividerField ? ('<div><label>Divider color</label><input class="input" data-field="borderColor" value="' + escapeHtml(block.style.borderColor || '#e5e7eb') + '" /></div>') : '')
         + (showSpacerField ? ('<div><label>Spacer height (px)</label><input class="input" data-field="height" type="number" value="' + escapeHtml(String(block.style.height || 20)) + '" /></div>') : '')
+        + (showTokenField ? ('<div class="email-token-helper"><div class="muted" style="margin-bottom:6px;">Insert personalisation token</div>'
+          + '<div class="token-list">'
+          + personalisationTokens.map(function(token){ return '<button class="btn token-btn" type="button" data-token="' + token + '">' + token + '</button>'; }).join('')
+          + '</div></div>') : '')
         + '<div class="email-doc-meta">'
           + '<div><label>Font size (px)</label><input class="input" data-field="fontSize" type="number" value="' + escapeHtml(String(block.style.fontSize || 16)) + '" /></div>'
           + '<div><label>Padding (px)</label><input class="input" data-field="padding" type="number" value="' + escapeHtml(String(block.style.padding || 0)) + '" /></div>'
@@ -19039,6 +19112,8 @@ function renderInterests(customer){
         + '</div>';
 
       inspectorEl.querySelectorAll('[data-field]').forEach(function(input){
+        input.addEventListener('focus', function(){ activeTokenField = input; });
+        input.addEventListener('click', function(){ activeTokenField = input; });
         input.addEventListener('input', function(){
           var field = input.getAttribute('data-field');
           if (!field) return;
@@ -19048,6 +19123,10 @@ function renderInterests(customer){
           if (field === 'alt') block.content.alt = input.value;
           if (field === 'buttonText') block.content.text = input.value;
           if (field === 'linkUrl') block.content.linkUrl = input.value;
+          if (field === 'groupCopy') block.content.groupCopy = input.value;
+          if (field === 'defaultCopy') block.content.defaultCopy = input.value;
+          if (field === 'urgencyText') block.content.text = input.value;
+          if (field === 'urgencyThreshold') block.content.threshold = Number(input.value) || 0;
           if (field === 'social'){
             var rows = input.value.split('\\n').map(function(row){ return row.trim(); }).filter(Boolean);
             block.content.links = rows.map(function(row){
@@ -19073,6 +19152,15 @@ function renderInterests(customer){
             schedulePreview();
           });
         }
+      });
+
+      inspectorEl.querySelectorAll('[data-token]').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var token = btn.getAttribute('data-token');
+          if (!token) return;
+          var target = activeTokenField || inspectorEl.querySelector('textarea.input, input.input');
+          insertTokenIntoField(target, token);
+        });
       });
     }
 
