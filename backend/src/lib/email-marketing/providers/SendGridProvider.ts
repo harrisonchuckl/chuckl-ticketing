@@ -35,12 +35,12 @@ export class SendGridProvider implements IEmailProvider {
       body: JSON.stringify(payload),
     });
 
+    const responseText = await res.text();
     if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`SendGrid error: ${res.status} ${text}`);
+      throw new Error(`SendGrid error: ${res.status} ${responseText}`);
     }
 
     const messageId = res.headers.get('x-message-id') || 'sendgrid:ok';
-    return { id: messageId };
+    return { id: messageId, status: res.status, response: responseText || null };
   }
 }

@@ -236,6 +236,8 @@ enum MarketingCampaignStatus {
   DRAFT
   SCHEDULED
   SENDING
+  PAUSED_LIMIT
+  FAILED
   SENT
   CANCELLED
 }
@@ -262,6 +264,7 @@ enum MarketingAutomationStepStatus {
 
 enum MarketingRecipientStatus {
   PENDING
+  RETRYABLE
   SENT
   FAILED
   SKIPPED_SUPPRESSED
@@ -1735,6 +1738,8 @@ model MarketingCampaign {
   segmentId       String
   status          MarketingCampaignStatus @default(DRAFT)
   scheduledFor    DateTime?
+  recipientsPreparedAt DateTime?
+  sendLockedUntil DateTime?
   createdByUserId String
   createdAt       DateTime                @default(now())
   updatedAt       DateTime                @updatedAt
@@ -1758,6 +1763,9 @@ model MarketingCampaignRecipient {
   status     MarketingRecipientStatus @default(PENDING)
   errorText  String?
   sentAt     DateTime?
+  retryAt    DateTime?
+  retryCount Int                      @default(0)
+  lastAttemptAt DateTime?
   createdAt  DateTime                 @default(now())
 
   campaign MarketingCampaign @relation(fields: [campaignId], references: [id])
@@ -1765,6 +1773,28 @@ model MarketingCampaignRecipient {
 
   @@unique([tenantId, campaignId, contactId])
   @@index([tenantId, campaignId])
+}
+
+model MarketingDailySendCounter {
+  id        String   @id @default(cuid())
+  tenantId  String
+  day       DateTime
+  count     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant User @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, day])
+  @@index([tenantId, day])
+}
+
+model MarketingWorkerState {
+  id              String   @id
+  lastWorkerRunAt DateTime?
+  lastSendAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 model MarketingEmailEvent {

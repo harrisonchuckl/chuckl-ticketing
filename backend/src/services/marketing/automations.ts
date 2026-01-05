@@ -49,6 +49,24 @@ function isFromVerified(fromEmail: string, requireVerifiedFrom: boolean) {
   return effective.toLowerCase().endsWith(`@${VERIFIED_FROM_DOMAIN.toLowerCase()}`);
 }
 
+function assertValidFromDomain(fromEmail: string, requireVerifiedFrom: boolean) {
+  if (!requireVerifiedFrom) return;
+  if (!VERIFIED_FROM_DOMAIN) {
+    throw new Error('MARKETING_FROM_DOMAIN must be configured when verified-from enforcement is enabled.');
+  }
+  const streamDomain = String(process.env.MARKETING_STREAM_DOMAIN || '').trim();
+  if (streamDomain && !streamDomain.toLowerCase().endsWith(VERIFIED_FROM_DOMAIN.toLowerCase())) {
+    throw new Error(
+      `MARKETING_STREAM_DOMAIN (${streamDomain}) must align with MARKETING_FROM_DOMAIN (${VERIFIED_FROM_DOMAIN}).`
+    );
+  }
+  if (!isFromVerified(fromEmail, requireVerifiedFrom)) {
+    throw new Error(
+      `From email must be verified for marketing sends. Ensure MARKETING_FROM_DOMAIN is set to ${VERIFIED_FROM_DOMAIN}.`
+    );
+  }
+}
+
 async function buildUnsubscribeUrl(tenantId: string, email: string) {
   const tenant = await prisma.user.findUnique({
     where: { id: tenantId },
@@ -331,9 +349,7 @@ export async function processAutomationSteps() {
       }
 
       const requireVerifiedFrom = resolveRequireVerifiedFrom(settings, REQUIRE_VERIFIED_FROM);
-      if (!isFromVerified(sender.fromEmail, requireVerifiedFrom)) {
-        throw new Error('From email not verified for marketing sends.');
-      }
+      assertValidFromDomain(sender.fromEmail, requireVerifiedFrom);
 
       const unsubscribeUrl = await buildUnsubscribeUrl(state.tenantId, state.contact.email);
       const preferencesUrl = await buildPreferencesUrl(state.tenantId, state.contact.email);
@@ -354,7 +370,7 @@ export async function processAutomationSteps() {
       }
 
       const provider = getEmailProvider();
-      await provider.sendEmail({
+      const result = await provider.sendEmail({
         to: state.contact.email,
         subject: nextStep.template.subject,
         html,
@@ -370,6 +386,20 @@ export async function processAutomationSteps() {
           tenantId: state.tenantId,
           contactId: state.contactId,
         },
+      });
+
+      console.info('[marketing:automation:send]', {
+        automationId: state.automationId,
+        stateId: state.id,
+        providerId: result.id,
+        providerStatus: result.status,
+        providerResponse: result.response || null,
+      });
+
+      await prisma.marketingWorkerState.upsert({
+        where: { id: 'global' },
+        update: { lastSendAt: new Date() },
+        create: { id: 'global', lastSendAt: new Date(), lastWorkerRunAt: null },
       });
 
       await prisma.marketingAutomationStepExecution.upsert({

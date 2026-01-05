@@ -13,6 +13,8 @@ export type SendEmailRequest = {
 
 export type SendEmailResult = {
   id: string;
+  status: number;
+  response?: string | null;
 };
 
 export interface IEmailProvider {

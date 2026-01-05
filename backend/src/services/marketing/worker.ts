@@ -4,10 +4,16 @@ import {
   processAutomationSteps,
   processNoPurchaseAutomations,
 } from './automations.js';
+import prisma from '../../lib/prisma.js';
 
 let interval: NodeJS.Timeout | null = null;
 
 export async function runMarketingWorkerOnce() {
+  await prisma.marketingWorkerState.upsert({
+    where: { id: 'global' },
+    update: { lastWorkerRunAt: new Date() },
+    create: { id: 'global', lastWorkerRunAt: new Date(), lastSendAt: null },
+  });
   await processScheduledCampaigns();
   await processSendingCampaigns();
   await processNoPurchaseAutomations();

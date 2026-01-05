@@ -154,6 +154,24 @@ function applyMarketingStream(fromEmail: string) {
   return `${fromEmail.slice(0, at)}@${streamDomain}`;
 }
 
+function assertValidFromDomain(fromEmail: string, requireVerifiedFrom: boolean) {
+  if (!requireVerifiedFrom) return;
+  if (!VERIFIED_FROM_DOMAIN) {
+    throw new Error('MARKETING_FROM_DOMAIN must be configured when verified-from enforcement is enabled.');
+  }
+  const streamDomain = String(process.env.MARKETING_STREAM_DOMAIN || '').trim();
+  if (streamDomain && !streamDomain.toLowerCase().endsWith(VERIFIED_FROM_DOMAIN.toLowerCase())) {
+    throw new Error(
+      `MARKETING_STREAM_DOMAIN (${streamDomain}) must align with MARKETING_FROM_DOMAIN (${VERIFIED_FROM_DOMAIN}).`
+    );
+  }
+  if (!isFromVerified(fromEmail, requireVerifiedFrom)) {
+    throw new Error(
+      `From email must be verified for marketing sends. Ensure MARKETING_FROM_DOMAIN is set to ${VERIFIED_FROM_DOMAIN}.`
+    );
+  }
+}
+
 router.get('/marketing/health', requireAdminOrOwner, async (_req, res) => {
   const workerEnabled = String(process.env.MARKETING_WORKER_ENABLED || 'true') === 'true';
   const intervalMs = Number(process.env.MARKETING_WORKER_INTERVAL_MS || 30000);
@@ -162,6 +180,13 @@ router.get('/marketing/health', requireAdminOrOwner, async (_req, res) => {
   const providerConfigured = Boolean(String(process.env.SENDGRID_API_KEY || '').trim());
   const publicBaseUrl = process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || process.env.BASE_URL || '';
   const unsubscribeBaseUrlOk = isValidPublicBaseUrl(publicBaseUrl);
+  const workerState = await prisma.marketingWorkerState.findUnique({ where: { id: 'global' } });
+  const sendQueueDepth = await prisma.marketingCampaignRecipient.count({
+    where: {
+      status: { in: [MarketingRecipientStatus.PENDING, MarketingRecipientStatus.RETRYABLE] },
+      campaign: { status: { in: [MarketingCampaignStatus.SCHEDULED, MarketingCampaignStatus.SENDING, MarketingCampaignStatus.PAUSED_LIMIT] } },
+    },
+  });
 
   console.info('[marketing:health]', {
     workerEnabled,
@@ -171,6 +196,9 @@ router.get('/marketing/health', requireAdminOrOwner, async (_req, res) => {
     providerConfigured,
     unsubscribeBaseUrlOk,
     publicBaseUrlConfigured: Boolean(publicBaseUrl),
+    lastWorkerRunAt: workerState?.lastWorkerRunAt || null,
+    lastSendAt: workerState?.lastSendAt || null,
+    sendQueueDepth,
   });
 
   res.json({
@@ -180,6 +208,9 @@ router.get('/marketing/health', requireAdminOrOwner, async (_req, res) => {
     dailyLimit,
     providerConfigured,
     unsubscribeBaseUrlOk,
+    lastWorkerRunAt: workerState?.lastWorkerRunAt || null,
+    lastSendAt: workerState?.lastSendAt || null,
+    sendQueueDepth,
   });
 });
 
@@ -1064,8 +1095,10 @@ router.post('/marketing/campaigns/:id/test-send', requireAdminOrOrganiser, async
   }
 
   const requireVerifiedFrom = resolveRequireVerifiedFrom(settings, REQUIRE_VERIFIED_FROM_DEFAULT);
-  if (!isFromVerified(sender.fromEmail, requireVerifiedFrom)) {
-    return res.status(400).json({ ok: false, message: 'From email not verified for marketing sends.' });
+  try {
+    assertValidFromDomain(sender.fromEmail, requireVerifiedFrom);
+  } catch (error: any) {
+    return res.status(400).json({ ok: false, message: error?.message || 'From email not verified for marketing sends.' });
   }
 
   const token = createUnsubscribeToken({ tenantId, email });
@@ -1187,7 +1220,7 @@ router.post('/marketing/campaigns/:id/cancel', requireAdminOrOrganiser, async (r
 
   const campaign = await prisma.marketingCampaign.update({
     where: { id },
-    data: { status: MarketingCampaignStatus.CANCELLED },
+    data: { status: MarketingCampaignStatus.CANCELLED, sendLockedUntil: null },
   });
 
   await logMarketingAudit(tenantId, 'campaign.cancelled', 'MarketingCampaign', campaign.id);
@@ -1227,6 +1260,7 @@ router.get('/marketing/campaigns/:id/recipients', requireAdminOrOrganiser, async
     total: items.length,
     sent: items.filter((r) => r.status === MarketingRecipientStatus.SENT).length,
     failed: items.filter((r) => r.status === MarketingRecipientStatus.FAILED).length,
+    retryable: items.filter((r) => r.status === MarketingRecipientStatus.RETRYABLE).length,
     skipped: items.filter((r) => r.status === MarketingRecipientStatus.SKIPPED_SUPPRESSED).length,
   };
 
