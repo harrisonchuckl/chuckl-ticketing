@@ -17624,6 +17624,60 @@ function renderInterests(customer){
         return '<option value=\"' + escapeHtml(t.name) + '\">' + escapeHtml(t.name) + '</option>';
       }).join('');
 
+      function titleCase(value){
+        return String(value || '').toLowerCase().replace(/(^|_)([a-z])/g, function(_, s, ch){ return (s ? ' ' : '') + ch.toUpperCase(); });
+      }
+
+      function formatStepDetails(step){
+        var detail = [];
+        if (step.stepType) detail.push(titleCase(step.stepType));
+        if (step.template && step.template.name) detail.push('Template: ' + step.template.name);
+        if (step.delayMinutes) detail.push('Wait ' + step.delayMinutes + 'm');
+        if (step.throttleMinutes) detail.push('Throttle ' + step.throttleMinutes + 'm');
+        if (step.quietHoursStart !== null && step.quietHoursStart !== undefined && step.quietHoursEnd !== null && step.quietHoursEnd !== undefined) {
+          detail.push('Quiet ' + step.quietHoursStart + ':00–' + step.quietHoursEnd + ':00 UTC');
+        }
+        if (step.conditionRules && Object.keys(step.conditionRules || {}).length) {
+          detail.push('Segment rule');
+        }
+        return detail.join(' • ');
+      }
+
+      function renderAutomationGraph(automation){
+        if (!automation) return '<div class=\"muted\">Select an automation to view the builder.</div>';
+        var steps = (automation.steps || []).slice().sort(function(a, b){ return (a.stepOrder || 0) - (b.stepOrder || 0); });
+        var triggerLabel = titleCase(automation.triggerType || '');
+        var nodesHtml = ''
+          + '<div class=\"automation-node automation-node--trigger\">'
+          +   '<div class=\"automation-node__title\">Trigger</div>'
+          +   '<div class=\"automation-node__label\">' + escapeHtml(triggerLabel || 'Trigger') + '</div>'
+          + '</div>';
+
+        nodesHtml += steps.map(function(step){
+          var stepConfig = step.stepConfig || {};
+          var branchHtml = '';
+          if (step.stepType === 'BRANCH') {
+            var ifStep = stepConfig.ifStepOrder ? ('Step ' + stepConfig.ifStepOrder) : 'Next';
+            var elseStep = stepConfig.elseStepOrder ? ('Step ' + stepConfig.elseStepOrder) : 'Next';
+            branchHtml = ''
+              + '<div class=\"automation-branch\">'
+              +   '<div class=\"automation-branch__row\">'
+              +     '<div class=\"automation-branch__chip\">If match → ' + escapeHtml(ifStep) + '</div>'
+              +     '<div class=\"automation-branch__chip\">Else → ' + escapeHtml(elseStep) + '</div>'
+              +   '</div>'
+              + '</div>';
+          }
+          return ''
+            + '<div class=\"automation-node\">'
+            +   '<div class=\"automation-node__title\">Step ' + escapeHtml(String(step.stepOrder || '')) + '</div>'
+            +   '<div class=\"automation-node__label\">' + escapeHtml(formatStepDetails(step) || 'Automation step') + '</div>'
+            +   branchHtml
+            + '</div>';
+        }).join('');
+
+        return '<div class=\"automation-graph\">' + nodesHtml + '</div>';
+      }
+
       var listHtml = items.map(function(a){
         var steps = (a.steps || []).map(function(step){
           var detail = [];
@@ -17656,9 +17710,15 @@ function renderInterests(customer){
           + '<div class=\"title\">' + escapeHtml(run.automation?.name || 'Automation') + '</div>'
           + '<div class=\"muted\">Contact: ' + escapeHtml(run.contact?.email || '') + '</div>'
           + '<div class=\"muted\">Trigger: ' + escapeHtml(run.triggerType || '') + ' • Status: ' + escapeHtml(run.status || '') + '</div>'
+          + '<div class=\"muted\">Started: ' + escapeHtml(formatDateTime(run.startedAt || run.createdAt || '')) + '</div>'
+          + '<div class=\"muted\">Last step: ' + escapeHtml(run.lastStep ? ('Step ' + run.lastStep) : '—') + '</div>'
           + '<button class=\"btn\" data-run-open=\"' + escapeHtml(run.id) + '\">View steps</button>'
           + '</div>';
       }).join('');
+
+      var selectedAutomationId = window.__mkAutomationSelected || (items[0] && items[0].id) || '';
+      var selectedAutomation = items.find(function(item){ return item.id === selectedAutomationId; }) || items[0];
+      window.__mkAutomationSelected = selectedAutomation ? selectedAutomation.id : '';
 
       var html = ''
         + '<style>'
@@ -17666,6 +17726,19 @@ function renderInterests(customer){
         + '.automation-step{position:relative;display:flex;align-items:flex-start;gap:12px;}'
         + '.automation-step__dot{width:10px;height:10px;border-radius:50%;background:#2563eb;position:absolute;left:-21px;top:14px;}'
         + '.automation-step__card{background:#0b1220;border-radius:12px;padding:10px 12px;min-width:200px;}'
+        + '.automation-builder{background:#0b1220;border-radius:16px;padding:16px;margin:10px 0 16px 0;border:1px solid rgba(148,163,184,0.2);}'
+        + '.automation-builder__header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:12px;}'
+        + '.automation-graph{display:flex;flex-direction:column;gap:12px;position:relative;padding-left:24px;}'
+        + '.automation-graph:before{content:\"\";position:absolute;left:10px;top:14px;bottom:14px;width:2px;background:#1f2937;}'
+        + '.automation-node{position:relative;padding:12px 14px;border-radius:14px;background:#111827;border:1px solid rgba(59,130,246,0.3);}'
+        + '.automation-node:before{content:\"\";position:absolute;left:-20px;top:18px;width:12px;height:12px;border-radius:50%;background:#3b82f6;}'
+        + '.automation-node--trigger{background:linear-gradient(135deg,rgba(37,99,235,0.2),rgba(15,23,42,0.9));border-color:rgba(37,99,235,0.6);}'
+        + '.automation-node--trigger:before{background:#22c55e;}'
+        + '.automation-node__title{font-weight:600;margin-bottom:4px;}'
+        + '.automation-node__label{color:#cbd5f5;font-size:13px;}'
+        + '.automation-branch{margin-top:10px;background:#0f172a;border-radius:10px;padding:8px;border:1px dashed rgba(148,163,184,0.3);}'
+        + '.automation-branch__row{display:flex;gap:8px;flex-wrap:wrap;}'
+        + '.automation-branch__chip{background:#111827;border-radius:999px;padding:4px 10px;font-size:12px;color:#cbd5f5;border:1px solid rgba(148,163,184,0.2);}'
         + '</style>'
         + '<div class=\"card\" style=\"margin:0 0 12px 0;\">'
         +   '<div class=\"title\">Create automation</div>'
@@ -17685,6 +17758,21 @@ function renderInterests(customer){
         +   '<div class=\"row\" style=\"gap:8px;margin-top:10px;\">'
         +     '<button class=\"btn p\" id=\"mk_auto_add\">Save automation</button>'
         +     '<div id=\"mk_auto_msg\" class=\"muted\"></div>'
+        +   '</div>'
+        + '</div>'
+        + '<div class=\"card\" style=\"margin:0 0 12px 0;\">'
+        +   '<div class=\"title\">Automation Builder</div>'
+        +   '<div class=\"automation-builder\">'
+        +     '<div class=\"automation-builder__header\">'
+        +       '<div>'
+        +         '<div class=\"muted\">Visual flow</div>'
+        +         '<div class=\"title\" style=\"margin-top:4px;\">' + escapeHtml(selectedAutomation?.name || 'Select an automation') + '</div>'
+        +       '</div>'
+        +       '<div style=\"min-width:240px;\">'
+        +         '<select class=\"input\" id=\"mk_auto_builder_select\">' + automationOptions + '</select>'
+        +       '</div>'
+        +     '</div>'
+        +     '<div id=\"mk_auto_builder_graph\">' + renderAutomationGraph(selectedAutomation) + '</div>'
         +   '</div>'
         + '</div>'
         + '<div class=\"card\" style=\"margin:0 0 12px 0;\">'
@@ -17725,6 +17813,19 @@ function renderInterests(customer){
         + '</div>';
 
       sections.automations.innerHTML = html;
+
+      var builderSelect = sections.automations.querySelector('#mk_auto_builder_select');
+      if (builderSelect) {
+        builderSelect.value = window.__mkAutomationSelected || '';
+        builderSelect.addEventListener('change', function(){
+          window.__mkAutomationSelected = builderSelect.value;
+          var picked = items.find(function(item){ return item.id === builderSelect.value; }) || null;
+          var graph = sections.automations.querySelector('#mk_auto_builder_graph');
+          if (graph) graph.innerHTML = renderAutomationGraph(picked);
+          var headerTitle = sections.automations.querySelector('.automation-builder .title');
+          if (headerTitle) headerTitle.textContent = picked ? picked.name : 'Select an automation';
+        });
+      }
 
       var addAuto = sections.automations.querySelector('#mk_auto_add');
       if (addAuto) {
@@ -17818,10 +17919,15 @@ function renderInterests(customer){
           try {
             var data = await fetchJson('/admin/marketing/automations/runs/' + encodeURIComponent(runId) + '/steps');
             var stepList = (data.items || []).map(function(step){
+              var meta = step.metadata ? JSON.stringify(step.metadata) : '';
+              var errorText = step.errorText ? String(step.errorText) : '';
               return '<div class=\"card\" style=\"margin:0 0 8px 0;\">'
                 + '<div class=\"title\">Step ' + escapeHtml(String(step.step?.stepOrder || '')) + '</div>'
+                + '<div class=\"muted\">Type: ' + escapeHtml(step.step?.stepType ? step.step.stepType.replace(/_/g, ' ') : '') + '</div>'
                 + '<div class=\"muted\">Status: ' + escapeHtml(step.status || '') + '</div>'
                 + '<div class=\"muted\">Sent: ' + escapeHtml(step.sentAt ? new Date(step.sentAt).toLocaleString() : '—') + '</div>'
+                + (errorText ? '<div class=\"error\" style=\"margin-top:6px;\">' + escapeHtml(errorText) + '</div>' : '')
+                + (meta ? '<div class=\"muted\" style=\"margin-top:6px;word-break:break-word;\">Meta: ' + escapeHtml(meta) + '</div>' : '')
                 + '</div>';
             }).join('');
             container.innerHTML = '<div class=\"title\" style=\"margin-bottom:8px;\">Run steps</div>'
