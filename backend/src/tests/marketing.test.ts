@@ -12,6 +12,7 @@ const contact = {
   lastName: 'Doe',
   consentStatus: MarketingConsentStatus.SUBSCRIBED,
   tags: ['vip', 'repeat'],
+  preferences: [],
 };
 
 const stats = {
