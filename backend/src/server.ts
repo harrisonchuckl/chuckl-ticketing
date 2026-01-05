@@ -59,6 +59,7 @@ import printfulWebhookRouter from "./routes/webhooks-printful.js";
 import adminOwnerRouter from "./routes/admin-owner.js";
 import adminOwnerDashboardRouter from "./routes/admin-owner-dashboard.js";
 import adminOwnerOrganisersRouter from "./routes/admin-owner-organisers.js";
+import segmentsRouter from "./routes/segments.js";
 
 const app = express();
 
@@ -168,6 +169,7 @@ app.use("/admin/api", adminOwnerDashboardRouter);
 app.use("/admin/api", adminOwnerOrganisersRouter);
 app.use("/admin/api", adminMarketingRouter);
 app.use("/admin", adminMarketingRouter);
+app.use("/", segmentsRouter);
 app.use("/webhooks", sendgridWebhookRouter);
 
 // 404

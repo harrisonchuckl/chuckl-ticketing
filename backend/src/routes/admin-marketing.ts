@@ -1013,15 +1013,20 @@ router.post('/marketing/segments', requireAdminOrOrganiser, async (req, res) => 
   const { name, description, rules } = req.body || {};
   if (!name) return res.status(400).json({ ok: false, message: 'Name required' });
 
+  const finalRules = rules || { rules: [] };
   const segment = await prisma.marketingSegment.create({
     data: {
       tenantId,
       name,
       description: description || null,
-      rules: rules || { rules: [] },
+      rules: finalRules,
     },
   });
-  await logMarketingAudit(tenantId, 'segment.created', 'MarketingSegment', segment.id, { name });
+  await logMarketingAudit(tenantId, 'segment.created', 'MarketingSegment', segment.id, {
+    name,
+    description: description || null,
+    rules: finalRules,
+  });
   res.json({ ok: true, segment });
 });
 
@@ -1041,7 +1046,11 @@ router.put('/marketing/segments/:id', requireAdminOrOrganiser, async (req, res) 
       rules: rules || undefined,
     },
   });
-  await logMarketingAudit(tenantId, 'segment.updated', 'MarketingSegment', segment.id, { name });
+  await logMarketingAudit(tenantId, 'segment.updated', 'MarketingSegment', segment.id, {
+    name,
+    description: description ?? null,
+    rules: rules || null,
+  });
   res.json({ ok: true, segment });
 });
 
@@ -1062,6 +1071,13 @@ router.get('/marketing/segments/:id/estimate', requireAdminOrOrganiser, async (r
   if (!segment) return res.status(404).json({ ok: false, message: 'Segment not found' });
 
   const estimate = await estimateCampaignRecipients(tenantId, segment.rules);
+  res.json({ ok: true, estimate });
+});
+
+router.post('/marketing/segments/estimate', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const { rules } = req.body || {};
+  const estimate = await estimateCampaignRecipients(tenantId, rules || { rules: [] });
   res.json({ ok: true, estimate });
 });
 
@@ -1243,7 +1259,8 @@ router.post('/marketing/segments/:id/estimate', requireAdminOrOrganiser, async (
   const segment = await prisma.marketingSegment.findFirst({ where: { id, tenantId } });
   if (!segment) return res.status(404).json({ ok: false, message: 'Segment not found' });
 
-  const estimate = await estimateCampaignRecipients(tenantId, segment.rules);
+  const rulesOverride = req.body?.rules;
+  const estimate = await estimateCampaignRecipients(tenantId, rulesOverride || segment.rules);
   res.json({ ok: true, estimate });
 });
 

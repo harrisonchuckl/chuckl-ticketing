@@ -36,6 +36,9 @@ const REQUIRE_VERIFIED_FROM = String(process.env.MARKETING_REQUIRE_VERIFIED_FROM
 const CAMPAIGN_LOCK_MINUTES = Number(process.env.MARKETING_CAMPAIGN_LOCK_MINUTES || 5);
 const MAX_RETRY_DELAY_MINUTES = Number(process.env.MARKETING_SEND_RETRY_MAX_MINUTES || 60);
 const BASE_RETRY_DELAY_SECONDS = Number(process.env.MARKETING_SEND_RETRY_BASE_SECONDS || 30);
+const ESTIMATE_CACHE_MS = Number(process.env.MARKETING_ESTIMATE_CACHE_MS || 30000);
+
+const estimateCache = new Map<string, { value: Awaited<ReturnType<typeof estimateCampaignRecipients>>; expiresAt: number }>();
 
 function baseUrl() {
   return PUBLIC_BASE_URL.replace(/\/+$/, '');
@@ -107,6 +110,12 @@ export function buildRecipientEntries(options: {
 }
 
 export async function estimateCampaignRecipients(tenantId: string, rulesInput: unknown) {
+  const cacheKey = `${tenantId}:${JSON.stringify(rulesInput || {})}`;
+  const cached = estimateCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.value;
+  }
+
   const contacts = await evaluateSegmentContacts(tenantId, rulesInput);
   const suppressions = await prisma.marketingSuppression.findMany({
     where: { tenantId },
@@ -122,12 +131,15 @@ export async function estimateCampaignRecipients(tenantId: string, rulesInput: u
   const sendable = recipients.filter((r) => r.status === MarketingRecipientStatus.PENDING);
   const suppressed = recipients.filter((r) => r.status === MarketingRecipientStatus.SKIPPED_SUPPRESSED);
 
-  return {
+  const estimate = {
     total: recipients.length,
     sendable: sendable.length,
     suppressed: suppressed.length,
     sample: sendable.slice(0, 20).map((r) => r.email),
   };
+
+  estimateCache.set(cacheKey, { value: estimate, expiresAt: Date.now() + ESTIMATE_CACHE_MS });
+  return estimate;
 }
 
 async function ensureRecipients(campaignId: string) {

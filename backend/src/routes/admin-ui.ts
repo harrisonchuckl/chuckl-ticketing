@@ -16493,29 +16493,213 @@ function renderInterests(customer){
       renderContacts(data.items || []);
     }
 
-    function renderSegments(items){
+    function renderSegments(items, topics, venues){
+      var builderState = window.__mkSegmentBuilderState || {
+        mode: 'create',
+        segmentId: '',
+        name: '',
+        description: '',
+        rules: []
+      };
+      builderState.rules = builderState.rules || [];
+      window.__mkSegmentBuilderState = builderState;
+
+      function extractRules(input){
+        if (Array.isArray(input)) return input;
+        if (input && Array.isArray(input.rules)) return input.rules;
+        if (input && Array.isArray(input.all)) return input.all;
+        return [];
+      }
+
+      function defaultRuleFor(type){
+        switch(type){
+          case 'HAS_TAG': return { type: 'HAS_TAG', value: '' };
+          case 'NOT_TAG': return { type: 'NOT_TAG', value: '' };
+          case 'LAST_PURCHASE_OLDER_THAN': return { type: 'LAST_PURCHASE_OLDER_THAN', days: 30 };
+          case 'PURCHASE_COUNT_90D_AT_LEAST': return { type: 'PURCHASE_COUNT_90D_AT_LEAST', count: 2 };
+          case 'MONETARY_TIER': return { type: 'MONETARY_TIER', metric: 'LIFETIME', tier: 'MID' };
+          case 'AVG_TICKETS_PER_ORDER_AT_LEAST': return { type: 'AVG_TICKETS_PER_ORDER_AT_LEAST', count: 2 };
+          case 'FAVOURITE_VENUE_ID': return { type: 'FAVOURITE_VENUE_ID', venueId: '' };
+          case 'PURCHASED_AT_VENUE': return { type: 'PURCHASED_AT_VENUE', venueId: '' };
+          case 'FAVOURITE_CATEGORY_CONTAINS': return { type: 'FAVOURITE_CATEGORY_CONTAINS', value: '' };
+          case 'FAVOURITE_EVENT_TYPE_CONTAINS': return { type: 'FAVOURITE_EVENT_TYPE_CONTAINS', value: '' };
+          case 'VIEWED_NO_PURCHASE_AFTER': return { type: 'VIEWED_NO_PURCHASE_AFTER', days: 14 };
+          case 'LIFECYCLE_STAGE': return { type: 'LIFECYCLE_STAGE', value: 'RETURNING', newWithinDays: 30, lapsedAfterDays: 180 };
+          case 'CONSENT_STATUS_IS': return { type: 'CONSENT_STATUS_IS', value: 'SUBSCRIBED' };
+          case 'PREFERENCE_TOPIC_STATUS': return { type: 'PREFERENCE_TOPIC_STATUS', topicId: '', status: 'SUBSCRIBED' };
+          case 'PURCHASED_CATEGORY_CONTAINS': return { type: 'PURCHASED_CATEGORY_CONTAINS', value: '' };
+          case 'TOTAL_SPENT_AT_LEAST': return { type: 'TOTAL_SPENT_AT_LEAST', amount: 50 };
+          case 'ATTENDED_VENUE': return { type: 'ATTENDED_VENUE', venueId: '' };
+          default: return { type: 'HAS_TAG', value: '' };
+        }
+      }
+
+      var ruleTypes = [
+        { value: 'HAS_TAG', label: 'Has tag' },
+        { value: 'NOT_TAG', label: 'Does not have tag' },
+        { value: 'LAST_PURCHASE_OLDER_THAN', label: 'Last purchase older than (days)' },
+        { value: 'PURCHASE_COUNT_90D_AT_LEAST', label: 'Purchases in last 90 days ≥' },
+        { value: 'MONETARY_TIER', label: 'Value tier (LTV / 90d)' },
+        { value: 'AVG_TICKETS_PER_ORDER_AT_LEAST', label: 'Avg tickets per order ≥' },
+        { value: 'FAVOURITE_VENUE_ID', label: 'Favourite venue' },
+        { value: 'PURCHASED_AT_VENUE', label: 'Purchased at venue' },
+        { value: 'FAVOURITE_CATEGORY_CONTAINS', label: 'Top category contains' },
+        { value: 'FAVOURITE_EVENT_TYPE_CONTAINS', label: 'Top event type contains' },
+        { value: 'VIEWED_NO_PURCHASE_AFTER', label: 'Viewed but no purchase after' },
+        { value: 'LIFECYCLE_STAGE', label: 'Lifecycle stage' },
+        { value: 'CONSENT_STATUS_IS', label: 'Consent status' },
+        { value: 'PREFERENCE_TOPIC_STATUS', label: 'Preference topic status' },
+        { value: 'PURCHASED_CATEGORY_CONTAINS', label: 'Purchased category contains' },
+        { value: 'TOTAL_SPENT_AT_LEAST', label: 'Total spend at least (£)' },
+        { value: 'ATTENDED_VENUE', label: 'Attended venue (orders)' },
+      ];
+
+      var venueOptions = (venues || []).map(function(v){
+        return '<option value="' + escapeHtml(v.id) + '">' + escapeHtml(v.name || v.id) + '</option>';
+      }).join('');
+      function renderRuleFields(rule, idx){
+        var venueInput = '<input class="input" list="mk_segment_venue_list" data-rule-index="' + idx + '" data-rule-field="venueId" value="' + escapeHtml(rule.venueId || '') + '" placeholder="Venue ID" />';
+        switch(rule.type){
+          case 'HAS_TAG':
+          case 'NOT_TAG':
+          case 'PURCHASED_CATEGORY_CONTAINS':
+          case 'FAVOURITE_CATEGORY_CONTAINS':
+          case 'FAVOURITE_EVENT_TYPE_CONTAINS':
+            return '<input class="input" data-rule-index="' + idx + '" data-rule-field="value" value="' + escapeHtml(rule.value || '') + '" placeholder="Value" />';
+          case 'LAST_PURCHASE_OLDER_THAN':
+          case 'PURCHASE_COUNT_90D_AT_LEAST':
+          case 'VIEWED_NO_PURCHASE_AFTER':
+            return '<input class="input" type="number" min="1" data-rule-index="' + idx + '" data-rule-field="' + (rule.type === 'PURCHASE_COUNT_90D_AT_LEAST' ? 'count' : 'days') + '" value="' + escapeHtml(rule.type === 'PURCHASE_COUNT_90D_AT_LEAST' ? rule.count : rule.days) + '" />';
+          case 'TOTAL_SPENT_AT_LEAST':
+            return '<input class="input" type="number" min="0" step="1" data-rule-index="' + idx + '" data-rule-field="amount" value="' + escapeHtml(rule.amount || 0) + '" />';
+          case 'AVG_TICKETS_PER_ORDER_AT_LEAST':
+            return '<input class="input" type="number" min="1" step="1" data-rule-index="' + idx + '" data-rule-field="count" value="' + escapeHtml(rule.count || 0) + '" />';
+          case 'MONETARY_TIER':
+            return ''
+              + '<select class="input" data-rule-index="' + idx + '" data-rule-field="metric">'
+              +   '<option value="LIFETIME"' + (rule.metric === 'LIFETIME' ? ' selected' : '') + '>Lifetime value</option>'
+              +   '<option value="NINETY_DAYS"' + (rule.metric === 'NINETY_DAYS' ? ' selected' : '') + '>90d spend</option>'
+              + '</select>'
+              + '<select class="input" data-rule-index="' + idx + '" data-rule-field="tier">'
+              +   '<option value="LOW"' + (rule.tier === 'LOW' ? ' selected' : '') + '>Low</option>'
+              +   '<option value="MID"' + (rule.tier === 'MID' ? ' selected' : '') + '>Mid</option>'
+              +   '<option value="HIGH"' + (rule.tier === 'HIGH' ? ' selected' : '') + '>High</option>'
+              + '</select>';
+          case 'FAVOURITE_VENUE_ID':
+          case 'PURCHASED_AT_VENUE':
+          case 'ATTENDED_VENUE':
+            return venueInput;
+          case 'LIFECYCLE_STAGE':
+            return ''
+              + '<select class="input" data-rule-index="' + idx + '" data-rule-field="value">'
+              +   '<option value="NEW"' + (rule.value === 'NEW' ? ' selected' : '') + '>New</option>'
+              +   '<option value="RETURNING"' + (rule.value === 'RETURNING' ? ' selected' : '') + '>Returning</option>'
+              +   '<option value="LAPSED"' + (rule.value === 'LAPSED' ? ' selected' : '') + '>Lapsed</option>'
+              + '</select>'
+              + '<input class="input" type="number" min="1" data-rule-index="' + idx + '" data-rule-field="newWithinDays" value="' + escapeHtml(rule.newWithinDays || 30) + '" placeholder="New within days" />'
+              + '<input class="input" type="number" min="1" data-rule-index="' + idx + '" data-rule-field="lapsedAfterDays" value="' + escapeHtml(rule.lapsedAfterDays || 180) + '" placeholder="Lapsed after days" />';
+          case 'CONSENT_STATUS_IS':
+            return ''
+              + '<select class="input" data-rule-index="' + idx + '" data-rule-field="value">'
+              +   '<option value="SUBSCRIBED"' + (rule.value === 'SUBSCRIBED' ? ' selected' : '') + '>Subscribed</option>'
+              +   '<option value="UNSUBSCRIBED"' + (rule.value === 'UNSUBSCRIBED' ? ' selected' : '') + '>Unsubscribed</option>'
+              +   '<option value="TRANSACTIONAL_ONLY"' + (rule.value === 'TRANSACTIONAL_ONLY' ? ' selected' : '') + '>Transactional only</option>'
+              + '</select>';
+          case 'PREFERENCE_TOPIC_STATUS': {
+            var selectedTopic = rule.topicId || '';
+            var topicSelectOptions = (topics || []).map(function(t){
+              var selected = selectedTopic === t.id ? ' selected' : '';
+              return '<option value="' + escapeHtml(t.id) + '"' + selected + '>' + escapeHtml(t.name || t.id) + '</option>';
+            }).join('');
+            return ''
+              + '<select class="input" data-rule-index="' + idx + '" data-rule-field="topicId">'
+              +   '<option value="">Choose topic</option>'
+              +   topicSelectOptions
+              + '</select>'
+              + '<select class="input" data-rule-index="' + idx + '" data-rule-field="status">'
+              +   '<option value="SUBSCRIBED"' + (rule.status === 'SUBSCRIBED' ? ' selected' : '') + '>Subscribed</option>'
+              +   '<option value="UNSUBSCRIBED"' + (rule.status === 'UNSUBSCRIBED' ? ' selected' : '') + '>Unsubscribed</option>'
+              + '</select>';
+          }
+          default:
+            return '<input class="input" data-rule-index="' + idx + '" data-rule-field="value" value="' + escapeHtml(rule.value || '') + '" />';
+        }
+      }
+
+      function ruleSummary(rule){
+        switch(rule.type){
+          case 'HAS_TAG': return 'Has tag "' + rule.value + '"';
+          case 'NOT_TAG': return 'No tag "' + rule.value + '"';
+          case 'LAST_PURCHASE_OLDER_THAN': return 'Last purchase > ' + rule.days + 'd';
+          case 'PURCHASE_COUNT_90D_AT_LEAST': return '90d purchases ≥ ' + rule.count;
+          case 'MONETARY_TIER': return (rule.metric === 'NINETY_DAYS' ? '90d spend' : 'LTV') + ' tier: ' + rule.tier;
+          case 'AVG_TICKETS_PER_ORDER_AT_LEAST': return 'Avg tickets/order ≥ ' + rule.count;
+          case 'FAVOURITE_VENUE_ID': return 'Favourite venue ' + rule.venueId;
+          case 'PURCHASED_AT_VENUE': return 'Purchased at venue ' + rule.venueId;
+          case 'FAVOURITE_CATEGORY_CONTAINS': return 'Top category contains "' + rule.value + '"';
+          case 'FAVOURITE_EVENT_TYPE_CONTAINS': return 'Top event type contains "' + rule.value + '"';
+          case 'VIEWED_NO_PURCHASE_AFTER': return 'Viewed last ' + rule.days + 'd, no purchase';
+          case 'LIFECYCLE_STAGE': return 'Lifecycle: ' + rule.value;
+          case 'CONSENT_STATUS_IS': return 'Consent: ' + rule.value;
+          case 'PREFERENCE_TOPIC_STATUS': return 'Topic ' + rule.topicId + ' is ' + rule.status;
+          case 'PURCHASED_CATEGORY_CONTAINS': return 'Purchased category contains "' + rule.value + '"';
+          case 'TOTAL_SPENT_AT_LEAST': return 'Total spent ≥ £' + rule.amount;
+          case 'ATTENDED_VENUE': return 'Attended venue ' + rule.venueId;
+          default: return rule.type;
+        }
+      }
+
+      var ruleRows = builderState.rules.map(function(rule, idx){
+        var typeOptions = ruleTypes.map(function(opt){
+          return '<option value="' + opt.value + '"' + (opt.value === rule.type ? ' selected' : '') + '>' + opt.label + '</option>';
+        }).join('');
+        return ''
+          + '<div class="card" style="margin:0 0 8px 0;">'
+          +   '<div class="row" style="gap:8px;flex-wrap:wrap;">'
+          +     '<select class="input" data-rule-index="' + idx + '" data-rule-type="true">' + typeOptions + '</select>'
+          +     renderRuleFields(rule, idx)
+          +     '<button class="btn" data-rule-remove="' + idx + '">Remove</button>'
+          +   '</div>'
+          + '</div>';
+      }).join('');
+
       var html = ''
+        + '<datalist id="mk_segment_venue_list">' + venueOptions + '</datalist>'
         + '<div class="card" style="margin:0 0 12px 0;">'
-        +   '<div class="title">Create segment</div>'
-        +   '<input class="input" id="mk_segment_name" placeholder="Segment name" />'
-        +   '<textarea class="input" id="mk_segment_rules" placeholder="Rules JSON, e.g. {&quot;rules&quot;:[{&quot;type&quot;:&quot;HAS_TAG&quot;,&quot;value&quot;:&quot;vip&quot;}]}" style="height:120px;margin-top:8px;"></textarea>'
-        +   '<div class="row" style="gap:8px;margin-top:10px;">'
-        +     '<button class="btn p" id="mk_segment_add">Save segment</button>'
+        +   '<div class="title">' + (builderState.mode === 'edit' ? 'Edit segment' : 'Create segment') + '</div>'
+        +   '<div class="muted">Build advanced rules with purchases, views, and consent data.</div>'
+        +   '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px;">'
+        +     '<input class="input" id="mk_segment_name" placeholder="Segment name" value="' + escapeHtml(builderState.name || '') + '" />'
+        +     '<input class="input" id="mk_segment_description" placeholder="Description (optional)" value="' + escapeHtml(builderState.description || '') + '" />'
+        +   '</div>'
+        +   '<div style="margin-top:12px;">' + (ruleRows || '<div class="muted">No rules yet. Add one to get started.</div>') + '</div>'
+        +   '<div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap;">'
+        +     '<button class="btn" id="mk_segment_add_rule">Add rule</button>'
+        +     '<button class="btn" id="mk_segment_estimate">Estimate now</button>'
+        +     '<div id="mk_segment_estimate_msg" class="muted"></div>'
+        +   '</div>'
+        +   '<div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap;">'
+        +     '<button class="btn p" id="mk_segment_save">' + (builderState.mode === 'edit' ? 'Update segment' : 'Save segment') + '</button>'
+        +     '<button class="btn" id="mk_segment_reset">Reset</button>'
         +     '<div id="mk_segment_msg" class="muted"></div>'
         +   '</div>'
         + '</div>'
         + '<div class="card" style="margin:0;">'
         +   '<div class="title">Segments</div>'
         +   '<div class="table-wrap"><table class="table">'
-        +     '<thead><tr><th>Name</th><th>Rules</th><th>Estimate</th></tr></thead>'
+        +     '<thead><tr><th>Name</th><th>Description</th><th>Rules</th><th>Actions</th></tr></thead>'
         +     '<tbody>'
         +       items.map(function(seg){
+              var rules = extractRules(seg.rules || {});
+              var summary = rules.map(ruleSummary).join('; ');
               return '<tr>'
                 + '<td>' + escapeHtml(seg.name) + '</td>'
-                + '<td><code>' + escapeHtml(JSON.stringify(seg.rules || {})) + '</code></td>'
+                + '<td>' + escapeHtml(seg.description || '—') + '</td>'
+                + '<td>' + escapeHtml(summary || '—') + '</td>'
                 + '<td>'
-                  + '<div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;">'
-                    + '<button class="btn" data-estimate="' + seg.id + '">Estimate recipients</button>'
+                  + '<div class="row" style="gap:6px;align-items:center;flex-wrap:wrap;">'
+                    + '<button class="btn" data-segment-edit="' + seg.id + '">Edit</button>'
+                    + '<button class="btn" data-estimate="' + seg.id + '">Estimate</button>'
                     + '<div class="muted" data-estimate-output="' + seg.id + '"></div>'
                   + '</div>'
                 + '</td>'
@@ -16525,27 +16709,148 @@ function renderInterests(customer){
         + '</div>';
       sections.segments.innerHTML = html;
 
-      var addBtn = sections.segments.querySelector('#mk_segment_add');
-      if (addBtn) {
-        addBtn.addEventListener('click', async function(){
+      function coerceFieldValue(field, value){
+        if (['days', 'count', 'amount', 'newWithinDays', 'lapsedAfterDays'].includes(field)) {
+          return Number(value || 0);
+        }
+        return value;
+      }
+
+      function scheduleEstimate(){
+        if (builderState.estimateTimer) clearTimeout(builderState.estimateTimer);
+        builderState.estimateTimer = setTimeout(function(){
+          var msg = sections.segments.querySelector('#mk_segment_estimate_msg');
+          if (!builderState.rules.length) { if (msg) msg.textContent = 'Add a rule to estimate.'; return; }
+          if (msg) msg.textContent = 'Estimating...';
+          fetchJson('/admin/marketing/segments/estimate', {
+            method:'POST',
+            headers:{ 'Content-Type':'application/json' },
+            body: JSON.stringify({ rules: { rules: builderState.rules } })
+          }).then(function(data){
+            var sample = (data.estimate.sample || []).join(', ');
+            var text = 'Sendable: ' + data.estimate.sendable + ' • Suppressed: ' + data.estimate.suppressed + ' • Total: ' + data.estimate.total;
+            if (sample) text += ' • Sample: ' + sample;
+            if (msg) msg.textContent = text;
+          }).catch(function(err){
+            if (msg) msg.textContent = err.message || 'Estimate failed';
+          });
+        }, 400);
+      }
+
+      var addRuleBtn = sections.segments.querySelector('#mk_segment_add_rule');
+      if (addRuleBtn) {
+        addRuleBtn.addEventListener('click', function(){
+          builderState.rules.push(defaultRuleFor('HAS_TAG'));
+          renderSegments(items, topics, venues);
+        });
+      }
+
+      var estimateBtn = sections.segments.querySelector('#mk_segment_estimate');
+      if (estimateBtn) {
+        estimateBtn.addEventListener('click', function(){
+          scheduleEstimate();
+        });
+      }
+
+      var saveBtn = sections.segments.querySelector('#mk_segment_save');
+      if (saveBtn) {
+        saveBtn.addEventListener('click', async function(){
           var name = String(valueOf(sections.segments, 'mk_segment_name') || '').trim();
-          var rulesRaw = String(valueOf(sections.segments, 'mk_segment_rules') || '').trim();
+          var description = String(valueOf(sections.segments, 'mk_segment_description') || '').trim();
           var msg = sections.segments.querySelector('#mk_segment_msg');
-          if (!name || !rulesRaw) { if (msg) msg.textContent = 'Name + rules required.'; return; }
+          if (!name) { if (msg) msg.textContent = 'Name required.'; return; }
+          if (!builderState.rules.length) { if (msg) msg.textContent = 'Add at least one rule.'; return; }
           try {
-            var rules = JSON.parse(rulesRaw);
-            await fetchJson('/admin/marketing/segments', {
-              method:'POST',
-              headers:{ 'Content-Type':'application/json' },
-              body: JSON.stringify({ name: name, rules: rules })
-            });
+            if (builderState.mode === 'edit' && builderState.segmentId) {
+              await fetchJson('/admin/marketing/segments/' + encodeURIComponent(builderState.segmentId), {
+                method:'PUT',
+                headers:{ 'Content-Type':'application/json' },
+                body: JSON.stringify({ name: name, description: description || null, rules: { rules: builderState.rules } })
+              });
+            } else {
+              await fetchJson('/admin/marketing/segments', {
+                method:'POST',
+                headers:{ 'Content-Type':'application/json' },
+                body: JSON.stringify({ name: name, description: description || null, rules: { rules: builderState.rules } })
+              });
+            }
             if (msg) msg.textContent = 'Saved.';
+            builderState.mode = 'create';
+            builderState.segmentId = '';
+            builderState.name = '';
+            builderState.description = '';
+            builderState.rules = [];
             await loadSegments();
           } catch (err) {
             if (msg) msg.textContent = err.message || 'Failed.';
           }
         });
       }
+
+      var resetBtn = sections.segments.querySelector('#mk_segment_reset');
+      if (resetBtn) {
+        resetBtn.addEventListener('click', function(){
+          builderState.mode = 'create';
+          builderState.segmentId = '';
+          builderState.name = '';
+          builderState.description = '';
+          builderState.rules = [];
+          renderSegments(items, topics, venues);
+        });
+      }
+
+      Array.prototype.slice.call(sections.segments.querySelectorAll('[data-rule-type]')).forEach(function(select){
+        select.addEventListener('change', function(){
+          var idx = Number(select.getAttribute('data-rule-index'));
+          var type = select.value;
+          builderState.rules[idx] = defaultRuleFor(type);
+          renderSegments(items, topics, venues);
+        });
+      });
+
+      Array.prototype.slice.call(sections.segments.querySelectorAll('[data-rule-field]')).forEach(function(input){
+        input.addEventListener('input', function(){
+          var idx = Number(input.getAttribute('data-rule-index'));
+          var field = input.getAttribute('data-rule-field');
+          if (!builderState.rules[idx]) return;
+          builderState.rules[idx][field] = coerceFieldValue(field, input.value);
+          if (field === 'topicId' && input.tagName === 'SELECT') {
+            builderState.rules[idx][field] = input.value;
+          }
+          scheduleEstimate();
+        });
+        input.addEventListener('change', function(){
+          var idx = Number(input.getAttribute('data-rule-index'));
+          var field = input.getAttribute('data-rule-field');
+          if (!builderState.rules[idx]) return;
+          builderState.rules[idx][field] = coerceFieldValue(field, input.value);
+          scheduleEstimate();
+        });
+      });
+
+      Array.prototype.slice.call(sections.segments.querySelectorAll('[data-rule-remove]')).forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var idx = Number(btn.getAttribute('data-rule-remove'));
+          builderState.rules.splice(idx, 1);
+          renderSegments(items, topics, venues);
+        });
+      });
+
+      Array.prototype.slice.call(sections.segments.querySelectorAll('[data-segment-edit]')).forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var id = btn.getAttribute('data-segment-edit');
+          var segment = items.find(function(s){ return s.id === id; });
+          if (!segment) return;
+          builderState.mode = 'edit';
+          builderState.segmentId = segment.id;
+          builderState.name = segment.name || '';
+          builderState.description = segment.description || '';
+          builderState.rules = extractRules(segment.rules || {}).map(function(rule){
+            return Object.assign({}, rule);
+          });
+          renderSegments(items, topics, venues);
+        });
+      });
 
       Array.prototype.slice.call(sections.segments.querySelectorAll('[data-estimate]')).forEach(function(btn){
         btn.addEventListener('click', async function(){
@@ -16560,7 +16865,7 @@ function renderInterests(customer){
             });
             var sample = (data.estimate.sample || []).join(', ');
             if (output) {
-              var text = 'Will send: ' + data.estimate.sendable + ' • Suppressed: ' + data.estimate.suppressed + ' • Total: ' + data.estimate.total;
+              var text = 'Sendable: ' + data.estimate.sendable + ' • Suppressed: ' + data.estimate.suppressed + ' • Total: ' + data.estimate.total;
               if (sample) text += ' • Sample: ' + sample;
               output.textContent = text;
             }
@@ -16573,7 +16878,11 @@ function renderInterests(customer){
 
     async function loadSegments(){
       var data = await fetchJson('/admin/marketing/segments');
-      renderSegments(data.items || []);
+      var topics = { items: [] };
+      var venues = { items: [] };
+      try { topics = await fetchJson('/admin/marketing/preferences/topics'); } catch (err) {}
+      try { venues = await fetchJson('/admin/venues'); } catch (err) {}
+      renderSegments(data.items || [], topics.items || [], venues.items || []);
       return data.items || [];
     }
 
@@ -16703,11 +17012,9 @@ function renderInterests(customer){
         +         '<div id="mk_builder_segment_estimate_msg" class="muted"></div>'
         +       '</div>'
         +       '<div class="muted" style="margin-top:12px;">Or create a new segment</div>'
-        +       '<input class="input" id="mk_builder_seg_name" placeholder="Segment name" style="margin-top:8px;" />'
-        +       '<textarea class="input" id="mk_builder_seg_rules" placeholder="Rules JSON" style="height:120px;margin-top:8px;"></textarea>'
         +       '<div class="row" style="gap:8px;margin-top:8px;">'
-        +         '<button class="btn" id="mk_builder_seg_save">Save segment</button>'
-        +         '<div id="mk_builder_seg_msg" class="muted"></div>'
+        +         '<button class="btn" id="mk_builder_seg_open">Open segment builder</button>'
+        +         '<div class="muted" id="mk_builder_seg_msg">Use the segment builder to define advanced rules.</div>'
         +       '</div>'
         +     '</div>'
         +     '<div class="card" style="margin:0;">'
@@ -16951,25 +17258,10 @@ function renderInterests(customer){
         });
       }
 
-      var saveSegmentBtn = sections.campaigns.querySelector('#mk_builder_seg_save');
-      if (saveSegmentBtn) {
-        saveSegmentBtn.addEventListener('click', async function(){
-          var name = String(valueOf(sections.campaigns, 'mk_builder_seg_name') || '').trim();
-          var rulesRaw = String(valueOf(sections.campaigns, 'mk_builder_seg_rules') || '').trim();
-          var msg = sections.campaigns.querySelector('#mk_builder_seg_msg');
-          if (!name || !rulesRaw) { if (msg) msg.textContent = 'Name + rules required.'; return; }
-          try {
-            var rules = JSON.parse(rulesRaw);
-            await fetchJson('/admin/marketing/segments', {
-              method:'POST',
-              headers:{ 'Content-Type':'application/json' },
-              body: JSON.stringify({ name: name, rules: rules })
-            });
-            if (msg) msg.textContent = 'Segment saved.';
-            await loadCampaigns();
-          } catch (err) {
-            if (msg) msg.textContent = err.message || 'Failed.';
-          }
+      var openSegmentBtn = sections.campaigns.querySelector('#mk_builder_seg_open');
+      if (openSegmentBtn) {
+        openSegmentBtn.addEventListener('click', function(){
+          setTab('segments');
         });
       }
 
