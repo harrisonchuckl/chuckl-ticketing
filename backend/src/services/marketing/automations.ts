@@ -32,6 +32,8 @@ const PUBLIC_BASE_URL =
 
 const AUTOMATION_LOCK_MINUTES = Number(process.env.MARKETING_AUTOMATION_LOCK_MINUTES || 5);
 const REQUIRE_VERIFIED_FROM = String(process.env.MARKETING_REQUIRE_VERIFIED_FROM || 'true') === 'true';
+const BOUNCE_WARN_THRESHOLD = Number(process.env.MARKETING_BOUNCE_WARN_THRESHOLD || 5);
+const SPAM_WARN_THRESHOLD = Number(process.env.MARKETING_SPAM_WARN_THRESHOLD || 0.1);
 
 function baseUrl() {
   return PUBLIC_BASE_URL.replace(/\/+$/, '');
@@ -1533,6 +1535,41 @@ export async function updateContactPreferences(options: {
   }
 }
 
+function buildDeliverabilityRates(metrics: {
+  delivered: number;
+  bounce: number;
+  complaint: number;
+  unsubscribe: number;
+  click: number;
+  open: number;
+}) {
+  const rate = (num: number) => (metrics.delivered ? Math.round((num / metrics.delivered) * 10000) / 100 : 0);
+  const bounceRate = rate(metrics.bounce);
+  const complaintRate = rate(metrics.complaint);
+  const clickRate = rate(metrics.click);
+  const openRate = rate(metrics.open);
+  const unsubscribeRate = rate(metrics.unsubscribe);
+  return {
+    bounceRate,
+    complaintRate,
+    spamRate: complaintRate,
+    clickRate,
+    openRate,
+    unsubscribeRate,
+  };
+}
+
+function buildDeliverabilityWarnings(bounceRate: number, spamRate: number) {
+  const warnings: Array<{ type: 'bounce' | 'spam'; rate: number; threshold: number }> = [];
+  if (bounceRate >= BOUNCE_WARN_THRESHOLD) {
+    warnings.push({ type: 'bounce', rate: bounceRate, threshold: BOUNCE_WARN_THRESHOLD });
+  }
+  if (spamRate >= SPAM_WARN_THRESHOLD) {
+    warnings.push({ type: 'spam', rate: spamRate, threshold: SPAM_WARN_THRESHOLD });
+  }
+  return warnings;
+}
+
 export async function fetchDeliverabilitySummary(tenantId: string, days: number) {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const events = await prisma.marketingEmailEvent.groupBy({
@@ -1547,8 +1584,10 @@ export async function fetchDeliverabilitySummary(tenantId: string, days: number)
   const complaint = countByType.get(MarketingEmailEventType.COMPLAINT) || 0;
   const unsubscribe = countByType.get(MarketingEmailEventType.UNSUBSCRIBE) || 0;
   const click = countByType.get(MarketingEmailEventType.CLICK) || 0;
+  const open = countByType.get(MarketingEmailEventType.OPEN) || 0;
 
-  const rate = (num: number) => (delivered ? Math.round((num / delivered) * 10000) / 100 : 0);
+  const rates = buildDeliverabilityRates({ delivered, bounce, complaint, unsubscribe, click, open });
+  const warnings = buildDeliverabilityWarnings(rates.bounceRate, rates.spamRate);
 
   return {
     delivered,
@@ -1556,11 +1595,68 @@ export async function fetchDeliverabilitySummary(tenantId: string, days: number)
     complaint,
     unsubscribe,
     click,
-    bounceRate: rate(bounce),
-    complaintRate: rate(complaint),
-    unsubscribeRate: rate(unsubscribe),
-    clickRate: rate(click),
+    open,
+    ...rates,
+    thresholds: {
+      bounceRate: BOUNCE_WARN_THRESHOLD,
+      spamRate: SPAM_WARN_THRESHOLD,
+    },
+    warnings,
   };
+}
+
+export async function fetchCampaignDeliverability(tenantId: string, days: number) {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const campaigns = await prisma.marketingCampaign.findMany({
+    where: { tenantId, createdAt: { gte: since } },
+    select: { id: true, name: true, status: true, createdAt: true },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (!campaigns.length) return [];
+
+  const events = await prisma.marketingEmailEvent.groupBy({
+    by: ['campaignId', 'type'],
+    where: { tenantId, campaignId: { in: campaigns.map((c) => c.id) }, createdAt: { gte: since } },
+    _count: { _all: true },
+  });
+
+  const countsByCampaign = new Map<
+    string,
+    Partial<Record<MarketingEmailEventType, number>>
+  >();
+  for (const row of events) {
+    if (!countsByCampaign.has(row.campaignId)) {
+      countsByCampaign.set(row.campaignId, {});
+    }
+    countsByCampaign.get(row.campaignId)![row.type] = row._count._all;
+  }
+
+  return campaigns.map((campaign) => {
+    const counts = countsByCampaign.get(campaign.id) || {};
+    const delivered = counts[MarketingEmailEventType.DELIVERED] || 0;
+    const bounce = counts[MarketingEmailEventType.BOUNCE] || 0;
+    const complaint = counts[MarketingEmailEventType.COMPLAINT] || 0;
+    const click = counts[MarketingEmailEventType.CLICK] || 0;
+    const open = counts[MarketingEmailEventType.OPEN] || 0;
+    const unsubscribe = counts[MarketingEmailEventType.UNSUBSCRIBE] || 0;
+    const rates = buildDeliverabilityRates({ delivered, bounce, complaint, unsubscribe, click, open });
+    const warnings = buildDeliverabilityWarnings(rates.bounceRate, rates.spamRate);
+
+    return {
+      campaignId: campaign.id,
+      name: campaign.name,
+      status: campaign.status,
+      createdAt: campaign.createdAt,
+      delivered,
+      bounce,
+      complaint,
+      click,
+      open,
+      unsubscribe,
+      ...rates,
+      warnings,
+    };
+  });
 }
 
 export async function fetchTopSegmentsByEngagement(tenantId: string, days: number) {
@@ -1622,7 +1718,13 @@ export function warmupPresets() {
       'Start low and ramp sending volume over 2–4 weeks to establish reputation.',
       'Begin with highly engaged segments to maximize opens/clicks.',
       'Separate transactional and marketing streams to protect critical mail.',
+      'Warm-up mode: target small segments and enforce a daily cap until bounce/spam stabilise.',
     ],
+    suggestion: {
+      segmentMax: 500,
+      dailyCap: 500,
+      note: 'Keep initial sends under 500 recipients/day with your most engaged segment.',
+    },
     presets: [
       { label: 'Week 1', dailyLimit: 500, ratePerSecond: 5, batchSize: 20 },
       { label: 'Week 2', dailyLimit: 2000, ratePerSecond: 10, batchSize: 50 },

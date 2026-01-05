@@ -4796,6 +4796,81 @@ document.addEventListener('click', function(e){
     return data || {};
   }
 
+  function requestMarketingStepUp(){
+    return new Promise(function(resolve){
+      openAdminModal({
+        title: 'Confirm password',
+        body:
+          '<div class="muted">Re-enter your password to manage suppressions.</div>'
+          + '<div class="grid">'
+          +   '<input type="password" class="ctl" id="mkStepUpPassword" placeholder="Password" />'
+          +   '<div class="error-inline" id="mkStepUpError" style="display:none;"></div>'
+          + '</div>',
+        actions:
+          '<button class="btn" id="mkStepUpCancel">Cancel</button>'
+          + '<button class="btn primary" id="mkStepUpConfirm">Confirm</button>',
+        onReady: function(overlay){
+          var passwordInput = overlay.querySelector('#mkStepUpPassword');
+          var errorEl = overlay.querySelector('#mkStepUpError');
+          var cancelBtn = overlay.querySelector('#mkStepUpCancel');
+          var confirmBtn = overlay.querySelector('#mkStepUpConfirm');
+
+          function setError(message){
+            if (!errorEl) return;
+            errorEl.textContent = message || '';
+            errorEl.style.display = message ? 'block' : 'none';
+          }
+
+          cancelBtn.addEventListener('click', function(){
+            closeAdminModal();
+            resolve(false);
+          });
+
+          confirmBtn.addEventListener('click', async function(){
+            setError('');
+            var password = passwordInput.value || '';
+            if (!password){
+              setError('Password required.');
+              return;
+            }
+            confirmBtn.disabled = true;
+            try{
+              await fetchJson('/admin/marketing/step-up', {
+                method:'POST',
+                headers:{ 'Content-Type':'application/json' },
+                body: JSON.stringify({ password: password })
+              });
+              closeAdminModal();
+              resolve(true);
+            }catch(e){
+              setError(parseErr(e));
+              confirmBtn.disabled = false;
+            }
+          });
+        }
+      });
+    });
+  }
+
+  async function marketingSensitiveRequest(url, opts, attempted){
+    var res = await fetch(url, { credentials:'include', ...(opts || {}) });
+    var text = '';
+    try{ text = await res.text(); }catch(e){}
+    var data = {};
+    if (text){
+      try{ data = JSON.parse(text); }catch(e){ data = {}; }
+    }
+    if (!res.ok){
+      if (res.status === 403 && data && data.stepUpRequired && !attempted){
+        var ok = await requestMarketingStepUp();
+        if (!ok) throw new Error('Step-up required.');
+        return marketingSensitiveRequest(url, opts, true);
+      }
+      throw new Error(text || ('HTTP ' + res.status));
+    }
+    return data || {};
+  }
+
   function renderDelta(value){
     var cls = value >= 0 ? 'up' : 'down';
     var arrow = value >= 0 ? '▲' : '▼';
@@ -18299,13 +18374,32 @@ function renderInterests(customer){
       renderPreferences(topics.items || [], summary.summary || {});
     }
 
-    function renderDeliverability(summary, segments, warmup, health){
+    var suppressionState = { search: '' };
+
+    function renderDeliverability(summary, segments, warmup, health, campaigns, suppressions){
+      var warnings = (summary && summary.warnings) || [];
+      var warningHtml = warnings.length
+        ? '<div class=\"card\" style=\"margin-bottom:12px;border-left:4px solid #f59e0b;background:#fff7ed;\">'
+          + '<div class=\"title\">Deliverability warnings</div>'
+          + '<ul style=\"margin:10px 0 0 18px;\">'
+            + warnings.map(function(warning){
+              if (warning.type === 'bounce') {
+                return '<li>Bounce rate ' + warning.rate + '% exceeds ' + warning.threshold + '% threshold.</li>';
+              }
+              return '<li>Spam complaint rate ' + warning.rate + '% exceeds ' + warning.threshold + '% threshold.</li>';
+            }).join('')
+          + '</ul>'
+        + '</div>'
+        : '';
+
       var summaryHtml = ''
-        + '<div class=\"grid\" style=\"grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;\">'
-        +   '<div class=\"card\"><div class=\"title\">Bounce rate</div><div>' + summary.bounceRate + '%</div></div>'
-        +   '<div class=\"card\"><div class=\"title\">Complaint rate</div><div>' + summary.complaintRate + '%</div></div>'
-        +   '<div class=\"card\"><div class=\"title\">Unsubscribe rate</div><div>' + summary.unsubscribeRate + '%</div></div>'
-        +   '<div class=\"card\"><div class=\"title\">Click rate</div><div>' + summary.clickRate + '%</div></div>'
+        + '<div class=\"grid\" style=\"grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;\">'
+        +   '<div class=\"card\"><div class=\"title\">Delivered</div><div>' + (summary.delivered || 0) + '</div></div>'
+        +   '<div class=\"card\"><div class=\"title\">Open rate</div><div>' + (summary.openRate || 0) + '%</div></div>'
+        +   '<div class=\"card\"><div class=\"title\">Click rate</div><div>' + (summary.clickRate || 0) + '%</div></div>'
+        +   '<div class=\"card\"><div class=\"title\">Bounce rate</div><div>' + (summary.bounceRate || 0) + '%</div></div>'
+        +   '<div class=\"card\"><div class=\"title\">Spam rate</div><div>' + (summary.spamRate || 0) + '%</div></div>'
+        +   '<div class=\"card\"><div class=\"title\">Unsubscribe rate</div><div>' + (summary.unsubscribeRate || 0) + '%</div></div>'
         + '</div>';
 
       var healthHtml = ''
@@ -18325,7 +18419,42 @@ function renderInterests(customer){
         return '<tr><td>' + escapeHtml(p.label) + '</td><td>' + p.dailyLimit + '</td><td>' + p.ratePerSecond + '/s</td><td>' + p.batchSize + '</td></tr>';
       }).join('');
 
+      var warmupSuggestion = warmup.suggestion
+        ? '<div class=\"card\" style=\"margin-top:12px;background:#f8fafc;\">'
+          + '<div class=\"title\" style=\"font-size:14px;\">Warm-up mode suggestion</div>'
+          + '<div class=\"muted\" style=\"margin-top:6px;\">'
+          +   escapeHtml(warmup.suggestion.note || '') + ' (segment size ≤ ' + warmup.suggestion.segmentMax + ', daily cap ' + warmup.suggestion.dailyCap + ').'
+          + '</div>'
+        + '</div>'
+        : '';
+
+      var campaignRows = (campaigns || []).map(function(item){
+        var alert = (item.warnings && item.warnings.length) ? '⚠️' : 'OK';
+        return '<tr>'
+          + '<td>' + escapeHtml(item.name || 'Unnamed campaign') + '</td>'
+          + '<td>' + escapeHtml(item.status || '') + '</td>'
+          + '<td>' + (item.delivered || 0) + '</td>'
+          + '<td>' + (item.openRate || 0) + '%</td>'
+          + '<td>' + (item.clickRate || 0) + '%</td>'
+          + '<td>' + (item.bounceRate || 0) + '%</td>'
+          + '<td>' + (item.spamRate || 0) + '%</td>'
+          + '<td>' + alert + '</td>'
+          + '</tr>';
+      }).join('');
+
+      var suppressionRows = (suppressions.items || []).map(function(item){
+        var reason = item.reason || '—';
+        return '<tr>'
+          + '<td>' + escapeHtml(item.email || '') + '</td>'
+          + '<td>' + escapeHtml(item.type || '') + '</td>'
+          + '<td>' + escapeHtml(reason) + '</td>'
+          + '<td>' + escapeHtml(formatDateTime(item.createdAt || '')) + '</td>'
+          + '<td><button class=\"btn\" data-id=\"' + escapeHtml(item.id || '') + '\" data-action=\"mk_suppression_remove\">Remove</button></td>'
+          + '</tr>';
+      }).join('');
+
       sections.deliverability.innerHTML = ''
+        + warningHtml
         + '<div class=\"card\" style=\"margin-bottom:12px;\">'
         +   '<div class=\"title\">Sending health</div>'
         +   '<div style=\"margin-top:10px;\">' + summaryHtml + '</div>'
@@ -18341,6 +18470,13 @@ function renderInterests(customer){
         +     '<tbody>' + (segmentRows || '<tr><td colspan=\"3\" class=\"muted\">No data yet.</td></tr>') + '</tbody>'
         +   '</table></div>'
         + '</div>'
+        + '<div class=\"card\" style=\"margin-bottom:12px;\">'
+        +   '<div class=\"title\">Campaign deliverability</div>'
+        +   '<div class=\"table-wrap\"><table class=\"table\">'
+        +     '<thead><tr><th>Campaign</th><th>Status</th><th>Delivered</th><th>Open rate</th><th>Click rate</th><th>Bounce rate</th><th>Spam rate</th><th>Alerts</th></tr></thead>'
+        +     '<tbody>' + (campaignRows || '<tr><td colspan=\"8\" class=\"muted\">No campaign data yet.</td></tr>') + '</tbody>'
+        +   '</table></div>'
+        + '</div>'
         + '<div class=\"card\">'
         +   '<div class=\"title\">Warm-up guidance</div>'
         +   '<ul style=\"margin:10px 0 0 18px;\">' + (warmup.guidance || []).map(function(g){ return '<li>' + escapeHtml(g) + '</li>'; }).join('') + '</ul>'
@@ -18348,7 +18484,47 @@ function renderInterests(customer){
         +     '<thead><tr><th>Preset</th><th>Daily limit</th><th>Rate</th><th>Batch size</th></tr></thead>'
         +     '<tbody>' + (warmupRows || '') + '</tbody>'
         +   '</table></div>'
+        +   warmupSuggestion
+        + '</div>'
+        + '<div class=\"card\" style=\"margin-top:12px;\">'
+        +   '<div class=\"title\">Suppressions</div>'
+        +   '<div class=\"muted\" style=\"margin-top:6px;\">Hard bounces and spam complaints are auto-suppressed.</div>'
+        +   '<div class=\"row\" style=\"gap:8px;margin-top:10px;flex-wrap:wrap;\">'
+        +     '<input class=\"input\" id=\"mk_suppression_search\" placeholder=\"Search email\" style=\"max-width:240px;\" value=\"' + escapeHtml(suppressions.search || '') + '\" />'
+        +     '<button class=\"btn\" id=\"mk_suppression_search_btn\">Search</button>'
+        +   '</div>'
+        +   '<div class=\"table-wrap\" style=\"margin-top:10px;\"><table class=\"table\">'
+        +     '<thead><tr><th>Email</th><th>Type</th><th>Reason</th><th>Created</th><th></th></tr></thead>'
+        +     '<tbody>' + (suppressionRows || '<tr><td colspan=\"5\" class=\"muted\">No suppressions.</td></tr>') + '</tbody>'
+        +   '</table></div>'
         + '</div>';
+
+      var searchBtn = sections.deliverability.querySelector('#mk_suppression_search_btn');
+      if (searchBtn) {
+        searchBtn.addEventListener('click', function(){
+          var value = String(valueOf(sections.deliverability, 'mk_suppression_search') || '').trim();
+          suppressionState.search = value;
+          loadDeliverability().catch(function(err){
+            sections.deliverability.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load deliverability') + '</div>';
+          });
+        });
+      }
+
+      sections.deliverability.querySelectorAll('button[data-action="mk_suppression_remove"]').forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          var id = btn.getAttribute('data-id');
+          if (!id) return;
+          try{
+            await marketingSensitiveRequest('/admin/marketing/suppressions/' + encodeURIComponent(id), { method:'DELETE' });
+            showToast('Suppression removed.', true);
+            loadDeliverability().catch(function(err){
+              sections.deliverability.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load deliverability') + '</div>';
+            });
+          }catch(e){
+            showToast(parseErr(e), false);
+          }
+        });
+      });
     }
 
     async function loadDeliverability(){
@@ -18356,11 +18532,17 @@ function renderInterests(customer){
       var segments = await fetchJson('/admin/marketing/deliverability/top-segments?days=30');
       var warmup = await fetchJson('/admin/marketing/deliverability/warmup');
       var health = await fetchJson('/admin/marketing/health');
+      var campaigns = await fetchJson('/admin/marketing/deliverability/campaigns?days=30');
+      var suppressionsUrl = '/admin/marketing/suppressions?page=1&pageSize=50';
+      if (suppressionState.search) suppressionsUrl += '&search=' + encodeURIComponent(suppressionState.search);
+      var suppressions = await fetchJson(suppressionsUrl);
       renderDeliverability(
         summary.summary || {},
         segments.items || [],
         warmup.data || { guidance: [], presets: [] },
-        health || {}
+        health || {},
+        campaigns.items || [],
+        { items: suppressions.items || [], search: suppressionState.search || '' }
       );
     }
 
