@@ -109,6 +109,69 @@ const PUBLIC_BASE_URL =
 const REQUIRE_VERIFIED_FROM_DEFAULT = String(process.env.MARKETING_REQUIRE_VERIFIED_FROM || 'true') === 'true';
 const TEST_SEND_RATE_LIMIT_SECONDS = Number(process.env.MARKETING_TEST_SEND_RATE_LIMIT_SEC || 60);
 const APPROVAL_THRESHOLD_DEFAULT = Number(process.env.MARKETING_APPROVAL_THRESHOLD || 5000);
+const MARKETING_ANALYTICS_CACHE_TTL_MS = Number(process.env.MARKETING_ANALYTICS_CACHE_TTL_MS || 5 * 60 * 1000);
+
+const analyticsCache = new Map<string, { expiresAt: number; value: any }>();
+
+function parseDateInput(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+}
+
+function parseDateRange(req: any) {
+  const now = new Date();
+  const toInput = parseDateInput(String(req.query?.to || '')) || now;
+  const fromInput =
+    parseDateInput(String(req.query?.from || '')) ||
+    new Date(Date.UTC(toInput.getUTCFullYear(), toInput.getUTCMonth(), toInput.getUTCDate() - 30));
+
+  const from = new Date(Date.UTC(fromInput.getUTCFullYear(), fromInput.getUTCMonth(), fromInput.getUTCDate(), 0, 0, 0));
+  const to = new Date(Date.UTC(toInput.getUTCFullYear(), toInput.getUTCMonth(), toInput.getUTCDate(), 23, 59, 59, 999));
+
+  return {
+    from,
+    to,
+    fromLabel: from.toISOString().slice(0, 10),
+    toLabel: to.toISOString().slice(0, 10),
+  };
+}
+
+function cacheKey(parts: Array<string | number | undefined | null>) {
+  return parts.filter((part) => part != null).join(':');
+}
+
+function getCachedAnalytics<T>(key: string): T | null {
+  const cached = analyticsCache.get(key);
+  if (!cached) return null;
+  if (cached.expiresAt < Date.now()) {
+    analyticsCache.delete(key);
+    return null;
+  }
+  return cached.value as T;
+}
+
+function setCachedAnalytics(key: string, value: any) {
+  analyticsCache.set(key, { value, expiresAt: Date.now() + MARKETING_ANALYTICS_CACHE_TTL_MS });
+}
+
+function parseUtmFromUrl(urlValue?: string | null) {
+  if (!urlValue) return null;
+  try {
+    const url = new URL(urlValue);
+    const params = url.searchParams;
+    const utmSource = params.get('utm_source');
+    const utmMedium = params.get('utm_medium');
+    const utmCampaign = params.get('utm_campaign');
+    const utmContent = params.get('utm_content');
+    const utmTerm = params.get('utm_term');
+    if (!utmSource && !utmMedium && !utmCampaign && !utmContent && !utmTerm) return null;
+    return { utmSource, utmMedium, utmCampaign, utmContent, utmTerm };
+  } catch (err) {
+    return null;
+  }
+}
 
 type AutomationPresetDefinition = {
   id: string;
@@ -2602,6 +2665,429 @@ router.get('/marketing/campaigns/:id/events', requireAdminOrOrganiser, async (re
   });
 
   res.json({ ok: true, items });
+});
+
+router.get('/marketing/analytics/overview', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const { from, to, fromLabel, toLabel } = parseDateRange(req);
+  const key = cacheKey(['marketing-analytics-overview', tenantId, fromLabel, toLabel]);
+  const cached = getCachedAnalytics<any>(key);
+  if (cached) return res.json({ ok: true, cached: true, ...cached });
+
+  const [sentCount, openCount, clickCount, checkoutCount, purchaseCount] = await Promise.all([
+    prisma.marketingCampaignRecipient.count({
+      where: { tenantId, status: MarketingRecipientStatus.SENT, sentAt: { gte: from, lte: to } },
+    }),
+    prisma.marketingEmailEvent.count({
+      where: { tenantId, type: MarketingEmailEventType.OPEN, createdAt: { gte: from, lte: to } },
+    }),
+    prisma.marketingEmailEvent.count({
+      where: { tenantId, type: MarketingEmailEventType.CLICK, createdAt: { gte: from, lte: to } },
+    }),
+    prisma.marketingCheckoutEvent.count({
+      where: { tenantId, createdAt: { gte: from, lte: to } },
+    }),
+    prisma.order.count({
+      where: { status: OrderStatus.PAID, createdAt: { gte: from, lte: to }, show: { organiserId: tenantId } },
+    }),
+  ]);
+
+  const rangeDays = Math.max(1, Math.ceil((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)));
+  const prevTo = new Date(from);
+  prevTo.setUTCDate(prevTo.getUTCDate() - 1);
+  const prevFrom = new Date(prevTo);
+  prevFrom.setUTCDate(prevFrom.getUTCDate() - rangeDays);
+
+  const [currentInsights, previousInsights] = await Promise.all([
+    prisma.customerInsight.findMany({
+      where: { tenantId, lastPurchaseAt: { gte: from, lte: to } },
+      select: { firstPurchaseAt: true, lastPurchaseAt: true, purchaseCount: true },
+    }),
+    prisma.customerInsight.findMany({
+      where: { tenantId, lastPurchaseAt: { gte: prevFrom, lte: prevTo } },
+      select: { firstPurchaseAt: true, lastPurchaseAt: true, purchaseCount: true },
+    }),
+  ]);
+
+  const lapsedThresholdDays = 90;
+  const lapsedThresholdMs = lapsedThresholdDays * 24 * 60 * 60 * 1000;
+  const reengagedCount = currentInsights.filter((insight) => {
+    if (!insight.firstPurchaseAt || !insight.lastPurchaseAt) return false;
+    const gap = insight.lastPurchaseAt.getTime() - insight.firstPurchaseAt.getTime();
+    return gap >= lapsedThresholdMs;
+  }).length;
+
+  function repeatStats(insights: Array<{ purchaseCount: number }>) {
+    const total = insights.length;
+    const repeat = insights.filter((insight) => (insight.purchaseCount || 0) > 1).length;
+    const rate = total ? repeat / total : 0;
+    return { total, repeat, rate };
+  }
+
+  const currentRepeat = repeatStats(currentInsights);
+  const previousRepeat = repeatStats(previousInsights);
+  const uplift = currentRepeat.rate - previousRepeat.rate;
+
+  const engagementEvents = await prisma.marketingEmailEvent.findMany({
+    where: {
+      tenantId,
+      type: { in: [MarketingEmailEventType.OPEN, MarketingEmailEventType.CLICK] },
+      createdAt: { gte: from, lte: to },
+    },
+    select: { createdAt: true, type: true },
+  });
+
+  const hourly = Array.from({ length: 24 }, () => ({ opens: 0, clicks: 0, total: 0 }));
+  engagementEvents.forEach((event) => {
+    const hour = event.createdAt.getUTCHours();
+    if (!hourly[hour]) return;
+    if (event.type === MarketingEmailEventType.OPEN) hourly[hour].opens += 1;
+    if (event.type === MarketingEmailEventType.CLICK) hourly[hour].clicks += 1;
+    hourly[hour].total += 1;
+  });
+
+  const bestHours = hourly
+    .map((row, hour) => ({ hour, ...row }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 5);
+
+  const response = {
+    range: { from: fromLabel, to: toLabel },
+    funnel: {
+      sent: sentCount,
+      opened: openCount,
+      clicked: clickCount,
+      checkout: checkoutCount,
+      purchased: purchaseCount,
+    },
+    cohorts: {
+      reengagedLapsed: reengagedCount,
+      repeatPurchaseRate: currentRepeat.rate,
+      repeatPurchaseUplift: uplift,
+      previousRepeatPurchaseRate: previousRepeat.rate,
+    },
+    bestTimeToSend: {
+      topHours: bestHours,
+      timezone: 'UTC',
+    },
+  };
+
+  setCachedAnalytics(key, response);
+  res.json({ ok: true, ...response });
+});
+
+router.get('/marketing/analytics/campaigns', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const { from, to, fromLabel, toLabel } = parseDateRange(req);
+  const key = cacheKey(['marketing-analytics-campaigns', tenantId, fromLabel, toLabel]);
+  const cached = getCachedAnalytics<any>(key);
+  if (cached) return res.json({ ok: true, cached: true, ...cached });
+
+  const campaigns = await prisma.marketingCampaign.findMany({
+    where: {
+      tenantId,
+      OR: [
+        { createdAt: { gte: from, lte: to } },
+        { scheduledFor: { gte: from, lte: to } },
+      ],
+    },
+    include: {
+      segment: true,
+      show: { include: { venue: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const campaignIds = campaigns.map((campaign) => campaign.id);
+  if (!campaignIds.length) {
+    const emptyResponse = {
+      range: { from: fromLabel, to: toLabel },
+      campaigns: [],
+      bySegment: [],
+      byVenue: [],
+      byCategory: [],
+      utmSummary: [],
+    };
+    setCachedAnalytics(key, emptyResponse);
+    return res.json({ ok: true, ...emptyResponse });
+  }
+
+  const [recipientStats, eventStats, clickEvents, orders] = await Promise.all([
+    prisma.marketingCampaignRecipient.groupBy({
+      by: ['campaignId', 'status'],
+      where: {
+        tenantId,
+        campaignId: { in: campaignIds },
+        createdAt: { gte: from, lte: to },
+      },
+      _count: { _all: true },
+    }),
+    prisma.marketingEmailEvent.groupBy({
+      by: ['campaignId', 'type'],
+      where: {
+        tenantId,
+        campaignId: { in: campaignIds },
+        createdAt: { gte: from, lte: to },
+        type: { in: [MarketingEmailEventType.OPEN, MarketingEmailEventType.CLICK] },
+      },
+      _count: { _all: true },
+    }),
+    prisma.marketingEmailEvent.findMany({
+      where: {
+        tenantId,
+        campaignId: { in: campaignIds },
+        createdAt: { gte: from, lte: to },
+        type: MarketingEmailEventType.CLICK,
+      },
+      select: {
+        campaignId: true,
+        email: true,
+        createdAt: true,
+        meta: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    }),
+    prisma.order.findMany({
+      where: {
+        status: OrderStatus.PAID,
+        createdAt: { gte: from, lte: to },
+        show: { organiserId: tenantId },
+      },
+      select: {
+        id: true,
+        email: true,
+        shippingEmail: true,
+        amountPence: true,
+        createdAt: true,
+        showId: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    }),
+  ]);
+
+  const ordersByEmail = new Map<string, typeof orders>();
+  orders.forEach((order) => {
+    const rawEmail = (order.email || order.shippingEmail || '').toLowerCase();
+    if (!rawEmail) return;
+    const list = ordersByEmail.get(rawEmail) || [];
+    list.push(order);
+    ordersByEmail.set(rawEmail, list);
+  });
+
+  const statsByCampaign = new Map<
+    string,
+    {
+      sent: number;
+      opened: number;
+      clicked: number;
+      orders: number;
+      revenuePence: number;
+      utm: Map<string, { clicks: number; orders: number; revenuePence: number; utm: any }>;
+      links: Map<string, { clicks: number; orders: number; revenuePence: number }>;
+    }
+  >();
+
+  function ensureCampaignStats(campaignId: string) {
+    if (!statsByCampaign.has(campaignId)) {
+      statsByCampaign.set(campaignId, {
+        sent: 0,
+        opened: 0,
+        clicked: 0,
+        orders: 0,
+        revenuePence: 0,
+        utm: new Map(),
+        links: new Map(),
+      });
+    }
+    return statsByCampaign.get(campaignId)!;
+  }
+
+  recipientStats.forEach((row) => {
+    const stats = ensureCampaignStats(row.campaignId);
+    if (row.status === MarketingRecipientStatus.SENT) stats.sent = row._count._all;
+  });
+
+  eventStats.forEach((row) => {
+    const stats = ensureCampaignStats(row.campaignId);
+    if (row.type === MarketingEmailEventType.OPEN) stats.opened = row._count._all;
+    if (row.type === MarketingEmailEventType.CLICK) stats.clicked = row._count._all;
+  });
+
+  const attributed = new Set<string>();
+
+  function linkFromMeta(meta: any) {
+    if (!meta) return null;
+    return meta.url || meta.link || meta['url'] || meta['link'] || meta['click_url'] || null;
+  }
+
+  clickEvents.forEach((event) => {
+    const email = String(event.email || '').toLowerCase();
+    const stats = ensureCampaignStats(event.campaignId);
+    const rawLink = linkFromMeta(event.meta);
+    if (rawLink) {
+      const linkStats = stats.links.get(rawLink) || { clicks: 0, orders: 0, revenuePence: 0 };
+      linkStats.clicks += 1;
+      stats.links.set(rawLink, linkStats);
+    }
+
+    const key = `${event.campaignId}:${email}`;
+    if (!email || attributed.has(key)) return;
+
+    const campaign = campaigns.find((item) => item.id === event.campaignId);
+    const possibleOrders = ordersByEmail.get(email) || [];
+    const attributedOrder = possibleOrders.find((order) => {
+      if (order.createdAt < event.createdAt) return false;
+      if (campaign?.showId && order.showId !== campaign.showId) return false;
+      return true;
+    });
+
+    if (!attributedOrder) return;
+    attributed.add(key);
+    stats.orders += 1;
+    stats.revenuePence += attributedOrder.amountPence || 0;
+
+    if (rawLink) {
+      const linkStats = stats.links.get(rawLink);
+      if (linkStats) {
+        linkStats.orders += 1;
+        linkStats.revenuePence += attributedOrder.amountPence || 0;
+      }
+    }
+
+    const utm = parseUtmFromUrl(rawLink);
+    if (utm) {
+      const utmKey = [
+        utm.utmSource || '',
+        utm.utmMedium || '',
+        utm.utmCampaign || '',
+        utm.utmContent || '',
+        utm.utmTerm || '',
+      ].join('|');
+      const utmStats = stats.utm.get(utmKey) || { clicks: 0, orders: 0, revenuePence: 0, utm };
+      utmStats.orders += 1;
+      utmStats.revenuePence += attributedOrder.amountPence || 0;
+      stats.utm.set(utmKey, utmStats);
+    }
+  });
+
+  clickEvents.forEach((event) => {
+    const rawLink = linkFromMeta(event.meta);
+    if (!rawLink) return;
+    const utm = parseUtmFromUrl(rawLink);
+    if (!utm) return;
+    const stats = ensureCampaignStats(event.campaignId);
+    const utmKey = [
+      utm.utmSource || '',
+      utm.utmMedium || '',
+      utm.utmCampaign || '',
+      utm.utmContent || '',
+      utm.utmTerm || '',
+    ].join('|');
+    const utmStats = stats.utm.get(utmKey) || { clicks: 0, orders: 0, revenuePence: 0, utm };
+    utmStats.clicks += 1;
+    stats.utm.set(utmKey, utmStats);
+  });
+
+  const campaignsResponse = campaigns.map((campaign) => {
+    const stats = ensureCampaignStats(campaign.id);
+    const utmList = Array.from(stats.utm.values())
+      .sort((a, b) => b.clicks - a.clicks)
+      .slice(0, 5);
+    const topLinks = Array.from(stats.links.entries())
+      .map(([url, data]) => ({ url, ...data }))
+      .sort((a, b) => b.clicks - a.clicks)
+      .slice(0, 3);
+    return {
+      id: campaign.id,
+      name: campaign.name,
+      status: campaign.status,
+      scheduledFor: campaign.scheduledFor,
+      segment: campaign.segment ? { id: campaign.segment.id, name: campaign.segment.name } : null,
+      show: campaign.show
+        ? {
+            id: campaign.show.id,
+            title: campaign.show.title,
+            category: campaign.show.eventCategory,
+            venue: campaign.show.venue ? campaign.show.venue.name : null,
+          }
+        : null,
+      sent: stats.sent,
+      opened: stats.opened,
+      clicked: stats.clicked,
+      orders: stats.orders,
+      revenuePence: stats.revenuePence,
+      utm: utmList,
+      topLinks,
+    };
+  });
+
+  function aggregatePerformance(rows: typeof campaignsResponse, keyFn: (row: typeof campaignsResponse[0]) => string) {
+    const map = new Map<
+      string,
+      { key: string; sent: number; opened: number; clicked: number; orders: number; revenuePence: number }
+    >();
+    rows.forEach((row) => {
+      const key = keyFn(row);
+      const entry = map.get(key) || {
+        key,
+        sent: 0,
+        opened: 0,
+        clicked: 0,
+        orders: 0,
+        revenuePence: 0,
+      };
+      entry.sent += row.sent;
+      entry.opened += row.opened;
+      entry.clicked += row.clicked;
+      entry.orders += row.orders;
+      entry.revenuePence += row.revenuePence;
+      map.set(key, entry);
+    });
+    return Array.from(map.values());
+  }
+
+  const bySegment = aggregatePerformance(campaignsResponse, (row) => row.segment?.name || 'Unassigned segment');
+  const byVenue = aggregatePerformance(campaignsResponse, (row) => row.show?.venue || 'Unassigned venue');
+  const byCategory = aggregatePerformance(campaignsResponse, (row) => row.show?.category || 'Unassigned category');
+
+  const utmSummary = new Map<
+    string,
+    { utm: any; clicks: number; orders: number; revenuePence: number }
+  >();
+
+  campaignsResponse.forEach((campaign) => {
+    campaign.utm.forEach((entry) => {
+      const utmKey = [
+        entry.utm.utmSource || '',
+        entry.utm.utmMedium || '',
+        entry.utm.utmCampaign || '',
+        entry.utm.utmContent || '',
+        entry.utm.utmTerm || '',
+      ].join('|');
+      const summary = utmSummary.get(utmKey) || {
+        utm: entry.utm,
+        clicks: 0,
+        orders: 0,
+        revenuePence: 0,
+      };
+      summary.clicks += entry.clicks;
+      summary.orders += entry.orders;
+      summary.revenuePence += entry.revenuePence;
+      utmSummary.set(utmKey, summary);
+    });
+  });
+
+  const response = {
+    range: { from: fromLabel, to: toLabel },
+    campaigns: campaignsResponse,
+    bySegment,
+    byVenue,
+    byCategory,
+    utmSummary: Array.from(utmSummary.values()).sort((a, b) => b.clicks - a.clicks).slice(0, 10),
+  };
+
+  setCachedAnalytics(key, response);
+  res.json({ ok: true, ...response });
 });
 
 export default router;
