@@ -55,8 +55,15 @@ router.post('/sendgrid', webhookLimiter, async (req, res) => {
       });
     }
 
-    if (type === 'bounce') {
-      await applySuppression(tenantId, email, MarketingSuppressionType.HARD_BOUNCE, 'SendGrid bounce');
+    const bounceClass = Number(event?.bounce_class ?? event?.bounceClass ?? event?.classification ?? NaN);
+    const bounceType = String(event?.type || event?.bounce_type || event?.bounceType || '').toLowerCase();
+    const isHardBounce =
+      (Number.isFinite(bounceClass) && bounceClass >= 10) ||
+      bounceType.includes('hard') ||
+      bounceType.includes('invalid');
+
+    if (type === 'bounce' && isHardBounce) {
+      await applySuppression(tenantId, email, MarketingSuppressionType.HARD_BOUNCE, 'SendGrid hard bounce');
     }
     if (type === 'spamreport') {
       await applySuppression(tenantId, email, MarketingSuppressionType.SPAM_COMPLAINT, 'SendGrid spam report');

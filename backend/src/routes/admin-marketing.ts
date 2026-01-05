@@ -2,7 +2,9 @@ import { Router } from 'express';
 import prisma from '../lib/prisma.js';
 import { requireAdminOrOrganiser } from '../lib/authz.js';
 import { isOwnerEmail } from '../lib/owner-authz.js';
+import { requireMarketingStepUp, setMarketingStepUpCookie } from '../lib/marketing-stepup.js';
 import { requireAuth } from '../middleware/requireAuth.js';
+import * as bcryptNS from 'bcryptjs';
 import { renderMarketingTemplate } from '../lib/email-marketing/rendering.js';
 import { getEmailProvider } from '../lib/email-marketing/index.js';
 import { createUnsubscribeToken } from '../lib/email-marketing/unsubscribe.js';
@@ -44,6 +46,7 @@ import {
 } from '../services/marketing/settings.js';
 import { queryCustomerInsights } from '../services/customer-insights.js';
 import {
+  fetchCampaignDeliverability,
   fetchDeliverabilitySummary,
   fetchTopSegmentsByEngagement,
   recordAutomationAudit,
@@ -53,11 +56,11 @@ import {
 } from '../services/marketing/automations.js';
 import { triggerTagAppliedAutomation } from '../services/marketing/automations.js';
 import { ensureDefaultPreferenceTopics } from '../services/marketing/preferences.js';
-import { recordConsentAudit } from '../services/marketing/audit.js';
+import { recordConsentAudit, recordSuppressionAudit } from '../services/marketing/audit.js';
 import { renderEmailDocument } from '../lib/email-builder/rendering.js';
 import { buildPreviewPersonalisationContext } from '../services/marketing/personalisation.js';
-
 const router = Router();
+const bcrypt: any = (bcryptNS as any).default ?? bcryptNS;
 
 function tenantIdFrom(req: any) {
   return String(req.user?.id || '');
@@ -1797,6 +1800,36 @@ router.get('/marketing/consent/check', requireAdminOrOrganiser, async (req, res)
   });
 });
 
+router.post('/marketing/step-up', requireAdminOrOrganiser, async (req, res) => {
+  const password = String(req.body?.password || '');
+  if (!password) {
+    return res.status(400).json({ ok: false, message: 'Password required' });
+  }
+
+  const actorId = req.user?.id || null;
+  try {
+    const user = await prisma.user.findUnique({ where: { id: actorId || '' } });
+    if (!user || !user.passwordHash) {
+      return res.status(400).json({ ok: false, message: 'Invalid user' });
+    }
+    const ok = await bcrypt.compare(password, user.passwordHash);
+    if (!ok) {
+      return res.status(401).json({ ok: false, message: 'Invalid credentials' });
+    }
+
+    setMarketingStepUpCookie(req, res, user.id);
+    await logMarketingAudit(tenantIdFrom(req), 'deliverability.step_up', 'MarketingDeliverability', null, {
+      status: 'success',
+    });
+    return res.json({ ok: true });
+  } catch (error) {
+    await logMarketingAudit(tenantIdFrom(req), 'deliverability.step_up', 'MarketingDeliverability', null, {
+      status: 'error',
+    });
+    return res.status(500).json({ ok: false, message: 'Failed to confirm step-up' });
+  }
+});
+
 router.post('/marketing/preferences/topics', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const { name, description, isDefault } = req.body || {};
@@ -1856,6 +1889,13 @@ router.get('/marketing/deliverability/summary', requireAdminOrOrganiser, async (
   res.json({ ok: true, summary });
 });
 
+router.get('/marketing/deliverability/campaigns', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const days = Number(req.query.days || 30);
+  const items = await fetchCampaignDeliverability(tenantId, days);
+  res.json({ ok: true, items });
+});
+
 router.get('/marketing/deliverability/top-segments', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const days = Number(req.query.days || 30);
@@ -1865,6 +1905,57 @@ router.get('/marketing/deliverability/top-segments', requireAdminOrOrganiser, as
 
 router.get('/marketing/deliverability/warmup', requireAdminOrOrganiser, async (_req, res) => {
   res.json({ ok: true, data: warmupPresets() });
+});
+
+router.get('/marketing/suppressions', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const search = String(req.query.search || '').trim();
+  const page = Math.max(1, Number(req.query.page || 1) || 1);
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 25) || 25));
+  const where: Prisma.MarketingSuppressionWhereInput = {
+    tenantId,
+    ...(search ? { email: { contains: search, mode: 'insensitive' } } : {}),
+  };
+
+  const [total, items] = await Promise.all([
+    prisma.marketingSuppression.count({ where }),
+    prisma.marketingSuppression.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+  ]);
+
+  res.json({
+    ok: true,
+    page,
+    pageSize,
+    total,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    items: items.map((item) => ({
+      id: item.id,
+      email: item.email,
+      type: item.type,
+      reason: item.reason,
+      createdAt: item.createdAt,
+    })),
+  });
+});
+
+router.delete('/marketing/suppressions/:id', requireAdminOrOrganiser, requireMarketingStepUp, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const id = String(req.params.id);
+  const suppression = await prisma.marketingSuppression.findFirst({ where: { id, tenantId } });
+  if (!suppression) return res.status(404).json({ ok: false, message: 'Suppression not found' });
+
+  await prisma.marketingSuppression.delete({ where: { id: suppression.id } });
+  await recordSuppressionAudit(tenantId, 'suppression.removed', suppression.id, {
+    email: suppression.email,
+    type: suppression.type,
+    reason: suppression.reason || null,
+  });
+  res.json({ ok: true });
 });
 
 router.post('/marketing/templates', requireAdminOrOrganiser, async (req, res) => {
