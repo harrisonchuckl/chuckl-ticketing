@@ -15518,7 +15518,206 @@ function renderInterests(customer){
 
   function analytics(){
     if (!main) return;
-    main.innerHTML = '<div class="card"><div class="title">Analytics</div><div class="muted">Analytics dashboard coming soon.</div></div>';
+    var today = new Date();
+    var defaultTo = formatDateInput(today);
+    var defaultFromDate = new Date(today);
+    defaultFromDate.setDate(defaultFromDate.getDate() - 30);
+    var defaultFrom = formatDateInput(defaultFromDate);
+
+    main.innerHTML = ''
+      + '<div class="card">'
+      +   '<div class="header" style="gap:12px;align-items:center;">'
+      +     '<div>'
+      +       '<div class="title">Marketing analytics</div>'
+      +       '<div class="muted">Attribution, funnels, and segment performance.</div>'
+      +     '</div>'
+      +     '<div class="row" style="gap:8px;margin-left:auto;flex-wrap:wrap;">'
+      +       '<input class="input" type="date" id="marketing_analytics_from" />'
+      +       '<input class="input" type="date" id="marketing_analytics_to" />'
+      +       '<button class="btn p" id="marketing_analytics_apply">Apply</button>'
+      +     '</div>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="card" style="margin-top:16px;">'
+      +   '<div class="title">Funnels</div>'
+      +   '<div class="grid" id="marketing_funnel_grid" style="margin-top:12px;gap:12px;"></div>'
+      + '</div>'
+      + '<div class="card" style="margin-top:16px;">'
+      +   '<div class="title">Cohorts</div>'
+      +   '<div class="grid" id="marketing_cohorts_grid" style="margin-top:12px;gap:12px;"></div>'
+      + '</div>'
+      + '<div class="card" style="margin-top:16px;">'
+      +   '<div class="title">Best time to send</div>'
+      +   '<div class="muted" style="font-size:12px;">Based on recent opens and clicks.</div>'
+      +   '<div class="grid" id="marketing_best_time" style="margin-top:12px;gap:12px;"></div>'
+      + '</div>'
+      + '<div class="card" style="margin-top:16px;">'
+      +   '<div class="title">Campaign attribution</div>'
+      +   '<div class="table-list" id="marketing_campaign_table" style="margin-top:12px;"></div>'
+      + '</div>'
+      + '<div class="card" style="margin-top:16px;">'
+      +   '<div class="title">UTM performance</div>'
+      +   '<div class="table-list" id="marketing_utm_table" style="margin-top:12px;"></div>'
+      + '</div>'
+      + '<div class="card" style="margin-top:16px;">'
+      +   '<div class="title">Segment performance</div>'
+      +   '<div class="grid" style="gap:16px;margin-top:12px;">'
+      +     '<div><div class="muted" style="margin-bottom:6px;">By segment</div><div class="table-list" id="marketing_segment_table"></div></div>'
+      +     '<div><div class="muted" style="margin-bottom:6px;">By venue</div><div class="table-list" id="marketing_venue_table"></div></div>'
+      +     '<div><div class="muted" style="margin-bottom:6px;">By category</div><div class="table-list" id="marketing_category_table"></div></div>'
+      +   '</div>'
+      + '</div>';
+
+    $('#marketing_analytics_from').value = defaultFrom;
+    $('#marketing_analytics_to').value = defaultTo;
+
+    function formatPercent(value){
+      if (!Number.isFinite(value)) return '—';
+      return (value * 100).toFixed(1) + '%';
+    }
+
+    function money(pence){
+      return '£' + ((Number(pence || 0) / 100).toFixed(2));
+    }
+
+    function renderFunnel(data){
+      var items = [
+        { label: 'Sent', value: data.sent },
+        { label: 'Opened', value: data.opened },
+        { label: 'Clicked', value: data.clicked },
+        { label: 'Checkout', value: data.checkout },
+        { label: 'Purchased', value: data.purchased }
+      ];
+      $('#marketing_funnel_grid').innerHTML = items.map(function(item){
+        return '<div class="panel-block">'
+          + '<div class="panel-title">' + item.label + '</div>'
+          + '<div style="font-size:22px;font-weight:700;">' + item.value + '</div>'
+          + '</div>';
+      }).join('');
+    }
+
+    function renderCohorts(data){
+      $('#marketing_cohorts_grid').innerHTML = ''
+        + '<div class="panel-block">'
+        +   '<div class="panel-title">Re-engaged lapsed</div>'
+        +   '<div style="font-size:22px;font-weight:700;">' + data.reengagedLapsed + '</div>'
+        +   '<div class="muted" style="font-size:12px;">≥90 days since first purchase</div>'
+        + '</div>'
+        + '<div class="panel-block">'
+        +   '<div class="panel-title">Repeat purchase rate</div>'
+        +   '<div style="font-size:22px;font-weight:700;">' + formatPercent(data.repeatPurchaseRate) + '</div>'
+        +   '<div class="muted" style="font-size:12px;">Prev: ' + formatPercent(data.previousRepeatPurchaseRate) + '</div>'
+        + '</div>'
+        + '<div class="panel-block">'
+        +   '<div class="panel-title">Repeat uplift</div>'
+        +   '<div style="font-size:22px;font-weight:700;">' + formatPercent(data.repeatPurchaseUplift) + '</div>'
+        +   '<div class="muted" style="font-size:12px;">vs previous range</div>'
+        + '</div>';
+    }
+
+    function renderBestTime(data){
+      var rows = (data.topHours || []).map(function(item){
+        var label = String(item.hour).padStart(2, '0') + ':00 UTC';
+        return '<div class="panel-block">'
+          + '<div class="panel-title">' + label + '</div>'
+          + '<div class="muted" style="font-size:12px;">Opens: ' + item.opens + ' · Clicks: ' + item.clicks + '</div>'
+          + '</div>';
+      }).join('');
+      $('#marketing_best_time').innerHTML = rows || '<div class="muted">No engagement data yet.</div>';
+    }
+
+    function renderCampaignTable(rows){
+      if (!rows.length){
+        $('#marketing_campaign_table').innerHTML = '<div class="table-row head"><div>Campaign</div><div>Sent</div><div>Opened</div><div>Clicked</div><div>Orders</div><div>Revenue</div></div>'
+          + '<div class="table-row"><div class="muted">No campaigns in range.</div></div>';
+        return;
+      }
+      var head = '<div class="table-row head"><div>Campaign</div><div>Sent</div><div>Opened</div><div>Clicked</div><div>Orders</div><div>Revenue</div></div>';
+      var body = rows.map(function(row){
+        var subtitle = [row.segment && row.segment.name ? row.segment.name : null, row.show && row.show.title ? row.show.title : null]
+          .filter(Boolean).join(' · ');
+        return '<div class="table-row">'
+          + '<div><div>' + escapeHtml(row.name) + '</div>'
+          + (subtitle ? '<div class="muted" style="font-size:12px;">' + escapeHtml(subtitle) + '</div>' : '')
+          + '</div>'
+          + '<div>' + row.sent + '</div>'
+          + '<div>' + row.opened + '</div>'
+          + '<div>' + row.clicked + '</div>'
+          + '<div>' + row.orders + '</div>'
+          + '<div>' + money(row.revenuePence) + '</div>'
+          + '</div>';
+      }).join('');
+      $('#marketing_campaign_table').innerHTML = head + body;
+    }
+
+    function renderUtmTable(rows){
+      if (!rows.length){
+        $('#marketing_utm_table').innerHTML = '<div class="table-row head"><div>UTM Source</div><div>Medium</div><div>Campaign</div><div>Clicks</div><div>Orders</div><div>Revenue</div></div>'
+          + '<div class="table-row"><div class="muted">No tracked UTMs in range.</div></div>';
+        return;
+      }
+      var head = '<div class="table-row head"><div>UTM Source</div><div>Medium</div><div>Campaign</div><div>Clicks</div><div>Orders</div><div>Revenue</div></div>';
+      var body = rows.map(function(row){
+        return '<div class="table-row">'
+          + '<div>' + escapeHtml(row.utm.utmSource || '—') + '</div>'
+          + '<div>' + escapeHtml(row.utm.utmMedium || '—') + '</div>'
+          + '<div>' + escapeHtml(row.utm.utmCampaign || '—') + '</div>'
+          + '<div>' + row.clicks + '</div>'
+          + '<div>' + row.orders + '</div>'
+          + '<div>' + money(row.revenuePence) + '</div>'
+          + '</div>';
+      }).join('');
+      $('#marketing_utm_table').innerHTML = head + body;
+    }
+
+    function renderPerformanceTable(targetId, rows){
+      var head = '<div class="table-row head"><div>Segment</div><div>Open rate</div><div>Click rate</div><div>Conversion</div><div>Revenue</div></div>';
+      if (!rows.length){
+        $(targetId).innerHTML = head + '<div class="table-row"><div class="muted">No data yet.</div></div>';
+        return;
+      }
+      var body = rows.map(function(row){
+        var openRate = row.sent ? row.opened / row.sent : 0;
+        var clickRate = row.sent ? row.clicked / row.sent : 0;
+        var conversion = row.sent ? row.orders / row.sent : 0;
+        return '<div class="table-row">'
+          + '<div>' + escapeHtml(row.key) + '</div>'
+          + '<div>' + formatPercent(openRate) + '</div>'
+          + '<div>' + formatPercent(clickRate) + '</div>'
+          + '<div>' + formatPercent(conversion) + '</div>'
+          + '<div>' + money(row.revenuePence) + '</div>'
+          + '</div>';
+      }).join('');
+      $(targetId).innerHTML = head + body;
+    }
+
+    async function loadAnalytics(){
+      var from = $('#marketing_analytics_from').value;
+      var to = $('#marketing_analytics_to').value;
+      var qs = '?from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to);
+      try{
+        var results = await Promise.all([
+          j('/admin/api/marketing/analytics/overview' + qs),
+          j('/admin/api/marketing/analytics/campaigns' + qs)
+        ]);
+        var overview = results[0] || {};
+        var campaigns = results[1] || {};
+        if (overview && overview.funnel) renderFunnel(overview.funnel);
+        if (overview && overview.cohorts) renderCohorts(overview.cohorts);
+        if (overview && overview.bestTimeToSend) renderBestTime(overview.bestTimeToSend);
+        renderCampaignTable((campaigns.campaigns || []));
+        renderUtmTable((campaigns.utmSummary || []));
+        renderPerformanceTable('#marketing_segment_table', campaigns.bySegment || []);
+        renderPerformanceTable('#marketing_venue_table', campaigns.byVenue || []);
+        renderPerformanceTable('#marketing_category_table', campaigns.byCategory || []);
+      }catch(err){
+        console.error('marketing analytics load failed', err);
+        showToast('Failed to load analytics', false);
+      }
+    }
+
+    $('#marketing_analytics_apply').addEventListener('click', loadAnalytics);
+    loadAnalytics();
   }
   function audiences(){
     if (!main) return;
