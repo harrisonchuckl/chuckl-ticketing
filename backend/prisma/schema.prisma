@@ -234,12 +234,20 @@ enum MarketingSuppressionType {
 
 enum MarketingCampaignStatus {
   DRAFT
+  APPROVAL_REQUIRED
   SCHEDULED
   SENDING
   PAUSED_LIMIT
   FAILED
   SENT
   CANCELLED
+}
+
+enum MarketingCampaignType {
+  ONE_OFF
+  SHOW_REMINDER
+  ROUNDUP
+  ANNOUNCEMENT
 }
 
 enum MarketingAutomationTriggerType {
@@ -958,6 +966,7 @@ model Show {
   supportTickets     SupportTicket[]
   chatbotTranscripts ChatbotTranscript[]
   customerShowViews  CustomerShowView[]
+  marketingCampaigns MarketingCampaign[]
 
   @@index([venueId])
   @@index([organiserId])
@@ -1842,6 +1851,8 @@ model MarketingCampaign {
   name            String
   templateId      String
   segmentId       String
+  type            MarketingCampaignType   @default(ONE_OFF)
+  showId          String?
   status          MarketingCampaignStatus @default(DRAFT)
   scheduledFor    DateTime?
   recipientsPreparedAt DateTime?
@@ -1853,11 +1864,13 @@ model MarketingCampaign {
   tenant     User                         @relation("MarketingCampaignTenant", fields: [tenantId], references: [id])
   template   MarketingTemplate            @relation(fields: [templateId], references: [id])
   segment    MarketingSegment             @relation(fields: [segmentId], references: [id])
+  show       Show?                        @relation(fields: [showId], references: [id])
   createdBy  User                         @relation("MarketingCampaignCreatedBy", fields: [createdByUserId], references: [id])
   recipients MarketingCampaignRecipient[]
   events     MarketingEmailEvent[]
 
   @@index([tenantId])
+  @@index([showId])
 }
 
 model MarketingCampaignRecipient {

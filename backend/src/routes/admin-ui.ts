@@ -16560,7 +16560,9 @@ function renderInterests(customer){
             });
             var sample = (data.estimate.sample || []).join(', ');
             if (output) {
-              output.textContent = data.estimate.count + ' recipients' + (sample ? (' • Sample: ' + sample) : '');
+              var text = 'Will send: ' + data.estimate.sendable + ' • Suppressed: ' + data.estimate.suppressed + ' • Total: ' + data.estimate.total;
+              if (sample) text += ' • Sample: ' + sample;
+              output.textContent = text;
             }
           } catch (err) {
             if (output) output.textContent = err.message || 'Estimate failed';
@@ -16649,24 +16651,67 @@ function renderInterests(customer){
       return data.items || [];
     }
 
-    function renderCampaigns(items, templates, segments){
-      var templateOptions = templates.map(function(t){
-        return '<option value=\"' + escapeHtml(t.id) + '\">' + escapeHtml(t.name) + '</option>';
-      }).join('');
-      var segmentOptions = segments.map(function(s){
-        return '<option value=\"' + escapeHtml(s.id) + '\">' + escapeHtml(s.name) + '</option>';
+    function renderCampaigns(items, templates, segments, shows){
+      var builderState = window.__mkCampaignBuilderState || {};
+      window.__mkCampaignBuilderState = builderState;
+
+      var typeOptions = [
+        { value: 'ONE_OFF', label: 'One-off' },
+        { value: 'SHOW_REMINDER', label: 'Show reminder' },
+        { value: 'ROUNDUP', label: 'Roundup' },
+        { value: 'ANNOUNCEMENT', label: 'Announcement' }
+      ];
+
+      var typeOptionHtml = typeOptions.map(function(opt){
+        return '<option value="' + opt.value + '">' + opt.label + '</option>';
       }).join('');
 
-      if (!templateOptions) templateOptions = '<option value=\"\">No templates yet</option>';
-      if (!segmentOptions) segmentOptions = '<option value=\"\">No segments yet</option>';
+      var templateOptions = templates.map(function(t){
+        return '<option value="' + escapeHtml(t.id) + '">' + escapeHtml(t.name) + '</option>';
+      }).join('');
+      var segmentOptions = segments.map(function(s){
+        return '<option value="' + escapeHtml(s.id) + '">' + escapeHtml(s.name) + '</option>';
+      }).join('');
+      var showOptions = (shows || []).map(function(show){
+        var title = show.title || 'Untitled show';
+        return '<option value="' + escapeHtml(show.id) + '">' + escapeHtml(title) + '</option>';
+      }).join('');
+
+      if (!templateOptions) templateOptions = '<option value="">No templates yet</option>';
+      if (!segmentOptions) segmentOptions = '<option value="">No segments yet</option>';
+      if (!showOptions) showOptions = '<option value="">No shows found</option>';
 
       var html = ''
         + '<div class="card" style="margin:0 0 12px 0;">'
         +   '<div class="title">Campaign builder</div>'
-        +   '<div class="muted">Step through template, segment, and send options without leaving the page.</div>'
-        +   '<div class="grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:12px;">'
+        +   '<div class="muted">Follow the workflow to define what will send and who will receive it.</div>'
+        +   '<div class="grid" style="grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px;">'
         +     '<div class="card" style="margin:0;">'
-        +       '<div class="title">Step 1 — Choose template</div>'
+        +       '<div class="title">Step 1 — Select type</div>'
+        +       '<select class="input" id="mk_builder_type" style="margin-top:8px;">' + typeOptionHtml + '</select>'
+        +       '<div class="muted" style="margin-top:12px;">Step 2 — Link show (optional)</div>'
+        +       '<select class="input" id="mk_builder_show" style="margin-top:8px;">'
+        +         '<option value="">No show linked</option>'
+        +         showOptions
+        +       '</select>'
+        +     '</div>'
+        +     '<div class="card" style="margin:0;">'
+        +       '<div class="title">Step 3 — Choose audience</div>'
+        +       '<select class="input" id="mk_builder_segment" style="margin-top:8px;">' + segmentOptions + '</select>'
+        +       '<div class="row" style="gap:8px;margin-top:8px;align-items:center;">'
+        +         '<button class="btn" id="mk_builder_segment_estimate">Estimate recipients</button>'
+        +         '<div id="mk_builder_segment_estimate_msg" class="muted"></div>'
+        +       '</div>'
+        +       '<div class="muted" style="margin-top:12px;">Or create a new segment</div>'
+        +       '<input class="input" id="mk_builder_seg_name" placeholder="Segment name" style="margin-top:8px;" />'
+        +       '<textarea class="input" id="mk_builder_seg_rules" placeholder="Rules JSON" style="height:120px;margin-top:8px;"></textarea>'
+        +       '<div class="row" style="gap:8px;margin-top:8px;">'
+        +         '<button class="btn" id="mk_builder_seg_save">Save segment</button>'
+        +         '<div id="mk_builder_seg_msg" class="muted"></div>'
+        +       '</div>'
+        +     '</div>'
+        +     '<div class="card" style="margin:0;">'
+        +       '<div class="title">Step 4 — Choose template</div>'
         +       '<select class="input" id="mk_builder_template" style="margin-top:8px;">' + templateOptions + '</select>'
         +       '<div class="row" style="gap:8px;margin-top:8px;">'
         +         '<button class="btn" id="mk_builder_template_preview">Preview template</button>'
@@ -16682,31 +16727,24 @@ function renderInterests(customer){
         +         '<div id="mk_builder_tpl_msg" class="muted"></div>'
         +       '</div>'
         +     '</div>'
+        +   '</div>'
+        +   '<div class="grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:12px;">'
         +     '<div class="card" style="margin:0;">'
-        +       '<div class="title">Step 2 — Choose segment</div>'
-        +       '<select class="input" id="mk_builder_segment" style="margin-top:8px;">' + segmentOptions + '</select>'
-        +       '<div class="row" style="gap:8px;margin-top:8px;align-items:center;">'
-        +         '<button class="btn" id="mk_builder_segment_estimate">Estimate recipients</button>'
-        +         '<div id="mk_builder_segment_estimate_msg" class="muted"></div>'
-        +       '</div>'
-        +       '<div class="muted" style="margin-top:12px;">Or create a new segment</div>'
-        +       '<input class="input" id="mk_builder_seg_name" placeholder="Segment name" style="margin-top:8px;" />'
-        +       '<textarea class="input" id="mk_builder_seg_rules" placeholder="Rules JSON" style="height:120px;margin-top:8px;"></textarea>'
-        +       '<div class="row" style="gap:8px;margin-top:8px;">'
-        +         '<button class="btn" id="mk_builder_seg_save">Save segment</button>'
-        +         '<div id="mk_builder_seg_msg" class="muted"></div>'
-        +       '</div>'
-        +     '</div>'
-        +     '<div class="card" style="margin:0;">'
-        +       '<div class="title">Step 3 — Preview + Test + Schedule</div>'
+        +       '<div class="title">Step 5 — Preview + estimate</div>'
         +       '<input class="input" id="mk_builder_campaign_name" placeholder="Campaign name" style="margin-top:8px;" />'
         +       '<div class="row" style="gap:8px;margin-top:8px;">'
         +         '<button class="btn p" id="mk_builder_campaign_create">Create draft</button>'
         +         '<div id="mk_builder_campaign_msg" class="muted"></div>'
         +       '</div>'
-        +       '<div class="muted" style="margin-top:12px;">Preview rendering</div>'
-        +       '<button class="btn" id="mk_builder_campaign_preview" style="margin-top:8px;">Preview campaign</button>'
-        +       '<div class="muted" style="margin-top:12px;">Send a test email</div>'
+        +       '<div class="muted" style="margin-top:12px;">What will send</div>'
+        +       '<div id="mk_builder_send_summary" class="muted" style="margin-top:6px;">Select a template to see subject + sender.</div>'
+        +       '<div class="row" style="gap:8px;margin-top:10px;">'
+        +         '<button class="btn" id="mk_builder_campaign_preview">Preview campaign</button>'
+        +       '</div>'
+        +       '<div id="mk_builder_preview_msg" class="muted" style="margin-top:8px;"></div>'
+        +     '</div>'
+        +     '<div class="card" style="margin:0;">'
+        +       '<div class="title">Step 6 — Send test</div>'
         +       '<input class="input" id="mk_builder_test_email" placeholder="Test email address" style="margin-top:8px;" />'
         +       '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px;">'
         +         '<input class="input" id="mk_builder_test_first" placeholder="First name" />'
@@ -16716,33 +16754,44 @@ function renderInterests(customer){
         +         '<button class="btn" id="mk_builder_test_send">Send test</button>'
         +         '<div id="mk_builder_test_msg" class="muted"></div>'
         +       '</div>'
-        +       '<div class="muted" style="margin-top:12px;">Schedule the campaign</div>'
+        +     '</div>'
+        +     '<div class="card" style="margin:0;">'
+        +       '<div class="title">Step 7 — Schedule or send now</div>'
         +       '<input class="input" id="mk_builder_schedule_time" type="datetime-local" style="margin-top:8px;" />'
-        +       '<div class="row" style="gap:8px;margin-top:8px;">'
+        +       '<div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap;">'
         +         '<button class="btn" id="mk_builder_send_now">Send now</button>'
         +         '<button class="btn p" id="mk_builder_schedule">Schedule</button>'
         +         '<div id="mk_builder_schedule_msg" class="muted"></div>'
         +       '</div>'
+        +       '<div class="muted" style="margin-top:8px;">Approval is required if recipients exceed the threshold or the sender is unverified.</div>'
         +     '</div>'
         +   '</div>'
         + '</div>'
         + '<div class="card" style="margin:0 0 12px 0;">'
         +   '<div class="title">Campaigns</div>'
         +   '<div class="table-wrap"><table class="table">'
-        +     '<thead><tr><th>Name</th><th>Status</th><th>Template</th><th>Segment</th><th>Actions</th></tr></thead>'
+        +     '<thead><tr><th>Name</th><th>Status</th><th>Type</th><th>Audience</th><th>Template</th><th>Show</th><th>Schedule</th><th>Actions</th></tr></thead>'
         +     '<tbody>'
         +       items.map(function(c){
+              var showTitle = (c.show && c.show.title) ? c.show.title : '—';
+              var scheduleText = c.scheduledFor ? formatDateTime(c.scheduledFor) : '—';
+              var typeLabel = String(c.type || '').replace(/_/g, ' ').toLowerCase();
+              typeLabel = typeLabel ? typeLabel.replace(/(^|\\s)\\S/g, function(t){ return t.toUpperCase(); }) : '—';
               return '<tr>'
                 + '<td>' + escapeHtml(c.name) + '</td>'
                 + '<td>' + escapeHtml(c.status) + '</td>'
-                + '<td>' + escapeHtml((c.template || {}).name || '') + '</td>'
+                + '<td>' + escapeHtml(typeLabel) + '</td>'
                 + '<td>' + escapeHtml((c.segment || {}).name || '') + '</td>'
+                + '<td>' + escapeHtml((c.template || {}).name || '') + '</td>'
+                + '<td>' + escapeHtml(showTitle || '—') + '</td>'
+                + '<td>' + escapeHtml(scheduleText) + '</td>'
                 + '<td>'
                   + '<div class="row" style="gap:6px;flex-wrap:wrap;">'
-                    + '<button class="btn" data-cpreview=\"' + c.id + '\">Preview</button>'
-                    + '<button class="btn" data-send=\"' + c.id + '\">Send now</button>'
-                    + '<button class="btn" data-recipients=\"' + c.id + '\">Recipients</button>'
-                    + '<button class="btn" data-events=\"' + c.id + '\">Events</button>'
+                    + '<button class="btn" data-cdetail="' + c.id + '">Details</button>'
+                    + '<button class="btn" data-cpreview="' + c.id + '">Preview</button>'
+                    + '<button class="btn" data-send="' + c.id + '">Send now</button>'
+                    + (c.status === 'APPROVAL_REQUIRED' ? '<button class="btn" data-approve="' + c.id + '">Approve</button>' : '')
+                    + '<button class="btn" data-cancel="' + c.id + '">Cancel</button>'
                   + '</div>'
                 + '</td>'
               + '</tr>';
@@ -16750,20 +16799,22 @@ function renderInterests(customer){
         +     '</tbody></table></div>'
         + '</div>'
         + '<div class="card" style="margin:0;">'
-        +   '<div class="title">Recipients & delivery events</div>'
-        +   '<div id="mk_campaign_details" class="muted" style="margin-top:10px;">Select a campaign to view recipients or delivery events.</div>'
+        +   '<div class="title">Campaign detail</div>'
+        +   '<div id="mk_campaign_detail_panel" class="muted" style="margin-top:10px;">Select a campaign to view details.</div>'
+        +   '<div id="mk_campaign_detail_activity" style="margin-top:12px;"></div>'
         + '</div>';
       sections.campaigns.innerHTML = html;
 
-      var builderState = window.__mkCampaignBuilderState || {};
-      window.__mkCampaignBuilderState = builderState;
-
       var templateSelect = sections.campaigns.querySelector('#mk_builder_template');
       var segmentSelect = sections.campaigns.querySelector('#mk_builder_segment');
+      var typeSelect = sections.campaigns.querySelector('#mk_builder_type');
+      var showSelect = sections.campaigns.querySelector('#mk_builder_show');
       var campaignNameInput = sections.campaigns.querySelector('#mk_builder_campaign_name');
       var campaignMsg = sections.campaigns.querySelector('#mk_builder_campaign_msg');
       var scheduleMsg = sections.campaigns.querySelector('#mk_builder_schedule_msg');
       var testMsg = sections.campaigns.querySelector('#mk_builder_test_msg');
+      var previewMsg = sections.campaigns.querySelector('#mk_builder_preview_msg');
+      var sendSummary = sections.campaigns.querySelector('#mk_builder_send_summary');
 
       function setBuilderMessage(el, message, isSuccess){
         if (!el) return;
@@ -16771,21 +16822,65 @@ function renderInterests(customer){
         el.style.color = isSuccess === true ? 'var(--success)' : '';
       }
 
+      function estimateText(estimate){
+        if (!estimate) return '';
+        var sample = (estimate.sample || []).join(', ');
+        var text = 'Will send: ' + estimate.sendable + ' • Suppressed: ' + estimate.suppressed + ' • Total: ' + estimate.total;
+        if (sample) text += ' • Sample: ' + sample;
+        return text;
+      }
+
       function markDraftStale(){
         builderState.campaignId = '';
         setBuilderMessage(campaignMsg, 'Draft cleared — create a new draft to preview or send.', false);
       }
 
+      if (typeSelect && builderState.type) typeSelect.value = builderState.type;
+      if (showSelect && builderState.showId) showSelect.value = builderState.showId;
       if (templateSelect && builderState.templateId) templateSelect.value = builderState.templateId;
       if (segmentSelect && builderState.segmentId) segmentSelect.value = builderState.segmentId;
       if (campaignNameInput && builderState.campaignName) campaignNameInput.value = builderState.campaignName;
+
+      if (typeSelect && !builderState.type) builderState.type = typeSelect.value;
+
+      if (templateSelect && sendSummary) {
+        var initialTemplate = templates.find(function(t){ return t.id === templateSelect.value; });
+        if (initialTemplate) {
+          var initialFrom = [initialTemplate.fromName, initialTemplate.fromEmail].filter(Boolean).join(' • ');
+          sendSummary.textContent = 'Template: ' + initialTemplate.name + ' • Subject: ' + initialTemplate.subject + (initialFrom ? (' • ' + initialFrom) : '');
+        }
+      }
+
+      if (typeSelect) {
+        typeSelect.addEventListener('change', function(){
+          builderState.type = typeSelect.value;
+          markDraftStale();
+        });
+      }
+
+      if (showSelect) {
+        showSelect.addEventListener('change', function(){
+          builderState.showId = showSelect.value;
+          markDraftStale();
+        });
+      }
 
       if (templateSelect) {
         templateSelect.addEventListener('change', function(){
           builderState.templateId = templateSelect.value;
           markDraftStale();
+          if (sendSummary) {
+            var selected = templates.find(function(t){ return t.id === templateSelect.value; });
+            if (selected) {
+              var fromLine = [selected.fromName, selected.fromEmail].filter(Boolean).join(' • ');
+              sendSummary.textContent = 'Template: ' + selected.name + ' • Subject: ' + selected.subject + (fromLine ? (' • ' + fromLine) : '');
+            } else {
+              sendSummary.textContent = 'Select a template to see subject + sender.';
+            }
+          }
         });
       }
+
       if (segmentSelect) {
         segmentSelect.addEventListener('change', function(){
           builderState.segmentId = segmentSelect.value;
@@ -16849,8 +16944,7 @@ function renderInterests(customer){
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({})
             });
-            var sample = (data.estimate.sample || []).join(', ');
-            if (msg) msg.textContent = data.estimate.count + ' recipients' + (sample ? (' • Sample: ' + sample) : '');
+            if (msg) msg.textContent = estimateText(data.estimate);
           } catch (err) {
             if (msg) msg.textContent = err.message || 'Estimate failed';
           }
@@ -16885,20 +16979,24 @@ function renderInterests(customer){
           var name = String(valueOf(sections.campaigns, 'mk_builder_campaign_name') || '').trim();
           var templateId = templateSelect ? templateSelect.value : '';
           var segmentId = segmentSelect ? segmentSelect.value : '';
-          if (!name || !templateId || !segmentId) {
-            setBuilderMessage(campaignMsg, 'Campaign name, template, and segment are required.', false);
+          var type = typeSelect ? typeSelect.value : '';
+          var showId = showSelect ? showSelect.value : '';
+          if (!name || !templateId || !segmentId || !type) {
+            setBuilderMessage(campaignMsg, 'Campaign name, type, template, and segment are required.', false);
             return;
           }
           try {
             var data = await fetchJson('/admin/marketing/campaigns', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
-              body: JSON.stringify({ name: name, templateId: templateId, segmentId: segmentId })
+              body: JSON.stringify({ name: name, templateId: templateId, segmentId: segmentId, type: type, showId: showId || null })
             });
             builderState.campaignId = data.campaign.id;
             builderState.templateId = templateId;
             builderState.segmentId = segmentId;
             builderState.campaignName = name;
+            builderState.type = type;
+            builderState.showId = showId || '';
             setBuilderMessage(campaignMsg, 'Draft created. Campaign ID: ' + data.campaign.id, true);
             await loadCampaigns();
           } catch (err) {
@@ -16920,9 +17018,9 @@ function renderInterests(customer){
             });
             var win = window.open('', '_blank');
             if (win) win.document.write(data.html || '');
-            setBuilderMessage(campaignMsg, 'Estimated recipients: ' + data.estimate.count, true);
+            setBuilderMessage(previewMsg, estimateText(data.estimate), true);
           } catch (err) {
-            setBuilderMessage(campaignMsg, err.message || 'Preview failed', false);
+            setBuilderMessage(previewMsg, err.message || 'Preview failed', false);
           }
         });
       }
@@ -16957,12 +17055,16 @@ function renderInterests(customer){
           if (!campaignId) { setBuilderMessage(campaignMsg, 'Create a draft campaign first.', false); return; }
           setBuilderMessage(scheduleMsg, 'Scheduling...', true);
           try {
-            await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(campaignId) + '/schedule', {
+            var resp = await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(campaignId) + '/schedule', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({ sendNow: true })
             });
-            setBuilderMessage(scheduleMsg, 'Campaign scheduled to send now.', true);
+            if (resp.approvalRequired) {
+              setBuilderMessage(scheduleMsg, 'Approval required: ' + (resp.approvalReasons || []).join(' '), false);
+            } else {
+              setBuilderMessage(scheduleMsg, 'Campaign scheduled to send now.', true);
+            }
             await loadCampaigns();
           } catch (err) {
             setBuilderMessage(scheduleMsg, err.message || 'Schedule failed', false);
@@ -16979,12 +17081,16 @@ function renderInterests(customer){
           if (!scheduledFor) { setBuilderMessage(scheduleMsg, 'Choose a date/time first.', false); return; }
           setBuilderMessage(scheduleMsg, 'Scheduling...', true);
           try {
-            await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(campaignId) + '/schedule', {
+            var resp = await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(campaignId) + '/schedule', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({ scheduledFor: scheduledFor })
             });
-            setBuilderMessage(scheduleMsg, 'Campaign scheduled.', true);
+            if (resp.approvalRequired) {
+              setBuilderMessage(scheduleMsg, 'Approval required: ' + (resp.approvalReasons || []).join(' '), false);
+            } else {
+              setBuilderMessage(scheduleMsg, 'Campaign scheduled.', true);
+            }
             await loadCampaigns();
           } catch (err) {
             setBuilderMessage(scheduleMsg, err.message || 'Schedule failed', false);
@@ -16992,19 +17098,90 @@ function renderInterests(customer){
         });
       }
 
+      async function loadCampaignDetail(id){
+        var panel = sections.campaigns.querySelector('#mk_campaign_detail_panel');
+        var activity = sections.campaigns.querySelector('#mk_campaign_detail_activity');
+        if (panel) panel.textContent = 'Loading...';
+        if (activity) activity.innerHTML = '';
+        try {
+          var data = await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(id));
+          var campaign = data.campaign || {};
+          var summary = data.summary || {};
+          var scheduleText = campaign.scheduledFor ? formatDateTime(campaign.scheduledFor) : 'Not scheduled';
+          var showText = campaign.show ? (campaign.show.title || 'Untitled show') : 'No show linked';
+          var approvalControls = '';
+          if (campaign.status === 'APPROVAL_REQUIRED') {
+            var scheduledValue = campaign.scheduledFor ? new Date(campaign.scheduledFor).toISOString().slice(0,16) : '';
+            approvalControls = ''
+              + '<div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap;">'
+              +   '<input class="input" id="mk_campaign_approve_time" type="datetime-local" value="' + scheduledValue + '" />'
+              +   '<button class="btn" data-approve-now="' + campaign.id + '">Approve + send now</button>'
+              +   '<button class="btn p" data-approve="' + campaign.id + '">Approve + schedule</button>'
+              + '</div>';
+          }
+          if (panel) {
+            panel.innerHTML = ''
+              + '<div class="muted" style="margin-bottom:8px;">Status: ' + escapeHtml(campaign.status || '') + ' • Scheduled: ' + escapeHtml(scheduleText) + '</div>'
+              + '<div><strong>What will send</strong></div>'
+              + '<div class="muted" style="margin-top:4px;">Template: ' + escapeHtml(campaign.template?.name || '—') + ' • Subject: ' + escapeHtml(campaign.template?.subject || '—') + '</div>'
+              + '<div class="muted" style="margin-top:4px;">From: ' + escapeHtml([campaign.template?.fromName, campaign.template?.fromEmail].filter(Boolean).join(' • ') || '—') + '</div>'
+              + '<div class="muted" style="margin-top:8px;">Audience: ' + escapeHtml(campaign.segment?.name || '—') + ' • Show: ' + escapeHtml(showText || '—') + '</div>'
+              + '<div class="muted" style="margin-top:8px;">Who will receive: Pending ' + (summary.pending || 0) + ' • Sent ' + (summary.sent || 0) + ' • Skipped ' + (summary.skipped || 0) + '</div>'
+              + '<div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap;">'
+              +   '<button class="btn" data-cpreview="' + campaign.id + '">Preview</button>'
+              +   '<button class="btn" data-recipients="' + campaign.id + '">Recipients</button>'
+              +   '<button class="btn" data-events="' + campaign.id + '">Events</button>'
+              +   '<button class="btn" data-send="' + campaign.id + '">Send now</button>'
+              +   '<button class="btn" data-cancel="' + campaign.id + '">Cancel</button>'
+              + '</div>'
+              + approvalControls;
+          }
+        } catch (err) {
+          if (panel) panel.textContent = err.message || 'Failed to load campaign details';
+        }
+      }
+
+      Array.prototype.slice.call(sections.campaigns.querySelectorAll('[data-cdetail]')).forEach(function(btn){
+        btn.addEventListener('click', function(){
+          loadCampaignDetail(btn.getAttribute('data-cdetail'));
+        });
+      });
+
       Array.prototype.slice.call(sections.campaigns.querySelectorAll('[data-send]')).forEach(function(btn){
         btn.addEventListener('click', async function(){
           var id = btn.getAttribute('data-send');
           try {
-            await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(id) + '/schedule', {
+            var resp = await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(id) + '/schedule', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({ sendNow: true })
             });
             await loadCampaigns();
-            alert('Campaign scheduled for sending.');
+            if (resp.approvalRequired) {
+              alert('Approval required: ' + (resp.approvalReasons || []).join(' '));
+            } else {
+              alert('Campaign scheduled for sending.');
+            }
+            loadCampaignDetail(id);
           } catch (err) {
             alert(err.message || 'Schedule failed');
+          }
+        });
+      });
+
+      Array.prototype.slice.call(sections.campaigns.querySelectorAll('[data-cancel]')).forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          var id = btn.getAttribute('data-cancel');
+          try {
+            await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(id) + '/cancel', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({})
+            });
+            await loadCampaigns();
+            loadCampaignDetail(id);
+          } catch (err) {
+            alert(err.message || 'Cancel failed');
           }
         });
       });
@@ -17020,7 +17197,6 @@ function renderInterests(customer){
             });
             var win = window.open('', '_blank');
             if (win) win.document.write(data.html || '');
-            alert('Estimated recipients: ' + data.estimate.count);
           } catch (err) {
             alert(err.message || 'Preview failed');
           }
@@ -17030,20 +17206,20 @@ function renderInterests(customer){
       Array.prototype.slice.call(sections.campaigns.querySelectorAll('[data-recipients]')).forEach(function(btn){
         btn.addEventListener('click', async function(){
           var id = btn.getAttribute('data-recipients');
-          var target = sections.campaigns.querySelector('#mk_campaign_details');
+          var target = sections.campaigns.querySelector('#mk_campaign_detail_activity');
           if (target) target.textContent = 'Loading recipients...';
           try {
-            var data = await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(id) + '/recipients');
+            var data = await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(id) + '/recipients?include=items');
             var rows = (data.items || []).map(function(r){
               return '<tr><td>' + escapeHtml(r.email) + '</td><td>' + escapeHtml(r.status) + '</td><td>' + escapeHtml(formatDateTime(r.sentAt || r.createdAt)) + '</td><td>' + escapeHtml(r.errorText || '') + '</td></tr>';
             }).join('');
             var summary = data.summary || {};
             if (target) {
               target.innerHTML = ''
-                + '<div class="muted" style="margin-bottom:8px;">Total: ' + (summary.total || 0) + ' • Sent: ' + (summary.sent || 0) + ' • Failed: ' + (summary.failed || 0) + ' • Retryable: ' + (summary.retryable || 0) + ' • Skipped: ' + (summary.skipped || 0) + '</div>'
+                + '<div class="muted" style="margin-bottom:8px;">Total: ' + (summary.total || 0) + ' • Sent: ' + (summary.sent || 0) + ' • Failed: ' + (summary.failed || 0) + ' • Retryable: ' + (summary.retryable || 0) + ' • Skipped: ' + (summary.skipped || 0) + ' • Pending: ' + (summary.pending || 0) + '</div>'
                 + '<div class="table-wrap"><table class="table">'
                 + '<thead><tr><th>Email</th><th>Status</th><th>Timestamp</th><th>Error</th></tr></thead>'
-                + '<tbody>' + (rows || '<tr><td colspan=\"4\" class=\"muted\">No recipients yet.</td></tr>') + '</tbody>'
+                + '<tbody>' + (rows || '<tr><td colspan="4" class="muted">No recipients yet.</td></tr>') + '</tbody>'
                 + '</table></div>';
             }
           } catch (err) {
@@ -17055,7 +17231,7 @@ function renderInterests(customer){
       Array.prototype.slice.call(sections.campaigns.querySelectorAll('[data-events]')).forEach(function(btn){
         btn.addEventListener('click', async function(){
           var id = btn.getAttribute('data-events');
-          var target = sections.campaigns.querySelector('#mk_campaign_details');
+          var target = sections.campaigns.querySelector('#mk_campaign_detail_activity');
           if (target) target.textContent = 'Loading events...';
           try {
             var data = await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(id) + '/events');
@@ -17066,7 +17242,7 @@ function renderInterests(customer){
               target.innerHTML = ''
                 + '<div class="table-wrap"><table class="table">'
                 + '<thead><tr><th>Email</th><th>Event</th><th>Timestamp</th></tr></thead>'
-                + '<tbody>' + (rows || '<tr><td colspan=\"3\" class=\"muted\">No events yet.</td></tr>') + '</tbody>'
+                + '<tbody>' + (rows || '<tr><td colspan="3" class="muted">No events yet.</td></tr>') + '</tbody>'
                 + '</table></div>';
             }
           } catch (err) {
@@ -17074,13 +17250,49 @@ function renderInterests(customer){
           }
         });
       });
+
+      sections.campaigns.onclick = async function(event){
+        var target = event.target;
+        if (!target || !target.getAttribute) return;
+        var approveNowId = target.getAttribute('data-approve-now');
+        if (approveNowId) {
+          try {
+            await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(approveNowId) + '/approve', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({ sendNow: true })
+            });
+            await loadCampaigns();
+            loadCampaignDetail(approveNowId);
+          } catch (err) {
+            alert(err.message || 'Approve failed');
+          }
+        }
+        var approveId = target.getAttribute('data-approve');
+        if (approveId) {
+          var approvedFor = valueOf(sections.campaigns, 'mk_campaign_approve_time');
+          try {
+            var payload = approvedFor ? { scheduledFor: approvedFor } : { sendNow: true };
+            await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(approveId) + '/approve', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify(payload)
+            });
+            await loadCampaigns();
+            loadCampaignDetail(approveId);
+          } catch (err) {
+            alert(err.message || 'Approve failed');
+          }
+        }
+      };
     }
 
     async function loadCampaigns(){
       var data = await fetchJson('/admin/marketing/campaigns');
       var templates = await fetchJson('/admin/marketing/templates');
       var segments = await fetchJson('/admin/marketing/segments');
-      renderCampaigns(data.items || [], templates.items || [], segments.items || []);
+      var shows = await fetchJson('/admin/shows');
+      renderCampaigns(data.items || [], templates.items || [], segments.items || [], shows.items || []);
     }
 
     function renderAutomations(items, templates){

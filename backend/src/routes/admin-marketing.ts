@@ -11,6 +11,7 @@ import { encryptToken } from '../lib/token-crypto.js';
 import {
   MarketingAutomationTriggerType,
   MarketingCampaignStatus,
+  MarketingCampaignType,
   MarketingConsentSource,
   MarketingConsentStatus,
   MarketingLawfulBasis,
@@ -22,8 +23,14 @@ import {
   Prisma,
   ShowStatus,
 } from '@prisma/client';
-import { evaluateSegmentContacts, estimateSegment } from '../services/marketing/segments.js';
-import { applySuppression, clearSuppression, ensureDailyLimit, shouldSuppressContact } from '../services/marketing/campaigns.js';
+import { evaluateSegmentContacts } from '../services/marketing/segments.js';
+import {
+  applySuppression,
+  clearSuppression,
+  ensureDailyLimit,
+  estimateCampaignRecipients,
+  shouldSuppressContact,
+} from '../services/marketing/campaigns.js';
 import {
   fetchMarketingSettings,
   applyMarketingStreamToEmail,
@@ -77,6 +84,7 @@ const PUBLIC_BASE_URL =
   process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
 const REQUIRE_VERIFIED_FROM_DEFAULT = String(process.env.MARKETING_REQUIRE_VERIFIED_FROM || 'true') === 'true';
 const TEST_SEND_RATE_LIMIT_SECONDS = Number(process.env.MARKETING_TEST_SEND_RATE_LIMIT_SEC || 60);
+const APPROVAL_THRESHOLD_DEFAULT = Number(process.env.MARKETING_APPROVAL_THRESHOLD || 5000);
 
 async function fetchTemplateShow(tenantId: string, showId?: string | null) {
   if (!showId) return null;
@@ -1053,7 +1061,7 @@ router.get('/marketing/segments/:id/estimate', requireAdminOrOrganiser, async (r
   const segment = await prisma.marketingSegment.findFirst({ where: { id, tenantId } });
   if (!segment) return res.status(404).json({ ok: false, message: 'Segment not found' });
 
-  const estimate = await estimateSegment(tenantId, segment.rules);
+  const estimate = await estimateCampaignRecipients(tenantId, segment.rules);
   res.json({ ok: true, estimate });
 });
 
@@ -1235,7 +1243,7 @@ router.post('/marketing/segments/:id/estimate', requireAdminOrOrganiser, async (
   const segment = await prisma.marketingSegment.findFirst({ where: { id, tenantId } });
   if (!segment) return res.status(404).json({ ok: false, message: 'Segment not found' });
 
-  const estimate = await estimateSegment(tenantId, segment.rules);
+  const estimate = await estimateCampaignRecipients(tenantId, segment.rules);
   res.json({ ok: true, estimate });
 });
 
@@ -1623,16 +1631,65 @@ router.get('/marketing/campaigns', requireAdminOrOrganiser, async (req, res) => 
     include: {
       template: { select: { name: true } },
       segment: { select: { name: true } },
+      show: { select: { id: true, title: true, date: true } },
     },
   });
   res.json({ ok: true, items });
 });
 
+router.get('/marketing/campaigns/:id', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const id = String(req.params.id);
+  const campaign = await prisma.marketingCampaign.findFirst({
+    where: { id, tenantId },
+    include: {
+      template: { select: { id: true, name: true, subject: true, fromName: true, fromEmail: true } },
+      segment: { select: { id: true, name: true } },
+      show: { select: { id: true, title: true, date: true } },
+      createdBy: { select: { id: true, name: true, email: true } },
+    },
+  });
+  if (!campaign) return res.status(404).json({ ok: false, message: 'Campaign not found' });
+
+  const grouped = await prisma.marketingCampaignRecipient.groupBy({
+    by: ['status'],
+    where: { tenantId, campaignId: id },
+    _count: { _all: true },
+  });
+  const summary = grouped.reduce(
+    (acc, row) => {
+      acc.total += row._count._all;
+      if (row.status === MarketingRecipientStatus.SENT) acc.sent = row._count._all;
+      if (row.status === MarketingRecipientStatus.FAILED) acc.failed = row._count._all;
+      if (row.status === MarketingRecipientStatus.RETRYABLE) acc.retryable = row._count._all;
+      if (row.status === MarketingRecipientStatus.SKIPPED_SUPPRESSED) acc.skipped = row._count._all;
+      if (row.status === MarketingRecipientStatus.PENDING) acc.pending = row._count._all;
+      return acc;
+    },
+    { total: 0, sent: 0, failed: 0, retryable: 0, skipped: 0, pending: 0 }
+  );
+
+  res.json({ ok: true, campaign, summary });
+});
+
 router.post('/marketing/campaigns', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
-  const { name, templateId, segmentId } = req.body || {};
-  if (!name || !templateId || !segmentId) {
+  const { name, templateId, segmentId, type, showId } = req.body || {};
+  if (!name || !templateId || !segmentId || !type) {
     return res.status(400).json({ ok: false, message: 'Missing campaign fields' });
+  }
+
+  const campaignType = String(type);
+  if (!Object.values(MarketingCampaignType).includes(campaignType as MarketingCampaignType)) {
+    return res.status(400).json({ ok: false, message: 'Invalid campaign type' });
+  }
+
+  let show = null;
+  if (showId) {
+    show = await prisma.show.findFirst({ where: { id: String(showId), organiserId: tenantId } });
+    if (!show) {
+      return res.status(400).json({ ok: false, message: 'Show not found for campaign' });
+    }
   }
 
   const campaign = await prisma.marketingCampaign.create({
@@ -1641,6 +1698,8 @@ router.post('/marketing/campaigns', requireAdminOrOrganiser, async (req, res) =>
       name,
       templateId,
       segmentId,
+      type: campaignType as MarketingCampaignType,
+      showId: show?.id || null,
       status: MarketingCampaignStatus.DRAFT,
       createdByUserId: tenantId,
     },
@@ -1652,10 +1711,36 @@ router.post('/marketing/campaigns', requireAdminOrOrganiser, async (req, res) =>
 router.put('/marketing/campaigns/:id', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const id = String(req.params.id);
-  const { name, templateId, segmentId } = req.body || {};
+  const { name, templateId, segmentId, type, showId } = req.body || {};
 
   const existing = await prisma.marketingCampaign.findFirst({ where: { id, tenantId } });
   if (!existing) return res.status(404).json({ ok: false, message: 'Campaign not found' });
+
+  if (![MarketingCampaignStatus.DRAFT, MarketingCampaignStatus.APPROVAL_REQUIRED].includes(existing.status)) {
+    return res.status(400).json({ ok: false, message: 'Campaign can only be edited while in draft or approval.' });
+  }
+
+  let campaignType: MarketingCampaignType | undefined = undefined;
+  if (type) {
+    const typed = String(type);
+    if (!Object.values(MarketingCampaignType).includes(typed as MarketingCampaignType)) {
+      return res.status(400).json({ ok: false, message: 'Invalid campaign type' });
+    }
+    campaignType = typed as MarketingCampaignType;
+  }
+
+  let showIdValue: string | null | undefined = undefined;
+  if (showId !== undefined) {
+    if (showId) {
+      const show = await prisma.show.findFirst({ where: { id: String(showId), organiserId: tenantId } });
+      if (!show) {
+        return res.status(400).json({ ok: false, message: 'Show not found for campaign' });
+      }
+      showIdValue = show.id;
+    } else {
+      showIdValue = null;
+    }
+  }
 
   const campaign = await prisma.marketingCampaign.update({
     where: { id },
@@ -1663,6 +1748,8 @@ router.put('/marketing/campaigns/:id', requireAdminOrOrganiser, async (req, res)
       name: name || undefined,
       templateId: templateId || undefined,
       segmentId: segmentId || undefined,
+      type: campaignType,
+      showId: showIdValue,
     },
   });
   await logMarketingAudit(tenantId, 'campaign.updated', 'MarketingCampaign', campaign.id, { name });
@@ -1678,8 +1765,16 @@ router.post('/marketing/campaigns/:id/preview', requireAdminOrOrganiser, async (
   });
   if (!campaign) return res.status(404).json({ ok: false, message: 'Campaign not found' });
 
-  const estimate = await estimateSegment(tenantId, campaign.segment.rules);
-  const sampleContact = await evaluateSegmentContacts(tenantId, campaign.segment.rules).then((c) => c[0]);
+  const estimate = await estimateCampaignRecipients(tenantId, campaign.segment.rules);
+  const contacts = await evaluateSegmentContacts(tenantId, campaign.segment.rules);
+  const suppressions = await prisma.marketingSuppression.findMany({ where: { tenantId } });
+  const suppressionMap = new Map(suppressions.map((s) => [String(s.email || '').toLowerCase(), s]));
+  const sampleContact = contacts.find((contact) => {
+    const suppression = suppressionMap.get(String(contact.email || '').toLowerCase()) || null;
+    const consentStatus = (contact.consentStatus as MarketingConsentStatus) || MarketingConsentStatus.TRANSACTIONAL_ONLY;
+    const decision = shouldSuppressContact(consentStatus, suppression);
+    return !decision.suppressed;
+  }) || contacts[0];
   const email = sampleContact?.email || 'sample@example.com';
   const token = createUnsubscribeToken({ tenantId, email });
   const unsubscribeUrl = `${PUBLIC_BASE_URL.replace(/\/+$/, '')}/u/${encodeURIComponent(
@@ -1823,20 +1918,71 @@ router.post('/marketing/campaigns/:id/schedule', requireAdminOrOrganiser, async 
 
   const campaign = await prisma.marketingCampaign.findFirst({
     where: { id, tenantId },
-    include: { segment: true },
+    include: { segment: true, template: true },
   });
   if (!campaign) return res.status(404).json({ ok: false, message: 'Campaign not found' });
 
-  const estimate = await estimateSegment(tenantId, campaign.segment.rules);
+  if (
+    ![
+      MarketingCampaignStatus.DRAFT,
+      MarketingCampaignStatus.APPROVAL_REQUIRED,
+      MarketingCampaignStatus.SCHEDULED,
+    ].includes(campaign.status)
+  ) {
+    return res.status(400).json({ ok: false, message: 'Campaign cannot be scheduled from its current status.' });
+  }
+
+  const estimate = await estimateCampaignRecipients(tenantId, campaign.segment.rules);
   const maxSegment = Number(process.env.MARKETING_MAX_SEGMENT || 20000);
   const role = String(req.user?.role || '').toUpperCase();
-  if (estimate.count > maxSegment && role !== 'ADMIN') {
+  if (estimate.sendable > maxSegment && role !== 'ADMIN') {
     return res.status(403).json({ ok: false, message: 'Segment too large for your role.' });
   }
 
-  await ensureDailyLimit(tenantId, estimate.count);
+  await ensureDailyLimit(tenantId, estimate.sendable);
 
-  const nextStatus = MarketingCampaignStatus.SCHEDULED;
+  const settings = await fetchMarketingSettings(tenantId);
+  const sender = resolveSenderDetails({
+    templateFromName: campaign.template.fromName,
+    templateFromEmail: campaign.template.fromEmail,
+    templateReplyTo: campaign.template.replyTo,
+    settings,
+  });
+
+  if (!sender.fromEmail || !sender.fromName) {
+    return res.status(400).json({ ok: false, message: 'From name/email required' });
+  }
+
+  if (settings?.sendgridDomain) {
+    const domain = settings.sendgridDomain.toLowerCase();
+    if (!sender.fromEmail.toLowerCase().endsWith(`@${domain}`)) {
+      return res.status(400).json({ ok: false, message: `From email must use the verified domain (${domain}).` });
+    }
+  }
+
+  const requireVerifiedFrom = resolveRequireVerifiedFrom(settings, REQUIRE_VERIFIED_FROM_DEFAULT);
+  let senderVerified = true;
+  try {
+    assertSenderVerified({ fromEmail: sender.fromEmail, settings, requireVerifiedFrom });
+  } catch (error: any) {
+    if (requireVerifiedFrom) {
+      senderVerified = false;
+    } else {
+      return res.status(400).json({ ok: false, message: error?.message || 'Sender validation failed.' });
+    }
+  }
+
+  const approvalThreshold = Number.isFinite(APPROVAL_THRESHOLD_DEFAULT)
+    ? APPROVAL_THRESHOLD_DEFAULT
+    : 5000;
+  const approvalReasons = [];
+  if (estimate.sendable > approvalThreshold) approvalReasons.push('Segment exceeds approval threshold.');
+  if (!senderVerified) approvalReasons.push('Sender domain is not verified.');
+
+  const approvalRequired = approvalReasons.length > 0;
+  const nextStatus = approvalRequired
+    ? MarketingCampaignStatus.APPROVAL_REQUIRED
+    : MarketingCampaignStatus.SCHEDULED;
   const scheduledTime = sendNow ? new Date() : scheduledFor;
 
   if (!scheduledTime || isNaN(scheduledTime.getTime())) {
@@ -1851,9 +1997,80 @@ router.post('/marketing/campaigns/:id/schedule', requireAdminOrOrganiser, async 
     },
   });
 
-  await logMarketingAudit(tenantId, 'campaign.scheduled', 'MarketingCampaign', updated.id, {
+  await logMarketingAudit(
+    tenantId,
+    approvalRequired ? 'campaign.approval_required' : 'campaign.scheduled',
+    'MarketingCampaign',
+    updated.id,
+    {
+      scheduledFor: scheduledTime.toISOString(),
+      approvalReasons: approvalReasons.length ? approvalReasons : undefined,
+    }
+  );
+  res.json({
+    ok: true,
+    campaign: updated,
+    estimate,
+    approvalRequired,
+    approvalReasons,
+  });
+});
+
+router.post('/marketing/campaigns/:id/approve', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const id = String(req.params.id);
+  const sendNow = Boolean(req.body?.sendNow);
+  const scheduledFor = req.body?.scheduledFor ? new Date(req.body.scheduledFor) : null;
+
+  const campaign = await prisma.marketingCampaign.findFirst({
+    where: { id, tenantId },
+    include: { segment: true, template: true },
+  });
+  if (!campaign) return res.status(404).json({ ok: false, message: 'Campaign not found' });
+
+  if (campaign.status !== MarketingCampaignStatus.APPROVAL_REQUIRED) {
+    return res.status(400).json({ ok: false, message: 'Campaign does not require approval.' });
+  }
+
+  const scheduledTime = sendNow ? new Date() : scheduledFor || campaign.scheduledFor;
+  if (!scheduledTime || isNaN(scheduledTime.getTime())) {
+    return res.status(400).json({ ok: false, message: 'scheduledFor required' });
+  }
+
+  const estimate = await estimateCampaignRecipients(tenantId, campaign.segment.rules);
+  await ensureDailyLimit(tenantId, estimate.sendable);
+
+  const settings = await fetchMarketingSettings(tenantId);
+  const sender = resolveSenderDetails({
+    templateFromName: campaign.template.fromName,
+    templateFromEmail: campaign.template.fromEmail,
+    templateReplyTo: campaign.template.replyTo,
+    settings,
+  });
+
+  if (!sender.fromEmail || !sender.fromName) {
+    return res.status(400).json({ ok: false, message: 'From name/email required' });
+  }
+
+  const requireVerifiedFrom = resolveRequireVerifiedFrom(settings, REQUIRE_VERIFIED_FROM_DEFAULT);
+  try {
+    assertSenderVerified({ fromEmail: sender.fromEmail, settings, requireVerifiedFrom });
+  } catch (error: any) {
+    return res.status(400).json({ ok: false, message: error?.message || 'Sender verification required.' });
+  }
+
+  const updated = await prisma.marketingCampaign.update({
+    where: { id },
+    data: {
+      status: MarketingCampaignStatus.SCHEDULED,
+      scheduledFor: scheduledTime,
+    },
+  });
+
+  await logMarketingAudit(tenantId, 'campaign.approved', 'MarketingCampaign', updated.id, {
     scheduledFor: scheduledTime.toISOString(),
   });
+
   res.json({ ok: true, campaign: updated, estimate });
 });
 
@@ -1863,6 +2080,18 @@ router.post('/marketing/campaigns/:id/cancel', requireAdminOrOrganiser, async (r
 
   const existing = await prisma.marketingCampaign.findFirst({ where: { id, tenantId } });
   if (!existing) return res.status(404).json({ ok: false, message: 'Campaign not found' });
+
+  if (
+    ![
+      MarketingCampaignStatus.DRAFT,
+      MarketingCampaignStatus.SCHEDULED,
+      MarketingCampaignStatus.SENDING,
+      MarketingCampaignStatus.PAUSED_LIMIT,
+      MarketingCampaignStatus.APPROVAL_REQUIRED,
+    ].includes(existing.status)
+  ) {
+    return res.status(400).json({ ok: false, message: 'Campaign cannot be cancelled in its current status.' });
+  }
 
   const campaign = await prisma.marketingCampaign.update({
     where: { id },
@@ -1895,22 +2124,37 @@ router.get('/marketing/campaigns/:id/logs', requireAdminOrOrganiser, async (req,
 router.get('/marketing/campaigns/:id/recipients', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const id = String(req.params.id);
+  const includeItems = String(req.query?.include || '') === 'items' || String(req.query?.detail || '') === 'true';
 
-  const items = await prisma.marketingCampaignRecipient.findMany({
+  const grouped = await prisma.marketingCampaignRecipient.groupBy({
+    by: ['status'],
     where: { tenantId, campaignId: id },
-    orderBy: { createdAt: 'desc' },
-    take: 500,
+    _count: { _all: true },
   });
 
-  const summary = {
-    total: items.length,
-    sent: items.filter((r) => r.status === MarketingRecipientStatus.SENT).length,
-    failed: items.filter((r) => r.status === MarketingRecipientStatus.FAILED).length,
-    retryable: items.filter((r) => r.status === MarketingRecipientStatus.RETRYABLE).length,
-    skipped: items.filter((r) => r.status === MarketingRecipientStatus.SKIPPED_SUPPRESSED).length,
-  };
+  const summary = grouped.reduce(
+    (acc, row) => {
+      acc.total += row._count._all;
+      if (row.status === MarketingRecipientStatus.SENT) acc.sent = row._count._all;
+      if (row.status === MarketingRecipientStatus.FAILED) acc.failed = row._count._all;
+      if (row.status === MarketingRecipientStatus.RETRYABLE) acc.retryable = row._count._all;
+      if (row.status === MarketingRecipientStatus.SKIPPED_SUPPRESSED) acc.skipped = row._count._all;
+      if (row.status === MarketingRecipientStatus.PENDING) acc.pending = row._count._all;
+      return acc;
+    },
+    { total: 0, sent: 0, failed: 0, retryable: 0, skipped: 0, pending: 0 }
+  );
 
-  res.json({ ok: true, items, summary });
+  let items = [];
+  if (includeItems) {
+    items = await prisma.marketingCampaignRecipient.findMany({
+      where: { tenantId, campaignId: id },
+      orderBy: { createdAt: 'desc' },
+      take: 500,
+    });
+  }
+
+  res.json({ ok: true, items: includeItems ? items : undefined, summary });
 });
 
 router.get('/marketing/campaigns/:id/events', requireAdminOrOrganiser, async (req, res) => {
