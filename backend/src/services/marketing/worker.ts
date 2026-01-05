@@ -2,7 +2,11 @@ import { processScheduledCampaigns, processSendingCampaigns } from './campaigns.
 import {
   processAbandonedCheckoutAutomations,
   processAutomationSteps,
+  processAnniversaryAutomations,
+  processBirthdayAutomations,
   processNoPurchaseAutomations,
+  processShowDateAutomations,
+  processViewedNoPurchaseAutomations,
 } from './automations.js';
 import prisma from '../../lib/prisma.js';
 
@@ -18,6 +22,10 @@ export async function runMarketingWorkerOnce() {
   await processSendingCampaigns();
   await processNoPurchaseAutomations();
   await processAbandonedCheckoutAutomations();
+  await processShowDateAutomations();
+  await processViewedNoPurchaseAutomations();
+  await processBirthdayAutomations();
+  await processAnniversaryAutomations();
   await processAutomationSteps();
 }
 

@@ -17587,7 +17587,7 @@ function renderInterests(customer){
       renderCampaigns(data.items || [], templates.items || [], segments.items || [], shows.items || []);
     }
 
-    function renderAutomations(items, templates){
+    function renderAutomations(items, templates, tags, topics, runs){
       var templateOptions = templates.map(function(t){
         return '<option value=\"' + escapeHtml(t.id) + '\">' + escapeHtml(t.name) + '</option>';
       }).join('');
@@ -17597,32 +17597,90 @@ function renderInterests(customer){
       var triggerOptions = [
         'AFTER_PURCHASE',
         'NO_PURCHASE_DAYS',
-        'VIP_THRESHOLD',
-        'SHOW_CATEGORY_INTEREST',
-        'ABANDONED_CHECKOUT'
+        'ABANDONED_CHECKOUT',
+        'SHOW_CREATED',
+        'SHOW_PUBLISHED',
+        'DAYS_BEFORE_SHOW',
+        'VIEWED_NO_PURCHASE',
+        'BIRTHDAY',
+        'ANNIVERSARY',
+        'TAG_APPLIED',
+        'PREFERENCE_TOPIC'
       ].map(function(t){ return '<option value=\"' + t + '\">' + t.replace(/_/g, ' ') + '</option>'; }).join('');
+
+      var stepTypeOptions = [
+        'SEND_EMAIL',
+        'WAIT',
+        'BRANCH',
+        'ADD_TAG',
+        'UPDATE_PREFERENCE',
+        'NOTIFY_ORGANISER'
+      ].map(function(t){ return '<option value=\"' + t + '\">' + t.replace(/_/g, ' ') + '</option>'; }).join('');
+
+      var topicOptions = (topics || []).map(function(t){
+        return '<option value=\"' + escapeHtml(t.id) + '\">' + escapeHtml(t.name) + '</option>';
+      }).join('');
+      var tagOptions = (tags || []).map(function(t){
+        return '<option value=\"' + escapeHtml(t.name) + '\">' + escapeHtml(t.name) + '</option>';
+      }).join('');
 
       var listHtml = items.map(function(a){
         var steps = (a.steps || []).map(function(step){
-          return '<li>Step ' + step.stepOrder + ' — ' + escapeHtml(step.template?.name || '') + ' (' + step.delayMinutes + ' min delay)</li>';
+          var detail = [];
+          if (step.stepType) detail.push(step.stepType.replace(/_/g, ' '));
+          if (step.template && step.template.name) detail.push(step.template.name);
+          if (step.delayMinutes) detail.push('Delay ' + step.delayMinutes + 'm');
+          if (step.throttleMinutes) detail.push('Throttle ' + step.throttleMinutes + 'm');
+          return '<div class=\"automation-step\">'
+            + '<div class=\"automation-step__dot\"></div>'
+            + '<div class=\"automation-step__card\">'
+            +   '<div class=\"title\">Step ' + step.stepOrder + '</div>'
+            +   '<div class=\"muted\">' + escapeHtml(detail.join(' • ') || 'Step') + '</div>'
+            + '</div>'
+            + '</div>';
         }).join('');
         return '<div class=\"card\" style=\"margin-bottom:12px;\">'
-          + '<div class=\"title\">' + escapeHtml(a.name) + '</div>'
-          + '<div class=\"muted\">Trigger: ' + escapeHtml(a.triggerType) + ' • ' + (a.isEnabled ? 'Enabled' : 'Disabled') + '</div>'
-          + '<ul style=\"margin:10px 0 0 18px;\">' + (steps || '<li>No steps yet.</li>') + '</ul>'
+          + '<div class=\"row\" style=\"justify-content:space-between;align-items:flex-start;\">'
+          +   '<div>'
+          +     '<div class=\"title\">' + escapeHtml(a.name) + '</div>'
+          +     '<div class=\"muted\">Trigger: ' + escapeHtml(a.triggerType) + ' • ' + (a.isEnabled ? 'Enabled' : 'Disabled') + '</div>'
+          +   '</div>'
+          +   '<button class=\"btn\" data-automation-open=\"' + escapeHtml(a.id) + '\">Edit</button>'
+          + '</div>'
+          + '<div class=\"automation-timeline\">' + (steps || '<div class=\"muted\" style=\"padding:10px 0;\">No steps yet.</div>') + '</div>'
+          + '</div>';
+      }).join('');
+
+      var runHtml = (runs || []).map(function(run){
+        return '<div class=\"card\" style=\"margin:0 0 10px 0;\">'
+          + '<div class=\"title\">' + escapeHtml(run.automation?.name || 'Automation') + '</div>'
+          + '<div class=\"muted\">Contact: ' + escapeHtml(run.contact?.email || '') + '</div>'
+          + '<div class=\"muted\">Trigger: ' + escapeHtml(run.triggerType || '') + ' • Status: ' + escapeHtml(run.status || '') + '</div>'
+          + '<button class=\"btn\" data-run-open=\"' + escapeHtml(run.id) + '\">View steps</button>'
           + '</div>';
       }).join('');
 
       var html = ''
+        + '<style>'
+        + '.automation-timeline{margin-top:12px;border-left:2px solid #1f2937;padding-left:16px;display:flex;flex-direction:column;gap:10px;}'
+        + '.automation-step{position:relative;display:flex;align-items:flex-start;gap:12px;}'
+        + '.automation-step__dot{width:10px;height:10px;border-radius:50%;background:#2563eb;position:absolute;left:-21px;top:14px;}'
+        + '.automation-step__card{background:#0b1220;border-radius:12px;padding:10px 12px;min-width:200px;}'
+        + '</style>'
         + '<div class=\"card\" style=\"margin:0 0 12px 0;\">'
         +   '<div class=\"title\">Create automation</div>'
-        +   '<div class=\"grid\" style=\"grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:10px;\">'
+        +   '<div class=\"grid\" style=\"grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:10px;\">'
         +     '<input class=\"input\" id=\"mk_auto_name\" placeholder=\"Automation name\" />'
         +     '<select class=\"input\" id=\"mk_auto_trigger\">' + triggerOptions + '</select>'
         +     '<select class=\"input\" id=\"mk_auto_enabled\">'
         +       '<option value=\"true\">Enabled</option>'
         +       '<option value=\"false\">Disabled</option>'
         +     '</select>'
+        +     '<input class=\"input\" id=\"mk_auto_days_before\" placeholder=\"Days before show\" />'
+        +   '</div>'
+        +   '<div class=\"grid\" style=\"grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px;\">'
+        +     '<input class=\"input\" id=\"mk_auto_view_days\" placeholder=\"Viewed no purchase days\" />'
+        +     '<textarea class=\"input\" id=\"mk_auto_trigger_json\" placeholder=\"Trigger config JSON\" style=\"height:80px;\"></textarea>'
         +   '</div>'
         +   '<div class=\"row\" style=\"gap:8px;margin-top:10px;\">'
         +     '<button class=\"btn p\" id=\"mk_auto_add\">Save automation</button>'
@@ -17631,21 +17689,39 @@ function renderInterests(customer){
         + '</div>'
         + '<div class=\"card\" style=\"margin:0 0 12px 0;\">'
         +   '<div class=\"title\">Add automation step</div>'
-        +   '<div class=\"grid\" style=\"grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:10px;\">'
+        +   '<div class=\"grid\" style=\"grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:10px;\">'
         +     '<select class=\"input\" id=\"mk_step_auto\">' + automationOptions + '</select>'
-        +     '<select class=\"input\" id=\"mk_step_template\">' + templateOptions + '</select>'
         +     '<input class=\"input\" id=\"mk_step_order\" placeholder=\"Step order\" />'
-        +     '<input class=\"input\" id=\"mk_step_delay\" placeholder=\"Delay (minutes)\" />'
+        +     '<select class=\"input\" id=\"mk_step_type\">' + stepTypeOptions + '</select>'
         +   '</div>'
-        +   '<textarea class=\"input\" id=\"mk_step_rules\" placeholder=\"Condition rules JSON (optional)\" style=\"height:100px;margin-top:10px;\"></textarea>'
+        +   '<div class=\"grid\" style=\"grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:10px;\">'
+        +     '<select class=\"input\" id=\"mk_step_template\">' + templateOptions + '</select>'
+        +     '<input class=\"input\" id=\"mk_step_delay\" placeholder=\"Delay (minutes)\" />'
+        +     '<input class=\"input\" id=\"mk_step_throttle\" placeholder=\"Throttle (minutes)\" />'
+        +   '</div>'
+        +   '<div class=\"grid\" style=\"grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px;\">'
+        +     '<input class=\"input\" id=\"mk_step_quiet_start\" placeholder=\"Quiet hours start (UTC hour)\" />'
+        +     '<input class=\"input\" id=\"mk_step_quiet_end\" placeholder=\"Quiet hours end (UTC hour)\" />'
+        +   '</div>'
+        +   '<div class=\"grid\" style=\"grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px;\">'
+        +     '<select class=\"input\" id=\"mk_step_tag\">' + (tagOptions || '<option value=\"\">Select tag</option>') + '</select>'
+        +     '<select class=\"input\" id=\"mk_step_topic\">' + (topicOptions || '<option value=\"\">Select topic</option>') + '</select>'
+        +   '</div>'
+        +   '<textarea class=\"input\" id=\"mk_step_rules\" placeholder=\"Condition rules JSON (Segment rules)\" style=\"height:90px;margin-top:10px;\"></textarea>'
+        +   '<textarea class=\"input\" id=\"mk_step_config\" placeholder=\"Step config JSON (e.g. {&quot;ifStepOrder&quot;:3,&quot;elseStepOrder&quot;:4} or {&quot;tag&quot;:&quot;VIP&quot;})\" style=\"height:90px;margin-top:10px;\"></textarea>'
         +   '<div class=\"row\" style=\"gap:8px;margin-top:10px;\">'
         +     '<button class=\"btn p\" id=\"mk_step_add\">Save step</button>'
         +     '<div id=\"mk_step_msg\" class=\"muted\"></div>'
         +   '</div>'
         + '</div>'
-        + '<div class=\"card\" style=\"margin:0;\">'
+        + '<div class=\"card\" style=\"margin:0 0 12px 0;\">'
         +   '<div class=\"title\">Automations</div>'
         +   '<div style=\"margin-top:10px;\">' + (listHtml || '<div class=\"muted\">No automations yet.</div>') + '</div>'
+        + '</div>'
+        + '<div class=\"card\" style=\"margin:0;\">'
+        +   '<div class=\"title\">Automation runs</div>'
+        +   '<div style=\"margin-top:10px;\">' + (runHtml || '<div class=\"muted\">No runs yet.</div>') + '</div>'
+        +   '<div id=\"mk_run_steps\" style=\"margin-top:12px;\"></div>'
         + '</div>';
 
       sections.automations.innerHTML = html;
@@ -17656,13 +17732,22 @@ function renderInterests(customer){
           var name = String(valueOf(sections.automations, 'mk_auto_name') || '').trim();
           var trigger = String(valueOf(sections.automations, 'mk_auto_trigger') || '').trim();
           var enabled = String(valueOf(sections.automations, 'mk_auto_enabled') || 'true') === 'true';
+          var daysBefore = String(valueOf(sections.automations, 'mk_auto_days_before') || '').trim();
+          var viewedDays = String(valueOf(sections.automations, 'mk_auto_view_days') || '').trim();
+          var configRaw = String(valueOf(sections.automations, 'mk_auto_trigger_json') || '').trim();
           var msg = sections.automations.querySelector('#mk_auto_msg');
           if (!name || !trigger) { if (msg) msg.textContent = 'Name + trigger required.'; return; }
+          var triggerConfig = {};
+          if (daysBefore) triggerConfig.daysBefore = Number(daysBefore);
+          if (viewedDays) triggerConfig.days = Number(viewedDays);
+          if (configRaw) {
+            try { triggerConfig = Object.assign(triggerConfig, JSON.parse(configRaw)); } catch (err) { if (msg) msg.textContent = 'Invalid trigger JSON.'; return; }
+          }
           try {
             await fetchJson('/admin/marketing/automations', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
-              body: JSON.stringify({ name: name, triggerType: trigger, isEnabled: enabled })
+              body: JSON.stringify({ name: name, triggerType: trigger, triggerConfig: triggerConfig, isEnabled: enabled })
             });
             if (msg) msg.textContent = 'Saved.';
             await loadAutomations();
@@ -17679,22 +17764,40 @@ function renderInterests(customer){
           var templateId = String(valueOf(sections.automations, 'mk_step_template') || '').trim();
           var stepOrder = String(valueOf(sections.automations, 'mk_step_order') || '').trim();
           var delayMinutes = String(valueOf(sections.automations, 'mk_step_delay') || '').trim();
+          var throttleMinutes = String(valueOf(sections.automations, 'mk_step_throttle') || '').trim();
+          var quietStart = String(valueOf(sections.automations, 'mk_step_quiet_start') || '').trim();
+          var quietEnd = String(valueOf(sections.automations, 'mk_step_quiet_end') || '').trim();
+          var stepType = String(valueOf(sections.automations, 'mk_step_type') || '').trim();
+          var tagName = String(valueOf(sections.automations, 'mk_step_tag') || '').trim();
+          var topicId = String(valueOf(sections.automations, 'mk_step_topic') || '').trim();
           var rulesRaw = String(valueOf(sections.automations, 'mk_step_rules') || '').trim();
+          var configRaw = String(valueOf(sections.automations, 'mk_step_config') || '').trim();
           var msg = sections.automations.querySelector('#mk_step_msg');
-          if (!automationId || !templateId || !stepOrder) { if (msg) msg.textContent = 'Automation, template, and order required.'; return; }
+          if (!automationId || !stepOrder) { if (msg) msg.textContent = 'Automation and order required.'; return; }
           var rules = {};
           if (rulesRaw) {
-            try { rules = JSON.parse(rulesRaw); } catch (err) { if (msg) msg.textContent = 'Invalid JSON.'; return; }
+            try { rules = JSON.parse(rulesRaw); } catch (err) { if (msg) msg.textContent = 'Invalid rules JSON.'; return; }
+          }
+          var config = {};
+          if (tagName) config.tag = tagName;
+          if (topicId) config.topicId = topicId;
+          if (configRaw) {
+            try { config = Object.assign(config, JSON.parse(configRaw)); } catch (err) { if (msg) msg.textContent = 'Invalid config JSON.'; return; }
           }
           try {
             await fetchJson('/admin/marketing/automations/' + encodeURIComponent(automationId) + '/steps', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({
-                templateId: templateId,
+                templateId: templateId || null,
                 stepOrder: Number(stepOrder),
                 delayMinutes: Number(delayMinutes || 0),
-                conditionRules: rules
+                throttleMinutes: Number(throttleMinutes || 0),
+                quietHoursStart: quietStart ? Number(quietStart) : null,
+                quietHoursEnd: quietEnd ? Number(quietEnd) : null,
+                conditionRules: rules,
+                stepType: stepType || 'SEND_EMAIL',
+                stepConfig: config
               })
             });
             if (msg) msg.textContent = 'Saved.';
@@ -17704,12 +17807,39 @@ function renderInterests(customer){
           }
         });
       }
+
+      sections.automations.querySelectorAll('[data-run-open]').forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          var runId = btn.getAttribute('data-run-open');
+          if (!runId) return;
+          var container = sections.automations.querySelector('#mk_run_steps');
+          if (!container) return;
+          container.innerHTML = '<div class=\"muted\">Loading steps...</div>';
+          try {
+            var data = await fetchJson('/admin/marketing/automations/runs/' + encodeURIComponent(runId) + '/steps');
+            var stepList = (data.items || []).map(function(step){
+              return '<div class=\"card\" style=\"margin:0 0 8px 0;\">'
+                + '<div class=\"title\">Step ' + escapeHtml(String(step.step?.stepOrder || '')) + '</div>'
+                + '<div class=\"muted\">Status: ' + escapeHtml(step.status || '') + '</div>'
+                + '<div class=\"muted\">Sent: ' + escapeHtml(step.sentAt ? new Date(step.sentAt).toLocaleString() : '—') + '</div>'
+                + '</div>';
+            }).join('');
+            container.innerHTML = '<div class=\"title\" style=\"margin-bottom:8px;\">Run steps</div>'
+              + (stepList || '<div class=\"muted\">No steps for this run.</div>');
+          } catch (err) {
+            container.innerHTML = '<div class=\"error\">Failed to load run steps.</div>';
+          }
+        });
+      });
     }
 
     async function loadAutomations(){
       var data = await fetchJson('/admin/marketing/automations');
       var templates = await fetchJson('/admin/marketing/templates');
-      renderAutomations(data.items || [], templates.items || []);
+      var tags = await fetchJson('/admin/marketing/tags');
+      var topics = await fetchJson('/admin/marketing/preferences/topics');
+      var runs = await fetchJson('/admin/marketing/automations/runs');
+      renderAutomations(data.items || [], templates.items || [], tags.items || [], topics.items || [], runs.items || []);
     }
 
     function renderPreferences(items, summary){

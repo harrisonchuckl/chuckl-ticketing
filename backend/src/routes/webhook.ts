@@ -1088,7 +1088,11 @@ try {
         await enqueueAutomationForContact(
           showForMarketing.organiserId,
           contact.id,
-          MarketingAutomationTriggerType.AFTER_PURCHASE
+          MarketingAutomationTriggerType.AFTER_PURCHASE,
+          {
+            triggerKey: `order:${orderIdValue}`,
+            metadata: { orderId: orderIdValue, showId: showIdValue },
+          }
         );
       }
     }

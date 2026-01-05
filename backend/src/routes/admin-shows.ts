@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { OrderStatus, SeatStatus, ShowStatus } from "@prisma/client";
 import prisma from "../lib/prisma.js";
+import { MarketingAutomationTriggerType } from "@prisma/client";
+import { processShowCreatedAutomation } from "../services/marketing/automations.js";
 import { requireAdminOrOrganiser } from "../lib/authz.js";
 import { clampBookingFeePence } from "../lib/booking-fee.js";
 
@@ -950,6 +952,13 @@ const organiserId = isOrganiser(req) ? requireUserId(req) : String(req.body?.org
       });
     }
 
+    if (organiserId) {
+      await processShowCreatedAutomation(organiserId, created.id, MarketingAutomationTriggerType.SHOW_CREATED);
+      if (status === "LIVE") {
+        await processShowCreatedAutomation(organiserId, created.id, MarketingAutomationTriggerType.SHOW_PUBLISHED);
+      }
+    }
+
     res.json({ ok: true, id: created.id });
   } catch (e) {
     console.error("POST /admin/shows failed", e);
@@ -1440,6 +1449,9 @@ organiserId: effectiveOrganiserId,
     }
     // --------------------------
 
+    const wasLive = existing.status === ShowStatus.LIVE;
+    const willBeLive = status ? status === "LIVE" : existing.status === ShowStatus.LIVE;
+
     const updated = await prisma.show.update({
       where: { id: existing.id },
     data: {
@@ -1493,6 +1505,10 @@ organiserId: effectiveOrganiserId,
       },
       select: { id: true },
     });
+
+    if (!wasLive && willBeLive) {
+      await processShowCreatedAutomation(existing.organiserId || effectiveOrganiserId, updated.id, MarketingAutomationTriggerType.SHOW_PUBLISHED);
+    }
 
     res.json({ ok: true, id: updated.id });
   } catch (e) {

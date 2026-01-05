@@ -3,9 +3,11 @@ import {
   MarketingAutomationStateStatus,
   MarketingAutomationTriggerType,
   MarketingAutomationStepStatus,
+  MarketingAutomationStepType,
   MarketingConsentStatus,
   MarketingEmailEventType,
   MarketingRecipientStatus,
+  MarketingPreferenceStatus,
   Prisma,
 } from '@prisma/client';
 import { getEmailProvider } from '../../lib/email-marketing/index.js';
@@ -22,6 +24,7 @@ import {
   resolveRequireVerifiedFrom,
   resolveSenderDetails,
 } from './settings.js';
+import { matchesSegmentRules, SegmentRule } from './segments.js';
 
 const PUBLIC_BASE_URL =
   process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
@@ -80,15 +83,26 @@ async function shouldSendAutomationEmail(tenantId: string, contactId: string, em
   return !decision.suppressed;
 }
 
-export async function enqueueAutomationForContact(tenantId: string, contactId: string, trigger: MarketingAutomationTriggerType) {
+type TriggerPayload = {
+  triggerKey?: string;
+  metadata?: Prisma.InputJsonValue;
+};
+
+export async function enqueueAutomationForContact(
+  tenantId: string,
+  contactId: string,
+  trigger: MarketingAutomationTriggerType,
+  payload: TriggerPayload = {}
+) {
   const automations = await prisma.marketingAutomation.findMany({
     where: { tenantId, triggerType: trigger, isEnabled: true },
     include: { steps: true },
   });
 
   for (const automation of automations) {
+    const triggerKey = String(payload.triggerKey || '');
     const existing = await prisma.marketingAutomationState.findUnique({
-      where: { tenantId_contactId_automationId: { tenantId, contactId, automationId: automation.id } },
+      where: { tenantId_contactId_automationId_triggerKey: { tenantId, contactId, automationId: automation.id, triggerKey } },
     });
     if (existing) continue;
 
@@ -96,11 +110,25 @@ export async function enqueueAutomationForContact(tenantId: string, contactId: s
     const delay = Math.max(0, firstStep?.delayMinutes || 0);
     const nextRunAt = new Date(Date.now() + delay * 60 * 1000);
 
+    const run = await prisma.marketingAutomationRun.create({
+      data: {
+        tenantId,
+        automationId: automation.id,
+        contactId,
+        triggerType: trigger,
+        triggerKey,
+        status: MarketingAutomationStateStatus.ACTIVE,
+        metadata: payload.metadata || undefined,
+      },
+    });
+
     await prisma.marketingAutomationState.create({
       data: {
         tenantId,
         contactId,
         automationId: automation.id,
+        runId: run.id,
+        triggerKey,
         nextRunAt,
         status: MarketingAutomationStateStatus.ACTIVE,
       },
@@ -112,7 +140,7 @@ export async function enqueueAutomationForContact(tenantId: string, contactId: s
         action: 'automation.enqueued',
         entityType: 'MarketingAutomation',
         entityId: automation.id,
-        metadata: { contactId, trigger },
+        metadata: { contactId, trigger, triggerKey },
       },
     });
   }
@@ -159,7 +187,10 @@ export async function processNoPurchaseAutomations() {
 
       if (lastOrder && lastOrder.createdAt > cutoff) continue;
 
-      await enqueueAutomationForContact(automation.tenantId, contact.id, MarketingAutomationTriggerType.NO_PURCHASE_DAYS);
+      await enqueueAutomationForContact(automation.tenantId, contact.id, MarketingAutomationTriggerType.NO_PURCHASE_DAYS, {
+        triggerKey: `no-purchase:${days}`,
+        metadata: { days },
+      });
     }
 
     await prisma.marketingAuditLog.create({
@@ -207,7 +238,10 @@ export async function processAbandonedCheckoutAutomations() {
         select: { id: true },
       });
       if (contact) {
-        await enqueueAutomationForContact(automation.tenantId, contact.id, MarketingAutomationTriggerType.ABANDONED_CHECKOUT);
+        await enqueueAutomationForContact(automation.tenantId, contact.id, MarketingAutomationTriggerType.ABANDONED_CHECKOUT, {
+          triggerKey: `abandoned:${event.orderId || event.id}`,
+          metadata: { orderId: event.orderId },
+        });
       }
 
       await prisma.marketingCheckoutEvent.update({
@@ -216,6 +250,406 @@ export async function processAbandonedCheckoutAutomations() {
       });
     }
   }
+}
+
+export async function processShowDateAutomations() {
+  const automations = await prisma.marketingAutomation.findMany({
+    where: { triggerType: MarketingAutomationTriggerType.DAYS_BEFORE_SHOW, isEnabled: true },
+    include: { steps: true },
+  });
+
+  for (const automation of automations) {
+    const config = (automation.triggerConfig || {}) as { daysBefore?: number };
+    const daysBefore = Number(config.daysBefore || 3);
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const target = new Date(start);
+    target.setDate(target.getDate() + daysBefore);
+    const end = new Date(target);
+    end.setHours(23, 59, 59, 999);
+
+    const shows = await prisma.show.findMany({
+      where: { organiserId: automation.tenantId, date: { gte: target, lte: end }, status: 'LIVE' },
+      select: { id: true, title: true, date: true },
+    });
+
+    if (!shows.length) continue;
+
+    const contacts = await prisma.marketingContact.findMany({
+      where: { tenantId: automation.tenantId },
+      select: { id: true },
+    });
+
+    for (const show of shows) {
+      for (const contact of contacts) {
+        await enqueueAutomationForContact(automation.tenantId, contact.id, MarketingAutomationTriggerType.DAYS_BEFORE_SHOW, {
+          triggerKey: `show:${show.id}:${daysBefore}`,
+          metadata: { showId: show.id, showDate: show.date, daysBefore },
+        });
+      }
+    }
+  }
+}
+
+export async function processBirthdayAutomations() {
+  const automations = await prisma.marketingAutomation.findMany({
+    where: { triggerType: MarketingAutomationTriggerType.BIRTHDAY, isEnabled: true },
+    include: { steps: true },
+  });
+  if (!automations.length) return;
+  const today = new Date();
+  const month = today.getUTCMonth();
+  const date = today.getUTCDate();
+
+  for (const automation of automations) {
+    const contacts = await prisma.marketingContact.findMany({
+      where: { tenantId: automation.tenantId, birthdayDate: { not: null } },
+      select: { id: true, birthdayDate: true },
+    });
+    for (const contact of contacts) {
+      const birthday = contact.birthdayDate;
+      if (!birthday) continue;
+      if (birthday.getUTCMonth() !== month || birthday.getUTCDate() !== date) continue;
+      await enqueueAutomationForContact(automation.tenantId, contact.id, MarketingAutomationTriggerType.BIRTHDAY, {
+        triggerKey: `birthday:${month + 1}-${date}`,
+      });
+    }
+  }
+}
+
+export async function processAnniversaryAutomations() {
+  const automations = await prisma.marketingAutomation.findMany({
+    where: { triggerType: MarketingAutomationTriggerType.ANNIVERSARY, isEnabled: true },
+    include: { steps: true },
+  });
+  if (!automations.length) return;
+  const today = new Date();
+  const month = today.getUTCMonth();
+  const date = today.getUTCDate();
+
+  for (const automation of automations) {
+    const contacts = await prisma.marketingContact.findMany({
+      where: { tenantId: automation.tenantId, anniversaryDate: { not: null } },
+      select: { id: true, anniversaryDate: true },
+    });
+    for (const contact of contacts) {
+      const anniversary = contact.anniversaryDate;
+      if (!anniversary) continue;
+      if (anniversary.getUTCMonth() !== month || anniversary.getUTCDate() !== date) continue;
+      await enqueueAutomationForContact(automation.tenantId, contact.id, MarketingAutomationTriggerType.ANNIVERSARY, {
+        triggerKey: `anniversary:${month + 1}-${date}`,
+      });
+    }
+  }
+}
+
+export async function processViewedNoPurchaseAutomations() {
+  const automations = await prisma.marketingAutomation.findMany({
+    where: { triggerType: MarketingAutomationTriggerType.VIEWED_NO_PURCHASE, isEnabled: true },
+    include: { steps: true },
+  });
+
+  for (const automation of automations) {
+    const config = (automation.triggerConfig || {}) as { days?: number };
+    const days = Number(config.days || 7);
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    const views = await prisma.customerShowView.findMany({
+      where: { createdAt: { gte: cutoff }, show: { organiserId: automation.tenantId } },
+      select: {
+        createdAt: true,
+        customerAccount: { select: { email: true } },
+      },
+    });
+
+    const viewsByEmail = new Map<string, Date>();
+    for (const view of views) {
+      const email = String(view.customerAccount?.email || '').toLowerCase();
+      if (!email) continue;
+      const prev = viewsByEmail.get(email);
+      if (!prev || view.createdAt > prev) {
+        viewsByEmail.set(email, view.createdAt);
+      }
+    }
+
+    for (const [email, viewedAt] of viewsByEmail.entries()) {
+      const contact = await prisma.marketingContact.findUnique({
+        where: { tenantId_email: { tenantId: automation.tenantId, email } },
+        select: { id: true },
+      });
+      if (!contact) continue;
+
+      const order = await prisma.order.findFirst({
+        where: { status: 'PAID', email, show: { organiserId: automation.tenantId }, createdAt: { gte: viewedAt } },
+        select: { id: true },
+      });
+      if (order) continue;
+
+      await enqueueAutomationForContact(automation.tenantId, contact.id, MarketingAutomationTriggerType.VIEWED_NO_PURCHASE, {
+        triggerKey: `viewed:${viewedAt.toISOString().slice(0, 10)}`,
+        metadata: { viewedAt },
+      });
+    }
+  }
+}
+
+export async function processShowCreatedAutomation(tenantId: string, showId: string, trigger: MarketingAutomationTriggerType) {
+  const automations = await prisma.marketingAutomation.findMany({
+    where: { tenantId, triggerType: trigger, isEnabled: true },
+  });
+  if (!automations.length) return;
+  const contacts = await prisma.marketingContact.findMany({
+    where: { tenantId },
+    select: { id: true },
+  });
+  for (const contact of contacts) {
+    await enqueueAutomationForContact(tenantId, contact.id, trigger, {
+      triggerKey: `show:${showId}`,
+      metadata: { showId },
+    });
+  }
+}
+
+export async function triggerTagAppliedAutomation(tenantId: string, contactId: string, tagName: string) {
+  await enqueueAutomationForContact(tenantId, contactId, MarketingAutomationTriggerType.TAG_APPLIED, {
+    triggerKey: `tag:${tagName}`,
+    metadata: { tag: tagName },
+  });
+}
+
+type SegmentContext = {
+  id: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  consentStatus: string | null;
+  tags: string[];
+  preferences: Array<{ topicId: string; status: string }>;
+};
+
+async function resolveSegmentContext(tenantId: string, contactId: string) {
+  const contact = await prisma.marketingContact.findUnique({
+    where: { id: contactId },
+    include: { tags: { include: { tag: true } }, consents: true, preferences: true },
+  });
+  if (!contact) return null;
+  const context: SegmentContext = {
+    id: contact.id,
+    email: contact.email,
+    firstName: contact.firstName,
+    lastName: contact.lastName,
+    consentStatus: contact.consents[0]?.status || null,
+    tags: contact.tags.map((t) => t.tag.name),
+    preferences: contact.preferences.map((pref) => ({
+      topicId: pref.topicId,
+      status: String(pref.status || ''),
+    })),
+  };
+
+  return context;
+}
+
+async function resolveSegmentStats(tenantId: string, email: string, rules: SegmentRule[]) {
+  const needsInsightData = rules.some((rule) =>
+    [
+      'LAST_PURCHASE_OLDER_THAN',
+      'PURCHASE_COUNT_90D_AT_LEAST',
+      'MONETARY_TIER',
+      'AVG_TICKETS_PER_ORDER_AT_LEAST',
+      'FAVOURITE_VENUE_ID',
+      'FAVOURITE_CATEGORY_CONTAINS',
+      'FAVOURITE_EVENT_TYPE_CONTAINS',
+      'VIEWED_NO_PURCHASE_AFTER',
+      'LIFECYCLE_STAGE',
+    ].includes(rule.type)
+  );
+
+  const needsOrderData = rules.some((rule) =>
+    [
+      'LAST_PURCHASE_OLDER_THAN',
+      'PURCHASED_CATEGORY_CONTAINS',
+      'TOTAL_SPENT_AT_LEAST',
+      'ATTENDED_VENUE',
+      'PURCHASED_AT_VENUE',
+      'VIEWED_NO_PURCHASE_AFTER',
+    ].includes(rule.type)
+  );
+
+  const needsViewData = rules.some((rule) => rule.type === 'VIEWED_NO_PURCHASE_AFTER');
+
+  const insight = needsInsightData
+    ? await prisma.customerInsight.findFirst({ where: { tenantId, email: email.toLowerCase() } })
+    : null;
+
+  const orderStats = needsOrderData
+    ? await prisma.order.findMany({
+        where: { status: 'PAID', email, show: { organiserId: tenantId } },
+        select: {
+          email: true,
+          amountPence: true,
+          createdAt: true,
+          show: { select: { eventCategory: true, eventType: true, tags: true, venueId: true } },
+        },
+      })
+    : [];
+
+  const viewStats = needsViewData
+    ? await prisma.customerShowView.findMany({
+        where: { show: { organiserId: tenantId }, customerAccount: { email } },
+        select: { createdAt: true },
+      })
+    : [];
+
+  const stats = {
+    lastPurchase: null as Date | null,
+    totalSpentPence: 0,
+    totalSpent90dPence: 0,
+    purchaseCount: 0,
+    purchaseCount90d: 0,
+    categories: new Set<string>(),
+    venues: new Set<string>(),
+    eventTypes: new Set<string>(),
+  };
+
+  const ninetyDaysAgo = new Date();
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
+  for (const order of orderStats) {
+    stats.purchaseCount += 1;
+    stats.totalSpentPence += order.amountPence || 0;
+    if (order.createdAt > ninetyDaysAgo) {
+      stats.purchaseCount90d += 1;
+      stats.totalSpent90dPence += order.amountPence || 0;
+    }
+    if (!stats.lastPurchase || order.createdAt > stats.lastPurchase) {
+      stats.lastPurchase = order.createdAt;
+    }
+    if (order.show?.eventCategory) stats.categories.add(order.show.eventCategory);
+    if (order.show?.eventType) stats.eventTypes.add(order.show.eventType);
+    if (order.show?.venueId) stats.venues.add(order.show.venueId);
+    (order.show?.tags || []).forEach((tag) => stats.categories.add(tag));
+  }
+
+  const insights = insight
+    ? {
+        firstPurchaseAt: insight.firstPurchaseAt,
+        lastPurchaseAt: insight.lastPurchaseAt,
+        purchaseCount: insight.purchaseCount,
+        purchaseCount90d: insight.purchaseCount90d,
+        avgTicketsPerOrder: insight.avgTicketsPerOrder,
+        monetaryValueLifetimePence: insight.monetaryValueLifetimePence,
+        monetaryValue90dPence: insight.monetaryValue90dPence,
+        favouriteVenueId: insight.favouriteVenueId,
+        topVenueIds: insight.topVenueIds,
+        favouriteCategory: insight.favouriteCategory,
+        favouriteEventType: insight.favouriteEventType,
+      }
+    : null;
+
+  const viewInsight = viewStats.reduce((acc, view) => {
+    if (!acc.lastViewAt || view.createdAt > acc.lastViewAt) {
+      acc.lastViewAt = view.createdAt;
+    }
+    return acc;
+  }, { lastViewAt: null as Date | null });
+
+  return { stats, insight: insights, views: viewInsight };
+}
+
+function parseSegmentRules(input: unknown): SegmentRule[] {
+  if (!input) return [];
+  if (Array.isArray(input)) return input as SegmentRule[];
+  if (typeof input === 'object') {
+    const anyInput = input as { rules?: SegmentRule[]; all?: SegmentRule[] };
+    if (Array.isArray(anyInput.rules)) return anyInput.rules as SegmentRule[];
+    if (Array.isArray(anyInput.all)) return anyInput.all as SegmentRule[];
+  }
+  return [];
+}
+
+function resolveQuietHoursDelay(step: { quietHoursStart?: number | null; quietHoursEnd?: number | null }) {
+  const start = step.quietHoursStart;
+  const end = step.quietHoursEnd;
+  if (start === null || start === undefined || end === null || end === undefined) return null;
+  const now = new Date();
+  const hour = now.getUTCHours();
+  const isQuiet = start < end ? hour >= start && hour < end : hour >= start || hour < end;
+  if (!isQuiet) return null;
+  const next = new Date(now);
+  if (start < end) {
+    next.setUTCHours(end, 0, 0, 0);
+  } else {
+    if (hour >= start) {
+      next.setUTCDate(next.getUTCDate() + 1);
+      next.setUTCHours(end, 0, 0, 0);
+    } else {
+      next.setUTCHours(end, 0, 0, 0);
+    }
+  }
+  return next;
+}
+
+async function resolveStepThrottle(stepId: string, tenantId: string, throttleMinutes: number) {
+  if (!throttleMinutes || throttleMinutes <= 0) return null;
+  const last = await prisma.marketingAutomationStepExecution.findFirst({
+    where: {
+      tenantId,
+      stepId,
+      status: MarketingAutomationStepStatus.SENT,
+    },
+    orderBy: { sentAt: 'desc' },
+    select: { sentAt: true },
+  });
+  if (!last?.sentAt) return null;
+  const nextAllowed = new Date(last.sentAt.getTime() + throttleMinutes * 60 * 1000);
+  return nextAllowed > new Date() ? nextAllowed : null;
+}
+
+async function addTagToContact(tenantId: string, contactId: string, tagName: string) {
+  const name = String(tagName || '').trim();
+  if (!name) return;
+  const tag = await prisma.marketingTag.upsert({
+    where: { tenantId_name: { tenantId, name } },
+    update: {},
+    create: { tenantId, name },
+  });
+  await prisma.marketingContactTag.upsert({
+    where: { contactId_tagId: { contactId, tagId: tag.id } },
+    create: { tenantId, contactId, tagId: tag.id },
+    update: {},
+  });
+  await triggerTagAppliedAutomation(tenantId, contactId, name);
+}
+
+async function updatePreferenceForContact(
+  tenantId: string,
+  contactId: string,
+  topicId: string,
+  status: MarketingPreferenceStatus
+) {
+  if (!topicId) return;
+  await prisma.marketingContactPreference.upsert({
+    where: { tenantId_contactId_topicId: { tenantId, contactId, topicId } },
+    create: { tenantId, contactId, topicId, status },
+    update: { status },
+  });
+}
+
+async function sendOrganiserNotification(tenantId: string, subject: string, body: string) {
+  const tenant = await prisma.user.findUnique({
+    where: { id: tenantId },
+    select: { email: true, tradingName: true, companyName: true, name: true },
+  });
+  if (!tenant?.email) return;
+  const settings = await fetchMarketingSettings(tenantId);
+  const provider = getEmailProvider(settings);
+  await provider.sendEmail({
+    to: tenant.email,
+    subject: subject || `Automation alert from ${tenantNameFrom(tenant)}`,
+    html: body || `<p>An automation step executed for ${tenantNameFrom(tenant)}.</p>`,
+    fromName: tenantNameFrom(tenant),
+    fromEmail: applyMarketingStreamToEmail(settings.fromEmail || tenant.email, settings),
+  });
 }
 
 export async function processAutomationSteps() {
@@ -253,11 +687,24 @@ export async function processAutomationSteps() {
         where: { id: state.id },
         data: { status: MarketingAutomationStateStatus.COMPLETED, nextRunAt: null },
       });
+      if (state.runId) {
+        await prisma.marketingAutomationRun.update({
+          where: { id: state.runId },
+          data: { status: MarketingAutomationStateStatus.COMPLETED, completedAt: new Date(), lastStep: state.currentStep },
+        });
+      }
       continue;
     }
 
     const existingExecution = await prisma.marketingAutomationStepExecution.findUnique({
-      where: { tenantId_contactId_stepId: { tenantId: state.tenantId, contactId: state.contactId, stepId: nextStep.id } },
+      where: {
+        tenantId_contactId_stepId_triggerKey: {
+          tenantId: state.tenantId,
+          contactId: state.contactId,
+          stepId: nextStep.id,
+          triggerKey: state.triggerKey,
+        },
+      },
     });
 
     if (existingExecution && existingExecution.status === MarketingAutomationStepStatus.SENT) {
@@ -273,141 +720,380 @@ export async function processAutomationSteps() {
       continue;
     }
 
-    const canSend = await shouldSendAutomationEmail(state.tenantId, state.contactId, state.contact.email);
-    if (!canSend) {
-      await prisma.marketingAutomationStepExecution.upsert({
-        where: { tenantId_contactId_stepId: { tenantId: state.tenantId, contactId: state.contactId, stepId: nextStep.id } },
-        create: {
-          tenantId: state.tenantId,
-          automationId: state.automationId,
-          stepId: nextStep.id,
-          contactId: state.contactId,
-          status: MarketingAutomationStepStatus.SKIPPED,
-          sentAt: new Date(),
-        },
-        update: { status: MarketingAutomationStepStatus.SKIPPED, sentAt: new Date(), errorText: null },
-      });
-
-      const nextRunAt = computeNextRunAt(steps, nextStep.stepOrder);
+    const throttleDelay = await resolveStepThrottle(nextStep.id, state.tenantId, nextStep.throttleMinutes || 0);
+    if (throttleDelay) {
       await prisma.marketingAutomationState.update({
         where: { id: state.id },
-        data: {
-          currentStep: nextStep.stepOrder,
-          nextRunAt,
-          status: nextRunAt ? MarketingAutomationStateStatus.ACTIVE : MarketingAutomationStateStatus.COMPLETED,
-        },
+        data: { nextRunAt: throttleDelay },
       });
       continue;
     }
 
+    const quietDelay = resolveQuietHoursDelay(nextStep);
+    if (quietDelay) {
+      await prisma.marketingAutomationState.update({
+        where: { id: state.id },
+        data: { nextRunAt: quietDelay },
+      });
+      continue;
+    }
+
+    const rules = parseSegmentRules(nextStep.conditionRules);
+    if (rules.length) {
+      const context = await resolveSegmentContext(state.tenantId, state.contactId);
+      if (!context) continue;
+      const stats = await resolveSegmentStats(state.tenantId, context.email, rules);
+      const matches = matchesSegmentRules(context, rules, stats.stats, stats.insight, stats.views);
+      if (!matches) {
+        await prisma.marketingAutomationStepExecution.upsert({
+          where: {
+            tenantId_contactId_stepId_triggerKey: {
+              tenantId: state.tenantId,
+              contactId: state.contactId,
+              stepId: nextStep.id,
+              triggerKey: state.triggerKey,
+            },
+          },
+          create: {
+            tenantId: state.tenantId,
+            automationId: state.automationId,
+            stepId: nextStep.id,
+            contactId: state.contactId,
+            triggerKey: state.triggerKey,
+            status: MarketingAutomationStepStatus.SKIPPED,
+            sentAt: new Date(),
+          },
+          update: { status: MarketingAutomationStepStatus.SKIPPED, sentAt: new Date(), errorText: null },
+        });
+
+        const nextRunAt = computeNextRunAt(steps, nextStep.stepOrder);
+        await prisma.marketingAutomationState.update({
+          where: { id: state.id },
+          data: {
+            currentStep: nextStep.stepOrder,
+            nextRunAt,
+            status: nextRunAt ? MarketingAutomationStateStatus.ACTIVE : MarketingAutomationStateStatus.COMPLETED,
+          },
+        });
+        continue;
+      }
+    }
+
+    let stateOverride: { currentStep: number; nextRunAt: Date | null; status: MarketingAutomationStateStatus } | null =
+      null;
     try {
-      const settings = await fetchMarketingSettings(state.tenantId);
-      const tenant = await prisma.user.findUnique({
-        where: { id: state.tenantId },
-        select: { tradingName: true, companyName: true, name: true, storefrontSlug: true, id: true },
-      });
-      if (!tenant) throw new Error('Tenant not found');
+      if (nextStep.stepType === MarketingAutomationStepType.WAIT) {
+        await prisma.marketingAutomationStepExecution.upsert({
+          where: {
+            tenantId_contactId_stepId_triggerKey: {
+              tenantId: state.tenantId,
+              contactId: state.contactId,
+              stepId: nextStep.id,
+              triggerKey: state.triggerKey,
+            },
+          },
+          create: {
+            tenantId: state.tenantId,
+            automationId: state.automationId,
+            stepId: nextStep.id,
+            contactId: state.contactId,
+            triggerKey: state.triggerKey,
+            status: MarketingAutomationStepStatus.SENT,
+            sentAt: new Date(),
+            metadata: { note: 'wait' },
+          },
+          update: { status: MarketingAutomationStepStatus.SENT, sentAt: new Date(), errorText: null },
+        });
+        const waitUntil = new Date(Date.now() + Math.max(0, nextStep.delayMinutes || 0) * 60 * 1000);
+        stateOverride = {
+          currentStep: nextStep.stepOrder,
+          nextRunAt: waitUntil,
+          status: MarketingAutomationStateStatus.ACTIVE,
+        };
+      } else if (nextStep.stepType === MarketingAutomationStepType.BRANCH) {
+        const config = (nextStep.stepConfig || {}) as {
+          ifRules?: SegmentRule[];
+          ifStepOrder?: number;
+          elseStepOrder?: number;
+        };
+        const branchRules = parseSegmentRules(config.ifRules);
+        let matched = false;
+        if (branchRules.length) {
+          const context = await resolveSegmentContext(state.tenantId, state.contactId);
+          if (!context) throw new Error('Contact not found');
+          const stats = await resolveSegmentStats(state.tenantId, context.email, branchRules);
+          matched = matchesSegmentRules(context, branchRules, stats.stats, stats.insight, stats.views);
+        }
+        const nextOrder = matched ? Number(config.ifStepOrder) : Number(config.elseStepOrder);
+        if (nextOrder && Number.isFinite(nextOrder)) {
+          stateOverride = {
+            currentStep: nextOrder - 1,
+            nextRunAt: new Date(),
+            status: MarketingAutomationStateStatus.ACTIVE,
+          };
+        }
+        await prisma.marketingAutomationStepExecution.upsert({
+          where: {
+            tenantId_contactId_stepId_triggerKey: {
+              tenantId: state.tenantId,
+              contactId: state.contactId,
+              stepId: nextStep.id,
+              triggerKey: state.triggerKey,
+            },
+          },
+          create: {
+            tenantId: state.tenantId,
+            automationId: state.automationId,
+            stepId: nextStep.id,
+            contactId: state.contactId,
+            triggerKey: state.triggerKey,
+            status: MarketingAutomationStepStatus.SENT,
+            sentAt: new Date(),
+            metadata: { matched, nextOrder },
+          },
+          update: { status: MarketingAutomationStepStatus.SENT, sentAt: new Date(), errorText: null },
+        });
+      } else if (nextStep.stepType === MarketingAutomationStepType.ADD_TAG) {
+        const config = (nextStep.stepConfig || {}) as { tag?: string };
+        await addTagToContact(state.tenantId, state.contactId, config.tag || '');
+        await prisma.marketingAutomationStepExecution.upsert({
+          where: {
+            tenantId_contactId_stepId_triggerKey: {
+              tenantId: state.tenantId,
+              contactId: state.contactId,
+              stepId: nextStep.id,
+              triggerKey: state.triggerKey,
+            },
+          },
+          create: {
+            tenantId: state.tenantId,
+            automationId: state.automationId,
+            stepId: nextStep.id,
+            contactId: state.contactId,
+            triggerKey: state.triggerKey,
+            status: MarketingAutomationStepStatus.SENT,
+            sentAt: new Date(),
+            metadata: { tag: config.tag || '' },
+          },
+          update: { status: MarketingAutomationStepStatus.SENT, sentAt: new Date(), errorText: null },
+        });
+      } else if (nextStep.stepType === MarketingAutomationStepType.UPDATE_PREFERENCE) {
+        const config = (nextStep.stepConfig || {}) as { topicId?: string; status?: MarketingPreferenceStatus };
+        await updatePreferenceForContact(
+          state.tenantId,
+          state.contactId,
+          config.topicId || '',
+          (config.status as MarketingPreferenceStatus) || MarketingPreferenceStatus.SUBSCRIBED
+        );
+        await prisma.marketingAutomationStepExecution.upsert({
+          where: {
+            tenantId_contactId_stepId_triggerKey: {
+              tenantId: state.tenantId,
+              contactId: state.contactId,
+              stepId: nextStep.id,
+              triggerKey: state.triggerKey,
+            },
+          },
+          create: {
+            tenantId: state.tenantId,
+            automationId: state.automationId,
+            stepId: nextStep.id,
+            contactId: state.contactId,
+            triggerKey: state.triggerKey,
+            status: MarketingAutomationStepStatus.SENT,
+            sentAt: new Date(),
+            metadata: { topicId: config.topicId || '', status: config.status || 'SUBSCRIBED' },
+          },
+          update: { status: MarketingAutomationStepStatus.SENT, sentAt: new Date(), errorText: null },
+        });
+      } else if (nextStep.stepType === MarketingAutomationStepType.NOTIFY_ORGANISER) {
+        const config = (nextStep.stepConfig || {}) as { subject?: string; body?: string };
+        await sendOrganiserNotification(state.tenantId, config.subject || '', config.body || '');
+        await prisma.marketingAutomationStepExecution.upsert({
+          where: {
+            tenantId_contactId_stepId_triggerKey: {
+              tenantId: state.tenantId,
+              contactId: state.contactId,
+              stepId: nextStep.id,
+              triggerKey: state.triggerKey,
+            },
+          },
+          create: {
+            tenantId: state.tenantId,
+            automationId: state.automationId,
+            stepId: nextStep.id,
+            contactId: state.contactId,
+            triggerKey: state.triggerKey,
+            status: MarketingAutomationStepStatus.SENT,
+            sentAt: new Date(),
+            metadata: { notified: true },
+          },
+          update: { status: MarketingAutomationStepStatus.SENT, sentAt: new Date(), errorText: null },
+        });
+      } else {
+        const canSend = await shouldSendAutomationEmail(state.tenantId, state.contactId, state.contact.email);
+        if (!canSend) {
+          await prisma.marketingAutomationStepExecution.upsert({
+            where: {
+              tenantId_contactId_stepId_triggerKey: {
+                tenantId: state.tenantId,
+                contactId: state.contactId,
+                stepId: nextStep.id,
+                triggerKey: state.triggerKey,
+              },
+            },
+            create: {
+              tenantId: state.tenantId,
+              automationId: state.automationId,
+              stepId: nextStep.id,
+              contactId: state.contactId,
+              triggerKey: state.triggerKey,
+              status: MarketingAutomationStepStatus.SKIPPED,
+              sentAt: new Date(),
+            },
+            update: { status: MarketingAutomationStepStatus.SKIPPED, sentAt: new Date(), errorText: null },
+          });
 
-      const sender = resolveSenderDetails({
-        templateFromName: nextStep.template.fromName,
-        templateFromEmail: nextStep.template.fromEmail,
-        templateReplyTo: nextStep.template.replyTo,
-        settings,
-      });
+          const nextRunAt = computeNextRunAt(steps, nextStep.stepOrder);
+          await prisma.marketingAutomationState.update({
+            where: { id: state.id },
+            data: {
+              currentStep: nextStep.stepOrder,
+              nextRunAt,
+              status: nextRunAt ? MarketingAutomationStateStatus.ACTIVE : MarketingAutomationStateStatus.COMPLETED,
+            },
+          });
+          continue;
+        }
 
-      if (!sender.fromEmail) {
-        throw new Error('From email required for marketing sends.');
-      }
+        if (!nextStep.template) {
+          throw new Error('Template required for send email step.');
+        }
 
-      if (!sender.fromName) {
-        throw new Error('From name required for marketing sends.');
-      }
+        const settings = await fetchMarketingSettings(state.tenantId);
+        const tenant = await prisma.user.findUnique({
+          where: { id: state.tenantId },
+          select: { tradingName: true, companyName: true, name: true, storefrontSlug: true, id: true },
+        });
+        if (!tenant) throw new Error('Tenant not found');
 
-      const requireVerifiedFrom = resolveRequireVerifiedFrom(settings, REQUIRE_VERIFIED_FROM);
-      assertSenderVerified({ fromEmail: sender.fromEmail, settings, requireVerifiedFrom });
+        const sender = resolveSenderDetails({
+          templateFromName: nextStep.template.fromName,
+          templateFromEmail: nextStep.template.fromEmail,
+          templateReplyTo: nextStep.template.replyTo,
+          settings,
+        });
 
-      const unsubscribeUrl = await buildUnsubscribeUrl(state.tenantId, state.contact.email);
-      const preferencesUrl = await buildPreferencesUrl(state.tenantId, state.contact.email);
-      const recommendedShows = await buildRecommendedShowsHtml(state.tenantId, state.contact.email);
+        if (!sender.fromEmail) {
+          throw new Error('From email required for marketing sends.');
+        }
 
-      const { html, errors } = renderMarketingTemplate(nextStep.template.mjmlBody, {
-        firstName: state.contact.firstName || '',
-        lastName: state.contact.lastName || '',
-        email: state.contact.email,
-        tenantName: tenantNameFrom(tenant),
-        unsubscribeUrl,
-        preferencesUrl,
-        recommendedShows: recommendedShows || '',
-      });
+        if (!sender.fromName) {
+          throw new Error('From name required for marketing sends.');
+        }
 
-      if (errors.length) {
-        throw new Error(errors.join('; '));
-      }
+        const requireVerifiedFrom = resolveRequireVerifiedFrom(settings, REQUIRE_VERIFIED_FROM);
+        assertSenderVerified({ fromEmail: sender.fromEmail, settings, requireVerifiedFrom });
 
-      const provider = getEmailProvider(settings);
-      const listUnsubscribeMail = buildListUnsubscribeMail(sender.fromEmail) || undefined;
-      const result = await provider.sendEmail({
-        to: state.contact.email,
-        subject: nextStep.template.subject,
-        html,
-        fromName: sender.fromName,
-        fromEmail: applyMarketingStreamToEmail(sender.fromEmail, settings),
-        replyTo: sender.replyTo,
-        headers: {
-          'List-Unsubscribe': [listUnsubscribeMail, `<${unsubscribeUrl}>`].filter(Boolean).join(', '),
-          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-        },
-        customArgs: {
+        const unsubscribeUrl = await buildUnsubscribeUrl(state.tenantId, state.contact.email);
+        const preferencesUrl = await buildPreferencesUrl(state.tenantId, state.contact.email);
+        const recommendedShows = await buildRecommendedShowsHtml(state.tenantId, state.contact.email);
+
+        const { html, errors } = renderMarketingTemplate(nextStep.template.mjmlBody, {
+          firstName: state.contact.firstName || '',
+          lastName: state.contact.lastName || '',
+          email: state.contact.email,
+          tenantName: tenantNameFrom(tenant),
+          unsubscribeUrl,
+          preferencesUrl,
+          recommendedShows: recommendedShows || '',
+        });
+
+        if (errors.length) {
+          throw new Error(errors.join('; '));
+        }
+
+        const provider = getEmailProvider(settings);
+        const listUnsubscribeMail = buildListUnsubscribeMail(sender.fromEmail) || undefined;
+        const result = await provider.sendEmail({
+          to: state.contact.email,
+          subject: nextStep.template.subject,
+          html,
+          fromName: sender.fromName,
+          fromEmail: applyMarketingStreamToEmail(sender.fromEmail, settings),
+          replyTo: sender.replyTo,
+          headers: {
+            'List-Unsubscribe': [listUnsubscribeMail, `<${unsubscribeUrl}>`].filter(Boolean).join(', '),
+            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+          },
+          customArgs: {
+            automationId: state.automationId,
+            tenantId: state.tenantId,
+            contactId: state.contactId,
+          },
+        });
+
+        console.info('[marketing:automation:send]', {
           automationId: state.automationId,
-          tenantId: state.tenantId,
-          contactId: state.contactId,
-        },
-      });
+          stateId: state.id,
+          providerId: result.id,
+          providerStatus: result.status,
+          providerResponse: result.response || null,
+        });
 
-      console.info('[marketing:automation:send]', {
-        automationId: state.automationId,
-        stateId: state.id,
-        providerId: result.id,
-        providerStatus: result.status,
-        providerResponse: result.response || null,
-      });
+        await prisma.marketingWorkerState.upsert({
+          where: { id: 'global' },
+          update: { lastSendAt: new Date() },
+          create: { id: 'global', lastSendAt: new Date(), lastWorkerRunAt: null },
+        });
 
-      await prisma.marketingWorkerState.upsert({
-        where: { id: 'global' },
-        update: { lastSendAt: new Date() },
-        create: { id: 'global', lastSendAt: new Date(), lastWorkerRunAt: null },
-      });
+        await prisma.marketingAutomationStepExecution.upsert({
+          where: {
+            tenantId_contactId_stepId_triggerKey: {
+              tenantId: state.tenantId,
+              contactId: state.contactId,
+              stepId: nextStep.id,
+              triggerKey: state.triggerKey,
+            },
+          },
+          create: {
+            tenantId: state.tenantId,
+            automationId: state.automationId,
+            stepId: nextStep.id,
+            contactId: state.contactId,
+            triggerKey: state.triggerKey,
+            status: MarketingAutomationStepStatus.SENT,
+            sentAt: new Date(),
+          },
+          update: { status: MarketingAutomationStepStatus.SENT, sentAt: new Date(), errorText: null },
+        });
 
-      await prisma.marketingAutomationStepExecution.upsert({
-        where: { tenantId_contactId_stepId: { tenantId: state.tenantId, contactId: state.contactId, stepId: nextStep.id } },
-        create: {
-          tenantId: state.tenantId,
-          automationId: state.automationId,
-          stepId: nextStep.id,
-          contactId: state.contactId,
-          status: MarketingAutomationStepStatus.SENT,
-          sentAt: new Date(),
-        },
-        update: { status: MarketingAutomationStepStatus.SENT, sentAt: new Date(), errorText: null },
-      });
-
-      await prisma.marketingAuditLog.create({
-        data: {
-          tenantId: state.tenantId,
-          action: 'automation.step.sent',
-          entityType: 'MarketingAutomationStep',
-          entityId: nextStep.id,
-          metadata: { contactId: state.contactId },
-        },
-      });
+        await prisma.marketingAuditLog.create({
+          data: {
+            tenantId: state.tenantId,
+            action: 'automation.step.sent',
+            entityType: 'MarketingAutomationStep',
+            entityId: nextStep.id,
+            metadata: { contactId: state.contactId },
+          },
+        });
+      }
     } catch (error: any) {
       await prisma.marketingAutomationStepExecution.upsert({
-        where: { tenantId_contactId_stepId: { tenantId: state.tenantId, contactId: state.contactId, stepId: nextStep.id } },
+        where: {
+          tenantId_contactId_stepId_triggerKey: {
+            tenantId: state.tenantId,
+            contactId: state.contactId,
+            stepId: nextStep.id,
+            triggerKey: state.triggerKey,
+          },
+        },
         create: {
           tenantId: state.tenantId,
           automationId: state.automationId,
           stepId: nextStep.id,
           contactId: state.contactId,
+          triggerKey: state.triggerKey,
           status: MarketingAutomationStepStatus.FAILED,
           errorText: error?.message || 'Send failed',
           sentAt: new Date(),
@@ -419,6 +1105,34 @@ export async function processAutomationSteps() {
         where: { id: state.id },
         data: { status: MarketingAutomationStateStatus.STOPPED },
       });
+      if (state.runId) {
+        await prisma.marketingAutomationRun.update({
+          where: { id: state.runId },
+          data: { status: MarketingAutomationStateStatus.STOPPED, lastStep: state.currentStep },
+        });
+      }
+      continue;
+    }
+
+    if (stateOverride) {
+      await prisma.marketingAutomationState.update({
+        where: { id: state.id },
+        data: {
+          currentStep: stateOverride.currentStep,
+          nextRunAt: stateOverride.nextRunAt,
+          status: stateOverride.status,
+        },
+      });
+      if (state.runId) {
+        await prisma.marketingAutomationRun.update({
+          where: { id: state.runId },
+          data: {
+            lastStep: stateOverride.currentStep,
+            status: stateOverride.status,
+            completedAt: stateOverride.status === MarketingAutomationStateStatus.COMPLETED ? new Date() : null,
+          },
+        });
+      }
       continue;
     }
 
@@ -431,6 +1145,16 @@ export async function processAutomationSteps() {
         status: nextRunAt ? MarketingAutomationStateStatus.ACTIVE : MarketingAutomationStateStatus.COMPLETED,
       },
     });
+    if (state.runId) {
+      await prisma.marketingAutomationRun.update({
+        where: { id: state.runId },
+        data: {
+          lastStep: nextStep.stepOrder,
+          status: nextRunAt ? MarketingAutomationStateStatus.ACTIVE : MarketingAutomationStateStatus.COMPLETED,
+          completedAt: nextRunAt ? null : new Date(),
+        },
+      });
+    }
   }
 }
 
@@ -542,6 +1266,15 @@ export async function updateContactPreferences(options: {
   topicStates: Array<{ topicId: string; status: 'SUBSCRIBED' | 'UNSUBSCRIBED' }>;
 }) {
   for (const topic of options.topicStates) {
+    const existing = await prisma.marketingContactPreference.findUnique({
+      where: {
+        tenantId_contactId_topicId: {
+          tenantId: options.tenantId,
+          contactId: options.contactId,
+          topicId: topic.topicId,
+        },
+      },
+    });
     await prisma.marketingContactPreference.upsert({
       where: {
         tenantId_contactId_topicId: {
@@ -558,6 +1291,17 @@ export async function updateContactPreferences(options: {
       },
       update: { status: topic.status },
     });
+    if (!existing || existing.status !== topic.status) {
+      await enqueueAutomationForContact(
+        options.tenantId,
+        options.contactId,
+        MarketingAutomationTriggerType.PREFERENCE_TOPIC,
+        {
+          triggerKey: `pref:${topic.topicId}:${topic.status}`,
+          metadata: { topicId: topic.topicId, status: topic.status },
+        }
+      );
+    }
   }
 }
 
