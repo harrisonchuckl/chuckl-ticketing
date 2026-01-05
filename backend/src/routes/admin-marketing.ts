@@ -20,6 +20,7 @@ import {
   MarketingSenderMode,
   MarketingVerifiedStatus,
   Prisma,
+  ShowStatus,
 } from '@prisma/client';
 import { evaluateSegmentContacts, estimateSegment } from '../services/marketing/segments.js';
 import { applySuppression, clearSuppression, ensureDailyLimit, shouldSuppressContact } from '../services/marketing/campaigns.js';
@@ -42,6 +43,7 @@ import {
 } from '../services/marketing/automations.js';
 import { ensureDefaultPreferenceTopics } from '../services/marketing/preferences.js';
 import { recordConsentAudit } from '../services/marketing/audit.js';
+import { renderEmailDocument } from '../lib/email-builder/rendering.js';
 
 const router = Router();
 
@@ -75,6 +77,47 @@ const PUBLIC_BASE_URL =
   process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
 const REQUIRE_VERIFIED_FROM_DEFAULT = String(process.env.MARKETING_REQUIRE_VERIFIED_FROM || 'true') === 'true';
 const TEST_SEND_RATE_LIMIT_SECONDS = Number(process.env.MARKETING_TEST_SEND_RATE_LIMIT_SEC || 60);
+
+async function fetchTemplateShow(tenantId: string, showId?: string | null) {
+  if (!showId) return null;
+  return prisma.show.findFirst({
+    where: { id: showId, organiserId: tenantId },
+    select: {
+      id: true,
+      title: true,
+      date: true,
+      imageUrl: true,
+      externalTicketUrl: true,
+      usesExternalTicketing: true,
+      slug: true,
+      tags: true,
+      venue: { select: { name: true } },
+    },
+  });
+}
+
+async function fetchUpcomingShows(tenantId: string, excludeId?: string | null) {
+  return prisma.show.findMany({
+    where: {
+      organiserId: tenantId,
+      id: excludeId ? { not: excludeId } : undefined,
+      date: { gte: new Date() },
+      status: ShowStatus.LIVE,
+    },
+    orderBy: { date: 'asc' },
+    take: 4,
+    select: {
+      id: true,
+      title: true,
+      date: true,
+      imageUrl: true,
+      externalTicketUrl: true,
+      usesExternalTicketing: true,
+      slug: true,
+      venue: { select: { name: true } },
+    },
+  });
+}
 
 function requireAdminOrOwner(req: any, res: any, next: any) {
   return requireAuth(req, res, () => {
@@ -1012,6 +1055,178 @@ router.get('/marketing/segments/:id/estimate', requireAdminOrOrganiser, async (r
 
   const estimate = await estimateSegment(tenantId, segment.rules);
   res.json({ ok: true, estimate });
+});
+
+router.get('/api/email-templates', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const items = await prisma.marketingEmailTemplate.findMany({
+    where: { tenantId },
+    orderBy: { updatedAt: 'desc' },
+    include: { _count: { select: { versions: true } } },
+  });
+  res.json({
+    ok: true,
+    items: items.map((item) => ({
+      id: item.id,
+      name: item.name,
+      subject: item.subject,
+      updatedAt: item.updatedAt,
+      versionCount: item._count.versions,
+    })),
+  });
+});
+
+router.post('/api/email-templates', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const { name, subject, document, showId } = req.body || {};
+  if (!name || !subject || !document) {
+    return res.status(400).json({ ok: false, message: 'Name, subject, and document are required' });
+  }
+
+  const show = await fetchTemplateShow(tenantId, showId);
+  const upcoming = await fetchUpcomingShows(tenantId, show?.id || null);
+  const { html } = renderEmailDocument(document, {
+    show: show || undefined,
+    upcomingShows: upcoming,
+    baseUrl: PUBLIC_BASE_URL,
+  });
+
+  const template = await prisma.marketingEmailTemplate.create({
+    data: {
+      tenantId,
+      name: String(name),
+      subject: String(subject),
+      showId: show?.id || null,
+    },
+  });
+
+  const version = await prisma.marketingEmailTemplateVersion.create({
+    data: {
+      templateId: template.id,
+      version: 1,
+      document,
+      html,
+    },
+  });
+
+  await prisma.marketingEmailTemplate.update({
+    where: { id: template.id },
+    data: { currentVersionId: version.id },
+  });
+
+  res.json({ ok: true, template: { ...template, currentVersionId: version.id } });
+});
+
+router.get('/api/email-templates/:id', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const id = String(req.params.id);
+  const template = await prisma.marketingEmailTemplate.findFirst({
+    where: { id, tenantId },
+    include: { versions: { orderBy: { createdAt: 'desc' } } },
+  });
+  if (!template) return res.status(404).json({ ok: false, message: 'Template not found' });
+
+  const currentVersion =
+    template.versions.find((version) => version.id === template.currentVersionId) || template.versions[0];
+
+  res.json({
+    ok: true,
+    template: {
+      id: template.id,
+      name: template.name,
+      subject: template.subject,
+      showId: template.showId,
+      currentVersionId: template.currentVersionId,
+    },
+    versions: template.versions.map((version) => ({
+      id: version.id,
+      version: version.version,
+      createdAt: version.createdAt,
+    })),
+    document: currentVersion?.document || null,
+  });
+});
+
+router.post('/api/email-templates/:id/versions', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const id = String(req.params.id);
+  const { name, subject, document, showId } = req.body || {};
+  const template = await prisma.marketingEmailTemplate.findFirst({ where: { id, tenantId } });
+  if (!template) return res.status(404).json({ ok: false, message: 'Template not found' });
+  if (!document) return res.status(400).json({ ok: false, message: 'Document is required' });
+
+  const lastVersion = await prisma.marketingEmailTemplateVersion.findFirst({
+    where: { templateId: id },
+    orderBy: { version: 'desc' },
+  });
+  const nextVersion = (lastVersion?.version || 0) + 1;
+
+  const show = await fetchTemplateShow(tenantId, showId || template.showId || undefined);
+  const upcoming = await fetchUpcomingShows(tenantId, show?.id || null);
+  const { html } = renderEmailDocument(document, {
+    show: show || undefined,
+    upcomingShows: upcoming,
+    baseUrl: PUBLIC_BASE_URL,
+  });
+
+  const version = await prisma.marketingEmailTemplateVersion.create({
+    data: {
+      templateId: id,
+      version: nextVersion,
+      document,
+      html,
+    },
+  });
+
+  const updated = await prisma.marketingEmailTemplate.update({
+    where: { id },
+    data: {
+      name: name ? String(name) : template.name,
+      subject: subject ? String(subject) : template.subject,
+      showId: show?.id || null,
+      currentVersionId: version.id,
+    },
+  });
+
+  res.json({ ok: true, template: updated, version });
+});
+
+router.post('/api/email-templates/:id/rollback', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const id = String(req.params.id);
+  const { versionId } = req.body || {};
+  if (!versionId) return res.status(400).json({ ok: false, message: 'Version ID required' });
+
+  const template = await prisma.marketingEmailTemplate.findFirst({ where: { id, tenantId } });
+  if (!template) return res.status(404).json({ ok: false, message: 'Template not found' });
+
+  const version = await prisma.marketingEmailTemplateVersion.findFirst({
+    where: { id: String(versionId), templateId: id },
+  });
+  if (!version) return res.status(404).json({ ok: false, message: 'Version not found' });
+
+  const updated = await prisma.marketingEmailTemplate.update({
+    where: { id },
+    data: { currentVersionId: version.id },
+  });
+
+  res.json({ ok: true, template: updated });
+});
+
+router.post('/api/email-templates/render', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const { document, showId } = req.body || {};
+  if (!document) return res.status(400).json({ ok: false, message: 'Document is required' });
+
+  const show = await fetchTemplateShow(tenantId, showId);
+  const upcoming = await fetchUpcomingShows(tenantId, show?.id || null);
+  const { html } = renderEmailDocument(document, {
+    show: show || undefined,
+    upcomingShows: upcoming,
+    baseUrl: PUBLIC_BASE_URL,
+  });
+
+  res.json({ ok: true, html });
 });
 
 router.post('/marketing/segments/:id/estimate', requireAdminOrOrganiser, async (req, res) => {
