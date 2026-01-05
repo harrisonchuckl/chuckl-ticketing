@@ -2933,6 +2933,150 @@ router.get(
       opacity:1;
       transform:translateY(0);
     }
+    .email-editor{
+      display:grid;
+      grid-template-columns:220px minmax(0,1fr) 320px;
+      gap:16px;
+      align-items:start;
+    }
+    .email-editor-panel{
+      border:1px solid var(--border);
+      border-radius:14px;
+      background:#ffffff;
+      padding:12px;
+    }
+    .email-editor-panel h3{
+      margin:0 0 8px;
+      font-size:14px;
+    }
+    .email-block-list{
+      display:grid;
+      gap:8px;
+    }
+    .email-block-btn{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:8px 10px;
+      border:1px solid var(--border);
+      border-radius:10px;
+      background:#f8fafc;
+      cursor:grab;
+      font-size:12px;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:.04em;
+    }
+    .email-canvas{
+      min-height:480px;
+      background:#f8fafc;
+      border:1px dashed var(--border);
+      border-radius:16px;
+      padding:16px;
+      display:grid;
+      gap:12px;
+    }
+    .email-block{
+      background:#ffffff;
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:12px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      cursor:pointer;
+    }
+    .email-block.dragging{
+      opacity:.6;
+    }
+    .email-block.selected{
+      border-color:#6366f1;
+      box-shadow:0 0 0 2px rgba(99,102,241,.2);
+    }
+    .email-block-meta{
+      display:grid;
+      gap:4px;
+    }
+    .email-block-type{
+      font-weight:700;
+      font-size:13px;
+    }
+    .email-block-preview{
+      font-size:12px;
+      color:var(--muted);
+    }
+    .email-block-actions{
+      display:flex;
+      gap:6px;
+    }
+    .email-block-actions button{
+      background:#ffffff;
+      border:1px solid var(--border);
+      border-radius:8px;
+      padding:4px 8px;
+      font-size:11px;
+      cursor:pointer;
+    }
+    .email-inspector{
+      display:grid;
+      gap:10px;
+    }
+    .email-inspector label{
+      font-size:12px;
+      font-weight:700;
+      display:block;
+      margin-bottom:4px;
+    }
+    .email-inspector input,
+    .email-inspector select,
+    .email-inspector textarea{
+      width:100%;
+    }
+    .email-preview{
+      border:1px solid var(--border);
+      border-radius:14px;
+      overflow:hidden;
+      background:#ffffff;
+    }
+    .email-preview-toolbar{
+      display:flex;
+      gap:8px;
+      padding:10px;
+      border-bottom:1px solid var(--border);
+      background:#f8fafc;
+    }
+    .email-preview-frame{
+      width:100%;
+      border:0;
+      height:480px;
+      background:#ffffff;
+    }
+    .email-version-list{
+      display:grid;
+      gap:8px;
+      max-height:240px;
+      overflow:auto;
+    }
+    .email-version-card{
+      border:1px solid var(--border);
+      border-radius:10px;
+      padding:8px 10px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:8px;
+      font-size:12px;
+    }
+    .email-doc-meta{
+      display:grid;
+      gap:8px;
+    }
+    @media (max-width:1200px){
+      .email-editor{
+        grid-template-columns:1fr;
+      }
+    }
   </style>
 </head>
 <body>
@@ -3084,6 +3228,7 @@ router.get(
             <a class="sb-link sub" href="/admin/ui/marketing" data-view="/admin/ui/marketing">Marketing Overview</a>
             <a class="sb-link sub" href="/admin/ui/audiences" data-view="/admin/ui/audiences">Audiences</a>
             <a class="sb-link sub" href="/admin/ui/email" data-view="/admin/ui/email">Email Campaigns</a>
+            <a class="sb-link sub" href="/admin/ui/email-templates" data-view="/admin/ui/email-templates">Email Templates</a>
             <a class="sb-link sub" href="/admin/ui/analytics" data-view="/admin/ui/analytics">Insights</a>
           </div>
         </div>
@@ -17501,6 +17646,655 @@ function renderInterests(customer){
       subtitle: 'Mailer-style journeys with contacts, segments, templates, and campaign sends.'
     });
   }
+
+  function makeEmailBlockId(){
+    return 'blk_' + Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
+  }
+
+  function defaultEmailDocument(){
+    return {
+      meta: {
+        showId: ''
+      },
+      blocks: [
+        createEmailBlock('Header'),
+        createEmailBlock('ShowHero'),
+        createEmailBlock('Text'),
+        createEmailBlock('Button'),
+        createEmailBlock('Divider'),
+        createEmailBlock('UpcomingShowsList'),
+        createEmailBlock('Social'),
+        createEmailBlock('Footer')
+      ]
+    };
+  }
+
+  function createEmailBlock(type){
+    var base = {
+      id: makeEmailBlockId(),
+      type: type,
+      style: {
+        fontSize: 16,
+        padding: 18,
+        color: '#111827',
+        backgroundColor: '#ffffff',
+        align: 'left'
+      },
+      settings: {
+        mobileStack: false
+      },
+      content: {}
+    };
+
+    if (type === 'Header') base.content = { text: 'Headline for your email' };
+    if (type === 'Text') base.content = { text: 'Write your message here. Highlight the show, share updates, or add context.' };
+    if (type === 'Image') base.content = { url: '', alt: 'Email image', linkUrl: '' };
+    if (type === 'Button') {
+      base.content = { text: 'Get tickets', linkUrl: '' };
+      base.style.align = 'center';
+      base.style.buttonColor = '#2563eb';
+      base.style.buttonTextColor = '#ffffff';
+      base.style.borderRadius = 6;
+    }
+    if (type === 'Divider') {
+      base.content = {};
+      base.style.borderColor = '#e5e7eb';
+      base.style.padding = 10;
+    }
+    if (type === 'Spacer') {
+      base.content = {};
+      base.style.height = 24;
+      base.style.padding = 0;
+    }
+    if (type === 'Social') {
+      base.content = {
+        links: [
+          { label: 'Instagram', url: '' },
+          { label: 'TikTok', url: '' },
+          { label: 'Facebook', url: '' }
+        ]
+      };
+      base.style.align = 'center';
+      base.settings.mobileStack = true;
+    }
+    if (type === 'Footer') {
+      base.content = { text: 'You are receiving this email because you opted in to updates. Unsubscribe anytime.' };
+      base.style.fontSize = 12;
+      base.style.align = 'center';
+      base.style.color = '#6b7280';
+      base.style.padding = 16;
+    }
+    if (type === 'ShowHero') {
+      base.content = { title: 'Show spotlight' };
+      base.style.align = 'left';
+      base.settings.mobileStack = true;
+    }
+    if (type === 'ShowCTA') {
+      base.content = { text: 'Reserve your spot', linkUrl: '' };
+      base.style.align = 'center';
+      base.style.buttonColor = '#16a34a';
+      base.style.buttonTextColor = '#ffffff';
+      base.style.borderRadius = 6;
+    }
+    if (type === 'ShowLineup') {
+      base.content = { title: 'Lineup' };
+    }
+    if (type === 'UpcomingShowsList') {
+      base.content = { title: 'Upcoming shows' };
+    }
+
+    return base;
+  }
+
+  function emailBlockPreview(block){
+    if (!block) return '';
+    if (block.type === 'Header' || block.type === 'Text' || block.type === 'Footer') return block.content.text || '';
+    if (block.type === 'Button' || block.type === 'ShowCTA') return block.content.text || '';
+    if (block.type === 'Image') return block.content.url ? 'Image set' : 'No image yet';
+    if (block.type === 'ShowHero') return 'Show hero block';
+    if (block.type === 'ShowLineup') return 'Show lineup';
+    if (block.type === 'UpcomingShowsList') return 'Upcoming list';
+    if (block.type === 'Social') return 'Social links';
+    if (block.type === 'Divider') return 'Divider';
+    if (block.type === 'Spacer') return 'Spacer';
+    return '';
+  }
+
+  async function emailTemplatesListPage(){
+    if (!main) return;
+    main.innerHTML =
+      '<div class="card">'
+        + '<div class="header">'
+          + '<div>'
+            + '<div class="title">Email templates</div>'
+            + '<div class="muted">Create and manage reusable email layouts with version history.</div>'
+          + '</div>'
+          + '<div class="row" style="gap:8px;flex-wrap:wrap;">'
+            + '<input class="input" id="email_tpl_name" placeholder="Template name" />'
+            + '<input class="input" id="email_tpl_subject" placeholder="Subject line" />'
+            + '<button class="btn p" id="email_tpl_create">New template</button>'
+          + '</div>'
+        + '</div>'
+        + '<div id="email_tpl_list" style="margin-top:12px;"></div>'
+      + '</div>';
+
+    var listEl = $('#email_tpl_list');
+    var createBtn = $('#email_tpl_create');
+
+    async function loadTemplates(){
+      try{
+        var data = await j('/admin/api/email-templates');
+        var items = data.items || [];
+        if (!items.length){
+          listEl.innerHTML = '<div class="muted">No templates yet. Create one to get started.</div>';
+          return;
+        }
+        listEl.innerHTML = ''
+          + '<div class="table-wrap"><table class="table">'
+          + '<thead><tr><th>Name</th><th>Subject</th><th>Versions</th><th>Updated</th><th></th></tr></thead>'
+          + '<tbody>'
+          + items.map(function(item){
+              return '<tr>'
+                + '<td>' + escapeHtml(item.name || '') + '</td>'
+                + '<td>' + escapeHtml(item.subject || '') + '</td>'
+                + '<td>' + escapeHtml(String(item.versionCount || 0)) + '</td>'
+                + '<td>' + escapeHtml(formatDateTime(item.updatedAt)) + '</td>'
+                + '<td><a class="btn" href="/admin/ui/email-templates/' + encodeURIComponent(item.id) + '" data-view="/admin/ui/email-templates/' + encodeURIComponent(item.id) + '">Open</a></td>'
+              + '</tr>';
+            }).join('')
+          + '</tbody></table></div>';
+      }catch(err){
+        listEl.innerHTML = '<div class="error">Failed to load templates: ' + escapeHtml(parseErr(err)) + '</div>';
+      }
+    }
+
+    if (createBtn){
+      createBtn.addEventListener('click', async function(){
+        var nameInput = $('#email_tpl_name');
+        var subjectInput = $('#email_tpl_subject');
+        var name = String(nameInput ? nameInput.value : '').trim() || 'New template';
+        var subject = String(subjectInput ? subjectInput.value : '').trim() || 'Your email subject';
+        try{
+          var payload = { name: name, subject: subject, document: defaultEmailDocument() };
+          var data = await j('/admin/api/email-templates', {
+            method: 'POST',
+            headers: { 'Content-Type':'application/json' },
+            body: JSON.stringify(payload)
+          });
+          if (data && data.template && data.template.id){
+            showToast('Template created.', true);
+            go('/admin/ui/email-templates/' + data.template.id);
+          }else{
+            showToast('Template created.', true);
+            loadTemplates();
+          }
+        }catch(err){
+          showToast(parseErr(err), false);
+        }
+      });
+    }
+
+    loadTemplates();
+  }
+
+  async function emailTemplateEditorPage(templateId){
+    if (!main) return;
+    main.innerHTML =
+      '<div class="card" style="margin-bottom:12px;">'
+        + '<div class="header">'
+          + '<div>'
+            + '<div class="title">Template editor</div>'
+            + '<div class="muted">Drag blocks into the canvas and customize styling for desktop and mobile.</div>'
+          + '</div>'
+          + '<div class="row" style="gap:8px;flex-wrap:wrap;">'
+            + '<button class="btn" id="email_tpl_back">Back to list</button>'
+            + '<button class="btn p" id="email_tpl_save">Save new version</button>'
+          + '</div>'
+        + '</div>'
+        + '<div class="grid" style="grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;">'
+          + '<input class="input" id="email_tpl_name_edit" placeholder="Template name" />'
+          + '<input class="input" id="email_tpl_subject_edit" placeholder="Subject line" />'
+        + '</div>'
+        + '<div class="grid" style="grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">'
+          + '<select class="input" id="email_tpl_show"></select>'
+          + '<input class="input" id="email_tpl_status" placeholder="Status" readonly />'
+        + '</div>'
+      + '</div>'
+      + '<div class="email-editor">'
+        + '<div class="email-editor-panel">'
+          + '<h3>Blocks</h3>'
+          + '<div class="email-block-list" id="emailBlockList"></div>'
+        + '</div>'
+        + '<div>'
+          + '<div class="email-canvas" id="emailCanvas"></div>'
+        + '</div>'
+        + '<div class="email-editor-panel">'
+          + '<h3>Inspector</h3>'
+          + '<div id="emailInspector" class="email-inspector"></div>'
+          + '<div style="margin-top:16px;">'
+            + '<h3 style="margin-bottom:6px;">Versions</h3>'
+            + '<div id="emailVersionList" class="email-version-list"></div>'
+          + '</div>'
+          + '<div style="margin-top:16px;">'
+            + '<h3 style="margin-bottom:6px;">Live preview</h3>'
+            + '<div class="email-preview">'
+              + '<div class="email-preview-toolbar">'
+                + '<button class="btn" data-preview="desktop">Desktop</button>'
+                + '<button class="btn" data-preview="mobile">Mobile</button>'
+              + '</div>'
+              + '<iframe id="emailPreviewFrame" class="email-preview-frame" title="Email preview"></iframe>'
+            + '</div>'
+          + '</div>'
+        + '</div>'
+      + '</div>';
+
+    var state = {
+      templateId: templateId,
+      document: defaultEmailDocument(),
+      template: null,
+      selectedId: null,
+      previewMode: 'desktop',
+      shows: [],
+      versions: []
+    };
+
+    var blockTypes = [
+      'Header','Text','Image','Button','Divider','Spacer','Social','Footer',
+      'ShowHero','ShowCTA','ShowLineup','UpcomingShowsList'
+    ];
+
+    var blockListEl = $('#emailBlockList');
+    var canvasEl = $('#emailCanvas');
+    var inspectorEl = $('#emailInspector');
+    var previewFrame = $('#emailPreviewFrame');
+    var versionListEl = $('#emailVersionList');
+    var saveBtn = $('#email_tpl_save');
+    var backBtn = $('#email_tpl_back');
+    var showSelect = $('#email_tpl_show');
+    var statusInput = $('#email_tpl_status');
+    var nameInput = $('#email_tpl_name_edit');
+    var subjectInput = $('#email_tpl_subject_edit');
+
+    function renderBlockLibrary(){
+      if (!blockListEl) return;
+      blockListEl.innerHTML = blockTypes.map(function(type){
+        return '<div class="email-block-btn" draggable="true" data-block-type="' + type + '">' + escapeHtml(type) + '<span>+</span></div>';
+      }).join('');
+
+      blockListEl.querySelectorAll('[data-block-type]').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var type = btn.getAttribute('data-block-type');
+          if (!type) return;
+          state.document.blocks.push(createEmailBlock(type));
+          state.selectedId = state.document.blocks[state.document.blocks.length - 1].id;
+          renderCanvas();
+          renderInspector();
+          schedulePreview();
+        });
+        btn.addEventListener('dragstart', function(e){
+          dragState.kind = 'new';
+          dragState.blockType = btn.getAttribute('data-block-type');
+          e.dataTransfer.setData('text/plain', dragState.blockType || '');
+        });
+      });
+    }
+
+    function findBlock(id){
+      return state.document.blocks.find(function(block){ return block.id === id; });
+    }
+
+    function renderCanvas(){
+      if (!canvasEl) return;
+      if (!state.document.blocks.length){
+        canvasEl.innerHTML = '<div class="muted">Drag blocks here to start building your email.</div>';
+        return;
+      }
+      canvasEl.innerHTML = state.document.blocks.map(function(block, idx){
+        var preview = emailBlockPreview(block);
+        return '<div class="email-block' + (block.id === state.selectedId ? ' selected' : '') + '" draggable="true" data-block-id="' + block.id + '" data-block-index="' + idx + '">'
+          + '<div class="email-block-meta">'
+            + '<div class="email-block-type">' + escapeHtml(block.type) + '</div>'
+            + '<div class="email-block-preview">' + escapeHtml(preview) + '</div>'
+          + '</div>'
+          + '<div class="email-block-actions">'
+            + '<button data-action="duplicate">Duplicate</button>'
+            + '<button data-action="remove">Remove</button>'
+          + '</div>'
+        + '</div>';
+      }).join('');
+
+      canvasEl.querySelectorAll('.email-block').forEach(function(row){
+        row.addEventListener('click', function(e){
+          var blockId = row.getAttribute('data-block-id');
+          if (e.target && e.target.getAttribute('data-action') === 'remove'){
+            state.document.blocks = state.document.blocks.filter(function(block){ return block.id !== blockId; });
+            if (state.selectedId === blockId) state.selectedId = null;
+            renderCanvas();
+            renderInspector();
+            schedulePreview();
+            return;
+          }
+          if (e.target && e.target.getAttribute('data-action') === 'duplicate'){
+            var existing = findBlock(blockId);
+            if (existing){
+              var clone = JSON.parse(JSON.stringify(existing));
+              clone.id = makeEmailBlockId();
+              state.document.blocks.splice(Number(row.getAttribute('data-block-index')) + 1, 0, clone);
+              state.selectedId = clone.id;
+              renderCanvas();
+              renderInspector();
+              schedulePreview();
+            }
+            return;
+          }
+          state.selectedId = blockId;
+          renderCanvas();
+          renderInspector();
+        });
+
+        row.addEventListener('dragstart', function(e){
+          dragState.kind = 'move';
+          dragState.blockId = row.getAttribute('data-block-id');
+          row.classList.add('dragging');
+          e.dataTransfer.setData('text/plain', dragState.blockId || '');
+        });
+        row.addEventListener('dragend', function(){
+          dragState.kind = null;
+          dragState.blockId = null;
+          dragState.blockType = null;
+          row.classList.remove('dragging');
+          clearDropHighlights();
+        });
+      });
+    }
+
+    function renderInspector(){
+      if (!inspectorEl) return;
+      var block = state.selectedId ? findBlock(state.selectedId) : null;
+      if (!block){
+        inspectorEl.innerHTML = '<div class="muted">Select a block to edit its content and styles.</div>';
+        return;
+      }
+      var showLinkField = block.type === 'Button' || block.type === 'ShowCTA' || block.type === 'Image';
+      var showTextField = block.type === 'Header' || block.type === 'Text' || block.type === 'Footer';
+      var showTitleField = block.type === 'ShowLineup' || block.type === 'UpcomingShowsList';
+      var showImageField = block.type === 'Image';
+      var showButtonField = block.type === 'Button' || block.type === 'ShowCTA';
+      var showSocialField = block.type === 'Social';
+      var showDividerField = block.type === 'Divider';
+      var showSpacerField = block.type === 'Spacer';
+
+      inspectorEl.innerHTML = ''
+        + '<div>'
+          + '<div class="muted">Block type</div>'
+          + '<div style="font-weight:700;margin-bottom:8px;">' + escapeHtml(block.type) + '</div>'
+        + '</div>'
+        + (showTextField ? ('<div><label>Text</label><textarea class="input" data-field="text" rows="4">' + escapeHtml(block.content.text || '') + '</textarea></div>') : '')
+        + (showTitleField ? ('<div><label>Title</label><input class="input" data-field="title" value="' + escapeHtml(block.content.title || '') + '" /></div>') : '')
+        + (showImageField ? ('<div><label>Image URL</label><input class="input" data-field="url" value="' + escapeHtml(block.content.url || '') + '" /></div>'
+          + '<div><label>Alt text</label><input class="input" data-field="alt" value="' + escapeHtml(block.content.alt || '') + '" /></div>') : '')
+        + (showButtonField ? ('<div><label>Button label</label><input class="input" data-field="buttonText" value="' + escapeHtml(block.content.text || '') + '" /></div>') : '')
+        + (showLinkField ? ('<div><label>Link URL</label><input class="input" data-field="linkUrl" value="' + escapeHtml(block.content.linkUrl || '') + '" /></div>') : '')
+        + (showSocialField ? ('<div><label>Social links (Label|URL per line)</label><textarea class="input" data-field="social" rows="4">' + escapeHtml((block.content.links || []).map(function(link){ return (link.label || '') + '|' + (link.url || ''); }).join('\\n')) + '</textarea></div>') : '')
+        + (showDividerField ? ('<div><label>Divider color</label><input class="input" data-field="borderColor" value="' + escapeHtml(block.style.borderColor || '#e5e7eb') + '" /></div>') : '')
+        + (showSpacerField ? ('<div><label>Spacer height (px)</label><input class="input" data-field="height" type="number" value="' + escapeHtml(String(block.style.height || 20)) + '" /></div>') : '')
+        + '<div class="email-doc-meta">'
+          + '<div><label>Font size (px)</label><input class="input" data-field="fontSize" type="number" value="' + escapeHtml(String(block.style.fontSize || 16)) + '" /></div>'
+          + '<div><label>Padding (px)</label><input class="input" data-field="padding" type="number" value="' + escapeHtml(String(block.style.padding || 0)) + '" /></div>'
+          + '<div><label>Text color</label><input class="input" data-field="color" type="color" value="' + escapeHtml(block.style.color || '#111827') + '" /></div>'
+          + '<div><label>Background color</label><input class="input" data-field="backgroundColor" type="color" value="' + escapeHtml(block.style.backgroundColor || '#ffffff') + '" /></div>'
+          + '<div><label>Alignment</label>'
+            + '<select class="input" data-field="align">'
+              + '<option value="left"' + (block.style.align === 'left' ? ' selected' : '') + '>Left</option>'
+              + '<option value="center"' + (block.style.align === 'center' ? ' selected' : '') + '>Center</option>'
+              + '<option value="right"' + (block.style.align === 'right' ? ' selected' : '') + '>Right</option>'
+            + '</select>'
+          + '</div>'
+          + '<label class="row" style="gap:6px;"><input type="checkbox" data-field="mobileStack" ' + (block.settings && block.settings.mobileStack ? 'checked' : '') + ' /> Stack on mobile</label>'
+        + '</div>';
+
+      inspectorEl.querySelectorAll('[data-field]').forEach(function(input){
+        input.addEventListener('input', function(){
+          var field = input.getAttribute('data-field');
+          if (!field) return;
+          if (field === 'text') block.content.text = input.value;
+          if (field === 'title') block.content.title = input.value;
+          if (field === 'url') block.content.url = input.value;
+          if (field === 'alt') block.content.alt = input.value;
+          if (field === 'buttonText') block.content.text = input.value;
+          if (field === 'linkUrl') block.content.linkUrl = input.value;
+          if (field === 'social'){
+            var rows = input.value.split('\\n').map(function(row){ return row.trim(); }).filter(Boolean);
+            block.content.links = rows.map(function(row){
+              var parts = row.split('|');
+              return { label: (parts[0] || '').trim(), url: (parts[1] || '').trim() };
+            });
+          }
+          if (field === 'borderColor') block.style.borderColor = input.value;
+          if (field === 'height') block.style.height = Number(input.value) || 0;
+          if (field === 'fontSize') block.style.fontSize = Number(input.value) || 16;
+          if (field === 'padding') block.style.padding = Number(input.value) || 0;
+          if (field === 'color') block.style.color = input.value;
+          if (field === 'backgroundColor') block.style.backgroundColor = input.value;
+          if (field === 'align') block.style.align = input.value;
+          if (field === 'mobileStack') block.settings.mobileStack = input.checked;
+          renderCanvas();
+          schedulePreview();
+        });
+        if (input.type === 'checkbox'){
+          input.addEventListener('change', function(){
+            var field = input.getAttribute('data-field');
+            if (field === 'mobileStack') block.settings.mobileStack = input.checked;
+            schedulePreview();
+          });
+        }
+      });
+    }
+
+    function renderVersions(){
+      if (!versionListEl) return;
+      if (!state.versions.length){
+        versionListEl.innerHTML = '<div class="muted">No versions saved yet.</div>';
+        return;
+      }
+      versionListEl.innerHTML = state.versions.map(function(version){
+        var isCurrent = state.template && state.template.currentVersionId === version.id;
+        return '<div class="email-version-card">'
+          + '<div>'
+            + '<div style="font-weight:700;">Version ' + escapeHtml(String(version.version)) + (isCurrent ? ' · Current' : '') + '</div>'
+            + '<div class="muted">' + escapeHtml(formatDateTime(version.createdAt)) + '</div>'
+          + '</div>'
+          + (isCurrent ? '' : '<button class="btn" data-version-id="' + version.id + '">Rollback</button>')
+        + '</div>';
+      }).join('');
+
+      versionListEl.querySelectorAll('[data-version-id]').forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          var versionId = btn.getAttribute('data-version-id');
+          if (!versionId) return;
+          try{
+            await j('/admin/api/email-templates/' + encodeURIComponent(state.templateId) + '/rollback', {
+              method: 'POST',
+              headers: { 'Content-Type':'application/json' },
+              body: JSON.stringify({ versionId: versionId })
+            });
+            showToast('Rolled back to previous version.', true);
+            await loadTemplate();
+          }catch(err){
+            showToast(parseErr(err), false);
+          }
+        });
+      });
+    }
+
+    function renderShowSelect(){
+      if (!showSelect) return;
+      if (!state.document.meta) state.document.meta = { showId: '' };
+      var options = ['<option value="">No show linked</option>'].concat(state.shows.map(function(show){
+        return '<option value="' + show.id + '">' + escapeHtml(show.title || 'Untitled show') + '</option>';
+      }));
+      showSelect.innerHTML = options.join('');
+      showSelect.value = state.document.meta.showId || '';
+    }
+
+    function bindShowSelect(){
+      if (!showSelect) return;
+      showSelect.addEventListener('change', function(){
+        state.document.meta.showId = showSelect.value || '';
+        schedulePreview();
+      });
+    }
+
+    function clearDropHighlights(){
+      $$('.email-block', canvasEl).forEach(function(row){
+        row.style.borderColor = '';
+      });
+    }
+
+    var dragState = { kind: null, blockId: null, blockType: null };
+
+    if (canvasEl){
+      canvasEl.addEventListener('dragover', function(e){
+        e.preventDefault();
+        var target = e.target && e.target.closest ? e.target.closest('[data-block-index]') : null;
+        clearDropHighlights();
+        if (target) target.style.borderColor = '#2563eb';
+      });
+
+      canvasEl.addEventListener('drop', function(e){
+        e.preventDefault();
+        var target = e.target && e.target.closest ? e.target.closest('[data-block-index]') : null;
+        var index = target ? Number(target.getAttribute('data-block-index')) : state.document.blocks.length;
+        if (dragState.kind === 'new' && dragState.blockType){
+          var newBlock = createEmailBlock(dragState.blockType);
+          state.document.blocks.splice(index, 0, newBlock);
+          state.selectedId = newBlock.id;
+        }else if (dragState.kind === 'move' && dragState.blockId){
+          var fromIndex = state.document.blocks.findIndex(function(block){ return block.id === dragState.blockId; });
+          if (fromIndex > -1){
+            var moved = state.document.blocks.splice(fromIndex, 1)[0];
+            var targetIndex = index > fromIndex ? index - 1 : index;
+            state.document.blocks.splice(targetIndex, 0, moved);
+            state.selectedId = moved.id;
+          }
+        }
+        dragState.kind = null;
+        dragState.blockId = null;
+        dragState.blockType = null;
+        clearDropHighlights();
+        renderCanvas();
+        renderInspector();
+        schedulePreview();
+      });
+    }
+
+    function setPreviewMode(mode){
+      state.previewMode = mode;
+      if (!previewFrame) return;
+      if (mode === 'mobile'){
+        previewFrame.style.width = '360px';
+        previewFrame.style.margin = '0 auto';
+      }else{
+        previewFrame.style.width = '100%';
+        previewFrame.style.margin = '0';
+      }
+    }
+
+    $$('.email-preview-toolbar [data-preview]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var mode = btn.getAttribute('data-preview');
+        setPreviewMode(mode || 'desktop');
+      });
+    });
+
+    var previewTimer = null;
+    function schedulePreview(){
+      if (previewTimer) clearTimeout(previewTimer);
+      previewTimer = setTimeout(renderPreview, 400);
+    }
+
+    async function renderPreview(){
+      if (!previewFrame) return;
+      try{
+        var data = await j('/admin/api/email-templates/render', {
+          method: 'POST',
+          headers: { 'Content-Type':'application/json' },
+          body: JSON.stringify({ document: state.document, showId: state.document.meta.showId || '' })
+        });
+        previewFrame.srcdoc = data.html || '';
+      }catch(err){
+        previewFrame.srcdoc = '<div style="font-family:Arial;padding:20px;">Preview failed: ' + escapeHtml(parseErr(err)) + '</div>';
+      }
+    }
+
+    async function loadShows(){
+      try{
+        var data = await j('/admin/shows');
+        state.shows = data.items || data.shows || [];
+      }catch(e){
+        state.shows = [];
+      }
+      renderShowSelect();
+    }
+
+    async function loadTemplate(){
+      try{
+        var data = await j('/admin/api/email-templates/' + encodeURIComponent(state.templateId));
+        state.template = data.template;
+        state.versions = data.versions || [];
+        state.document = data.document || defaultEmailDocument();
+        if (!state.document.meta) state.document.meta = { showId: '' };
+        if (!state.document.meta.showId && data.template && data.template.showId){
+          state.document.meta.showId = data.template.showId;
+        }
+        if (nameInput) nameInput.value = state.template.name || '';
+        if (subjectInput) subjectInput.value = state.template.subject || '';
+        if (statusInput) statusInput.value = state.template.currentVersionId ? 'Saved' : 'Draft';
+        renderShowSelect();
+        renderCanvas();
+        renderInspector();
+        renderVersions();
+        schedulePreview();
+      }catch(err){
+        main.innerHTML = '<div class="card"><div class="error">Failed to load template: ' + escapeHtml(parseErr(err)) + '</div></div>';
+      }
+    }
+
+    if (saveBtn){
+      saveBtn.addEventListener('click', async function(){
+        try{
+          if (!state.document.meta) state.document.meta = { showId: '' };
+          var payload = {
+            name: nameInput ? nameInput.value : '',
+            subject: subjectInput ? subjectInput.value : '',
+            document: state.document,
+            showId: state.document.meta.showId || ''
+          };
+          await j('/admin/api/email-templates/' + encodeURIComponent(state.templateId) + '/versions', {
+            method: 'POST',
+            headers: { 'Content-Type':'application/json' },
+            body: JSON.stringify(payload)
+          });
+          showToast('Version saved.', true);
+          await loadTemplate();
+        }catch(err){
+          showToast(parseErr(err), false);
+        }
+      });
+    }
+
+    if (backBtn){
+      backBtn.addEventListener('click', function(){
+        go('/admin/ui/email-templates');
+      });
+    }
+
+    renderBlockLibrary();
+    loadShows();
+    bindShowSelect();
+    loadTemplate();
+    setPreviewMode('desktop');
+  }
   function finance(){
   if (!main) return;
   main.innerHTML =
@@ -18778,6 +19572,7 @@ function renderInterests(customer){
       if (path === '/admin/ui/marketing')      return marketingPage();
       if (path === '/admin/ui/audiences')      return audiences();
       if (path === '/admin/ui/email')          return emailPage();
+      if (path === '/admin/ui/email-templates') return emailTemplatesListPage();
       if (path === '/admin/ui/integrations/printful') return printfulIntegrationPage();
       if (path === '/admin/ui/integrations/printful-pricing') return printfulPricingPage();
       if (path === '/admin/ui/integrations/printful-reconciliation') return printfulReconciliationPage();
@@ -18825,6 +19620,11 @@ function renderInterests(customer){
       if (path.startsWith('/admin/ui/promoters/')){
         var pid = path.split('/')[4];
         return promoterProfile(pid);
+      }
+
+      if (path.startsWith('/admin/ui/email-templates/')){
+        var tplId = path.split('/')[4];
+        return emailTemplateEditorPage(tplId);
       }
 
       return home();

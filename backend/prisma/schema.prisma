@@ -413,6 +413,7 @@ model User {
   marketingContacts          MarketingContact[]
   marketingTags              MarketingTag[]
   marketingTemplates         MarketingTemplate[]
+  marketingEmailTemplates    MarketingEmailTemplate[]
   marketingSegments          MarketingSegment[]
   marketingCampaigns         MarketingCampaign[]        @relation("MarketingCampaignCreatedBy")
   marketingCampaignsAsTenant MarketingCampaign[]        @relation("MarketingCampaignTenant")
@@ -1789,6 +1790,35 @@ model MarketingTemplate {
   automationSteps MarketingAutomationStep[]
 
   @@index([tenantId])
+}
+
+model MarketingEmailTemplate {
+  id               String   @id @default(cuid())
+  tenantId         String
+  name             String
+  subject          String
+  showId           String?
+  currentVersionId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  tenant   User                         @relation(fields: [tenantId], references: [id])
+  versions MarketingEmailTemplateVersion[]
+
+  @@index([tenantId])
+}
+
+model MarketingEmailTemplateVersion {
+  id         String   @id @default(cuid())
+  templateId String
+  version    Int
+  document   Json
+  html       String   @db.Text
+  createdAt  DateTime @default(now())
+
+  template MarketingEmailTemplate @relation(fields: [templateId], references: [id])
+
+  @@index([templateId])
 }
 
 model MarketingSegment {
