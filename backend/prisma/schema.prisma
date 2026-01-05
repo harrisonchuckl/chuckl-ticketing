@@ -422,6 +422,8 @@ model User {
   marketingPreferenceTopics  MarketingPreferenceTopic[]
   marketingCheckoutEvents    MarketingCheckoutEvent[]
   marketingAuditLogs         MarketingAuditLog[]
+  marketingImportJobs        MarketingImportJob[]
+  marketingDailySendCounters MarketingDailySendCounter[]
   campaignDrafts             CampaignDraft[]
   upsellBundles              UpsellBundle[]
 
