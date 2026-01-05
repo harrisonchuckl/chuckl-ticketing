@@ -4,6 +4,8 @@ import {
   processAutomationSteps,
   processAnniversaryAutomations,
   processBirthdayAutomations,
+  processLowSalesVelocityAutomations,
+  processMonthlyRoundupAutomations,
   processNoPurchaseAutomations,
   processShowDateAutomations,
   processViewedNoPurchaseAutomations,
@@ -23,6 +25,8 @@ export async function runMarketingWorkerOnce() {
   await processNoPurchaseAutomations();
   await processAbandonedCheckoutAutomations();
   await processShowDateAutomations();
+  await processMonthlyRoundupAutomations();
+  await processLowSalesVelocityAutomations();
   await processViewedNoPurchaseAutomations();
   await processBirthdayAutomations();
   await processAnniversaryAutomations();

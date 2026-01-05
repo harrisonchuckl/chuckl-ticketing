@@ -16374,6 +16374,7 @@ function renderInterests(customer){
       +     '<button class="btn tab-btn" data-tab="segments">Segments</button>'
       +     '<button class="btn tab-btn" data-tab="templates">Templates</button>'
       +     '<button class="btn tab-btn" data-tab="campaigns">Campaigns</button>'
+      +     '<button class="btn tab-btn" data-tab="presets">Presets</button>'
       +     '<button class="btn tab-btn" data-tab="automations">Automations</button>'
       +     '<button class="btn tab-btn" data-tab="preferences">Preferences</button>'
       +     '<button class="btn tab-btn" data-tab="deliverability">Deliverability</button>'
@@ -16383,6 +16384,7 @@ function renderInterests(customer){
       +   '<div id="marketing-segments" class="marketing-tab" style="margin-top:16px;display:none;"></div>'
       +   '<div id="marketing-templates" class="marketing-tab" style="margin-top:16px;display:none;"></div>'
       +   '<div id="marketing-campaigns" class="marketing-tab" style="margin-top:16px;display:none;"></div>'
+      +   '<div id="marketing-presets" class="marketing-tab" style="margin-top:16px;display:none;"></div>'
       +   '<div id="marketing-automations" class="marketing-tab" style="margin-top:16px;display:none;"></div>'
       +   '<div id="marketing-preferences" class="marketing-tab" style="margin-top:16px;display:none;"></div>'
       +   '<div id="marketing-deliverability" class="marketing-tab" style="margin-top:16px;display:none;"></div>'
@@ -16395,6 +16397,7 @@ function renderInterests(customer){
       segments: main.querySelector('#marketing-segments'),
       templates: main.querySelector('#marketing-templates'),
       campaigns: main.querySelector('#marketing-campaigns'),
+      presets: main.querySelector('#marketing-presets'),
       automations: main.querySelector('#marketing-automations'),
       preferences: main.querySelector('#marketing-preferences'),
       deliverability: main.querySelector('#marketing-deliverability'),
@@ -16521,6 +16524,8 @@ function renderInterests(customer){
           case 'AVG_TICKETS_PER_ORDER_AT_LEAST': return { type: 'AVG_TICKETS_PER_ORDER_AT_LEAST', count: 2 };
           case 'FAVOURITE_VENUE_ID': return { type: 'FAVOURITE_VENUE_ID', venueId: '' };
           case 'PURCHASED_AT_VENUE': return { type: 'PURCHASED_AT_VENUE', venueId: '' };
+          case 'PURCHASED_TOWN_IS': return { type: 'PURCHASED_TOWN_IS', value: '' };
+          case 'PURCHASED_COUNTY_IS': return { type: 'PURCHASED_COUNTY_IS', value: '' };
           case 'FAVOURITE_CATEGORY_CONTAINS': return { type: 'FAVOURITE_CATEGORY_CONTAINS', value: '' };
           case 'FAVOURITE_EVENT_TYPE_CONTAINS': return { type: 'FAVOURITE_EVENT_TYPE_CONTAINS', value: '' };
           case 'VIEWED_NO_PURCHASE_AFTER': return { type: 'VIEWED_NO_PURCHASE_AFTER', days: 14 };
@@ -16543,6 +16548,8 @@ function renderInterests(customer){
         { value: 'AVG_TICKETS_PER_ORDER_AT_LEAST', label: 'Avg tickets per order ≥' },
         { value: 'FAVOURITE_VENUE_ID', label: 'Favourite venue' },
         { value: 'PURCHASED_AT_VENUE', label: 'Purchased at venue' },
+        { value: 'PURCHASED_TOWN_IS', label: 'Purchased in town' },
+        { value: 'PURCHASED_COUNTY_IS', label: 'Purchased in county' },
         { value: 'FAVOURITE_CATEGORY_CONTAINS', label: 'Top category contains' },
         { value: 'FAVOURITE_EVENT_TYPE_CONTAINS', label: 'Top event type contains' },
         { value: 'VIEWED_NO_PURCHASE_AFTER', label: 'Viewed but no purchase after' },
@@ -16562,6 +16569,8 @@ function renderInterests(customer){
         switch(rule.type){
           case 'HAS_TAG':
           case 'NOT_TAG':
+          case 'PURCHASED_TOWN_IS':
+          case 'PURCHASED_COUNTY_IS':
           case 'PURCHASED_CATEGORY_CONTAINS':
           case 'FAVOURITE_CATEGORY_CONTAINS':
           case 'FAVOURITE_EVENT_TYPE_CONTAINS':
@@ -17587,6 +17596,239 @@ function renderInterests(customer){
       renderCampaigns(data.items || [], templates.items || [], segments.items || [], shows.items || []);
     }
 
+    function renderAutomationPresets(presets, templates, shows){
+      presets = presets || [];
+      templates = templates || [];
+      shows = shows || [];
+
+      var presetCards = presets.map(function(preset){
+        return '<div class="card preset-card">'
+          + '<div>'
+          +   '<div class="title">' + escapeHtml(preset.label || preset.id) + '</div>'
+          +   '<div class="muted" style="margin-top:4px;">' + escapeHtml(preset.description || '') + '</div>'
+          +   '<div class="muted" style="margin-top:6px;font-size:12px;">Trigger: ' + escapeHtml((preset.triggerType || '').replace(/_/g, ' ')) + '</div>'
+          + '</div>'
+          + '<button class="btn p" data-preset-open="' + escapeHtml(preset.id) + '">Enable</button>'
+          + '</div>';
+      }).join('');
+
+      var templateOptions = templates.map(function(t){
+        return '<option value="' + escapeHtml(t.id) + '">' + escapeHtml(t.name) + '</option>';
+      }).join('');
+
+      var showOptions = shows.map(function(s){
+        var meta = [formatDateTime(s.date), s.venue && s.venue.name].filter(Boolean).join(' • ');
+        return '<option value="' + escapeHtml(s.id) + '">' + escapeHtml(s.title || 'Untitled show') + (meta ? (' — ' + escapeHtml(meta)) : '') + '</option>';
+      }).join('');
+
+      var html = ''
+        + '<style>'
+        + '.preset-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;}'
+        + '.preset-card{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;}'
+        + '.preset-wizard{margin-top:12px;}'
+        + '.preset-wizard__header{display:flex;align-items:center;justify-content:space-between;gap:8px;}'
+        + '</style>'
+        + '<div class="card" style="margin:0 0 12px 0;">'
+        +   '<div class="title">Automation presets</div>'
+        +   '<div class="muted" style="margin-top:6px;">Enable built-in automations in a few clicks.</div>'
+        +   '<div class="preset-list" style="margin-top:12px;">' + (presetCards || '<div class="muted">No presets available.</div>') + '</div>'
+        + '</div>'
+        + '<div class="card preset-wizard" id="mk_preset_wizard" style="display:none;">'
+        +   '<div class="preset-wizard__header">'
+        +     '<div>'
+        +       '<div class="title" id="mk_preset_title">Enable preset</div>'
+        +       '<div class="muted" id="mk_preset_desc"></div>'
+        +     '</div>'
+        +     '<button class="btn" id="mk_preset_close">Close</button>'
+        +   '</div>'
+        +   '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px;">'
+        +     '<input class="input" id="mk_preset_name" placeholder="Automation name" />'
+        +     '<select class="input" id="mk_preset_show">' + (showOptions || '<option value="">No shows</option>') + '</select>'
+        +   '</div>'
+        +   '<div class="grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:10px;">'
+        +     '<select class="input" id="mk_preset_scope">'
+        +       '<option value="county">County buyers</option>'
+        +       '<option value="town">Town buyers</option>'
+        +     '</select>'
+        +     '<input class="input" id="mk_preset_scope_value" placeholder="County or town" />'
+        +     '<input class="input" id="mk_preset_category" placeholder="Interested category" />'
+        +   '</div>'
+        +   '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px;">'
+        +     '<select class="input" id="mk_preset_template">' + (templateOptions || '<option value="">No templates</option>') + '</select>'
+        +     '<input class="input" id="mk_preset_recommended" placeholder="Recommended template" readonly />'
+        +   '</div>'
+        +   '<div class="row" style="gap:10px;margin-top:12px;flex-wrap:wrap;">'
+        +     '<button class="btn" id="mk_preset_preview">Preview template</button>'
+        +     '<label class="muted" style="display:flex;align-items:center;gap:6px;">'
+        +       '<input type="checkbox" id="mk_preset_approve" />'
+        +       'I approve this automation'
+        +     '</label>'
+        +     '<button class="btn p" id="mk_preset_enable">Enable preset</button>'
+        +     '<div class="muted" id="mk_preset_msg"></div>'
+        +   '</div>'
+        + '</div>';
+
+      sections.presets.innerHTML = html;
+
+      var wizard = sections.presets.querySelector('#mk_preset_wizard');
+      var selectedPreset = null;
+
+      function findPreset(id){
+        return presets.find(function(p){ return p.id === id; }) || null;
+      }
+
+      function findTemplateByHint(hint){
+        var lower = String(hint || '').toLowerCase();
+        if (!lower) return null;
+        return templates.find(function(t){ return String(t.name || '').toLowerCase().indexOf(lower) !== -1; }) || null;
+      }
+
+      function findShow(id){
+        return shows.find(function(s){ return s.id === id; }) || null;
+      }
+
+      function setWizardVisibility(show){
+        if (!wizard) return;
+        wizard.style.display = show ? 'block' : 'none';
+      }
+
+      function applyShowDefaults(){
+        var showId = valueOf(sections.presets, 'mk_preset_show');
+        var show = findShow(showId);
+        if (!show) return;
+        var scopeSelect = sections.presets.querySelector('#mk_preset_scope');
+        var scopeValueInput = sections.presets.querySelector('#mk_preset_scope_value');
+        var categoryInput = sections.presets.querySelector('#mk_preset_category');
+        var scope = scopeSelect ? scopeSelect.value : 'county';
+        if (scopeValueInput && !scopeValueInput.value) {
+          scopeValueInput.value = scope === 'town' ? (show.venue && show.venue.city || '') : (show.venue && show.venue.county || '');
+        }
+        if (categoryInput && !categoryInput.value) {
+          categoryInput.value = show.eventCategory || (show.tags && show.tags[0]) || show.eventType || '';
+        }
+        var nameInput = sections.presets.querySelector('#mk_preset_name');
+        if (nameInput && selectedPreset && !nameInput.value) {
+          nameInput.value = (selectedPreset.label || 'Preset') + ': ' + (show.title || 'Show');
+        }
+      }
+
+      function openWizard(preset){
+        if (!preset || !wizard) return;
+        selectedPreset = preset;
+        setWizardVisibility(true);
+        var title = sections.presets.querySelector('#mk_preset_title');
+        var desc = sections.presets.querySelector('#mk_preset_desc');
+        var nameInput = sections.presets.querySelector('#mk_preset_name');
+        if (title) title.textContent = preset.label || 'Enable preset';
+        if (desc) desc.textContent = preset.description || '';
+        if (nameInput) nameInput.value = '';
+        var recommended = findTemplateByHint(preset.templateHint);
+        var templateSelect = sections.presets.querySelector('#mk_preset_template');
+        if (templateSelect) {
+          templateSelect.value = recommended ? recommended.id : (templates[0] && templates[0].id) || '';
+        }
+        var recommendedInput = sections.presets.querySelector('#mk_preset_recommended');
+        if (recommendedInput) {
+          recommendedInput.value = recommended ? recommended.name : ('No match for "' + (preset.templateHint || '') + '"');
+        }
+        var msg = sections.presets.querySelector('#mk_preset_msg');
+        if (msg) msg.textContent = '';
+        applyShowDefaults();
+      }
+
+      sections.presets.querySelectorAll('[data-preset-open]').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var presetId = btn.getAttribute('data-preset-open');
+          openWizard(findPreset(presetId));
+        });
+      });
+
+      var closeBtn = sections.presets.querySelector('#mk_preset_close');
+      if (closeBtn) {
+        closeBtn.addEventListener('click', function(){ setWizardVisibility(false); });
+      }
+
+      var showSelect = sections.presets.querySelector('#mk_preset_show');
+      if (showSelect) {
+        showSelect.addEventListener('change', function(){
+          var scopeValueInput = sections.presets.querySelector('#mk_preset_scope_value');
+          var categoryInput = sections.presets.querySelector('#mk_preset_category');
+          if (scopeValueInput) scopeValueInput.value = '';
+          if (categoryInput) categoryInput.value = '';
+          applyShowDefaults();
+        });
+      }
+
+      var scopeSelect = sections.presets.querySelector('#mk_preset_scope');
+      if (scopeSelect) {
+        scopeSelect.addEventListener('change', function(){
+          var scopeValueInput = sections.presets.querySelector('#mk_preset_scope_value');
+          if (scopeValueInput) scopeValueInput.value = '';
+          applyShowDefaults();
+        });
+      }
+
+      var previewBtn = sections.presets.querySelector('#mk_preset_preview');
+      if (previewBtn) {
+        previewBtn.addEventListener('click', async function(){
+          var templateId = valueOf(sections.presets, 'mk_preset_template');
+          var showId = valueOf(sections.presets, 'mk_preset_show');
+          var msg = sections.presets.querySelector('#mk_preset_msg');
+          if (!templateId) { if (msg) msg.textContent = 'Template required.'; return; }
+          try {
+            var data = await fetchJson('/admin/marketing/templates/' + encodeURIComponent(templateId) + '/preview', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({ showId: showId || null, sample: { email: 'sample@example.com', firstName: 'Sample', lastName: 'User' } })
+            });
+            var win = window.open('', '_blank');
+            if (win) win.document.write(data.html || '');
+          } catch (err) {
+            if (msg) msg.textContent = err.message || 'Preview failed.';
+          }
+        });
+      }
+
+      var enableBtn = sections.presets.querySelector('#mk_preset_enable');
+      if (enableBtn) {
+        enableBtn.addEventListener('click', async function(){
+          var msg = sections.presets.querySelector('#mk_preset_msg');
+          var approved = !!(sections.presets.querySelector('#mk_preset_approve') || {}).checked;
+          if (!selectedPreset) { if (msg) msg.textContent = 'Select a preset.'; return; }
+          var payload = {
+            presetId: selectedPreset.id,
+            showId: valueOf(sections.presets, 'mk_preset_show'),
+            templateId: valueOf(sections.presets, 'mk_preset_template'),
+            automationName: valueOf(sections.presets, 'mk_preset_name'),
+            audienceMode: valueOf(sections.presets, 'mk_preset_scope'),
+            audienceValue: valueOf(sections.presets, 'mk_preset_scope_value'),
+            category: valueOf(sections.presets, 'mk_preset_category'),
+            isEnabled: approved
+          };
+          if (!payload.showId || !payload.templateId) { if (msg) msg.textContent = 'Show and template required.'; return; }
+          try {
+            await fetchJson('/admin/marketing/automations/presets/enable', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify(payload)
+            });
+            if (msg) msg.textContent = approved ? 'Preset enabled.' : 'Preset saved (disabled until approved).';
+            await loadPresets();
+            await loadAutomations();
+          } catch (err) {
+            if (msg) msg.textContent = err.message || 'Failed to enable preset.';
+          }
+        });
+      }
+    }
+
+    async function loadPresets(){
+      var data = await fetchJson('/admin/marketing/automations/presets');
+      var templates = await fetchJson('/admin/marketing/templates');
+      var shows = await fetchJson('/admin/shows');
+      renderAutomationPresets(data.presets || [], templates.items || [], shows.items || []);
+    }
+
     function renderAutomations(items, templates, tags, topics, runs){
       var templateOptions = templates.map(function(t){
         return '<option value=\"' + escapeHtml(t.id) + '\">' + escapeHtml(t.name) + '</option>';
@@ -17601,6 +17843,8 @@ function renderInterests(customer){
         'SHOW_CREATED',
         'SHOW_PUBLISHED',
         'DAYS_BEFORE_SHOW',
+        'MONTHLY_ROUNDUP',
+        'LOW_SALES_VELOCITY',
         'VIEWED_NO_PURCHASE',
         'BIRTHDAY',
         'ANNIVERSARY',
@@ -18375,6 +18619,7 @@ function renderInterests(customer){
     loadSegments().catch(function(err){ sections.segments.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load segments') + '</div>'; });
     loadTemplates().catch(function(err){ sections.templates.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load templates') + '</div>'; });
     loadCampaigns().catch(function(err){ sections.campaigns.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load campaigns') + '</div>'; });
+    loadPresets().catch(function(err){ sections.presets.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load presets') + '</div>'; });
     loadAutomations().catch(function(err){ sections.automations.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load automations') + '</div>'; });
     loadPreferences().catch(function(err){ sections.preferences.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load preferences') + '</div>'; });
     loadDeliverability().catch(function(err){ sections.deliverability.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load deliverability') + '</div>'; });

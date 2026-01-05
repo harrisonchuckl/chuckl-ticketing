@@ -6,6 +6,12 @@ export type MarketingTemplateVariables = {
   unsubscribeUrl?: string | null;
   preferencesUrl?: string | null;
   recommendedShows?: string | null;
+  showTitle?: string | null;
+  showDate?: string | null;
+  showVenue?: string | null;
+  showTown?: string | null;
+  showCounty?: string | null;
+  showUrl?: string | null;
 };
 
 export function interpolateTemplate(template: string, variables: MarketingTemplateVariables): string {
@@ -43,6 +49,24 @@ export function ensureRecommendationsBlock(html: string, recommendedShows?: stri
   return `${html}${recommendedShows}`;
 }
 
+export function ensureShowBlock(html: string, variables: MarketingTemplateVariables): string {
+  const showUrl = variables.showUrl || '';
+  if (!showUrl) return html;
+  if (html.includes(showUrl)) return html;
+  const title = variables.showTitle || 'Featured show';
+  const subtitle = [variables.showDate, variables.showVenue, variables.showTown, variables.showCounty]
+    .filter(Boolean)
+    .join(' • ');
+  const block = `
+    <div style="margin-top:24px;padding:16px;border-radius:12px;border:1px solid #e2e8f0;background:#f8fafc;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;">
+      <div style="font-weight:700;font-size:16px;margin-bottom:6px;">${title}</div>
+      <div style="color:#64748b;font-size:13px;margin-bottom:10px;">${subtitle}</div>
+      <a href="${showUrl}" style="display:inline-block;padding:10px 16px;background:#2563eb;color:#fff;text-decoration:none;border-radius:999px;font-size:13px;">View show</a>
+    </div>
+  `;
+  return `${html}${block}`;
+}
+
 export function renderMarketingTemplate(
   mjmlBody: string,
   variables: MarketingTemplateVariables
@@ -53,6 +77,7 @@ export function renderMarketingTemplate(
   html = interpolateTemplate(html, variables);
 
   html = ensureRecommendationsBlock(html, variables.recommendedShows);
+  html = ensureShowBlock(html, variables);
 
   if (variables.unsubscribeUrl) {
     html = ensureUnsubscribeFooter(html, variables.unsubscribeUrl, variables.preferencesUrl);

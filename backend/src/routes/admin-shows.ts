@@ -473,7 +473,7 @@ organiser: { select: { id: true, storefrontSlug: true } },
 const venues = venueIds.length
   ? await prisma.venue.findMany({
       where: { id: { in: venueIds } },
-      select: { id: true, name: true, city: true, capacity: true },
+      select: { id: true, name: true, city: true, county: true, capacity: true },
     })
   : [];
 

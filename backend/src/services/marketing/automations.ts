@@ -25,6 +25,7 @@ import {
   resolveSenderDetails,
 } from './settings.js';
 import { matchesSegmentRules, SegmentRule } from './segments.js';
+import { buildShowAnalytics, computeRiskBadge } from '../smart-shows-analytics.js';
 
 const PUBLIC_BASE_URL =
   process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
@@ -42,6 +43,27 @@ function tenantNameFrom(user: { tradingName?: string | null; companyName?: strin
 
 function tenantSlugFrom(user: { storefrontSlug?: string | null; id: string }) {
   return user.storefrontSlug || user.id;
+}
+
+function formatShowDate(date?: Date | string | null) {
+  if (!date) return '';
+  const value = typeof date === 'string' ? new Date(date) : date;
+  if (Number.isNaN(value.getTime())) return '';
+  return value.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function resolveShowUrl(show: {
+  id: string;
+  usesExternalTicketing?: boolean | null;
+  externalTicketUrl?: string | null;
+  slug?: string | null;
+  organiser?: { storefrontSlug?: string | null; id: string } | null;
+}) {
+  if (show.usesExternalTicketing && show.externalTicketUrl) {
+    return show.externalTicketUrl;
+  }
+  const slug = show.slug && show.organiser ? `/public/${encodeURIComponent(show.organiser.storefrontSlug || show.organiser.id)}/${encodeURIComponent(show.slug)}` : null;
+  return `${baseUrl()}${slug || `/public/event/${encodeURIComponent(show.id)}`}`;
 }
 
 
@@ -259,7 +281,7 @@ export async function processShowDateAutomations() {
   });
 
   for (const automation of automations) {
-    const config = (automation.triggerConfig || {}) as { daysBefore?: number };
+    const config = (automation.triggerConfig || {}) as { daysBefore?: number; showId?: string | null };
     const daysBefore = Number(config.daysBefore || 3);
     const start = new Date();
     start.setHours(0, 0, 0, 0);
@@ -269,7 +291,12 @@ export async function processShowDateAutomations() {
     end.setHours(23, 59, 59, 999);
 
     const shows = await prisma.show.findMany({
-      where: { organiserId: automation.tenantId, date: { gte: target, lte: end }, status: 'LIVE' },
+      where: {
+        organiserId: automation.tenantId,
+        id: config.showId ? config.showId : undefined,
+        date: { gte: target, lte: end },
+        status: 'LIVE',
+      },
       select: { id: true, title: true, date: true },
     });
 
@@ -288,6 +315,182 @@ export async function processShowDateAutomations() {
         });
       }
     }
+  }
+}
+
+function toNumber(value: unknown) {
+  if (typeof value === 'number') return value;
+  if (value === null || value === undefined) return 0;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : 0;
+}
+
+async function resolveShowAnalytics(tenantId: string, showId: string) {
+  const show = await prisma.show.findFirst({
+    where: { organiserId: tenantId, id: showId },
+    select: {
+      id: true,
+      title: true,
+      date: true,
+      status: true,
+      showCapacity: true,
+      slug: true,
+      externalTicketUrl: true,
+      usesExternalTicketing: true,
+      organiser: { select: { id: true, storefrontSlug: true } },
+      ticketTypes: { select: { available: true } },
+      venue: { select: { name: true, city: true, county: true } },
+      promoterLinks: { select: { weeklyReportEnabled: true, weeklyReportEmail: true, weeklyReportTime: true } },
+    },
+  });
+  if (!show) return null;
+  const now = new Date();
+  const start7 = new Date(now);
+  start7.setDate(now.getDate() - 7);
+  const start14 = new Date(now);
+  start14.setDate(now.getDate() - 14);
+
+  const [totalSold, last7, prev7, revenueAgg] = await Promise.all([
+    prisma.ticket.aggregate({
+      where: { showId, order: { is: { status: 'PAID' } } },
+      _sum: { quantity: true },
+    }),
+    prisma.ticket.aggregate({
+      where: { showId, order: { is: { status: 'PAID', createdAt: { gte: start7, lt: now } } } },
+      _sum: { quantity: true },
+    }),
+    prisma.ticket.aggregate({
+      where: { showId, order: { is: { status: 'PAID', createdAt: { gte: start14, lt: start7 } } } },
+      _sum: { quantity: true },
+    }),
+    prisma.order.aggregate({
+      where: { showId, status: 'PAID' },
+      _sum: { amountPence: true },
+    }),
+  ]);
+
+  const analytics = buildShowAnalytics({
+    show,
+    soldCount: toNumber(totalSold._sum.quantity),
+    revenuePence: toNumber(revenueAgg._sum.amountPence),
+    last7: toNumber(last7._sum.quantity),
+    prev7: toNumber(prev7._sum.quantity),
+    now,
+  });
+
+  return { show, analytics, risk: computeRiskBadge(analytics.metrics) };
+}
+
+async function resolveAutomationShow(tenantId: string, showId: string) {
+  return prisma.show.findFirst({
+    where: { organiserId: tenantId, id: showId },
+    select: {
+      id: true,
+      title: true,
+      date: true,
+      slug: true,
+      externalTicketUrl: true,
+      usesExternalTicketing: true,
+      organiser: { select: { id: true, storefrontSlug: true } },
+      venue: { select: { name: true, city: true, county: true } },
+    },
+  });
+}
+
+export async function processMonthlyRoundupAutomations() {
+  const automations = await prisma.marketingAutomation.findMany({
+    where: { triggerType: MarketingAutomationTriggerType.MONTHLY_ROUNDUP, isEnabled: true },
+    include: { steps: true },
+  });
+  if (!automations.length) return;
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0, 0, 0, 0);
+  const monthKey = `${startOfMonth.getUTCFullYear()}-${String(startOfMonth.getUTCMonth() + 1).padStart(2, '0')}`;
+
+  for (const automation of automations) {
+    const scanned = await prisma.marketingAuditLog.findFirst({
+      where: {
+        tenantId: automation.tenantId,
+        action: 'automation.monthly_roundup_scan',
+        entityId: automation.id,
+        createdAt: { gte: startOfMonth },
+      },
+    });
+    if (scanned) continue;
+
+    const config = (automation.triggerConfig || {}) as { showId?: string | null; county?: string | null };
+    if (!config.showId) continue;
+    const resolved = await resolveShowAnalytics(automation.tenantId, config.showId);
+    if (!resolved) continue;
+    const county = String(config.county || resolved.show.venue?.county || '').trim();
+    const countyKey = county ? county.toLowerCase() : 'all';
+
+    const contacts = await prisma.marketingContact.findMany({
+      where: { tenantId: automation.tenantId },
+      select: { id: true },
+    });
+
+    for (const contact of contacts) {
+      await enqueueAutomationForContact(automation.tenantId, contact.id, MarketingAutomationTriggerType.MONTHLY_ROUNDUP, {
+        triggerKey: `monthly:${monthKey}:${countyKey}:${resolved.show.id}`,
+        metadata: { showId: resolved.show.id, monthKey, county: county || null },
+      });
+    }
+
+    await prisma.marketingAuditLog.create({
+      data: {
+        tenantId: automation.tenantId,
+        action: 'automation.monthly_roundup_scan',
+        entityType: 'MarketingAutomation',
+        entityId: automation.id,
+        metadata: { monthKey, county: county || null, showId: resolved.show.id },
+      },
+    });
+  }
+}
+
+export async function processLowSalesVelocityAutomations() {
+  const automations = await prisma.marketingAutomation.findMany({
+    where: { triggerType: MarketingAutomationTriggerType.LOW_SALES_VELOCITY, isEnabled: true },
+    include: { steps: true },
+  });
+  if (!automations.length) return;
+
+  for (const automation of automations) {
+    const config = (automation.triggerConfig || {}) as { showId?: string | null };
+    if (!config.showId) continue;
+    const resolved = await resolveShowAnalytics(automation.tenantId, config.showId);
+    if (!resolved) continue;
+    if (resolved.show.date < new Date()) continue;
+    if (resolved.risk.level !== 'At Risk') continue;
+
+    const contacts = await prisma.marketingContact.findMany({
+      where: { tenantId: automation.tenantId },
+      select: { id: true },
+    });
+
+    for (const contact of contacts) {
+      await enqueueAutomationForContact(
+        automation.tenantId,
+        contact.id,
+        MarketingAutomationTriggerType.LOW_SALES_VELOCITY,
+        {
+          triggerKey: `low-velocity:${resolved.show.id}`,
+          metadata: { showId: resolved.show.id, risk: resolved.risk.level, reason: resolved.risk.reason },
+        }
+      );
+    }
+
+    await prisma.marketingAuditLog.create({
+      data: {
+        tenantId: automation.tenantId,
+        action: 'automation.low_velocity_scan',
+        entityType: 'MarketingAutomation',
+        entityId: automation.id,
+        metadata: { showId: resolved.show.id, risk: resolved.risk.level, reason: resolved.risk.reason },
+      },
+    });
   }
 }
 
@@ -471,6 +674,8 @@ async function resolveSegmentStats(tenantId: string, email: string, rules: Segme
       'TOTAL_SPENT_AT_LEAST',
       'ATTENDED_VENUE',
       'PURCHASED_AT_VENUE',
+      'PURCHASED_TOWN_IS',
+      'PURCHASED_COUNTY_IS',
       'VIEWED_NO_PURCHASE_AFTER',
     ].includes(rule.type)
   );
@@ -488,7 +693,15 @@ async function resolveSegmentStats(tenantId: string, email: string, rules: Segme
           email: true,
           amountPence: true,
           createdAt: true,
-          show: { select: { eventCategory: true, eventType: true, tags: true, venueId: true } },
+          show: {
+            select: {
+              eventCategory: true,
+              eventType: true,
+              tags: true,
+              venueId: true,
+              venue: { select: { city: true, county: true } },
+            },
+          },
         },
       })
     : [];
@@ -509,6 +722,8 @@ async function resolveSegmentStats(tenantId: string, email: string, rules: Segme
     categories: new Set<string>(),
     venues: new Set<string>(),
     eventTypes: new Set<string>(),
+    towns: new Set<string>(),
+    counties: new Set<string>(),
   };
 
   const ninetyDaysAgo = new Date();
@@ -527,6 +742,8 @@ async function resolveSegmentStats(tenantId: string, email: string, rules: Segme
     if (order.show?.eventCategory) stats.categories.add(order.show.eventCategory);
     if (order.show?.eventType) stats.eventTypes.add(order.show.eventType);
     if (order.show?.venueId) stats.venues.add(order.show.venueId);
+    if (order.show?.venue?.city) stats.towns.add(String(order.show.venue.city).toLowerCase());
+    if (order.show?.venue?.county) stats.counties.add(String(order.show.venue.county).toLowerCase());
     (order.show?.tags || []).forEach((tag) => stats.categories.add(tag));
   }
 
@@ -659,7 +876,7 @@ export async function processAutomationSteps() {
       status: MarketingAutomationStateStatus.ACTIVE,
       nextRunAt: { lte: now },
     },
-    include: { automation: true, contact: true },
+    include: { automation: true, contact: true, run: true },
     take: 50,
   });
 
@@ -998,6 +1215,11 @@ export async function processAutomationSteps() {
         const unsubscribeUrl = await buildUnsubscribeUrl(state.tenantId, state.contact.email);
         const preferencesUrl = await buildPreferencesUrl(state.tenantId, state.contact.email);
         const recommendedShows = await buildRecommendedShowsHtml(state.tenantId, state.contact.email);
+        const runMetadata = (state.run?.metadata || {}) as { showId?: string };
+        const triggerConfig = (state.automation?.triggerConfig || {}) as { showId?: string | null };
+        const showId = runMetadata.showId || triggerConfig.showId || '';
+        const show = showId ? await resolveAutomationShow(state.tenantId, showId) : null;
+        const showUrl = show ? resolveShowUrl(show) : '';
 
         const { html, errors } = renderMarketingTemplate(nextStep.template.mjmlBody, {
           firstName: state.contact.firstName || '',
@@ -1007,6 +1229,12 @@ export async function processAutomationSteps() {
           unsubscribeUrl,
           preferencesUrl,
           recommendedShows: recommendedShows || '',
+          showTitle: show?.title || '',
+          showDate: formatShowDate(show?.date),
+          showVenue: show?.venue?.name || '',
+          showTown: show?.venue?.city || '',
+          showCounty: show?.venue?.county || '',
+          showUrl: showUrl || '',
         });
 
         if (errors.length) {
