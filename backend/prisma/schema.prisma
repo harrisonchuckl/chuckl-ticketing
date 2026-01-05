@@ -468,6 +468,8 @@ model User {
   marketingAiTemplates       MarketingAiTemplate[]
   marketingAiTonePresets     MarketingAiTonePreset[]
   storefrontThemes          StorefrontTheme[]
+
+  customerInsights CustomerInsight[]
 }
 
 model MarketingSettings {
@@ -540,6 +542,7 @@ model CustomerAccount {
   orders      Order[]
   rememberTokens CustomerRememberToken[]
   showViews     CustomerShowView[]
+  customerInsights CustomerInsight[]
 }
 
 model CustomerStorefrontMembership {
