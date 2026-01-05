@@ -16364,7 +16364,18 @@ function renderInterests(customer){
         +   '<div class="table-wrap"><table class="table">'
         +     '<thead><tr><th>Name</th><th>Rules</th><th>Estimate</th></tr></thead>'
         +     '<tbody>'
-        +       items.map(function(seg){ return '<tr><td>' + escapeHtml(seg.name) + '</td><td><code>' + escapeHtml(JSON.stringify(seg.rules || {})) + '</code></td><td><button class=\"btn\" data-estimate=\"' + seg.id + '\">Estimate</button></td></tr>'; }).join('')
+        +       items.map(function(seg){
+              return '<tr>'
+                + '<td>' + escapeHtml(seg.name) + '</td>'
+                + '<td><code>' + escapeHtml(JSON.stringify(seg.rules || {})) + '</code></td>'
+                + '<td>'
+                  + '<div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;">'
+                    + '<button class="btn" data-estimate="' + seg.id + '">Estimate recipients</button>'
+                    + '<div class="muted" data-estimate-output="' + seg.id + '"></div>'
+                  + '</div>'
+                + '</td>'
+              + '</tr>';
+            }).join('')
         +     '</tbody></table></div>'
         + '</div>';
       sections.segments.innerHTML = html;
@@ -16394,11 +16405,20 @@ function renderInterests(customer){
       Array.prototype.slice.call(sections.segments.querySelectorAll('[data-estimate]')).forEach(function(btn){
         btn.addEventListener('click', async function(){
           var id = btn.getAttribute('data-estimate');
+          var output = sections.segments.querySelector('[data-estimate-output="' + id + '"]');
+          if (output) output.textContent = 'Estimating...';
           try {
-            var data = await fetchJson('/admin/marketing/segments/' + encodeURIComponent(id) + '/estimate');
-            alert('Estimated recipients: ' + data.estimate.count + '\\nSample: ' + (data.estimate.sample || []).join(', '));
+            var data = await fetchJson('/admin/marketing/segments/' + encodeURIComponent(id) + '/estimate', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({})
+            });
+            var sample = (data.estimate.sample || []).join(', ');
+            if (output) {
+              output.textContent = data.estimate.count + ' recipients' + (sample ? (' • Sample: ' + sample) : '');
+            }
           } catch (err) {
-            alert(err.message || 'Estimate failed');
+            if (output) output.textContent = err.message || 'Estimate failed';
           }
         });
       });
@@ -16492,47 +16512,337 @@ function renderInterests(customer){
         return '<option value=\"' + escapeHtml(s.id) + '\">' + escapeHtml(s.name) + '</option>';
       }).join('');
 
+      if (!templateOptions) templateOptions = '<option value=\"\">No templates yet</option>';
+      if (!segmentOptions) segmentOptions = '<option value=\"\">No segments yet</option>';
+
       var html = ''
         + '<div class="card" style="margin:0 0 12px 0;">'
-        +   '<div class="title">Create campaign</div>'
-        +   '<input class="input" id="mk_campaign_name" placeholder="Campaign name" />'
-        +   '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px;">'
-        +     '<select class="input" id="mk_campaign_template">' + templateOptions + '</select>'
-        +     '<select class="input" id="mk_campaign_segment">' + segmentOptions + '</select>'
-        +   '</div>'
-        +   '<div class="row" style="gap:8px;margin-top:10px;">'
-        +     '<button class="btn p" id="mk_campaign_add">Save campaign</button>'
-        +     '<div id="mk_campaign_msg" class="muted"></div>'
+        +   '<div class="title">Campaign builder</div>'
+        +   '<div class="muted">Step through template, segment, and send options without leaving the page.</div>'
+        +   '<div class="grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:12px;">'
+        +     '<div class="card" style="margin:0;">'
+        +       '<div class="title">Step 1 — Choose template</div>'
+        +       '<select class="input" id="mk_builder_template" style="margin-top:8px;">' + templateOptions + '</select>'
+        +       '<div class="row" style="gap:8px;margin-top:8px;">'
+        +         '<button class="btn" id="mk_builder_template_preview">Preview template</button>'
+        +       '</div>'
+        +       '<div class="muted" style="margin-top:12px;">Or create a new template</div>'
+        +       '<input class="input" id="mk_builder_tpl_name" placeholder="Template name" style="margin-top:8px;" />'
+        +       '<input class="input" id="mk_builder_tpl_subject" placeholder="Subject" style="margin-top:8px;" />'
+        +       '<input class="input" id="mk_builder_tpl_fromName" placeholder="From name (optional)" style="margin-top:8px;" />'
+        +       '<input class="input" id="mk_builder_tpl_fromEmail" placeholder="From email (optional)" style="margin-top:8px;" />'
+        +       '<textarea class="input" id="mk_builder_tpl_mjml" placeholder="MJML body" style="height:120px;margin-top:8px;"></textarea>'
+        +       '<div class="row" style="gap:8px;margin-top:8px;">'
+        +         '<button class="btn" id="mk_builder_tpl_save">Save template</button>'
+        +         '<div id="mk_builder_tpl_msg" class="muted"></div>'
+        +       '</div>'
+        +     '</div>'
+        +     '<div class="card" style="margin:0;">'
+        +       '<div class="title">Step 2 — Choose segment</div>'
+        +       '<select class="input" id="mk_builder_segment" style="margin-top:8px;">' + segmentOptions + '</select>'
+        +       '<div class="row" style="gap:8px;margin-top:8px;align-items:center;">'
+        +         '<button class="btn" id="mk_builder_segment_estimate">Estimate recipients</button>'
+        +         '<div id="mk_builder_segment_estimate_msg" class="muted"></div>'
+        +       '</div>'
+        +       '<div class="muted" style="margin-top:12px;">Or create a new segment</div>'
+        +       '<input class="input" id="mk_builder_seg_name" placeholder="Segment name" style="margin-top:8px;" />'
+        +       '<textarea class="input" id="mk_builder_seg_rules" placeholder="Rules JSON" style="height:120px;margin-top:8px;"></textarea>'
+        +       '<div class="row" style="gap:8px;margin-top:8px;">'
+        +         '<button class="btn" id="mk_builder_seg_save">Save segment</button>'
+        +         '<div id="mk_builder_seg_msg" class="muted"></div>'
+        +       '</div>'
+        +     '</div>'
+        +     '<div class="card" style="margin:0;">'
+        +       '<div class="title">Step 3 — Preview + Test + Schedule</div>'
+        +       '<input class="input" id="mk_builder_campaign_name" placeholder="Campaign name" style="margin-top:8px;" />'
+        +       '<div class="row" style="gap:8px;margin-top:8px;">'
+        +         '<button class="btn p" id="mk_builder_campaign_create">Create draft</button>'
+        +         '<div id="mk_builder_campaign_msg" class="muted"></div>'
+        +       '</div>'
+        +       '<div class="muted" style="margin-top:12px;">Preview rendering</div>'
+        +       '<button class="btn" id="mk_builder_campaign_preview" style="margin-top:8px;">Preview campaign</button>'
+        +       '<div class="muted" style="margin-top:12px;">Send a test email</div>'
+        +       '<input class="input" id="mk_builder_test_email" placeholder="Test email address" style="margin-top:8px;" />'
+        +       '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px;">'
+        +         '<input class="input" id="mk_builder_test_first" placeholder="First name" />'
+        +         '<input class="input" id="mk_builder_test_last" placeholder="Last name" />'
+        +       '</div>'
+        +       '<div class="row" style="gap:8px;margin-top:8px;">'
+        +         '<button class="btn" id="mk_builder_test_send">Send test</button>'
+        +         '<div id="mk_builder_test_msg" class="muted"></div>'
+        +       '</div>'
+        +       '<div class="muted" style="margin-top:12px;">Schedule the campaign</div>'
+        +       '<input class="input" id="mk_builder_schedule_time" type="datetime-local" style="margin-top:8px;" />'
+        +       '<div class="row" style="gap:8px;margin-top:8px;">'
+        +         '<button class="btn" id="mk_builder_send_now">Send now</button>'
+        +         '<button class="btn p" id="mk_builder_schedule">Schedule</button>'
+        +         '<div id="mk_builder_schedule_msg" class="muted"></div>'
+        +       '</div>'
+        +     '</div>'
         +   '</div>'
         + '</div>'
-        + '<div class="card" style="margin:0;">'
+        + '<div class="card" style="margin:0 0 12px 0;">'
         +   '<div class="title">Campaigns</div>'
         +   '<div class="table-wrap"><table class="table">'
-        +     '<thead><tr><th>Name</th><th>Status</th><th>Template</th><th>Segment</th><th>Schedule</th><th>Preview</th></tr></thead>'
+        +     '<thead><tr><th>Name</th><th>Status</th><th>Template</th><th>Segment</th><th>Actions</th></tr></thead>'
         +     '<tbody>'
-        +       items.map(function(c){ return '<tr><td>' + escapeHtml(c.name) + '</td><td>' + escapeHtml(c.status) + '</td><td>' + escapeHtml((c.template || {}).name || '') + '</td><td>' + escapeHtml((c.segment || {}).name || '') + '</td><td><button class=\"btn\" data-send=\"' + c.id + '\">Send now</button></td><td><button class=\"btn\" data-cpreview=\"' + c.id + '\">Preview</button></td></tr>'; }).join('')
+        +       items.map(function(c){
+              return '<tr>'
+                + '<td>' + escapeHtml(c.name) + '</td>'
+                + '<td>' + escapeHtml(c.status) + '</td>'
+                + '<td>' + escapeHtml((c.template || {}).name || '') + '</td>'
+                + '<td>' + escapeHtml((c.segment || {}).name || '') + '</td>'
+                + '<td>'
+                  + '<div class="row" style="gap:6px;flex-wrap:wrap;">'
+                    + '<button class="btn" data-cpreview=\"' + c.id + '\">Preview</button>'
+                    + '<button class="btn" data-send=\"' + c.id + '\">Send now</button>'
+                    + '<button class="btn" data-recipients=\"' + c.id + '\">Recipients</button>'
+                    + '<button class="btn" data-events=\"' + c.id + '\">Events</button>'
+                  + '</div>'
+                + '</td>'
+              + '</tr>';
+            }).join('')
         +     '</tbody></table></div>'
+        + '</div>'
+        + '<div class="card" style="margin:0;">'
+        +   '<div class="title">Recipients & delivery events</div>'
+        +   '<div id="mk_campaign_details" class="muted" style="margin-top:10px;">Select a campaign to view recipients or delivery events.</div>'
         + '</div>';
       sections.campaigns.innerHTML = html;
 
-      var addBtn = sections.campaigns.querySelector('#mk_campaign_add');
-      if (addBtn) {
-        addBtn.addEventListener('click', async function(){
-          var name = String(valueOf(sections.campaigns, 'mk_campaign_name') || '').trim();
-          var templateId = String(valueOf(sections.campaigns, 'mk_campaign_template') || '').trim();
-          var segmentId = String(valueOf(sections.campaigns, 'mk_campaign_segment') || '').trim();
-          var msg = sections.campaigns.querySelector('#mk_campaign_msg');
-          if (!name || !templateId || !segmentId) { if (msg) msg.textContent = 'All fields required.'; return; }
+      var builderState = window.__mkCampaignBuilderState || {};
+      window.__mkCampaignBuilderState = builderState;
+
+      var templateSelect = sections.campaigns.querySelector('#mk_builder_template');
+      var segmentSelect = sections.campaigns.querySelector('#mk_builder_segment');
+      var campaignNameInput = sections.campaigns.querySelector('#mk_builder_campaign_name');
+      var campaignMsg = sections.campaigns.querySelector('#mk_builder_campaign_msg');
+      var scheduleMsg = sections.campaigns.querySelector('#mk_builder_schedule_msg');
+      var testMsg = sections.campaigns.querySelector('#mk_builder_test_msg');
+
+      function setBuilderMessage(el, message, isSuccess){
+        if (!el) return;
+        el.textContent = message || '';
+        el.style.color = isSuccess === true ? 'var(--success)' : '';
+      }
+
+      function markDraftStale(){
+        builderState.campaignId = '';
+        setBuilderMessage(campaignMsg, 'Draft cleared — create a new draft to preview or send.', false);
+      }
+
+      if (templateSelect && builderState.templateId) templateSelect.value = builderState.templateId;
+      if (segmentSelect && builderState.segmentId) segmentSelect.value = builderState.segmentId;
+      if (campaignNameInput && builderState.campaignName) campaignNameInput.value = builderState.campaignName;
+
+      if (templateSelect) {
+        templateSelect.addEventListener('change', function(){
+          builderState.templateId = templateSelect.value;
+          markDraftStale();
+        });
+      }
+      if (segmentSelect) {
+        segmentSelect.addEventListener('change', function(){
+          builderState.segmentId = segmentSelect.value;
+          markDraftStale();
+        });
+      }
+
+      var templatePreviewBtn = sections.campaigns.querySelector('#mk_builder_template_preview');
+      if (templatePreviewBtn) {
+        templatePreviewBtn.addEventListener('click', async function(){
+          var templateId = templateSelect ? templateSelect.value : '';
+          if (!templateId) { alert('Select a template first.'); return; }
           try {
-            await fetchJson('/admin/marketing/campaigns', {
+            var data = await fetchJson('/admin/marketing/templates/' + encodeURIComponent(templateId) + '/preview', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({})
+            });
+            var win = window.open('', '_blank');
+            if (win) win.document.write(data.html || '');
+          } catch (err) {
+            alert(err.message || 'Preview failed');
+          }
+        });
+      }
+
+      var saveTemplateBtn = sections.campaigns.querySelector('#mk_builder_tpl_save');
+      if (saveTemplateBtn) {
+        saveTemplateBtn.addEventListener('click', async function(){
+          var name = String(valueOf(sections.campaigns, 'mk_builder_tpl_name') || '').trim();
+          var subject = String(valueOf(sections.campaigns, 'mk_builder_tpl_subject') || '').trim();
+          var fromName = String(valueOf(sections.campaigns, 'mk_builder_tpl_fromName') || '').trim();
+          var fromEmail = String(valueOf(sections.campaigns, 'mk_builder_tpl_fromEmail') || '').trim();
+          var mjmlBody = String(valueOf(sections.campaigns, 'mk_builder_tpl_mjml') || '').trim();
+          var msg = sections.campaigns.querySelector('#mk_builder_tpl_msg');
+          if (!name || !subject || !mjmlBody) { if (msg) msg.textContent = 'Name, subject, and body required.'; return; }
+          try {
+            await fetchJson('/admin/marketing/templates', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({ name: name, subject: subject, fromName: fromName, fromEmail: fromEmail, mjmlBody: mjmlBody })
+            });
+            if (msg) msg.textContent = 'Template saved.';
+            await loadCampaigns();
+          } catch (err) {
+            if (msg) msg.textContent = err.message || 'Failed.';
+          }
+        });
+      }
+
+      var estimateBtn = sections.campaigns.querySelector('#mk_builder_segment_estimate');
+      if (estimateBtn) {
+        estimateBtn.addEventListener('click', async function(){
+          var segmentId = segmentSelect ? segmentSelect.value : '';
+          var msg = sections.campaigns.querySelector('#mk_builder_segment_estimate_msg');
+          if (!segmentId) { if (msg) msg.textContent = 'Choose a segment first.'; return; }
+          if (msg) msg.textContent = 'Estimating...';
+          try {
+            var data = await fetchJson('/admin/marketing/segments/' + encodeURIComponent(segmentId) + '/estimate', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({})
+            });
+            var sample = (data.estimate.sample || []).join(', ');
+            if (msg) msg.textContent = data.estimate.count + ' recipients' + (sample ? (' • Sample: ' + sample) : '');
+          } catch (err) {
+            if (msg) msg.textContent = err.message || 'Estimate failed';
+          }
+        });
+      }
+
+      var saveSegmentBtn = sections.campaigns.querySelector('#mk_builder_seg_save');
+      if (saveSegmentBtn) {
+        saveSegmentBtn.addEventListener('click', async function(){
+          var name = String(valueOf(sections.campaigns, 'mk_builder_seg_name') || '').trim();
+          var rulesRaw = String(valueOf(sections.campaigns, 'mk_builder_seg_rules') || '').trim();
+          var msg = sections.campaigns.querySelector('#mk_builder_seg_msg');
+          if (!name || !rulesRaw) { if (msg) msg.textContent = 'Name + rules required.'; return; }
+          try {
+            var rules = JSON.parse(rulesRaw);
+            await fetchJson('/admin/marketing/segments', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({ name: name, rules: rules })
+            });
+            if (msg) msg.textContent = 'Segment saved.';
+            await loadCampaigns();
+          } catch (err) {
+            if (msg) msg.textContent = err.message || 'Failed.';
+          }
+        });
+      }
+
+      var createCampaignBtn = sections.campaigns.querySelector('#mk_builder_campaign_create');
+      if (createCampaignBtn) {
+        createCampaignBtn.addEventListener('click', async function(){
+          var name = String(valueOf(sections.campaigns, 'mk_builder_campaign_name') || '').trim();
+          var templateId = templateSelect ? templateSelect.value : '';
+          var segmentId = segmentSelect ? segmentSelect.value : '';
+          if (!name || !templateId || !segmentId) {
+            setBuilderMessage(campaignMsg, 'Campaign name, template, and segment are required.', false);
+            return;
+          }
+          try {
+            var data = await fetchJson('/admin/marketing/campaigns', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({ name: name, templateId: templateId, segmentId: segmentId })
             });
-            if (msg) msg.textContent = 'Saved.';
+            builderState.campaignId = data.campaign.id;
+            builderState.templateId = templateId;
+            builderState.segmentId = segmentId;
+            builderState.campaignName = name;
+            setBuilderMessage(campaignMsg, 'Draft created. Campaign ID: ' + data.campaign.id, true);
             await loadCampaigns();
           } catch (err) {
-            if (msg) msg.textContent = err.message || 'Failed.';
+            setBuilderMessage(campaignMsg, err.message || 'Failed to create campaign.', false);
+          }
+        });
+      }
+
+      var previewCampaignBtn = sections.campaigns.querySelector('#mk_builder_campaign_preview');
+      if (previewCampaignBtn) {
+        previewCampaignBtn.addEventListener('click', async function(){
+          var campaignId = builderState.campaignId;
+          if (!campaignId) { setBuilderMessage(campaignMsg, 'Create a draft campaign first.', false); return; }
+          try {
+            var data = await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(campaignId) + '/preview', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({})
+            });
+            var win = window.open('', '_blank');
+            if (win) win.document.write(data.html || '');
+            setBuilderMessage(campaignMsg, 'Estimated recipients: ' + data.estimate.count, true);
+          } catch (err) {
+            setBuilderMessage(campaignMsg, err.message || 'Preview failed', false);
+          }
+        });
+      }
+
+      var testSendBtn = sections.campaigns.querySelector('#mk_builder_test_send');
+      if (testSendBtn) {
+        testSendBtn.addEventListener('click', async function(){
+          var campaignId = builderState.campaignId;
+          var email = String(valueOf(sections.campaigns, 'mk_builder_test_email') || '').trim();
+          var firstName = String(valueOf(sections.campaigns, 'mk_builder_test_first') || '').trim();
+          var lastName = String(valueOf(sections.campaigns, 'mk_builder_test_last') || '').trim();
+          if (!campaignId) { setBuilderMessage(campaignMsg, 'Create a draft campaign first.', false); return; }
+          if (!email) { setBuilderMessage(testMsg, 'Enter a test email.', false); return; }
+          setBuilderMessage(testMsg, 'Sending test...', true);
+          try {
+            await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(campaignId) + '/test-send', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({ email: email, firstName: firstName, lastName: lastName })
+            });
+            setBuilderMessage(testMsg, 'Test email sent.', true);
+          } catch (err) {
+            setBuilderMessage(testMsg, err.message || 'Test send failed', false);
+          }
+        });
+      }
+
+      var sendNowBtn = sections.campaigns.querySelector('#mk_builder_send_now');
+      if (sendNowBtn) {
+        sendNowBtn.addEventListener('click', async function(){
+          var campaignId = builderState.campaignId;
+          if (!campaignId) { setBuilderMessage(campaignMsg, 'Create a draft campaign first.', false); return; }
+          setBuilderMessage(scheduleMsg, 'Scheduling...', true);
+          try {
+            await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(campaignId) + '/schedule', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({ sendNow: true })
+            });
+            setBuilderMessage(scheduleMsg, 'Campaign scheduled to send now.', true);
+            await loadCampaigns();
+          } catch (err) {
+            setBuilderMessage(scheduleMsg, err.message || 'Schedule failed', false);
+          }
+        });
+      }
+
+      var scheduleBtn = sections.campaigns.querySelector('#mk_builder_schedule');
+      if (scheduleBtn) {
+        scheduleBtn.addEventListener('click', async function(){
+          var campaignId = builderState.campaignId;
+          var scheduledFor = valueOf(sections.campaigns, 'mk_builder_schedule_time');
+          if (!campaignId) { setBuilderMessage(campaignMsg, 'Create a draft campaign first.', false); return; }
+          if (!scheduledFor) { setBuilderMessage(scheduleMsg, 'Choose a date/time first.', false); return; }
+          setBuilderMessage(scheduleMsg, 'Scheduling...', true);
+          try {
+            await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(campaignId) + '/schedule', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({ scheduledFor: scheduledFor })
+            });
+            setBuilderMessage(scheduleMsg, 'Campaign scheduled.', true);
+            await loadCampaigns();
+          } catch (err) {
+            setBuilderMessage(scheduleMsg, err.message || 'Schedule failed', false);
           }
         });
       }
@@ -16568,6 +16878,54 @@ function renderInterests(customer){
             alert('Estimated recipients: ' + data.estimate.count);
           } catch (err) {
             alert(err.message || 'Preview failed');
+          }
+        });
+      });
+
+      Array.prototype.slice.call(sections.campaigns.querySelectorAll('[data-recipients]')).forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          var id = btn.getAttribute('data-recipients');
+          var target = sections.campaigns.querySelector('#mk_campaign_details');
+          if (target) target.textContent = 'Loading recipients...';
+          try {
+            var data = await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(id) + '/recipients');
+            var rows = (data.items || []).map(function(r){
+              return '<tr><td>' + escapeHtml(r.email) + '</td><td>' + escapeHtml(r.status) + '</td><td>' + escapeHtml(formatDateTime(r.sentAt || r.createdAt)) + '</td><td>' + escapeHtml(r.errorText || '') + '</td></tr>';
+            }).join('');
+            var summary = data.summary || {};
+            if (target) {
+              target.innerHTML = ''
+                + '<div class="muted" style="margin-bottom:8px;">Total: ' + (summary.total || 0) + ' • Sent: ' + (summary.sent || 0) + ' • Failed: ' + (summary.failed || 0) + ' • Skipped: ' + (summary.skipped || 0) + '</div>'
+                + '<div class="table-wrap"><table class="table">'
+                + '<thead><tr><th>Email</th><th>Status</th><th>Timestamp</th><th>Error</th></tr></thead>'
+                + '<tbody>' + (rows || '<tr><td colspan=\"4\" class=\"muted\">No recipients yet.</td></tr>') + '</tbody>'
+                + '</table></div>';
+            }
+          } catch (err) {
+            if (target) target.textContent = err.message || 'Failed to load recipients';
+          }
+        });
+      });
+
+      Array.prototype.slice.call(sections.campaigns.querySelectorAll('[data-events]')).forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          var id = btn.getAttribute('data-events');
+          var target = sections.campaigns.querySelector('#mk_campaign_details');
+          if (target) target.textContent = 'Loading events...';
+          try {
+            var data = await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(id) + '/events');
+            var rows = (data.items || []).map(function(e){
+              return '<tr><td>' + escapeHtml(e.email || '') + '</td><td>' + escapeHtml(e.type) + '</td><td>' + escapeHtml(formatDateTime(e.createdAt)) + '</td></tr>';
+            }).join('');
+            if (target) {
+              target.innerHTML = ''
+                + '<div class="table-wrap"><table class="table">'
+                + '<thead><tr><th>Email</th><th>Event</th><th>Timestamp</th></tr></thead>'
+                + '<tbody>' + (rows || '<tr><td colspan=\"3\" class=\"muted\">No events yet.</td></tr>') + '</tbody>'
+                + '</table></div>';
+            }
+          } catch (err) {
+            if (target) target.textContent = err.message || 'Failed to load events';
           }
         });
       });
