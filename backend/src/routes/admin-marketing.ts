@@ -534,7 +534,7 @@ router.post('/marketing/imports', requireAdminOrOrganiser, async (req, res) => {
         totalRows,
         imported,
         skipped,
-        errorsJson: rowErrors.length ? { total: rowErrors.length } : null,
+        errorsJson: rowErrors.length ? { total: rowErrors.length } : Prisma.DbNull,
       },
     });
 
