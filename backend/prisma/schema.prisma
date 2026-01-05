@@ -474,6 +474,8 @@ model User {
   marketingAuditLogsAsActor  MarketingAuditLog[]        @relation("MarketingAuditActor")
   marketingImportJobs        MarketingImportJob[]
   marketingDailySendCounters MarketingDailySendCounter[]
+  marketingDailyEventRollups MarketingDailyEventRollup[]
+  marketingEmailEventReceipts MarketingEmailEventReceipt[]
   campaignDrafts             CampaignDraft[]
   upsellBundles              UpsellBundle[]
 
