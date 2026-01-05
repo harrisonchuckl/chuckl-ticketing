@@ -21,6 +21,7 @@ import {
 } from '@prisma/client';
 import { evaluateSegmentContacts } from './segments.js';
 import { buildRecommendedShowsHtml } from './recommendations.js';
+import { recordConsentAudit, recordSuppressionAudit } from './audit.js';
 
 const PUBLIC_BASE_URL =
   process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
@@ -556,7 +557,8 @@ export async function applySuppression(
   tenantId: string,
   email: string,
   type: MarketingSuppressionType,
-  reason?: string | null
+  reason?: string | null,
+  source: MarketingConsentSource = MarketingConsentSource.API
 ) {
   const normalizedEmail = String(email || '').trim().toLowerCase();
   if (!normalizedEmail) return;
@@ -565,16 +567,24 @@ export async function applySuppression(
     where: { tenantId, email: normalizedEmail },
   });
 
+  let suppressionId = existing?.id || null;
   if (existing) {
-    await prisma.marketingSuppression.update({
+    const updated = await prisma.marketingSuppression.update({
       where: { id: existing.id },
       data: { type, reason: reason || null },
     });
+    suppressionId = updated.id;
   } else {
-    await prisma.marketingSuppression.create({
+    const created = await prisma.marketingSuppression.create({
       data: { tenantId, email: normalizedEmail, type, reason: reason || null },
     });
+    suppressionId = created.id;
   }
+  await recordSuppressionAudit(tenantId, 'suppression.updated', suppressionId, {
+    email: normalizedEmail,
+    type,
+    reason: reason || null,
+  });
 
   const contact = await prisma.marketingContact.findUnique({
     where: { tenantId_email: { tenantId, email: normalizedEmail } },
@@ -592,12 +602,25 @@ export async function applySuppression(
         contactId: contact.id,
         status,
         lawfulBasis: MarketingLawfulBasis.UNKNOWN,
-        source: MarketingConsentSource.API,
+        source,
         capturedAt: new Date(),
       },
       update: {
         status,
+        source,
       },
     });
+    await recordConsentAudit(tenantId, 'consent.updated', contact.id, { status, source, email: normalizedEmail });
+  }
+}
+
+export async function clearSuppression(tenantId: string, email: string) {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  if (!normalizedEmail) return;
+  const deleted = await prisma.marketingSuppression.deleteMany({
+    where: { tenantId, email: normalizedEmail },
+  });
+  if (deleted.count > 0) {
+    await recordSuppressionAudit(tenantId, 'suppression.cleared', null, { email: normalizedEmail });
   }
 }

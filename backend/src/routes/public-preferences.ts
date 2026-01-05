@@ -2,6 +2,7 @@ import { Router } from 'express';
 import prisma from '../lib/prisma.js';
 import { verifyPreferencesToken } from '../lib/email-marketing/preferences.js';
 import { ensureContactPreferenceDefaults, recordPreferenceAudit, updateContactPreferences } from '../services/marketing/automations.js';
+import { ensureDefaultPreferenceTopics } from '../services/marketing/preferences.js';
 
 const router = Router();
 
@@ -42,6 +43,8 @@ router.get('/preferences/:tenantSlug/:token', async (req, res) => {
   if (!tenant || tenant.id !== payload.tenantId) {
     return res.status(404).send(renderPage('Tenant not found.'));
   }
+
+  await ensureDefaultPreferenceTopics(tenant.id);
 
   const contact = await prisma.marketingContact.upsert({
     where: { tenantId_email: { tenantId: tenant.id, email: payload.email } },
@@ -102,6 +105,8 @@ router.post('/preferences/:tenantSlug/:token', async (req, res) => {
   if (!tenant || tenant.id !== payload.tenantId) {
     return res.status(404).send(renderPage('Tenant not found.'));
   }
+
+  await ensureDefaultPreferenceTopics(tenant.id);
 
   const contact = await prisma.marketingContact.findUnique({
     where: { tenantId_email: { tenantId: tenant.id, email: payload.email } },

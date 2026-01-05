@@ -17063,8 +17063,40 @@ function renderInterests(customer){
       renderAutomations(data.items || [], templates.items || []);
     }
 
-    function renderPreferences(items){
+    function renderPreferences(items, summary){
+      var consents = (summary && summary.consents) || {};
+      var suppressions = (summary && summary.suppressions) || {};
       var html = ''
+        + '<div class=\"card\" style=\"margin:0 0 12px 0;\">'
+        +   '<div class=\"title\">Consent breakdown</div>'
+        +   '<div class=\"muted\" style=\"margin-top:6px;\">' + escapeHtml(String((summary && summary.contacts) || 0)) + ' contacts</div>'
+        +   '<div class=\"grid\" style=\"grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px;\">'
+        +     '<div class=\"card\" style=\"margin:0;\">'
+        +       '<div class=\"muted\">Subscribed</div>'
+        +       '<div>' + escapeHtml(String(consents.SUBSCRIBED || 0)) + '</div>'
+        +     '</div>'
+        +     '<div class=\"card\" style=\"margin:0;\">'
+        +       '<div class=\"muted\">Transactional only</div>'
+        +       '<div>' + escapeHtml(String(consents.TRANSACTIONAL_ONLY || 0)) + '</div>'
+        +     '</div>'
+        +     '<div class=\"card\" style=\"margin:0;\">'
+        +       '<div class=\"muted\">Unsubscribed</div>'
+        +       '<div>' + escapeHtml(String(consents.UNSUBSCRIBED || 0)) + '</div>'
+        +     '</div>'
+        +     '<div class=\"card\" style=\"margin:0;\">'
+        +       '<div class=\"muted\">Bounced</div>'
+        +       '<div>' + escapeHtml(String(consents.BOUNCED || 0)) + '</div>'
+        +     '</div>'
+        +     '<div class=\"card\" style=\"margin:0;\">'
+        +       '<div class=\"muted\">Complained</div>'
+        +       '<div>' + escapeHtml(String(consents.COMPLAINED || 0)) + '</div>'
+        +     '</div>'
+        +     '<div class=\"card\" style=\"margin:0;\">'
+        +       '<div class=\"muted\">Suppressions</div>'
+        +       '<div>' + escapeHtml(String((suppressions.UNSUBSCRIBE || 0) + (suppressions.HARD_BOUNCE || 0) + (suppressions.SPAM_COMPLAINT || 0))) + '</div>'
+        +     '</div>'
+        +   '</div>'
+        + '</div>'
         + '<div class=\"card\" style=\"margin:0 0 12px 0;\">'
         +   '<div class=\"title\">Add topic</div>'
         +   '<div class=\"grid\" style=\"grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:10px;\">'
@@ -17114,8 +17146,13 @@ function renderInterests(customer){
     }
 
     async function loadPreferences(){
-      var data = await fetchJson('/admin/marketing/preferences/topics');
-      renderPreferences(data.items || []);
+      var results = await Promise.all([
+        fetchJson('/admin/marketing/preferences/topics'),
+        fetchJson('/admin/marketing/consent/summary')
+      ]);
+      var topics = results[0];
+      var summary = results[1];
+      renderPreferences(topics.items || [], summary.summary || {});
     }
 
     function renderDeliverability(summary, segments, warmup, health){
