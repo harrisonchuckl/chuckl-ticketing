@@ -5,6 +5,9 @@ import { createPreferencesToken } from '../../lib/email-marketing/preferences.js
 import { renderMarketingTemplate } from '../../lib/email-marketing/rendering.js';
 import {
   fetchMarketingSettings,
+  applyMarketingStreamToEmail,
+  assertSenderVerified,
+  buildListUnsubscribeMail,
   resolveDailyLimit,
   resolveRequireVerifiedFrom,
   resolveSenderDetails,
@@ -30,7 +33,6 @@ const RATE_PER_SEC = Number(process.env.MARKETING_SEND_RATE_PER_SEC || 50);
 const BATCH_SIZE = Number(process.env.MARKETING_SEND_BATCH_SIZE || 50);
 const DAILY_LIMIT = Number(process.env.MARKETING_DAILY_LIMIT || 50000);
 const REQUIRE_VERIFIED_FROM = String(process.env.MARKETING_REQUIRE_VERIFIED_FROM || 'true') === 'true';
-const VERIFIED_FROM_DOMAIN = String(process.env.MARKETING_FROM_DOMAIN || '').trim();
 const CAMPAIGN_LOCK_MINUTES = Number(process.env.MARKETING_CAMPAIGN_LOCK_MINUTES || 5);
 const MAX_RETRY_DELAY_MINUTES = Number(process.env.MARKETING_SEND_RETRY_MAX_MINUTES || 60);
 const BASE_RETRY_DELAY_SECONDS = Number(process.env.MARKETING_SEND_RETRY_BASE_SECONDS || 30);
@@ -165,38 +167,6 @@ async function buildPreferencesUrl(tenantId: string, email: string) {
   return `${baseUrl()}/preferences/${encodeURIComponent(slug)}/${encodeURIComponent(token)}`;
 }
 
-function isFromVerified(fromEmail: string, requireVerifiedFrom: boolean) {
-  if (!requireVerifiedFrom || !VERIFIED_FROM_DOMAIN) return true;
-  const effective = applyMarketingStream(fromEmail);
-  return effective.toLowerCase().endsWith(`@${VERIFIED_FROM_DOMAIN.toLowerCase()}`);
-}
-
-function applyMarketingStream(fromEmail: string) {
-  const streamDomain = String(process.env.MARKETING_STREAM_DOMAIN || '').trim();
-  if (!streamDomain) return fromEmail;
-  const at = fromEmail.indexOf('@');
-  if (at === -1) return fromEmail;
-  return `${fromEmail.slice(0, at)}@${streamDomain}`;
-}
-
-function assertValidFromDomain(fromEmail: string, requireVerifiedFrom: boolean) {
-  if (!requireVerifiedFrom) return;
-  if (!VERIFIED_FROM_DOMAIN) {
-    throw new Error('MARKETING_FROM_DOMAIN must be configured when verified-from enforcement is enabled.');
-  }
-  const streamDomain = String(process.env.MARKETING_STREAM_DOMAIN || '').trim();
-  if (streamDomain && !streamDomain.toLowerCase().endsWith(VERIFIED_FROM_DOMAIN.toLowerCase())) {
-    throw new Error(
-      `MARKETING_STREAM_DOMAIN (${streamDomain}) must align with MARKETING_FROM_DOMAIN (${VERIFIED_FROM_DOMAIN}).`
-    );
-  }
-  if (!isFromVerified(fromEmail, requireVerifiedFrom)) {
-    throw new Error(
-      `From email must be verified for marketing sends. Ensure MARKETING_FROM_DOMAIN is set to ${VERIFIED_FROM_DOMAIN}.`
-    );
-  }
-}
-
 function startOfDayUtc(date = new Date()) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
@@ -301,9 +271,9 @@ export async function processCampaignSend(campaignId: string) {
   }
 
   const requireVerifiedFrom = resolveRequireVerifiedFrom(settings, REQUIRE_VERIFIED_FROM);
-  assertValidFromDomain(sender.fromEmail, requireVerifiedFrom);
+  assertSenderVerified({ fromEmail: sender.fromEmail, settings, requireVerifiedFrom });
 
-  const provider = getEmailProvider();
+  const provider = getEmailProvider(settings);
 
   const tenant = await prisma.user.findUnique({
     where: { id: campaign.tenantId },
@@ -368,9 +338,7 @@ export async function processCampaignSend(campaignId: string) {
       }
 
       try {
-        const listUnsubscribeMail = VERIFIED_FROM_DOMAIN
-          ? `<mailto:unsubscribe@${VERIFIED_FROM_DOMAIN}?subject=unsubscribe>`
-          : undefined;
+        const listUnsubscribeMail = buildListUnsubscribeMail(sender.fromEmail) || undefined;
         const headers: Record<string, string> = {
           'List-Unsubscribe': [listUnsubscribeMail, `<${unsubscribeUrl}>`].filter(Boolean).join(', '),
           'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
@@ -381,7 +349,7 @@ export async function processCampaignSend(campaignId: string) {
           subject: campaign.template.subject,
           html,
           fromName: sender.fromName,
-          fromEmail: applyMarketingStream(sender.fromEmail),
+          fromEmail: applyMarketingStreamToEmail(sender.fromEmail, settings),
           replyTo: sender.replyTo,
           headers,
           customArgs: {

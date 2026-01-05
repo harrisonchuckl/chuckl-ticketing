@@ -17220,9 +17220,46 @@ function renderInterests(customer){
       );
     }
 
-    function renderSettings(settings){
+    function renderSettings(payload){
+      var settings = payload.settings || {};
+      var canOverride = !!payload.canOverride;
+      var tenantId = payload.tenantId || '';
+      var sendgridConfigured = !!payload.sendgridConfigured;
+      var dnsRecords = Array.isArray(settings.sendgridDnsRecords) ? settings.sendgridDnsRecords : [];
+      var mode = settings.sendingMode || 'SENDGRID';
+      var status = settings.verifiedStatus || 'UNVERIFIED';
+      var smtpConfigured = !!settings.smtpConfigured;
+      var smtpLastTestAt = settings.smtpLastTestAt ? new Date(settings.smtpLastTestAt) : null;
+
+      function statusLabel(value){
+        if (value === 'VERIFIED') return { label: 'Verified', color: '#16a34a' };
+        if (value === 'PENDING') return { label: 'Pending', color: '#f59e0b' };
+        if (value === 'FAILED') return { label: 'Failed', color: '#dc2626' };
+        return { label: 'Unverified', color: '#6b7280' };
+      }
+
+      var statusMeta = statusLabel(status);
+      var dnsTable = dnsRecords.length
+        ? '<div class="table-wrap" style="margin-top:10px;"><table class="table">'
+          + '<thead><tr><th>Type</th><th>Host</th><th>Value</th></tr></thead>'
+          + '<tbody>' + dnsRecords.map(function(record){ return '<tr><td>' + escapeHtml(record.type || '') + '</td><td>' + escapeHtml(record.host || '') + '</td><td>' + escapeHtml(record.data || '') + '</td></tr>'; }).join('') + '</tbody>'
+          + '</table></div>'
+        : '<div class="muted" style="margin-top:10px;">No DNS records generated yet.</div>';
+
+      var overrideHtml = canOverride
+        ? '<div class="card" style="margin-bottom:12px;">'
+          + '<div class="title">Organiser override</div>'
+          + '<div class="muted" style="margin-top:6px;">Owner/admins can load sender settings for another organiser ID.</div>'
+          + '<div class="row" style="gap:8px;margin-top:12px;">'
+            + '<input class="input" id="mk_override_tenant" placeholder="Organiser ID" style="max-width:320px" value="' + escapeHtml(tenantId) + '" />'
+            + '<button class="btn" id="mk_override_load">Load</button>'
+          + '</div>'
+        + '</div>'
+        : '';
+
       var html = ''
-        + '<div class="card" style="margin:0;">'
+        + overrideHtml
+        + '<div class="card" style="margin-bottom:12px;">'
         +   '<div class="title">Sender defaults</div>'
         +   '<div class="muted" style="margin-top:6px;">Defaults apply when templates leave sender fields blank.</div>'
         +   '<div class="grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px;">'
@@ -17230,11 +17267,60 @@ function renderInterests(customer){
         +     '<input class="input" id="mk_settings_fromEmail" placeholder="Default from email" />'
         +     '<input class="input" id="mk_settings_replyTo" placeholder="Default reply-to (optional)" />'
         +   '</div>'
-        +   '<div class="muted" style="margin-top:10px;">Verified domains and compliant reply-to addresses improve deliverability and help meet marketing requirements.</div>'
         +   '<div class="row" style="gap:8px;margin-top:12px;">'
-        +     '<button class="btn p" id="mk_settings_save">Save settings</button>'
+        +     '<button class="btn p" id="mk_settings_save">Save sender defaults</button>'
+        +   '</div>'
+        + '</div>'
+        + '<div class="card" style="margin:0;">'
+        +   '<div class="title">Sender identity setup</div>'
+        +   '<div class="muted" style="margin-top:6px;">Production sends are blocked until verification succeeds. Test sends are always allowed.</div>'
+        +   '<div class="row" style="gap:12px;flex-wrap:wrap;margin-top:12px;">'
+        +     '<label class="row" style="gap:6px;"><input type="radio" name="mk_sender_mode" value="SENDGRID" ' + (mode === 'SENDGRID' ? 'checked' : '') + ' /> SendGrid verified domain</label>'
+        +     '<label class="row" style="gap:6px;"><input type="radio" name="mk_sender_mode" value="SMTP" ' + (mode === 'SMTP' ? 'checked' : '') + ' /> SMTP fallback (advanced)</label>'
+        +   '</div>'
+        +   '<div class="row" style="gap:8px;margin-top:10px;">'
+        +     '<span class="pill" style="background:' + statusMeta.color + ';color:#fff;">' + statusMeta.label + '</span>'
+        +     '<span class="muted">Status for current sender mode</span>'
+        +   '</div>'
+        +   (!sendgridConfigured ? '<div class="error" style="margin-top:10px;">SendGrid API key is not configured. Verification cannot start.</div>' : '')
+        +   '<div id="mk_sender_sendgrid" style="margin-top:14px;">'
+        +     '<div class="title" style="font-size:14px;">SendGrid domain verification</div>'
+        +     '<div class="muted" style="margin-top:6px;">Generate DNS records (SPF/DKIM), add them at your DNS host, then refresh verification.</div>'
+        +     '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px;">'
+        +       '<input class="input" id="mk_sendgrid_domain" placeholder="Domain (example.com)" />'
+        +       '<input class="input" id="mk_sendgrid_subdomain" placeholder="Subdomain (mail)" />'
+        +     '</div>'
+        +     '<div class="row" style="gap:8px;margin-top:10px;">'
+        +       '<button class="btn p" id="mk_sendgrid_start">Generate DNS records</button>'
+        +       '<button class="btn" id="mk_sendgrid_refresh">Check verification</button>'
+        +     '</div>'
+        +     dnsTable
+        +   '</div>'
+        +   '<div id="mk_sender_smtp" style="margin-top:16px;">'
+        +     '<div class="title" style="font-size:14px;">SMTP fallback credentials</div>'
+        +     '<div class="muted" style="margin-top:6px;">Credentials are encrypted at rest. Use port 465 for SSL or 587 for STARTTLS.</div>'
+        +     '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px;">'
+        +       '<input class="input" id="mk_smtp_host" placeholder="SMTP host" />'
+        +       '<input class="input" id="mk_smtp_port" placeholder="SMTP port" />'
+        +       '<input class="input" id="mk_smtp_user" placeholder="SMTP username" />'
+        +       '<input class="input" id="mk_smtp_pass" placeholder="SMTP password" type="password" />'
+        +     '</div>'
+        +     '<label class="row" style="gap:6px;margin-top:8px;"><input type="checkbox" id="mk_smtp_secure" /> Use SSL (port 465)</label>'
+        +     '<div class="row" style="gap:8px;margin-top:10px;">'
+        +       '<button class="btn p" id="mk_smtp_save">Save SMTP settings</button>'
+        +       '<span class="muted">' + (smtpConfigured ? 'SMTP configured' : 'SMTP not configured') + '</span>'
+        +       (smtpLastTestAt ? ('<span class="muted">Last test: ' + escapeHtml(fmtDateTime.format(smtpLastTestAt)) + '</span>') : '')
+        +     '</div>'
+        +   '</div>'
+        +   '<div class="card" style="margin-top:16px;">'
+        +     '<div class="title" style="font-size:14px;">Send a test email</div>'
+        +     '<div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap;">'
+        +       '<input class="input" id="mk_sender_test_email" placeholder="Recipient email" style="min-width:240px;" />'
+        +       '<button class="btn" id="mk_sender_test_send">Send test</button>'
+        +     '</div>'
         +   '</div>'
         + '</div>';
+
       sections.settings.innerHTML = html;
 
       var fromNameInput = sections.settings.querySelector('#mk_settings_fromName');
@@ -17244,6 +17330,52 @@ function renderInterests(customer){
       if (fromEmailInput) fromEmailInput.value = settings.defaultFromEmail || '';
       if (replyToInput) replyToInput.value = settings.defaultReplyTo || '';
 
+      var sendgridDomainInput = sections.settings.querySelector('#mk_sendgrid_domain');
+      var sendgridSubdomainInput = sections.settings.querySelector('#mk_sendgrid_subdomain');
+      if (sendgridDomainInput) sendgridDomainInput.value = settings.sendgridDomain || (settings.defaultFromEmail ? settings.defaultFromEmail.split('@')[1] : '') || '';
+      if (sendgridSubdomainInput) sendgridSubdomainInput.value = settings.sendgridSubdomain || 'mail';
+
+      var smtpHostInput = sections.settings.querySelector('#mk_smtp_host');
+      var smtpPortInput = sections.settings.querySelector('#mk_smtp_port');
+      var smtpUserInput = sections.settings.querySelector('#mk_smtp_user');
+      var smtpSecureInput = sections.settings.querySelector('#mk_smtp_secure');
+      if (smtpHostInput) smtpHostInput.value = settings.smtpHost || '';
+      if (smtpPortInput) smtpPortInput.value = settings.smtpPort || '';
+      if (smtpUserInput) smtpUserInput.value = '';
+      if (smtpSecureInput) smtpSecureInput.checked = !!settings.smtpSecure;
+
+      function tenantPayload(extra){
+        var body = extra || {};
+        if (canOverride && tenantId) body.tenantId = tenantId;
+        return body;
+      }
+
+      function currentMode(){
+        var selected = sections.settings.querySelector('input[name="mk_sender_mode"]:checked');
+        return selected ? selected.value : 'SENDGRID';
+      }
+
+      function toggleModePanels(){
+        var modeValue = currentMode();
+        var sendgridPanel = sections.settings.querySelector('#mk_sender_sendgrid');
+        var smtpPanel = sections.settings.querySelector('#mk_sender_smtp');
+        if (sendgridPanel) sendgridPanel.style.display = modeValue === 'SENDGRID' ? 'block' : 'none';
+        if (smtpPanel) smtpPanel.style.display = modeValue === 'SMTP' ? 'block' : 'none';
+      }
+
+      sections.settings.querySelectorAll('input[name="mk_sender_mode"]').forEach(function(input){
+        input.addEventListener('change', toggleModePanels);
+      });
+      toggleModePanels();
+
+      var overrideBtn = sections.settings.querySelector('#mk_override_load');
+      if (overrideBtn) {
+        overrideBtn.addEventListener('click', function(){
+          var overrideId = String(valueOf(sections.settings, 'mk_override_tenant') || '').trim();
+          loadSettings(overrideId);
+        });
+      }
+
       var saveBtn = sections.settings.querySelector('#mk_settings_save');
       if (saveBtn) {
         saveBtn.addEventListener('click', async function(){
@@ -17251,13 +17383,95 @@ function renderInterests(customer){
             await fetchJson('/admin/marketing/settings', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
-              body: JSON.stringify({
+              body: JSON.stringify(tenantPayload({
                 defaultFromName: String(valueOf(sections.settings, 'mk_settings_fromName') || '').trim(),
                 defaultFromEmail: String(valueOf(sections.settings, 'mk_settings_fromEmail') || '').trim(),
                 defaultReplyTo: String(valueOf(sections.settings, 'mk_settings_replyTo') || '').trim()
-              })
+              }))
             });
-            showToast('Marketing settings saved.', true);
+            showToast('Sender defaults saved.', true);
+            loadSettings(tenantId);
+          } catch (err) {
+            showToast(parseErr(err), false);
+          }
+        });
+      }
+
+      var sendgridStartBtn = sections.settings.querySelector('#mk_sendgrid_start');
+      if (sendgridStartBtn) {
+        sendgridStartBtn.addEventListener('click', async function(){
+          try {
+            await fetchJson('/admin/marketing/sender-identity/sendgrid/start', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify(tenantPayload({
+                domain: String(valueOf(sections.settings, 'mk_sendgrid_domain') || '').trim(),
+                subdomain: String(valueOf(sections.settings, 'mk_sendgrid_subdomain') || '').trim(),
+                sendingMode: 'SENDGRID'
+              }))
+            });
+            showToast('SendGrid verification started.', true);
+            loadSettings(tenantId);
+          } catch (err) {
+            showToast(parseErr(err), false);
+          }
+        });
+      }
+
+      var sendgridRefreshBtn = sections.settings.querySelector('#mk_sendgrid_refresh');
+      if (sendgridRefreshBtn) {
+        sendgridRefreshBtn.addEventListener('click', async function(){
+          try {
+            await fetchJson('/admin/marketing/sender-identity/sendgrid/refresh', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify(tenantPayload({}))
+            });
+            showToast('Verification refreshed.', true);
+            loadSettings(tenantId);
+          } catch (err) {
+            showToast(parseErr(err), false);
+          }
+        });
+      }
+
+      var smtpSaveBtn = sections.settings.querySelector('#mk_smtp_save');
+      if (smtpSaveBtn) {
+        smtpSaveBtn.addEventListener('click', async function(){
+          try {
+            await fetchJson('/admin/marketing/sender-identity', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify(tenantPayload({
+                sendingMode: 'SMTP',
+                smtpHost: String(valueOf(sections.settings, 'mk_smtp_host') || '').trim(),
+                smtpPort: Number(valueOf(sections.settings, 'mk_smtp_port') || 0) || null,
+                smtpUser: String(valueOf(sections.settings, 'mk_smtp_user') || '').trim(),
+                smtpPass: String(valueOf(sections.settings, 'mk_smtp_pass') || '').trim(),
+                smtpSecure: !!(sections.settings.querySelector('#mk_smtp_secure') || {}).checked
+              }))
+            });
+            showToast('SMTP settings saved.', true);
+            loadSettings(tenantId);
+          } catch (err) {
+            showToast(parseErr(err), false);
+          }
+        });
+      }
+
+      var testBtn = sections.settings.querySelector('#mk_sender_test_send');
+      if (testBtn) {
+        testBtn.addEventListener('click', async function(){
+          try {
+            await fetchJson('/admin/marketing/sender-identity/test-send', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify(tenantPayload({
+                email: String(valueOf(sections.settings, 'mk_sender_test_email') || '').trim()
+              }))
+            });
+            showToast('Test email sent.', true);
+            loadSettings(tenantId);
           } catch (err) {
             showToast(parseErr(err), false);
           }
@@ -17265,9 +17479,11 @@ function renderInterests(customer){
       }
     }
 
-    async function loadSettings(){
-      var data = await fetchJson('/admin/marketing/settings');
-      renderSettings(data.settings || {});
+    async function loadSettings(overrideTenantId){
+      var url = '/admin/marketing/sender-identity';
+      if (overrideTenantId) url += '?tenantId=' + encodeURIComponent(overrideTenantId);
+      var data = await fetchJson(url);
+      renderSettings(data || {});
     }
 
     loadContacts().catch(function(err){ sections.contacts.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load contacts') + '</div>'; });

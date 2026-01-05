@@ -7,6 +7,7 @@ import { renderMarketingTemplate } from '../lib/email-marketing/rendering.js';
 import { getEmailProvider } from '../lib/email-marketing/index.js';
 import { createUnsubscribeToken } from '../lib/email-marketing/unsubscribe.js';
 import { createPreferencesToken } from '../lib/email-marketing/preferences.js';
+import { encryptToken } from '../lib/token-crypto.js';
 import {
   MarketingAutomationTriggerType,
   MarketingCampaignStatus,
@@ -16,11 +17,20 @@ import {
   MarketingSuppressionType,
   MarketingImportJobStatus,
   MarketingRecipientStatus,
+  MarketingSenderMode,
+  MarketingVerifiedStatus,
   Prisma,
 } from '@prisma/client';
 import { evaluateSegmentContacts, estimateSegment } from '../services/marketing/segments.js';
 import { applySuppression, clearSuppression, ensureDailyLimit, shouldSuppressContact } from '../services/marketing/campaigns.js';
-import { fetchMarketingSettings, resolveRequireVerifiedFrom, resolveSenderDetails } from '../services/marketing/settings.js';
+import {
+  fetchMarketingSettings,
+  applyMarketingStreamToEmail,
+  assertSenderVerified,
+  buildListUnsubscribeMail,
+  resolveRequireVerifiedFrom,
+  resolveSenderDetails,
+} from '../services/marketing/settings.js';
 import { queryCustomerInsights } from '../services/customer-insights.js';
 import {
   fetchDeliverabilitySummary,
@@ -65,7 +75,6 @@ const PUBLIC_BASE_URL =
   process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
 const REQUIRE_VERIFIED_FROM_DEFAULT = String(process.env.MARKETING_REQUIRE_VERIFIED_FROM || 'true') === 'true';
 const TEST_SEND_RATE_LIMIT_SECONDS = Number(process.env.MARKETING_TEST_SEND_RATE_LIMIT_SEC || 60);
-const VERIFIED_FROM_DOMAIN = String(process.env.MARKETING_FROM_DOMAIN || '').trim();
 
 function requireAdminOrOwner(req: any, res: any, next: any) {
   return requireAuth(req, res, () => {
@@ -95,6 +104,70 @@ function normaliseEmail(value: string) {
 
 function isValidEmail(email: string) {
   return Boolean(email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email));
+}
+
+function canOverrideTenant(req: any) {
+  const role = String(req.user?.role || '').trim().toUpperCase();
+  return role === 'ADMIN' || isOwnerEmail(req.user?.email);
+}
+
+function resolveTenantId(req: any) {
+  const override = String(req.query?.tenantId || req.body?.tenantId || '').trim();
+  if (override && canOverrideTenant(req)) return override;
+  return tenantIdFrom(req);
+}
+
+const SENDGRID_API_KEY = String(process.env.SENDGRID_API_KEY || '').trim();
+const SENDGRID_BASE_URL = 'https://api.sendgrid.com/v3';
+
+type SendgridDnsRecord = { type: string; host: string; data: string };
+
+function normalizeDomain(value: string) {
+  return String(value || '').trim().toLowerCase().replace(/^@/, '');
+}
+
+function sendgridHeaders() {
+  if (!SENDGRID_API_KEY) {
+    throw new Error('SendGrid not configured. Set SENDGRID_API_KEY.');
+  }
+  return {
+    Authorization: `Bearer ${SENDGRID_API_KEY}`,
+    'Content-Type': 'application/json',
+  };
+}
+
+async function sendgridRequest(path: string, options?: RequestInit) {
+  const res = await fetch(`${SENDGRID_BASE_URL}${path}`, {
+    method: options?.method || 'GET',
+    headers: { ...sendgridHeaders(), ...(options?.headers || {}) },
+    body: options?.body,
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`SendGrid error: ${res.status} ${text}`);
+  }
+  return text ? JSON.parse(text) : {};
+}
+
+function extractSendgridDnsRecords(payload: any): SendgridDnsRecord[] {
+  const dns = payload?.dns || {};
+  const records = [dns.mail_cname, dns.dkim1, dns.dkim2]
+    .filter(Boolean)
+    .map((record: any) => ({
+      type: String(record.type || '').toUpperCase(),
+      host: String(record.host || ''),
+      data: String(record.data || ''),
+    }))
+    .filter((record: SendgridDnsRecord) => record.type && record.host && record.data);
+  return records;
+}
+
+function isSendgridVerified(payload: any) {
+  if (payload?.valid === true) return true;
+  const dns = payload?.dns || {};
+  const records = [dns.mail_cname, dns.dkim1, dns.dkim2].filter(Boolean);
+  if (!records.length) return false;
+  return records.every((record: any) => record.valid === true);
 }
 
 function parseCsvRows(text: string) {
@@ -144,37 +217,6 @@ function parseCsvRows(text: string) {
   return rows;
 }
 
-function isFromVerified(fromEmail: string, requireVerifiedFrom: boolean) {
-  if (!requireVerifiedFrom || !VERIFIED_FROM_DOMAIN) return true;
-  const effective = applyMarketingStream(fromEmail);
-  return effective.toLowerCase().endsWith(`@${VERIFIED_FROM_DOMAIN.toLowerCase()}`);
-}
-
-function applyMarketingStream(fromEmail: string) {
-  const streamDomain = String(process.env.MARKETING_STREAM_DOMAIN || '').trim();
-  if (!streamDomain) return fromEmail;
-  const at = fromEmail.indexOf('@');
-  if (at === -1) return fromEmail;
-  return `${fromEmail.slice(0, at)}@${streamDomain}`;
-}
-
-function assertValidFromDomain(fromEmail: string, requireVerifiedFrom: boolean) {
-  if (!requireVerifiedFrom) return;
-  if (!VERIFIED_FROM_DOMAIN) {
-    throw new Error('MARKETING_FROM_DOMAIN must be configured when verified-from enforcement is enabled.');
-  }
-  const streamDomain = String(process.env.MARKETING_STREAM_DOMAIN || '').trim();
-  if (streamDomain && !streamDomain.toLowerCase().endsWith(VERIFIED_FROM_DOMAIN.toLowerCase())) {
-    throw new Error(
-      `MARKETING_STREAM_DOMAIN (${streamDomain}) must align with MARKETING_FROM_DOMAIN (${VERIFIED_FROM_DOMAIN}).`
-    );
-  }
-  if (!isFromVerified(fromEmail, requireVerifiedFrom)) {
-    throw new Error(
-      `From email must be verified for marketing sends. Ensure MARKETING_FROM_DOMAIN is set to ${VERIFIED_FROM_DOMAIN}.`
-    );
-  }
-}
 
 router.get('/marketing/health', requireAdminOrOwner, async (_req, res) => {
   const workerEnabled = String(process.env.MARKETING_WORKER_ENABLED || 'true') === 'true';
@@ -270,15 +312,29 @@ router.post('/marketing/insights/query', requireAdminOrOrganiser, async (req, re
 });
 
 router.get('/marketing/settings', requireAdminOrOrganiser, async (req, res) => {
-  const tenantId = tenantIdFrom(req);
-  const settings = await prisma.marketingSettings.findUnique({ where: { tenantId } });
+  const tenantId = resolveTenantId(req);
+  const settings = await prisma.marketingSettings.upsert({
+    where: { tenantId },
+    create: {
+      tenantId,
+      requireVerifiedFrom: REQUIRE_VERIFIED_FROM_DEFAULT,
+      sendingMode: MarketingSenderMode.SENDGRID,
+      verifiedStatus: MarketingVerifiedStatus.UNVERIFIED,
+    },
+    update: {},
+  });
   console.info('[marketing:settings:get]', settings);
   res.json({ ok: true, settings });
 });
 
 router.post('/marketing/settings', requireAdminOrOrganiser, async (req, res) => {
-  const tenantId = tenantIdFrom(req);
+  const tenantId = resolveTenantId(req);
   const payload = req.body || {};
+
+  const existing = await prisma.marketingSettings.findUnique({
+    where: { tenantId },
+    select: { defaultFromEmail: true },
+  });
 
   const defaultFromName = hasOwn(payload, 'defaultFromName') ? String(payload.defaultFromName || '').trim() : undefined;
   const defaultFromEmail = hasOwn(payload, 'defaultFromEmail') ? String(payload.defaultFromEmail || '').trim() : undefined;
@@ -286,6 +342,9 @@ router.post('/marketing/settings', requireAdminOrOrganiser, async (req, res) => 
   const requireVerifiedFrom = hasOwn(payload, 'requireVerifiedFrom') ? Boolean(payload.requireVerifiedFrom) : undefined;
   const dailyLimitOverride = hasOwn(payload, 'dailyLimitOverride') ? Number(payload.dailyLimitOverride) : undefined;
   const sendRatePerSecOverride = hasOwn(payload, 'sendRatePerSecOverride') ? Number(payload.sendRatePerSecOverride) : undefined;
+  const resetVerifiedStatus =
+    defaultFromEmail !== undefined &&
+    normaliseEmail(defaultFromEmail || '') !== normaliseEmail(existing?.defaultFromEmail || '');
 
   const settings = await prisma.marketingSettings.upsert({
     where: { tenantId },
@@ -295,6 +354,8 @@ router.post('/marketing/settings', requireAdminOrOrganiser, async (req, res) => 
       defaultFromEmail: defaultFromEmail ? defaultFromEmail : null,
       defaultReplyTo: defaultReplyTo ? defaultReplyTo : null,
       requireVerifiedFrom: requireVerifiedFrom ?? REQUIRE_VERIFIED_FROM_DEFAULT,
+      sendingMode: MarketingSenderMode.SENDGRID,
+      verifiedStatus: MarketingVerifiedStatus.UNVERIFIED,
       dailyLimitOverride: Number.isFinite(dailyLimitOverride) ? dailyLimitOverride : null,
       sendRatePerSecOverride: Number.isFinite(sendRatePerSecOverride) ? sendRatePerSecOverride : null,
     },
@@ -303,6 +364,7 @@ router.post('/marketing/settings', requireAdminOrOrganiser, async (req, res) => 
       defaultFromEmail: defaultFromEmail !== undefined ? (defaultFromEmail ? defaultFromEmail : null) : undefined,
       defaultReplyTo: defaultReplyTo !== undefined ? (defaultReplyTo ? defaultReplyTo : null) : undefined,
       requireVerifiedFrom: requireVerifiedFrom ?? undefined,
+      verifiedStatus: resetVerifiedStatus ? MarketingVerifiedStatus.UNVERIFIED : undefined,
       dailyLimitOverride:
         dailyLimitOverride !== undefined ? (Number.isFinite(dailyLimitOverride) ? dailyLimitOverride : null) : undefined,
       sendRatePerSecOverride:
@@ -314,6 +376,246 @@ router.post('/marketing/settings', requireAdminOrOrganiser, async (req, res) => 
 
   console.info('[marketing:settings:upsert]', settings);
   res.json({ ok: true, settings });
+});
+
+router.get('/marketing/sender-identity', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = resolveTenantId(req);
+  const settings = await prisma.marketingSettings.upsert({
+    where: { tenantId },
+    create: {
+      tenantId,
+      requireVerifiedFrom: REQUIRE_VERIFIED_FROM_DEFAULT,
+      sendingMode: MarketingSenderMode.SENDGRID,
+      verifiedStatus: MarketingVerifiedStatus.UNVERIFIED,
+    },
+    update: {},
+  });
+
+  const smtpConfigured = Boolean(settings.smtpHost && settings.smtpUserEncrypted && settings.smtpPassEncrypted);
+  const safeSettings = {
+    ...settings,
+    smtpUserEncrypted: null,
+    smtpPassEncrypted: null,
+    smtpConfigured,
+  };
+
+  res.json({
+    ok: true,
+    tenantId,
+    canOverride: canOverrideTenant(req),
+    sendgridConfigured: Boolean(SENDGRID_API_KEY),
+    settings: safeSettings,
+  });
+});
+
+router.post('/marketing/sender-identity', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = resolveTenantId(req);
+  const payload = req.body || {};
+  const existing = await prisma.marketingSettings.findUnique({ where: { tenantId } });
+  const updates: Prisma.MarketingSettingsUpdateInput = {};
+
+  const sendingMode = hasOwn(payload, 'sendingMode') ? String(payload.sendingMode || '').trim().toUpperCase() : undefined;
+  const smtpHost = hasOwn(payload, 'smtpHost') ? String(payload.smtpHost || '').trim() : undefined;
+  const smtpPort = hasOwn(payload, 'smtpPort') ? Number(payload.smtpPort || 0) : undefined;
+  const smtpUser = hasOwn(payload, 'smtpUser') ? String(payload.smtpUser || '').trim() : undefined;
+  const smtpPass = hasOwn(payload, 'smtpPass') ? String(payload.smtpPass || '').trim() : undefined;
+  const smtpSecure = hasOwn(payload, 'smtpSecure') ? Boolean(payload.smtpSecure) : undefined;
+
+  if (sendingMode === MarketingSenderMode.SMTP || sendingMode === MarketingSenderMode.SENDGRID) {
+    updates.sendingMode = sendingMode as MarketingSenderMode;
+  }
+
+  if (smtpHost !== undefined) updates.smtpHost = smtpHost ? smtpHost : null;
+  if (smtpPort !== undefined && Number.isFinite(smtpPort)) updates.smtpPort = smtpPort || null;
+  if (smtpSecure !== undefined) updates.smtpSecure = smtpSecure;
+  if (smtpUser !== undefined) updates.smtpUserEncrypted = smtpUser ? encryptToken(smtpUser) : null;
+  if (smtpPass !== undefined) updates.smtpPassEncrypted = smtpPass ? encryptToken(smtpPass) : null;
+
+  const smtpTouched = smtpHost !== undefined || smtpPort !== undefined || smtpUser !== undefined || smtpPass !== undefined || smtpSecure !== undefined;
+  const modeChanged = sendingMode && sendingMode !== existing?.sendingMode;
+  if (smtpTouched) updates.smtpLastTestAt = null;
+  if (modeChanged || (sendingMode === MarketingSenderMode.SMTP && smtpTouched)) {
+    updates.verifiedStatus = MarketingVerifiedStatus.UNVERIFIED;
+  }
+
+  if (canOverrideTenant(req) && hasOwn(payload, 'verifiedStatus')) {
+    const status = String(payload.verifiedStatus || '').trim().toUpperCase();
+    if (Object.values(MarketingVerifiedStatus).includes(status as MarketingVerifiedStatus)) {
+      updates.verifiedStatus = status as MarketingVerifiedStatus;
+    }
+  }
+
+  const settings = await prisma.marketingSettings.upsert({
+    where: { tenantId },
+    create: {
+      tenantId,
+      requireVerifiedFrom: REQUIRE_VERIFIED_FROM_DEFAULT,
+      sendingMode: (updates.sendingMode as MarketingSenderMode) || MarketingSenderMode.SENDGRID,
+      verifiedStatus: (updates.verifiedStatus as MarketingVerifiedStatus) || MarketingVerifiedStatus.UNVERIFIED,
+      smtpHost: updates.smtpHost as string | null,
+      smtpPort: updates.smtpPort as number | null,
+      smtpUserEncrypted: updates.smtpUserEncrypted as string | null,
+      smtpPassEncrypted: updates.smtpPassEncrypted as string | null,
+      smtpSecure: updates.smtpSecure as boolean | null,
+      smtpLastTestAt: updates.smtpLastTestAt as Date | null,
+    },
+    update: updates,
+  });
+
+  const smtpConfigured = Boolean(settings.smtpHost && settings.smtpUserEncrypted && settings.smtpPassEncrypted);
+  const safeSettings = { ...settings, smtpUserEncrypted: null, smtpPassEncrypted: null, smtpConfigured };
+  res.json({ ok: true, settings: safeSettings });
+});
+
+router.post('/marketing/sender-identity/sendgrid/start', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = resolveTenantId(req);
+  const payload = req.body || {};
+
+  const settings = await prisma.marketingSettings.upsert({
+    where: { tenantId },
+    create: {
+      tenantId,
+      requireVerifiedFrom: REQUIRE_VERIFIED_FROM_DEFAULT,
+      sendingMode: MarketingSenderMode.SENDGRID,
+      verifiedStatus: MarketingVerifiedStatus.UNVERIFIED,
+    },
+    update: {},
+  });
+
+  const defaultDomain = normalizeDomain(settings.defaultFromEmail?.split('@')[1] || '');
+  const domain = normalizeDomain(payload.domain || defaultDomain);
+  const subdomain = normalizeDomain(payload.subdomain || 'mail');
+
+  if (!domain) {
+    return res.status(400).json({ ok: false, message: 'Domain is required for verification.' });
+  }
+
+  const response = await sendgridRequest('/whitelabel/domains', {
+    method: 'POST',
+    body: JSON.stringify({
+      domain,
+      subdomain,
+      automatic_security: true,
+      custom_spf: true,
+    }),
+  });
+
+  const dnsRecords = extractSendgridDnsRecords(response);
+  const verifiedStatus = isSendgridVerified(response)
+    ? MarketingVerifiedStatus.VERIFIED
+    : MarketingVerifiedStatus.PENDING;
+
+  const updated = await prisma.marketingSettings.update({
+    where: { tenantId },
+    data: {
+      sendingMode: MarketingSenderMode.SENDGRID,
+      verifiedStatus,
+      sendgridDomainId: String(response.id || ''),
+      sendgridDomain: domain,
+      sendgridSubdomain: subdomain,
+      sendgridDnsRecords: dnsRecords as Prisma.InputJsonValue,
+    },
+  });
+
+  const smtpConfigured = Boolean(updated.smtpHost && updated.smtpUserEncrypted && updated.smtpPassEncrypted);
+  res.json({
+    ok: true,
+    settings: { ...updated, smtpUserEncrypted: null, smtpPassEncrypted: null, smtpConfigured },
+    dnsRecords,
+  });
+});
+
+router.post('/marketing/sender-identity/sendgrid/refresh', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = resolveTenantId(req);
+  const settings = await prisma.marketingSettings.findUnique({ where: { tenantId } });
+  if (!settings?.sendgridDomainId) {
+    return res.status(400).json({ ok: false, message: 'SendGrid domain verification not started yet.' });
+  }
+
+  const response = await sendgridRequest(`/whitelabel/domains/${encodeURIComponent(settings.sendgridDomainId)}`);
+  const dnsRecords = extractSendgridDnsRecords(response);
+  const verifiedStatus = isSendgridVerified(response)
+    ? MarketingVerifiedStatus.VERIFIED
+    : MarketingVerifiedStatus.PENDING;
+
+  const updated = await prisma.marketingSettings.update({
+    where: { tenantId },
+    data: {
+      verifiedStatus,
+      sendgridDnsRecords: dnsRecords as Prisma.InputJsonValue,
+    },
+  });
+
+  const smtpConfigured = Boolean(updated.smtpHost && updated.smtpUserEncrypted && updated.smtpPassEncrypted);
+  res.json({
+    ok: true,
+    settings: { ...updated, smtpUserEncrypted: null, smtpPassEncrypted: null, smtpConfigured },
+    dnsRecords,
+  });
+});
+
+router.post('/marketing/sender-identity/test-send', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = resolveTenantId(req);
+  const email = normaliseEmail(req.body?.email);
+
+  if (!email || !isValidEmail(email)) {
+    return res.status(400).json({ ok: false, message: 'Valid email required' });
+  }
+
+  const settings = await prisma.marketingSettings.upsert({
+    where: { tenantId },
+    create: {
+      tenantId,
+      requireVerifiedFrom: REQUIRE_VERIFIED_FROM_DEFAULT,
+      sendingMode: MarketingSenderMode.SENDGRID,
+      verifiedStatus: MarketingVerifiedStatus.UNVERIFIED,
+    },
+    update: {},
+  });
+
+  const sender = resolveSenderDetails({ settings });
+  if (!sender.fromEmail || !sender.fromName) {
+    return res.status(400).json({ ok: false, message: 'From name/email required' });
+  }
+
+  const requireVerifiedFrom = resolveRequireVerifiedFrom(settings, REQUIRE_VERIFIED_FROM_DEFAULT);
+  try {
+    assertSenderVerified({ fromEmail: sender.fromEmail, settings, requireVerifiedFrom, allowUnverified: true });
+  } catch (error: any) {
+    return res.status(400).json({ ok: false, message: error?.message || 'From email not verified for marketing sends.' });
+  }
+
+  try {
+    const provider = getEmailProvider(settings);
+    const listUnsubscribeMail = buildListUnsubscribeMail(sender.fromEmail);
+    await provider.sendEmail({
+      to: email,
+      subject: `Sender identity test for ${sender.fromName}`,
+      html: `<p>This is a test send to confirm your sender identity for ${sender.fromName}.</p>`,
+      fromName: sender.fromName,
+      fromEmail: applyMarketingStreamToEmail(sender.fromEmail, settings),
+      replyTo: sender.replyTo || undefined,
+      headers: listUnsubscribeMail ? { 'List-Unsubscribe': listUnsubscribeMail } : undefined,
+    });
+
+    let verifiedStatusUpdate: MarketingVerifiedStatus | undefined;
+    if (settings.sendingMode === MarketingSenderMode.SMTP) {
+      verifiedStatusUpdate = MarketingVerifiedStatus.VERIFIED;
+    }
+
+    await prisma.marketingSettings.update({
+      where: { tenantId },
+      data: {
+        smtpLastTestAt: new Date(),
+        verifiedStatus: verifiedStatusUpdate ?? undefined,
+      },
+    });
+
+    res.json({ ok: true });
+  } catch (error: any) {
+    console.error('[marketing:sender-identity:test-send]', error);
+    res.status(500).json({ ok: false, message: 'Test send failed' });
+  }
 });
 
 router.get('/marketing/contacts', requireAdminOrOrganiser, async (req, res) => {
@@ -1227,7 +1529,7 @@ router.post('/marketing/campaigns/:id/test-send', requireAdminOrOrganiser, async
 
   const requireVerifiedFrom = resolveRequireVerifiedFrom(settings, REQUIRE_VERIFIED_FROM_DEFAULT);
   try {
-    assertValidFromDomain(sender.fromEmail, requireVerifiedFrom);
+    assertSenderVerified({ fromEmail: sender.fromEmail, settings, requireVerifiedFrom, allowUnverified: true });
   } catch (error: any) {
     return res.status(400).json({ ok: false, message: error?.message || 'From email not verified for marketing sends.' });
   }
@@ -1260,10 +1562,8 @@ router.post('/marketing/campaigns/:id/test-send', requireAdminOrOrganiser, async
   }
 
   try {
-    const provider = getEmailProvider();
-    const listUnsubscribeMail = VERIFIED_FROM_DOMAIN
-      ? `<mailto:unsubscribe@${VERIFIED_FROM_DOMAIN}?subject=unsubscribe>`
-      : undefined;
+    const provider = getEmailProvider(settings);
+    const listUnsubscribeMail = buildListUnsubscribeMail(sender.fromEmail) || undefined;
     const headers: Record<string, string> = {
       'List-Unsubscribe': [listUnsubscribeMail, `<${unsubscribeUrl}>`].filter(Boolean).join(', '),
       'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
@@ -1274,7 +1574,7 @@ router.post('/marketing/campaigns/:id/test-send', requireAdminOrOrganiser, async
       subject: `[Test] ${campaign.template.subject}`,
       html,
       fromName: sender.fromName,
-      fromEmail: applyMarketingStream(sender.fromEmail),
+      fromEmail: applyMarketingStreamToEmail(sender.fromEmail, settings),
       replyTo: sender.replyTo || undefined,
       headers,
       customArgs: {

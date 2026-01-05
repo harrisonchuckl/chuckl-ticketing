@@ -467,12 +467,36 @@ model MarketingSettings {
   defaultFromEmail       String?
   defaultReplyTo         String?
   requireVerifiedFrom    Boolean
+  sendingMode            MarketingSenderMode @default(SENDGRID)
+  verifiedStatus         MarketingVerifiedStatus @default(UNVERIFIED)
+  sendgridDomainId       String?
+  sendgridDomain         String?
+  sendgridSubdomain      String?
+  sendgridDnsRecords     Json?
+  smtpHost               String?
+  smtpPort               Int?
+  smtpUserEncrypted      String?
+  smtpPassEncrypted      String?
+  smtpSecure             Boolean?
+  smtpLastTestAt         DateTime?
   dailyLimitOverride     Int?
   sendRatePerSecOverride Int?
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
   tenant User @relation(fields: [tenantId], references: [id])
+}
+
+enum MarketingSenderMode {
+  SENDGRID
+  SMTP
+}
+
+enum MarketingVerifiedStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  FAILED
 }
 
 model OrganiserProfile {
