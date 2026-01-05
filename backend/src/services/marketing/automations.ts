@@ -14,11 +14,14 @@ import { createPreferencesToken } from '../../lib/email-marketing/preferences.js
 import { renderMarketingTemplate } from '../../lib/email-marketing/rendering.js';
 import { shouldSuppressContact } from './campaigns.js';
 import { buildRecommendedShowsHtml } from './recommendations.js';
+import { fetchMarketingSettings, resolveRequireVerifiedFrom, resolveSenderDetails } from './settings.js';
 
 const PUBLIC_BASE_URL =
   process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
 
 const AUTOMATION_LOCK_MINUTES = Number(process.env.MARKETING_AUTOMATION_LOCK_MINUTES || 5);
+const REQUIRE_VERIFIED_FROM = String(process.env.MARKETING_REQUIRE_VERIFIED_FROM || 'true') === 'true';
+const VERIFIED_FROM_DOMAIN = String(process.env.MARKETING_FROM_DOMAIN || '').trim();
 
 function baseUrl() {
   return PUBLIC_BASE_URL.replace(/\/+$/, '');
@@ -38,6 +41,12 @@ function applyMarketingStream(fromEmail: string) {
   const at = fromEmail.indexOf('@');
   if (at === -1) return fromEmail;
   return `${fromEmail.slice(0, at)}@${streamDomain}`;
+}
+
+function isFromVerified(fromEmail: string, requireVerifiedFrom: boolean) {
+  if (!requireVerifiedFrom || !VERIFIED_FROM_DOMAIN) return true;
+  const effective = applyMarketingStream(fromEmail);
+  return effective.toLowerCase().endsWith(`@${VERIFIED_FROM_DOMAIN.toLowerCase()}`);
 }
 
 async function buildUnsubscribeUrl(tenantId: string, email: string) {
@@ -299,11 +308,32 @@ export async function processAutomationSteps() {
     }
 
     try {
+      const settings = await fetchMarketingSettings(state.tenantId);
       const tenant = await prisma.user.findUnique({
         where: { id: state.tenantId },
         select: { tradingName: true, companyName: true, name: true, storefrontSlug: true, id: true },
       });
       if (!tenant) throw new Error('Tenant not found');
+
+      const sender = resolveSenderDetails({
+        templateFromName: nextStep.template.fromName,
+        templateFromEmail: nextStep.template.fromEmail,
+        templateReplyTo: nextStep.template.replyTo,
+        settings,
+      });
+
+      if (!sender.fromEmail) {
+        throw new Error('From email required for marketing sends.');
+      }
+
+      if (!sender.fromName) {
+        throw new Error('From name required for marketing sends.');
+      }
+
+      const requireVerifiedFrom = resolveRequireVerifiedFrom(settings, REQUIRE_VERIFIED_FROM);
+      if (!isFromVerified(sender.fromEmail, requireVerifiedFrom)) {
+        throw new Error('From email not verified for marketing sends.');
+      }
 
       const unsubscribeUrl = await buildUnsubscribeUrl(state.tenantId, state.contact.email);
       const preferencesUrl = await buildPreferencesUrl(state.tenantId, state.contact.email);
@@ -328,9 +358,9 @@ export async function processAutomationSteps() {
         to: state.contact.email,
         subject: nextStep.template.subject,
         html,
-        fromName: nextStep.template.fromName,
-        fromEmail: applyMarketingStream(nextStep.template.fromEmail),
-        replyTo: nextStep.template.replyTo,
+        fromName: sender.fromName,
+        fromEmail: applyMarketingStream(sender.fromEmail),
+        replyTo: sender.replyTo,
         headers: {
           'List-Unsubscribe': `<${unsubscribeUrl}>`,
           'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',

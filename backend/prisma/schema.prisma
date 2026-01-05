@@ -404,6 +404,7 @@ model User {
   marketingCampaignsAsTenant MarketingCampaign[]        @relation("MarketingCampaignTenant")
   marketingSuppressions      MarketingSuppression[]
   marketingAutomations       MarketingAutomation[]
+  marketingSettings          MarketingSettings?
   marketingPreferenceTopics  MarketingPreferenceTopic[]
   marketingCheckoutEvents    MarketingCheckoutEvent[]
   marketingAuditLogs         MarketingAuditLog[]
@@ -442,6 +443,20 @@ model User {
   marketingAiTemplates       MarketingAiTemplate[]
   marketingAiTonePresets     MarketingAiTonePreset[]
   storefrontThemes          StorefrontTheme[]
+}
+
+model MarketingSettings {
+  tenantId               String   @id
+  defaultFromName        String?
+  defaultFromEmail       String?
+  defaultReplyTo         String?
+  requireVerifiedFrom    Boolean
+  dailyLimitOverride     Int?
+  sendRatePerSecOverride Int?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  tenant User @relation(fields: [tenantId], references: [id])
 }
 
 model OrganiserProfile {

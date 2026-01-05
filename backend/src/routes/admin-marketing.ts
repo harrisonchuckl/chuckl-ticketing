@@ -56,6 +56,7 @@ async function logMarketingAudit(
 
 const PUBLIC_BASE_URL =
   process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
+const REQUIRE_VERIFIED_FROM_DEFAULT = String(process.env.MARKETING_REQUIRE_VERIFIED_FROM || 'true') === 'true';
 
 function requireAdminOrOwner(req: any, res: any, next: any) {
   return requireAuth(req, res, () => {
@@ -73,6 +74,10 @@ function isValidPublicBaseUrl(value: string) {
   } catch {
     return false;
   }
+}
+
+function hasOwn(obj: Record<string, any>, key: string) {
+  return Object.prototype.hasOwnProperty.call(obj, key);
 }
 
 router.get('/marketing/health', requireAdminOrOwner, async (_req, res) => {
@@ -102,6 +107,53 @@ router.get('/marketing/health', requireAdminOrOwner, async (_req, res) => {
     providerConfigured,
     unsubscribeBaseUrlOk,
   });
+});
+
+router.get('/marketing/settings', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const settings = await prisma.marketingSettings.findUnique({ where: { tenantId } });
+  console.info('[marketing:settings:get]', settings);
+  res.json({ ok: true, settings });
+});
+
+router.post('/marketing/settings', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const payload = req.body || {};
+
+  const defaultFromName = hasOwn(payload, 'defaultFromName') ? String(payload.defaultFromName || '').trim() : undefined;
+  const defaultFromEmail = hasOwn(payload, 'defaultFromEmail') ? String(payload.defaultFromEmail || '').trim() : undefined;
+  const defaultReplyTo = hasOwn(payload, 'defaultReplyTo') ? String(payload.defaultReplyTo || '').trim() : undefined;
+  const requireVerifiedFrom = hasOwn(payload, 'requireVerifiedFrom') ? Boolean(payload.requireVerifiedFrom) : undefined;
+  const dailyLimitOverride = hasOwn(payload, 'dailyLimitOverride') ? Number(payload.dailyLimitOverride) : undefined;
+  const sendRatePerSecOverride = hasOwn(payload, 'sendRatePerSecOverride') ? Number(payload.sendRatePerSecOverride) : undefined;
+
+  const settings = await prisma.marketingSettings.upsert({
+    where: { tenantId },
+    create: {
+      tenantId,
+      defaultFromName: defaultFromName ? defaultFromName : null,
+      defaultFromEmail: defaultFromEmail ? defaultFromEmail : null,
+      defaultReplyTo: defaultReplyTo ? defaultReplyTo : null,
+      requireVerifiedFrom: requireVerifiedFrom ?? REQUIRE_VERIFIED_FROM_DEFAULT,
+      dailyLimitOverride: Number.isFinite(dailyLimitOverride) ? dailyLimitOverride : null,
+      sendRatePerSecOverride: Number.isFinite(sendRatePerSecOverride) ? sendRatePerSecOverride : null,
+    },
+    update: {
+      defaultFromName: defaultFromName !== undefined ? (defaultFromName ? defaultFromName : null) : undefined,
+      defaultFromEmail: defaultFromEmail !== undefined ? (defaultFromEmail ? defaultFromEmail : null) : undefined,
+      defaultReplyTo: defaultReplyTo !== undefined ? (defaultReplyTo ? defaultReplyTo : null) : undefined,
+      requireVerifiedFrom: requireVerifiedFrom ?? undefined,
+      dailyLimitOverride:
+        dailyLimitOverride !== undefined ? (Number.isFinite(dailyLimitOverride) ? dailyLimitOverride : null) : undefined,
+      sendRatePerSecOverride:
+        sendRatePerSecOverride !== undefined
+          ? (Number.isFinite(sendRatePerSecOverride) ? sendRatePerSecOverride : null)
+          : undefined,
+    },
+  });
+
+  console.info('[marketing:settings:upsert]', settings);
+  res.json({ ok: true, settings });
 });
 
 router.get('/marketing/contacts', requireAdminOrOrganiser, async (req, res) => {
@@ -474,7 +526,7 @@ router.get('/marketing/deliverability/warmup', requireAdminOrOrganiser, async (_
 router.post('/marketing/templates', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const { name, subject, fromName, fromEmail, replyTo, mjmlBody } = req.body || {};
-  if (!name || !subject || !fromName || !fromEmail || !mjmlBody) {
+  if (!name || !subject || !mjmlBody) {
     return res.status(400).json({ ok: false, message: 'Missing template fields' });
   }
 
@@ -483,9 +535,9 @@ router.post('/marketing/templates', requireAdminOrOrganiser, async (req, res) =>
       tenantId,
       name,
       subject,
-      fromName,
-      fromEmail,
-      replyTo: replyTo || null,
+      fromName: String(fromName || '').trim(),
+      fromEmail: String(fromEmail || '').trim(),
+      replyTo: replyTo ? String(replyTo).trim() : null,
       mjmlBody,
     },
   });
@@ -506,9 +558,9 @@ router.put('/marketing/templates/:id', requireAdminOrOrganiser, async (req, res)
     data: {
       name: name || undefined,
       subject: subject || undefined,
-      fromName: fromName || undefined,
-      fromEmail: fromEmail || undefined,
-      replyTo: replyTo ?? undefined,
+      fromName: fromName !== undefined ? String(fromName || '').trim() : undefined,
+      fromEmail: fromEmail !== undefined ? String(fromEmail || '').trim() : undefined,
+      replyTo: replyTo !== undefined ? (replyTo ? String(replyTo).trim() : null) : undefined,
       mjmlBody: mjmlBody || undefined,
     },
   });

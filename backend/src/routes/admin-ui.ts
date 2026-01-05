@@ -16027,6 +16027,7 @@ function renderInterests(customer){
       +     '<button class="btn tab-btn" data-tab="automations">Automations</button>'
       +     '<button class="btn tab-btn" data-tab="preferences">Preferences</button>'
       +     '<button class="btn tab-btn" data-tab="deliverability">Deliverability</button>'
+      +     '<button class="btn tab-btn" data-tab="settings">Settings</button>'
       +   '</div>'
       +   '<div id="marketing-contacts" class="marketing-tab" style="margin-top:16px;"></div>'
       +   '<div id="marketing-segments" class="marketing-tab" style="margin-top:16px;display:none;"></div>'
@@ -16035,6 +16036,7 @@ function renderInterests(customer){
       +   '<div id="marketing-automations" class="marketing-tab" style="margin-top:16px;display:none;"></div>'
       +   '<div id="marketing-preferences" class="marketing-tab" style="margin-top:16px;display:none;"></div>'
       +   '<div id="marketing-deliverability" class="marketing-tab" style="margin-top:16px;display:none;"></div>'
+      +   '<div id="marketing-settings" class="marketing-tab" style="margin-top:16px;display:none;"></div>'
       + '</div>';
 
     var tabs = Array.prototype.slice.call(main.querySelectorAll('.tab-btn'));
@@ -16046,6 +16048,7 @@ function renderInterests(customer){
       automations: main.querySelector('#marketing-automations'),
       preferences: main.querySelector('#marketing-preferences'),
       deliverability: main.querySelector('#marketing-deliverability'),
+      settings: main.querySelector('#marketing-settings'),
     };
 
     function setTab(name){
@@ -16209,8 +16212,8 @@ function renderInterests(customer){
         +   '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px;">'
         +     '<input class="input" id="mk_template_name" placeholder="Template name" />'
         +     '<input class="input" id="mk_template_subject" placeholder="Subject" />'
-        +     '<input class="input" id="mk_template_fromName" placeholder="From name" />'
-        +     '<input class="input" id="mk_template_fromEmail" placeholder="From email" />'
+        +     '<input class="input" id="mk_template_fromName" placeholder="From name (optional)" />'
+        +     '<input class="input" id="mk_template_fromEmail" placeholder="From email (optional)" />'
         +   '</div>'
         +   '<textarea class="input" id="mk_template_mjml" placeholder=\"MJML body\" style="height:180px;margin-top:10px;"></textarea>'
         +   '<div class="row" style="gap:8px;margin-top:10px;">'
@@ -16237,7 +16240,7 @@ function renderInterests(customer){
           var fromEmail = String(valueOf(sections.templates, 'mk_template_fromEmail') || '').trim();
           var mjmlBody = String(valueOf(sections.templates, 'mk_template_mjml') || '').trim();
           var msg = sections.templates.querySelector('#mk_template_msg');
-          if (!name || !subject || !fromName || !fromEmail || !mjmlBody) { if (msg) msg.textContent = 'All fields required.'; return; }
+          if (!name || !subject || !mjmlBody) { if (msg) msg.textContent = 'Name, subject, and body required.'; return; }
           try {
             await fetchJson('/admin/marketing/templates', {
               method:'POST',
@@ -16598,6 +16601,56 @@ function renderInterests(customer){
       renderDeliverability(summary.summary || {}, segments.items || [], warmup.data || { guidance: [], presets: [] });
     }
 
+    function renderSettings(settings){
+      var html = ''
+        + '<div class="card" style="margin:0;">'
+        +   '<div class="title">Sender defaults</div>'
+        +   '<div class="muted" style="margin-top:6px;">Defaults apply when templates leave sender fields blank.</div>'
+        +   '<div class="grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px;">'
+        +     '<input class="input" id="mk_settings_fromName" placeholder="Default from name" />'
+        +     '<input class="input" id="mk_settings_fromEmail" placeholder="Default from email" />'
+        +     '<input class="input" id="mk_settings_replyTo" placeholder="Default reply-to (optional)" />'
+        +   '</div>'
+        +   '<div class="muted" style="margin-top:10px;">Verified domains and compliant reply-to addresses improve deliverability and help meet marketing requirements.</div>'
+        +   '<div class="row" style="gap:8px;margin-top:12px;">'
+        +     '<button class="btn p" id="mk_settings_save">Save settings</button>'
+        +   '</div>'
+        + '</div>';
+      sections.settings.innerHTML = html;
+
+      var fromNameInput = sections.settings.querySelector('#mk_settings_fromName');
+      var fromEmailInput = sections.settings.querySelector('#mk_settings_fromEmail');
+      var replyToInput = sections.settings.querySelector('#mk_settings_replyTo');
+      if (fromNameInput) fromNameInput.value = settings.defaultFromName || '';
+      if (fromEmailInput) fromEmailInput.value = settings.defaultFromEmail || '';
+      if (replyToInput) replyToInput.value = settings.defaultReplyTo || '';
+
+      var saveBtn = sections.settings.querySelector('#mk_settings_save');
+      if (saveBtn) {
+        saveBtn.addEventListener('click', async function(){
+          try {
+            await fetchJson('/admin/marketing/settings', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({
+                defaultFromName: String(valueOf(sections.settings, 'mk_settings_fromName') || '').trim(),
+                defaultFromEmail: String(valueOf(sections.settings, 'mk_settings_fromEmail') || '').trim(),
+                defaultReplyTo: String(valueOf(sections.settings, 'mk_settings_replyTo') || '').trim()
+              })
+            });
+            showToast('Marketing settings saved.', true);
+          } catch (err) {
+            showToast(parseErr(err), false);
+          }
+        });
+      }
+    }
+
+    async function loadSettings(){
+      var data = await fetchJson('/admin/marketing/settings');
+      renderSettings(data.settings || {});
+    }
+
     loadContacts().catch(function(err){ sections.contacts.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load contacts') + '</div>'; });
     loadSegments().catch(function(err){ sections.segments.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load segments') + '</div>'; });
     loadTemplates().catch(function(err){ sections.templates.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load templates') + '</div>'; });
@@ -16605,6 +16658,7 @@ function renderInterests(customer){
     loadAutomations().catch(function(err){ sections.automations.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load automations') + '</div>'; });
     loadPreferences().catch(function(err){ sections.preferences.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load preferences') + '</div>'; });
     loadDeliverability().catch(function(err){ sections.deliverability.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load deliverability') + '</div>'; });
+    loadSettings().catch(function(err){ sections.settings.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load settings') + '</div>'; });
   }
   function emailPage(){
     marketingPage({
