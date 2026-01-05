@@ -250,6 +250,18 @@ enum MarketingCampaignType {
   ANNOUNCEMENT
 }
 
+enum MarketingGovernanceRole {
+  VIEWER
+  CAMPAIGN_CREATOR
+  APPROVER
+}
+
+enum MarketingTemplateChangeStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum MarketingAutomationTriggerType {
   AFTER_PURCHASE
   NO_PURCHASE_DAYS
@@ -440,16 +452,25 @@ model User {
   marketingContacts          MarketingContact[]
   marketingTags              MarketingTag[]
   marketingTemplates         MarketingTemplate[]
+  marketingTemplatesLocked   MarketingTemplate[]        @relation("MarketingTemplateLockedBy")
+  marketingTemplateVersions  MarketingTemplateVersion[] @relation("MarketingTemplateVersionAuthor")
+  marketingTemplateChangesRequested MarketingTemplateChangeRequest[] @relation("MarketingTemplateChangeRequestedBy")
+  marketingTemplateChangesApproved  MarketingTemplateChangeRequest[] @relation("MarketingTemplateChangeApprovedBy")
   marketingEmailTemplates    MarketingEmailTemplate[]
   marketingSegments          MarketingSegment[]
   marketingCampaigns         MarketingCampaign[]        @relation("MarketingCampaignCreatedBy")
   marketingCampaignsAsTenant MarketingCampaign[]        @relation("MarketingCampaignTenant")
+  marketingCampaignsScheduled MarketingCampaign[]       @relation("MarketingCampaignScheduledBy")
+  marketingCampaignsApproved  MarketingCampaign[]       @relation("MarketingCampaignApprovedBy")
+  marketingRoleAssignments   MarketingRoleAssignment[]  @relation("MarketingRoleAssignee")
+  marketingRoleTenants       MarketingRoleAssignment[]  @relation("MarketingRoleTenant")
   marketingSuppressions      MarketingSuppression[]
   marketingAutomations       MarketingAutomation[]
   marketingSettings          MarketingSettings?
   marketingPreferenceTopics  MarketingPreferenceTopic[]
   marketingCheckoutEvents    MarketingCheckoutEvent[]
   marketingAuditLogs         MarketingAuditLog[]
+  marketingAuditLogsAsActor  MarketingAuditLog[]        @relation("MarketingAuditActor")
   marketingImportJobs        MarketingImportJob[]
   marketingDailySendCounters MarketingDailySendCounter[]
   campaignDrafts             CampaignDraft[]
@@ -1836,15 +1857,64 @@ model MarketingTemplate {
   fromName  String
   fromEmail String
   replyTo   String?
+  previewText String?
   mjmlBody  String   @db.Text
+  isLocked  Boolean  @default(false)
+  lockedAt  DateTime?
+  lockedByUserId String?
+  lockReason String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   tenant          User                      @relation(fields: [tenantId], references: [id])
+  lockedBy       User?                     @relation("MarketingTemplateLockedBy", fields: [lockedByUserId], references: [id])
   campaigns       MarketingCampaign[]
   automationSteps MarketingAutomationStep[]
+  versions        MarketingTemplateVersion[]
+  changeRequests  MarketingTemplateChangeRequest[]
 
   @@index([tenantId])
+}
+
+model MarketingTemplateVersion {
+  id         String   @id @default(cuid())
+  templateId String
+  version    Int
+  name       String
+  subject    String
+  previewText String?
+  fromName   String
+  fromEmail  String
+  replyTo    String?
+  mjmlBody   String   @db.Text
+  createdByUserId String?
+  createdAt  DateTime @default(now())
+
+  template MarketingTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("MarketingTemplateVersionAuthor", fields: [createdByUserId], references: [id])
+
+  @@index([templateId, version])
+}
+
+model MarketingTemplateChangeRequest {
+  id         String   @id @default(cuid())
+  tenantId   String
+  templateId String
+  status     MarketingTemplateChangeStatus @default(PENDING)
+  payload    Json
+  message    String?
+  requestedByUserId String?
+  approvedByUserId  String?
+  requestedAt DateTime @default(now())
+  reviewedAt DateTime?
+
+  tenant     User             @relation(fields: [tenantId], references: [id])
+  template   MarketingTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  requestedBy User?           @relation("MarketingTemplateChangeRequestedBy", fields: [requestedByUserId], references: [id])
+  approvedBy  User?           @relation("MarketingTemplateChangeApprovedBy", fields: [approvedByUserId], references: [id])
+
+  @@index([tenantId, status])
+  @@index([templateId])
 }
 
 model MarketingEmailTemplate {
@@ -1901,6 +1971,10 @@ model MarketingCampaign {
   showId          String?
   status          MarketingCampaignStatus @default(DRAFT)
   scheduledFor    DateTime?
+  scheduledByUserId String?
+  approvedByUserId  String?
+  approvedAt      DateTime?
+  sentAt          DateTime?
   recipientsPreparedAt DateTime?
   sendLockedUntil DateTime?
   createdByUserId String
@@ -1912,6 +1986,8 @@ model MarketingCampaign {
   segment    MarketingSegment             @relation(fields: [segmentId], references: [id])
   show       Show?                        @relation(fields: [showId], references: [id])
   createdBy  User                         @relation("MarketingCampaignCreatedBy", fields: [createdByUserId], references: [id])
+  scheduledBy User?                       @relation("MarketingCampaignScheduledBy", fields: [scheduledByUserId], references: [id])
+  approvedBy  User?                       @relation("MarketingCampaignApprovedBy", fields: [approvedByUserId], references: [id])
   recipients MarketingCampaignRecipient[]
   events     MarketingEmailEvent[]
 
@@ -2134,6 +2210,8 @@ model MarketingCheckoutEvent {
 model MarketingAuditLog {
   id         String   @id @default(cuid())
   tenantId   String
+  actorUserId String?
+  actorEmail  String?
   action     String
   entityType String
   entityId   String?
@@ -2141,8 +2219,26 @@ model MarketingAuditLog {
   createdAt  DateTime @default(now())
 
   tenant User @relation(fields: [tenantId], references: [id])
+  actor  User? @relation("MarketingAuditActor", fields: [actorUserId], references: [id])
 
   @@index([tenantId, createdAt])
+  @@index([actorUserId, createdAt])
+}
+
+model MarketingRoleAssignment {
+  id        String   @id @default(cuid())
+  tenantId  String
+  userId    String
+  role      MarketingGovernanceRole @default(VIEWER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant User @relation("MarketingRoleTenant", fields: [tenantId], references: [id])
+  user   User @relation("MarketingRoleAssignee", fields: [userId], references: [id])
+
+  @@unique([tenantId, userId])
+  @@index([tenantId])
+  @@index([userId])
 }
 
 model AdminAuditLog {

@@ -488,11 +488,30 @@ export async function processCampaignSend(campaignId: string) {
       status: MarketingRecipientStatus.FAILED,
     },
   });
+  const finalStatus = failures > 0 ? MarketingCampaignStatus.FAILED : MarketingCampaignStatus.SENT;
   await prisma.marketingCampaign.update({
     where: { id: campaign.id },
     data: {
-      status: failures > 0 ? MarketingCampaignStatus.FAILED : MarketingCampaignStatus.SENT,
+      status: finalStatus,
       sendLockedUntil: null,
+      sentAt: finalStatus === MarketingCampaignStatus.SENT ? new Date() : null,
+    },
+  });
+
+  const actorUserId = campaign.approvedByUserId || campaign.scheduledByUserId || null;
+  const actor =
+    actorUserId
+      ? await prisma.user.findUnique({ where: { id: actorUserId }, select: { email: true } })
+      : null;
+  await prisma.marketingAuditLog.create({
+    data: {
+      tenantId: campaign.tenantId,
+      actorUserId,
+      actorEmail: actor?.email || null,
+      action: finalStatus === MarketingCampaignStatus.SENT ? 'campaign.sent' : 'campaign.failed',
+      entityType: 'MarketingCampaign',
+      entityId: campaign.id,
+      metadata: { failures },
     },
   });
 }
