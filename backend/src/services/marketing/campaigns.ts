@@ -30,6 +30,9 @@ const BATCH_SIZE = Number(process.env.MARKETING_SEND_BATCH_SIZE || 50);
 const DAILY_LIMIT = Number(process.env.MARKETING_DAILY_LIMIT || 50000);
 const REQUIRE_VERIFIED_FROM = String(process.env.MARKETING_REQUIRE_VERIFIED_FROM || 'true') === 'true';
 const VERIFIED_FROM_DOMAIN = String(process.env.MARKETING_FROM_DOMAIN || '').trim();
+const CAMPAIGN_LOCK_MINUTES = Number(process.env.MARKETING_CAMPAIGN_LOCK_MINUTES || 5);
+const MAX_RETRY_DELAY_MINUTES = Number(process.env.MARKETING_SEND_RETRY_MAX_MINUTES || 60);
+const BASE_RETRY_DELAY_SECONDS = Number(process.env.MARKETING_SEND_RETRY_BASE_SECONDS || 30);
 
 function baseUrl() {
   return PUBLIC_BASE_URL.replace(/\/+$/, '');
@@ -131,6 +134,11 @@ async function ensureRecipients(campaignId: string) {
     });
   }
 
+  await prisma.marketingCampaign.updateMany({
+    where: { id: campaignId, recipientsPreparedAt: null },
+    data: { recipientsPreparedAt: new Date() },
+  });
+
   return campaign;
 }
 
@@ -170,10 +178,92 @@ function applyMarketingStream(fromEmail: string) {
   return `${fromEmail.slice(0, at)}@${streamDomain}`;
 }
 
+function assertValidFromDomain(fromEmail: string, requireVerifiedFrom: boolean) {
+  if (!requireVerifiedFrom) return;
+  if (!VERIFIED_FROM_DOMAIN) {
+    throw new Error('MARKETING_FROM_DOMAIN must be configured when verified-from enforcement is enabled.');
+  }
+  const streamDomain = String(process.env.MARKETING_STREAM_DOMAIN || '').trim();
+  if (streamDomain && !streamDomain.toLowerCase().endsWith(VERIFIED_FROM_DOMAIN.toLowerCase())) {
+    throw new Error(
+      `MARKETING_STREAM_DOMAIN (${streamDomain}) must align with MARKETING_FROM_DOMAIN (${VERIFIED_FROM_DOMAIN}).`
+    );
+  }
+  if (!isFromVerified(fromEmail, requireVerifiedFrom)) {
+    throw new Error(
+      `From email must be verified for marketing sends. Ensure MARKETING_FROM_DOMAIN is set to ${VERIFIED_FROM_DOMAIN}.`
+    );
+  }
+}
+
+function startOfDayUtc(date = new Date()) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+function nextRetryAt(retryCount: number) {
+  const baseDelay = Math.max(1, BASE_RETRY_DELAY_SECONDS);
+  const backoffSeconds = Math.min(
+    baseDelay * Math.pow(2, Math.max(0, retryCount)),
+    MAX_RETRY_DELAY_MINUTES * 60
+  );
+  return new Date(Date.now() + backoffSeconds * 1000);
+}
+
+function parseSendError(error: any) {
+  const message = String(error?.message || 'Send failed');
+  const match = message.match(/SendGrid error: (\d{3})/);
+  const status = match ? Number(match[1]) : null;
+  const retryable =
+    (status !== null && (status === 429 || status >= 500)) ||
+    /timeout|temporarily|rate limit|too many requests|network/i.test(message);
+  return { message, status, retryable };
+}
+
+async function reserveDailySendSlot(tenantId: string, dailyLimit: number) {
+  const day = startOfDayUtc();
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.marketingDailySendCounter.findUnique({
+      where: { tenantId_day: { tenantId, day } },
+    });
+    let currentCount = existing?.count ?? 0;
+    if (!existing) {
+      const sentToday = await tx.marketingCampaignRecipient.count({
+        where: {
+          tenantId,
+          status: MarketingRecipientStatus.SENT,
+          sentAt: { gte: day },
+        },
+      });
+      currentCount = sentToday;
+    }
+    if (currentCount >= dailyLimit) {
+      return { allowed: false, count: currentCount };
+    }
+    if (existing) {
+      const updated = await tx.marketingDailySendCounter.update({
+        where: { tenantId_day: { tenantId, day } },
+        data: { count: { increment: 1 } },
+      });
+      return { allowed: true, count: updated.count };
+    }
+    const created = await tx.marketingDailySendCounter.create({
+      data: { tenantId, day, count: currentCount + 1 },
+    });
+    return { allowed: true, count: created.count };
+  });
+}
+
+async function refreshCampaignLock(campaignId: string) {
+  const lockUntil = new Date(Date.now() + CAMPAIGN_LOCK_MINUTES * 60 * 1000);
+  await prisma.marketingCampaign.update({
+    where: { id: campaignId },
+    data: { sendLockedUntil: lockUntil },
+  });
+}
+
 export async function ensureDailyLimit(tenantId: string, upcomingCount: number) {
   const settings = await fetchMarketingSettings(tenantId);
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
+  const start = startOfDayUtc();
   const sentToday = await prisma.marketingCampaignRecipient.count({
     where: {
       tenantId,
@@ -190,6 +280,8 @@ export async function ensureDailyLimit(tenantId: string, upcomingCount: number) 
 export async function processCampaignSend(campaignId: string) {
   const campaign = await ensureRecipients(campaignId);
   if (campaign.status === MarketingCampaignStatus.CANCELLED) return;
+
+  await refreshCampaignLock(campaignId);
 
   const settings = await fetchMarketingSettings(campaign.tenantId);
   const sender = resolveSenderDetails({
@@ -208,9 +300,7 @@ export async function processCampaignSend(campaignId: string) {
   }
 
   const requireVerifiedFrom = resolveRequireVerifiedFrom(settings, REQUIRE_VERIFIED_FROM);
-  if (!isFromVerified(sender.fromEmail, requireVerifiedFrom)) {
-    throw new Error('From email not verified for marketing sends.');
-  }
+  assertValidFromDomain(sender.fromEmail, requireVerifiedFrom);
 
   const provider = getEmailProvider();
 
@@ -220,12 +310,16 @@ export async function processCampaignSend(campaignId: string) {
   });
   if (!tenant) throw new Error('Tenant not found');
 
+  const dailyLimit = resolveDailyLimit(settings, DAILY_LIMIT);
+
   while (true) {
+    await refreshCampaignLock(campaignId);
     const recipients = await prisma.marketingCampaignRecipient.findMany({
       where: {
         tenantId: campaign.tenantId,
         campaignId: campaign.id,
-        status: MarketingRecipientStatus.PENDING,
+        status: { in: [MarketingRecipientStatus.PENDING, MarketingRecipientStatus.RETRYABLE] },
+        OR: [{ retryAt: null }, { retryAt: { lte: new Date() } }],
       },
       take: BATCH_SIZE,
     });
@@ -233,6 +327,15 @@ export async function processCampaignSend(campaignId: string) {
     if (!recipients.length) break;
 
     for (const recipient of recipients) {
+      const slot = await reserveDailySendSlot(campaign.tenantId, dailyLimit);
+      if (!slot.allowed) {
+        await prisma.marketingCampaign.update({
+          where: { id: campaign.id },
+          data: { status: MarketingCampaignStatus.PAUSED_LIMIT, sendLockedUntil: null },
+        });
+        return;
+      }
+
       const contact = await prisma.marketingContact.findUnique({
         where: { id: recipient.contactId },
         select: { firstName: true, lastName: true, email: true },
@@ -254,7 +357,11 @@ export async function processCampaignSend(campaignId: string) {
       if (errors.length) {
         await prisma.marketingCampaignRecipient.update({
           where: { id: recipient.id },
-          data: { status: MarketingRecipientStatus.FAILED, errorText: errors.join('; ') },
+          data: {
+            status: MarketingRecipientStatus.FAILED,
+            errorText: errors.join('; '),
+            lastAttemptAt: new Date(),
+          },
         });
         continue;
       }
@@ -268,7 +375,7 @@ export async function processCampaignSend(campaignId: string) {
           'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
         };
 
-        await provider.sendEmail({
+        const result = await provider.sendEmail({
           to: recipient.email,
           subject: campaign.template.subject,
           html,
@@ -285,7 +392,19 @@ export async function processCampaignSend(campaignId: string) {
 
         await prisma.marketingCampaignRecipient.update({
           where: { id: recipient.id },
-          data: { status: MarketingRecipientStatus.SENT, sentAt: new Date(), errorText: null },
+          data: {
+            status: MarketingRecipientStatus.SENT,
+            sentAt: new Date(),
+            errorText: null,
+            lastAttemptAt: new Date(),
+            retryAt: null,
+          },
+        });
+
+        await prisma.marketingWorkerState.upsert({
+          where: { id: 'global' },
+          update: { lastSendAt: new Date() },
+          create: { id: 'global', lastSendAt: new Date(), lastWorkerRunAt: null },
         });
 
         await prisma.marketingEmailEvent.create({
@@ -298,10 +417,32 @@ export async function processCampaignSend(campaignId: string) {
             meta: { provider: 'sendgrid' },
           },
         });
+
+        console.info('[marketing:send]', {
+          campaignId: campaign.id,
+          recipientId: recipient.id,
+          providerId: result.id,
+          providerStatus: result.status,
+          providerResponse: result.response || null,
+        });
       } catch (error: any) {
+        const parsed = parseSendError(error);
+        const nextStatus = parsed.retryable ? MarketingRecipientStatus.RETRYABLE : MarketingRecipientStatus.FAILED;
         await prisma.marketingCampaignRecipient.update({
           where: { id: recipient.id },
-          data: { status: MarketingRecipientStatus.FAILED, errorText: error?.message || 'Send failed' },
+          data: {
+            status: nextStatus,
+            errorText: parsed.message,
+            retryAt: parsed.retryable ? nextRetryAt(recipient.retryCount) : null,
+            retryCount: parsed.retryable ? recipient.retryCount + 1 : recipient.retryCount,
+            lastAttemptAt: new Date(),
+          },
+        });
+        console.error('[marketing:send:error]', {
+          campaignId: campaign.id,
+          recipientId: recipient.id,
+          error: parsed.message,
+          retryable: parsed.retryable,
         });
       }
 
@@ -313,9 +454,34 @@ export async function processCampaignSend(campaignId: string) {
     }
   }
 
+  const remaining = await prisma.marketingCampaignRecipient.count({
+    where: {
+      tenantId: campaign.tenantId,
+      campaignId: campaign.id,
+      status: { in: [MarketingRecipientStatus.PENDING, MarketingRecipientStatus.RETRYABLE] },
+    },
+  });
+  if (remaining > 0) {
+    await prisma.marketingCampaign.update({
+      where: { id: campaign.id },
+      data: { status: MarketingCampaignStatus.SENDING, sendLockedUntil: null },
+    });
+    return;
+  }
+
+  const failures = await prisma.marketingCampaignRecipient.count({
+    where: {
+      tenantId: campaign.tenantId,
+      campaignId: campaign.id,
+      status: MarketingRecipientStatus.FAILED,
+    },
+  });
   await prisma.marketingCampaign.update({
     where: { id: campaign.id },
-    data: { status: MarketingCampaignStatus.SENT },
+    data: {
+      status: failures > 0 ? MarketingCampaignStatus.FAILED : MarketingCampaignStatus.SENT,
+      sendLockedUntil: null,
+    },
   });
 }
 
@@ -325,21 +491,28 @@ export async function processScheduledCampaigns() {
     where: {
       status: MarketingCampaignStatus.SCHEDULED,
       scheduledFor: { lte: now },
+      OR: [{ sendLockedUntil: null }, { sendLockedUntil: { lte: now } }],
     },
     select: { id: true },
   });
 
   for (const campaign of scheduled) {
-    await prisma.marketingCampaign.update({
-      where: { id: campaign.id },
-      data: { status: MarketingCampaignStatus.SENDING },
+    const lockUntil = new Date(Date.now() + CAMPAIGN_LOCK_MINUTES * 60 * 1000);
+    const locked = await prisma.marketingCampaign.updateMany({
+      where: {
+        id: campaign.id,
+        status: MarketingCampaignStatus.SCHEDULED,
+        OR: [{ sendLockedUntil: null }, { sendLockedUntil: { lte: now } }],
+      },
+      data: { status: MarketingCampaignStatus.SENDING, sendLockedUntil: lockUntil },
     });
+    if (locked.count === 0) continue;
     try {
       await processCampaignSend(campaign.id);
     } catch (error) {
       await prisma.marketingCampaign.update({
         where: { id: campaign.id },
-        data: { status: MarketingCampaignStatus.CANCELLED },
+        data: { status: MarketingCampaignStatus.FAILED, sendLockedUntil: null },
       });
       console.error('Failed to send marketing campaign', { campaignId: campaign.id, error });
     }
@@ -347,18 +520,32 @@ export async function processScheduledCampaigns() {
 }
 
 export async function processSendingCampaigns() {
+  const now = new Date();
   const campaigns = await prisma.marketingCampaign.findMany({
-    where: { status: MarketingCampaignStatus.SENDING },
+    where: {
+      status: { in: [MarketingCampaignStatus.SENDING, MarketingCampaignStatus.PAUSED_LIMIT] },
+      OR: [{ sendLockedUntil: null }, { sendLockedUntil: { lte: now } }],
+    },
     select: { id: true },
   });
 
   for (const campaign of campaigns) {
+    const lockUntil = new Date(Date.now() + CAMPAIGN_LOCK_MINUTES * 60 * 1000);
+    const locked = await prisma.marketingCampaign.updateMany({
+      where: {
+        id: campaign.id,
+        status: { in: [MarketingCampaignStatus.SENDING, MarketingCampaignStatus.PAUSED_LIMIT] },
+        OR: [{ sendLockedUntil: null }, { sendLockedUntil: { lte: now } }],
+      },
+      data: { status: MarketingCampaignStatus.SENDING, sendLockedUntil: lockUntil },
+    });
+    if (locked.count === 0) continue;
     try {
       await processCampaignSend(campaign.id);
     } catch (error) {
       await prisma.marketingCampaign.update({
         where: { id: campaign.id },
-        data: { status: MarketingCampaignStatus.CANCELLED },
+        data: { status: MarketingCampaignStatus.FAILED, sendLockedUntil: null },
       });
       console.error('Failed to resume marketing campaign', { campaignId: campaign.id, error });
     }

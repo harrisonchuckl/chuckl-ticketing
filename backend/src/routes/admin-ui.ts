@@ -16895,7 +16895,7 @@ function renderInterests(customer){
             var summary = data.summary || {};
             if (target) {
               target.innerHTML = ''
-                + '<div class="muted" style="margin-bottom:8px;">Total: ' + (summary.total || 0) + ' • Sent: ' + (summary.sent || 0) + ' • Failed: ' + (summary.failed || 0) + ' • Skipped: ' + (summary.skipped || 0) + '</div>'
+                + '<div class="muted" style="margin-bottom:8px;">Total: ' + (summary.total || 0) + ' • Sent: ' + (summary.sent || 0) + ' • Failed: ' + (summary.failed || 0) + ' • Retryable: ' + (summary.retryable || 0) + ' • Skipped: ' + (summary.skipped || 0) + '</div>'
                 + '<div class="table-wrap"><table class="table">'
                 + '<thead><tr><th>Email</th><th>Status</th><th>Timestamp</th><th>Error</th></tr></thead>'
                 + '<tbody>' + (rows || '<tr><td colspan=\"4\" class=\"muted\">No recipients yet.</td></tr>') + '</tbody>'
@@ -17118,13 +17118,22 @@ function renderInterests(customer){
       renderPreferences(data.items || []);
     }
 
-    function renderDeliverability(summary, segments, warmup){
+    function renderDeliverability(summary, segments, warmup, health){
       var summaryHtml = ''
         + '<div class=\"grid\" style=\"grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;\">'
         +   '<div class=\"card\"><div class=\"title\">Bounce rate</div><div>' + summary.bounceRate + '%</div></div>'
         +   '<div class=\"card\"><div class=\"title\">Complaint rate</div><div>' + summary.complaintRate + '%</div></div>'
         +   '<div class=\"card\"><div class=\"title\">Unsubscribe rate</div><div>' + summary.unsubscribeRate + '%</div></div>'
         +   '<div class=\"card\"><div class=\"title\">Click rate</div><div>' + summary.clickRate + '%</div></div>'
+        + '</div>';
+
+      var healthHtml = ''
+        + '<div class=\"grid\" style=\"grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;\">'
+        +   '<div class=\"card\"><div class=\"title\">Daily limit</div><div>' + (health.dailyLimit || 0) + '</div></div>'
+        +   '<div class=\"card\"><div class=\"title\">Send rate</div><div>' + (health.sendRate || 0) + '/s</div></div>'
+        +   '<div class=\"card\"><div class=\"title\">Queue depth</div><div>' + (health.sendQueueDepth || 0) + '</div></div>'
+        +   '<div class=\"card\"><div class=\"title\">Last worker run</div><div>' + escapeHtml(formatDateTime(health.lastWorkerRunAt || '')) + '</div></div>'
+        +   '<div class=\"card\"><div class=\"title\">Last send</div><div>' + escapeHtml(formatDateTime(health.lastSendAt || '')) + '</div></div>'
         + '</div>';
 
       var segmentRows = (segments || []).map(function(seg){
@@ -17139,6 +17148,10 @@ function renderInterests(customer){
         + '<div class=\"card\" style=\"margin-bottom:12px;\">'
         +   '<div class=\"title\">Sending health</div>'
         +   '<div style=\"margin-top:10px;\">' + summaryHtml + '</div>'
+        + '</div>'
+        + '<div class=\"card\" style=\"margin-bottom:12px;\">'
+        +   '<div class=\"title\">Worker & limits</div>'
+        +   '<div style=\"margin-top:10px;\">' + healthHtml + '</div>'
         + '</div>'
         + '<div class=\"card\" style=\"margin-bottom:12px;\">'
         +   '<div class=\"title\">Top segments by engagement</div>'
@@ -17161,7 +17174,13 @@ function renderInterests(customer){
       var summary = await fetchJson('/admin/marketing/deliverability/summary?days=30');
       var segments = await fetchJson('/admin/marketing/deliverability/top-segments?days=30');
       var warmup = await fetchJson('/admin/marketing/deliverability/warmup');
-      renderDeliverability(summary.summary || {}, segments.items || [], warmup.data || { guidance: [], presets: [] });
+      var health = await fetchJson('/admin/marketing/health');
+      renderDeliverability(
+        summary.summary || {},
+        segments.items || [],
+        warmup.data || { guidance: [], presets: [] },
+        health || {}
+      );
     }
 
     function renderSettings(settings){
