@@ -1,3 +1,10 @@
+import {
+  applyPersonalisationTokens,
+  resolvePersonalisationTokens,
+  type PersonalisationContext,
+  type PersonalisationTokens,
+} from "../../services/marketing/personalisation.js";
+
 export type EmailBlock = {
   id: string;
   type: string;
@@ -23,12 +30,15 @@ export type EmailRenderShow = {
   slug?: string | null;
   venue?: { name?: string | null } | null;
   tags?: string[] | null;
+  eventCategory?: string | null;
+  ticketsRemaining?: number | null;
 };
 
 export type EmailRenderOptions = {
   show?: EmailRenderShow | null;
   upcomingShows?: EmailRenderShow[];
   baseUrl?: string;
+  personalisation?: PersonalisationContext;
 };
 
 function escapeHtml(input: string) {
@@ -82,7 +92,51 @@ function renderButton(label: string, url: string, style: Record<string, any>) {
   return `<div style="text-align:${align};">${buttonHtml}</div>`;
 }
 
-function renderBlock(block: EmailBlock, options: EmailRenderOptions) {
+function resolveText(input: string, tokens: PersonalisationTokens) {
+  return applyPersonalisationTokens(String(input || ""), tokens);
+}
+
+function renderShowList(params: {
+  shows: EmailRenderShow[];
+  color: string;
+  baseUrl: string;
+}) {
+  const { shows, color, baseUrl } = params;
+  return shows
+    .map((show) => {
+      const url = resolveShowUrl(show, baseUrl);
+      return `<tr>
+        <td style="padding:6px 0;border-bottom:1px solid #f3f4f6;">
+          <a href="${escapeHtml(url)}" style="text-decoration:none;color:${color};font-weight:700;">${escapeHtml(
+            show.title || "Untitled show"
+          )}</a>
+          <div style="font-size:12px;color:#6b7280;">${escapeHtml(formatDate(show.date || ""))}${
+        show.venue?.name ? ` · ${escapeHtml(show.venue.name || "")}` : ""
+      }</div>
+        </td>
+      </tr>`;
+    })
+    .join("");
+}
+
+function pickRecommendedShows(
+  upcoming: EmailRenderShow[],
+  affinity: { category?: string; venue?: string }
+) {
+  const category = String(affinity.category || "").toLowerCase();
+  const venue = String(affinity.venue || "").toLowerCase();
+  const scored = upcoming
+    .map((show) => {
+      let score = 0;
+      if (category && show.eventCategory && show.eventCategory.toLowerCase() === category) score += 2;
+      if (venue && show.venue?.name && show.venue.name.toLowerCase() === venue) score += 1;
+      return { show, score };
+    })
+    .sort((a, b) => b.score - a.score);
+  return scored.map((item) => item.show);
+}
+
+function renderBlock(block: EmailBlock, options: EmailRenderOptions, tokens: PersonalisationTokens) {
   const content = block.content || {};
   const style = block.style || {};
   const padding = withPx(style.padding ?? 18, 18);
@@ -101,11 +155,12 @@ function renderBlock(block: EmailBlock, options: EmailRenderOptions) {
   ]);
 
   if (block.type === "Header") {
-    return `<tr><td style="${cellStyle}"><div style="font-size:${withPx((style.fontSize || 24) + 6, 30)};font-weight:800;">${escapeHtml(content.text || "")}</div></td></tr>`;
+    const text = resolveText(content.text || "", tokens);
+    return `<tr><td style="${cellStyle}"><div style="font-size:${withPx((style.fontSize || 24) + 6, 30)};font-weight:800;">${escapeHtml(text)}</div></td></tr>`;
   }
 
   if (block.type === "Text") {
-    const text = escapeHtml(content.text || "").replace(/\n/g, "<br/>");
+    const text = escapeHtml(resolveText(content.text || "", tokens)).replace(/\n/g, "<br/>");
     return `<tr><td style="${cellStyle}"><div style="line-height:1.6;">${text}</div></td></tr>`;
   }
 
@@ -118,7 +173,9 @@ function renderBlock(block: EmailBlock, options: EmailRenderOptions) {
   }
 
   if (block.type === "Button") {
-    return `<tr><td style="${cellStyle}">${renderButton(content.text || "Call to action", content.linkUrl || "#", style)}</td></tr>`;
+    const label = resolveText(content.text || "Call to action", tokens);
+    const url = resolveText(content.linkUrl || "#", tokens);
+    return `<tr><td style="${cellStyle}">${renderButton(label, url, style)}</td></tr>`;
   }
 
   if (block.type === "Divider") {
@@ -145,7 +202,7 @@ function renderBlock(block: EmailBlock, options: EmailRenderOptions) {
   }
 
   if (block.type === "Footer") {
-    const text = escapeHtml(content.text || "").replace(/\n/g, "<br/>");
+    const text = escapeHtml(resolveText(content.text || "", tokens)).replace(/\n/g, "<br/>");
     return `<tr><td style="${cellStyle}"><div style="font-size:${fontSize};line-height:1.5;">${text}</div></td></tr>`;
   }
 
@@ -174,35 +231,88 @@ function renderBlock(block: EmailBlock, options: EmailRenderOptions) {
 
   if (block.type === "ShowCTA") {
     const showUrl = resolveShowUrl(options.show || null, options.baseUrl || "");
-    return `<tr><td style="${cellStyle}">${renderButton(content.text || "Get tickets", content.linkUrl || showUrl, style)}</td></tr>`;
+    const label = resolveText(content.text || "Get tickets", tokens);
+    const url = resolveText(content.linkUrl || showUrl, tokens);
+    return `<tr><td style="${cellStyle}">${renderButton(label, url, style)}</td></tr>`;
   }
 
   if (block.type === "ShowLineup") {
     const tags = options.show?.tags || [];
     if (!tags.length) return "";
-    const title = escapeHtml(content.title || "Lineup");
+    const title = escapeHtml(resolveText(content.title || "Lineup", tokens));
     const items = tags.map((tag) => `<span style="display:inline-block;padding:6px 10px;border:1px solid #e5e7eb;border-radius:999px;margin:4px;font-size:12px;">${escapeHtml(tag)}</span>`).join("");
     return `<tr><td style="${cellStyle}"><div style="font-weight:700;margin-bottom:6px;">${title}</div><div>${items}</div></td></tr>`;
   }
 
   if (block.type === "UpcomingShowsList") {
     const upcoming = options.upcomingShows || [];
-    const title = escapeHtml(content.title || "Upcoming shows");
+    const title = escapeHtml(resolveText(content.title || "Upcoming shows", tokens));
     const listItems = upcoming.length
-      ? upcoming
-          .slice(0, 4)
-          .map((show) => {
-            const url = resolveShowUrl(show, options.baseUrl || "");
-            return `<tr>
-              <td style="padding:6px 0;border-bottom:1px solid #f3f4f6;">
-                <a href="${escapeHtml(url)}" style="text-decoration:none;color:${color};font-weight:700;">${escapeHtml(show.title || "Untitled show")}</a>
-                <div style="font-size:12px;color:#6b7280;">${escapeHtml(formatDate(show.date || ""))}${show.venue?.name ? ` · ${escapeHtml(show.venue.name || "")}` : ""}</div>
-              </td>
-            </tr>`;
-          })
-          .join("")
+      ? renderShowList({ shows: upcoming.slice(0, 4), color, baseUrl: options.baseUrl || "" })
       : `<tr><td style="padding:8px 0;color:#6b7280;font-size:12px;">No upcoming shows yet.</td></tr>`;
     return `<tr><td style="${cellStyle}"><div style="font-weight:700;margin-bottom:6px;">${title}</div><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${listItems}</table></td></tr>`;
+  }
+
+  if (block.type === "RecommendedForYou") {
+    const upcoming = options.upcomingShows || [];
+    const picks = pickRecommendedShows(upcoming, {
+      category: tokens.topCategory,
+      venue: tokens.favouriteVenue,
+    }).slice(0, 4);
+    const title = escapeHtml(resolveText(content.title || "Recommended for you", tokens));
+    const listItems = picks.length
+      ? renderShowList({ shows: picks, color, baseUrl: options.baseUrl || "" })
+      : `<tr><td style="padding:8px 0;color:#6b7280;font-size:12px;">No recommendations yet.</td></tr>`;
+    return `<tr><td style="${cellStyle}"><div style="font-weight:700;margin-bottom:6px;">${title}</div><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${listItems}</table></td></tr>`;
+  }
+
+  if (block.type === "BecauseYouLiked") {
+    const upcoming = options.upcomingShows || [];
+    const affinityLabel = tokens.topCategory || tokens.favouriteVenue;
+    if (!affinityLabel) return "";
+    const matches = pickRecommendedShows(upcoming, {
+      category: tokens.topCategory,
+      venue: tokens.favouriteVenue,
+    }).filter((show) => {
+      if (tokens.topCategory && show.eventCategory) {
+        if (show.eventCategory.toLowerCase() === tokens.topCategory.toLowerCase()) return true;
+      }
+      if (tokens.favouriteVenue && show.venue?.name) {
+        if (show.venue.name.toLowerCase() === tokens.favouriteVenue.toLowerCase()) return true;
+      }
+      return false;
+    });
+    const list = (matches.length ? matches : upcoming).slice(0, 4);
+    const fallbackTitle = `Because you liked ${affinityLabel}`;
+    const title = escapeHtml(resolveText(content.title || fallbackTitle, tokens));
+    const listItems = list.length
+      ? renderShowList({ shows: list, color, baseUrl: options.baseUrl || "" })
+      : `<tr><td style="padding:8px 0;color:#6b7280;font-size:12px;">More shows coming soon.</td></tr>`;
+    return `<tr><td style="${cellStyle}"><div style="font-weight:700;margin-bottom:6px;">${title}</div><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${listItems}</table></td></tr>`;
+  }
+
+  if (block.type === "BringTheGroup") {
+    const isGroupBuyer = options.personalisation?.groupBuyerScore === true;
+    const defaultCopy =
+      content.defaultCopy || "Make it a night out — invite friends and save seats together.";
+    const groupCopy =
+      content.groupCopy || "Bring the whole crew back. Lock in seats for the group before they go.";
+    const copy = isGroupBuyer ? groupCopy : defaultCopy;
+    const resolved = escapeHtml(resolveText(copy, tokens)).replace(/\n/g, "<br/>");
+    return `<tr><td style="${cellStyle}"><div style="background:#f1f5f9;border-radius:12px;padding:16px;font-weight:600;line-height:1.5;">${resolved}</div></td></tr>`;
+  }
+
+  if (block.type === "UrgencyBanner") {
+    const remaining = options.show?.ticketsRemaining ?? null;
+    const threshold = Number(content.threshold ?? 20);
+    if (!Number.isFinite(remaining) || remaining === null || remaining > threshold) return "";
+    const showTitle = options.show?.title || "this show";
+    const rawText =
+      content.text || `Hurry — only ${Math.max(0, remaining)} tickets left for ${showTitle}.`;
+    const message = escapeHtml(resolveText(rawText, tokens))
+      .replace(/\{remaining\}/g, String(Math.max(0, Number(remaining))))
+      .replace(/\{showTitle\}/g, escapeHtml(showTitle));
+    return `<tr><td style="${cellStyle}"><div style="background:#fee2e2;border-radius:12px;padding:12px;text-align:center;font-weight:700;color:#991b1b;">${message}</div></td></tr>`;
   }
 
   return "";
@@ -210,7 +320,8 @@ function renderBlock(block: EmailBlock, options: EmailRenderOptions) {
 
 export function renderEmailDocument(document: EmailDocument, options: EmailRenderOptions = {}) {
   const blocks = Array.isArray(document?.blocks) ? document.blocks : [];
-  const rows = blocks.map((block) => renderBlock(block, options)).filter(Boolean).join("");
+  const tokens = resolvePersonalisationTokens(options.personalisation);
+  const rows = blocks.map((block) => renderBlock(block, options, tokens)).filter(Boolean).join("");
   const html = `<!doctype html>
 <html>
   <head>
