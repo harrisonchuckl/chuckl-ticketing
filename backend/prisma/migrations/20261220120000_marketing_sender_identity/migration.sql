@@ -1,17 +1,3 @@
--- AlterTable
-ALTER TABLE "MarketingSettings" ADD COLUMN     "sendingMode" TEXT NOT NULL DEFAULT 'SENDGRID',
-ADD COLUMN     "verifiedStatus" TEXT NOT NULL DEFAULT 'UNVERIFIED',
-ADD COLUMN     "sendgridDomainId" TEXT,
-ADD COLUMN     "sendgridDomain" TEXT,
-ADD COLUMN     "sendgridSubdomain" TEXT,
-ADD COLUMN     "sendgridDnsRecords" JSONB,
-ADD COLUMN     "smtpHost" TEXT,
-ADD COLUMN     "smtpPort" INTEGER,
-ADD COLUMN     "smtpUserEncrypted" TEXT,
-ADD COLUMN     "smtpPassEncrypted" TEXT,
-ADD COLUMN     "smtpSecure" BOOLEAN,
-ADD COLUMN     "smtpLastTestAt" TIMESTAMP(3);
-
 -- CreateEnum
 DO $$ BEGIN
     CREATE TYPE "MarketingSenderMode" AS ENUM ('SENDGRID', 'SMTP');
@@ -25,6 +11,17 @@ EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
--- Ensure enums are used for columns
-ALTER TABLE "MarketingSettings" ALTER COLUMN "sendingMode" TYPE "MarketingSenderMode" USING ("sendingMode"::"MarketingSenderMode");
-ALTER TABLE "MarketingSettings" ALTER COLUMN "verifiedStatus" TYPE "MarketingVerifiedStatus" USING ("verifiedStatus"::"MarketingVerifiedStatus");
+-- Add new columns (safe if re-run)
+ALTER TABLE "MarketingSettings"
+  ADD COLUMN IF NOT EXISTS "sendingMode" "MarketingSenderMode" NOT NULL DEFAULT 'SENDGRID',
+  ADD COLUMN IF NOT EXISTS "verifiedStatus" "MarketingVerifiedStatus" NOT NULL DEFAULT 'UNVERIFIED',
+  ADD COLUMN IF NOT EXISTS "sendgridDomainId" TEXT,
+  ADD COLUMN IF NOT EXISTS "sendgridDomain" TEXT,
+  ADD COLUMN IF NOT EXISTS "sendgridSubdomain" TEXT,
+  ADD COLUMN IF NOT EXISTS "sendgridDnsRecords" JSONB,
+  ADD COLUMN IF NOT EXISTS "smtpHost" TEXT,
+  ADD COLUMN IF NOT EXISTS "smtpPort" INTEGER,
+  ADD COLUMN IF NOT EXISTS "smtpUserEncrypted" TEXT,
+  ADD COLUMN IF NOT EXISTS "smtpPassEncrypted" TEXT,
+  ADD COLUMN IF NOT EXISTS "smtpSecure" BOOLEAN,
+  ADD COLUMN IF NOT EXISTS "smtpLastTestAt" TIMESTAMP(3);
