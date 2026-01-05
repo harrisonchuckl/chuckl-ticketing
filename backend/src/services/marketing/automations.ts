@@ -14,14 +14,20 @@ import { createPreferencesToken } from '../../lib/email-marketing/preferences.js
 import { renderMarketingTemplate } from '../../lib/email-marketing/rendering.js';
 import { shouldSuppressContact } from './campaigns.js';
 import { buildRecommendedShowsHtml } from './recommendations.js';
-import { fetchMarketingSettings, resolveRequireVerifiedFrom, resolveSenderDetails } from './settings.js';
+import {
+  fetchMarketingSettings,
+  applyMarketingStreamToEmail,
+  assertSenderVerified,
+  buildListUnsubscribeMail,
+  resolveRequireVerifiedFrom,
+  resolveSenderDetails,
+} from './settings.js';
 
 const PUBLIC_BASE_URL =
   process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
 
 const AUTOMATION_LOCK_MINUTES = Number(process.env.MARKETING_AUTOMATION_LOCK_MINUTES || 5);
 const REQUIRE_VERIFIED_FROM = String(process.env.MARKETING_REQUIRE_VERIFIED_FROM || 'true') === 'true';
-const VERIFIED_FROM_DOMAIN = String(process.env.MARKETING_FROM_DOMAIN || '').trim();
 
 function baseUrl() {
   return PUBLIC_BASE_URL.replace(/\/+$/, '');
@@ -35,37 +41,6 @@ function tenantSlugFrom(user: { storefrontSlug?: string | null; id: string }) {
   return user.storefrontSlug || user.id;
 }
 
-function applyMarketingStream(fromEmail: string) {
-  const streamDomain = String(process.env.MARKETING_STREAM_DOMAIN || '').trim();
-  if (!streamDomain) return fromEmail;
-  const at = fromEmail.indexOf('@');
-  if (at === -1) return fromEmail;
-  return `${fromEmail.slice(0, at)}@${streamDomain}`;
-}
-
-function isFromVerified(fromEmail: string, requireVerifiedFrom: boolean) {
-  if (!requireVerifiedFrom || !VERIFIED_FROM_DOMAIN) return true;
-  const effective = applyMarketingStream(fromEmail);
-  return effective.toLowerCase().endsWith(`@${VERIFIED_FROM_DOMAIN.toLowerCase()}`);
-}
-
-function assertValidFromDomain(fromEmail: string, requireVerifiedFrom: boolean) {
-  if (!requireVerifiedFrom) return;
-  if (!VERIFIED_FROM_DOMAIN) {
-    throw new Error('MARKETING_FROM_DOMAIN must be configured when verified-from enforcement is enabled.');
-  }
-  const streamDomain = String(process.env.MARKETING_STREAM_DOMAIN || '').trim();
-  if (streamDomain && !streamDomain.toLowerCase().endsWith(VERIFIED_FROM_DOMAIN.toLowerCase())) {
-    throw new Error(
-      `MARKETING_STREAM_DOMAIN (${streamDomain}) must align with MARKETING_FROM_DOMAIN (${VERIFIED_FROM_DOMAIN}).`
-    );
-  }
-  if (!isFromVerified(fromEmail, requireVerifiedFrom)) {
-    throw new Error(
-      `From email must be verified for marketing sends. Ensure MARKETING_FROM_DOMAIN is set to ${VERIFIED_FROM_DOMAIN}.`
-    );
-  }
-}
 
 async function buildUnsubscribeUrl(tenantId: string, email: string) {
   const tenant = await prisma.user.findUnique({
@@ -349,7 +324,7 @@ export async function processAutomationSteps() {
       }
 
       const requireVerifiedFrom = resolveRequireVerifiedFrom(settings, REQUIRE_VERIFIED_FROM);
-      assertValidFromDomain(sender.fromEmail, requireVerifiedFrom);
+      assertSenderVerified({ fromEmail: sender.fromEmail, settings, requireVerifiedFrom });
 
       const unsubscribeUrl = await buildUnsubscribeUrl(state.tenantId, state.contact.email);
       const preferencesUrl = await buildPreferencesUrl(state.tenantId, state.contact.email);
@@ -369,16 +344,17 @@ export async function processAutomationSteps() {
         throw new Error(errors.join('; '));
       }
 
-      const provider = getEmailProvider();
+      const provider = getEmailProvider(settings);
+      const listUnsubscribeMail = buildListUnsubscribeMail(sender.fromEmail) || undefined;
       const result = await provider.sendEmail({
         to: state.contact.email,
         subject: nextStep.template.subject,
         html,
         fromName: sender.fromName,
-        fromEmail: applyMarketingStream(sender.fromEmail),
+        fromEmail: applyMarketingStreamToEmail(sender.fromEmail, settings),
         replyTo: sender.replyTo,
         headers: {
-          'List-Unsubscribe': `<${unsubscribeUrl}>`,
+          'List-Unsubscribe': [listUnsubscribeMail, `<${unsubscribeUrl}>`].filter(Boolean).join(', '),
           'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
         },
         customArgs: {
