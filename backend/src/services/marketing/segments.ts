@@ -32,6 +32,7 @@ export type SegmentContact = {
   email: string;
   firstName: string | null;
   lastName: string | null;
+  town: string | null;
   consentStatus: string | null;
   tags: string[];
   preferences: Array<{ topicId: string; status: string }>;
@@ -98,6 +99,7 @@ export async function evaluateSegmentContacts(
     email: contact.email,
     firstName: contact.firstName,
     lastName: contact.lastName,
+    town: contact.town,
     consentStatus: contact.consents[0]?.status || null,
     tags: contact.tags.map((t) => t.tag.name),
     preferences: contact.preferences.map((pref) => ({
