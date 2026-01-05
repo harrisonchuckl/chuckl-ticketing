@@ -17,6 +17,7 @@ import {
   MarketingLawfulBasis,
   MarketingSuppressionType,
   MarketingImportJobStatus,
+  MarketingCampaignRecipient,
   MarketingRecipientStatus,
   MarketingSenderMode,
   MarketingVerifiedStatus,
@@ -1733,7 +1734,11 @@ router.put('/marketing/campaigns/:id', requireAdminOrOrganiser, async (req, res)
   const existing = await prisma.marketingCampaign.findFirst({ where: { id, tenantId } });
   if (!existing) return res.status(404).json({ ok: false, message: 'Campaign not found' });
 
-  if (![MarketingCampaignStatus.DRAFT, MarketingCampaignStatus.APPROVAL_REQUIRED].includes(existing.status)) {
+  const editableStatuses: MarketingCampaignStatus[] = [
+    MarketingCampaignStatus.DRAFT,
+    MarketingCampaignStatus.APPROVAL_REQUIRED,
+  ];
+  if (!editableStatuses.includes(existing.status)) {
     return res.status(400).json({ ok: false, message: 'Campaign can only be edited while in draft or approval.' });
   }
 
@@ -1939,13 +1944,12 @@ router.post('/marketing/campaigns/:id/schedule', requireAdminOrOrganiser, async 
   });
   if (!campaign) return res.status(404).json({ ok: false, message: 'Campaign not found' });
 
-  if (
-    ![
-      MarketingCampaignStatus.DRAFT,
-      MarketingCampaignStatus.APPROVAL_REQUIRED,
-      MarketingCampaignStatus.SCHEDULED,
-    ].includes(campaign.status)
-  ) {
+  const schedulableStatuses: MarketingCampaignStatus[] = [
+    MarketingCampaignStatus.DRAFT,
+    MarketingCampaignStatus.APPROVAL_REQUIRED,
+    MarketingCampaignStatus.SCHEDULED,
+  ];
+  if (!schedulableStatuses.includes(campaign.status)) {
     return res.status(400).json({ ok: false, message: 'Campaign cannot be scheduled from its current status.' });
   }
 
@@ -2098,15 +2102,14 @@ router.post('/marketing/campaigns/:id/cancel', requireAdminOrOrganiser, async (r
   const existing = await prisma.marketingCampaign.findFirst({ where: { id, tenantId } });
   if (!existing) return res.status(404).json({ ok: false, message: 'Campaign not found' });
 
-  if (
-    ![
-      MarketingCampaignStatus.DRAFT,
-      MarketingCampaignStatus.SCHEDULED,
-      MarketingCampaignStatus.SENDING,
-      MarketingCampaignStatus.PAUSED_LIMIT,
-      MarketingCampaignStatus.APPROVAL_REQUIRED,
-    ].includes(existing.status)
-  ) {
+  const cancellableStatuses: MarketingCampaignStatus[] = [
+    MarketingCampaignStatus.DRAFT,
+    MarketingCampaignStatus.SCHEDULED,
+    MarketingCampaignStatus.SENDING,
+    MarketingCampaignStatus.PAUSED_LIMIT,
+    MarketingCampaignStatus.APPROVAL_REQUIRED,
+  ];
+  if (!cancellableStatuses.includes(existing.status)) {
     return res.status(400).json({ ok: false, message: 'Campaign cannot be cancelled in its current status.' });
   }
 
@@ -2162,7 +2165,7 @@ router.get('/marketing/campaigns/:id/recipients', requireAdminOrOrganiser, async
     { total: 0, sent: 0, failed: 0, retryable: 0, skipped: 0, pending: 0 }
   );
 
-  let items = [];
+  let items: MarketingCampaignRecipient[] = [];
   if (includeItems) {
     items = await prisma.marketingCampaignRecipient.findMany({
       where: { tenantId, campaignId: id },
