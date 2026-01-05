@@ -4,6 +4,13 @@ import { createUnsubscribeToken } from '../../lib/email-marketing/unsubscribe.js
 import { createPreferencesToken } from '../../lib/email-marketing/preferences.js';
 import { renderMarketingTemplate } from '../../lib/email-marketing/rendering.js';
 import {
+  fetchMarketingSettings,
+  resolveDailyLimit,
+  resolveRequireVerifiedFrom,
+  resolveSenderDetails,
+  resolveSendRate,
+} from './settings.js';
+import {
   MarketingCampaignStatus,
   MarketingConsentStatus,
   MarketingConsentSource,
@@ -149,8 +156,8 @@ async function buildPreferencesUrl(tenantId: string, email: string) {
   return `${baseUrl()}/preferences/${encodeURIComponent(slug)}/${encodeURIComponent(token)}`;
 }
 
-function isFromVerified(fromEmail: string) {
-  if (!REQUIRE_VERIFIED_FROM || !VERIFIED_FROM_DOMAIN) return true;
+function isFromVerified(fromEmail: string, requireVerifiedFrom: boolean) {
+  if (!requireVerifiedFrom || !VERIFIED_FROM_DOMAIN) return true;
   const effective = applyMarketingStream(fromEmail);
   return effective.toLowerCase().endsWith(`@${VERIFIED_FROM_DOMAIN.toLowerCase()}`);
 }
@@ -164,6 +171,7 @@ function applyMarketingStream(fromEmail: string) {
 }
 
 export async function ensureDailyLimit(tenantId: string, upcomingCount: number) {
+  const settings = await fetchMarketingSettings(tenantId);
   const start = new Date();
   start.setHours(0, 0, 0, 0);
   const sentToday = await prisma.marketingCampaignRecipient.count({
@@ -173,7 +181,8 @@ export async function ensureDailyLimit(tenantId: string, upcomingCount: number) 
       sentAt: { gte: start },
     },
   });
-  if (sentToday + upcomingCount > DAILY_LIMIT) {
+  const dailyLimit = resolveDailyLimit(settings, DAILY_LIMIT);
+  if (sentToday + upcomingCount > dailyLimit) {
     throw new Error('Daily marketing send limit reached.');
   }
 }
@@ -182,7 +191,24 @@ export async function processCampaignSend(campaignId: string) {
   const campaign = await ensureRecipients(campaignId);
   if (campaign.status === MarketingCampaignStatus.CANCELLED) return;
 
-  if (!isFromVerified(campaign.template.fromEmail)) {
+  const settings = await fetchMarketingSettings(campaign.tenantId);
+  const sender = resolveSenderDetails({
+    templateFromName: campaign.template.fromName,
+    templateFromEmail: campaign.template.fromEmail,
+    templateReplyTo: campaign.template.replyTo,
+    settings,
+  });
+
+  if (!sender.fromEmail) {
+    throw new Error('From email required for marketing sends.');
+  }
+
+  if (!sender.fromName) {
+    throw new Error('From name required for marketing sends.');
+  }
+
+  const requireVerifiedFrom = resolveRequireVerifiedFrom(settings, REQUIRE_VERIFIED_FROM);
+  if (!isFromVerified(sender.fromEmail, requireVerifiedFrom)) {
     throw new Error('From email not verified for marketing sends.');
   }
 
@@ -246,9 +272,9 @@ export async function processCampaignSend(campaignId: string) {
           to: recipient.email,
           subject: campaign.template.subject,
           html,
-          fromName: campaign.template.fromName,
-          fromEmail: applyMarketingStream(campaign.template.fromEmail),
-          replyTo: campaign.template.replyTo,
+          fromName: sender.fromName,
+          fromEmail: applyMarketingStream(sender.fromEmail),
+          replyTo: sender.replyTo,
           headers,
           customArgs: {
             campaignId: campaign.id,
@@ -279,7 +305,8 @@ export async function processCampaignSend(campaignId: string) {
         });
       }
 
-      const delay = Math.max(0, Math.floor(1000 / Math.max(1, RATE_PER_SEC)));
+      const sendRate = resolveSendRate(settings, RATE_PER_SEC);
+      const delay = Math.max(0, Math.floor(1000 / Math.max(1, sendRate)));
       if (delay) {
         await sleep(delay);
       }
