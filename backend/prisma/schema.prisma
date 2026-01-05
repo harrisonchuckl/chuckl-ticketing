@@ -256,6 +256,23 @@ enum MarketingAutomationTriggerType {
   VIP_THRESHOLD
   SHOW_CATEGORY_INTEREST
   ABANDONED_CHECKOUT
+  SHOW_CREATED
+  SHOW_PUBLISHED
+  DAYS_BEFORE_SHOW
+  VIEWED_NO_PURCHASE
+  BIRTHDAY
+  ANNIVERSARY
+  TAG_APPLIED
+  PREFERENCE_TOPIC
+}
+
+enum MarketingAutomationStepType {
+  SEND_EMAIL
+  WAIT
+  BRANCH
+  ADD_TAG
+  UPDATE_PREFERENCE
+  NOTIFY_ORGANISER
 }
 
 enum MarketingAutomationStateStatus {
@@ -1683,6 +1700,8 @@ model MarketingContact {
   lastName  String?
   phone     String?
   town      String?
+  birthdayDate    DateTime?
+  anniversaryDate DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1695,6 +1714,7 @@ model MarketingContact {
   preferences              MarketingContactPreference[]
   automationStates         MarketingAutomationState[]
   automationStepExecutions MarketingAutomationStepExecution[]
+  automationRuns           MarketingAutomationRun[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -1941,6 +1961,7 @@ model MarketingAutomation {
   tenantId    String
   name        String
   triggerType MarketingAutomationTriggerType
+  triggerConfig Json?
   isEnabled   Boolean                        @default(true)
   createdAt   DateTime                       @default(now())
   updatedAt   DateTime                       @updatedAt
@@ -1949,6 +1970,7 @@ model MarketingAutomation {
   steps          MarketingAutomationStep[]
   states         MarketingAutomationState[]
   stepExecutions MarketingAutomationStepExecution[]
+  runs           MarketingAutomationRun[]
 
   @@index([tenantId])
 }
@@ -1957,13 +1979,18 @@ model MarketingAutomationStep {
   id             String @id @default(cuid())
   tenantId       String
   automationId   String
-  delayMinutes   Int
-  templateId     String
-  conditionRules Json
+  stepType       MarketingAutomationStepType @default(SEND_EMAIL)
+  delayMinutes   Int                         @default(0)
+  templateId     String?
+  conditionRules Json?
+  stepConfig     Json?
+  throttleMinutes Int                        @default(0)
+  quietHoursStart Int?
+  quietHoursEnd   Int?
   stepOrder      Int
 
   automation MarketingAutomation                @relation(fields: [automationId], references: [id])
-  template   MarketingTemplate                  @relation(fields: [templateId], references: [id])
+  template   MarketingTemplate?                 @relation(fields: [templateId], references: [id])
   executions MarketingAutomationStepExecution[]
 
   @@unique([tenantId, automationId, stepOrder])
@@ -1975,6 +2002,8 @@ model MarketingAutomationState {
   tenantId     String
   contactId    String
   automationId String
+  runId        String?
+  triggerKey   String                         @default("")
   currentStep  Int                            @default(0)
   nextRunAt    DateTime?
   status       MarketingAutomationStateStatus @default(ACTIVE)
@@ -1983,8 +2012,9 @@ model MarketingAutomationState {
 
   automation MarketingAutomation @relation(fields: [automationId], references: [id])
   contact    MarketingContact    @relation(fields: [contactId], references: [id])
+  run        MarketingAutomationRun? @relation(fields: [runId], references: [id])
 
-  @@unique([tenantId, contactId, automationId])
+  @@unique([tenantId, contactId, automationId, triggerKey])
   @@index([tenantId, nextRunAt])
 }
 
@@ -1994,8 +2024,10 @@ model MarketingAutomationStepExecution {
   automationId String
   stepId       String
   contactId    String
+  triggerKey   String                        @default("")
   status       MarketingAutomationStepStatus @default(SENT)
   errorText    String?
+  metadata     Json?
   sentAt       DateTime?
   createdAt    DateTime                      @default(now())
 
@@ -2003,8 +2035,30 @@ model MarketingAutomationStepExecution {
   step       MarketingAutomationStep @relation(fields: [stepId], references: [id])
   contact    MarketingContact        @relation(fields: [contactId], references: [id])
 
-  @@unique([tenantId, contactId, stepId])
+  @@unique([tenantId, contactId, stepId, triggerKey])
   @@index([tenantId])
+}
+
+model MarketingAutomationRun {
+  id           String                         @id @default(cuid())
+  tenantId     String
+  automationId String
+  contactId    String
+  triggerType  MarketingAutomationTriggerType
+  triggerKey   String                         @default("")
+  status       MarketingAutomationStateStatus @default(ACTIVE)
+  lastStep     Int                            @default(0)
+  startedAt    DateTime                       @default(now())
+  completedAt  DateTime?
+  metadata     Json?
+
+  automation MarketingAutomation @relation(fields: [automationId], references: [id])
+  contact    MarketingContact    @relation(fields: [contactId], references: [id])
+  states     MarketingAutomationState[]
+
+  @@index([tenantId, automationId])
+  @@index([tenantId, contactId])
+  @@index([tenantId, status])
 }
 
 model MarketingPreferenceTopic {

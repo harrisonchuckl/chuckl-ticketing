@@ -9,6 +9,7 @@ import { createUnsubscribeToken } from '../lib/email-marketing/unsubscribe.js';
 import { createPreferencesToken } from '../lib/email-marketing/preferences.js';
 import { encryptToken } from '../lib/token-crypto.js';
 import {
+  MarketingAutomationStepType,
   MarketingAutomationTriggerType,
   MarketingCampaignStatus,
   MarketingCampaignType,
@@ -49,6 +50,7 @@ import {
   recordPreferenceAudit,
   warmupPresets,
 } from '../services/marketing/automations.js';
+import { triggerTagAppliedAutomation } from '../services/marketing/automations.js';
 import { ensureDefaultPreferenceTopics } from '../services/marketing/preferences.js';
 import { recordConsentAudit } from '../services/marketing/audit.js';
 import { renderEmailDocument } from '../lib/email-builder/rendering.js';
@@ -719,12 +721,16 @@ router.post('/marketing/contacts', requireAdminOrOrganiser, async (req, res) => 
       lastName: req.body?.lastName || null,
       phone: req.body?.phone || null,
       town: req.body?.town || null,
+      birthdayDate: req.body?.birthdayDate ? new Date(req.body.birthdayDate) : null,
+      anniversaryDate: req.body?.anniversaryDate ? new Date(req.body.anniversaryDate) : null,
     },
     update: {
       firstName: req.body?.firstName || undefined,
       lastName: req.body?.lastName || undefined,
       phone: req.body?.phone || undefined,
       town: req.body?.town || undefined,
+      birthdayDate: req.body?.birthdayDate ? new Date(req.body.birthdayDate) : undefined,
+      anniversaryDate: req.body?.anniversaryDate ? new Date(req.body.anniversaryDate) : undefined,
     },
   });
 
@@ -758,6 +764,35 @@ router.post('/marketing/contacts', requireAdminOrOrganiser, async (req, res) => 
   await logMarketingAudit(tenantId, 'contact.saved', 'MarketingContact', contact.id, { email });
 
   res.json({ ok: true, contactId: contact.id });
+});
+
+router.post('/marketing/contacts/:id/tags', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const contactId = String(req.params.id);
+  const tags = Array.isArray(req.body?.tags) ? req.body.tags : [];
+  if (!tags.length) return res.status(400).json({ ok: false, message: 'Tags required' });
+
+  const contact = await prisma.marketingContact.findFirst({ where: { id: contactId, tenantId } });
+  if (!contact) return res.status(404).json({ ok: false, message: 'Contact not found' });
+
+  for (const tagName of tags) {
+    const name = String(tagName || '').trim();
+    if (!name) continue;
+    const tag = await prisma.marketingTag.upsert({
+      where: { tenantId_name: { tenantId, name } },
+      update: {},
+      create: { tenantId, name },
+    });
+    await prisma.marketingContactTag.upsert({
+      where: { contactId_tagId: { contactId, tagId: tag.id } },
+      create: { tenantId, contactId, tagId: tag.id },
+      update: {},
+    });
+    await triggerTagAppliedAutomation(tenantId, contactId, name);
+  }
+
+  await logMarketingAudit(tenantId, 'contact.tags.updated', 'MarketingContact', contactId, { tags });
+  res.json({ ok: true });
 });
 
 router.post('/marketing/imports', requireAdminOrOrganiser, async (req, res) => {
@@ -1286,7 +1321,7 @@ router.get('/marketing/automations', requireAdminOrOrganiser, async (req, res) =
 
 router.post('/marketing/automations', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
-  const { name, triggerType, isEnabled } = req.body || {};
+  const { name, triggerType, triggerConfig, isEnabled } = req.body || {};
   if (!name || !triggerType) return res.status(400).json({ ok: false, message: 'Name + trigger required' });
 
   const automation = await prisma.marketingAutomation.create({
@@ -1294,6 +1329,7 @@ router.post('/marketing/automations', requireAdminOrOrganiser, async (req, res) 
       tenantId,
       name,
       triggerType: triggerType as MarketingAutomationTriggerType,
+      triggerConfig: triggerConfig || undefined,
       isEnabled: isEnabled !== undefined ? Boolean(isEnabled) : true,
     },
   });
@@ -1306,7 +1342,7 @@ router.post('/marketing/automations', requireAdminOrOrganiser, async (req, res) 
 router.put('/marketing/automations/:id', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const id = String(req.params.id);
-  const { name, triggerType, isEnabled } = req.body || {};
+  const { name, triggerType, triggerConfig, isEnabled } = req.body || {};
 
   const existing = await prisma.marketingAutomation.findFirst({ where: { id, tenantId } });
   if (!existing) return res.status(404).json({ ok: false, message: 'Automation not found' });
@@ -1316,6 +1352,7 @@ router.put('/marketing/automations/:id', requireAdminOrOrganiser, async (req, re
     data: {
       name: name || undefined,
       triggerType: triggerType || undefined,
+      triggerConfig: triggerConfig || undefined,
       isEnabled: isEnabled !== undefined ? Boolean(isEnabled) : undefined,
     },
   });
@@ -1340,9 +1377,13 @@ router.delete('/marketing/automations/:id', requireAdminOrOrganiser, async (req,
 router.post('/marketing/automations/:id/steps', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const automationId = String(req.params.id);
-  const { delayMinutes, templateId, conditionRules, stepOrder } = req.body || {};
-  if (!templateId || stepOrder === undefined) {
-    return res.status(400).json({ ok: false, message: 'Template + step order required' });
+  const { delayMinutes, templateId, conditionRules, stepOrder, stepType, stepConfig, throttleMinutes, quietHoursStart, quietHoursEnd } = req.body || {};
+  if (stepOrder === undefined) {
+    return res.status(400).json({ ok: false, message: 'Step order required' });
+  }
+  const resolvedStepType = (stepType || MarketingAutomationStepType.SEND_EMAIL) as MarketingAutomationStepType;
+  if (resolvedStepType === MarketingAutomationStepType.SEND_EMAIL && !templateId) {
+    return res.status(400).json({ ok: false, message: 'Template required for send email step' });
   }
 
   const automation = await prisma.marketingAutomation.findFirst({ where: { id: automationId, tenantId } });
@@ -1353,8 +1394,13 @@ router.post('/marketing/automations/:id/steps', requireAdminOrOrganiser, async (
       tenantId,
       automationId,
       delayMinutes: Number(delayMinutes || 0),
-      templateId,
-      conditionRules: conditionRules || {},
+      templateId: templateId || null,
+      conditionRules: conditionRules || undefined,
+      stepType: resolvedStepType,
+      stepConfig: stepConfig || undefined,
+      throttleMinutes: Number(throttleMinutes || 0),
+      quietHoursStart: quietHoursStart !== undefined && quietHoursStart !== null ? Number(quietHoursStart) : null,
+      quietHoursEnd: quietHoursEnd !== undefined && quietHoursEnd !== null ? Number(quietHoursEnd) : null,
       stepOrder: Number(stepOrder),
     },
   });
@@ -1367,7 +1413,7 @@ router.put('/marketing/automations/:id/steps/:stepId', requireAdminOrOrganiser, 
   const tenantId = tenantIdFrom(req);
   const automationId = String(req.params.id);
   const stepId = String(req.params.stepId);
-  const { delayMinutes, templateId, conditionRules, stepOrder } = req.body || {};
+  const { delayMinutes, templateId, conditionRules, stepOrder, stepType, stepConfig, throttleMinutes, quietHoursStart, quietHoursEnd } = req.body || {};
 
   const existing = await prisma.marketingAutomationStep.findFirst({
     where: { id: stepId, tenantId, automationId },
@@ -1378,8 +1424,13 @@ router.put('/marketing/automations/:id/steps/:stepId', requireAdminOrOrganiser, 
     where: { id: stepId },
     data: {
       delayMinutes: delayMinutes !== undefined ? Number(delayMinutes) : undefined,
-      templateId: templateId || undefined,
+      templateId: templateId !== undefined ? templateId : undefined,
       conditionRules: conditionRules || undefined,
+      stepType: stepType || undefined,
+      stepConfig: stepConfig || undefined,
+      throttleMinutes: throttleMinutes !== undefined ? Number(throttleMinutes) : undefined,
+      quietHoursStart: quietHoursStart !== undefined ? (quietHoursStart !== null ? Number(quietHoursStart) : null) : undefined,
+      quietHoursEnd: quietHoursEnd !== undefined ? (quietHoursEnd !== null ? Number(quietHoursEnd) : null) : undefined,
       stepOrder: stepOrder !== undefined ? Number(stepOrder) : undefined,
     },
   });
@@ -1409,6 +1460,45 @@ router.get('/marketing/preferences/topics', requireAdminOrOrganiser, async (req,
   const items = await prisma.marketingPreferenceTopic.findMany({
     where: { tenantId },
     orderBy: { createdAt: 'desc' },
+  });
+  res.json({ ok: true, items });
+});
+
+router.get('/marketing/tags', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const items = await prisma.marketingTag.findMany({
+    where: { tenantId },
+    orderBy: { name: 'asc' },
+  });
+  res.json({ ok: true, items });
+});
+
+router.get('/marketing/automations/runs', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const automationId = String(req.query?.automationId || '').trim();
+  const items = await prisma.marketingAutomationRun.findMany({
+    where: { tenantId, ...(automationId ? { automationId } : {}) },
+    orderBy: { startedAt: 'desc' },
+    take: 200,
+    include: { contact: true, automation: true },
+  });
+  res.json({ ok: true, items });
+});
+
+router.get('/marketing/automations/runs/:runId/steps', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const runId = String(req.params.runId);
+  const run = await prisma.marketingAutomationRun.findFirst({ where: { id: runId, tenantId } });
+  if (!run) return res.status(404).json({ ok: false, message: 'Run not found' });
+  const items = await prisma.marketingAutomationStepExecution.findMany({
+    where: {
+      tenantId,
+      automationId: run.automationId,
+      contactId: run.contactId,
+      triggerKey: run.triggerKey,
+    },
+    include: { step: true },
+    orderBy: { createdAt: 'asc' },
   });
   res.json({ ok: true, items });
 });
