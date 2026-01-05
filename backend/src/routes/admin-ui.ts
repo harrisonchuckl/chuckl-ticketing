@@ -548,10 +548,10 @@ router.get("/ui/login", (req, res) => {
     loginPane.classList.remove("hidden");
   }
 
-  createBtn?.addEventListener("click", showRequestForm);
-  backBtn?.addEventListener("click", showLoginForm);
+  if (createBtn) createBtn.addEventListener("click", showRequestForm);
+  if (backBtn) backBtn.addEventListener("click", showLoginForm);
 
-  requestForm?.addEventListener("submit", async (e) => {
+  if (requestForm) requestForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     requestMsg.textContent = "";
     requestMsg.className = "msg";
@@ -9383,6 +9383,13 @@ async function listShows(){
   return Number.isFinite(n) ? n : 0;
 }
 
+  function firstDefined(){
+    for (var i = 0; i < arguments.length; i += 1) {
+      if (arguments[i] !== null && arguments[i] !== undefined) return arguments[i];
+    }
+    return null;
+  }
+
   function loadVenueExtras(){
     try{
       var saved = localStorage.getItem('adminVenueExtras');
@@ -9609,32 +9616,33 @@ function statusBadgeHTML(statusLabel){
         : '';
 
            // Allocation counts (support multiple backend shapes)
-      var sold = num(
-        (s._alloc && (s._alloc.sold ?? s._alloc.soldCount)) ??
-        s.sold ??
-        s.soldCount ??
+      var sold = num(firstDefined(
+        s._alloc ? firstDefined(s._alloc.sold, s._alloc.soldCount) : null,
+        s.sold,
+        s.soldCount,
         0
-      );
+      ));
 
       // "hold" in your UI should represent HELD seats
-      var held = num(
-        (s._alloc && (s._alloc.held ?? s._alloc.hold ?? s._alloc.heldCount ?? s._alloc.holdCount)) ??
-        s.held ??
-        s.heldCount ??
+      var held = num(firstDefined(
+        s._alloc ? firstDefined(s._alloc.held, s._alloc.hold, s._alloc.heldCount, s._alloc.holdCount) : null,
+        s.held,
+        s.heldCount,
         0
-      );
+      ));
 
       // BLOCKED seats (your Prisma enum supports this)
-      var blocked = num(
-        (s._alloc && (s._alloc.blocked ?? s._alloc.blockedCount)) ??
-        s.blocked ??
-        s.blockedCount ??
+      var blocked = num(firstDefined(
+        s._alloc ? firstDefined(s._alloc.blocked, s._alloc.blockedCount) : null,
+        s.blocked,
+        s.blockedCount,
         0
-      );
+      ));
 
       // Try hard to derive TOTAL capacity if backend didn't supply it
+      var allocTotal = s._alloc ? firstDefined(s._alloc.total, s._alloc.capacity) : null;
       var total =
-        ((s._alloc && (s._alloc.total ?? s._alloc.capacity)) != null) ? num(s._alloc.total ?? s._alloc.capacity)
+        (allocTotal != null) ? num(allocTotal)
         : ((s._alloc && s._alloc.available != null) ? num(s._alloc.available) + sold + held + blocked
         : (s.capacity != null ? num(s.capacity)
         : (sumTicketTypeCap(s.ticketTypes))));
@@ -9686,7 +9694,7 @@ function statusBadgeHTML(statusLabel){
       if (externalSalesMap && Object.prototype.hasOwnProperty.call(externalSalesMap, s.id)){
         externalSalesValue = externalSalesMap[s.id];
       }else{
-        var fallbackExternal = s.externalSales ?? s.externalSalesCount ?? null;
+        var fallbackExternal = firstDefined(s.externalSales, s.externalSalesCount);
         var fallbackNumber = Number(fallbackExternal);
         externalSalesValue = Number.isFinite(fallbackNumber) ? fallbackNumber : '';
       }
@@ -10357,7 +10365,7 @@ async function summaryPage(id){
 
     // --- Links Configuration ---
 
-  const storefront = show.organiser?.storefrontSlug || '';
+  const storefront = (show.organiser && show.organiser.storefrontSlug) || '';
   const showSlug = show.slug || '';
 
   // Preferred pretty URL: /public/<storefront>/<slug>
@@ -15111,8 +15119,8 @@ function renderInterests(customer){
       if (data){
         row.querySelector('[data-field="title"]').value = data.title || '';
         row.querySelector('[data-field="sku"]').value = data.sku || '';
-        row.querySelector('[data-field="price"]').value = data.pricePenceOverride ?? '';
-        row.querySelector('[data-field="stock"]').value = data.stockCountOverride ?? '';
+        row.querySelector('[data-field="price"]').value = firstDefined(data.pricePenceOverride, '');
+        row.querySelector('[data-field="stock"]').value = firstDefined(data.stockCountOverride, '');
       }
       row.querySelector('[data-remove]').addEventListener('click', function(){ row.remove(); });
     }
@@ -15129,7 +15137,7 @@ function renderInterests(customer){
       $('#ps_image_rows').appendChild(row);
       if (data){
         row.querySelector('[data-field="url"]').value = data.url || '';
-        row.querySelector('[data-field="sort"]').value = data.sortOrder ?? '';
+        row.querySelector('[data-field="sort"]').value = firstDefined(data.sortOrder, '');
       }
       row.querySelector('[data-remove]').addEventListener('click', function(){ row.remove(); });
     }
@@ -15197,15 +15205,15 @@ function renderInterests(customer){
         $('#ps_prod_category').value = p.category || 'MERCH';
         $('#ps_prod_fulfilment').value = p.fulfilmentType || 'NONE';
         $('#ps_prod_status').value = p.status || 'DRAFT';
-        $('#ps_prod_price').value = p.pricePence ?? '';
+        $('#ps_prod_price').value = firstDefined(p.pricePence, '');
         $('#ps_prod_custom').checked = !!p.allowCustomAmount;
         $('#ps_prod_inventory').value = p.inventoryMode || 'UNLIMITED';
-        $('#ps_prod_stock').value = p.stockCount ?? '';
-        $('#ps_prod_low_stock').value = p.lowStockThreshold ?? '';
+        $('#ps_prod_stock').value = firstDefined(p.stockCount, '');
+        $('#ps_prod_low_stock').value = firstDefined(p.lowStockThreshold, '');
         $('#ps_prod_preorder').checked = !!p.preorderEnabled;
         $('#ps_prod_preorder_close').value = p.preorderCloseAt ? p.preorderCloseAt.split('T')[0] : '';
-        $('#ps_prod_max_order').value = p.maxPerOrder ?? '';
-        $('#ps_prod_max_ticket').value = p.maxPerTicket ?? '';
+        $('#ps_prod_max_order').value = firstDefined(p.maxPerOrder, '');
+        $('#ps_prod_max_ticket').value = firstDefined(p.maxPerTicket, '');
         (p.variants || []).forEach(addVariantRow);
         (p.images || []).forEach(addImageRow);
       }catch(err){
@@ -18266,12 +18274,14 @@ function renderInterests(customer){
               + '</div>';
           }
           if (panel) {
+            var template = campaign.template || {};
+            var segment = campaign.segment || {};
             panel.innerHTML = ''
               + '<div class="muted" style="margin-bottom:8px;">Status: ' + escapeHtml(campaign.status || '') + ' • Scheduled: ' + escapeHtml(scheduleText) + '</div>'
               + '<div><strong>What will send</strong></div>'
-              + '<div class="muted" style="margin-top:4px;">Template: ' + escapeHtml(campaign.template?.name || '—') + ' • Subject: ' + escapeHtml(campaign.template?.subject || '—') + '</div>'
-              + '<div class="muted" style="margin-top:4px;">From: ' + escapeHtml([campaign.template?.fromName, campaign.template?.fromEmail].filter(Boolean).join(' • ') || '—') + '</div>'
-              + '<div class="muted" style="margin-top:8px;">Audience: ' + escapeHtml(campaign.segment?.name || '—') + ' • Show: ' + escapeHtml(showText || '—') + '</div>'
+              + '<div class="muted" style="margin-top:4px;">Template: ' + escapeHtml(template.name || '—') + ' • Subject: ' + escapeHtml(template.subject || '—') + '</div>'
+              + '<div class="muted" style="margin-top:4px;">From: ' + escapeHtml([template.fromName, template.fromEmail].filter(Boolean).join(' • ') || '—') + '</div>'
+              + '<div class="muted" style="margin-top:8px;">Audience: ' + escapeHtml(segment.name || '—') + ' • Show: ' + escapeHtml(showText || '—') + '</div>'
               + '<div class="muted" style="margin-top:8px;">Who will receive: Pending ' + (summary.pending || 0) + ' • Sent ' + (summary.sent || 0) + ' • Skipped ' + (summary.skipped || 0) + '</div>'
               + '<div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap;">'
               +   '<button class="btn" data-cpreview="' + campaign.id + '">Preview</button>'
@@ -18875,9 +18885,11 @@ function renderInterests(customer){
       }).join('');
 
       var runHtml = (runs || []).map(function(run){
+        var automation = run.automation || {};
+        var contact = run.contact || {};
         return '<div class=\"card\" style=\"margin:0 0 10px 0;\">'
-          + '<div class=\"title\">' + escapeHtml(run.automation?.name || 'Automation') + '</div>'
-          + '<div class=\"muted\">Contact: ' + escapeHtml(run.contact?.email || '') + '</div>'
+          + '<div class=\"title\">' + escapeHtml(automation.name || 'Automation') + '</div>'
+          + '<div class=\"muted\">Contact: ' + escapeHtml(contact.email || '') + '</div>'
           + '<div class=\"muted\">Trigger: ' + escapeHtml(run.triggerType || '') + ' • Status: ' + escapeHtml(run.status || '') + '</div>'
           + '<div class=\"muted\">Started: ' + escapeHtml(formatDateTime(run.startedAt || run.createdAt || '')) + '</div>'
           + '<div class=\"muted\">Last step: ' + escapeHtml(run.lastStep ? ('Step ' + run.lastStep) : '—') + '</div>'
@@ -18935,7 +18947,7 @@ function renderInterests(customer){
         +     '<div class=\"automation-builder__header\">'
         +       '<div>'
         +         '<div class=\"muted\">Visual flow</div>'
-        +         '<div class=\"title\" style=\"margin-top:4px;\">' + escapeHtml(selectedAutomation?.name || 'Select an automation') + '</div>'
+        +         '<div class=\"title\" style=\"margin-top:4px;\">' + escapeHtml((selectedAutomation && selectedAutomation.name) || 'Select an automation') + '</div>'
         +       '</div>'
         +       '<div style=\"min-width:240px;\">'
         +         '<select class=\"input\" id=\"mk_auto_builder_select\">' + automationOptions + '</select>'
@@ -19090,9 +19102,10 @@ function renderInterests(customer){
             var stepList = (data.items || []).map(function(step){
               var meta = step.metadata ? JSON.stringify(step.metadata) : '';
               var errorText = step.errorText ? String(step.errorText) : '';
+              var stepInfo = step.step || {};
               return '<div class=\"card\" style=\"margin:0 0 8px 0;\">'
-                + '<div class=\"title\">Step ' + escapeHtml(String(step.step?.stepOrder || '')) + '</div>'
-                + '<div class=\"muted\">Type: ' + escapeHtml(step.step?.stepType ? step.step.stepType.replace(/_/g, ' ') : '') + '</div>'
+                + '<div class=\"title\">Step ' + escapeHtml(String(stepInfo.stepOrder || '')) + '</div>'
+                + '<div class=\"muted\">Type: ' + escapeHtml(stepInfo.stepType ? stepInfo.stepType.replace(/_/g, ' ') : '') + '</div>'
                 + '<div class=\"muted\">Status: ' + escapeHtml(step.status || '') + '</div>'
                 + '<div class=\"muted\">Sent: ' + escapeHtml(step.sentAt ? new Date(step.sentAt).toLocaleString() : '—') + '</div>'
                 + (errorText ? '<div class=\"error\" style=\"margin-top:6px;\">' + escapeHtml(errorText) + '</div>' : '')
@@ -19381,8 +19394,9 @@ function renderInterests(customer){
 
       var changeRows = templateChanges.map(function(change){
         var requestedBy = change.requestedBy ? (change.requestedBy.name || change.requestedBy.email || change.requestedBy.id) : 'Unknown';
+        var templateName = change.template && change.template.name ? change.template.name : '';
         return '<div class="table-row" style="grid-template-columns:1fr 1fr 180px 160px;">'
-          + '<div>' + escapeHtml(change.template?.name || '') + '</div>'
+          + '<div>' + escapeHtml(templateName) + '</div>'
           + '<div>' + escapeHtml(requestedBy) + '</div>'
           + '<div>' + escapeHtml(formatDateTime(change.requestedAt || '')) + '</div>'
           + '<div>'
@@ -21362,7 +21376,11 @@ function renderInterests(customer){
           + '<div class="card" style="margin:0;">'
           +   '<div class="title">Add-ons</div>'
           +   '<div class="table-wrap" style="margin-top:10px;"><table class="table"><thead><tr><th>Show</th><th>Product</th><th>Mode</th><th>Active</th><th>Action</th></tr></thead><tbody>'
-          +     addons.map(function(a){ return '<tr data-addon-id=\"' + a.id + '\"><td>' + escapeHtml(a.show?.title || a.showId) + '</td><td>' + escapeHtml(a.product?.title || a.productId) + '</td><td>' + escapeHtml(a.mode || '') + '</td><td>' + escapeHtml(a.isActive ? 'Yes' : 'No') + '</td><td><button class=\"btn\" data-action=\"delete\">Remove</button></td></tr>'; }).join('')
+          +     addons.map(function(a){
+            var showTitle = (a.show && a.show.title) ? a.show.title : a.showId;
+            var productTitle = (a.product && a.product.title) ? a.product.title : a.productId;
+            return '<tr data-addon-id=\"' + a.id + '\"><td>' + escapeHtml(showTitle) + '</td><td>' + escapeHtml(productTitle) + '</td><td>' + escapeHtml(a.mode || '') + '</td><td>' + escapeHtml(a.isActive ? 'Yes' : 'No') + '</td><td><button class=\"btn\" data-action=\"delete\">Remove</button></td></tr>';
+          }).join('')
           +   '</tbody></table></div>'
           + '</div>';
 
