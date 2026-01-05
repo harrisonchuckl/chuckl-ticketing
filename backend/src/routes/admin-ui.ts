@@ -4602,14 +4602,28 @@ document.addEventListener('click', function(e){
               + '<div id="ownerAuditTable"></div>'
               + '<div class="owner-pagination" id="ownerAuditPagination"></div>'
             + '</section>'
-            : (isFinancial || isHealth
+            : (isFinancial
               ? '<section class="card">'
                 + '<div class="panel-block" style="margin-top:8px;">'
                 +   '<div class="panel-title">' + escapeHtml(current.title) + '</div>'
                 +   '<div class="muted">' + escapeHtml(current.body) + '</div>'
                 + '</div>'
               + '</section>'
-              : ''))))
+              : (isHealth
+                ? '<section class="card" id="ownerHealthCard">'
+                  + '<div class="header" style="align-items:center;gap:12px;">'
+                  +   '<div>'
+                  +     '<div class="title">System health</div>'
+                  +     '<div class="muted">Worker activity, backlog, and provider readiness.</div>'
+                  +   '</div>'
+                  +   '<button class="btn small secondary" id="ownerHealthRefresh" style="margin-left:auto;">Refresh</button>'
+                  + '</div>'
+                  + '<div id="ownerHealthBody" style="margin-top:12px;">'
+                  +   '<div class="skeleton skeleton-line"></div>'
+                  +   '<div class="skeleton skeleton-line" style="margin-top:8px;"></div>'
+                  + '</div>'
+                + '</section>'
+                : '')))))
       + '</div>';
 
     if (isInsights){
@@ -4622,6 +4636,61 @@ document.addEventListener('click', function(e){
     }
     if (isAudit){
       initOwnerAudit();
+    }
+    if (isHealth){
+      loadOwnerHealth();
+    }
+  }
+
+  function renderOwnerHealth(payload){
+    var body = $('#ownerHealthBody');
+    if (!body) return;
+    var worker = payload.worker || {};
+    var provider = payload.provider || {};
+    var lastRun = worker.lastRunAt ? formatDateTime(worker.lastRunAt) : '—';
+    var lastSend = worker.lastSendAt ? formatDateTime(worker.lastSendAt) : '—';
+    var providerStatus = provider.sendgridConfigured ? 'Configured' : 'Missing key';
+    var webhookStatus = provider.webhookTokenConfigured ? 'Token set' : 'Token missing';
+    var html = ''
+      + '<div class="grid" style="gap:12px;">'
+      +   '<div class="panel-block">'
+      +     '<div class="panel-title">Worker enabled</div>'
+      +     '<div>' + (worker.enabled ? 'Yes' : 'No') + '</div>'
+      +     '<div class="muted" style="font-size:12px;">Interval ' + (worker.intervalMs || 0) + 'ms</div>'
+      +   '</div>'
+      +   '<div class="panel-block">'
+      +     '<div class="panel-title">Last worker run</div>'
+      +     '<div>' + escapeHtml(lastRun) + '</div>'
+      +     '<div class="muted" style="font-size:12px;">Last send ' + escapeHtml(lastSend) + '</div>'
+      +   '</div>'
+      +   '<div class="panel-block">'
+      +     '<div class="panel-title">Send backlog</div>'
+      +     '<div>' + (payload.sendQueueDepth || 0) + '</div>'
+      +     '<div class="muted" style="font-size:12px;">Daily limit ' + (worker.dailyLimit || 0) + '</div>'
+      +   '</div>'
+      +   '<div class="panel-block">'
+      +     '<div class="panel-title">Provider status</div>'
+      +     '<div>' + providerStatus + '</div>'
+      +     '<div class="muted" style="font-size:12px;">Webhook: ' + webhookStatus + ' · Max age ' + (provider.maxWebhookAgeHours || 0) + 'h</div>'
+      +   '</div>'
+      + '</div>';
+    body.innerHTML = html;
+  }
+
+  async function loadOwnerHealth(){
+    try{
+      var data = await j('/admin/api/owner/health');
+      renderOwnerHealth(data || {});
+    }catch(err){
+      var body = $('#ownerHealthBody');
+      if (body) body.innerHTML = '<div class="error">Failed to load health data.</div>';
+    }
+    var refreshBtn = $('#ownerHealthRefresh');
+    if (refreshBtn && !refreshBtn.dataset.bound){
+      refreshBtn.dataset.bound = 'true';
+      refreshBtn.addEventListener('click', function(){
+        loadOwnerHealth();
+      });
     }
   }
 

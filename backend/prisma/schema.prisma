@@ -2016,6 +2016,8 @@ model MarketingCampaignRecipient {
 
   @@unique([tenantId, campaignId, contactId])
   @@index([tenantId, campaignId])
+  @@index([tenantId, sentAt])
+  @@index([status])
 }
 
 model MarketingDailySendCounter {
@@ -2025,6 +2027,24 @@ model MarketingDailySendCounter {
   count     Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  tenant User @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, day])
+  @@index([tenantId, day])
+}
+
+model MarketingDailyEventRollup {
+  id           String   @id @default(cuid())
+  tenantId     String
+  day          DateTime
+  sent         Int      @default(0)
+  opened       Int      @default(0)
+  clicked      Int      @default(0)
+  bounced      Int      @default(0)
+  unsubscribed Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   tenant User @relation(fields: [tenantId], references: [id])
 
@@ -2055,6 +2075,23 @@ model MarketingEmailEvent {
 
   @@index([tenantId, campaignId])
   @@index([tenantId])
+  @@index([tenantId, type, createdAt])
+  @@index([tenantId, createdAt])
+}
+
+model MarketingEmailEventReceipt {
+  id              String   @id @default(cuid())
+  tenantId         String
+  provider        String
+  providerEventId String
+  receivedAt      DateTime @default(now())
+  eventAt         DateTime?
+  meta            Json?
+
+  tenant User @relation(fields: [tenantId], references: [id])
+
+  @@unique([provider, providerEventId])
+  @@index([tenantId, receivedAt])
 }
 
 model MarketingAutomation {

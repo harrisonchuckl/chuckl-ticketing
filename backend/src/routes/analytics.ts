@@ -4,6 +4,26 @@ import prisma from '../lib/db.js';
 import { requireAdmin } from '../lib/authz.js';
 
 const router = Router();
+const ANALYTICS_CACHE_TTL_MS = Number(process.env.ANALYTICS_CACHE_TTL_MS || 5 * 60 * 1000);
+const analyticsCache = new Map<string, { expiresAt: number; value: any }>();
+
+function cacheKey(parts: Array<string | number | undefined | null>) {
+  return parts.filter((part) => part != null).join(':');
+}
+
+function getCachedAnalytics<T>(key: string): T | null {
+  const cached = analyticsCache.get(key);
+  if (!cached) return null;
+  if (cached.expiresAt < Date.now()) {
+    analyticsCache.delete(key);
+    return null;
+  }
+  return cached.value as T;
+}
+
+function setCachedAnalytics(key: string, value: any) {
+  analyticsCache.set(key, { value, expiresAt: Date.now() + ANALYTICS_CACHE_TTL_MS });
+}
 
 /**
  * GET /admin/analytics/overview?from=YYYY-MM-DD&to=YYYY-MM-DD
@@ -13,6 +33,9 @@ router.get('/analytics/overview', requireAdmin, async (req: Request, res: Respon
   try {
     const from = req.query.from ? new Date(String(req.query.from)) : null;
     const to = req.query.to ? new Date(String(req.query.to)) : null;
+    const key = cacheKey(['analytics-overview', from?.toISOString(), to?.toISOString()]);
+    const cached = getCachedAnalytics<any>(key);
+    if (cached) return res.json({ ok: true, cached: true, ...cached });
 
     const whereOrders: any = {};
     if (from || to) {
@@ -58,6 +81,16 @@ router.get('/analytics/overview', requireAdmin, async (req: Request, res: Respon
       },
       series,
     });
+    setCachedAnalytics(key, {
+      kpis: {
+        ordersCount,
+        ticketsSold,
+        revenuePence,
+        refundsPence,
+        avgOrderValuePence,
+      },
+      series,
+    });
   } catch (e: any) {
     res.status(500).json({ ok: false, message: e?.message ?? 'Analytics failed' });
   }
@@ -70,6 +103,9 @@ router.get('/analytics/overview', requireAdmin, async (req: Request, res: Respon
 router.get('/analytics/show/:id', requireAdmin, async (req: Request, res: Response) => {
   try {
     const showId = String(req.params.id);
+    const key = cacheKey(['analytics-show', showId]);
+    const cached = getCachedAnalytics<any>(key);
+    if (cached) return res.json({ ok: true, cached: true, ...cached });
 
     const show = await prisma.show.findUnique({
       where: { id: showId },
@@ -121,6 +157,22 @@ router.get('/analytics/show/:id', requireAdmin, async (req: Request, res: Respon
 
     res.json({
       ok: true,
+      show: {
+        id: show.id,
+        title: show.title,
+        date: show.date,
+        venue: show.venue ? { id: show.venue.id, name: show.venue.name, city: show.venue.city, postcode: show.venue.postcode } : null,
+      },
+      kpis: {
+        ordersCount,
+        ticketsSold,
+        revenuePence,
+        refundedRevenuePence,
+      },
+      series,
+      ticketTypeBreakdown,
+    });
+    setCachedAnalytics(key, {
       show: {
         id: show.id,
         title: show.title,
