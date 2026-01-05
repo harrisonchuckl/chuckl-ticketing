@@ -77,6 +77,30 @@ function formatShowDate(date?: Date | string | null) {
   return value.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+function formatLocalDateTime(value: Date) {
+  const pad = (num: number) => String(num).padStart(2, '0');
+  const year = value.getFullYear();
+  const month = pad(value.getMonth() + 1);
+  const day = pad(value.getDate());
+  const hour = pad(value.getHours());
+  const minute = pad(value.getMinutes());
+  return `${year}-${month}-${day}T${hour}:${minute}`;
+}
+
+function injectPreviewText(mjmlBody: string, previewText?: string | null) {
+  const preview = String(previewText || '').trim();
+  if (!preview) return mjmlBody;
+  if (/<mj-preview[\s>]/i.test(mjmlBody)) return mjmlBody;
+  const previewTag = `<mj-preview>${preview}</mj-preview>`;
+  if (/<mj-head[\s>]/i.test(mjmlBody)) {
+    return mjmlBody.replace(/<mj-head[\s>]/i, (match) => `${match}\n${previewTag}`);
+  }
+  if (/<mjml[\s>]/i.test(mjmlBody)) {
+    return mjmlBody.replace(/<mjml[\s>]/i, (match) => `${match}\n${previewTag}`);
+  }
+  return `${previewTag}\n${mjmlBody}`;
+}
+
 function resolveShowUrl(show: {
   id: string;
   usesExternalTicketing?: boolean | null;
@@ -239,6 +263,197 @@ function automationPresets(): AutomationPresetDefinition[] {
       templateHint: 'booster',
     },
   ];
+}
+
+type AiSuggestionPayload = Record<string, any>;
+
+function nextOccurrenceOfDayHour(now: Date, dayIndex: number, hour: number) {
+  const candidate = new Date(now);
+  candidate.setHours(hour, 0, 0, 0);
+  const currentDay = candidate.getDay();
+  let delta = (dayIndex - currentDay + 7) % 7;
+  if (delta === 0 && candidate <= now) delta = 7;
+  candidate.setDate(candidate.getDate() + delta);
+  return candidate;
+}
+
+async function storeAiSuggestion(
+  organiserId: string,
+  showId: string | null,
+  suggestionType: string,
+  suggestionPayload: AiSuggestionPayload,
+  sourceData?: Prisma.InputJsonValue
+) {
+  return prisma.marketingAiSuggestion.create({
+    data: {
+      organiserId,
+      showId,
+      suggestionType,
+      suggestionPayload,
+      sourceData: sourceData || undefined,
+    },
+  });
+}
+
+async function recommendBestSegment(tenantId: string, showId: string) {
+  const campaigns = await prisma.marketingCampaign.findMany({
+    where: { tenantId, showId },
+    select: { id: true, segmentId: true, segment: { select: { name: true } } },
+  });
+  const segments = await prisma.marketingSegment.findMany({
+    where: { tenantId },
+    select: { id: true, name: true },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  if (!campaigns.length) {
+    const fallback = segments[0];
+    if (!fallback) return null;
+    return {
+      segmentId: fallback.id,
+      segmentName: fallback.name,
+      reason: 'No prior campaign history for this show yet.',
+      metrics: null,
+    };
+  }
+
+  const campaignIds = campaigns.map((campaign) => campaign.id);
+  const sentCounts = await prisma.marketingCampaignRecipient.groupBy({
+    by: ['campaignId'],
+    where: { tenantId, campaignId: { in: campaignIds }, status: MarketingRecipientStatus.SENT },
+    _count: { _all: true },
+  });
+  const clickCounts = await prisma.marketingEmailEvent.groupBy({
+    by: ['campaignId'],
+    where: { tenantId, campaignId: { in: campaignIds }, type: 'CLICK' },
+    _count: { _all: true },
+  });
+
+  const sentByCampaign = new Map(sentCounts.map((row) => [row.campaignId, row._count._all]));
+  const clicksByCampaign = new Map(clickCounts.map((row) => [row.campaignId, row._count._all]));
+  const performance = new Map<string, { segmentName: string; sent: number; clicks: number }>();
+
+  campaigns.forEach((campaign) => {
+    const sent = sentByCampaign.get(campaign.id) || 0;
+    const clicks = clicksByCampaign.get(campaign.id) || 0;
+    const existing = performance.get(campaign.segmentId) || {
+      segmentName: campaign.segment?.name || 'Segment',
+      sent: 0,
+      clicks: 0,
+    };
+    performance.set(campaign.segmentId, {
+      segmentName: existing.segmentName,
+      sent: existing.sent + sent,
+      clicks: existing.clicks + clicks,
+    });
+  });
+
+  let best: { segmentId: string; segmentName: string; sent: number; clicks: number; clickRate: number } | null = null;
+  for (const [segmentId, stats] of performance.entries()) {
+    const clickRate = stats.sent ? stats.clicks / stats.sent : 0;
+    if (!best || clickRate > best.clickRate || (clickRate === best.clickRate && stats.sent > best.sent)) {
+      best = { segmentId, segmentName: stats.segmentName, sent: stats.sent, clicks: stats.clicks, clickRate };
+    }
+  }
+
+  if (!best) return null;
+  return {
+    segmentId: best.segmentId,
+    segmentName: best.segmentName,
+    reason: 'Highest click rate from prior show campaigns.',
+    metrics: {
+      sent: best.sent,
+      clicks: best.clicks,
+      clickRate: Number((best.clickRate * 100).toFixed(1)),
+    },
+  };
+}
+
+function buildSubjectVariations(show: any, tenantName: string) {
+  const title = show.title || 'the show';
+  const venueName = show.venue?.name || '';
+  const showDate = formatShowDate(show.date);
+  const venueLine = venueName ? ` at ${venueName}` : '';
+  const dateLine = showDate ? ` · ${showDate}` : '';
+  return [
+    {
+      subject: `${title}${venueLine} tickets now available`,
+      previewText: `Reserve your seats${dateLine}.`,
+      reason: 'Availability-focused headline.',
+    },
+    {
+      subject: `Don’t miss ${title}${venueLine}`,
+      previewText: `Join ${tenantName} for ${title}${dateLine}.`,
+      reason: 'FOMO-style reminder.',
+    },
+    {
+      subject: `${title}${dateLine} — final spots`,
+      previewText: `Secure tickets for ${title}${venueLine}.`,
+      reason: 'Urgency for late-stage pushes.',
+    },
+  ];
+}
+
+async function recommendSendTime(tenantId: string) {
+  const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+  const events = await prisma.marketingEmailEvent.findMany({
+    where: { tenantId, type: { in: ['OPEN', 'CLICK'] }, createdAt: { gte: since } },
+    select: { createdAt: true, type: true },
+    orderBy: { createdAt: 'desc' },
+    take: 2000,
+  });
+
+  const hourScores = new Array(24).fill(0);
+  const dayScores = new Array(7).fill(0);
+  events.forEach((event) => {
+    const weight = event.type === 'CLICK' ? 2 : 1;
+    const date = event.createdAt;
+    hourScores[date.getHours()] += weight;
+    dayScores[date.getDay()] += weight;
+  });
+
+  let bestHour = 10;
+  let bestDay = 2;
+  if (events.length) {
+    bestHour = hourScores.reduce((best, score, hour) => (score > hourScores[best] ? hour : best), 0);
+    bestDay = dayScores.reduce((best, score, day) => (score > dayScores[best] ? day : best), 0);
+  }
+
+  const recommendedDate = nextOccurrenceOfDayHour(new Date(), bestDay, bestHour);
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  return {
+    recommendedLocal: formatLocalDateTime(recommendedDate),
+    bestHour,
+    bestDay,
+    timezone: 'Europe/London',
+    reason: events.length
+      ? `Highest engagement around ${bestHour}:00 on ${dayNames[bestDay]}.`
+      : 'Defaulted to mid-morning due to limited engagement history.',
+  };
+}
+
+function recommendAutomationPreset(show: any) {
+  const presets = automationPresets().filter((preset) => preset.triggerType === MarketingAutomationTriggerType.DAYS_BEFORE_SHOW);
+  const daysUntil = Math.ceil((new Date(show.date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  let bestPreset = presets[0];
+  let bestDelta = Number.POSITIVE_INFINITY;
+  presets.forEach((preset) => {
+    const delta = Math.abs((preset.daysBefore ?? 0) - daysUntil);
+    if (delta < bestDelta) {
+      bestDelta = delta;
+      bestPreset = preset;
+    }
+  });
+  const reason =
+    daysUntil >= 0
+      ? `Show is in ${daysUntil} days; ${bestPreset.label} aligns closest.`
+      : 'Show date passed; follow-up automation recommended.';
+  return {
+    presetId: bestPreset.id,
+    label: bestPreset.label,
+    description: bestPreset.description,
+    reason,
+  };
 }
 
 async function fetchTemplateShow(tenantId: string, showId?: string | null) {
@@ -2023,7 +2238,7 @@ router.delete('/marketing/suppressions/:id', requireAdminOrOrganiser, requireMar
 
 router.post('/marketing/templates', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
-  const { name, subject, fromName, fromEmail, replyTo, mjmlBody } = req.body || {};
+  const { name, subject, fromName, fromEmail, replyTo, mjmlBody, previewText } = req.body || {};
   if (!name || !subject || !mjmlBody) {
     return res.status(400).json({ ok: false, message: 'Missing template fields' });
   }
@@ -2036,7 +2251,7 @@ router.post('/marketing/templates', requireAdminOrOrganiser, async (req, res) =>
       fromName: String(fromName || '').trim(),
       fromEmail: String(fromEmail || '').trim(),
       replyTo: replyTo ? String(replyTo).trim() : null,
-      mjmlBody,
+      mjmlBody: injectPreviewText(mjmlBody, previewText),
     },
   });
   await logMarketingAudit(tenantId, 'template.created', 'MarketingTemplate', template.id, { name });
@@ -2046,7 +2261,7 @@ router.post('/marketing/templates', requireAdminOrOrganiser, async (req, res) =>
 router.put('/marketing/templates/:id', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const id = String(req.params.id);
-  const { name, subject, fromName, fromEmail, replyTo, mjmlBody } = req.body || {};
+  const { name, subject, fromName, fromEmail, replyTo, mjmlBody, previewText } = req.body || {};
 
   const existing = await prisma.marketingTemplate.findFirst({ where: { id, tenantId } });
   if (!existing) return res.status(404).json({ ok: false, message: 'Template not found' });
@@ -2059,7 +2274,7 @@ router.put('/marketing/templates/:id', requireAdminOrOrganiser, async (req, res)
       fromName: fromName !== undefined ? String(fromName || '').trim() : undefined,
       fromEmail: fromEmail !== undefined ? String(fromEmail || '').trim() : undefined,
       replyTo: replyTo !== undefined ? (replyTo ? String(replyTo).trim() : null) : undefined,
-      mjmlBody: mjmlBody || undefined,
+      mjmlBody: mjmlBody ? injectPreviewText(mjmlBody, previewText) : undefined,
     },
   });
   await logMarketingAudit(tenantId, 'template.updated', 'MarketingTemplate', template.id, { name });
@@ -2116,6 +2331,85 @@ router.post('/marketing/templates/:id/preview', requireAdminOrOrganiser, async (
   });
 
   res.json({ ok: true, html, errors });
+});
+
+router.post('/marketing/ai/suggestions', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const showId = String(req.body?.showId || '');
+  const types = Array.isArray(req.body?.types) ? req.body.types.map((type: any) => String(type)) : [];
+
+  if (!showId) return res.status(400).json({ ok: false, message: 'Show required' });
+
+  const show = await prisma.show.findFirst({
+    where: { id: showId, organiserId: tenantId },
+    select: {
+      id: true,
+      title: true,
+      date: true,
+      eventType: true,
+      eventCategory: true,
+      tags: true,
+      venue: { select: { name: true, city: true, county: true } },
+    },
+  });
+  if (!show) return res.status(404).json({ ok: false, message: 'Show not found' });
+
+  const tenant = await prisma.user.findUnique({
+    where: { id: tenantId },
+    select: { tradingName: true, companyName: true, name: true },
+  });
+  const tenantName = tenantNameFrom(tenant || {});
+
+  const response: Record<string, any> = {};
+  const wantedTypes = types.length ? types : ['segment', 'subject_lines', 'send_time', 'automation_preset'];
+
+  if (wantedTypes.includes('segment')) {
+    const segment = await recommendBestSegment(tenantId, showId);
+    if (segment) {
+      const stored = await storeAiSuggestion(tenantId, showId, 'segment', segment, { showId });
+      response.segment = { id: stored.id, ...segment };
+    }
+  }
+
+  if (wantedTypes.includes('subject_lines')) {
+    const variations = buildSubjectVariations(show, tenantName);
+    const stored = await storeAiSuggestion(tenantId, showId, 'subject_lines', { variations }, { showId });
+    response.subjectLines = { id: stored.id, variations };
+  }
+
+  if (wantedTypes.includes('send_time')) {
+    const sendTime = await recommendSendTime(tenantId);
+    const stored = await storeAiSuggestion(tenantId, showId, 'send_time', sendTime, { showId });
+    response.sendTime = { id: stored.id, ...sendTime };
+  }
+
+  if (wantedTypes.includes('automation_preset')) {
+    const preset = recommendAutomationPreset(show);
+    const stored = await storeAiSuggestion(tenantId, showId, 'automation_preset', preset, { showId });
+    response.automationPreset = { id: stored.id, ...preset };
+  }
+
+  res.json({ ok: true, suggestions: response });
+});
+
+router.post('/marketing/ai/suggestions/:id/feedback', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const id = String(req.params.id);
+  const suggestion = await prisma.marketingAiSuggestion.findFirst({ where: { id, organiserId: tenantId } });
+  if (!suggestion) return res.status(404).json({ ok: false, message: 'Suggestion not found' });
+
+  const used = req.body?.used === true;
+  const feedback = req.body?.feedback ? String(req.body.feedback) : null;
+  const updated = await prisma.marketingAiSuggestion.update({
+    where: { id },
+    data: {
+      used,
+      usedAt: used ? new Date() : null,
+      feedback,
+    },
+  });
+
+  res.json({ ok: true, suggestion: updated });
 });
 
 router.get('/marketing/campaigns', requireAdminOrOrganiser, async (req, res) => {

@@ -486,6 +486,7 @@ model User {
   featuredDecisionLogs       FeaturedDecisionLog[]
   marketingAiTemplates       MarketingAiTemplate[]
   marketingAiTonePresets     MarketingAiTonePreset[]
+  marketingAiSuggestions     MarketingAiSuggestion[]
   storefrontThemes          StorefrontTheme[]
 
   customerInsights CustomerInsight[]
@@ -1134,6 +1135,26 @@ model MarketingAiDraftPerformance {
   updatedAt DateTime @updatedAt
 
   draft MarketingAiDraft @relation(fields: [draftId], references: [id])
+}
+
+model MarketingAiSuggestion {
+  id               String   @id @default(cuid())
+  organiserId      String
+  showId           String?
+  suggestionType   String
+  suggestionPayload Json
+  sourceData       Json?
+  used             Boolean  @default(false)
+  usedAt           DateTime?
+  feedback         String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  organiser User  @relation(fields: [organiserId], references: [id])
+  show      Show? @relation(fields: [showId], references: [id])
+
+  @@index([organiserId])
+  @@index([showId])
 }
 
 model CampaignDraft {
