@@ -557,6 +557,56 @@ model CustomerShowView {
   @@index([createdAt])
 }
 
+model CustomerInsight {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenantId          String
+  email             String
+  customerAccountId String?
+  customerKey       String   @unique
+
+  firstPurchaseAt        DateTime?
+  lastPurchaseAt         DateTime?
+  purchaseCount          Int      @default(0)
+  purchaseCount90d       Int      @default(0)
+  ticketsBoughtLifetime  Int      @default(0)
+  avgTicketsPerOrder     Float    @default(0)
+  groupBuyerScore        Boolean  @default(false)
+  monetaryValueLifetimePence Int  @default(0)
+  monetaryValue90dPence      Int  @default(0)
+
+  recencyScore   Int    @default(0)
+  frequencyScore Int    @default(0)
+  monetaryScore  Int    @default(0)
+  rfmSegment     String?
+
+  favouriteVenueId  String?
+  topVenueIds       String[] @default([])
+  favouriteCategory String?
+  favouriteEventType String?
+
+  tenant          User            @relation(fields: [tenantId], references: [id])
+  customerAccount CustomerAccount? @relation(fields: [customerAccountId], references: [id])
+
+  @@index([tenantId])
+  @@index([email])
+  @@index([customerAccountId])
+  @@index([tenantId, email])
+  @@index([tenantId, customerAccountId])
+}
+
+model CustomerInsightsWorkerState {
+  id                 String   @id
+  lastRunAt          DateTime?
+  lastRunCompletedAt DateTime?
+  lastProcessedCount Int      @default(0)
+  lastError          String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
 model Basket {
   id                String   @id @default(cuid())
   createdAt         DateTime @default(now())

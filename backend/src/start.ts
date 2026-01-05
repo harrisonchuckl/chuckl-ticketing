@@ -1,6 +1,7 @@
 import "./env.js";
 import app from "./server.js";
 import { startMarketingWorker } from "./services/marketing/worker.js";
+import { startCustomerInsightsWorker } from "./services/customer-insights-worker.js";
 
 const port = Number(process.env.PORT ?? 8080);
 app.listen(port, () => {
@@ -8,3 +9,4 @@ app.listen(port, () => {
 });
 
 startMarketingWorker();
+startCustomerInsightsWorker();

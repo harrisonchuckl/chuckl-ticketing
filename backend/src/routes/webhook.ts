@@ -10,6 +10,7 @@ import { MarketingAutomationTriggerType, MarketingConsentSource, Prisma, Product
 import { enqueueAutomationForContact, markCheckoutCompleted } from "../services/marketing/automations.js";
 import { createPrintfulClient, PrintfulOrderCreatePayload } from "../services/integrations/printful.js";
 import { estimateStripeFees, estimateVat, getPrintfulPricingConfig } from "../services/printful-pricing.js";
+import { refreshCustomerInsightForOrder } from "../services/customer-insights.js";
 
 
 const stripeSecret = process.env.STRIPE_SECRET_KEY;
@@ -1072,11 +1073,11 @@ try {
     where: { id: showIdValue },
     select: { organiserId: true },
   });
-  if (showForMarketing?.organiserId) {
-    if (payerEmail) {
-      const contact = await syncMarketingContactFromOrder({
-        tenantId: showForMarketing.organiserId,
-        email: payerEmail,
+    if (showForMarketing?.organiserId) {
+      if (payerEmail) {
+        const contact = await syncMarketingContactFromOrder({
+          tenantId: showForMarketing.organiserId,
+          email: payerEmail,
         firstName: payerFirstName,
         lastName: payerLastName,
         source: MarketingConsentSource.CHECKOUT,
@@ -1092,6 +1093,15 @@ try {
       }
     }
     await markCheckoutCompleted(showForMarketing.organiserId, orderIdValue, payerEmail);
+  }
+  try {
+    await refreshCustomerInsightForOrder(orderIdValue);
+  } catch (insightErr: any) {
+    console.error("[webhook] customer insight refresh failed", {
+      orderId: orderIdValue,
+      message: insightErr?.message,
+      stack: insightErr?.stack,
+    });
   }
   try {
     if ((finalTicketCount || 0) > 0) {
