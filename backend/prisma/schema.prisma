@@ -206,6 +206,8 @@ enum MarketingLawfulBasis {
   EXPLICIT_OPT_IN
   SOFT_OPT_IN
   UNKNOWN
+  CONSENT
+  LEGITIMATE_INTEREST
 }
 
 enum MarketingConsentSource {
@@ -213,6 +215,15 @@ enum MarketingConsentSource {
   MANUAL_IMPORT
   ADMIN_EDIT
   API
+  NEWSLETTER_SIGNUP
+  IMPORT_CSV
+}
+
+enum MarketingImportJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
 }
 
 enum MarketingSuppressionType {
@@ -1612,6 +1623,36 @@ model MarketingConsent {
 
   @@unique([tenantId, contactId])
   @@index([tenantId])
+}
+
+model MarketingImportJob {
+  id        String                 @id @default(cuid())
+  tenantId  String
+  filename  String?
+  status    MarketingImportJobStatus
+  createdAt DateTime               @default(now())
+  finishedAt DateTime?
+  totalRows Int                    @default(0)
+  imported  Int                    @default(0)
+  skipped   Int                    @default(0)
+  errorsJson Json?
+
+  tenant    User                   @relation(fields: [tenantId], references: [id])
+  rowErrors MarketingImportRowError[]
+
+  @@index([tenantId])
+}
+
+model MarketingImportRowError {
+  id        String            @id @default(cuid())
+  jobId     String
+  rowNumber Int
+  email     String?
+  error     String
+
+  job MarketingImportJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
 }
 
 model MarketingSuppression {

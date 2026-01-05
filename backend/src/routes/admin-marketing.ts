@@ -12,11 +12,12 @@ import {
   MarketingConsentSource,
   MarketingConsentStatus,
   MarketingLawfulBasis,
+  MarketingImportJobStatus,
   MarketingRecipientStatus,
   Prisma,
 } from '@prisma/client';
 import { evaluateSegmentContacts, estimateSegment } from '../services/marketing/segments.js';
-import { ensureDailyLimit } from '../services/marketing/campaigns.js';
+import { ensureDailyLimit, shouldSuppressContact } from '../services/marketing/campaigns.js';
 import {
   fetchDeliverabilitySummary,
   fetchTopSegmentsByEngagement,
@@ -78,6 +79,61 @@ function isValidPublicBaseUrl(value: string) {
 
 function hasOwn(obj: Record<string, any>, key: string) {
   return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+function normaliseEmail(value: string) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function isValidEmail(email: string) {
+  return Boolean(email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email));
+}
+
+function parseCsvRows(text: string) {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = '';
+  let inQuotes = false;
+  let i = 0;
+  const input = String(text || '');
+
+  while (i < input.length) {
+    const char = input[i];
+    if (char === '"') {
+      if (inQuotes && input[i + 1] === '"') {
+        cell += '"';
+        i += 2;
+        continue;
+      }
+      inQuotes = !inQuotes;
+      i += 1;
+      continue;
+    }
+    if (!inQuotes && (char === '\n' || char === '\r')) {
+      if (char === '\r' && input[i + 1] === '\n') i += 1;
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = '';
+      i += 1;
+      continue;
+    }
+    if (!inQuotes && char === ',') {
+      row.push(cell);
+      cell = '';
+      i += 1;
+      continue;
+    }
+    cell += char;
+    i += 1;
+  }
+
+  if (cell.length || row.length) {
+    row.push(cell);
+    rows.push(row);
+  }
+
+  return rows;
 }
 
 router.get('/marketing/health', requireAdminOrOwner, async (_req, res) => {
@@ -238,6 +294,246 @@ router.post('/marketing/contacts', requireAdminOrOrganiser, async (req, res) => 
   await logMarketingAudit(tenantId, 'contact.saved', 'MarketingContact', contact.id, { email });
 
   res.json({ ok: true, contactId: contact.id });
+});
+
+router.post('/marketing/imports', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const csvText = String(req.body?.csv || req.body?.csvText || req.body?.text || '').trim();
+  if (!csvText) return res.status(400).json({ ok: false, message: 'CSV required' });
+
+  const filename = String(req.body?.filename || '').trim() || null;
+  const requestedLawfulBasis = String(req.body?.lawfulBasis || '').trim();
+  const lawfulBasis =
+    requestedLawfulBasis === MarketingLawfulBasis.LEGITIMATE_INTEREST
+      ? MarketingLawfulBasis.LEGITIMATE_INTEREST
+      : MarketingLawfulBasis.CONSENT;
+
+  const job = await prisma.marketingImportJob.create({
+    data: {
+      tenantId,
+      filename,
+      status: MarketingImportJobStatus.PROCESSING,
+    },
+  });
+
+  try {
+    const rows = parseCsvRows(csvText).filter((row) =>
+      row.some((cell) => String(cell || '').trim())
+    );
+
+    if (!rows.length) {
+      await prisma.marketingImportJob.update({
+        where: { id: job.id },
+        data: {
+          status: MarketingImportJobStatus.FAILED,
+          finishedAt: new Date(),
+          errorsJson: { message: 'No rows found' },
+        },
+      });
+      return res.status(400).json({ ok: false, message: 'No rows found' });
+    }
+
+    const headerRow = rows[0].map((cell) => String(cell || '').trim().toLowerCase());
+    const emailHeaderIndex = headerRow.findIndex((value) => value === 'email' || value === 'e-mail');
+    const hasHeader = emailHeaderIndex >= 0;
+    const firstNameIndex = headerRow.findIndex((value) => value === 'first_name' || value === 'firstname');
+    const lastNameIndex = headerRow.findIndex((value) => value === 'last_name' || value === 'lastname');
+    const phoneIndex = headerRow.findIndex((value) => value === 'phone' || value === 'phone_number');
+    const townIndex = headerRow.findIndex((value) => value === 'town' || value === 'city');
+
+    const dataRows = hasHeader ? rows.slice(1) : rows;
+    const emailIndex = hasHeader ? emailHeaderIndex : 0;
+
+    const uniqueEmails = new Set<string>();
+    dataRows.forEach((row) => {
+      const email = normaliseEmail(String(row[emailIndex] || ''));
+      if (email) uniqueEmails.add(email);
+    });
+
+    const suppressionRecords = await prisma.marketingSuppression.findMany({
+      where: { tenantId, email: { in: Array.from(uniqueEmails) } },
+      select: { email: true, type: true },
+    });
+    const suppressionMap = new Map(
+      suppressionRecords.map((record) => [record.email.toLowerCase(), record.type])
+    );
+
+    const existingContacts = await prisma.marketingContact.findMany({
+      where: { tenantId, email: { in: Array.from(uniqueEmails) } },
+      include: { consents: true },
+    });
+    const contactMap = new Map(
+      existingContacts.map((contact) => [
+        contact.email.toLowerCase(),
+        {
+          id: contact.id,
+          consentStatus: contact.consents[0]?.status || null,
+        },
+      ])
+    );
+
+    const rowErrors: Array<{ jobId: string; rowNumber: number; email: string | null; error: string }> = [];
+    let imported = 0;
+    let skipped = 0;
+    const seenEmails = new Set<string>();
+
+    function cellValue(row: string[], index: number) {
+      if (index < 0) return null;
+      const value = String(row[index] || '').trim();
+      return value ? value : null;
+    }
+
+    for (let i = 0; i < dataRows.length; i += 1) {
+      const row = dataRows[i];
+      const rowNumber = hasHeader ? i + 2 : i + 1;
+      const email = normaliseEmail(String(row[emailIndex] || ''));
+
+      if (!email) {
+        skipped += 1;
+        rowErrors.push({ jobId: job.id, rowNumber, email: null, error: 'Missing email' });
+        continue;
+      }
+      if (!isValidEmail(email)) {
+        skipped += 1;
+        rowErrors.push({ jobId: job.id, rowNumber, email, error: 'Invalid email' });
+        continue;
+      }
+      if (seenEmails.has(email)) {
+        skipped += 1;
+        rowErrors.push({ jobId: job.id, rowNumber, email, error: 'Duplicate email in import' });
+        continue;
+      }
+      seenEmails.add(email);
+
+      const suppression = suppressionMap.get(email) || null;
+      const existingConsentStatus =
+        contactMap.get(email)?.consentStatus || MarketingConsentStatus.TRANSACTIONAL_ONLY;
+      const decision = shouldSuppressContact(existingConsentStatus as MarketingConsentStatus, suppression ? { type: suppression } : null);
+
+      if (decision.suppressed) {
+        skipped += 1;
+        rowErrors.push({ jobId: job.id, rowNumber, email, error: 'Suppressed email' });
+        continue;
+      }
+
+      const firstName = cellValue(row, firstNameIndex);
+      const lastName = cellValue(row, lastNameIndex);
+      const phone = cellValue(row, phoneIndex);
+      const town = cellValue(row, townIndex);
+
+      try {
+        const contact = await prisma.marketingContact.upsert({
+          where: { tenantId_email: { tenantId, email } },
+          create: {
+            tenantId,
+            email,
+            firstName,
+            lastName,
+            phone,
+            town,
+          },
+          update: {
+            firstName: firstName || undefined,
+            lastName: lastName || undefined,
+            phone: phone || undefined,
+            town: town || undefined,
+          },
+        });
+
+        await prisma.marketingConsent.upsert({
+          where: { tenantId_contactId: { tenantId, contactId: contact.id } },
+          create: {
+            tenantId,
+            contactId: contact.id,
+            status: MarketingConsentStatus.SUBSCRIBED,
+            lawfulBasis,
+            source: MarketingConsentSource.IMPORT_CSV,
+            capturedAt: new Date(),
+          },
+          update: {
+            status: MarketingConsentStatus.SUBSCRIBED,
+            lawfulBasis,
+            source: MarketingConsentSource.IMPORT_CSV,
+            capturedAt: new Date(),
+          },
+        });
+
+        imported += 1;
+      } catch (_err) {
+        skipped += 1;
+        rowErrors.push({ jobId: job.id, rowNumber, email, error: 'Failed to import row' });
+      }
+    }
+
+    if (rowErrors.length) {
+      await prisma.marketingImportRowError.createMany({
+        data: rowErrors.map((row) => ({
+          jobId: row.jobId,
+          rowNumber: row.rowNumber,
+          email: row.email,
+          error: row.error,
+        })),
+      });
+    }
+
+    const totalRows = dataRows.length;
+    await prisma.marketingImportJob.update({
+      where: { id: job.id },
+      data: {
+        status: MarketingImportJobStatus.COMPLETED,
+        finishedAt: new Date(),
+        totalRows,
+        imported,
+        skipped,
+        errorsJson: rowErrors.length ? { total: rowErrors.length } : null,
+      },
+    });
+
+    return res.json({
+      ok: true,
+      jobId: job.id,
+      totalRows,
+      imported,
+      skipped,
+      errors: rowErrors.length,
+    });
+  } catch (_err) {
+    await prisma.marketingImportJob.update({
+      where: { id: job.id },
+      data: {
+        status: MarketingImportJobStatus.FAILED,
+        finishedAt: new Date(),
+        errorsJson: { message: 'Import failed' },
+      },
+    });
+    return res.status(500).json({ ok: false, message: 'Import failed' });
+  }
+});
+
+router.get('/marketing/imports', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const items = await prisma.marketingImportJob.findMany({
+    where: { tenantId },
+    orderBy: { createdAt: 'desc' },
+    take: 100,
+  });
+  res.json({ ok: true, items });
+});
+
+router.get('/marketing/imports/:id', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const id = String(req.params.id || '');
+  const job = await prisma.marketingImportJob.findFirst({
+    where: { id, tenantId },
+  });
+  if (!job) return res.status(404).json({ ok: false, message: 'Import not found' });
+
+  const errors = await prisma.marketingImportRowError.findMany({
+    where: { jobId: job.id },
+    orderBy: { rowNumber: 'asc' },
+  });
+
+  res.json({ ok: true, job, errors });
 });
 
 router.get('/marketing/segments', requireAdminOrOrganiser, async (req, res) => {
