@@ -862,12 +862,13 @@ async function sendOrganiserNotification(tenantId: string, subject: string, body
   if (!tenant?.email) return;
   const settings = await fetchMarketingSettings(tenantId);
   const provider = getEmailProvider(settings);
+  const fromEmail = applyMarketingStreamToEmail(settings?.defaultFromEmail || tenant.email, settings);
   await provider.sendEmail({
     to: tenant.email,
     subject: subject || `Automation alert from ${tenantNameFrom(tenant)}`,
     html: body || `<p>An automation step executed for ${tenantNameFrom(tenant)}.</p>`,
     fromName: tenantNameFrom(tenant),
-    fromEmail: applyMarketingStreamToEmail(settings.fromEmail || tenant.email, settings),
+    fromEmail,
   });
 }
 

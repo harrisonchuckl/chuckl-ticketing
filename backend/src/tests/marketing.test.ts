@@ -18,8 +18,14 @@ const contact = {
 const stats = {
   lastPurchase: new Date(Date.now() - 1000 * 60 * 60 * 24 * 20),
   totalSpentPence: 45000,
+  totalSpent90dPence: 30000,
+  purchaseCount: 5,
+  purchaseCount90d: 2,
   categories: new Set(['comedy', 'standup']),
   venues: new Set(['venue_1']),
+  eventTypes: new Set(['show']),
+  towns: new Set(['Townsville']),
+  counties: new Set(['Countyshire']),
 };
 
 test('segment rule evaluation matches rules against contact + order stats', () => {

@@ -27,6 +27,7 @@ import {
   MarketingTemplateChangeStatus,
   MarketingVerifiedStatus,
   OrderStatus,
+  MarketingEmailEventType,
   Prisma,
   ShowStatus,
 } from '@prisma/client';
@@ -3198,8 +3199,8 @@ router.post('/marketing/campaigns/:id/schedule', requireAdminOrOrganiser, async 
 
   const estimate = await estimateCampaignRecipients(tenantId, campaign.segment.rules);
   const maxSegment = Number(process.env.MARKETING_MAX_SEGMENT || 20000);
-  const role = String(req.user?.role || '').toUpperCase();
-  if (estimate.sendable > maxSegment && role !== 'ADMIN') {
+  const userRole = String(req.user?.role || '').toUpperCase();
+  if (estimate.sendable > maxSegment && userRole !== 'ADMIN') {
     return res.status(403).json({ ok: false, message: 'Segment too large for your role.' });
   }
 
