@@ -20,6 +20,7 @@ import {
 import { evaluateSegmentContacts, estimateSegment } from '../services/marketing/segments.js';
 import { ensureDailyLimit, shouldSuppressContact } from '../services/marketing/campaigns.js';
 import { fetchMarketingSettings, resolveRequireVerifiedFrom, resolveSenderDetails } from '../services/marketing/settings.js';
+import { queryCustomerInsights } from '../services/customer-insights.js';
 import {
   fetchDeliverabilitySummary,
   fetchTopSegmentsByEngagement,
@@ -212,6 +213,57 @@ router.get('/marketing/health', requireAdminOrOwner, async (_req, res) => {
     lastSendAt: workerState?.lastSendAt || null,
     sendQueueDepth,
   });
+});
+
+router.get('/marketing/insights/health', requireAdminOrOwner, async (_req, res) => {
+  const workerEnabled = String(process.env.CUSTOMER_INSIGHTS_WORKER_ENABLED || 'true') === 'true';
+  const intervalMs = Number(process.env.CUSTOMER_INSIGHTS_WORKER_INTERVAL_MS || 24 * 60 * 60 * 1000);
+  const workerState = await prisma.customerInsightsWorkerState.findUnique({ where: { id: 'global' } });
+  const totalInsights = await prisma.customerInsight.count();
+
+  res.json({
+    workerEnabled,
+    intervalMs,
+    lastRunAt: workerState?.lastRunAt || null,
+    lastRunCompletedAt: workerState?.lastRunCompletedAt || null,
+    lastProcessedCount: workerState?.lastProcessedCount || 0,
+    lastError: workerState?.lastError || null,
+    totalInsights,
+  });
+});
+
+router.get('/marketing/insights', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const email = String(req.query.email || '').trim().toLowerCase();
+  const customerAccountId = String(req.query.customerAccountId || '').trim();
+  const limit = Number(req.query.limit || 50);
+
+  if (email) {
+    const insight = await prisma.customerInsight.findFirst({
+      where: {
+        tenantId,
+        email,
+        ...(customerAccountId ? { customerAccountId } : {}),
+      },
+    });
+    return res.json({ ok: true, insight });
+  }
+
+  const items = await prisma.customerInsight.findMany({
+    where: { tenantId },
+    orderBy: { lastPurchaseAt: 'desc' },
+    take: Math.min(Math.max(limit, 1), 200),
+  });
+
+  return res.json({ ok: true, items });
+});
+
+router.post('/marketing/insights/query', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const payload = req.body || {};
+  const limit = Number(payload.limit || 100);
+  const results = await queryCustomerInsights(tenantId, payload.rules, limit);
+  res.json({ ok: true, ...results });
 });
 
 router.get('/marketing/settings', requireAdminOrOrganiser, async (req, res) => {
