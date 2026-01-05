@@ -15936,8 +15936,8 @@ function renderInterests(customer){
           }
           continue;
         }
-        if (!inQuotes && (char === '\n' || char === '\r')){
-          if (char === '\r' && input[i + 1] === '\n') i += 1;
+        if (!inQuotes && (char === '\\n' || char === '\\r')){
+          if (char === '\\r' && input[i + 1] === '\\n') i += 1;
           row.push(cell);
           rows.push(row);
           break;
