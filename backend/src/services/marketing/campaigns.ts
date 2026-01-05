@@ -38,7 +38,14 @@ const MAX_RETRY_DELAY_MINUTES = Number(process.env.MARKETING_SEND_RETRY_MAX_MINU
 const BASE_RETRY_DELAY_SECONDS = Number(process.env.MARKETING_SEND_RETRY_BASE_SECONDS || 30);
 const ESTIMATE_CACHE_MS = Number(process.env.MARKETING_ESTIMATE_CACHE_MS || 30000);
 
-const estimateCache = new Map<string, { value: Awaited<ReturnType<typeof estimateCampaignRecipients>>; expiresAt: number }>();
+type CampaignEstimate = {
+  total: number;
+  sendable: number;
+  suppressed: number;
+  sample: string[];
+};
+
+const estimateCache = new Map<string, { value: CampaignEstimate; expiresAt: number }>();
 
 function baseUrl() {
   return PUBLIC_BASE_URL.replace(/\/+$/, '');
@@ -109,7 +116,7 @@ export function buildRecipientEntries(options: {
     });
 }
 
-export async function estimateCampaignRecipients(tenantId: string, rulesInput: unknown) {
+export async function estimateCampaignRecipients(tenantId: string, rulesInput: unknown): Promise<CampaignEstimate> {
   const cacheKey = `${tenantId}:${JSON.stringify(rulesInput || {})}`;
   const cached = estimateCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {

@@ -137,10 +137,13 @@ export async function syncMarketingContactFromMembership(input: MembershipSyncIn
     return contact;
   }
 
+  const optOutStatuses: MarketingConsentStatus[] = [
+    MarketingConsentStatus.SUBSCRIBED,
+    MarketingConsentStatus.TRANSACTIONAL_ONLY,
+  ];
   const shouldUpdate =
     (optedIn && existingConsent.status !== MarketingConsentStatus.SUBSCRIBED) ||
-    (!optedIn &&
-      [MarketingConsentStatus.SUBSCRIBED, MarketingConsentStatus.TRANSACTIONAL_ONLY].includes(existingConsent.status));
+    (!optedIn && optOutStatuses.includes(existingConsent.status));
 
   if (shouldUpdate) {
     await prisma.marketingConsent.update({
