@@ -16666,6 +16666,7 @@ function renderInterests(customer){
       +     '<button class="btn tab-btn" data-tab="presets">Presets</button>'
       +     '<button class="btn tab-btn" data-tab="automations">Automations</button>'
       +     '<button class="btn tab-btn" data-tab="preferences">Preferences</button>'
+      +     '<button class="btn tab-btn" data-tab="governance">Governance</button>'
       +     '<button class="btn tab-btn" data-tab="deliverability">Deliverability</button>'
       +     '<button class="btn tab-btn" data-tab="settings">Settings</button>'
       +   '</div>'
@@ -16676,6 +16677,7 @@ function renderInterests(customer){
       +   '<div id="marketing-presets" class="marketing-tab" style="margin-top:16px;display:none;"></div>'
       +   '<div id="marketing-automations" class="marketing-tab" style="margin-top:16px;display:none;"></div>'
       +   '<div id="marketing-preferences" class="marketing-tab" style="margin-top:16px;display:none;"></div>'
+      +   '<div id="marketing-governance" class="marketing-tab" style="margin-top:16px;display:none;"></div>'
       +   '<div id="marketing-deliverability" class="marketing-tab" style="margin-top:16px;display:none;"></div>'
       +   '<div id="marketing-settings" class="marketing-tab" style="margin-top:16px;display:none;"></div>'
       + '</div>';
@@ -16689,9 +16691,11 @@ function renderInterests(customer){
       presets: main.querySelector('#marketing-presets'),
       automations: main.querySelector('#marketing-automations'),
       preferences: main.querySelector('#marketing-preferences'),
+      governance: main.querySelector('#marketing-governance'),
       deliverability: main.querySelector('#marketing-deliverability'),
       settings: main.querySelector('#marketing-settings'),
     };
+    var governanceState = { auditPage: 1, auditPageSize: 25 };
 
     function setTab(name){
       tabs.forEach(function(btn){
@@ -17204,9 +17208,28 @@ function renderInterests(customer){
         + '<div class="card" style="margin:0;">'
         +   '<div class="title">Templates</div>'
         +   '<div class="table-wrap"><table class="table">'
-        +     '<thead><tr><th>Name</th><th>Subject</th><th>Preview</th></tr></thead>'
+        +     '<thead><tr><th>Name</th><th>Subject</th><th>Status</th><th>Version</th><th>Actions</th></tr></thead>'
         +     '<tbody>'
-        +       items.map(function(t){ return '<tr><td>' + escapeHtml(t.name) + '</td><td>' + escapeHtml(t.subject) + '</td><td><button class=\"btn\" data-preview=\"' + t.id + '\">Preview</button></td></tr>'; }).join('')
+        +       items.map(function(t){
+              var statusLabel = t.isLocked ? 'Locked' : 'Editable';
+              var pending = (t.pendingChangeRequests || []).length;
+              var versionLabel = t.latestVersion ? ('v' + t.latestVersion) : '—';
+              var pendingLabel = pending ? (' • ' + pending + ' pending') : '';
+              return '<tr>'
+                + '<td>' + escapeHtml(t.name) + '</td>'
+                + '<td>' + escapeHtml(t.subject) + '</td>'
+                + '<td>' + escapeHtml(statusLabel + pendingLabel) + '</td>'
+                + '<td>' + escapeHtml(versionLabel) + '</td>'
+                + '<td>'
+                  + '<div class="row" style="gap:6px;flex-wrap:wrap;">'
+                    + '<button class="btn" data-preview="' + t.id + '">Preview</button>'
+                    + '<button class="btn" data-template-edit="' + t.id + '">Edit</button>'
+                    + '<button class="btn" data-template-versions="' + t.id + '">Versions</button>'
+                    + '<button class="btn" data-template-lock="' + t.id + '" data-locked="' + (t.isLocked ? 'true' : 'false') + '">' + (t.isLocked ? 'Unlock' : 'Lock') + '</button>'
+                  + '</div>'
+                + '</td>'
+              + '</tr>';
+            }).join('')
         +     '</tbody></table></div>'
         + '</div>';
       sections.templates.innerHTML = html;
@@ -17236,6 +17259,105 @@ function renderInterests(customer){
         });
       }
 
+      function openTemplateEditor(template){
+        openAdminModal({
+          title: 'Edit template',
+          body: ''
+            + '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">'
+            +   '<label>Template name<input class="input" id="mk_tpl_edit_name" value="' + escapeHtml(template.name || '') + '" /></label>'
+            +   '<label>Subject<input class="input" id="mk_tpl_edit_subject" value="' + escapeHtml(template.subject || '') + '" /></label>'
+            +   '<label>Preview text<input class="input" id="mk_tpl_edit_preview" value="' + escapeHtml(template.previewText || '') + '" /></label>'
+            +   '<label>From name<input class="input" id="mk_tpl_edit_from_name" value="' + escapeHtml(template.fromName || '') + '" /></label>'
+            +   '<label>From email<input class="input" id="mk_tpl_edit_from_email" value="' + escapeHtml(template.fromEmail || '') + '" /></label>'
+            + '</div>'
+            + '<label style="display:block;margin-top:10px;">Reply-to<input class="input" id="mk_tpl_edit_reply" value="' + escapeHtml(template.replyTo || '') + '" /></label>'
+            + '<label style="display:block;margin-top:10px;">MJML body<textarea class="input" id="mk_tpl_edit_body" style="height:180px;">' + escapeHtml(template.mjmlBody || '') + '</textarea></label>'
+            + '<label style="display:block;margin-top:10px;">Change note<textarea class="input" id="mk_tpl_edit_note" placeholder="Optional note for approver"></textarea></label>'
+            + '<div class="muted" id="mk_tpl_edit_msg" style="margin-top:8px;"></div>',
+          actions: '<button class="btn" id="mk_tpl_edit_cancel">Cancel</button><button class="btn p" id="mk_tpl_edit_save">Save</button>'
+        });
+
+        var cancel = $('#mk_tpl_edit_cancel');
+        var save = $('#mk_tpl_edit_save');
+        var msg = $('#mk_tpl_edit_msg');
+        if (cancel) cancel.addEventListener('click', closeAdminModal);
+        if (save) {
+          save.addEventListener('click', async function(){
+            try{
+              var payload = {
+                name: valueOf(document, 'mk_tpl_edit_name'),
+                subject: valueOf(document, 'mk_tpl_edit_subject'),
+                previewText: valueOf(document, 'mk_tpl_edit_preview'),
+                fromName: valueOf(document, 'mk_tpl_edit_from_name'),
+                fromEmail: valueOf(document, 'mk_tpl_edit_from_email'),
+                replyTo: valueOf(document, 'mk_tpl_edit_reply'),
+                mjmlBody: valueOf(document, 'mk_tpl_edit_body'),
+                message: valueOf(document, 'mk_tpl_edit_note')
+              };
+              var resp = await fetchJson('/admin/marketing/templates/' + encodeURIComponent(template.id), {
+                method:'PUT',
+                headers:{ 'Content-Type':'application/json' },
+                body: JSON.stringify(payload)
+              });
+              if (resp && resp.approvalRequired) {
+                if (msg) msg.textContent = 'Change submitted for approval.';
+              } else {
+                if (msg) msg.textContent = 'Template updated.';
+              }
+              await loadTemplates();
+            } catch (err) {
+              if (msg) msg.textContent = err.message || 'Failed to save.';
+            }
+          });
+        }
+      }
+
+      function openTemplateVersions(templateId){
+        fetchJson('/admin/marketing/templates/' + encodeURIComponent(templateId) + '/versions')
+          .then(function(data){
+            var rows = (data.versions || []).map(function(v){
+              var author = v.createdBy ? (v.createdBy.name || v.createdBy.email || v.createdBy.id) : 'System';
+              return '<div class="table-row" style="grid-template-columns:120px 1fr 180px 120px;">'
+                + '<div>v' + v.version + '</div>'
+                + '<div>' + escapeHtml(author) + '</div>'
+                + '<div>' + formatDateTime(v.createdAt) + '</div>'
+                + '<div><button class="btn" data-rollback="' + v.id + '">Rollback</button></div>'
+              + '</div>';
+            }).join('');
+            openAdminModal({
+              title: 'Template versions',
+              body: '<div class="table-list"><div class="table-row head" style="grid-template-columns:120px 1fr 180px 120px;">'
+                + '<div>Version</div><div>Author</div><div>Created</div><div>Actions</div></div>'
+                + (rows || '<div class="table-row"><div class="muted">No versions yet.</div></div>')
+              + '</div>',
+              actions: '<button class="btn" id="mk_tpl_versions_close">Close</button>'
+            });
+            var closeBtn = $('#mk_tpl_versions_close');
+            if (closeBtn) closeBtn.addEventListener('click', closeAdminModal);
+            $$('#adminModalBody [data-rollback]').forEach(function(btn){
+              btn.addEventListener('click', async function(){
+                var versionId = btn.getAttribute('data-rollback');
+                if (!versionId) return;
+                if (!confirm('Rollback to this version?')) return;
+                try{
+                  await fetchJson('/admin/marketing/templates/' + encodeURIComponent(templateId) + '/rollback', {
+                    method:'POST',
+                    headers:{ 'Content-Type':'application/json' },
+                    body: JSON.stringify({ versionId: versionId })
+                  });
+                  await loadTemplates();
+                  closeAdminModal();
+                } catch (err) {
+                  alert(err.message || 'Rollback failed');
+                }
+              });
+            });
+          })
+          .catch(function(err){
+            alert(err.message || 'Failed to load versions');
+          });
+      }
+
       Array.prototype.slice.call(sections.templates.querySelectorAll('[data-preview]')).forEach(function(btn){
         btn.addEventListener('click', async function(){
           var id = btn.getAttribute('data-preview');
@@ -17249,6 +17371,40 @@ function renderInterests(customer){
             if (win) win.document.write(data.html || '');
           } catch (err) {
             alert(err.message || 'Preview failed');
+          }
+        });
+      });
+
+      Array.prototype.slice.call(sections.templates.querySelectorAll('[data-template-edit]')).forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var id = btn.getAttribute('data-template-edit');
+          var template = items.find(function(t){ return t.id === id; });
+          if (template) openTemplateEditor(template);
+        });
+      });
+
+      Array.prototype.slice.call(sections.templates.querySelectorAll('[data-template-versions]')).forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var id = btn.getAttribute('data-template-versions');
+          if (id) openTemplateVersions(id);
+        });
+      });
+
+      Array.prototype.slice.call(sections.templates.querySelectorAll('[data-template-lock]')).forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          var id = btn.getAttribute('data-template-lock');
+          var locked = btn.getAttribute('data-locked') === 'true';
+          var nextLocked = !locked;
+          var reason = nextLocked ? prompt('Lock reason (optional)') : '';
+          try{
+            await fetchJson('/admin/marketing/templates/' + encodeURIComponent(id) + '/lock', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({ isLocked: nextLocked, reason: reason })
+            });
+            await loadTemplates();
+          } catch (err) {
+            alert(err.message || 'Update failed');
           }
         });
       });
@@ -17380,7 +17536,7 @@ function renderInterests(customer){
         +         '<button class="btn p" id="mk_builder_schedule">Schedule</button>'
         +         '<div id="mk_builder_schedule_msg" class="muted"></div>'
         +       '</div>'
-        +       '<div class="muted" style="margin-top:8px;">Approval is required if recipients exceed the threshold or the sender is unverified.</div>'
+        +       '<div class="muted" style="margin-top:8px;">Approval is required for first-time senders, large recipient counts, or unverified senders.</div>'
         +     '</div>'
         +   '</div>'
         + '</div>'
@@ -18951,6 +19107,182 @@ function renderInterests(customer){
       });
     }
 
+    function renderGovernance(approvals, roles, audit){
+      var campaigns = (approvals && approvals.campaigns) || [];
+      var templateChanges = (approvals && approvals.templateChanges) || [];
+      var assignments = (roles && roles.assignments) || [];
+      var currentRole = (roles && roles.currentRole) || 'APPROVER';
+      var logs = (audit && audit.logs) || [];
+
+      var campaignRows = campaigns.map(function(c){
+        return '<div class="table-row" style="grid-template-columns:1fr 140px 180px 180px 120px;">'
+          + '<div>' + escapeHtml(c.name || '') + '</div>'
+          + '<div>' + escapeHtml(c.status || '') + '</div>'
+          + '<div>' + escapeHtml((c.segment && c.segment.name) || '—') + '</div>'
+          + '<div>' + escapeHtml((c.template && c.template.name) || '—') + '</div>'
+          + '<div><button class="btn" data-approval-campaign="' + c.id + '">Approve</button></div>'
+        + '</div>';
+      }).join('');
+
+      var changeRows = templateChanges.map(function(change){
+        var requestedBy = change.requestedBy ? (change.requestedBy.name || change.requestedBy.email || change.requestedBy.id) : 'Unknown';
+        return '<div class="table-row" style="grid-template-columns:1fr 1fr 180px 160px;">'
+          + '<div>' + escapeHtml(change.template?.name || '') + '</div>'
+          + '<div>' + escapeHtml(requestedBy) + '</div>'
+          + '<div>' + escapeHtml(formatDateTime(change.requestedAt || '')) + '</div>'
+          + '<div>'
+            + '<div class="row" style="gap:6px;flex-wrap:wrap;">'
+              + '<button class="btn" data-approval-template="' + change.id + '" data-approval-action="approve">Approve</button>'
+              + '<button class="btn" data-approval-template="' + change.id + '" data-approval-action="reject">Reject</button>'
+            + '</div>'
+          + '</div>'
+        + '</div>';
+      }).join('');
+
+      var roleRows = assignments.map(function(entry){
+        var label = entry.user ? (entry.user.name || entry.user.email || entry.user.id) : entry.userId;
+        return '<div class="table-row" style="grid-template-columns:1fr 160px;">'
+          + '<div>' + escapeHtml(label || '') + '</div>'
+          + '<div>' + escapeHtml(entry.role || '') + '</div>'
+        + '</div>';
+      }).join('');
+
+      var logRows = logs.map(function(log){
+        var actor = log.actor ? (log.actor.name || log.actor.email || log.actor.id) : (log.actorEmail || 'System');
+        return '<div class="table-row" style="grid-template-columns:160px 1fr 1fr 200px;">'
+          + '<div>' + escapeHtml(formatDateTime(log.createdAt || '')) + '</div>'
+          + '<div>' + escapeHtml(log.action || '') + '</div>'
+          + '<div>' + escapeHtml(log.entityType || '') + '</div>'
+          + '<div>' + escapeHtml(actor || '') + '</div>'
+        + '</div>';
+      }).join('');
+
+      var roleOptions = ['VIEWER', 'CAMPAIGN_CREATOR', 'APPROVER'].map(function(opt){
+        return '<option value="' + opt + '">' + opt.replace('_', ' ') + '</option>';
+      }).join('');
+
+      sections.governance.innerHTML = ''
+        + '<div class="card" style="margin:0 0 12px 0;">'
+        +   '<div class="title">Pending approvals</div>'
+        +   '<div class="muted" style="margin-top:6px;">Campaigns and locked template edits awaiting sign-off.</div>'
+        +   '<div class="table-list" style="margin-top:10px;">'
+        +     '<div class="table-row head" style="grid-template-columns:1fr 140px 180px 180px 120px;">'
+        +       '<div>Campaign</div><div>Status</div><div>Segment</div><div>Template</div><div>Action</div>'
+        +     '</div>'
+        +     (campaignRows || '<div class="table-row"><div class="muted">No pending campaigns.</div></div>')
+        +   '</div>'
+        +   '<div class="table-list" style="margin-top:12px;">'
+        +     '<div class="table-row head" style="grid-template-columns:1fr 1fr 180px 160px;">'
+        +       '<div>Template</div><div>Requested by</div><div>Requested at</div><div>Actions</div>'
+        +     '</div>'
+        +     (changeRows || '<div class="table-row"><div class="muted">No pending template changes.</div></div>')
+        +   '</div>'
+        + '</div>'
+        + '<div class="card" style="margin:0 0 12px 0;">'
+        +   '<div class="title">Marketing roles</div>'
+        +   '<div class="muted" style="margin-top:6px;">Your role: ' + escapeHtml(currentRole) + '</div>'
+        +   '<div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap;">'
+        +     '<input class="input" id="mk_role_email" placeholder="User email" style="min-width:240px;" />'
+        +     '<select class="input" id="mk_role_select" style="min-width:200px;">' + roleOptions + '</select>'
+        +     '<button class="btn" id="mk_role_add">Assign role</button>'
+        +   '</div>'
+        +   '<div class="table-list" style="margin-top:12px;">'
+        +     '<div class="table-row head" style="grid-template-columns:1fr 160px;">'
+        +       '<div>User</div><div>Role</div>'
+        +     '</div>'
+        +     (roleRows || '<div class="table-row"><div class="muted">No role assignments yet.</div></div>')
+        +   '</div>'
+        + '</div>'
+        + '<div class="card">'
+        +   '<div class="title">Audit log</div>'
+        +   '<div class="table-list" style="margin-top:10px;">'
+        +     '<div class="table-row head" style="grid-template-columns:160px 1fr 1fr 200px;">'
+        +       '<div>When</div><div>Action</div><div>Entity</div><div>Actor</div>'
+        +     '</div>'
+        +     (logRows || '<div class="table-row"><div class="muted">No audit entries yet.</div></div>')
+        +   '</div>'
+        +   '<div class="row" style="gap:8px;margin-top:10px;">'
+        +     '<button class="btn" data-governance-action="audit-prev"' + ((audit && audit.page) <= 1 ? ' disabled' : '') + '>Previous</button>'
+        +     '<button class="btn" data-governance-action="audit-next"' + ((audit && audit.totalPages) && (audit.page >= audit.totalPages) ? ' disabled' : '') + '>Next</button>'
+        +     '<span class="muted">Page ' + escapeHtml(String((audit && audit.page) || 1)) + ' of ' + escapeHtml(String((audit && audit.totalPages) || 1)) + '</span>'
+        +   '</div>'
+        + '</div>';
+
+      sections.governance.querySelectorAll('[data-approval-campaign]').forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          var id = btn.getAttribute('data-approval-campaign');
+          if (!id) return;
+          if (!confirm('Approve this campaign to send?')) return;
+          try{
+            await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(id) + '/approve', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({})
+            });
+            loadGovernance();
+            loadCampaigns();
+          }catch(err){
+            alert(err.message || 'Approval failed');
+          }
+        });
+      });
+
+      sections.governance.querySelectorAll('[data-approval-template]').forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          var id = btn.getAttribute('data-approval-template');
+          var action = btn.getAttribute('data-approval-action');
+          if (!id || !action) return;
+          if (!confirm('Proceed with this template change?')) return;
+          try{
+            await fetchJson('/admin/marketing/templates/changes/' + encodeURIComponent(id) + '/' + encodeURIComponent(action), {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({})
+            });
+            loadGovernance();
+            loadTemplates();
+          }catch(err){
+            alert(err.message || 'Template approval failed');
+          }
+        });
+      });
+
+      var roleBtn = sections.governance.querySelector('#mk_role_add');
+      if (roleBtn) {
+        roleBtn.addEventListener('click', async function(){
+          try{
+            await fetchJson('/admin/marketing/roles', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({
+                email: String(valueOf(sections.governance, 'mk_role_email') || '').trim(),
+                role: String(valueOf(sections.governance, 'mk_role_select') || '').trim()
+              })
+            });
+            loadGovernance();
+          }catch(err){
+            alert(err.message || 'Role update failed');
+          }
+        });
+      }
+
+      sections.governance.querySelectorAll('[data-governance-action]').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var action = btn.getAttribute('data-governance-action');
+          if (action === 'audit-prev' && governanceState.auditPage > 1) governanceState.auditPage -= 1;
+          if (action === 'audit-next') governanceState.auditPage += 1;
+          loadGovernance();
+        });
+      });
+    }
+
+    async function loadGovernance(){
+      var approvals = await fetchJson('/admin/marketing/approvals');
+      var roles = await fetchJson('/admin/marketing/roles');
+      var audit = await fetchJson('/admin/marketing/audit-logs?page=' + governanceState.auditPage + '&pageSize=' + governanceState.auditPageSize);
+      renderGovernance(approvals || {}, roles || {}, audit || {});
+    }
+
     async function loadDeliverability(){
       var summary = await fetchJson('/admin/marketing/deliverability/summary?days=30');
       var segments = await fetchJson('/admin/marketing/deliverability/top-segments?days=30');
@@ -19243,6 +19575,7 @@ function renderInterests(customer){
     loadPresets().catch(function(err){ sections.presets.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load presets') + '</div>'; });
     loadAutomations().catch(function(err){ sections.automations.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load automations') + '</div>'; });
     loadPreferences().catch(function(err){ sections.preferences.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load preferences') + '</div>'; });
+    loadGovernance().catch(function(err){ sections.governance.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load governance') + '</div>'; });
     loadDeliverability().catch(function(err){ sections.deliverability.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load deliverability') + '</div>'; });
     loadSettings().catch(function(err){ sections.settings.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load settings') + '</div>'; });
   }

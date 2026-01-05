@@ -23,6 +23,8 @@ import {
   MarketingCampaignRecipient,
   MarketingRecipientStatus,
   MarketingSenderMode,
+  MarketingGovernanceRole,
+  MarketingTemplateChangeStatus,
   MarketingVerifiedStatus,
   OrderStatus,
   Prisma,
@@ -66,6 +68,40 @@ function tenantIdFrom(req: any) {
   return String(req.user?.id || '');
 }
 
+function actorFrom(req: any) {
+  return { id: req.user?.id || null, email: req.user?.email || null };
+}
+
+const marketingRoleRank: Record<MarketingGovernanceRole, number> = {
+  [MarketingGovernanceRole.VIEWER]: 0,
+  [MarketingGovernanceRole.CAMPAIGN_CREATOR]: 1,
+  [MarketingGovernanceRole.APPROVER]: 2,
+};
+
+async function resolveMarketingRole(tenantId: string, req: any): Promise<MarketingGovernanceRole> {
+  const platformRole = String(req.user?.platformRole || '').toUpperCase();
+  const userRole = String(req.user?.role || '').toUpperCase();
+  if (platformRole === 'PLATFORM_ADMIN' || userRole === 'ADMIN') {
+    return MarketingGovernanceRole.APPROVER;
+  }
+  const userId = String(req.user?.id || '');
+  if (!tenantId || !userId) return MarketingGovernanceRole.VIEWER;
+  const assignment = await prisma.marketingRoleAssignment.findUnique({
+    where: { tenantId_userId: { tenantId, userId } },
+  });
+  return assignment?.role ?? MarketingGovernanceRole.APPROVER;
+}
+
+async function assertMarketingRole(req: any, res: any, required: MarketingGovernanceRole) {
+  const tenantId = tenantIdFrom(req);
+  const role = await resolveMarketingRole(tenantId, req);
+  if (marketingRoleRank[role] < marketingRoleRank[required]) {
+    res.status(403).json({ ok: false, message: 'Insufficient marketing role.' });
+    return null;
+  }
+  return role;
+}
+
 function tenantNameFrom(user: { tradingName?: string | null; companyName?: string | null; name?: string | null }) {
   return user.tradingName || user.companyName || user.name || 'TIXL';
 }
@@ -101,6 +137,40 @@ function injectPreviewText(mjmlBody: string, previewText?: string | null) {
   return `${previewTag}\n${mjmlBody}`;
 }
 
+async function createTemplateVersion(
+  template: {
+    id: string;
+    name: string;
+    subject: string;
+    previewText?: string | null;
+    fromName: string;
+    fromEmail: string;
+    replyTo?: string | null;
+    mjmlBody: string;
+  },
+  userId?: string | null
+) {
+  const latest = await prisma.marketingTemplateVersion.findFirst({
+    where: { templateId: template.id },
+    orderBy: { version: 'desc' },
+  });
+  const nextVersion = (latest?.version || 0) + 1;
+  return prisma.marketingTemplateVersion.create({
+    data: {
+      templateId: template.id,
+      version: nextVersion,
+      name: template.name,
+      subject: template.subject,
+      previewText: template.previewText || null,
+      fromName: template.fromName,
+      fromEmail: template.fromEmail,
+      replyTo: template.replyTo || null,
+      mjmlBody: template.mjmlBody,
+      createdByUserId: userId || null,
+    },
+  });
+}
+
 function resolveShowUrl(show: {
   id: string;
   usesExternalTicketing?: boolean | null;
@@ -115,11 +185,14 @@ async function logMarketingAudit(
   action: string,
   entityType: string,
   entityId?: string | null,
-  metadata?: Prisma.InputJsonValue
+  metadata?: Prisma.InputJsonValue,
+  actor?: { id?: string | null; email?: string | null }
 ) {
   await prisma.marketingAuditLog.create({
     data: {
       tenantId,
+      actorUserId: actor?.id || null,
+      actorEmail: actor?.email || null,
       action,
       entityType,
       entityId: entityId || null,
@@ -1061,6 +1134,8 @@ router.post('/marketing/sender-identity/test-send', requireAdminOrOrganiser, asy
 
 router.get('/marketing/contacts', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
   const q = String(req.query.q || '').trim().toLowerCase();
 
   const contacts = await prisma.marketingContact.findMany({
@@ -1096,6 +1171,8 @@ router.get('/marketing/contacts', requireAdminOrOrganiser, async (req, res) => {
 
 router.post('/marketing/contacts', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
+  if (!role) return;
   const email = String(req.body?.email || '').trim().toLowerCase();
   if (!email) return res.status(400).json({ ok: false, message: 'Email required' });
 
@@ -1148,13 +1225,15 @@ router.post('/marketing/contacts', requireAdminOrOrganiser, async (req, res) => 
     await recordConsentAudit(tenantId, 'consent.updated', contact.id, { status, source: MarketingConsentSource.ADMIN_EDIT });
   }
 
-  await logMarketingAudit(tenantId, 'contact.saved', 'MarketingContact', contact.id, { email });
+  await logMarketingAudit(tenantId, 'contact.saved', 'MarketingContact', contact.id, { email }, actorFrom(req));
 
   res.json({ ok: true, contactId: contact.id });
 });
 
 router.post('/marketing/contacts/:id/tags', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
+  if (!role) return;
   const contactId = String(req.params.id);
   const tags = Array.isArray(req.body?.tags) ? req.body.tags : [];
   if (!tags.length) return res.status(400).json({ ok: false, message: 'Tags required' });
@@ -1178,12 +1257,14 @@ router.post('/marketing/contacts/:id/tags', requireAdminOrOrganiser, async (req,
     await triggerTagAppliedAutomation(tenantId, contactId, name);
   }
 
-  await logMarketingAudit(tenantId, 'contact.tags.updated', 'MarketingContact', contactId, { tags });
+  await logMarketingAudit(tenantId, 'contact.tags.updated', 'MarketingContact', contactId, { tags }, actorFrom(req));
   res.json({ ok: true });
 });
 
 router.post('/marketing/imports', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
+  if (!role) return;
   const csvText = String(req.body?.csv || req.body?.csvText || req.body?.text || '').trim();
   if (!csvText) return res.status(400).json({ ok: false, message: 'CSV required' });
 
@@ -1398,6 +1479,8 @@ router.post('/marketing/imports', requireAdminOrOrganiser, async (req, res) => {
 
 router.get('/marketing/imports', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
   const items = await prisma.marketingImportJob.findMany({
     where: { tenantId },
     orderBy: { createdAt: 'desc' },
@@ -1408,6 +1491,8 @@ router.get('/marketing/imports', requireAdminOrOrganiser, async (req, res) => {
 
 router.get('/marketing/imports/:id', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
   const id = String(req.params.id || '');
   const job = await prisma.marketingImportJob.findFirst({
     where: { id, tenantId },
@@ -1424,6 +1509,8 @@ router.get('/marketing/imports/:id', requireAdminOrOrganiser, async (req, res) =
 
 router.get('/marketing/segments', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
   const items = await prisma.marketingSegment.findMany({
     where: { tenantId },
     orderBy: { createdAt: 'desc' },
@@ -1433,6 +1520,8 @@ router.get('/marketing/segments', requireAdminOrOrganiser, async (req, res) => {
 
 router.post('/marketing/segments', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
+  if (!role) return;
   const { name, description, rules } = req.body || {};
   if (!name) return res.status(400).json({ ok: false, message: 'Name required' });
 
@@ -1449,12 +1538,14 @@ router.post('/marketing/segments', requireAdminOrOrganiser, async (req, res) => 
     name,
     description: description || null,
     rules: finalRules,
-  });
+  }, actorFrom(req));
   res.json({ ok: true, segment });
 });
 
 router.put('/marketing/segments/:id', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
+  if (!role) return;
   const id = String(req.params.id);
   const { name, description, rules } = req.body || {};
 
@@ -1473,22 +1564,26 @@ router.put('/marketing/segments/:id', requireAdminOrOrganiser, async (req, res) 
     name,
     description: description ?? null,
     rules: rules || null,
-  });
+  }, actorFrom(req));
   res.json({ ok: true, segment });
 });
 
 router.delete('/marketing/segments/:id', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
+  if (!role) return;
   const id = String(req.params.id);
   const existing = await prisma.marketingSegment.findFirst({ where: { id, tenantId } });
   if (!existing) return res.status(404).json({ ok: false, message: 'Segment not found' });
   await prisma.marketingSegment.delete({ where: { id } });
-  await logMarketingAudit(tenantId, 'segment.deleted', 'MarketingSegment', id);
+  await logMarketingAudit(tenantId, 'segment.deleted', 'MarketingSegment', id, undefined, actorFrom(req));
   res.json({ ok: true });
 });
 
 router.get('/marketing/segments/:id/estimate', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
   const id = String(req.params.id);
   const segment = await prisma.marketingSegment.findFirst({ where: { id, tenantId } });
   if (!segment) return res.status(404).json({ ok: false, message: 'Segment not found' });
@@ -1499,6 +1594,8 @@ router.get('/marketing/segments/:id/estimate', requireAdminOrOrganiser, async (r
 
 router.post('/marketing/segments/estimate', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
   const { rules } = req.body || {};
   const estimate = await estimateCampaignRecipients(tenantId, rules || { rules: [] });
   res.json({ ok: true, estimate });
@@ -1704,11 +1801,31 @@ router.post('/marketing/segments/:id/estimate', requireAdminOrOrganiser, async (
 
 router.get('/marketing/templates', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
   const items = await prisma.marketingTemplate.findMany({
     where: { tenantId },
     orderBy: { createdAt: 'desc' },
+    include: {
+      changeRequests: {
+        where: { status: MarketingTemplateChangeStatus.PENDING },
+        select: { id: true, requestedAt: true, requestedByUserId: true, message: true },
+      },
+      versions: {
+        select: { version: true, createdAt: true },
+        orderBy: { version: 'desc' },
+        take: 1,
+      },
+    },
   });
-  res.json({ ok: true, items });
+  res.json({
+    ok: true,
+    items: items.map((item) => ({
+      ...item,
+      latestVersion: item.versions[0]?.version || 0,
+      pendingChangeRequests: item.changeRequests,
+    })),
+  });
 });
 
 router.get('/marketing/automations/presets', requireAdminOrOrganiser, async (_req, res) => {
@@ -2096,14 +2213,24 @@ router.post('/marketing/step-up', requireAdminOrOrganiser, async (req, res) => {
     }
 
     setMarketingStepUpCookie(req, res, user.id);
-    await logMarketingAudit(tenantIdFrom(req), 'deliverability.step_up', 'MarketingDeliverability', null, {
-      status: 'success',
-    });
+    await logMarketingAudit(
+      tenantIdFrom(req),
+      'deliverability.step_up',
+      'MarketingDeliverability',
+      null,
+      { status: 'success' },
+      actorFrom(req)
+    );
     return res.json({ ok: true });
   } catch (error) {
-    await logMarketingAudit(tenantIdFrom(req), 'deliverability.step_up', 'MarketingDeliverability', null, {
-      status: 'error',
-    });
+    await logMarketingAudit(
+      tenantIdFrom(req),
+      'deliverability.step_up',
+      'MarketingDeliverability',
+      null,
+      { status: 'error' },
+      actorFrom(req)
+    );
     return res.status(500).json({ ok: false, message: 'Failed to confirm step-up' });
   }
 });
@@ -2236,8 +2363,122 @@ router.delete('/marketing/suppressions/:id', requireAdminOrOrganiser, requireMar
   res.json({ ok: true });
 });
 
+router.get('/marketing/approvals', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
+
+  const [campaigns, templateChanges] = await Promise.all([
+    prisma.marketingCampaign.findMany({
+      where: { tenantId, status: MarketingCampaignStatus.APPROVAL_REQUIRED },
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        template: { select: { id: true, name: true, subject: true } },
+        segment: { select: { id: true, name: true } },
+        createdBy: { select: { id: true, email: true, name: true } },
+      },
+    }),
+    prisma.marketingTemplateChangeRequest.findMany({
+      where: { tenantId, status: MarketingTemplateChangeStatus.PENDING },
+      orderBy: { requestedAt: 'desc' },
+      include: {
+        template: { select: { id: true, name: true, subject: true } },
+        requestedBy: { select: { id: true, email: true, name: true } },
+      },
+    }),
+  ]);
+
+  res.json({ ok: true, campaigns, templateChanges });
+});
+
+router.get('/marketing/roles', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
+
+  const assignments = await prisma.marketingRoleAssignment.findMany({
+    where: { tenantId },
+    include: { user: { select: { id: true, email: true, name: true } } },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  res.json({
+    ok: true,
+    currentRole: role,
+    assignments,
+  });
+});
+
+router.post('/marketing/roles', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.APPROVER);
+  if (!role) return;
+
+  const requestedRole = String(req.body?.role || '').toUpperCase();
+  if (!Object.values(MarketingGovernanceRole).includes(requestedRole as MarketingGovernanceRole)) {
+    return res.status(400).json({ ok: false, message: 'Invalid role' });
+  }
+
+  const userId = String(req.body?.userId || '');
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const user = userId
+    ? await prisma.user.findUnique({ where: { id: userId } })
+    : email
+      ? await prisma.user.findUnique({ where: { email } })
+      : null;
+
+  if (!user) return res.status(404).json({ ok: false, message: 'User not found' });
+
+  const assignment = await prisma.marketingRoleAssignment.upsert({
+    where: { tenantId_userId: { tenantId, userId: user.id } },
+    update: { role: requestedRole as MarketingGovernanceRole },
+    create: { tenantId, userId: user.id, role: requestedRole as MarketingGovernanceRole },
+  });
+
+  await logMarketingAudit(
+    tenantId,
+    'role.assignment.updated',
+    'MarketingRoleAssignment',
+    assignment.id,
+    { userId: user.id, role: assignment.role },
+    actorFrom(req)
+  );
+
+  res.json({ ok: true, assignment });
+});
+
+router.get('/marketing/audit-logs', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
+
+  const page = Math.max(1, Number(req.query.page || 1) || 1);
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 25) || 25));
+  const [total, logs] = await Promise.all([
+    prisma.marketingAuditLog.count({ where: { tenantId } }),
+    prisma.marketingAuditLog.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      include: { actor: { select: { id: true, email: true, name: true } } },
+    }),
+  ]);
+
+  res.json({
+    ok: true,
+    page,
+    pageSize,
+    total,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    logs,
+  });
+});
+
 router.post('/marketing/templates', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
+  if (!role) return;
   const { name, subject, fromName, fromEmail, replyTo, mjmlBody, previewText } = req.body || {};
   if (!name || !subject || !mjmlBody) {
     return res.status(400).json({ ok: false, message: 'Missing template fields' });
@@ -2248,51 +2489,86 @@ router.post('/marketing/templates', requireAdminOrOrganiser, async (req, res) =>
       tenantId,
       name,
       subject,
+      previewText: previewText ? String(previewText).trim() : null,
       fromName: String(fromName || '').trim(),
       fromEmail: String(fromEmail || '').trim(),
       replyTo: replyTo ? String(replyTo).trim() : null,
       mjmlBody: injectPreviewText(mjmlBody, previewText),
     },
   });
-  await logMarketingAudit(tenantId, 'template.created', 'MarketingTemplate', template.id, { name });
+  await createTemplateVersion(template, req.user?.id);
+  await logMarketingAudit(tenantId, 'template.created', 'MarketingTemplate', template.id, { name }, actorFrom(req));
   res.json({ ok: true, template });
 });
 
 router.put('/marketing/templates/:id', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
+  if (!role) return;
   const id = String(req.params.id);
   const { name, subject, fromName, fromEmail, replyTo, mjmlBody, previewText } = req.body || {};
 
   const existing = await prisma.marketingTemplate.findFirst({ where: { id, tenantId } });
   if (!existing) return res.status(404).json({ ok: false, message: 'Template not found' });
 
+  const nextTemplate = {
+    name: name !== undefined ? String(name).trim() : existing.name,
+    subject: subject !== undefined ? String(subject).trim() : existing.subject,
+    previewText: previewText !== undefined ? String(previewText || '').trim() || null : existing.previewText,
+    fromName: fromName !== undefined ? String(fromName || '').trim() : existing.fromName,
+    fromEmail: fromEmail !== undefined ? String(fromEmail || '').trim() : existing.fromEmail,
+    replyTo: replyTo !== undefined ? (replyTo ? String(replyTo).trim() : null) : existing.replyTo,
+    mjmlBody: mjmlBody ? injectPreviewText(mjmlBody, previewText) : existing.mjmlBody,
+  };
+
+  if (existing.isLocked) {
+    const changeRequest = await prisma.marketingTemplateChangeRequest.create({
+      data: {
+        tenantId,
+        templateId: existing.id,
+        payload: nextTemplate,
+        message: String(req.body?.message || '').trim() || null,
+        requestedByUserId: req.user?.id || null,
+      },
+    });
+    await logMarketingAudit(
+      tenantId,
+      'template.change.requested',
+      'MarketingTemplate',
+      existing.id,
+      { changeRequestId: changeRequest.id },
+      actorFrom(req)
+    );
+    return res.json({ ok: true, approvalRequired: true, changeRequest });
+  }
+
   const template = await prisma.marketingTemplate.update({
     where: { id },
     data: {
-      name: name || undefined,
-      subject: subject || undefined,
-      fromName: fromName !== undefined ? String(fromName || '').trim() : undefined,
-      fromEmail: fromEmail !== undefined ? String(fromEmail || '').trim() : undefined,
-      replyTo: replyTo !== undefined ? (replyTo ? String(replyTo).trim() : null) : undefined,
-      mjmlBody: mjmlBody ? injectPreviewText(mjmlBody, previewText) : undefined,
+      ...nextTemplate,
     },
   });
-  await logMarketingAudit(tenantId, 'template.updated', 'MarketingTemplate', template.id, { name });
+  await createTemplateVersion(template, req.user?.id);
+  await logMarketingAudit(tenantId, 'template.updated', 'MarketingTemplate', template.id, { name }, actorFrom(req));
   res.json({ ok: true, template });
 });
 
 router.delete('/marketing/templates/:id', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.APPROVER);
+  if (!role) return;
   const id = String(req.params.id);
   const existing = await prisma.marketingTemplate.findFirst({ where: { id, tenantId } });
   if (!existing) return res.status(404).json({ ok: false, message: 'Template not found' });
   await prisma.marketingTemplate.delete({ where: { id } });
-  await logMarketingAudit(tenantId, 'template.deleted', 'MarketingTemplate', id);
+  await logMarketingAudit(tenantId, 'template.deleted', 'MarketingTemplate', id, undefined, actorFrom(req));
   res.json({ ok: true });
 });
 
 router.post('/marketing/templates/:id/preview', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
   const id = String(req.params.id);
   const template = await prisma.marketingTemplate.findFirst({ where: { id, tenantId } });
   if (!template) return res.status(404).json({ ok: false, message: 'Template not found' });
@@ -2331,6 +2607,188 @@ router.post('/marketing/templates/:id/preview', requireAdminOrOrganiser, async (
   });
 
   res.json({ ok: true, html, errors });
+});
+
+router.post('/marketing/templates/:id/lock', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.APPROVER);
+  if (!role) return;
+  const id = String(req.params.id);
+  const isLocked = Boolean(req.body?.isLocked);
+  const reason = String(req.body?.reason || '').trim() || null;
+  const template = await prisma.marketingTemplate.findFirst({ where: { id, tenantId } });
+  if (!template) return res.status(404).json({ ok: false, message: 'Template not found' });
+
+  const updated = await prisma.marketingTemplate.update({
+    where: { id },
+    data: {
+      isLocked,
+      lockedAt: isLocked ? new Date() : null,
+      lockedByUserId: isLocked ? req.user?.id || null : null,
+      lockReason: isLocked ? reason : null,
+    },
+  });
+
+  await logMarketingAudit(
+    tenantId,
+    isLocked ? 'template.locked' : 'template.unlocked',
+    'MarketingTemplate',
+    id,
+    { reason },
+    actorFrom(req)
+  );
+  res.json({ ok: true, template: updated });
+});
+
+router.get('/marketing/templates/:id/versions', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
+  const id = String(req.params.id);
+  const template = await prisma.marketingTemplate.findFirst({ where: { id, tenantId } });
+  if (!template) return res.status(404).json({ ok: false, message: 'Template not found' });
+
+  const versions = await prisma.marketingTemplateVersion.findMany({
+    where: { templateId: id },
+    orderBy: { version: 'desc' },
+    include: { createdBy: { select: { id: true, email: true, name: true } } },
+  });
+  res.json({ ok: true, versions });
+});
+
+router.post('/marketing/templates/:id/rollback', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.APPROVER);
+  if (!role) return;
+  const id = String(req.params.id);
+  const versionId = req.body?.versionId ? String(req.body.versionId) : null;
+  const versionNumber = req.body?.version ? Number(req.body.version) : null;
+
+  const template = await prisma.marketingTemplate.findFirst({ where: { id, tenantId } });
+  if (!template) return res.status(404).json({ ok: false, message: 'Template not found' });
+
+  const version = await prisma.marketingTemplateVersion.findFirst({
+    where: {
+      templateId: id,
+      ...(versionId ? { id: versionId } : {}),
+      ...(versionNumber ? { version: versionNumber } : {}),
+    },
+  });
+  if (!version) return res.status(404).json({ ok: false, message: 'Template version not found' });
+
+  const updated = await prisma.marketingTemplate.update({
+    where: { id },
+    data: {
+      name: version.name,
+      subject: version.subject,
+      previewText: version.previewText,
+      fromName: version.fromName,
+      fromEmail: version.fromEmail,
+      replyTo: version.replyTo,
+      mjmlBody: version.mjmlBody,
+    },
+  });
+
+  await createTemplateVersion(updated, req.user?.id);
+  await logMarketingAudit(
+    tenantId,
+    'template.rolled_back',
+    'MarketingTemplate',
+    id,
+    { version: version.version },
+    actorFrom(req)
+  );
+
+  res.json({ ok: true, template: updated });
+});
+
+router.post('/marketing/templates/changes/:id/approve', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.APPROVER);
+  if (!role) return;
+  const id = String(req.params.id);
+
+  const changeRequest = await prisma.marketingTemplateChangeRequest.findFirst({
+    where: { id, tenantId },
+  });
+  if (!changeRequest || changeRequest.status !== MarketingTemplateChangeStatus.PENDING) {
+    return res.status(404).json({ ok: false, message: 'Change request not found' });
+  }
+
+  const template = await prisma.marketingTemplate.findFirst({
+    where: { id: changeRequest.templateId, tenantId },
+  });
+  if (!template) return res.status(404).json({ ok: false, message: 'Template not found' });
+
+  const payload = changeRequest.payload as Record<string, any>;
+  const updated = await prisma.marketingTemplate.update({
+    where: { id: template.id },
+    data: {
+      name: payload.name ?? template.name,
+      subject: payload.subject ?? template.subject,
+      previewText: payload.previewText ?? template.previewText,
+      fromName: payload.fromName ?? template.fromName,
+      fromEmail: payload.fromEmail ?? template.fromEmail,
+      replyTo: payload.replyTo ?? template.replyTo,
+      mjmlBody: payload.mjmlBody ?? template.mjmlBody,
+    },
+  });
+
+  await prisma.marketingTemplateChangeRequest.update({
+    where: { id: changeRequest.id },
+    data: {
+      status: MarketingTemplateChangeStatus.APPROVED,
+      approvedByUserId: req.user?.id || null,
+      reviewedAt: new Date(),
+    },
+  });
+
+  await createTemplateVersion(updated, req.user?.id);
+  await logMarketingAudit(
+    tenantId,
+    'template.change.approved',
+    'MarketingTemplate',
+    template.id,
+    { changeRequestId: changeRequest.id },
+    actorFrom(req)
+  );
+
+  res.json({ ok: true, template: updated });
+});
+
+router.post('/marketing/templates/changes/:id/reject', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.APPROVER);
+  if (!role) return;
+  const id = String(req.params.id);
+
+  const changeRequest = await prisma.marketingTemplateChangeRequest.findFirst({
+    where: { id, tenantId },
+  });
+  if (!changeRequest || changeRequest.status !== MarketingTemplateChangeStatus.PENDING) {
+    return res.status(404).json({ ok: false, message: 'Change request not found' });
+  }
+
+  const updatedRequest = await prisma.marketingTemplateChangeRequest.update({
+    where: { id: changeRequest.id },
+    data: {
+      status: MarketingTemplateChangeStatus.REJECTED,
+      approvedByUserId: req.user?.id || null,
+      reviewedAt: new Date(),
+      message: String(req.body?.message || '').trim() || changeRequest.message,
+    },
+  });
+
+  await logMarketingAudit(
+    tenantId,
+    'template.change.rejected',
+    'MarketingTemplate',
+    changeRequest.templateId,
+    { changeRequestId: changeRequest.id },
+    actorFrom(req)
+  );
+
+  res.json({ ok: true, changeRequest: updatedRequest });
 });
 
 router.post('/marketing/ai/suggestions', requireAdminOrOrganiser, async (req, res) => {
@@ -2414,6 +2872,8 @@ router.post('/marketing/ai/suggestions/:id/feedback', requireAdminOrOrganiser, a
 
 router.get('/marketing/campaigns', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
   const items = await prisma.marketingCampaign.findMany({
     where: { tenantId },
     orderBy: { createdAt: 'desc' },
@@ -2428,6 +2888,8 @@ router.get('/marketing/campaigns', requireAdminOrOrganiser, async (req, res) => 
 
 router.get('/marketing/campaigns/:id', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
   const id = String(req.params.id);
   const campaign = await prisma.marketingCampaign.findFirst({
     where: { id, tenantId },
@@ -2463,6 +2925,8 @@ router.get('/marketing/campaigns/:id', requireAdminOrOrganiser, async (req, res)
 
 router.post('/marketing/campaigns', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
+  if (!role) return;
   const { name, templateId, segmentId, type, showId } = req.body || {};
   if (!name || !templateId || !segmentId || !type) {
     return res.status(400).json({ ok: false, message: 'Missing campaign fields' });
@@ -2493,12 +2957,14 @@ router.post('/marketing/campaigns', requireAdminOrOrganiser, async (req, res) =>
       createdByUserId: tenantId,
     },
   });
-  await logMarketingAudit(tenantId, 'campaign.created', 'MarketingCampaign', campaign.id, { name });
+  await logMarketingAudit(tenantId, 'campaign.created', 'MarketingCampaign', campaign.id, { name }, actorFrom(req));
   res.json({ ok: true, campaign });
 });
 
 router.put('/marketing/campaigns/:id', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
+  if (!role) return;
   const id = String(req.params.id);
   const { name, templateId, segmentId, type, showId } = req.body || {};
 
@@ -2545,12 +3011,14 @@ router.put('/marketing/campaigns/:id', requireAdminOrOrganiser, async (req, res)
       showId: showIdValue,
     },
   });
-  await logMarketingAudit(tenantId, 'campaign.updated', 'MarketingCampaign', campaign.id, { name });
+  await logMarketingAudit(tenantId, 'campaign.updated', 'MarketingCampaign', campaign.id, { name }, actorFrom(req));
   res.json({ ok: true, campaign });
 });
 
 router.post('/marketing/campaigns/:id/preview', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
   const id = String(req.params.id);
   const campaign = await prisma.marketingCampaign.findFirst({
     where: { id, tenantId },
@@ -2592,6 +3060,8 @@ router.post('/marketing/campaigns/:id/preview', requireAdminOrOrganiser, async (
 
 router.post('/marketing/campaigns/:id/test-send', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
+  if (!role) return;
   const id = String(req.params.id);
   const email = normaliseEmail(req.body?.email);
   const firstName = String(req.body?.firstName || 'Test').trim();
@@ -2660,7 +3130,7 @@ router.post('/marketing/campaigns/:id/test-send', requireAdminOrOrganiser, async
       email,
       success: false,
       errors,
-    });
+    }, actorFrom(req));
     return res.status(400).json({ ok: false, message: 'Template render failed', errors });
   }
 
@@ -2690,7 +3160,7 @@ router.post('/marketing/campaigns/:id/test-send', requireAdminOrOrganiser, async
     await logMarketingAudit(tenantId, 'campaign.test_send', 'MarketingCampaign', campaign.id, {
       email,
       success: true,
-    });
+    }, actorFrom(req));
 
     res.json({ ok: true });
   } catch (error: any) {
@@ -2698,13 +3168,15 @@ router.post('/marketing/campaigns/:id/test-send', requireAdminOrOrganiser, async
       email,
       success: false,
       error: error?.message || 'Send failed',
-    });
+    }, actorFrom(req));
     res.status(500).json({ ok: false, message: 'Test send failed' });
   }
 });
 
 router.post('/marketing/campaigns/:id/schedule', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
+  if (!role) return;
   const id = String(req.params.id);
   const sendNow = Boolean(req.body?.sendNow);
   const scheduledFor = req.body?.scheduledFor ? new Date(req.body.scheduledFor) : null;
@@ -2768,10 +3240,17 @@ router.post('/marketing/campaigns/:id/schedule', requireAdminOrOrganiser, async 
     ? APPROVAL_THRESHOLD_DEFAULT
     : 5000;
   const approvalReasons = [];
+  const priorSends = await prisma.marketingCampaign.count({
+    where: { tenantId, status: MarketingCampaignStatus.SENT },
+  });
   if (estimate.sendable > approvalThreshold) approvalReasons.push('Segment exceeds approval threshold.');
+  if (!priorSends) approvalReasons.push('First-time sender requires approval.');
   if (!senderVerified) approvalReasons.push('Sender domain is not verified.');
 
   const approvalRequired = approvalReasons.length > 0;
+  if (!approvalRequired && role !== MarketingGovernanceRole.APPROVER) {
+    return res.status(403).json({ ok: false, message: 'Approver role required to schedule sends.' });
+  }
   const nextStatus = approvalRequired
     ? MarketingCampaignStatus.APPROVAL_REQUIRED
     : MarketingCampaignStatus.SCHEDULED;
@@ -2786,6 +3265,7 @@ router.post('/marketing/campaigns/:id/schedule', requireAdminOrOrganiser, async 
     data: {
       status: nextStatus,
       scheduledFor: scheduledTime,
+      scheduledByUserId: req.user?.id || null,
     },
   });
 
@@ -2797,7 +3277,8 @@ router.post('/marketing/campaigns/:id/schedule', requireAdminOrOrganiser, async 
     {
       scheduledFor: scheduledTime.toISOString(),
       approvalReasons: approvalReasons.length ? approvalReasons : undefined,
-    }
+    },
+    actorFrom(req)
   );
   res.json({
     ok: true,
@@ -2810,6 +3291,8 @@ router.post('/marketing/campaigns/:id/schedule', requireAdminOrOrganiser, async 
 
 router.post('/marketing/campaigns/:id/approve', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.APPROVER);
+  if (!role) return;
   const id = String(req.params.id);
   const sendNow = Boolean(req.body?.sendNow);
   const scheduledFor = req.body?.scheduledFor ? new Date(req.body.scheduledFor) : null;
@@ -2856,18 +3339,27 @@ router.post('/marketing/campaigns/:id/approve', requireAdminOrOrganiser, async (
     data: {
       status: MarketingCampaignStatus.SCHEDULED,
       scheduledFor: scheduledTime,
+      approvedByUserId: req.user?.id || null,
+      approvedAt: new Date(),
     },
   });
 
-  await logMarketingAudit(tenantId, 'campaign.approved', 'MarketingCampaign', updated.id, {
-    scheduledFor: scheduledTime.toISOString(),
-  });
+  await logMarketingAudit(
+    tenantId,
+    'campaign.approved',
+    'MarketingCampaign',
+    updated.id,
+    { scheduledFor: scheduledTime.toISOString() },
+    actorFrom(req)
+  );
 
   res.json({ ok: true, campaign: updated, estimate });
 });
 
 router.post('/marketing/campaigns/:id/cancel', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
+  if (!role) return;
   const id = String(req.params.id);
 
   const existing = await prisma.marketingCampaign.findFirst({ where: { id, tenantId } });
@@ -2889,12 +3381,14 @@ router.post('/marketing/campaigns/:id/cancel', requireAdminOrOrganiser, async (r
     data: { status: MarketingCampaignStatus.CANCELLED, sendLockedUntil: null },
   });
 
-  await logMarketingAudit(tenantId, 'campaign.cancelled', 'MarketingCampaign', campaign.id);
+  await logMarketingAudit(tenantId, 'campaign.cancelled', 'MarketingCampaign', campaign.id, undefined, actorFrom(req));
   res.json({ ok: true, campaign });
 });
 
 router.get('/marketing/campaigns/:id/logs', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
   const id = String(req.params.id);
 
   const events = await prisma.marketingEmailEvent.findMany({
@@ -2914,6 +3408,8 @@ router.get('/marketing/campaigns/:id/logs', requireAdminOrOrganiser, async (req,
 
 router.get('/marketing/campaigns/:id/recipients', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
   const id = String(req.params.id);
   const includeItems = String(req.query?.include || '') === 'items' || String(req.query?.detail || '') === 'true';
 
@@ -2950,6 +3446,8 @@ router.get('/marketing/campaigns/:id/recipients', requireAdminOrOrganiser, async
 
 router.get('/marketing/campaigns/:id/events', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
   const id = String(req.params.id);
 
   const items = await prisma.marketingEmailEvent.findMany({
