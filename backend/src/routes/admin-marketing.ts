@@ -4,6 +4,7 @@ import { requireAdminOrOrganiser } from '../lib/authz.js';
 import { isOwnerEmail } from '../lib/owner-authz.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { renderMarketingTemplate } from '../lib/email-marketing/rendering.js';
+import { getEmailProvider } from '../lib/email-marketing/index.js';
 import { createUnsubscribeToken } from '../lib/email-marketing/unsubscribe.js';
 import { createPreferencesToken } from '../lib/email-marketing/preferences.js';
 import {
@@ -18,6 +19,7 @@ import {
 } from '@prisma/client';
 import { evaluateSegmentContacts, estimateSegment } from '../services/marketing/segments.js';
 import { ensureDailyLimit, shouldSuppressContact } from '../services/marketing/campaigns.js';
+import { fetchMarketingSettings, resolveRequireVerifiedFrom, resolveSenderDetails } from '../services/marketing/settings.js';
 import {
   fetchDeliverabilitySummary,
   fetchTopSegmentsByEngagement,
@@ -58,6 +60,8 @@ async function logMarketingAudit(
 const PUBLIC_BASE_URL =
   process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
 const REQUIRE_VERIFIED_FROM_DEFAULT = String(process.env.MARKETING_REQUIRE_VERIFIED_FROM || 'true') === 'true';
+const TEST_SEND_RATE_LIMIT_SECONDS = Number(process.env.MARKETING_TEST_SEND_RATE_LIMIT_SEC || 60);
+const VERIFIED_FROM_DOMAIN = String(process.env.MARKETING_FROM_DOMAIN || '').trim();
 
 function requireAdminOrOwner(req: any, res: any, next: any) {
   return requireAuth(req, res, () => {
@@ -134,6 +138,20 @@ function parseCsvRows(text: string) {
   }
 
   return rows;
+}
+
+function isFromVerified(fromEmail: string, requireVerifiedFrom: boolean) {
+  if (!requireVerifiedFrom || !VERIFIED_FROM_DOMAIN) return true;
+  const effective = applyMarketingStream(fromEmail);
+  return effective.toLowerCase().endsWith(`@${VERIFIED_FROM_DOMAIN.toLowerCase()}`);
+}
+
+function applyMarketingStream(fromEmail: string) {
+  const streamDomain = String(process.env.MARKETING_STREAM_DOMAIN || '').trim();
+  if (!streamDomain) return fromEmail;
+  const at = fromEmail.indexOf('@');
+  if (at === -1) return fromEmail;
+  return `${fromEmail.slice(0, at)}@${streamDomain}`;
 }
 
 router.get('/marketing/health', requireAdminOrOwner, async (_req, res) => {
@@ -602,6 +620,16 @@ router.get('/marketing/segments/:id/estimate', requireAdminOrOrganiser, async (r
   res.json({ ok: true, estimate });
 });
 
+router.post('/marketing/segments/:id/estimate', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const id = String(req.params.id);
+  const segment = await prisma.marketingSegment.findFirst({ where: { id, tenantId } });
+  if (!segment) return res.status(404).json({ ok: false, message: 'Segment not found' });
+
+  const estimate = await estimateSegment(tenantId, segment.rules);
+  res.json({ ok: true, estimate });
+});
+
 router.get('/marketing/templates', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const items = await prisma.marketingTemplate.findMany({
@@ -995,6 +1023,119 @@ router.post('/marketing/campaigns/:id/preview', requireAdminOrOrganiser, async (
   res.json({ ok: true, estimate, html, errors });
 });
 
+router.post('/marketing/campaigns/:id/test-send', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const id = String(req.params.id);
+  const email = normaliseEmail(req.body?.email);
+  const firstName = String(req.body?.firstName || 'Test').trim();
+  const lastName = String(req.body?.lastName || 'Recipient').trim();
+
+  if (!email || !isValidEmail(email)) {
+    return res.status(400).json({ ok: false, message: 'Valid email required' });
+  }
+
+  const lastTest = await prisma.marketingAuditLog.findFirst({
+    where: { tenantId, action: 'campaign.test_send' },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (lastTest && TEST_SEND_RATE_LIMIT_SECONDS > 0) {
+    const secondsSince = (Date.now() - lastTest.createdAt.getTime()) / 1000;
+    if (secondsSince < TEST_SEND_RATE_LIMIT_SECONDS) {
+      return res.status(429).json({ ok: false, message: 'Test send rate limit reached.' });
+    }
+  }
+
+  const campaign = await prisma.marketingCampaign.findFirst({
+    where: { id, tenantId },
+    include: { template: true, tenant: true },
+  });
+  if (!campaign) return res.status(404).json({ ok: false, message: 'Campaign not found' });
+
+  const settings = await fetchMarketingSettings(tenantId);
+  const sender = resolveSenderDetails({
+    templateFromName: campaign.template.fromName,
+    templateFromEmail: campaign.template.fromEmail,
+    templateReplyTo: campaign.template.replyTo,
+    settings,
+  });
+
+  if (!sender.fromEmail || !sender.fromName) {
+    return res.status(400).json({ ok: false, message: 'From name/email required' });
+  }
+
+  const requireVerifiedFrom = resolveRequireVerifiedFrom(settings, REQUIRE_VERIFIED_FROM_DEFAULT);
+  if (!isFromVerified(sender.fromEmail, requireVerifiedFrom)) {
+    return res.status(400).json({ ok: false, message: 'From email not verified for marketing sends.' });
+  }
+
+  const token = createUnsubscribeToken({ tenantId, email });
+  const unsubscribeUrl = `${PUBLIC_BASE_URL.replace(/\/+$/, '')}/u/${encodeURIComponent(
+    campaign.tenant.storefrontSlug || campaign.tenantId
+  )}/${encodeURIComponent(token)}`;
+  const preferencesToken = createPreferencesToken({ tenantId, email });
+  const preferencesUrl = `${PUBLIC_BASE_URL.replace(/\/+$/, '')}/preferences/${encodeURIComponent(
+    campaign.tenant.storefrontSlug || campaign.tenantId
+  )}/${encodeURIComponent(preferencesToken)}`;
+
+  const { html, errors } = renderMarketingTemplate(campaign.template.mjmlBody, {
+    firstName,
+    lastName,
+    email,
+    tenantName: tenantNameFrom(campaign.tenant),
+    unsubscribeUrl,
+    preferencesUrl,
+  });
+
+  if (errors.length) {
+    await logMarketingAudit(tenantId, 'campaign.test_send', 'MarketingCampaign', campaign.id, {
+      email,
+      success: false,
+      errors,
+    });
+    return res.status(400).json({ ok: false, message: 'Template render failed', errors });
+  }
+
+  try {
+    const provider = getEmailProvider();
+    const listUnsubscribeMail = VERIFIED_FROM_DOMAIN
+      ? `<mailto:unsubscribe@${VERIFIED_FROM_DOMAIN}?subject=unsubscribe>`
+      : undefined;
+    const headers: Record<string, string> = {
+      'List-Unsubscribe': [listUnsubscribeMail, `<${unsubscribeUrl}>`].filter(Boolean).join(', '),
+      'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+    };
+
+    await provider.sendEmail({
+      to: email,
+      subject: `[Test] ${campaign.template.subject}`,
+      html,
+      fromName: sender.fromName,
+      fromEmail: applyMarketingStream(sender.fromEmail),
+      replyTo: sender.replyTo || undefined,
+      headers,
+      customArgs: {
+        campaignId: campaign.id,
+        tenantId: campaign.tenantId,
+        testSend: 'true',
+      },
+    });
+
+    await logMarketingAudit(tenantId, 'campaign.test_send', 'MarketingCampaign', campaign.id, {
+      email,
+      success: true,
+    });
+
+    res.json({ ok: true });
+  } catch (error: any) {
+    await logMarketingAudit(tenantId, 'campaign.test_send', 'MarketingCampaign', campaign.id, {
+      email,
+      success: false,
+      error: error?.message || 'Send failed',
+    });
+    res.status(500).json({ ok: false, message: 'Test send failed' });
+  }
+});
+
 router.post('/marketing/campaigns/:id/schedule', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const id = String(req.params.id);
@@ -1090,6 +1231,19 @@ router.get('/marketing/campaigns/:id/recipients', requireAdminOrOrganiser, async
   };
 
   res.json({ ok: true, items, summary });
+});
+
+router.get('/marketing/campaigns/:id/events', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const id = String(req.params.id);
+
+  const items = await prisma.marketingEmailEvent.findMany({
+    where: { tenantId, campaignId: id },
+    orderBy: { createdAt: 'desc' },
+    take: 500,
+  });
+
+  res.json({ ok: true, items });
 });
 
 export default router;
