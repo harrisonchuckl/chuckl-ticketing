@@ -81,6 +81,24 @@ const marketingRoleRank: Record<MarketingGovernanceRole, number> = {
   [MarketingGovernanceRole.APPROVER]: 2,
 };
 
+function normalizeMarketingRole(role?: string | null): MarketingGovernanceRole | null {
+  const value = String(role || '').trim().toUpperCase();
+  if (!value) return null;
+  switch (value) {
+    case 'VIEWER':
+      return MarketingGovernanceRole.VIEWER;
+    case 'CAMPAIGN_CREATOR':
+    case 'CREATOR':
+    case 'EDITOR':
+      return MarketingGovernanceRole.CAMPAIGN_CREATOR;
+    case 'APPROVER':
+    case 'ADMIN':
+      return MarketingGovernanceRole.APPROVER;
+    default:
+      return null;
+  }
+}
+
 async function resolveMarketingRole(tenantId: string, req: any): Promise<MarketingGovernanceRole> {
   const platformRole = String(req.user?.platformRole || '').toUpperCase();
   const userRole = String(req.user?.role || '').toUpperCase();
@@ -89,10 +107,24 @@ async function resolveMarketingRole(tenantId: string, req: any): Promise<Marketi
   }
   const userId = String(req.user?.id || '');
   if (!tenantId || !userId) return MarketingGovernanceRole.VIEWER;
-  const assignment = await prisma.marketingRoleAssignment.findUnique({
-    where: { tenantId_userId: { tenantId, userId } },
-  });
-  return assignment?.role ?? MarketingGovernanceRole.APPROVER;
+  try {
+    const assignment = await prisma.marketingRoleAssignment.findUnique({
+      where: { tenantId_userId: { tenantId, userId } },
+    });
+    return assignment?.role ?? MarketingGovernanceRole.APPROVER;
+  } catch (error) {
+    console.error('[marketing] role lookup failed', error);
+    try {
+      const rows = await prisma.$queryRaw<{ role: string }[]>(
+        Prisma.sql`SELECT "role"::text AS role FROM "MarketingRoleAssignment" WHERE "tenantId" = ${tenantId} AND "userId" = ${userId} LIMIT 1`
+      );
+      const normalized = normalizeMarketingRole(rows[0]?.role);
+      return normalized ?? MarketingGovernanceRole.APPROVER;
+    } catch (fallbackError) {
+      console.error('[marketing] role fallback lookup failed', fallbackError);
+      return MarketingGovernanceRole.APPROVER;
+    }
+  }
 }
 
 async function assertMarketingRole(req: any, res: any, required: MarketingGovernanceRole) {
