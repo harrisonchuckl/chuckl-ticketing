@@ -106,6 +106,30 @@ export function buildRecipientEntries(options: {
     });
 }
 
+export async function estimateCampaignRecipients(tenantId: string, rulesInput: unknown) {
+  const contacts = await evaluateSegmentContacts(tenantId, rulesInput);
+  const suppressions = await prisma.marketingSuppression.findMany({
+    where: { tenantId },
+  });
+
+  const recipients = buildRecipientEntries({
+    tenantId,
+    campaignId: 'estimate',
+    contacts,
+    suppressions,
+  });
+
+  const sendable = recipients.filter((r) => r.status === MarketingRecipientStatus.PENDING);
+  const suppressed = recipients.filter((r) => r.status === MarketingRecipientStatus.SKIPPED_SUPPRESSED);
+
+  return {
+    total: recipients.length,
+    sendable: sendable.length,
+    suppressed: suppressed.length,
+    sample: sendable.slice(0, 20).map((r) => r.email),
+  };
+}
+
 async function ensureRecipients(campaignId: string) {
   const campaign = await prisma.marketingCampaign.findUnique({
     where: { id: campaignId },
