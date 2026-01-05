@@ -10,6 +10,8 @@ export type SegmentRule =
   | { type: 'AVG_TICKETS_PER_ORDER_AT_LEAST'; count: number }
   | { type: 'FAVOURITE_VENUE_ID'; venueId: string }
   | { type: 'PURCHASED_AT_VENUE'; venueId: string }
+  | { type: 'PURCHASED_TOWN_IS'; value: string }
+  | { type: 'PURCHASED_COUNTY_IS'; value: string }
   | { type: 'FAVOURITE_CATEGORY_CONTAINS'; value: string }
   | { type: 'FAVOURITE_EVENT_TYPE_CONTAINS'; value: string }
   | { type: 'VIEWED_NO_PURCHASE_AFTER'; days: number }
@@ -44,6 +46,8 @@ export type SegmentOrderStats = {
   categories: Set<string>;
   venues: Set<string>;
   eventTypes: Set<string>;
+  towns: Set<string>;
+  counties: Set<string>;
 };
 
 type SegmentInsight = {
@@ -123,6 +127,8 @@ export async function evaluateSegmentContacts(
       'TOTAL_SPENT_AT_LEAST',
       'ATTENDED_VENUE',
       'PURCHASED_AT_VENUE',
+      'PURCHASED_TOWN_IS',
+      'PURCHASED_COUNTY_IS',
       'VIEWED_NO_PURCHASE_AFTER',
     ].includes(rule.type)
   );
@@ -205,7 +211,15 @@ export async function evaluateSegmentContacts(
         email: true,
         amountPence: true,
         createdAt: true,
-        show: { select: { eventCategory: true, eventType: true, tags: true, venueId: true } },
+        show: {
+          select: {
+            eventCategory: true,
+            eventType: true,
+            tags: true,
+            venueId: true,
+            venue: { select: { city: true, county: true } },
+          },
+        },
       },
     });
 
@@ -224,6 +238,8 @@ export async function evaluateSegmentContacts(
         categories: new Set<string>(),
         venues: new Set<string>(),
         eventTypes: new Set<string>(),
+        towns: new Set<string>(),
+        counties: new Set<string>(),
       };
       existing.totalSpentPence += Number(order.amountPence || 0);
       existing.purchaseCount += 1;
@@ -247,6 +263,12 @@ export async function evaluateSegmentContacts(
       }
       if (order.show?.venueId) {
         existing.venues.add(String(order.show.venueId));
+      }
+      if (order.show?.venue?.city) {
+        existing.towns.add(String(order.show.venue.city).toLowerCase());
+      }
+      if (order.show?.venue?.county) {
+        existing.counties.add(String(order.show.venue.county).toLowerCase());
       }
       orderStats.set(email, existing);
     }
@@ -324,6 +346,16 @@ export function matchesSegmentRules(
         if (!venueId) return false;
         if (stats?.venues.has(venueId)) return true;
         return (insight?.topVenueIds || []).includes(venueId);
+      }
+      case 'PURCHASED_TOWN_IS': {
+        if (!stats) return false;
+        const value = String(rule.value || '').toLowerCase();
+        return stats.towns.has(value);
+      }
+      case 'PURCHASED_COUNTY_IS': {
+        if (!stats) return false;
+        const value = String(rule.value || '').toLowerCase();
+        return stats.counties.has(value);
       }
       case 'FAVOURITE_CATEGORY_CONTAINS': {
         const value = String(rule.value || '').toLowerCase();

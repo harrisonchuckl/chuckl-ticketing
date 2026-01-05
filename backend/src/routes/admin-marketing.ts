@@ -25,7 +25,7 @@ import {
   Prisma,
   ShowStatus,
 } from '@prisma/client';
-import { evaluateSegmentContacts } from '../services/marketing/segments.js';
+import { evaluateSegmentContacts, SegmentRule } from '../services/marketing/segments.js';
 import {
   applySuppression,
   clearSuppression,
@@ -65,6 +65,22 @@ function tenantNameFrom(user: { tradingName?: string | null; companyName?: strin
   return user.tradingName || user.companyName || user.name || 'TIXL';
 }
 
+function formatShowDate(date?: Date | string | null) {
+  if (!date) return '';
+  const value = typeof date === 'string' ? new Date(date) : date;
+  if (Number.isNaN(value.getTime())) return '';
+  return value.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function resolveShowUrl(show: {
+  id: string;
+  usesExternalTicketing?: boolean | null;
+  externalTicketUrl?: string | null;
+}) {
+  if (show.usesExternalTicketing && show.externalTicketUrl) return show.externalTicketUrl;
+  return `${PUBLIC_BASE_URL.replace(/\/+$/, '')}/public/event/${encodeURIComponent(show.id)}`;
+}
+
 async function logMarketingAudit(
   tenantId: string,
   action: string,
@@ -89,6 +105,74 @@ const REQUIRE_VERIFIED_FROM_DEFAULT = String(process.env.MARKETING_REQUIRE_VERIF
 const TEST_SEND_RATE_LIMIT_SECONDS = Number(process.env.MARKETING_TEST_SEND_RATE_LIMIT_SEC || 60);
 const APPROVAL_THRESHOLD_DEFAULT = Number(process.env.MARKETING_APPROVAL_THRESHOLD || 5000);
 
+type AutomationPresetDefinition = {
+  id: string;
+  label: string;
+  description: string;
+  triggerType: MarketingAutomationTriggerType;
+  daysBefore?: number;
+  templateHint: string;
+};
+
+function automationPresets(): AutomationPresetDefinition[] {
+  return [
+    {
+      id: 'save-the-date-30',
+      label: 'Save the Date',
+      description: 'Send a heads-up 30 days before the show.',
+      triggerType: MarketingAutomationTriggerType.DAYS_BEFORE_SHOW,
+      daysBefore: 30,
+      templateHint: 'save the date',
+    },
+    {
+      id: 'reminder-14',
+      label: 'Reminder',
+      description: 'Keep momentum 14 days before the show.',
+      triggerType: MarketingAutomationTriggerType.DAYS_BEFORE_SHOW,
+      daysBefore: 14,
+      templateHint: 'reminder',
+    },
+    {
+      id: 'last-chance-5',
+      label: 'Last Chance (5 days)',
+      description: 'Urgent push 5 days before show day.',
+      triggerType: MarketingAutomationTriggerType.DAYS_BEFORE_SHOW,
+      daysBefore: 5,
+      templateHint: 'last chance',
+    },
+    {
+      id: 'last-chance-3',
+      label: 'Last Chance (3 days)',
+      description: 'Final nudge 3 days before show day.',
+      triggerType: MarketingAutomationTriggerType.DAYS_BEFORE_SHOW,
+      daysBefore: 3,
+      templateHint: 'last chance',
+    },
+    {
+      id: 'thank-you-next-day',
+      label: 'Thank You',
+      description: 'Follow up the day after the show.',
+      triggerType: MarketingAutomationTriggerType.DAYS_BEFORE_SHOW,
+      daysBefore: -1,
+      templateHint: 'thank you',
+    },
+    {
+      id: 'monthly-roundup-county',
+      label: 'Monthly Roundup by County',
+      description: 'Monthly digest for buyers in a county.',
+      triggerType: MarketingAutomationTriggerType.MONTHLY_ROUNDUP,
+      templateHint: 'roundup',
+    },
+    {
+      id: 'low-sales-velocity',
+      label: 'Low Sales Velocity Booster',
+      description: 'Only sends when ticket velocity is weak.',
+      triggerType: MarketingAutomationTriggerType.LOW_SALES_VELOCITY,
+      templateHint: 'booster',
+    },
+  ];
+}
+
 async function fetchTemplateShow(tenantId: string, showId?: string | null) {
   if (!showId) return null;
   return prisma.show.findFirst({
@@ -102,7 +186,7 @@ async function fetchTemplateShow(tenantId: string, showId?: string | null) {
       usesExternalTicketing: true,
       slug: true,
       tags: true,
-      venue: { select: { name: true } },
+      venue: { select: { name: true, city: true, county: true } },
     },
   });
 }
@@ -1309,6 +1393,110 @@ router.get('/marketing/templates', requireAdminOrOrganiser, async (req, res) => 
   res.json({ ok: true, items });
 });
 
+router.get('/marketing/automations/presets', requireAdminOrOrganiser, async (_req, res) => {
+  res.json({ ok: true, presets: automationPresets() });
+});
+
+router.post('/marketing/automations/presets/enable', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const {
+    presetId,
+    showId,
+    templateId,
+    automationName,
+    audienceMode,
+    audienceValue,
+    category,
+    isEnabled,
+  } = req.body || {};
+
+  const preset = automationPresets().find((item) => item.id === presetId);
+  if (!preset) return res.status(404).json({ ok: false, message: 'Preset not found' });
+  if (!showId || !templateId) {
+    return res.status(400).json({ ok: false, message: 'Show and template required' });
+  }
+
+  const show = await prisma.show.findFirst({
+    where: { id: showId, organiserId: tenantId },
+    select: {
+      id: true,
+      title: true,
+      date: true,
+      eventCategory: true,
+      eventType: true,
+      tags: true,
+      venue: { select: { city: true, county: true } },
+    },
+  });
+  if (!show) return res.status(404).json({ ok: false, message: 'Show not found' });
+
+  const template = await prisma.marketingTemplate.findFirst({ where: { id: templateId, tenantId } });
+  if (!template) return res.status(404).json({ ok: false, message: 'Template not found' });
+
+  const normalizedMode = String(audienceMode || 'county').toLowerCase() === 'town' ? 'town' : 'county';
+  const defaultLocation =
+    normalizedMode === 'town' ? show.venue?.city || '' : show.venue?.county || '';
+  const locationValue = String(audienceValue || defaultLocation || '').trim();
+  const defaultCategory =
+    category ||
+    show.eventCategory ||
+    (Array.isArray(show.tags) && show.tags.length ? show.tags[0] : '') ||
+    show.eventType ||
+    '';
+  const categoryValue = String(defaultCategory || '').trim();
+
+  const rules: SegmentRule[] = [];
+  if (locationValue) {
+    if (normalizedMode === 'town') {
+      rules.push({ type: 'PURCHASED_TOWN_IS', value: locationValue });
+    } else {
+      rules.push({ type: 'PURCHASED_COUNTY_IS', value: locationValue });
+    }
+  }
+  if (categoryValue) {
+    rules.push({ type: 'PURCHASED_CATEGORY_CONTAINS', value: categoryValue });
+  }
+
+  const triggerConfig = (() => {
+    if (preset.triggerType === MarketingAutomationTriggerType.DAYS_BEFORE_SHOW) {
+      return { daysBefore: preset.daysBefore ?? 3, showId: show.id };
+    }
+    if (preset.triggerType === MarketingAutomationTriggerType.MONTHLY_ROUNDUP) {
+      return { showId: show.id, county: normalizedMode === 'county' ? locationValue || null : null };
+    }
+    if (preset.triggerType === MarketingAutomationTriggerType.LOW_SALES_VELOCITY) {
+      return { showId: show.id };
+    }
+    return { showId: show.id };
+  })();
+
+  const automation = await prisma.marketingAutomation.create({
+    data: {
+      tenantId,
+      name: automationName || `${preset.label}: ${show.title || 'Show'}`,
+      triggerType: preset.triggerType,
+      triggerConfig: triggerConfig || undefined,
+      isEnabled: isEnabled !== undefined ? Boolean(isEnabled) : true,
+    },
+  });
+
+  const step = await prisma.marketingAutomationStep.create({
+    data: {
+      tenantId,
+      automationId: automation.id,
+      stepType: MarketingAutomationStepType.SEND_EMAIL,
+      templateId: template.id,
+      stepOrder: 1,
+      conditionRules: rules.length ? { rules } : undefined,
+    },
+  });
+
+  await recordAutomationAudit(tenantId, 'automation.created', automation.id, { presetId });
+  await recordAutomationAudit(tenantId, 'automation.step.created', automation.id, { stepId: step.id, presetId });
+
+  res.json({ ok: true, automation, step });
+});
+
 router.get('/marketing/automations', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const items = await prisma.marketingAutomation.findMany({
@@ -1718,6 +1906,8 @@ router.post('/marketing/templates/:id/preview', requireAdminOrOrganiser, async (
   const preferencesUrl = `${PUBLIC_BASE_URL.replace(/\/+$/, '')}/preferences/${encodeURIComponent(
     tenant.storefrontSlug || tenant.id
   )}/${encodeURIComponent(preferencesToken)}`;
+  const show = await fetchTemplateShow(tenantId, req.body?.showId || req.body?.sample?.showId);
+  const showUrl = show ? resolveShowUrl(show) : '';
 
   const { html, errors } = renderMarketingTemplate(template.mjmlBody, {
     firstName: req.body?.sample?.firstName || 'Sample',
@@ -1726,6 +1916,12 @@ router.post('/marketing/templates/:id/preview', requireAdminOrOrganiser, async (
     tenantName: tenantNameFrom(tenant),
     unsubscribeUrl,
     preferencesUrl,
+    showTitle: show?.title || '',
+    showDate: formatShowDate(show?.date),
+    showVenue: show?.venue?.name || '',
+    showTown: show?.venue?.city || '',
+    showCounty: show?.venue?.county || '',
+    showUrl,
   });
 
   res.json({ ok: true, html, errors });
