@@ -3241,7 +3241,7 @@ router.get(
           <div class="sb-submenu" data-submenu="customers">
             <a class="sb-link sub" href="/admin/ui/customers" data-view="/admin/ui/customers">Customers</a>
             <a class="sb-link sub" href="/admin/ui/marketing" data-view="/admin/ui/marketing">Marketing Overview</a>
-            <a class="sb-link sub" href="/admin/ui/audiences" data-view="/admin/ui/audiences">Audiences</a>
+            <a class="sb-link sub" href="/admin/ui/imports-exports" data-view="/admin/ui/imports-exports">Imports &amp; Exports</a>
             <a class="sb-link sub" href="/admin/ui/email" data-view="/admin/ui/email">Email Campaigns</a>
             <a class="sb-link sub" href="/admin/ui/email-templates" data-view="/admin/ui/email-templates">Email Templates</a>
             <a class="sb-link sub" href="/admin/ui/analytics" data-view="/admin/ui/analytics">Insights</a>
@@ -15719,22 +15719,28 @@ function renderInterests(customer){
     $('#marketing_analytics_apply').addEventListener('click', loadAnalytics);
     loadAnalytics();
   }
-  function audiences(){
+  function importsExports(){
     if (!main) return;
     main.innerHTML = ''
       + '<div class="card">'
       +   '<div class="header" style="gap:12px;align-items:center;">'
       +     '<div>'
-      +       '<div class="title">Audiences</div>'
-      +       '<div class="muted">Import subscribers to update marketing consent with clear provenance.</div>'
+      +       '<div class="title">Imports &amp; Exports</div>'
+      +       '<div class="muted">Import subscribers with full provenance, then export compliant audience segments.</div>'
       +     '</div>'
       +   '</div>'
       +   '<div class="grid" style="gap:12px;margin-top:12px;">'
       +     '<div class="grid" style="gap:8px;">'
       +       '<label style="font-weight:600;font-size:13px;">CSV file<input class="input" type="file" id="marketing_import_file" accept=".csv,text/csv" /></label>'
-      +       '<label style="font-weight:600;font-size:13px;">CSV text<textarea class="input" id="marketing_import_csv" rows="6" placeholder="email,first_name,last_name\\nname@example.com,Sam,Lee"></textarea></label>'
+      +       '<label style="font-weight:600;font-size:13px;">CSV text<textarea class="input" id="marketing_import_csv" rows="6" placeholder="email,first_name,last_name,town,tags,topics\\nname@example.com,Sam,Lee,London,VIP;Rock,Newsletter"></textarea></label>'
       +     '</div>'
       +     '<div class="grid" style="gap:8px;">'
+      +       '<label style="font-weight:600;font-size:13px;">Import source'
+      +         '<select class="input" id="marketing_import_source">'
+      +           '<option value="MANUAL_CSV">Manual CSV</option>'
+      +           '<option value="WIX_SYNC">Wix Sync (optional)</option>'
+      +         '</select>'
+      +       '</label>'
       +       '<label style="font-weight:600;font-size:13px;">Lawful basis'
       +         '<select class="input" id="marketing_import_basis">'
       +           '<option value="CONSENT">Consent</option>'
@@ -15746,8 +15752,49 @@ function renderInterests(customer){
       +         '<div class="muted" id="marketing_import_status" style="font-size:12px;"></div>'
       +       '</div>'
       +       '<div class="muted" style="font-size:12px;">'
-      +         'Expected headers: email, first_name, last_name, phone, town.'
+      +         'Map columns for email, first name, last name, town, tags, and topics.'
       +       '</div>'
+      +     '</div>'
+      +   '</div>'
+      +   '<div class="grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:16px;">'
+      +     '<label style="font-weight:600;font-size:13px;">Email'
+      +       '<select class="input" id="marketing_import_map_email"></select>'
+      +     '</label>'
+      +     '<label style="font-weight:600;font-size:13px;">First name'
+      +       '<select class="input" id="marketing_import_map_first"></select>'
+      +     '</label>'
+      +     '<label style="font-weight:600;font-size:13px;">Last name'
+      +       '<select class="input" id="marketing_import_map_last"></select>'
+      +     '</label>'
+      +     '<label style="font-weight:600;font-size:13px;">Town'
+      +       '<select class="input" id="marketing_import_map_town"></select>'
+      +     '</label>'
+      +     '<label style="font-weight:600;font-size:13px;">Tags'
+      +       '<select class="input" id="marketing_import_map_tags"></select>'
+      +     '</label>'
+      +     '<label style="font-weight:600;font-size:13px;">Topics'
+      +       '<select class="input" id="marketing_import_map_topics"></select>'
+      +     '</label>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="card" style="margin-top:16px;">'
+      +   '<div class="header" style="gap:12px;align-items:center;">'
+      +     '<div>'
+      +       '<div class="title">Exports</div>'
+      +       '<div class="muted">Download compliant contact lists and segment definitions.</div>'
+      +     '</div>'
+      +   '</div>'
+      +   '<div class="grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:12px;">'
+      +     '<button class="btn" id="marketing_export_contacts">Export all contacts</button>'
+      +     '<div class="grid" style="gap:6px;">'
+      +       '<label style="font-weight:600;font-size:13px;">Segment'
+      +         '<select class="input" id="marketing_export_segment"></select>'
+      +       '</label>'
+      +       '<button class="btn" id="marketing_export_segment_btn">Export segment contacts</button>'
+      +     '</div>'
+      +     '<div class="grid" style="gap:6px;">'
+      +       '<div class="muted" style="font-size:12px;">Segments CSV includes names and rules for governance.</div>'
+      +       '<button class="btn" id="marketing_export_segments">Export segments</button>'
       +     '</div>'
       +   '</div>'
       + '</div>'
@@ -15765,41 +15812,129 @@ function renderInterests(customer){
       + '</div>'
       + '<div class="card" style="margin-top:16px;">'
       +   '<div class="title">Import details</div>'
-      +   '<div class="muted" style="margin-bottom:10px;">Select a job to see row errors and download a CSV report.</div>'
+      +   '<div class="muted" style="margin-bottom:10px;">Select a job to see row errors, audit activity, and download a CSV report.</div>'
       +   '<div id="marketing_import_detail"></div>'
       + '</div>';
 
     var fileInput = $('#marketing_import_file');
     var csvInput = $('#marketing_import_csv');
     var basisSelect = $('#marketing_import_basis');
+    var sourceSelect = $('#marketing_import_source');
     var submitBtn = $('#marketing_import_submit');
     var statusEl = $('#marketing_import_status');
     var refreshBtn = $('#marketing_import_refresh');
     var jobsTable = $('#marketing_import_jobs');
     var detailEl = $('#marketing_import_detail');
-    var state = { jobs: [], errors: [], filename: '' };
+    var exportContactsBtn = $('#marketing_export_contacts');
+    var exportSegmentsBtn = $('#marketing_export_segments');
+    var exportSegmentBtn = $('#marketing_export_segment_btn');
+    var exportSegmentSelect = $('#marketing_export_segment');
+    var mapEmail = $('#marketing_import_map_email');
+    var mapFirst = $('#marketing_import_map_first');
+    var mapLast = $('#marketing_import_map_last');
+    var mapTown = $('#marketing_import_map_town');
+    var mapTags = $('#marketing_import_map_tags');
+    var mapTopics = $('#marketing_import_map_topics');
+    var state = { jobs: [], errors: [], filename: '', auditLogs: [], segments: [] };
 
-    function escapeCsv(value){
-      var str = String(value == null ? '' : value);
-      if (/[",\\n]/.test(str)){
-        return '\"' + str.replace(/\"/g, '\"\"') + '\"';
+    function jobMeta(job){
+      if (job && job.errorsJson && typeof job.errorsJson === 'object') return job.errorsJson;
+      return {};
+    }
+
+    function parseCsvHeader(text){
+      var input = String(text || '');
+      var rows = [];
+      var row = [];
+      var cell = '';
+      var inQuotes = false;
+      for (var i = 0; i < input.length; i += 1){
+        var char = input[i];
+        if (char === '"'){
+          if (inQuotes && input[i + 1] === '"'){
+            cell += '"';
+            i += 1;
+          } else {
+            inQuotes = !inQuotes;
+          }
+          continue;
+        }
+        if (!inQuotes && (char === '\n' || char === '\r')){
+          if (char === '\r' && input[i + 1] === '\n') i += 1;
+          row.push(cell);
+          rows.push(row);
+          break;
+        }
+        if (!inQuotes && char === ','){
+          row.push(cell);
+          cell = '';
+          continue;
+        }
+        cell += char;
       }
-      return str;
+      if (!rows.length && (cell.length || row.length)){
+        row.push(cell);
+        rows.push(row);
+      }
+      return rows[0] || [];
+    }
+
+    function setSelectOptions(select, headers, defaultMatch){
+      if (!select) return;
+      var options = ['<option value="">Auto-detect</option>'];
+      headers.forEach(function(header){
+        var safe = escapeHtml(String(header || '').trim());
+        options.push('<option value="' + safe + '">' + safe + '</option>');
+      });
+      select.innerHTML = options.join('');
+      if (defaultMatch){
+        var match = String(defaultMatch || '').toLowerCase();
+        for (var i = 0; i < select.options.length; i += 1){
+          if (String(select.options[i].value || '').toLowerCase() === match){
+            select.selectedIndex = i;
+            break;
+          }
+        }
+      }
+    }
+
+    function refreshMapping(){
+      if (!csvInput) return;
+      var headers = parseCsvHeader(csvInput.value || '').map(function(value){
+        return String(value || '').trim();
+      }).filter(Boolean);
+      if (!headers.length){
+        setSelectOptions(mapEmail, []);
+        setSelectOptions(mapFirst, []);
+        setSelectOptions(mapLast, []);
+        setSelectOptions(mapTown, []);
+        setSelectOptions(mapTags, []);
+        setSelectOptions(mapTopics, []);
+        return;
+      }
+      setSelectOptions(mapEmail, headers, 'email');
+      setSelectOptions(mapFirst, headers, 'first_name');
+      setSelectOptions(mapLast, headers, 'last_name');
+      setSelectOptions(mapTown, headers, 'town');
+      setSelectOptions(mapTags, headers, 'tags');
+      setSelectOptions(mapTopics, headers, 'topics');
     }
 
     function renderJobs(){
       if (!jobsTable) return;
       if (!state.jobs.length){
-        jobsTable.innerHTML = '<thead><tr><th>Created</th><th>Status</th><th>File</th><th>Total</th><th>Imported</th><th>Skipped</th><th></th></tr></thead>'
-          + '<tbody><tr><td colspan="7" class="muted">No imports yet.</td></tr></tbody>';
+        jobsTable.innerHTML = '<thead><tr><th>Created</th><th>Status</th><th>File</th><th>Source</th><th>Total</th><th>Imported</th><th>Skipped</th><th></th></tr></thead>'
+          + '<tbody><tr><td colspan="8" class="muted">No imports yet.</td></tr></tbody>';
         return;
       }
-      jobsTable.innerHTML = '<thead><tr><th>Created</th><th>Status</th><th>File</th><th>Total</th><th>Imported</th><th>Skipped</th><th></th></tr></thead><tbody>'
+      jobsTable.innerHTML = '<thead><tr><th>Created</th><th>Status</th><th>File</th><th>Source</th><th>Total</th><th>Imported</th><th>Skipped</th><th></th></tr></thead><tbody>'
         + state.jobs.map(function(job){
+          var meta = jobMeta(job);
           return '<tr>'
             + '<td>' + escapeHtml(formatDateTime(job.createdAt)) + '</td>'
             + '<td>' + escapeHtml(job.status) + '</td>'
             + '<td>' + escapeHtml(job.filename || '—') + '</td>'
+            + '<td>' + escapeHtml(meta.source || 'MANUAL_CSV') + '</td>'
             + '<td>' + escapeHtml(job.totalRows || 0) + '</td>'
             + '<td>' + escapeHtml(job.imported || 0) + '</td>'
             + '<td>' + escapeHtml(job.skipped || 0) + '</td>'
@@ -15815,48 +15950,42 @@ function renderInterests(customer){
       });
     }
 
-    function renderDetail(job, errors){
+    function renderDetail(job, errors, auditLogs){
       if (!detailEl) return;
       if (!job){
         detailEl.innerHTML = '<div class="muted">Choose an import job to see details.</div>';
         return;
       }
+      var meta = jobMeta(job);
       var errorCount = (errors || []).length;
+      var auditCount = (auditLogs || []).length;
       detailEl.innerHTML = ''
         + '<div class="grid" style="gap:6px;margin-bottom:12px;">'
         +   '<div><strong>Status:</strong> ' + escapeHtml(job.status) + '</div>'
+        +   '<div><strong>Source:</strong> ' + escapeHtml(meta.source || 'MANUAL_CSV') + '</div>'
+        +   '<div><strong>Lawful basis:</strong> ' + escapeHtml(meta.lawfulBasis || 'CONSENT') + '</div>'
         +   '<div><strong>Totals:</strong> ' + escapeHtml(job.imported || 0) + ' imported, ' + escapeHtml(job.skipped || 0) + ' skipped</div>'
         +   '<div><strong>Finished:</strong> ' + escapeHtml(job.finishedAt ? formatDateTime(job.finishedAt) : '—') + '</div>'
-        +   (errorCount ? '<button class="btn" id="marketing_import_download">Download errors CSV</button>' : '')
+        +   (errorCount ? '<a class="btn" id="marketing_import_download" href="/admin/api/marketing/imports/' + escapeHtml(job.id) + '/errors.csv">Download errors CSV</a>' : '')
         + '</div>'
-        + '<div class="table-wrap">'
+        + '<div class="table-wrap" style="margin-bottom:12px;">'
         +   '<table class="table">'
         +     '<thead><tr><th>Row</th><th>Email</th><th>Error</th></tr></thead><tbody>'
         +       (errorCount ? errors.map(function(row){
           return '<tr><td>' + escapeHtml(row.rowNumber) + '</td><td>' + escapeHtml(row.email || '—') + '</td><td>' + escapeHtml(row.error) + '</td></tr>';
         }).join('') : '<tr><td colspan="3" class="muted">No errors.</td></tr>')
         +     '</tbody></table>'
+        + '</div>'
+        + '<div class="table-wrap">'
+        +   '<table class="table">'
+        +     '<thead><tr><th>Time</th><th>Action</th><th>Actor</th><th>Details</th></tr></thead><tbody>'
+        +       (auditCount ? auditLogs.map(function(log){
+          var actor = log.actorEmail || log.actorUserId || 'System';
+          var details = log.metadata ? JSON.stringify(log.metadata) : '';
+          return '<tr><td>' + escapeHtml(formatDateTime(log.createdAt)) + '</td><td>' + escapeHtml(log.action) + '</td><td>' + escapeHtml(actor) + '</td><td class="muted" style="font-size:12px;">' + escapeHtml(details) + '</td></tr>';
+        }).join('') : '<tr><td colspan="4" class="muted">No audit activity recorded.</td></tr>')
+        +     '</tbody></table>'
         + '</div>';
-
-      var downloadBtn = $('#marketing_import_download');
-      if (downloadBtn && errorCount){
-        downloadBtn.addEventListener('click', function(){
-          var header = ['rowNumber', 'email', 'error'].join(',');
-          var body = errors.map(function(row){
-            return [row.rowNumber, row.email || '', row.error].map(escapeCsv).join(',');
-          }).join('\\n');
-          var csv = header + '\\n' + body;
-          var blob = new Blob([csv], { type: 'text/csv' });
-          var url = URL.createObjectURL(blob);
-          var link = document.createElement('a');
-          link.href = url;
-          link.download = 'marketing-import-errors.csv';
-          document.body.appendChild(link);
-          link.click();
-          link.remove();
-          URL.revokeObjectURL(url);
-        });
-      }
     }
 
     async function loadJobs(){
@@ -15869,10 +15998,29 @@ function renderInterests(customer){
       }
     }
 
+    async function loadSegments(){
+      if (!exportSegmentSelect) return;
+      try {
+        var data = await j('/admin/api/marketing/segments');
+        state.segments = data.items || [];
+        exportSegmentSelect.innerHTML = ['<option value="">Select a segment</option>']
+          .concat(state.segments.map(function(segment){
+            return '<option value="' + escapeHtml(segment.id) + '">' + escapeHtml(segment.name) + '</option>';
+          })).join('');
+      } catch (err) {
+        showToast(parseErr(err), false);
+      }
+    }
+
     async function loadJob(id){
       try {
-        var data = await j('/admin/api/marketing/imports/' + encodeURIComponent(id));
-        renderDetail(data.job, data.errors || []);
+        var results = await Promise.all([
+          j('/admin/api/marketing/imports/' + encodeURIComponent(id)),
+          j('/admin/api/marketing/imports/' + encodeURIComponent(id) + '/audit')
+        ]);
+        var data = results[0] || {};
+        var auditData = results[1] || {};
+        renderDetail(data.job, data.errors || [], auditData.logs || []);
       } catch (err) {
         showToast(parseErr(err), false);
       }
@@ -15886,8 +16034,15 @@ function renderInterests(customer){
         var reader = new FileReader();
         reader.onload = function(e){
           if (csvInput) csvInput.value = String((e.target && e.target.result) || '');
+          refreshMapping();
         };
         reader.readAsText(file);
+      });
+    }
+
+    if (csvInput){
+      csvInput.addEventListener('input', function(){
+        refreshMapping();
       });
     }
 
@@ -15899,6 +16054,14 @@ function renderInterests(customer){
           showToast('Paste CSV text or select a file first.', false);
           return;
         }
+        var mapping = {
+          email: mapEmail ? mapEmail.value : '',
+          firstName: mapFirst ? mapFirst.value : '',
+          lastName: mapLast ? mapLast.value : '',
+          town: mapTown ? mapTown.value : '',
+          tags: mapTags ? mapTags.value : '',
+          topics: mapTopics ? mapTopics.value : ''
+        };
         submitBtn.disabled = true;
         if (statusEl) statusEl.textContent = 'Importing…';
         try {
@@ -15908,7 +16071,9 @@ function renderInterests(customer){
             body: JSON.stringify({
               csv: csvText,
               filename: state.filename || null,
-              lawfulBasis: basisSelect ? basisSelect.value : 'CONSENT'
+              lawfulBasis: basisSelect ? basisSelect.value : 'CONSENT',
+              source: sourceSelect ? sourceSelect.value : 'MANUAL_CSV',
+              mapping: mapping
             })
           });
           showToast('Import started.', true);
@@ -15924,9 +16089,30 @@ function renderInterests(customer){
     }
 
     if (refreshBtn) refreshBtn.addEventListener('click', loadJobs);
+    if (exportContactsBtn) {
+      exportContactsBtn.addEventListener('click', function(){
+        window.location.href = '/admin/api/marketing/exports/contacts.csv';
+      });
+    }
+    if (exportSegmentsBtn) {
+      exportSegmentsBtn.addEventListener('click', function(){
+        window.location.href = '/admin/api/marketing/exports/segments.csv';
+      });
+    }
+    if (exportSegmentBtn) {
+      exportSegmentBtn.addEventListener('click', function(){
+        if (!exportSegmentSelect || !exportSegmentSelect.value){
+          showToast('Select a segment to export.', false);
+          return;
+        }
+        window.location.href = '/admin/api/marketing/exports/contacts.csv?segmentId=' + encodeURIComponent(exportSegmentSelect.value);
+      });
+    }
 
-    renderDetail(null, []);
+    refreshMapping();
+    renderDetail(null, [], []);
     loadJobs();
+    loadSegments();
   }
   function smartStorefront(){
     if (!main) return;
@@ -21582,7 +21768,8 @@ function renderInterests(customer){
       if (path === '/admin/ui/promoters/new')  return promoterCreate();
       if (path === '/admin/ui/analytics')      return analytics();
       if (path === '/admin/ui/marketing')      return marketingPage();
-      if (path === '/admin/ui/audiences')      return audiences();
+      if (path === '/admin/ui/audiences')      return importsExports();
+      if (path === '/admin/ui/imports-exports') return importsExports();
       if (path === '/admin/ui/email')          return emailPage();
       if (path === '/admin/ui/email-templates') return emailTemplatesListPage();
       if (path === '/admin/ui/integrations/printful') return printfulIntegrationPage();

@@ -18,6 +18,7 @@ import {
   MarketingConsentSource,
   MarketingConsentStatus,
   MarketingLawfulBasis,
+  MarketingPreferenceStatus,
   MarketingSuppressionType,
   MarketingImportJobStatus,
   MarketingCampaignRecipient,
@@ -732,6 +733,41 @@ function parseCsvRows(text: string) {
   return rows;
 }
 
+function normaliseHeader(value: string) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function resolveColumnIndex(
+  headerRow: string[],
+  mappingValue: unknown,
+  fallbackIndex: number
+): number {
+  if (typeof mappingValue === 'number' && Number.isFinite(mappingValue)) {
+    return mappingValue;
+  }
+  if (typeof mappingValue === 'string') {
+    const trimmed = mappingValue.trim();
+    if (!trimmed) return fallbackIndex;
+    const target = normaliseHeader(trimmed);
+    const index = headerRow.findIndex((value) => normaliseHeader(value) === target);
+    return index >= 0 ? index : fallbackIndex;
+  }
+  return fallbackIndex;
+}
+
+function parseDelimitedList(value: string | null) {
+  if (!value) return [];
+  return value
+    .split(/[,;|]/)
+    .map((item) => String(item || '').trim())
+    .filter(Boolean);
+}
+
+function escapeCsvValue(value: unknown) {
+  const str = String(value ?? '');
+  return /[",\n]/.test(str) ? `"${str.replaceAll('"', '""')}"` : str;
+}
+
 
 router.get('/marketing/health', requireAdminOrOwner, async (_req, res) => {
   const workerEnabled = String(process.env.MARKETING_WORKER_ENABLED || 'true') === 'true';
@@ -1271,18 +1307,28 @@ router.post('/marketing/imports', requireAdminOrOrganiser, async (req, res) => {
 
   const filename = String(req.body?.filename || '').trim() || null;
   const requestedLawfulBasis = String(req.body?.lawfulBasis || '').trim();
+  const mapping = req.body?.mapping && typeof req.body.mapping === 'object' ? req.body.mapping : {};
+  const source = String(req.body?.source || 'MANUAL_CSV').trim() || 'MANUAL_CSV';
   const lawfulBasis =
     requestedLawfulBasis === MarketingLawfulBasis.LEGITIMATE_INTEREST
       ? MarketingLawfulBasis.LEGITIMATE_INTEREST
       : MarketingLawfulBasis.CONSENT;
+
+  const jobMetadata = { source, mapping, lawfulBasis };
 
   const job = await prisma.marketingImportJob.create({
     data: {
       tenantId,
       filename,
       status: MarketingImportJobStatus.PROCESSING,
+      errorsJson: jobMetadata,
     },
   });
+
+  await logMarketingAudit(tenantId, 'import.started', 'MarketingImportJob', job.id, {
+    filename,
+    ...jobMetadata,
+  }, actorFrom(req));
 
   try {
     const rows = parseCsvRows(csvText).filter((row) =>
@@ -1295,22 +1341,46 @@ router.post('/marketing/imports', requireAdminOrOrganiser, async (req, res) => {
         data: {
           status: MarketingImportJobStatus.FAILED,
           finishedAt: new Date(),
-          errorsJson: { message: 'No rows found' },
+          errorsJson: { ...jobMetadata, message: 'No rows found' },
         },
       });
+      await logMarketingAudit(tenantId, 'import.failed', 'MarketingImportJob', job.id, { reason: 'no_rows' }, actorFrom(req));
       return res.status(400).json({ ok: false, message: 'No rows found' });
     }
 
     const headerRow = rows[0].map((cell) => String(cell || '').trim().toLowerCase());
+    const mappingValues = Object.values(mapping || {});
+    const mappingUsesHeader = mappingValues.some((value) => typeof value === 'string' && value.trim());
     const emailHeaderIndex = headerRow.findIndex((value) => value === 'email' || value === 'e-mail');
-    const hasHeader = emailHeaderIndex >= 0;
-    const firstNameIndex = headerRow.findIndex((value) => value === 'first_name' || value === 'firstname');
-    const lastNameIndex = headerRow.findIndex((value) => value === 'last_name' || value === 'lastname');
-    const phoneIndex = headerRow.findIndex((value) => value === 'phone' || value === 'phone_number');
-    const townIndex = headerRow.findIndex((value) => value === 'town' || value === 'city');
+    const hasHeader = mappingUsesHeader || emailHeaderIndex >= 0;
+    const firstNameHeaderIndex = headerRow.findIndex((value) => value === 'first_name' || value === 'firstname');
+    const lastNameHeaderIndex = headerRow.findIndex((value) => value === 'last_name' || value === 'lastname');
+    const phoneHeaderIndex = headerRow.findIndex((value) => value === 'phone' || value === 'phone_number');
+    const townHeaderIndex = headerRow.findIndex((value) => value === 'town' || value === 'city');
+    const tagsHeaderIndex = headerRow.findIndex((value) => value === 'tags' || value === 'tag');
+    const topicsHeaderIndex = headerRow.findIndex((value) => value === 'topics' || value === 'topic' || value === 'preferences');
 
     const dataRows = hasHeader ? rows.slice(1) : rows;
-    const emailIndex = hasHeader ? emailHeaderIndex : 0;
+    const emailIndex = resolveColumnIndex(headerRow, mapping.email, hasHeader ? emailHeaderIndex : 0);
+    const firstNameIndex = resolveColumnIndex(headerRow, mapping.firstName, firstNameHeaderIndex);
+    const lastNameIndex = resolveColumnIndex(headerRow, mapping.lastName, lastNameHeaderIndex);
+    const phoneIndex = resolveColumnIndex(headerRow, mapping.phone, phoneHeaderIndex);
+    const townIndex = resolveColumnIndex(headerRow, mapping.town, townHeaderIndex);
+    const tagsIndex = resolveColumnIndex(headerRow, mapping.tags, tagsHeaderIndex);
+    const topicsIndex = resolveColumnIndex(headerRow, mapping.topics, topicsHeaderIndex);
+
+    if (emailIndex < 0) {
+      await prisma.marketingImportJob.update({
+        where: { id: job.id },
+        data: {
+          status: MarketingImportJobStatus.FAILED,
+          finishedAt: new Date(),
+          errorsJson: { ...jobMetadata, message: 'Email column not mapped' },
+        },
+      });
+      await logMarketingAudit(tenantId, 'import.failed', 'MarketingImportJob', job.id, { reason: 'email_missing' }, actorFrom(req));
+      return res.status(400).json({ ok: false, message: 'Email column not mapped' });
+    }
 
     const uniqueEmails = new Set<string>();
     dataRows.forEach((row) => {
@@ -1339,6 +1409,13 @@ router.post('/marketing/imports', requireAdminOrOrganiser, async (req, res) => {
         },
       ])
     );
+
+    const [existingTags, existingTopics] = await Promise.all([
+      prisma.marketingTag.findMany({ where: { tenantId } }),
+      prisma.marketingPreferenceTopic.findMany({ where: { tenantId } }),
+    ]);
+    const tagCache = new Map(existingTags.map((tag) => [tag.name.toLowerCase(), tag.id]));
+    const topicCache = new Map(existingTopics.map((topic) => [topic.name.toLowerCase(), topic.id]));
 
     const rowErrors: Array<{ jobId: string; rowNumber: number; email: string | null; error: string }> = [];
     let imported = 0;
@@ -1388,6 +1465,8 @@ router.post('/marketing/imports', requireAdminOrOrganiser, async (req, res) => {
       const lastName = cellValue(row, lastNameIndex);
       const phone = cellValue(row, phoneIndex);
       const town = cellValue(row, townIndex);
+      const tagValues = parseDelimitedList(cellValue(row, tagsIndex));
+      const topicValues = parseDelimitedList(cellValue(row, topicsIndex));
 
       try {
         const contact = await prisma.marketingContact.upsert({
@@ -1426,6 +1505,44 @@ router.post('/marketing/imports', requireAdminOrOrganiser, async (req, res) => {
           },
         });
 
+        for (const rawTag of tagValues) {
+          const tagName = String(rawTag || '').trim();
+          if (!tagName) continue;
+          const tagKey = tagName.toLowerCase();
+          let tagId = tagCache.get(tagKey);
+          if (!tagId) {
+            const tag = await prisma.marketingTag.create({
+              data: { tenantId, name: tagName },
+            });
+            tagId = tag.id;
+            tagCache.set(tagKey, tagId);
+          }
+          await prisma.marketingContactTag.upsert({
+            where: { contactId_tagId: { contactId: contact.id, tagId } },
+            create: { tenantId, contactId: contact.id, tagId },
+            update: {},
+          });
+        }
+
+        for (const rawTopic of topicValues) {
+          const topicName = String(rawTopic || '').trim();
+          if (!topicName) continue;
+          const topicKey = topicName.toLowerCase();
+          let topicId = topicCache.get(topicKey);
+          if (!topicId) {
+            const topic = await prisma.marketingPreferenceTopic.create({
+              data: { tenantId, name: topicName },
+            });
+            topicId = topic.id;
+            topicCache.set(topicKey, topicId);
+          }
+          await prisma.marketingContactPreference.upsert({
+            where: { tenantId_contactId_topicId: { tenantId, contactId: contact.id, topicId } },
+            create: { tenantId, contactId: contact.id, topicId, status: MarketingPreferenceStatus.SUBSCRIBED },
+            update: { status: MarketingPreferenceStatus.SUBSCRIBED },
+          });
+        }
+
         imported += 1;
       } catch (_err) {
         skipped += 1;
@@ -1453,9 +1570,16 @@ router.post('/marketing/imports', requireAdminOrOrganiser, async (req, res) => {
         totalRows,
         imported,
         skipped,
-        errorsJson: rowErrors.length ? { total: rowErrors.length } : Prisma.DbNull,
+        errorsJson: { ...jobMetadata, total: rowErrors.length },
       },
     });
+
+    await logMarketingAudit(tenantId, 'import.completed', 'MarketingImportJob', job.id, {
+      totalRows,
+      imported,
+      skipped,
+      errors: rowErrors.length,
+    }, actorFrom(req));
 
     return res.json({
       ok: true,
@@ -1471,9 +1595,10 @@ router.post('/marketing/imports', requireAdminOrOrganiser, async (req, res) => {
       data: {
         status: MarketingImportJobStatus.FAILED,
         finishedAt: new Date(),
-        errorsJson: { message: 'Import failed' },
+        errorsJson: { ...jobMetadata, message: 'Import failed' },
       },
     });
+    await logMarketingAudit(tenantId, 'import.failed', 'MarketingImportJob', job.id, { reason: 'exception' }, actorFrom(req));
     return res.status(500).json({ ok: false, message: 'Import failed' });
   }
 });
@@ -1506,6 +1631,183 @@ router.get('/marketing/imports/:id', requireAdminOrOrganiser, async (req, res) =
   });
 
   res.json({ ok: true, job, errors });
+});
+
+router.get('/marketing/imports/:id/errors.csv', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
+  const id = String(req.params.id || '');
+  const job = await prisma.marketingImportJob.findFirst({
+    where: { id, tenantId },
+  });
+  if (!job) return res.status(404).json({ ok: false, message: 'Import not found' });
+
+  const errors = await prisma.marketingImportRowError.findMany({
+    where: { jobId: job.id },
+    orderBy: { rowNumber: 'asc' },
+  });
+
+  const header = ['rowNumber', 'email', 'error'];
+  const escapeCsv = (value: string | number | null) => {
+    const str = String(value ?? '');
+    return /[",\n]/.test(str) ? `"${str.replaceAll('"', '""')}"` : str;
+  };
+  const csv = [header.join(','), ...errors.map((row) => [
+    escapeCsv(row.rowNumber),
+    escapeCsv(row.email || ''),
+    escapeCsv(row.error || ''),
+  ].join(','))].join('\n');
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="marketing-import-${job.id}-errors.csv"`);
+  res.send(csv);
+});
+
+router.get('/marketing/imports/:id/audit', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
+  const id = String(req.params.id || '');
+  const job = await prisma.marketingImportJob.findFirst({
+    where: { id, tenantId },
+  });
+  if (!job) return res.status(404).json({ ok: false, message: 'Import not found' });
+
+  const logs = await prisma.marketingAuditLog.findMany({
+    where: { tenantId, entityType: 'MarketingImportJob', entityId: job.id },
+    orderBy: { createdAt: 'desc' },
+    take: 50,
+  });
+
+  res.json({ ok: true, logs });
+});
+
+router.get('/marketing/exports/contacts.csv', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
+  const segmentId = String(req.query.segmentId || '').trim();
+  const segment = segmentId
+    ? await prisma.marketingSegment.findFirst({ where: { id: segmentId, tenantId } })
+    : null;
+  if (segmentId && !segment) {
+    return res.status(404).json({ ok: false, message: 'Segment not found' });
+  }
+
+  const contacts = segment
+    ? await evaluateSegmentContacts(tenantId, segment.rules)
+    : (await prisma.marketingContact.findMany({
+        where: { tenantId },
+        include: {
+          tags: { include: { tag: true } },
+          consents: true,
+          preferences: true,
+        },
+      })).map((contact) => ({
+        id: contact.id,
+        email: contact.email,
+        firstName: contact.firstName,
+        lastName: contact.lastName,
+        town: contact.town,
+        consentStatus: contact.consents[0]?.status || null,
+        tags: contact.tags.map((tag) => tag.tag.name),
+        preferences: contact.preferences.map((pref) => ({
+          topicId: pref.topicId,
+          status: String(pref.status || ''),
+        })),
+      }));
+
+  const topicIds = Array.from(
+    new Set(contacts.flatMap((contact) => contact.preferences.map((pref) => pref.topicId)))
+  );
+  const topics = topicIds.length
+    ? await prisma.marketingPreferenceTopic.findMany({
+        where: { tenantId, id: { in: topicIds } },
+      })
+    : [];
+  const topicMap = new Map(topics.map((topic) => [topic.id, topic.name]));
+
+  const emails = contacts.map((contact) => contact.email);
+  const suppressions = emails.length
+    ? await prisma.marketingSuppression.findMany({
+        where: { tenantId, email: { in: emails } },
+        select: { email: true, type: true },
+      })
+    : [];
+  const suppressionMap = new Map(
+    suppressions.map((record) => [record.email.toLowerCase(), record])
+  );
+
+  const rows = contacts
+    .map((contact) => {
+      const suppression = suppressionMap.get(contact.email.toLowerCase()) || null;
+      const consentStatus =
+        (contact.consentStatus as MarketingConsentStatus) || MarketingConsentStatus.TRANSACTIONAL_ONLY;
+      const decision = shouldSuppressContact(consentStatus, suppression);
+      return decision.suppressed ? null : contact;
+    })
+    .filter(Boolean) as typeof contacts;
+
+  const header = [
+    'email',
+    'first_name',
+    'last_name',
+    'town',
+    'tags',
+    'topics',
+    'consent_status',
+  ];
+
+  const csv = [header.join(','), ...rows.map((contact) => {
+    const topicsLabel = contact.preferences
+      .filter((pref) => String(pref.status || '').toUpperCase() === MarketingPreferenceStatus.SUBSCRIBED)
+      .map((pref) => topicMap.get(pref.topicId) || pref.topicId)
+      .filter(Boolean)
+      .join('; ');
+    return [
+      escapeCsvValue(contact.email),
+      escapeCsvValue(contact.firstName || ''),
+      escapeCsvValue(contact.lastName || ''),
+      escapeCsvValue(contact.town || ''),
+      escapeCsvValue((contact.tags || []).join('; ')),
+      escapeCsvValue(topicsLabel),
+      escapeCsvValue(contact.consentStatus || ''),
+    ].join(',');
+  })].join('\n');
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="marketing-contacts${segment ? `-${segment.id}` : ''}.csv"`
+  );
+  res.send(csv);
+});
+
+router.get('/marketing/exports/segments.csv', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
+
+  const segments = await prisma.marketingSegment.findMany({
+    where: { tenantId },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const header = ['segment_id', 'name', 'description', 'created_at', 'rules_json'];
+  const csv = [header.join(','), ...segments.map((segment) => {
+    return [
+      escapeCsvValue(segment.id),
+      escapeCsvValue(segment.name),
+      escapeCsvValue(segment.description || ''),
+      escapeCsvValue(segment.createdAt.toISOString()),
+      escapeCsvValue(JSON.stringify(segment.rules || {})),
+    ].join(',');
+  })].join('\n');
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="marketing-segments.csv"');
+  res.send(csv);
 });
 
 router.get('/marketing/segments', requireAdminOrOrganiser, async (req, res) => {
