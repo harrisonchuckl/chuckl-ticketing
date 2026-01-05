@@ -17191,6 +17191,7 @@ function renderInterests(customer){
         +   '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px;">'
         +     '<input class="input" id="mk_template_name" placeholder="Template name" />'
         +     '<input class="input" id="mk_template_subject" placeholder="Subject" />'
+        +     '<input class="input" id="mk_template_preview" placeholder="Preview text (optional)" />'
         +     '<input class="input" id="mk_template_fromName" placeholder="From name (optional)" />'
         +     '<input class="input" id="mk_template_fromEmail" placeholder="From email (optional)" />'
         +   '</div>'
@@ -17215,6 +17216,7 @@ function renderInterests(customer){
         addBtn.addEventListener('click', async function(){
           var name = String(valueOf(sections.templates, 'mk_template_name') || '').trim();
           var subject = String(valueOf(sections.templates, 'mk_template_subject') || '').trim();
+          var previewText = String(valueOf(sections.templates, 'mk_template_preview') || '').trim();
           var fromName = String(valueOf(sections.templates, 'mk_template_fromName') || '').trim();
           var fromEmail = String(valueOf(sections.templates, 'mk_template_fromEmail') || '').trim();
           var mjmlBody = String(valueOf(sections.templates, 'mk_template_mjml') || '').trim();
@@ -17224,7 +17226,7 @@ function renderInterests(customer){
             await fetchJson('/admin/marketing/templates', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
-              body: JSON.stringify({ name: name, subject: subject, fromName: fromName, fromEmail: fromEmail, mjmlBody: mjmlBody })
+              body: JSON.stringify({ name: name, subject: subject, previewText: previewText, fromName: fromName, fromEmail: fromEmail, mjmlBody: mjmlBody })
             });
             if (msg) msg.textContent = 'Saved.';
             await loadTemplates();
@@ -17324,6 +17326,7 @@ function renderInterests(customer){
         +       '<div class="muted" style="margin-top:12px;">Or create a new template</div>'
         +       '<input class="input" id="mk_builder_tpl_name" placeholder="Template name" style="margin-top:8px;" />'
         +       '<input class="input" id="mk_builder_tpl_subject" placeholder="Subject" style="margin-top:8px;" />'
+        +       '<input class="input" id="mk_builder_tpl_preview" placeholder="Preview text (optional)" style="margin-top:8px;" />'
         +       '<input class="input" id="mk_builder_tpl_fromName" placeholder="From name (optional)" style="margin-top:8px;" />'
         +       '<input class="input" id="mk_builder_tpl_fromEmail" placeholder="From email (optional)" style="margin-top:8px;" />'
         +       '<textarea class="input" id="mk_builder_tpl_mjml" placeholder="MJML body" style="height:120px;margin-top:8px;"></textarea>'
@@ -17332,6 +17335,15 @@ function renderInterests(customer){
         +         '<div id="mk_builder_tpl_msg" class="muted"></div>'
         +       '</div>'
         +     '</div>'
+        +   '</div>'
+        +   '<div class="card" style="margin:12px 0 0 0;">'
+        +     '<div class="title">AI assist (drafts only)</div>'
+        +     '<div class="muted" style="margin-top:6px;">Recommendations are suggestions only. AI never sends automatically.</div>'
+        +     '<div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap;">'
+        +       '<button class="btn" id="mk_ai_campaign_refresh">Generate suggestions</button>'
+        +       '<div class="muted" id="mk_ai_campaign_msg"></div>'
+        +     '</div>'
+        +     '<div id="mk_ai_campaign_panel" style="margin-top:10px;"></div>'
         +   '</div>'
         +   '<div class="grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:12px;">'
         +     '<div class="card" style="margin:0;">'
@@ -17420,11 +17432,85 @@ function renderInterests(customer){
       var testMsg = sections.campaigns.querySelector('#mk_builder_test_msg');
       var previewMsg = sections.campaigns.querySelector('#mk_builder_preview_msg');
       var sendSummary = sections.campaigns.querySelector('#mk_builder_send_summary');
+      var aiMsg = sections.campaigns.querySelector('#mk_ai_campaign_msg');
+      var aiPanel = sections.campaigns.querySelector('#mk_ai_campaign_panel');
+      var aiRefreshBtn = sections.campaigns.querySelector('#mk_ai_campaign_refresh');
 
       function setBuilderMessage(el, message, isSuccess){
         if (!el) return;
         el.textContent = message || '';
         el.style.color = isSuccess === true ? 'var(--success)' : '';
+      }
+
+      function renderAiPanel(suggestions){
+        if (!aiPanel) return;
+        if (!suggestions) {
+          aiPanel.innerHTML = '<div class="muted">Select a show and generate suggestions.</div>';
+          return;
+        }
+        var segment = suggestions.segment;
+        var subjectLines = suggestions.subjectLines;
+        var sendTime = suggestions.sendTime;
+
+        var segmentHtml = segment
+          ? ('<div class="card" style="margin:0 0 8px 0;">'
+              + '<div class="title">Best segment</div>'
+              + '<div class="muted" style="margin-top:6px;">' + escapeHtml(segment.segmentName || '') + '</div>'
+              + (segment.metrics ? ('<div class="muted" style="margin-top:4px;">Sent: ' + segment.metrics.sent + ' · Clicks: ' + segment.metrics.clicks + ' · Click rate: ' + segment.metrics.clickRate + '%</div>') : '')
+              + '<div class="muted" style="margin-top:6px;">' + escapeHtml(segment.reason || '') + '</div>'
+              + '<div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap;">'
+              +   '<button class="btn" data-ai-use="segment" data-ai-id="' + escapeHtml(segment.id) + '" data-ai-segment="' + escapeHtml(segment.segmentId) + '">Use segment</button>'
+              +   '<button class="btn" data-ai-dismiss="' + escapeHtml(segment.id) + '">Not used</button>'
+              + '</div>'
+            + '</div>')
+          : '<div class="muted">No segment recommendation yet.</div>';
+
+        var subjectHtml = subjectLines && subjectLines.variations
+          ? ('<div class="card" style="margin:0 0 8px 0;">'
+              + '<div class="title">Subject + preview ideas</div>'
+              + (subjectLines.variations || []).map(function(variation){
+                return ''
+                  + '<div class="panel-block" style="margin-top:8px;">'
+                  +   '<div style="font-weight:600;">' + escapeHtml(variation.subject || '') + '</div>'
+                  +   '<div class="muted" style="margin-top:4px;">Preview: ' + escapeHtml(variation.previewText || '') + '</div>'
+                  +   '<div class="muted" style="margin-top:4px;">' + escapeHtml(variation.reason || '') + '</div>'
+                  +   '<div class="row" style="gap:8px;margin-top:6px;flex-wrap:wrap;">'
+                  +     '<button class="btn" data-ai-use="subject" data-ai-id="' + escapeHtml(subjectLines.id) + '" data-ai-subject="' + escapeHtml(variation.subject || '') + '" data-ai-preview="' + escapeHtml(variation.previewText || '') + '">Apply</button>'
+                  +   '</div>'
+                  + '</div>';
+              }).join('')
+              + '<div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap;">'
+              +   '<button class="btn" data-ai-dismiss="' + escapeHtml(subjectLines.id) + '">Not used</button>'
+              + '</div>'
+            + '</div>')
+          : '<div class="muted">No subject ideas yet.</div>';
+
+        var sendTimeHtml = sendTime
+          ? ('<div class="card" style="margin:0;">'
+              + '<div class="title">Recommended send time</div>'
+              + '<div class="muted" style="margin-top:6px;">' + escapeHtml(sendTime.recommendedLocal || '') + ' (' + escapeHtml(sendTime.timezone || 'local') + ')</div>'
+              + '<div class="muted" style="margin-top:4px;">' + escapeHtml(sendTime.reason || '') + '</div>'
+              + '<div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap;">'
+              +   '<button class="btn" data-ai-use="send_time" data-ai-id="' + escapeHtml(sendTime.id) + '" data-ai-time="' + escapeHtml(sendTime.recommendedLocal || '') + '">Apply time</button>'
+              +   '<button class="btn" data-ai-dismiss="' + escapeHtml(sendTime.id) + '">Not used</button>'
+              + '</div>'
+            + '</div>')
+          : '<div class="muted">No send time suggestion yet.</div>';
+
+        aiPanel.innerHTML = segmentHtml + subjectHtml + sendTimeHtml;
+      }
+
+      async function recordAiFeedback(id, used, feedback){
+        if (!id) return;
+        try{
+          await fetchJson('/admin/marketing/ai/suggestions/' + encodeURIComponent(id) + '/feedback', {
+            method:'POST',
+            headers:{ 'Content-Type':'application/json' },
+            body: JSON.stringify({ used: !!used, feedback: feedback || null })
+          });
+        }catch(err){
+          console.warn('[marketing][ai] feedback failed', err);
+        }
       }
 
       function estimateText(estimate){
@@ -17467,6 +17553,7 @@ function renderInterests(customer){
         showSelect.addEventListener('change', function(){
           builderState.showId = showSelect.value;
           markDraftStale();
+          renderAiPanel(null);
         });
       }
 
@@ -17517,6 +17604,7 @@ function renderInterests(customer){
         saveTemplateBtn.addEventListener('click', async function(){
           var name = String(valueOf(sections.campaigns, 'mk_builder_tpl_name') || '').trim();
           var subject = String(valueOf(sections.campaigns, 'mk_builder_tpl_subject') || '').trim();
+          var previewText = String(valueOf(sections.campaigns, 'mk_builder_tpl_preview') || '').trim();
           var fromName = String(valueOf(sections.campaigns, 'mk_builder_tpl_fromName') || '').trim();
           var fromEmail = String(valueOf(sections.campaigns, 'mk_builder_tpl_fromEmail') || '').trim();
           var mjmlBody = String(valueOf(sections.campaigns, 'mk_builder_tpl_mjml') || '').trim();
@@ -17526,7 +17614,7 @@ function renderInterests(customer){
             await fetchJson('/admin/marketing/templates', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
-              body: JSON.stringify({ name: name, subject: subject, fromName: fromName, fromEmail: fromEmail, mjmlBody: mjmlBody })
+              body: JSON.stringify({ name: name, subject: subject, previewText: previewText, fromName: fromName, fromEmail: fromEmail, mjmlBody: mjmlBody })
             });
             if (msg) msg.textContent = 'Template saved.';
             await loadCampaigns();
@@ -17687,6 +17775,63 @@ function renderInterests(customer){
           }
         });
       }
+
+      if (aiRefreshBtn) {
+        aiRefreshBtn.addEventListener('click', async function(){
+          var showId = valueOf(sections.campaigns, 'mk_builder_show');
+          if (!showId) { setBuilderMessage(aiMsg, 'Select a show to generate suggestions.', false); return; }
+          setBuilderMessage(aiMsg, 'Generating suggestions...', true);
+          try {
+            var data = await fetchJson('/admin/marketing/ai/suggestions', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({ showId: showId, types: ['segment', 'subject_lines', 'send_time'] })
+            });
+            renderAiPanel(data.suggestions || {});
+            setBuilderMessage(aiMsg, 'Suggestions ready.', true);
+          } catch (err) {
+            setBuilderMessage(aiMsg, err.message || 'Failed to generate suggestions.', false);
+          }
+        });
+      }
+
+      if (aiPanel) {
+        aiPanel.addEventListener('click', function(event){
+          var target = event.target;
+          if (!target || !target.getAttribute) return;
+          var useType = target.getAttribute('data-ai-use');
+          if (useType === 'segment') {
+            var segId = target.getAttribute('data-ai-segment') || '';
+            if (segmentSelect && segId) {
+              segmentSelect.value = segId;
+              builderState.segmentId = segId;
+              markDraftStale();
+            }
+            recordAiFeedback(target.getAttribute('data-ai-id'), true, 'used');
+          }
+          if (useType === 'subject') {
+            var subjectValue = target.getAttribute('data-ai-subject') || '';
+            var previewValue = target.getAttribute('data-ai-preview') || '';
+            var subjectInput = sections.campaigns.querySelector('#mk_builder_tpl_subject');
+            var previewInput = sections.campaigns.querySelector('#mk_builder_tpl_preview');
+            if (subjectInput) subjectInput.value = subjectValue;
+            if (previewInput) previewInput.value = previewValue;
+            recordAiFeedback(target.getAttribute('data-ai-id'), true, 'used');
+          }
+          if (useType === 'send_time') {
+            var timeValue = target.getAttribute('data-ai-time') || '';
+            var scheduleInput = sections.campaigns.querySelector('#mk_builder_schedule_time');
+            if (scheduleInput) scheduleInput.value = timeValue;
+            recordAiFeedback(target.getAttribute('data-ai-id'), true, 'used');
+          }
+          var dismissId = target.getAttribute('data-ai-dismiss');
+          if (dismissId) {
+            recordAiFeedback(dismissId, false, 'not_used');
+          }
+        });
+      }
+
+      renderAiPanel(null);
 
       async function loadCampaignDetail(id){
         var panel = sections.campaigns.querySelector('#mk_campaign_detail_panel');
@@ -17918,6 +18063,16 @@ function renderInterests(customer){
         + '.preset-wizard__header{display:flex;align-items:center;justify-content:space-between;gap:8px;}'
         + '</style>'
         + '<div class="card" style="margin:0 0 12px 0;">'
+        +   '<div class="title">AI preset recommendation</div>'
+        +   '<div class="muted" style="margin-top:6px;">AI only drafts recommendations. You choose whether to enable.</div>'
+        +   '<div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap;">'
+        +     '<select class="input" id="mk_preset_ai_show">' + (showOptions || '<option value="">No shows</option>') + '</select>'
+        +     '<button class="btn" id="mk_preset_ai_refresh">Suggest preset</button>'
+        +     '<div class="muted" id="mk_preset_ai_msg"></div>'
+        +   '</div>'
+        +   '<div id="mk_preset_ai_panel" style="margin-top:10px;"></div>'
+        + '</div>'
+        + '<div class="card" style="margin:0 0 12px 0;">'
         +   '<div class="title">Automation presets</div>'
         +   '<div class="muted" style="margin-top:6px;">Enable built-in automations in a few clicks.</div>'
         +   '<div class="preset-list" style="margin-top:12px;">' + (presetCards || '<div class="muted">No presets available.</div>') + '</div>'
@@ -17961,6 +18116,9 @@ function renderInterests(customer){
 
       var wizard = sections.presets.querySelector('#mk_preset_wizard');
       var selectedPreset = null;
+      var aiPanel = sections.presets.querySelector('#mk_preset_ai_panel');
+      var aiMsg = sections.presets.querySelector('#mk_preset_ai_msg');
+      var aiRefreshBtn = sections.presets.querySelector('#mk_preset_ai_refresh');
 
       function findPreset(id){
         return presets.find(function(p){ return p.id === id; }) || null;
@@ -17979,6 +18137,36 @@ function renderInterests(customer){
       function setWizardVisibility(show){
         if (!wizard) return;
         wizard.style.display = show ? 'block' : 'none';
+      }
+
+      function renderAiPreset(suggestion){
+        if (!aiPanel) return;
+        if (!suggestion) {
+          aiPanel.innerHTML = '<div class="muted">Select a show to get a recommendation.</div>';
+          return;
+        }
+        aiPanel.innerHTML = ''
+          + '<div class="panel-block">'
+          +   '<div style="font-weight:600;">' + escapeHtml(suggestion.label || '') + '</div>'
+          +   '<div class="muted" style="margin-top:4px;">' + escapeHtml(suggestion.reason || '') + '</div>'
+          +   '<div class="row" style="gap:8px;margin-top:6px;flex-wrap:wrap;">'
+          +     '<button class="btn" data-ai-preset-open="' + escapeHtml(suggestion.presetId) + '" data-ai-id="' + escapeHtml(suggestion.id) + '">Open wizard</button>'
+          +     '<button class="btn" data-ai-dismiss="' + escapeHtml(suggestion.id) + '">Not used</button>'
+          +   '</div>'
+          + '</div>';
+      }
+
+      async function recordAiFeedback(id, used, feedback){
+        if (!id) return;
+        try{
+          await fetchJson('/admin/marketing/ai/suggestions/' + encodeURIComponent(id) + '/feedback', {
+            method:'POST',
+            headers:{ 'Content-Type':'application/json' },
+            body: JSON.stringify({ used: !!used, feedback: feedback || null })
+          });
+        }catch(err){
+          console.warn('[marketing][ai] preset feedback failed', err);
+        }
       }
 
       function applyShowDefaults(){
@@ -18031,6 +18219,43 @@ function renderInterests(customer){
           openWizard(findPreset(presetId));
         });
       });
+
+      if (aiRefreshBtn) {
+        aiRefreshBtn.addEventListener('click', async function(){
+          var showId = valueOf(sections.presets, 'mk_preset_ai_show');
+          if (!showId) { if (aiMsg) aiMsg.textContent = 'Select a show first.'; return; }
+          if (aiMsg) aiMsg.textContent = 'Generating suggestion...';
+          try{
+            var data = await fetchJson('/admin/marketing/ai/suggestions', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({ showId: showId, types: ['automation_preset'] })
+            });
+            renderAiPreset((data.suggestions || {}).automationPreset || null);
+            if (aiMsg) aiMsg.textContent = 'Suggestion ready.';
+          }catch(err){
+            if (aiMsg) aiMsg.textContent = err.message || 'Failed to generate suggestion.';
+          }
+        });
+      }
+
+      if (aiPanel) {
+        aiPanel.addEventListener('click', function(event){
+          var target = event.target;
+          if (!target || !target.getAttribute) return;
+          var presetId = target.getAttribute('data-ai-preset-open');
+          if (presetId) {
+            openWizard(findPreset(presetId));
+            recordAiFeedback(target.getAttribute('data-ai-id'), true, 'used');
+          }
+          var dismissId = target.getAttribute('data-ai-dismiss');
+          if (dismissId) {
+            recordAiFeedback(dismissId, false, 'not_used');
+          }
+        });
+      }
+
+      renderAiPreset(null);
 
       var closeBtn = sections.presets.querySelector('#mk_preset_close');
       if (closeBtn) {
