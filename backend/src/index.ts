@@ -19,6 +19,7 @@ import adminOrdersApiRoutes from "./routes/admin-orders-api.js";
 import adminAiCrmRoutes from "./routes/admin-ai-crm.js";
 import adminOwnerRoutes from "./routes/admin-owner.js";
 import adminOwnerOrganisersRoutes from "./routes/admin-owner-organisers.js";
+import segmentsRoutes from "./routes/segments.js";
 
 const app = express();
 
@@ -50,6 +51,7 @@ app.use("/admin/api", adminOrdersApiRoutes);
 app.use("/admin/api", adminAiCrmRoutes);
 app.use("/admin/api", adminOwnerRoutes);
 app.use("/admin/api", adminOwnerOrganisersRoutes);
+app.use("/", segmentsRoutes);
 
 const port = Number(process.env.PORT) || 3000;
 app.listen(port, () => {
