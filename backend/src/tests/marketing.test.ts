@@ -10,6 +10,7 @@ const contact = {
   email: 'alex@example.com',
   firstName: 'Alex',
   lastName: 'Doe',
+  town: null,
   consentStatus: MarketingConsentStatus.SUBSCRIBED,
   tags: ['vip', 'repeat'],
   preferences: [],
