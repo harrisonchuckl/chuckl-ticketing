@@ -15287,7 +15287,212 @@ function renderInterests(customer){
   }
   function audiences(){
     if (!main) return;
-    main.innerHTML = '<div class="card"><div class="title">Audiences</div><div class="muted">Audience tools coming soon.</div></div>';
+    main.innerHTML = ''
+      + '<div class="card">'
+      +   '<div class="header" style="gap:12px;align-items:center;">'
+      +     '<div>'
+      +       '<div class="title">Audiences</div>'
+      +       '<div class="muted">Import subscribers to update marketing consent with clear provenance.</div>'
+      +     '</div>'
+      +   '</div>'
+      +   '<div class="grid" style="gap:12px;margin-top:12px;">'
+      +     '<div class="grid" style="gap:8px;">'
+      +       '<label style="font-weight:600;font-size:13px;">CSV file<input class="input" type="file" id="marketing_import_file" accept=".csv,text/csv" /></label>'
+      +       '<label style="font-weight:600;font-size:13px;">CSV text<textarea class="input" id="marketing_import_csv" rows="6" placeholder="email,first_name,last_name\\nname@example.com,Sam,Lee"></textarea></label>'
+      +     '</div>'
+      +     '<div class="grid" style="gap:8px;">'
+      +       '<label style="font-weight:600;font-size:13px;">Lawful basis'
+      +         '<select class="input" id="marketing_import_basis">'
+      +           '<option value="CONSENT">Consent</option>'
+      +           '<option value="LEGITIMATE_INTEREST">Legitimate interest</option>'
+      +         '</select>'
+      +       '</label>'
+      +       '<div class="row" style="gap:8px;align-items:center;">'
+      +         '<button class="btn p" id="marketing_import_submit">Start import</button>'
+      +         '<div class="muted" id="marketing_import_status" style="font-size:12px;"></div>'
+      +       '</div>'
+      +       '<div class="muted" style="font-size:12px;">'
+      +         'Expected headers: email, first_name, last_name, phone, town.'
+      +       '</div>'
+      +     '</div>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="card" style="margin-top:16px;">'
+      +   '<div class="header" style="gap:12px;align-items:center;">'
+      +     '<div>'
+      +       '<div class="title">Import jobs</div>'
+      +       '<div class="muted">Track recent uploads and results.</div>'
+      +     '</div>'
+      +     '<button class="btn" id="marketing_import_refresh" style="margin-left:auto;">Refresh</button>'
+      +   '</div>'
+      +   '<div class="table-wrap" style="margin-top:12px;">'
+      +     '<table class="table" id="marketing_import_jobs"></table>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="card" style="margin-top:16px;">'
+      +   '<div class="title">Import details</div>'
+      +   '<div class="muted" style="margin-bottom:10px;">Select a job to see row errors and download a CSV report.</div>'
+      +   '<div id="marketing_import_detail"></div>'
+      + '</div>';
+
+    var fileInput = $('#marketing_import_file');
+    var csvInput = $('#marketing_import_csv');
+    var basisSelect = $('#marketing_import_basis');
+    var submitBtn = $('#marketing_import_submit');
+    var statusEl = $('#marketing_import_status');
+    var refreshBtn = $('#marketing_import_refresh');
+    var jobsTable = $('#marketing_import_jobs');
+    var detailEl = $('#marketing_import_detail');
+    var state = { jobs: [], errors: [], filename: '' };
+
+    function escapeCsv(value){
+      var str = String(value == null ? '' : value);
+      if (/[\",\n]/.test(str)){
+        return '\"' + str.replace(/\"/g, '\"\"') + '\"';
+      }
+      return str;
+    }
+
+    function renderJobs(){
+      if (!jobsTable) return;
+      if (!state.jobs.length){
+        jobsTable.innerHTML = '<thead><tr><th>Created</th><th>Status</th><th>File</th><th>Total</th><th>Imported</th><th>Skipped</th><th></th></tr></thead>'
+          + '<tbody><tr><td colspan="7" class="muted">No imports yet.</td></tr></tbody>';
+        return;
+      }
+      jobsTable.innerHTML = '<thead><tr><th>Created</th><th>Status</th><th>File</th><th>Total</th><th>Imported</th><th>Skipped</th><th></th></tr></thead><tbody>'
+        + state.jobs.map(function(job){
+          return '<tr>'
+            + '<td>' + escapeHtml(formatDateTime(job.createdAt)) + '</td>'
+            + '<td>' + escapeHtml(job.status) + '</td>'
+            + '<td>' + escapeHtml(job.filename || '—') + '</td>'
+            + '<td>' + escapeHtml(job.totalRows || 0) + '</td>'
+            + '<td>' + escapeHtml(job.imported || 0) + '</td>'
+            + '<td>' + escapeHtml(job.skipped || 0) + '</td>'
+            + '<td><button class="btn" data-job-view="' + escapeHtml(job.id) + '">View</button></td>'
+            + '</tr>';
+        }).join('') + '</tbody>';
+
+      $$('#marketing_import_jobs [data-job-view]').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var id = btn.getAttribute('data-job-view');
+          if (id) loadJob(id);
+        });
+      });
+    }
+
+    function renderDetail(job, errors){
+      if (!detailEl) return;
+      if (!job){
+        detailEl.innerHTML = '<div class="muted">Choose an import job to see details.</div>';
+        return;
+      }
+      var errorCount = (errors || []).length;
+      detailEl.innerHTML = ''
+        + '<div class="grid" style="gap:6px;margin-bottom:12px;">'
+        +   '<div><strong>Status:</strong> ' + escapeHtml(job.status) + '</div>'
+        +   '<div><strong>Totals:</strong> ' + escapeHtml(job.imported || 0) + ' imported, ' + escapeHtml(job.skipped || 0) + ' skipped</div>'
+        +   '<div><strong>Finished:</strong> ' + escapeHtml(job.finishedAt ? formatDateTime(job.finishedAt) : '—') + '</div>'
+        +   (errorCount ? '<button class="btn" id="marketing_import_download">Download errors CSV</button>' : '')
+        + '</div>'
+        + '<div class="table-wrap">'
+        +   '<table class="table">'
+        +     '<thead><tr><th>Row</th><th>Email</th><th>Error</th></tr></thead><tbody>'
+        +       (errorCount ? errors.map(function(row){
+          return '<tr><td>' + escapeHtml(row.rowNumber) + '</td><td>' + escapeHtml(row.email || '—') + '</td><td>' + escapeHtml(row.error) + '</td></tr>';
+        }).join('') : '<tr><td colspan="3" class="muted">No errors.</td></tr>')
+        +     '</tbody></table>'
+        + '</div>';
+
+      var downloadBtn = $('#marketing_import_download');
+      if (downloadBtn && errorCount){
+        downloadBtn.addEventListener('click', function(){
+          var header = ['rowNumber', 'email', 'error'].join(',');
+          var body = errors.map(function(row){
+            return [row.rowNumber, row.email || '', row.error].map(escapeCsv).join(',');
+          }).join('\\n');
+          var csv = header + '\\n' + body;
+          var blob = new Blob([csv], { type: 'text/csv' });
+          var url = URL.createObjectURL(blob);
+          var link = document.createElement('a');
+          link.href = url;
+          link.download = 'marketing-import-errors.csv';
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          URL.revokeObjectURL(url);
+        });
+      }
+    }
+
+    async function loadJobs(){
+      try {
+        var data = await j('/admin/api/marketing/imports');
+        state.jobs = data.items || [];
+        renderJobs();
+      } catch (err) {
+        showToast(parseErr(err), false);
+      }
+    }
+
+    async function loadJob(id){
+      try {
+        var data = await j('/admin/api/marketing/imports/' + encodeURIComponent(id));
+        renderDetail(data.job, data.errors || []);
+      } catch (err) {
+        showToast(parseErr(err), false);
+      }
+    }
+
+    if (fileInput) {
+      fileInput.addEventListener('change', function(){
+        var file = fileInput.files && fileInput.files[0];
+        if (!file) return;
+        state.filename = file.name || '';
+        var reader = new FileReader();
+        reader.onload = function(e){
+          if (csvInput) csvInput.value = String((e.target && e.target.result) || '');
+        };
+        reader.readAsText(file);
+      });
+    }
+
+    if (submitBtn) {
+      submitBtn.addEventListener('click', async function(){
+        if (!csvInput) return;
+        var csvText = String(csvInput.value || '').trim();
+        if (!csvText){
+          showToast('Paste CSV text or select a file first.', false);
+          return;
+        }
+        submitBtn.disabled = true;
+        if (statusEl) statusEl.textContent = 'Importing…';
+        try {
+          var resp = await j('/admin/api/marketing/imports', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              csv: csvText,
+              filename: state.filename || null,
+              lawfulBasis: basisSelect ? basisSelect.value : 'CONSENT'
+            })
+          });
+          showToast('Import started.', true);
+          await loadJobs();
+          if (resp && resp.jobId) await loadJob(resp.jobId);
+        } catch (err) {
+          showToast(parseErr(err), false);
+        } finally {
+          submitBtn.disabled = false;
+          if (statusEl) statusEl.textContent = '';
+        }
+      });
+    }
+
+    if (refreshBtn) refreshBtn.addEventListener('click', loadJobs);
+
+    renderDetail(null, []);
+    loadJobs();
   }
   function smartStorefront(){
     if (!main) return;

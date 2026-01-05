@@ -6,6 +6,8 @@ import { readConsent } from "../lib/auth/cookie.js";
 import { readStorefrontCartCount } from "../lib/storefront-cart.js";
 import { buildConsentBanner } from "../lib/public-consent-banner.js";
 import { verifyJwt } from "../utils/security.js";
+import { MarketingConsentSource, MarketingConsentStatus, MarketingLawfulBasis } from "@prisma/client";
+import { shouldSuppressContact } from "../services/marketing/campaigns.js";
 
 const router = Router();
 const THEME_CACHE_TTL_MS = 30 * 1000;
@@ -86,6 +88,29 @@ function normaliseRgbColor(value: string | null | undefined) {
 
 function resolveBrandColor(organiser: { brandColorHex?: string | null; brandColorRgb?: string | null }) {
   return normaliseHexColor(organiser.brandColorHex) || normaliseRgbColor(organiser.brandColorRgb);
+}
+
+async function resolveTenantIdFromStorefrontSlug(storefrontSlug: string) {
+  const slug = String(storefrontSlug || "").trim();
+  if (!slug) return null;
+  const storefront = await prisma.storefront.findUnique({
+    where: { slug },
+    select: { ownerUserId: true },
+  });
+  if (storefront?.ownerUserId) return storefront.ownerUserId;
+  const tenant = await prisma.user.findFirst({
+    where: { OR: [{ storefrontSlug: slug }, { id: slug }] },
+    select: { id: true },
+  });
+  return tenant?.id || null;
+}
+
+function normaliseEmail(value: string) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isValidEmail(email: string) {
+  return Boolean(email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email));
 }
 
 type StorefrontTheme = {
@@ -1038,6 +1063,74 @@ router.get("/:storefront/basket", async (req, res) => {
       consentBanner: consent.banner,
     })
   );
+});
+
+router.post("/:storefront/newsletter-signup", async (req, res) => {
+  const storefrontSlug = String(req.params.storefront || "").trim();
+  const tenantId = await resolveTenantIdFromStorefrontSlug(storefrontSlug);
+  if (!tenantId) return res.status(404).json({ ok: false, message: "Storefront not found" });
+
+  const email = normaliseEmail(String(req.body?.email || ""));
+  if (!isValidEmail(email)) return res.status(400).json({ ok: false, message: "Valid email required" });
+
+  const suppression = await prisma.marketingSuppression.findFirst({
+    where: { tenantId, email },
+    select: { type: true },
+  });
+
+  const existingContact = await prisma.marketingContact.findUnique({
+    where: { tenantId_email: { tenantId, email } },
+    select: { id: true },
+  });
+
+  const existingConsent = existingContact
+    ? await prisma.marketingConsent.findUnique({
+        where: { tenantId_contactId: { tenantId, contactId: existingContact.id } },
+        select: { status: true },
+      })
+    : null;
+
+  const decision = shouldSuppressContact(
+    (existingConsent?.status as MarketingConsentStatus) || MarketingConsentStatus.TRANSACTIONAL_ONLY,
+    suppression || null
+  );
+
+  if (decision.suppressed) {
+    return res.json({ ok: true });
+  }
+
+  const contact = await prisma.marketingContact.upsert({
+    where: { tenantId_email: { tenantId, email } },
+    create: {
+      tenantId,
+      email,
+    },
+    update: {},
+  });
+
+  await prisma.marketingConsent.upsert({
+    where: { tenantId_contactId: { tenantId, contactId: contact.id } },
+    create: {
+      tenantId,
+      contactId: contact.id,
+      status: MarketingConsentStatus.SUBSCRIBED,
+      lawfulBasis: MarketingLawfulBasis.CONSENT,
+      source: MarketingConsentSource.NEWSLETTER_SIGNUP,
+      capturedAt: new Date(),
+      capturedIp: req.ip || null,
+      capturedUserAgent: String(req.headers["user-agent"] || "") || null,
+    },
+    update: {
+      status: MarketingConsentStatus.SUBSCRIBED,
+      lawfulBasis: MarketingLawfulBasis.CONSENT,
+      source: MarketingConsentSource.NEWSLETTER_SIGNUP,
+      capturedAt: new Date(),
+      capturedIp: req.ip || null,
+      capturedUserAgent: String(req.headers["user-agent"] || "") || null,
+    },
+  });
+
+  return res.json({ ok: true });
 });
 
 /**
