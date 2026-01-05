@@ -13,6 +13,8 @@ import { readStorefrontCart } from "../lib/storefront-cart.js";
 import { issueCustomerEmailVerification } from "../lib/customer-email-verification.js";
 import { buildCustomerTicketsPdf, sendTicketsEmail } from "../services/email.js";
 import { readConsent } from "../lib/auth/cookie.js";
+import { syncMarketingContactFromMembership } from "../services/marketing/contacts.js";
+import { MarketingConsentSource } from "@prisma/client";
 
 const router = Router();
 
@@ -480,6 +482,11 @@ router.patch("/customer/membership", requireCustomer, async (req: any, res) => {
   if (!storefront) return res.status(404).json({ ok: false, error: "Storefront not found" });
 
   const marketingOptIn = Boolean(req.body?.marketingOptIn);
+  const customer = await prisma.customerAccount.findUnique({
+    where: { id: String(req.customerSession.sub) },
+    select: { email: true, name: true, phone: true },
+  });
+  if (!customer?.email) return res.status(404).json({ ok: false, error: "Customer not found" });
 
   const membership = await prisma.customerStorefrontMembership.upsert({
     where: {
@@ -495,6 +502,19 @@ router.patch("/customer/membership", requireCustomer, async (req: any, res) => {
       marketingOptIn,
     },
     select: { id: true, marketingOptIn: true },
+  });
+
+  const nameParts = String(customer.name || "").trim().split(" ").filter(Boolean);
+  await syncMarketingContactFromMembership({
+    tenantId: storefront.ownerUserId,
+    email: customer.email,
+    firstName: nameParts[0] || null,
+    lastName: nameParts.length > 1 ? nameParts.slice(1).join(" ") : null,
+    phone: customer.phone,
+    marketingOptIn,
+    capturedIp: req.ip || null,
+    capturedUserAgent: req.get("user-agent") || null,
+    source: MarketingConsentSource.CHECKOUT,
   });
 
   res.json({ ok: true, membership });

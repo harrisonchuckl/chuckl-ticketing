@@ -13,12 +13,13 @@ import {
   MarketingConsentSource,
   MarketingConsentStatus,
   MarketingLawfulBasis,
+  MarketingSuppressionType,
   MarketingImportJobStatus,
   MarketingRecipientStatus,
   Prisma,
 } from '@prisma/client';
 import { evaluateSegmentContacts, estimateSegment } from '../services/marketing/segments.js';
-import { ensureDailyLimit, shouldSuppressContact } from '../services/marketing/campaigns.js';
+import { applySuppression, clearSuppression, ensureDailyLimit, shouldSuppressContact } from '../services/marketing/campaigns.js';
 import { fetchMarketingSettings, resolveRequireVerifiedFrom, resolveSenderDetails } from '../services/marketing/settings.js';
 import { queryCustomerInsights } from '../services/customer-insights.js';
 import {
@@ -29,6 +30,8 @@ import {
   recordPreferenceAudit,
   warmupPresets,
 } from '../services/marketing/automations.js';
+import { ensureDefaultPreferenceTopics } from '../services/marketing/preferences.js';
+import { recordConsentAudit } from '../services/marketing/audit.js';
 
 const router = Router();
 
@@ -374,23 +377,29 @@ router.post('/marketing/contacts', requireAdminOrOrganiser, async (req, res) => 
   const status = req.body?.status || MarketingConsentStatus.TRANSACTIONAL_ONLY;
   const lawfulBasis = req.body?.lawfulBasis || MarketingLawfulBasis.UNKNOWN;
 
-  await prisma.marketingConsent.upsert({
-    where: { tenantId_contactId: { tenantId, contactId: contact.id } },
-    create: {
-      tenantId,
-      contactId: contact.id,
-      status,
-      lawfulBasis,
-      source: MarketingConsentSource.ADMIN_EDIT,
-      capturedAt: new Date(),
-    },
-    update: {
-      status,
-      lawfulBasis,
-      source: MarketingConsentSource.ADMIN_EDIT,
-      capturedAt: new Date(),
-    },
-  });
+  if (status === MarketingConsentStatus.UNSUBSCRIBED) {
+    await applySuppression(tenantId, email, MarketingSuppressionType.UNSUBSCRIBE, 'Admin unsubscribe', MarketingConsentSource.ADMIN_EDIT);
+  } else {
+    await clearSuppression(tenantId, email);
+    await prisma.marketingConsent.upsert({
+      where: { tenantId_contactId: { tenantId, contactId: contact.id } },
+      create: {
+        tenantId,
+        contactId: contact.id,
+        status,
+        lawfulBasis,
+        source: MarketingConsentSource.ADMIN_EDIT,
+        capturedAt: new Date(),
+      },
+      update: {
+        status,
+        lawfulBasis,
+        source: MarketingConsentSource.ADMIN_EDIT,
+        capturedAt: new Date(),
+      },
+    });
+    await recordConsentAudit(tenantId, 'consent.updated', contact.id, { status, source: MarketingConsentSource.ADMIN_EDIT });
+  }
 
   await logMarketingAudit(tenantId, 'contact.saved', 'MarketingContact', contact.id, { email });
 
@@ -853,11 +862,81 @@ router.delete('/marketing/automations/:id/steps/:stepId', requireAdminOrOrganise
 
 router.get('/marketing/preferences/topics', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  await ensureDefaultPreferenceTopics(tenantId);
   const items = await prisma.marketingPreferenceTopic.findMany({
     where: { tenantId },
     orderBy: { createdAt: 'desc' },
   });
   res.json({ ok: true, items });
+});
+
+router.get('/marketing/consent/summary', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const consentGroups = await prisma.marketingConsent.groupBy({
+    by: ['status'],
+    where: { tenantId },
+    _count: { _all: true },
+  });
+  const suppressionGroups = await prisma.marketingSuppression.groupBy({
+    by: ['type'],
+    where: { tenantId },
+    _count: { _all: true },
+  });
+  const contactCount = await prisma.marketingContact.count({ where: { tenantId } });
+
+  const consentCounts = consentGroups.reduce<Record<string, number>>((acc, item) => {
+    acc[item.status] = item._count._all;
+    return acc;
+  }, {});
+  const suppressionCounts = suppressionGroups.reduce<Record<string, number>>((acc, item) => {
+    acc[item.type] = item._count._all;
+    return acc;
+  }, {});
+
+  res.json({
+    ok: true,
+    summary: {
+      contacts: contactCount,
+      consents: consentCounts,
+      suppressions: suppressionCounts,
+    },
+  });
+});
+
+router.get('/marketing/consent/check', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const email = String(req.query.email || '').trim().toLowerCase();
+  if (!email) return res.status(400).json({ ok: false, message: 'Email required' });
+
+  const contact = await prisma.marketingContact.findUnique({
+    where: { tenantId_email: { tenantId, email } },
+    select: { id: true },
+  });
+  const consent = contact
+    ? await prisma.marketingConsent.findUnique({
+        where: { tenantId_contactId: { tenantId, contactId: contact.id } },
+        select: { status: true },
+      })
+    : null;
+  const suppression = await prisma.marketingSuppression.findFirst({
+    where: { tenantId, email },
+    select: { type: true },
+  });
+  const decision = shouldSuppressContact(
+    (consent?.status as MarketingConsentStatus) || MarketingConsentStatus.TRANSACTIONAL_ONLY,
+    suppression
+  );
+
+  res.json({
+    ok: true,
+    result: {
+      email,
+      consentStatus: consent?.status || MarketingConsentStatus.TRANSACTIONAL_ONLY,
+      suppressionType: suppression?.type || null,
+      suppressed: decision.suppressed,
+      reason: decision.reason,
+    },
+  });
 });
 
 router.post('/marketing/preferences/topics', requireAdminOrOrganiser, async (req, res) => {
