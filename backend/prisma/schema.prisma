@@ -454,6 +454,7 @@ model User {
   marketingTemplates         MarketingTemplate[]
   marketingTemplatesLocked   MarketingTemplate[]        @relation("MarketingTemplateLockedBy")
   marketingTemplateVersions  MarketingTemplateVersion[] @relation("MarketingTemplateVersionAuthor")
+  marketingTemplateChangeRequestsAsTenant MarketingTemplateChangeRequest[] @relation("MarketingTemplateChangeTenant")
   marketingTemplateChangesRequested MarketingTemplateChangeRequest[] @relation("MarketingTemplateChangeRequestedBy")
   marketingTemplateChangesApproved  MarketingTemplateChangeRequest[] @relation("MarketingTemplateChangeApprovedBy")
   marketingEmailTemplates    MarketingEmailTemplate[]
@@ -1002,6 +1003,7 @@ model Show {
   upsellBundles  UpsellBundle[]
   showEvents     ShowEvent[]
   marketingAiDrafts MarketingAiDraft[]
+  marketingAiSuggestions MarketingAiSuggestion[]
   featuredPins      FeaturedPin[]
   crmEventViews      CrmEventView[]
   crmSurveys         CrmSurvey[]
@@ -1908,7 +1910,7 @@ model MarketingTemplateChangeRequest {
   requestedAt DateTime @default(now())
   reviewedAt DateTime?
 
-  tenant     User             @relation(fields: [tenantId], references: [id])
+  tenant     User             @relation("MarketingTemplateChangeTenant", fields: [tenantId], references: [id])
   template   MarketingTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
   requestedBy User?           @relation("MarketingTemplateChangeRequestedBy", fields: [requestedByUserId], references: [id])
   approvedBy  User?           @relation("MarketingTemplateChangeApprovedBy", fields: [approvedByUserId], references: [id])
