@@ -63,3 +63,41 @@ Use the **Deliverability** tab in Admin → Marketing to view suggested warm-up 
 - [ ] `MARKETING_STREAM_DOMAIN` configured
 - [ ] Webhook URL configured
 - [ ] Test email send + webhook events
+
+## 8) Environment variable checklist
+
+**Required for production sending**
+
+- [ ] `SENDGRID_API_KEY` (or alternative provider credentials)
+- [ ] `SENDGRID_WEBHOOK_TOKEN` (required if you enable webhook auth)
+- [ ] `PUBLIC_BASE_URL` (or `APP_BASE_URL` / `BASE_URL` for unsubscribe links)
+- [ ] `MARKETING_STREAM_DOMAIN`
+- [ ] `MARKETING_FROM_DOMAIN`
+- [ ] `MARKETING_UNSUBSCRIBE_SECRET`
+- [ ] `MARKETING_PREFERENCES_SECRET`
+
+**Operational limits**
+
+- [ ] `MARKETING_WORKER_ENABLED`
+- [ ] `MARKETING_WORKER_INTERVAL_MS`
+- [ ] `MARKETING_SEND_RATE_PER_SEC`
+- [ ] `MARKETING_SEND_BATCH_SIZE`
+- [ ] `MARKETING_DAILY_LIMIT`
+- [ ] `MARKETING_MAX_SEGMENT`
+- [ ] `MARKETING_APPROVAL_THRESHOLD`
+
+**Security & hardening**
+
+- [ ] `SENDGRID_WEBHOOK_MAX_AGE_HOURS`
+- [ ] `MARKETING_REQUIRE_VERIFIED_FROM`
+- [ ] `MARKETING_STEPUP_TTL_MS`
+- [ ] `MARKETING_UNSUBSCRIBE_EXP_DAYS`
+- [ ] `MARKETING_PREFERENCES_EXP_DAYS`
+
+**Caching & rate limits**
+
+- [ ] `MARKETING_ESTIMATE_CACHE_MS`
+- [ ] `MARKETING_ANALYTICS_CACHE_TTL_MS`
+- [ ] `MARKETING_ESTIMATE_RATE_LIMIT_PER_MIN`
+- [ ] `MARKETING_ANALYTICS_RATE_LIMIT_PER_MIN`
+- [ ] `ANALYTICS_CACHE_TTL_MS`

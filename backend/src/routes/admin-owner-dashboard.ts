@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { Prisma } from "@prisma/client";
+import { MarketingCampaignStatus, MarketingRecipientStatus, Prisma } from "@prisma/client";
 import prisma from "../lib/prisma.js";
 import { requireSiteOwner } from "../lib/owner-authz.js";
 
@@ -278,6 +278,52 @@ router.get("/owner/summary", requireSiteOwner, async (req, res) => {
     console.error("owner/summary failed", err);
     return res.status(500).json({ error: true, message: "Failed to load owner summary" });
   }
+});
+
+router.get("/owner/health", requireSiteOwner, async (_req, res) => {
+  const workerEnabled = String(process.env.MARKETING_WORKER_ENABLED || "true") === "true";
+  const intervalMs = Number(process.env.MARKETING_WORKER_INTERVAL_MS || 30000);
+  const sendRate = Number(process.env.MARKETING_SEND_RATE_PER_SEC || 50);
+  const dailyLimit = Number(process.env.MARKETING_DAILY_LIMIT || 50000);
+  const providerConfigured = Boolean(String(process.env.SENDGRID_API_KEY || "").trim());
+  const webhookTokenConfigured = Boolean(String(process.env.SENDGRID_WEBHOOK_TOKEN || "").trim());
+  const maxWebhookAgeHours = Number(process.env.SENDGRID_WEBHOOK_MAX_AGE_HOURS || 72);
+
+  const [workerState, sendQueueDepth] = await Promise.all([
+    prisma.marketingWorkerState.findUnique({ where: { id: "global" } }),
+    prisma.marketingCampaignRecipient.count({
+      where: {
+        status: { in: [MarketingRecipientStatus.PENDING, MarketingRecipientStatus.RETRYABLE] },
+        campaign: {
+          status: {
+            in: [
+              MarketingCampaignStatus.SCHEDULED,
+              MarketingCampaignStatus.SENDING,
+              MarketingCampaignStatus.PAUSED_LIMIT,
+            ],
+          },
+        },
+      },
+    }),
+  ]);
+
+  res.json({
+    ok: true,
+    worker: {
+      enabled: workerEnabled,
+      intervalMs,
+      sendRate,
+      dailyLimit,
+      lastRunAt: workerState?.lastWorkerRunAt || null,
+      lastSendAt: workerState?.lastSendAt || null,
+    },
+    sendQueueDepth,
+    provider: {
+      sendgridConfigured: providerConfigured,
+      webhookTokenConfigured,
+      maxWebhookAgeHours,
+    },
+  });
 });
 
 router.get("/owner/timeseries", requireSiteOwner, async (req, res) => {

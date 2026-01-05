@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import prisma from '../lib/prisma.js';
 import { requireAdminOrOrganiser } from '../lib/authz.js';
 import { isOwnerEmail } from '../lib/owner-authz.js';
@@ -209,6 +210,22 @@ const REQUIRE_VERIFIED_FROM_DEFAULT = String(process.env.MARKETING_REQUIRE_VERIF
 const TEST_SEND_RATE_LIMIT_SECONDS = Number(process.env.MARKETING_TEST_SEND_RATE_LIMIT_SEC || 60);
 const APPROVAL_THRESHOLD_DEFAULT = Number(process.env.MARKETING_APPROVAL_THRESHOLD || 5000);
 const MARKETING_ANALYTICS_CACHE_TTL_MS = Number(process.env.MARKETING_ANALYTICS_CACHE_TTL_MS || 5 * 60 * 1000);
+const MARKETING_ANALYTICS_RATE_LIMIT_PER_MIN = Number(process.env.MARKETING_ANALYTICS_RATE_LIMIT_PER_MIN || 60);
+const MARKETING_ESTIMATE_RATE_LIMIT_PER_MIN = Number(process.env.MARKETING_ESTIMATE_RATE_LIMIT_PER_MIN || 30);
+
+const marketingAnalyticsLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: MARKETING_ANALYTICS_RATE_LIMIT_PER_MIN,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const marketingEstimateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: MARKETING_ESTIMATE_RATE_LIMIT_PER_MIN,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 const analyticsCache = new Map<string, { expiresAt: number; value: any }>();
 
@@ -1883,7 +1900,7 @@ router.delete('/marketing/segments/:id', requireAdminOrOrganiser, async (req, re
   res.json({ ok: true });
 });
 
-router.get('/marketing/segments/:id/estimate', requireAdminOrOrganiser, async (req, res) => {
+router.get('/marketing/segments/:id/estimate', marketingEstimateLimiter, requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -1895,7 +1912,7 @@ router.get('/marketing/segments/:id/estimate', requireAdminOrOrganiser, async (r
   res.json({ ok: true, estimate });
 });
 
-router.post('/marketing/segments/estimate', requireAdminOrOrganiser, async (req, res) => {
+router.post('/marketing/segments/estimate', marketingEstimateLimiter, requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -2091,7 +2108,7 @@ router.post('/api/email-templates/render', requireAdminOrOrganiser, async (req, 
   res.json({ ok: true, html });
 });
 
-router.post('/marketing/segments/:id/estimate', requireAdminOrOrganiser, async (req, res) => {
+router.post('/marketing/segments/:id/estimate', marketingEstimateLimiter, requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const id = String(req.params.id);
   const segment = await prisma.marketingSegment.findFirst({ where: { id, tenantId } });
@@ -3762,22 +3779,17 @@ router.get('/marketing/campaigns/:id/events', requireAdminOrOrganiser, async (re
   res.json({ ok: true, items });
 });
 
-router.get('/marketing/analytics/overview', requireAdminOrOrganiser, async (req, res) => {
+router.get('/marketing/analytics/overview', marketingAnalyticsLimiter, requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const { from, to, fromLabel, toLabel } = parseDateRange(req);
   const key = cacheKey(['marketing-analytics-overview', tenantId, fromLabel, toLabel]);
   const cached = getCachedAnalytics<any>(key);
   if (cached) return res.json({ ok: true, cached: true, ...cached });
 
-  const [sentCount, openCount, clickCount, checkoutCount, purchaseCount] = await Promise.all([
-    prisma.marketingCampaignRecipient.count({
-      where: { tenantId, status: MarketingRecipientStatus.SENT, sentAt: { gte: from, lte: to } },
-    }),
-    prisma.marketingEmailEvent.count({
-      where: { tenantId, type: MarketingEmailEventType.OPEN, createdAt: { gte: from, lte: to } },
-    }),
-    prisma.marketingEmailEvent.count({
-      where: { tenantId, type: MarketingEmailEventType.CLICK, createdAt: { gte: from, lte: to } },
+  const [rollups, checkoutCount, purchaseCount] = await Promise.all([
+    prisma.marketingDailyEventRollup.findMany({
+      where: { tenantId, day: { gte: from, lte: to } },
+      select: { sent: true, opened: true, clicked: true, bounced: true, unsubscribed: true },
     }),
     prisma.marketingCheckoutEvent.count({
       where: { tenantId, createdAt: { gte: from, lte: to } },
@@ -3786,6 +3798,49 @@ router.get('/marketing/analytics/overview', requireAdminOrOrganiser, async (req,
       where: { status: OrderStatus.PAID, createdAt: { gte: from, lte: to }, show: { organiserId: tenantId } },
     }),
   ]);
+
+  const rollupTotals = rollups.reduce(
+    (acc, row) => {
+      acc.sent += row.sent;
+      acc.opened += row.opened;
+      acc.clicked += row.clicked;
+      acc.bounced += row.bounced;
+      acc.unsubscribed += row.unsubscribed;
+      return acc;
+    },
+    { sent: 0, opened: 0, clicked: 0, bounced: 0, unsubscribed: 0 }
+  );
+
+  let sentCount = rollupTotals.sent;
+  let openCount = rollupTotals.opened;
+  let clickCount = rollupTotals.clicked;
+  let bounceCount = rollupTotals.bounced;
+  let unsubscribeCount = rollupTotals.unsubscribed;
+
+  if (!rollups.length) {
+    const [fallbackSent, fallbackOpen, fallbackClick, fallbackBounce, fallbackUnsub] = await Promise.all([
+      prisma.marketingCampaignRecipient.count({
+        where: { tenantId, status: MarketingRecipientStatus.SENT, sentAt: { gte: from, lte: to } },
+      }),
+      prisma.marketingEmailEvent.count({
+        where: { tenantId, type: MarketingEmailEventType.OPEN, createdAt: { gte: from, lte: to } },
+      }),
+      prisma.marketingEmailEvent.count({
+        where: { tenantId, type: MarketingEmailEventType.CLICK, createdAt: { gte: from, lte: to } },
+      }),
+      prisma.marketingEmailEvent.count({
+        where: { tenantId, type: MarketingEmailEventType.BOUNCE, createdAt: { gte: from, lte: to } },
+      }),
+      prisma.marketingEmailEvent.count({
+        where: { tenantId, type: MarketingEmailEventType.UNSUBSCRIBE, createdAt: { gte: from, lte: to } },
+      }),
+    ]);
+    sentCount = fallbackSent;
+    openCount = fallbackOpen;
+    clickCount = fallbackClick;
+    bounceCount = fallbackBounce;
+    unsubscribeCount = fallbackUnsub;
+  }
 
   const rangeDays = Math.max(1, Math.ceil((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)));
   const prevTo = new Date(from);
@@ -3852,6 +3907,8 @@ router.get('/marketing/analytics/overview', requireAdminOrOrganiser, async (req,
       sent: sentCount,
       opened: openCount,
       clicked: clickCount,
+      bounced: bounceCount,
+      unsubscribed: unsubscribeCount,
       checkout: checkoutCount,
       purchased: purchaseCount,
     },
@@ -3871,7 +3928,7 @@ router.get('/marketing/analytics/overview', requireAdminOrOrganiser, async (req,
   res.json({ ok: true, ...response });
 });
 
-router.get('/marketing/analytics/campaigns', requireAdminOrOrganiser, async (req, res) => {
+router.get('/marketing/analytics/campaigns', marketingAnalyticsLimiter, requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const { from, to, fromLabel, toLabel } = parseDateRange(req);
   const key = cacheKey(['marketing-analytics-campaigns', tenantId, fromLabel, toLabel]);
