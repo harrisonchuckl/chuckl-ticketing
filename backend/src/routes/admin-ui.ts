@@ -21804,7 +21804,10 @@ function renderInterests(customer){
   // --- ROUTER ---
   function route(){
     try{
-      var path = location.pathname.replace(/\\/$/, '');
+      var path = location.pathname;
+      if (path.length > 1 && path.endsWith('/')) {
+        path = path.slice(0, -1);
+      }
       console.log('[Admin UI] route', path);
       setActive(path);
 
