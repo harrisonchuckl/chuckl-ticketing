@@ -1741,8 +1741,9 @@ function openContactImporter() {
 }
 
 function getRoute() {
-  const path = (window.__MS_PATH__ || window.location.pathname).replace(/\/$/, '');
-  return path || '/admin/marketing';
+  const currentPath = window.location.pathname.replace(/\/$/, '');
+  const initialPath = String(window.__MS_PATH__ || '').replace(/\/$/, '');
+  return currentPath || initialPath || '/admin/marketing';
 }
 
 async function renderRoute() {
