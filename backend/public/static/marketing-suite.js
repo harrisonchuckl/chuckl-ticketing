@@ -35,7 +35,8 @@ const mergeTags = [
   { group: 'Links', value: '{{links.unsubscribeLink}}', label: 'Unsubscribe link' },
 ];
 
-const API_BASE = '/admin/marketing/api';
+const API_BASE = '/admin/api/marketing';
+const SEARCH_API_BASE = '/admin/marketing/api';
 
 const appState = {
   status: null,
@@ -50,10 +51,24 @@ const appState = {
   contactPage: 0,
 };
 
+function truncatePayload(payload, limit = 3000) {
+  try {
+    const text = JSON.stringify(payload);
+    if (text.length <= limit) return text;
+    return `${text.slice(0, limit)}…`;
+  } catch (error) {
+    const fallback = String(payload || '');
+    if (fallback.length <= limit) return fallback;
+    return `${fallback.slice(0, limit)}…`;
+  }
+}
+
 function fetchJson(url, opts = {}) {
-  console.log('[marketing-suite] fetch', url, opts.body || null);
+  const method = String(opts.method || 'GET').toUpperCase();
+  console.log('[marketing-suite] request', { url, method });
   return fetch(url, { credentials: 'include', ...opts }).then(async (res) => {
     const data = await res.json().catch(() => ({}));
+    console.log('[marketing-suite] response', { url, method, status: res.status, payload: truncatePayload(data) });
     if (!res.ok || data.ok === false) {
       const message = data.message || data.error || 'Request failed';
       const error = new Error(message);
@@ -173,6 +188,49 @@ function renderEmptyState(title, subtitle, buttonLabel, onClickName) {
   `;
 }
 
+function renderErrorState(title, message, retryLabel = 'Retry') {
+  return `
+    <div class="ms-card">
+      <h2>${escapeHtml(title)}</h2>
+      <div class="ms-muted">${escapeHtml(message || 'Something went wrong.')}</div>
+      <div class="ms-toolbar" style="justify-content:flex-end;margin-top:12px;">
+        <button class="ms-secondary" data-action="retry">${escapeHtml(retryLabel)}</button>
+      </div>
+    </div>
+  `;
+}
+
+function showErrorState(main, title, error, retryHandler, retryLabel) {
+  if (!main) return;
+  const message = error?.message || 'Request failed.';
+  main.innerHTML = renderErrorState(title, message, retryLabel);
+  const retryButton = main.querySelector('[data-action="retry"]');
+  if (retryButton && retryHandler) retryButton.addEventListener('click', retryHandler);
+}
+
+function showGlobalErrorBanner(message) {
+  if (!document.body) return;
+  let banner = document.getElementById('ms-error-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'ms-error-banner';
+    banner.style.position = 'fixed';
+    banner.style.top = '16px';
+    banner.style.left = '16px';
+    banner.style.right = '16px';
+    banner.style.zIndex = '9999';
+    banner.innerHTML = `
+      <div class="ms-card" style="border:1px solid #f87171;background:#fff7f7;">
+        <div style="font-weight:600;margin-bottom:4px;">Something went wrong</div>
+        <div class="ms-muted" data-ms-error-message></div>
+      </div>
+    `;
+    document.body.appendChild(banner);
+  }
+  const messageEl = banner.querySelector('[data-ms-error-message]');
+  if (messageEl) messageEl.textContent = message;
+}
+
 function renderPagination(page, hasMore) {
   return `
     <div class="ms-toolbar" style="justify-content:flex-end;margin-top:12px;">
@@ -254,7 +312,7 @@ function setupSearch() {
     }
     timer = setTimeout(async () => {
       try {
-        const data = await fetchJson(`${API_BASE}/search?q=${encodeURIComponent(query)}`);
+        const data = await fetchJson(`${SEARCH_API_BASE}/search?q=${encodeURIComponent(query)}`);
         appState.searchResults = data;
         results.innerHTML = renderSearchResults(data);
         results.querySelectorAll('a[data-link]').forEach((link) => {
@@ -334,76 +392,82 @@ async function renderHome() {
 async function renderCampaigns() {
   const main = document.getElementById('ms-main');
   main.innerHTML = '<div class="ms-card">Loading campaigns...</div>';
-  const data = await fetchJson(`${API_BASE}/campaigns`);
-  appState.campaigns = data.items || [];
-  if (!appState.campaigns.length) {
-    main.innerHTML = `<div class="ms-card">${renderEmptyState('No campaigns yet', 'Create your first campaign to reach your audience.', 'Create campaign', 'openCampaignWizard')}</div>`;
-    main.querySelector('[data-action="openCampaignWizard"]').addEventListener('click', openCampaignWizard);
-    return;
-  }
-  const rows = appState.campaigns
-    .map((item) => {
-      const schedule = item.scheduledFor ? new Date(item.scheduledFor).toLocaleString() : '—';
-      const sentAt = item.sentAt ? new Date(item.sentAt).toLocaleString() : '—';
-      return `
-        <tr>
-          <td><a href="/admin/marketing/campaigns/${item.id}">${escapeHtml(item.name)}</a></td>
-          <td>${renderPill(item.status)}</td>
-          <td>${escapeHtml(item.segment?.name || '—')}</td>
-          <td>${escapeHtml(item.template?.name || '—')}</td>
-          <td>${escapeHtml(schedule)}</td>
-          <td>${escapeHtml(sentAt)}</td>
-        </tr>
-      `;
-    })
-    .join('');
-  main.innerHTML = `
-    <div class="ms-card">
-      <div class="ms-toolbar" style="justify-content:space-between;">
-        <div>
-          <h2>Campaigns</h2>
-          <div class="ms-muted">List-first view of your email campaigns.</div>
-        </div>
-        <button class="ms-primary" id="ms-create-campaign">Create campaign</button>
-      </div>
-      <table class="ms-table" style="margin-top:16px;">
-        <thead>
+  try {
+    const data = await fetchJson(`${API_BASE}/campaigns`);
+    appState.campaigns = data.items || [];
+    if (!appState.campaigns.length) {
+      main.innerHTML = `<div class="ms-card">${renderEmptyState('No campaigns yet', 'Create your first campaign to reach your audience.', 'Create campaign', 'openCampaignWizard')}</div>`;
+      main.querySelector('[data-action="openCampaignWizard"]').addEventListener('click', openCampaignWizard);
+      return;
+    }
+    const rows = appState.campaigns
+      .map((item) => {
+        const schedule = item.scheduledFor ? new Date(item.scheduledFor).toLocaleString() : '—';
+        const sentAt = item.sentAt ? new Date(item.sentAt).toLocaleString() : '—';
+        return `
           <tr>
-            <th>Name</th>
-            <th>Status</th>
-            <th>Segment</th>
-            <th>Template</th>
-            <th>Scheduled</th>
-            <th>Sent</th>
+            <td><a href="/admin/marketing/campaigns/${item.id}">${escapeHtml(item.name)}</a></td>
+            <td>${renderPill(item.status)}</td>
+            <td>${escapeHtml(item.segment?.name || '—')}</td>
+            <td>${escapeHtml(item.template?.name || '—')}</td>
+            <td>${escapeHtml(schedule)}</td>
+            <td>${escapeHtml(sentAt)}</td>
           </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
-  `;
-  const createBtn = document.getElementById('ms-create-campaign');
-  if (createBtn) createBtn.addEventListener('click', openCampaignWizard);
+        `;
+      })
+      .join('');
+    main.innerHTML = `
+      <div class="ms-card">
+        <div class="ms-toolbar" style="justify-content:space-between;">
+          <div>
+            <h2>Campaigns</h2>
+            <div class="ms-muted">List-first view of your email campaigns.</div>
+          </div>
+          <button class="ms-primary" id="ms-create-campaign">Create campaign</button>
+        </div>
+        <table class="ms-table" style="margin-top:16px;">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Status</th>
+              <th>Segment</th>
+              <th>Template</th>
+              <th>Scheduled</th>
+              <th>Sent</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+    const createBtn = document.getElementById('ms-create-campaign');
+    if (createBtn) createBtn.addEventListener('click', openCampaignWizard);
+  } catch (error) {
+    console.error('[marketing-suite] campaigns load failed', error);
+    showErrorState(main, "Couldn't load campaigns", error, renderCampaigns);
+  }
 }
 
 async function renderCampaignCreate() {
   const main = document.getElementById('ms-main');
   main.innerHTML = '<div class="ms-card">Loading campaign builder...</div>';
 
-  const [segmentsData, templatesData, showsData] = await Promise.all([
-    fetchJson(`${API_BASE}/segments`),
-    fetchJson(`${API_BASE}/templates`),
-    fetchJson('/admin/shows'),
-  ]);
-  const segments = segmentsData.items || [];
-  const templates = templatesData.items || [];
-  const shows = showsData.items || [];
-  const params = new URLSearchParams(window.location.search);
-  const preselectedSegmentId = params.get('segment') || '';
-  const selectedSegmentId = preselectedSegmentId || (segments[0] && segments[0].id) || '';
-  const selectedTemplateId = (templates[0] && templates[0].id) || '';
-  const templateMap = new Map(templates.map((template) => [template.id, template]));
-  const segmentMap = new Map(segments.map((segment) => [segment.id, segment]));
-  const selectedTemplate = templateMap.get(selectedTemplateId) || {};
+  try {
+    const [segmentsData, templatesData, showsData] = await Promise.all([
+      fetchJson(`${API_BASE}/segments`),
+      fetchJson(`${API_BASE}/templates`),
+      fetchJson('/admin/shows'),
+    ]);
+    const segments = segmentsData.items || [];
+    const templates = templatesData.items || [];
+    const shows = showsData.items || [];
+    const params = new URLSearchParams(window.location.search);
+    const preselectedSegmentId = params.get('segment') || '';
+    const selectedSegmentId = preselectedSegmentId || (segments[0] && segments[0].id) || '';
+    const selectedTemplateId = (templates[0] && templates[0].id) || '';
+    const templateMap = new Map(templates.map((template) => [template.id, template]));
+    const segmentMap = new Map(segments.map((segment) => [segment.id, segment]));
+    const selectedTemplate = templateMap.get(selectedTemplateId) || {};
 
   main.innerHTML = `
     <div class="ms-campaign-setup">
@@ -590,10 +654,10 @@ async function renderCampaignCreate() {
     window.open(`/admin/marketing/templates/${templateId}/edit`, '_blank', 'noopener');
   });
 
-  document.getElementById('ms-campaign-create').addEventListener('click', async () => {
-    const name = document.getElementById('ms-campaign-name').value || 'New campaign';
-    const type = document.getElementById('ms-campaign-type').value;
-    const segmentId = segmentSelect.value;
+    document.getElementById('ms-campaign-create').addEventListener('click', async () => {
+      const name = document.getElementById('ms-campaign-name').value || 'New campaign';
+      const type = document.getElementById('ms-campaign-type').value;
+      const segmentId = segmentSelect.value;
     const templateId = templateSelect.value;
     const showId = showSelect.value || null;
     const subject = subjectInput.value;
@@ -625,18 +689,23 @@ async function renderCampaignCreate() {
       });
     }
 
-    navigateTo(`/admin/marketing/campaigns/${response.campaign.id}`);
-  });
+      navigateTo(`/admin/marketing/campaigns/${response.campaign.id}`);
+    });
+  } catch (error) {
+    console.error('[marketing-suite] campaign builder load failed', error);
+    showErrorState(main, "Couldn't load campaign builder", error, renderCampaignCreate);
+  }
 }
 
 async function renderCampaignDetail(campaignId) {
   const main = document.getElementById('ms-main');
   main.innerHTML = '<div class="ms-card">Loading campaign...</div>';
-  const data = await fetchJson(`${API_BASE}/campaigns/${campaignId}`);
-  const campaign = data.campaign;
-  const summary = data.summary || {};
-  const preview = await fetchJson(`${API_BASE}/campaigns/${campaignId}/preview`);
-  const estimate = preview.estimate || {};
+  try {
+    const data = await fetchJson(`${API_BASE}/campaigns/${campaignId}`);
+    const campaign = data.campaign;
+    const summary = data.summary || {};
+    const preview = await fetchJson(`${API_BASE}/campaigns/${campaignId}/preview`);
+    const estimate = preview.estimate || {};
 
   main.innerHTML = `
     <div class="ms-card">
@@ -674,11 +743,15 @@ async function renderCampaignDetail(campaignId) {
     </div>
   `;
 
-  document.getElementById('ms-campaign-preview').addEventListener('click', () => openCampaignPreview(campaignId));
-  document.getElementById('ms-campaign-test').addEventListener('click', () => sendCampaignTest(campaignId));
-  document.getElementById('ms-campaign-schedule').addEventListener('click', () => scheduleCampaign(campaignId));
-  document.getElementById('ms-campaign-send').addEventListener('click', () => sendCampaignNow(campaignId));
-  document.getElementById('ms-campaign-cancel').addEventListener('click', () => cancelCampaignSchedule(campaignId));
+    document.getElementById('ms-campaign-preview').addEventListener('click', () => openCampaignPreview(campaignId));
+    document.getElementById('ms-campaign-test').addEventListener('click', () => sendCampaignTest(campaignId));
+    document.getElementById('ms-campaign-schedule').addEventListener('click', () => scheduleCampaign(campaignId));
+    document.getElementById('ms-campaign-send').addEventListener('click', () => sendCampaignNow(campaignId));
+    document.getElementById('ms-campaign-cancel').addEventListener('click', () => cancelCampaignSchedule(campaignId));
+  } catch (error) {
+    console.error('[marketing-suite] campaign detail load failed', error);
+    showErrorState(main, "Couldn't load campaign", error, () => renderCampaignDetail(campaignId));
+  }
 }
 
 async function openCampaignPreview(campaignId) {
@@ -735,66 +808,72 @@ async function cancelCampaignSchedule(campaignId) {
 async function renderTemplates() {
   const main = document.getElementById('ms-main');
   main.innerHTML = '<div class="ms-card">Loading templates...</div>';
-  const data = await fetchJson(`${API_BASE}/templates`);
-  appState.templates = data.items || [];
-  if (!appState.templates.length) {
-    main.innerHTML = `<div class="ms-card">${renderEmptyState('No templates yet', 'Create a MJML template to start sending.', 'Create template', 'openTemplateCreator')}</div>`;
-    main.querySelector('[data-action="openTemplateCreator"]').addEventListener('click', openTemplateCreator);
-    return;
-  }
-  const rows = appState.templates
-    .map((item) => {
-      return `
-        <tr>
-          <td>${escapeHtml(item.name)}</td>
-          <td>${escapeHtml(item.subject)}</td>
-          <td>${item.updatedAt ? new Date(item.updatedAt).toLocaleDateString() : '—'}</td>
-          <td>
-            <a class="ms-secondary" href="/admin/marketing/templates/${item.id}/edit">Edit</a>
-          </td>
-        </tr>
-      `;
-    })
-    .join('');
-
-  main.innerHTML = `
-    <div class="ms-card">
-      <div class="ms-toolbar" style="justify-content:space-between;">
-        <div>
-          <h2>Templates</h2>
-          <div class="ms-muted">Design and manage MJML email templates.</div>
-        </div>
-        <button class="ms-primary" id="ms-create-template">Create template</button>
-      </div>
-      <table class="ms-table" style="margin-top:16px;">
-        <thead>
+  try {
+    const data = await fetchJson(`${API_BASE}/templates`);
+    appState.templates = data.items || [];
+    if (!appState.templates.length) {
+      main.innerHTML = `<div class="ms-card">${renderEmptyState('No templates yet', 'Create a MJML template to start sending.', 'Create template', 'openTemplateCreator')}</div>`;
+      main.querySelector('[data-action="openTemplateCreator"]').addEventListener('click', openTemplateCreator);
+      return;
+    }
+    const rows = appState.templates
+      .map((item) => {
+        return `
           <tr>
-            <th>Name</th>
-            <th>Subject</th>
-            <th>Updated</th>
-            <th></th>
+            <td>${escapeHtml(item.name)}</td>
+            <td>${escapeHtml(item.subject)}</td>
+            <td>${item.updatedAt ? new Date(item.updatedAt).toLocaleDateString() : '—'}</td>
+            <td>
+              <a class="ms-secondary" href="/admin/marketing/templates/${item.id}/edit">Edit</a>
+            </td>
           </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
-  `;
-  const createBtn = document.getElementById('ms-create-template');
-  if (createBtn) createBtn.addEventListener('click', openTemplateCreator);
+        `;
+      })
+      .join('');
+
+    main.innerHTML = `
+      <div class="ms-card">
+        <div class="ms-toolbar" style="justify-content:space-between;">
+          <div>
+            <h2>Templates</h2>
+            <div class="ms-muted">Design and manage MJML email templates.</div>
+          </div>
+          <button class="ms-primary" id="ms-create-template">Create template</button>
+        </div>
+        <table class="ms-table" style="margin-top:16px;">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Subject</th>
+              <th>Updated</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+    const createBtn = document.getElementById('ms-create-template');
+    if (createBtn) createBtn.addEventListener('click', openTemplateCreator);
+  } catch (error) {
+    console.error('[marketing-suite] templates load failed', error);
+    showErrorState(main, "Couldn't load templates", error, renderTemplates);
+  }
 }
 
 async function renderTemplateEditor(templateId) {
   const main = document.getElementById('ms-main');
   main.innerHTML = '<div class="ms-card">Loading editor...</div>';
 
-  const [templateData, versionsData, showsData] = await Promise.all([
-    fetchJson(`${API_BASE}/templates/${templateId}`),
-    fetchJson(`${API_BASE}/templates/${templateId}/versions`),
-    fetchJson('/admin/shows'),
-  ]);
-  const template = templateData.template;
-  const versions = versionsData.versions || [];
-  appState.shows = showsData.items || [];
+  try {
+    const [templateData, versionsData, showsData] = await Promise.all([
+      fetchJson(`${API_BASE}/templates/${templateId}`),
+      fetchJson(`${API_BASE}/templates/${templateId}/versions`),
+      fetchJson('/admin/shows'),
+    ]);
+    const template = templateData.template;
+    const versions = versionsData.versions || [];
+    appState.shows = showsData.items || [];
 
   main.innerHTML = `
     <div class="ms-card">
@@ -968,75 +1047,85 @@ async function renderTemplateEditor(templateId) {
     frame.srcdoc = preview.html || '';
   });
 
-  document.querySelectorAll('[data-version]').forEach((button) => {
-    button.addEventListener('click', async () => {
-      const versionId = button.getAttribute('data-version');
-      await fetchJson(`${API_BASE}/templates/${templateId}/restore`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ versionId }),
+    document.querySelectorAll('[data-version]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const versionId = button.getAttribute('data-version');
+        await fetchJson(`${API_BASE}/templates/${templateId}/restore`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ versionId }),
+        });
+        toast('Version restored.');
+        renderTemplateEditor(templateId);
       });
-      toast('Version restored.');
-      renderTemplateEditor(templateId);
     });
-  });
+  } catch (error) {
+    console.error('[marketing-suite] template editor load failed', error);
+    showErrorState(main, "Couldn't load template", error, () => renderTemplateEditor(templateId));
+  }
 }
 
 async function renderSegments() {
   const main = document.getElementById('ms-main');
   main.innerHTML = '<div class="ms-card">Loading segments...</div>';
-  const data = await fetchJson(`${API_BASE}/segments`);
-  appState.segments = data.items || [];
-  if (!appState.segments.length) {
-    main.innerHTML = `<div class="ms-card">${renderEmptyState('No segments yet', 'Create a segment to target your audience.', 'Create segment', 'openSegmentCreator')}</div>`;
-    main.querySelector('[data-action="openSegmentCreator"]').addEventListener('click', openSegmentCreator);
-    return;
-  }
-  const rows = appState.segments
-    .map(
-      (item) => `
-        <tr>
-          <td><a href="/admin/marketing/segments/${item.id}">${escapeHtml(item.name)}</a></td>
-          <td>${escapeHtml(item.description || '—')}</td>
-          <td>${item.updatedAt ? new Date(item.updatedAt).toLocaleDateString() : '—'}</td>
-        </tr>
-      `
-    )
-    .join('');
-  main.innerHTML = `
-    <div class="ms-card">
-      <div class="ms-toolbar" style="justify-content:space-between;">
-        <div>
-          <h2>Segments</h2>
-          <div class="ms-muted">Audience slices for targeted campaigns.</div>
-        </div>
-        <button class="ms-primary" id="ms-create-segment">Create segment</button>
-      </div>
-      <table class="ms-table" style="margin-top:16px;">
-        <thead>
+  try {
+    const data = await fetchJson(`${API_BASE}/segments`);
+    appState.segments = data.items || [];
+    if (!appState.segments.length) {
+      main.innerHTML = `<div class="ms-card">${renderEmptyState('No segments yet', 'Create a segment to target your audience.', 'Create segment', 'openSegmentCreator')}</div>`;
+      main.querySelector('[data-action="openSegmentCreator"]').addEventListener('click', openSegmentCreator);
+      return;
+    }
+    const rows = appState.segments
+      .map(
+        (item) => `
           <tr>
-            <th>Name</th>
-            <th>Description</th>
-            <th>Updated</th>
+            <td><a href="/admin/marketing/segments/${item.id}">${escapeHtml(item.name)}</a></td>
+            <td>${escapeHtml(item.description || '—')}</td>
+            <td>${item.updatedAt ? new Date(item.updatedAt).toLocaleDateString() : '—'}</td>
           </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
-  `;
-  document.getElementById('ms-create-segment').addEventListener('click', openSegmentCreator);
+        `
+      )
+      .join('');
+    main.innerHTML = `
+      <div class="ms-card">
+        <div class="ms-toolbar" style="justify-content:space-between;">
+          <div>
+            <h2>Segments</h2>
+            <div class="ms-muted">Audience slices for targeted campaigns.</div>
+          </div>
+          <button class="ms-primary" id="ms-create-segment">Create segment</button>
+        </div>
+        <table class="ms-table" style="margin-top:16px;">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Description</th>
+              <th>Updated</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+    document.getElementById('ms-create-segment').addEventListener('click', openSegmentCreator);
+  } catch (error) {
+    console.error('[marketing-suite] segments load failed', error);
+    showErrorState(main, "Couldn't load segments", error, renderSegments);
+  }
 }
 
 async function renderSegmentDetail(segmentId) {
   const main = document.getElementById('ms-main');
   main.innerHTML = '<div class="ms-card">Loading segment...</div>';
-  const [segmentData, evalData] = await Promise.all([
-    fetchJson(`${API_BASE}/segments/${segmentId}`),
-    fetchJson(`${API_BASE}/segments/${segmentId}/evaluate`, { method: 'POST' }),
-  ]);
-  const segment = segmentData.segment;
-  const estimate = evalData.estimate || {};
-  const sample = evalData.sample || [];
+  try {
+    const [segmentData, evalData] = await Promise.all([
+      fetchJson(`${API_BASE}/segments/${segmentId}`),
+      fetchJson(`${API_BASE}/segments/${segmentId}/evaluate`, { method: 'POST' }),
+    ]);
+    const segment = segmentData.segment;
+    const estimate = evalData.estimate || {};
+    const sample = evalData.sample || [];
 
   main.innerHTML = `
     <div class="ms-card">
@@ -1084,84 +1173,94 @@ async function renderSegmentDetail(segmentId) {
     </div>
   `;
 
-  document.getElementById('ms-use-segment').addEventListener('click', () => openCampaignWizard(segmentId));
+    document.getElementById('ms-use-segment').addEventListener('click', () => openCampaignWizard(segmentId));
+  } catch (error) {
+    console.error('[marketing-suite] segment detail load failed', error);
+    showErrorState(main, "Couldn't load segment", error, () => renderSegmentDetail(segmentId));
+  }
 }
 
 async function renderContacts() {
   const main = document.getElementById('ms-main');
   main.innerHTML = '<div class="ms-card">Loading contacts...</div>';
-  const data = await fetchJson(`${API_BASE}/contacts`);
-  appState.contacts = data.items || [];
+  try {
+    const data = await fetchJson(`${API_BASE}/contacts`);
+    appState.contacts = data.items || [];
 
-  if (!appState.contacts.length) {
-    main.innerHTML = `<div class="ms-card">${renderEmptyState('No contacts found', 'Import contacts to build your audience.', 'Import contacts', 'openContactImporter')}</div>`;
-    main.querySelector('[data-action="openContactImporter"]').addEventListener('click', openContactImporter);
-    return;
-  }
+    if (!appState.contacts.length) {
+      main.innerHTML = `<div class="ms-card">${renderEmptyState('No contacts found', 'Import contacts to build your audience.', 'Import contacts', 'openContactImporter')}</div>`;
+      main.querySelector('[data-action="openContactImporter"]').addEventListener('click', openContactImporter);
+      return;
+    }
 
-  const pageSize = 25;
-  const start = appState.contactPage * pageSize;
-  const rows = appState.contacts.slice(start, start + pageSize);
-  const hasMore = start + pageSize < appState.contacts.length;
+    const pageSize = 25;
+    const start = appState.contactPage * pageSize;
+    const rows = appState.contacts.slice(start, start + pageSize);
+    const hasMore = start + pageSize < appState.contacts.length;
 
-  main.innerHTML = `
-    <div class="ms-card">
-      <div class="ms-toolbar" style="justify-content:space-between;">
-        <div>
-          <h2>Contacts</h2>
-          <div class="ms-muted">Audience records and subscriptions.</div>
+    main.innerHTML = `
+      <div class="ms-card">
+        <div class="ms-toolbar" style="justify-content:space-between;">
+          <div>
+            <h2>Contacts</h2>
+            <div class="ms-muted">Audience records and subscriptions.</div>
+          </div>
+          <button class="ms-primary" id="ms-import-contacts">Import contacts</button>
         </div>
-        <button class="ms-primary" id="ms-import-contacts">Import contacts</button>
+        <table class="ms-table" style="margin-top:16px;">
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Name</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows
+              .map(
+                (item) => `
+                  <tr>
+                    <td><a href="/admin/marketing/contacts/${item.id}">${escapeHtml(item.email)}</a></td>
+                    <td>${escapeHtml(`${item.firstName || ''} ${item.lastName || ''}`.trim())}</td>
+                    <td>${escapeHtml(item.status || '—')}</td>
+                  </tr>
+                `
+              )
+              .join('')}
+          </tbody>
+        </table>
+        ${renderPagination(appState.contactPage, hasMore)}
       </div>
-      <table class="ms-table" style="margin-top:16px;">
-        <thead>
-          <tr>
-            <th>Email</th>
-            <th>Name</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows
-            .map(
-              (item) => `
-                <tr>
-                  <td><a href="/admin/marketing/contacts/${item.id}">${escapeHtml(item.email)}</a></td>
-                  <td>${escapeHtml(`${item.firstName || ''} ${item.lastName || ''}`.trim())}</td>
-                  <td>${escapeHtml(item.status || '—')}</td>
-                </tr>
-              `
-            )
-            .join('')}
-        </tbody>
-      </table>
-      ${renderPagination(appState.contactPage, hasMore)}
-    </div>
-  `;
+    `;
 
-  document.getElementById('ms-import-contacts').addEventListener('click', openContactImporter);
-  main.querySelectorAll('[data-page]').forEach((button) => {
-    button.addEventListener('click', () => {
-      const direction = button.getAttribute('data-page');
-      appState.contactPage += direction === 'next' ? 1 : -1;
-      appState.contactPage = Math.max(0, appState.contactPage);
-      renderContacts();
+    document.getElementById('ms-import-contacts').addEventListener('click', openContactImporter);
+    main.querySelectorAll('[data-page]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const direction = button.getAttribute('data-page');
+        appState.contactPage += direction === 'next' ? 1 : -1;
+        appState.contactPage = Math.max(0, appState.contactPage);
+        renderContacts();
+      });
     });
-  });
+  } catch (error) {
+    console.error('[marketing-suite] contacts load failed', error);
+    showErrorState(main, "Couldn't load contacts", error, renderContacts);
+  }
 }
 
 async function renderContactDetail(contactId) {
   const main = document.getElementById('ms-main');
   main.innerHTML = '<div class="ms-card">Loading contact...</div>';
-  const [data, audit] = await Promise.all([
-    fetchJson(`${API_BASE}/contacts/${contactId}`),
-    fetchJson(`${API_BASE}/contacts/${contactId}/audit`),
-  ]);
-  const contact = data.contact;
-  const consent = data.consent || {};
-  const suppressions = data.suppressions || [];
-  const preferences = data.preferences || [];
-  const logs = audit.items || [];
+  try {
+    const [data, audit] = await Promise.all([
+      fetchJson(`${API_BASE}/contacts/${contactId}`),
+      fetchJson(`${API_BASE}/contacts/${contactId}/audit`),
+    ]);
+    const contact = data.contact;
+    const consent = data.consent || {};
+    const suppressions = data.suppressions || [];
+    const preferences = data.preferences || [];
+    const logs = audit.items || [];
 
   main.innerHTML = `
     <div class="ms-card">
@@ -1203,67 +1302,76 @@ async function renderContactDetail(contactId) {
     </div>
   `;
 
-  document.getElementById('ms-contact-suppress').addEventListener('click', async () => {
-    const reason = prompt('Suppression reason:', 'Manual suppression');
-    await fetchJson(`${API_BASE}/contacts/${contactId}/suppress`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reason }),
+    document.getElementById('ms-contact-suppress').addEventListener('click', async () => {
+      const reason = prompt('Suppression reason:', 'Manual suppression');
+      await fetchJson(`${API_BASE}/contacts/${contactId}/suppress`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      });
+      toast('Suppression added.');
+      renderContactDetail(contactId);
     });
-    toast('Suppression added.');
-    renderContactDetail(contactId);
-  });
-  document.getElementById('ms-contact-unsuppress').addEventListener('click', async () => {
-    await fetchJson(`${API_BASE}/contacts/${contactId}/unsuppress`, { method: 'POST' });
-    toast('Suppression removed.');
-    renderContactDetail(contactId);
-  });
+    document.getElementById('ms-contact-unsuppress').addEventListener('click', async () => {
+      await fetchJson(`${API_BASE}/contacts/${contactId}/unsuppress`, { method: 'POST' });
+      toast('Suppression removed.');
+      renderContactDetail(contactId);
+    });
+  } catch (error) {
+    console.error('[marketing-suite] contact detail load failed', error);
+    showErrorState(main, "Couldn't load contact", error, () => renderContactDetail(contactId));
+  }
 }
 
 async function renderAutomations() {
   const main = document.getElementById('ms-main');
   main.innerHTML = '<div class="ms-card">Loading automations...</div>';
-  const data = await fetchJson(`${API_BASE}/automations`);
-  appState.automations = data.items || [];
-  if (!appState.automations.length) {
-    main.innerHTML = `<div class="ms-card">${renderEmptyState('No automations yet', 'Create a flow to automate your messaging.', 'Create automation', 'openAutomationCreator')}</div>`;
-    main.querySelector('[data-action="openAutomationCreator"]').addEventListener('click', openAutomationCreator);
-    return;
-  }
-  const rows = appState.automations
-    .map((item) => {
-      return `
-        <tr>
-          <td><a href="/admin/marketing/automations/${item.id}">${escapeHtml(item.name)}</a></td>
-          <td>${escapeHtml(item.triggerType)}</td>
-          <td>${item.isEnabled ? 'Enabled' : 'Paused'}</td>
-        </tr>
-      `;
-    })
-    .join('');
-  main.innerHTML = `
-    <div class="ms-card">
-      <div class="ms-toolbar" style="justify-content:space-between;">
-        <div>
-          <h2>Automations</h2>
-          <div class="ms-muted">Trigger-based journeys with flows.</div>
-        </div>
-        <button class="ms-primary" id="ms-create-automation">Create automation</button>
-      </div>
-      <table class="ms-table" style="margin-top:16px;">
-        <thead>
+  try {
+    const data = await fetchJson(`${API_BASE}/automations`);
+    appState.automations = data.items || [];
+    if (!appState.automations.length) {
+      main.innerHTML = `<div class="ms-card">${renderEmptyState('No automations yet', 'Create a flow to automate your messaging.', 'Create automation', 'openAutomationCreator')}</div>`;
+      main.querySelector('[data-action="openAutomationCreator"]').addEventListener('click', openAutomationCreator);
+      return;
+    }
+    const rows = appState.automations
+      .map((item) => {
+        return `
           <tr>
-            <th>Name</th>
-            <th>Trigger</th>
-            <th>Status</th>
+            <td><a href="/admin/marketing/automations/${item.id}">${escapeHtml(item.name)}</a></td>
+            <td>${escapeHtml(item.triggerType)}</td>
+            <td>${item.isEnabled ? 'Enabled' : 'Paused'}</td>
           </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
-  `;
-  const createBtn = document.getElementById('ms-create-automation');
-  if (createBtn) createBtn.addEventListener('click', openAutomationCreator);
+        `;
+      })
+      .join('');
+    main.innerHTML = `
+      <div class="ms-card">
+        <div class="ms-toolbar" style="justify-content:space-between;">
+          <div>
+            <h2>Automations</h2>
+            <div class="ms-muted">Trigger-based journeys with flows.</div>
+          </div>
+          <button class="ms-primary" id="ms-create-automation">Create automation</button>
+        </div>
+        <table class="ms-table" style="margin-top:16px;">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Trigger</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+    const createBtn = document.getElementById('ms-create-automation');
+    if (createBtn) createBtn.addEventListener('click', openAutomationCreator);
+  } catch (error) {
+    console.error('[marketing-suite] automations load failed', error);
+    showErrorState(main, "Couldn't load automations", error, renderAutomations);
+  }
 }
 
 function buildFlowFromSteps(triggerType, steps) {
@@ -1282,13 +1390,14 @@ function buildFlowFromSteps(triggerType, steps) {
 async function renderAutomationDetail(automationId) {
   const main = document.getElementById('ms-main');
   main.innerHTML = '<div class="ms-card">Loading automation...</div>';
-  const [automationData, templateData] = await Promise.all([
-    fetchJson(`${API_BASE}/automations/${automationId}`),
-    fetchJson(`${API_BASE}/templates`),
-  ]);
-  const automation = automationData.automation;
-  const templates = templateData.items || [];
-  const steps = automation.steps || [];
+  try {
+    const [automationData, templateData] = await Promise.all([
+      fetchJson(`${API_BASE}/automations/${automationId}`),
+      fetchJson(`${API_BASE}/templates`),
+    ]);
+    const automation = automationData.automation;
+    const templates = templateData.items || [];
+    const steps = automation.steps || [];
 
   main.innerHTML = `
     <div class="ms-card">
@@ -1313,13 +1422,17 @@ async function renderAutomationDetail(automationId) {
     </div>
   `;
 
-  document.getElementById('ms-automation-toggle').addEventListener('click', async () => {
-    await fetchJson(`${API_BASE}/automations/${automationId}/toggle`, { method: 'POST' });
-    toast('Automation updated.');
-    renderAutomationDetail(automationId);
-  });
+    document.getElementById('ms-automation-toggle').addEventListener('click', async () => {
+      await fetchJson(`${API_BASE}/automations/${automationId}/toggle`, { method: 'POST' });
+      toast('Automation updated.');
+      renderAutomationDetail(automationId);
+    });
 
-  document.getElementById('ms-automation-edit-flow').addEventListener('click', () => openAutomationFlowEditor(automation, templates));
+    document.getElementById('ms-automation-edit-flow').addEventListener('click', () => openAutomationFlowEditor(automation, templates));
+  } catch (error) {
+    console.error('[marketing-suite] automation detail load failed', error);
+    showErrorState(main, "Couldn't load automation", error, () => renderAutomationDetail(automationId));
+  }
 }
 
 function openAutomationFlowEditor(automation, templates) {
@@ -1428,30 +1541,35 @@ function openAutomationFlowEditor(automation, templates) {
 async function renderAnalytics() {
   const main = document.getElementById('ms-main');
   main.innerHTML = '<div class="ms-card">Loading analytics...</div>';
-  const data = await fetchJson(`${API_BASE}/analytics/summary`);
+  try {
+    const data = await fetchJson(`${API_BASE}/analytics/summary`);
 
-  main.innerHTML = `
-    <div class="ms-card">
-      <h2>Analytics</h2>
-      <div class="ms-muted">Performance overview</div>
-      <div class="ms-grid cols-4" style="margin-top:16px;">
-        ${renderCard('Sent (7d)', data.sentLast7Days || 0)}
-        ${renderCard('Sent (30d)', data.sentLast30Days || 0)}
-        ${renderCard('Open rate', `${Math.round((data.openRate || 0) * 100)}%`)}
-        ${renderCard('Click rate', `${Math.round((data.clickRate || 0) * 100)}%`)}
-      </div>
-      <div class="ms-grid cols-2" style="margin-top:16px;">
-        <div class="ms-card">
-          <h3>Top campaigns</h3>
-          ${(data.topCampaigns || []).map((campaign) => `<div>${escapeHtml(campaign.name)} • ${campaign.events} events</div>`).join('') || '<div class="ms-muted">No campaign activity yet.</div>'}
+    main.innerHTML = `
+      <div class="ms-card">
+        <h2>Analytics</h2>
+        <div class="ms-muted">Performance overview</div>
+        <div class="ms-grid cols-4" style="margin-top:16px;">
+          ${renderCard('Sent (7d)', data.sentLast7Days || 0)}
+          ${renderCard('Sent (30d)', data.sentLast30Days || 0)}
+          ${renderCard('Open rate', `${Math.round((data.openRate || 0) * 100)}%`)}
+          ${renderCard('Click rate', `${Math.round((data.clickRate || 0) * 100)}%`)}
         </div>
-        <div class="ms-card">
-          <h3>Top segments</h3>
-          ${(data.topSegments || []).map((segment) => `<div>${escapeHtml(segment.name)} • ${segment.engagementRate || 0}%</div>`).join('') || '<div class="ms-muted">No segment activity yet.</div>'}
+        <div class="ms-grid cols-2" style="margin-top:16px;">
+          <div class="ms-card">
+            <h3>Top campaigns</h3>
+            ${(data.topCampaigns || []).map((campaign) => `<div>${escapeHtml(campaign.name)} • ${campaign.events} events</div>`).join('') || '<div class="ms-muted">No campaign activity yet.</div>'}
+          </div>
+          <div class="ms-card">
+            <h3>Top segments</h3>
+            ${(data.topSegments || []).map((segment) => `<div>${escapeHtml(segment.name)} • ${segment.engagementRate || 0}%</div>`).join('') || '<div class="ms-muted">No segment activity yet.</div>'}
+          </div>
         </div>
       </div>
-    </div>
-  `;
+    `;
+  } catch (error) {
+    console.error('[marketing-suite] analytics load failed', error);
+    showErrorState(main, "Couldn't load analytics", error, renderAnalytics);
+  }
 }
 
 async function renderDeliverability() {
@@ -1487,97 +1605,97 @@ async function renderDeliverability() {
     `;
   } catch (error) {
     if (error.status === 403) {
-      main.innerHTML = `
-        <div class="ms-card">
-          <h2>Deliverability</h2>
-          <div class="ms-banner">You don’t have access to Deliverability settings. Ask an Admin.</div>
-        </div>
-      `;
+      showErrorState(main, "Couldn't load deliverability", error, renderDeliverability);
       return;
     }
-    main.innerHTML = `<div class="ms-card">${renderEmptyState('Deliverability data unavailable', 'Check your permissions or try again later.', '', '')}</div>`;
+    showErrorState(main, "Couldn't load deliverability", error, renderDeliverability);
   }
 }
 
 async function renderSettings() {
   const main = document.getElementById('ms-main');
   main.innerHTML = '<div class="ms-card">Loading settings...</div>';
-  const [settingsData, rolesData] = await Promise.all([
-    fetchJson(`${API_BASE}/settings`),
-    fetchJson(`${API_BASE}/settings/roles`),
-  ]);
-  const settings = settingsData.settings || {};
-  const roles = rolesData.assignments || [];
+  try {
+    const [settingsData, rolesData] = await Promise.all([
+      fetchJson(`${API_BASE}/settings`),
+      fetchJson(`${API_BASE}/settings/roles`),
+    ]);
+    const settings = settingsData.settings || {};
+    const roles = rolesData.assignments || [];
 
-  main.innerHTML = `
-    <div class="ms-card">
-      <h2>Settings</h2>
-      <div class="ms-muted">Sender profiles and governance.</div>
-      <div class="ms-grid cols-2" style="margin-top:16px;">
-        ${renderFormRow('From name', `<input id="ms-settings-from-name" value="${escapeHtml(settings.defaultFromName || '')}" />`)}
-        ${renderFormRow('From email', `<input id="ms-settings-from-email" value="${escapeHtml(settings.defaultFromEmail || '')}" />`)}
-        ${renderFormRow('Reply-to', `<input id="ms-settings-reply-to" value="${escapeHtml(settings.defaultReplyTo || '')}" />`)}
-        ${renderFormRow('Daily limit override', `<input id="ms-settings-daily-limit" type="number" value="${escapeHtml(settings.dailyLimitOverride || '')}" />`)}
+    main.innerHTML = `
+      <div class="ms-card">
+        <h2>Settings</h2>
+        <div class="ms-muted">Sender profiles and governance.</div>
+        <div class="ms-grid cols-2" style="margin-top:16px;">
+          ${renderFormRow('From name', `<input id="ms-settings-from-name" value="${escapeHtml(settings.defaultFromName || '')}" />`)}
+          ${renderFormRow('From email', `<input id="ms-settings-from-email" value="${escapeHtml(settings.defaultFromEmail || '')}" />`)}
+          ${renderFormRow('Reply-to', `<input id="ms-settings-reply-to" value="${escapeHtml(settings.defaultReplyTo || '')}" />`)}
+          ${renderFormRow('Daily limit override', `<input id="ms-settings-daily-limit" type="number" value="${escapeHtml(settings.dailyLimitOverride || '')}" />`)}
+        </div>
+        <div class="ms-field">
+          <label><input type="checkbox" id="ms-settings-verified" ${settings.requireVerifiedFrom ? 'checked' : ''} /> Require verified from address</label>
+        </div>
+        <div class="ms-toolbar" style="margin-top:16px;">
+          <button class="ms-primary" id="ms-save-settings">Save settings</button>
+        </div>
       </div>
-      <div class="ms-field">
-        <label><input type="checkbox" id="ms-settings-verified" ${settings.requireVerifiedFrom ? 'checked' : ''} /> Require verified from address</label>
+      <div class="ms-card" style="margin-top:16px;">
+        <h3>Governance roles</h3>
+        <table class="ms-table">
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Role</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${roles.map((assignment) => `<tr><td>${escapeHtml(assignment.userId)}</td><td>${escapeHtml(assignment.role)}</td></tr>`).join('')}
+          </tbody>
+        </table>
+        <div class="ms-toolbar" style="margin-top:12px;">
+          <input id="ms-role-user" placeholder="User ID" />
+          <select id="ms-role-role">
+            <option value="VIEWER">Viewer</option>
+            <option value="CAMPAIGN_CREATOR">Creator</option>
+            <option value="APPROVER">Approver</option>
+          </select>
+          <button class="ms-secondary" id="ms-role-save">Assign role</button>
+        </div>
       </div>
-      <div class="ms-toolbar" style="margin-top:16px;">
-        <button class="ms-primary" id="ms-save-settings">Save settings</button>
-      </div>
-    </div>
-    <div class="ms-card" style="margin-top:16px;">
-      <h3>Governance roles</h3>
-      <table class="ms-table">
-        <thead>
-          <tr>
-            <th>User</th>
-            <th>Role</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${roles.map((assignment) => `<tr><td>${escapeHtml(assignment.userId)}</td><td>${escapeHtml(assignment.role)}</td></tr>`).join('')}
-        </tbody>
-      </table>
-      <div class="ms-toolbar" style="margin-top:12px;">
-        <input id="ms-role-user" placeholder="User ID" />
-        <select id="ms-role-role">
-          <option value="VIEWER">Viewer</option>
-          <option value="CAMPAIGN_CREATOR">Creator</option>
-          <option value="APPROVER">Approver</option>
-        </select>
-        <button class="ms-secondary" id="ms-role-save">Assign role</button>
-      </div>
-    </div>
-  `;
+    `;
 
-  document.getElementById('ms-save-settings').addEventListener('click', async () => {
-    await fetchJson(`${API_BASE}/settings`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        defaultFromName: document.getElementById('ms-settings-from-name').value,
-        defaultFromEmail: document.getElementById('ms-settings-from-email').value,
-        defaultReplyTo: document.getElementById('ms-settings-reply-to').value,
-        dailyLimitOverride: document.getElementById('ms-settings-daily-limit').value || null,
-        requireVerifiedFrom: document.getElementById('ms-settings-verified').checked,
-      }),
+    document.getElementById('ms-save-settings').addEventListener('click', async () => {
+      await fetchJson(`${API_BASE}/settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          defaultFromName: document.getElementById('ms-settings-from-name').value,
+          defaultFromEmail: document.getElementById('ms-settings-from-email').value,
+          defaultReplyTo: document.getElementById('ms-settings-reply-to').value,
+          dailyLimitOverride: document.getElementById('ms-settings-daily-limit').value || null,
+          requireVerifiedFrom: document.getElementById('ms-settings-verified').checked,
+        }),
+      });
+      toast('Settings saved.');
     });
-    toast('Settings saved.');
-  });
 
-  document.getElementById('ms-role-save').addEventListener('click', async () => {
-    await fetchJson(`${API_BASE}/settings/roles`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId: document.getElementById('ms-role-user').value,
-        role: document.getElementById('ms-role-role').value,
-      }),
+    document.getElementById('ms-role-save').addEventListener('click', async () => {
+      await fetchJson(`${API_BASE}/settings/roles`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: document.getElementById('ms-role-user').value,
+          role: document.getElementById('ms-role-role').value,
+        }),
+      });
+      toast('Role assignment saved.');
+      renderSettings();
     });
-    toast('Role assignment saved.');
-    renderSettings();
-  });
+  } catch (error) {
+    console.error('[marketing-suite] settings load failed', error);
+    showErrorState(main, "Couldn't load settings", error, renderSettings);
+  }
 }
 
 async function openTemplateCreator() {
@@ -1740,14 +1858,8 @@ function openContactImporter() {
   });
 }
 
-function getRoute() {
-  const currentPath = window.location.pathname.replace(/\/$/, '');
-  const initialPath = String(window.__MS_PATH__ || '').replace(/\/$/, '');
-  return currentPath || initialPath || '/admin/marketing';
-}
-
 async function renderRoute() {
-  const path = getRoute();
+  const path = window.location.pathname.replace(/\/$/, '') || '/admin/marketing';
   const highlight =
     path.startsWith('/admin/marketing/campaigns')
       ? '/admin/marketing/campaigns'
@@ -1755,21 +1867,39 @@ async function renderRoute() {
         ? '/admin/marketing/templates'
         : path.startsWith('/admin/marketing/automations/')
           ? '/admin/marketing/automations'
+          : path.startsWith('/admin/marketing/segments/')
+            ? '/admin/marketing/segments'
+            : path.startsWith('/admin/marketing/contacts/')
+              ? '/admin/marketing/contacts'
           : path;
   renderShell(highlight);
   loadStatus();
 
   try {
-    if (path === '/admin/marketing') return renderHome();
-    if (path === '/admin/marketing/campaigns') return renderCampaigns();
-    if (path === '/admin/marketing/campaigns/new') return renderCampaignCreate();
-    if (path === '/admin/marketing/templates') return renderTemplates();
-    if (path === '/admin/marketing/segments') return renderSegments();
-    if (path === '/admin/marketing/contacts') return renderContacts();
-    if (path === '/admin/marketing/automations') return renderAutomations();
-    if (path === '/admin/marketing/analytics') return renderAnalytics();
-    if (path === '/admin/marketing/deliverability') return renderDeliverability();
-    if (path === '/admin/marketing/settings') return renderSettings();
+    switch (path) {
+      case '/admin/marketing':
+        return renderHome();
+      case '/admin/marketing/campaigns':
+        return renderCampaigns();
+      case '/admin/marketing/campaigns/new':
+        return renderCampaignCreate();
+      case '/admin/marketing/automations':
+        return renderAutomations();
+      case '/admin/marketing/contacts':
+        return renderContacts();
+      case '/admin/marketing/segments':
+        return renderSegments();
+      case '/admin/marketing/templates':
+        return renderTemplates();
+      case '/admin/marketing/analytics':
+        return renderAnalytics();
+      case '/admin/marketing/deliverability':
+        return renderDeliverability();
+      case '/admin/marketing/settings':
+        return renderSettings();
+      default:
+        break;
+    }
 
     const campaignMatch = path.match(/\/admin\/marketing\/campaigns\/([^/]+)/);
     if (campaignMatch) return renderCampaignDetail(campaignMatch[1]);
@@ -1791,13 +1921,7 @@ async function renderRoute() {
     console.error('[marketing-suite] render failed', error);
     const main = document.getElementById('ms-main');
     if (main) {
-      const message = error?.message || 'Unable to load this page.';
-      main.innerHTML = `
-        <div class="ms-card">
-          <h2>Unable to load</h2>
-          <div class="ms-muted">${escapeHtml(message)}</div>
-        </div>
-      `;
+      showErrorState(main, "Couldn't load page", error, renderRoute);
     }
   }
 }
@@ -1817,6 +1941,18 @@ document.addEventListener('click', (event) => {
   if (!href.startsWith('/admin/marketing')) return;
   event.preventDefault();
   navigateTo(href);
+});
+
+window.addEventListener('error', (event) => {
+  const location = event.filename ? `${event.filename}:${event.lineno || 0}:${event.colno || 0}` : '';
+  const message = `${event.message || 'Unexpected error'}${location ? ` (${location})` : ''}`;
+  showGlobalErrorBanner(message);
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+  const reason = event.reason;
+  const message = reason?.message || String(reason || 'Unhandled promise rejection');
+  showGlobalErrorBanner(message);
 });
 
 renderRoute();

@@ -67,7 +67,7 @@ import { renderEmailDocument } from '../lib/email-builder/rendering.js';
 import { buildPreviewPersonalisationContext } from '../services/marketing/personalisation.js';
 import { compileEditorHtml, renderCompiledTemplate } from '../services/marketing/template-compiler.js';
 import { buildStepsFromFlow, validateFlow } from '../services/marketing/flow.js';
-import { marketingSuiteHtml, sendMarketingSuiteShell } from '../lib/marketing-suite-shell.js';
+import { sendMarketingSuiteShell } from '../lib/marketing-suite-shell.js';
 const router = Router();
 const bcrypt: any = (bcryptNS as any).default ?? bcryptNS;
 
@@ -90,16 +90,8 @@ function resolveFlowState(flowJson: Prisma.JsonValue | null | undefined) {
   return { nodes: [], edges: [] };
 }
 
-function renderMarketingShell(req: any, res: any, options?: { activePath?: string; params?: Record<string, string> }) {
-  const requestedPath = options?.activePath || String(req.originalUrl || req.path || '/admin/marketing');
-  const activePath = requestedPath.startsWith('/marketing') ? `/admin${requestedPath}` : requestedPath;
-  const params = options?.params || req.params || {};
-  const bootstrap = `<script>window.__MS_PATH__=${JSON.stringify(activePath)};window.__MS_PARAMS__=${JSON.stringify(
-    params
-  )};</script>`;
-  const html = marketingSuiteHtml().replace('</body>', `${bootstrap}</body>`);
-  res.setHeader('Cache-Control', 'no-store');
-  res.type('html').send(html);
+function renderMarketingShell(_req: any, res: any) {
+  sendMarketingSuiteShell(res);
 }
 
 function logMarketingApi(req: any, resultSummary: unknown) {
