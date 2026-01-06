@@ -385,6 +385,250 @@ async function renderCampaigns() {
   if (createBtn) createBtn.addEventListener('click', openCampaignWizard);
 }
 
+async function renderCampaignCreate() {
+  const main = document.getElementById('ms-main');
+  main.innerHTML = '<div class="ms-card">Loading campaign builder...</div>';
+
+  const [segmentsData, templatesData, showsData] = await Promise.all([
+    fetchJson(`${API_BASE}/segments`),
+    fetchJson(`${API_BASE}/templates`),
+    fetchJson('/admin/shows'),
+  ]);
+  const segments = segmentsData.items || [];
+  const templates = templatesData.items || [];
+  const shows = showsData.items || [];
+  const params = new URLSearchParams(window.location.search);
+  const preselectedSegmentId = params.get('segment') || '';
+  const selectedSegmentId = preselectedSegmentId || (segments[0] && segments[0].id) || '';
+  const selectedTemplateId = (templates[0] && templates[0].id) || '';
+  const templateMap = new Map(templates.map((template) => [template.id, template]));
+  const segmentMap = new Map(segments.map((segment) => [segment.id, segment]));
+  const selectedTemplate = templateMap.get(selectedTemplateId) || {};
+
+  main.innerHTML = `
+    <div class="ms-campaign-setup">
+      <div class="ms-campaign-form">
+        <div class="ms-card">
+          <div class="ms-toolbar" style="justify-content:space-between;">
+            <div>
+              <h2>Create campaign</h2>
+              <div class="ms-muted">Set your audience, subject, timing, and content before sending.</div>
+            </div>
+            <button class="ms-secondary" id="ms-campaign-back">Back to campaigns</button>
+          </div>
+          <div class="ms-grid cols-2" style="margin-top:16px;">
+            ${renderFormRow('Campaign name', '<input id="ms-campaign-name" placeholder="Spring launch update" />')}
+            ${renderFormRow(
+              'Campaign type',
+              `<select id="ms-campaign-type">
+                <option value="ONE_OFF">One-off</option>
+                <option value="SHOW_REMINDER">Show reminder</option>
+                <option value="ROUNDUP">Roundup</option>
+                <option value="ANNOUNCEMENT">Announcement</option>
+              </select>`
+            )}
+          </div>
+        </div>
+        <div class="ms-card">
+          <h3>To</h3>
+          ${renderFormRow(
+            'Audience segment',
+            `<select id="ms-campaign-segment">
+              ${
+                segments.length
+                  ? segments
+                      .map(
+                        (segment) =>
+                          `<option value="${segment.id}" ${selectedSegmentId === segment.id ? 'selected' : ''}>${escapeHtml(segment.name)}</option>`
+                      )
+                      .join('')
+                  : '<option value="">No segments available</option>'
+              }
+            </select>`,
+            'Choose a segment, or manage automations from the Automations section.'
+          )}
+          <div class="ms-toolbar">
+            <a class="ms-secondary" href="/admin/marketing/segments">Manage segments</a>
+            <a class="ms-secondary" href="/admin/marketing/automations">Set up automation</a>
+          </div>
+        </div>
+        <div class="ms-card">
+          <h3>Subject</h3>
+          ${renderFormRow(
+            'Main line',
+            `<input id="ms-campaign-preview-text" value="${escapeHtml(selectedTemplate.previewText || '')}" placeholder="A short preview line" />`,
+            'Displayed as the preview text in inboxes.'
+          )}
+          ${renderFormRow('Subject line', `<input id="ms-campaign-subject" value="${escapeHtml(selectedTemplate.subject || '')}" placeholder="Subject line" />`)}
+        </div>
+        <div class="ms-card">
+          <h3>Send time</h3>
+          ${renderFormRow('Schedule for', `<input id="ms-campaign-schedule" type="datetime-local" />`, 'Pick a send time or leave blank to schedule later.')}
+        </div>
+        <div class="ms-card">
+          <h3>Content</h3>
+          ${renderFormRow(
+            'Template',
+            `<select id="ms-campaign-template">
+              ${
+                templates.length
+                  ? templates.map((template) => `<option value="${template.id}">${escapeHtml(template.name)}</option>`).join('')
+                  : '<option value="">No templates available</option>'
+              }
+            </select>`
+          )}
+          ${renderFormRow(
+            'Show association (optional)',
+            `<select id="ms-campaign-show">
+              <option value="">No show</option>
+              ${shows.map((show) => `<option value="${show.id}">${escapeHtml(show.title)}</option>`).join('')}
+            </select>`
+          )}
+          <div class="ms-toolbar">
+            <button class="ms-secondary" id="ms-campaign-open-designer">Open designer</button>
+            <button class="ms-secondary" id="ms-campaign-refresh-preview">Refresh preview</button>
+          </div>
+        </div>
+        <div class="ms-toolbar" style="justify-content:flex-end;">
+          <button class="ms-primary" id="ms-campaign-create">Create campaign</button>
+        </div>
+      </div>
+      <div class="ms-campaign-preview">
+        <div class="ms-card">
+          <div class="ms-toolbar" style="justify-content:space-between;">
+            <div>
+              <h3>Template preview</h3>
+              <div class="ms-muted">See how the campaign will look before sending.</div>
+            </div>
+          </div>
+          <div class="ms-preview-meta">
+            <div><span class="ms-muted">To</span><strong id="ms-preview-to">—</strong></div>
+            <div><span class="ms-muted">Subject</span><strong id="ms-preview-subject">—</strong></div>
+            <div><span class="ms-muted">Send time</span><strong id="ms-preview-time">Not scheduled</strong></div>
+          </div>
+          <div class="ms-preview-frame">
+            <iframe id="ms-campaign-preview-frame" style="width:100%;height:420px;border:1px solid var(--ms-border);border-radius:12px;"></iframe>
+            <div class="ms-muted" id="ms-preview-empty">Select a template to see a live preview.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('ms-campaign-back').addEventListener('click', () => navigateTo('/admin/marketing/campaigns'));
+
+  const previewTo = document.getElementById('ms-preview-to');
+  const previewSubject = document.getElementById('ms-preview-subject');
+  const previewTime = document.getElementById('ms-preview-time');
+  const previewFrame = document.getElementById('ms-campaign-preview-frame');
+  const previewEmpty = document.getElementById('ms-preview-empty');
+  const segmentSelect = document.getElementById('ms-campaign-segment');
+  const templateSelect = document.getElementById('ms-campaign-template');
+  const showSelect = document.getElementById('ms-campaign-show');
+  const subjectInput = document.getElementById('ms-campaign-subject');
+  const previewTextInput = document.getElementById('ms-campaign-preview-text');
+  const scheduleInput = document.getElementById('ms-campaign-schedule');
+  const openDesignerBtn = document.getElementById('ms-campaign-open-designer');
+
+  function updatePreviewSummary() {
+    const segmentName = segmentMap.get(segmentSelect.value)?.name || '—';
+    previewTo.textContent = segmentName;
+    previewSubject.textContent = subjectInput.value || '—';
+    previewTime.textContent = scheduleInput.value ? new Date(scheduleInput.value).toLocaleString() : 'Not scheduled';
+  }
+
+  async function updateTemplatePreview() {
+    const templateId = templateSelect.value;
+    if (!templateId) {
+      previewFrame.removeAttribute('srcdoc');
+      previewEmpty.style.display = 'block';
+      return;
+    }
+    previewEmpty.style.display = 'none';
+    const showId = showSelect.value || undefined;
+    const preview = await fetchJson(`${API_BASE}/templates/${templateId}/preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        showId,
+        sample: { email: 'sample@example.com', firstName: 'Sample', lastName: 'User', showId },
+      }),
+    });
+    previewFrame.srcdoc = preview.html || '';
+  }
+
+  function syncTemplateFields() {
+    const template = templateMap.get(templateSelect.value);
+    if (!template) return;
+    subjectInput.value = template.subject || '';
+    previewTextInput.value = template.previewText || '';
+    updatePreviewSummary();
+  }
+
+  updatePreviewSummary();
+  if (selectedTemplateId) {
+    await updateTemplatePreview();
+  }
+
+  segmentSelect.addEventListener('change', updatePreviewSummary);
+  subjectInput.addEventListener('input', updatePreviewSummary);
+  scheduleInput.addEventListener('change', updatePreviewSummary);
+  templateSelect.addEventListener('change', async () => {
+    syncTemplateFields();
+    await updateTemplatePreview();
+  });
+  showSelect.addEventListener('change', updateTemplatePreview);
+
+  document.getElementById('ms-campaign-refresh-preview').addEventListener('click', updateTemplatePreview);
+
+  openDesignerBtn.addEventListener('click', () => {
+    const templateId = templateSelect.value;
+    if (!templateId) {
+      toast('Select a template to edit.');
+      return;
+    }
+    window.open(`/admin/marketing/templates/${templateId}/edit`, '_blank', 'noopener');
+  });
+
+  document.getElementById('ms-campaign-create').addEventListener('click', async () => {
+    const name = document.getElementById('ms-campaign-name').value || 'New campaign';
+    const type = document.getElementById('ms-campaign-type').value;
+    const segmentId = segmentSelect.value;
+    const templateId = templateSelect.value;
+    const showId = showSelect.value || null;
+    const subject = subjectInput.value;
+    const previewText = previewTextInput.value;
+    const scheduledFor = scheduleInput.value || null;
+
+    if (!segmentId || !templateId) {
+      toast('Please select a segment and template before creating the campaign.', 'warning');
+      return;
+    }
+
+    await fetchJson(`${API_BASE}/templates/${templateId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subject, previewText }),
+    });
+
+    const response = await fetchJson(`${API_BASE}/campaigns`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, type, showId, segmentId, templateId }),
+    });
+
+    if (scheduledFor) {
+      await fetchJson(`${API_BASE}/campaigns/${response.campaign.id}/schedule`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sendNow: false, scheduledFor }),
+      });
+    }
+
+    navigateTo(`/admin/marketing/campaigns/${response.campaign.id}`);
+  });
+}
+
 async function renderCampaignDetail(campaignId) {
   const main = document.getElementById('ms-main');
   main.innerHTML = '<div class="ms-card">Loading campaign...</div>';
@@ -1459,64 +1703,10 @@ async function openAutomationCreator() {
 }
 
 async function openCampaignWizard(preselectedSegmentId) {
-  const [segmentsData, templatesData, showsData] = await Promise.all([
-    fetchJson(`${API_BASE}/segments`),
-    fetchJson(`${API_BASE}/templates`),
-    fetchJson('/admin/shows'),
-  ]);
-  const segments = segmentsData.items || [];
-  const templates = templatesData.items || [];
-  const shows = showsData.items || [];
-
-  const modal = renderModal(
-    'Create campaign',
-    renderFormRow('Campaign name', '<input id="ms-campaign-name" />') +
-      renderFormRow(
-        'Type',
-        `<select id="ms-campaign-type">
-          <option value="ONE_OFF">One-off</option>
-          <option value="SHOW_REMINDER">Show reminder</option>
-          <option value="ROUNDUP">Roundup</option>
-          <option value="ANNOUNCEMENT">Announcement</option>
-        </select>`
-      ) +
-      renderFormRow(
-        'Segment',
-        `<select id="ms-campaign-segment">
-          ${segments.map((segment) => `<option value="${segment.id}" ${preselectedSegmentId === segment.id ? 'selected' : ''}>${escapeHtml(segment.name)}</option>`).join('')}
-        </select>`
-      ) +
-      renderFormRow(
-        'Template',
-        `<select id="ms-campaign-template">
-          ${templates.map((template) => `<option value="${template.id}">${escapeHtml(template.name)}</option>`).join('')}
-        </select>`
-      ) +
-      renderFormRow(
-        'Show association (optional)',
-        `<select id="ms-campaign-show">
-          <option value="">No show</option>
-          ${shows.map((show) => `<option value="${show.id}">${escapeHtml(show.title)}</option>`).join('')}
-        </select>`
-      ) +
-      `<div class="ms-toolbar" style="justify-content:flex-end;"><button class="ms-primary" id="ms-campaign-create">Create campaign</button></div>`
-  );
-
-  modal.querySelector('#ms-campaign-create').addEventListener('click', async () => {
-    const response = await fetchJson(`${API_BASE}/campaigns`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: modal.querySelector('#ms-campaign-name').value || 'New campaign',
-        type: modal.querySelector('#ms-campaign-type').value,
-        showId: modal.querySelector('#ms-campaign-show').value || null,
-        segmentId: modal.querySelector('#ms-campaign-segment').value,
-        templateId: modal.querySelector('#ms-campaign-template').value,
-      }),
-    });
-    closeModal();
-    navigateTo(`/admin/marketing/campaigns/${response.campaign.id}`);
-  });
+  const params = new URLSearchParams();
+  if (preselectedSegmentId) params.set('segment', preselectedSegmentId);
+  const query = params.toString();
+  navigateTo(`/admin/marketing/campaigns/new${query ? `?${query}` : ''}`);
 }
 
 function openContactImporter() {
@@ -1550,12 +1740,19 @@ function getRoute() {
 async function renderRoute() {
   const path = getRoute();
   const highlight =
-    path.startsWith('/admin/marketing/templates/') ? '/admin/marketing/templates' : path.startsWith('/admin/marketing/automations/') ? '/admin/marketing/automations' : path;
+    path.startsWith('/admin/marketing/campaigns')
+      ? '/admin/marketing/campaigns'
+      : path.startsWith('/admin/marketing/templates/')
+        ? '/admin/marketing/templates'
+        : path.startsWith('/admin/marketing/automations/')
+          ? '/admin/marketing/automations'
+          : path;
   renderShell(highlight);
   await loadStatus();
 
   if (path === '/admin/marketing') return renderHome();
   if (path === '/admin/marketing/campaigns') return renderCampaigns();
+  if (path === '/admin/marketing/campaigns/new') return renderCampaignCreate();
   if (path === '/admin/marketing/templates') return renderTemplates();
   if (path === '/admin/marketing/segments') return renderSegments();
   if (path === '/admin/marketing/contacts') return renderContacts();
