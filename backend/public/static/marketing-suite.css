@@ -249,21 +249,47 @@ body {
   z-index: 1000;
 }
 
-.ms-modal .ms-card {
-  max-width: 540px;
-  width: 100%;
+/* UPDATED BLOCK TOOLBAR */
+.ms-builder-block {
+    position: relative;
+    border: 1px solid transparent;
+    padding: 10px;
+    transition: border 0.2s;
 }
 
-.ms-campaign-setup {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
-  gap: 20px;
-  align-items: start;
+.ms-builder-block:hover {
+    border: 1px solid var(--ms-primary);
+    cursor: pointer;
 }
 
-.ms-campaign-preview {
-  position: sticky;
-  top: 24px;
+.ms-builder-block .block-actions {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: -30px; 
+    background: var(--ms-primary);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 6px 6px 0 0;
+    font-size: 13px;
+    z-index: 10;
+    gap: 8px;
+    align-items: center;
+}
+
+.ms-builder-block:hover .block-actions {
+    display: flex; 
+}
+
+.ms-builder-block .block-actions span {
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 3px;
+    transition: background 0.2s;
+}
+
+.ms-builder-block .block-actions span:hover {
+    background: rgba(255, 255, 255, 0.2);
 }
 
 .ms-preview-meta {
