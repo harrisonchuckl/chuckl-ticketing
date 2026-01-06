@@ -62,7 +62,7 @@ import {
 } from '../services/marketing/automations.js';
 import { triggerTagAppliedAutomation } from '../services/marketing/automations.js';
 import { ensureDefaultPreferenceTopics } from '../services/marketing/preferences.js';
-import { recordConsentAudit } from '../services/marketing/audit.js';
+import { recordConsentAudit, recordSuppressionAudit } from '../services/marketing/audit.js';
 import { renderEmailDocument } from '../lib/email-builder/rendering.js';
 import { buildPreviewPersonalisationContext } from '../services/marketing/personalisation.js';
 import { compileEditorHtml, renderCompiledTemplate } from '../services/marketing/template-compiler.js';
