@@ -107,14 +107,21 @@ body {
   width: 600px;
   background-color: var(--canvas-bg, #ffffff);
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-  padding: 30px 0 150px 0; /* Left/Right padding 0 for strips */
+  padding: 60px 0 200px 0; /* Extra top/bottom padding for easier dropping */
   display: flex;
   flex-direction: column;
-  min-height: 800px;
-  box-sizing: content-box;
+  height: auto !important; /* Grows with content */
+  min-height: 100vh;
+  box-sizing: border-box;
   align-items: stretch !important;
+  overflow: visible !important;
 }
 
+/* Ensure indicators are visible inside nested strips */
+.ms-strip .ms-drop-indicator {
+  margin: 10px 20px;
+  width: auto;
+}
 /* 5. THE BUILDER BLOCKS (MASTER SETTINGS) */
 .ms-builder-block {
   position: relative;
