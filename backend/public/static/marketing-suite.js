@@ -914,32 +914,58 @@ async function renderTemplateEditor(templateId) {
         <button class="ms-tab-btn" data-sidebar-tab="styles">Styles</button>
       </div>
 
-      <div id="ms-sidebar-blocks" class="ms-sidebar-panel active">
+    <div id="ms-sidebar-blocks" class="ms-sidebar-panel active">
         <div class="ms-block-grid">
           <div class="ms-draggable-block" draggable="true" data-type="text">
-            <span class="icon">Tt</span> <span>Text</span>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>
+            <span>Text</span>
           </div>
-          <div class="ms-draggable-block" draggable="true" data-type="image">
-            <span class="icon">🖼️</span> <span>Image</span>
-          </div>
-          <div class="ms-draggable-block" draggable="true" data-type="button">
-            <span class="icon">🔘</span> <span>Button</span>
+          <div class="ms-draggable-block" draggable="true" data-type="boxedtext">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 8h10M7 12h10M7 16h5"/></svg>
+            <span>Boxed Text</span>
           </div>
           <div class="ms-draggable-block" draggable="true" data-type="divider">
-            <span class="icon">➖</span> <span>Divider</span>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>Divider</span>
+          </div>
+          <div class="ms-draggable-block" draggable="true" data-type="image">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            <span>Image</span>
+          </div>
+          <div class="ms-draggable-block" draggable="true" data-type="imagegroup">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="18" rx="1"/><rect x="13" y="3" width="8" height="18" rx="1"/></svg>
+            <span>Image Group</span>
+          </div>
+          <div class="ms-draggable-block" draggable="true" data-type="imagecard">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="12" rx="1"/><path d="M3 15h18v6H3z"/></svg>
+            <span>Image Card</span>
+          </div>
+          <div class="ms-draggable-block" draggable="true" data-type="button">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="9" width="18" height="6" rx="2"/></svg>
+            <span>Button</span>
           </div>
           <div class="ms-draggable-block" draggable="true" data-type="social">
-            <span class="icon">🔗</span> <span>Social</span>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
+            <span>Social</span>
+          </div>
+          <div class="ms-draggable-block" draggable="true" data-type="footer">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16M4 16h16M4 12h10"/></svg>
+            <span>Footer</span>
+          </div>
+          <div class="ms-draggable-block" draggable="true" data-type="video">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="m10 8 6 4-6 4V8z"/></svg>
+            <span>Video</span>
           </div>
           <div class="ms-draggable-block" draggable="true" data-type="product">
-            <span class="icon">🛍️</span> <span>Product</span>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+            <span>Product</span>
           </div>
-          <div class="ms-draggable-block" draggable="true" data-type="event">
-            <span class="icon">📅</span> <span>Event</span>
+          <div class="ms-draggable-block" draggable="true" data-type="code">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+            <span>Code</span>
           </div>
         </div>
       </div>
-
       <div id="ms-sidebar-styles" class="ms-sidebar-panel">
         <div class="ms-field">
             <label>Page Background</label>
@@ -2199,17 +2225,21 @@ function moveBlockInCanvas(fromIndex, toIndex) {
  */
 function getDefaultBlockContent(type) {
     switch (type) {
-        case 'text': return { text: '<h3>Hello World</h3><p>Edit this text in the sidebar.</p>' };
-        case 'image': return { src: 'https://via.placeholder.com/600x300', alt: 'Image' };
-        case 'button': return { label: 'Click Me', url: 'https://', color: '#4f46e5' };
-        case 'divider': return {};
-        case 'social': return { networks: ['facebook', 'instagram'] };
-        case 'product': return { productId: null }; 
-        case 'event': return { eventId: null };
+        case 'text': return { text: '<h3>New Text Block</h3><p>Enter your content here.</p>' };
+        case 'boxedtext': return { text: '<p>This is text inside a colored box.</p>', bgColor: '#f1f5f9' };
+        case 'image': return { src: 'https://placehold.co/600x300', alt: 'Image', link: '' };
+        case 'imagegroup': return { images: [{src:'https://placehold.co/300x300'}, {src:'https://placehold.co/300x300'}] };
+        case 'imagecard': return { src: 'https://placehold.co/600x300', caption: '<strong>Image Caption</strong><p>Subtext goes here.</p>' };
+        case 'button': return { label: 'Click Here', url: 'https://', color: '#4f46e5', align: 'center' };
+        case 'divider': return { color: '#e2e8f0', thickness: '1px' };
+        case 'social': return { fb: '#', ig: '#', tw: '#' };
+        case 'footer': return { text: '© 2026 Your Company. | <a href="{{links.unsubscribeLink}}">Unsubscribe</a>' };
+        case 'video': return { url: '', thumbnail: 'https://placehold.co/600x340?text=Video+Placeholder' };
+        case 'code': return { html: '' };
+        case 'product': return { productId: null, title: 'Product Name', price: '£0.00' };
         default: return {};
     }
 }
-
 /**
  * Renders the `window.editorBlocks` array into the DOM with Professional Icons
  */
@@ -2236,18 +2266,28 @@ function renderBuilderCanvas() {
         el.dataset.index = index;
 
         let previewHtml = '';
-        if (block.type === 'text') {
-            previewHtml = `<div>${block.content.text}</div>`;
-        } else if (block.type === 'image') {
-            previewHtml = `<img src="${block.content.src}" alt="${block.content.alt}" style="width:100%; height:auto; display:block;">`;
-        } else if (block.type === 'button') {
-            previewHtml = `<div style="text-align:center;"><a class="ms-primary" style="background:${block.content.color}; display:inline-block;">${block.content.label}</a></div>`;
-        } else if (block.type === 'divider') {
-            previewHtml = `<hr style="border:0; border-top:1px solid #e2e8f0; margin:20px 0;">`;
-        } else {
-            previewHtml = `<div class="ms-muted" style="text-align:center; padding:20px; border:1px dashed #ccc;">[${block.type.toUpperCase()} BLOCK]</div>`;
-        }
+        const c = block.content;
 
+        switch(block.type) {
+            case 'text': previewHtml = `<div>${c.text}</div>`; break;
+            case 'boxedtext': previewHtml = `<div style="background:${c.bgColor}; padding:20px; border-radius:4px;">${c.text}</div>`; break;
+            case 'image': previewHtml = `<img src="${c.src}" style="width:100%; display:block;">`; break;
+            case 'imagegroup': 
+                previewHtml = `<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                    ${c.images.map(img => `<img src="${img.src}" style="width:100%;">`).join('')}
+                </div>`; 
+                break;
+            case 'imagecard': 
+                previewHtml = `<div style="border:1px solid #eee;"><img src="${c.src}" style="width:100%;"><div style="padding:15px;">${c.caption}</div></div>`; 
+                break;
+            case 'button': previewHtml = `<div style="text-align:${c.align};"><a class="ms-primary" style="background:${c.color};">${c.label}</a></div>`; break;
+            case 'divider': previewHtml = `<hr style="border:0; border-top:${c.thickness} solid ${c.color}; margin:20px 0;">`; break;
+            case 'social': previewHtml = `<div style="text-align:center; gap:10px; display:flex; justify-content:center;">FB | IG | TW</div>`; break;
+            case 'footer': previewHtml = `<div style="font-size:12px; color:#666; text-align:center; border-top:1px solid #eee; padding-top:20px;">${c.text}</div>`; break;
+            case 'video': previewHtml = `<div style="position:relative;"><img src="${c.thumbnail}" style="width:100%;"><div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.2);">▶</div></div>`; break;
+            case 'code': previewHtml = `<div style="background:#2d2d2d; color:#85ff85; padding:10px; font-family:monospace; font-size:12px;">&lt;HTML Code Block /&gt;</div>`; break;
+            default: previewHtml = `<div class="ms-muted" style="text-align:center; padding:20px; border:1px dashed #ccc;">[${block.type.toUpperCase()} BLOCK]</div>`;
+        }
         el.innerHTML = `
             ${previewHtml}
             <div class="block-actions">
