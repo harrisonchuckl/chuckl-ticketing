@@ -88,37 +88,7 @@ function escapeHtml(value) {
 function navigateTo(path) {
   if (window.location.pathname === path) return;
   window.history.pushState({}, '', path);
-renderRoute();
-
-/**
- * Duplicates an existing block and places it directly underneath the original
- */
-window.duplicateBlock = function(index) {
-    const original = window.editorBlocks[index];
-    
-    // Create a deep copy to avoid editing both at once
-    const copy = JSON.parse(JSON.stringify(original));
-    
-    // Assign a new unique ID
-    copy.id = 'blk_' + Date.now();
-    
-    // Insert into the array immediately after the original
-    window.editorBlocks.splice(index + 1, 0, copy);
-    
-    renderBuilderCanvas();
-    toast('Block duplicated');
-};
-
-/**
- * Helper to ensure the editor opens when the specific edit icon is clicked
- */
-window.openEditorFromIcon = function(id) {
-    const block = window.editorBlocks.find(b => b.id === id);
-    if (block) {
-        openBlockEditor(block);
-    }
-};
-
+  renderRoute();
 }
 
 function renderModal(title, innerHtml) {
@@ -2023,6 +1993,22 @@ window.addEventListener('unhandledrejection', (event) => {
 
 renderRoute();
 
+/* GLOBAL BUILDER HELPERS */
+window.duplicateBlock = function(index) {
+    const original = window.editorBlocks[index];
+    const copy = JSON.parse(JSON.stringify(original));
+    copy.id = 'blk_' + Date.now();
+    window.editorBlocks.splice(index + 1, 0, copy);
+    renderBuilderCanvas();
+    toast('Block duplicated');
+};
+
+window.openEditorFromIcon = function(id) {
+    const block = window.editorBlocks.find(b => b.id === id);
+    if (block) openBlockEditor(block);
+};
+
+
 /* =========================================
    VISUAL BUILDER LOGIC (v2 - Reordering Support)
    ========================================= */
@@ -2225,10 +2211,11 @@ function getDefaultBlockContent(type) {
 }
 
 /**
- * Renders the `window.editorBlocks` array into the DOM
+ * Renders the `window.editorBlocks` array into the DOM with Professional Icons
  */
 function renderBuilderCanvas() {
     const canvas = document.getElementById('ms-builder-canvas');
+    if (!canvas) return;
     canvas.innerHTML = '';
 
     if (window.editorBlocks.length === 0) {
@@ -2236,14 +2223,18 @@ function renderBuilderCanvas() {
         return;
     }
 
+    // Professional SVG Icons
+    const iconEdit = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
+    const iconCopy = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+    const iconTrash = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
+
     window.editorBlocks.forEach((block, index) => {
         const el = document.createElement('div');
         el.className = 'ms-builder-block';
-        el.draggable = true; // Make it draggable!
+        el.draggable = true;
         el.dataset.id = block.id;
         el.dataset.index = index;
 
-        // Generate HTML preview
         let previewHtml = '';
         if (block.type === 'text') {
             previewHtml = `<div>${block.content.text}</div>`;
@@ -2257,35 +2248,28 @@ function renderBuilderCanvas() {
             previewHtml = `<div class="ms-muted" style="text-align:center; padding:20px; border:1px dashed #ccc;">[${block.type.toUpperCase()} BLOCK]</div>`;
         }
 
-       // Updated HTML with Edit, Duplicate, and Delete icons
         el.innerHTML = `
             ${previewHtml}
             <div class="block-actions">
-                <span title="Edit" onclick="window.openEditorFromIcon('${block.id}')">✏️</span>
-                <span title="Duplicate" onclick="window.duplicateBlock(${index})">📂</span>
-                <span title="Delete" onclick="window.deleteBlock('${block.id}')">🗑️</span>
+                <span title="Edit" onclick="window.openEditorFromIcon('${block.id}')">${iconEdit}</span>
+                <span title="Duplicate" onclick="window.duplicateBlock(${index})">${iconCopy}</span>
+                <span title="Delete" onclick="window.deleteBlock('${block.id}')">${iconTrash}</span>
             </div>
         `;
-        // DRAG START (Existing Item)
+
         el.addEventListener('dragstart', (e) => {
             draggedSource = 'canvas';
             draggedBlockIndex = index;
             e.dataTransfer.effectAllowed = 'move';
-            // Wait a tick to add the class, so the "ghost" image is taken BEFORE we fade it out
             setTimeout(() => el.classList.add('dragging'), 0);
         });
 
-        // DRAG END
         el.addEventListener('dragend', () => {
             el.classList.remove('dragging');
-            draggedSource = null;
-            draggedBlockIndex = null;
-            // Clean up any stray indicators
             const ind = document.querySelector('.ms-drop-indicator');
             if(ind) ind.remove();
         });
 
-        // CLICK (Edit)
         el.addEventListener('click', (e) => {
             if (e.target.closest('.block-actions')) return; 
             openBlockEditor(block);
