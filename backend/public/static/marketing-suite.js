@@ -2100,36 +2100,38 @@ function setupVisualBuilder() {
 
     // 3. Drag Start (Sidebar Items)
     document.querySelectorAll('.ms-draggable-block').forEach(item => {
-        item.addEventListener('dragstart', (e) => {
-            draggedSource = 'sidebar';
-            e.dataTransfer.setData('blockType', item.dataset.type);
-            e.dataTransfer.effectAllowed = 'copy';
-        });
+        iel.addEventListener('dragstart', (e) => {
+                draggedSource = 'canvas';
+                e.dataTransfer.setData('blockId', block.id); // Send ID
+                e.dataTransfer.effectAllowed = 'move';
+                setTimeout(() => el.classList.add('dragging'), 0);
+            });
     });
 
     // 4. Drag Over (Canvas - Logic for the Drop Line)
-    canvas.addEventListener('dragover', (e) => {
+  canvas.addEventListener('dragover', (e) => {
         e.preventDefault();
         
-        // Find the element strictly after the mouse cursor
-        const afterElement = getDragAfterElement(canvas, e.clientY);
+        // 1. Detect the specific container we are hovering over (Strip or Canvas)
+        const stripTarget = e.target.closest('.ms-strip');
+        const container = stripTarget || canvas;
         
-        // Remove any existing indicator to prevent duplicates
-        const existingIndicator = document.querySelector('.ms-drop-indicator');
-        if (existingIndicator) existingIndicator.remove();
+        // 2. Find placement element
+        const afterElement = getDragAfterElement(container, e.clientY);
+        
+        // 3. Update Indicator placement
+        let indicator = document.querySelector('.ms-drop-indicator');
+        if (!indicator) {
+            indicator = document.createElement('div');
+            indicator.classList.add('ms-drop-indicator');
+        }
 
-        // Create the blue drop line
-        const indicator = document.createElement('div');
-        indicator.classList.add('ms-drop-indicator');
-
-        // Insert the line at the correct position
         if (afterElement == null) {
-            canvas.appendChild(indicator);
+            container.appendChild(indicator);
         } else {
-            canvas.insertBefore(indicator, afterElement);
+            container.insertBefore(indicator, afterElement);
         }
     });
-
     // 5. Drag Leave (Cleanup)
     canvas.addEventListener('dragleave', (e) => {
         // Only remove if we are actually leaving the canvas container, not just entering a child
@@ -2140,45 +2142,67 @@ function setupVisualBuilder() {
     });
 
    // 6. Drop Logic (Corrected for Nested Strips)
-    canvas.addEventListener('drop', (e) => {
+ canvas.addEventListener('drop', (e) => {
         e.preventDefault();
         const indicator = document.querySelector('.ms-drop-indicator');
-        const dropTargetStrip = e.target.closest('.ms-strip'); 
+        if (!indicator) return;
 
-        const canvasChildren = Array.from(canvas.children);
+        const dropContainer = indicator.parentElement;
+        const canvasChildren = Array.from(dropContainer.children);
         const dropIndex = canvasChildren.indexOf(indicator);
-        if (indicator) indicator.remove();
+        indicator.remove();
 
         const type = e.dataTransfer.getData('blockType');
+        const isFromSidebar = draggedSource === 'sidebar';
 
-        // CASE 1: Dropping INSIDE a strip
-       if (dropTargetStrip && type) {
-    // We need to find the ID of the block that IS the strip
-    const stripContainer = dropTargetStrip.closest('.ms-builder-block');
-    const stripId = stripContainer ? stripContainer.dataset.id : null;
-    
-    const stripBlock = window.editorBlocks.find(b => b.id === stripId);
-    if (stripBlock) {
-        if (!stripBlock.content.blocks) stripBlock.content.blocks = [];
-        stripBlock.content.blocks.push({
-            id: 'blk_' + Date.now(),
-            type: type,
-            content: getDefaultBlockContent(type)
-        });
-        renderBuilderCanvas();
-        return;
-    }
-}
-
-        // CASE 2: Dropping on the main canvas
-        if (draggedSource === 'sidebar' && type) {
-            addBlockToCanvas(type, dropIndex);
-        } else if (draggedSource === 'canvas' && draggedBlockIndex !== null) {
-            moveBlockInCanvas(draggedBlockIndex, dropIndex);
+        // Helper to find and remove block from anywhere (State Cleanup)
+        function findAndRemoveBlock(id) {
+            // Check top level
+            const topIdx = window.editorBlocks.findIndex(b => b.id === id);
+            if (topIdx > -1) return window.editorBlocks.splice(topIdx, 1)[0];
+            
+            // Check inside strips
+            for (let b of window.editorBlocks) {
+                if (b.type === 'strip' && b.content.blocks) {
+                    const innerIdx = b.content.blocks.findIndex(ib => ib.id === id);
+                    if (innerIdx > -1) return b.content.blocks.splice(innerIdx, 1)[0];
+                }
+            }
+            return null;
         }
 
+        let blockData;
+
+        if (isFromSidebar) {
+            blockData = {
+                id: 'blk_' + Date.now(),
+                type: type,
+                content: getDefaultBlockContent(type),
+                styles: { padding: '10px' }
+            };
+        } else {
+            // Moving existing block
+            const draggedBlockId = e.dataTransfer.getData('blockId');
+            blockData = findAndRemoveBlock(draggedBlockId);
+        }
+
+        if (!blockData) return;
+
+        // Determine destination: Strip or Main Canvas
+        if (dropContainer.classList.contains('ms-strip')) {
+            const stripId = dropContainer.closest('.ms-builder-block').dataset.id;
+            const stripBlock = window.editorBlocks.find(b => b.id === stripId);
+            if (stripBlock) {
+                stripBlock.content.blocks = stripBlock.content.blocks || [];
+                stripBlock.content.blocks.splice(dropIndex, 0, blockData);
+            }
+        } else {
+            // Drop on main canvas
+            window.editorBlocks.splice(dropIndex, 0, blockData);
+        }
+
+        renderBuilderCanvas();
         draggedSource = null;
-        draggedBlockIndex = null;
     });
   
     // 7. Back Button
