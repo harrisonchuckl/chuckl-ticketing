@@ -266,18 +266,27 @@ body {
   display: none;
   position: absolute;
   right: 0;
-  top: -32px; 
-  background: #0f9cdf; /* New light blue color */
+  top: -28px; /* Lowered slightly to prevent screen cutoff */
+  background: #0f9cdf !important; /* Force the blue color */
   color: white;
-  padding: 4px 8px;
-  border-radius: 6px 6px 0 0;
-  z-index: 100;
-  gap: 6px;
-  flex-direction: row; /* Horizontal orientation */
+  padding: 2px 6px !important; /* Smaller padding */
+  border-radius: 4px 4px 0 0;
+  z-index: 9999; /* Ensure it stays on top */
+  gap: 4px !important; 
+  display: flex !important; /* Ensure flexbox is active */
+  flex-direction: row !important; /* Force horizontal */
   align-items: center;
-  box-shadow: 0 -2px 6px rgba(0,0,0,0.1);
-  white-space: nowrap; /* Prevents cutting off */
+  box-shadow: 0 -2px 4px rgba(0,0,0,0.1);
+  white-space: nowrap;
+  height: 28px; /* Fixed small height */
 }
+
+/* Make icons inside smaller */
+.ms-builder-block .block-actions svg {
+  width: 14px !important;
+  height: 14px !important;
+}
+
 .ms-builder-block .block-actions span {
     cursor: pointer;
     display: flex;
@@ -577,3 +586,26 @@ body {
     min-height: 800px;
     padding-bottom: 100px; /* Extra space to drop at the bottom */
 }
+
+/* Full width Strip styling */
+.ms-strip {
+  width: 100% !important;
+  min-height: 80px;
+  height: auto !important; /* Allows vertical growth */
+  padding: 20px 0;
+  margin: 10px 0;
+  border: 1px dashed #cbd5e1;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+/* Ensure the canvas doesn't restrict strip width */
+.ms-builder-canvas {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  align-items: stretch !important;
+}
+
+
+
