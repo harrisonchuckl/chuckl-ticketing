@@ -436,11 +436,14 @@ body {
 .ms-builder-block {
     position: relative;
     border: 1px solid transparent;
-    /* Removed padding here so images sit flush to the edge of the block selection area */
+    padding: 10px;
     transition: border 0.2s;
-    /* Ensure block wraps content tightly */
     height: auto; 
-    overflow: hidden;
+    overflow: visible !important; /* Allows buttons to pop out */
+    z-index: 1;
+}
+.ms-builder-block:hover {
+    z-index: 10; /* Brings the hovered block to the front */
 }
 
 /* Specific styling for image previews to ensure tight wrapping */
@@ -469,20 +472,25 @@ body {
   cursor: pointer;
 }
 .ms-builder-block .block-actions {
-  display: none;
+  display: none !important;
   position: absolute;
   right: 0;
-  top: -24px;
-  background: var(--ms-primary);
+  top: -32px; /* Sits exactly above the element */
+  background: #0f9cdf !important;
   color: white;
-  padding: 4px 8px;
-  border-radius: 4px 4px 0 0;
-  font-size: 12px;
-}
-.ms-builder-block:hover .block-actions {
-  display: block;
+  padding: 4px 8px !important;
+  border-radius: 6px 6px 0 0;
+  z-index: 99999 !important; /* Forces it to top layer */
+  gap: 8px !important;
+  flex-direction: row !important;
+  align-items: center;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+  white-space: nowrap;
 }
 
+.ms-builder-block:hover > .block-actions {
+  display: flex !important;
+}
 /* SIDEBAR (Right Side) */
 .ms-builder-sidebar {
   background: white;
