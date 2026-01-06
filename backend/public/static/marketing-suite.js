@@ -2107,26 +2107,25 @@ function setupVisualBuilder() {
         });
     });
   
-   // 4. Drag Over (Handles Placement Line in Canvas and Strips)
-    canvas.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        const stripTarget = e.target.closest('.ms-strip');
-        const container = stripTarget || canvas;
-        const afterElement = getDragAfterElement(container, e.clientY);
-        
-        let indicator = document.querySelector('.ms-drop-indicator');
-        if (!indicator) {
-            indicator = document.createElement('div');
-            indicator.classList.add('ms-drop-indicator');
-        }
+  // 4. Drag Over (Updated for ms-strip-inner support)
+canvas.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    
+    // Find if we are hovering over a strip's inner container or the main canvas
+    const stripInner = e.target.closest('.ms-strip-inner');
+    const container = stripInner || canvas;
+    
+    const afterElement = getDragAfterElement(container, e.clientY);
+    let indicator = document.querySelector('.ms-drop-indicator') || document.createElement('div');
+    indicator.className = 'ms-drop-indicator';
 
-        if (afterElement == null) {
-            container.appendChild(indicator);
-        } else {
-            container.insertBefore(indicator, afterElement);
-        }
-    });
-
+    if (afterElement == null) {
+        container.appendChild(indicator);
+    } else {
+        container.insertBefore(indicator, afterElement);
+    }
+});
+  
     // 5. Drag Leave Cleanup
     canvas.addEventListener('dragleave', (e) => {
         if (e.relatedTarget && !canvas.contains(e.relatedTarget) && e.relatedTarget !== canvas) {
@@ -2135,126 +2134,62 @@ function setupVisualBuilder() {
         }
     });
 
-    // 6. Drop Logic (Handles Sidebar Drops and Moving between Strips)
-    canvas.addEventListener('drop', (e) => {
-        e.preventDefault();
-        const indicator = document.querySelector('.ms-drop-indicator');
-        if (!indicator) return;
+   // 6. Drop Logic (Supports reordering inside and outside strips)
+canvas.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const indicator = document.querySelector('.ms-drop-indicator');
+    if (!indicator) return;
 
-        const dropContainer = indicator.parentElement;
-        const siblings = Array.from(dropContainer.children);
-        const dropIndex = siblings.indexOf(indicator);
-        indicator.remove();
+    const dropContainer = indicator.parentElement;
+    const siblings = Array.from(dropContainer.children);
+    const dropIndex = siblings.indexOf(indicator);
+    indicator.remove();
 
-        const type = e.dataTransfer.getData('blockType');
-        const isFromSidebar = draggedSource === 'sidebar';
+    const type = e.dataTransfer.getData('blockType');
+    const isFromSidebar = draggedSource === 'sidebar';
 
-        function findAndRemoveBlock(id) {
-            const topIdx = window.editorBlocks.findIndex(b => b.id === id);
-            if (topIdx > -1) return window.editorBlocks.splice(topIdx, 1)[0];
-            for (let b of window.editorBlocks) {
-                if (b.type === 'strip' && b.content.blocks) {
-                    const innerIdx = b.content.blocks.findIndex(ib => ib.id === id);
-                    if (innerIdx > -1) return b.content.blocks.splice(innerIdx, 1)[0];
-                }
+    function findAndRemoveBlock(id) {
+        const topIdx = window.editorBlocks.findIndex(b => b.id === id);
+        if (topIdx > -1) return window.editorBlocks.splice(topIdx, 1)[0];
+        for (let b of window.editorBlocks) {
+            if (b.type === 'strip' && b.content.blocks) {
+                const innerIdx = b.content.blocks.findIndex(ib => ib.id === id);
+                if (innerIdx > -1) return b.content.blocks.splice(innerIdx, 1)[0];
             }
-            return null;
         }
+        return null;
+    }
 
-        let blockData;
-        if (isFromSidebar) {
-            blockData = {
-                id: 'blk_' + Date.now(),
-                type: type,
-                content: getDefaultBlockContent(type),
-                styles: { padding: '10px' }
-            };
-        } else {
-            const draggedBlockId = e.dataTransfer.getData('blockId');
-            blockData = findAndRemoveBlock(draggedBlockId);
+    let blockData;
+    if (isFromSidebar) {
+        blockData = {
+            id: 'blk_' + Date.now(),
+            type: type,
+            content: getDefaultBlockContent(type),
+            styles: { padding: '10px' }
+        };
+    } else {
+        const draggedBlockId = e.dataTransfer.getData('blockId');
+        blockData = findAndRemoveBlock(draggedBlockId);
+    }
+
+    if (!blockData) return;
+
+    // Logic for nesting
+    if (dropContainer.classList.contains('ms-strip-inner')) {
+        const stripId = dropContainer.closest('.ms-builder-block').dataset.id;
+        const stripBlock = window.editorBlocks.find(b => b.id === stripId);
+        if (stripBlock) {
+            stripBlock.content.blocks = stripBlock.content.blocks || [];
+            stripBlock.content.blocks.splice(dropIndex, 0, blockData);
         }
+    } else {
+        window.editorBlocks.splice(dropIndex, 0, blockData);
+    }
 
-        if (!blockData) return;
-
-        if (dropContainer.classList.contains('ms-strip')) {
-            const stripContainer = dropContainer.closest('.ms-builder-block');
-            const stripId = stripContainer.dataset.id;
-            const stripBlock = window.editorBlocks.find(b => b.id === stripId);
-            if (stripBlock) {
-                stripBlock.content.blocks = stripBlock.content.blocks || [];
-                stripBlock.content.blocks.splice(dropIndex, 0, blockData);
-            }
-        } else {
-            window.editorBlocks.splice(dropIndex, 0, blockData);
-        }
-
-        renderBuilderCanvas();
-        draggedSource = null;
-    });
-  
-   // 6. Drop Logic (Corrected for Nested Strips)
- canvas.addEventListener('drop', (e) => {
-        e.preventDefault();
-        const indicator = document.querySelector('.ms-drop-indicator');
-        if (!indicator) return;
-
-        const dropContainer = indicator.parentElement;
-        const canvasChildren = Array.from(dropContainer.children);
-        const dropIndex = canvasChildren.indexOf(indicator);
-        indicator.remove();
-
-        const type = e.dataTransfer.getData('blockType');
-        const isFromSidebar = draggedSource === 'sidebar';
-
-        // Helper to find and remove block from anywhere (State Cleanup)
-        function findAndRemoveBlock(id) {
-            // Check top level
-            const topIdx = window.editorBlocks.findIndex(b => b.id === id);
-            if (topIdx > -1) return window.editorBlocks.splice(topIdx, 1)[0];
-            
-            // Check inside strips
-            for (let b of window.editorBlocks) {
-                if (b.type === 'strip' && b.content.blocks) {
-                    const innerIdx = b.content.blocks.findIndex(ib => ib.id === id);
-                    if (innerIdx > -1) return b.content.blocks.splice(innerIdx, 1)[0];
-                }
-            }
-            return null;
-        }
-
-        let blockData;
-
-        if (isFromSidebar) {
-            blockData = {
-                id: 'blk_' + Date.now(),
-                type: type,
-                content: getDefaultBlockContent(type),
-                styles: { padding: '10px' }
-            };
-        } else {
-            // Moving existing block
-            const draggedBlockId = e.dataTransfer.getData('blockId');
-            blockData = findAndRemoveBlock(draggedBlockId);
-        }
-
-        if (!blockData) return;
-
-        // Determine destination: Strip or Main Canvas
-        if (dropContainer.classList.contains('ms-strip')) {
-            const stripId = dropContainer.closest('.ms-builder-block').dataset.id;
-            const stripBlock = window.editorBlocks.find(b => b.id === stripId);
-            if (stripBlock) {
-                stripBlock.content.blocks = stripBlock.content.blocks || [];
-                stripBlock.content.blocks.splice(dropIndex, 0, blockData);
-            }
-        } else {
-            // Drop on main canvas
-            window.editorBlocks.splice(dropIndex, 0, blockData);
-        }
-
-        renderBuilderCanvas();
-        draggedSource = null;
-    });
+    renderBuilderCanvas();
+    draggedSource = null;
+});
   
     // 7. Back Button
     const backBtn = document.getElementById('ms-back-to-blocks');
