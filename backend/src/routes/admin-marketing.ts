@@ -2098,6 +2098,18 @@ router.delete('/api/marketing/segments/:id', requireAdminOrOrganiser, async (req
   res.json({ ok: true });
 });
 
+router.get('/api/marketing/segments/:id', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
+  const id = String(req.params.id);
+  const segment = await prisma.marketingSegment.findFirst({ where: { id, tenantId } });
+  if (!segment) return res.status(404).json({ ok: false, message: 'Segment not found' });
+  const response = { ok: true, segment };
+  logMarketingApi(req, response);
+  res.json(response);
+});
+
 router.get('/api/marketing/segments/:id/estimate', marketingEstimateLimiter, requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
@@ -2108,6 +2120,20 @@ router.get('/api/marketing/segments/:id/estimate', marketingEstimateLimiter, req
 
   const estimate = await estimateCampaignRecipients(tenantId, segment.rules);
   res.json({ ok: true, estimate });
+});
+
+router.post('/api/marketing/segments/:id/evaluate', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
+  const id = String(req.params.id);
+  const segment = await prisma.marketingSegment.findFirst({ where: { id, tenantId } });
+  if (!segment) return res.status(404).json({ ok: false, message: 'Segment not found' });
+  const estimate = await estimateCampaignRecipients(tenantId, segment.rules);
+  const contacts = await evaluateSegmentContacts(tenantId, segment.rules);
+  const response = { ok: true, estimate, sample: contacts.slice(0, 25) };
+  logMarketingApi(req, response);
+  res.json(response);
 });
 
 router.post('/api/marketing/segments/estimate', marketingEstimateLimiter, requireAdminOrOrganiser, async (req, res) => {
