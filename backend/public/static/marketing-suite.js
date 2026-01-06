@@ -1034,20 +1034,9 @@ async function renderTemplateEditor(templateId) {
 
   activateTabs(document.getElementById('ms-template-tabs'));
 
-  document.querySelectorAll('[data-tag]').forEach((button) => {
-    button.addEventListener('click', () => {
-      const tag = button.getAttribute('data-tag');
-      const textarea = document.getElementById('ms-template-mjml');
-      if (!textarea) return;
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const text = textarea.value;
-      textarea.value = `${text.substring(0, start)}${tag}${text.substring(end)}`;
-      textarea.focus();
-      textarea.selectionStart = textarea.selectionEnd = start + tag.length;
-    });
-  });
-
+// Initialize the Visual Builder logic
+setupVisualBuilder();
+    
   async function saveTemplate() {
     const payload = {
       name: document.getElementById('ms-template-name').value,
@@ -2003,3 +1992,217 @@ window.addEventListener('unhandledrejection', (event) => {
 });
 
 renderRoute();
+
+/* =========================================
+   VISUAL BUILDER LOGIC
+   ========================================= */
+
+// Global state to store the blocks (Text, Image, etc.)
+window.editorBlocks = [];
+
+/**
+ * Initializes listeners for the Visual Builder
+ */
+function setupVisualBuilder() {
+    const canvas = document.getElementById('ms-builder-canvas');
+    if (!canvas) return;
+
+    // 1. Initialize State
+    // In the future, you can parse existing JSON from the database here.
+    // For now, we start with an empty canvas.
+    window.editorBlocks = []; 
+    renderBuilderCanvas();
+
+    // 2. Sidebar Tab Switching (Content vs Styles)
+    const tabBtns = document.querySelectorAll('.ms-tab-btn');
+    tabBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            // Reset active states
+            document.querySelectorAll('.ms-tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.ms-sidebar-panel').forEach(p => p.classList.remove('active'));
+            document.getElementById('ms-block-editor').classList.add('hidden'); // Hide specific block editor
+
+            // Set new active state
+            e.target.classList.add('active');
+            const targetId = `ms-sidebar-${e.target.dataset.sidebarTab}`;
+            document.getElementById(targetId).classList.add('active');
+        });
+    });
+
+    // 3. Drag & Drop: Drag Start (Sidebar Items)
+    document.querySelectorAll('.ms-draggable-block').forEach(item => {
+        item.addEventListener('dragstart', (e) => {
+            // Tell the browser what type of block we are dragging (e.g., 'text', 'image')
+            e.dataTransfer.setData('blockType', item.dataset.type);
+            e.dataTransfer.effectAllowed = 'copy';
+        });
+    });
+
+    // 4. Drag & Drop: Drag Over (Canvas)
+    canvas.addEventListener('dragover', (e) => {
+        e.preventDefault(); // Required to allow dropping
+        canvas.style.backgroundColor = '#f1f5f9'; // Visual cue
+    });
+
+    canvas.addEventListener('dragleave', () => {
+        canvas.style.backgroundColor = '#fff';
+    });
+
+    // 5. Drag & Drop: Drop (Canvas)
+    canvas.addEventListener('drop', (e) => {
+        e.preventDefault();
+        canvas.style.backgroundColor = '#fff';
+        const type = e.dataTransfer.getData('blockType');
+        if (type) {
+            addBlockToCanvas(type);
+        }
+    });
+
+    // 6. Back Button (Return from Block Editor to Block List)
+    const backBtn = document.getElementById('ms-back-to-blocks');
+    if (backBtn) {
+        backBtn.addEventListener('click', () => {
+            document.getElementById('ms-block-editor').classList.add('hidden');
+            document.getElementById('ms-sidebar-blocks').classList.add('active');
+            document.querySelector('[data-sidebar-tab="blocks"]').classList.add('active');
+        });
+    }
+}
+
+/**
+ * Adds a new block to the state and re-renders
+ */
+function addBlockToCanvas(type) {
+    const newBlock = {
+        id: 'blk_' + Date.now(),
+        type: type,
+        content: getDefaultBlockContent(type),
+        styles: { padding: '10px' }
+    };
+    window.editorBlocks.push(newBlock);
+    renderBuilderCanvas();
+    openBlockEditor(newBlock); // Auto-open editor for the new block
+}
+
+/**
+ * Returns default data for new blocks
+ */
+function getDefaultBlockContent(type) {
+    switch (type) {
+        case 'text': return { text: '<h3>Hello World</h3><p>Edit this text in the sidebar.</p>' };
+        case 'image': return { src: 'https://via.placeholder.com/600x300', alt: 'Image' };
+        case 'button': return { label: 'Click Me', url: 'https://', color: '#4f46e5' };
+        case 'divider': return {};
+        case 'social': return { networks: ['facebook', 'instagram'] };
+        case 'product': return { productId: null }; // Placeholder for your product integration
+        case 'event': return { eventId: null };     // Placeholder for your event integration
+        default: return {};
+    }
+}
+
+/**
+ * Renders the `window.editorBlocks` array into the DOM
+ */
+function renderBuilderCanvas() {
+    const canvas = document.getElementById('ms-builder-canvas');
+    canvas.innerHTML = '';
+
+    if (window.editorBlocks.length === 0) {
+        canvas.innerHTML = `<div class="ms-canvas-placeholder">Drag elements here from the sidebar to build your email.</div>`;
+        return;
+    }
+
+    window.editorBlocks.forEach((block) => {
+        const el = document.createElement('div');
+        el.className = 'ms-builder-block';
+        el.dataset.id = block.id;
+
+        // Generate HTML preview for the block
+        let previewHtml = '';
+        if (block.type === 'text') {
+            previewHtml = `<div>${block.content.text}</div>`;
+        } else if (block.type === 'image') {
+            previewHtml = `<img src="${block.content.src}" alt="${block.content.alt}" style="width:100%; height:auto; display:block;">`;
+        } else if (block.type === 'button') {
+            previewHtml = `<div style="text-align:center;"><a class="ms-primary" style="background:${block.content.color}; display:inline-block;">${block.content.label}</a></div>`;
+        } else if (block.type === 'divider') {
+            previewHtml = `<hr style="border:0; border-top:1px solid #e2e8f0; margin:20px 0;">`;
+        } else {
+            previewHtml = `<div class="ms-muted" style="text-align:center; padding:20px; border:1px dashed #ccc;">[${block.type.toUpperCase()} BLOCK]</div>`;
+        }
+
+        el.innerHTML = `
+            ${previewHtml}
+            <div class="block-actions">
+                <span onclick="window.deleteBlock('${block.id}')" style="cursor:pointer;">🗑️ Delete</span>
+            </div>
+        `;
+
+        // Click to edit
+        el.addEventListener('click', (e) => {
+            if (e.target.closest('.block-actions')) return; 
+            openBlockEditor(block);
+        });
+
+        canvas.appendChild(el);
+    });
+}
+
+/**
+ * Deletes a block by ID
+ */
+window.deleteBlock = function(id) {
+    if(!confirm('Delete this block?')) return;
+    window.editorBlocks = window.editorBlocks.filter(b => b.id !== id);
+    renderBuilderCanvas();
+    // Hide editor
+    document.getElementById('ms-block-editor').classList.add('hidden');
+    document.getElementById('ms-sidebar-blocks').classList.add('active');
+}
+
+/**
+ * Opens the specific settings for a block in the sidebar
+ */
+function openBlockEditor(block) {
+    // 1. Switch sidebar view
+    document.querySelectorAll('.ms-sidebar-panel').forEach(p => p.classList.remove('active'));
+    const editorPanel = document.getElementById('ms-block-editor');
+    editorPanel.classList.remove('hidden');
+    editorPanel.classList.add('active');
+
+    const container = document.getElementById('ms-active-block-settings');
+    container.innerHTML = '';
+
+    // 2. Render input fields based on block type
+    if (block.type === 'text') {
+        container.innerHTML = `
+            <div class="ms-field">
+                <label>Content (HTML allowed)</label>
+                <textarea id="edit-text-val" rows="10">${block.content.text}</textarea>
+            </div>
+        `;
+        container.querySelector('#edit-text-val').addEventListener('input', (e) => {
+            block.content.text = e.target.value;
+            renderBuilderCanvas();
+        });
+    } 
+    else if (block.type === 'button') {
+        container.innerHTML = `
+            <div class="ms-field"><label>Button Label</label><input id="edit-btn-label" value="${block.content.label}"></div>
+            <div class="ms-field"><label>Link URL</label><input id="edit-btn-url" value="${block.content.url}"></div>
+            <div class="ms-field"><label>Color</label><input type="color" id="edit-btn-color" value="${block.content.color}"></div>
+        `;
+        container.querySelector('#edit-btn-label').addEventListener('input', (e) => { block.content.label = e.target.value; renderBuilderCanvas(); });
+        container.querySelector('#edit-btn-color').addEventListener('input', (e) => { block.content.color = e.target.value; renderBuilderCanvas(); });
+    }
+    else if (block.type === 'image') {
+        container.innerHTML = `
+            <div class="ms-field"><label>Image URL</label><input id="edit-img-src" value="${block.content.src}"></div>
+            <div class="ms-field"><label>Alt Text</label><input id="edit-img-alt" value="${block.content.alt}"></div>
+        `;
+        container.querySelector('#edit-img-src').addEventListener('input', (e) => { block.content.src = e.target.value; renderBuilderCanvas(); });
+    }
+    else {
+        container.innerHTML = `<div class="ms-muted">No settings available for this block type yet.</div>`;
+    }
+}
