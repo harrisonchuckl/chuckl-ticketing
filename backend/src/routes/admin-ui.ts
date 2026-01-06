@@ -19849,10 +19849,56 @@ function renderInterests(customer){
     loadSettings().catch(function(err){ sections.settings.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load settings') + '</div>'; });
   }
   function emailPage(){
-    marketingPage({
-      title: 'Email Campaigns',
-      subtitle: 'Mailer-style journeys with contacts, segments, templates, and campaign sends.'
-    });
+    var params = new URL(window.location.href).searchParams;
+    if (params.get('legacy') === '1') {
+      return marketingPage({
+        title: 'Email Campaigns',
+        subtitle: 'Mailer-style journeys with contacts, segments, templates, and campaign sends.'
+      });
+    }
+
+    main.innerHTML = ''
+      + '<div class="card">'
+      +   '<div class="title">Email Campaigns</div>'
+      +   '<div class="muted" style="margin-top:6px;">Launch the new Marketing Suite in a separate tab, or return to the legacy campaigns UI.</div>'
+      +   '<div class="row" style="gap:12px;margin-top:16px;flex-wrap:wrap;">'
+      +     '<button class="btn p" id="mk_open_suite">Open Marketing Suite</button>'
+      +     '<a class="btn secondary" href="/admin/ui/email?legacy=1" data-view="/admin/ui/email?legacy=1">Open legacy Email Campaigns</a>'
+      +   '</div>'
+      +   '<div id="mk_status" class="card" style="margin-top:18px;"></div>'
+      + '</div>';
+
+    var statusEl = main.querySelector('#mk_status');
+    var openBtn = main.querySelector('#mk_open_suite');
+    if (openBtn) {
+      openBtn.addEventListener('click', function(){
+        window.open('/admin/marketing', '_blank', 'noopener,noreferrer');
+      });
+    }
+
+    if (statusEl) {
+      statusEl.innerHTML = '<div class="muted">Loading marketing status...</div>';
+      fetch('/admin/marketing/status', { credentials: 'include' })
+        .then(function(res){ return res.json(); })
+        .then(function(data){
+          var senderOk = data && data.senderConfigured;
+          var verified = data && data.verifiedStatus || 'UNVERIFIED';
+          statusEl.innerHTML = ''
+            + '<div class="row" style="gap:12px;align-items:flex-start;">'
+            +   '<div>'
+            +     '<div style="font-weight:600;">Sender configured</div>'
+            +     '<div class="muted">' + (senderOk ? 'Yes' : 'Not yet') + '</div>'
+            +   '</div>'
+            +   '<div>'
+            +     '<div style="font-weight:600;">Domain verification</div>'
+            +     '<div class="muted">' + escapeHtml(String(verified)) + '</div>'
+            +   '</div>'
+            + '</div>';
+        })
+        .catch(function(){
+          statusEl.innerHTML = '<div class="error">Unable to load marketing status.</div>';
+        });
+    }
   }
 
   function makeEmailBlockId(){

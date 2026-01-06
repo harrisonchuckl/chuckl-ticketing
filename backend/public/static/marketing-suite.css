@@ -1,0 +1,279 @@
+:root {
+  --ms-bg: #f8fafc;
+  --ms-sidebar: #0f172a;
+  --ms-sidebar-text: #e2e8f0;
+  --ms-primary: #4f46e5;
+  --ms-border: #e2e8f0;
+  --ms-text: #0f172a;
+  --ms-muted: #64748b;
+}
+
+* {
+  box-sizing: border-box;
+  font-family: 'Inter', system-ui, -apple-system, Segoe UI, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: var(--ms-bg);
+  color: var(--ms-text);
+}
+
+.ms-shell {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  min-height: 100vh;
+}
+
+.ms-sidebar {
+  background: var(--ms-sidebar);
+  color: var(--ms-sidebar-text);
+  padding: 24px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ms-brand {
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.ms-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.ms-nav a {
+  color: var(--ms-sidebar-text);
+  text-decoration: none;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ms-nav a.active,
+.ms-nav a:hover {
+  background: rgba(148, 163, 184, 0.18);
+}
+
+.ms-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.ms-topbar {
+  padding: 18px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--ms-border);
+  background: #fff;
+  gap: 12px;
+}
+
+.ms-search {
+  flex: 1;
+  max-width: 420px;
+}
+
+.ms-search input {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--ms-border);
+  font-size: 14px;
+}
+
+.ms-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ms-status {
+  background: #f1f5f9;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--ms-muted);
+}
+
+.ms-main {
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.ms-card {
+  background: #fff;
+  padding: 20px;
+  border-radius: 16px;
+  border: 1px solid var(--ms-border);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+}
+
+.ms-card h2 {
+  margin: 0 0 6px 0;
+}
+
+.ms-muted {
+  color: var(--ms-muted);
+  font-size: 13px;
+}
+
+.ms-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.ms-table th,
+.ms-table td {
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--ms-border);
+  text-align: left;
+}
+
+.ms-table th {
+  color: var(--ms-muted);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ms-pill {
+  display: inline-flex;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.ms-primary {
+  background: var(--ms-primary);
+  color: #fff;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ms-secondary {
+  background: #fff;
+  color: var(--ms-text);
+  border: 1px solid var(--ms-border);
+  padding: 10px 14px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.ms-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.ms-grid.cols-3 {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.ms-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ms-empty {
+  padding: 24px;
+  border: 1px dashed var(--ms-border);
+  border-radius: 14px;
+  text-align: center;
+  color: var(--ms-muted);
+}
+
+.ms-editor-shell {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: calc(100vh - 120px);
+  gap: 16px;
+}
+
+.ms-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+#ms-editor {
+  height: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid var(--ms-border);
+}
+
+.ms-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 320px;
+  height: 100vh;
+  background: #fff;
+  border-left: 1px solid var(--ms-border);
+  padding: 20px;
+  overflow-y: auto;
+  box-shadow: -10px 0 20px rgba(15, 23, 42, 0.08);
+}
+
+.ms-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.ms-modal .ms-card {
+  max-width: 540px;
+  width: 100%;
+}
+
+.ms-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.ms-field input,
+.ms-field select,
+.ms-field textarea {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--ms-border);
+  font-size: 14px;
+}
+
+.ms-banner {
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--ms-border);
+  background: #f8fafc;
+  color: var(--ms-muted);
+}
+
+.react-flow__renderer {
+  background: #f8fafc;
+}

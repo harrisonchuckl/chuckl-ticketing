@@ -3,6 +3,7 @@ import { getEmailProvider } from '../../lib/email-marketing/index.js';
 import { createUnsubscribeToken } from '../../lib/email-marketing/unsubscribe.js';
 import { createPreferencesToken } from '../../lib/email-marketing/preferences.js';
 import { renderMarketingTemplate } from '../../lib/email-marketing/rendering.js';
+import { buildDefaultMergeContext } from '../../lib/email-marketing/merge-tags.js';
 import {
   fetchMarketingSettings,
   applyMarketingStreamToEmail,
@@ -25,6 +26,7 @@ import {
 import { evaluateSegmentContacts } from './segments.js';
 import { buildRecommendedShowsHtml } from './recommendations.js';
 import { recordConsentAudit, recordSuppressionAudit } from './audit.js';
+import { renderCompiledTemplate } from './template-compiler.js';
 
 const PUBLIC_BASE_URL =
   process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
@@ -358,15 +360,41 @@ export async function processCampaignSend(campaignId: string) {
       const preferencesUrl = await buildPreferencesUrl(campaign.tenantId, recipient.email);
       const recommendedShows = await buildRecommendedShowsHtml(campaign.tenantId, recipient.email);
 
-      const { html, errors } = renderMarketingTemplate(campaign.template.mjmlBody, {
-        firstName: contact?.firstName || '',
-        lastName: contact?.lastName || '',
-        email: recipient.email,
-        tenantName: tenantNameFrom(tenant),
-        unsubscribeUrl,
-        preferencesUrl,
-        recommendedShows: recommendedShows || '',
+      const mergeContext = buildDefaultMergeContext({
+        contact: {
+          firstName: contact?.firstName || '',
+          lastName: contact?.lastName || '',
+          email: recipient.email,
+        },
+        links: {
+          managePreferencesLink: preferencesUrl,
+          unsubscribeLink: unsubscribeUrl,
+        },
       });
+
+      let html = '';
+      let errors: string[] = [];
+      if (campaign.template.compiledHtml) {
+        html = renderCompiledTemplate({
+          compiledHtml: campaign.template.compiledHtml,
+          mergeContext,
+          unsubscribeUrl,
+          preferencesUrl,
+          recommendedShows: recommendedShows || null,
+        });
+      } else {
+        const rendered = renderMarketingTemplate(campaign.template.mjmlBody, {
+          firstName: contact?.firstName || '',
+          lastName: contact?.lastName || '',
+          email: recipient.email,
+          tenantName: tenantNameFrom(tenant),
+          unsubscribeUrl,
+          preferencesUrl,
+          recommendedShows: recommendedShows || '',
+        });
+        html = rendered.html;
+        errors = rendered.errors;
+      }
 
       if (errors.length) {
         await prisma.marketingCampaignRecipient.update({
@@ -381,6 +409,18 @@ export async function processCampaignSend(campaignId: string) {
       }
 
       try {
+        await prisma.marketingSendSnapshot.create({
+          data: {
+            tenantId: campaign.tenantId,
+            campaignId: campaign.id,
+            templateId: campaign.template.id,
+            recipientEmail: recipient.email,
+            renderedHtml: html,
+            renderedText: null,
+            mergeContext,
+          },
+        });
+
         const listUnsubscribeMail = buildListUnsubscribeMail(sender.fromEmail) || undefined;
         const headers: Record<string, string> = {
           'List-Unsubscribe': [listUnsubscribeMail, `<${unsubscribeUrl}>`].filter(Boolean).join(', '),

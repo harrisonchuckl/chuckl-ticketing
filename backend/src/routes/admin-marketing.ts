@@ -11,6 +11,7 @@ import { getEmailProvider } from '../lib/email-marketing/index.js';
 import { createUnsubscribeToken } from '../lib/email-marketing/unsubscribe.js';
 import { createPreferencesToken } from '../lib/email-marketing/preferences.js';
 import { encryptToken } from '../lib/token-crypto.js';
+import { buildDefaultMergeContext } from '../lib/email-marketing/merge-tags.js';
 import {
   MarketingAutomationStepType,
   MarketingAutomationTriggerType,
@@ -64,6 +65,8 @@ import { ensureDefaultPreferenceTopics } from '../services/marketing/preferences
 import { recordConsentAudit, recordSuppressionAudit } from '../services/marketing/audit.js';
 import { renderEmailDocument } from '../lib/email-builder/rendering.js';
 import { buildPreviewPersonalisationContext } from '../services/marketing/personalisation.js';
+import { compileEditorHtml, renderCompiledTemplate } from '../services/marketing/template-compiler.js';
+import { buildStepsFromFlow, validateFlow } from '../services/marketing/flow.js';
 const router = Router();
 const bcrypt: any = (bcryptNS as any).default ?? bcryptNS;
 
@@ -213,6 +216,27 @@ function resolveShowUrl(show: {
 }) {
   if (show.usesExternalTicketing && show.externalTicketUrl) return show.externalTicketUrl;
   return `${PUBLIC_BASE_URL.replace(/\/+$/, '')}/public/event/${encodeURIComponent(show.id)}`;
+}
+
+function buildTemplateMergeContext(options: {
+  contact?: { firstName?: string | null; lastName?: string | null; email?: string | null; town?: string | null; county?: string | null; tags?: string[] | null };
+  show?: { title?: string | null; venue?: string | null; date?: Date | string | null; time?: string | null; priceFrom?: number | string | null; image?: string | null };
+  links?: { ticketLink?: string | null; managePreferencesLink?: string | null; unsubscribeLink?: string | null };
+}) {
+  const showDate =
+    options.show?.date ? (typeof options.show.date === 'string' ? options.show.date : formatShowDate(options.show.date)) : null;
+  return buildDefaultMergeContext({
+    contact: options.contact,
+    show: {
+      title: options.show?.title || null,
+      venue: options.show?.venue || null,
+      date: showDate,
+      time: options.show?.time || null,
+      priceFrom: options.show?.priceFrom || null,
+      image: options.show?.image || null,
+    },
+    links: options.links,
+  });
 }
 
 async function logMarketingAudit(
@@ -927,6 +951,18 @@ router.get('/marketing/settings', requireAdminOrOrganiser, async (req, res) => {
   res.json({ ok: true, settings });
 });
 
+router.get('/marketing/status', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = resolveTenantId(req);
+  const settings = await prisma.marketingSettings.findUnique({ where: { tenantId } });
+  const senderConfigured = Boolean(settings?.defaultFromEmail && settings?.defaultFromName);
+  res.json({
+    ok: true,
+    senderConfigured,
+    verifiedStatus: settings?.verifiedStatus || MarketingVerifiedStatus.UNVERIFIED,
+    sendingMode: settings?.sendingMode || MarketingSenderMode.SENDGRID,
+  });
+});
+
 router.post('/marketing/settings', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = resolveTenantId(req);
   const payload = req.body || {};
@@ -939,6 +975,12 @@ router.post('/marketing/settings', requireAdminOrOrganiser, async (req, res) => 
   const defaultFromName = hasOwn(payload, 'defaultFromName') ? String(payload.defaultFromName || '').trim() : undefined;
   const defaultFromEmail = hasOwn(payload, 'defaultFromEmail') ? String(payload.defaultFromEmail || '').trim() : undefined;
   const defaultReplyTo = hasOwn(payload, 'defaultReplyTo') ? String(payload.defaultReplyTo || '').trim() : undefined;
+  const brandLogoUrl = hasOwn(payload, 'brandLogoUrl') ? String(payload.brandLogoUrl || '').trim() : undefined;
+  const brandDefaultFont = hasOwn(payload, 'brandDefaultFont') ? String(payload.brandDefaultFont || '').trim() : undefined;
+  const brandPrimaryColor = hasOwn(payload, 'brandPrimaryColor') ? String(payload.brandPrimaryColor || '').trim() : undefined;
+  const brandButtonRadius = hasOwn(payload, 'brandButtonRadius')
+    ? Number(payload.brandButtonRadius || 0)
+    : undefined;
   const requireVerifiedFrom = hasOwn(payload, 'requireVerifiedFrom') ? Boolean(payload.requireVerifiedFrom) : undefined;
   const dailyLimitOverride = hasOwn(payload, 'dailyLimitOverride') ? Number(payload.dailyLimitOverride) : undefined;
   const sendRatePerSecOverride = hasOwn(payload, 'sendRatePerSecOverride') ? Number(payload.sendRatePerSecOverride) : undefined;
@@ -956,6 +998,10 @@ router.post('/marketing/settings', requireAdminOrOrganiser, async (req, res) => 
       requireVerifiedFrom: requireVerifiedFrom ?? REQUIRE_VERIFIED_FROM_DEFAULT,
       sendingMode: MarketingSenderMode.SENDGRID,
       verifiedStatus: MarketingVerifiedStatus.UNVERIFIED,
+      brandLogoUrl: brandLogoUrl ? brandLogoUrl : null,
+      brandDefaultFont: brandDefaultFont ? brandDefaultFont : null,
+      brandPrimaryColor: brandPrimaryColor ? brandPrimaryColor : null,
+      brandButtonRadius: Number.isFinite(brandButtonRadius) ? brandButtonRadius : null,
       dailyLimitOverride: Number.isFinite(dailyLimitOverride) ? dailyLimitOverride : null,
       sendRatePerSecOverride: Number.isFinite(sendRatePerSecOverride) ? sendRatePerSecOverride : null,
     },
@@ -963,6 +1009,11 @@ router.post('/marketing/settings', requireAdminOrOrganiser, async (req, res) => 
       defaultFromName: defaultFromName !== undefined ? (defaultFromName ? defaultFromName : null) : undefined,
       defaultFromEmail: defaultFromEmail !== undefined ? (defaultFromEmail ? defaultFromEmail : null) : undefined,
       defaultReplyTo: defaultReplyTo !== undefined ? (defaultReplyTo ? defaultReplyTo : null) : undefined,
+      brandLogoUrl: brandLogoUrl !== undefined ? (brandLogoUrl ? brandLogoUrl : null) : undefined,
+      brandDefaultFont: brandDefaultFont !== undefined ? (brandDefaultFont ? brandDefaultFont : null) : undefined,
+      brandPrimaryColor: brandPrimaryColor !== undefined ? (brandPrimaryColor ? brandPrimaryColor : null) : undefined,
+      brandButtonRadius:
+        brandButtonRadius !== undefined ? (Number.isFinite(brandButtonRadius) ? brandButtonRadius : null) : undefined,
       requireVerifiedFrom: requireVerifiedFrom ?? undefined,
       verifiedStatus: resetVerifiedStatus ? MarketingVerifiedStatus.UNVERIFIED : undefined,
       dailyLimitOverride:
@@ -976,6 +1027,68 @@ router.post('/marketing/settings', requireAdminOrOrganiser, async (req, res) => 
 
   console.info('[marketing:settings:upsert]', settings);
   res.json({ ok: true, settings });
+});
+
+router.get('/marketing/brand-settings', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = resolveTenantId(req);
+  const settings = await prisma.marketingSettings.upsert({
+    where: { tenantId },
+    create: {
+      tenantId,
+      requireVerifiedFrom: REQUIRE_VERIFIED_FROM_DEFAULT,
+      sendingMode: MarketingSenderMode.SENDGRID,
+      verifiedStatus: MarketingVerifiedStatus.UNVERIFIED,
+    },
+    update: {},
+  });
+  res.json({
+    ok: true,
+    brand: {
+      logoUrl: settings.brandLogoUrl || null,
+      defaultFont: settings.brandDefaultFont || null,
+      primaryColor: settings.brandPrimaryColor || null,
+      buttonRadius: settings.brandButtonRadius || null,
+    },
+  });
+});
+
+router.post('/marketing/brand-settings', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = resolveTenantId(req);
+  const payload = req.body || {};
+  const logoUrl = String(payload.logoUrl || '').trim();
+  const defaultFont = String(payload.defaultFont || '').trim();
+  const primaryColor = String(payload.primaryColor || '').trim();
+  const buttonRadius = Number(payload.buttonRadius || 0);
+
+  const settings = await prisma.marketingSettings.upsert({
+    where: { tenantId },
+    create: {
+      tenantId,
+      requireVerifiedFrom: REQUIRE_VERIFIED_FROM_DEFAULT,
+      sendingMode: MarketingSenderMode.SENDGRID,
+      verifiedStatus: MarketingVerifiedStatus.UNVERIFIED,
+      brandLogoUrl: logoUrl || null,
+      brandDefaultFont: defaultFont || null,
+      brandPrimaryColor: primaryColor || null,
+      brandButtonRadius: Number.isFinite(buttonRadius) ? buttonRadius : null,
+    },
+    update: {
+      brandLogoUrl: logoUrl || null,
+      brandDefaultFont: defaultFont || null,
+      brandPrimaryColor: primaryColor || null,
+      brandButtonRadius: Number.isFinite(buttonRadius) ? buttonRadius : null,
+    },
+  });
+
+  res.json({
+    ok: true,
+    brand: {
+      logoUrl: settings.brandLogoUrl || null,
+      defaultFont: settings.brandDefaultFont || null,
+      primaryColor: settings.brandPrimaryColor || null,
+      buttonRadius: settings.brandButtonRadius || null,
+    },
+  });
 });
 
 router.get('/marketing/sender-identity', requireAdminOrOrganiser, async (req, res) => {
@@ -2294,9 +2407,20 @@ router.get('/marketing/automations', requireAdminOrOrganiser, async (req, res) =
   res.json({ ok: true, items });
 });
 
+router.get('/marketing/automations/:id', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const id = String(req.params.id);
+  const automation = await prisma.marketingAutomation.findFirst({
+    where: { id, tenantId },
+    include: { steps: { include: { template: true }, orderBy: { stepOrder: 'asc' } } },
+  });
+  if (!automation) return res.status(404).json({ ok: false, message: 'Automation not found' });
+  res.json({ ok: true, automation });
+});
+
 router.post('/marketing/automations', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
-  const { name, triggerType, triggerConfig, isEnabled } = req.body || {};
+  const { name, triggerType, triggerConfig, isEnabled, flowJson } = req.body || {};
   if (!name || !triggerType) return res.status(400).json({ ok: false, message: 'Name + trigger required' });
 
   const automation = await prisma.marketingAutomation.create({
@@ -2306,6 +2430,7 @@ router.post('/marketing/automations', requireAdminOrOrganiser, async (req, res) 
       triggerType: triggerType as MarketingAutomationTriggerType,
       triggerConfig: triggerConfig || undefined,
       isEnabled: isEnabled !== undefined ? Boolean(isEnabled) : true,
+      flowJson: flowJson || null,
     },
   });
 
@@ -2317,7 +2442,7 @@ router.post('/marketing/automations', requireAdminOrOrganiser, async (req, res) 
 router.put('/marketing/automations/:id', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const id = String(req.params.id);
-  const { name, triggerType, triggerConfig, isEnabled } = req.body || {};
+  const { name, triggerType, triggerConfig, isEnabled, flowJson } = req.body || {};
 
   const existing = await prisma.marketingAutomation.findFirst({ where: { id, tenantId } });
   if (!existing) return res.status(404).json({ ok: false, message: 'Automation not found' });
@@ -2329,12 +2454,82 @@ router.put('/marketing/automations/:id', requireAdminOrOrganiser, async (req, re
       triggerType: triggerType || undefined,
       triggerConfig: triggerConfig || undefined,
       isEnabled: isEnabled !== undefined ? Boolean(isEnabled) : undefined,
+      flowJson: flowJson !== undefined ? flowJson : undefined,
     },
   });
 
   await recordAutomationAudit(tenantId, 'automation.updated', automation.id, { triggerType, isEnabled });
 
   res.json({ ok: true, automation });
+});
+
+router.put('/marketing/automations/:id/flow', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const id = String(req.params.id);
+  const { flowJson } = req.body || {};
+  const existing = await prisma.marketingAutomation.findFirst({ where: { id, tenantId } });
+  if (!existing) return res.status(404).json({ ok: false, message: 'Automation not found' });
+
+  const updated = await prisma.marketingAutomation.update({
+    where: { id },
+    data: { flowJson: flowJson || null, version: { increment: 1 } },
+  });
+  await recordAutomationAudit(tenantId, 'automation.flow.updated', updated.id, {});
+  console.info('[marketing:automation:flow]', { automationId: id, tenantId });
+  res.json({ ok: true, automation: updated });
+});
+
+router.post('/marketing/automations/:id/validate', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const id = String(req.params.id);
+  const automation = await prisma.marketingAutomation.findFirst({ where: { id, tenantId } });
+  if (!automation) return res.status(404).json({ ok: false, message: 'Automation not found' });
+
+  const nodes = req.body?.nodes || automation.flowJson?.nodes || [];
+  const edges = req.body?.edges || automation.flowJson?.edges || [];
+  const errors = validateFlow(nodes, edges);
+  res.json({ ok: errors.length === 0, errors });
+});
+
+router.post('/marketing/automations/:id/flow/steps', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const id = String(req.params.id);
+  const automation = await prisma.marketingAutomation.findFirst({ where: { id, tenantId } });
+  if (!automation) return res.status(404).json({ ok: false, message: 'Automation not found' });
+
+  const nodes = req.body?.nodes || automation.flowJson?.nodes || [];
+  const edges = req.body?.edges || automation.flowJson?.edges || [];
+  const errors = validateFlow(nodes, edges);
+  if (errors.length) return res.status(400).json({ ok: false, errors });
+
+  const steps = buildStepsFromFlow(nodes, edges);
+  await prisma.marketingAutomationStep.deleteMany({ where: { automationId: id, tenantId } });
+  const created = await prisma.marketingAutomationStep.createMany({
+    data: steps.map((step) => ({ ...step, tenantId, automationId: id })),
+  });
+  await recordAutomationAudit(tenantId, 'automation.steps.generated', id, { count: created.count });
+  res.json({ ok: true, count: created.count });
+});
+
+router.post('/marketing/automations/:id/simulate', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const id = String(req.params.id);
+  const automation = await prisma.marketingAutomation.findFirst({ where: { id, tenantId } });
+  if (!automation) return res.status(404).json({ ok: false, message: 'Automation not found' });
+
+  const contacts = await prisma.marketingContact.findMany({
+    where: { tenantId },
+    select: { id: true, email: true, firstName: true, lastName: true },
+    take: 25,
+  });
+  const count = await prisma.marketingContact.count({ where: { tenantId } });
+
+  res.json({
+    ok: true,
+    total: count,
+    sample: contacts,
+    note: 'Simulation uses current marketing contacts as an estimate.',
+  });
 });
 
 router.delete('/marketing/automations/:id', requireAdminOrOrganiser, async (req, res) => {
@@ -2831,10 +3026,13 @@ router.post('/marketing/templates', requireAdminOrOrganiser, async (req, res) =>
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
   if (!role) return;
-  const { name, subject, fromName, fromEmail, replyTo, mjmlBody, previewText } = req.body || {};
-  if (!name || !subject || !mjmlBody) {
+  const { name, subject, fromName, fromEmail, replyTo, mjmlBody, previewText, editorType, editorStateJson, compiledHtml, compiledText } =
+    req.body || {};
+  if (!name || !subject) {
     return res.status(400).json({ ok: false, message: 'Missing template fields' });
   }
+
+  const safeMjml = mjmlBody ? injectPreviewText(mjmlBody, previewText) : '<mjml><mj-body></mj-body></mjml>';
 
   const template = await prisma.marketingTemplate.create({
     data: {
@@ -2845,11 +3043,25 @@ router.post('/marketing/templates', requireAdminOrOrganiser, async (req, res) =>
       fromName: String(fromName || '').trim(),
       fromEmail: String(fromEmail || '').trim(),
       replyTo: replyTo ? String(replyTo).trim() : null,
-      mjmlBody: injectPreviewText(mjmlBody, previewText),
+      mjmlBody: safeMjml,
+      editorType: editorType ? String(editorType) : 'GRAPESJS',
+      editorStateJson: editorStateJson || null,
+      compiledHtml: compiledHtml || null,
+      compiledText: compiledText || null,
     },
   });
   await createTemplateVersion(template, req.user?.id);
   await logMarketingAudit(tenantId, 'template.created', 'MarketingTemplate', template.id, { name }, actorFrom(req));
+  res.json({ ok: true, template });
+});
+
+router.get('/marketing/templates/:id', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
+  const id = String(req.params.id);
+  const template = await prisma.marketingTemplate.findFirst({ where: { id, tenantId } });
+  if (!template) return res.status(404).json({ ok: false, message: 'Template not found' });
   res.json({ ok: true, template });
 });
 
@@ -2858,7 +3070,8 @@ router.put('/marketing/templates/:id', requireAdminOrOrganiser, async (req, res)
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
   if (!role) return;
   const id = String(req.params.id);
-  const { name, subject, fromName, fromEmail, replyTo, mjmlBody, previewText } = req.body || {};
+  const { name, subject, fromName, fromEmail, replyTo, mjmlBody, previewText, editorType, editorStateJson, compiledHtml, compiledText } =
+    req.body || {};
 
   const existing = await prisma.marketingTemplate.findFirst({ where: { id, tenantId } });
   if (!existing) return res.status(404).json({ ok: false, message: 'Template not found' });
@@ -2871,6 +3084,10 @@ router.put('/marketing/templates/:id', requireAdminOrOrganiser, async (req, res)
     fromEmail: fromEmail !== undefined ? String(fromEmail || '').trim() : existing.fromEmail,
     replyTo: replyTo !== undefined ? (replyTo ? String(replyTo).trim() : null) : existing.replyTo,
     mjmlBody: mjmlBody ? injectPreviewText(mjmlBody, previewText) : existing.mjmlBody,
+    editorType: editorType !== undefined ? String(editorType) : existing.editorType,
+    editorStateJson: editorStateJson !== undefined ? editorStateJson : existing.editorStateJson,
+    compiledHtml: compiledHtml !== undefined ? compiledHtml : existing.compiledHtml,
+    compiledText: compiledText !== undefined ? compiledText : existing.compiledText,
   };
 
   if (existing.isLocked) {
@@ -2943,9 +3160,48 @@ router.post('/marketing/templates/:id/preview', requireAdminOrOrganiser, async (
   const show = await fetchTemplateShow(tenantId, req.body?.showId || req.body?.sample?.showId);
   const showUrl = show ? resolveShowUrl(show) : '';
 
-  const { html, errors } = renderMarketingTemplate(template.mjmlBody, {
+  const sampleContact = {
     firstName: req.body?.sample?.firstName || 'Sample',
     lastName: req.body?.sample?.lastName || 'User',
+    email,
+    town: show?.venue?.city || '',
+    county: show?.venue?.county || '',
+  };
+
+  if (template.compiledHtml) {
+    const mergeContext = buildTemplateMergeContext({
+      contact: sampleContact,
+      show: {
+        title: show?.title || '',
+        venue: show?.venue?.name || '',
+        date: show?.date || null,
+      },
+      links: {
+        ticketLink: showUrl || '',
+        managePreferencesLink: preferencesUrl,
+        unsubscribeLink: unsubscribeUrl,
+      },
+    });
+    const compiledHtml = renderCompiledTemplate({
+      compiledHtml: template.compiledHtml,
+      mergeContext,
+      unsubscribeUrl,
+      preferencesUrl,
+      showContext: {
+        showTitle: show?.title || '',
+        showDate: formatShowDate(show?.date),
+        showVenue: show?.venue?.name || '',
+        showTown: show?.venue?.city || '',
+        showCounty: show?.venue?.county || '',
+        showUrl,
+      },
+    });
+    return res.json({ ok: true, html: compiledHtml, errors: [] });
+  }
+
+  const { html, errors } = renderMarketingTemplate(template.mjmlBody, {
+    firstName: sampleContact.firstName,
+    lastName: sampleContact.lastName,
     email,
     tenantName: tenantNameFrom(tenant),
     unsubscribeUrl,
@@ -2959,6 +3215,108 @@ router.post('/marketing/templates/:id/preview', requireAdminOrOrganiser, async (
   });
 
   res.json({ ok: true, html, errors });
+});
+
+router.post('/marketing/templates/:id/compile', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
+  if (!role) return;
+  const id = String(req.params.id);
+  const template = await prisma.marketingTemplate.findFirst({ where: { id, tenantId } });
+  if (!template) return res.status(404).json({ ok: false, message: 'Template not found' });
+
+  const editorStateJson = req.body?.editorStateJson ?? template.editorStateJson;
+  const compiled = compileEditorHtml(editorStateJson || null);
+
+  const updated = await prisma.marketingTemplate.update({
+    where: { id },
+    data: {
+      editorStateJson: editorStateJson || null,
+      compiledHtml: compiled.compiledHtml,
+      lastCompiledAt: new Date(),
+      version: { increment: 1 },
+    },
+  });
+
+  console.info('[marketing:template:compile]', { templateId: id, tenantId, htmlBytes: compiled.compiledHtml.length });
+  res.json({ ok: true, compiledHtml: compiled.compiledHtml, template: updated });
+});
+
+router.post('/marketing/templates/:id/test-send', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
+  if (!role) return;
+  const id = String(req.params.id);
+  const recipientEmail = String(req.body?.email || '').trim();
+  if (!recipientEmail) {
+    return res.status(400).json({ ok: false, message: 'Recipient email required.' });
+  }
+  const template = await prisma.marketingTemplate.findFirst({ where: { id, tenantId } });
+  if (!template) return res.status(404).json({ ok: false, message: 'Template not found' });
+
+  const settings = await fetchMarketingSettings(tenantId);
+  const sender = resolveSenderDetails(settings);
+  const provider = getEmailProvider(settings);
+
+  const unsubscribeUrl = `${PUBLIC_BASE_URL.replace(/\/+$/, '')}/u/${encodeURIComponent(tenantId)}/${encodeURIComponent(
+    createUnsubscribeToken({ tenantId, email: recipientEmail })
+  )}`;
+  const preferencesUrl = `${PUBLIC_BASE_URL.replace(/\/+$/, '')}/preferences/${encodeURIComponent(
+    tenantId
+  )}/${encodeURIComponent(createPreferencesToken({ tenantId, email: recipientEmail }))}`;
+
+  const mergeContext = buildTemplateMergeContext({
+    contact: { firstName: 'Test', lastName: 'Recipient', email: recipientEmail },
+    links: {
+      managePreferencesLink: preferencesUrl,
+      unsubscribeLink: unsubscribeUrl,
+    },
+  });
+
+  let html = '';
+  let errors: string[] = [];
+  if (template.compiledHtml) {
+    html = renderCompiledTemplate({
+      compiledHtml: template.compiledHtml,
+      mergeContext,
+      unsubscribeUrl,
+      preferencesUrl,
+    });
+  } else {
+    const rendered = renderMarketingTemplate(template.mjmlBody, {
+      firstName: 'Test',
+      lastName: 'Recipient',
+      email: recipientEmail,
+      tenantName: 'TixAll',
+      unsubscribeUrl,
+      preferencesUrl,
+    });
+    html = rendered.html;
+    errors = rendered.errors;
+  }
+
+  if (errors.length) {
+    return res.status(400).json({ ok: false, message: errors.join('; ') });
+  }
+
+  const result = await provider.sendEmail({
+    to: recipientEmail,
+    subject: `[Test] ${template.subject}`,
+    html,
+    fromName: sender.fromName,
+    fromEmail: applyMarketingStreamToEmail(sender.fromEmail, settings),
+    replyTo: sender.replyTo,
+  });
+
+  console.info('[marketing:template:test-send]', {
+    templateId: template.id,
+    tenantId,
+    providerId: result.id,
+    providerStatus: result.status,
+    providerResponse: result.response || null,
+  });
+
+  res.json({ ok: true, result });
 });
 
 router.post('/marketing/templates/:id/lock', requireAdminOrOrganiser, async (req, res) => {
@@ -3083,6 +3441,10 @@ router.post('/marketing/templates/changes/:id/approve', requireAdminOrOrganiser,
       fromEmail: payload.fromEmail ?? template.fromEmail,
       replyTo: payload.replyTo ?? template.replyTo,
       mjmlBody: payload.mjmlBody ?? template.mjmlBody,
+      editorType: payload.editorType ?? template.editorType,
+      editorStateJson: payload.editorStateJson ?? template.editorStateJson,
+      compiledHtml: payload.compiledHtml ?? template.compiledHtml,
+      compiledText: payload.compiledText ?? template.compiledText,
     },
   });
 
@@ -3398,6 +3760,28 @@ router.post('/marketing/campaigns/:id/preview', requireAdminOrOrganiser, async (
     campaign.tenant.storefrontSlug || campaign.tenantId
   )}/${encodeURIComponent(preferencesToken)}`;
 
+  const mergeContext = buildTemplateMergeContext({
+    contact: {
+      firstName: sampleContact?.firstName || 'Sample',
+      lastName: sampleContact?.lastName || 'User',
+      email,
+    },
+    links: {
+      managePreferencesLink: preferencesUrl,
+      unsubscribeLink: unsubscribeUrl,
+    },
+  });
+
+  if (campaign.template.compiledHtml) {
+    const compiledHtml = renderCompiledTemplate({
+      compiledHtml: campaign.template.compiledHtml,
+      mergeContext,
+      unsubscribeUrl,
+      preferencesUrl,
+    });
+    return res.json({ ok: true, estimate, html: compiledHtml, errors: [] });
+  }
+
   const { html, errors } = renderMarketingTemplate(campaign.template.mjmlBody, {
     firstName: sampleContact?.firstName || 'Sample',
     lastName: sampleContact?.lastName || 'User',
@@ -3468,14 +3852,35 @@ router.post('/marketing/campaigns/:id/test-send', requireAdminOrOrganiser, async
     campaign.tenant.storefrontSlug || campaign.tenantId
   )}/${encodeURIComponent(preferencesToken)}`;
 
-  const { html, errors } = renderMarketingTemplate(campaign.template.mjmlBody, {
-    firstName,
-    lastName,
-    email,
-    tenantName: tenantNameFrom(campaign.tenant),
-    unsubscribeUrl,
-    preferencesUrl,
+  const mergeContext = buildTemplateMergeContext({
+    contact: { firstName, lastName, email },
+    links: {
+      managePreferencesLink: preferencesUrl,
+      unsubscribeLink: unsubscribeUrl,
+    },
   });
+
+  let html = '';
+  let errors: string[] = [];
+  if (campaign.template.compiledHtml) {
+    html = renderCompiledTemplate({
+      compiledHtml: campaign.template.compiledHtml,
+      mergeContext,
+      unsubscribeUrl,
+      preferencesUrl,
+    });
+  } else {
+    const rendered = renderMarketingTemplate(campaign.template.mjmlBody, {
+      firstName,
+      lastName,
+      email,
+      tenantName: tenantNameFrom(campaign.tenant),
+      unsubscribeUrl,
+      preferencesUrl,
+    });
+    html = rendered.html;
+    errors = rendered.errors;
+  }
 
   if (errors.length) {
     await logMarketingAudit(tenantId, 'campaign.test_send', 'MarketingCampaign', campaign.id, {
@@ -3494,7 +3899,7 @@ router.post('/marketing/campaigns/:id/test-send', requireAdminOrOrganiser, async
       'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
     };
 
-    await provider.sendEmail({
+    const result = await provider.sendEmail({
       to: email,
       subject: `[Test] ${campaign.template.subject}`,
       html,
@@ -3507,6 +3912,14 @@ router.post('/marketing/campaigns/:id/test-send', requireAdminOrOrganiser, async
         tenantId: campaign.tenantId,
         testSend: 'true',
       },
+    });
+
+    console.info('[marketing:campaign:test-send]', {
+      campaignId: campaign.id,
+      tenantId,
+      providerId: result.id,
+      providerStatus: result.status,
+      providerResponse: result.response || null,
     });
 
     await logMarketingAudit(tenantId, 'campaign.test_send', 'MarketingCampaign', campaign.id, {
@@ -4272,6 +4685,35 @@ router.get('/marketing/analytics/campaigns', marketingAnalyticsLimiter, requireA
 
   setCachedAnalytics(key, response);
   res.json({ ok: true, ...response });
+});
+
+function marketingSuiteHtml() {
+  return `
+  <!doctype html>
+  <html lang="en">
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <title>Marketing Suite</title>
+      <link rel="stylesheet" href="/static/marketing-suite.css" />
+      <link rel="stylesheet" href="https://unpkg.com/grapesjs@0.21.11/dist/css/grapes.min.css" />
+      <link rel="stylesheet" href="https://unpkg.com/reactflow@11/dist/style.css" />
+    </head>
+    <body>
+      <div id="ms-root"></div>
+      <script src="https://unpkg.com/grapesjs@0.21.11/dist/grapes.min.js"></script>
+      <script type="module" src="/static/marketing-suite.js"></script>
+    </body>
+  </html>
+  `;
+}
+
+router.get('/marketing', requireAdminOrOrganiser, (_req, res) => {
+  res.send(marketingSuiteHtml());
+});
+
+router.get('/marketing/*', requireAdminOrOrganiser, (_req, res) => {
+  res.send(marketingSuiteHtml());
 });
 
 export default router;
