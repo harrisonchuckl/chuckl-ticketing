@@ -462,6 +462,7 @@ model User {
   marketingCampaignsAsTenant              MarketingCampaign[]              @relation("MarketingCampaignTenant")
   marketingCampaignsScheduled             MarketingCampaign[]              @relation("MarketingCampaignScheduledBy")
   marketingCampaignsApproved              MarketingCampaign[]              @relation("MarketingCampaignApprovedBy")
+  marketingSendSnapshots                  MarketingSendSnapshot[]
   marketingRoleAssignments                MarketingRoleAssignment[]        @relation("MarketingRoleAssignee")
   marketingRoleTenants                    MarketingRoleAssignment[]        @relation("MarketingRoleTenant")
   marketingSuppressions                   MarketingSuppression[]
@@ -520,6 +521,10 @@ model MarketingSettings {
   defaultFromName        String?
   defaultFromEmail       String?
   defaultReplyTo         String?
+  brandLogoUrl           String?
+  brandDefaultFont       String?
+  brandPrimaryColor      String?
+  brandButtonRadius      Int?
   requireVerifiedFrom    Boolean
   sendingMode            MarketingSenderMode     @default(SENDGRID)
   verifiedStatus         MarketingVerifiedStatus @default(UNVERIFIED)
@@ -1861,6 +1866,12 @@ model MarketingTemplate {
   replyTo        String?
   previewText    String?
   mjmlBody       String    @db.Text
+  editorType     String    @default("GRAPESJS")
+  editorStateJson Json?
+  compiledHtml   String?   @db.Text
+  compiledText   String?
+  lastCompiledAt DateTime?
+  version        Int       @default(1)
   isLocked       Boolean   @default(false)
   lockedAt       DateTime?
   lockedByUserId String?
@@ -1874,6 +1885,7 @@ model MarketingTemplate {
   automationSteps MarketingAutomationStep[]
   versions        MarketingTemplateVersion[]
   changeRequests  MarketingTemplateChangeRequest[]
+  sendSnapshots   MarketingSendSnapshot[]
 
   @@index([tenantId])
 }
@@ -1992,6 +2004,7 @@ model MarketingCampaign {
   approvedBy  User?                        @relation("MarketingCampaignApprovedBy", fields: [approvedByUserId], references: [id])
   recipients  MarketingCampaignRecipient[]
   events      MarketingEmailEvent[]
+  sendSnapshots MarketingSendSnapshot[]
 
   @@index([tenantId])
   @@index([showId])
@@ -2018,6 +2031,25 @@ model MarketingCampaignRecipient {
   @@index([tenantId, campaignId])
   @@index([tenantId, sentAt])
   @@index([status])
+}
+
+model MarketingSendSnapshot {
+  id             String   @id @default(cuid())
+  tenantId       String
+  campaignId     String
+  templateId     String
+  recipientEmail String
+  renderedHtml   String   @db.Text
+  renderedText   String?
+  mergeContext   Json?
+  createdAt      DateTime @default(now())
+
+  tenant   User              @relation(fields: [tenantId], references: [id])
+  campaign MarketingCampaign @relation(fields: [campaignId], references: [id])
+  template MarketingTemplate @relation(fields: [templateId], references: [id])
+
+  @@index([tenantId, campaignId])
+  @@index([tenantId, templateId])
 }
 
 model MarketingDailySendCounter {
@@ -2101,6 +2133,8 @@ model MarketingAutomation {
   triggerType   MarketingAutomationTriggerType
   triggerConfig Json?
   isEnabled     Boolean                        @default(true)
+  flowJson      Json?
+  version       Int                            @default(1)
   createdAt     DateTime                       @default(now())
   updatedAt     DateTime                       @updatedAt
 

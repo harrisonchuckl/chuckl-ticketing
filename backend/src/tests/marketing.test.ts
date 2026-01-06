@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createUnsubscribeToken, verifyUnsubscribeToken } from '../lib/email-marketing/unsubscribe.js';
 import { matchesSegmentRules } from '../services/marketing/segments.js';
 import { buildRecipientEntries, shouldSuppressContact } from '../services/marketing/campaigns.js';
+import { buildStepsFromFlow, validateFlow } from '../services/marketing/flow.js';
 import { MarketingConsentStatus, MarketingSuppressionType } from '@prisma/client';
 
 const contact = {
@@ -65,4 +66,35 @@ test('idempotent recipient creation dedupes contacts', () => {
 
   assert.equal(recipients.length, 1);
   assert.equal(recipients[0].contactId, 'contact_1');
+});
+
+test('flow validation requires trigger and templates for send nodes', () => {
+  const errors = validateFlow(
+    [
+      { id: 'node_1', type: 'sendEmail', data: {} },
+      { id: 'node_2', type: 'delay', data: { delayMinutes: 10 } },
+    ],
+    [{ source: 'node_1', target: 'node_2' }]
+  );
+
+  assert.ok(errors.some((err) => err.message.includes('Trigger')));
+  assert.ok(errors.some((err) => err.message.includes('template')));
+});
+
+test('flow builder generates steps from connected nodes', () => {
+  const steps = buildStepsFromFlow(
+    [
+      { id: 'trigger', type: 'trigger' },
+      { id: 'delay_1', type: 'delay', data: { delayMinutes: 15 } },
+      { id: 'send_1', type: 'sendEmail', data: { templateId: 'tmpl_1' } },
+    ],
+    [
+      { source: 'trigger', target: 'delay_1' },
+      { source: 'delay_1', target: 'send_1' },
+    ]
+  );
+
+  assert.equal(steps.length, 2);
+  assert.equal(steps[0].delayMinutes, 15);
+  assert.equal(steps[1].templateId, 'tmpl_1');
 });

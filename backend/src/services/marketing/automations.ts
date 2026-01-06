@@ -14,8 +14,10 @@ import { getEmailProvider } from '../../lib/email-marketing/index.js';
 import { createUnsubscribeToken } from '../../lib/email-marketing/unsubscribe.js';
 import { createPreferencesToken } from '../../lib/email-marketing/preferences.js';
 import { renderMarketingTemplate } from '../../lib/email-marketing/rendering.js';
+import { buildDefaultMergeContext } from '../../lib/email-marketing/merge-tags.js';
 import { shouldSuppressContact } from './campaigns.js';
 import { buildRecommendedShowsHtml } from './recommendations.js';
+import { renderCompiledTemplate } from './template-compiler.js';
 import {
   fetchMarketingSettings,
   applyMarketingStreamToEmail,
@@ -1226,21 +1228,61 @@ export async function processAutomationSteps() {
         const show = showId ? await resolveAutomationShow(state.tenantId, showId) : null;
         const showUrl = show ? resolveShowUrl(show) : '';
 
-        const { html, errors } = renderMarketingTemplate(nextStep.template.mjmlBody, {
-          firstName: state.contact.firstName || '',
-          lastName: state.contact.lastName || '',
-          email: state.contact.email,
-          tenantName: tenantNameFrom(tenant),
-          unsubscribeUrl,
-          preferencesUrl,
-          recommendedShows: recommendedShows || '',
-          showTitle: show?.title || '',
-          showDate: formatShowDate(show?.date),
-          showVenue: show?.venue?.name || '',
-          showTown: show?.venue?.city || '',
-          showCounty: show?.venue?.county || '',
-          showUrl: showUrl || '',
+        const mergeContext = buildDefaultMergeContext({
+          contact: {
+            firstName: state.contact.firstName || '',
+            lastName: state.contact.lastName || '',
+            email: state.contact.email,
+          },
+          show: {
+            title: show?.title || '',
+            venue: show?.venue?.name || '',
+            date: formatShowDate(show?.date),
+          },
+          links: {
+            ticketLink: showUrl || '',
+            managePreferencesLink: preferencesUrl,
+            unsubscribeLink: unsubscribeUrl,
+          },
         });
+
+        let html = '';
+        let errors: string[] = [];
+        if (nextStep.template.compiledHtml) {
+          html = renderCompiledTemplate({
+            compiledHtml: nextStep.template.compiledHtml,
+            mergeContext,
+            unsubscribeUrl,
+            preferencesUrl,
+            recommendedShows: recommendedShows || null,
+            showContext: {
+              showTitle: show?.title || '',
+              showDate: formatShowDate(show?.date),
+              showVenue: show?.venue?.name || '',
+              showTown: show?.venue?.city || '',
+              showCounty: show?.venue?.county || '',
+              showUrl: showUrl || '',
+            },
+          });
+        } else {
+          const rendered = renderMarketingTemplate(nextStep.template.mjmlBody, {
+            firstName: state.contact.firstName || '',
+            lastName: state.contact.lastName || '',
+            email: state.contact.email,
+            tenantName: tenantNameFrom(tenant),
+            unsubscribeUrl,
+            preferencesUrl,
+            recommendedShows: recommendedShows || '',
+            showTitle: show?.title || '',
+            showDate: formatShowDate(show?.date),
+            showVenue: show?.venue?.name || '',
+            showTown: show?.venue?.city || '',
+            showCounty: show?.venue?.county || '',
+            showUrl: showUrl || '',
+          });
+          html = rendered.html;
+          errors = rendered.errors;
+        }
 
         if (errors.length) {
           throw new Error(errors.join('; '));
