@@ -2110,11 +2110,12 @@ function setupVisualBuilder() {
   // 4. Drag Over (Updated for ms-strip-inner support)
 canvas.addEventListener('dragover', (e) => {
     e.preventDefault();
-    
+
     // Find if we are hovering over a strip's inner container or the main canvas
-    const stripInner = e.target.closest('.ms-strip-inner');
+    const stripContainer = e.target.closest('.ms-strip');
+    const stripInner = e.target.closest('.ms-strip-inner') || (stripContainer ? stripContainer.querySelector('.ms-strip-inner') : null);
     const container = stripInner || canvas;
-    
+
     const afterElement = getDragAfterElement(container, e.clientY);
     let indicator = document.querySelector('.ms-drop-indicator') || document.createElement('div');
     indicator.className = 'ms-drop-indicator';
@@ -2148,13 +2149,13 @@ canvas.addEventListener('drop', (e) => {
     const type = e.dataTransfer.getData('blockType');
     const isFromSidebar = draggedSource === 'sidebar';
 
-    function findAndRemoveBlock(id) {
-        const topIdx = window.editorBlocks.findIndex(b => b.id === id);
-        if (topIdx > -1) return window.editorBlocks.splice(topIdx, 1)[0];
-        for (let b of window.editorBlocks) {
+    function findAndRemoveBlock(id, blocks = window.editorBlocks) {
+        const topIdx = blocks.findIndex(b => b.id === id);
+        if (topIdx > -1) return blocks.splice(topIdx, 1)[0];
+        for (let b of blocks) {
             if (b.type === 'strip' && b.content.blocks) {
-                const innerIdx = b.content.blocks.findIndex(ib => ib.id === id);
-                if (innerIdx > -1) return b.content.blocks.splice(innerIdx, 1)[0];
+                const removed = findAndRemoveBlock(id, b.content.blocks);
+                if (removed) return removed;
             }
         }
         return null;
@@ -2327,6 +2328,9 @@ function createBlockElement(block, index, parentArray) {
 
     const el = document.createElement('div');
     el.className = 'ms-builder-block';
+    if (block.type === 'strip') {
+        el.classList.add('is-strip');
+    }
     el.dataset.id = block.id;
     el.draggable = true;
     el.style.padding = block.styles?.padding || '10px';
@@ -2435,7 +2439,21 @@ function getPreviewHtml(block) {
 
 window.deleteBlock = function(id) {
     if(!confirm('Delete this block?')) return;
-    window.editorBlocks = window.editorBlocks.filter(b => b.id !== id);
+    function removeBlockById(blocks, targetId) {
+        const idx = blocks.findIndex(b => b.id === targetId);
+        if (idx > -1) {
+            blocks.splice(idx, 1);
+            return true;
+        }
+        for (const block of blocks) {
+            if (block.type === 'strip' && block.content.blocks) {
+                const removed = removeBlockById(block.content.blocks, targetId);
+                if (removed) return true;
+            }
+        }
+        return false;
+    }
+    removeBlockById(window.editorBlocks, id);
     renderBuilderCanvas();
     document.getElementById('ms-block-editor').classList.add('hidden');
     document.getElementById('ms-sidebar-blocks').classList.add('active');

@@ -139,6 +139,25 @@ body {
   cursor: pointer;
 }
 
+/* Keep strip selectors beneath nested elements */
+.ms-builder-block.is-strip,
+.ms-builder-block.is-strip:hover {
+  z-index: 1;
+}
+
+.ms-builder-block.is-strip .block-actions {
+  pointer-events: none;
+  z-index: 2;
+}
+
+.ms-builder-block.is-strip.is-selected .block-actions {
+  pointer-events: auto;
+}
+
+.ms-builder-block.is-strip .ms-strip-inner .ms-builder-block {
+  z-index: 3;
+}
+
 /* Hide actions by default */
 .ms-builder-block .block-actions {
   display: none !important;
@@ -193,6 +212,13 @@ body {
   display: flex;
   flex-direction: column;
   gap: 15px;
+}
+
+.ms-strip-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 60px;
 }
 
 /* 7. SIDEBAR & DRAGGABLE ITEMS */
