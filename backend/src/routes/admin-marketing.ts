@@ -78,6 +78,17 @@ function actorFrom(req: any) {
   return { id: req.user?.id || null, email: req.user?.email || null };
 }
 
+function resolveFlowState(flowJson: Prisma.JsonValue | null | undefined) {
+  if (flowJson && typeof flowJson === 'object' && !Array.isArray(flowJson)) {
+    const record = flowJson as Record<string, unknown>;
+    return {
+      nodes: Array.isArray(record.nodes) ? record.nodes : [],
+      edges: Array.isArray(record.edges) ? record.edges : [],
+    };
+  }
+  return { nodes: [], edges: [] };
+}
+
 const marketingRoleRank: Record<MarketingGovernanceRole, number> = {
   [MarketingGovernanceRole.VIEWER]: 0,
   [MarketingGovernanceRole.CAMPAIGN_CREATOR]: 1,
@@ -2485,8 +2496,9 @@ router.post('/marketing/automations/:id/validate', requireAdminOrOrganiser, asyn
   const automation = await prisma.marketingAutomation.findFirst({ where: { id, tenantId } });
   if (!automation) return res.status(404).json({ ok: false, message: 'Automation not found' });
 
-  const nodes = req.body?.nodes || automation.flowJson?.nodes || [];
-  const edges = req.body?.edges || automation.flowJson?.edges || [];
+  const flow = resolveFlowState(automation.flowJson);
+  const nodes = req.body?.nodes || flow.nodes;
+  const edges = req.body?.edges || flow.edges;
   const errors = validateFlow(nodes, edges);
   res.json({ ok: errors.length === 0, errors });
 });
@@ -2497,8 +2509,9 @@ router.post('/marketing/automations/:id/flow/steps', requireAdminOrOrganiser, as
   const automation = await prisma.marketingAutomation.findFirst({ where: { id, tenantId } });
   if (!automation) return res.status(404).json({ ok: false, message: 'Automation not found' });
 
-  const nodes = req.body?.nodes || automation.flowJson?.nodes || [];
-  const edges = req.body?.edges || automation.flowJson?.edges || [];
+  const flow = resolveFlowState(automation.flowJson);
+  const nodes = req.body?.nodes || flow.nodes;
+  const edges = req.body?.edges || flow.edges;
   const errors = validateFlow(nodes, edges);
   if (errors.length) return res.status(400).json({ ok: false, errors });
 
@@ -3255,7 +3268,18 @@ router.post('/marketing/templates/:id/test-send', requireAdminOrOrganiser, async
   if (!template) return res.status(404).json({ ok: false, message: 'Template not found' });
 
   const settings = await fetchMarketingSettings(tenantId);
-  const sender = resolveSenderDetails(settings);
+  const sender = resolveSenderDetails({
+    templateFromName: template.fromName,
+    templateFromEmail: template.fromEmail,
+    templateReplyTo: template.replyTo,
+    settings,
+  });
+  if (!sender.fromEmail) {
+    return res.status(400).json({ ok: false, message: 'From email required for marketing sends.' });
+  }
+  if (!sender.fromName) {
+    return res.status(400).json({ ok: false, message: 'From name required for marketing sends.' });
+  }
   const provider = getEmailProvider(settings);
 
   const unsubscribeUrl = `${PUBLIC_BASE_URL.replace(/\/+$/, '')}/u/${encodeURIComponent(tenantId)}/${encodeURIComponent(
