@@ -447,3 +447,29 @@ body {
   font-size: 24px;
   margin-bottom: 8px;
 }
+
+/* DRAG & DROP REORDERING STYLES */
+
+/* The blue line that appears between blocks */
+.ms-drop-indicator {
+    height: 4px;
+    background-color: var(--ms-primary);
+    margin: 8px 0;
+    border-radius: 2px;
+    pointer-events: none;
+    transition: all 0.1s;
+    box-shadow: 0 2px 4px rgba(79, 70, 229, 0.3);
+}
+
+/* The block while it is being dragged */
+.ms-builder-block.dragging {
+    opacity: 0.4;
+    border: 2px dashed var(--ms-muted);
+    background: #f8fafc;
+}
+
+/* Ensure the canvas handles the drop zone correctly */
+.ms-builder-canvas {
+    min-height: 800px;
+    padding-bottom: 100px; /* Extra space to drop at the bottom */
+}
