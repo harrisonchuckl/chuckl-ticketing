@@ -2152,23 +2152,23 @@ function setupVisualBuilder() {
         const type = e.dataTransfer.getData('blockType');
 
         // CASE 1: Dropping INSIDE a strip
-        if (dropTargetStrip && type) {
-            const stripContainer = dropTargetStrip.closest('.ms-builder-block');
-            const stripId = stripContainer.dataset.id;
-            const stripBlock = window.editorBlocks.find(b => b.id === stripId);
-            
-            if (stripBlock) {
-                stripBlock.content.blocks = stripBlock.content.blocks || [];
-                stripBlock.content.blocks.push({
-                    id: 'blk_' + Date.now(),
-                    type: type,
-                    content: getDefaultBlockContent(type),
-                    styles: { padding: '10px' }
-                });
-                renderBuilderCanvas();
-                return;
-            }
-        }
+       if (dropTargetStrip && type) {
+    // We need to find the ID of the block that IS the strip
+    const stripContainer = dropTargetStrip.closest('.ms-builder-block');
+    const stripId = stripContainer ? stripContainer.dataset.id : null;
+    
+    const stripBlock = window.editorBlocks.find(b => b.id === stripId);
+    if (stripBlock) {
+        if (!stripBlock.content.blocks) stripBlock.content.blocks = [];
+        stripBlock.content.blocks.push({
+            id: 'blk_' + Date.now(),
+            type: type,
+            content: getDefaultBlockContent(type)
+        });
+        renderBuilderCanvas();
+        return;
+    }
+}
 
         // CASE 2: Dropping on the main canvas
         if (draggedSource === 'sidebar' && type) {
@@ -2378,10 +2378,17 @@ function getPreviewHtml(block) {
   const c = block.content;
   switch(block.type) {
     case 'strip': 
-      return `<div class="ms-strip" style="background-color: ${c.bgColor || 'transparent'};">
-                ${(c.blocks || []).length > 0 ? '' : '<div class="ms-muted">Drop elements into this strip</div>'}
+  const blocks = c.blocks || [];
+  // We wrap nested items so they are visible and have spacing
+  const nestedHtml = blocks.map(b => {
+      return `<div class="ms-nested-block" style="padding: 10px; border: 1px solid #f1f5f9; margin-bottom: 5px; background: white;">
+                ${getPreviewHtml(b)}
               </div>`;
-    case 'text': return `<div>${c.text}</div>`;
+  }).join('');
+  
+  return `<div class="ms-strip" style="background-color: ${c.bgColor || '#ffffff'}; min-height: 100px;">
+            ${nestedHtml || '<div class="ms-muted" style="text-align:center; padding:40px;">Drop elements here</div>'}
+          </div>`;    case 'text': return `<div>${c.text}</div>`;
     case 'boxedtext': return `<div style="background:${c.bgColor}; padding:20px; border-radius:4px;">${c.text}</div>`;
         case 'image': return `<img src="${c.src}" style="width:100%; display:block;">`;
         case 'imagegroup': 
