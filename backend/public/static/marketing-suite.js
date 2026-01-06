@@ -2207,8 +2207,11 @@ canvas.addEventListener('drop', (e) => {
  * Helper: Detects which element is directly *after* the mouse cursor Y position
  */
 function getDragAfterElement(container, y) {
-    // Get all blocks that are NOT the one currently being dragged and NOT the indicator
-    const draggableElements = [...container.querySelectorAll('.ms-builder-block:not(.dragging)')];
+    if (!container) return null;
+    // Only consider direct children so we don't try to insert before nested blocks
+    const draggableElements = Array.from(container.children).filter((child) => {
+        return child.classList.contains('ms-builder-block') && !child.classList.contains('dragging');
+    });
 
     return draggableElements.reduce((closest, child) => {
         const box = child.getBoundingClientRect();
