@@ -263,20 +263,21 @@ body {
 }
 
 .ms-builder-block .block-actions {
-    display: none;
-    position: absolute;
-    right: 0;
-    top: -42px; /* Adjusted for larger height */
-    background: var(--ms-primary);
-    color: white;
-    padding: 8px 12px; /* Increased padding */
-    border-radius: 8px 8px 0 0;
-    z-index: 10;
-    gap: 12px; /* More space between icons */
-    align-items: center;
-    box-shadow: 0 -4px 10px rgba(0,0,0,0.1);
+  display: none;
+  position: absolute;
+  right: 0;
+  top: -32px; 
+  background: #0f9cdf; /* New light blue color */
+  color: white;
+  padding: 4px 8px;
+  border-radius: 6px 6px 0 0;
+  z-index: 100;
+  gap: 6px;
+  flex-direction: row; /* Horizontal orientation */
+  align-items: center;
+  box-shadow: 0 -2px 6px rgba(0,0,0,0.1);
+  white-space: nowrap; /* Prevents cutting off */
 }
-
 .ms-builder-block .block-actions span {
     cursor: pointer;
     display: flex;
@@ -389,17 +390,27 @@ body {
 }
 
 .ms-builder-canvas {
-  width: 600px; /* Standard email width */
-  /* min-height removed, let content dictate height + padding */
-  background: white;
+  width: 600px;
+  background-color: var(--canvas-bg, #ffffff); /* Controlled by JavaScript */
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-  padding: 30px 30px 150px 30px; /* Large bottom padding ensures canvas extends beyond content */
+  padding: 30px 30px 150px 30px; 
+  display: flex;
+  flex-direction: column;
+  min-height: 800px;
+  box-sizing: content-box;
+}
+
+/* The Strip Component Styling */
+.ms-strip {
+  width: 100%;
+  min-height: 60px; /* Base height */
+  height: auto;     /* Grows automatically with content */
   display: flex;
   flex-direction: column;
   gap: 10px;
-  box-sizing: content-box; /* Ensures padding adds to width */
+  padding: 20px;
+  border: 1px dashed #cbd5e1; /* Visual guide */
 }
-
 /* BLOCKS IN CANVAS */
 .ms-builder-block {
     position: relative;
