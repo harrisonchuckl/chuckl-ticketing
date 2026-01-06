@@ -2140,10 +2140,44 @@ function setupVisualBuilder() {
     });
 
     // 6. Drop (Finalize Move/Add)
-    canvas.addEventListener('drop', (e) => {
-        e.preventDefault();
-        const indicator = document.querySelector('.ms-drop-indicator');
-        
+   canvas.addEventListener('drop', (e) => {
+  e.preventDefault();
+  const indicator = document.querySelector('.ms-drop-indicator');
+  const dropTargetStrip = e.target.closest('.ms-strip'); // Check if dropping in a strip
+
+  const canvasChildren = Array.from(canvas.children);
+  const dropIndex = canvasChildren.indexOf(indicator);
+  if (indicator) indicator.remove();
+
+  const type = e.dataTransfer.getData('blockType');
+
+  if (dropTargetStrip && type) {
+    // Logic for dropping INSIDE a strip
+    const stripId = dropTargetStrip.parentElement.dataset.id;
+    const stripBlock = window.editorBlocks.find(b => b.id === stripId);
+    if (stripBlock) {
+      stripBlock.content.blocks.push({
+        id: 'blk_' + Date.now(),
+        type: type,
+        content: getDefaultBlockContent(type),
+        styles: { padding: '10px' }
+      });
+      renderBuilderCanvas();
+      return;
+    }
+  }
+
+  // Logic for dropping on the main canvas
+  if (draggedSource === 'sidebar' && type) {
+    addBlockToCanvas(type, dropIndex);
+  } else if (draggedSource === 'canvas' && draggedBlockIndex !== null) {
+    moveBlockInCanvas(draggedBlockIndex, dropIndex);
+  }
+
+  draggedSource = null;
+  draggedBlockIndex = null;
+});
+  
         // Determine the new index based on where the indicator ended up
         // We look at all children of the canvas (blocks + indicator) to find the indicator's index
         const canvasChildren = Array.from(canvas.children);
@@ -2258,8 +2292,12 @@ function getDefaultBlockContent(type) {
     const placeholderLarge = getPlaceholderImage(600, 300);
     const placeholderSmall = getPlaceholderImage(300, 200);
 switch (type) {
-    case 'strip': return { bgColor: '#ffffff', blocks: [] };
-    case 'text': return { text: '<h3>New Text Block</h3><p>Enter your content here.</p>' };
+  case 'strip': 
+  const nestedHtml = (c.blocks || []).map(b => getPreviewHtml(b)).join('');
+  return `<div class="ms-strip" style="background-color: ${c.bgColor || '#ffffff'};">
+            ${nestedHtml || '<div class="ms-muted" style="text-align:center; padding:20px;">Drop elements here</div>'}
+          </div>`;
+  case 'text': return { text: '<h3>New Text Block</h3><p>Enter your content here.</p>' };
         case 'boxedtext': return { text: '<p>This is text inside a colored box.</p>', bgColor: '#f1f5f9' };
         case 'image': return { src: placeholderLarge, alt: 'Image', link: '' };
         case 'imagegroup': return { images: [{src:placeholderSmall}, {src:placeholderSmall}] };
