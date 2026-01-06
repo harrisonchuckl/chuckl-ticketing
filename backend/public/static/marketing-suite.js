@@ -1994,11 +1994,12 @@ window.addEventListener('unhandledrejection', (event) => {
 renderRoute();
 
 /* =========================================
-   VISUAL BUILDER LOGIC
+   VISUAL BUILDER LOGIC (v2 - Reordering Support)
    ========================================= */
 
-// Global state to store the blocks (Text, Image, etc.)
 window.editorBlocks = [];
+let draggedSource = null; // 'sidebar' or 'canvas'
+let draggedBlockIndex = null; // Index of block being moved (if from canvas)
 
 /**
  * Initializes listeners for the Visual Builder
@@ -2008,57 +2009,92 @@ function setupVisualBuilder() {
     if (!canvas) return;
 
     // 1. Initialize State
-    // In the future, you can parse existing JSON from the database here.
-    // For now, we start with an empty canvas.
-    window.editorBlocks = []; 
+    window.editorBlocks = window.editorBlocks.length ? window.editorBlocks : [];
     renderBuilderCanvas();
 
-    // 2. Sidebar Tab Switching (Content vs Styles)
+    // 2. Sidebar Tab Switching
     const tabBtns = document.querySelectorAll('.ms-tab-btn');
     tabBtns.forEach(btn => {
         btn.addEventListener('click', (e) => {
-            // Reset active states
             document.querySelectorAll('.ms-tab-btn').forEach(b => b.classList.remove('active'));
             document.querySelectorAll('.ms-sidebar-panel').forEach(p => p.classList.remove('active'));
-            document.getElementById('ms-block-editor').classList.add('hidden'); // Hide specific block editor
-
-            // Set new active state
+            document.getElementById('ms-block-editor').classList.add('hidden');
             e.target.classList.add('active');
             const targetId = `ms-sidebar-${e.target.dataset.sidebarTab}`;
             document.getElementById(targetId).classList.add('active');
         });
     });
 
-    // 3. Drag & Drop: Drag Start (Sidebar Items)
+    // 3. Drag Start (Sidebar Items)
     document.querySelectorAll('.ms-draggable-block').forEach(item => {
         item.addEventListener('dragstart', (e) => {
-            // Tell the browser what type of block we are dragging (e.g., 'text', 'image')
+            draggedSource = 'sidebar';
             e.dataTransfer.setData('blockType', item.dataset.type);
             e.dataTransfer.effectAllowed = 'copy';
         });
     });
 
-    // 4. Drag & Drop: Drag Over (Canvas)
+    // 4. Drag Over (Canvas - Logic for the Drop Line)
     canvas.addEventListener('dragover', (e) => {
-        e.preventDefault(); // Required to allow dropping
-        canvas.style.backgroundColor = '#f1f5f9'; // Visual cue
-    });
-
-    canvas.addEventListener('dragleave', () => {
-        canvas.style.backgroundColor = '#fff';
-    });
-
-    // 5. Drag & Drop: Drop (Canvas)
-    canvas.addEventListener('drop', (e) => {
         e.preventDefault();
-        canvas.style.backgroundColor = '#fff';
-        const type = e.dataTransfer.getData('blockType');
-        if (type) {
-            addBlockToCanvas(type);
+        
+        // Find the element strictly after the mouse cursor
+        const afterElement = getDragAfterElement(canvas, e.clientY);
+        
+        // Remove any existing indicator to prevent duplicates
+        const existingIndicator = document.querySelector('.ms-drop-indicator');
+        if (existingIndicator) existingIndicator.remove();
+
+        // Create the blue drop line
+        const indicator = document.createElement('div');
+        indicator.classList.add('ms-drop-indicator');
+
+        // Insert the line at the correct position
+        if (afterElement == null) {
+            canvas.appendChild(indicator);
+        } else {
+            canvas.insertBefore(indicator, afterElement);
         }
     });
 
-    // 6. Back Button (Return from Block Editor to Block List)
+    // 5. Drag Leave (Cleanup)
+    canvas.addEventListener('dragleave', (e) => {
+        // Only remove if we are actually leaving the canvas container, not just entering a child
+        if (e.relatedTarget && !canvas.contains(e.relatedTarget) && e.relatedTarget !== canvas) {
+            const indicator = document.querySelector('.ms-drop-indicator');
+            if (indicator) indicator.remove();
+        }
+    });
+
+    // 6. Drop (Finalize Move/Add)
+    canvas.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const indicator = document.querySelector('.ms-drop-indicator');
+        
+        // Determine the new index based on where the indicator ended up
+        // We look at all children of the canvas (blocks + indicator) to find the indicator's index
+        const canvasChildren = Array.from(canvas.children);
+        const dropIndex = canvasChildren.indexOf(indicator);
+
+        // Remove indicator
+        if (indicator) indicator.remove();
+
+        if (draggedSource === 'sidebar') {
+            // CASE A: Adding a new block
+            const type = e.dataTransfer.getData('blockType');
+            if (type) addBlockToCanvas(type, dropIndex);
+        } 
+        else if (draggedSource === 'canvas' && draggedBlockIndex !== null) {
+            // CASE B: Reordering an existing block
+            moveBlockInCanvas(draggedBlockIndex, dropIndex);
+        }
+
+        // Reset Drag State
+        draggedSource = null;
+        draggedBlockIndex = null;
+    });
+
+    // 7. Back Button
     const backBtn = document.getElementById('ms-back-to-blocks');
     if (backBtn) {
         backBtn.addEventListener('click', () => {
@@ -2070,18 +2106,76 @@ function setupVisualBuilder() {
 }
 
 /**
- * Adds a new block to the state and re-renders
+ * Helper: Detects which element is directly *after* the mouse cursor Y position
  */
-function addBlockToCanvas(type) {
+function getDragAfterElement(container, y) {
+    // Get all blocks that are NOT the one currently being dragged and NOT the indicator
+    const draggableElements = [...container.querySelectorAll('.ms-builder-block:not(.dragging)')];
+
+    return draggableElements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        // Calculate distance from the middle of the box
+        const offset = y - box.top - box.height / 2;
+        
+        // We want the element where the mouse is *above* the middle (negative offset)
+        // and closest to 0
+        if (offset < 0 && offset > closest.offset) {
+            return { offset: offset, element: child };
+        } else {
+            return closest;
+        }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+
+/**
+ * Adds a new block to the state at a specific index
+ */
+function addBlockToCanvas(type, index) {
     const newBlock = {
         id: 'blk_' + Date.now(),
         type: type,
         content: getDefaultBlockContent(type),
         styles: { padding: '10px' }
     };
-    window.editorBlocks.push(newBlock);
+
+    // If index is invalid or -1 (end of list), push to end
+    if (index === undefined || index === -1) {
+        window.editorBlocks.push(newBlock);
+    } else {
+        // Insert at specific index
+        window.editorBlocks.splice(index, 0, newBlock);
+    }
+
     renderBuilderCanvas();
-    openBlockEditor(newBlock); // Auto-open editor for the new block
+    openBlockEditor(newBlock);
+}
+
+/**
+ * Moves an existing block from oldIndex to newIndex
+ */
+function moveBlockInCanvas(fromIndex, toIndex) {
+    if (fromIndex === toIndex) return;
+
+    const blockToMove = window.editorBlocks[fromIndex];
+    
+    // Remove from old position
+    window.editorBlocks.splice(fromIndex, 1);
+    
+    // Adjust index if we removed an item before the drop target
+    // The "indicator" logic in the DOM gives us the visual index, 
+    // but since we just removed an item from the array, we need to account for the shift.
+    // However, since the DOM loop counted the indicator's position *among siblings*,
+    // and the dragging element was hidden/ghosted but technically still there or removed...
+    // The safest logic with the indicator approach is:
+    
+    // If we dropped "after" the item itself, the index decreases by 1
+    let finalIndex = toIndex;
+    if (fromIndex < toIndex) {
+        finalIndex = toIndex - 1; 
+    }
+    
+    window.editorBlocks.splice(finalIndex, 0, blockToMove);
+    renderBuilderCanvas();
 }
 
 /**
@@ -2094,8 +2188,8 @@ function getDefaultBlockContent(type) {
         case 'button': return { label: 'Click Me', url: 'https://', color: '#4f46e5' };
         case 'divider': return {};
         case 'social': return { networks: ['facebook', 'instagram'] };
-        case 'product': return { productId: null }; // Placeholder for your product integration
-        case 'event': return { eventId: null };     // Placeholder for your event integration
+        case 'product': return { productId: null }; 
+        case 'event': return { eventId: null };
         default: return {};
     }
 }
@@ -2112,12 +2206,14 @@ function renderBuilderCanvas() {
         return;
     }
 
-    window.editorBlocks.forEach((block) => {
+    window.editorBlocks.forEach((block, index) => {
         const el = document.createElement('div');
         el.className = 'ms-builder-block';
+        el.draggable = true; // Make it draggable!
         el.dataset.id = block.id;
+        el.dataset.index = index;
 
-        // Generate HTML preview for the block
+        // Generate HTML preview
         let previewHtml = '';
         if (block.type === 'text') {
             previewHtml = `<div>${block.content.text}</div>`;
@@ -2138,7 +2234,26 @@ function renderBuilderCanvas() {
             </div>
         `;
 
-        // Click to edit
+        // DRAG START (Existing Item)
+        el.addEventListener('dragstart', (e) => {
+            draggedSource = 'canvas';
+            draggedBlockIndex = index;
+            e.dataTransfer.effectAllowed = 'move';
+            // Wait a tick to add the class, so the "ghost" image is taken BEFORE we fade it out
+            setTimeout(() => el.classList.add('dragging'), 0);
+        });
+
+        // DRAG END
+        el.addEventListener('dragend', () => {
+            el.classList.remove('dragging');
+            draggedSource = null;
+            draggedBlockIndex = null;
+            // Clean up any stray indicators
+            const ind = document.querySelector('.ms-drop-indicator');
+            if(ind) ind.remove();
+        });
+
+        // CLICK (Edit)
         el.addEventListener('click', (e) => {
             if (e.target.closest('.block-actions')) return; 
             openBlockEditor(block);
@@ -2148,23 +2263,15 @@ function renderBuilderCanvas() {
     });
 }
 
-/**
- * Deletes a block by ID
- */
 window.deleteBlock = function(id) {
     if(!confirm('Delete this block?')) return;
     window.editorBlocks = window.editorBlocks.filter(b => b.id !== id);
     renderBuilderCanvas();
-    // Hide editor
     document.getElementById('ms-block-editor').classList.add('hidden');
     document.getElementById('ms-sidebar-blocks').classList.add('active');
 }
 
-/**
- * Opens the specific settings for a block in the sidebar
- */
 function openBlockEditor(block) {
-    // 1. Switch sidebar view
     document.querySelectorAll('.ms-sidebar-panel').forEach(p => p.classList.remove('active'));
     const editorPanel = document.getElementById('ms-block-editor');
     editorPanel.classList.remove('hidden');
@@ -2173,12 +2280,11 @@ function openBlockEditor(block) {
     const container = document.getElementById('ms-active-block-settings');
     container.innerHTML = '';
 
-    // 2. Render input fields based on block type
     if (block.type === 'text') {
         container.innerHTML = `
             <div class="ms-field">
                 <label>Content (HTML allowed)</label>
-                <textarea id="edit-text-val" rows="10">${block.content.text}</textarea>
+                <textarea id="edit-text-val" rows="10" style="width:100%;">${block.content.text}</textarea>
             </div>
         `;
         container.querySelector('#edit-text-val').addEventListener('input', (e) => {
