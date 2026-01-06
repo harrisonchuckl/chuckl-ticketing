@@ -88,7 +88,37 @@ function escapeHtml(value) {
 function navigateTo(path) {
   if (window.location.pathname === path) return;
   window.history.pushState({}, '', path);
-  renderRoute();
+renderRoute();
+
+/**
+ * Duplicates an existing block and places it directly underneath the original
+ */
+window.duplicateBlock = function(index) {
+    const original = window.editorBlocks[index];
+    
+    // Create a deep copy to avoid editing both at once
+    const copy = JSON.parse(JSON.stringify(original));
+    
+    // Assign a new unique ID
+    copy.id = 'blk_' + Date.now();
+    
+    // Insert into the array immediately after the original
+    window.editorBlocks.splice(index + 1, 0, copy);
+    
+    renderBuilderCanvas();
+    toast('Block duplicated');
+};
+
+/**
+ * Helper to ensure the editor opens when the specific edit icon is clicked
+ */
+window.openEditorFromIcon = function(id) {
+    const block = window.editorBlocks.find(b => b.id === id);
+    if (block) {
+        openBlockEditor(block);
+    }
+};
+
 }
 
 function renderModal(title, innerHtml) {
@@ -2227,13 +2257,15 @@ function renderBuilderCanvas() {
             previewHtml = `<div class="ms-muted" style="text-align:center; padding:20px; border:1px dashed #ccc;">[${block.type.toUpperCase()} BLOCK]</div>`;
         }
 
+       // Updated HTML with Edit, Duplicate, and Delete icons
         el.innerHTML = `
             ${previewHtml}
             <div class="block-actions">
-                <span onclick="window.deleteBlock('${block.id}')" style="cursor:pointer;">🗑️ Delete</span>
+                <span title="Edit" onclick="window.openEditorFromIcon('${block.id}')">✏️</span>
+                <span title="Duplicate" onclick="window.duplicateBlock(${index})">📂</span>
+                <span title="Delete" onclick="window.deleteBlock('${block.id}')">🗑️</span>
             </div>
         `;
-
         // DRAG START (Existing Item)
         el.addEventListener('dragstart', (e) => {
             draggedSource = 'canvas';
