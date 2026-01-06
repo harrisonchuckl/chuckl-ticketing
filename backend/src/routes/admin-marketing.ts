@@ -67,7 +67,7 @@ import { renderEmailDocument } from '../lib/email-builder/rendering.js';
 import { buildPreviewPersonalisationContext } from '../services/marketing/personalisation.js';
 import { compileEditorHtml, renderCompiledTemplate } from '../services/marketing/template-compiler.js';
 import { buildStepsFromFlow, validateFlow } from '../services/marketing/flow.js';
-import { sendMarketingSuiteShell } from '../lib/marketing-suite-shell.js';
+import { marketingSuiteHtml, sendMarketingSuiteShell } from '../lib/marketing-suite-shell.js';
 const router = Router();
 const bcrypt: any = (bcryptNS as any).default ?? bcryptNS;
 
@@ -88,6 +88,54 @@ function resolveFlowState(flowJson: Prisma.JsonValue | null | undefined) {
     };
   }
   return { nodes: [], edges: [] };
+}
+
+function renderMarketingShell(req: any, res: any, options?: { activePath?: string; params?: Record<string, string> }) {
+  const activePath = options?.activePath || String(req.path || req.originalUrl || '/admin/marketing');
+  const params = options?.params || req.params || {};
+  const bootstrap = `<script>window.__MS_PATH__=${JSON.stringify(activePath)};window.__MS_PARAMS__=${JSON.stringify(
+    params
+  )};</script>`;
+  const html = marketingSuiteHtml().replace('</body>', `${bootstrap}</body>`);
+  res.setHeader('Cache-Control', 'no-store');
+  res.type('html').send(html);
+}
+
+function logMarketingApi(req: any, resultSummary: unknown) {
+  console.log(`[marketing api] ${req.originalUrl || req.url}`, {
+    tenantId: tenantIdFrom(req),
+    actor: actorFrom(req),
+    resultSummary,
+  });
+}
+
+function forwardToLegacy(
+  req: any,
+  res: any,
+  next: any,
+  legacyPath: string,
+  methodOverride?: string,
+  bodyOverride?: Record<string, unknown>
+) {
+  if (bodyOverride && typeof bodyOverride === 'object') {
+    req.body = { ...(req.body || {}), ...bodyOverride };
+  }
+  const originalUrl = req.url;
+  const originalMethod = req.method;
+  const originalJson = res.json.bind(res);
+  res.json = (payload: any) => {
+    logMarketingApi(req, payload);
+    res.json = originalJson;
+    return originalJson(payload);
+  };
+  req.url = legacyPath;
+  if (methodOverride) req.method = methodOverride;
+  router.handle(req, res, (err: any) => {
+    req.url = originalUrl;
+    req.method = originalMethod;
+    res.json = originalJson;
+    if (err) next(err);
+  });
 }
 
 const marketingRoleRank: Record<MarketingGovernanceRole, number> = {
@@ -4710,6 +4758,352 @@ router.get('/api/marketing/analytics/campaigns', marketingAnalyticsLimiter, requ
 
   setCachedAnalytics(key, response);
   res.json({ ok: true, ...response });
+});
+
+router.get('/admin/marketing/api/search', requireAuth, requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
+  const q = String(req.query.q || '').trim();
+  if (!q) {
+    const response = { ok: true, campaigns: [], templates: [], contacts: [] };
+    logMarketingApi(req, response);
+    return res.json(response);
+  }
+  const [campaigns, templates, contacts] = await Promise.all([
+    prisma.marketingCampaign.findMany({
+      where: { tenantId, name: { contains: q, mode: 'insensitive' } },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    }),
+    prisma.marketingTemplate.findMany({
+      where: { tenantId, name: { contains: q, mode: 'insensitive' } },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    }),
+    prisma.marketingContact.findMany({
+      where: {
+        tenantId,
+        OR: [
+          { email: { contains: q, mode: 'insensitive' } },
+          { firstName: { contains: q, mode: 'insensitive' } },
+          { lastName: { contains: q, mode: 'insensitive' } },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    }),
+  ]);
+
+  const response = {
+    ok: true,
+    campaigns: campaigns.map((item) => ({ id: item.id, name: item.name, status: item.status })),
+    templates: templates.map((item) => ({ id: item.id, name: item.name, subject: item.subject })),
+    contacts: contacts.map((item) => ({ id: item.id, email: item.email, name: `${item.firstName || ''} ${item.lastName || ''}`.trim() })),
+  };
+  logMarketingApi(req, response);
+  res.json(response);
+});
+
+router.get('/admin/marketing/api/segments/:id', requireAuth, requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
+  const id = String(req.params.id);
+  const segment = await prisma.marketingSegment.findFirst({ where: { id, tenantId } });
+  if (!segment) return res.status(404).json({ ok: false, message: 'Segment not found' });
+  const response = { ok: true, segment };
+  logMarketingApi(req, response);
+  res.json(response);
+});
+
+router.post('/admin/marketing/api/segments/:id/evaluate', requireAuth, requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
+  const id = String(req.params.id);
+  const segment = await prisma.marketingSegment.findFirst({ where: { id, tenantId } });
+  if (!segment) return res.status(404).json({ ok: false, message: 'Segment not found' });
+  const estimate = await estimateCampaignRecipients(tenantId, segment.rules);
+  const contacts = await evaluateSegmentContacts(tenantId, segment.rules);
+  const response = { ok: true, estimate, sample: contacts.slice(0, 25) };
+  logMarketingApi(req, response);
+  res.json(response);
+});
+
+router.get('/admin/marketing/api/contacts/:id', requireAuth, requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
+  const id = String(req.params.id);
+  const contact = await prisma.marketingContact.findFirst({
+    where: { id, tenantId },
+    include: {
+      consents: true,
+      tags: { include: { tag: true } },
+      preferences: { include: { topic: true } },
+    },
+  });
+  if (!contact) return res.status(404).json({ ok: false, message: 'Contact not found' });
+
+  const suppressions = await prisma.marketingSuppression.findMany({
+    where: { tenantId, email: contact.email },
+  });
+  await ensureDefaultPreferenceTopics(tenantId);
+  const topics = await prisma.marketingPreferenceTopic.findMany({
+    where: { tenantId },
+    orderBy: { name: 'asc' },
+  });
+
+  const response = {
+    ok: true,
+    contact,
+    consent: contact.consents[0] || null,
+    tags: contact.tags.map((tag) => tag.tag),
+    suppressions,
+    preferences: topics.map((topic) => {
+      const match = contact.preferences.find((pref) => pref.topicId === topic.id);
+      return { ...topic, status: match?.status || MarketingPreferenceStatus.UNKNOWN };
+    }),
+  };
+  logMarketingApi(req, response);
+  res.json(response);
+});
+
+router.get('/admin/marketing/api/contacts/:id/audit', requireAuth, requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
+  const id = String(req.params.id);
+  const logs = await prisma.marketingAuditLog.findMany({
+    where: { tenantId, entityId: id },
+    orderBy: { createdAt: 'desc' },
+    take: 50,
+  });
+  const response = { ok: true, items: logs };
+  logMarketingApi(req, response);
+  res.json(response);
+});
+
+router.post('/admin/marketing/api/contacts/:id/suppress', requireAuth, requireAdminOrOrganiser, requireMarketingStepUp, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
+  if (!role) return;
+  const id = String(req.params.id);
+  const contact = await prisma.marketingContact.findFirst({ where: { id, tenantId } });
+  if (!contact) return res.status(404).json({ ok: false, message: 'Contact not found' });
+  const reason = String(req.body?.reason || 'Manual suppression').trim();
+  await applySuppression(tenantId, contact.email, MarketingSuppressionType.MANUAL, reason, MarketingConsentSource.ADMIN_EDIT);
+  await recordSuppressionAudit(tenantId, contact.email, { action: 'suppress', reason });
+  const response = { ok: true };
+  logMarketingApi(req, response);
+  res.json(response);
+});
+
+router.post('/admin/marketing/api/contacts/:id/unsuppress', requireAuth, requireAdminOrOrganiser, requireMarketingStepUp, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
+  if (!role) return;
+  const id = String(req.params.id);
+  const contact = await prisma.marketingContact.findFirst({ where: { id, tenantId } });
+  if (!contact) return res.status(404).json({ ok: false, message: 'Contact not found' });
+  await clearSuppression(tenantId, contact.email);
+  await recordSuppressionAudit(tenantId, contact.email, { action: 'unsuppress' });
+  const response = { ok: true };
+  logMarketingApi(req, response);
+  res.json(response);
+});
+
+router.post('/admin/marketing/api/automations/:id/toggle', requireAuth, requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
+  if (!role) return;
+  const id = String(req.params.id);
+  const automation = await prisma.marketingAutomation.findFirst({ where: { id, tenantId } });
+  if (!automation) return res.status(404).json({ ok: false, message: 'Automation not found' });
+  const nextEnabled = req.body?.isEnabled !== undefined ? Boolean(req.body.isEnabled) : !automation.isEnabled;
+  const updated = await prisma.marketingAutomation.update({
+    where: { id },
+    data: { isEnabled: nextEnabled },
+  });
+  await recordAutomationAudit(tenantId, nextEnabled ? 'automation.enabled' : 'automation.disabled', updated.id, {});
+  const response = { ok: true, automation: updated };
+  logMarketingApi(req, response);
+  res.json(response);
+});
+
+router.get('/admin/marketing/api/analytics/summary', requireAuth, requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
+  const now = new Date();
+  const from7 = new Date(now);
+  from7.setDate(from7.getDate() - 7);
+  const from30 = new Date(now);
+  from30.setDate(from30.getDate() - 30);
+
+  const [sent7, sent30, opened30, clicked30, topSegments, topCampaignEvents] = await Promise.all([
+    prisma.marketingCampaignRecipient.count({
+      where: { tenantId, status: MarketingRecipientStatus.SENT, sentAt: { gte: from7 } },
+    }),
+    prisma.marketingCampaignRecipient.count({
+      where: { tenantId, status: MarketingRecipientStatus.SENT, sentAt: { gte: from30 } },
+    }),
+    prisma.marketingEmailEvent.count({
+      where: { tenantId, type: MarketingEmailEventType.OPENED, createdAt: { gte: from30 } },
+    }),
+    prisma.marketingEmailEvent.count({
+      where: { tenantId, type: MarketingEmailEventType.CLICKED, createdAt: { gte: from30 } },
+    }),
+    fetchTopSegmentsByEngagement(tenantId, 30),
+    prisma.marketingEmailEvent.groupBy({
+      by: ['campaignId'],
+      where: { tenantId, createdAt: { gte: from30 } },
+      _count: { _all: true },
+      orderBy: { _count: { _all: 'desc' } },
+      take: 5,
+    }),
+  ]);
+
+  const campaignIds = topCampaignEvents.map((row) => row.campaignId);
+  const campaigns = await prisma.marketingCampaign.findMany({
+    where: { tenantId, id: { in: campaignIds } },
+    select: { id: true, name: true },
+  });
+  const campaignMap = new Map(campaigns.map((campaign) => [campaign.id, campaign.name]));
+
+  const response = {
+    ok: true,
+    sentLast7Days: sent7,
+    sentLast30Days: sent30,
+    openRate: sent30 ? Number((opened30 / sent30).toFixed(4)) : 0,
+    clickRate: sent30 ? Number((clicked30 / sent30).toFixed(4)) : 0,
+    topCampaigns: topCampaignEvents.map((row) => ({
+      id: row.campaignId,
+      name: campaignMap.get(row.campaignId) || 'Campaign',
+      events: row._count._all,
+    })),
+    topSegments,
+  };
+  logMarketingApi(req, response);
+  res.json(response);
+});
+
+router.get('/admin/marketing/api/deliverability/campaigns/:id', requireAuth, requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
+  const id = String(req.params.id);
+  const items = await fetchCampaignDeliverability(tenantId, 30);
+  const match = items.find((item) => item.campaignId === id) || null;
+  const response = { ok: true, report: match };
+  logMarketingApi(req, response);
+  res.json(response);
+});
+
+router.post('/admin/marketing/api/campaigns/:id/send-test', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
+  forwardToLegacy(req, res, next, `/api/marketing/campaigns/${req.params.id}/test-send`);
+});
+
+router.post('/admin/marketing/api/campaigns/:id/send-now', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
+  forwardToLegacy(req, res, next, `/api/marketing/campaigns/${req.params.id}/approve`, undefined, { sendNow: true });
+});
+
+router.post('/admin/marketing/api/campaigns/:id/cancel-schedule', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
+  forwardToLegacy(req, res, next, `/api/marketing/campaigns/${req.params.id}/cancel`);
+});
+
+router.get('/admin/marketing/api/campaigns/:id/preview', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
+  forwardToLegacy(req, res, next, `/api/marketing/campaigns/${req.params.id}/preview`, 'POST');
+});
+
+router.post('/admin/marketing/api/templates/:id', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
+  forwardToLegacy(req, res, next, `/api/marketing/templates/${req.params.id}`, 'PUT');
+});
+
+router.post('/admin/marketing/api/templates/:id/restore', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
+  forwardToLegacy(req, res, next, `/api/marketing/templates/${req.params.id}/rollback`);
+});
+
+router.post('/admin/marketing/api/segments/:id', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
+  forwardToLegacy(req, res, next, `/api/marketing/segments/${req.params.id}`, 'PUT');
+});
+
+router.post('/admin/marketing/api/contacts/import', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
+  forwardToLegacy(req, res, next, '/api/marketing/imports');
+});
+
+router.post('/admin/marketing/api/automations/:id', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
+  forwardToLegacy(req, res, next, `/api/marketing/automations/${req.params.id}`, 'PUT');
+});
+
+router.post('/admin/marketing/api/settings/roles', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
+  forwardToLegacy(req, res, next, '/api/marketing/roles');
+});
+
+router.get('/admin/marketing/api/settings/roles', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
+  forwardToLegacy(req, res, next, '/api/marketing/roles');
+});
+
+router.use('/admin/marketing/api', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
+  const legacyPath = req.originalUrl.replace('/admin/marketing/api', '/api/marketing');
+  forwardToLegacy(req, res, next, legacyPath);
+});
+
+router.get('/admin/marketing', requireAuth, requireAdminOrOrganiser, (req, res) => {
+  renderMarketingShell(req, res, { activePath: '/admin/marketing' });
+});
+
+router.get('/admin/marketing/campaigns', requireAuth, requireAdminOrOrganiser, (req, res) => {
+  renderMarketingShell(req, res, { activePath: '/admin/marketing/campaigns' });
+});
+
+router.get('/admin/marketing/campaigns/:id', requireAuth, requireAdminOrOrganiser, (req, res) => {
+  renderMarketingShell(req, res, { activePath: `/admin/marketing/campaigns/${req.params.id}`, params: req.params });
+});
+
+router.get('/admin/marketing/templates', requireAuth, requireAdminOrOrganiser, (req, res) => {
+  renderMarketingShell(req, res, { activePath: '/admin/marketing/templates' });
+});
+
+router.get('/admin/marketing/templates/:id/edit', requireAuth, requireAdminOrOrganiser, (req, res) => {
+  renderMarketingShell(req, res, { activePath: `/admin/marketing/templates/${req.params.id}/edit`, params: req.params });
+});
+
+router.get('/admin/marketing/segments', requireAuth, requireAdminOrOrganiser, (req, res) => {
+  renderMarketingShell(req, res, { activePath: '/admin/marketing/segments' });
+});
+
+router.get('/admin/marketing/segments/:id', requireAuth, requireAdminOrOrganiser, (req, res) => {
+  renderMarketingShell(req, res, { activePath: `/admin/marketing/segments/${req.params.id}`, params: req.params });
+});
+
+router.get('/admin/marketing/contacts', requireAuth, requireAdminOrOrganiser, (req, res) => {
+  renderMarketingShell(req, res, { activePath: '/admin/marketing/contacts' });
+});
+
+router.get('/admin/marketing/contacts/:id', requireAuth, requireAdminOrOrganiser, (req, res) => {
+  renderMarketingShell(req, res, { activePath: `/admin/marketing/contacts/${req.params.id}`, params: req.params });
+});
+
+router.get('/admin/marketing/automations', requireAuth, requireAdminOrOrganiser, (req, res) => {
+  renderMarketingShell(req, res, { activePath: '/admin/marketing/automations' });
+});
+
+router.get('/admin/marketing/automations/:id', requireAuth, requireAdminOrOrganiser, (req, res) => {
+  renderMarketingShell(req, res, { activePath: `/admin/marketing/automations/${req.params.id}`, params: req.params });
+});
+
+router.get('/admin/marketing/analytics', requireAuth, requireAdminOrOrganiser, (req, res) => {
+  renderMarketingShell(req, res, { activePath: '/admin/marketing/analytics' });
+});
+
+router.get('/admin/marketing/deliverability', requireAuth, requireAdminOrOrganiser, (req, res) => {
+  renderMarketingShell(req, res, { activePath: '/admin/marketing/deliverability' });
+});
+
+router.get('/admin/marketing/settings', requireAuth, requireAdminOrOrganiser, (req, res) => {
+  renderMarketingShell(req, res, { activePath: '/admin/marketing/settings' });
 });
 
 router.get('/marketing', requireAdminOrOrganiser, (_req, res) => {
