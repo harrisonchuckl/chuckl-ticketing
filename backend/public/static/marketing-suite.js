@@ -2300,69 +2300,96 @@ function getDefaultBlockContent(type) {
 }
 
 /**
- * Renders the `window.editorBlocks` array into the DOM with Professional Icons
+ * REFACTORED: Renders blocks and their children recursively
  */
-/**
- * Renders the `window.editorBlocks` array AND the static footer into the DOM
- */
-/* Corrected renderBuilderCanvas Function */
 function renderBuilderCanvas() {
     const canvas = document.getElementById('ms-builder-canvas');
     if (!canvas) return;
     canvas.innerHTML = '';
 
-    const iconEdit = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
-    const iconCopy = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
-    const iconTrash = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
-
     // 1. Render Draggable Blocks
-    if (window.editorBlocks.length > 0) {
-        window.editorBlocks.forEach((block, index) => {
-            const el = document.createElement('div');
-            el.className = 'ms-builder-block';
-            el.draggable = true;
-            el.dataset.id = block.id;
-            el.dataset.index = index;
-            el.style.padding = block.styles?.padding || '10px';
-
-            let previewHtml = getPreviewHtml(block); 
-
-            el.innerHTML = `
-                ${previewHtml}
-                <div class="block-actions">
-                    <span title="Edit" onclick="window.openEditorFromIcon('${block.id}')">${iconEdit}</span>
-                    <span title="Duplicate" onclick="window.duplicateBlock(${index})">${iconCopy}</span>
-                    <span title="Delete" onclick="window.deleteBlock('${block.id}')">${iconTrash}</span>
-                </div>
-            `;
-
-            // Drag Events
-            el.addEventListener('dragstart', (e) => {
-                draggedSource = 'canvas';
-                draggedBlockIndex = index;
-                e.dataTransfer.effectAllowed = 'move';
-                e.dataTransfer.setData('blockId', block.id); // Added to help move logic
-                setTimeout(() => el.classList.add('dragging'), 0);
-            });
-
-            el.addEventListener('dragend', () => {
-                el.classList.remove('dragging');
-                const ind = document.querySelector('.ms-drop-indicator');
-                if(ind) ind.remove();
-            });
-
-            el.addEventListener('click', (e) => {
-                if (e.target.closest('.block-actions')) return; 
-                document.querySelectorAll('.ms-builder-block').forEach(b => b.classList.remove('is-selected'));
-                el.classList.add('is-selected');
-                openBlockEditor(block);
-            });
-
-            canvas.appendChild(el);
-        }); // <--- ADD THIS (Close forEach)
-    } // <--- ADD THIS (Close if)
+    window.editorBlocks.forEach((block, index) => {
+        const blockEl = createBlockElement(block, index, window.editorBlocks);
+        canvas.appendChild(blockEl);
+    });
 
     // 2. Render Static Footer
+    renderStaticFooter(canvas);
+}
+
+/**
+ * NEW HELPER: Creates a block element with all listeners attached.
+ * This function calls itself if it finds a "strip" with children.
+ */
+function createBlockElement(block, index, parentArray) {
+    const iconEdit = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
+    const iconTrash = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
+
+    const el = document.createElement('div');
+    el.className = 'ms-builder-block';
+    el.dataset.id = block.id;
+    el.draggable = true;
+    el.style.padding = block.styles?.padding || '10px';
+    
+    // --- STRIP SPECIAL HANDLING ---
+    if (block.type === 'strip') {
+        el.innerHTML = `
+            <div class="ms-strip" style="background-color: ${block.content.bgColor || '#ffffff'};">
+                <div class="ms-strip-inner"></div>
+            </div>
+            <div class="block-actions">
+                <span title="Delete" onclick="window.deleteBlock('${block.id}')">${iconTrash}</span>
+            </div>
+        `;
+        const innerContainer = el.querySelector('.ms-strip-inner');
+        // Recursively render children into this strip
+        if (block.content.blocks) {
+            block.content.blocks.forEach((child, childIdx) => {
+                innerContainer.appendChild(createBlockElement(child, childIdx, block.content.blocks));
+            });
+        }
+    } else {
+        // --- STANDARD BLOCK HANDLING ---
+        el.innerHTML = `
+            ${getPreviewHtml(block)}
+            <div class="block-actions">
+                <span title="Edit" onclick="window.openEditorFromIcon('${block.id}')">${iconEdit}</span>
+                <span title="Delete" onclick="window.deleteBlock('${block.id}')">${iconTrash}</span>
+            </div>
+        `;
+    }
+
+    // CLICK: Select the block (stopPropagation prevents parent strips from being selected instead)
+    el.addEventListener('click', (e) => {
+        e.stopPropagation(); 
+        document.querySelectorAll('.ms-builder-block').forEach(b => b.classList.remove('is-selected'));
+        el.classList.add('is-selected');
+        openBlockEditor(block);
+    });
+
+    // DRAG START: Set data for the drop listener
+    el.addEventListener('dragstart', (e) => {
+        e.stopPropagation(); 
+        draggedSource = 'canvas';
+        e.dataTransfer.setData('blockId', block.id);
+        e.dataTransfer.effectAllowed = 'move';
+        setTimeout(() => el.classList.add('dragging'), 0);
+    });
+
+    el.addEventListener('dragend', () => {
+        el.classList.remove('dragging');
+        const ind = document.querySelector('.ms-drop-indicator');
+        if(ind) ind.remove();
+    });
+
+    return el;
+}
+
+/**
+ * Helper to render the footer
+ */
+function renderStaticFooter(canvas) {
+    const iconEdit = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
     const footerEl = document.createElement('div');
     footerEl.className = 'ms-builder-block ms-static-footer';
     footerEl.style.borderTop = '2px solid #e5e7eb';
@@ -2373,34 +2400,23 @@ function renderBuilderCanvas() {
     footerEl.innerHTML = `
         ${window.emailFooterState.text}
         <div class="block-actions" style="top:-15px; right: 10px;">
-            <span style="font-size:12px; pointer-events:none;">Footer Area (Click to Edit)</span>
+            <span style="font-size:12px; pointer-events:none;">Footer Area</span>
              <span title="Edit">${iconEdit}</span>
         </div>
     `;
     
-    footerEl.addEventListener('click', () => {
-        openFooterEditor();
-    });
-
+    footerEl.addEventListener('click', () => openFooterEditor());
     canvas.appendChild(footerEl);
 }
-// Helper for preview HTML to keep render function clean
+
+/**
+ * Re-added the core getPreviewHtml for the basic blocks
+ */
 function getPreviewHtml(block) {
-  const c = block.content;
-  switch(block.type) {
-    case 'strip': 
-  const blocks = c.blocks || [];
-  // We wrap nested items so they are visible and have spacing
-  const nestedHtml = blocks.map(b => {
-      return `<div class="ms-nested-block" style="padding: 10px; border: 1px solid #f1f5f9; margin-bottom: 5px; background: white;">
-                ${getPreviewHtml(b)}
-              </div>`;
-  }).join('');
-  
-  return `<div class="ms-strip" style="background-color: ${c.bgColor || '#ffffff'}; min-height: 100px;">
-            ${nestedHtml || '<div class="ms-muted" style="text-align:center; padding:40px;">Drop elements here</div>'}
-          </div>`;    case 'text': return `<div>${c.text}</div>`;
-    case 'boxedtext': return `<div style="background:${c.bgColor}; padding:20px; border-radius:4px;">${c.text}</div>`;
+    const c = block.content;
+    switch(block.type) {
+        case 'text': return `<div>${c.text}</div>`;
+        case 'boxedtext': return `<div style="background:${c.bgColor}; padding:20px; border-radius:4px;">${c.text}</div>`;
         case 'image': return `<img src="${c.src}" style="width:100%; display:block;">`;
         case 'imagegroup': 
             return `<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
@@ -2410,14 +2426,13 @@ function getPreviewHtml(block) {
             return `<div style="border:1px solid #eee;"><img src="${c.src}" style="width:100%; display:block;"><div style="padding:15px;">${c.caption}</div></div>`; 
         case 'button': return `<div style="text-align:${c.align};"><a class="ms-primary" style="background:${c.color};">${c.label}</a></div>`;
         case 'divider': return `<hr style="border:0; border-top:${c.thickness} solid ${c.color}; margin:20px 0;">`;
-        case 'social': return `<div style="text-align:center; gap:10px; display:flex; justify-content:center;">
-            ${c.fb ? 'FB Icon ' : ''} ${c.ig ? 'IG Icon ' : ''} ${c.tw ? 'TW Icon' : ''}
-            </div>`;
-        case 'video': return `<div style="position:relative;"><img src="${c.thumbnail}" style="width:100%; display:block;"><div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:rgba(0,0,0,0.5); color:white; width:50px; height:50px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:24px;">▶</div></div>`;
-        case 'code': return `<div style="background:#f1f5f9; color:#64748b; padding:10px; font-family:monospace; font-size:12px; text-align:center;">&lt;HTML Code Block /&gt;</div>`;
+        case 'social': return `<div style="text-align:center; display:flex; justify-content:center; gap:10px;">Social Icons Placeholder</div>`;
+        case 'video': return `<div style="position:relative;"><img src="${c.thumbnail}" style="width:100%;"><div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:rgba(0,0,0,0.5); color:white; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center;">▶</div></div>`;
+        case 'code': return `<div style="background:#f1f5f9; padding:10px; font-family:monospace; font-size:12px; text-align:center;">&lt;HTML Code /&gt;</div>`;
         default: return `<div class="ms-muted">[${block.type.toUpperCase()} BLOCK]</div>`;
     }
 }
+
 window.deleteBlock = function(id) {
     if(!confirm('Delete this block?')) return;
     window.editorBlocks = window.editorBlocks.filter(b => b.id !== id);
