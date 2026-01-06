@@ -2036,13 +2036,31 @@ window.openEditorFromIcon = function(id) {
 
 
 /* =========================================
-   VISUAL BUILDER LOGIC (v2 - Reordering Support)
+   VISUAL BUILDER LOGIC (v3 - Footer & Placeholders)
    ========================================= */
 
 window.editorBlocks = [];
-let draggedSource = null; // 'sidebar' or 'canvas'
-let draggedBlockIndex = null; // Index of block being moved (if from canvas)
+// Separate state for the mandatory footer
+window.emailFooterState = {
+    text: '<p style="font-size:12px; color:#6b7280; text-align:center;">© 2026 TixAll. All rights reserved.<br>You are receiving this email because you opted in via our website.<br><a href="{{links.unsubscribeLink}}" style="color:#4f46e5; text-decoration:underline;">Unsubscribe</a> | <a href="{{links.managePreferencesLink}}" style="color:#4f46e5; text-decoration:underline;">Manage Preferences</a></p>',
+    bgColor: '#f8fafc'
+};
 
+let draggedSource = null;
+let draggedBlockIndex = null;
+
+// Helper to generate SVG data URI for placeholders
+function getPlaceholderImage(width, height) {
+    const svg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${width}" height="${height}" fill="#e2e8f0"/>
+        <g fill="none" stroke="#94a3b8" stroke-width="2">
+            <rect x="${width/2 - 24}" y="${height/2 - 18}" width="48" height="36" rx="4"/>
+            <circle cx="${width/2}" cy="${height/2}" r="8"/>
+            <polyline points="${width/2 - 24 + 10} ${height/2 - 18 + 8} ${width/2 - 24 + 4} ${height/2 - 18 + 4} ${width/2 + 24 - 4} ${height/2 - 18 + 4} ${width/2 + 24 - 10} ${height/2 - 18 + 8}"/>
+        </g>
+    </svg>`;
+    return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+}
 /**
  * Initializes listeners for the Visual Builder
  */
@@ -2224,101 +2242,133 @@ function moveBlockInCanvas(fromIndex, toIndex) {
  * Returns default data for new blocks
  */
 function getDefaultBlockContent(type) {
+    const placeholderLarge = getPlaceholderImage(600, 300);
+    const placeholderSmall = getPlaceholderImage(300, 200);
+
     switch (type) {
         case 'text': return { text: '<h3>New Text Block</h3><p>Enter your content here.</p>' };
         case 'boxedtext': return { text: '<p>This is text inside a colored box.</p>', bgColor: '#f1f5f9' };
-        case 'image': return { src: 'https://placehold.co/600x300', alt: 'Image', link: '' };
-        case 'imagegroup': return { images: [{src:'https://placehold.co/300x300'}, {src:'https://placehold.co/300x300'}] };
-        case 'imagecard': return { src: 'https://placehold.co/600x300', caption: '<strong>Image Caption</strong><p>Subtext goes here.</p>' };
+        case 'image': return { src: placeholderLarge, alt: 'Image', link: '' };
+        case 'imagegroup': return { images: [{src:placeholderSmall}, {src:placeholderSmall}] };
+        case 'imagecard': return { src: placeholderLarge, caption: '<p style="margin-top:10px;">Image caption goes here.</p>' };
         case 'button': return { label: 'Click Here', url: 'https://', color: '#4f46e5', align: 'center' };
         case 'divider': return { color: '#e2e8f0', thickness: '1px' };
         case 'social': return { fb: '#', ig: '#', tw: '#' };
-        case 'footer': return { text: '© 2026 Your Company. | <a href="{{links.unsubscribeLink}}">Unsubscribe</a>' };
-        case 'video': return { url: '', thumbnail: 'https://placehold.co/600x340?text=Video+Placeholder' };
+        // 'footer' type gets removed from here as it's now handled statically
+        case 'video': return { url: '', thumbnail: placeholderLarge };
         case 'code': return { html: '' };
         case 'product': return { productId: null, title: 'Product Name', price: '£0.00' };
         default: return {};
     }
 }
+
 /**
  * Renders the `window.editorBlocks` array into the DOM with Professional Icons
+ */
+/**
+ * Renders the `window.editorBlocks` array AND the static footer into the DOM
  */
 function renderBuilderCanvas() {
     const canvas = document.getElementById('ms-builder-canvas');
     if (!canvas) return;
     canvas.innerHTML = '';
 
-    if (window.editorBlocks.length === 0) {
-        canvas.innerHTML = `<div class="ms-canvas-placeholder">Drag elements here from the sidebar to build your email.</div>`;
-        return;
-    }
-
-    // Professional SVG Icons
     const iconEdit = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
     const iconCopy = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
     const iconTrash = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
 
-    window.editorBlocks.forEach((block, index) => {
-        const el = document.createElement('div');
-        el.className = 'ms-builder-block';
-        el.draggable = true;
-        el.dataset.id = block.id;
-        el.dataset.index = index;
+    // 1. Render Draggable Blocks
+    if (window.editorBlocks.length > 0) {
+        window.editorBlocks.forEach((block, index) => {
+            const el = document.createElement('div');
+            el.className = 'ms-builder-block';
+            el.draggable = true;
+            el.dataset.id = block.id;
+            el.dataset.index = index;
+            el.style.padding = block.styles?.padding || '10px'; // Apply padding style
 
-        let previewHtml = '';
-        const c = block.content;
+            // ... (Preview HTML generation logic from previous step goes here if not already present) ...
+            let previewHtml = getPreviewHtml(block); // Using helper function for cleanliness
 
-        switch(block.type) {
-            case 'text': previewHtml = `<div>${c.text}</div>`; break;
-            case 'boxedtext': previewHtml = `<div style="background:${c.bgColor}; padding:20px; border-radius:4px;">${c.text}</div>`; break;
-            case 'image': previewHtml = `<img src="${c.src}" style="width:100%; display:block;">`; break;
-            case 'imagegroup': 
-                previewHtml = `<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-                    ${c.images.map(img => `<img src="${img.src}" style="width:100%;">`).join('')}
-                </div>`; 
-                break;
-            case 'imagecard': 
-                previewHtml = `<div style="border:1px solid #eee;"><img src="${c.src}" style="width:100%;"><div style="padding:15px;">${c.caption}</div></div>`; 
-                break;
-            case 'button': previewHtml = `<div style="text-align:${c.align};"><a class="ms-primary" style="background:${c.color};">${c.label}</a></div>`; break;
-            case 'divider': previewHtml = `<hr style="border:0; border-top:${c.thickness} solid ${c.color}; margin:20px 0;">`; break;
-            case 'social': previewHtml = `<div style="text-align:center; gap:10px; display:flex; justify-content:center;">FB | IG | TW</div>`; break;
-            case 'footer': previewHtml = `<div style="font-size:12px; color:#666; text-align:center; border-top:1px solid #eee; padding-top:20px;">${c.text}</div>`; break;
-            case 'video': previewHtml = `<div style="position:relative;"><img src="${c.thumbnail}" style="width:100%;"><div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.2);">▶</div></div>`; break;
-            case 'code': previewHtml = `<div style="background:#2d2d2d; color:#85ff85; padding:10px; font-family:monospace; font-size:12px;">&lt;HTML Code Block /&gt;</div>`; break;
-            default: previewHtml = `<div class="ms-muted" style="text-align:center; padding:20px; border:1px dashed #ccc;">[${block.type.toUpperCase()} BLOCK]</div>`;
-        }
-        el.innerHTML = `
-            ${previewHtml}
-            <div class="block-actions">
-                <span title="Edit" onclick="window.openEditorFromIcon('${block.id}')">${iconEdit}</span>
-                <span title="Duplicate" onclick="window.duplicateBlock(${index})">${iconCopy}</span>
-                <span title="Delete" onclick="window.deleteBlock('${block.id}')">${iconTrash}</span>
-            </div>
-        `;
+            el.innerHTML = `
+                ${previewHtml}
+                <div class="block-actions">
+                    <span title="Edit" onclick="window.openEditorFromIcon('${block.id}')">${iconEdit}</span>
+                    <span title="Duplicate" onclick="window.duplicateBlock(${index})">${iconCopy}</span>
+                    <span title="Delete" onclick="window.deleteBlock('${block.id}')">${iconTrash}</span>
+                </div>
+            `;
 
-        el.addEventListener('dragstart', (e) => {
-            draggedSource = 'canvas';
-            draggedBlockIndex = index;
-            e.dataTransfer.effectAllowed = 'move';
-            setTimeout(() => el.classList.add('dragging'), 0);
+            // Drag Events
+            el.addEventListener('dragstart', (e) => {
+                draggedSource = 'canvas';
+                draggedBlockIndex = index;
+                e.dataTransfer.effectAllowed = 'move';
+                setTimeout(() => el.classList.add('dragging'), 0);
+            });
+            el.addEventListener('dragend', () => {
+                el.classList.remove('dragging');
+                const ind = document.querySelector('.ms-drop-indicator');
+                if(ind) ind.remove();
+            });
+            // Click to Edit
+            el.addEventListener('click', (e) => {
+                if (e.target.closest('.block-actions')) return; 
+                openBlockEditor(block);
+            });
+
+            canvas.appendChild(el);
         });
+    } else {
+         canvas.innerHTML = `<div class="ms-canvas-placeholder" style="margin-bottom:20px;">Drag elements here to build your email.</div>`;
+    }
 
-        el.addEventListener('dragend', () => {
-            el.classList.remove('dragging');
-            const ind = document.querySelector('.ms-drop-indicator');
-            if(ind) ind.remove();
-        });
-
-        el.addEventListener('click', (e) => {
-            if (e.target.closest('.block-actions')) return; 
-            openBlockEditor(block);
-        });
-
-        canvas.appendChild(el);
+    // 2. Render Static Footer (Always at bottom, not draggable)
+    const footerEl = document.createElement('div');
+    footerEl.className = 'ms-builder-block ms-static-footer';
+    footerEl.style.borderTop = '2px solid #e5e7eb';
+    footerEl.style.marginTop = 'auto'; // Pushes to bottom if canvas height forces it
+    footerEl.style.backgroundColor = window.emailFooterState.bgColor;
+    footerEl.style.padding = '20px';
+    
+    footerEl.innerHTML = `
+        ${window.emailFooterState.text}
+        <div class="block-actions" style="top:-15px; right: 10px;">
+            <span style="font-size:12px; pointer-events:none;">Footer Area (Click to Edit)</span>
+             <span title="Edit">${iconEdit}</span>
+        </div>
+    `;
+    
+    footerEl.addEventListener('click', () => {
+        openFooterEditor();
     });
+
+    canvas.appendChild(footerEl);
 }
 
+// Helper for preview HTML to keep render function clean
+function getPreviewHtml(block) {
+    const c = block.content;
+    switch(block.type) {
+        case 'text': return `<div>${c.text}</div>`;
+        case 'boxedtext': return `<div style="background:${c.bgColor}; padding:20px; border-radius:4px;">${c.text}</div>`;
+        case 'image': return `<img src="${c.src}" style="width:100%; display:block;">`;
+        case 'imagegroup': 
+            return `<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                ${c.images.map(img => `<img src="${img.src}" style="width:100%;">`).join('')}
+            </div>`; 
+        case 'imagecard': 
+            return `<div style="border:1px solid #eee;"><img src="${c.src}" style="width:100%; display:block;"><div style="padding:15px;">${c.caption}</div></div>`; 
+        case 'button': return `<div style="text-align:${c.align};"><a class="ms-primary" style="background:${c.color};">${c.label}</a></div>`;
+        case 'divider': return `<hr style="border:0; border-top:${c.thickness} solid ${c.color}; margin:20px 0;">`;
+        case 'social': return `<div style="text-align:center; gap:10px; display:flex; justify-content:center;">
+            ${c.fb ? 'FB Icon ' : ''} ${c.ig ? 'IG Icon ' : ''} ${c.tw ? 'TW Icon' : ''}
+            </div>`;
+        case 'video': return `<div style="position:relative;"><img src="${c.thumbnail}" style="width:100%; display:block;"><div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:rgba(0,0,0,0.5); color:white; width:50px; height:50px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:24px;">▶</div></div>`;
+        case 'code': return `<div style="background:#f1f5f9; color:#64748b; padding:10px; font-family:monospace; font-size:12px; text-align:center;">&lt;HTML Code Block /&gt;</div>`;
+        default: return `<div class="ms-muted">[${block.type.toUpperCase()} BLOCK]</div>`;
+    }
+}
 window.deleteBlock = function(id) {
     if(!confirm('Delete this block?')) return;
     window.editorBlocks = window.editorBlocks.filter(b => b.id !== id);
@@ -2367,4 +2417,38 @@ function openBlockEditor(block) {
     else {
         container.innerHTML = `<div class="ms-muted">No settings available for this block type yet.</div>`;
     }
+}
+
+/* Opens the editor for the static footer */
+function openFooterEditor() {
+    document.querySelectorAll('.ms-sidebar-panel').forEach(p => p.classList.remove('active'));
+    const editorPanel = document.getElementById('ms-block-editor');
+    editorPanel.classList.remove('hidden');
+    editorPanel.classList.add('active');
+
+    const container = document.getElementById('ms-active-block-settings');
+    container.innerHTML = `
+        <div class="ms-toolbar" style="margin-bottom:10px; border-bottom:1px solid #eee; padding-bottom:10px;">
+            <strong>Edit Footer</strong>
+            <p class="ms-muted" style="font-size:12px;">This section appears at the bottom of every email.</p>
+        </div>
+        <div class="ms-field">
+            <label>Footer Content (HTML)</label>
+            <textarea id="edit-footer-text" rows="8" style="width:100%; font-family:monospace; font-size:12px;">${window.emailFooterState.text}</textarea>
+            <div class="ms-muted">Required merge tags: {{links.unsubscribeLink}}</div>
+        </div>
+        <div class="ms-field">
+            <label>Background Color</label>
+            <input type="color" id="edit-footer-bg" value="${window.emailFooterState.bgColor}">
+        </div>
+    `;
+
+    container.querySelector('#edit-footer-text').addEventListener('input', (e) => {
+        window.emailFooterState.text = e.target.value;
+        renderBuilderCanvas();
+    });
+    container.querySelector('#edit-footer-bg').addEventListener('input', (e) => {
+        window.emailFooterState.bgColor = e.target.value;
+        renderBuilderCanvas();
+    });
 }
