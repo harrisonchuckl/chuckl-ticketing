@@ -62,7 +62,7 @@ import {
 } from '../services/marketing/automations.js';
 import { triggerTagAppliedAutomation } from '../services/marketing/automations.js';
 import { ensureDefaultPreferenceTopics } from '../services/marketing/preferences.js';
-import { recordConsentAudit, recordSuppressionAudit } from '../services/marketing/audit.js';
+import { recordConsentAudit } from '../services/marketing/audit.js';
 import { renderEmailDocument } from '../lib/email-builder/rendering.js';
 import { buildPreviewPersonalisationContext } from '../services/marketing/personalisation.js';
 import { compileEditorHtml, renderCompiledTemplate } from '../services/marketing/template-compiler.js';
@@ -130,7 +130,7 @@ function forwardToLegacy(
   };
   req.url = legacyPath;
   if (methodOverride) req.method = methodOverride;
-  router.handle(req, res, (err: any) => {
+  (router as any).handle(req, res, (err: any) => {
     req.url = originalUrl;
     req.method = originalMethod;
     res.json = originalJson;
@@ -4863,7 +4863,7 @@ router.get('/admin/marketing/api/contacts/:id', requireAuth, requireAdminOrOrgan
     suppressions,
     preferences: topics.map((topic) => {
       const match = contact.preferences.find((pref) => pref.topicId === topic.id);
-      return { ...topic, status: match?.status || MarketingPreferenceStatus.UNKNOWN };
+      return { ...topic, status: match?.status || MarketingPreferenceStatus.SUBSCRIBED };
     }),
   };
   logMarketingApi(req, response);
@@ -4893,8 +4893,7 @@ router.post('/admin/marketing/api/contacts/:id/suppress', requireAuth, requireAd
   const contact = await prisma.marketingContact.findFirst({ where: { id, tenantId } });
   if (!contact) return res.status(404).json({ ok: false, message: 'Contact not found' });
   const reason = String(req.body?.reason || 'Manual suppression').trim();
-  await applySuppression(tenantId, contact.email, MarketingSuppressionType.MANUAL, reason, MarketingConsentSource.ADMIN_EDIT);
-  await recordSuppressionAudit(tenantId, contact.email, { action: 'suppress', reason });
+  await applySuppression(tenantId, contact.email, MarketingSuppressionType.UNSUBSCRIBE, reason, MarketingConsentSource.ADMIN_EDIT);
   const response = { ok: true };
   logMarketingApi(req, response);
   res.json(response);
@@ -4908,7 +4907,6 @@ router.post('/admin/marketing/api/contacts/:id/unsuppress', requireAuth, require
   const contact = await prisma.marketingContact.findFirst({ where: { id, tenantId } });
   if (!contact) return res.status(404).json({ ok: false, message: 'Contact not found' });
   await clearSuppression(tenantId, contact.email);
-  await recordSuppressionAudit(tenantId, contact.email, { action: 'unsuppress' });
   const response = { ok: true };
   logMarketingApi(req, response);
   res.json(response);
@@ -4950,17 +4948,17 @@ router.get('/admin/marketing/api/analytics/summary', requireAuth, requireAdminOr
       where: { tenantId, status: MarketingRecipientStatus.SENT, sentAt: { gte: from30 } },
     }),
     prisma.marketingEmailEvent.count({
-      where: { tenantId, type: MarketingEmailEventType.OPENED, createdAt: { gte: from30 } },
+      where: { tenantId, type: MarketingEmailEventType.OPEN, createdAt: { gte: from30 } },
     }),
     prisma.marketingEmailEvent.count({
-      where: { tenantId, type: MarketingEmailEventType.CLICKED, createdAt: { gte: from30 } },
+      where: { tenantId, type: MarketingEmailEventType.CLICK, createdAt: { gte: from30 } },
     }),
     fetchTopSegmentsByEngagement(tenantId, 30),
     prisma.marketingEmailEvent.groupBy({
       by: ['campaignId'],
       where: { tenantId, createdAt: { gte: from30 } },
-      _count: { _all: true },
-      orderBy: { _count: { _all: 'desc' } },
+      _count: { id: true },
+      orderBy: { _count: { id: 'desc' } },
       take: 5,
     }),
   ]);
@@ -4981,7 +4979,7 @@ router.get('/admin/marketing/api/analytics/summary', requireAuth, requireAdminOr
     topCampaigns: topCampaignEvents.map((row) => ({
       id: row.campaignId,
       name: campaignMap.get(row.campaignId) || 'Campaign',
-      events: row._count._all,
+      events: row._count?.id ?? 0,
     })),
     topSegments,
   };
