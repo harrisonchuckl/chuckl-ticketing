@@ -321,3 +321,129 @@ body {
 .react-flow__renderer {
   background: #f8fafc;
 }
+
+/* VISUAL BUILDER LAYOUT */
+.ms-visual-builder {
+  display: grid;
+  grid-template-columns: 1fr 300px; /* Canvas | Sidebar */
+  height: calc(100vh - 200px);
+  border: 1px solid var(--ms-border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #e5e7eb; /* Grey background behind the email canvas */
+}
+
+/* CANVAS (Left Side) */
+.ms-builder-canvas-wrapper {
+  padding: 40px;
+  overflow-y: auto;
+  display: flex;
+  justify-content: center;
+}
+
+.ms-builder-canvas {
+  width: 600px; /* Standard email width */
+  min-height: 800px;
+  background: white;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ms-canvas-placeholder {
+  border: 2px dashed #cbd5e1;
+  padding: 40px;
+  text-align: center;
+  color: #64748b;
+  border-radius: 8px;
+  margin-top: 20px;
+}
+
+/* BLOCKS IN CANVAS */
+.ms-builder-block {
+  position: relative;
+  border: 1px solid transparent;
+  padding: 10px;
+}
+.ms-builder-block:hover {
+  border: 1px solid var(--ms-primary);
+  cursor: pointer;
+}
+.ms-builder-block .block-actions {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: -24px;
+  background: var(--ms-primary);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px 4px 0 0;
+  font-size: 12px;
+}
+.ms-builder-block:hover .block-actions {
+  display: block;
+}
+
+/* SIDEBAR (Right Side) */
+.ms-builder-sidebar {
+  background: white;
+  border-left: 1px solid var(--ms-border);
+  display: flex;
+  flex-direction: column;
+}
+
+.ms-sidebar-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--ms-border);
+}
+.ms-tab-btn {
+  flex: 1;
+  background: none;
+  border: none;
+  padding: 14px;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--ms-muted);
+}
+.ms-tab-btn.active {
+  color: var(--ms-primary);
+  border-bottom: 2px solid var(--ms-primary);
+}
+
+.ms-sidebar-panel {
+  display: none;
+  padding: 16px;
+  overflow-y: auto;
+}
+.ms-sidebar-panel.active {
+  display: block;
+}
+
+/* DRAGGABLE ICONS GRID */
+.ms-block-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.ms-draggable-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #f8fafc;
+  border: 1px solid var(--ms-border);
+  padding: 16px;
+  border-radius: 8px;
+  cursor: grab;
+  transition: all 0.2s;
+}
+.ms-draggable-block:hover {
+  border-color: var(--ms-primary);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+.ms-draggable-block .icon {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
