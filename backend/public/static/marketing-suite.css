@@ -266,15 +266,34 @@ body {
     display: none;
     position: absolute;
     right: 0;
-    top: -30px; 
+    top: -42px; /* Adjusted for larger height */
     background: var(--ms-primary);
     color: white;
-    padding: 4px 8px;
-    border-radius: 6px 6px 0 0;
-    font-size: 13px;
+    padding: 8px 12px; /* Increased padding */
+    border-radius: 8px 8px 0 0;
     z-index: 10;
-    gap: 8px;
+    gap: 12px; /* More space between icons */
     align-items: center;
+    box-shadow: 0 -4px 10px rgba(0,0,0,0.1);
+}
+
+.ms-builder-block .block-actions span {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s, opacity 0.2s;
+}
+
+.ms-builder-block .block-actions span:hover {
+    transform: scale(1.1);
+    opacity: 0.8;
+}
+
+/* 40% Bigger Icons (Standard was 20px, now 28px) */
+.ms-builder-block .block-actions svg {
+    width: 28px;
+    height: 28px;
 }
 
 .ms-builder-block:hover .block-actions {
