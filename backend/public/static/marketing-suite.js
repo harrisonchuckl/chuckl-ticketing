@@ -1757,35 +1757,49 @@ async function renderRoute() {
           ? '/admin/marketing/automations'
           : path;
   renderShell(highlight);
-  await loadStatus();
+  loadStatus();
 
-  if (path === '/admin/marketing') return renderHome();
-  if (path === '/admin/marketing/campaigns') return renderCampaigns();
-  if (path === '/admin/marketing/campaigns/new') return renderCampaignCreate();
-  if (path === '/admin/marketing/templates') return renderTemplates();
-  if (path === '/admin/marketing/segments') return renderSegments();
-  if (path === '/admin/marketing/contacts') return renderContacts();
-  if (path === '/admin/marketing/automations') return renderAutomations();
-  if (path === '/admin/marketing/analytics') return renderAnalytics();
-  if (path === '/admin/marketing/deliverability') return renderDeliverability();
-  if (path === '/admin/marketing/settings') return renderSettings();
+  try {
+    if (path === '/admin/marketing') return renderHome();
+    if (path === '/admin/marketing/campaigns') return renderCampaigns();
+    if (path === '/admin/marketing/campaigns/new') return renderCampaignCreate();
+    if (path === '/admin/marketing/templates') return renderTemplates();
+    if (path === '/admin/marketing/segments') return renderSegments();
+    if (path === '/admin/marketing/contacts') return renderContacts();
+    if (path === '/admin/marketing/automations') return renderAutomations();
+    if (path === '/admin/marketing/analytics') return renderAnalytics();
+    if (path === '/admin/marketing/deliverability') return renderDeliverability();
+    if (path === '/admin/marketing/settings') return renderSettings();
 
-  const campaignMatch = path.match(/\/admin\/marketing\/campaigns\/([^/]+)/);
-  if (campaignMatch) return renderCampaignDetail(campaignMatch[1]);
+    const campaignMatch = path.match(/\/admin\/marketing\/campaigns\/([^/]+)/);
+    if (campaignMatch) return renderCampaignDetail(campaignMatch[1]);
 
-  const templateMatch = path.match(/\/admin\/marketing\/templates\/([^/]+)\/edit/);
-  if (templateMatch) return renderTemplateEditor(templateMatch[1]);
+    const templateMatch = path.match(/\/admin\/marketing\/templates\/([^/]+)\/edit/);
+    if (templateMatch) return renderTemplateEditor(templateMatch[1]);
 
-  const segmentMatch = path.match(/\/admin\/marketing\/segments\/([^/]+)/);
-  if (segmentMatch) return renderSegmentDetail(segmentMatch[1]);
+    const segmentMatch = path.match(/\/admin\/marketing\/segments\/([^/]+)/);
+    if (segmentMatch) return renderSegmentDetail(segmentMatch[1]);
 
-  const contactMatch = path.match(/\/admin\/marketing\/contacts\/([^/]+)/);
-  if (contactMatch) return renderContactDetail(contactMatch[1]);
+    const contactMatch = path.match(/\/admin\/marketing\/contacts\/([^/]+)/);
+    if (contactMatch) return renderContactDetail(contactMatch[1]);
 
-  const automationMatch = path.match(/\/admin\/marketing\/automations\/([^/]+)/);
-  if (automationMatch) return renderAutomationDetail(automationMatch[1]);
+    const automationMatch = path.match(/\/admin\/marketing\/automations\/([^/]+)/);
+    if (automationMatch) return renderAutomationDetail(automationMatch[1]);
 
-  return renderHome();
+    return renderHome();
+  } catch (error) {
+    console.error('[marketing-suite] render failed', error);
+    const main = document.getElementById('ms-main');
+    if (main) {
+      const message = error?.message || 'Unable to load this page.';
+      main.innerHTML = `
+        <div class="ms-card">
+          <h2>Unable to load</h2>
+          <div class="ms-muted">${escapeHtml(message)}</div>
+        </div>
+      `;
+    }
+  }
 }
 
 window.addEventListener('popstate', () => {
