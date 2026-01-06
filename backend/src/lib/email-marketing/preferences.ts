@@ -1,3 +1,5 @@
+import { createHmac } from 'node:crypto';
+
 const SECRET = process.env.MARKETING_PREFERENCES_SECRET || process.env.MARKETING_UNSUBSCRIBE_SECRET || 'dev-preferences-secret';
 const DEFAULT_EXP_DAYS = Number(process.env.MARKETING_PREFERENCES_EXP_DAYS || 90);
 
@@ -17,7 +19,7 @@ function base64UrlDecode(input: string) {
 
 function signature(body: string) {
   return base64UrlEncode(
-    require('crypto').createHmac('sha256', SECRET).update(body).digest('hex')
+    createHmac('sha256', SECRET).update(body).digest('hex')
   );
 }
 
