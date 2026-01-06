@@ -5042,59 +5042,59 @@ router.use('/marketing/api', requireAuth, requireAdminOrOrganiser, (req, res, ne
 });
 
 router.get('/marketing', requireAuth, requireAdminOrOrganiser, (req, res) => {
-  renderMarketingShell(req, res, { activePath: '/marketing' });
+  renderMarketingShell(req, res);
 });
 
 router.get('/marketing/campaigns', requireAuth, requireAdminOrOrganiser, (req, res) => {
-  renderMarketingShell(req, res, { activePath: '/marketing/campaigns' });
+  renderMarketingShell(req, res);
 });
 
 router.get('/marketing/campaigns/:id', requireAuth, requireAdminOrOrganiser, (req, res) => {
-  renderMarketingShell(req, res, { activePath: `/marketing/campaigns/${req.params.id}`, params: req.params });
+  renderMarketingShell(req, res);
 });
 
 router.get('/marketing/templates', requireAuth, requireAdminOrOrganiser, (req, res) => {
-  renderMarketingShell(req, res, { activePath: '/marketing/templates' });
+  renderMarketingShell(req, res);
 });
 
 router.get('/marketing/templates/:id/edit', requireAuth, requireAdminOrOrganiser, (req, res) => {
-  renderMarketingShell(req, res, { activePath: `/marketing/templates/${req.params.id}/edit`, params: req.params });
+  renderMarketingShell(req, res);
 });
 
 router.get('/marketing/segments', requireAuth, requireAdminOrOrganiser, (req, res) => {
-  renderMarketingShell(req, res, { activePath: '/marketing/segments' });
+  renderMarketingShell(req, res);
 });
 
 router.get('/marketing/segments/:id', requireAuth, requireAdminOrOrganiser, (req, res) => {
-  renderMarketingShell(req, res, { activePath: `/marketing/segments/${req.params.id}`, params: req.params });
+  renderMarketingShell(req, res);
 });
 
 router.get('/marketing/contacts', requireAuth, requireAdminOrOrganiser, (req, res) => {
-  renderMarketingShell(req, res, { activePath: '/marketing/contacts' });
+  renderMarketingShell(req, res);
 });
 
 router.get('/marketing/contacts/:id', requireAuth, requireAdminOrOrganiser, (req, res) => {
-  renderMarketingShell(req, res, { activePath: `/marketing/contacts/${req.params.id}`, params: req.params });
+  renderMarketingShell(req, res);
 });
 
 router.get('/marketing/automations', requireAuth, requireAdminOrOrganiser, (req, res) => {
-  renderMarketingShell(req, res, { activePath: '/marketing/automations' });
+  renderMarketingShell(req, res);
 });
 
 router.get('/marketing/automations/:id', requireAuth, requireAdminOrOrganiser, (req, res) => {
-  renderMarketingShell(req, res, { activePath: `/marketing/automations/${req.params.id}`, params: req.params });
+  renderMarketingShell(req, res);
 });
 
 router.get('/marketing/analytics', requireAuth, requireAdminOrOrganiser, (req, res) => {
-  renderMarketingShell(req, res, { activePath: '/marketing/analytics' });
+  renderMarketingShell(req, res);
 });
 
 router.get('/marketing/deliverability', requireAuth, requireAdminOrOrganiser, (req, res) => {
-  renderMarketingShell(req, res, { activePath: '/marketing/deliverability' });
+  renderMarketingShell(req, res);
 });
 
 router.get('/marketing/settings', requireAuth, requireAdminOrOrganiser, (req, res) => {
-  renderMarketingShell(req, res, { activePath: '/marketing/settings' });
+  renderMarketingShell(req, res);
 });
 
 router.get('/marketing', requireAdminOrOrganiser, (_req, res) => {
