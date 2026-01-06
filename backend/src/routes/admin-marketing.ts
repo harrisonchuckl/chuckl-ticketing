@@ -91,7 +91,8 @@ function resolveFlowState(flowJson: Prisma.JsonValue | null | undefined) {
 }
 
 function renderMarketingShell(req: any, res: any, options?: { activePath?: string; params?: Record<string, string> }) {
-  const activePath = options?.activePath || String(req.path || req.originalUrl || '/admin/marketing');
+  const requestedPath = options?.activePath || String(req.originalUrl || req.path || '/admin/marketing');
+  const activePath = requestedPath.startsWith('/marketing') ? `/admin${requestedPath}` : requestedPath;
   const params = options?.params || req.params || {};
   const bootstrap = `<script>window.__MS_PATH__=${JSON.stringify(activePath)};window.__MS_PARAMS__=${JSON.stringify(
     params
@@ -4760,7 +4761,7 @@ router.get('/api/marketing/analytics/campaigns', marketingAnalyticsLimiter, requ
   res.json({ ok: true, ...response });
 });
 
-router.get('/admin/marketing/api/search', requireAuth, requireAdminOrOrganiser, async (req, res) => {
+router.get('/marketing/api/search', requireAuth, requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -4805,7 +4806,7 @@ router.get('/admin/marketing/api/search', requireAuth, requireAdminOrOrganiser, 
   res.json(response);
 });
 
-router.get('/admin/marketing/api/segments/:id', requireAuth, requireAdminOrOrganiser, async (req, res) => {
+router.get('/marketing/api/segments/:id', requireAuth, requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -4817,7 +4818,7 @@ router.get('/admin/marketing/api/segments/:id', requireAuth, requireAdminOrOrgan
   res.json(response);
 });
 
-router.post('/admin/marketing/api/segments/:id/evaluate', requireAuth, requireAdminOrOrganiser, async (req, res) => {
+router.post('/marketing/api/segments/:id/evaluate', requireAuth, requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -4831,7 +4832,7 @@ router.post('/admin/marketing/api/segments/:id/evaluate', requireAuth, requireAd
   res.json(response);
 });
 
-router.get('/admin/marketing/api/contacts/:id', requireAuth, requireAdminOrOrganiser, async (req, res) => {
+router.get('/marketing/api/contacts/:id', requireAuth, requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -4870,7 +4871,7 @@ router.get('/admin/marketing/api/contacts/:id', requireAuth, requireAdminOrOrgan
   res.json(response);
 });
 
-router.get('/admin/marketing/api/contacts/:id/audit', requireAuth, requireAdminOrOrganiser, async (req, res) => {
+router.get('/marketing/api/contacts/:id/audit', requireAuth, requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -4885,7 +4886,7 @@ router.get('/admin/marketing/api/contacts/:id/audit', requireAuth, requireAdminO
   res.json(response);
 });
 
-router.post('/admin/marketing/api/contacts/:id/suppress', requireAuth, requireAdminOrOrganiser, requireMarketingStepUp, async (req, res) => {
+router.post('/marketing/api/contacts/:id/suppress', requireAuth, requireAdminOrOrganiser, requireMarketingStepUp, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
   if (!role) return;
@@ -4899,7 +4900,7 @@ router.post('/admin/marketing/api/contacts/:id/suppress', requireAuth, requireAd
   res.json(response);
 });
 
-router.post('/admin/marketing/api/contacts/:id/unsuppress', requireAuth, requireAdminOrOrganiser, requireMarketingStepUp, async (req, res) => {
+router.post('/marketing/api/contacts/:id/unsuppress', requireAuth, requireAdminOrOrganiser, requireMarketingStepUp, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
   if (!role) return;
@@ -4912,7 +4913,7 @@ router.post('/admin/marketing/api/contacts/:id/unsuppress', requireAuth, require
   res.json(response);
 });
 
-router.post('/admin/marketing/api/automations/:id/toggle', requireAuth, requireAdminOrOrganiser, async (req, res) => {
+router.post('/marketing/api/automations/:id/toggle', requireAuth, requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
   if (!role) return;
@@ -4930,7 +4931,7 @@ router.post('/admin/marketing/api/automations/:id/toggle', requireAuth, requireA
   res.json(response);
 });
 
-router.get('/admin/marketing/api/analytics/summary', requireAuth, requireAdminOrOrganiser, async (req, res) => {
+router.get('/marketing/api/analytics/summary', requireAuth, requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -4987,7 +4988,7 @@ router.get('/admin/marketing/api/analytics/summary', requireAuth, requireAdminOr
   res.json(response);
 });
 
-router.get('/admin/marketing/api/deliverability/campaigns/:id', requireAuth, requireAdminOrOrganiser, async (req, res) => {
+router.get('/marketing/api/deliverability/campaigns/:id', requireAuth, requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -4999,109 +5000,109 @@ router.get('/admin/marketing/api/deliverability/campaigns/:id', requireAuth, req
   res.json(response);
 });
 
-router.post('/admin/marketing/api/campaigns/:id/send-test', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
+router.post('/marketing/api/campaigns/:id/send-test', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
   forwardToLegacy(req, res, next, `/api/marketing/campaigns/${req.params.id}/test-send`);
 });
 
-router.post('/admin/marketing/api/campaigns/:id/send-now', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
+router.post('/marketing/api/campaigns/:id/send-now', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
   forwardToLegacy(req, res, next, `/api/marketing/campaigns/${req.params.id}/approve`, undefined, { sendNow: true });
 });
 
-router.post('/admin/marketing/api/campaigns/:id/cancel-schedule', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
+router.post('/marketing/api/campaigns/:id/cancel-schedule', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
   forwardToLegacy(req, res, next, `/api/marketing/campaigns/${req.params.id}/cancel`);
 });
 
-router.get('/admin/marketing/api/campaigns/:id/preview', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
+router.get('/marketing/api/campaigns/:id/preview', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
   forwardToLegacy(req, res, next, `/api/marketing/campaigns/${req.params.id}/preview`, 'POST');
 });
 
-router.post('/admin/marketing/api/templates/:id', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
+router.post('/marketing/api/templates/:id', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
   forwardToLegacy(req, res, next, `/api/marketing/templates/${req.params.id}`, 'PUT');
 });
 
-router.post('/admin/marketing/api/templates/:id/restore', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
+router.post('/marketing/api/templates/:id/restore', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
   forwardToLegacy(req, res, next, `/api/marketing/templates/${req.params.id}/rollback`);
 });
 
-router.post('/admin/marketing/api/segments/:id', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
+router.post('/marketing/api/segments/:id', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
   forwardToLegacy(req, res, next, `/api/marketing/segments/${req.params.id}`, 'PUT');
 });
 
-router.post('/admin/marketing/api/contacts/import', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
+router.post('/marketing/api/contacts/import', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
   forwardToLegacy(req, res, next, '/api/marketing/imports');
 });
 
-router.post('/admin/marketing/api/automations/:id', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
+router.post('/marketing/api/automations/:id', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
   forwardToLegacy(req, res, next, `/api/marketing/automations/${req.params.id}`, 'PUT');
 });
 
-router.post('/admin/marketing/api/settings/roles', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
+router.post('/marketing/api/settings/roles', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
   forwardToLegacy(req, res, next, '/api/marketing/roles');
 });
 
-router.get('/admin/marketing/api/settings/roles', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
+router.get('/marketing/api/settings/roles', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
   forwardToLegacy(req, res, next, '/api/marketing/roles');
 });
 
-router.use('/admin/marketing/api', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
-  const legacyPath = req.originalUrl.replace('/admin/marketing/api', '/api/marketing');
+router.use('/marketing/api', requireAuth, requireAdminOrOrganiser, (req, res, next) => {
+  const legacyPath = req.url.replace('/marketing/api', '/api/marketing');
   forwardToLegacy(req, res, next, legacyPath);
 });
 
-router.get('/admin/marketing', requireAuth, requireAdminOrOrganiser, (req, res) => {
-  renderMarketingShell(req, res, { activePath: '/admin/marketing' });
+router.get('/marketing', requireAuth, requireAdminOrOrganiser, (req, res) => {
+  renderMarketingShell(req, res, { activePath: '/marketing' });
 });
 
-router.get('/admin/marketing/campaigns', requireAuth, requireAdminOrOrganiser, (req, res) => {
-  renderMarketingShell(req, res, { activePath: '/admin/marketing/campaigns' });
+router.get('/marketing/campaigns', requireAuth, requireAdminOrOrganiser, (req, res) => {
+  renderMarketingShell(req, res, { activePath: '/marketing/campaigns' });
 });
 
-router.get('/admin/marketing/campaigns/:id', requireAuth, requireAdminOrOrganiser, (req, res) => {
-  renderMarketingShell(req, res, { activePath: `/admin/marketing/campaigns/${req.params.id}`, params: req.params });
+router.get('/marketing/campaigns/:id', requireAuth, requireAdminOrOrganiser, (req, res) => {
+  renderMarketingShell(req, res, { activePath: `/marketing/campaigns/${req.params.id}`, params: req.params });
 });
 
-router.get('/admin/marketing/templates', requireAuth, requireAdminOrOrganiser, (req, res) => {
-  renderMarketingShell(req, res, { activePath: '/admin/marketing/templates' });
+router.get('/marketing/templates', requireAuth, requireAdminOrOrganiser, (req, res) => {
+  renderMarketingShell(req, res, { activePath: '/marketing/templates' });
 });
 
-router.get('/admin/marketing/templates/:id/edit', requireAuth, requireAdminOrOrganiser, (req, res) => {
-  renderMarketingShell(req, res, { activePath: `/admin/marketing/templates/${req.params.id}/edit`, params: req.params });
+router.get('/marketing/templates/:id/edit', requireAuth, requireAdminOrOrganiser, (req, res) => {
+  renderMarketingShell(req, res, { activePath: `/marketing/templates/${req.params.id}/edit`, params: req.params });
 });
 
-router.get('/admin/marketing/segments', requireAuth, requireAdminOrOrganiser, (req, res) => {
-  renderMarketingShell(req, res, { activePath: '/admin/marketing/segments' });
+router.get('/marketing/segments', requireAuth, requireAdminOrOrganiser, (req, res) => {
+  renderMarketingShell(req, res, { activePath: '/marketing/segments' });
 });
 
-router.get('/admin/marketing/segments/:id', requireAuth, requireAdminOrOrganiser, (req, res) => {
-  renderMarketingShell(req, res, { activePath: `/admin/marketing/segments/${req.params.id}`, params: req.params });
+router.get('/marketing/segments/:id', requireAuth, requireAdminOrOrganiser, (req, res) => {
+  renderMarketingShell(req, res, { activePath: `/marketing/segments/${req.params.id}`, params: req.params });
 });
 
-router.get('/admin/marketing/contacts', requireAuth, requireAdminOrOrganiser, (req, res) => {
-  renderMarketingShell(req, res, { activePath: '/admin/marketing/contacts' });
+router.get('/marketing/contacts', requireAuth, requireAdminOrOrganiser, (req, res) => {
+  renderMarketingShell(req, res, { activePath: '/marketing/contacts' });
 });
 
-router.get('/admin/marketing/contacts/:id', requireAuth, requireAdminOrOrganiser, (req, res) => {
-  renderMarketingShell(req, res, { activePath: `/admin/marketing/contacts/${req.params.id}`, params: req.params });
+router.get('/marketing/contacts/:id', requireAuth, requireAdminOrOrganiser, (req, res) => {
+  renderMarketingShell(req, res, { activePath: `/marketing/contacts/${req.params.id}`, params: req.params });
 });
 
-router.get('/admin/marketing/automations', requireAuth, requireAdminOrOrganiser, (req, res) => {
-  renderMarketingShell(req, res, { activePath: '/admin/marketing/automations' });
+router.get('/marketing/automations', requireAuth, requireAdminOrOrganiser, (req, res) => {
+  renderMarketingShell(req, res, { activePath: '/marketing/automations' });
 });
 
-router.get('/admin/marketing/automations/:id', requireAuth, requireAdminOrOrganiser, (req, res) => {
-  renderMarketingShell(req, res, { activePath: `/admin/marketing/automations/${req.params.id}`, params: req.params });
+router.get('/marketing/automations/:id', requireAuth, requireAdminOrOrganiser, (req, res) => {
+  renderMarketingShell(req, res, { activePath: `/marketing/automations/${req.params.id}`, params: req.params });
 });
 
-router.get('/admin/marketing/analytics', requireAuth, requireAdminOrOrganiser, (req, res) => {
-  renderMarketingShell(req, res, { activePath: '/admin/marketing/analytics' });
+router.get('/marketing/analytics', requireAuth, requireAdminOrOrganiser, (req, res) => {
+  renderMarketingShell(req, res, { activePath: '/marketing/analytics' });
 });
 
-router.get('/admin/marketing/deliverability', requireAuth, requireAdminOrOrganiser, (req, res) => {
-  renderMarketingShell(req, res, { activePath: '/admin/marketing/deliverability' });
+router.get('/marketing/deliverability', requireAuth, requireAdminOrOrganiser, (req, res) => {
+  renderMarketingShell(req, res, { activePath: '/marketing/deliverability' });
 });
 
-router.get('/admin/marketing/settings', requireAuth, requireAdminOrOrganiser, (req, res) => {
-  renderMarketingShell(req, res, { activePath: '/admin/marketing/settings' });
+router.get('/marketing/settings', requireAuth, requireAdminOrOrganiser, (req, res) => {
+  renderMarketingShell(req, res, { activePath: '/marketing/settings' });
 });
 
 router.get('/marketing', requireAdminOrOrganiser, (_req, res) => {

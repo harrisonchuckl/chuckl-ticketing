@@ -25,6 +25,7 @@ export type SegmentRule =
 export type SegmentRulesPayload = {
   rules?: SegmentRule[];
   all?: SegmentRule[];
+  operator?: 'AND' | 'OR';
 };
 
 export type SegmentContact = {
@@ -69,22 +70,27 @@ type SegmentViewStats = {
   lastViewAt: Date | null;
 };
 
-function normaliseRules(input: unknown): SegmentRule[] {
-  if (!input) return [];
-  if (Array.isArray(input)) return input as SegmentRule[];
+function normaliseRulesPayload(input: unknown): { rules: SegmentRule[]; operator: 'AND' | 'OR' } {
+  if (!input) return { rules: [], operator: 'AND' };
+  if (Array.isArray(input)) return { rules: input as SegmentRule[], operator: 'AND' };
   if (typeof input === 'object') {
-    const anyInput = input as SegmentRulesPayload;
-    if (Array.isArray(anyInput.rules)) return anyInput.rules as SegmentRule[];
-    if (Array.isArray(anyInput.all)) return anyInput.all as SegmentRule[];
+    const anyInput = input as SegmentRulesPayload & { match?: string };
+    const rules = Array.isArray(anyInput.rules)
+      ? (anyInput.rules as SegmentRule[])
+      : Array.isArray(anyInput.all)
+        ? (anyInput.all as SegmentRule[])
+        : [];
+    const operatorRaw = String(anyInput.operator || anyInput.match || 'AND').toUpperCase();
+    return { rules, operator: operatorRaw === 'OR' ? 'OR' : 'AND' };
   }
-  return [];
+  return { rules: [], operator: 'AND' };
 }
 
 export async function evaluateSegmentContacts(
   tenantId: string,
   rulesInput: unknown
 ): Promise<SegmentContact[]> {
-  const rules = normaliseRules(rulesInput);
+  const { rules, operator } = normaliseRulesPayload(rulesInput);
   const contacts = await prisma.marketingContact.findMany({
     where: { tenantId },
     include: {
@@ -281,7 +287,7 @@ export async function evaluateSegmentContacts(
     const stats = orderStats.get(emailKey) || null;
     const insight = insightMap.get(emailKey) || null;
     const views = viewStats.get(emailKey) || null;
-    return matchesSegmentRules(contact, rules, stats, insight, views);
+    return matchesSegmentRules(contact, rules, operator, stats, insight, views);
   };
 
   return contactRecords.filter(matches);
@@ -290,10 +296,12 @@ export async function evaluateSegmentContacts(
 export function matchesSegmentRules(
   contact: SegmentContact,
   rules: SegmentRule[],
+  operator: 'AND' | 'OR',
   stats: SegmentOrderStats | null,
   insight: SegmentInsight | null,
   views: SegmentViewStats | null
 ) {
+  if (!rules.length) return true;
   const resolveLastPurchase = () => insight?.lastPurchaseAt || stats?.lastPurchase || null;
   const resolveFirstPurchase = () => insight?.firstPurchaseAt || null;
   const resolvePurchaseCount90d = () => insight?.purchaseCount90d ?? stats?.purchaseCount90d ?? 0;
@@ -309,7 +317,8 @@ export function matchesSegmentRules(
     return 'LOW';
   };
 
-  return rules.every((rule) => {
+  const evaluator = operator === 'OR' ? 'some' : 'every';
+  return rules[evaluator]((rule) => {
     switch (rule.type) {
       case 'HAS_TAG':
         return contact.tags.map((t) => t.toLowerCase()).includes(String(rule.value || '').toLowerCase());
