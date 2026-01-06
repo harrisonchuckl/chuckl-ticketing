@@ -59,6 +59,12 @@ function fetchJson(url, opts = {}) {
   });
 }
 
+function navigateTo(path) {
+  if (window.location.pathname === path) return;
+  window.history.pushState({}, '', path);
+  renderRoute();
+}
+
 function renderShell(activePath) {
   const root = document.getElementById('ms-root');
   const nav = navItems
@@ -90,6 +96,14 @@ function renderShell(activePath) {
       </div>
     </div>
   `;
+
+  root.querySelectorAll('a[href^="/admin/marketing"]').forEach((link) => {
+    link.addEventListener('click', (event) => {
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+      event.preventDefault();
+      navigateTo(link.getAttribute('href'));
+    });
+  });
 
   const createSelect = document.getElementById('ms-create');
   if (createSelect) {
@@ -1097,5 +1111,22 @@ async function renderRoute() {
 
   return renderHome();
 }
+
+window.addEventListener('popstate', () => {
+  renderRoute();
+});
+
+document.addEventListener('click', (event) => {
+  if (event.defaultPrevented) return;
+  const target = event.target.closest('a');
+  if (!target) return;
+  if (target.target && target.target !== '_self') return;
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+  const href = target.getAttribute('href');
+  if (!href) return;
+  if (!href.startsWith('/admin/marketing')) return;
+  event.preventDefault();
+  navigateTo(href);
+});
 
 renderRoute();

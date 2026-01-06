@@ -67,6 +67,7 @@ import { renderEmailDocument } from '../lib/email-builder/rendering.js';
 import { buildPreviewPersonalisationContext } from '../services/marketing/personalisation.js';
 import { compileEditorHtml, renderCompiledTemplate } from '../services/marketing/template-compiler.js';
 import { buildStepsFromFlow, validateFlow } from '../services/marketing/flow.js';
+import { sendMarketingSuiteShell } from '../lib/marketing-suite-shell.js';
 const router = Router();
 const bcrypt: any = (bcryptNS as any).default ?? bcryptNS;
 
@@ -853,7 +854,7 @@ function escapeCsvValue(value: unknown) {
 }
 
 
-router.get('/marketing/health', requireAdminOrOwner, async (_req, res) => {
+router.get('/api/marketing/health', requireAdminOrOwner, async (_req, res) => {
   const workerEnabled = String(process.env.MARKETING_WORKER_ENABLED || 'true') === 'true';
   const intervalMs = Number(process.env.MARKETING_WORKER_INTERVAL_MS || 30000);
   const sendRate = Number(process.env.MARKETING_SEND_RATE_PER_SEC || 50);
@@ -895,7 +896,7 @@ router.get('/marketing/health', requireAdminOrOwner, async (_req, res) => {
   });
 });
 
-router.get('/marketing/insights/health', requireAdminOrOwner, async (_req, res) => {
+router.get('/api/marketing/insights/health', requireAdminOrOwner, async (_req, res) => {
   const workerEnabled = String(process.env.CUSTOMER_INSIGHTS_WORKER_ENABLED || 'true') === 'true';
   const intervalMs = Number(process.env.CUSTOMER_INSIGHTS_WORKER_INTERVAL_MS || 24 * 60 * 60 * 1000);
   const workerState = await prisma.customerInsightsWorkerState.findUnique({ where: { id: 'global' } });
@@ -912,7 +913,7 @@ router.get('/marketing/insights/health', requireAdminOrOwner, async (_req, res) 
   });
 });
 
-router.get('/marketing/insights', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/insights', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const email = String(req.query.email || '').trim().toLowerCase();
   const customerAccountId = String(req.query.customerAccountId || '').trim();
@@ -938,7 +939,7 @@ router.get('/marketing/insights', requireAdminOrOrganiser, async (req, res) => {
   return res.json({ ok: true, items });
 });
 
-router.post('/marketing/insights/query', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/insights/query', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const payload = req.body || {};
   const limit = Number(payload.limit || 100);
@@ -946,7 +947,7 @@ router.post('/marketing/insights/query', requireAdminOrOrganiser, async (req, re
   res.json({ ok: true, ...results });
 });
 
-router.get('/marketing/settings', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/settings', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = resolveTenantId(req);
   const settings = await prisma.marketingSettings.upsert({
     where: { tenantId },
@@ -962,7 +963,7 @@ router.get('/marketing/settings', requireAdminOrOrganiser, async (req, res) => {
   res.json({ ok: true, settings });
 });
 
-router.get('/marketing/status', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/status', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = resolveTenantId(req);
   const settings = await prisma.marketingSettings.findUnique({ where: { tenantId } });
   const senderConfigured = Boolean(settings?.defaultFromEmail && settings?.defaultFromName);
@@ -974,7 +975,7 @@ router.get('/marketing/status', requireAdminOrOrganiser, async (req, res) => {
   });
 });
 
-router.post('/marketing/settings', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/settings', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = resolveTenantId(req);
   const payload = req.body || {};
 
@@ -1040,7 +1041,7 @@ router.post('/marketing/settings', requireAdminOrOrganiser, async (req, res) => 
   res.json({ ok: true, settings });
 });
 
-router.get('/marketing/brand-settings', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/brand-settings', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = resolveTenantId(req);
   const settings = await prisma.marketingSettings.upsert({
     where: { tenantId },
@@ -1063,7 +1064,7 @@ router.get('/marketing/brand-settings', requireAdminOrOrganiser, async (req, res
   });
 });
 
-router.post('/marketing/brand-settings', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/brand-settings', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = resolveTenantId(req);
   const payload = req.body || {};
   const logoUrl = String(payload.logoUrl || '').trim();
@@ -1102,7 +1103,7 @@ router.post('/marketing/brand-settings', requireAdminOrOrganiser, async (req, re
   });
 });
 
-router.get('/marketing/sender-identity', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/sender-identity', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = resolveTenantId(req);
   const settings = await prisma.marketingSettings.upsert({
     where: { tenantId },
@@ -1132,7 +1133,7 @@ router.get('/marketing/sender-identity', requireAdminOrOrganiser, async (req, re
   });
 });
 
-router.post('/marketing/sender-identity', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/sender-identity', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = resolveTenantId(req);
   const payload = req.body || {};
   const existing = await prisma.marketingSettings.findUnique({ where: { tenantId } });
@@ -1191,7 +1192,7 @@ router.post('/marketing/sender-identity', requireAdminOrOrganiser, async (req, r
   res.json({ ok: true, settings: safeSettings });
 });
 
-router.post('/marketing/sender-identity/sendgrid/start', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/sender-identity/sendgrid/start', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = resolveTenantId(req);
   const payload = req.body || {};
 
@@ -1249,7 +1250,7 @@ router.post('/marketing/sender-identity/sendgrid/start', requireAdminOrOrganiser
   });
 });
 
-router.post('/marketing/sender-identity/sendgrid/refresh', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/sender-identity/sendgrid/refresh', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = resolveTenantId(req);
   const settings = await prisma.marketingSettings.findUnique({ where: { tenantId } });
   if (!settings?.sendgridDomainId) {
@@ -1278,7 +1279,7 @@ router.post('/marketing/sender-identity/sendgrid/refresh', requireAdminOrOrganis
   });
 });
 
-router.post('/marketing/sender-identity/test-send', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/sender-identity/test-send', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = resolveTenantId(req);
   const email = normaliseEmail(req.body?.email);
 
@@ -1342,7 +1343,7 @@ router.post('/marketing/sender-identity/test-send', requireAdminOrOrganiser, asy
   }
 });
 
-router.get('/marketing/contacts', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/contacts', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -1379,7 +1380,7 @@ router.get('/marketing/contacts', requireAdminOrOrganiser, async (req, res) => {
   res.json({ ok: true, items });
 });
 
-router.post('/marketing/contacts', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/contacts', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
   if (!role) return;
@@ -1440,7 +1441,7 @@ router.post('/marketing/contacts', requireAdminOrOrganiser, async (req, res) => 
   res.json({ ok: true, contactId: contact.id });
 });
 
-router.post('/marketing/contacts/:id/tags', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/contacts/:id/tags', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
   if (!role) return;
@@ -1471,7 +1472,7 @@ router.post('/marketing/contacts/:id/tags', requireAdminOrOrganiser, async (req,
   res.json({ ok: true });
 });
 
-router.post('/marketing/imports', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/imports', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
   if (!role) return;
@@ -1776,7 +1777,7 @@ router.post('/marketing/imports', requireAdminOrOrganiser, async (req, res) => {
   }
 });
 
-router.get('/marketing/imports', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/imports', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -1788,7 +1789,7 @@ router.get('/marketing/imports', requireAdminOrOrganiser, async (req, res) => {
   res.json({ ok: true, items });
 });
 
-router.get('/marketing/imports/:id', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/imports/:id', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -1806,7 +1807,7 @@ router.get('/marketing/imports/:id', requireAdminOrOrganiser, async (req, res) =
   res.json({ ok: true, job, errors });
 });
 
-router.get('/marketing/imports/:id/errors.csv', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/imports/:id/errors.csv', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -1837,7 +1838,7 @@ router.get('/marketing/imports/:id/errors.csv', requireAdminOrOrganiser, async (
   res.send(csv);
 });
 
-router.get('/marketing/imports/:id/audit', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/imports/:id/audit', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -1856,7 +1857,7 @@ router.get('/marketing/imports/:id/audit', requireAdminOrOrganiser, async (req, 
   res.json({ ok: true, logs });
 });
 
-router.get('/marketing/exports/contacts.csv', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/exports/contacts.csv', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -1957,7 +1958,7 @@ router.get('/marketing/exports/contacts.csv', requireAdminOrOrganiser, async (re
   res.send(csv);
 });
 
-router.get('/marketing/exports/segments.csv', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/exports/segments.csv', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -1983,7 +1984,7 @@ router.get('/marketing/exports/segments.csv', requireAdminOrOrganiser, async (re
   res.send(csv);
 });
 
-router.get('/marketing/segments', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/segments', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -1994,7 +1995,7 @@ router.get('/marketing/segments', requireAdminOrOrganiser, async (req, res) => {
   res.json({ ok: true, items });
 });
 
-router.post('/marketing/segments', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/segments', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
   if (!role) return;
@@ -2018,7 +2019,7 @@ router.post('/marketing/segments', requireAdminOrOrganiser, async (req, res) => 
   res.json({ ok: true, segment });
 });
 
-router.put('/marketing/segments/:id', requireAdminOrOrganiser, async (req, res) => {
+router.put('/api/marketing/segments/:id', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
   if (!role) return;
@@ -2044,7 +2045,7 @@ router.put('/marketing/segments/:id', requireAdminOrOrganiser, async (req, res) 
   res.json({ ok: true, segment });
 });
 
-router.delete('/marketing/segments/:id', requireAdminOrOrganiser, async (req, res) => {
+router.delete('/api/marketing/segments/:id', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
   if (!role) return;
@@ -2056,7 +2057,7 @@ router.delete('/marketing/segments/:id', requireAdminOrOrganiser, async (req, re
   res.json({ ok: true });
 });
 
-router.get('/marketing/segments/:id/estimate', marketingEstimateLimiter, requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/segments/:id/estimate', marketingEstimateLimiter, requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -2068,7 +2069,7 @@ router.get('/marketing/segments/:id/estimate', marketingEstimateLimiter, require
   res.json({ ok: true, estimate });
 });
 
-router.post('/marketing/segments/estimate', marketingEstimateLimiter, requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/segments/estimate', marketingEstimateLimiter, requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -2264,7 +2265,7 @@ router.post('/api/email-templates/render', requireAdminOrOrganiser, async (req, 
   res.json({ ok: true, html });
 });
 
-router.post('/marketing/segments/:id/estimate', marketingEstimateLimiter, requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/segments/:id/estimate', marketingEstimateLimiter, requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const id = String(req.params.id);
   const segment = await prisma.marketingSegment.findFirst({ where: { id, tenantId } });
@@ -2275,7 +2276,7 @@ router.post('/marketing/segments/:id/estimate', marketingEstimateLimiter, requir
   res.json({ ok: true, estimate });
 });
 
-router.get('/marketing/templates', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/templates', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -2304,11 +2305,11 @@ router.get('/marketing/templates', requireAdminOrOrganiser, async (req, res) => 
   });
 });
 
-router.get('/marketing/automations/presets', requireAdminOrOrganiser, async (_req, res) => {
+router.get('/api/marketing/automations/presets', requireAdminOrOrganiser, async (_req, res) => {
   res.json({ ok: true, presets: automationPresets() });
 });
 
-router.post('/marketing/automations/presets/enable', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/automations/presets/enable', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const {
     presetId,
@@ -2408,7 +2409,7 @@ router.post('/marketing/automations/presets/enable', requireAdminOrOrganiser, as
   res.json({ ok: true, automation, step });
 });
 
-router.get('/marketing/automations', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/automations', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const items = await prisma.marketingAutomation.findMany({
     where: { tenantId },
@@ -2418,7 +2419,7 @@ router.get('/marketing/automations', requireAdminOrOrganiser, async (req, res) =
   res.json({ ok: true, items });
 });
 
-router.get('/marketing/automations/:id', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/automations/:id', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const id = String(req.params.id);
   const automation = await prisma.marketingAutomation.findFirst({
@@ -2429,7 +2430,7 @@ router.get('/marketing/automations/:id', requireAdminOrOrganiser, async (req, re
   res.json({ ok: true, automation });
 });
 
-router.post('/marketing/automations', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/automations', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const { name, triggerType, triggerConfig, isEnabled, flowJson } = req.body || {};
   if (!name || !triggerType) return res.status(400).json({ ok: false, message: 'Name + trigger required' });
@@ -2450,7 +2451,7 @@ router.post('/marketing/automations', requireAdminOrOrganiser, async (req, res) 
   res.json({ ok: true, automation });
 });
 
-router.put('/marketing/automations/:id', requireAdminOrOrganiser, async (req, res) => {
+router.put('/api/marketing/automations/:id', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const id = String(req.params.id);
   const { name, triggerType, triggerConfig, isEnabled, flowJson } = req.body || {};
@@ -2474,7 +2475,7 @@ router.put('/marketing/automations/:id', requireAdminOrOrganiser, async (req, re
   res.json({ ok: true, automation });
 });
 
-router.put('/marketing/automations/:id/flow', requireAdminOrOrganiser, async (req, res) => {
+router.put('/api/marketing/automations/:id/flow', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const id = String(req.params.id);
   const { flowJson } = req.body || {};
@@ -2490,7 +2491,7 @@ router.put('/marketing/automations/:id/flow', requireAdminOrOrganiser, async (re
   res.json({ ok: true, automation: updated });
 });
 
-router.post('/marketing/automations/:id/validate', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/automations/:id/validate', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const id = String(req.params.id);
   const automation = await prisma.marketingAutomation.findFirst({ where: { id, tenantId } });
@@ -2503,7 +2504,7 @@ router.post('/marketing/automations/:id/validate', requireAdminOrOrganiser, asyn
   res.json({ ok: errors.length === 0, errors });
 });
 
-router.post('/marketing/automations/:id/flow/steps', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/automations/:id/flow/steps', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const id = String(req.params.id);
   const automation = await prisma.marketingAutomation.findFirst({ where: { id, tenantId } });
@@ -2524,7 +2525,7 @@ router.post('/marketing/automations/:id/flow/steps', requireAdminOrOrganiser, as
   res.json({ ok: true, count: created.count });
 });
 
-router.post('/marketing/automations/:id/simulate', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/automations/:id/simulate', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const id = String(req.params.id);
   const automation = await prisma.marketingAutomation.findFirst({ where: { id, tenantId } });
@@ -2545,7 +2546,7 @@ router.post('/marketing/automations/:id/simulate', requireAdminOrOrganiser, asyn
   });
 });
 
-router.delete('/marketing/automations/:id', requireAdminOrOrganiser, async (req, res) => {
+router.delete('/api/marketing/automations/:id', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const id = String(req.params.id);
 
@@ -2557,7 +2558,7 @@ router.delete('/marketing/automations/:id', requireAdminOrOrganiser, async (req,
   res.json({ ok: true });
 });
 
-router.post('/marketing/automations/:id/steps', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/automations/:id/steps', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const automationId = String(req.params.id);
   const { delayMinutes, templateId, conditionRules, stepOrder, stepType, stepConfig, throttleMinutes, quietHoursStart, quietHoursEnd } = req.body || {};
@@ -2592,7 +2593,7 @@ router.post('/marketing/automations/:id/steps', requireAdminOrOrganiser, async (
   res.json({ ok: true, step });
 });
 
-router.put('/marketing/automations/:id/steps/:stepId', requireAdminOrOrganiser, async (req, res) => {
+router.put('/api/marketing/automations/:id/steps/:stepId', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const automationId = String(req.params.id);
   const stepId = String(req.params.stepId);
@@ -2622,7 +2623,7 @@ router.put('/marketing/automations/:id/steps/:stepId', requireAdminOrOrganiser, 
   res.json({ ok: true, step });
 });
 
-router.delete('/marketing/automations/:id/steps/:stepId', requireAdminOrOrganiser, async (req, res) => {
+router.delete('/api/marketing/automations/:id/steps/:stepId', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const automationId = String(req.params.id);
   const stepId = String(req.params.stepId);
@@ -2637,7 +2638,7 @@ router.delete('/marketing/automations/:id/steps/:stepId', requireAdminOrOrganise
   res.json({ ok: true });
 });
 
-router.get('/marketing/preferences/topics', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/preferences/topics', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   await ensureDefaultPreferenceTopics(tenantId);
   const items = await prisma.marketingPreferenceTopic.findMany({
@@ -2647,7 +2648,7 @@ router.get('/marketing/preferences/topics', requireAdminOrOrganiser, async (req,
   res.json({ ok: true, items });
 });
 
-router.get('/marketing/tags', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/tags', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const items = await prisma.marketingTag.findMany({
     where: { tenantId },
@@ -2656,7 +2657,7 @@ router.get('/marketing/tags', requireAdminOrOrganiser, async (req, res) => {
   res.json({ ok: true, items });
 });
 
-router.get('/marketing/automations/runs', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/automations/runs', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const automationId = String(req.query?.automationId || '').trim();
   const items = await prisma.marketingAutomationRun.findMany({
@@ -2668,7 +2669,7 @@ router.get('/marketing/automations/runs', requireAdminOrOrganiser, async (req, r
   res.json({ ok: true, items });
 });
 
-router.get('/marketing/automations/runs/:runId/steps', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/automations/runs/:runId/steps', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const runId = String(req.params.runId);
   const run = await prisma.marketingAutomationRun.findFirst({ where: { id: runId, tenantId } });
@@ -2686,7 +2687,7 @@ router.get('/marketing/automations/runs/:runId/steps', requireAdminOrOrganiser, 
   res.json({ ok: true, items });
 });
 
-router.get('/marketing/consent/summary', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/consent/summary', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const consentGroups = await prisma.marketingConsent.groupBy({
     by: ['status'],
@@ -2719,7 +2720,7 @@ router.get('/marketing/consent/summary', requireAdminOrOrganiser, async (req, re
   });
 });
 
-router.get('/marketing/consent/check', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/consent/check', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const email = String(req.query.email || '').trim().toLowerCase();
   if (!email) return res.status(400).json({ ok: false, message: 'Email required' });
@@ -2755,7 +2756,7 @@ router.get('/marketing/consent/check', requireAdminOrOrganiser, async (req, res)
   });
 });
 
-router.post('/marketing/step-up', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/step-up', requireAdminOrOrganiser, async (req, res) => {
   const password = String(req.body?.password || '');
   if (!password) {
     return res.status(400).json({ ok: false, message: 'Password required' });
@@ -2795,7 +2796,7 @@ router.post('/marketing/step-up', requireAdminOrOrganiser, async (req, res) => {
   }
 });
 
-router.post('/marketing/preferences/topics', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/preferences/topics', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const { name, description, isDefault } = req.body || {};
   if (!name) return res.status(400).json({ ok: false, message: 'Name required' });
@@ -2813,7 +2814,7 @@ router.post('/marketing/preferences/topics', requireAdminOrOrganiser, async (req
   res.json({ ok: true, topic });
 });
 
-router.put('/marketing/preferences/topics/:id', requireAdminOrOrganiser, async (req, res) => {
+router.put('/api/marketing/preferences/topics/:id', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const id = String(req.params.id);
   const { name, description, isDefault } = req.body || {};
@@ -2834,7 +2835,7 @@ router.put('/marketing/preferences/topics/:id', requireAdminOrOrganiser, async (
   res.json({ ok: true, topic });
 });
 
-router.delete('/marketing/preferences/topics/:id', requireAdminOrOrganiser, async (req, res) => {
+router.delete('/api/marketing/preferences/topics/:id', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const id = String(req.params.id);
 
@@ -2846,7 +2847,7 @@ router.delete('/marketing/preferences/topics/:id', requireAdminOrOrganiser, asyn
   res.json({ ok: true });
 });
 
-router.get('/marketing/deliverability/summary', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/deliverability/summary', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const days = Number(req.query.days || 30);
   const summary = await fetchDeliverabilitySummary(tenantId, days);
@@ -2854,25 +2855,25 @@ router.get('/marketing/deliverability/summary', requireAdminOrOrganiser, async (
   res.json({ ok: true, summary });
 });
 
-router.get('/marketing/deliverability/campaigns', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/deliverability/campaigns', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const days = Number(req.query.days || 30);
   const items = await fetchCampaignDeliverability(tenantId, days);
   res.json({ ok: true, items });
 });
 
-router.get('/marketing/deliverability/top-segments', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/deliverability/top-segments', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const days = Number(req.query.days || 30);
   const items = await fetchTopSegmentsByEngagement(tenantId, days);
   res.json({ ok: true, items });
 });
 
-router.get('/marketing/deliverability/warmup', requireAdminOrOrganiser, async (_req, res) => {
+router.get('/api/marketing/deliverability/warmup', requireAdminOrOrganiser, async (_req, res) => {
   res.json({ ok: true, data: warmupPresets() });
 });
 
-router.get('/marketing/suppressions', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/suppressions', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const search = String(req.query.search || '').trim();
   const page = Math.max(1, Number(req.query.page || 1) || 1);
@@ -2908,7 +2909,7 @@ router.get('/marketing/suppressions', requireAdminOrOrganiser, async (req, res) 
   });
 });
 
-router.delete('/marketing/suppressions/:id', requireAdminOrOrganiser, requireMarketingStepUp, async (req, res) => {
+router.delete('/api/marketing/suppressions/:id', requireAdminOrOrganiser, requireMarketingStepUp, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const id = String(req.params.id);
   const suppression = await prisma.marketingSuppression.findFirst({ where: { id, tenantId } });
@@ -2923,7 +2924,7 @@ router.delete('/marketing/suppressions/:id', requireAdminOrOrganiser, requireMar
   res.json({ ok: true });
 });
 
-router.get('/marketing/approvals', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/approvals', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -2951,7 +2952,7 @@ router.get('/marketing/approvals', requireAdminOrOrganiser, async (req, res) => 
   res.json({ ok: true, campaigns, templateChanges });
 });
 
-router.get('/marketing/roles', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/roles', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -2969,7 +2970,7 @@ router.get('/marketing/roles', requireAdminOrOrganiser, async (req, res) => {
   });
 });
 
-router.post('/marketing/roles', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/roles', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.APPROVER);
   if (!role) return;
@@ -3007,7 +3008,7 @@ router.post('/marketing/roles', requireAdminOrOrganiser, async (req, res) => {
   res.json({ ok: true, assignment });
 });
 
-router.get('/marketing/audit-logs', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/audit-logs', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -3035,7 +3036,7 @@ router.get('/marketing/audit-logs', requireAdminOrOrganiser, async (req, res) =>
   });
 });
 
-router.post('/marketing/templates', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/templates', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
   if (!role) return;
@@ -3068,7 +3069,7 @@ router.post('/marketing/templates', requireAdminOrOrganiser, async (req, res) =>
   res.json({ ok: true, template });
 });
 
-router.get('/marketing/templates/:id', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/templates/:id', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -3078,7 +3079,7 @@ router.get('/marketing/templates/:id', requireAdminOrOrganiser, async (req, res)
   res.json({ ok: true, template });
 });
 
-router.put('/marketing/templates/:id', requireAdminOrOrganiser, async (req, res) => {
+router.put('/api/marketing/templates/:id', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
   if (!role) return;
@@ -3135,7 +3136,7 @@ router.put('/marketing/templates/:id', requireAdminOrOrganiser, async (req, res)
   res.json({ ok: true, template });
 });
 
-router.delete('/marketing/templates/:id', requireAdminOrOrganiser, async (req, res) => {
+router.delete('/api/marketing/templates/:id', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.APPROVER);
   if (!role) return;
@@ -3147,7 +3148,7 @@ router.delete('/marketing/templates/:id', requireAdminOrOrganiser, async (req, r
   res.json({ ok: true });
 });
 
-router.post('/marketing/templates/:id/preview', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/templates/:id/preview', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -3230,7 +3231,7 @@ router.post('/marketing/templates/:id/preview', requireAdminOrOrganiser, async (
   res.json({ ok: true, html, errors });
 });
 
-router.post('/marketing/templates/:id/compile', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/templates/:id/compile', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
   if (!role) return;
@@ -3255,7 +3256,7 @@ router.post('/marketing/templates/:id/compile', requireAdminOrOrganiser, async (
   res.json({ ok: true, compiledHtml: compiled.compiledHtml, template: updated });
 });
 
-router.post('/marketing/templates/:id/test-send', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/templates/:id/test-send', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
   if (!role) return;
@@ -3343,7 +3344,7 @@ router.post('/marketing/templates/:id/test-send', requireAdminOrOrganiser, async
   res.json({ ok: true, result });
 });
 
-router.post('/marketing/templates/:id/lock', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/templates/:id/lock', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.APPROVER);
   if (!role) return;
@@ -3374,7 +3375,7 @@ router.post('/marketing/templates/:id/lock', requireAdminOrOrganiser, async (req
   res.json({ ok: true, template: updated });
 });
 
-router.get('/marketing/templates/:id/versions', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/templates/:id/versions', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -3390,7 +3391,7 @@ router.get('/marketing/templates/:id/versions', requireAdminOrOrganiser, async (
   res.json({ ok: true, versions });
 });
 
-router.post('/marketing/templates/:id/rollback', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/templates/:id/rollback', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.APPROVER);
   if (!role) return;
@@ -3436,7 +3437,7 @@ router.post('/marketing/templates/:id/rollback', requireAdminOrOrganiser, async 
   res.json({ ok: true, template: updated });
 });
 
-router.post('/marketing/templates/changes/:id/approve', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/templates/changes/:id/approve', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.APPROVER);
   if (!role) return;
@@ -3494,7 +3495,7 @@ router.post('/marketing/templates/changes/:id/approve', requireAdminOrOrganiser,
   res.json({ ok: true, template: updated });
 });
 
-router.post('/marketing/templates/changes/:id/reject', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/templates/changes/:id/reject', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.APPROVER);
   if (!role) return;
@@ -3529,7 +3530,7 @@ router.post('/marketing/templates/changes/:id/reject', requireAdminOrOrganiser, 
   res.json({ ok: true, changeRequest: updatedRequest });
 });
 
-router.post('/marketing/ai/suggestions', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/ai/suggestions', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const showId = String(req.body?.showId || '');
   const types = Array.isArray(req.body?.types) ? req.body.types.map((type: any) => String(type)) : [];
@@ -3588,7 +3589,7 @@ router.post('/marketing/ai/suggestions', requireAdminOrOrganiser, async (req, re
   res.json({ ok: true, suggestions: response });
 });
 
-router.post('/marketing/ai/suggestions/:id/feedback', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/ai/suggestions/:id/feedback', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const id = String(req.params.id);
   const suggestion = await prisma.marketingAiSuggestion.findFirst({ where: { id, organiserId: tenantId } });
@@ -3608,7 +3609,7 @@ router.post('/marketing/ai/suggestions/:id/feedback', requireAdminOrOrganiser, a
   res.json({ ok: true, suggestion: updated });
 });
 
-router.get('/marketing/campaigns', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/campaigns', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -3624,7 +3625,7 @@ router.get('/marketing/campaigns', requireAdminOrOrganiser, async (req, res) => 
   res.json({ ok: true, items });
 });
 
-router.get('/marketing/campaigns/:id', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/campaigns/:id', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -3661,7 +3662,7 @@ router.get('/marketing/campaigns/:id', requireAdminOrOrganiser, async (req, res)
   res.json({ ok: true, campaign, summary });
 });
 
-router.post('/marketing/campaigns', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/campaigns', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
   if (!role) return;
@@ -3699,7 +3700,7 @@ router.post('/marketing/campaigns', requireAdminOrOrganiser, async (req, res) =>
   res.json({ ok: true, campaign });
 });
 
-router.put('/marketing/campaigns/:id', requireAdminOrOrganiser, async (req, res) => {
+router.put('/api/marketing/campaigns/:id', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
   if (!role) return;
@@ -3753,7 +3754,7 @@ router.put('/marketing/campaigns/:id', requireAdminOrOrganiser, async (req, res)
   res.json({ ok: true, campaign });
 });
 
-router.post('/marketing/campaigns/:id/preview', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/campaigns/:id/preview', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -3818,7 +3819,7 @@ router.post('/marketing/campaigns/:id/preview', requireAdminOrOrganiser, async (
   res.json({ ok: true, estimate, html, errors });
 });
 
-router.post('/marketing/campaigns/:id/test-send', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/campaigns/:id/test-send', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
   if (!role) return;
@@ -3962,7 +3963,7 @@ router.post('/marketing/campaigns/:id/test-send', requireAdminOrOrganiser, async
   }
 });
 
-router.post('/marketing/campaigns/:id/schedule', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/campaigns/:id/schedule', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
   if (!role) return;
@@ -4078,7 +4079,7 @@ router.post('/marketing/campaigns/:id/schedule', requireAdminOrOrganiser, async 
   });
 });
 
-router.post('/marketing/campaigns/:id/approve', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/campaigns/:id/approve', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.APPROVER);
   if (!role) return;
@@ -4145,7 +4146,7 @@ router.post('/marketing/campaigns/:id/approve', requireAdminOrOrganiser, async (
   res.json({ ok: true, campaign: updated, estimate });
 });
 
-router.post('/marketing/campaigns/:id/cancel', requireAdminOrOrganiser, async (req, res) => {
+router.post('/api/marketing/campaigns/:id/cancel', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.CAMPAIGN_CREATOR);
   if (!role) return;
@@ -4174,7 +4175,7 @@ router.post('/marketing/campaigns/:id/cancel', requireAdminOrOrganiser, async (r
   res.json({ ok: true, campaign });
 });
 
-router.get('/marketing/campaigns/:id/logs', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/campaigns/:id/logs', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -4195,7 +4196,7 @@ router.get('/marketing/campaigns/:id/logs', requireAdminOrOrganiser, async (req,
   res.json({ ok: true, events, recipients });
 });
 
-router.get('/marketing/campaigns/:id/recipients', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/campaigns/:id/recipients', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -4233,7 +4234,7 @@ router.get('/marketing/campaigns/:id/recipients', requireAdminOrOrganiser, async
   res.json({ ok: true, items: includeItems ? items : undefined, summary });
 });
 
-router.get('/marketing/campaigns/:id/events', requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/campaigns/:id/events', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
@@ -4248,7 +4249,7 @@ router.get('/marketing/campaigns/:id/events', requireAdminOrOrganiser, async (re
   res.json({ ok: true, items });
 });
 
-router.get('/marketing/analytics/overview', marketingAnalyticsLimiter, requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/analytics/overview', marketingAnalyticsLimiter, requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const { from, to, fromLabel, toLabel } = parseDateRange(req);
   const key = cacheKey(['marketing-analytics-overview', tenantId, fromLabel, toLabel]);
@@ -4397,7 +4398,7 @@ router.get('/marketing/analytics/overview', marketingAnalyticsLimiter, requireAd
   res.json({ ok: true, ...response });
 });
 
-router.get('/marketing/analytics/campaigns', marketingAnalyticsLimiter, requireAdminOrOrganiser, async (req, res) => {
+router.get('/api/marketing/analytics/campaigns', marketingAnalyticsLimiter, requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const { from, to, fromLabel, toLabel } = parseDateRange(req);
   const key = cacheKey(['marketing-analytics-campaigns', tenantId, fromLabel, toLabel]);
@@ -4711,33 +4712,12 @@ router.get('/marketing/analytics/campaigns', marketingAnalyticsLimiter, requireA
   res.json({ ok: true, ...response });
 });
 
-function marketingSuiteHtml() {
-  return `
-  <!doctype html>
-  <html lang="en">
-    <head>
-      <meta charset="utf-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1" />
-      <title>Marketing Suite</title>
-      <link rel="stylesheet" href="/static/marketing-suite.css" />
-      <link rel="stylesheet" href="https://unpkg.com/grapesjs@0.21.11/dist/css/grapes.min.css" />
-      <link rel="stylesheet" href="https://unpkg.com/reactflow@11/dist/style.css" />
-    </head>
-    <body>
-      <div id="ms-root"></div>
-      <script src="https://unpkg.com/grapesjs@0.21.11/dist/grapes.min.js"></script>
-      <script type="module" src="/static/marketing-suite.js"></script>
-    </body>
-  </html>
-  `;
-}
-
 router.get('/marketing', requireAdminOrOrganiser, (_req, res) => {
-  res.send(marketingSuiteHtml());
+  sendMarketingSuiteShell(res);
 });
 
 router.get('/marketing/*', requireAdminOrOrganiser, (_req, res) => {
-  res.send(marketingSuiteHtml());
+  sendMarketingSuiteShell(res);
 });
 
 export default router;

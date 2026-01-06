@@ -4904,7 +4904,7 @@ document.addEventListener('click', function(e){
             }
             confirmBtn.disabled = true;
             try{
-              await fetchJson('/admin/marketing/step-up', {
+              await fetchJson('/admin/api/marketing/step-up', {
                 method:'POST',
                 headers:{ 'Content-Type':'application/json' },
                 body: JSON.stringify({ password: password })
@@ -17028,7 +17028,7 @@ function renderInterests(customer){
           var msg = sections.contacts.querySelector('#mk_contact_msg');
           if (!email) { if (msg) msg.textContent = 'Email required.'; return; }
           try {
-            await fetchJson('/admin/marketing/contacts', {
+            await fetchJson('/admin/api/marketing/contacts', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({ email: email, firstName: firstName, lastName: lastName, status: status })
@@ -17048,7 +17048,7 @@ function renderInterests(customer){
     }
 
     async function loadContacts(){
-      var data = await fetchJson('/admin/marketing/contacts');
+      var data = await fetchJson('/admin/api/marketing/contacts');
       renderContacts(data.items || []);
     }
 
@@ -17287,7 +17287,7 @@ function renderInterests(customer){
           var msg = sections.segments.querySelector('#mk_segment_estimate_msg');
           if (!builderState.rules.length) { if (msg) msg.textContent = 'Add a rule to estimate.'; return; }
           if (msg) msg.textContent = 'Estimating...';
-          fetchJson('/admin/marketing/segments/estimate', {
+          fetchJson('/admin/api/marketing/segments/estimate', {
             method:'POST',
             headers:{ 'Content-Type':'application/json' },
             body: JSON.stringify({ rules: { rules: builderState.rules } })
@@ -17327,13 +17327,13 @@ function renderInterests(customer){
           if (!builderState.rules.length) { if (msg) msg.textContent = 'Add at least one rule.'; return; }
           try {
             if (builderState.mode === 'edit' && builderState.segmentId) {
-              await fetchJson('/admin/marketing/segments/' + encodeURIComponent(builderState.segmentId), {
+              await fetchJson('/admin/api/marketing/segments/' + encodeURIComponent(builderState.segmentId), {
                 method:'PUT',
                 headers:{ 'Content-Type':'application/json' },
                 body: JSON.stringify({ name: name, description: description || null, rules: { rules: builderState.rules } })
               });
             } else {
-              await fetchJson('/admin/marketing/segments', {
+              await fetchJson('/admin/api/marketing/segments', {
                 method:'POST',
                 headers:{ 'Content-Type':'application/json' },
                 body: JSON.stringify({ name: name, description: description || null, rules: { rules: builderState.rules } })
@@ -17423,7 +17423,7 @@ function renderInterests(customer){
           var output = sections.segments.querySelector('[data-estimate-output="' + id + '"]');
           if (output) output.textContent = 'Estimating...';
           try {
-            var data = await fetchJson('/admin/marketing/segments/' + encodeURIComponent(id) + '/estimate', {
+            var data = await fetchJson('/admin/api/marketing/segments/' + encodeURIComponent(id) + '/estimate', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({})
@@ -17442,10 +17442,10 @@ function renderInterests(customer){
     }
 
     async function loadSegments(){
-      var data = await fetchJson('/admin/marketing/segments');
+      var data = await fetchJson('/admin/api/marketing/segments');
       var topics = { items: [] };
       var venues = { items: [] };
-      try { topics = await fetchJson('/admin/marketing/preferences/topics'); } catch (err) {}
+      try { topics = await fetchJson('/admin/api/marketing/preferences/topics'); } catch (err) {}
       try { venues = await fetchJson('/admin/venues'); } catch (err) {}
       renderSegments(data.items || [], topics.items || [], venues.items || []);
       return data.items || [];
@@ -17509,7 +17509,7 @@ function renderInterests(customer){
           var msg = sections.templates.querySelector('#mk_template_msg');
           if (!name || !subject || !mjmlBody) { if (msg) msg.textContent = 'Name, subject, and body required.'; return; }
           try {
-            await fetchJson('/admin/marketing/templates', {
+            await fetchJson('/admin/api/marketing/templates', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({ name: name, subject: subject, previewText: previewText, fromName: fromName, fromEmail: fromEmail, mjmlBody: mjmlBody })
@@ -17557,7 +17557,7 @@ function renderInterests(customer){
                 mjmlBody: valueOf(document, 'mk_tpl_edit_body'),
                 message: valueOf(document, 'mk_tpl_edit_note')
               };
-              var resp = await fetchJson('/admin/marketing/templates/' + encodeURIComponent(template.id), {
+              var resp = await fetchJson('/admin/api/marketing/templates/' + encodeURIComponent(template.id), {
                 method:'PUT',
                 headers:{ 'Content-Type':'application/json' },
                 body: JSON.stringify(payload)
@@ -17576,7 +17576,7 @@ function renderInterests(customer){
       }
 
       function openTemplateVersions(templateId){
-        fetchJson('/admin/marketing/templates/' + encodeURIComponent(templateId) + '/versions')
+        fetchJson('/admin/api/marketing/templates/' + encodeURIComponent(templateId) + '/versions')
           .then(function(data){
             var rows = (data.versions || []).map(function(v){
               var author = v.createdBy ? (v.createdBy.name || v.createdBy.email || v.createdBy.id) : 'System';
@@ -17603,7 +17603,7 @@ function renderInterests(customer){
                 if (!versionId) return;
                 if (!confirm('Rollback to this version?')) return;
                 try{
-                  await fetchJson('/admin/marketing/templates/' + encodeURIComponent(templateId) + '/rollback', {
+                  await fetchJson('/admin/api/marketing/templates/' + encodeURIComponent(templateId) + '/rollback', {
                     method:'POST',
                     headers:{ 'Content-Type':'application/json' },
                     body: JSON.stringify({ versionId: versionId })
@@ -17625,7 +17625,7 @@ function renderInterests(customer){
         btn.addEventListener('click', async function(){
           var id = btn.getAttribute('data-preview');
           try {
-            var data = await fetchJson('/admin/marketing/templates/' + encodeURIComponent(id) + '/preview', {
+            var data = await fetchJson('/admin/api/marketing/templates/' + encodeURIComponent(id) + '/preview', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({})
@@ -17660,7 +17660,7 @@ function renderInterests(customer){
           var nextLocked = !locked;
           var reason = nextLocked ? prompt('Lock reason (optional)') : '';
           try{
-            await fetchJson('/admin/marketing/templates/' + encodeURIComponent(id) + '/lock', {
+            await fetchJson('/admin/api/marketing/templates/' + encodeURIComponent(id) + '/lock', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({ isLocked: nextLocked, reason: reason })
@@ -17674,7 +17674,7 @@ function renderInterests(customer){
     }
 
     async function loadTemplates(){
-      var data = await fetchJson('/admin/marketing/templates');
+      var data = await fetchJson('/admin/api/marketing/templates');
       renderTemplates(data.items || []);
       return data.items || [];
     }
@@ -17922,7 +17922,7 @@ function renderInterests(customer){
       async function recordAiFeedback(id, used, feedback){
         if (!id) return;
         try{
-          await fetchJson('/admin/marketing/ai/suggestions/' + encodeURIComponent(id) + '/feedback', {
+          await fetchJson('/admin/api/marketing/ai/suggestions/' + encodeURIComponent(id) + '/feedback', {
             method:'POST',
             headers:{ 'Content-Type':'application/json' },
             body: JSON.stringify({ used: !!used, feedback: feedback || null })
@@ -18005,7 +18005,7 @@ function renderInterests(customer){
           var templateId = templateSelect ? templateSelect.value : '';
           if (!templateId) { alert('Select a template first.'); return; }
           try {
-            var data = await fetchJson('/admin/marketing/templates/' + encodeURIComponent(templateId) + '/preview', {
+            var data = await fetchJson('/admin/api/marketing/templates/' + encodeURIComponent(templateId) + '/preview', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({})
@@ -18030,7 +18030,7 @@ function renderInterests(customer){
           var msg = sections.campaigns.querySelector('#mk_builder_tpl_msg');
           if (!name || !subject || !mjmlBody) { if (msg) msg.textContent = 'Name, subject, and body required.'; return; }
           try {
-            await fetchJson('/admin/marketing/templates', {
+            await fetchJson('/admin/api/marketing/templates', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({ name: name, subject: subject, previewText: previewText, fromName: fromName, fromEmail: fromEmail, mjmlBody: mjmlBody })
@@ -18051,7 +18051,7 @@ function renderInterests(customer){
           if (!segmentId) { if (msg) msg.textContent = 'Choose a segment first.'; return; }
           if (msg) msg.textContent = 'Estimating...';
           try {
-            var data = await fetchJson('/admin/marketing/segments/' + encodeURIComponent(segmentId) + '/estimate', {
+            var data = await fetchJson('/admin/api/marketing/segments/' + encodeURIComponent(segmentId) + '/estimate', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({})
@@ -18083,7 +18083,7 @@ function renderInterests(customer){
             return;
           }
           try {
-            var data = await fetchJson('/admin/marketing/campaigns', {
+            var data = await fetchJson('/admin/api/marketing/campaigns', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({ name: name, templateId: templateId, segmentId: segmentId, type: type, showId: showId || null })
@@ -18108,7 +18108,7 @@ function renderInterests(customer){
           var campaignId = builderState.campaignId;
           if (!campaignId) { setBuilderMessage(campaignMsg, 'Create a draft campaign first.', false); return; }
           try {
-            var data = await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(campaignId) + '/preview', {
+            var data = await fetchJson('/admin/api/marketing/campaigns/' + encodeURIComponent(campaignId) + '/preview', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({})
@@ -18133,7 +18133,7 @@ function renderInterests(customer){
           if (!email) { setBuilderMessage(testMsg, 'Enter a test email.', false); return; }
           setBuilderMessage(testMsg, 'Sending test...', true);
           try {
-            await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(campaignId) + '/test-send', {
+            await fetchJson('/admin/api/marketing/campaigns/' + encodeURIComponent(campaignId) + '/test-send', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({ email: email, firstName: firstName, lastName: lastName })
@@ -18152,7 +18152,7 @@ function renderInterests(customer){
           if (!campaignId) { setBuilderMessage(campaignMsg, 'Create a draft campaign first.', false); return; }
           setBuilderMessage(scheduleMsg, 'Scheduling...', true);
           try {
-            var resp = await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(campaignId) + '/schedule', {
+            var resp = await fetchJson('/admin/api/marketing/campaigns/' + encodeURIComponent(campaignId) + '/schedule', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({ sendNow: true })
@@ -18178,7 +18178,7 @@ function renderInterests(customer){
           if (!scheduledFor) { setBuilderMessage(scheduleMsg, 'Choose a date/time first.', false); return; }
           setBuilderMessage(scheduleMsg, 'Scheduling...', true);
           try {
-            var resp = await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(campaignId) + '/schedule', {
+            var resp = await fetchJson('/admin/api/marketing/campaigns/' + encodeURIComponent(campaignId) + '/schedule', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({ scheduledFor: scheduledFor })
@@ -18201,7 +18201,7 @@ function renderInterests(customer){
           if (!showId) { setBuilderMessage(aiMsg, 'Select a show to generate suggestions.', false); return; }
           setBuilderMessage(aiMsg, 'Generating suggestions...', true);
           try {
-            var data = await fetchJson('/admin/marketing/ai/suggestions', {
+            var data = await fetchJson('/admin/api/marketing/ai/suggestions', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({ showId: showId, types: ['segment', 'subject_lines', 'send_time'] })
@@ -18258,7 +18258,7 @@ function renderInterests(customer){
         if (panel) panel.textContent = 'Loading...';
         if (activity) activity.innerHTML = '';
         try {
-          var data = await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(id));
+          var data = await fetchJson('/admin/api/marketing/campaigns/' + encodeURIComponent(id));
           var campaign = data.campaign || {};
           var summary = data.summary || {};
           var scheduleText = campaign.scheduledFor ? formatDateTime(campaign.scheduledFor) : 'Not scheduled';
@@ -18307,7 +18307,7 @@ function renderInterests(customer){
         btn.addEventListener('click', async function(){
           var id = btn.getAttribute('data-send');
           try {
-            var resp = await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(id) + '/schedule', {
+            var resp = await fetchJson('/admin/api/marketing/campaigns/' + encodeURIComponent(id) + '/schedule', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({ sendNow: true })
@@ -18329,7 +18329,7 @@ function renderInterests(customer){
         btn.addEventListener('click', async function(){
           var id = btn.getAttribute('data-cancel');
           try {
-            await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(id) + '/cancel', {
+            await fetchJson('/admin/api/marketing/campaigns/' + encodeURIComponent(id) + '/cancel', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({})
@@ -18346,7 +18346,7 @@ function renderInterests(customer){
         btn.addEventListener('click', async function(){
           var id = btn.getAttribute('data-cpreview');
           try {
-            var data = await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(id) + '/preview', {
+            var data = await fetchJson('/admin/api/marketing/campaigns/' + encodeURIComponent(id) + '/preview', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({})
@@ -18365,7 +18365,7 @@ function renderInterests(customer){
           var target = sections.campaigns.querySelector('#mk_campaign_detail_activity');
           if (target) target.textContent = 'Loading recipients...';
           try {
-            var data = await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(id) + '/recipients?include=items');
+            var data = await fetchJson('/admin/api/marketing/campaigns/' + encodeURIComponent(id) + '/recipients?include=items');
             var rows = (data.items || []).map(function(r){
               return '<tr><td>' + escapeHtml(r.email) + '</td><td>' + escapeHtml(r.status) + '</td><td>' + escapeHtml(formatDateTime(r.sentAt || r.createdAt)) + '</td><td>' + escapeHtml(r.errorText || '') + '</td></tr>';
             }).join('');
@@ -18390,7 +18390,7 @@ function renderInterests(customer){
           var target = sections.campaigns.querySelector('#mk_campaign_detail_activity');
           if (target) target.textContent = 'Loading events...';
           try {
-            var data = await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(id) + '/events');
+            var data = await fetchJson('/admin/api/marketing/campaigns/' + encodeURIComponent(id) + '/events');
             var rows = (data.items || []).map(function(e){
               return '<tr><td>' + escapeHtml(e.email || '') + '</td><td>' + escapeHtml(e.type) + '</td><td>' + escapeHtml(formatDateTime(e.createdAt)) + '</td></tr>';
             }).join('');
@@ -18413,7 +18413,7 @@ function renderInterests(customer){
         var approveNowId = target.getAttribute('data-approve-now');
         if (approveNowId) {
           try {
-            await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(approveNowId) + '/approve', {
+            await fetchJson('/admin/api/marketing/campaigns/' + encodeURIComponent(approveNowId) + '/approve', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({ sendNow: true })
@@ -18429,7 +18429,7 @@ function renderInterests(customer){
           var approvedFor = valueOf(sections.campaigns, 'mk_campaign_approve_time');
           try {
             var payload = approvedFor ? { scheduledFor: approvedFor } : { sendNow: true };
-            await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(approveId) + '/approve', {
+            await fetchJson('/admin/api/marketing/campaigns/' + encodeURIComponent(approveId) + '/approve', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify(payload)
@@ -18444,9 +18444,9 @@ function renderInterests(customer){
     }
 
     async function loadCampaigns(){
-      var data = await fetchJson('/admin/marketing/campaigns');
-      var templates = await fetchJson('/admin/marketing/templates');
-      var segments = await fetchJson('/admin/marketing/segments');
+      var data = await fetchJson('/admin/api/marketing/campaigns');
+      var templates = await fetchJson('/admin/api/marketing/templates');
+      var segments = await fetchJson('/admin/api/marketing/segments');
       var shows = await fetchJson('/admin/shows');
       renderCampaigns(data.items || [], templates.items || [], segments.items || [], shows.items || []);
     }
@@ -18580,7 +18580,7 @@ function renderInterests(customer){
       async function recordAiFeedback(id, used, feedback){
         if (!id) return;
         try{
-          await fetchJson('/admin/marketing/ai/suggestions/' + encodeURIComponent(id) + '/feedback', {
+          await fetchJson('/admin/api/marketing/ai/suggestions/' + encodeURIComponent(id) + '/feedback', {
             method:'POST',
             headers:{ 'Content-Type':'application/json' },
             body: JSON.stringify({ used: !!used, feedback: feedback || null })
@@ -18647,7 +18647,7 @@ function renderInterests(customer){
           if (!showId) { if (aiMsg) aiMsg.textContent = 'Select a show first.'; return; }
           if (aiMsg) aiMsg.textContent = 'Generating suggestion...';
           try{
-            var data = await fetchJson('/admin/marketing/ai/suggestions', {
+            var data = await fetchJson('/admin/api/marketing/ai/suggestions', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({ showId: showId, types: ['automation_preset'] })
@@ -18711,7 +18711,7 @@ function renderInterests(customer){
           var msg = sections.presets.querySelector('#mk_preset_msg');
           if (!templateId) { if (msg) msg.textContent = 'Template required.'; return; }
           try {
-            var data = await fetchJson('/admin/marketing/templates/' + encodeURIComponent(templateId) + '/preview', {
+            var data = await fetchJson('/admin/api/marketing/templates/' + encodeURIComponent(templateId) + '/preview', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({ showId: showId || null, sample: { email: 'sample@example.com', firstName: 'Sample', lastName: 'User' } })
@@ -18742,7 +18742,7 @@ function renderInterests(customer){
           };
           if (!payload.showId || !payload.templateId) { if (msg) msg.textContent = 'Show and template required.'; return; }
           try {
-            await fetchJson('/admin/marketing/automations/presets/enable', {
+            await fetchJson('/admin/api/marketing/automations/presets/enable', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify(payload)
@@ -18758,8 +18758,8 @@ function renderInterests(customer){
     }
 
     async function loadPresets(){
-      var data = await fetchJson('/admin/marketing/automations/presets');
-      var templates = await fetchJson('/admin/marketing/templates');
+      var data = await fetchJson('/admin/api/marketing/automations/presets');
+      var templates = await fetchJson('/admin/api/marketing/templates');
       var shows = await fetchJson('/admin/shows');
       renderAutomationPresets(data.presets || [], templates.items || [], shows.items || []);
     }
@@ -19026,7 +19026,7 @@ function renderInterests(customer){
             try { triggerConfig = Object.assign(triggerConfig, JSON.parse(configRaw)); } catch (err) { if (msg) msg.textContent = 'Invalid trigger JSON.'; return; }
           }
           try {
-            await fetchJson('/admin/marketing/automations', {
+            await fetchJson('/admin/api/marketing/automations', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({ name: name, triggerType: trigger, triggerConfig: triggerConfig, isEnabled: enabled })
@@ -19067,7 +19067,7 @@ function renderInterests(customer){
             try { config = Object.assign(config, JSON.parse(configRaw)); } catch (err) { if (msg) msg.textContent = 'Invalid config JSON.'; return; }
           }
           try {
-            await fetchJson('/admin/marketing/automations/' + encodeURIComponent(automationId) + '/steps', {
+            await fetchJson('/admin/api/marketing/automations/' + encodeURIComponent(automationId) + '/steps', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({
@@ -19098,7 +19098,7 @@ function renderInterests(customer){
           if (!container) return;
           container.innerHTML = '<div class=\"muted\">Loading steps...</div>';
           try {
-            var data = await fetchJson('/admin/marketing/automations/runs/' + encodeURIComponent(runId) + '/steps');
+            var data = await fetchJson('/admin/api/marketing/automations/runs/' + encodeURIComponent(runId) + '/steps');
             var stepList = (data.items || []).map(function(step){
               var meta = step.metadata ? JSON.stringify(step.metadata) : '';
               var errorText = step.errorText ? String(step.errorText) : '';
@@ -19122,11 +19122,11 @@ function renderInterests(customer){
     }
 
     async function loadAutomations(){
-      var data = await fetchJson('/admin/marketing/automations');
-      var templates = await fetchJson('/admin/marketing/templates');
-      var tags = await fetchJson('/admin/marketing/tags');
-      var topics = await fetchJson('/admin/marketing/preferences/topics');
-      var runs = await fetchJson('/admin/marketing/automations/runs');
+      var data = await fetchJson('/admin/api/marketing/automations');
+      var templates = await fetchJson('/admin/api/marketing/templates');
+      var tags = await fetchJson('/admin/api/marketing/tags');
+      var topics = await fetchJson('/admin/api/marketing/preferences/topics');
+      var runs = await fetchJson('/admin/api/marketing/automations/runs');
       renderAutomations(data.items || [], templates.items || [], tags.items || [], topics.items || [], runs.items || []);
     }
 
@@ -19198,7 +19198,7 @@ function renderInterests(customer){
           var msg = sections.preferences.querySelector('#mk_topic_msg');
           if (!name) { if (msg) msg.textContent = 'Name required.'; return; }
           try {
-            await fetchJson('/admin/marketing/preferences/topics', {
+            await fetchJson('/admin/api/marketing/preferences/topics', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({ name: name, description: description, isDefault: isDefault })
@@ -19214,8 +19214,8 @@ function renderInterests(customer){
 
     async function loadPreferences(){
       var results = await Promise.all([
-        fetchJson('/admin/marketing/preferences/topics'),
-        fetchJson('/admin/marketing/consent/summary')
+        fetchJson('/admin/api/marketing/preferences/topics'),
+        fetchJson('/admin/api/marketing/consent/summary')
       ]);
       var topics = results[0];
       var summary = results[1];
@@ -19363,7 +19363,7 @@ function renderInterests(customer){
           var id = btn.getAttribute('data-id');
           if (!id) return;
           try{
-            await marketingSensitiveRequest('/admin/marketing/suppressions/' + encodeURIComponent(id), { method:'DELETE' });
+            await marketingSensitiveRequest('/admin/api/marketing/suppressions/' + encodeURIComponent(id), { method:'DELETE' });
             showToast('Suppression removed.', true);
             loadDeliverability().catch(function(err){
               sections.deliverability.innerHTML = '<div class="error">' + escapeHtml(err.message || 'Failed to load deliverability') + '</div>';
@@ -19483,7 +19483,7 @@ function renderInterests(customer){
           if (!id) return;
           if (!confirm('Approve this campaign to send?')) return;
           try{
-            await fetchJson('/admin/marketing/campaigns/' + encodeURIComponent(id) + '/approve', {
+            await fetchJson('/admin/api/marketing/campaigns/' + encodeURIComponent(id) + '/approve', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({})
@@ -19503,7 +19503,7 @@ function renderInterests(customer){
           if (!id || !action) return;
           if (!confirm('Proceed with this template change?')) return;
           try{
-            await fetchJson('/admin/marketing/templates/changes/' + encodeURIComponent(id) + '/' + encodeURIComponent(action), {
+            await fetchJson('/admin/api/marketing/templates/changes/' + encodeURIComponent(id) + '/' + encodeURIComponent(action), {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({})
@@ -19520,7 +19520,7 @@ function renderInterests(customer){
       if (roleBtn) {
         roleBtn.addEventListener('click', async function(){
           try{
-            await fetchJson('/admin/marketing/roles', {
+            await fetchJson('/admin/api/marketing/roles', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify({
@@ -19546,19 +19546,19 @@ function renderInterests(customer){
     }
 
     async function loadGovernance(){
-      var approvals = await fetchJson('/admin/marketing/approvals');
-      var roles = await fetchJson('/admin/marketing/roles');
-      var audit = await fetchJson('/admin/marketing/audit-logs?page=' + governanceState.auditPage + '&pageSize=' + governanceState.auditPageSize);
+      var approvals = await fetchJson('/admin/api/marketing/approvals');
+      var roles = await fetchJson('/admin/api/marketing/roles');
+      var audit = await fetchJson('/admin/api/marketing/audit-logs?page=' + governanceState.auditPage + '&pageSize=' + governanceState.auditPageSize);
       renderGovernance(approvals || {}, roles || {}, audit || {});
     }
 
     async function loadDeliverability(){
-      var summary = await fetchJson('/admin/marketing/deliverability/summary?days=30');
-      var segments = await fetchJson('/admin/marketing/deliverability/top-segments?days=30');
-      var warmup = await fetchJson('/admin/marketing/deliverability/warmup');
-      var health = await fetchJson('/admin/marketing/health');
-      var campaigns = await fetchJson('/admin/marketing/deliverability/campaigns?days=30');
-      var suppressionsUrl = '/admin/marketing/suppressions?page=1&pageSize=50';
+      var summary = await fetchJson('/admin/api/marketing/deliverability/summary?days=30');
+      var segments = await fetchJson('/admin/api/marketing/deliverability/top-segments?days=30');
+      var warmup = await fetchJson('/admin/api/marketing/deliverability/warmup');
+      var health = await fetchJson('/admin/api/marketing/health');
+      var campaigns = await fetchJson('/admin/api/marketing/deliverability/campaigns?days=30');
+      var suppressionsUrl = '/admin/api/marketing/suppressions?page=1&pageSize=50';
       if (suppressionState.search) suppressionsUrl += '&search=' + encodeURIComponent(suppressionState.search);
       var suppressions = await fetchJson(suppressionsUrl);
       renderDeliverability(
@@ -19731,7 +19731,7 @@ function renderInterests(customer){
       if (saveBtn) {
         saveBtn.addEventListener('click', async function(){
           try {
-            await fetchJson('/admin/marketing/settings', {
+            await fetchJson('/admin/api/marketing/settings', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify(tenantPayload({
@@ -19752,7 +19752,7 @@ function renderInterests(customer){
       if (sendgridStartBtn) {
         sendgridStartBtn.addEventListener('click', async function(){
           try {
-            await fetchJson('/admin/marketing/sender-identity/sendgrid/start', {
+            await fetchJson('/admin/api/marketing/sender-identity/sendgrid/start', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify(tenantPayload({
@@ -19773,7 +19773,7 @@ function renderInterests(customer){
       if (sendgridRefreshBtn) {
         sendgridRefreshBtn.addEventListener('click', async function(){
           try {
-            await fetchJson('/admin/marketing/sender-identity/sendgrid/refresh', {
+            await fetchJson('/admin/api/marketing/sender-identity/sendgrid/refresh', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify(tenantPayload({}))
@@ -19790,7 +19790,7 @@ function renderInterests(customer){
       if (smtpSaveBtn) {
         smtpSaveBtn.addEventListener('click', async function(){
           try {
-            await fetchJson('/admin/marketing/sender-identity', {
+            await fetchJson('/admin/api/marketing/sender-identity', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify(tenantPayload({
@@ -19814,7 +19814,7 @@ function renderInterests(customer){
       if (testBtn) {
         testBtn.addEventListener('click', async function(){
           try {
-            await fetchJson('/admin/marketing/sender-identity/test-send', {
+            await fetchJson('/admin/api/marketing/sender-identity/test-send', {
               method:'POST',
               headers:{ 'Content-Type':'application/json' },
               body: JSON.stringify(tenantPayload({
@@ -19831,7 +19831,7 @@ function renderInterests(customer){
     }
 
     async function loadSettings(overrideTenantId){
-      var url = '/admin/marketing/sender-identity';
+      var url = '/admin/api/marketing/sender-identity';
       if (overrideTenantId) url += '?tenantId=' + encodeURIComponent(overrideTenantId);
       var data = await fetchJson(url);
       renderSettings(data || {});
@@ -19878,7 +19878,7 @@ function renderInterests(customer){
 
     if (statusEl) {
       statusEl.innerHTML = '<div class="muted">Loading marketing status...</div>';
-      fetch('/admin/marketing/status', { credentials: 'include' })
+      fetch('/admin/api/marketing/status', { credentials: 'include' })
         .then(function(res){ return res.json(); })
         .then(function(data){
           var senderOk = data && data.senderConfigured;

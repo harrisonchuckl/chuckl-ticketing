@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import express from 'express';
 import { createUnsubscribeToken, verifyUnsubscribeToken } from '../lib/email-marketing/unsubscribe.js';
 import { matchesSegmentRules } from '../services/marketing/segments.js';
 import { buildRecipientEntries, shouldSuppressContact } from '../services/marketing/campaigns.js';
 import { buildStepsFromFlow, validateFlow } from '../services/marketing/flow.js';
 import { MarketingConsentStatus, MarketingSuppressionType } from '@prisma/client';
+import { sendMarketingSuiteShell } from '../lib/marketing-suite-shell.js';
 
 const contact = {
   id: 'contact_1',
@@ -97,4 +99,24 @@ test('flow builder generates steps from connected nodes', () => {
   assert.equal(steps.length, 2);
   assert.equal(steps[0].delayMinutes, 15);
   assert.equal(steps[1].templateId, 'tmpl_1');
+});
+
+test('marketing suite shell returns HTML for SPA routes', async () => {
+  const app = express();
+  app.get('/admin/marketing/*', (_req, res) => {
+    sendMarketingSuiteShell(res);
+  });
+
+  const server = app.listen(0);
+  const { port } = server.address() as { port: number };
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/admin/marketing/campaigns`);
+    const contentType = response.headers.get('content-type') || '';
+    const body = await response.text();
+    assert.ok(contentType.includes('text/html'));
+    assert.match(body, /Marketing Suite/);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
 });
