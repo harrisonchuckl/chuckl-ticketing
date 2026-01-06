@@ -41,7 +41,7 @@ test('segment rule evaluation matches rules against contact + order stats', () =
     { type: 'ATTENDED_VENUE', venueId: 'venue_1' },
   ] as const;
 
-  const matches = matchesSegmentRules(contact, rules as any, stats, null, null);
+  const matches = matchesSegmentRules(contact, rules as any, 'AND', stats, null, null);
   assert.equal(matches, true);
 });
 

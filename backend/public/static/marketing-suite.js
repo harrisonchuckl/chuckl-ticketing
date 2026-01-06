@@ -1618,6 +1618,13 @@ async function openSegmentCreator() {
     'Create segment',
     renderFormRow('Name', '<input id="ms-segment-name" />') +
       renderFormRow('Description', '<textarea id="ms-segment-description"></textarea>') +
+      renderFormRow(
+        'Match rules',
+        `<select id="ms-segment-operator">
+          <option value="AND">All rules (AND)</option>
+          <option value="OR">Any rule (OR)</option>
+        </select>`
+      ) +
       `<div id="ms-segment-rules"></div>
       <button class="ms-secondary" id="ms-segment-add-rule">Add rule</button>
       <div class="ms-toolbar" style="justify-content:flex-end;"><button class="ms-primary" id="ms-segment-create">Create</button></div>`
@@ -1630,6 +1637,7 @@ async function openSegmentCreator() {
           'Rule type',
           `<select data-rule-type>
             <option value="HAS_TAG">Tag contains</option>
+            <option value="PURCHASED_TOWN_IS">Town/City equals</option>
             <option value="PURCHASED_COUNTY_IS">County equals</option>
             <option value="LAST_PURCHASE_OLDER_THAN">Last purchase older than (days)</option>
             <option value="VIEWED_NO_PURCHASE_AFTER">Viewed show but not purchased (days)</option>
@@ -1664,7 +1672,7 @@ async function openSegmentCreator() {
       body: JSON.stringify({
         name: modal.querySelector('#ms-segment-name').value,
         description: modal.querySelector('#ms-segment-description').value,
-        rules: { rules },
+        rules: { rules, operator: modal.querySelector('#ms-segment-operator').value },
       }),
     });
     closeModal();

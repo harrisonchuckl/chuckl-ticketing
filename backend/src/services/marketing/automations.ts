@@ -967,7 +967,7 @@ export async function processAutomationSteps() {
       const context = await resolveSegmentContext(state.tenantId, state.contactId);
       if (!context) continue;
       const stats = await resolveSegmentStats(state.tenantId, context.email, rules);
-      const matches = matchesSegmentRules(context, rules, stats.stats, stats.insight, stats.views);
+      const matches = matchesSegmentRules(context, rules, 'AND', stats.stats, stats.insight, stats.views);
       if (!matches) {
         await prisma.marketingAutomationStepExecution.upsert({
           where: {
@@ -1046,7 +1046,7 @@ export async function processAutomationSteps() {
           const context = await resolveSegmentContext(state.tenantId, state.contactId);
           if (!context) throw new Error('Contact not found');
           const stats = await resolveSegmentStats(state.tenantId, context.email, branchRules);
-          matched = matchesSegmentRules(context, branchRules, stats.stats, stats.insight, stats.views);
+          matched = matchesSegmentRules(context, branchRules, 'AND', stats.stats, stats.insight, stats.views);
         }
         const nextOrder = matched ? Number(config.ifStepOrder) : Number(config.elseStepOrder);
         if (nextOrder && Number.isFinite(nextOrder)) {
