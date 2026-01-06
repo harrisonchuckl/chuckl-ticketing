@@ -915,8 +915,12 @@ async function renderTemplateEditor(templateId) {
       </div>
 
     <div id="ms-sidebar-blocks" class="ms-sidebar-panel active">
-        <div class="ms-block-grid">
-          <div class="ms-draggable-block" draggable="true" data-type="text">
+  <div class="ms-block-grid">
+    <div class="ms-draggable-block" draggable="true" data-type="strip">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/></svg>
+      <span>Strip</span>
+    </div>
+    <div class="ms-draggable-block" draggable="true" data-type="text">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>
             <span>Text</span>
           </div>
@@ -2065,11 +2069,20 @@ function getPlaceholderImage(width, height) {
  * Initializes listeners for the Visual Builder
  */
 function setupVisualBuilder() {
-    const canvas = document.getElementById('ms-builder-canvas');
-    if (!canvas) return;
+  const canvas = document.getElementById('ms-builder-canvas');
+  if (!canvas) return;
 
-    // 1. Initialize State
-    window.editorBlocks = window.editorBlocks.length ? window.editorBlocks : [];
+  // Background Color Logic
+  const bgInput = document.getElementById('ms-style-bg');
+  if (bgInput) {
+    bgInput.addEventListener('input', (e) => {
+      canvas.style.setProperty('--canvas-bg', e.target.value);
+      window.currentTemplateStyles = window.currentTemplateStyles || {};
+      window.currentTemplateStyles.canvasBg = e.target.value;
+    });
+  }
+
+  // 1. Initialize State    window.editorBlocks = window.editorBlocks.length ? window.editorBlocks : [];
     renderBuilderCanvas();
 
     // 2. Sidebar Tab Switching
@@ -2244,9 +2257,9 @@ function moveBlockInCanvas(fromIndex, toIndex) {
 function getDefaultBlockContent(type) {
     const placeholderLarge = getPlaceholderImage(600, 300);
     const placeholderSmall = getPlaceholderImage(300, 200);
-
-    switch (type) {
-        case 'text': return { text: '<h3>New Text Block</h3><p>Enter your content here.</p>' };
+switch (type) {
+    case 'strip': return { bgColor: '#ffffff', blocks: [] };
+    case 'text': return { text: '<h3>New Text Block</h3><p>Enter your content here.</p>' };
         case 'boxedtext': return { text: '<p>This is text inside a colored box.</p>', bgColor: '#f1f5f9' };
         case 'image': return { src: placeholderLarge, alt: 'Image', link: '' };
         case 'imagegroup': return { images: [{src:placeholderSmall}, {src:placeholderSmall}] };
@@ -2348,10 +2361,14 @@ function renderBuilderCanvas() {
 
 // Helper for preview HTML to keep render function clean
 function getPreviewHtml(block) {
-    const c = block.content;
-    switch(block.type) {
-        case 'text': return `<div>${c.text}</div>`;
-        case 'boxedtext': return `<div style="background:${c.bgColor}; padding:20px; border-radius:4px;">${c.text}</div>`;
+  const c = block.content;
+  switch(block.type) {
+    case 'strip': 
+      return `<div class="ms-strip" style="background-color: ${c.bgColor || 'transparent'};">
+                ${(c.blocks || []).length > 0 ? '' : '<div class="ms-muted">Drop elements into this strip</div>'}
+              </div>`;
+    case 'text': return `<div>${c.text}</div>`;
+    case 'boxedtext': return `<div style="background:${c.bgColor}; padding:20px; border-radius:4px;">${c.text}</div>`;
         case 'image': return `<img src="${c.src}" style="width:100%; display:block;">`;
         case 'imagegroup': 
             return `<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
