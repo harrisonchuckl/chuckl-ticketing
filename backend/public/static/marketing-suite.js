@@ -2107,13 +2107,11 @@ function setupVisualBuilder() {
         });
     });
   
-   // 4. Drag Over (Handles Main Canvas and Nested Strips)
+   // 4. Drag Over (Handles Placement Line in Canvas and Strips)
     canvas.addEventListener('dragover', (e) => {
         e.preventDefault();
-        
         const stripTarget = e.target.closest('.ms-strip');
         const container = stripTarget || canvas;
-        
         const afterElement = getDragAfterElement(container, e.clientY);
         
         let indicator = document.querySelector('.ms-drop-indicator');
@@ -2128,16 +2126,72 @@ function setupVisualBuilder() {
             container.insertBefore(indicator, afterElement);
         }
     });
-  
-    // 5. Drag Leave (Cleanup)
+
+    // 5. Drag Leave Cleanup
     canvas.addEventListener('dragleave', (e) => {
-        // Only remove if we are actually leaving the canvas container, not just entering a child
         if (e.relatedTarget && !canvas.contains(e.relatedTarget) && e.relatedTarget !== canvas) {
             const indicator = document.querySelector('.ms-drop-indicator');
             if (indicator) indicator.remove();
         }
     });
 
+    // 6. Drop Logic (Handles Sidebar Drops and Moving between Strips)
+    canvas.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const indicator = document.querySelector('.ms-drop-indicator');
+        if (!indicator) return;
+
+        const dropContainer = indicator.parentElement;
+        const siblings = Array.from(dropContainer.children);
+        const dropIndex = siblings.indexOf(indicator);
+        indicator.remove();
+
+        const type = e.dataTransfer.getData('blockType');
+        const isFromSidebar = draggedSource === 'sidebar';
+
+        function findAndRemoveBlock(id) {
+            const topIdx = window.editorBlocks.findIndex(b => b.id === id);
+            if (topIdx > -1) return window.editorBlocks.splice(topIdx, 1)[0];
+            for (let b of window.editorBlocks) {
+                if (b.type === 'strip' && b.content.blocks) {
+                    const innerIdx = b.content.blocks.findIndex(ib => ib.id === id);
+                    if (innerIdx > -1) return b.content.blocks.splice(innerIdx, 1)[0];
+                }
+            }
+            return null;
+        }
+
+        let blockData;
+        if (isFromSidebar) {
+            blockData = {
+                id: 'blk_' + Date.now(),
+                type: type,
+                content: getDefaultBlockContent(type),
+                styles: { padding: '10px' }
+            };
+        } else {
+            const draggedBlockId = e.dataTransfer.getData('blockId');
+            blockData = findAndRemoveBlock(draggedBlockId);
+        }
+
+        if (!blockData) return;
+
+        if (dropContainer.classList.contains('ms-strip')) {
+            const stripContainer = dropContainer.closest('.ms-builder-block');
+            const stripId = stripContainer.dataset.id;
+            const stripBlock = window.editorBlocks.find(b => b.id === stripId);
+            if (stripBlock) {
+                stripBlock.content.blocks = stripBlock.content.blocks || [];
+                stripBlock.content.blocks.splice(dropIndex, 0, blockData);
+            }
+        } else {
+            window.editorBlocks.splice(dropIndex, 0, blockData);
+        }
+
+        renderBuilderCanvas();
+        draggedSource = null;
+    });
+  
    // 6. Drop Logic (Corrected for Nested Strips)
  canvas.addEventListener('drop', (e) => {
         e.preventDefault();
@@ -2359,18 +2413,19 @@ function renderBuilderCanvas() {
                 const ind = document.querySelector('.ms-drop-indicator');
                 if(ind) ind.remove();
             });
-            // Click to Edit
-            el.addEventListener('click', (e) => {
-                if (e.target.closest('.block-actions')) return; 
-                openBlockEditor(block);
-            });
-
-            canvas.appendChild(el);
-        });
-    } else {
-         canvas.innerHTML = `<div class="ms-canvas-placeholder" style="margin-bottom:20px;">Drag elements here to build your email.</div>`;
-    }
-
+          
+           // Click to Select/Edit
+el.addEventListener('click', (e) => {
+    if (e.target.closest('.block-actions')) return; 
+    
+    // Remove selected class from all other blocks
+    document.querySelectorAll('.ms-builder-block').forEach(b => b.classList.remove('is-selected'));
+    // Add selected class to this block
+    el.classList.add('is-selected');
+    
+    openBlockEditor(block);
+});
+          
     // 2. Render Static Footer (Always at bottom, not draggable)
     const footerEl = document.createElement('div');
     footerEl.className = 'ms-builder-block ms-static-footer';
