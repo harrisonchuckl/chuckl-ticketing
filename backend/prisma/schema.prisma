@@ -412,10 +412,9 @@ model User {
   storefronts                Storefront[]
   dashboardWidgetPreferences DashboardWidgetPreference[]
   orderAuditLogs             OrderAuditLog[]             @relation("OrderAuditActor")
-  marketingAiDraftsOrganised MarketingAiDraft[] @relation("MarketingAiDraftOrganiser")
-  marketingAiDraftsCreated   MarketingAiDraft[] @relation("MarketingAiDraftCreatedBy")
+  marketingAiDraftsOrganised MarketingAiDraft[]          @relation("MarketingAiDraftOrganiser")
+  marketingAiDraftsCreated   MarketingAiDraft[]          @relation("MarketingAiDraftCreatedBy")
   adminAuditLogs             AdminAuditLog[]             @relation("AdminAuditActor")
-
 
   venueMemberships    VenueMember[]
   invitedVenueMembers VenueMember[] @relation("VenueInviter")
@@ -449,80 +448,80 @@ model User {
   // --- storefront (must be unique per organiser) ---
   storefrontSlug String? @unique
 
-  marketingContacts          MarketingContact[]
-  marketingTags              MarketingTag[]
-  marketingTemplates         MarketingTemplate[]
-  marketingTemplatesLocked   MarketingTemplate[]        @relation("MarketingTemplateLockedBy")
-  marketingTemplateVersions  MarketingTemplateVersion[] @relation("MarketingTemplateVersionAuthor")
+  marketingContacts                       MarketingContact[]
+  marketingTags                           MarketingTag[]
+  marketingTemplates                      MarketingTemplate[]
+  marketingTemplatesLocked                MarketingTemplate[]              @relation("MarketingTemplateLockedBy")
+  marketingTemplateVersions               MarketingTemplateVersion[]       @relation("MarketingTemplateVersionAuthor")
   marketingTemplateChangeRequestsAsTenant MarketingTemplateChangeRequest[] @relation("MarketingTemplateChangeTenant")
-  marketingTemplateChangesRequested MarketingTemplateChangeRequest[] @relation("MarketingTemplateChangeRequestedBy")
-  marketingTemplateChangesApproved  MarketingTemplateChangeRequest[] @relation("MarketingTemplateChangeApprovedBy")
-  marketingEmailTemplates    MarketingEmailTemplate[]
-  marketingSegments          MarketingSegment[]
-  marketingCampaigns         MarketingCampaign[]        @relation("MarketingCampaignCreatedBy")
-  marketingCampaignsAsTenant MarketingCampaign[]        @relation("MarketingCampaignTenant")
-  marketingCampaignsScheduled MarketingCampaign[]       @relation("MarketingCampaignScheduledBy")
-  marketingCampaignsApproved  MarketingCampaign[]       @relation("MarketingCampaignApprovedBy")
-  marketingRoleAssignments   MarketingRoleAssignment[]  @relation("MarketingRoleAssignee")
-  marketingRoleTenants       MarketingRoleAssignment[]  @relation("MarketingRoleTenant")
-  marketingSuppressions      MarketingSuppression[]
-  marketingAutomations       MarketingAutomation[]
-  marketingSettings          MarketingSettings?
-  marketingPreferenceTopics  MarketingPreferenceTopic[]
-  marketingCheckoutEvents    MarketingCheckoutEvent[]
-  marketingAuditLogs         MarketingAuditLog[]
-  marketingAuditLogsAsActor  MarketingAuditLog[]        @relation("MarketingAuditActor")
-  marketingImportJobs        MarketingImportJob[]
-  marketingDailySendCounters MarketingDailySendCounter[]
-  marketingDailyEventRollups MarketingDailyEventRollup[]
-  marketingEmailEventReceipts MarketingEmailEventReceipt[]
-  campaignDrafts             CampaignDraft[]
-  upsellBundles              UpsellBundle[]
+  marketingTemplateChangesRequested       MarketingTemplateChangeRequest[] @relation("MarketingTemplateChangeRequestedBy")
+  marketingTemplateChangesApproved        MarketingTemplateChangeRequest[] @relation("MarketingTemplateChangeApprovedBy")
+  marketingEmailTemplates                 MarketingEmailTemplate[]
+  marketingSegments                       MarketingSegment[]
+  marketingCampaigns                      MarketingCampaign[]              @relation("MarketingCampaignCreatedBy")
+  marketingCampaignsAsTenant              MarketingCampaign[]              @relation("MarketingCampaignTenant")
+  marketingCampaignsScheduled             MarketingCampaign[]              @relation("MarketingCampaignScheduledBy")
+  marketingCampaignsApproved              MarketingCampaign[]              @relation("MarketingCampaignApprovedBy")
+  marketingRoleAssignments                MarketingRoleAssignment[]        @relation("MarketingRoleAssignee")
+  marketingRoleTenants                    MarketingRoleAssignment[]        @relation("MarketingRoleTenant")
+  marketingSuppressions                   MarketingSuppression[]
+  marketingAutomations                    MarketingAutomation[]
+  marketingSettings                       MarketingSettings?
+  marketingPreferenceTopics               MarketingPreferenceTopic[]
+  marketingCheckoutEvents                 MarketingCheckoutEvent[]
+  marketingAuditLogs                      MarketingAuditLog[]
+  marketingAuditLogsAsActor               MarketingAuditLog[]              @relation("MarketingAuditActor")
+  marketingImportJobs                     MarketingImportJob[]
+  marketingDailySendCounters              MarketingDailySendCounter[]
+  marketingDailyEventRollups              MarketingDailyEventRollup[]
+  marketingEmailEventReceipts             MarketingEmailEventReceipt[]
+  campaignDrafts                          CampaignDraft[]
+  upsellBundles                           UpsellBundle[]
 
-  crmSegments                 CrmSegment[]
-  crmSegmentMembers           CrmSegmentMember[]
-  crmTags                     CrmTag[] @relation("CrmTagOrganiser")
-  crmCustomerTagsOrganiser    CrmCustomerTag[] @relation("CrmCustomerTagOrganiser")
-  crmCustomerTagsCustomer     CrmCustomerTag[] @relation("CrmCustomerTagCustomer")
-  crmEventViewsOrganiser      CrmEventView[] @relation("CrmEventViewOrganiser")
-  crmEventViewsCustomer       CrmEventView[] @relation("CrmEventViewCustomer")
-  crmSurveys                  CrmSurvey[]
-  crmSurveyResponses          CrmSurveyResponse[]
-  storeTaxRates               StoreTaxRate[]
-  storeFulfilmentMethods      StoreFulfilmentMethod[]
-  storeShowAddOns             StoreShowAddOn[]
-  storeBundleRules            StoreBundleRule[]
-  supportTicketsOrganised     SupportTicket[] @relation("SupportTicketOrganiser")
-  supportTicketsCustomer      SupportTicket[] @relation("SupportTicketCustomer")
-  chatbotKnowledgeSources     ChatbotKnowledgeSource[] @relation("ChatbotKnowledgeOrganiser")
-  chatbotTranscriptsOrganiser ChatbotTranscript[] @relation("ChatbotTranscriptOrganiser")
-  chatbotTranscriptsCustomer  ChatbotTranscript[] @relation("ChatbotTranscriptCustomer")
-  chatbotEscalationRules      ChatbotEscalationRule[] @relation("ChatbotEscalationOrganiser")
-  fulfilmentIntegrations      FulfilmentIntegration[]
-  fulfilmentProductMappings   FulfilmentProductMapping[]
-  printfulPricingConfig       PrintfulPricingConfig?
-  productOrderProfitSnapshots ProductOrderProfitSnapshot[]
+  crmSegments                     CrmSegment[]
+  crmSegmentMembers               CrmSegmentMember[]
+  crmTags                         CrmTag[]                         @relation("CrmTagOrganiser")
+  crmCustomerTagsOrganiser        CrmCustomerTag[]                 @relation("CrmCustomerTagOrganiser")
+  crmCustomerTagsCustomer         CrmCustomerTag[]                 @relation("CrmCustomerTagCustomer")
+  crmEventViewsOrganiser          CrmEventView[]                   @relation("CrmEventViewOrganiser")
+  crmEventViewsCustomer           CrmEventView[]                   @relation("CrmEventViewCustomer")
+  crmSurveys                      CrmSurvey[]
+  crmSurveyResponses              CrmSurveyResponse[]
+  storeTaxRates                   StoreTaxRate[]
+  storeFulfilmentMethods          StoreFulfilmentMethod[]
+  storeShowAddOns                 StoreShowAddOn[]
+  storeBundleRules                StoreBundleRule[]
+  supportTicketsOrganised         SupportTicket[]                  @relation("SupportTicketOrganiser")
+  supportTicketsCustomer          SupportTicket[]                  @relation("SupportTicketCustomer")
+  chatbotKnowledgeSources         ChatbotKnowledgeSource[]         @relation("ChatbotKnowledgeOrganiser")
+  chatbotTranscriptsOrganiser     ChatbotTranscript[]              @relation("ChatbotTranscriptOrganiser")
+  chatbotTranscriptsCustomer      ChatbotTranscript[]              @relation("ChatbotTranscriptCustomer")
+  chatbotEscalationRules          ChatbotEscalationRule[]          @relation("ChatbotEscalationOrganiser")
+  fulfilmentIntegrations          FulfilmentIntegration[]
+  fulfilmentProductMappings       FulfilmentProductMapping[]
+  printfulPricingConfig           PrintfulPricingConfig?
+  productOrderProfitSnapshots     ProductOrderProfitSnapshot[]
   productOrderItemProfitSnapshots ProductOrderItemProfitSnapshot[]
 
-  featuredConfigs            FeaturedConfig[]
-  featuredPins               FeaturedPin[]
-  featuredRegionRules        FeaturedRegionRule[]
-  featuredDecisionLogs       FeaturedDecisionLog[]
-  marketingAiTemplates       MarketingAiTemplate[]
-  marketingAiTonePresets     MarketingAiTonePreset[]
-  marketingAiSuggestions     MarketingAiSuggestion[]
-  storefrontThemes          StorefrontTheme[]
+  featuredConfigs        FeaturedConfig[]
+  featuredPins           FeaturedPin[]
+  featuredRegionRules    FeaturedRegionRule[]
+  featuredDecisionLogs   FeaturedDecisionLog[]
+  marketingAiTemplates   MarketingAiTemplate[]
+  marketingAiTonePresets MarketingAiTonePreset[]
+  marketingAiSuggestions MarketingAiSuggestion[]
+  storefrontThemes       StorefrontTheme[]
 
   customerInsights CustomerInsight[]
 }
 
 model MarketingSettings {
-  tenantId               String   @id
+  tenantId               String                  @id
   defaultFromName        String?
   defaultFromEmail       String?
   defaultReplyTo         String?
   requireVerifiedFrom    Boolean
-  sendingMode            MarketingSenderMode @default(SENDGRID)
+  sendingMode            MarketingSenderMode     @default(SENDGRID)
   verifiedStatus         MarketingVerifiedStatus @default(UNVERIFIED)
   sendgridDomainId       String?
   sendgridDomain         String?
@@ -536,8 +535,8 @@ model MarketingSettings {
   smtpLastTestAt         DateTime?
   dailyLimitOverride     Int?
   sendRatePerSecOverride Int?
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
 
   tenant User @relation(fields: [tenantId], references: [id])
 }
@@ -555,37 +554,37 @@ enum MarketingVerifiedStatus {
 }
 
 model OrganiserProfile {
-  userId                 String             @id
-  organiserType          OrganiserType      @default(OTHER)
-  subscriptionStatus     SubscriptionStatus @default(NONE)
-  subscriptionPlan       String?
-  subscriptionPeriodEnd  DateTime?
-  permissionsJson        Json?
-  notes                  String?
-  createdAt              DateTime           @default(now())
-  updatedAt              DateTime           @updatedAt
-  user                   User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId                String             @id
+  organiserType         OrganiserType      @default(OTHER)
+  subscriptionStatus    SubscriptionStatus @default(NONE)
+  subscriptionPlan      String?
+  subscriptionPeriodEnd DateTime?
+  permissionsJson       Json?
+  notes                 String?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  user                  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model CustomerAccount {
-  id               String   @id @default(cuid())
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  email            String   @unique
-  passwordHash     String
-  name             String?
-  phone            String?
-  marketingConsent Boolean  @default(false)
-  lastLoginAt      DateTime?
-  emailVerifiedAt  DateTime?
-  emailVerificationTokenHash String? @db.Text
+  id                         String    @id @default(cuid())
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
+  email                      String    @unique
+  passwordHash               String
+  name                       String?
+  phone                      String?
+  marketingConsent           Boolean   @default(false)
+  lastLoginAt                DateTime?
+  emailVerifiedAt            DateTime?
+  emailVerificationTokenHash String?   @db.Text
   emailVerificationExpiresAt DateTime?
 
-  memberships CustomerStorefrontMembership[]
-  baskets     Basket[]
-  orders      Order[]
-  rememberTokens CustomerRememberToken[]
-  showViews     CustomerShowView[]
+  memberships      CustomerStorefrontMembership[]
+  baskets          Basket[]
+  orders           Order[]
+  rememberTokens   CustomerRememberToken[]
+  showViews        CustomerShowView[]
   customerInsights CustomerInsight[]
 }
 
@@ -606,10 +605,10 @@ model CustomerStorefrontMembership {
 }
 
 model CustomerRememberToken {
-  id                String   @id @default(cuid())
-  createdAt         DateTime @default(now())
+  id                String    @id @default(cuid())
+  createdAt         DateTime  @default(now())
   customerAccountId String
-  tokenHash         String   @unique @db.Text
+  tokenHash         String    @unique @db.Text
   expiresAt         DateTime
   lastUsedAt        DateTime?
   userAgent         String?
@@ -645,29 +644,29 @@ model CustomerInsight {
   tenantId          String
   email             String
   customerAccountId String?
-  customerKey       String   @unique
+  customerKey       String  @unique
 
-  firstPurchaseAt        DateTime?
-  lastPurchaseAt         DateTime?
-  purchaseCount          Int      @default(0)
-  purchaseCount90d       Int      @default(0)
-  ticketsBoughtLifetime  Int      @default(0)
-  avgTicketsPerOrder     Float    @default(0)
-  groupBuyerScore        Boolean  @default(false)
-  monetaryValueLifetimePence Int  @default(0)
-  monetaryValue90dPence      Int  @default(0)
+  firstPurchaseAt            DateTime?
+  lastPurchaseAt             DateTime?
+  purchaseCount              Int       @default(0)
+  purchaseCount90d           Int       @default(0)
+  ticketsBoughtLifetime      Int       @default(0)
+  avgTicketsPerOrder         Float     @default(0)
+  groupBuyerScore            Boolean   @default(false)
+  monetaryValueLifetimePence Int       @default(0)
+  monetaryValue90dPence      Int       @default(0)
 
-  recencyScore   Int    @default(0)
-  frequencyScore Int    @default(0)
-  monetaryScore  Int    @default(0)
+  recencyScore   Int     @default(0)
+  frequencyScore Int     @default(0)
+  monetaryScore  Int     @default(0)
   rfmSegment     String?
 
-  favouriteVenueId  String?
-  topVenueIds       String[] @default([])
-  favouriteCategory String?
+  favouriteVenueId   String?
+  topVenueIds        String[] @default([])
+  favouriteCategory  String?
   favouriteEventType String?
 
-  tenant          User            @relation(fields: [tenantId], references: [id])
+  tenant          User             @relation(fields: [tenantId], references: [id])
   customerAccount CustomerAccount? @relation(fields: [customerAccountId], references: [id])
 
   @@index([tenantId])
@@ -678,13 +677,13 @@ model CustomerInsight {
 }
 
 model CustomerInsightsWorkerState {
-  id                 String   @id
+  id                 String    @id
   lastRunAt          DateTime?
   lastRunCompletedAt DateTime?
-  lastProcessedCount Int      @default(0)
+  lastProcessedCount Int       @default(0)
   lastError          String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 }
 
 model Basket {
@@ -713,8 +712,8 @@ model BasketItem {
   qty               Int
   customAmountPence Int?
 
-  basket  Basket         @relation(fields: [basketId], references: [id], onDelete: Cascade)
-  product Product        @relation(fields: [productId], references: [id])
+  basket  Basket          @relation(fields: [basketId], references: [id], onDelete: Cascade)
+  product Product         @relation(fields: [productId], references: [id])
   variant ProductVariant? @relation(fields: [variantId], references: [id])
 
   @@index([basketId])
@@ -787,12 +786,12 @@ model Promoter {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  name        String
-  tradingName String?
-  email       String?
-  phone       String?
-  logoUrl     String?
-  website     String?
+  name          String
+  tradingName   String?
+  email         String?
+  phone         String?
+  logoUrl       String?
+  website       String?
   websiteDomain String? @unique
 
   companyNumber String?
@@ -820,8 +819,8 @@ model Promoter {
 }
 
 model PromoterMember {
-  id        String   @id @default(cuid())
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
   promoterId String
   userId     String
 
@@ -969,7 +968,7 @@ model Show {
   tags             String[] @default([])
   accessibility    Json?
 
-  externalTicketUrl   String?
+  externalTicketUrl     String?
   usesExternalTicketing Boolean @default(false)
 
   status      ShowStatus @default(DRAFT)
@@ -998,23 +997,23 @@ model Show {
   allocations ExternalAllocation[]
 
   // Slug history for public URL redirects
-  slugHistory   ShowSlugHistory[]
-  promoterLinks ShowPromoter[]
-  upsellRules   UpsellRule[]
-  campaignDrafts CampaignDraft[]
-  upsellBundles  UpsellBundle[]
-  showEvents     ShowEvent[]
-  marketingAiDrafts MarketingAiDraft[]
+  slugHistory            ShowSlugHistory[]
+  promoterLinks          ShowPromoter[]
+  upsellRules            UpsellRule[]
+  campaignDrafts         CampaignDraft[]
+  upsellBundles          UpsellBundle[]
+  showEvents             ShowEvent[]
+  marketingAiDrafts      MarketingAiDraft[]
   marketingAiSuggestions MarketingAiSuggestion[]
-  featuredPins      FeaturedPin[]
-  crmEventViews      CrmEventView[]
-  crmSurveys         CrmSurvey[]
-  storeShowAddOns    StoreShowAddOn[]
-  storeBundleRules   StoreBundleRule[]
-  supportTickets     SupportTicket[]
-  chatbotTranscripts ChatbotTranscript[]
-  customerShowViews  CustomerShowView[]
-  marketingCampaigns MarketingCampaign[]
+  featuredPins           FeaturedPin[]
+  crmEventViews          CrmEventView[]
+  crmSurveys             CrmSurvey[]
+  storeShowAddOns        StoreShowAddOn[]
+  storeBundleRules       StoreBundleRule[]
+  supportTickets         SupportTicket[]
+  chatbotTranscripts     ChatbotTranscript[]
+  customerShowViews      CustomerShowView[]
+  marketingCampaigns     MarketingCampaign[]
 
   @@index([venueId])
   @@index([organiserId])
@@ -1092,24 +1091,24 @@ model FeaturedDecisionLog {
 }
 
 model MarketingAiDraft {
-  id              String   @id @default(cuid())
-  organiserId     String
-  showId          String?
-  channel         String
-  objective       String
-  tone            String
-  title           String
-  content         String   @db.Text
+  id               String   @id @default(cuid())
+  organiserId      String
+  showId           String?
+  channel          String
+  objective        String
+  tone             String
+  title            String
+  content          String   @db.Text
   sourceTemplateId String?
-  createdByUserId String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdByUserId  String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  organiser  User  @relation("MarketingAiDraftOrganiser", fields: [organiserId], references: [id])
-  show      Show? @relation(fields: [showId], references: [id])
-  sourceTemplate MarketingAiTemplate? @relation(fields: [sourceTemplateId], references: [id])
-  createdBy  User? @relation("MarketingAiDraftCreatedBy", fields: [createdByUserId], references: [id])
-  performance MarketingAiDraftPerformance?
+  organiser      User                         @relation("MarketingAiDraftOrganiser", fields: [organiserId], references: [id])
+  show           Show?                        @relation(fields: [showId], references: [id])
+  sourceTemplate MarketingAiTemplate?         @relation(fields: [sourceTemplateId], references: [id])
+  createdBy      User?                        @relation("MarketingAiDraftCreatedBy", fields: [createdByUserId], references: [id])
+  performance    MarketingAiDraftPerformance?
 
   @@index([organiserId])
   @@index([showId])
@@ -1129,7 +1128,7 @@ model MarketingAiTemplate {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  organiser User @relation(fields: [organiserId], references: [id])
+  organiser User               @relation(fields: [organiserId], references: [id])
   drafts    MarketingAiDraft[]
 
   @@index([organiserId])
@@ -1150,30 +1149,30 @@ model MarketingAiTonePreset {
 }
 
 model MarketingAiDraftPerformance {
-  id       String   @id @default(cuid())
-  draftId  String   @unique
-  used     Boolean  @default(false)
-  usedAt   DateTime?
-  platform String?
-  metrics  Json?
-  notes    String?
-  updatedAt DateTime @updatedAt
+  id        String    @id @default(cuid())
+  draftId   String    @unique
+  used      Boolean   @default(false)
+  usedAt    DateTime?
+  platform  String?
+  metrics   Json?
+  notes     String?
+  updatedAt DateTime  @updatedAt
 
   draft MarketingAiDraft @relation(fields: [draftId], references: [id])
 }
 
 model MarketingAiSuggestion {
-  id               String   @id @default(cuid())
-  organiserId      String
-  showId           String?
-  suggestionType   String
+  id                String    @id @default(cuid())
+  organiserId       String
+  showId            String?
+  suggestionType    String
   suggestionPayload Json
-  sourceData       Json?
-  used             Boolean  @default(false)
-  usedAt           DateTime?
-  feedback         String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  sourceData        Json?
+  used              Boolean   @default(false)
+  usedAt            DateTime?
+  feedback          String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   organiser User  @relation(fields: [organiserId], references: [id])
   show      Show? @relation(fields: [showId], references: [id])
@@ -1327,21 +1326,21 @@ model Order {
   emailDeliveryError  String?
   emailPdfAttached    Boolean?
 
-  showId       String
-  userId       String?
+  showId            String
+  userId            String?
   customerAccountId String?
-  ticketTypeId String?
+  ticketTypeId      String?
 
-  show       Show        @relation(fields: [showId], references: [id])
-  user       User?       @relation(fields: [userId], references: [id])
+  show            Show             @relation(fields: [showId], references: [id])
+  user            User?            @relation(fields: [userId], references: [id])
   customerAccount CustomerAccount? @relation(fields: [customerAccountId], references: [id])
-  ticketType TicketType? @relation(fields: [ticketTypeId], references: [id])
-  storefront Storefront? @relation(fields: [storefrontId], references: [id])
+  ticketType      TicketType?      @relation(fields: [ticketTypeId], references: [id])
+  storefront      Storefront?      @relation(fields: [storefrontId], references: [id])
 
-  tickets   Ticket[]
-  refunds   Refund[]
-  notes     OrderNote[]
-  auditLogs OrderAuditLog[]
+  tickets        Ticket[]
+  refunds        Refund[]
+  notes          OrderNote[]
+  auditLogs      OrderAuditLog[]
   supportTickets SupportTicket[]
 
   seatsCsv                String?        @db.Text
@@ -1382,7 +1381,7 @@ model Storefront {
   digitalEnabled       Boolean @default(false)
   shippingFlatFeePence Int?
 
-  owner         User           @relation(fields: [ownerUserId], references: [id])
+  owner         User                           @relation(fields: [ownerUserId], references: [id])
   products      Product[]
   orders        Order[]
   memberships   CustomerStorefrontMembership[]
@@ -1394,14 +1393,14 @@ model Storefront {
 }
 
 model StorefrontTheme {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  organiserId String
-  page        StorefrontThemePage
-  draftJson   Json?
+  id            String              @id @default(cuid())
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  organiserId   String
+  page          StorefrontThemePage
+  draftJson     Json?
   publishedJson Json?
-  publishedAt DateTime?
+  publishedAt   DateTime?
 
   organiser User @relation(fields: [organiserId], references: [id])
 
@@ -1414,11 +1413,11 @@ model FulfilmentIntegration {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  organiserId          String
-  provider             FulfilmentProvider
-  accessTokenEncrypted String?  @db.Text
-  refreshTokenEncrypted String? @db.Text
-  accessTokenExpiresAt DateTime?
+  organiserId           String
+  provider              FulfilmentProvider
+  accessTokenEncrypted  String?            @db.Text
+  refreshTokenEncrypted String?            @db.Text
+  accessTokenExpiresAt  DateTime?
 
   organiser User @relation(fields: [organiserId], references: [id])
 
@@ -1431,27 +1430,27 @@ model FulfilmentProductMapping {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  organiserId      String
-  provider         FulfilmentProvider
-  productId        String
-  productVariantId String?
-  providerProductId String
-  providerVariantId String?
-  providerBasePricePence Int?
-  providerBaseCurrency   String? @default("gbp")
-  providerBaseUpdatedAt  DateTime?
+  organiserId                   String
+  provider                      FulfilmentProvider
+  productId                     String
+  productVariantId              String?
+  providerProductId             String
+  providerVariantId             String?
+  providerBasePricePence        Int?
+  providerBaseCurrency          String?            @default("gbp")
+  providerBaseUpdatedAt         DateTime?
   providerShippingEstimatePence Int?
-  providerTaxEstimatePence Int?
+  providerTaxEstimatePence      Int?
 
-  organiser      User           @relation(fields: [organiserId], references: [id])
-  product        Product        @relation(fields: [productId], references: [id])
+  organiser      User            @relation(fields: [organiserId], references: [id])
+  product        Product         @relation(fields: [productId], references: [id])
   productVariant ProductVariant? @relation(fields: [productVariantId], references: [id])
 
+  @@unique([provider, productId, productVariantId])
   @@index([organiserId])
   @@index([productId])
   @@index([productVariantId])
   @@index([provider, providerProductId])
-  @@unique([provider, productId, productVariantId])
 }
 
 model Product {
@@ -1459,30 +1458,30 @@ model Product {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  storefrontId      String
-  title             String
-  slug              String
-  status            ProductStatus         @default(DRAFT)
-  category          ProductCategory       @default(MERCH)
-  description       String?
-  fulfilmentType    ProductFulfilmentType @default(NONE)
-  pricePence        Int?
-  retailPricePence  Int?
+  storefrontId        String
+  title               String
+  slug                String
+  status              ProductStatus         @default(DRAFT)
+  category            ProductCategory       @default(MERCH)
+  description         String?
+  fulfilmentType      ProductFulfilmentType @default(NONE)
+  pricePence          Int?
+  retailPricePence    Int?
   compareAtPricePence Int?
-  marginRuleUsed    String?
-  currency          String                @default("gbp")
-  allowCustomAmount Boolean               @default(false)
-  inventoryMode     InventoryMode         @default(UNLIMITED)
-  stockCount        Int?
-  lowStockThreshold Int?
-  preorderEnabled   Boolean               @default(false)
-  preorderCloseAt   DateTime?
-  maxPerOrder       Int?
-  maxPerTicket      Int?
-  promoterId        String?
+  marginRuleUsed      String?
+  currency            String                @default("gbp")
+  allowCustomAmount   Boolean               @default(false)
+  inventoryMode       InventoryMode         @default(UNLIMITED)
+  stockCount          Int?
+  lowStockThreshold   Int?
+  preorderEnabled     Boolean               @default(false)
+  preorderCloseAt     DateTime?
+  maxPerOrder         Int?
+  maxPerTicket        Int?
+  promoterId          String?
 
-  storefront         Storefront          @relation(fields: [storefrontId], references: [id])
-  promoter           Promoter?           @relation(fields: [promoterId], references: [id])
+  storefront         Storefront                 @relation(fields: [storefrontId], references: [id])
+  promoter           Promoter?                  @relation(fields: [promoterId], references: [id])
   basketItems        BasketItem[]
   variants           ProductVariant[]
   images             ProductImage[]
@@ -1509,7 +1508,7 @@ model ProductVariant {
   stockCountOverride Int?
   sortOrder          Int     @default(0)
 
-  product            Product             @relation(fields: [productId], references: [id])
+  product            Product                    @relation(fields: [productId], references: [id])
   basketItems        BasketItem[]
   orderItems         ProductOrderItem[]
   inventoryMovements InventoryMovement[]
@@ -1584,17 +1583,17 @@ model ProductOrder {
   status           ProductOrderStatus
   fulfilmentStatus ProductOrderFulfilmentStatus @default(UNFULFILLED)
 
-  printfulOrderId        String?
+  printfulOrderId           String?
   printfulCostSubtotalPence Int?
-  printfulShippingPence  Int?
-  printfulTaxPence       Int?
-  printfulTotalPence     Int?
-  printfulCostCurrency   String?
-  printfulCostRawJson    Json?
+  printfulShippingPence     Int?
+  printfulTaxPence          Int?
+  printfulTotalPence        Int?
+  printfulCostCurrency      String?
+  printfulCostRawJson       Json?
 
-  storefront Storefront         @relation(fields: [storefrontId], references: [id])
-  order      Order?             @relation(fields: [orderId], references: [id])
-  items      ProductOrderItem[]
+  storefront     Storefront                  @relation(fields: [storefrontId], references: [id])
+  order          Order?                      @relation(fields: [orderId], references: [id])
+  items          ProductOrderItem[]
   profitSnapshot ProductOrderProfitSnapshot?
 
   @@index([storefrontId])
@@ -1606,46 +1605,45 @@ model ProductOrderItem {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  productOrderId         String
-  productId              String
-  variantId              String?
-  titleSnapshot          String
-  variantSnapshot        String?
-  unitPricePence         Int
-  qty                    Int
-  lineTotalPence         Int
-  fulfilmentTypeSnapshot ProductFulfilmentType
-  fulfilmentStatus       ProductOrderItemStatus @default(UNFULFILLED)
+  productOrderId            String
+  productId                 String
+  variantId                 String?
+  titleSnapshot             String
+  variantSnapshot           String?
+  unitPricePence            Int
+  qty                       Int
+  lineTotalPence            Int
+  fulfilmentTypeSnapshot    ProductFulfilmentType
+  fulfilmentStatus          ProductOrderItemStatus @default(UNFULFILLED)
   fulfilmentProviderOrderId String?
-  fulfilmentErrorMessage String?
-  trackingNumber         String?
-  trackingUrl            String?
-  trackingCarrier        String?
-  metadataJson           Json?
+  fulfilmentErrorMessage    String?
+  trackingNumber            String?
+  trackingUrl               String?
+  trackingCarrier           String?
+  metadataJson              Json?
 
-  productOrder ProductOrder    @relation(fields: [productOrderId], references: [id])
-  product      Product         @relation(fields: [productId], references: [id])
-  variant      ProductVariant? @relation(fields: [variantId], references: [id])
+  productOrder   ProductOrder                    @relation(fields: [productOrderId], references: [id])
+  product        Product                         @relation(fields: [productId], references: [id])
+  variant        ProductVariant?                 @relation(fields: [variantId], references: [id])
   profitSnapshot ProductOrderItemProfitSnapshot?
 
   @@index([productOrderId])
 }
-
 
 model PrintfulPricingConfig {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  organiserId String @unique
-  marginBps   Int    @default(1500)
-  vatRegistered Boolean @default(true)
-  vatRateBps Int @default(2000)
-  shippingPolicy PrintfulShippingPolicy @default(PASS_THROUGH)
-  stripeFeeBps Int @default(150)
-  stripeFeeFixedPence Int @default(20)
-  allowNegativeMargin Boolean @default(false)
-  minimumProfitPence Int @default(0)
+  organiserId         String                 @unique
+  marginBps           Int                    @default(1500)
+  vatRegistered       Boolean                @default(true)
+  vatRateBps          Int                    @default(2000)
+  shippingPolicy      PrintfulShippingPolicy @default(PASS_THROUGH)
+  stripeFeeBps        Int                    @default(150)
+  stripeFeeFixedPence Int                    @default(20)
+  allowNegativeMargin Boolean                @default(false)
+  minimumProfitPence  Int                    @default(0)
 
   organiser User @relation(fields: [organiserId], references: [id])
 
@@ -1658,35 +1656,35 @@ model ProductOrderProfitSnapshot {
   updatedAt DateTime @updatedAt
 
   productOrderId String @unique
-  organiserId String
+  organiserId    String
 
   retailSubtotalPence Int
   retailShippingPence Int
-  retailTaxPence Int
-  retailTotalPence Int
+  retailTaxPence      Int
+  retailTotalPence    Int
 
   printfulSubtotalPence Int
   printfulShippingPence Int
-  printfulTaxPence Int
-  printfulTotalPence Int
+  printfulTaxPence      Int
+  printfulTotalPence    Int
 
-  stripeFeePence Int
+  stripeFeePence   Int
   vatEstimatePence Int
-  netProfitPence Int
-  currency String
+  netProfitPence   Int
+  currency         String
 
-  marginBpsUsed Int
-  vatRateBpsUsed Int
-  shippingPolicyUsed PrintfulShippingPolicy
-  negativeMargin Boolean @default(false)
-  missingPrintfulCost Boolean @default(false)
+  marginBpsUsed       Int
+  vatRateBpsUsed      Int
+  shippingPolicyUsed  PrintfulShippingPolicy
+  negativeMargin      Boolean                @default(false)
+  missingPrintfulCost Boolean                @default(false)
 
   organiserSharePence Int @default(0)
-  platformSharePence Int @default(0)
-  creatorSharePence Int @default(0)
+  platformSharePence  Int @default(0)
+  creatorSharePence   Int @default(0)
 
-  organiser User @relation(fields: [organiserId], references: [id])
-  productOrder ProductOrder @relation(fields: [productOrderId], references: [id])
+  organiser     User                             @relation(fields: [organiserId], references: [id])
+  productOrder  ProductOrder                     @relation(fields: [productOrderId], references: [id])
   itemSnapshots ProductOrderItemProfitSnapshot[]
 
   @@index([organiserId])
@@ -1698,27 +1696,27 @@ model ProductOrderItemProfitSnapshot {
   updatedAt DateTime @updatedAt
 
   productOrderItemId String @unique
-  profitSnapshotId String
-  organiserId String
+  profitSnapshotId   String
+  organiserId        String
 
-  retailUnitPricePence Int
-  retailLineTotalPence Int
-  printfulUnitCostPence Int
+  retailUnitPricePence   Int
+  retailLineTotalPence   Int
+  printfulUnitCostPence  Int
   printfulLineTotalPence Int
-  stripeFeePence Int
-  vatEstimatePence Int
-  netProfitPence Int
-  currency String
-  marginBpsUsed Int
-  negativeMargin Boolean @default(false)
+  stripeFeePence         Int
+  vatEstimatePence       Int
+  netProfitPence         Int
+  currency               String
+  marginBpsUsed          Int
+  negativeMargin         Boolean @default(false)
 
   organiserSharePence Int @default(0)
-  platformSharePence Int @default(0)
-  creatorSharePence Int @default(0)
+  platformSharePence  Int @default(0)
+  creatorSharePence   Int @default(0)
 
-  organiser User @relation(fields: [organiserId], references: [id])
-  profitSnapshot ProductOrderProfitSnapshot @relation(fields: [profitSnapshotId], references: [id])
-  productOrderItem ProductOrderItem @relation(fields: [productOrderItemId], references: [id])
+  organiser        User                       @relation(fields: [organiserId], references: [id])
+  profitSnapshot   ProductOrderProfitSnapshot @relation(fields: [profitSnapshotId], references: [id])
+  productOrderItem ProductOrderItem           @relation(fields: [productOrderItemId], references: [id])
 
   @@index([organiserId])
 }
@@ -1741,17 +1739,17 @@ model InventoryMovement {
 }
 
 model MarketingContact {
-  id        String   @id @default(cuid())
-  tenantId  String
-  email     String
-  firstName String?
-  lastName  String?
-  phone     String?
-  town      String?
+  id              String    @id @default(cuid())
+  tenantId        String
+  email           String
+  firstName       String?
+  lastName        String?
+  phone           String?
+  town            String?
   birthdayDate    DateTime?
   anniversaryDate DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   tenant User @relation(fields: [tenantId], references: [id])
 
@@ -1786,25 +1784,25 @@ model MarketingConsent {
 }
 
 model MarketingImportJob {
-  id        String                 @id @default(cuid())
-  tenantId  String
-  filename  String?
-  status    MarketingImportJobStatus
-  createdAt DateTime               @default(now())
+  id         String                   @id @default(cuid())
+  tenantId   String
+  filename   String?
+  status     MarketingImportJobStatus
+  createdAt  DateTime                 @default(now())
   finishedAt DateTime?
-  totalRows Int                    @default(0)
-  imported  Int                    @default(0)
-  skipped   Int                    @default(0)
+  totalRows  Int                      @default(0)
+  imported   Int                      @default(0)
+  skipped    Int                      @default(0)
   errorsJson Json?
 
-  tenant    User                   @relation(fields: [tenantId], references: [id])
+  tenant    User                      @relation(fields: [tenantId], references: [id])
   rowErrors MarketingImportRowError[]
 
   @@index([tenantId])
 }
 
 model MarketingImportRowError {
-  id        String            @id @default(cuid())
+  id        String  @id @default(cuid())
   jobId     String
   rowNumber Int
   email     String?
@@ -1854,24 +1852,24 @@ model MarketingContactTag {
 }
 
 model MarketingTemplate {
-  id        String   @id @default(cuid())
-  tenantId  String
-  name      String
-  subject   String
-  fromName  String
-  fromEmail String
-  replyTo   String?
-  previewText String?
-  mjmlBody  String   @db.Text
-  isLocked  Boolean  @default(false)
-  lockedAt  DateTime?
+  id             String    @id @default(cuid())
+  tenantId       String
+  name           String
+  subject        String
+  fromName       String
+  fromEmail      String
+  replyTo        String?
+  previewText    String?
+  mjmlBody       String    @db.Text
+  isLocked       Boolean   @default(false)
+  lockedAt       DateTime?
   lockedByUserId String?
-  lockReason String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  lockReason     String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  tenant          User                      @relation(fields: [tenantId], references: [id])
-  lockedBy       User?                     @relation("MarketingTemplateLockedBy", fields: [lockedByUserId], references: [id])
+  tenant          User                             @relation(fields: [tenantId], references: [id])
+  lockedBy        User?                            @relation("MarketingTemplateLockedBy", fields: [lockedByUserId], references: [id])
   campaigns       MarketingCampaign[]
   automationSteps MarketingAutomationStep[]
   versions        MarketingTemplateVersion[]
@@ -1881,41 +1879,41 @@ model MarketingTemplate {
 }
 
 model MarketingTemplateVersion {
-  id         String   @id @default(cuid())
-  templateId String
-  version    Int
-  name       String
-  subject    String
-  previewText String?
-  fromName   String
-  fromEmail  String
-  replyTo    String?
-  mjmlBody   String   @db.Text
+  id              String   @id @default(cuid())
+  templateId      String
+  version         Int
+  name            String
+  subject         String
+  previewText     String?
+  fromName        String
+  fromEmail       String
+  replyTo         String?
+  mjmlBody        String   @db.Text
   createdByUserId String?
-  createdAt  DateTime @default(now())
+  createdAt       DateTime @default(now())
 
-  template MarketingTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  createdBy User? @relation("MarketingTemplateVersionAuthor", fields: [createdByUserId], references: [id])
+  template  MarketingTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  createdBy User?             @relation("MarketingTemplateVersionAuthor", fields: [createdByUserId], references: [id])
 
   @@index([templateId, version])
 }
 
 model MarketingTemplateChangeRequest {
-  id         String   @id @default(cuid())
-  tenantId   String
-  templateId String
-  status     MarketingTemplateChangeStatus @default(PENDING)
-  payload    Json
-  message    String?
+  id                String                        @id @default(cuid())
+  tenantId          String
+  templateId        String
+  status            MarketingTemplateChangeStatus @default(PENDING)
+  payload           Json
+  message           String?
   requestedByUserId String?
   approvedByUserId  String?
-  requestedAt DateTime @default(now())
-  reviewedAt DateTime?
+  requestedAt       DateTime                      @default(now())
+  reviewedAt        DateTime?
 
-  tenant     User             @relation("MarketingTemplateChangeTenant", fields: [tenantId], references: [id])
-  template   MarketingTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  requestedBy User?           @relation("MarketingTemplateChangeRequestedBy", fields: [requestedByUserId], references: [id])
-  approvedBy  User?           @relation("MarketingTemplateChangeApprovedBy", fields: [approvedByUserId], references: [id])
+  tenant      User              @relation("MarketingTemplateChangeTenant", fields: [tenantId], references: [id])
+  template    MarketingTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  requestedBy User?             @relation("MarketingTemplateChangeRequestedBy", fields: [requestedByUserId], references: [id])
+  approvedBy  User?             @relation("MarketingTemplateChangeApprovedBy", fields: [approvedByUserId], references: [id])
 
   @@index([tenantId, status])
   @@index([templateId])
@@ -1931,7 +1929,7 @@ model MarketingEmailTemplate {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  tenant   User                         @relation(fields: [tenantId], references: [id])
+  tenant   User                            @relation(fields: [tenantId], references: [id])
   versions MarketingEmailTemplateVersion[]
 
   @@index([tenantId])
@@ -1966,52 +1964,52 @@ model MarketingSegment {
 }
 
 model MarketingCampaign {
-  id              String                  @id @default(cuid())
-  tenantId        String
-  name            String
-  templateId      String
-  segmentId       String
-  type            MarketingCampaignType   @default(ONE_OFF)
-  showId          String?
-  status          MarketingCampaignStatus @default(DRAFT)
-  scheduledFor    DateTime?
-  scheduledByUserId String?
-  approvedByUserId  String?
-  approvedAt      DateTime?
-  sentAt          DateTime?
+  id                   String                  @id @default(cuid())
+  tenantId             String
+  name                 String
+  templateId           String
+  segmentId            String
+  type                 MarketingCampaignType   @default(ONE_OFF)
+  showId               String?
+  status               MarketingCampaignStatus @default(DRAFT)
+  scheduledFor         DateTime?
+  scheduledByUserId    String?
+  approvedByUserId     String?
+  approvedAt           DateTime?
+  sentAt               DateTime?
   recipientsPreparedAt DateTime?
-  sendLockedUntil DateTime?
-  createdByUserId String
-  createdAt       DateTime                @default(now())
-  updatedAt       DateTime                @updatedAt
+  sendLockedUntil      DateTime?
+  createdByUserId      String
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
 
-  tenant     User                         @relation("MarketingCampaignTenant", fields: [tenantId], references: [id])
-  template   MarketingTemplate            @relation(fields: [templateId], references: [id])
-  segment    MarketingSegment             @relation(fields: [segmentId], references: [id])
-  show       Show?                        @relation(fields: [showId], references: [id])
-  createdBy  User                         @relation("MarketingCampaignCreatedBy", fields: [createdByUserId], references: [id])
-  scheduledBy User?                       @relation("MarketingCampaignScheduledBy", fields: [scheduledByUserId], references: [id])
-  approvedBy  User?                       @relation("MarketingCampaignApprovedBy", fields: [approvedByUserId], references: [id])
-  recipients MarketingCampaignRecipient[]
-  events     MarketingEmailEvent[]
+  tenant      User                         @relation("MarketingCampaignTenant", fields: [tenantId], references: [id])
+  template    MarketingTemplate            @relation(fields: [templateId], references: [id])
+  segment     MarketingSegment             @relation(fields: [segmentId], references: [id])
+  show        Show?                        @relation(fields: [showId], references: [id])
+  createdBy   User                         @relation("MarketingCampaignCreatedBy", fields: [createdByUserId], references: [id])
+  scheduledBy User?                        @relation("MarketingCampaignScheduledBy", fields: [scheduledByUserId], references: [id])
+  approvedBy  User?                        @relation("MarketingCampaignApprovedBy", fields: [approvedByUserId], references: [id])
+  recipients  MarketingCampaignRecipient[]
+  events      MarketingEmailEvent[]
 
   @@index([tenantId])
   @@index([showId])
 }
 
 model MarketingCampaignRecipient {
-  id         String                   @id @default(cuid())
-  tenantId   String
-  campaignId String
-  contactId  String
-  email      String
-  status     MarketingRecipientStatus @default(PENDING)
-  errorText  String?
-  sentAt     DateTime?
-  retryAt    DateTime?
-  retryCount Int                      @default(0)
+  id            String                   @id @default(cuid())
+  tenantId      String
+  campaignId    String
+  contactId     String
+  email         String
+  status        MarketingRecipientStatus @default(PENDING)
+  errorText     String?
+  sentAt        DateTime?
+  retryAt       DateTime?
+  retryCount    Int                      @default(0)
   lastAttemptAt DateTime?
-  createdAt  DateTime                 @default(now())
+  createdAt     DateTime                 @default(now())
 
   campaign MarketingCampaign @relation(fields: [campaignId], references: [id])
   contact  MarketingContact  @relation(fields: [contactId], references: [id])
@@ -2055,11 +2053,11 @@ model MarketingDailyEventRollup {
 }
 
 model MarketingWorkerState {
-  id              String   @id
+  id              String    @id
   lastWorkerRunAt DateTime?
   lastSendAt      DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }
 
 model MarketingEmailEvent {
@@ -2082,11 +2080,11 @@ model MarketingEmailEvent {
 }
 
 model MarketingEmailEventReceipt {
-  id              String   @id @default(cuid())
-  tenantId         String
+  id              String    @id @default(cuid())
+  tenantId        String
   provider        String
   providerEventId String
-  receivedAt      DateTime @default(now())
+  receivedAt      DateTime  @default(now())
   eventAt         DateTime?
   meta            Json?
 
@@ -2097,14 +2095,14 @@ model MarketingEmailEventReceipt {
 }
 
 model MarketingAutomation {
-  id          String                         @id @default(cuid())
-  tenantId    String
-  name        String
-  triggerType MarketingAutomationTriggerType
+  id            String                         @id @default(cuid())
+  tenantId      String
+  name          String
+  triggerType   MarketingAutomationTriggerType
   triggerConfig Json?
-  isEnabled   Boolean                        @default(true)
-  createdAt   DateTime                       @default(now())
-  updatedAt   DateTime                       @updatedAt
+  isEnabled     Boolean                        @default(true)
+  createdAt     DateTime                       @default(now())
+  updatedAt     DateTime                       @updatedAt
 
   tenant         User                               @relation(fields: [tenantId], references: [id])
   steps          MarketingAutomationStep[]
@@ -2116,18 +2114,18 @@ model MarketingAutomation {
 }
 
 model MarketingAutomationStep {
-  id             String @id @default(cuid())
-  tenantId       String
-  automationId   String
-  stepType       MarketingAutomationStepType @default(SEND_EMAIL)
-  delayMinutes   Int                         @default(0)
-  templateId     String?
-  conditionRules Json?
-  stepConfig     Json?
-  throttleMinutes Int                        @default(0)
+  id              String                      @id @default(cuid())
+  tenantId        String
+  automationId    String
+  stepType        MarketingAutomationStepType @default(SEND_EMAIL)
+  delayMinutes    Int                         @default(0)
+  templateId      String?
+  conditionRules  Json?
+  stepConfig      Json?
+  throttleMinutes Int                         @default(0)
   quietHoursStart Int?
   quietHoursEnd   Int?
-  stepOrder      Int
+  stepOrder       Int
 
   automation MarketingAutomation                @relation(fields: [automationId], references: [id])
   template   MarketingTemplate?                 @relation(fields: [templateId], references: [id])
@@ -2150,8 +2148,8 @@ model MarketingAutomationState {
   createdAt    DateTime                       @default(now())
   updatedAt    DateTime                       @updatedAt
 
-  automation MarketingAutomation @relation(fields: [automationId], references: [id])
-  contact    MarketingContact    @relation(fields: [contactId], references: [id])
+  automation MarketingAutomation     @relation(fields: [automationId], references: [id])
+  contact    MarketingContact        @relation(fields: [contactId], references: [id])
   run        MarketingAutomationRun? @relation(fields: [runId], references: [id])
 
   @@unique([tenantId, contactId, automationId, triggerKey])
@@ -2192,8 +2190,8 @@ model MarketingAutomationRun {
   completedAt  DateTime?
   metadata     Json?
 
-  automation MarketingAutomation @relation(fields: [automationId], references: [id])
-  contact    MarketingContact    @relation(fields: [contactId], references: [id])
+  automation MarketingAutomation        @relation(fields: [automationId], references: [id])
+  contact    MarketingContact           @relation(fields: [contactId], references: [id])
   states     MarketingAutomationState[]
 
   @@index([tenantId, automationId])
@@ -2249,17 +2247,17 @@ model MarketingCheckoutEvent {
 }
 
 model MarketingAuditLog {
-  id         String   @id @default(cuid())
-  tenantId   String
+  id          String   @id @default(cuid())
+  tenantId    String
   actorUserId String?
   actorEmail  String?
-  action     String
-  entityType String
-  entityId   String?
-  metadata   Json?
-  createdAt  DateTime @default(now())
+  action      String
+  entityType  String
+  entityId    String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
 
-  tenant User @relation(fields: [tenantId], references: [id])
+  tenant User  @relation(fields: [tenantId], references: [id])
   actor  User? @relation("MarketingAuditActor", fields: [actorUserId], references: [id])
 
   @@index([tenantId, createdAt])
@@ -2267,12 +2265,12 @@ model MarketingAuditLog {
 }
 
 model MarketingRoleAssignment {
-  id        String   @id @default(cuid())
+  id        String                  @id @default(cuid())
   tenantId  String
   userId    String
   role      MarketingGovernanceRole @default(VIEWER)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime                @default(now())
+  updatedAt DateTime                @updatedAt
 
   tenant User @relation("MarketingRoleTenant", fields: [tenantId], references: [id])
   user   User @relation("MarketingRoleAssignee", fields: [userId], references: [id])
@@ -2283,16 +2281,16 @@ model MarketingRoleAssignment {
 }
 
 model AdminAuditLog {
-  id          String   @id @default(cuid())
-  actorUserId String?
-  actorEmail  String?
-  action      String
-  targetType  String?
-  targetId    String?
+  id           String   @id @default(cuid())
+  actorUserId  String?
+  actorEmail   String?
+  action       String
+  targetType   String?
+  targetId     String?
   metadataJson Json?
-  ip          String?
-  userAgent   String?
-  createdAt   DateTime @default(now())
+  ip           String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
 
   actor User? @relation("AdminAuditActor", fields: [actorUserId], references: [id])
 
@@ -2475,17 +2473,17 @@ model AllocationSeat {
 }
 
 model CrmSegment {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   organiserId    String
   name           String
   description    String?
   definitionJson Json
   lastRunAt      DateTime?
   archivedAt     DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  organiser User @relation(fields: [organiserId], references: [id])
+  organiser User               @relation(fields: [organiserId], references: [id])
   members   CrmSegmentMember[]
 
   @@index([organiserId])
@@ -2512,7 +2510,7 @@ model CrmTag {
   colour      String?
   createdAt   DateTime @default(now())
 
-  organiser User @relation("CrmTagOrganiser", fields: [organiserId], references: [id])
+  organiser User             @relation("CrmTagOrganiser", fields: [organiserId], references: [id])
   customers CrmCustomerTag[]
 
   @@index([organiserId])
@@ -2526,8 +2524,8 @@ model CrmCustomerTag {
   tagId         String
   createdAt     DateTime @default(now())
 
-  organiser User  @relation("CrmCustomerTagOrganiser", fields: [organiserId], references: [id])
-  customer  User? @relation("CrmCustomerTagCustomer", fields: [customerId], references: [id])
+  organiser User   @relation("CrmCustomerTagOrganiser", fields: [organiserId], references: [id])
+  customer  User?  @relation("CrmCustomerTagCustomer", fields: [customerId], references: [id])
   tag       CrmTag @relation(fields: [tagId], references: [id])
 
   @@unique([customerEmail, tagId])
@@ -2554,18 +2552,18 @@ model CrmEventView {
 }
 
 model CrmSurvey {
-  id          String           @id @default(cuid())
+  id          String          @id @default(cuid())
   organiserId String
   name        String
   showId      String?
-  status      CrmSurveyStatus  @default(DRAFT)
+  status      CrmSurveyStatus @default(DRAFT)
   startsAt    DateTime?
   endsAt      DateTime?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
-  organiser User  @relation(fields: [organiserId], references: [id])
-  show      Show? @relation(fields: [showId], references: [id])
+  organiser User                @relation(fields: [organiserId], references: [id])
+  show      Show?               @relation(fields: [showId], references: [id])
   questions CrmSurveyQuestion[]
   responses CrmSurveyResponse[]
 
@@ -2573,12 +2571,12 @@ model CrmSurvey {
 }
 
 model CrmSurveyQuestion {
-  id          String   @id @default(cuid())
+  id          String @id @default(cuid())
   surveyId    String
   type        String
   prompt      String
   optionsJson Json?
-  sortOrder   Int      @default(0)
+  sortOrder   Int    @default(0)
 
   survey CrmSurvey @relation(fields: [surveyId], references: [id])
 
@@ -2614,12 +2612,12 @@ model StoreTaxRate {
 }
 
 model StoreFulfilmentMethod {
-  id          String            @id @default(cuid())
+  id          String              @id @default(cuid())
   organiserId String
   name        String
   type        StoreFulfilmentKind
   detailsJson Json?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime            @default(now())
 
   organiser User @relation(fields: [organiserId], references: [id])
 
@@ -2627,14 +2625,14 @@ model StoreFulfilmentMethod {
 }
 
 model StoreShowAddOn {
-  id          String        @id @default(cuid())
+  id          String         @id @default(cuid())
   organiserId String
   showId      String
   productId   String
   mode        StoreAddOnMode
-  isActive    Boolean       @default(true)
+  isActive    Boolean        @default(true)
   maxPerOrder Int?
-  sortOrder   Int           @default(0)
+  sortOrder   Int            @default(0)
 
   organiser User    @relation(fields: [organiserId], references: [id])
   show      Show    @relation(fields: [showId], references: [id])
@@ -2645,7 +2643,7 @@ model StoreShowAddOn {
 }
 
 model StoreBundleRule {
-  id             String                @id @default(cuid())
+  id             String                  @id @default(cuid())
   organiserId    String
   name           String
   showId         String?
@@ -2654,9 +2652,9 @@ model StoreBundleRule {
   discountValue  Int
   startsAt       DateTime?
   endsAt         DateTime?
-  isActive       Boolean               @default(true)
-  createdAt      DateTime              @default(now())
-  updatedAt      DateTime              @updatedAt
+  isActive       Boolean                 @default(true)
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
 
   organiser User  @relation(fields: [organiserId], references: [id])
   show      Show? @relation(fields: [showId], references: [id])
@@ -2665,7 +2663,7 @@ model StoreBundleRule {
 }
 
 model SupportTicket {
-  id                    String                 @id @default(cuid())
+  id                    String                @id @default(cuid())
   organiserId           String
   customerId            String?
   orderId               String?
@@ -2675,16 +2673,16 @@ model SupportTicket {
   status                SupportTicketStatus
   priority              SupportTicketPriority
   lastCustomerMessageAt DateTime?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
 
-  organiser       User  @relation("SupportTicketOrganiser", fields: [organiserId], references: [id])
-  customer        User? @relation("SupportTicketCustomer", fields: [customerId], references: [id])
-  order           Order? @relation(fields: [orderId], references: [id])
-  show            Show? @relation(fields: [showId], references: [id])
-  messages        SupportMessage[]
-  attachments     SupportAttachment[]
-  triageResults   SupportTriageResult[]
+  organiser        User                    @relation("SupportTicketOrganiser", fields: [organiserId], references: [id])
+  customer         User?                   @relation("SupportTicketCustomer", fields: [customerId], references: [id])
+  order            Order?                  @relation(fields: [orderId], references: [id])
+  show             Show?                   @relation(fields: [showId], references: [id])
+  messages         SupportMessage[]
+  attachments      SupportAttachment[]
+  triageResults    SupportTriageResult[]
   suggestedReplies SupportSuggestedReply[]
 
   @@index([organiserId])
@@ -2692,11 +2690,11 @@ model SupportTicket {
 }
 
 model SupportMessage {
-  id         String                  @id @default(cuid())
+  id         String                   @id @default(cuid())
   ticketId   String
   senderType SupportMessageSenderType
   body       String
-  createdAt  DateTime @default(now())
+  createdAt  DateTime                 @default(now())
   metaJson   Json?
 
   ticket SupportTicket @relation(fields: [ticketId], references: [id])
@@ -2717,12 +2715,12 @@ model SupportAttachment {
 }
 
 model SupportTriageResult {
-  id                String   @id @default(cuid())
+  id                String                @id @default(cuid())
   ticketId          String
   suggestedCategory SupportTicketCategory
   suggestedPriority SupportTicketPriority
   suggestedNextStep String?
-  createdAt         DateTime @default(now())
+  createdAt         DateTime              @default(now())
 
   ticket SupportTicket @relation(fields: [ticketId], references: [id])
 
@@ -2755,15 +2753,15 @@ model ChatbotKnowledgeSource {
 }
 
 model ChatbotTranscript {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   organiserId      String
   sessionId        String
   customerId       String?
   showId           String?
-  startedAt        DateTime @default(now())
+  startedAt        DateTime  @default(now())
   endedAt          DateTime?
   transcriptJson   Json
-  conversionHelped Boolean  @default(false)
+  conversionHelped Boolean   @default(false)
 
   organiser User  @relation("ChatbotTranscriptOrganiser", fields: [organiserId], references: [id])
   customer  User? @relation("ChatbotTranscriptCustomer", fields: [customerId], references: [id])
@@ -2778,7 +2776,7 @@ model ChatbotEscalationRule {
   name        String
   matchJson   Json
   actionJson  Json
-  isActive    Boolean @default(true)
+  isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
 
   organiser User @relation("ChatbotEscalationOrganiser", fields: [organiserId], references: [id])
