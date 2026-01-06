@@ -2139,68 +2139,48 @@ function setupVisualBuilder() {
         }
     });
 
-    // 6. Drop (Finalize Move/Add)
-   canvas.addEventListener('drop', (e) => {
-  e.preventDefault();
-  const indicator = document.querySelector('.ms-drop-indicator');
-  const dropTargetStrip = e.target.closest('.ms-strip'); // Check if dropping in a strip
+   // 6. Drop Logic (Corrected for Nested Strips)
+    canvas.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const indicator = document.querySelector('.ms-drop-indicator');
+        const dropTargetStrip = e.target.closest('.ms-strip'); 
 
-  const canvasChildren = Array.from(canvas.children);
-  const dropIndex = canvasChildren.indexOf(indicator);
-  if (indicator) indicator.remove();
-
-  const type = e.dataTransfer.getData('blockType');
-
-  if (dropTargetStrip && type) {
-    // Logic for dropping INSIDE a strip
-    const stripId = dropTargetStrip.parentElement.dataset.id;
-    const stripBlock = window.editorBlocks.find(b => b.id === stripId);
-    if (stripBlock) {
-      stripBlock.content.blocks.push({
-        id: 'blk_' + Date.now(),
-        type: type,
-        content: getDefaultBlockContent(type),
-        styles: { padding: '10px' }
-      });
-      renderBuilderCanvas();
-      return;
-    }
-  }
-
-  // Logic for dropping on the main canvas
-  if (draggedSource === 'sidebar' && type) {
-    addBlockToCanvas(type, dropIndex);
-  } else if (draggedSource === 'canvas' && draggedBlockIndex !== null) {
-    moveBlockInCanvas(draggedBlockIndex, dropIndex);
-  }
-
-  draggedSource = null;
-  draggedBlockIndex = null;
-});
-  
-        // Determine the new index based on where the indicator ended up
-        // We look at all children of the canvas (blocks + indicator) to find the indicator's index
         const canvasChildren = Array.from(canvas.children);
         const dropIndex = canvasChildren.indexOf(indicator);
-
-        // Remove indicator
         if (indicator) indicator.remove();
 
-        if (draggedSource === 'sidebar') {
-            // CASE A: Adding a new block
-            const type = e.dataTransfer.getData('blockType');
-            if (type) addBlockToCanvas(type, dropIndex);
-        } 
-        else if (draggedSource === 'canvas' && draggedBlockIndex !== null) {
-            // CASE B: Reordering an existing block
+        const type = e.dataTransfer.getData('blockType');
+
+        // CASE 1: Dropping INSIDE a strip
+        if (dropTargetStrip && type) {
+            const stripContainer = dropTargetStrip.closest('.ms-builder-block');
+            const stripId = stripContainer.dataset.id;
+            const stripBlock = window.editorBlocks.find(b => b.id === stripId);
+            
+            if (stripBlock) {
+                stripBlock.content.blocks = stripBlock.content.blocks || [];
+                stripBlock.content.blocks.push({
+                    id: 'blk_' + Date.now(),
+                    type: type,
+                    content: getDefaultBlockContent(type),
+                    styles: { padding: '10px' }
+                });
+                renderBuilderCanvas();
+                return;
+            }
+        }
+
+        // CASE 2: Dropping on the main canvas
+        if (draggedSource === 'sidebar' && type) {
+            addBlockToCanvas(type, dropIndex);
+        } else if (draggedSource === 'canvas' && draggedBlockIndex !== null) {
             moveBlockInCanvas(draggedBlockIndex, dropIndex);
         }
 
-        // Reset Drag State
         draggedSource = null;
         draggedBlockIndex = null;
     });
-
+  
     // 7. Back Button
     const backBtn = document.getElementById('ms-back-to-blocks');
     if (backBtn) {
@@ -2291,13 +2271,10 @@ function moveBlockInCanvas(fromIndex, toIndex) {
 function getDefaultBlockContent(type) {
     const placeholderLarge = getPlaceholderImage(600, 300);
     const placeholderSmall = getPlaceholderImage(300, 200);
-switch (type) {
-  case 'strip': 
-  const nestedHtml = (c.blocks || []).map(b => getPreviewHtml(b)).join('');
-  return `<div class="ms-strip" style="background-color: ${c.bgColor || '#ffffff'};">
-            ${nestedHtml || '<div class="ms-muted" style="text-align:center; padding:20px;">Drop elements here</div>'}
-          </div>`;
-  case 'text': return { text: '<h3>New Text Block</h3><p>Enter your content here.</p>' };
+    
+    switch (type) {
+        case 'strip': return { bgColor: '#ffffff', blocks: [] };
+        case 'text': return { text: '<h3>New Text Block</h3><p>Enter your content here.</p>' };
         case 'boxedtext': return { text: '<p>This is text inside a colored box.</p>', bgColor: '#f1f5f9' };
         case 'image': return { src: placeholderLarge, alt: 'Image', link: '' };
         case 'imagegroup': return { images: [{src:placeholderSmall}, {src:placeholderSmall}] };
@@ -2305,7 +2282,6 @@ switch (type) {
         case 'button': return { label: 'Click Here', url: 'https://', color: '#4f46e5', align: 'center' };
         case 'divider': return { color: '#e2e8f0', thickness: '1px' };
         case 'social': return { fb: '#', ig: '#', tw: '#' };
-        // 'footer' type gets removed from here as it's now handled statically
         case 'video': return { url: '', thumbnail: placeholderLarge };
         case 'code': return { html: '' };
         case 'product': return { productId: null, title: 'Product Name', price: '£0.00' };
