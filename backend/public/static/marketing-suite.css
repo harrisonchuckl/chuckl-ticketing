@@ -1,3 +1,4 @@
+/* 1. CORE VARIABLES & RESET */
 :root {
   --ms-bg: #f8fafc;
   --ms-sidebar: #0f172a;
@@ -19,6 +20,7 @@ body {
   color: var(--ms-text);
 }
 
+/* 2. LAYOUT SHELL */
 .ms-shell {
   display: grid;
   grid-template-columns: 260px 1fr;
@@ -34,17 +36,8 @@ body {
   gap: 12px;
 }
 
-.ms-brand {
-  font-weight: 700;
-  font-size: 18px;
-}
-
-.ms-nav {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 12px;
-}
+.ms-brand { font-weight: 700; font-size: 18px; }
+.ms-nav { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
 
 .ms-nav a {
   color: var(--ms-sidebar-text);
@@ -57,16 +50,11 @@ body {
   gap: 8px;
 }
 
-.ms-nav a.active,
-.ms-nav a:hover {
+.ms-nav a.active, .ms-nav a:hover {
   background: rgba(148, 163, 184, 0.18);
 }
 
-.ms-content {
-  display: flex;
-  flex-direction: column;
-}
-
+/* 3. TOPBAR & SEARCH */
 .ms-topbar {
   padding: 18px 28px;
   display: flex;
@@ -77,11 +65,7 @@ body {
   gap: 12px;
 }
 
-.ms-search {
-  flex: 1;
-  max-width: 420px;
-}
-
+.ms-search { flex: 1; max-width: 420px; }
 .ms-search input {
   width: 100%;
   padding: 10px 14px;
@@ -90,12 +74,7 @@ body {
   font-size: 14px;
 }
 
-.ms-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
+.ms-actions { display: flex; align-items: center; gap: 10px; }
 .ms-status {
   background: #f1f5f9;
   padding: 6px 12px;
@@ -104,13 +83,159 @@ body {
   color: var(--ms-muted);
 }
 
-.ms-main {
-  padding: 28px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+/* 4. VISUAL BUILDER CANVAS */
+.ms-visual-builder {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  height: calc(100vh - 200px);
+  border: 1px solid var(--ms-border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #e5e7eb;
 }
 
+.ms-builder-canvas-wrapper {
+  padding: 40px 0;
+  overflow-y: auto;
+  display: flex;
+  justify-content: center;
+  background: #e5e7eb;
+  height: 100%;
+}
+
+.ms-builder-canvas {
+  width: 600px;
+  background-color: var(--canvas-bg, #ffffff);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  padding: 30px 0 150px 0; /* Left/Right padding 0 for strips */
+  display: flex;
+  flex-direction: column;
+  min-height: 800px;
+  box-sizing: content-box;
+  align-items: stretch !important;
+}
+
+/* 5. THE BUILDER BLOCKS (MASTER SETTINGS) */
+.ms-builder-block {
+  position: relative;
+  border: 1px solid transparent;
+  padding: 10px;
+  transition: border 0.2s;
+  height: auto; 
+  overflow: visible !important; /* CRITICAL: Allows buttons to sit above */
+  z-index: 1;
+}
+
+.ms-builder-block:hover {
+  border: 1px solid var(--ms-primary);
+  z-index: 9999; /* Brings block to front layer */
+  cursor: pointer;
+}
+
+/* THE ACTION BUTTONS (HORIZONTAL BLUE BAR) */
+.ms-builder-block .block-actions {
+  display: none !important;
+  position: absolute;
+  right: 0;
+  top: -32px; /* Sits above the block */
+  background: #0f9cdf !important;
+  color: white;
+  padding: 4px 8px !important;
+  border-radius: 6px 6px 0 0;
+  z-index: 10000 !important; /* Forces it to the absolute top layer */
+  gap: 8px !important;
+  display: flex !important;
+  flex-direction: row !important; /* Forces horizontal */
+  align-items: center;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+  white-space: nowrap;
+  height: 32px;
+}
+
+.ms-builder-block:hover > .block-actions {
+  display: flex !important;
+}
+
+.ms-builder-block .block-actions span {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 4px;
+}
+
+.ms-builder-block .block-actions svg {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+/* 6. STRIPS (FULL WIDTH) */
+.ms-strip {
+  width: 100% !important;
+  min-height: 100px;
+  height: auto !important;
+  background-color: #ffffff;
+  border: 1px dashed #cbd5e1;
+  padding: 20px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+/* 7. SIDEBAR & DRAGGABLE ITEMS */
+.ms-builder-sidebar {
+  background: white;
+  border-left: 1px solid var(--ms-border);
+  display: flex;
+  flex-direction: column;
+}
+
+.ms-sidebar-tabs { display: flex; border-bottom: 1px solid var(--ms-border); }
+.ms-tab-btn {
+  flex: 1;
+  background: none;
+  border: none;
+  padding: 14px;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--ms-muted);
+}
+.ms-tab-btn.active {
+  color: var(--ms-primary);
+  border-bottom: 2px solid var(--ms-primary);
+}
+
+.ms-sidebar-panel { display: none; padding: 16px; overflow-y: auto; }
+.ms-sidebar-panel.active { display: block; }
+
+.ms-block-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.ms-draggable-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border: 1px solid var(--ms-border);
+  padding: 12px 8px;
+  border-radius: 8px;
+  cursor: grab;
+  transition: all 0.2s;
+  font-size: 11px;
+  color: #334155;
+  text-align: center;
+}
+
+.ms-draggable-block svg { margin-bottom: 6px; color: var(--ms-primary); }
+.ms-draggable-block:hover { border-color: var(--ms-primary); background: #f5f3ff; }
+
+/* 8. UI UTILITIES */
+.ms-main { padding: 28px; display: flex; flex-direction: column; gap: 20px; }
 .ms-card {
   background: #fff;
   padding: 20px;
@@ -119,44 +244,10 @@ body {
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
 }
 
-.ms-card h2 {
-  margin: 0 0 6px 0;
-}
+.ms-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.ms-table th, .ms-table td { padding: 12px 10px; border-bottom: 1px solid var(--ms-border); text-align: left; }
 
-.ms-muted {
-  color: var(--ms-muted);
-  font-size: 13px;
-}
-
-.ms-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-}
-
-.ms-table th,
-.ms-table td {
-  padding: 12px 10px;
-  border-bottom: 1px solid var(--ms-border);
-  text-align: left;
-}
-
-.ms-table th {
-  color: var(--ms-muted);
-  font-weight: 600;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.ms-pill {
-  display: inline-flex;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  background: #e2e8f0;
-  color: #0f172a;
-}
+.ms-pill { display: inline-flex; padding: 4px 10px; border-radius: 999px; font-size: 12px; background: #e2e8f0; }
 
 .ms-primary {
   background: var(--ms-primary);
@@ -177,444 +268,14 @@ body {
   cursor: pointer;
 }
 
-.ms-grid {
-  display: grid;
-  gap: 16px;
-}
-
-.ms-grid.cols-3 {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-}
-
-.ms-grid.cols-2 {
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-}
-
-.ms-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.ms-empty {
-  padding: 24px;
-  border: 1px dashed var(--ms-border);
-  border-radius: 14px;
-  text-align: center;
-  color: var(--ms-muted);
-}
-
-.ms-editor-shell {
-  display: grid;
-  grid-template-rows: auto 1fr;
-  height: calc(100vh - 120px);
-  gap: 16px;
-}
-
-.ms-editor-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-#ms-editor {
-  height: 100%;
-  border-radius: 16px;
-  overflow: hidden;
-  border: 1px solid var(--ms-border);
-}
-
-.ms-drawer {
-  position: fixed;
-  top: 0;
-  right: 0;
-  width: 320px;
-  height: 100vh;
-  background: #fff;
-  border-left: 1px solid var(--ms-border);
-  padding: 20px;
-  overflow-y: auto;
-  box-shadow: -10px 0 20px rgba(15, 23, 42, 0.08);
-}
-
-.ms-modal {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-/* UPDATED BLOCK TOOLBAR */
-.ms-builder-block {
-    position: relative;
-    border: 1px solid transparent;
-    padding: 10px;
-    transition: border 0.2s;
-}
-
-.ms-builder-block:hover {
-    border: 1px solid var(--ms-primary);
-    cursor: pointer;
-}
-
-.ms-builder-block .block-actions {
-  display: none;
-  position: absolute;
-  right: 10px;
-  top: 5px; /* Moved inside the element to prevent cutoff */
-  background: #0f9cdf !important;
-  color: white;
-  padding: 4px 8px !important;
-  border-radius: 4px;
-  z-index: 999;
-  gap: 8px !important;
-  display: flex !important;
-  flex-direction: row !important; /* Horizontal */
-  align-items: center;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-}
-
-/* Ensure icons are small */
-.ms-builder-block .block-actions svg {
-  width: 14px !important;
-  height: 14px !important;
-}
-
-/* Make Strips Full Width */
-.ms-strip {
-  width: 100% !important;
-  min-height: 100px;
-  height: auto !important;
-  background-color: #ffffff;
-  border: 1px dashed #cbd5e1;
-  padding: 20px;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-}
-
-.ms-builder-block .block-actions span {
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: transform 0.2s, opacity 0.2s;
-}
-
-.ms-builder-block .block-actions span:hover {
-    transform: scale(1.1);
-    opacity: 0.8;
-}
-
-/* 40% Bigger Icons (Standard was 20px, now 28px) */
-.ms-builder-block .block-actions svg {
-    width: 28px;
-    height: 28px;
-}
-
-.ms-builder-block:hover .block-actions {
-    display: flex; 
-}
-
-.ms-builder-block .block-actions span {
-    cursor: pointer;
-    padding: 2px 4px;
-    border-radius: 3px;
-    transition: background 0.2s;
-}
-
-.ms-builder-block .block-actions span:hover {
-    background: rgba(255, 255, 255, 0.2);
-}
-
-.ms-preview-meta {
-  display: grid;
-  gap: 10px;
-  margin: 16px 0;
-}
-
-.ms-preview-meta div {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.ms-preview-frame {
-  position: relative;
-}
-
-#ms-preview-empty {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 12px;
-  background: rgba(248, 250, 252, 0.92);
-  border-radius: 12px;
-}
-
-.ms-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 12px;
-}
-
-.ms-field input,
-.ms-field select,
-.ms-field textarea {
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--ms-border);
-  font-size: 14px;
-}
-
-.ms-banner {
-  padding: 16px;
-  border-radius: 12px;
-  border: 1px solid var(--ms-border);
-  background: #f8fafc;
-  color: var(--ms-muted);
-}
-
-.react-flow__renderer {
-  background: #f8fafc;
-}
-
-/* VISUAL BUILDER LAYOUT */
-.ms-visual-builder {
-  display: grid;
-  grid-template-columns: 1fr 300px; /* Canvas | Sidebar */
-  height: calc(100vh - 200px);
-  border: 1px solid var(--ms-border);
-  border-radius: 12px;
-  overflow: hidden;
-  background: #e5e7eb; /* Grey background behind the email canvas */
-}
-
-/* CANVAS (Left Side) */
-.ms-builder-canvas-wrapper {
-  padding: 40px 0; /* Removed horizontal padding here, handled by flex justify */
-  overflow-y: auto;
-  display: flex;
-  justify-content: center;
-  background: #e5e7eb;
-  height: 100%; /* Ensure wrapper fills height */
-}
-
-.ms-builder-canvas {
-  width: 600px;
-  background-color: var(--canvas-bg, #ffffff); /* Controlled by JavaScript */
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-  padding: 30px 30px 150px 30px; 
-  display: flex;
-  flex-direction: column;
-  min-height: 800px;
-  box-sizing: content-box;
-}
-
-/* The Strip Component Styling */
-.ms-strip {
-  width: 100%;
-  min-height: 60px; /* Base height */
-  height: auto;     /* Grows automatically with content */
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 20px;
-  border: 1px dashed #cbd5e1; /* Visual guide */
-}
-/* BLOCKS IN CANVAS */
-.ms-builder-block {
-    position: relative;
-    border: 1px solid transparent;
-    padding: 10px;
-    transition: border 0.2s;
-    height: auto; 
-    overflow: visible !important; /* Allows buttons to pop out */
-    z-index: 1;
-}
-.ms-builder-block:hover {
-    z-index: 10; /* Brings the hovered block to the front */
-}
-
-/* Specific styling for image previews to ensure tight wrapping */
-.ms-builder-block img {
-    display: block; /* Removes bottom ghost space in inline images */
-    width: 100%;
-    height: auto;
-}
-.ms-canvas-placeholder {
-  border: 2px dashed #cbd5e1;
-  padding: 40px;
-  text-align: center;
-  color: #64748b;
-  border-radius: 8px;
-  margin-top: 20px;
-}
-
-/* BLOCKS IN CANVAS */
-.ms-builder-block {
-  position: relative;
-  border: 1px solid transparent;
-  padding: 10px;
-}
-.ms-builder-block:hover {
-  border: 1px solid var(--ms-primary);
-  cursor: pointer;
-}
-.ms-builder-block .block-actions {
-  display: none !important;
-  position: absolute;
-  right: 0;
-  top: -32px; /* Sits exactly above the element */
-  background: #0f9cdf !important;
-  color: white;
-  padding: 4px 8px !important;
-  border-radius: 6px 6px 0 0;
-  z-index: 99999 !important; /* Forces it to top layer */
-  gap: 8px !important;
-  flex-direction: row !important;
-  align-items: center;
-  box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
-  white-space: nowrap;
-}
-
-.ms-builder-block:hover > .block-actions {
-  display: flex !important;
-}
-/* SIDEBAR (Right Side) */
-.ms-builder-sidebar {
-  background: white;
-  border-left: 1px solid var(--ms-border);
-  display: flex;
-  flex-direction: column;
-}
-
-.ms-sidebar-tabs {
-  display: flex;
-  border-bottom: 1px solid var(--ms-border);
-}
-.ms-tab-btn {
-  flex: 1;
-  background: none;
-  border: none;
-  padding: 14px;
-  cursor: pointer;
-  font-weight: 600;
-  color: var(--ms-muted);
-}
-.ms-tab-btn.active {
-  color: var(--ms-primary);
-  border-bottom: 2px solid var(--ms-primary);
-}
-
-.ms-sidebar-panel {
-  display: none;
-  padding: 16px;
-  overflow-y: auto;
-}
-.ms-sidebar-panel.active {
-  display: block;
-}
-
-/* DRAGGABLE ICONS GRID */
-.ms-block-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  padding: 4px;
-}
-.ms-draggable-block {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: #ffffff;
-  border: 1px solid var(--ms-border);
-  padding: 12px 8px;
-  border-radius: 8px;
-  cursor: grab;
-  transition: all 0.2s;
-  font-size: 11px;
-  font-weight: 500;
-  color: #334155;
-  text-align: center;
-}
-.ms-draggable-block svg {
-  margin-bottom: 6px;
-  color: var(--ms-primary);
-  opacity: 0.8;
-}
-.ms-draggable-block:hover {
-  border-color: var(--ms-primary);
-  background: #f5f3ff;
-  transform: translateY(-1px);
-}
-
-.ms-draggable-block {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: #f8fafc;
-  border: 1px solid var(--ms-border);
-  padding: 16px;
-  border-radius: 8px;
-  cursor: grab;
-  transition: all 0.2s;
-}
-.ms-draggable-block:hover {
-  border-color: var(--ms-primary);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-}
-.ms-draggable-block .icon {
-  font-size: 24px;
-  margin-bottom: 8px;
-}
-
-/* DRAG & DROP REORDERING STYLES */
-
-/* The blue line that appears between blocks */
 .ms-drop-indicator {
-    height: 4px;
-    background-color: var(--ms-primary);
-    margin: 8px 0;
-    border-radius: 2px;
-    pointer-events: none;
-    transition: all 0.1s;
-    box-shadow: 0 2px 4px rgba(79, 70, 229, 0.3);
+  height: 4px;
+  background-color: var(--ms-primary);
+  margin: 4px 0;
+  border-radius: 2px;
 }
 
-/* The block while it is being dragged */
-.ms-builder-block.dragging {
-    opacity: 0.4;
-    border: 2px dashed var(--ms-muted);
-    background: #f8fafc;
-}
+.ms-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.ms-field input, .ms-field select, .ms-field textarea { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--ms-border); }
 
-/* Ensure the canvas handles the drop zone correctly */
-.ms-builder-canvas {
-    min-height: 800px;
-    padding-bottom: 100px; /* Extra space to drop at the bottom */
-}
-
-
-
-/* Ensure the canvas doesn't restrict strip width */
-.ms-builder-canvas {
-  padding-left: 0 !important;
-  padding-right: 0 !important;
-  align-items: stretch !important;
-}
-
-
-
+.ms-muted { color: var(--ms-muted); font-size: 13px; }
