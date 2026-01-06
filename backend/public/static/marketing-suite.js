@@ -897,28 +897,75 @@ async function renderTemplateEditor(templateId) {
       </div>
       <div id="ms-template-tabs" style="margin-top:16px;">
         ${renderTabs([
-          {
-            id: 'edit',
-            label: 'Edit MJML',
-            content: `
-              <div class="ms-grid cols-3">
-                <div class="ms-card" style="grid-column:span 2;">
-                  <textarea id="ms-template-mjml" style="width:100%;min-height:320px;">${escapeHtml(
-                    template.mjmlBody || '<mjml><mj-body></mj-body></mjml>'
-                  )}</textarea>
-                </div>
-                <div class="ms-card">
-                  <h3>Merge tags</h3>
-                  <div class="ms-muted">Click to insert into the editor.</div>
-                  <div class="ms-merge-tags">
-                    ${mergeTags
-                      .map((tag) => `<button class="ms-secondary" data-tag="${tag.value}">${tag.group}: ${tag.label}</button>`)
-                      .join('')}
-                  </div>
-                </div>
-              </div>
-            `,
-          },
+         {
+  id: 'editor',
+  label: 'Visual Editor',
+  content: `
+  <div class="ms-visual-builder">
+    <div class="ms-builder-canvas-wrapper">
+      <div id="ms-builder-canvas" class="ms-builder-canvas">
+        <div class="ms-canvas-placeholder">Drag blocks here from the sidebar</div>
+      </div>
+    </div>
+
+    <div class="ms-builder-sidebar">
+      <div class="ms-sidebar-tabs">
+        <button class="ms-tab-btn active" data-sidebar-tab="blocks">Content</button>
+        <button class="ms-tab-btn" data-sidebar-tab="styles">Styles</button>
+      </div>
+
+      <div id="ms-sidebar-blocks" class="ms-sidebar-panel active">
+        <div class="ms-block-grid">
+          <div class="ms-draggable-block" draggable="true" data-type="text">
+            <span class="icon">Tt</span> <span>Text</span>
+          </div>
+          <div class="ms-draggable-block" draggable="true" data-type="image">
+            <span class="icon">🖼️</span> <span>Image</span>
+          </div>
+          <div class="ms-draggable-block" draggable="true" data-type="button">
+            <span class="icon">🔘</span> <span>Button</span>
+          </div>
+          <div class="ms-draggable-block" draggable="true" data-type="divider">
+            <span class="icon">➖</span> <span>Divider</span>
+          </div>
+          <div class="ms-draggable-block" draggable="true" data-type="social">
+            <span class="icon">🔗</span> <span>Social</span>
+          </div>
+          <div class="ms-draggable-block" draggable="true" data-type="product">
+            <span class="icon">🛍️</span> <span>Product</span>
+          </div>
+          <div class="ms-draggable-block" draggable="true" data-type="event">
+            <span class="icon">📅</span> <span>Event</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="ms-sidebar-styles" class="ms-sidebar-panel">
+        <div class="ms-field">
+            <label>Page Background</label>
+            <input type="color" id="ms-style-bg" value="#ffffff">
+        </div>
+        <div class="ms-field">
+            <label>Font Family</label>
+            <select id="ms-style-font">
+                <option value="Arial">Arial</option>
+                <option value="Helvetica">Helvetica</option>
+                <option value="Georgia">Georgia</option>
+            </select>
+        </div>
+      </div>
+
+      <div id="ms-block-editor" class="ms-sidebar-panel hidden">
+        <div class="ms-toolbar" style="margin-bottom:10px;">
+            <button class="ms-secondary small" id="ms-back-to-blocks">← Back</button>
+            <strong>Edit Block</strong>
+        </div>
+        <div id="ms-active-block-settings"></div>
+      </div>
+    </div>
+  </div>
+  `,
+},
           {
             id: 'preview',
             label: 'Preview',
@@ -1009,8 +1056,8 @@ async function renderTemplateEditor(templateId) {
       fromName: document.getElementById('ms-template-from-name').value,
       fromEmail: document.getElementById('ms-template-from-email').value,
       replyTo: document.getElementById('ms-template-reply-to').value,
-      mjmlBody: document.getElementById('ms-template-mjml').value,
-    };
+// We are saving the JSON state of the visual builder
+mjmlBody: JSON.stringify(window.currentTemplateBlocks || []),    };
     const response = await fetchJson(`${API_BASE}/templates/${templateId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
