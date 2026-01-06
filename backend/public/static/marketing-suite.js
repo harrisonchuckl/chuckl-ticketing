@@ -2370,6 +2370,7 @@ function getDefaultBlockContent(type) {
 /**
  * Renders the `window.editorBlocks` array AND the static footer into the DOM
  */
+/* Corrected renderBuilderCanvas Function */
 function renderBuilderCanvas() {
     const canvas = document.getElementById('ms-builder-canvas');
     if (!canvas) return;
@@ -2387,10 +2388,9 @@ function renderBuilderCanvas() {
             el.draggable = true;
             el.dataset.id = block.id;
             el.dataset.index = index;
-            el.style.padding = block.styles?.padding || '10px'; // Apply padding style
+            el.style.padding = block.styles?.padding || '10px';
 
-            // ... (Preview HTML generation logic from previous step goes here if not already present) ...
-            let previewHtml = getPreviewHtml(block); // Using helper function for cleanliness
+            let previewHtml = getPreviewHtml(block); 
 
             el.innerHTML = `
                 ${previewHtml}
@@ -2406,31 +2406,32 @@ function renderBuilderCanvas() {
                 draggedSource = 'canvas';
                 draggedBlockIndex = index;
                 e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('blockId', block.id); // Added to help move logic
                 setTimeout(() => el.classList.add('dragging'), 0);
             });
+
             el.addEventListener('dragend', () => {
                 el.classList.remove('dragging');
                 const ind = document.querySelector('.ms-drop-indicator');
                 if(ind) ind.remove();
             });
-          
-           // Click to Select/Edit
-el.addEventListener('click', (e) => {
-    if (e.target.closest('.block-actions')) return; 
-    
-    // Remove selected class from all other blocks
-    document.querySelectorAll('.ms-builder-block').forEach(b => b.classList.remove('is-selected'));
-    // Add selected class to this block
-    el.classList.add('is-selected');
-    
-    openBlockEditor(block);
-});
-          
-    // 2. Render Static Footer (Always at bottom, not draggable)
+
+            el.addEventListener('click', (e) => {
+                if (e.target.closest('.block-actions')) return; 
+                document.querySelectorAll('.ms-builder-block').forEach(b => b.classList.remove('is-selected'));
+                el.classList.add('is-selected');
+                openBlockEditor(block);
+            });
+
+            canvas.appendChild(el);
+        }); // <--- ADD THIS (Close forEach)
+    } // <--- ADD THIS (Close if)
+
+    // 2. Render Static Footer
     const footerEl = document.createElement('div');
     footerEl.className = 'ms-builder-block ms-static-footer';
     footerEl.style.borderTop = '2px solid #e5e7eb';
-    footerEl.style.marginTop = 'auto'; // Pushes to bottom if canvas height forces it
+    footerEl.style.marginTop = 'auto';
     footerEl.style.backgroundColor = window.emailFooterState.bgColor;
     footerEl.style.padding = '20px';
     
@@ -2448,7 +2449,6 @@ el.addEventListener('click', (e) => {
 
     canvas.appendChild(footerEl);
 }
-
 // Helper for preview HTML to keep render function clean
 function getPreviewHtml(block) {
   const c = block.content;
