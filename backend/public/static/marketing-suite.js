@@ -2098,28 +2098,24 @@ function setupVisualBuilder() {
         });
     });
 
-    // 3. Drag Start (Sidebar Items)
+ // 3. Drag Start (Sidebar Items)
     document.querySelectorAll('.ms-draggable-block').forEach(item => {
-        iel.addEventListener('dragstart', (e) => {
-                draggedSource = 'canvas';
-                e.dataTransfer.setData('blockId', block.id); // Send ID
-                e.dataTransfer.effectAllowed = 'move';
-                setTimeout(() => el.classList.add('dragging'), 0);
-            });
+        item.addEventListener('dragstart', (e) => {
+            draggedSource = 'sidebar';
+            e.dataTransfer.setData('blockType', item.dataset.type);
+            e.dataTransfer.effectAllowed = 'copy';
+        });
     });
-
-    // 4. Drag Over (Canvas - Logic for the Drop Line)
-  canvas.addEventListener('dragover', (e) => {
+  
+   // 4. Drag Over (Handles Main Canvas and Nested Strips)
+    canvas.addEventListener('dragover', (e) => {
         e.preventDefault();
         
-        // 1. Detect the specific container we are hovering over (Strip or Canvas)
         const stripTarget = e.target.closest('.ms-strip');
         const container = stripTarget || canvas;
         
-        // 2. Find placement element
         const afterElement = getDragAfterElement(container, e.clientY);
         
-        // 3. Update Indicator placement
         let indicator = document.querySelector('.ms-drop-indicator');
         if (!indicator) {
             indicator = document.createElement('div');
@@ -2132,6 +2128,7 @@ function setupVisualBuilder() {
             container.insertBefore(indicator, afterElement);
         }
     });
+  
     // 5. Drag Leave (Cleanup)
     canvas.addEventListener('dragleave', (e) => {
         // Only remove if we are actually leaving the canvas container, not just entering a child
