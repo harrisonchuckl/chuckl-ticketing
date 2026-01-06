@@ -380,23 +380,43 @@ body {
 
 /* CANVAS (Left Side) */
 .ms-builder-canvas-wrapper {
-  padding: 40px;
+  padding: 40px 0; /* Removed horizontal padding here, handled by flex justify */
   overflow-y: auto;
   display: flex;
   justify-content: center;
+  background: #e5e7eb;
+  height: 100%; /* Ensure wrapper fills height */
 }
 
 .ms-builder-canvas {
   width: 600px; /* Standard email width */
-  min-height: 800px;
+  /* min-height removed, let content dictate height + padding */
   background: white;
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-  padding: 20px;
+  padding: 30px 30px 150px 30px; /* Large bottom padding ensures canvas extends beyond content */
   display: flex;
   flex-direction: column;
   gap: 10px;
+  box-sizing: content-box; /* Ensures padding adds to width */
 }
 
+/* BLOCKS IN CANVAS */
+.ms-builder-block {
+    position: relative;
+    border: 1px solid transparent;
+    /* Removed padding here so images sit flush to the edge of the block selection area */
+    transition: border 0.2s;
+    /* Ensure block wraps content tightly */
+    height: auto; 
+    overflow: hidden;
+}
+
+/* Specific styling for image previews to ensure tight wrapping */
+.ms-builder-block img {
+    display: block; /* Removes bottom ghost space in inline images */
+    width: 100%;
+    height: auto;
+}
 .ms-canvas-placeholder {
   border: 2px dashed #cbd5e1;
   padding: 40px;
