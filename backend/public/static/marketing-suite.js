@@ -1,6 +1,7 @@
 const navItems = [
   { label: 'Marketing Home', path: '/admin/marketing' },
   { label: 'Campaigns', path: '/admin/marketing/campaigns' },
+  { label: 'Intelligent Campaigns', path: '/admin/marketing/intelligent' },
   { label: 'Automations', path: '/admin/marketing/automations' },
   { label: 'Contacts', path: '/admin/marketing/contacts' },
   { label: 'Segments', path: '/admin/marketing/segments' },
@@ -446,6 +447,16 @@ async function renderCampaigns() {
     console.error('[marketing-suite] campaigns load failed', error);
     showErrorState(main, "Couldn't load campaigns", error, renderCampaigns);
   }
+}
+
+function renderIntelligentCampaigns() {
+  const main = document.getElementById('ms-main');
+  main.innerHTML = `
+    <div class="ms-card">
+      <h2>Intelligent Campaigns</h2>
+      <p class="ms-muted">Plan, personalize, and optimize multi-step campaigns from one place. Content coming soon.</p>
+    </div>
+  `;
 }
 
 async function renderCampaignCreate() {
@@ -2226,6 +2237,8 @@ async function renderRoute() {
         return renderCampaigns();
       case '/admin/marketing/campaigns/new':
         return renderCampaignCreate();
+      case '/admin/marketing/intelligent':
+        return renderIntelligentCampaigns();
       case '/admin/marketing/automations':
         return renderAutomations();
       case '/admin/marketing/contacts':
